@@ -25,12 +25,13 @@ python -m server.server --reset   # wipe all state and start a fresh run
 #   --type-clause          Reject shared-type links
 #   --manager-port PORT  Manager HTTP port (enables back-link)
 
-# Unit tests — no emulator or server required (234 + 77 + 62 + 78 + 127 + 6 = 584 tests)
+# Unit tests — no emulator or server required (234 + 77 + 62 + 78 + 127 + 63 + 6 = 647 tests)
 pytest tests/unit/test_state.py -v
 pytest tests/unit/test_gen3_adapter.py -v
 pytest tests/unit/test_gen4_adapter.py -v
 pytest tests/unit/test_gen1_adapter.py -v
 pytest tests/unit/test_gen2_adapter.py -v
+pytest tests/unit/test_gen5_adapter.py -v
 pytest tests/unit/test_phase1_comms.py -v
 
 # Single test
@@ -41,15 +42,18 @@ python tools/gen_area_map.py
 
 # Regenerate lua/gen2_crystal_areas.lua from area_map.json (124 entries)
 python tools/gen_gen2_area_map.py
+
+# Regenerate Gen 5 BW area maps and location tables
+python tools/gen_gen5_area_map.py    # Gen 5 BW
 ```
 
 ## Project Overview
 
-SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Supported games include **Gen 1** (Red, Blue, Yellow), **Gen 2** (Crystal), **Gen 3** (FireRed, LeafGreen, Emerald, Radical Red/CFRU) and **Gen 4** (HeartGold, SoulSilver, Platinum). Each BizHawk instance runs a game-specific Lua client (`lua/clients/gen1_rby_client.lua`, `lua/clients/gen2_crystal_client.lua`, `lua/clients/gen3_frlge_client.lua`, or `lua/clients/gen4_hgsspt_client.lua`), which reads game RAM each frame and sends JSON events (area_enter, capture, faint, etc.) over a persistent **TCP connection** to a central Python server. The server uses a pluggable adapter framework (`server/adapters/`) to handle game-specific logic while enforcing Soul Link rules — pairing encounters by area, propagating faints, mirroring party presence — and returns commands (e.g., `force_faint`) in the TCP response. **No BizHawk CLI flags are required.**
+SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Supported games include **Gen 1** (Red, Blue, Yellow), **Gen 2** (Crystal), **Gen 3** (FireRed, LeafGreen, Emerald, Radical Red/CFRU), **Gen 4** (HeartGold, SoulSilver, Platinum), and **Gen 5** (Black, White, Black 2, White 2). Each BizHawk instance runs a game-specific Lua client (`lua/clients/gen1_rby_client.lua`, `lua/clients/gen2_crystal_client.lua`, `lua/clients/gen3_frlge_client.lua`, `lua/clients/gen4_hgsspt_client.lua`, or `lua/clients/gen5_bw_client.lua`), which reads game RAM each frame and sends JSON events (area_enter, capture, faint, etc.) over a persistent **TCP connection** to a central Python server. The server uses a pluggable adapter framework (`server/adapters/`) to handle game-specific logic while enforcing Soul Link rules — pairing encounters by area, propagating faints, mirroring party presence — and returns commands (e.g., `force_faint`) in the TCP response. **No BizHawk CLI flags are required.**
 
 ### Game Maturity
 
-**Only Gen 3 has been extensively tested in live gameplay.** Gen 1, 2, and 4 have Python unit tests and Lua clients but limited real-world testing — treat them as experimental. When making changes to shared code (`server.py`, `state.py`, `adapters/base.py`), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check. Gen 5 has stubs only.
+**Only Gen 3 has been extensively tested in live gameplay.** Gen 1, 2, 4, and 5 have Python unit tests and Lua clients but limited real-world testing — treat them as experimental. When making changes to shared code (`server.py`, `state.py`, `adapters/base.py`), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check.
 
 ## Soul Link Rules (Full Specification)
 
@@ -127,12 +131,16 @@ If a player whiteouts (entire party faints), all remaining party mons are treate
 [BizHawk Instance A (Gen 4 NDS)]     [BizHawk Instance B (Gen 4 NDS)]
   lua/clients/gen4_hgsspt_client.lua   lua/clients/gen4_hgsspt_client.lua
   lua/memory_nds.lua  — NDS RAM        lua/memory_nds.lua  — NDS RAM
+
+[BizHawk Instance A (Gen 5 NDS)]     [BizHawk Instance B (Gen 5 NDS)]
+  lua/clients/gen5_bw_client.lua      lua/clients/gen5_bw_client.lua
+  lua/memory_nds.lua                  lua/memory_nds.lua
          |  newline-delimited JSON (TCP)         |
          +────────────────┬──────────────────────+
                           ↓
                    [server/server.py]   ← asyncio TCP server on :54321
                    [server/state.py]    ← SoulLinkState FSM + adapters
-                   [server/adapters/]   ← gen2_crystal, gen3_frlge, gen4_hgsspt
+                   [server/adapters/]   ← gen2_crystal, gen3_frlge, gen4_hgsspt, gen5_bw
                    [data/links.json]    ← persisted link table + area states
                    [data/games/]        ← game-specific data per generation
                           |
@@ -164,20 +172,22 @@ SLink-RR/
 │   ├── slink.lua                # Universal entry point (auto-detects game)
 │   ├── slink_gen3.lua           # Gen 3 loader (loads gen3_frlge_client)
 │   ├── slink_gen4.lua           # Gen 4 loader (loads gen4_hgsspt_client)
+│   ├── slink_gen5.lua           # Gen 5 loader (loads gen5_bw_client)
 │   ├── clients/                 # Per-game production clients (one per supported game)
 │   │   ├── gen2_crystal_client.lua
 │   │   ├── gen3_frlge_client.lua
-│   │   └── gen4_hgsspt_client.lua
+│   │   ├── gen4_hgsspt_client.lua
+│   │   └── gen5_bw_client.lua
 │   ├── games/                   # Per-game adapter configs (address tables, constants)
 │   │   ├── gen2_crystal.lua
 │   │   ├── gen3_frlge.lua
 │   │   ├── gen4_hgsspt.lua
 │   │   ├── gen1_rby.lua         # Stub (future)
 │   │   ├── gen2_gsc.lua         # Stub (future)
-│   │   └── gen5_bw.lua          # Stub (future)
+│   │   └── gen5_bw.lua          # Gen 5 game module
 │   ├── memory_gba.lua           # GBA memory read/write helpers (Gen 3)
 │   ├── memory_gb.lua            # GB/GBC memory read/write helpers (Gen 1 & Gen 2)
-│   ├── memory_nds.lua           # NDS memory read/write helpers (Gen 4)
+│   ├── memory_nds.lua           # NDS memory read/write helpers (Gen 4 & Gen 5)
 │   ├── hud.lua                  # Shared HUD overlay module
 │   ├── connector.lua            # LuaSocket TCP wrapper (non-blocking)
 │   ├── game_detect.lua          # ROM header game detection
@@ -197,7 +207,8 @@ SLink-RR/
 │       ├── gen1_rby.py          # Gen 1 adapter
 │       ├── gen2_crystal.py      # Gen 2 adapter
 │       ├── gen3_frlge.py        # Gen 3 adapter
-│       └── gen4_hgsspt.py       # Gen 4 adapter
+│       ├── gen4_hgsspt.py       # Gen 4 adapter
+│       └── gen5_bw.py           # Gen 5 adapter
 ├── data/                        # Runtime data (persisted state + game data)
 │   ├── links.json               # Active run state (auto-generated, not committed)
 │   ├── memorial.json            # Death log (auto-generated)
@@ -208,15 +219,17 @@ SLink-RR/
 │       ├── gen2_crystal/        # Crystal species, types, items, area maps
 │       ├── gen1_rby/            # Placeholder
 │       ├── gen2_gsc/            # Placeholder
-│       └── gen5_bw/             # Placeholder
+│       └── gen5_bw/             # Gen 5 area maps and location data
 ├── tools/                       # Code generation scripts (run manually)
 │   ├── gen_pokemon_data.py      # Generates pokemon_data.py tables
 │   ├── gen_ability_names.py     # Generates ability name table
 │   ├── gen_rr_types.py          # Generates RR type data
 │   ├── gen_gen2_area_map.py     # Generates gen2_crystal_areas.lua + gen2_crystal_locations.lua
+│   ├── gen_gen5_area_map.py     # Generates Gen 5 BW/BW2 area maps
 │   └── ...                      # Other generators
 ├── tests/                       # Python test suite
 │   ├── unit/                    # Unit tests (pytest, no emulator needed)
+│   │   └── test_gen5_adapter.py # Gen 5 adapter tests
 │   ├── integration/             # Integration tests
 │   ├── fixtures/                # Test fixtures
 │   └── TESTING.md              # Test documentation
@@ -254,14 +267,20 @@ SLink-RR/
 *Gen 4 Lua (NDS — HGSS / Platinum):*
 - **`lua/slink_gen4.lua`** — Gen 4 launcher script (configure host/port/player, loads gen4_hgsspt_client.lua).
 - **`lua/clients/gen4_hgsspt_client.lua`** — Gen 4 NDS client: HeartGold/SoulSilver. Ported from SLink-HGSS prototype. LCRNG-aware, HP debounce, zone-based area detection. Uses memory_nds.lua for NDS RAM access.
-- **`lua/memory_nds.lua`** — Shared Gen 4 NDS memory helpers (730 lines): 2-level pointer chain resolution, LCRNG encryption/decryption, party/box/battle reads, HP debounce (2-frame filter), Pokéball counting, trainer name reading. Game-specific addresses from variant profile.
+- **`lua/memory_nds.lua`** — Shared Gen 4/5 NDS memory helpers (730 lines): 2-level pointer chain resolution, LCRNG encryption/decryption, party/box/battle reads, HP debounce (2-frame filter), Pokéball counting, trainer name reading. Game-specific addresses from variant profile.
 - **`lua/games/gen4_hgsspt.lua`** — Gen 4 game module: HGSS/Platinum detection via NDS ROM codes (IPKE/IPGE/CPUE), per-variant memory profiles, gift areas (new_bark_town, route_30, ruins_of_alph, dragons_den), area resolution via zone IDs.
 - **`data/games/gen4_hgsspt/gen4_hgsspt_areas.lua`** — Generated lookup: `zoneId → area_id` (195 entries). Source: data/games/gen4_hgsspt/area_map_hgss.json.
+
+*Gen 5 Lua (NDS — Black / White / Black 2 / White 2):*
+- **`lua/slink_gen5.lua`** — Gen 5 launcher script (configure host/port/player, loads gen5_bw_client.lua).
+- **`lua/clients/gen5_bw_client.lua`** — Gen 5 NDS client: Black, White, Black 2, and White 2. Uses PID:OTID keys, 220-byte PKM structs, and the shared memory_nds.lua helpers.
+- **`lua/games/gen5_bw.lua`** — Gen 5 game module: Black/White/BW2 detection via NDS ROM codes, per-variant memory profiles, BW1/BW2 gift areas, and zone-based area resolution.
+- **`data/games/gen5_bw/gen5_bw_areas.lua`** — Generated lookup: `zoneId → area_id` for Black/White/BW2. Regenerate with `python tools/gen_gen5_area_map.py`.
 
 *Shared Lua:*
 - **`lua/connector.lua`** — LuaSocket wrapper with fully non-blocking connect (zero stutter), exponential backoff (2s → 30s cap), pending-connect probe via zero-byte send: `C.init()`, `C.send()`, `C.receive()`.
 - **`lua/socket.lua`** — LuaSocket shim; requires `lua/x64/socket-windows-5-4.dll` (from Archipelago install).
-- **`lua/game_detect.lua`** — Shared game detection framework: scans ROM header to identify game family (Gen 2 GBC, Gen 3 GBA, or Gen 4 NDS), returns the matching game module.
+- **`lua/game_detect.lua`** — Shared game detection framework: scans ROM header to identify the game family (Gen 2 GBC, Gen 3 GBA, Gen 4 NDS, or Gen 5 NDS), returns the matching game module.
 
 *Server:*
 - **`server/state.py`** — `SoulLinkState` FSM: processes event dicts, queues commands for each player, persists state. Includes `_check_link_violation()` for species/gender/type clause rules.
@@ -271,6 +290,7 @@ SLink-RR/
 - **`server/adapters/gen3_frlge.py`** — Gen 3 adapter: GBA PID:OTID key format, FRLG+Emerald gift areas, Gen 1-3 species data, RR variant support.
 - **`server/adapters/gen2_crystal.py`** — Gen 2 adapter: DV-based gender/shiny, 251 sequential species (NatDex 1-251), 17 types (Dark+Steel added), Crystal item names, PokeAPI sprites. Data from `data/games/gen2_crystal/`.
 - **`server/adapters/gen4_hgsspt.py`** — Gen 4 adapter: PID:OTID key format, HGSS gift areas, Gen 1-4 species (NatDex 1-493).
+- **`server/adapters/gen5_bw.py`** — Gen 5 adapter: PID:OTID key format, BW/BW2 gift areas, Gen 1-5 species (NatDex 1-649).
 - **`server/adapters/__init__.py`** — Adapter registry: get_adapter(game_id) with backward-compat aliases.
 - **`server/manager.py`** — Run Manager (port 8090): creates/starts/stops/archives named runs, each a `server.py` subprocess. Supports per-run lock rule configuration. Passes `--run-name` from run registry to spawned subprocess. Dynamic launcher script endpoints (`GET /api/runs/<id>/launcher/<player>`). Passes `--manager-port` when spawning subprocesses.
 
@@ -279,6 +299,7 @@ SLink-RR/
 - **`data/games/gen3_frlge/rr_items.json`** — 746 RR item ID → name mappings (generated by `lua/tests/test_item_discovery.lua`). Loaded at server startup; used when `_is_rr` is True.
 - **`tools/gen_area_map.py`** — Generates `data/games/gen3_frlge/gen3_frlge_areas.lua` and `data/games/gen3_frlge/gen3_frlge_locations.lua` from `data/games/gen3_frlge/area_map.json`.
 - **`tools/gen_gen2_area_map.py`** — Generates `lua/gen2_crystal_areas.lua` and `lua/gen2_crystal_locations.lua` from `data/games/gen2_crystal/area_map.json`.
+- **`tools/gen_gen5_area_map.py`** — Generates `data/games/gen5_bw/gen5_bw_areas.lua` and `data/games/gen5_bw/gen5_bw_locations.lua` from the Gen 5 BW/BW2 area maps.
 
 *Tests:*
 - **`lua/tests/test_*.lua`** — Standalone BizHawk test scripts (see `tests/TESTING.md`).
@@ -286,10 +307,13 @@ SLink-RR/
 - **`lua/tests/test_sound_discovery.lua`** — Diagnostic script: scans ROM for gSongTable and reports SE song header addresses for the current ROM profile.
 - **`lua/tests/test_ability_diag.lua`** — Diagnostic script: auto-detects ROM profile, validates gBaseStats address, shows party ability data per slot.
 - **`lua/tests/test_item_discovery.lua`** — ROM scanner for RR/CFRU gItems table. Uses CFRU probe scoring (IDs 52-62) and itemId field validation to find the correct table. Outputs JSON to `rr_items.json`.
-- **`tests/unit/test_state.py`** — 199 pytest unit tests for the state machine.
-- **`tests/unit/test_gen3_adapter.py`** — 50 tests for Gen 3 adapter.
-- **`tests/unit/test_gen4_adapter.py`** — 40 tests for Gen 4 adapter.
-- **`tests/unit/test_gen2_adapter.py`** — 127 tests for Gen 2 adapter.
+- **`tests/unit/test_state.py`** — 234 pytest unit tests for the state machine.
+- **`tests/unit/test_gen1_adapter.py`** — 78 tests for the Gen 1 adapter.
+- **`tests/unit/test_gen2_adapter.py`** — 127 tests for the Gen 2 adapter.
+- **`tests/unit/test_gen3_adapter.py`** — 77 tests for the Gen 3 adapter.
+- **`tests/unit/test_gen4_adapter.py`** — 62 tests for the Gen 4 adapter.
+- **`tests/unit/test_gen5_adapter.py`** — 63 tests for the Gen 5 adapter.
+- **`tests/unit/test_phase1_comms.py`** — 6 TCP integration tests.
 
 ---
 
@@ -305,6 +329,7 @@ Each game family has its own adapter module:
 - **`server/adapters/gen2_crystal.py`** — Gen 2 (Crystal)
 - **`server/adapters/gen3_frlge.py`** — Gen 3 (FRLG, Emerald, Radical Red/CFRU)
 - **`server/adapters/gen4_hgsspt.py`** — Gen 4 (HeartGold, SoulSilver, Platinum)
+- **`server/adapters/gen5_bw.py`** — Gen 5 (Black, White, Black 2, White 2)
 
 The state machine (`state.py`) calls adapter methods instead of hardcoded game logic. The adapter is selected based on the `game_id` field in the first `hello` event and persisted in `links.json`.
 
@@ -388,6 +413,7 @@ No legacy patterns remain.
 - **Universal:** Load `lua/slink.lua` — auto-detects the ROM and loads the correct client. Uses default connection settings.
 - **Gen 3 (GBA):** Load `lua/slink_gen3.lua` (or `lua/clients/gen3_frlge_client.lua` directly). Edit `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER` at the top.
 - **Gen 4 (NDS):** Load `lua/slink_gen4.lua` (or `lua/clients/gen4_hgsspt_client.lua` directly). Edit `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER` at the top.
+- **Gen 5 (NDS):** Load `lua/slink_gen5.lua` (or `lua/clients/gen5_bw_client.lua` directly). Edit `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER` at the top.
 - **Downloaded launcher:** Launcher files from the status page/manager prompt for the project root folder, cache it in `slink_path.cfg`, and auto-detect the game.
 
 ```lua
@@ -1003,7 +1029,14 @@ Below the cards:
 ### Unit tests — no emulator or server required
 
 ```bash
-pytest tests/unit/test_state.py -v   # 234 tests
+pytest tests/unit/ -v   # 647 tests
+pytest tests/unit/test_state.py -v          # 234 tests
+pytest tests/unit/test_gen1_adapter.py -v   # 78 tests
+pytest tests/unit/test_gen2_adapter.py -v   # 127 tests
+pytest tests/unit/test_gen3_adapter.py -v   # 77 tests
+pytest tests/unit/test_gen4_adapter.py -v   # 62 tests
+pytest tests/unit/test_gen5_adapter.py -v   # 63 tests
+pytest tests/unit/test_phase1_comms.py -v   # 6 tests
 ```
 
 Feed event dicts directly to `SoulLinkState.handle_event()`. Use `monkeypatch` to redirect `LINKS_PATH` to `tmp_path`. Helper `make_state_with_link()` creates a pre-linked pair with `pokeballs_obtained = {"a": True, "b": True}`.

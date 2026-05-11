@@ -774,4 +774,90 @@ function M.retrieveBoxMon(key)
     return true
 end
 
+--- Deposit party slot directly to the dedicated memorial box (last box).
+-- Gen 1: Box 12 (SRAM bank 3, CartRAM offset 0x75EA)
+-- Gen 2: Box 14 (SRAM bank 3, CartRAM offset 0x79E0)
+-- If no dedicated memorial box is available, falls back to depositPartyMon.
+-- Returns true on success, false + error string on failure.
+function M.depositMemorialMon(slot)
+    local mem_off = M.profile and M.profile.memorial_box_cartram_offset
+    if not mem_off then
+        if M.GENERATION == 1 then
+            mem_off = 0x75EA
+        elseif M.GENERATION == 2 then
+            mem_off = 0x79E0
+        end
+    end
+    if not mem_off then
+        return M.depositPartyMon(slot)
+    end
+
+    local pcount = M.getPartyCount()
+    if pcount <= 1 then
+        return false, "last mon in party"
+    end
+    if slot < 0 or slot >= pcount then
+        return false, "invalid slot"
+    end
+
+    local mbox_count = mem_r8(mem_off, SRAM_DOMAIN)
+    if mbox_count > M.BOX_MAX_MONS then
+        mbox_count = 0
+    end
+    if mbox_count >= M.BOX_MAX_MONS then
+        return M.depositPartyMon(slot)
+    end
+
+    local species_off = mem_off + 1
+    local structs_off = mem_off + 1 + (M.BOX_MAX_MONS + 1)
+    local ots_off     = structs_off + M.BOX_MAX_MONS * M.BOX_STRUCT_SIZE
+    local nicks_off   = ots_off + M.BOX_MAX_MONS * 11
+
+    local party_base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
+    local species = M.read_u8(party_base + M.SPECIES_OFFSET)
+
+    local struct_dst = structs_off + mbox_count * M.BOX_STRUCT_SIZE
+    for i = 0, M.BOX_STRUCT_SIZE - 1 do
+        mem_w8(struct_dst + i, M.read_u8(party_base + i), SRAM_DOMAIN)
+    end
+
+    local ot_dst   = ots_off + mbox_count * 11
+    local party_ot = M.PARTY_OT_NAMES_ADDR + slot * 11
+    for i = 0, 10 do
+        mem_w8(ot_dst + i, M.read_u8(party_ot + i), SRAM_DOMAIN)
+    end
+
+    local nick_dst   = nicks_off + mbox_count * 11
+    local party_nick = M.PARTY_NICKS_ADDR + slot * 11
+    for i = 0, 10 do
+        mem_w8(nick_dst + i, M.read_u8(party_nick + i), SRAM_DOMAIN)
+    end
+
+    mem_w8(species_off + mbox_count, species, SRAM_DOMAIN)
+    mem_w8(species_off + mbox_count + 1, 0xFF, SRAM_DOMAIN)
+    mem_w8(mem_off, mbox_count + 1, SRAM_DOMAIN)
+
+    local new_pcount = pcount - 1
+    for i = slot, new_pcount - 1 do
+        memcpy(M.PARTY_BASE_ADDR + i * M.PARTY_STRUCT_SIZE,
+               M.PARTY_BASE_ADDR + (i + 1) * M.PARTY_STRUCT_SIZE, M.PARTY_STRUCT_SIZE)
+        memcpy(M.PARTY_OT_NAMES_ADDR + i * 11,
+               M.PARTY_OT_NAMES_ADDR + (i + 1) * 11, 11)
+        memcpy(M.PARTY_NICKS_ADDR + i * 11,
+               M.PARTY_NICKS_ADDR + (i + 1) * 11, 11)
+    end
+    memzero(M.PARTY_BASE_ADDR + new_pcount * M.PARTY_STRUCT_SIZE, M.PARTY_STRUCT_SIZE)
+    memzero(M.PARTY_OT_NAMES_ADDR + new_pcount * 11, 11)
+    memzero(M.PARTY_NICKS_ADDR + new_pcount * 11, 11)
+
+    for i = 0, new_pcount - 1 do
+        local sp = M.read_u8(M.PARTY_BASE_ADDR + i * M.PARTY_STRUCT_SIZE + M.SPECIES_OFFSET)
+        M.write_u8(M.PARTY_SPECIES_ADDR + i, sp)
+    end
+    M.write_u8(M.PARTY_SPECIES_ADDR + new_pcount, 0xFF)
+    M.write_u8(M.PARTY_COUNT_ADDR, new_pcount)
+
+    return true
+end
+
 return M

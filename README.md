@@ -10,9 +10,9 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 | 1 | Red, Blue, Yellow | US English | ⚠️ Experimental |
 | 2 | Crystal | GBC | ⚠️ Experimental |
 | 4 | HeartGold, SoulSilver, Platinum | US | ⚠️ Experimental |
-| 5 | Black, White, B2W2 | — | 🚧 Planned |
+| 5 | Black, White, Black 2, White 2 | — | ⚠️ Experimental |
 
-> **Note:** Only Gen 3 has been extensively tested in live gameplay. Gen 1, 2, and 4 have unit tests and Lua clients but limited real-world testing.
+> **Note:** Only Gen 3 has been extensively tested in live gameplay. Gen 1, 2, 4, and 5 have unit tests and Lua clients but limited real-world testing.
 
 ## Quick Start
 
@@ -93,7 +93,7 @@ python -m server.manager --host 0.0.0.0
 ## Tests
 
 ```bash
-pytest tests/unit/ -v        # 584 tests, no emulator needed
+pytest tests/unit/ -v        # 647 tests, no emulator needed
 ```
 
 ## Project Structure
@@ -108,7 +108,7 @@ lua/
 server/
   server.py              # TCP + HTTP server (aiohttp)
   state.py               # SoulLinkState FSM
-  adapters/              # Game-specific adapters (gen1–4)
+  adapters/              # Game-specific adapters (gen1–5)
   pokemon_data.py        # Species, abilities, types, evos
 data/
   games/                 # Per-game static data (area maps, items)

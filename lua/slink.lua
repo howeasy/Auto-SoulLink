@@ -20,6 +20,7 @@ local _CLIENT_MAP = {
     gen2_crystal  = "clients/gen2_crystal_client.lua",
     gen3_frlge    = "clients/gen3_frlge_client.lua",
     gen4_hgsspt   = "clients/gen4_hgsspt_client.lua",
+    gen5_bw       = "clients/gen5_bw_client.lua",
 }
 
 local client_path = _CLIENT_MAP[detected.game_id]

@@ -7,9 +7,9 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 - **Gen 1** — Red, Blue, Yellow (US English) — ⚠️ experimental
 - **Gen 2** — Crystal (GBC) — ⚠️ experimental
 - **Gen 4** — HeartGold, SoulSilver, Platinum — ⚠️ experimental
-- **Gen 5** — Black, White, B2W2 — 🚧 planned (stubs only)
+- **Gen 5** — Black, White, Black 2, White 2 — ⚠️ experimental
 
-> **Note:** Only Gen 3 has been extensively tested in live gameplay. Gen 1, 2, and 4 have unit tests and Lua clients but limited real-world testing.
+> **Note:** Only Gen 3 has been extensively tested in live gameplay. Gen 1, 2, 4, and 5 have unit tests and Lua clients but limited real-world testing.
 
 ---
 
@@ -101,12 +101,17 @@ Alternatively, load `lua/slink.lua` directly — it auto-detects the game but us
   lua/clients/gen4_hgsspt_client.lua
   lua/memory_nds.lua
   data/games/gen4_hgsspt/gen4_hgsspt_areas.lua
+
+[BizHawk – Gen 5 (NDS)]            [BizHawk – Gen 5 (NDS)]
+  lua/clients/gen5_bw_client.lua     lua/clients/gen5_bw_client.lua
+  lua/memory_nds.lua                 lua/memory_nds.lua
+  data/games/gen5_bw/gen5_bw_areas.lua
          |  TCP JSON event                  |
          +-────────────────────────────────-+
                        ↓
               [server/server.py]   aiohttp HTTP + TCP listener :54321
               [server/state.py]    SoulLinkState FSM
-              [server/adapters/]   Game-specific adapters (gen1_rby, gen3_frlge, gen4_hgsspt)
+              [server/adapters/]   Game-specific adapters (gen1_rby, gen3_frlge, gen4_hgsspt, gen5_bw)
               [data/links.json]    persisted link table
               [data/memorial.json] persisted memorial log
               [data/games/]        game-specific data (area maps, RR data)
@@ -293,12 +298,13 @@ The status server (default port 8080) exposes these pages and endpoints:
 ### Unit tests (no emulator required)
 
 ```bash
-pytest tests/unit/ -v          # all 584 tests
+pytest tests/unit/ -v          # all 647 tests
 pytest tests/unit/test_state.py -v        # 234 state machine tests
 pytest tests/unit/test_gen3_adapter.py -v  # 77 Gen 3 adapter tests
 pytest tests/unit/test_gen4_adapter.py -v  # 62 Gen 4 adapter tests
 pytest tests/unit/test_gen1_adapter.py -v  # 78 Gen 1 adapter tests
 pytest tests/unit/test_gen2_adapter.py -v  # 127 Gen 2 adapter tests
+pytest tests/unit/test_gen5_adapter.py -v  # 63 Gen 5 adapter tests
 ```
 
 234 state machine tests covering: linking, dead zones, faint propagation, whiteout, party sync (including confirmation-based `sync_retrieve_done`/`sync_retrieve_failed`, PC swap event ordering), box capture stats caching, memorial box, reconnect re-queuing, illegal captures, encounter logging, AP ROM type handling, species clause (evo families), gender clause (genderless edge cases), type clause (shared types, partial overlap, monotypes), combined clauses, violation recovery, clause rule persistence, same-save species duplicate prevention, dynamic gift areas, hello resolved_areas, gift area no_catch protection, unlinked encounter quarantine, paired party sync enforcement, dead zone quarantined mon retirement, CFRU/RR species data validation (Gen 3 ID rekey, Gen 4+ cross-gen evolutions, gender ratios), battle HP cache writeback (CFRU), double-buffer party diff, frame ordering, player identity lock (OT ID per slot — first lock, wrong OT rejection, event blocking, persistence, empty party skip, per-player independence), persistent run metadata (rom_type, trainer_names), shiny bonus pairs (pending_bonus FIFO queue, pair formation, faint propagation both directions, party sync at formation, FIFO multi-bonus, lock clause violations with retry, area unresolve, persistence, key migration, no-wildcard-exemption), nature change (key_change migration), and dupes clause partner pending capture check.
@@ -326,25 +332,30 @@ See `tests/TESTING.md` for the full 9-step alpha test procedure. Load `lua/slink
 | `lua/slink.lua` | **Universal entry point** — auto-detects game and loads correct client |
 | `lua/slink_gen3.lua` | **Gen 3 launcher** — configure host/port/player, load in BizHawk |
 | `lua/slink_gen4.lua` | **Gen 4 launcher** — configure host/port/player, load in BizHawk |
+| `lua/slink_gen5.lua` | **Gen 5 launcher** — configure host/port/player, load in BizHawk |
 | `lua/clients/gen3_frlge_client.lua` | Gen 3 production client — FRLG/Emerald/Radical Red. Localized BizHawk memory functions, display data cache, battle/overworld state cached once per frame. |
 | `lua/clients/gen4_hgsspt_client.lua` | Gen 4 production client — HeartGold/SoulSilver. NDS memory model, LCRNG-aware, HP debounce. |
+| `lua/clients/gen5_bw_client.lua` | Gen 5 production client — Black, White, Black 2, White 2. PID:OTID keys, 220-byte PKM structs, shared NDS helpers. |
 | `lua/memory_gba.lua` | Gen 3 GBA RAM helpers — auto-detecting profiles (vanilla, AP, CFRU/RR), read/write, force-faint, box/party transfer, memorial write, SE playback via m4a engine |
-| `lua/memory_nds.lua` | Gen 4 NDS RAM helpers — LCRNG encryption/decryption, 2-level pointer chain, HP debounce, party/box/battle reads |
+| `lua/memory_nds.lua` | Gen 4/5 NDS RAM helpers — LCRNG encryption/decryption, 2-level pointer chain, HP debounce, party/box/battle reads |
 | `data/games/gen3_frlge/gen3_frlge_areas.lua` | Gen 3 area lookup — `mapGroup*256+mapNum → area_id` (175 entries; `python tools/gen_area_map.py` to regenerate) |
 | `data/games/gen4_hgsspt/gen4_hgsspt_areas.lua` | Gen 4 area lookup — `zoneId → area_id` (195 entries, auto-generated) |
 | `lua/connector.lua` | Shared TCP connector — fully non-blocking connect, exponential backoff (2s → 30s cap) |
 | `lua/game_detect.lua` | Shared game detection framework — scans ROM header to identify game family |
 | `lua/games/gen3_frlge.lua` | Gen 3 game module — ROM detection, profiles, gift areas, area resolution |
 | `lua/games/gen4_hgsspt.lua` | Gen 4 game module — NDS ROM detection, HGSS profiles, gift areas, area resolution |
+| `lua/games/gen5_bw.lua` | Gen 5 game module — Black/White/BW2 detection, per-variant NDS profiles, gift areas, area resolution |
 | `server/state.py` | `SoulLinkState` FSM — all Soul Link rule enforcement, adapter-driven |
 | `server/server.py` | aiohttp coordinator + status page (flicker-free DOM morphing, battle display) |
 | `server/adapters/gen1_rby.py` | Gen 1 adapter — DVs:OTID:species keys, RBY gift areas, Gen 1 sprites |
 | `server/adapters/gen3_frlge.py` | Gen 3 adapter — GBA key format, FRLG+Emerald gift areas, Gen 1-3 species |
 | `server/adapters/gen4_hgsspt.py` | Gen 4 adapter — PID:OTID keys, HGSS gift areas, Gen 1-4 species |
+| `server/adapters/gen5_bw.py` | Gen 5 adapter — PID:OTID keys, BW/BW2 gift areas, Gen 1-5 species |
 | `server/adapters/base.py` | Adapter ABC — GameRulesAdapter + GamePresentationAdapter interfaces |
 | `data/games/gen1_rby/` | Gen 1 game data — area/location mappings |
 | `data/games/gen3_frlge/` | Gen 3 game data — area maps, RR items/sprites/types/species/trainers |
 | `data/games/gen4_hgsspt/` | Gen 4 game data — HGSS area map |
+| `data/games/gen5_bw/` | Gen 5 game data — BW/BW2 area maps and location tables |
 | `data/links.json` | Persisted link table — written after every state change |
 | `data/memorial.json` | Persisted memorial log |
 | `server/manager.py` | Run Manager — creates/starts/stops/archives named runs on port 8090 |

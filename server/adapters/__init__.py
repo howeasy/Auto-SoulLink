@@ -41,6 +41,16 @@ register_adapter("frlg", Gen3Adapter)
 from .gen4_hgsspt import Gen4Adapter  # noqa: E402
 register_adapter("gen4_hgsspt", Gen4Adapter)
 
+try:
+    from .gen5_bw import Gen5Adapter  # noqa: E402
+    register_adapter("gen5_bw", Gen5Adapter)
+    register_adapter("pokemon_black", Gen5Adapter)
+    register_adapter("pokemon_white", Gen5Adapter)
+    register_adapter("pokemon_black_2", Gen5Adapter)
+    register_adapter("pokemon_white_2", Gen5Adapter)
+except ImportError:
+    pass
+
 from .gen1_rby import Gen1Adapter  # noqa: E402
 register_adapter("gen1_rby", Gen1Adapter)
 

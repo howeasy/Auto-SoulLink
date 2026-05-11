@@ -7,12 +7,36 @@
     M.detect_variant()  — returns "heartgold", "soulsilver", or "platinum"
     M.rom_type_for_variant(variant) — returns rom_type string for server
     M.is_gift_area(area_id) — true for gift/static encounter areas
-    M.resolve_area(mapGroup, mapNum) — returns area_id from zone lookup
+    M.resolve_area(zone_id) — returns area_id from zone lookup
 
   Supports ROM variants:
     • heartgold   — Pokémon HeartGold US (IPKE)
-    • soulsilver  — Pokémon SoulSilver US (IPGE)
-    • platinum    — Pokémon Platinum US (CPUE) — stub, addresses TBD
+    • soulsilver  — Pokémon SoulSilver US (IPGE) — identical offsets to HG
+    • platinum    — Pokémon Platinum US (CPUE)
+
+  Pointer chain (same for all Gen 4):
+    p1   = memory.read_u32_le(0x0BA8, "Main RAM") & 0xFFFFFF
+    base = memory.read_u32_le(p1 + 0x20, "Main RAM") & 0xFFFFFF
+  All offsets below are relative to `base`.
+
+  Address sources:
+    • Brian0255/NDS-Ironmon-Tracker MemoryAddresses.lua + GameConfigurator.lua
+      — party, battle, zone, trainer ID, badge offsets (confirmed production-tested)
+    • kwsch/PKHeX SAV4HGSS.cs / SAV4Pt.cs / SAV4.cs
+      — Trainer1 field offset (player name, badges), Party field offset
+    • kwsch/PKHeX PlayerBag4HGSS.cs / PlayerBag4Pt.cs
+      — Bag base offset + pocket-relative offsets → BALLS_POCKET_OFF per variant
+    • pret/pokeheartgold include/save.h + include/constants/save_arrays.h
+      — SaveData struct layout, arrayHeaders[SAVE_PCSTORAGE=41].offset field
+
+  Coordinate system:
+    PKHeX uses a "General" save buffer whose byte 0 = SaveData.dynamic_region[0].
+    dynamic_region starts at SaveData+0x10 (HGSS) or SaveData+0x14 (Platinum).
+    Since base = &SaveData, all PKHeX General offsets need +0x10 (HGSS) or +0x14 (Pt)
+    to become base-relative offsets.
+
+  Note: SoulSilver and HeartGold use IDENTICAL offsets (confirmed Ironmon-Tracker).
+  Unlike Gen 5, there is no version-to-version delta between HG and SS.
 --]]
 
 local M = {}
@@ -98,91 +122,120 @@ end
 M.detect_priority = 20  -- higher than Gen 3 (10) so NDS is checked first
 
 -- ── Memory profiles ─────────────────────────────────────────────────────────
--- HGSS profile: confirmed from pret/pokeheartgold + live testing.
--- All offsets are relative to the resolved base pointer (M._base in memory_nds).
+-- HGSS profile: all offsets confirmed from two independent sources:
+--   • Brian0255/NDS-Ironmon-Tracker MemoryAddresses.lua (live BizHawk Lua)
+--   • kwsch/PKHeX SAV4HGSS.cs / SAV4.cs / PlayerBag4HGSS.cs
+--
+-- SoulSilver uses the SAME profile as HeartGold (confirmed from Ironmon-Tracker —
+-- the SOUL_SILVER block in MemoryAddresses.lua is byte-for-byte identical to HG).
+-- Unlike Gen 5 (Black/White have a +0x20 delta), there is NO version offset here.
 local _HGSS_PROFILE = {
-    -- Pointer chain
+    -- Pointer chain (same for both HG and SS, and for Platinum)
     P1_PTR_ADDR      = 0x0BA8,
     BASE_PTR_OFF     = 0x20,
 
     -- Party
-    PARTY_COUNT_OFF  = 0xA4,
-    PARTY_OFF        = 0xA8,
-    MON_SIZE         = 0xEC,  -- 236 bytes (PartyPokemon)
+    -- PKHeX: SAV4HGSS.cs Party=0x98 → General[0x94] = count; base+0xA4 = 0x94+0x10 ✓
+    -- Ironmon: playerBase=0xA8 ✓
+    PARTY_COUNT_OFF  = 0xA4,   -- u8, 0-6
+    PARTY_OFF        = 0xA8,   -- PartyPokemon[6], stride 0xEC (236 bytes)
+    MON_SIZE         = 0xEC,   -- 236 bytes (PartyPokemon)
 
     -- PC Storage
+    -- pret/pokeheartgold: SaveData.arrayHeaders[SAVE_PCSTORAGE=41].offset field.
+    -- arrayHeaders[0] at SaveData+0x23014; [41] at +0x232A4; .offset (u32, struct+8) at +0x232AC.
+    -- Read u32_le at base+0x232AC → byte offset within dynamic_region of PC box data.
     PC_ARRAY_HDR_OFF = 0x232AC,
-    PC_BOX_STRIDE    = 0x1000,
-    PC_SLOT_STRIDE   = 0x88,   -- 136 bytes (BoxPokemon)
+    PC_BOX_STRIDE    = 0x1000,   -- 30 × 0x88 = 0xF90, padded to 0x1000 (Gen 4 style)
+    PC_SLOT_STRIDE   = 0x88,     -- BoxPokemon = 136 bytes
     BOXES_COUNT      = 18,
-    MEMORIAL_BOX     = 17,     -- Box 18 (0-indexed)
+    MEMORIAL_BOX     = 17,       -- Box 18 (0-indexed), UI "Box 18", "THE DEAD"
 
     -- Battle
+    -- Ironmon: playerBattleBase=0x4EA98, enemyBase=0x4F068 ✓
     PLAYER_BATTLE_OFF = 0x4EA98,
     ENEMY_BATTLE_OFF  = 0x4F068,
-    BATTLE_STATUS_ADDR = 0x246F48,
+    BATTLE_STATUS_ADDR = 0x246F48,  -- absolute (Ironmon GLOBAL.battleStatus); not used by isInBattle()
 
     -- Bag (Pokéball pocket)
+    -- PKHeX PlayerBag4HGSS.cs: BaseOffset=0x644, Balls pocket at +0x6C0.
+    -- General buffer: 0x644+0x6C0 = 0xD04; base-relative: 0xD04+0x10 = 0xD14. ✓
+    -- Slot count: BattleItems at +0x720; (0x720-0x6C0)/4 = 0x60/4 = 24 slots. ✓
     BALLS_POCKET_OFF   = 0xD14,
     BALLS_POCKET_COUNT = 24,
 
     -- Zone / area
+    -- Ironmon: childMapHeader=0x25FE4 (pointer to map header; zone u16 at ptr+2) ✓
     ZONE_ID_OFF      = 0x25FE4,
-    ZONE_ID_MAX      = 0x200,  -- HGSS has 540 zones
-    TRAINER_ID_OFF   = 0x440AA,
+    ZONE_ID_MAX      = 0x220,   -- HGSS has 540 zones (IDs 0x000–0x21B); 0x220=544 covers all of them.
+    TRAINER_ID_OFF   = 0x440AA, -- u16; 0=wild (Ironmon: enemyTrainerID=0x440AA) ✓
 
     -- Player profile
+    -- PKHeX SAV4HGSS.cs: Trainer1=0x64 → base+0x74 (0x64+0x10). Name = u16[8].
+    -- Badges: SAV4.cs General[Trainer1+0x1A] → 0x64+0x1A=0x7E → base+0x8E (Johto)
+    --         SAV4HGSS.cs General[Trainer1+0x1F] → 0x64+0x1F=0x83 → base+0x93 (Kanto)
     PLAYER_NAME_OFF  = 0x74,
-    BADGES_1_OFF     = 0x8E,   -- Johto badges
-    BADGES_2_OFF     = 0x93,   -- Kanto badges (nil for Platinum)
+    BADGES_1_OFF     = 0x8E,   -- u8, Johto badges (bit 0=Zephyr … bit 7=Rising)
+    BADGES_2_OFF     = 0x93,   -- u8, Kanto badges (bit 0=Boulder … bit 7=Earth)
 
     -- Platform
     RAM_DOMAIN       = "Main RAM",
     ROM_DOMAIN       = "ROM",
 }
 
--- Platinum profile: confirmed from Brian0255/NDS-Ironmon-Tracker + pret/pokeplatinum.
--- Source: MemoryAddresses.lua (CPUE entry) + GameConfigurator.lua (pointer chain).
--- All offsets are relative to versionPtrAddr (= *(*(0x0BA8) + 0x20) & 0xFFFFFF),
--- IDENTICAL pointer chain to HGSS.
+-- Platinum profile: confirmed from Brian0255/NDS-Ironmon-Tracker + kwsch/PKHeX.
+-- Sources: MemoryAddresses.lua (CPUE entry), SAV4Pt.cs, PlayerBag4Pt.cs.
+-- All offsets are relative to the same base pointer as HGSS (P1_PTR_ADDR identical).
+-- PKHeX delta for Platinum: dynamic_region starts at SaveData+0x14 (vs +0x10 HGSS).
 local _PT_PROFILE = {
-    -- Pointer chain — IDENTICAL to HGSS (confirmed: NDS-Ironmon-Tracker GLOBAL_POINTER=0xBA8)
+    -- Pointer chain — IDENTICAL to HGSS (confirmed: Ironmon GLOBAL_POINTER=0xBA8)
     P1_PTR_ADDR      = 0x0BA8,
     BASE_PTR_OFF     = 0x20,
 
-    -- Party (source: NDS-Ironmon-Tracker playerBase=0xB4; pret: Party{capacity+0, count+4, mon+8})
-    PARTY_COUNT_OFF  = 0xB0,   -- party struct at base+0xAC, count at +4
+    -- Party
+    -- PKHeX SAV4Pt.cs: Party=0xA0 → count at General[0x9C] → base+0xB0 (0x9C+0x14) ✓
+    -- Ironmon: playerBase=0xB4 ✓
+    PARTY_COUNT_OFF  = 0xB0,   -- u8, 0-6
     PARTY_OFF        = 0xB4,   -- first PartyPokemon slot
-    MON_SIZE         = 0xEC,   -- 236 bytes (NDS-Ironmon-Tracker ENCRYPTED_POKEMON_SIZE=236)
+    MON_SIZE         = 0xEC,   -- 236 bytes (Ironmon ENCRYPTED_POKEMON_SIZE=236) ✓
 
-    -- PC Storage — not tracked by NDS-Ironmon-Tracker; TBD via BizHawk RAM watch.
-    PC_ARRAY_HDR_OFF = nil,    -- TBD: PCBoxes save entry index 37 (vs HGSS index 41)
-    PC_BOX_STRIDE    = 0x1000, -- same as HGSS (30 × 0x88 = 0xF90, padded to 0x1000)
-    PC_SLOT_STRIDE   = 0x88,   -- BoxPokemon = 0x88 bytes (confirmed pret/pokeplatinum)
+    -- PC Storage
+    -- Platinum SaveData struct not in public decompilation; assumed same layout as HGSS:
+    -- arrayHeaders[41].offset field at SaveData+0x232AC (VERIFY_ME: pause BizHawk, check
+    -- u32_le at base+0x232AC is a small offset < 0x23000 pointing to PC box data).
+    PC_ARRAY_HDR_OFF = 0x232AC,   -- likely correct (same SaveData layout); VERIFY_ME
+    PC_BOX_STRIDE    = 0x1000,    -- 30 × 0x88 = 0xF90, padded to 0x1000 (same as HGSS)
+    PC_SLOT_STRIDE   = 0x88,      -- BoxPokemon = 136 bytes (confirmed pret/pokeplatinum)
     BOXES_COUNT      = 18,
     MEMORIAL_BOX     = 17,
 
-    -- Battle (source: NDS-Ironmon-Tracker playerBattleBase=0x4B8AC, enemyBase=0x4BE5C)
+    -- Battle
+    -- Ironmon: playerBattleBase=0x4B8AC, enemyBase=0x4BE5C ✓
     PLAYER_BATTLE_OFF  = 0x4B8AC,
     ENEMY_BATTLE_OFF   = 0x4BE5C,
-    BATTLE_STATUS_ADDR = 0x24A55A,  -- absolute (NDS-Ironmon-Tracker GLOBAL.battleStatus)
+    BATTLE_STATUS_ADDR = 0x24A55A,  -- absolute (Ironmon GLOBAL.battleStatus); not used by isInBattle()
 
-    -- Bag (Pokéball pocket).
-    -- Source: NDS-Ironmon-Tracker medicine@0xB60 + pret struct: medicine at bag+0x51C,
-    -- berries at bag+0x5BC (0xB60+0x5BC=0xC00 matches tracker's berryBagStart=0xC00 ✓),
-    -- pokeballs at bag+0x6BC → 0x644+0x6BC = 0xD00.
-    BALLS_POCKET_OFF   = 0xD00,  -- ⚠ derived; verify in BizHawk RAM watch
-    BALLS_POCKET_COUNT = 15,     -- pret: POKEBALL_POCKET_SIZE = 15 (vs 24 HGSS)
+    -- Bag (Pokéball pocket)
+    -- PKHeX PlayerBag4Pt.cs: BaseOffset=0x630, Balls at +0x6BC.
+    -- General_Pt: 0x630+0x6BC = 0xCEC; base-relative: 0xCEC+0x14 = 0xD00. ✓
+    -- Slot count: BattleItems at +0x6F8; (0x6F8-0x6BC)/4 = 0x3C/4 = 15 slots. ✓
+    BALLS_POCKET_OFF   = 0xD00,
+    BALLS_POCKET_COUNT = 15,
 
-    -- Zone / area (source: NDS-Ironmon-Tracker childMapHeader=0x239B0, read as u16)
+    -- Zone / area
+    -- Ironmon: childMapHeader=0x239B0 (map header pointer; zone u16 at ptr+2) ✓
+    -- Platinum has 593 zones (MAP_HEADER_COUNT); ZONE_ID_MAX=0x280=640 gives headroom.
     ZONE_ID_OFF      = 0x239B0,
-    ZONE_ID_MAX      = 0x280,  -- 593 zones (MAP_HEADER_COUNT); 0x280=640 gives headroom
-    TRAINER_ID_OFF   = 0x4189E,  -- enemy trainer ID; 0=wild (NDS-Ironmon-Tracker)
+    ZONE_ID_MAX      = 0x280,
+    TRAINER_ID_OFF   = 0x4189E,  -- u16 enemy trainer ID; 0=wild (Ironmon) ✓
 
-    -- Player profile (name not tracked by NDS-Ironmon-Tracker; TBD via binary analysis)
-    PLAYER_NAME_OFF  = nil,    -- TBD
-    BADGES_1_OFF     = 0x96,   -- single Sinnoh badge byte (NDS-Ironmon-Tracker badges=0x96)
-    BADGES_2_OFF     = false,  -- Platinum has only one badge set → nil
+    -- Player profile
+    -- PKHeX SAV4Pt.cs: Trainer1=0x68 → base+0x7C (0x68+0x14). Name = u16[8].
+    -- Same charcode encoding as HGSS (custom Gen IV 16-bit codes, not Unicode).
+    -- Badges: SAV4.cs General[Trainer1+0x1A] → 0x68+0x1A=0x82 → base+0x96 (Sinnoh) ✓
+    PLAYER_NAME_OFF  = 0x7C,
+    BADGES_1_OFF     = 0x96,   -- u8, Sinnoh badges (bit 0=Coal … bit 7=Beacon)
+    BADGES_2_OFF     = false,  -- Platinum has only one badge set → disables readBadges2()
 
     RAM_DOMAIN       = "Main RAM",
     ROM_DOMAIN       = "ROM",
@@ -197,8 +250,10 @@ M.profiles = {
 -- ── Area lookup ─────────────────────────────────────────────────────────────
 local _AREAS = require("gen4_hgsspt_areas")
 
+-- resolve_area(zone_id) — maps sequential zone ID to area_id.
+-- Backward-compatible form: resolve_area(mapGroup, mapNum) still accepts legacy composite keys.
 function M.resolve_area(mapGroup, mapNum)
-    local key = mapGroup * 1000 + mapNum
+    local key = (mapNum == nil) and mapGroup or (mapGroup * 1000 + mapNum)
     return _AREAS[key] or ""
 end
 

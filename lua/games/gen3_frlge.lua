@@ -366,4 +366,69 @@ function GEN3.rom_type_for_variant(variant)
     return base
 end
 
+-- Additive Emerald US 1.0 profile from the Gen5 fork.
+-- Uses Emerald-specific RAM addresses while leaving existing FRLG/AP/RR logic untouched.
+GEN3.profiles.emerald = {
+    PARTY_COUNT_ADDR           = 0x020244E9,
+    PARTY_BASE                 = 0x020244EC,
+    ENEMY_COUNT_ADDR           = 0x020244EA,
+    ENEMY_BASE                 = 0x02024744,
+    BATTLE_TYPE_ADDR           = 0x02022FEC,
+    BATTLE_OUTCOME_ADDR        = 0x0202433A,
+    BATTLE_MONS_ADDR           = 0x02024084,
+    BATTLER_PARTY_INDEXES_ADDR = 0x0202406E,
+    BATTLERS_COUNT_ADDR        = 0x0202406C,
+    BATTLE_MAIN_FUNC_ADDR      = 0x03005D04,
+    RETURN_FROM_BATTLE_ADDR    = nil,
+    GMAIN_ADDR                 = 0x030022C0,
+    SB1_PTR_ADDR               = 0x03005D8C,
+    SB2_PTR_ADDR               = 0x03005D90,
+    PSP_PTR_ADDR               = 0x03005D94,
+    SB2_ENC_KEY_OFFSET         = 0x00AC,
+    SB1_BALL_POCKET_OFFSET     = 0x0650,
+    SB1_BALL_POCKET_COUNT      = 16,
+    SB1_FLAGS_OFFSET           = 0x1270,
+    OVERWORLD_MODE             = "gmain_flags",
+    OUTCOME_CAUGHT             = 7,
+    OUTCOME_RAN                = 4,
+    SE_SONG_HEADERS            = {},
+    BASESTATS_ADDR             = 0x083203CC,
+    BASESTATS_ENTRY_SIZE       = 28,
+    TRAINER_OPPONENT_ADDR      = 0x02038BCA,
+}
+
+-- Cache the ROM game code so Emerald-specific lookups can branch cheaply.
+do
+    local ok, code = pcall(function()
+        local b = {}
+        for i = 0, 3 do
+            b[i + 1] = string.char(memory.read_u8(0x080000AC + i, "System Bus"))
+        end
+        return table.concat(b)
+    end)
+    GEN3._game_code = (ok and code) or nil
+end
+
+local function _lookup_table(frlg_module, emerald_module)
+    if GEN3._game_code == "BPEE" then
+        local ok, tbl = pcall(require, emerald_module)
+        if ok then
+            return tbl
+        end
+    end
+    return require(frlg_module)
+end
+
+function GEN3.resolve_area(mapGroup, mapNum)
+    local areas = _lookup_table("gen3_frlge_areas", "gen3_emerald_areas")
+    local k = mapGroup .. ":" .. mapNum
+    return areas[k] or ""
+end
+
+function GEN3.resolve_location(mapGroup, mapNum)
+    local locs = _lookup_table("gen3_frlge_locations", "gen3_emerald_locations")
+    local k = mapGroup .. ":" .. mapNum
+    return locs[k] or ""
+end
+
 return GEN3

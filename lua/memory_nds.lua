@@ -308,7 +308,7 @@ local BALLS_POCKET_COUNT = 24        -- number of item slots in ball pocket
 -- Zone ID pointer: base+ZONE_ID_OFF is a pointer; the u16 two bytes in = zone.
 -- Falls back to ptr+2 if direct read returns 0. Confirmed in live T3 tests.
 local ZONE_ID_OFF        = 0x25FE4
-local ZONE_ID_MAX        = 0x200     -- plausibility upper bound (HGSS: 540 zones)
+local ZONE_ID_MAX        = 0x220     -- plausibility upper bound (HGSS: 540 zones, max ID 0x21B)
 
 -- Enemy trainer ID: u16 at base+TRAINER_ID_OFF (0 = wild battle).
 -- Confirmed against live wild/trainer battles (NDS-Ironmon-Tracker MemoryAddresses.lua).
@@ -333,6 +333,21 @@ local BATTLE_STATUS_ADDR = 0x246F48
 -- Memorial box index (0-based). Box 17 = UI "Box 18" = "THE DEAD".
 -- Both HGSS and Platinum use 18-box storage; memorial is the last box.
 local MEMORIAL_BOX       = 17
+
+-- ── Gen 5 direct-addressing mode ─────────────────────────────────────────────
+-- Gen 5 (Black/White/Black2/White2) uses fixed absolute RAM addresses instead of
+-- the Gen 4 two-level pointer chain. When DIRECT_ADDR = true:
+--   • M.init() sets M._base = 0 (truthy in Lua) and skips pointer resolution.
+--   • All M._base + OFF expressions evaluate to the absolute address directly.
+--   • ZONE_ID_DIRECT disables the Gen 4 zone ID pointer-fallback branch.
+--   • PC_STORAGE_BASE replaces the Gen 4 PC array-header dereference.
+--   • TRAINER_NAME_ENCODING switches readTrainerName() to UTF-16 passthrough.
+local DIRECT_ADDR          = false   -- true for Gen 5
+local ZONE_ID_DIRECT       = false   -- true for Gen 5 (no pointer fallback on zone==0)
+local PC_STORAGE_BASE      = nil     -- Gen 5 direct PC box[0] base addr (nil = Gen 4 method)
+local TRAINER_NAME_ENCODING = "gen4" -- "gen4" or "gen5" (UTF-16 passthrough)
+local BOXES_COUNT          = 18      -- 18 (Gen 4) or 24 (Gen 5)
+local PC_CURRENT_BOX_OFF   = 0x12000 -- offset from pcStorageBase to currentBox u8
 
 -- ── M.applyProfile ────────────────────────────────────────────────────────────
 -- Call once at startup (after variant detection) to apply a game-specific address
@@ -365,6 +380,15 @@ function M.applyProfile(p)
         MEMORIAL_BOX   = p.MEMORIAL_BOX
         M.MEMORIAL_BOX = p.MEMORIAL_BOX
     end
+    -- Gen 5 direct-addressing mode fields
+    if p.DIRECT_ADDR           ~= nil then DIRECT_ADDR           = p.DIRECT_ADDR           end
+    if p.ZONE_ID_DIRECT        ~= nil then ZONE_ID_DIRECT        = p.ZONE_ID_DIRECT        end
+    if p.PC_STORAGE_BASE       ~= nil then PC_STORAGE_BASE       = p.PC_STORAGE_BASE       end
+    if p.TRAINER_NAME_ENCODING ~= nil then TRAINER_NAME_ENCODING = p.TRAINER_NAME_ENCODING end
+    if p.MON_SIZE              ~= nil then M.MON_SIZE            = p.MON_SIZE              end
+    if p.PC_BOX_STRIDE         ~= nil then PC_BOX_STRIDE         = p.PC_BOX_STRIDE         end
+    if p.BOXES_COUNT           ~= nil then BOXES_COUNT           = p.BOXES_COUNT           end
+    if p.PC_CURRENT_BOX_OFF    ~= nil then PC_CURRENT_BOX_OFF    = p.PC_CURRENT_BOX_OFF    end
 end
 
 -- Export read-only profile values for callers that need them.
@@ -416,27 +440,40 @@ function M.clearDebounce()
 end
 
 -- ── M.init() ─────────────────────────────────────────────────────────────────
--- Resolve the two-level pointer chain and update the per-slot debounce caches.
+-- Resolve the base pointer (Gen 4: two-level chain; Gen 5: set base = 0 directly)
+-- and update the per-slot debounce caches.
 -- Must be called every frame before any address helper.
--- Returns base (integer) or nil when save is not loaded (title screen, BIOS).
+-- Returns base (integer, 0 for Gen 5) or nil when save is not loaded.
 function M.init()
-    local p1 = r32(P1_PTR_ADDR) & 0xFFFFFF
-    if p1 == 0 then
-        if M._base then M.clearDebounce() end
-        M._base = nil; return nil
+    if DIRECT_ADDR then
+        -- Gen 5: all addresses are absolute; no pointer chain.
+        -- Use party count as a plausibility check (must be 0-6).
+        -- Note: PARTY_COUNT_OFF is the absolute address (M._base will be 0).
+        local n = r8(PARTY_COUNT_OFF)
+        if n > 6 then
+            if M._base then M.clearDebounce() end
+            M._base = nil; return nil
+        end
+        M._base = 0   -- 0 is truthy in Lua; signals direct-addressing mode active
+    else
+        local p1 = r32(P1_PTR_ADDR) & 0xFFFFFF
+        if p1 == 0 then
+            if M._base then M.clearDebounce() end
+            M._base = nil; return nil
+        end
+        local base = r32(p1 + BASE_PTR_OFF) & 0xFFFFFF
+        if base == 0 then
+            if M._base then M.clearDebounce() end
+            M._base = nil; return nil
+        end
+        M._base = base
     end
-    local base = r32(p1 + BASE_PTR_OFF) & 0xFFFFFF
-    if base == 0 then
-        if M._base then M.clearDebounce() end
-        M._base = nil; return nil
-    end
-    M._base = base
     for i = 0, 5 do
         _db_update(_db_party,  i, M.readPartySlot(i))
         _db_update(_db_battle, i, M.readBattleSlot(i))
         _db_update(_db_enemy,  i, M.readEnemySlot(i))
     end
-    return base
+    return M._base
 end
 
 -- ── Pre-write validation ────────────────────────────────────────────────────
@@ -446,15 +483,20 @@ end
 -- box_mon / party_mon from firing when the game state is garbage (title screen,
 -- mid-save, reset).
 --
--- Checks:
---   1. Base pointer chain resolves (M._base non-nil)
+-- Gen 4 checks:
+--   1. Base pointer chain resolves (M._base non-nil and non-zero)
 --   2. Party count u8 is 0–6
 --   3. PC storage arrayHeaders[41].offset is in valid range
---   4. Zone ID pointer dereferences to a plausible value (< 0x200)
+--   4. Zone ID pointer dereferences to a plausible value (< ZONE_ID_MAX)
 --   5. Player name starts with a valid Gen IV char code (not 0x0000)
+-- Gen 5 checks (DIRECT_ADDR mode): skip #1 (no pointer chain) and #3 (no PC array header).
 function M.validateSave()
-    -- 1. Base pointer
-    if not M._base then return false, "base pointer not resolved" end
+    if not DIRECT_ADDR then
+        -- 1. Base pointer (Gen 4 only)
+        if not M._base then return false, "base pointer not resolved" end
+    else
+        if M._base == nil then return false, "base not initialized" end
+    end
 
     -- 2. Party count
     local raw_count = r8(M._base + PARTY_COUNT_OFF)
@@ -462,26 +504,43 @@ function M.validateSave()
         return false, fmt("party count=%d (expected 0-6)", raw_count)
     end
 
-    -- 3. PC storage header offset
-    local pc_off = r32(M._base + PC_ARRAY_HDR_OFF)
-    if pc_off < 0x100 or pc_off >= 0x23000 then
-        return false, fmt("PC header offset=0x%X (expected 0x100-0x22FFF)", pc_off)
+    -- 3. PC storage header offset (Gen 4 only; Gen 5 uses PC_STORAGE_BASE)
+    if not DIRECT_ADDR and PC_ARRAY_HDR_OFF then
+        local pc_off = r32(M._base + PC_ARRAY_HDR_OFF)
+        if pc_off < 0x100 or pc_off >= 0x23000 then
+            return false, fmt("PC header offset=0x%X (expected 0x100-0x22FFF)", pc_off)
+        end
     end
 
-    -- 4. Zone ID plausibility (HGSS ~540 zones, Platinum ~400 zones; cap at ZONE_ID_MAX)
-    local zone = r16(M._base + ZONE_ID_OFF)
-    if zone == 0 then
-        local ptr = r32(M._base + ZONE_ID_OFF) & 0xFFFFFF
-        if ptr ~= 0 then zone = r16(ptr + 2) end
+    -- 4. Zone ID plausibility
+    local zone
+    if ZONE_ID_DIRECT then
+        zone = r16(M._base + ZONE_ID_OFF)
+    else
+        zone = r16(M._base + ZONE_ID_OFF)
+        if zone == 0 then
+            local ptr = r32(M._base + ZONE_ID_OFF) & 0xFFFFFF
+            if ptr ~= 0 then zone = r16(ptr + 2) end
+        end
     end
     if zone > ZONE_ID_MAX then
         return false, fmt("zone ID=0x%X (expected < 0x%X)", zone, ZONE_ID_MAX)
     end
 
-    -- 5. Player name first char (Gen IV charcode 289–478 for visible chars)
-    local first_char = r16(M._base + PLAYER_NAME_OFF)
-    if first_char == 0x0000 then
-        return false, "player name starts with 0x0000 (save not loaded)"
+    -- 5. Player name first char
+    if PLAYER_NAME_OFF then
+        local first_char = r16(M._base + PLAYER_NAME_OFF)
+        if TRAINER_NAME_ENCODING == "gen5" then
+            -- Gen 5: 0xFFFF = EOS (save not loaded or no name); 0x0000 also invalid
+            if first_char == 0x0000 or first_char == 0xFFFF then
+                return false, "player name is empty (save not loaded)"
+            end
+        else
+            -- Gen 4: valid charcodes start at 0x0121 (289); 0x0000 = not loaded
+            if first_char == 0x0000 then
+                return false, "player name starts with 0x0000 (save not loaded)"
+            end
+        end
     end
 
     return true, nil
@@ -527,13 +586,17 @@ end
 
 -- ── Zone ID ───────────────────────────────────────────────────────────────────
 
--- Returns the current flat HGSS zone ID (u16).
--- Tries a direct u16 read first; falls back to dereferencing as a u32 pointer
--- and reading u16 at ptr+2 if the direct read returns 0. Confirmed in T3 live tests.
+-- Returns the current zone ID (u16).
+-- Gen 4: tries a direct u16 read; falls back to dereferencing as a u32 pointer
+-- and reading u16 at ptr+2 if direct read returns 0 (zone ID stored via pointer).
+-- Gen 5: reads absolute ZONE_ID_OFF directly; zone 0 is valid (Black City/Marine Tube),
+-- so the Gen 4 pointer fallback is skipped when ZONE_ID_DIRECT = true.
 function M.readZoneID()
-    if not M._base then return 0 end
+    if M._base == nil then return 0 end
     local zone = r16(M._base + ZONE_ID_OFF)
-    if zone == 0 then
+    -- Gen 5: zone 0 is a valid map; skip the pointer-fallback branch.
+    -- Gen 4: zone 0 means use the parent header pointer (fallback to ZONE_ID_OFF+2).
+    if zone == 0 and not ZONE_ID_DIRECT then
         local ptr = r32(M._base + ZONE_ID_OFF) & 0xFFFFFF
         if ptr ~= 0 then
             zone = r16(ptr + 2)
@@ -571,19 +634,34 @@ M.readKantoBadges = M.readBadges2
 --   EOS = 0xFFFF (end-of-string)
 -- Unknown chars are silently skipped. Returns "" when base is not set.
 function M.readTrainerName()
-    if not M._base then return "" end
+    if M._base == nil then return "" end
+    if not PLAYER_NAME_OFF then return "" end
     local chars = {}
-    for i = 0, 7 do   -- up to 8 u16s: 7 visible chars + EOS terminator
-        local c = r16(M._base + PLAYER_NAME_OFF + i * 2)
-        if c == 0xFFFF or c == 0x0000 then break end
-        if     c >= 289 and c <= 298 then chars[#chars+1] = string.char(c - 241)  -- '0'=48; 289-48=241
-        elseif c >= 299 and c <= 324 then chars[#chars+1] = string.char(c - 234)  -- 'A'=65; 299-65=234
-        elseif c >= 325 and c <= 350 then chars[#chars+1] = string.char(c - 228)  -- 'a'=97; 325-97=228
-        elseif c == 478 then chars[#chars+1] = " "
-        elseif c == 446 then chars[#chars+1] = "-"
-        elseif c == 435 then chars[#chars+1] = "'"
-        elseif c == 430 then chars[#chars+1] = "."
-        -- other control/symbol chars: silently skip
+    if TRAINER_NAME_ENCODING == "gen5" then
+        -- Gen 5: UTF-16LE-compatible encoding. Printable ASCII range 0x0020–0x007E
+        -- passes through directly. EOS = 0xFFFF. Up to 7 visible chars + terminator.
+        for i = 0, 7 do
+            local c = r16(M._base + PLAYER_NAME_OFF + i * 2)
+            if c == 0xFFFF or c == 0x0000 then break end
+            if c >= 0x0020 and c <= 0x007E then
+                chars[#chars+1] = string.char(c)
+            end
+            -- Non-ASCII chars (Japanese, accented) are silently skipped.
+        end
+    else
+        -- Gen 4: custom charcode table (289–350 = digits+uppercase+lowercase, etc.)
+        for i = 0, 7 do
+            local c = r16(M._base + PLAYER_NAME_OFF + i * 2)
+            if c == 0xFFFF or c == 0x0000 then break end
+            if     c >= 289 and c <= 298 then chars[#chars+1] = string.char(c - 241)  -- '0'=48; 289-48=241
+            elseif c >= 299 and c <= 324 then chars[#chars+1] = string.char(c - 234)  -- 'A'=65; 299-65=234
+            elseif c >= 325 and c <= 350 then chars[#chars+1] = string.char(c - 228)  -- 'a'=97; 325-97=228
+            elseif c == 478 then chars[#chars+1] = " "
+            elseif c == 446 then chars[#chars+1] = "-"
+            elseif c == 435 then chars[#chars+1] = "'"
+            elseif c == 430 then chars[#chars+1] = "."
+            -- other control/symbol chars: silently skip
+            end
         end
     end
     return table.concat(chars)
@@ -733,7 +811,12 @@ end
 -- Formula: saveData + 0x10 + arrayHeaders[41].offset
 --   saveData      = M._base   (confirmed: base = SaveData*)
 --   PC_ARRAY_HDR_OFF = 0x232AC  (saveData + 0x23014 + 41*0x10 + 8)
+-- Gen 5: PC storage is at an absolute address (PC_STORAGE_BASE); no array header needed.
 function M.pcStorageBase()
+    if DIRECT_ADDR then
+        -- Gen 5: PC_STORAGE_BASE is a direct absolute address set in the profile.
+        return PC_STORAGE_BASE   -- nil until verified and set in the game profile
+    end
     if not M._base then return nil end
     local chunk_off = r32(M._base + PC_ARRAY_HDR_OFF)
     -- Valid PC chunk offset must be non-zero and within dynamic_region (0x23000 bytes).
@@ -763,9 +846,8 @@ function M.pcBoxFirstEmpty(box)
 end
 
 -- Read the "current box" index (0-based) from PCStorage.
--- PCStorage struct: boxes[18] (each 0x1000) followed by currentBox (u8) at +0x12000.
-local PC_CURRENT_BOX_OFF = 0x12000  -- offset from pcStorageBase
--- Box names: u16[9] × 18 at pcStorageBase + 0x12004 (after currentBox + 3B padding).
+-- PCStorage struct: boxes[BOXES_COUNT] (each 0x1000) followed by currentBox (u8) at PC_CURRENT_BOX_OFF.
+-- Box names: u16[9] × BOXES_COUNT at pcStorageBase + 0x12004 (Gen 4) or similar (Gen 5: VERIFY_ME).
 -- pret/pokeheartgold PCStorage: boxNames[NUM_BOXES][BOX_NAME_LENGTH+1] (each entry = 9 u16 = 18 bytes).
 local PC_BOX_NAMES_OFF   = 0x12004  -- confirmed via NDS-Ironmon-Tracker MemoryAddresses
 local PC_BOX_NAME_STRIDE = 0x12     -- 18 bytes (9 u16 chars) per box name
@@ -774,7 +856,7 @@ function M.readCurrentBox()
     local base_pc = M.pcStorageBase()
     if not base_pc then return 0 end
     local idx = r8(base_pc + PC_CURRENT_BOX_OFF)
-    return (idx < 18) and idx or 0
+    return (idx < BOXES_COUNT) and idx or 0
 end
 
 -- Rename a PC box. Converts ASCII name to Gen IV charcodes (u16).

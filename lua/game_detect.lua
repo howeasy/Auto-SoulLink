@@ -18,6 +18,7 @@ package.loaded["games.gen1_rby"]      = nil
 package.loaded["games.gen2_crystal"]  = nil
 package.loaded["games.gen3_frlge"]    = nil
 package.loaded["games.gen4_hgsspt"]   = nil
+package.loaded["games.gen5_bw"]       = nil
 
 -- Registry of game modules (add future games here).
 -- pcall protects against load-time errors (e.g., missing dependencies on wrong platform).
@@ -27,6 +28,7 @@ local _module_names = {
     "games.gen2_crystal",
     "games.gen3_frlge",
     "games.gen4_hgsspt",
+    "games.gen5_bw",
 }
 for _, name in ipairs(_module_names) do
     local ok, mod = pcall(require, name)
@@ -63,7 +65,7 @@ function game_detect.detect()
         end
     end
     error("[game_detect] No game module matched the loaded ROM. " ..
-          "Ensure the ROM is a supported game (Gen 1: RBY, Gen 3: FRLG / Emerald, Gen 4: HGSS / Platinum).")
+          "Ensure the ROM is a supported game (Gen 1: RBY, Gen 3: FRLG / Emerald, Gen 4: HGSS / Platinum, Gen 5: BW / BW2).")
 end
 
 return game_detect

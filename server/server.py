@@ -2772,6 +2772,10 @@ class SLinkServer:
         "Red": "gen1_rby", "Blue": "gen1_rby", "Yellow": "gen1_rby",
         "red": "gen1_rby", "blue": "gen1_rby", "yellow": "gen1_rby",
         "Crystal": "gen2_crystal", "crystal": "gen2_crystal",
+        "pokemon_black": "gen5_bw",
+        "pokemon_white": "gen5_bw",
+        "pokemon_black_2": "gen5_bw",
+        "pokemon_white_2": "gen5_bw",
     }
 
     _VARIANT_LABEL: dict[str, str] = {
@@ -2783,6 +2787,10 @@ class SLinkServer:
         "Red": "Red", "Blue": "Blue", "Yellow": "Yellow",
         "red": "Red", "blue": "Blue", "yellow": "Yellow",
         "Crystal": "Crystal", "crystal": "Crystal",
+        "pokemon_black": "Pokémon Black",
+        "pokemon_white": "Pokémon White",
+        "pokemon_black_2": "Pokémon Black 2",
+        "pokemon_white_2": "Pokémon White 2",
     }
 
     def _page_title(self) -> str:
