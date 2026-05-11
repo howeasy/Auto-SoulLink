@@ -4,13 +4,15 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 
 ## Supported Games
 
-| Gen | Games | ROM Variants |
-|-----|-------|-------------|
-| 1 | Red, Blue, Yellow | US English |
-| 2 | Crystal | GBC |
-| 3 | FireRed, LeafGreen, Emerald | Vanilla, randomized, Archipelago, Radical Red 4.1 (CFRU) |
-| 4 | HeartGold, SoulSilver, Platinum | US |
-| 5 | Black, White, B2W2 | *Planned* |
+| Gen | Games | ROM Variants | Status |
+|-----|-------|-------------|--------|
+| 3 | FireRed, LeafGreen, Emerald | Vanilla, randomized, Archipelago, Radical Red 4.1 (CFRU) | **✅ Battle-tested** |
+| 1 | Red, Blue, Yellow | US English | ⚠️ Alpha — unit tests only |
+| 2 | Crystal | GBC | ⚠️ Alpha — unit tests only |
+| 4 | HeartGold, SoulSilver, Platinum | US | ⚠️ Alpha — unit tests only |
+| 5 | Black, White, B2W2 | — | 🚧 Planned |
+
+> **Note:** Only Gen 3 has been extensively tested in live gameplay. Gen 1, 2, and 4 have Python unit tests and Lua clients but have not been through significant real-world testing. Expect rough edges.
 
 ## Quick Start
 

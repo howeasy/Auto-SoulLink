@@ -91,9 +91,12 @@ cd calc && node build view            # HTML-only rebuild
 
 ## Supported Games
 
-| Gen | Games |
-|-----|-------|
-| 1   | Red, Blue, Yellow (US) |
-| 2   | Crystal (GBC) |
-| 3   | FireRed, LeafGreen, Emerald (vanilla / Archipelago / Radical Red 4.1) |
-| 4   | HeartGold, SoulSilver, Platinum |
+**Only Gen 3 has been battle-tested in live gameplay.** Gen 1, 2, and 4 have unit tests and Lua clients but have not had significant real-world testing — treat them as alpha quality. When making changes to shared code (server.py, state.py, adapters/base.py), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check.
+
+| Gen | Games | Status |
+|-----|-------|--------|
+| 3   | FireRed, LeafGreen, Emerald (vanilla / Archipelago / Radical Red 4.1) | **Battle-tested** |
+| 1   | Red, Blue, Yellow (US) | Alpha — unit tests only |
+| 2   | Crystal (GBC) | Alpha — unit tests only |
+| 4   | HeartGold, SoulSilver, Platinum | Alpha — unit tests only |
+| 5   | Black, White, B2W2 | Planned (stubs only) |

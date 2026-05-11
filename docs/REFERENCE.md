@@ -3,11 +3,13 @@
 SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a Lua client that reads game RAM every frame and sends JSON events (area entered, capture, faint, etc.) to a central Python server over TCP. The server enforces Soul Link rules — linking encounters by area, propagating faints, syncing party/box state, moving dead pairs to a memorial box — and returns commands back to the Lua clients in the same response.
 
 **Supported Games:**
-- **Gen 1** — Red, Blue, Yellow (US English)
-- **Gen 2** — Crystal (GBC)
-- **Gen 3** — FireRed, LeafGreen, Emerald (vanilla, randomized, Archipelago, Radical Red/CFRU)
-- **Gen 4** — HeartGold, SoulSilver, Platinum
-- **Gen 5** — Black, White, B2W2 *(planned — stubs in place)*
+- **Gen 3** — FireRed, LeafGreen, Emerald (vanilla, randomized, Archipelago, Radical Red/CFRU) — **✅ battle-tested**
+- **Gen 1** — Red, Blue, Yellow (US English) — ⚠️ alpha (unit tests only)
+- **Gen 2** — Crystal (GBC) — ⚠️ alpha (unit tests only)
+- **Gen 4** — HeartGold, SoulSilver, Platinum — ⚠️ alpha (unit tests only)
+- **Gen 5** — Black, White, B2W2 — 🚧 planned (stubs only)
+
+> **Note:** Only Gen 3 has been extensively tested in live gameplay. Gen 1, 2, and 4 have not been through significant real-world testing.
 
 ---
 

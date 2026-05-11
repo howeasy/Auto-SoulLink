@@ -46,6 +46,10 @@ python tools/gen_gen2_area_map.py
 
 SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Supported games include **Gen 1** (Red, Blue, Yellow), **Gen 2** (Crystal), **Gen 3** (FireRed, LeafGreen, Emerald, Radical Red/CFRU) and **Gen 4** (HeartGold, SoulSilver, Platinum). Each BizHawk instance runs a game-specific Lua client (`lua/clients/gen1_rby_client.lua`, `lua/clients/gen2_crystal_client.lua`, `lua/clients/gen3_frlge_client.lua`, or `lua/clients/gen4_hgsspt_client.lua`), which reads game RAM each frame and sends JSON events (area_enter, capture, faint, etc.) over a persistent **TCP connection** to a central Python server. The server uses a pluggable adapter framework (`server/adapters/`) to handle game-specific logic while enforcing Soul Link rules — pairing encounters by area, propagating faints, mirroring party presence — and returns commands (e.g., `force_faint`) in the TCP response. **No BizHawk CLI flags are required.**
 
+### Game Maturity
+
+**Only Gen 3 has been battle-tested in live gameplay.** Gen 1, 2, and 4 have Python unit tests and Lua clients but have not had significant real-world testing — treat them as alpha quality. When making changes to shared code (`server.py`, `state.py`, `adapters/base.py`), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check. Gen 5 has stubs only.
+
 ## Soul Link Rules (Full Specification)
 
 All rules are enforced automatically by the system. Players cannot bypass them.
