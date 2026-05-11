@@ -62,14 +62,7 @@ _LUA_ROOT = [
     # Gen 2 area tables live in lua/ (loaded via _lua_root)
     "gen2_crystal_areas.lua",
     "gen2_crystal_locations.lua",
-    # Gen 4 area tables live in lua/
-    "gen4_hgsspt_areas.lua",
-    "gen4_hgsspt_areas_pt.lua",
-    "gen4_hgsspt_locations.lua",
-    "gen4_hgsspt_locations_pt.lua",
-    # Gen 5 area tables live in lua/
-    "gen5_bw_areas.lua",
-    "gen5_bw_locations.lua",
+    # Gen 3/4/5 area tables live in data/games/<gen>/ (loaded via _proj_root)
 ]
 
 # lua/clients/
@@ -106,6 +99,10 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "gen4_hgsspt_areas_pt.lua",
         "gen4_hgsspt_locations.lua",
         "gen4_hgsspt_locations_pt.lua",
+    ],
+    "gen5_bw": [
+        "gen5_bw_areas.lua",
+        "gen5_bw_locations.lua",
     ],
 }
 
