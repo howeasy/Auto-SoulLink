@@ -928,95 +928,105 @@ _STATUS_HTML = """<!DOCTYPE html>
 
 _STREAM_SHARED_CSS = """
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { background: transparent; font-family: 'Segoe UI', system-ui, sans-serif; padding: 8px; }
+  html, body { width: 100%; height: 100%; overflow: hidden; }
+  body { background: transparent; font-family: 'Segoe UI', system-ui, sans-serif; font-size: clamp(10px, 1.6vmin, 15px); }
   body.theme-dark { color: #eee; }
   body.theme-light { color: #222; }
-  .theme-dark .card { background: rgba(0,0,0,0.75); border: 1px solid rgba(255,255,255,0.15); }
-  .theme-light .card { background: rgba(255,255,255,0.85); border: 1px solid rgba(0,0,0,0.15); }
-  .card { border-radius: 8px; padding: 10px 14px; }
-  table { border-collapse: collapse; width: 100%; }
-  th { font-size: 0.8em; text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 6px; text-align: left; }
-  .theme-dark th { color: #ff0; border-bottom: 1px solid rgba(255,255,255,0.15); }
-  .theme-light th { color: #666; border-bottom: 1px solid rgba(0,0,0,0.15); }
-  td { padding: 3px 6px; font-size: 0.9em; }
-  .theme-dark td { border-bottom: 1px solid rgba(255,255,255,0.06); }
-  .theme-light td { border-bottom: 1px solid rgba(0,0,0,0.06); }
-  .hp-bar-bg { display: inline-block; width: 60px; height: 6px; border-radius: 3px; vertical-align: middle; margin-right: 3px; }
+  #root { padding: clamp(3px, 1vmin, 10px); height: 100%; overflow: hidden; }
+
+  /* Sprites — stream overlays use spriteTag() for consistent markup */
+  .mon-sprite { width: clamp(24px, 5vmin, 44px); aspect-ratio: 1; image-rendering: pixelated; flex-shrink: 0; }
+
+  /* Section label */
+  .section-label { font-size: 0.72em; font-weight: bold; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.55; margin-bottom: clamp(2px, 0.4vmin, 6px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .theme-dark .section-label { color: #ff0; opacity: 0.7; }
+  .theme-light .section-label { color: #444; opacity: 0.7; }
+
+  /* Party flex layout */
+  .party-grid { display: flex; flex-direction: column; gap: clamp(2px, 0.5vmin, 5px); }
+  .mon-card { display: flex; align-items: center; gap: clamp(3px, 0.8vmin, 7px); min-width: 0; }
+  .mon-card.fainted { opacity: 0.5; }
+  .mon-card.fainted .mon-name { color: #f44; }
+  .mon-info { flex: 1; min-width: 0; overflow: hidden; }
+  .mon-name { font-size: clamp(0.75em, 1.2vmin, 0.92em); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
+  .mon-stats { display: flex; align-items: center; gap: clamp(2px, 0.5vmin, 5px); }
+  .mon-level { font-size: 0.72em; flex-shrink: 0; opacity: 0.6; }
+
+  /* HP bar fills available space */
+  .hp-bar-bg { flex: 1; min-width: clamp(20px, 3vw, 60px); height: clamp(3px, 0.5vmin, 5px); border-radius: 99px; }
   .theme-dark .hp-bar-bg { background: rgba(255,255,255,0.15); }
-  .theme-light .hp-bar-bg { background: rgba(0,0,0,0.15); }
-  .hp-bar { height: 6px; border-radius: 3px; }
+  .theme-light .hp-bar-bg { background: rgba(0,0,0,0.12); }
+  .hp-bar { height: 100%; border-radius: 99px; transition: width 0.4s; }
   .hp-high { background: #4f4; }
-  .hp-mid { background: #fa0; }
-  .hp-low { background: #f44; }
+  .hp-mid  { background: #fa0; }
+  .hp-low  { background: #f44; }
+  .hp-label { font-size: 0.7em; flex-shrink: 0; opacity: 0.6; }
+
+  /* Status */
   .alive { color: #4f4; }
   .dead, .dead_zone { color: #f44; }
   .pending { color: #fa0; }
-  .dim { opacity: 0.5; }
-  .fainted { opacity: 0.5; }
-  .fainted td { color: #f44 !important; }
-  .active-mon td:first-child { color: #ff0; border-left: 3px solid #ff9900; }
-  .active-mon { background: rgba(255,153,0,0.08); }
-  .mon-sprite { width: 48px; height: 48px; image-rendering: pixelated; vertical-align: middle; margin: -2px 1px -2px 0; clip-path: inset(2px); }
-  .gender-male { color: #6af; }
-  .gender-female { color: #f9a; }
-  .shiny-star { color: #FFD700; }
-  h3 { font-size: 1em; margin-bottom: 6px; }
-  .theme-dark h3 { color: #ff0; }
-  .theme-light h3 { color: #333; }
-  .counter { font-size: 2.5em; font-weight: bold; line-height: 1; }
-  .counter-label { font-size: 0.85em; margin-top: 2px; }
-  .theme-dark .counter-label { color: #aaa; }
-  .theme-light .counter-label { color: #666; }
-  .counters { display: flex; gap: 20px; }
+  .dim { opacity: 0.45; }
+
+  /* Tables (links overlay) */
+  table { border-collapse: collapse; width: 100%; }
+  th { font-size: 0.68em; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 4px; text-align: left; opacity: 0.5; }
+  .theme-dark th { border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .theme-light th { border-bottom: 1px solid rgba(0,0,0,0.1); }
+  td { padding: 2px 4px; font-size: 0.82em; }
+  .theme-dark td { border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .theme-light td { border-bottom: 1px solid rgba(0,0,0,0.05); }
+
+  /* Links flex rows */
+  .link-row { display: flex; align-items: center; gap: clamp(3px, 0.8vmin, 8px); padding: clamp(2px, 0.4vmin, 4px) 0; }
+  .theme-dark .link-row { border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .theme-light .link-row { border-bottom: 1px solid rgba(0,0,0,0.05); }
+  .link-side { flex: 1; min-width: 0; display: flex; align-items: center; gap: clamp(2px, 0.5vmin, 4px); }
+  .link-side-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82em; }
+  .link-sep { flex-shrink: 0; opacity: 0.35; font-size: 0.75em; }
+  .link-status { flex-shrink: 0; font-size: 0.78em; font-weight: bold; }
+
+  /* Death counter — fills widget */
+  .counters-wrap { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+  .counters { display: flex; gap: clamp(12px, 5vw, 50px); align-items: center; }
   .counter-box { text-align: center; }
-  .event-row { padding: 4px 0; font-size: 0.85em; display: flex; gap: 8px; align-items: baseline; }
-  .theme-dark .event-row { border-bottom: 1px solid rgba(255,255,255,0.06); }
-  .theme-light .event-row { border-bottom: 1px solid rgba(0,0,0,0.06); }
-  .event-time { font-size: 0.8em; flex-shrink: 0; width: 50px; }
-  .theme-dark .event-time { color: #888; }
-  .theme-light .event-time { color: #999; }
-  .event-player { font-weight: bold; flex-shrink: 0; width: 20px; }
-  .event-text { flex: 1; }
+  .counter { font-size: clamp(2em, 10vmin, 6em); font-weight: bold; line-height: 1; }
+  .counter-label { font-size: clamp(0.55em, 1.2vmin, 0.8em); opacity: 0.55; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+
+  /* Event feed */
+  .event-row { display: flex; gap: 5px; align-items: baseline; padding: clamp(1px, 0.3vmin, 3px) 0; font-size: 0.82em; line-height: 1.35; }
+  .theme-dark .event-row { border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .theme-light .event-row { border-bottom: 1px solid rgba(0,0,0,0.05); }
+  .event-time { opacity: 0.4; flex-shrink: 0; font-size: 0.8em; min-width: 4em; }
+  .event-player { font-weight: bold; flex-shrink: 0; min-width: 1.5em; }
+  .event-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .event-type-capture { color: #4f4; }
   .event-type-faint { color: #f44; }
   .event-type-whiteout { color: #f80; }
   .event-type-no_catch { color: #fa0; }
   .event-type-area_enter { color: #7cf; }
-  .event-type-hello { color: #aaa; }
+  .event-type-hello { opacity: 0.4; }
   .event-type-linked { color: #4f4; font-weight: bold; }
   .event-type-dead_zone { color: #f44; font-weight: bold; }
   .event-type-force_faint { color: #f88; }
   .event-type-key_change { color: #c8f; }
   .event-type-violation { color: #f80; font-weight: bold; }
   .event-type-reroll { color: #8cf; }
-  .area-row { display: flex; gap: 12px; align-items: center; font-size: 0.9em; padding: 2px 0; }
-  .area-count { font-size: 1.8em; font-weight: bold; }
-  /* Move table (stream overlay) */
-  .move-row td { padding: 0 !important; }
-  details.moves-details { margin: 2px 0; }
-  details.moves-details summary { cursor: pointer; font-size: 0.8em; color: #888; padding: 1px 4px; user-select: none; list-style: none; }
-  details.moves-details summary::-webkit-details-marker { display: none; }
-  details.moves-details summary::before { content: "▶ "; font-size: 0.7em; }
-  details.moves-details[open] summary::before { content: "▼ "; font-size: 0.7em; }
-  .move-tbl { width: 100%; border-collapse: collapse; font-size: 0.82em; }
-  .move-tbl th { background: rgba(255,255,255,0.05); padding: 1px 4px; font-size: 0.75em; color: #999; text-align: left; }
-  .move-tbl td { padding: 1px 4px; }
-  .move-tbl .mv-name { font-weight: 600; white-space: nowrap; }
-  .move-tbl .type-badge { display: inline-block; padding: 0 4px; border-radius: 2px; font-size: 0.72em; font-weight: bold; color: #fff; text-transform: uppercase; text-shadow: 1px 1px rgba(0,0,0,0.5); white-space: nowrap; }
-  .split-icon { height: 16px; vertical-align: middle; }
-  .split-physical { filter: brightness(200%); }
-  .split-special { filter: brightness(200%); }
-  .split-status { filter: brightness(300%); }
+
+  /* Area tracker */
+  .area-row { display: flex; gap: 8px; align-items: center; font-size: 0.9em; padding: 2px 0; }
+  .area-count { font-size: clamp(1.2em, 3vmin, 2em); font-weight: bold; min-width: 2ch; text-align: right; flex-shrink: 0; }
+
   /* Badge overlay */
-  .badges-overlay { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
-  .player-badges { display: flex; flex-direction: column; gap: 6px; }
-  .player-badges-label { font-size: 0.85em; font-weight: bold; letter-spacing: 0.03em; }
+  .badges-overlay { display: flex; gap: clamp(8px, 2vw, 24px); flex-wrap: wrap; align-items: flex-start; }
+  .player-badges { display: flex; flex-direction: column; gap: 4px; }
+  .player-badges-label { font-size: 0.72em; font-weight: bold; letter-spacing: 0.03em; text-transform: uppercase; opacity: 0.65; }
   .theme-dark .player-badges-label { color: #ff0; }
-  .theme-light .player-badges-label { color: #333; }
-  .badge-strip { display: flex; gap: 5px; flex-wrap: wrap; }
-  .badge-img { width: 32px; height: 32px; image-rendering: pixelated; transition: opacity 0.2s; }
+  .theme-light .player-badges-label { color: #eee; }
+  .badge-strip { display: flex; gap: clamp(2px, 0.5vw, 5px); flex-wrap: wrap; }
+  .badge-img { width: clamp(18px, 3.5vmin, 32px); aspect-ratio: 1; image-rendering: pixelated; transition: opacity 0.2s; }
   .badge-img.earned { opacity: 1; }
-  .badge-img.unearned { opacity: 0.15; filter: grayscale(100%); }
+  .badge-img.unearned { opacity: 0.12; filter: grayscale(100%); }
 """
 
 _STREAM_SHARED_JS = r"""
@@ -1166,11 +1176,12 @@ def _stream_overlay_page(title: str, render_js: str) -> str:
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{title} — Soul Link Stream</title>
   <style>{_STREAM_SHARED_CSS}</style>
 </head>
 <body>
-  <div id="root" class="card"></div>
+  <div id="root"></div>
   <script>{_STREAM_SHARED_JS}
 
 {render_js}
@@ -1183,29 +1194,31 @@ _STREAM_PARTY_JS = r"""
 var PLAYER_ID = '%PLAYER%';
 function render(d) {
   var p = d.players[PLAYER_ID];
-  if (!p) { document.getElementById('root').innerHTML = 'No data'; return; }
+  if (!p) { document.getElementById('root').innerHTML = '<span class="dim">—</span>'; return; }
   var name = p.trainer_name || PLAYER_ID.toUpperCase();
-  var h = '<h3>' + name + '</h3>';
   var keys = p.party_keys || [];
-  if (keys.length === 0) { h += '<div class="dim">No party mons</div>'; }
-  else {
-    h += '<table><thead><tr><th>Pokémon</th><th>Lv</th><th>HP</th></tr></thead><tbody>';
+  var h = '<div class="section-label">' + name + '</div>';
+  if (!keys.length) {
+    h += '<div class="dim" style="font-size:0.85em">No party</div>';
+  } else {
+    h += '<div class="party-grid">';
     keys.forEach(function(key) {
       var det = p.party_details[key] || {};
       var hp = det.hp || 0, maxHP = det.maxHP || 1, lv = det.level || 0;
-      var sid = det.species_id || 0;
-      var nick = det.nickname || '';
-      var spName = det.species_name || '';
-      var cls = hp === 0 ? 'fainted' : '';
-      h += '<tr class="'+cls+'">';
-      h += '<td>' + (det.sprite_html || spriteTag(sid)) + monLabel(nick, spName, key) + '</td>';
-      h += '<td>' + (lv || '?') + '</td>';
-      h += '<td>' + hpBar(hp, maxHP) + '</td>';
-      h += '</tr>';
-      var mvHtml = moveTableHtml(det.move_details, false, key);
-      if (mvHtml) { h += '<tr class="move-row '+cls+'"><td colspan="3">'+mvHtml+'</td></tr>'; }
+      var fainted = hp === 0 ? ' fainted' : '';
+      var pct = maxHP > 0 ? Math.max(0, Math.min(100, Math.round(hp / maxHP * 100))) : 0;
+      var barCls = pct > 50 ? 'hp-high' : (pct > 20 ? 'hp-mid' : 'hp-low');
+      h += '<div class="mon-card' + fainted + '">';
+      h += spriteTag(det.species_id || 0);
+      h += '<div class="mon-info">';
+      h += '<div class="mon-name">' + monLabel(det.nickname, det.species_name, key) + '</div>';
+      h += '<div class="mon-stats">';
+      h += '<span class="mon-level">Lv.' + (lv || '?') + '</span>';
+      h += '<div class="hp-bar-bg"><div class="hp-bar ' + barCls + '" style="width:' + pct + '%"></div></div>';
+      h += '<span class="hp-label">' + pct + '%</span>';
+      h += '</div></div></div>';
     });
-    h += '</tbody></table>';
+    h += '</div>';
   }
   document.getElementById('root').innerHTML = h;
 }
@@ -1214,22 +1227,23 @@ function render(d) {
 _STREAM_LINKS_JS = r"""
 function render(d) {
   var links = d.links || [];
-  if (links.length === 0) { document.getElementById('root').innerHTML = '<div class="dim">No links yet</div>'; return; }
-  var nameA = d.players.a.trainer_name || 'A';
-  var nameB = d.players.b.trainer_name || 'B';
-  var h = '<table><thead><tr><th>Area</th><th>'+nameA+'</th><th>'+nameB+'</th><th>Status</th></tr></thead><tbody>';
+  if (!links.length) { document.getElementById('root').innerHTML = '<div class="dim">No links yet</div>'; return; }
+  var nameA = (d.players.a && d.players.a.trainer_name) || 'A';
+  var nameB = (d.players.b && d.players.b.trainer_name) || 'B';
+  var h = '';
   links.forEach(function(lnk) {
     var status = lnk.status;
     var statusCls = status === 'alive' ? 'alive' : (status === 'dead' || status === 'memorial' || status === 'dead_zone' ? 'dead' : 'pending');
     var statusIcon = status === 'alive' ? '✓' : (statusCls === 'dead' ? '☠' : '⏳');
-    var aLabel = lnk.a_nickname ? (lnk.a_sprite_html || spriteTag(lnk.a_species)) + monLabel(lnk.a_nickname, lnk.a_species_name, lnk.a_key) : '<span class="dim">—</span>';
-    var bLabel = lnk.b_nickname ? (lnk.b_sprite_html || spriteTag(lnk.b_species)) + monLabel(lnk.b_nickname, lnk.b_species_name, lnk.b_key) : '<span class="dim">—</span>';
-    h += '<tr><td>'+(lnk.area_display || lnk.area_id)+'</td>';
-    h += '<td>'+aLabel+'</td>';
-    h += '<td>'+bLabel+'</td>';
-    h += '<td class="'+statusCls+'">'+statusIcon+' '+status+'</td></tr>';
+    var aName = lnk.a_nickname ? monLabel(lnk.a_nickname, lnk.a_species_name, lnk.a_key) : '<span class="dim">—</span>';
+    var bName = lnk.b_nickname ? monLabel(lnk.b_nickname, lnk.b_species_name, lnk.b_key) : '<span class="dim">—</span>';
+    h += '<div class="link-row">';
+    h += '<div class="link-side">' + spriteTag(lnk.a_species || 0) + '<span class="link-side-name">' + aName + '</span></div>';
+    h += '<span class="link-sep">↔</span>';
+    h += '<div class="link-side">' + spriteTag(lnk.b_species || 0) + '<span class="link-side-name">' + bName + '</span></div>';
+    h += '<span class="link-status ' + statusCls + '">' + statusIcon + '</span>';
+    h += '</div>';
   });
-  h += '</tbody></table>';
   document.getElementById('root').innerHTML = h;
 }
 """
@@ -1237,21 +1251,15 @@ function render(d) {
 _STREAM_DEATHS_JS = r"""
 function render(d) {
   var links = d.links || [];
-  var alive = 0, dead = 0, pending = 0;
+  var alive = 0, dead = 0;
   links.forEach(function(l) {
     if (l.status === 'alive') alive++;
     else if (l.status === 'dead' || l.status === 'memorial' || l.status === 'dead_zone') dead++;
   });
-  // Count pending areas
-  var areas = d.area_states || {};
-  for (var a in areas) {
-    if (areas[a].indexOf('pending') >= 0) pending++;
-  }
-  var h = '<div class="counters">';
-  h += '<div class="counter-box"><div class="counter alive">'+alive+'</div><div class="counter-label">Alive</div></div>';
-  h += '<div class="counter-box"><div class="counter dead">'+dead+'</div><div class="counter-label">Dead</div></div>';
-  if (pending > 0) h += '<div class="counter-box"><div class="counter pending">'+pending+'</div><div class="counter-label">Pending</div></div>';
-  h += '</div>';
+  var h = '<div class="counters-wrap"><div class="counters">';
+  h += '<div class="counter-box"><div class="counter alive">' + alive + '</div><div class="counter-label">Alive</div></div>';
+  h += '<div class="counter-box"><div class="counter dead">' + dead + '</div><div class="counter-label">Dead</div></div>';
+  h += '</div></div>';
   document.getElementById('root').innerHTML = h;
 }
 """
@@ -1259,26 +1267,20 @@ function render(d) {
 _STREAM_AREAS_JS = r"""
 function render(d) {
   var areas = d.area_states || {};
-  var counts = { linked: 0, pending_a: 0, pending_b: 0, pending_both: 0, dead_zone: 0, unseen: 0 };
-  for (var a in areas) {
-    var st = areas[a];
-    if (st in counts) counts[st]++;
-    else if (st === 'linked') counts.linked++;
-  }
+  var counts = { linked: 0, pending_a: 0, pending_b: 0, pending_both: 0, dead_zone: 0 };
+  for (var a in areas) { var st = areas[a]; if (st in counts) counts[st]++; }
   var pending = counts.pending_a + counts.pending_b + counts.pending_both;
-  var nameA = d.players.a.trainer_name || 'A';
-  var nameB = d.players.b.trainer_name || 'B';
-  var h = '<h3>Area Tracker</h3>';
-  h += '<div class="area-row"><span class="area-count alive">' + counts.linked + '</span> Linked</div>';
-  h += '<div class="area-row"><span class="area-count dead">' + counts.dead_zone + '</span> Dead Zones</div>';
+  var nameA = (d.players.a && d.players.a.trainer_name) || 'A';
+  var nameB = (d.players.b && d.players.b.trainer_name) || 'B';
+  var h = '<div class="section-label">Areas</div>';
+  h += '<div class="area-row"><span class="area-count alive">' + counts.linked + '</span><span>Linked</span></div>';
+  h += '<div class="area-row"><span class="area-count dead">' + counts.dead_zone + '</span><span>Dead Zones</span></div>';
   if (pending > 0) {
-    h += '<div class="area-row"><span class="area-count pending">' + pending + '</span> Pending';
     var parts = [];
-    if (counts.pending_a > 0) parts.push(counts.pending_a + ' waiting on ' + nameA);
-    if (counts.pending_b > 0) parts.push(counts.pending_b + ' waiting on ' + nameB);
-    if (counts.pending_both > 0) parts.push(counts.pending_both + ' both entered');
-    h += ' <span class="dim">(' + parts.join(', ') + ')</span>';
-    h += '</div>';
+    if (counts.pending_a > 0) parts.push(counts.pending_a + ' on ' + nameA);
+    if (counts.pending_b > 0) parts.push(counts.pending_b + ' on ' + nameB);
+    if (counts.pending_both > 0) parts.push(counts.pending_both + ' both in');
+    h += '<div class="area-row"><span class="area-count pending">' + pending + '</span><span>Pending <span class="dim">(' + parts.join(', ') + ')</span></span></div>';
   }
   document.getElementById('root').innerHTML = h;
 }
@@ -1287,10 +1289,10 @@ function render(d) {
 _STREAM_EVENTS_JS = r"""
 function render(d) {
   var events = d.recent_events || [];
-  if (events.length === 0) { document.getElementById('root').innerHTML = '<div class="dim">No events yet</div>'; return; }
-  var nameA = d.players.a.trainer_name || 'A';
-  var nameB = d.players.b.trainer_name || 'B';
-  var h = '<h3>Event Feed</h3>';
+  if (!events.length) { document.getElementById('root').innerHTML = '<div class="dim" style="font-size:0.85em">No events yet</div>'; return; }
+  var nameA = (d.players.a && d.players.a.trainer_name) || 'A';
+  var nameB = (d.players.b && d.players.b.trainer_name) || 'B';
+  var h = '';
   events.slice(0, 20).forEach(function(ev) {
     var time = '';
     if (ev.ts) {
@@ -1298,8 +1300,7 @@ function render(d) {
       if (!isNaN(dt)) {
         var h12 = dt.getHours() % 12 || 12;
         var mn = ('0' + dt.getMinutes()).slice(-2);
-        var ap = dt.getHours() >= 12 ? 'PM' : 'AM';
-        time = h12 + ':' + mn + ' ' + ap;
+        time = h12 + ':' + mn + (dt.getHours() >= 12 ? 'p' : 'a');
       } else { time = ev.ts.substring(11, 16); }
     }
     var pName = ev.player === 'a' ? nameA : nameB;
@@ -1307,7 +1308,7 @@ function render(d) {
     h += '<div class="event-row">';
     h += '<span class="event-time">' + time + '</span>';
     h += '<span class="event-player">' + pName + '</span>';
-    h += '<span class="event-text '+cls+'">' + (ev.text || ev.type) + '</span>';
+    h += '<span class="event-text ' + cls + '">' + (ev.text || ev.type) + '</span>';
     h += '</div>';
   });
   document.getElementById('root').innerHTML = h;
