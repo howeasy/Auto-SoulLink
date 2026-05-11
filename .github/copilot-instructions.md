@@ -48,7 +48,7 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 
 ### Game Maturity
 
-**Only Gen 3 has been battle-tested in live gameplay.** Gen 1, 2, and 4 have Python unit tests and Lua clients but have not had significant real-world testing — treat them as alpha quality. When making changes to shared code (`server.py`, `state.py`, `adapters/base.py`), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check. Gen 5 has stubs only.
+**Only Gen 3 has been extensively tested in live gameplay.** Gen 1, 2, and 4 have Python unit tests and Lua clients but limited real-world testing — treat them as experimental. When making changes to shared code (`server.py`, `state.py`, `adapters/base.py`), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check. Gen 5 has stubs only.
 
 ## Soul Link Rules (Full Specification)
 
