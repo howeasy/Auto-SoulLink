@@ -10,6 +10,7 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 | 2 | Crystal | GBC |
 | 3 | FireRed, LeafGreen, Emerald | Vanilla, randomized, Archipelago, Radical Red 4.1 (CFRU) |
 | 4 | HeartGold, SoulSilver, Platinum | US |
+| 5 | Black, White, B2W2 | *Planned* |
 
 ## Quick Start
 
@@ -17,14 +18,19 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 # 1. Install Python deps
 pip install -r requirements.txt
 
-# 2. Start the server
-python -m server.server
+# 2. Start the Run Manager
+python -m server.manager --host 0.0.0.0
 
-# 3. Open the status page
-#    http://localhost:8080/
+# 3. Open the dashboard
+#    http://localhost:8090/
 ```
 
-Then load `lua/slink.lua` (auto-detects game) in each BizHawk Lua Console. Edit the launcher script header to set `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER` (`"a"` or `"b"`).
+From the dashboard:
+
+1. **Create a run** — pick a name and enable any clause rules (species, gender, type)
+2. **Start the run** — the manager launches a server instance automatically
+3. **Download launcher scripts** — click the Player A / Player B download buttons
+4. **Load in BizHawk** — open each downloaded `.lua` file in a BizHawk Lua Console (one per emulator instance). The script auto-detects the game and connects to the server — no editing required.
 
 > Load the script **after** loading your save file. Writes are disabled until SaveBlock validation passes.
 

@@ -7,6 +7,7 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 - **Gen 2** — Crystal (GBC)
 - **Gen 3** — FireRed, LeafGreen, Emerald (vanilla, randomized, Archipelago, Radical Red/CFRU)
 - **Gen 4** — HeartGold, SoulSilver, Platinum
+- **Gen 5** — Black, White, B2W2 *(planned — stubs in place)*
 
 ---
 
