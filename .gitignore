@@ -12,3 +12,4 @@ data/backups/
 slink_path.cfg
 node_modules/
 .claude/
+tests/_tmp/

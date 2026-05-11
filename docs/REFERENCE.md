@@ -20,7 +20,7 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 | BizHawk 2.9+ | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core). **Gen 3:** Two instances with US 1.0 FRLG/Emerald ROMs. **Gen 4:** Two instances with US HGSS ROMs |
 | ROMs | **Gen 1:** Red/Blue/Yellow (US). **Gen 3:** Vanilla, randomized (UPR), Archipelago, or Radical Red 4.1. **Gen 4:** HeartGold/SoulSilver US |
 | Python 3.10+ | `pip install -r requirements.txt` |
-| Scripts in `lua/` | `slink.lua` (universal entry point), `memory_gba.lua`, `gen3_frlge_areas.lua`, `connector.lua`, `socket.lua` |
+| Scripts in `lua/` | `slink.lua` (universal entry point), `memory_gba.lua`, `connector.lua`, `socket.lua` |
 | LuaSocket DLL | Copy `socket-windows-5-4.dll` from an Archipelago install into `lua/x64/` (see `lua/x64/README.md`) |
 | Network | Both BizHawk instances must reach the Python server (localhost or LAN) |
 
@@ -95,12 +95,12 @@ Alternatively, load `lua/slink.lua` directly — it auto-detects the game but us
 [BizHawk – Gen 3 (GBA)]            [BizHawk – Gen 3 (GBA)]
   lua/clients/gen3_frlge_client.lua    lua/clients/gen3_frlge_client.lua
   lua/memory_gba.lua                   lua/memory_gba.lua
-  lua/gen3_frlge_areas.lua             lua/gen3_frlge_areas.lua
+  data/games/gen3_frlge/gen3_frlge_areas.lua
 
 [BizHawk – Gen 4 (NDS)]            [BizHawk – Gen 4 (NDS)]
   lua/clients/gen4_hgsspt_client.lua
   lua/memory_nds.lua
-  lua/gen4_hgsspt_areas.lua
+  data/games/gen4_hgsspt/gen4_hgsspt_areas.lua
          |  TCP JSON event                  |
          +-────────────────────────────────-+
                        ↓
@@ -293,15 +293,15 @@ The status server (default port 8080) exposes these pages and endpoints:
 ### Unit tests (no emulator required)
 
 ```bash
-pytest tests/unit/ -v          # all 527 tests
-pytest tests/unit/test_state.py -v        # 204 state machine tests
-pytest tests/unit/test_gen3_adapter.py -v  # 50 Gen 3 adapter tests
+pytest tests/unit/ -v          # all 584 tests
+pytest tests/unit/test_state.py -v        # 234 state machine tests
+pytest tests/unit/test_gen3_adapter.py -v  # 77 Gen 3 adapter tests
 pytest tests/unit/test_gen4_adapter.py -v  # 62 Gen 4 adapter tests
 pytest tests/unit/test_gen1_adapter.py -v  # 78 Gen 1 adapter tests
 pytest tests/unit/test_gen2_adapter.py -v  # 127 Gen 2 adapter tests
 ```
 
-204 state machine tests covering: linking, dead zones, faint propagation, whiteout, party sync (including confirmation-based `sync_retrieve_done`/`sync_retrieve_failed`, PC swap event ordering), box capture stats caching, memorial box, reconnect re-queuing, illegal captures, encounter logging, AP ROM type handling, species clause (evo families), gender clause (genderless edge cases), type clause (shared types, partial overlap, monotypes), combined clauses, violation recovery, clause rule persistence, same-save species duplicate prevention, dynamic gift areas, hello resolved_areas, gift area no_catch protection, unlinked encounter quarantine, paired party sync enforcement, dead zone quarantined mon retirement, CFRU/RR species data validation (Gen 3 ID rekey, Gen 4+ cross-gen evolutions, gender ratios), battle HP cache writeback (CFRU), double-buffer party diff, frame ordering, player identity lock (OT ID per slot — first lock, wrong OT rejection, event blocking, persistence, empty party skip, per-player independence), persistent run metadata (rom_type, trainer_names), shiny bonus pairs (pending_bonus FIFO queue, pair formation, faint propagation both directions, party sync at formation, FIFO multi-bonus, lock clause violations with retry, area unresolve, persistence, key migration, no-wildcard-exemption), nature change (key_change migration), and dupes clause partner pending capture check.
+234 state machine tests covering: linking, dead zones, faint propagation, whiteout, party sync (including confirmation-based `sync_retrieve_done`/`sync_retrieve_failed`, PC swap event ordering), box capture stats caching, memorial box, reconnect re-queuing, illegal captures, encounter logging, AP ROM type handling, species clause (evo families), gender clause (genderless edge cases), type clause (shared types, partial overlap, monotypes), combined clauses, violation recovery, clause rule persistence, same-save species duplicate prevention, dynamic gift areas, hello resolved_areas, gift area no_catch protection, unlinked encounter quarantine, paired party sync enforcement, dead zone quarantined mon retirement, CFRU/RR species data validation (Gen 3 ID rekey, Gen 4+ cross-gen evolutions, gender ratios), battle HP cache writeback (CFRU), double-buffer party diff, frame ordering, player identity lock (OT ID per slot — first lock, wrong OT rejection, event blocking, persistence, empty party skip, per-player independence), persistent run metadata (rom_type, trainer_names), shiny bonus pairs (pending_bonus FIFO queue, pair formation, faint propagation both directions, party sync at formation, FIFO multi-bonus, lock clause violations with retry, area unresolve, persistence, key migration, no-wildcard-exemption), nature change (key_change migration), and dupes clause partner pending capture check.
 
 ### Integration tests (server required)
 
@@ -330,8 +330,8 @@ See `tests/TESTING.md` for the full 9-step alpha test procedure. Load `lua/slink
 | `lua/clients/gen4_hgsspt_client.lua` | Gen 4 production client — HeartGold/SoulSilver. NDS memory model, LCRNG-aware, HP debounce. |
 | `lua/memory_gba.lua` | Gen 3 GBA RAM helpers — auto-detecting profiles (vanilla, AP, CFRU/RR), read/write, force-faint, box/party transfer, memorial write, SE playback via m4a engine |
 | `lua/memory_nds.lua` | Gen 4 NDS RAM helpers — LCRNG encryption/decryption, 2-level pointer chain, HP debounce, party/box/battle reads |
-| `lua/gen3_frlge_areas.lua` | Gen 3 area lookup — `mapGroup*256+mapNum → area_id` (183 entries; `python tools/gen_area_map.py` to regenerate) |
-| `lua/gen4_hgsspt_areas.lua` | Gen 4 area lookup — `zoneId → area_id` (195 entries, auto-generated) |
+| `data/games/gen3_frlge/gen3_frlge_areas.lua` | Gen 3 area lookup — `mapGroup*256+mapNum → area_id` (175 entries; `python tools/gen_area_map.py` to regenerate) |
+| `data/games/gen4_hgsspt/gen4_hgsspt_areas.lua` | Gen 4 area lookup — `zoneId → area_id` (195 entries, auto-generated) |
 | `lua/connector.lua` | Shared TCP connector — fully non-blocking connect, exponential backoff (2s → 30s cap) |
 | `lua/game_detect.lua` | Shared game detection framework — scans ROM header to identify game family |
 | `lua/games/gen3_frlge.lua` | Gen 3 game module — ROM detection, profiles, gift areas, area resolution |
@@ -560,7 +560,7 @@ Server flags:
 
 ```bash
 python -m server.server --help
-# --host HOST         bind host (default: 127.0.0.1)
+# --host HOST         bind host (default: 0.0.0.0)
 # --port PORT         TCP port (default: 54321)
 # --http-port PORT    HTTP status port (default: 8080)
 # --data-dir DIR      data directory for links/memorial JSON (default: data/)
@@ -675,7 +675,7 @@ If you add new map entries or fix area IDs:
 
 ```bash
 python tools/gen_area_map.py
-# Writes: lua/gen3_frlge_areas.lua  (Lua lookup table)
+# Writes: data/games/gen3_frlge/gen3_frlge_areas.lua  (Lua lookup table)
 ```
 
 ---

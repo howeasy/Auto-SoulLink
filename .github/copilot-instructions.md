@@ -13,7 +13,7 @@ python -m server.server --host 127.0.0.1 --port 54321 --http-port 8080
 python -m server.server --reset   # wipe all state and start a fresh run
 
 # Full server CLI args:
-#   --host HOST          bind host (default: 127.0.0.1)
+#   --host HOST          bind host (default: 0.0.0.0)
 #   --port PORT          TCP port (default: 54321)
 #   --http-port PORT     HTTP status port (default: 8080)
 #   --reset              Clear saved state
@@ -25,20 +25,21 @@ python -m server.server --reset   # wipe all state and start a fresh run
 #   --type-clause          Reject shared-type links
 #   --manager-port PORT  Manager HTTP port (enables back-link)
 
-# Unit tests — no emulator or server required (199 + 50 + 62 + 78 + 127 + 6 = 522 tests)
+# Unit tests — no emulator or server required (234 + 77 + 62 + 78 + 127 + 6 = 584 tests)
 pytest tests/unit/test_state.py -v
 pytest tests/unit/test_gen3_adapter.py -v
 pytest tests/unit/test_gen4_adapter.py -v
 pytest tests/unit/test_gen1_adapter.py -v
 pytest tests/unit/test_gen2_adapter.py -v
+pytest tests/unit/test_phase1_comms.py -v
 
 # Single test
 pytest tests/unit/test_state.py::test_faint_queues_force_faint_for_partner -v
 
-# Regenerate lua/gen3_frlge_areas.lua from data/games/gen3_frlge/area_map.json (175 entries)
+# Regenerate data/games/gen3_frlge/gen3_frlge_areas.lua from area_map.json (175 entries)
 python tools/gen_area_map.py
 
-# Regenerate lua/gen2_crystal_areas.lua from data/games/gen2_crystal/area_map.json (124 entries)
+# Regenerate lua/gen2_crystal_areas.lua from area_map.json (124 entries)
 python tools/gen_gen2_area_map.py
 ```
 
@@ -121,7 +122,7 @@ If a player whiteouts (entire party faints), all remaining party mons are treate
 [BizHawk Instance A (Gen 3 GBA)]     [BizHawk Instance B (Gen 3 GBA)]
   lua/clients/gen3_frlge_client.lua    lua/clients/gen3_frlge_client.lua
   lua/memory_gba.lua                   lua/memory_gba.lua
-  lua/gen3_frlge_areas.lua             lua/gen3_frlge_areas.lua
+  data/games/gen3_frlge/gen3_frlge_areas.lua
 
 [BizHawk Instance A (Gen 4 NDS)]     [BizHawk Instance B (Gen 4 NDS)]
   lua/clients/gen4_hgsspt_client.lua   lua/clients/gen4_hgsspt_client.lua
@@ -181,9 +182,6 @@ SLink-RR/
 │   ├── connector.lua            # LuaSocket TCP wrapper (non-blocking)
 │   ├── game_detect.lua          # ROM header game detection
 │   ├── socket.lua               # LuaSocket shim (loads DLL)
-│   ├── gen3_frlge_areas.lua     # Area lookup table (Gen 3)
-│   ├── gen3_frlge_locations.lua # Location name lookup (Gen 3)
-│   ├── gen4_hgsspt_areas.lua    # Area lookup table (Gen 4)
 │   ├── gen2_crystal_areas.lua   # Area lookup table (Gen 2, 124 entries)
 │   ├── gen2_crystal_locations.lua # Location name lookup (Gen 2, 81 areas)
 │   ├── tests/                   # BizHawk test scripts (run manually in emulator)
@@ -192,9 +190,11 @@ SLink-RR/
 │   ├── server.py                # Main TCP/HTTP server (asyncio + aiohttp)
 │   ├── state.py                 # SoulLinkState FSM (game-agnostic)
 │   ├── pokemon_data.py          # Species names, evo families, types, abilities
+│   ├── move_data.py             # Move names and properties (Gen 3 RR + vanilla)
 │   ├── manager.py               # Run Manager (multi-run orchestration)
 │   └── adapters/                # Per-game server adapters
 │       ├── base.py              # Abstract base adapter
+│       ├── gen1_rby.py          # Gen 1 adapter
 │       ├── gen2_crystal.py      # Gen 2 adapter
 │       ├── gen3_frlge.py        # Gen 3 adapter
 │       └── gen4_hgsspt.py       # Gen 4 adapter
@@ -203,8 +203,8 @@ SLink-RR/
 │   ├── memorial.json            # Death log (auto-generated)
 │   ├── runs/                    # Run Manager named runs (each has own links.json)
 │   └── games/                   # Per-game static data
-│       ├── gen3_frlge/          # FRLG/RR items, types, sprites, area maps
-│       ├── gen4_hgsspt/         # HGSS/Pt area maps
+│       ├── gen3_frlge/          # FRLG/RR items, types, sprites, area maps + gen3_frlge_areas.lua
+│       ├── gen4_hgsspt/         # HGSS/Pt area maps + gen4_hgsspt_areas.lua
 │       ├── gen2_crystal/        # Crystal species, types, items, area maps
 │       ├── gen1_rby/            # Placeholder
 │       ├── gen2_gsc/            # Placeholder
@@ -241,7 +241,7 @@ SLink-RR/
 - **`lua/slink_gen3.lua`** — Gen 3 launcher script (configure host/port/player, loads gen3_frlge_client.lua).
 - **`lua/clients/gen3_frlge_client.lua`** — **Gen 3 production script**: ROM validation, event detection, TCP transport, command dispatch, party-sync writes, battle HP cache with frame-ordered writeback (CFRU), double-buffer `index_party()` with per-buffer entry pools, F-key manual overrides, nature change detection (personality-changed key migration via otId+species+level+nickname signature matching), borrowed battle rolling gift capture buffer (3+ gifts in 45 frames triggers freeze), encounter GUI prompts.
 - **`lua/memory_gba.lua`** — FRLG address constants and read/write helpers (including `M.hasPokeballs()`, `M.countPokeballs()`). Contains `PROFILES` table with vanilla, AP, and Radical Red/CFRU address profiles. `M.initProfile()` auto-detects ROM type and applies the correct profile. Extended `_CHARSET` with `/` (0xBA), `,` (0xB9), `$` (0xB8), `♂` (0xB5), `♀` (0xB6), `'` (0xB3), `'` (0xB4), `·` (0xAF), `…` (0xB0), `«` (0xB1), `»` (0xB2).
-- **`lua/gen3_frlge_areas.lua`** — Generated lookup: `mapGroup*256+mapNum → area_id` (175 entries). Regenerate with `python tools/gen_area_map.py`.
+- **`data/games/gen3_frlge/gen3_frlge_areas.lua`** — Generated lookup: `mapGroup*256+mapNum → area_id` (175 entries). Regenerate with `python tools/gen_area_map.py`.
 
 *Gen 2 Lua (GBC — Crystal):*
 - **`lua/slink_gen2.lua`** — Gen 2 launcher script (configure host/port/player, loads gen2_crystal_client.lua).
@@ -256,7 +256,7 @@ SLink-RR/
 - **`lua/clients/gen4_hgsspt_client.lua`** — Gen 4 NDS client: HeartGold/SoulSilver. Ported from SLink-HGSS prototype. LCRNG-aware, HP debounce, zone-based area detection. Uses memory_nds.lua for NDS RAM access.
 - **`lua/memory_nds.lua`** — Shared Gen 4 NDS memory helpers (730 lines): 2-level pointer chain resolution, LCRNG encryption/decryption, party/box/battle reads, HP debounce (2-frame filter), Pokéball counting, trainer name reading. Game-specific addresses from variant profile.
 - **`lua/games/gen4_hgsspt.lua`** — Gen 4 game module: HGSS/Platinum detection via NDS ROM codes (IPKE/IPGE/CPUE), per-variant memory profiles, gift areas (new_bark_town, route_30, ruins_of_alph, dragons_den), area resolution via zone IDs.
-- **`lua/gen4_hgsspt_areas.lua`** — Generated lookup: `zoneId → area_id` (195 entries). Source: data/games/gen4_hgsspt/area_map_hgss.json.
+- **`data/games/gen4_hgsspt/gen4_hgsspt_areas.lua`** — Generated lookup: `zoneId → area_id` (195 entries). Source: data/games/gen4_hgsspt/area_map_hgss.json.
 
 *Shared Lua:*
 - **`lua/connector.lua`** — LuaSocket wrapper with fully non-blocking connect (zero stutter), exponential backoff (2s → 30s cap), pending-connect probe via zero-byte send: `C.init()`, `C.send()`, `C.receive()`.
@@ -277,7 +277,7 @@ SLink-RR/
 *Data:*
 - **`data/links.json`** — Link table + area states + pokeballs_obtained flags + lock rules, written on every state change.
 - **`data/games/gen3_frlge/rr_items.json`** — 746 RR item ID → name mappings (generated by `lua/tests/test_item_discovery.lua`). Loaded at server startup; used when `_is_rr` is True.
-- **`tools/gen_area_map.py`** — Generates `lua/gen3_frlge_areas.lua` and `lua/gen3_frlge_locations.lua` from `data/games/gen3_frlge/area_map.json`.
+- **`tools/gen_area_map.py`** — Generates `data/games/gen3_frlge/gen3_frlge_areas.lua` and `data/games/gen3_frlge/gen3_frlge_locations.lua` from `data/games/gen3_frlge/area_map.json`.
 - **`tools/gen_gen2_area_map.py`** — Generates `lua/gen2_crystal_areas.lua` and `lua/gen2_crystal_locations.lua` from `data/games/gen2_crystal/area_map.json`.
 
 *Tests:*
@@ -809,7 +809,7 @@ Do not zero the entire slot during battle. Deferred memorialization happens post
 
 ### Area Normalization
 
-Raw `mapGroup:mapNum` maps to a canonical `area_id` via a lookup table in `lua/gen3_frlge_areas.lua`. **175 entries** generated from `data/games/gen3_frlge/area_map.json` by `python tools/gen_area_map.py`. Key decisions:
+Raw `mapGroup:mapNum` maps to a canonical `area_id` via a lookup table in `data/games/gen3_frlge/gen3_frlge_areas.lua`. **175 entries** generated from `data/games/gen3_frlge/area_map.json` by `python tools/gen_area_map.py`. Key decisions:
 
 - Multi-floor dungeons share one area_id (e.g., all Mt. Moon floors → `"mt_moon"`)
 - Building interiors with wild encounters (Safari Zone areas) each get their own area_id
@@ -1003,7 +1003,7 @@ Below the cards:
 ### Unit tests — no emulator or server required
 
 ```bash
-pytest tests/unit/test_state.py -v   # 199 tests
+pytest tests/unit/test_state.py -v   # 234 tests
 ```
 
 Feed event dicts directly to `SoulLinkState.handle_event()`. Use `monkeypatch` to redirect `LINKS_PATH` to `tmp_path`. Helper `make_state_with_link()` creates a pre-linked pair with `pokeballs_obtained = {"a": True, "b": True}`.

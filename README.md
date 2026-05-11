@@ -93,7 +93,7 @@ python -m server.manager --host 0.0.0.0
 ## Tests
 
 ```bash
-pytest tests/unit/ -v        # ~527 tests, no emulator needed
+pytest tests/unit/ -v        # 584 tests, no emulator needed
 ```
 
 ## Project Structure

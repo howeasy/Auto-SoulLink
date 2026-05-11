@@ -14,7 +14,7 @@ Tests 1–3 are diagnostic; **Test 4 (`slink.lua` or `slink_gen3.lua`) is the al
 | LuaSocket DLL | Copy `socket-windows-5-4.dll` from your Archipelago install into `lua/x64/` (see `lua/x64/README.md`) |
 | Python server | `python -m server.server --host 127.0.0.1 --port 54321` (run from project root; needed from Test 3 onward) |
 | Status page | `http://localhost:8080/` — flicker-free auto-refresh every 5 s (DOM morphing); shows player areas, gym badges, party, Pokéball counts, encounters table; battle display above party |
-| Scripts in `lua/` | `memory_gba.lua`, `gen3_frlge_areas.lua`, `connector.lua`, `socket.lua`, `slink.lua`, all files in `tests/` |
+| Scripts in `lua/` | `memory_gba.lua`, `connector.lua`, `socket.lua`, `slink.lua`, all files in `tests/` |
 | Save states | Make a BizHawk save state before Test 2 (it writes RAM) |
 
 ---
