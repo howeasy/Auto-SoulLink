@@ -1,0 +1,2666 @@
+--[[
+  lua/clients/gen3_frlge_client.lua — SLink Gen 3 Client (Production Script)
+  ==========================================================================
+  Supports all three ROM profiles: vanilla FRLG, Archipelago (AP), and
+  Radical Red 4.1 (CFRU/DPE). Profile is auto-detected by memory_gba.lua.
+
+  Detects every SLink event type automatically, sends each to the Python
+  server via TCP, and logs server responses to the Lua console.
+  No GUI overlay.  Verbose logging for all commands and sync operations.
+
+  Run server first:
+      python -m server.server --host 127.0.0.1 --port 54321
+
+  ┌─ EVENTS DETECTED AUTOMATICALLY ───────────────────────────────────────
+  │  hello          — on TCP connect / reconnect (party snapshot)
+  │  area_enter     — mapGroup+mapNum changes to a mapped encounter zone
+  │  capture        — (battle) new monKey in party/PC box during/after battle
+  │  capture        — (gift)   new monKey in party outside battle context
+  │  box_to_party   — previously known monKey returns to party from PC box
+  │  party_to_box   — party monKey disappears without fainting (deposited at PC)
+  │  faint          — party mon HP transitions from > 0 to 0
+  │  no_catch       — wild battle ends, no capture in grace window
+  │                   gated by: wild-only + resolved_areas + gBattleOutcome
+  │  whiteout       — all living party mons transition to HP = 0
+  │  safe           — first overworld frame after a battle ends
+  │  tick           — automatic every 60 frames; carries ball_count + party snapshot
+  └────────────────────────────────────────────────────────────────────────
+
+  ┌─ COMMANDS DISPATCHED ──────────────────────────────────────────────────
+  │  force_faint    — write HP = 0 to matching party slot (immediate)
+  │  box_mon        — deposit partner's linked mon to PC (deferred: safe state)
+  │  party_mon      — restore partner's linked mon to party (deferred: safe state)
+  │  memorialize    — move dead mon to Box 13 (deferred: safe state)
+  │  pending_sync   — HUD notice: manual PC sync required
+  └────────────────────────────────────────────────────────────────────────
+
+  Manual F keys:
+    F1  → area_enter        (current area_id)
+    F2  → capture           (party slot 0)
+    F3  → faint             (party slot 0)
+    F4  → no_catch          (current area_id)
+    F5  → whiteout
+    F6  → safe
+    F7  → tick              (includes ball_count + party snapshot)
+    F8  → party_to_box      (party slot 0, if HP > 0)
+    F9  → memorialize       (direct Lua write — party slot 0 → Box 13, no server)
+
+  ┌─ TESTING CRITERIA ────────────────────────────────────────────────────
+  │  ✓ Startup: TCP connected, hello sent, Writes: ON
+  │  ✓ Walk into route → AUTO area_enter:route_N → noop
+  │  ✓ Battle start/end logged with wild/trainer flag
+  │  ✓ Catch (party not full) → AUTO capture(battle):key → noop
+  │  ✓ Catch (party full=6)   → AUTO capture(box):key   → noop
+  │  ✓ Gift/starter appear    → AUTO capture(gift):key  → noop
+  │  ✓ Deposit mon at PC      → AUTO party_to_box:key   → box_mon queued for partner
+  │  ✓ Retrieve mon from PC   → AUTO box_to_party:key   → party_mon queued for partner
+  │  ✓ Trainer battle end     → NO no_catch fired
+  │  ✓ Wild battle, run/KO    → AUTO no_catch:route_N   → noop/dead_zone
+  │  ✓ Second battle same area → NO second no_catch
+  │  ✓ Party mon HP→0         → AUTO faint:key
+  │  ✓ All party fainted      → AUTO whiteout
+  │  ✓ Return to overworld    → AUTO safe
+  │  ✓ Faint → memorialize queued for both mons → Box 13 after safe state
+  │  ✓ F9 → direct memorialize write; "✓ memorialize: <key> → box13 s0"
+  └───────────────────────────────────────────────────────────────────────
+--]]
+
+-- ── CONFIGURE ─────────────────────────────────────────────────────────────────
+-- Launcher scripts set SLINK_* globals before dofile("clients/gen3_frlge_client.lua").
+-- Direct loading uses the defaults below.
+local SERVER_HOST = SLINK_HOST   or "127.0.0.1"
+local SERVER_PORT = SLINK_PORT   or 54322
+local PLAYER_ID   = SLINK_PLAYER or "a"   -- "a" = FireRed, "b" = LeafGreen
+-- Clear globals so they don't leak across reloads
+SLINK_HOST = nil; SLINK_PORT = nil; SLINK_PLAYER = nil
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- ── Module loading ────────────────────────────────────────────────────────────
+local _src = debug.getinfo(1, "S").source:match("@(.+[/\\])") or ""
+local _lua_root = _src:match("(.+[/\\])clients[/\\]") or _src
+local _proj_root = _lua_root:match("(.+[/\\])lua[/\\]") or (_lua_root .. "../")
+package.path = _src .. "?.lua;"
+           .. _lua_root .. "?.lua;"
+           .. _lua_root .. "games/?.lua;"
+           .. _proj_root .. "data/games/gen3_frlge/?.lua;"
+           .. package.path
+
+package.loaded["memory_gba"]        = nil
+package.loaded["gen3_frlge_areas"]  = nil
+package.loaded["connector"] = nil
+package.loaded["socket"]    = nil
+package.loaded["game_detect"]      = nil
+package.loaded["games.gen3_frlge"] = nil
+package.loaded["gen3_frlge_locations"] = nil
+package.loaded["hud"]               = nil
+
+local M     = require("memory_gba")
+local C     = require("connector")
+local HUD   = require("hud")
+
+-- Game module detection — provides game-specific area/gift classification
+-- and profile data for memory.lua initialization
+local game_detect = require("game_detect")
+local detected    = game_detect.detect()
+local game_module = detected.module
+
+-- ── Localized hot-path globals ────────────────────────────────────────────────
+local mem_u8   = memory.read_u8
+local mem_u16  = memory.read_u16_le
+local mem_u32  = memory.read_u32_le
+local mem_w8   = memory.write_u8
+local mem_w16  = memory.write_u16_le
+local fmt      = string.format
+
+-- ── JSON encoder ──────────────────────────────────────────────────────────────
+-- Optimised: O(n) array check, pre-built format strings, minimal allocations.
+local _json_esc = {['\\']='\\\\', ['"']='\\"', ['\n']='\\n'}
+local function json_encode(val)
+    local t = type(val)
+    if val == nil         then return "null"
+    elseif t == "boolean" then return val and "true" or "false"
+    elseif t == "number"  then
+        -- integer fast path (avoids ".0" suffix from tostring for whole numbers)
+        if val == val and val % 1 == 0 and val >= -2147483648 and val <= 2147483647 then
+            return string.format("%d", val)
+        end
+        return tostring(val)
+    elseif t == "string"  then
+        return '"' .. val:gsub('[\\"\n]', _json_esc) .. '"'
+    elseif t == "table" then
+        -- O(n) array detection: true if sequential integer keys 1..#val with no holes
+        local n = #val
+        local is_arr = (n > 0)
+        if is_arr then
+            -- Only verify there are no extra non-integer keys
+            local cnt = 0
+            for _ in pairs(val) do cnt = cnt + 1; if cnt > n then is_arr = false; break end end
+            if cnt ~= n then is_arr = false end
+        end
+        local p, pn = {}, 0
+        if is_arr then
+            for i = 1, n do pn = pn + 1; p[pn] = json_encode(val[i]) end
+            return "[" .. table.concat(p, ",") .. "]"
+        else
+            for k, v in pairs(val) do
+                pn = pn + 1
+                p[pn] = '"' .. tostring(k) .. '":' .. json_encode(v)
+            end
+            return "{" .. table.concat(p, ",") .. "}"
+        end
+    else return '"['..t..']"' end
+end
+
+-- ── Response parsing ──────────────────────────────────────────────────────────
+local function parse_command_list(raw)
+    local cmds = {}
+    local arr = raw:match('"commands"%s*:%s*(%b[])')
+    if not arr then return cmds end
+    for obj in arr:gmatch('%b{}') do
+        local cmd = obj:match('"cmd"%s*:%s*"([^"]+)"')
+        local key = obj:match('"key"%s*:%s*"([^"]+)"')
+        local msg = obj:match('"message"%s*:%s*"([^"]*)"')
+        local stats = nil
+        local sj = obj:match('"stats"%s*:%s*(%b{})')
+        if sj then
+            stats = {
+                level   = tonumber(sj:match('"level"%s*:%s*(%d+)')),
+                maxHP   = tonumber(sj:match('"maxHP"%s*:%s*(%d+)')),
+                attack  = tonumber(sj:match('"attack"%s*:%s*(%d+)')),
+                defense = tonumber(sj:match('"defense"%s*:%s*(%d+)')),
+                speed   = tonumber(sj:match('"speed"%s*:%s*(%d+)')),
+                spAtk   = tonumber(sj:match('"spAtk"%s*:%s*(%d+)')),
+                spDef   = tonumber(sj:match('"spDef"%s*:%s*(%d+)')),
+            }
+        end
+        -- hud_show fields
+        local text    = obj:match('"text"%s*:%s*"([^"]*)"')
+        local r       = tonumber(obj:match('"r"%s*:%s*(%d+)'))
+        local g       = tonumber(obj:match('"g"%s*:%s*(%d+)'))
+        local b       = tonumber(obj:match('"b"%s*:%s*(%d+)'))
+        local frames  = tonumber(obj:match('"frames"%s*:%s*(%d+)'))
+        -- play_sound field
+        local sound   = tonumber(obj:match('"sound"%s*:%s*(%d+)'))
+        -- unresolve_area field
+        local area_id = obj:match('"area_id"%s*:%s*"([^"]*)"')
+        -- resolved_areas: parse "areas" array of strings
+        local areas   = nil
+        local areas_raw = obj:match('"areas"%s*:%s*(%b[])')
+        if areas_raw then
+            areas = {}
+            for a in areas_raw:gmatch('"([^"]+)"') do
+                areas[#areas + 1] = a
+            end
+        end
+        if cmd then
+            cmds[#cmds+1] = {
+                cmd=cmd, key=key, message=msg, stats=stats,
+                text=text, r=r, g=g, b=b, frames=frames,
+                sound=sound, area_id=area_id, areas=areas,
+            }
+        end
+    end
+    return cmds
+end
+local function format_cmds(cmds)
+    if #cmds == 0 then return "???" end
+    local p = {}
+    for _, c in ipairs(cmds) do
+        if c.cmd == "pending_sync" then
+            p[#p+1] = "pending_sync"
+        elseif c.key then
+            p[#p+1] = c.cmd.."("..c.key:sub(1,8).."...)"
+        else
+            p[#p+1] = c.cmd
+        end
+    end
+    return table.concat(p, ", ")
+end
+
+-- ── ROM profile detection and validation ─────────────────────────────────────
+M.applyProfile(detected.profile, detected.variant)
+local rom_type        = detected.module.rom_type_for_variant(detected.variant)
+local val_ok, val_err = M.validateROM()
+local writes_enabled  = val_ok
+-- Re-validated each frame when false (save may not be loaded at script start).
+local memorial_box_renamed = false  -- one-shot: rename Box 13 to "THE DEAD"
+local memorial_overflow_renamed = {} -- overflow boxes already renamed
+
+-- ── Deferred sync state (declared before dispatch_commands uses them) ─────────
+local pending_sync_cmds = {}  -- deferred box_mon / party_mon commands
+local sync_written_keys = {}  -- keys written by auto-sync this frame (suppress re-fire)
+local nick_cache        = {}  -- key → display label (updated from party snapshots)
+
+-- ── Party integrity protection ────────────────────────────────────────────────
+-- CFRU's game engine may react to party modifications (deposit/compact/retrieve)
+-- between frames and inadvertently swap substruct data (species, held items)
+-- between party mons. When species is corrupted, the engine recalculates the
+-- entire stat block (HP, maxHP, attack, …) from wrong base stats.
+-- We snapshot critical fields before sync ops and verify/restore after.
+local _party_snapshot     = {}   -- {[monKey] = {species, item, level, hp, maxHP, atk, def, spe, spa, spd}}
+local _party_verify_frames = 0   -- countdown: frames remaining to verify party integrity
+local _STAT_OFFSETS = {
+    {0x5A, "atk"}, {0x5C, "def"}, {0x5E, "spe"}, {0x60, "spa"}, {0x62, "spd"},
+}
+
+-- Forward-declare variables used by dispatch_commands but initialized later
+local resolved_areas        = {}
+local resolved_areas_seeded = false
+local pending_hud_area      = nil
+
+-- ── HUD overlay ───────────────────────────────────────────────────────────────
+-- Minimal on-screen display shown during deaths and party swaps only.
+-- GBA screen: 240 × 160. HUD appears at the bottom.
+-- ── HUD overlay (shared module) ───────────────────────────────────────────────
+HUD.init({screen_w = 240, screen_h = 160, hud_x = 3, hud_y = 146, hud_right = 237,
+          prompt_y = 44, prompt_h = 14, gameover_y = 60})
+local hud_show     = HUD.show
+local hud_render   = HUD.render
+local prompt_show  = HUD.prompt
+local game_over_flag   = false  -- set by game_over command; persistent HUD
+
+local function nick_label(key)
+    return nick_cache[key] or key:sub(1, 8)
+end
+
+-- Battle-persistent cache: gBattleMons HP/maxHP/level keyed by monKey.
+-- Keyed by identity (not slot) to prevent stale-index issues when switching mons.
+-- Declared before dispatch_commands so force_faint can update it.
+local _battle_hp_cache = {}  -- [monKey] → {hp, maxHP, level}
+local _ability_cache   = {}  -- [monKey] → ability_id (persists across battles)
+
+-- Deferred battle faints: keys that need force_faint but are the active battler.
+-- Applied once the mon is no longer the active battler (switched out or battle ends).
+local pending_battle_faints = {}  -- [monKey] → true
+
+-- Keys that have been force-fainted by server command during THIS BATTLE.
+-- Prevents re-reporting the HP=0 as a new faint event back to the server.
+-- Persists for the entire battle (cleared at battle start and battle end)
+-- so that gBattleMons cache updates never overwrite HP=0.
+local force_fainted_keys = {}  -- [monKey] → true
+
+-- In-battle faint debounce: CFRU battle scripts process damage in multi-step
+-- sequences within a single game frame.  Between steps, gBattleMons may show
+-- transient HP=0 before abilities (Sturdy, Focus Sash, Endure) restore HP=1.
+-- We require HP to stay at 0 for FAINT_DEBOUNCE_FRAMES before confirming.
+local FAINT_DEBOUNCE_FRAMES = 3
+local pending_faint_debounce = {}  -- [monKey] → frames_remaining
+
+-- Forward-declared here so dispatch_commands can see it (populated by index_party below).
+local _quarantined_slots = {} -- [slot] → true if key changed this frame (reset each frame)
+
+-- ── Command dispatcher ────────────────────────────────────────────────────────
+local function dispatch_commands(cmds)
+    for _, c in ipairs(cmds) do
+        if c.cmd == "play_sound" and c.sound then
+            M.playSE(c.sound)
+        elseif c.cmd == "force_faint" and c.key then
+            -- Populate nick_cache from server-provided nickname (for mons not in our party yet).
+            if c.nickname and c.nickname ~= "" then
+                nick_cache[c.key] = c.nickname
+            end
+            if writes_enabled then
+                local currently_in_battle = M.isInBattle()
+                local count = memory.read_u8(M.PARTY_COUNT_ADDR)
+                for slot = 0, count - 1 do
+                    local base = M.PARTY_BASE + slot * M.MON_SIZE
+                    if M.monKey(base) == c.key then
+                        -- Safety gate: if slot is quarantined (mid-copy), defer.
+                        if _quarantined_slots[slot] then
+                            pending_battle_faints[c.key] = true
+                            console.log(string.format("[SLink-FRLGE]   ↳ force_faint DEFERRED (slot quarantined, mid-copy) slot=%d key=%s", slot, c.key))
+                            break
+                        end
+                        -- Check if this mon is an active battler (battler 0 or battler 2 in doubles).
+                        local is_active_battler = false
+                        if currently_in_battle and M.BATTLER_PARTY_INDEXES_ADDR then
+                            is_active_battler = memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR) == slot
+                            if not is_active_battler
+                               and M.BATTLERS_COUNT_ADDR
+                               and mem_u8(M.BATTLERS_COUNT_ADDR) >= 4 then
+                                -- Doubles: battler 2 is the player's second active mon.
+                                is_active_battler = memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR + 4) == slot
+                            end
+                        end
+                        if is_active_battler then
+                            -- Defer: don't write HP while this mon is an active battler.
+                            -- Applied once the mon switches out or battle ends.
+                            pending_battle_faints[c.key] = true
+                            console.log(string.format("[SLink-FRLGE]   ↳ force_faint DEFERRED (active battler) slot=%d key=%s", slot, c.key))
+                            hud_show("!! " .. nick_label(c.key) .. " — faint pending switch!", 255, 80, 80, 360)
+                        else
+                            -- Safe to write: not in battle, or mon is on the bench.
+                            -- Write HP=0 to party only (skip gBattleMons for bench mons).
+                            memory.write_u16_le(base + M.OFF_HP, 0)
+                            _battle_hp_cache[c.key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
+                            force_fainted_keys[c.key] = true
+                            M.playSE(M.SE_FAINT)
+                            console.log(string.format("[SLink-FRLGE]   ↳ DISPATCHED force_faint slot=%d key=%s in_battle=%s", slot, c.key, tostring(currently_in_battle)))
+                            hud_show("!! " .. nick_label(c.key) .. " force-fainted!", 255, 80, 80, 360)
+                        end
+                        break
+                    end
+                end
+            else
+                console.log("[SLink-FRLGE]   ↳ force_faint skipped (writes off) key="..tostring(c.key))
+            end
+        elseif c.cmd == "pending_sync" then
+            console.log("[SLink-FRLGE]   ↳ ⚠ SYNC REQUIRED: "..(c.message or "check partner at PC"))
+        elseif c.cmd == "box_mon" and c.key then
+            -- Cancel any pending party_mon for the same key (opposing commands = net no-op).
+            local filtered = {}
+            for _, p in ipairs(pending_sync_cmds) do
+                if not (p.key == c.key and p.cmd == "party_mon") then
+                    filtered[#filtered + 1] = p
+                end
+            end
+            pending_sync_cmds = filtered
+            table.insert(pending_sync_cmds, {cmd="box_mon", key=c.key})
+            console.log("[SLink-FRLGE]   ↳ box_mon queued: "..c.key:sub(1,8))
+        elseif c.cmd == "party_mon" and c.key then
+            -- Populate nick_cache from server-provided nickname before any HUD display.
+            if c.nickname and c.nickname ~= "" then
+                nick_cache[c.key] = c.nickname
+            end
+            -- Cancel any pending box_mon for the same key (opposing commands = net no-op).
+            local filtered = {}
+            for _, p in ipairs(pending_sync_cmds) do
+                if not (p.key == c.key and p.cmd == "box_mon") then
+                    filtered[#filtered + 1] = p
+                end
+            end
+            pending_sync_cmds = filtered
+            table.insert(pending_sync_cmds, {cmd="party_mon", key=c.key, stats=c.stats})
+            console.log("[SLink-FRLGE]   ↳ party_mon queued: "..c.key:sub(1,8))
+        elseif c.cmd == "memorialize" and c.key then
+            -- Deduplicate: skip if this key already has a pending memorialize
+            local already_queued = false
+            for _, p in ipairs(pending_sync_cmds) do
+                if p.cmd == "memorialize" and p.key == c.key then
+                    already_queued = true; break
+                end
+            end
+            if not already_queued then
+                table.insert(pending_sync_cmds, {cmd="memorialize", key=c.key})
+                console.log("[SLink-FRLGE]   ↳ memorialize queued: "..c.key:sub(1,8))
+            else
+                console.log("[SLink-FRLGE]   ↳ memorialize deduped: "..c.key:sub(1,8))
+            end
+        elseif c.cmd == "hud_show" and c.text then
+            hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+        elseif c.cmd == "gui_prompt" and c.text then
+            prompt_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+            console.log("[SLink-FRLGE]   ↳ gui_prompt: "..c.text)
+        elseif c.cmd == "resolved_areas" and c.areas then
+            for _, a in ipairs(c.areas) do resolved_areas[a] = true end
+            resolved_areas_seeded = true
+            console.log(string.format("[SLink-FRLGE]   ↳ resolved_areas: %d areas seeded", #c.areas))
+            -- Fire deferred encounter HUD if area_enter happened before seeding arrived.
+            if pending_hud_area and not resolved_areas[pending_hud_area] then
+                local disp = pending_hud_area:gsub("_", " "):gsub("(%a)([%w]*)", function(a, b) return a:upper()..b end)
+                hud_show(">> New encounter: " .. disp, 80, 255, 120, 180)
+            end
+            pending_hud_area = nil
+        elseif c.cmd == "unresolve_area" and c.area_id then
+            resolved_areas[c.area_id] = nil
+            console.log("[SLink-FRLGE]   ↳ unresolve_area: "..c.area_id.." (species clause reroll)")
+        elseif c.cmd == "game_over" then
+            game_over_flag = true
+            HUD.set_game_over()
+            console.log("[SLink-FRLGE]   ↳ GAME OVER — SOUL LINK")
+        elseif c.cmd ~= "noop" then
+            console.log("[SLink-FRLGE]   ↳ cmd: "..tostring(c.cmd))
+        end
+    end
+end
+
+-- ── Send / receive ────────────────────────────────────────────────────────────
+local seq            = 0
+local pending_labels = {}
+
+local function send(evt, label, is_auto, is_silent)
+    if not C.connected() then
+        console.log("[SLink-FRLGE] NOT CONNECTED — dropped: "..(label or evt.event))
+        return
+    end
+    seq = seq + 1; evt.seq = seq; evt.player = PLAYER_ID
+    C.send(json_encode(evt))
+    local prefix = is_auto and "AUTO" or "MANUAL"
+    local lbl    = (is_silent and "SILENT:" or "")..(prefix.." "..seq..": "..(label or evt.event))
+    pending_labels[#pending_labels+1] = lbl
+    if not is_silent then
+        console.log(string.format("[SLink-FRLGE] [→] seq=%d  %s: %s", seq, prefix, label or evt.event))
+    end
+end
+
+-- ── Per-frame helpers ─────────────────────────────────────────────────────────
+
+-- Merged map lookup: one SB1 dereference for both area_id and loc_name.
+local function current_area_loc()
+    local g, n = M.getCurrentMap()
+    return game_module.resolve_area(g, n), game_module.resolve_location(g, n)
+end
+
+-- Per-slot monKey cache: avoids string.format on every frame for unchanged slots.
+local _mk_pers, _mk_otid, _mk_str = {}, {}, {}
+-- Delta-based stats cache: only re-read stats when slot identity or level changes.
+local _sc_key   = {}  -- [slot] → previous monKey string at this slot
+local _sc_level = {}  -- [slot] → previous level byte at this slot
+local mon_stats_cache  = {}   -- key → {level, maxHP, attack, defense, speed, spAtk, spDef}
+-- Cross-frame party slot stability (quarantine guard).
+-- If a slot's monKey changes between frames, the game is mid-copy (100-byte struct
+-- copy in progress). During this window: identity bytes (0-7) = new mon, substructs
+-- and stats (0x20+) = old mon's data. We quarantine the slot for one frame to prevent
+-- caching old data under the new key. Write commands also check this before executing.
+local _slot_prev_keys   = {}  -- [slot] → monKey seen last frame
+-- _quarantined_slots: forward-declared before dispatch_commands (line ~289)
+local function cachedMonKey(slot)
+    local base = M.PARTY_BASE + slot * M.MON_SIZE
+    local p = mem_u32(base + M.OFF_PERSONALITY)
+    local o = mem_u32(base + M.OFF_OTID)
+    if p == _mk_pers[slot] and o == _mk_otid[slot] then return _mk_str[slot] end
+    local key = fmt("%08X:%08X", p, o)
+    _mk_pers[slot] = p; _mk_otid[slot] = o; _mk_str[slot] = key
+    return key
+end
+
+-- Double-buffer pool for index_party: avoids allocating new tables every frame.
+-- Each buffer is a table of {hp, maxHP, level, slot} entries keyed by monKey.
+-- CRITICAL: each buffer has its OWN entry pool so prev_party entries are not
+-- overwritten when index_party populates curr_party.  Shared pooled entries
+-- would make prev_info == curr_info (same object), breaking faint detection.
+local _ip_buf = {{}, {}}
+local _ip_idx = 1
+local _ip_entry_pool = {{}, {}}
+for _buf = 1, 2 do
+    for _pi = 0, 5 do _ip_entry_pool[_buf][_pi] = {hp=0, maxHP=0, level=0, slot=0} end
+end
+
+local function index_party(battle_active)
+    -- Swap buffers: current becomes the write target, previous is the read target
+    _ip_idx = (_ip_idx == 1) and 2 or 1
+    local t = _ip_buf[_ip_idx]
+    local pool = _ip_entry_pool[_ip_idx]
+    for k in pairs(t) do t[k] = nil end  -- clear reused buffer
+    -- Reset quarantine flags (will be set per-slot below)
+    for ii = 0, 5 do _quarantined_slots[ii] = nil end
+    if M.PARTY_IN_SB1 and M.PARTY_BASE == 0 then return t, 0 end
+    local count = mem_u8(M.PARTY_COUNT_ADDR)
+    for i = 0, count - 1 do
+        local base  = M.PARTY_BASE + i * M.MON_SIZE
+        local flags = mem_u8(base + M.OFF_FLAGS)
+        local maxHP = mem_u16(base + M.OFF_MAX_HP)
+        if (flags & 0x02) ~= 0 and maxHP > 0 then
+            local k  = cachedMonKey(i)
+            -- Cross-frame stability: quarantine if key changed from last frame.
+            -- During a party struct copy (reorder, PC swap), personality+otId bytes are
+            -- written before the substruct/stat bytes — key changes one frame before data
+            -- is valid. Quarantined slots: curr_party is still updated (so diff detects
+            -- key changes) but stats/display caches are NOT written to.
+            local prev_k = _slot_prev_keys[i]
+            _slot_prev_keys[i] = k
+            _quarantined_slots[i] = (prev_k ~= nil and k ~= prev_k)
+            local lv = mem_u8(base + M.OFF_LEVEL)
+            local hp = mem_u16(base + M.OFF_HP)
+            -- CFRU doesn't copy battle HP/level back to the party struct.
+            -- Use the persistent battle cache (survives mon switches).
+            if battle_active then
+                local bc = _battle_hp_cache[k]
+                if bc then
+                    hp    = bc.hp
+                    maxHP = bc.maxHP
+                    lv    = bc.level
+                end
+            end
+            -- Reuse pooled entry table (per-buffer) to avoid per-frame allocation
+            local entry = pool[i]
+            entry.hp = hp; entry.maxHP = maxHP; entry.level = lv; entry.slot = i
+            t[k] = entry
+            -- Inline delta stats cache: only re-read full stats when identity or level changes.
+            -- Saves a separate 6-slot loop with redundant personality/otid/level reads.
+            -- Skipped entirely if slot is quarantined (mid-copy: stats belong to old mon).
+            if not _quarantined_slots[i] then
+                if k ~= _sc_key[i] or lv ~= _sc_level[i] then
+                    _sc_key[i] = k; _sc_level[i] = lv
+                    local st = mon_stats_cache[k]
+                    if not st then st = {}; mon_stats_cache[k] = st end
+                    st.level = lv; st.maxHP = maxHP
+                    st.attack  = mem_u16(base + 0x5A)
+                    st.defense = mem_u16(base + 0x5C)
+                    st.speed   = mem_u16(base + 0x5E)
+                    st.spAtk   = mem_u16(base + 0x60)
+                    st.spDef   = mem_u16(base + 0x62)
+                    -- Cache move PP (4 bytes at Attacks substruct +8, i.e. data+0x2C+8=data+0x34)
+                    -- For CFRU (unencrypted fixed-order): directly at base+0x34
+                    -- For vanilla/AP: PP is inside encrypted substruct — skip (retrieveBoxMon handles it)
+                    if M.CFRU_NO_ENCRYPT then
+                        st.pp1 = mem_u8(base + 0x34)
+                        st.pp2 = mem_u8(base + 0x35)
+                        st.pp3 = mem_u8(base + 0x36)
+                        st.pp4 = mem_u8(base + 0x37)
+                    end
+                end
+            end
+        end
+    end
+    for slot = count, 5 do
+        _sc_key[slot] = nil; _sc_level[slot] = nil
+        _slot_prev_keys[slot] = nil
+    end
+    return t, count
+end
+
+-- Per-monKey display data cache: species/held_item/ability only change on
+-- capture, evolution, or item give/take — no need to decrypt every tick.
+-- Nickname and held_item are re-read each tick (cheap unencrypted reads).
+local _display_cache = {}  -- key → {nickname, species_id, held_item_id, ability_id}
+
+local function build_party_snapshot(battle_active)
+    if M.PARTY_IN_SB1 and M.PARTY_BASE == 0 then return {} end
+    -- Active battler detection: read gBattleMons[0] (player's side), same approach as
+    -- enemy active detection which reads gBattleMons[1] and compares species+level.
+    local player_species, player_level = 0, 0
+    if battle_active and M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
+        player_species = mem_u16(M.BATTLE_MONS_ADDR + 0x00)
+        player_level   = mem_u8(M.BATTLE_MONS_ADDR + 0x2A)
+    end
+    local count = mem_u8(M.PARTY_COUNT_ADDR)
+    local snap  = {}
+    for i = 0, count - 1 do
+        local base = M.PARTY_BASE + i * M.MON_SIZE
+        if M.slotOccupied(base) then
+            -- Skip quarantined slots: their struct is mid-copy (new identity, old data).
+            -- The slot will be included next frame once stable.
+            if _quarantined_slots[i] then
+                -- continue (no snap entry, no display cache update)
+            else
+            local k     = cachedMonKey(i)
+            local hp    = mem_u16(base + M.OFF_HP)
+            local maxHP = mem_u16(base + M.OFF_MAX_HP)
+            local level = mem_u8(base + M.OFF_LEVEL)
+            -- CFRU doesn't copy battle HP/level back to party struct.
+            -- Use the persistent battle cache (survives mon switches).
+            if battle_active then
+                local bc = _battle_hp_cache[k]
+                if bc then
+                    hp    = bc.hp
+                    maxHP = bc.maxHP
+                    level = bc.level
+                end
+            end
+            -- Use cached display data; only full-decrypt if key is new or not cached.
+            -- Always re-read held_item_id (cheap single-word decrypt) so give/take updates immediately.
+            local dc = _display_cache[k]
+            if not dc then
+                local ok_ps, ps = pcall(M.readPartySlot, i)
+                dc = {
+                    nickname     = (ok_ps and ps and ps.nickname)     or "",
+                    species_id   = (ok_ps and ps and ps.species_id)  or 0,
+                    held_item_id = (ok_ps and ps and ps.held_item_id) or 0,
+                    ability_id   = (ok_ps and ps and ps.ability_id)  or 0,
+                }
+                _display_cache[k] = dc
+            else
+                local ok_i, iid = pcall(M.decryptHeldItem, base)
+                if ok_i then
+                    dc.held_item_id = iid
+                end
+                -- Re-read species: changes on evolution (key stays the same in Gen 3).
+                local ok_s, sid = pcall(M.decryptSpecies, base)
+                if ok_s and sid and sid > 0 then dc.species_id = sid end
+                -- Re-read nickname: it's unencrypted and cheap, and changes
+                -- when the player uses the Name Rater or nicknames on capture.
+                local ok_n, nick = pcall(M.readNickname, base)
+                if ok_n and nick ~= "" then dc.nickname = nick end
+            end
+            -- Resolve ability: prefer gBaseStats, fall back to gBattleMons cache
+            local final_aid = dc.ability_id
+            if (not final_aid or final_aid == 0) and _ability_cache[k] then
+                final_aid = _ability_cache[k]
+            end
+            -- Active battler: mirrors enemy detection (species + level match gBattleMons[0])
+            local is_active = battle_active and dc.species_id > 0
+                              and dc.species_id == player_species and level == player_level
+            snap[#snap+1] = {key=k, hp=hp, maxHP=maxHP, level=level,
+                             slot=i, active=is_active,
+                             nickname=dc.nickname, species_id=dc.species_id,
+                             held_item_id=dc.held_item_id, ability_id=final_aid or 0}
+            -- Read moves + PP (cheap, re-read every tick for level-up/TM changes)
+            local ok_mv, mv, pp = pcall(M.decryptMoves, base)
+            if ok_mv and mv then
+                snap[#snap].moves = mv
+                snap[#snap].pp    = pp
+            end
+            if dc.nickname ~= "" or dc.species_id ~= 0 then
+                nick_cache[k] = dc.nickname ~= "" and dc.nickname or ("#"..dc.species_id)
+            end
+            end -- quarantine check
+        end
+    end
+    return snap
+end
+
+-- ── Incremental box scanner ──────────────────────────────────────────────────
+-- Scans 2 boxes per tick instead of all 13 at once, eliminating periodic stutter.
+-- Accumulates results client-side; always sends full cache to server.
+local _box_cache = {}
+local _box_next  = 0
+
+-- Validate that box storage is accessible and currentBox is in range.
+-- Returns true if safe to scan; false during transitions/menus.
+local function _box_ptr_valid()
+    if M.CFRU_BOX_BASES then
+        -- CFRU: static EWRAM addresses, just validate currentBox range
+        local cur_box = memory.read_u8(M.POKEMON_STORAGE_BASE)
+        return cur_box < M.BOXES_PER_STORE
+    end
+    if M.BOX_SB1_OFFSET then
+        -- DPE legacy: SB1-relative boxes
+        local sb1 = memory.read_u32_le(M.SB1_PTR_ADDR)
+        return sb1 >= 0x02000000 and sb1 < 0x02040000
+    end
+    if not M.PSP_PTR_ADDR or M.PSP_PTR_ADDR == 0 then return false end
+    local psp = memory.read_u32_le(M.PSP_PTR_ADDR)
+    if psp < 0x02000000 or psp >= 0x02040000 then return false end
+    local cur_box = memory.read_u8(psp)
+    if cur_box >= M.BOXES_PER_STORE then return false end
+    return true
+end
+
+local function scan_next_boxes()
+    -- Guard: skip scan when the storage pointer is invalid (save not loaded,
+    -- title screen, or mid-transition garbage) — mirrors party_diff_ok gate.
+    if not _box_ptr_valid() then return _box_cache end
+    for _ = 1, 2 do
+        local boxIdx = _box_next
+        -- Remove stale entries for this box (in-place to avoid table allocation)
+        local j = 1
+        for i = 1, #_box_cache do
+            if _box_cache[i].box ~= boxIdx then
+                _box_cache[j] = _box_cache[i]; j = j + 1
+            end
+        end
+        for i = j, #_box_cache do _box_cache[i] = nil end
+        -- Scan this box
+        for slotIdx = 0, M.MONS_PER_BOX - 1 do
+            local addr = M.boxMonAddr(boxIdx, slotIdx)
+            if M.boxSlotOccupied(addr) then
+                local k = M.monKey(addr)
+                -- Use display cache; only full-decrypt if key is new or not cached.
+                -- Always re-read held_item_id so give/take updates immediately.
+                local dc = _display_cache[k]
+                if not dc then
+                    local nick, sid, iid = M.readBoxSlotDisplay(addr, true)
+                    local ok_a, aid = pcall(M.getBoxAbilityId, addr)
+                    dc = {nickname=nick, species_id=sid, held_item_id=iid,
+                          ability_id=(ok_a and aid) or 0}
+                    _display_cache[k] = dc
+                else
+                    local ok_i, iid = pcall(M.decryptBoxHeldItem, addr)
+                    if ok_i then dc.held_item_id = iid end
+                    local ok_n, nick = pcall(M.readNickname, addr)
+                    if ok_n and nick ~= "" then dc.nickname = nick end
+                end
+                local box_aid = dc.ability_id
+                if (not box_aid or box_aid == 0) and _ability_cache[k] then
+                    box_aid = _ability_cache[k]
+                end
+                _box_cache[#_box_cache + 1] = {
+                    box = boxIdx, slot = slotIdx, key = k,
+                    nickname = dc.nickname, species_id = dc.species_id,
+                    held_item_id = dc.held_item_id, ability_id = box_aid or 0,
+                }
+                -- Read moves from box slot (no PP for CFRU CompressedPokemon)
+                local ok_bm, bm = pcall(M.decryptBoxMoves, addr)
+                if ok_bm and bm then
+                    _box_cache[#_box_cache].moves = bm
+                end
+            end
+        end
+        _box_next = _box_next + 1
+        if _box_next >= M.BOXES_PER_STORE then _box_next = 0 end
+    end
+    return _box_cache
+end
+
+-- ── Per-frame state ───────────────────────────────────────────────────────────
+local initialized     = false
+local was_connected   = false
+local prev_area, prev_loc = current_area_loc()
+local prev_party      = index_party()
+local prev_in_battle  = M.isInBattle()
+local frame_count     = 0
+local prev_keys       = {}
+
+local TICK_INTERVAL    = 30   -- auto tick every 30 frames (~0.5 s)
+
+-- Battle-scoped capture / no_catch tracking:
+local battle_area_id       = nil
+local battle_is_wild       = false
+local captured_this_battle = false
+local battle_box_index     = nil
+local battle_box_snapshot  = {}   -- {[slotIdx] = true} occupied slots at battle start
+local battle_box_slot_count = 0   -- number of occupied slots at battle start
+local post_battle_frames   = 0
+local pending_safe         = false
+local POST_BATTLE_GRACE    = 90  -- 1.5s; CFRU needs longer for catch/exp/level-up animations
+-- Accumulates enemy mons seen during the current trainer battle.
+-- Keyed by "species_id:level" to deduplicate.  Reset on battle start.
+local battle_seen_enemies  = {}  -- key → {species_id, level, hp, maxHP}
+-- Borrowed-party protection: true while the game has replaced gPlayerParty with
+-- another trainer's mons (Poké Dude, in-game partner, mock battles).  All party
+-- diffing, capture, faint, and sync detection is frozen until the battle ends.
+local borrowed_battle      = false
+local pre_borrowed_party   = nil  -- snapshot of real party before the swap
+
+-- Mass party swap freeze (pre-battle borrowed party detection).
+-- The Poké Dude tutorial swaps the party BEFORE the battle starts, so
+-- isBorrowedBattle() fires too late.  Detect the swap by counting gift captures
+-- within a rolling window — normal gameplay never produces 3+ gifts in <1s.
+local party_frozen          = false
+local pre_freeze_keys       = {}   -- set of monKeys that were in party before freeze
+local freeze_frames_left    = 0
+local FREEZE_TIMEOUT_FRAMES = 3600 -- 60s failsafe
+local POST_UNFREEZE_SETTLE  = 15   -- ~0.25s for game to restore real party after unfreeze
+local post_unfreeze_frames  = 0    -- countdown: suppress party diffs while settling
+local gift_capture_buffer   = {}   -- buffered gift events: {key,hp,maxHP,level,area,nickname,species_id,held_item_id,frame}
+local GIFT_BUFFER_WINDOW    = 45   -- hold gifts for ~0.75s before confirming real
+local GIFT_FREEZE_THRESHOLD = 3    -- 3+ gifts in window = borrowed swap
+
+-- Per-session:
+local all_known_keys   = {}   -- all keys ever seen in party or box
+local sync_cooldown        = 0
+local SYNC_COOLDOWN_FRAMES = 30
+local GIFT_COOLDOWN_FRAMES = 1800 -- 30s for naming dialog after gift/starter
+local sync_block_log_timer = 0  -- throttle SYNC BLOCKED spam
+-- Debounce: require keys to appear/disappear for N consecutive frames before
+-- firing box_to_party / party_to_box.  Prevents false events from memory read
+-- glitches during BizHawk window move/resize.
+local PARTY_DEBOUNCE_FRAMES = 3
+local pending_box_to_party  = {}  -- key → frames_seen (confirmed once >= threshold)
+local pending_party_to_box  = {}  -- key → {frames=N, info=prev_info}
+-- Pokéball gate: no_catch suppressed until player enters a non-gift encounter area.
+-- Gift area classification now handled by game_module.is_gift_area()
+local nuzlocke_active = false
+
+
+-- ── Item integrity helpers ────────────────────────────────────────────────────
+-- Snapshot critical party fields for all current party mons (by monKey).
+-- When called during an active verify window (consecutive sync ops), preserves
+-- existing snapshot entries — they hold the pre-corruption baseline from the
+-- first sync in the batch and must not be overwritten with values the game
+-- engine may have already corrupted in reaction to the previous compaction.
+local function snapshot_party_fields()
+    local count = memory.read_u8(M.PARTY_COUNT_ADDR)
+    if _party_verify_frames > 0 then
+        -- Active verify window — merge new mons only; keep pre-corruption baselines.
+        for i = 0, count - 1 do
+            local base = M.PARTY_BASE + i * M.MON_SIZE
+            -- Skip quarantined slots: identity just changed, substruct/stat bytes
+            -- still belong to the old mon. Snapshotting now would store new key + old data,
+            -- causing verify_party_fields() to attempt a wrong restoration next frame.
+            if not _quarantined_slots[i] and M.slotOccupied(base) then
+                local k = M.monKey(base)
+                if not _party_snapshot[k] then
+                    local ok_s, sid = pcall(M.decryptSpecies, base)
+                    local ok_i, iid = pcall(M.decryptHeldItem, base)
+                    _party_snapshot[k] = {
+                        species = ok_s and sid or 0,
+                        item    = ok_i and iid or 0,
+                        level   = mem_u8(base + M.OFF_LEVEL),
+                        hp      = mem_u16(base + M.OFF_HP),
+                        maxHP   = mem_u16(base + M.OFF_MAX_HP),
+                        atk     = mem_u16(base + 0x5A),
+                        def     = mem_u16(base + 0x5C),
+                        spe     = mem_u16(base + 0x5E),
+                        spa     = mem_u16(base + 0x60),
+                        spd     = mem_u16(base + 0x62),
+                    }
+                end
+            end
+        end
+    else
+        -- No active verify — fresh snapshot.
+        _party_snapshot = {}
+        for i = 0, count - 1 do
+            local base = M.PARTY_BASE + i * M.MON_SIZE
+            -- Skip quarantined slots: same reasoning as active-verify branch above.
+            if not _quarantined_slots[i] and M.slotOccupied(base) then
+                local k = M.monKey(base)
+                local ok_s, sid = pcall(M.decryptSpecies, base)
+                local ok_i, iid = pcall(M.decryptHeldItem, base)
+                _party_snapshot[k] = {
+                    species = ok_s and sid or 0,
+                    item    = ok_i and iid or 0,
+                    level   = mem_u8(base + M.OFF_LEVEL),
+                    hp      = mem_u16(base + M.OFF_HP),
+                    maxHP   = mem_u16(base + M.OFF_MAX_HP),
+                    atk     = mem_u16(base + 0x5A),
+                    def     = mem_u16(base + 0x5C),
+                    spe     = mem_u16(base + 0x5E),
+                    spa     = mem_u16(base + 0x60),
+                    spd     = mem_u16(base + 0x62),
+                }
+            end
+        end
+    end
+    _party_verify_frames = 8  -- verify for 8 frames after sync (covers multi-op batches)
+end
+
+-- Verify and restore party fields if they've been changed by the game engine.
+-- Only restores fields for mons that were in the pre-sync snapshot.
+-- Returns true if any repairs were made (caller can extend verify window).
+--
+-- CFRU's engine can swap the entire 48-byte substruct block (+0x20..+0x4F) between
+-- party slots when compacting after a deposit/memorialize. Individual field patching
+-- (old approach) left moves/EVs/nature/IVs wrong. This version detects pairwise
+-- swaps via species cross-validation and repairs all 48 bytes atomically.
+local function _restore_stats(base, expected)
+    local fixed = 0
+    if mem_u16(base + M.OFF_MAX_HP) ~= expected.maxHP then
+        mem_w16(base + M.OFF_MAX_HP, expected.maxHP)
+        fixed = fixed + 1
+    end
+    if mem_u16(base + M.OFF_HP) ~= expected.hp then
+        local k = M.monKey(base)
+        if expected.hp > 0 and not force_fainted_keys[k] then
+            mem_w16(base + M.OFF_HP, expected.hp)
+            fixed = fixed + 1
+        end
+    end
+    if mem_u8(base + M.OFF_LEVEL) ~= expected.level then
+        mem_w8(base + M.OFF_LEVEL, expected.level)
+        fixed = fixed + 1
+    end
+    for _, pair in ipairs(_STAT_OFFSETS) do
+        if mem_u16(base + pair[1]) ~= expected[pair[2]] then
+            mem_w16(base + pair[1], expected[pair[2]])
+            fixed = fixed + 1
+        end
+    end
+    return fixed
+end
+
+local function verify_party_fields()
+    if not M.CFRU_NO_ENCRYPT then return false end  -- only CFRU has this issue
+    local count = memory.read_u8(M.PARTY_COUNT_ADDR)
+    local fixed_sub = 0
+    local fixed_stat = 0
+
+    -- Build slot map: monKey → {base, cur_species} for all occupied slots.
+    local slot_map = {}
+    for i = 0, count - 1 do
+        local base = M.PARTY_BASE + i * M.MON_SIZE
+        if M.slotOccupied(base) then
+            local k = M.monKey(base)
+            local ok_s, cs = pcall(M.decryptSpecies, base)
+            slot_map[k] = { base = base, cur_species = ok_s and cs or 0 }
+        end
+    end
+
+    -- Pass 1: detect and repair pairwise substruct swaps.
+    -- A swap is confirmed when slot A's cur_species == expected_B AND slot B's
+    -- cur_species == expected_A. Repair by swapping all 48 bytes (+0x20..+0x4F).
+    local handled = {}
+    for k, info in pairs(slot_map) do
+        if not handled[k] then
+            local expected = _party_snapshot[k]
+            if expected and expected.species > 0 and info.cur_species ~= expected.species then
+                -- Find the partner whose cur_species matches our expected species
+                -- and whose own expected species matches our cur_species (confirming swap).
+                local partner_k, partner_info = nil, nil
+                for k2, info2 in pairs(slot_map) do
+                    if k2 ~= k and not handled[k2] then
+                        local exp2 = _party_snapshot[k2]
+                        if info2.cur_species == expected.species and
+                           exp2 and exp2.species == info.cur_species then
+                            partner_k, partner_info = k2, info2
+                            break
+                        end
+                    end
+                end
+                if partner_k then
+                    -- Confirmed pairwise swap: exchange all 48 substruct bytes.
+                    local base_a, base_b = info.base, partner_info.base
+                    for j = 0, 47 do
+                        local a = memory.read_u8(base_a + M.OFF_SUBSTRUCT + j)
+                        local b = memory.read_u8(base_b + M.OFF_SUBSTRUCT + j)
+                        memory.write_u8(base_a + M.OFF_SUBSTRUCT + j, b)
+                        memory.write_u8(base_b + M.OFF_SUBSTRUCT + j, a)
+                    end
+                    -- Restore stat blocks for both slots (engine recalculated from
+                    -- the wrong substruct before we could repair it).
+                    fixed_stat = fixed_stat + _restore_stats(base_a, expected)
+                    local exp2 = _party_snapshot[partner_k]
+                    if exp2 then
+                        fixed_stat = fixed_stat + _restore_stats(base_b, exp2)
+                    end
+                    handled[k] = true
+                    handled[partner_k] = true
+                    fixed_sub = fixed_sub + 2
+                    console.log(string.format(
+                        "[SLink-FRLGE] ⚠ Substruct swap REPAIRED: %s ↔ %s",
+                        k:sub(1,8), partner_k:sub(1,8)))
+                end
+                -- No partner found: fall through to Pass 2 for individual field restore.
+            end
+        end
+    end
+
+    -- Pass 1b: detect and repair cyclic rotations (3+ way).
+    -- After Pass 1 exhausts pairwise matches, any remaining unmatched slots whose
+    -- species mismatch implies a cycle (A→B→C→A) are resolved by iteratively
+    -- placing each slot's expected substruct data from wherever it currently sits.
+    local unmatched = {}
+    for k, info in pairs(slot_map) do
+        if not handled[k] then
+            local expected = _party_snapshot[k]
+            if expected and expected.species > 0 and info.cur_species ~= expected.species then
+                unmatched[#unmatched + 1] = k
+            end
+        end
+    end
+    if #unmatched >= 3 then
+        -- Build reverse lookup: cur_species → key (for slots in the unmatched set)
+        local species_to_key = {}
+        for _, k in ipairs(unmatched) do
+            species_to_key[slot_map[k].cur_species] = k
+        end
+        local cycle_fixed = 0
+        for _, k in ipairs(unmatched) do
+            if not handled[k] then
+                local expected = _party_snapshot[k]
+                -- Find which slot currently holds our expected species
+                local donor_k = species_to_key[expected.species]
+                if donor_k and donor_k ~= k and not handled[donor_k] then
+                    -- Copy donor's full 48-byte substruct block into our slot
+                    local dst_base = slot_map[k].base
+                    local src_base = slot_map[donor_k].base
+                    for j = 0, 47 do
+                        local b = memory.read_u8(src_base + M.OFF_SUBSTRUCT + j)
+                        memory.write_u8(dst_base + M.OFF_SUBSTRUCT + j, b)
+                    end
+                    fixed_stat = fixed_stat + _restore_stats(dst_base, expected)
+                    handled[k] = true
+                    cycle_fixed = cycle_fixed + 1
+                    -- Update reverse lookup: our slot now holds expected species
+                    species_to_key[expected.species] = nil
+                    -- Donor slot's species is now "available" at our old cur_species
+                    -- (we overwrote dst but src still has its data until it's fixed)
+                end
+            end
+        end
+        if cycle_fixed > 0 then
+            -- Mark remaining donors as handled if their species now matches
+            for _, k in ipairs(unmatched) do
+                if not handled[k] then
+                    local expected = _party_snapshot[k]
+                    local ok_s, cs = pcall(M.decryptSpecies, slot_map[k].base)
+                    if ok_s and cs == expected.species then
+                        handled[k] = true
+                        cycle_fixed = cycle_fixed + 1
+                    end
+                end
+            end
+            fixed_sub = fixed_sub + cycle_fixed
+            console.log(string.format(
+                "[SLink-FRLGE] ⚠ Cyclic rotation REPAIRED: %d slots", cycle_fixed))
+        end
+    end
+
+    -- Pass 2: individual field + stat restoration for unhandled slots.
+    -- Covers partial corruptions (item-only changes) and unmatched species mismatches.
+    for k, info in pairs(slot_map) do
+        if not handled[k] then
+            local expected = _party_snapshot[k]
+            if expected then
+                local base = info.base
+                -- Species (individual fallback if no swap partner was found)
+                if expected.species > 0 and info.cur_species ~= expected.species then
+                    mem_w16(base + M.OFF_SUBSTRUCT, expected.species)
+                    fixed_sub = fixed_sub + 1
+                end
+                -- Item
+                local ok_i, cur_item = pcall(M.decryptHeldItem, base)
+                if ok_i and cur_item ~= expected.item then
+                    mem_w16(base + M.OFF_SUBSTRUCT + 2, expected.item)
+                    fixed_sub = fixed_sub + 1
+                end
+                -- Stat block
+                fixed_stat = fixed_stat + _restore_stats(base, expected)
+            end
+        end
+    end
+
+    if fixed_sub > 0 or fixed_stat > 0 then
+        console.log(string.format(
+            "[SLink-FRLGE] ⚠ Party integrity: restored %d substruct + %d stat field(s)",
+            fixed_sub, fixed_stat))
+    end
+    return (fixed_sub + fixed_stat) > 0
+end
+
+-- ── Sync write helpers ─────────────────────────────────────────────────────────
+local function exec_box_mon(key)
+    snapshot_party_fields()  -- protect remaining mons' fields during compaction
+    local count = memory.read_u8(M.PARTY_COUNT_ADDR)
+    -- Never deposit the last party mon — game crashes with 0 party mons.
+    if count <= 1 then
+        console.log("[SLink-FRLGE] ✗ box_mon skipped: " .. key:sub(1,8) .. " (last mon in party)")
+        hud_show("! Can't deposit -- only mon!", 255, 200, 60, 240)
+        return
+    end
+    for slot = 0, count - 1 do
+        local base = M.PARTY_BASE + slot * M.MON_SIZE
+        if M.slotOccupied(base) and M.monKey(base) == key then
+            -- Read stats before depositing; party-only bytes are zeroed by depositPartyMon.
+            local stats = {
+                level   = memory.read_u8(base + M.OFF_LEVEL),
+                maxHP   = memory.read_u16_le(base + M.OFF_MAX_HP),
+                attack  = memory.read_u16_le(base + 0x5A),
+                defense = memory.read_u16_le(base + 0x5C),
+                speed   = memory.read_u16_le(base + 0x5E),
+                spAtk   = memory.read_u16_le(base + 0x60),
+                spDef   = memory.read_u16_le(base + 0x62),
+            }
+            -- Capture move PP so retrieval can restore it (CFRU compressed box loses PP)
+            if M.CFRU_NO_ENCRYPT then
+                stats.pp1 = memory.read_u8(base + 0x34)
+                stats.pp2 = memory.read_u8(base + 0x35)
+                stats.pp3 = memory.read_u8(base + 0x36)
+                stats.pp4 = memory.read_u8(base + 0x37)
+            end
+            local bi, si, err = M.depositPartyMon(slot)
+            if bi then
+                console.log(string.format("[SLink-FRLGE] ✓ box_mon: %s → box%d s%d", key:sub(1,8), bi, si))
+                sync_written_keys[key] = true
+                -- Remove deposited mon from snapshot (no longer in party)
+                _party_snapshot[key] = nil
+                verify_party_fields()  -- immediate post-compact integrity check
+                hud_show("v " .. nick_label(key) .. " deposited", 100, 180, 255, 200)
+                -- Cache stats on server so party_mon can restore them correctly later.
+                -- Use stats_cache (not party_to_box) to avoid triggering sync feedback loop.
+                send({event="stats_cache", key=key, stats=stats},
+                     "stats_cache:"..key:sub(1,8), true, true)
+            else
+                console.log("[SLink-FRLGE] ✗ box_mon failed: "..(err or "?").."  key="..key:sub(1,8))
+                hud_show("X Deposit failed: " .. nick_label(key), 255, 80, 80, 240)
+            end
+            return
+        end
+    end
+    -- Not in party — check if already in a box (desired state already met).
+    local bi, si = M.scanBoxForKey(key)
+    if bi then
+        console.log(string.format("[SLink-FRLGE] box_mon: %s already in box%d s%d — skipping", key:sub(1,8), bi, si))
+        sync_written_keys[key] = true
+    else
+        console.log("[SLink-FRLGE] box_mon: "..key:sub(1,8).." not found in party or boxes")
+    end
+end
+
+local function exec_party_mon(key, stats)
+    -- If the mon is already in the party, the desired state is already met.
+    local count = memory.read_u8(M.PARTY_COUNT_ADDR)
+    for slot = 0, count - 1 do
+        local base = M.PARTY_BASE + slot * M.MON_SIZE
+        if M.slotOccupied(base) and M.monKey(base) == key then
+            console.log("[SLink-FRLGE] party_mon: "..key:sub(1,8).." already in party — skipping")
+            sync_written_keys[key] = true
+            -- Still confirm retrieval so server updates party_keys.
+            send({event="sync_retrieve_done", key=key},
+                 "sync_retrieve_done:"..key:sub(1,8), true, true)
+            return
+        end
+    end
+    -- Fail closed: refuse to retrieve without valid stats (prevents zero-stat crash).
+    if not stats or not stats.level or stats.level <= 0
+       or not stats.maxHP or stats.maxHP <= 0 then
+        console.log("[SLink-FRLGE] ✗ party_mon: no valid stats for "..key:sub(1,8).." — manual retrieval needed")
+        hud_show("! Retrieve " .. nick_label(key) .. " from PC", 255, 200, 60, 600)
+        send({event="sync_retrieve_failed", key=key},
+             "sync_retrieve_failed:"..key:sub(1,8), true, true)
+        return
+    end
+    snapshot_party_fields()  -- protect existing mons' fields during retrieval
+    if count >= 6 then
+        -- Party full — a preceding box_mon should free a slot. Re-queue to retry
+        -- (up to 3 attempts) instead of giving up immediately.
+        local retries = stats and stats._retries or 0
+        if retries < 3 then
+            local retry_stats = {}
+            for k, v in pairs(stats) do retry_stats[k] = v end
+            retry_stats._retries = retries + 1
+            table.insert(pending_sync_cmds, {cmd="party_mon", key=key, stats=retry_stats})
+            console.log("[SLink-FRLGE] party_mon: party full for "..key:sub(1,8).." — re-queued (attempt "..(retries+1).."/3)")
+            return
+        end
+        -- Exhausted retries — genuine full party, notify server.
+        console.log("[SLink-FRLGE] ✗ party_mon: party still full after 3 retries for "..key:sub(1,8))
+        hud_show("! Make room & retrieve " .. nick_label(key), 255, 200, 60, 600)
+        send({event="sync_retrieve_failed", key=key},
+             "sync_retrieve_failed:"..key:sub(1,8), true, true)
+        return
+    end
+    local ok, err = M.retrieveBoxMon(key, stats)
+    if ok then
+        console.log("[SLink-FRLGE] ✓ party_mon: "..key:sub(1,8).." added to party (full heal)")
+        sync_written_keys[key] = true
+        all_known_keys[key]    = true  -- prevent false gift-capture on subsequent frames
+        -- Add retrieved mon to snapshot so verify_party_fields protects its items
+        -- against CFRU engine substruct swaps.  Data is clean: we just wrote it
+        -- within this Lua frame; the engine hasn't run yet.
+        local new_count = memory.read_u8(M.PARTY_COUNT_ADDR)
+        local ret_base = M.PARTY_BASE + (new_count - 1) * M.MON_SIZE
+        local ok_s, sid = pcall(M.decryptSpecies, ret_base)
+        local ok_i, iid = pcall(M.decryptHeldItem, ret_base)
+        _party_snapshot[key] = {
+            species = ok_s and sid or 0,
+            item    = ok_i and iid or 0,
+            level   = mem_u8(ret_base + M.OFF_LEVEL),
+            hp      = mem_u16(ret_base + M.OFF_HP),
+            maxHP   = mem_u16(ret_base + M.OFF_MAX_HP),
+            atk     = mem_u16(ret_base + 0x5A),
+            def     = mem_u16(ret_base + 0x5C),
+            spe     = mem_u16(ret_base + 0x5E),
+            spa     = mem_u16(ret_base + 0x60),
+            spd     = mem_u16(ret_base + 0x62),
+        }
+        verify_party_fields()  -- immediate post-retrieval integrity check (now covers new mon)
+        -- Populate nick_cache from the retrieved mon's actual nickname in RAM
+        local ok_n, nick = pcall(M.readNickname, ret_base)
+        if ok_n and nick and nick ~= "" then nick_cache[key] = nick end
+        hud_show("^ " .. nick_label(key) .. " retrieved", 100, 255, 160, 200)
+        -- Notify server so it can update its party_keys for this player.
+        send({event="sync_retrieve_done", key=key},
+             "sync_retrieve_done:"..key:sub(1,8), true, true)
+    else
+        console.log("[SLink-FRLGE] ✗ party_mon failed: "..(err or "?").."  key="..key:sub(1,8))
+        hud_show("! Retrieve " .. nick_label(key) .. " from PC", 255, 200, 60, 600)
+        send({event="sync_retrieve_failed", key=key},
+             "sync_retrieve_failed:"..key:sub(1,8), true, true)
+    end
+end
+
+local function exec_memorialize(key)
+    snapshot_party_fields()  -- protect remaining mons' fields during memorialize compaction
+    -- Drain any stale box_mon/party_mon for this key from the queue
+    local filtered = {}
+    for _, c in ipairs(pending_sync_cmds) do
+        if not (c.key == key and (c.cmd == "box_mon" or c.cmd == "party_mon")) then
+            filtered[#filtered + 1] = c
+        end
+    end
+    pending_sync_cmds = filtered
+
+    -- Log pre-state for diagnostics
+    local pre_count = memory.read_u8(M.PARTY_COUNT_ADDR)
+    console.log(string.format("[SLink-FRLGE] memorialize: key=%s partyCount=%d", key:sub(1,8), pre_count))
+
+    local bi, si = M.memorializeMon(key)
+    if bi then
+        -- Remove memorialized mon from snapshot, verify remaining items
+        _party_snapshot[key] = nil
+        verify_party_fields()
+        -- Verify: confirm the key is gone from party and present in memorial box
+        local post_count = memory.read_u8(M.PARTY_COUNT_ADDR)
+        local still_in_party = false
+        for slot = 0, post_count - 1 do
+            local base = M.PARTY_BASE + slot * M.MON_SIZE
+            if M.monKey(base) == key then still_in_party = true; break end
+        end
+        local in_memorial = M.boxMonKey(bi, si) == key
+
+        console.log(string.format("[SLink-FRLGE] ✓ memorialize: %s → box%d s%d  count=%d→%d  gone=%s  in_box=%s",
+            key:sub(1, 8), bi, si, pre_count, post_count,
+            tostring(not still_in_party), tostring(in_memorial)))
+
+        if still_in_party then
+            console.log("[SLink-FRLGE] ⚠ memorialize VERIFY FAIL: key still in party after memorialize!")
+        end
+
+        hud_show("X " .. nick_label(key) .. " memorialized", 255, 140, 40, 300)
+        send({event="memorialize_done", key=key, box=bi}, "memorialize_done:"..key:sub(1,8), true)
+        -- Rename overflow boxes (Box 12 → "DEAD 2", Box 11 → "DEAD 3", etc.)
+        if bi ~= M.MEMORIAL_BOX and not memorial_overflow_renamed[bi] then
+            local n = M.MEMORIAL_BOX - bi + 1  -- Box 12→2, Box 11→3, ...
+            pcall(M.renameBox, bi, "DEAD " .. n)
+            memorial_overflow_renamed[bi] = true
+            console.log(string.format("[SLink-FRLGE] Overflow box %d renamed to 'DEAD %d'", bi, n))
+        end
+    else
+        console.log("[SLink-FRLGE] ✗ memorialize failed: "..tostring(si).."  key="..key:sub(1,8))
+        hud_show("X Memorial failed: " .. nick_label(key), 255, 80, 80, 300)
+        send({event="memorialize_failed", key=key, reason=si},
+             "memorialize_failed:"..key:sub(1,8), true)
+    end
+end
+
+-- ── Main frame handler ────────────────────────────────────────────────────────
+local function on_frame()
+    frame_count = frame_count + 1
+
+    -- 0a. Refresh ASLR-dependent party addresses (no-op for vanilla/AP)
+    M.refreshPartyAddrs()
+
+    -- 0b. Re-validate writes if previously disabled (save may load after script start)
+    if not writes_enabled then
+        local ok, err = M.validateROM()
+        if ok then
+            writes_enabled = true
+            console.log("[SLink-FRLGE] ✓ ROM validation passed — writes enabled")
+        end
+    end
+
+    -- Rename memorial box once after writes are first enabled
+    if writes_enabled and not memorial_box_renamed then
+        local ok, err = pcall(M.renameBox, M.MEMORIAL_BOX, "THE DEAD")
+        if ok then
+            memorial_box_renamed = true
+            console.log("[SLink-FRLGE] Memorial box renamed to 'THE DEAD'")
+        end
+    end
+
+    -- 1. Drive TCP pump
+    C.pump()
+
+    -- 2. Connection state change → send hello on (re)connect
+    local now_connected = C.connected()
+    if now_connected ~= was_connected then
+        if now_connected then
+            console.log("[SLink-FRLGE] [TCP] connected to "..SERVER_HOST..":"..SERVER_PORT)
+            -- Mid-run reconnect: check actual bag contents to determine nuzlocke gate.
+            -- Must run BEFORE building the party snapshot so reconnects include real data.
+            if M.hasPokeballs() then
+                nuzlocke_active = true
+                console.log("[SLink-FRLGE] nuzlocke ACTIVE (pokeballs already in bag at startup)")
+            end
+            -- Only build a real party snapshot when save data looks valid.
+            -- During intro (title screen, cutscenes), gPlayerPartyCount may be garbage (>6).
+            -- Skip snapshot during borrowed-party battles (RR mock/Poké Dude) — the party in
+            -- RAM belongs to the NPC, not the player. Sending it would corrupt identity lock.
+            local raw_count = memory.read_u8(M.PARTY_COUNT_ADDR)
+            local save_loaded = raw_count >= 0 and raw_count <= 6
+            local snap = (save_loaded and not borrowed_battle) and build_party_snapshot(false) or {}
+            -- Seed all_known_keys from current party on connect
+            for k in pairs(prev_party) do all_known_keys[k] = true end
+            -- Seed all_known_keys from PC boxes so withdrawn mons
+            -- are recognized as box_to_party, not false gift captures.
+            -- Skip memorial box: dead mons must not block future same-PID captures.
+            for boxIdx = 0, (M.BOXES_PER_STORE or 14) - 1 do
+                if boxIdx ~= M.MEMORIAL_BOX and not memorial_overflow_renamed[boxIdx] then
+                    for slotIdx = 0, 29 do
+                        local bk = M.boxMonKey(boxIdx, slotIdx)
+                        if bk and bk ~= "0:0" then
+                            all_known_keys[bk] = true
+                        end
+                    end
+                end
+            end
+            local h_area, h_loc = current_area_loc()
+            send({event="hello", area_id=h_area, loc_name=h_loc,
+                  rom_type=rom_type,
+                  writes_enabled=writes_enabled, has_pokeballs=M.hasPokeballs(),
+                  ball_count=M.countPokeballs(),
+                  badges=(function() local ok,n,bm=pcall(M.readBadges); return ok and bm or 0 end)(),
+                  trainer_name=(function() local ok,v=pcall(M.readTrainerName); return ok and v or "" end)(),
+                  party=snap}, "hello", true)
+            -- Log party keys so they can be used with inject_link_by_slot or inject_link
+            if #snap > 0 then
+                for i, m in ipairs(snap) do
+                    console.log(string.format("[SLink-FRLGE] party[%d] key=%s level=%d maxHP=%d",
+                        i-1, m.key or "?", m.level or 0, m.maxHP or 0))
+                end
+            else
+                console.log("[SLink-FRLGE] party: empty (no mons with maxHP>0)")
+            end
+            initialized = true
+        else
+            console.log("[SLink-FRLGE] [TCP] disconnected — reconnecting…")
+        end
+        was_connected = now_connected
+    end
+
+    -- 3b. Dispatch received responses (may enqueue sync cmds)
+    while true do
+        local line = C.receive()
+        if not line then break end
+        local label = table.remove(pending_labels, 1) or "?"
+        local cmds  = parse_command_list(line)
+        if label:sub(1,7) ~= "SILENT:" then
+            console.log("[SLink-FRLGE] [←] "..label.." → "..format_cmds(cmds))
+        end
+        dispatch_commands(cmds)
+    end
+
+    if not initialized then return end
+
+    -- 4. Read current state — cache battle/overworld state once per frame.
+    -- Within a single on_frame() callback the GBA CPU is frozen, so these
+    -- values cannot change between uses.  Read BEFORE sync flush so the
+    -- cached overworld state gates writes correctly.
+    local area, loc    = current_area_loc()
+    local in_battle    = M.isInBattle()
+    local is_overworld = M.isInOverworld()
+
+    -- 4a. Update sync_cooldown BEFORE sync flush to prevent executing sync
+    -- commands on the battle-end transition frame.  The game is still doing
+    -- post-battle processing (HP writeback, exp, evolution) on that frame.
+    local battle_just_ended = prev_in_battle and not in_battle
+    if battle_just_ended then
+        sync_cooldown = SYNC_COOLDOWN_FRAMES
+    elseif sync_cooldown > 0 then
+        sync_cooldown = sync_cooldown - 1
+    end
+
+    -- 4b. Flush deferred battle faints: apply force_faint to mons that are no longer
+    -- the active battler (switched out) or when battle has ended.
+    if next(pending_battle_faints) and writes_enabled then
+        local count = memory.read_u8(M.PARTY_COUNT_ADDR)
+        local active_slot  = -1
+        local active_slot2 = -1
+        if in_battle and M.BATTLER_PARTY_INDEXES_ADDR then
+            active_slot = memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR)
+            if M.BATTLERS_COUNT_ADDR and mem_u8(M.BATTLERS_COUNT_ADDR) >= 4 then
+                active_slot2 = memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR + 4)
+            end
+        end
+        for key, _ in pairs(pending_battle_faints) do
+            local found_slot = false
+            for slot = 0, count - 1 do
+                local base = M.PARTY_BASE + slot * M.MON_SIZE
+                if M.monKey(base) == key then
+                    found_slot = true
+                    -- Safety gate: if slot is quarantined (mid-copy), skip this frame.
+                    if _quarantined_slots[slot] then break end
+                    if not in_battle or (slot ~= active_slot and slot ~= active_slot2) then
+                        -- Mon is no longer active (or battle ended) — safe to faint.
+                        memory.write_u16_le(base + M.OFF_HP, 0)
+                        _battle_hp_cache[key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
+                        force_fainted_keys[key] = true
+                        pending_battle_faints[key] = nil
+                        M.playSE(M.SE_FAINT)
+                        console.log(string.format("[SLink-FRLGE]   ↳ DEFERRED force_faint applied slot=%d key=%s", slot, key))
+                        hud_show("!! " .. nick_label(key) .. " force-fainted!", 255, 80, 80, 360)
+                    end
+                    break
+                end
+            end
+            -- Mon is no longer in party (compacted out after fainting naturally).
+            -- Treat as if force_faint succeeded — it's already gone.
+            if not found_slot and not in_battle then
+                force_fainted_keys[key] = true
+                pending_battle_faints[key] = nil
+                console.log(string.format("[SLink-FRLGE]   ↳ DEFERRED force_faint: key=%s gone from party (compacted); treating as fainted", key:sub(1,8)))
+            end
+        end
+    end
+
+    -- 5. Flush one deferred sync cmd if safe (BEFORE party diff so writes are clean)
+    -- Gate on: overworld, cooldown expired, NOT the battle-end frame, and
+    -- post-battle grace window finished (avoids writes during catch/exp/evo anims).
+    local safe_now = is_overworld and sync_cooldown == 0
+                     and not battle_just_ended and post_battle_frames == 0
+                     and not party_frozen
+    if #pending_sync_cmds > 0 then
+        if not safe_now or not writes_enabled then
+            sync_block_log_timer = sync_block_log_timer - 1
+            if sync_block_log_timer <= 0 then
+                sync_block_log_timer = 120
+                console.log(string.format("[SLink-FRLGE] SYNC BLOCKED: safe=%s writes=%s cooldown=%d pbf=%d cmd=%s",
+                    tostring(safe_now), tostring(writes_enabled), sync_cooldown,
+                    post_battle_frames, pending_sync_cmds[1].cmd))
+            end
+        else
+            sync_block_log_timer = 0
+        end
+    end
+    if safe_now and #pending_sync_cmds > 0 and writes_enabled then
+        local cmd = pending_sync_cmds[1]  -- peek before removing
+        -- Safety gate: if target party slot is in mid-copy quarantine, defer one frame.
+        local quarantine_blocked = false
+        if (cmd.cmd == "box_mon" or cmd.cmd == "memorialize") and cmd.key then
+            local q_count = memory.read_u8(M.PARTY_COUNT_ADDR)
+            for q_s = 0, q_count - 1 do
+                if M.monKey(M.PARTY_BASE + q_s * M.MON_SIZE) == cmd.key then
+                    if _quarantined_slots[q_s] then
+                        quarantine_blocked = true
+                        console.log(string.format("[SLink-FRLGE] SYNC DEFERRED (slot quarantined, mid-copy) cmd=%s key=%s slot=%d",
+                            cmd.cmd, cmd.key:sub(1,8), q_s))
+                    end
+                    break
+                end
+            end
+        end
+        if not quarantine_blocked then
+            table.remove(pending_sync_cmds, 1)
+            local exec_ok, exec_err = true, nil
+            if cmd.cmd == "box_mon" then
+                exec_ok, exec_err = pcall(exec_box_mon, cmd.key)
+            elseif cmd.cmd == "party_mon" then
+                exec_ok, exec_err = pcall(exec_party_mon, cmd.key, cmd.stats)
+            elseif cmd.cmd == "memorialize" then
+                exec_ok, exec_err = pcall(exec_memorialize, cmd.key)
+            end
+            if not exec_ok then
+                console.log(string.format("[SLink-FRLGE] ✗ SYNC CMD ERROR (%s key=%s): %s",
+                    cmd.cmd, (cmd.key or "?"):sub(1,8), tostring(exec_err)))
+                -- Re-queue with a retry counter to avoid infinite loops.
+                cmd._retries = (cmd._retries or 0) + 1
+                if cmd._retries <= 3 then
+                    table.insert(pending_sync_cmds, 1, cmd)
+                    console.log(string.format("[SLink-FRLGE]   ↳ re-queued (attempt %d/3)", cmd._retries))
+                else
+                    console.log("[SLink-FRLGE]   ↳ DROPPED after 3 retries")
+                    hud_show("X " .. cmd.cmd .. " failed for " .. nick_label(cmd.key or ""), 255, 80, 80, 600)
+                end
+            end
+        end
+    end
+
+    -- 5b. Per-frame item integrity check (catches game-engine interference between frames)
+    if _party_verify_frames > 0 and is_overworld and writes_enabled then
+        _party_verify_frames = _party_verify_frames - 1
+        local repaired = verify_party_fields()
+        -- Self-extending window: if CFRU engine is still corrupting, keep verifying.
+        if repaired and _party_verify_frames < 4 then
+            _party_verify_frames = 8
+        end
+    end
+    -- ── area_enter / loc_enter ────────────────────────────────────────────────
+    -- Fire on any map change (encounter zones get area_id; towns/buildings get loc_name only).
+    if loc ~= prev_loc then
+        send({event="area_enter", area_id=area, loc_name=loc},
+             "area_enter:"..(area ~= "" and area or loc), true)
+        -- Notify the player when entering an area with a new encounter available.
+        -- Exclude gift/intro areas — those aren't "wild encounter" areas.
+        if nuzlocke_active and area ~= "" and not game_module.is_gift_area(area) then
+            if resolved_areas_seeded then
+                if not resolved_areas[area] then
+                    local disp = area:gsub("_", " "):gsub("(%a)([%w]*)", function(a, b) return a:upper()..b end)
+                    hud_show("** NEW ENCOUNTER **  " .. disp, 255, 220, 60, 240)
+                    M.playSE(M.SE_SUCCESS)
+                end
+            else
+                -- Hello response hasn't arrived yet — defer HUD until resolved_areas seeds.
+                pending_hud_area = area
+            end
+        end
+    end
+
+    -- ── battle start ─────────────────────────────────────────────────────────
+    if not prev_in_battle and in_battle then
+        battle_area_id       = area
+        captured_this_battle = false
+        battle_is_wild       = M.isWildBattle()
+        battle_seen_enemies  = {}
+        _battle_hp_cache     = {}  -- fresh cache for this battle
+        force_fainted_keys   = {}  -- fresh guard set for this battle
+        pending_faint_debounce = {}  -- clear any stale debounce state
+        -- Detect borrowed-party battles (CFRU/RR only).
+        local ok_bb, is_bb = pcall(M.isBorrowedBattle)
+        borrowed_battle = ok_bb and is_bb or false
+        if borrowed_battle then
+            -- Snapshot the real party BEFORE the game swaps it out.
+            -- prev_party still holds the last-frame (real) party here.
+            pre_borrowed_party = {}
+            for k, v in pairs(prev_party) do
+                pre_borrowed_party[k] = {hp=v.hp, maxHP=v.maxHP, level=v.level, slot=v.slot}
+            end
+            -- Discard any buffered gift captures — they're borrowed mons, not real gifts.
+            if #gift_capture_buffer > 0 then
+                console.log(string.format("[SLink-FRLGE] [battle] ★ discarding %d buffered gift captures (borrowed)",
+                    #gift_capture_buffer))
+                gift_capture_buffer = {}
+            end
+            console.log("[SLink-FRLGE] [battle] ★ BORROWED PARTY detected — freezing party diff")
+        end
+        if mem_u8(M.PARTY_COUNT_ADDR) == 6 then
+            -- Snapshot occupied SLOTS (not keys) so detection works even when
+            -- a caught mon has the same PID as a dead mon already in the box.
+            local boxIdx
+            if M.POKEMON_STORAGE_BASE then
+                boxIdx = memory.read_u8(M.POKEMON_STORAGE_BASE)
+            elseif M.BOX_SB1_OFFSET then
+                local sb1 = memory.read_u32_le(M.SB1_PTR_ADDR)
+                boxIdx = memory.read_u8(sb1 + M.BOX_SB1_OFFSET - M.BOX_DATA_OFFSET)
+            elseif M.PSP_PTR_ADDR and M.PSP_PTR_ADDR ~= 0 then
+                local psp = memory.read_u32_le(M.PSP_PTR_ADDR)
+                boxIdx = memory.read_u8(psp)
+            end
+            -- If currentBox points to a memorial/overflow box, redirect to the first
+            -- non-memorial box with space so catches don't land among dead mons.
+            if boxIdx and (boxIdx == M.MEMORIAL_BOX or memorial_overflow_renamed[boxIdx]) then
+                local redirected = false
+                for bi = 0, (M.BOXES_PER_STORE or 14) - 1 do
+                    if bi ~= M.MEMORIAL_BOX and not memorial_overflow_renamed[bi] then
+                        -- Count occupied slots in this box
+                        local occ = 0
+                        for si = 0, M.MONS_PER_BOX - 1 do
+                            local a = M.boxMonAddr(bi, si)
+                            if a and M.boxSlotOccupied(a) then occ = occ + 1 end
+                        end
+                        if occ < M.MONS_PER_BOX then
+                            -- Write the new currentBox index
+                            if M.POKEMON_STORAGE_BASE then
+                                memory.write_u8(M.POKEMON_STORAGE_BASE, bi)
+                            elseif M.BOX_SB1_OFFSET then
+                                local sb1 = memory.read_u32_le(M.SB1_PTR_ADDR)
+                                memory.write_u8(sb1 + M.BOX_SB1_OFFSET - M.BOX_DATA_OFFSET, bi)
+                            elseif M.PSP_PTR_ADDR and M.PSP_PTR_ADDR ~= 0 then
+                                local psp = memory.read_u32_le(M.PSP_PTR_ADDR)
+                                memory.write_u8(psp, bi)
+                            end
+                            boxIdx = bi
+                            redirected = true
+                            console.log(string.format(
+                                "[SLink-FRLGE] currentBox was memorial (box %d) — redirected to box %d",
+                                M.MEMORIAL_BOX, bi))
+                            break
+                        end
+                    end
+                end
+                if not redirected then
+                    console.log("[SLink-FRLGE] WARNING: all non-memorial boxes full, cannot redirect currentBox")
+                end
+            end
+            if boxIdx and boxIdx < (M.BOXES_PER_STORE or 14) then
+                battle_box_index = boxIdx
+                battle_box_snapshot = {}
+                battle_box_slot_count = 0
+                for slot = 0, M.MONS_PER_BOX - 1 do
+                    local addr = M.boxMonAddr(boxIdx, slot)
+                    if addr and M.boxSlotOccupied(addr) then
+                        battle_box_snapshot[slot] = true
+                        battle_box_slot_count = battle_box_slot_count + 1
+                    end
+                end
+            else
+                battle_box_index = nil
+                battle_box_snapshot = {}
+                battle_box_slot_count = 0
+            end
+        else
+            battle_box_index    = nil
+            battle_box_snapshot = {}
+            battle_box_slot_count = 0
+        end
+        console.log(string.format("[SLink-FRLGE] [battle] start  wild=%s  borrowed=%s  area=%s",
+            tostring(battle_is_wild), tostring(borrowed_battle), battle_area_id or "(none)"))
+        -- Show encounter prompt when a wild battle starts in an unresolved area.
+        if battle_is_wild and nuzlocke_active and battle_area_id and battle_area_id ~= ""
+                and not resolved_areas[battle_area_id] and not game_module.is_gift_area(battle_area_id) then
+            local disp = battle_area_id:gsub("_", " "):gsub("(%a)([%w]*)", function(a, b) return a:upper()..b end)
+            hud_show("** NEW ENCOUNTER **  " .. disp, 255, 220, 60, 360)
+            M.playSE(M.SE_SUCCESS)
+        end
+    end
+
+    -- ── gBattleMons cache update (every frame while in battle + transition) ──
+    -- CFRU does NOT copy battle HP/level back to the party struct during battle.
+    -- Cache gBattleMons values for all player-side battlers each frame so that
+    -- index_party/build_party_snapshot can use them (survives mon switches).
+    -- Also fire on battle_just_ended to capture the FINAL HP state — CFRU may
+    -- set gBattleOutcome on the same frame as the last faint, so a cache update
+    -- gated only on in_battle would miss the final HP=0.
+    if (in_battle or battle_just_ended) and M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0
+       and M.BATTLER_PARTY_INDEXES_ADDR then
+        -- Update cache for battler 0 (always the player's primary mon)
+        local idx0 = mem_u16(M.BATTLER_PARTY_INDEXES_ADDR)
+        if idx0 < 6 then
+            local base0 = M.PARTY_BASE + idx0 * M.MON_SIZE
+            if M.slotOccupied(base0) then
+                local k0 = M.monKey(base0)
+                local bmon = M.BATTLE_MONS_ADDR + 0 * M.BATTLE_MON_SIZE
+                local bmon_hp    = mem_u16(bmon + M.BATTLE_MON_HP_OFF)
+                local bmon_maxHP = mem_u16(bmon + 0x2C)
+                local bmon_level = mem_u8(bmon + 0x2A)
+                -- Only update cache if gBattleMons has valid data (maxHP > 0).
+                -- At battle end, gBattleMons may be cleared — don't poison the cache.
+                if bmon_maxHP > 0 then
+                    local bc = _battle_hp_cache[k0]
+                    if bc then
+                        -- Existing entry: update normally.
+                        -- Guard: don't overwrite hp=0 committed by a force_faint applied
+                        -- this same frame (step 4b). Without this, the CFRU writeback at
+                        -- battle end would restore the surviving HP and silently undo the faint.
+                        if not force_fainted_keys[k0] then
+                            bc.hp = bmon_hp
+                        end
+                        bc.maxHP = bmon_maxHP
+                        bc.level = bmon_level
+                    elseif bmon_hp > 0 and not _quarantined_slots[idx0] then
+                        -- New entry: only create when HP is positive AND slot identity is stable.
+                        -- gBattlerPartyIndexes[0] switches to the incoming mon before
+                        -- gBattleMons[0] is refreshed, so for 1-2 frames the new key
+                        -- maps to stale hp=0 from the fainted mon.  Skipping that frame
+                        -- prevents a false faint on the just-sent-out replacement.
+                        -- _quarantined_slots[idx0] adds a second gate: if the party slot
+                        -- identity is mid-copy, defer to the next stable frame.
+                        _battle_hp_cache[k0] = {hp=bmon_hp, maxHP=bmon_maxHP, level=bmon_level}
+                    end
+                end
+                -- Cache resolved ability keyed by monKey (persists across battles;
+                -- essential fallback for AP where gBaseStats address is unknown).
+                local aid0 = memory.read_u8(bmon + 0x20)
+                if aid0 > 0 then _ability_cache[k0] = aid0 end
+            end
+        end
+        -- Double battles: battler 2 is the player's second mon
+        if M.BATTLERS_COUNT_ADDR and mem_u8(M.BATTLERS_COUNT_ADDR) >= 4 then
+            local idx2 = mem_u16(M.BATTLER_PARTY_INDEXES_ADDR + 4)
+            if idx2 < 6 then
+                local base2 = M.PARTY_BASE + idx2 * M.MON_SIZE
+                if M.slotOccupied(base2) then
+                    local k2 = M.monKey(base2)
+                    local bmon2 = M.BATTLE_MONS_ADDR + 2 * M.BATTLE_MON_SIZE
+                    local bmon2_hp    = mem_u16(bmon2 + M.BATTLE_MON_HP_OFF)
+                    local bmon2_maxHP = mem_u16(bmon2 + 0x2C)
+                    local bmon2_level = mem_u8(bmon2 + 0x2A)
+                    if bmon2_maxHP > 0 then
+                        local bc2 = _battle_hp_cache[k2]
+                        if bc2 then
+                            -- Same guard as battler 0: preserve force-fainted hp=0.
+                            if not force_fainted_keys[k2] then
+                                bc2.hp = bmon2_hp
+                            end
+                            bc2.maxHP = bmon2_maxHP
+                            bc2.level = bmon2_level
+                        elseif bmon2_hp > 0 and not _quarantined_slots[idx2] then
+                            -- Same guard as battler 0: don't initialize with hp=0 or mid-copy data.
+                            _battle_hp_cache[k2] = {hp=bmon2_hp, maxHP=bmon2_maxHP, level=bmon2_level}
+                        end
+                    end
+                    local aid2 = memory.read_u8(bmon2 + 0x20)
+                    if aid2 > 0 then _ability_cache[k2] = aid2 end
+                end
+            end
+        end
+    end
+
+    -- ── battle end ───────────────────────────────────────────────────────────
+    if battle_just_ended then
+        -- Borrowed-party cleanup: restore the real party snapshot and skip
+        -- HP writeback (the cached HP belongs to the borrowed mons, not ours).
+        if borrowed_battle then
+            console.log("[SLink-FRLGE] [battle] ★ borrowed battle ended — restoring real party snapshot")
+            if pre_borrowed_party then
+                prev_party = pre_borrowed_party
+            end
+            pre_borrowed_party = nil
+            borrowed_battle    = false
+            _battle_hp_cache   = {}  -- discard borrowed mon HP
+            pending_battle_faints = {}  -- discard any deferred faints from borrowed battle
+            force_fainted_keys    = {}  -- clear battle-scoped guard
+            pending_faint_debounce = {}  -- clear any debounce state
+            post_battle_frames = POST_BATTLE_GRACE
+            pending_safe       = true
+            -- Skip normal writeback — fall through to party read below.
+        else
+        -- CFRU doesn't copy gBattleMons HP/level back to the party struct after
+        -- battle.  Write the last-known battle values so post-battle reads and
+        -- faint detection see the correct (actual) HP, not stale pre-battle values.
+        if writes_enabled then
+            local count = mem_u8(M.PARTY_COUNT_ADDR)
+            for key, bc in pairs(_battle_hp_cache) do
+                -- Only write back if maxHP > 0 (sanity check: 0 means garbage data).
+                if bc.maxHP > 0 then
+                    for slot = 0, count - 1 do
+                        local base = M.PARTY_BASE + slot * M.MON_SIZE
+                        if M.monKey(base) == key then
+                            mem_w16(base + M.OFF_HP, bc.hp)
+                            mem_w16(base + M.OFF_MAX_HP, bc.maxHP)
+                            mem_w8(base + M.OFF_LEVEL, bc.level)
+                            break
+                        end
+                    end
+                end
+            end
+            if next(_battle_hp_cache) then
+                console.log("[SLink-FRLGE] [battle] wrote back cached HP/level to party struct")
+            end
+        end
+        _battle_hp_cache   = {}  -- clear cache; party struct is now authoritative
+        pending_battle_faints = {}  -- all deferred faints should be flushed by now
+        force_fainted_keys    = {}  -- clear battle-scoped guard
+        pending_faint_debounce = {}  -- clear any debounce state
+        post_battle_frames = POST_BATTLE_GRACE
+        pending_safe       = true
+        console.log("[SLink-FRLGE] [battle] end  grace window started")
+        -- DEBUG: log party state at battle end to diagnose capture detection
+        console.log(string.format("[SLink-FRLGE] [DIAG] battle_end: captured=%s count=%d box_idx=%s",
+            tostring(captured_this_battle), mem_u8(M.PARTY_COUNT_ADDR),
+            battle_box_index ~= nil and tostring(battle_box_index) or "nil"))
+        end -- not borrowed_battle
+    end
+
+    -- 6. Read party AFTER battle end writeback so diff sees correct HP.
+    -- Stats cache is merged into index_party() — no separate pass needed.
+    local curr_party, party_count = index_party(in_battle)
+
+    -- ── party freeze: unfreeze check ───────────────────────────────────────────
+    if party_frozen then
+        -- Only count down timeout when NOT in battle — borrowed battles can
+        -- last much longer than the timeout window.
+        if not in_battle then
+            freeze_frames_left = freeze_frames_left - 1
+        end
+        -- Check if original mons have returned
+        local returned, total = 0, 0
+        for k, _ in pairs(pre_freeze_keys) do
+            total = total + 1
+            if curr_party[k] then returned = returned + 1 end
+        end
+        -- Unfreeze when: originals returned, battle ended, or timeout (overworld only).
+        if (total > 0 and returned >= total)
+           or battle_just_ended
+           or freeze_frames_left <= 0 then
+            local reason = freeze_frames_left <= 0 and "timeout"
+                or battle_just_ended and "battle ended"
+                or "originals returned"
+            console.log("[SLink-FRLGE] ★ PARTY UNFREEZE: " .. reason)
+            party_frozen = false
+            pending_faint_debounce = {}  -- clear stale debounce state
+            -- Start settle period: keep prev_party synced for a few frames
+            -- before allowing party diffs, so the game has time to restore
+            -- the real party after a borrowed-party battle.
+            post_unfreeze_frames = POST_UNFREEZE_SETTLE
+            -- Resync baseline so the next diff doesn't compare stale prev_party
+            -- against the current (possibly changed) party.
+            prev_party = curr_party
+            pending_party_to_box = {}
+            pending_box_to_party = {}
+            gift_capture_buffer  = {}
+        end
+    end
+
+    -- ── party diff gate ─────────────────────────────────────────────────────
+    -- Only diff party keys when in a trustworthy game state.  During menus
+    -- (bag / Repel / etc.) BizHawk memory reads can return transient garbage,
+    -- producing phantom party changes.  We freeze prev_party and skip all
+    -- party-change detection while in those states.
+    -- For vanilla ROMs isInOverworld() == not isInBattle(), so this is always true.
+    -- Borrowed-party battles: completely freeze party diff — the party RAM
+    -- contains another trainer's mons and must not trigger any events.
+    -- Post-unfreeze settle: suppress diffs while game restores real party.
+    if post_unfreeze_frames > 0 then
+        post_unfreeze_frames = post_unfreeze_frames - 1
+    end
+    local party_diff_ok = not borrowed_battle and not party_frozen
+        and post_unfreeze_frames == 0
+        and (in_battle or post_battle_frames > 0 or is_overworld)
+
+    if party_diff_ok then
+
+    -- ── nature change detection (RR Nature Changer NPC) ──────────────────────
+    -- In Radical Red, changing a mon's nature modifies the personality value,
+    -- which changes the monKey.  Detect this by matching disappeared/appeared
+    -- keys on otId + species + level + nickname (all unchanged by nature edit).
+    -- Must run BEFORE capture/faint diff so false events are suppressed.
+    -- Suppressed while gift buffer has entries — mass party swaps produce false
+    -- signature matches that corrupt local state.
+    local nature_migrated = {}  -- old_key → true AND new_key → true (skip set)
+    if #gift_capture_buffer == 0 then
+    do
+        local disappeared, appeared = {}, {}
+        for k, _ in pairs(prev_party) do
+            if not curr_party[k] then disappeared[#disappeared+1] = k end
+        end
+        for k, info in pairs(curr_party) do
+            if not prev_party[k] and not sync_written_keys[k] then
+                appeared[#appeared+1] = {key=k, slot=info.slot}
+            end
+        end
+        if #disappeared > 0 and #appeared > 0 then
+            -- Build signature for each disappeared key from cached data.
+            -- Signature: otId .. ":" .. species_id .. ":" .. level .. ":" .. nickname
+            local dis_sigs = {}  -- sig → old_key (only unique sigs)
+            local dis_dups = {}  -- sig → true if seen more than once
+            for _, old_k in ipairs(disappeared) do
+                local parts = old_k:match(":(.+)")  -- otId portion of "personality:otId"
+                local dc = _display_cache[old_k]
+                local prev_info = prev_party[old_k]
+                if parts and dc and prev_info then
+                    local sig = parts..":"
+                              ..(dc.species_id or 0)..":"
+                              ..(prev_info.level or 0)..":"
+                              ..(dc.nickname or "")
+                    if dis_sigs[sig] then
+                        dis_dups[sig] = true  -- ambiguous: two mons share this sig
+                    else
+                        dis_sigs[sig] = old_k
+                    end
+                end
+            end
+            -- Match each appeared key against disappeared signatures.
+            for _, app in ipairs(appeared) do
+                local new_k = app.key
+                local new_parts = new_k:match(":(.+)")
+                -- Fresh read for the new key (personality changed, so re-read everything).
+                local ok_ps, ps = pcall(M.readPartySlot, app.slot)
+                if new_parts and ok_ps and ps then
+                    local new_info = curr_party[new_k]
+                    local sig = new_parts..":"
+                              ..(ps.species_id or 0)..":"
+                              ..(new_info and new_info.level or 0)..":"
+                              ..(ps.nickname or "")
+                    local old_k = dis_sigs[sig]
+                    if old_k and not dis_dups[sig] then
+                        -- 1:1 match — this is a nature change, not a new capture.
+                        console.log(fmt("[SLink-FRLGE] nature change detected: %s → %s", old_k:sub(1,8), new_k:sub(1,8)))
+                        nature_migrated[old_k] = true
+                        nature_migrated[new_k] = true
+
+                        -- Migrate tracking state: old key → new key
+                        all_known_keys[old_k] = nil
+                        all_known_keys[new_k] = true
+
+                        -- Fresh display cache from readPartySlot (don't clone old —
+                        -- ability may change since it depends on personality).
+                        _display_cache[old_k] = nil
+                        _display_cache[new_k] = {
+                            nickname     = ps.nickname     or "",
+                            species_id   = ps.species_id   or 0,
+                            held_item_id = ps.held_item_id or 0,
+                            ability_id   = ps.ability_id   or 0,
+                        }
+
+                        -- Nick cache
+                        nick_cache[new_k] = nick_cache[old_k]
+                        nick_cache[old_k] = nil
+
+                        -- Ability cache (clear — may have changed with personality)
+                        _ability_cache[old_k] = nil
+
+                        -- Stats cache
+                        mon_stats_cache[new_k] = mon_stats_cache[old_k]
+                        mon_stats_cache[old_k] = nil
+
+                        -- Sync written keys
+                        if sync_written_keys[old_k] then
+                            sync_written_keys[old_k] = nil
+                            sync_written_keys[new_k] = true
+                        end
+
+                        -- Pending debounce state
+                        if pending_party_to_box[old_k] then
+                            pending_party_to_box[new_k] = pending_party_to_box[old_k]
+                            pending_party_to_box[old_k] = nil
+                        end
+                        if pending_box_to_party[old_k] then
+                            pending_box_to_party[new_k] = pending_box_to_party[old_k]
+                            pending_box_to_party[old_k] = nil
+                        end
+
+                        -- Faint debounce / force-faint / battle caches
+                        if pending_faint_debounce[old_k] then
+                            pending_faint_debounce[new_k] = pending_faint_debounce[old_k]
+                            pending_faint_debounce[old_k] = nil
+                        end
+                        if force_fainted_keys[old_k] then
+                            force_fainted_keys[new_k] = true
+                            force_fainted_keys[old_k] = nil
+                        end
+                        if _battle_hp_cache[old_k] then
+                            _battle_hp_cache[new_k] = _battle_hp_cache[old_k]
+                            _battle_hp_cache[old_k] = nil
+                        end
+                        if pending_battle_faints[old_k] then
+                            pending_battle_faints[new_k] = true
+                            pending_battle_faints[old_k] = nil
+                        end
+
+                        -- Pending sync commands referencing old key
+                        for _, sc in ipairs(pending_sync_cmds) do
+                            if sc.key == old_k then sc.key = new_k end
+                        end
+
+                        -- Notify server
+                        send({event="key_change", old_key=old_k, new_key=new_k},
+                             "key_change:"..old_k:sub(1,8).."->"..new_k:sub(1,8), true)
+                    end
+                end
+            end
+        end
+    end
+    end -- #gift_capture_buffer == 0
+
+    -- ── capture (party, battle-scoped or gift/box) ────────────────────────────
+    for k, info in pairs(curr_party) do
+        -- DEBUG: log when a key appears as "new" during battle but gets blocked
+        if not prev_party[k] and (in_battle or post_battle_frames > 0) then
+            if _quarantined_slots[info.slot] then
+                console.log(string.format("[SLink-FRLGE] [DIAG] capture BLOCKED by quarantine: %s slot=%d", k:sub(1,8), info.slot))
+            elseif sync_written_keys[k] then
+                console.log(string.format("[SLink-FRLGE] [DIAG] capture BLOCKED by sync_written: %s", k:sub(1,8)))
+            end
+        end
+        -- Skip quarantined slots: the new key is mid-copy (not yet a confirmed new mon).
+        -- It will appear again next frame when the slot is stable.
+        if not prev_party[k] and not sync_written_keys[k] and not nature_migrated[k] then
+            -- Read display data for this party slot (pcall-guarded).
+            local ok_ps, ps = pcall(M.readPartySlot, info.slot)
+            local cap_nick = ok_ps and ps and ps.nickname      or ""
+            local cap_sid  = ok_ps and ps and ps.species_id    or 0
+            local cap_iid  = ok_ps and ps and ps.held_item_id  or 0
+            local cap_aid  = ok_ps and ps and ps.ability_id    or 0
+            -- Populate display + nick caches so snapshot/HUD use fresh data.
+            _display_cache[k] = {nickname=cap_nick, species_id=cap_sid,
+                                 held_item_id=cap_iid, ability_id=cap_aid}
+            if cap_nick ~= "" or cap_sid ~= 0 then
+                nick_cache[k] = cap_nick ~= "" and cap_nick or ("#"..cap_sid)
+            end
+            if (in_battle or post_battle_frames > 0) and not all_known_keys[k] then
+                local evt_area = battle_area_id or area
+                captured_this_battle     = true
+                resolved_areas[evt_area] = true
+                all_known_keys[k]        = true
+                send({event="capture", key=k, hp=info.hp, maxHP=info.maxHP,
+                      level=info.level, area_id=evt_area,
+                      nickname=cap_nick, species_id=cap_sid, held_item_id=cap_iid},
+                     "capture(battle):"..k:sub(1,8), true)
+            elseif all_known_keys[k] then
+                -- DEBUG: log when a "new" party key is blocked by all_known_keys during battle
+                if in_battle or post_battle_frames > 0 then
+                    console.log(string.format("[SLink-FRLGE] [DIAG] capture BLOCKED by all_known_keys: %s slot=%d battle=%s grace=%d",
+                        k:sub(1,8), info.slot, tostring(in_battle), post_battle_frames))
+                end
+                -- Previously seen key reappeared → candidate for box_to_party.
+                -- Queue it; confirmed after PARTY_DEBOUNCE_FRAMES of persistence.
+                -- Skip quarantined slots: the reappearance may be a mid-copy artifact.
+                if not _quarantined_slots[info.slot] and not pending_box_to_party[k] then
+                    pending_box_to_party[k] = PARTY_DEBOUNCE_FRAMES
+                end
+            else
+                -- New key outside battle → gift/starter/trade
+                -- Before nuzlocke_active (no Pokéballs), this is always the starter —
+                -- use "intro" so both players link regardless of randomized start location.
+                -- Post-nuzlocke gifts (Eevee, Lapras, fossils) use their real area_id.
+                -- If the map isn't in areas.lua, use "gift_<group>_<num>" so each
+                -- unmapped gift location gets a unique area_id (prevents collisions).
+                local gift_area
+                if not nuzlocke_active then
+                    gift_area = "intro"
+                else
+                    if area ~= "" then
+                        gift_area = area
+                    else
+                        local g, n = M.getCurrentMap()
+                        gift_area = "gift_" .. g .. "_" .. n
+                    end
+                end
+                -- Don't set all_known_keys yet — deferred to buffer flush so we
+                -- can cleanly discard borrowed-party gifts without rollback.
+                -- Dedup: skip if already in the buffer (e.g. prev_party wasn't updated).
+                local already_buffered = false
+                for _, buf in ipairs(gift_capture_buffer) do
+                    if buf.key == k then already_buffered = true; break end
+                end
+                if not already_buffered then
+                    gift_capture_buffer[#gift_capture_buffer + 1] = {
+                        key=k, hp=info.hp, maxHP=info.maxHP, level=info.level,
+                        area=gift_area, nickname=cap_nick, species_id=cap_sid,
+                        held_item_id=cap_iid, frame=frame_count
+                    }
+                    if #gift_capture_buffer >= GIFT_FREEZE_THRESHOLD then
+                        -- Mass swap detected — freeze party diff.
+                        party_frozen       = true
+                        freeze_frames_left = FREEZE_TIMEOUT_FRAMES
+                        pending_faint_debounce = {}  -- clear stale debounce state
+                        -- Only track REAL mons for the unfreeze check.
+                        -- Buffered gift keys are NOT in all_known_keys (deferred),
+                        -- so filtering prev_party by all_known_keys excludes them.
+                        pre_freeze_keys    = {}
+                        for pk, _ in pairs(prev_party) do
+                            if all_known_keys[pk] then
+                                pre_freeze_keys[pk] = true
+                            end
+                        end
+                        console.log(string.format(
+                            "[SLink-FRLGE] ★ PARTY FREEZE: %d gift captures in %d frames — borrowed party swap",
+                            #gift_capture_buffer,
+                            frame_count - gift_capture_buffer[1].frame))
+                        gift_capture_buffer = {}
+                    end
+                end
+            end
+        end
+    end
+
+    -- ── faint + party_to_box ─────────────────────────────────────────────────
+    local had_alive = false
+    local all_zero  = true
+    local real_faint_occurred = false  -- track if any non-force faint happened
+    for k, prev_info in pairs(prev_party) do
+        local curr_info = curr_party[k]
+        if nature_migrated[k] then
+            -- Nature change: old key vanished but migrated — not a real disappearance.
+            all_zero = false
+        elseif curr_info then
+            -- Key still in party — clear any party_to_box debounce
+            pending_party_to_box[k] = nil
+            if prev_info.hp > 0 then had_alive = true end
+            if prev_info.hp > 0 and curr_info.hp == 0 and not party_frozen then
+                -- Don't re-report faints that we caused via force_faint command.
+                if force_fainted_keys[k] then
+                    console.log("[SLink-FRLGE]   ↳ faint suppressed (force_fainted) key="..k:sub(1,8))
+                elseif in_battle then
+                    -- In-battle: start debounce instead of sending immediately.
+                    -- CFRU may show transient HP=0 before abilities (Sturdy, Focus Sash)
+                    -- restore HP on the next frame.
+                    if not pending_faint_debounce[k] then
+                        pending_faint_debounce[k] = FAINT_DEBOUNCE_FRAMES
+                        console.log("[SLink-FRLGE]   ↳ faint debounce started key="..k:sub(1,8).." frames="..FAINT_DEBOUNCE_FRAMES)
+                    end
+                else
+                    -- Overworld: party struct is authoritative, send immediately.
+                    send({event="faint", key=k, area_id=area},
+                         "faint:"..k:sub(1,8), true)
+                    real_faint_occurred = true
+                end
+            end
+            -- If HP recovered, cancel any pending debounce (Sturdy/Endure/Focus Sash).
+            if curr_info and curr_info.hp > 0 then
+                if pending_faint_debounce[k] then
+                    console.log("[SLink-FRLGE]   ↳ faint debounce CANCELLED (HP recovered) key="..k:sub(1,8))
+                    pending_faint_debounce[k] = nil
+                end
+                all_zero = false
+            end
+        else
+            -- Key disappeared from party — candidate for party_to_box.
+            -- Queue it; confirmed after PARTY_DEBOUNCE_FRAMES of absence.
+            -- Note: _quarantined_slots protects new keys (captures at mid-copy slots).
+            -- Old keys disappearing in key-based tracking always indicate genuine removal:
+            -- party reorders keep both keys present in curr_party (different slots),
+            -- so they never reach this branch. Only genuine deposits hit this path.
+            if not in_battle and prev_info.hp > 0 and not sync_written_keys[k]
+               and not party_frozen then
+                if not pending_party_to_box[k] then
+                    pending_party_to_box[k] = {frames=PARTY_DEBOUNCE_FRAMES,
+                        info={hp=prev_info.hp, maxHP=prev_info.maxHP,
+                              level=prev_info.level, slot=prev_info.slot}}
+                end
+            end
+            all_zero = false  -- gone from party, can't be all-zero anymore
+        end
+    end
+
+    -- ── debounce: in-battle faint confirmation ──────────────────────────────
+    -- Keys must remain at HP=0 for FAINT_DEBOUNCE_FRAMES before confirming.
+    -- This filters out transient HP=0 from CFRU multi-step damage processing.
+    for k, frames_left in pairs(pending_faint_debounce) do
+        local ci = curr_party[k]
+        if not ci or ci.hp > 0 then
+            -- HP recovered or mon left party — cancel debounce.
+            if ci and ci.hp > 0 then
+                console.log("[SLink-FRLGE]   ↳ faint debounce CANCELLED (HP recovered) key="..k:sub(1,8))
+            end
+            pending_faint_debounce[k] = nil
+        elseif force_fainted_keys[k] then
+            -- Server already force-fainted this mon — don't double-report.
+            pending_faint_debounce[k] = nil
+        else
+            frames_left = frames_left - 1
+            if frames_left <= 0 then
+                -- Confirmed: HP stayed at 0 for N frames — real faint.
+                pending_faint_debounce[k] = nil
+                console.log("[SLink-FRLGE]   ↳ faint debounce CONFIRMED key="..k:sub(1,8))
+                send({event="faint", key=k, area_id=area},
+                     "faint:"..k:sub(1,8), true)
+                real_faint_occurred = true
+            else
+                pending_faint_debounce[k] = frames_left
+            end
+        end
+    end
+
+    -- ── debounce: party_to_box confirmation ─────────────────────────────────
+    -- Keys must stay absent from the party for PARTY_DEBOUNCE_FRAMES before we fire.
+    -- Skip sends if party_frozen — pending entries are cleared on unfreeze.
+    for k, ptb in pairs(pending_party_to_box) do
+        if curr_party[k] then
+            -- Key came back → was a memory glitch, cancel.
+            pending_party_to_box[k] = nil
+        elseif party_frozen then
+            -- Freeze active — hold, don't decrement or send.
+        else
+            ptb.frames = ptb.frames - 1
+            if ptb.frames <= 0 then
+                pending_party_to_box[k] = nil
+                local st = mon_stats_cache[k]
+                local stats_tbl = st and {level=st.level, maxHP=st.maxHP,
+                    attack=st.attack, defense=st.defense, speed=st.speed,
+                    spAtk=st.spAtk, spDef=st.spDef} or nil
+                send({event="party_to_box", key=k, stats=stats_tbl},
+                     "party_to_box:"..k:sub(1,8), true)
+            end
+        end
+    end
+
+    -- ── debounce: box_to_party confirmation ─────────────────────────────────
+    -- Keys must persist in the party for PARTY_DEBOUNCE_FRAMES before we fire.
+    -- Skip sends if party_frozen just triggered this frame.
+    -- NOTE: Runs AFTER party_to_box confirmation so that PC swaps (Move Pokemon)
+    -- send the deposit event before the retrieval event.  This ensures the server
+    -- knows about the freed party slot before checking partner room.
+    for k, remaining in pairs(pending_box_to_party) do
+        if not curr_party[k] then
+            -- Key vanished again → was a memory glitch, cancel.
+            pending_box_to_party[k] = nil
+        elseif party_frozen then
+            -- Freeze active — don't decrement or send; hold until unfreeze clears.
+        else
+            remaining = remaining - 1
+            if remaining <= 0 then
+                pending_box_to_party[k] = nil
+                send({event="box_to_party", key=k, area_id=area},
+                     "box_to_party:"..k:sub(1,8), true)
+            else
+                pending_box_to_party[k] = remaining
+            end
+        end
+    end
+
+    -- ── whiteout ─────────────────────────────────────────────────────────────
+    -- Don't declare whiteout while faint debounce is in progress — some of
+    -- those HP=0 readings may be transient (Sturdy/Focus Sash recovery).
+    if had_alive and all_zero and not party_frozen and real_faint_occurred
+       and not next(pending_faint_debounce) then
+        M.playSE(M.SE_BOO)
+        send({event="whiteout"}, "whiteout", true)
+    end
+
+    end -- party_diff_ok
+
+    -- ── gift capture buffer: flush confirmed gifts ──────────────────────────
+    -- Entries older than GIFT_BUFFER_WINDOW are confirmed real and sent.
+    -- If party_frozen was triggered, the buffer was already cleared.
+    if #gift_capture_buffer > 0 and not party_frozen and not borrowed_battle then
+        local i = 1
+        while i <= #gift_capture_buffer do
+            local buf = gift_capture_buffer[i]
+            if frame_count - buf.frame >= GIFT_BUFFER_WINDOW then
+                all_known_keys[buf.key] = true
+                sync_cooldown = math.max(sync_cooldown, GIFT_COOLDOWN_FRAMES)
+                send({event="capture", key=buf.key, hp=buf.hp, maxHP=buf.maxHP,
+                      level=buf.level, area_id=buf.area,
+                      nickname=buf.nickname, species_id=buf.species_id,
+                      held_item_id=buf.held_item_id},
+                     "capture(gift):"..buf.key:sub(1,8), true)
+                table.remove(gift_capture_buffer, i)
+            else
+                i = i + 1
+            end
+        end
+    end
+
+    -- ── post-battle grace window ──────────────────────────────────────────────
+    if post_battle_frames > 0 then
+        post_battle_frames = post_battle_frames - 1
+
+        if battle_box_index ~= nil and not captured_this_battle then
+            -- Slot-based detection: find newly occupied slots since battle start.
+            -- This works even when the caught mon has the same PID as a dead mon
+            -- already in the box (key-based diff would miss it).
+            local new_slots = {}
+            for slot = 0, M.MONS_PER_BOX - 1 do
+                if not battle_box_snapshot[slot] then
+                    local addr = M.boxMonAddr(battle_box_index, slot)
+                    if addr and M.boxSlotOccupied(addr) then
+                        new_slots[#new_slots + 1] = {slot = slot, addr = addr}
+                    end
+                end
+            end
+            if #new_slots == 1 then
+                local ns = new_slots[1]
+                local k = M.monKey(ns.addr)
+                local evt_area = battle_area_id or area
+                captured_this_battle     = true
+                resolved_areas[evt_area] = true
+                all_known_keys[k]        = true
+                -- Get display data directly from the new slot address.
+                local bnick, bsid, biid = M.readBoxSlotDisplay(ns.addr, true)
+                if bnick ~= "" or bsid ~= 0 then
+                    nick_cache[k] = bnick ~= "" and bnick or ("#"..bsid)
+                end
+                -- Read stats from gBattleMons[1] which persists in EWRAM post-battle.
+                local box_stats = nil
+                local box_lv = 0
+                local box_maxHP = 0
+                if M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
+                    local foe_base = M.BATTLE_MONS_ADDR + 1 * M.BATTLE_MON_SIZE
+                    local ok_lv, elv   = pcall(memory.read_u8,     foe_base + 0x2A)
+                    local ok_mh, emh   = pcall(memory.read_u16_le, foe_base + 0x2C)
+                    local ok_at, eat   = pcall(memory.read_u16_le, foe_base + 0x02)
+                    local ok_de, ede   = pcall(memory.read_u16_le, foe_base + 0x04)
+                    local ok_sp, esp   = pcall(memory.read_u16_le, foe_base + 0x06)
+                    local ok_sa, esa   = pcall(memory.read_u16_le, foe_base + 0x08)
+                    local ok_sd, esd   = pcall(memory.read_u16_le, foe_base + 0x0A)
+                    box_lv = (ok_lv and elv and elv > 0) and elv or 0
+                    box_maxHP = (ok_mh and emh and emh > 0) and emh or 0
+                    if box_lv > 0 and box_maxHP > 0 then
+                        box_stats = {
+                            level   = box_lv,
+                            maxHP   = box_maxHP,
+                            attack  = ok_at and eat or 0,
+                            defense = ok_de and ede or 0,
+                            speed   = ok_sp and esp or 0,
+                            spAtk   = ok_sa and esa or 0,
+                            spDef   = ok_sd and esd or 0,
+                        }
+                    end
+                    -- Fallback species from gBattleMons if box decrypt failed.
+                    if bsid == 0 then
+                        local ok_es, esid = pcall(memory.read_u16_le, foe_base + 0x00)
+                        bsid = (ok_es and esid and esid > 0) and esid or 0
+                    end
+                end
+                -- Always send level and maxHP as top-level fields so the server
+                -- can cache them even when full box_stats is unavailable.
+                send({event="capture", key=k, area_id=evt_area, in_box=true,
+                      level=box_lv, maxHP=box_maxHP, nickname=bnick,
+                      species_id=bsid, held_item_id=biid, stats=box_stats},
+                     "capture(box):"..k:sub(1,8), true)
+            elseif #new_slots > 1 then
+                captured_this_battle = true
+                console.log(string.format("[SLink-FRLGE] box: %d new slots — ambiguous, no_catch suppressed", #new_slots))
+            else
+                -- No new slot in the battle-start box. The game may have auto-advanced
+                -- to a different box after the catch (box was full).
+                if M.getBattleOutcome() == M.OUTCOME_CAUGHT then
+                    -- The game auto-advanced to a different box after the catch.
+                    -- Scan all non-memorial boxes for exactly one key not seen before this battle.
+                    local new_key, found_count = nil, 0
+                    for bi = 0, M.BOXES_PER_STORE - 1 do
+                        if bi ~= M.MEMORIAL_BOX then
+                            for si = 0, M.MONS_PER_BOX - 1 do
+                                local k = M.boxMonKey(bi, si)
+                                if k and not all_known_keys[k] then
+                                    found_count = found_count + 1
+                                    new_key = k
+                                end
+                            end
+                        end
+                    end
+                    if found_count == 1 then
+                        local evt_area = battle_area_id or area
+                        captured_this_battle    = true
+                        all_known_keys[new_key] = true
+                        resolved_areas[evt_area] = true
+                        local _, _, baddr = M.scanBoxForKey(new_key)
+                        local bnick, bsid, biid = baddr and M.readBoxSlotDisplay(baddr, true) or "", 0, 0
+                        if bnick ~= "" or bsid ~= 0 then
+                            nick_cache[new_key] = bnick ~= "" and bnick or ("#"..bsid)
+                        end
+                        local box_lv, box_stats = 0, nil
+                        if M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
+                            local foe_base = M.BATTLE_MONS_ADDR + 1 * M.BATTLE_MON_SIZE
+                            local ok_lv, elv = pcall(memory.read_u8,     foe_base + 0x2A)
+                            local ok_mh, emh = pcall(memory.read_u16_le, foe_base + 0x2C)
+                            local ok_at, eat = pcall(memory.read_u16_le, foe_base + 0x02)
+                            local ok_de, ede = pcall(memory.read_u16_le, foe_base + 0x04)
+                            local ok_sp, esp = pcall(memory.read_u16_le, foe_base + 0x06)
+                            local ok_sa, esa = pcall(memory.read_u16_le, foe_base + 0x08)
+                            local ok_sd, esd = pcall(memory.read_u16_le, foe_base + 0x0A)
+                            box_lv = (ok_lv and elv and elv > 0) and elv or 0
+                            local mhp = (ok_mh and emh and emh > 0) and emh or 0
+                            if box_lv > 0 and mhp > 0 then
+                                box_stats = {
+                                    level   = box_lv,
+                                    maxHP   = mhp,
+                                    attack  = ok_at and eat or 0,
+                                    defense = ok_de and ede or 0,
+                                    speed   = ok_sp and esp or 0,
+                                    spAtk   = ok_sa and esa or 0,
+                                    spDef   = ok_sd and esd or 0,
+                                }
+                            end
+                            if bsid == 0 then
+                                local ok_es, esid = pcall(memory.read_u16_le, foe_base + 0x00)
+                                bsid = (ok_es and esid and esid > 0) and esid or 0
+                            end
+                        end
+                        send({event="capture", key=new_key, area_id=evt_area, in_box=true,
+                              level=box_lv, nickname=bnick, species_id=bsid, held_item_id=biid,
+                              stats=box_stats},
+                             "capture(box/switched):"..new_key:sub(1,8), true)
+                    else
+                        captured_this_battle = true
+                        console.log(string.format("[SLink-FRLGE] box: switched+CAUGHT; %d new keys — no_catch suppressed", found_count))
+                    end
+                end
+            end
+        end
+
+        if post_battle_frames == 0 then
+            local outcome_caught = (M.getBattleOutcome() == M.OUTCOME_CAUGHT)
+            -- DEBUG: log why no_catch was suppressed
+            if not captured_this_battle and outcome_caught then
+                console.log("[SLink-FRLGE] [DIAG] no_catch suppressed: outcome=CAUGHT but captured_this_battle=false (capture detection missed!)")
+            end
+            if nuzlocke_active and battle_is_wild and not captured_this_battle and not outcome_caught
+                    and battle_area_id and battle_area_id ~= ""
+                    and not resolved_areas[battle_area_id]
+                    and not game_module.is_gift_area(battle_area_id) then
+                resolved_areas[battle_area_id] = true
+                -- Read the wild Pokémon's species and level from gBattleMons[1].
+                -- gBattleMons data persists in EWRAM after battle ends.
+                local enc_sid   = 0
+                local enc_level = 0
+                if M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
+                    local foe_base = M.BATTLE_MONS_ADDR + 1 * M.BATTLE_MON_SIZE
+                    local ok_s, sid = pcall(memory.read_u16_le, foe_base + 0x00)
+                    if ok_s and sid and sid > 0 then enc_sid = sid end
+                    local ok_l, lv = pcall(memory.read_u8, foe_base + 0x2A)
+                    if ok_l and lv then enc_level = lv end
+                end
+                send({event="no_catch", area_id=battle_area_id,
+                      species_id=enc_sid, level=enc_level},
+                     "no_catch:"..battle_area_id, true)
+            end
+            captured_this_battle = false
+        end
+    end
+
+    -- ── activate nuzlocke once the player has Pokéballs in their bag ─────────────
+    -- Throttled to every 15 frames (~0.25s) to avoid 14 bag reads per frame.
+    if not nuzlocke_active and frame_count % 15 == 0 and M.hasPokeballs() then
+        nuzlocke_active = true
+        console.log("[SLink-FRLGE] nuzlocke ACTIVE (pokeballs in bag)")
+    end
+
+    -- ── safe ─────────────────────────────────────────────────────────────────
+    if pending_safe and is_overworld then
+        pending_safe = false
+        send({event="safe"}, "safe", true)
+    end
+
+    -- ── auto tick ────────────────────────────────────────────────────────────
+    if frame_count % TICK_INTERVAL == 0 then
+        local ok_t, tname = pcall(M.readTrainerName)
+        local ok_b2, badge_n, badge_bm = pcall(M.readBadges)
+        local evt = {event="tick", ball_count=M.countPokeballs(), has_pokeballs=nuzlocke_active,
+                     area_id=area, loc_name=loc,
+                     in_battle=in_battle,
+                     badges=ok_b2 and badge_bm or 0,
+                     trainer_name=ok_t and tname or ""}
+        -- Only include party/box/enemy data once save data looks valid.
+        -- During title screen / intro cutscenes, RAM may contain uninitialized garbage.
+        -- gPlayerPartyCount in 0–6 is the sanity check for "save is loaded".
+        local raw_count = memory.read_u8(M.PARTY_COUNT_ADDR)
+        if raw_count >= 0 and raw_count <= 6 then
+            -- During borrowed-party battles or party freeze (pre-battle swap),
+            -- don't send the borrowed mons as our party — omit party data
+            -- so the server keeps the real snapshot.
+            if not borrowed_battle and not party_frozen then
+                evt.party = build_party_snapshot(in_battle)
+            end
+            -- Include enemy party when in battle; send empty table when not (clears stale data).
+            if in_battle then
+                if M.BATTLE_TYPE_ADDR and M.BATTLE_TYPE_ADDR ~= 0 then
+                    local flags = memory.read_u32_le(M.BATTLE_TYPE_ADDR)
+                    evt.is_trainer_battle = (flags & M.BATTLE_TYPE_TRAINER_MASK) ~= 0
+                                         or (flags & M.BATTLE_TYPE_FIRST_MASK)   ~= 0
+                end
+                -- Send trainer index for name resolution on the server
+                if evt.is_trainer_battle then
+                    local tid = M.readTrainerOpponentId()
+                    if tid > 0 then evt.trainer_id = tid end
+                end
+                local enemy_party = {}
+                -- Read active foe from gBattleMons[1] (always valid during battle).
+                -- BattlePokemon: species +0x00, ability +0x20, hp +0x28, level +0x2A, maxHP +0x2C
+                local foe_species, foe_level, foe_hp, foe_maxHP, foe_ability, foe_item = 0, 0, 0, 0, 0, 0
+                if M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
+                    local foe_base = M.BATTLE_MONS_ADDR + 1 * M.BATTLE_MON_SIZE
+                    foe_species = memory.read_u16_le(foe_base + 0x00)
+                    foe_level   = memory.read_u8(foe_base + 0x2A)
+                    foe_hp      = memory.read_u16_le(foe_base + M.BATTLE_MON_HP_OFF)
+                    foe_maxHP   = memory.read_u16_le(foe_base + 0x2C)
+                    foe_ability = memory.read_u8(foe_base + 0x20)
+                    -- Item field at +0x02 is unreliable for wild mons in CFRU/RR;
+                    -- only read it for trainer battles where gEnemyParty is populated.
+                    if evt.is_trainer_battle then
+                        foe_item = memory.read_u16_le(foe_base + 0x02)
+                    end
+                end
+                -- Primary: read full team from gEnemyParty if count is valid (vanilla/AP).
+                local ok_ep, full_team = pcall(M.readEnemyParty)
+                if ok_ep and full_team and #full_team > 1 then
+                    for idx, mon in ipairs(full_team) do
+                        mon.active = (mon.species_id == foe_species and mon.level == foe_level)
+                        -- Active foe: prefer gBattleMons ability (resolved at battle start)
+                        if mon.active and foe_ability > 0 then
+                            mon.ability_id = foe_ability
+                        end
+                        -- Item field unreliable for wild mons in CFRU/RR
+                        if not evt.is_trainer_battle then
+                            mon.held_item_id = 0
+                        end
+                        enemy_party[idx] = mon
+                    end
+                elseif foe_species > 0 and foe_maxHP > 0 then
+                    -- Fallback: accumulate foes seen via gBattleMons[1] (CFRU/RR).
+                    local foe_key = foe_species .. ":" .. foe_level
+                    battle_seen_enemies[foe_key] = {
+                        species_id   = foe_species,
+                        level        = foe_level,
+                        hp           = foe_hp,
+                        maxHP        = foe_maxHP,
+                        ability_id   = foe_ability,
+                        held_item_id = foe_item,
+                    }
+                    for k, mon in pairs(battle_seen_enemies) do
+                        enemy_party[#enemy_party + 1] = {
+                            species_id   = mon.species_id,
+                            level        = mon.level,
+                            hp           = (k == foe_key) and foe_hp or mon.hp,
+                            maxHP        = mon.maxHP,
+                            ability_id   = mon.ability_id,
+                            held_item_id = (k == foe_key) and foe_item or mon.held_item_id,
+                            active       = (k == foe_key),
+                        }
+                    end
+                end
+                evt.enemy_party = enemy_party
+            else
+                evt.enemy_party = {}
+            end
+            -- Incremental box scan: 2 boxes per tick instead of all 13 at once.
+            -- Only scan when in a trustworthy state (mirrors party_diff_ok gate).
+            if party_diff_ok then
+                local ok_b, boxes = pcall(scan_next_boxes)
+                if ok_b then
+                    evt.pc_boxes = boxes
+                    -- Seed all_known_keys from the scanned results when in overworld
+                    -- and outside any post-battle grace window.  This heals the case
+                    -- where the startup/connect box scans ran before the save file was
+                    -- loaded (empty EWRAM → no keys found), leaving pre-existing box
+                    -- mons unknown and causing them to fire as capture(gift) on withdraw.
+                    -- Guard: skip during/after battles so the post-battle box-capture
+                    -- fallback scan (which checks `not all_known_keys[k]`) still works.
+                    if is_overworld and post_battle_frames == 0 then
+                        for _, entry in ipairs(boxes) do
+                            -- Skip memorial/overflow boxes: dead mons must not block
+                            -- future same-PID captures (CFRU reuses personalities).
+                            if entry.key and not all_known_keys[entry.key]
+                               and entry.box ~= M.MEMORIAL_BOX
+                               and not memorial_overflow_renamed[entry.box] then
+                                all_known_keys[entry.key] = true
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        send(evt, "tick(auto)", true, true)
+    end
+
+    -- ── manual F keys ────────────────────────────────────────────────────────
+    local keys = input.get()
+    local function pressed(k) return keys[k] and not prev_keys[k] end
+
+    if pressed("F1") then
+        send({event="area_enter", area_id=area},
+             "area_enter:"..(area~="" and area or "(none)"), false)
+    end
+    if pressed("F2") then
+        if M.slotOccupied(M.PARTY_BASE) then
+            local k  = M.monKey(M.PARTY_BASE)
+            local lv = memory.read_u8(M.PARTY_BASE + M.OFF_LEVEL)
+            local hp = memory.read_u16_le(M.PARTY_BASE + M.OFF_HP)
+            local mx = memory.read_u16_le(M.PARTY_BASE + M.OFF_MAX_HP)
+            local nick, sid, iid = M.readBoxSlotDisplay(M.PARTY_BASE, false)
+            send({event="capture", key=k, level=lv, hp=hp, maxHP=mx, area_id=area,
+                  nickname=nick, species_id=sid, held_item_id=iid},
+                 "capture(manual):"..k:sub(1,8), false)
+        else console.log("[SLink-FRLGE] F2: slot 0 empty") end
+    end
+    if pressed("F3") then
+        if M.slotOccupied(M.PARTY_BASE) then
+            local k = M.monKey(M.PARTY_BASE)
+            send({event="faint", key=k, area_id=area}, "faint:"..k:sub(1,8), false)
+        else console.log("[SLink-FRLGE] F3: slot 0 empty") end
+    end
+    if pressed("F4") then
+        local f4_sid, f4_lv = 0, 0
+        if M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
+            local foe_base = M.BATTLE_MONS_ADDR + 1 * M.BATTLE_MON_SIZE
+            local ok_s4, sid4 = pcall(memory.read_u16_le, foe_base + 0x00)
+            if ok_s4 and sid4 and sid4 > 0 then f4_sid = sid4 end
+            local ok_l4, lv4 = pcall(memory.read_u8, foe_base + 0x2A)
+            if ok_l4 and lv4 then f4_lv = lv4 end
+        end
+        send({event="no_catch", area_id=area, species_id=f4_sid, level=f4_lv},
+             "no_catch:"..(area~="" and area or "(none)"), false)
+    end
+    if pressed("F5") then send({event="whiteout"},    "whiteout",    false) end
+    if pressed("F6") then send({event="safe"},         "safe",        false) end
+    if pressed("F7") then
+        local ok_t, tname = pcall(M.readTrainerName)
+        local ok_b, boxes = pcall(M.readBoxSummary)
+        send({event="tick", ball_count=M.countPokeballs(), has_pokeballs=nuzlocke_active,
+              area_id=area, loc_name=loc,
+              trainer_name=ok_t and tname or "",
+              pc_boxes=ok_b and boxes or {},
+              party=build_party_snapshot(in_battle)}, "tick", false)
+    end
+    if pressed("F8") then
+        if M.slotOccupied(M.PARTY_BASE) then
+            local base = M.PARTY_BASE
+            local k  = M.monKey(base)
+            local hp = memory.read_u16_le(base + M.OFF_HP)
+            if hp > 0 then
+                local st = mon_stats_cache[k]
+                local stats_tbl = st and {level=st.level, maxHP=st.maxHP,
+                    attack=st.attack, defense=st.defense, speed=st.speed,
+                    spAtk=st.spAtk, spDef=st.spDef} or nil
+                send({event="party_to_box", key=k, stats=stats_tbl},
+                     "party_to_box:"..k:sub(1,8), false)
+            else
+                console.log("[SLink-FRLGE] F8: slot 0 HP=0, use only for living mons")
+            end
+        else console.log("[SLink-FRLGE] F8: slot 0 empty") end
+    end
+    if pressed("F9") then
+        -- Manual: directly memorialize party slot 0 (skips server — tests Lua write)
+        if M.slotOccupied(M.PARTY_BASE) or M.monKey(M.PARTY_BASE) ~= "00000000:00000000" then
+            local k = M.monKey(M.PARTY_BASE)
+            console.log("[SLink-FRLGE] F9: manually memorializing "..k:sub(1,8))
+            exec_memorialize(k)
+        else
+            console.log("[SLink-FRLGE] F9: slot 0 empty")
+        end
+    end
+    prev_keys = keys
+
+    -- (sync_cooldown is now updated at step 4a, before the sync flush)
+
+    -- ── HUD overlay (draw last so it appears on top) ──────────────────────────
+    hud_render()
+
+    -- ── clear per-frame write guard ───────────────────────────────────────────
+    sync_written_keys = {}
+
+    -- ── advance prev state ────────────────────────────────────────────────────
+    -- Freeze prev_party during menu/script states so garbage reads don't
+    -- accumulate into the baseline used for diff detection.
+    if party_diff_ok then
+        prev_party     = curr_party
+        -- Inject keys still debouncing for party_to_box so the detection loop
+        -- continues to see them as "previously in party" on subsequent frames.
+        for k, ptb in pairs(pending_party_to_box) do
+            if not prev_party[k] then
+                prev_party[k] = ptb.info
+            end
+        end
+    elseif post_unfreeze_frames > 0 then
+        -- During post-unfreeze settle, keep baseline synced so diffs are clean
+        -- when the settle period ends (game may still be restoring real party).
+        prev_party = curr_party
+    end
+    prev_area      = area
+    prev_loc       = loc
+    prev_in_battle = in_battle
+end
+
+local function on_frame_safe()
+    local ok, err = pcall(on_frame)
+    if not ok then console.log("[SLink-FRLGE] ERROR (handler kept alive): " .. tostring(err)) end
+end
+
+-- ── Startup ───────────────────────────────────────────────────────────────────
+console.clear()
+C.init(SERVER_HOST, SERVER_PORT)
+console.log(string.format("[SLink-FRLGE] ROM: %s  Validation: %s  Writes: %s",
+    rom_type, val_ok and "OK" or ("FAIL – "..tostring(val_err)),
+    writes_enabled and "ON" or "OFF (will re-validate each frame)"))
+if M.CFRU_NO_ENCRYPT then
+    console.log("[SLink-FRLGE] ⚠ CFRU/RR: Load this script AFTER entering the game (not at title screen)")
+end
+console.log(string.format("[SLink-FRLGE] TCP: %s:%d  Player: %s", SERVER_HOST, SERVER_PORT, PLAYER_ID))
+console.log("[SLink-FRLGE] Auto: hello area_enter capture(battle/box/gift) box_to_party party_to_box faint no_catch(wild) whiteout safe tick")
+console.log("[SLink-FRLGE] F1=area_enter F2=capture(s0) F3=faint(s0) F4=no_catch F5=whiteout F6=safe F7=tick F8=party_to_box(s0)")
+console.log("[SLink-FRLGE] F9=memorialize(s0)")
+console.log("[SLink-FRLGE] --- monitoring started ---")
+-- Seed all_known_keys from current party before monitoring begins
+for k in pairs(prev_party) do all_known_keys[k] = true end
+-- Detect memorial overflow boxes: walk down from memorial box;
+-- if a box is full (30 mons), it's an overflow memorial box.
+do
+    local bi = M.MEMORIAL_BOX - 1
+    while bi >= 0 do
+        local occ = 0
+        for si = 0, M.MONS_PER_BOX - 1 do
+            local a = M.boxMonAddr(bi, si)
+            if a and M.boxSlotOccupied(a) then occ = occ + 1 end
+        end
+        if occ >= M.MONS_PER_BOX then
+            memorial_overflow_renamed[bi] = true
+            bi = bi - 1
+        else
+            break
+        end
+    end
+    if next(memorial_overflow_renamed) then
+        console.log(string.format("[SLink-FRLGE] Detected %d memorial overflow box(es)",
+            (function() local n=0; for _ in pairs(memorial_overflow_renamed) do n=n+1 end; return n end)()))
+    end
+end
+-- Seed all_known_keys from PC boxes to prevent false gift captures
+-- when withdrawing mons after a script reload.
+-- Skip memorial + overflow boxes: dead mons must not block future same-PID captures.
+for boxIdx = 0, (M.BOXES_PER_STORE or 14) - 1 do
+    if boxIdx ~= M.MEMORIAL_BOX and not memorial_overflow_renamed[boxIdx] then
+        for slotIdx = 0, 29 do
+            local bk = M.boxMonKey(boxIdx, slotIdx)
+            if bk and bk ~= "0:0" then
+                all_known_keys[bk] = true
+            end
+        end
+    end
+end
+
+event.onframeend(on_frame_safe, "t4_events")
+console.log("[SLink-FRLGE] Running — play normally to trigger events…")

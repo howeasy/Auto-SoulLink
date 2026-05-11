@@ -1,0 +1,55 @@
+{
+  "game_id": "gen3_frlge",
+  "rules": {
+    "species_lock": false,
+    "gender_lock": false,
+    "type_lock": false
+  },
+  "links": [
+    {
+      "area_id": "route_1",
+      "a": null,
+      "b": null,
+      "status": "dead",
+      "encounter_a": {
+        "key": "",
+        "level": 4,
+        "species": 19,
+        "nickname": ""
+      },
+      "encounter_b": null,
+      "killed_at": "2026-05-01T01:07:28.643215+00:00",
+      "cause": "dead_zone",
+      "killer": null,
+      "initiating_player": "a"
+    }
+  ],
+  "area_states": {
+    "route_1": "dead_zone"
+  },
+  "pending_captures": {},
+  "mon_stats": {},
+  "pokeballs_obtained": {
+    "a": false,
+    "b": false
+  },
+  "rom_type": "",
+  "trainer_names": {
+    "a": "",
+    "b": ""
+  },
+  "player_identity": {},
+  "pending_memorials": {
+    "a": [],
+    "b": []
+  },
+  "retry_areas": {
+    "a": [],
+    "b": []
+  },
+  "bonus_keys": {
+    "a": [],
+    "b": []
+  },
+  "run_over": false
+}

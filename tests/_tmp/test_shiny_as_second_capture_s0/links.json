@@ -1,0 +1,48 @@
+{
+  "game_id": "gen3_frlge",
+  "rules": {
+    "species_lock": false,
+    "gender_lock": false,
+    "type_lock": false
+  },
+  "links": [],
+  "area_states": {
+    "route_2": "pending_b"
+  },
+  "pending_captures": {
+    "route_2": {
+      "a": {
+        "key": "AAAA0001:BBBB0001",
+        "level": 0,
+        "species": 0,
+        "nickname": ""
+      }
+    }
+  },
+  "mon_stats": {},
+  "pokeballs_obtained": {
+    "a": true,
+    "b": true
+  },
+  "rom_type": "",
+  "trainer_names": {
+    "a": "",
+    "b": ""
+  },
+  "player_identity": {},
+  "pending_memorials": {
+    "a": [],
+    "b": []
+  },
+  "retry_areas": {
+    "a": [],
+    "b": []
+  },
+  "bonus_keys": {
+    "a": [
+      "00010001:00010001"
+    ],
+    "b": []
+  },
+  "run_over": false
+}

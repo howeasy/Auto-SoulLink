@@ -1,0 +1,40 @@
+{
+  "game_id": "gen3_frlge",
+  "rules": {
+    "species_lock": false,
+    "gender_lock": false,
+    "type_lock": false
+  },
+  "links": [],
+  "area_states": {},
+  "pending_captures": {},
+  "mon_stats": {},
+  "pokeballs_obtained": {
+    "a": true,
+    "b": false
+  },
+  "rom_type": "",
+  "trainer_names": {
+    "a": "",
+    "b": ""
+  },
+  "player_identity": {
+    "a": {
+      "ot_id": "1111",
+      "trainer_name": "Ash"
+    }
+  },
+  "pending_memorials": {
+    "a": [],
+    "b": []
+  },
+  "retry_areas": {
+    "a": [],
+    "b": []
+  },
+  "bonus_keys": {
+    "a": [],
+    "b": []
+  },
+  "run_over": false
+}

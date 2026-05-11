@@ -1,0 +1,70 @@
+{
+  "game_id": "gen3_frlge",
+  "rules": {
+    "species_lock": false,
+    "gender_lock": false,
+    "type_lock": false
+  },
+  "links": [
+    {
+      "area_id": "route_1",
+      "a": {
+        "key": "A:1",
+        "level": 5,
+        "species": 0,
+        "nickname": ""
+      },
+      "b": {
+        "key": "B:2",
+        "level": 7,
+        "species": 0,
+        "nickname": ""
+      },
+      "status": "dead",
+      "encounter_a": null,
+      "encounter_b": null,
+      "killed_at": "2026-05-01T01:07:28.910928+00:00",
+      "cause": "battle",
+      "killer": {
+        "species": 25,
+        "level": 10,
+        "is_trainer": false,
+        "trainer_name": "",
+        "trainer_class": ""
+      },
+      "initiating_player": "a"
+    }
+  ],
+  "area_states": {
+    "route_1": "linked"
+  },
+  "pending_captures": {},
+  "mon_stats": {},
+  "pokeballs_obtained": {
+    "a": true,
+    "b": true
+  },
+  "rom_type": "",
+  "trainer_names": {
+    "a": "",
+    "b": ""
+  },
+  "player_identity": {},
+  "pending_memorials": {
+    "a": [
+      "A:1"
+    ],
+    "b": [
+      "B:2"
+    ]
+  },
+  "retry_areas": {
+    "a": [],
+    "b": []
+  },
+  "bonus_keys": {
+    "a": [],
+    "b": []
+  },
+  "run_over": true
+}

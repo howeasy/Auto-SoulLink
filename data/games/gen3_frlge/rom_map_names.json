@@ -1,0 +1,3498 @@
+{
+  "0:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 196,
+    "name": "Celadon Dept.",
+    "rom_name": "Celadon Dept.",
+    "weather": 0
+  },
+  "0:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 196,
+    "name": "Celadon Dept.",
+    "rom_name": "Celadon Dept.",
+    "weather": 0
+  },
+  "0:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 196,
+    "name": "Celadon Dept.",
+    "rom_name": "Celadon Dept.",
+    "weather": 0
+  },
+  "0:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 196,
+    "name": "Celadon Dept.",
+    "rom_name": "Celadon Dept.",
+    "weather": 0
+  },
+  "0:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 196,
+    "name": "Celadon Dept.",
+    "rom_name": "Celadon Dept.",
+    "weather": 0
+  },
+  "10:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:10": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:11": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:12": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:13": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:14": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:15": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:16": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:17": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:18": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:19": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:5": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:6": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:7": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:8": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "10:9": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 0
+  },
+  "11:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 95,
+    "name": "Fuchsia City",
+    "rom_name": "Fuchsia City",
+    "weather": 0
+  },
+  "11:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 95,
+    "name": "Fuchsia City",
+    "rom_name": "Fuchsia City",
+    "weather": 0
+  },
+  "11:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 95,
+    "name": "Fuchsia City",
+    "rom_name": "Fuchsia City",
+    "weather": 0
+  },
+  "11:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 95,
+    "name": "Fuchsia City",
+    "rom_name": "Fuchsia City",
+    "weather": 0
+  },
+  "11:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 95,
+    "name": "Fuchsia City",
+    "rom_name": "Fuchsia City",
+    "weather": 0
+  },
+  "11:5": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 95,
+    "name": "Fuchsia City",
+    "rom_name": "Fuchsia City",
+    "weather": 0
+  },
+  "11:6": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 95,
+    "name": "Fuchsia City",
+    "rom_name": "Fuchsia City",
+    "weather": 0
+  },
+  "11:7": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 95,
+    "name": "Fuchsia City",
+    "rom_name": "Fuchsia City",
+    "weather": 0
+  },
+  "11:8": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 95,
+    "name": "Fuchsia City",
+    "rom_name": "Fuchsia City",
+    "weather": 0
+  },
+  "11:9": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 95,
+    "name": "Fuchsia City",
+    "rom_name": "Fuchsia City",
+    "weather": 0
+  },
+  "12:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 96,
+    "name": "Cinnabar Island",
+    "rom_name": "Cinnabar Island",
+    "weather": 12
+  },
+  "12:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 96,
+    "name": "Cinnabar Island",
+    "rom_name": "Cinnabar Island",
+    "weather": 0
+  },
+  "12:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 96,
+    "name": "Cinnabar Island",
+    "rom_name": "Cinnabar Island",
+    "weather": 0
+  },
+  "12:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 96,
+    "name": "Cinnabar Island",
+    "rom_name": "Cinnabar Island",
+    "weather": 0
+  },
+  "12:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 96,
+    "name": "Cinnabar Island",
+    "rom_name": "Cinnabar Island",
+    "weather": 0
+  },
+  "12:5": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 96,
+    "name": "Cinnabar Island",
+    "rom_name": "Cinnabar Island",
+    "weather": 0
+  },
+  "12:6": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 96,
+    "name": "Cinnabar Island",
+    "rom_name": "Cinnabar Island",
+    "weather": 0
+  },
+  "12:7": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 96,
+    "name": "Cinnabar Island",
+    "rom_name": "Cinnabar Island",
+    "weather": 0
+  },
+  "13:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 97,
+    "name": "Indigo Plateau",
+    "rom_name": "Indigo Plateau",
+    "weather": 0
+  },
+  "13:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 97,
+    "name": "Indigo Plateau",
+    "rom_name": "Indigo Plateau",
+    "weather": 0
+  },
+  "14:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 98,
+    "name": "Saffron City",
+    "rom_name": "Saffron City",
+    "weather": 0
+  },
+  "14:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 98,
+    "name": "Saffron City",
+    "rom_name": "Saffron City",
+    "weather": 0
+  },
+  "14:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 98,
+    "name": "Saffron City",
+    "rom_name": "Saffron City",
+    "weather": 0
+  },
+  "14:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 98,
+    "name": "Saffron City",
+    "rom_name": "Saffron City",
+    "weather": 0
+  },
+  "14:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 98,
+    "name": "Saffron City",
+    "rom_name": "Saffron City",
+    "weather": 0
+  },
+  "14:5": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 98,
+    "name": "Saffron City",
+    "rom_name": "Saffron City",
+    "weather": 0
+  },
+  "14:6": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 98,
+    "name": "Saffron City",
+    "rom_name": "Saffron City",
+    "weather": 0
+  },
+  "14:7": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 98,
+    "name": "Saffron City",
+    "rom_name": "Saffron City",
+    "weather": 0
+  },
+  "14:8": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 98,
+    "name": "Saffron City",
+    "rom_name": "Saffron City",
+    "weather": 0
+  },
+  "14:9": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 98,
+    "name": "Saffron City",
+    "rom_name": "Saffron City",
+    "weather": 0
+  },
+  "15:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 102,
+    "name": "Route 2",
+    "rom_name": "Route 2",
+    "weather": 0
+  },
+  "15:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 102,
+    "name": "Route 2",
+    "rom_name": "Route 2",
+    "weather": 0
+  },
+  "15:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 102,
+    "name": "Route 2",
+    "rom_name": "Route 2",
+    "weather": 0
+  },
+  "15:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 102,
+    "name": "Route 2",
+    "rom_name": "Route 2",
+    "weather": 0
+  },
+  "16:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 104,
+    "name": "Route 4",
+    "rom_name": "Route 4",
+    "weather": 0
+  },
+  "16:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 104,
+    "name": "Route 4",
+    "rom_name": "Route 4",
+    "weather": 0
+  },
+  "17:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 105,
+    "name": "Route 5",
+    "rom_name": "Route 5",
+    "weather": 0
+  },
+  "17:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 105,
+    "name": "Route 5",
+    "rom_name": "Route 5",
+    "weather": 0
+  },
+  "18:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 106,
+    "name": "Route 6",
+    "rom_name": "Route 6",
+    "weather": 0
+  },
+  "18:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 106,
+    "name": "Route 6",
+    "rom_name": "Route 6",
+    "weather": 0
+  },
+  "19:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 107,
+    "name": "Route 7",
+    "rom_name": "Route 7",
+    "weather": 0
+  },
+  "1:0": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 126,
+    "name": "Viridian Forest",
+    "rom_name": "Viridian Forest",
+    "weather": 11
+  },
+  "1:1": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 127,
+    "name": "Mt. Moon",
+    "rom_name": "Mt. Moon",
+    "weather": 0
+  },
+  "1:10": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:100": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 175,
+    "name": "Mt. Ember",
+    "rom_name": "Mt. Ember",
+    "weather": 0
+  },
+  "1:101": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 175,
+    "name": "Mt. Ember",
+    "rom_name": "Mt. Ember",
+    "weather": 12
+  },
+  "1:102": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 175,
+    "name": "Mt. Ember",
+    "rom_name": "Mt. Ember",
+    "weather": 0
+  },
+  "1:103": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 175,
+    "name": "Mt. Ember",
+    "rom_name": "Mt. Ember",
+    "weather": 0
+  },
+  "1:104": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 175,
+    "name": "Mt. Ember",
+    "rom_name": "Mt. Ember",
+    "weather": 0
+  },
+  "1:105": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 175,
+    "name": "Mt. Ember",
+    "rom_name": "Mt. Ember",
+    "weather": 0
+  },
+  "1:106": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 175,
+    "name": "Mt. Ember",
+    "rom_name": "Mt. Ember",
+    "weather": 0
+  },
+  "1:107": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 175,
+    "name": "Mt. Ember",
+    "rom_name": "Mt. Ember",
+    "weather": 0
+  },
+  "1:108": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 175,
+    "name": "Mt. Ember",
+    "rom_name": "Mt. Ember",
+    "weather": 0
+  },
+  "1:109": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 176,
+    "name": "Berry Forest",
+    "rom_name": "Berry Forest",
+    "weather": 11
+  },
+  "1:11": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:110": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 177,
+    "name": "Icefall Cave",
+    "rom_name": "Icefall Cave",
+    "weather": 0
+  },
+  "1:111": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 177,
+    "name": "Icefall Cave",
+    "rom_name": "Icefall Cave",
+    "weather": 0
+  },
+  "1:112": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 177,
+    "name": "Icefall Cave",
+    "rom_name": "Icefall Cave",
+    "weather": 0
+  },
+  "1:113": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 177,
+    "name": "Icefall Cave",
+    "rom_name": "Icefall Cave",
+    "weather": 0
+  },
+  "1:114": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 178,
+    "name": "Rocket Warehouse",
+    "rom_name": "Rocket Warehouse",
+    "weather": 0
+  },
+  "1:115": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 180,
+    "name": "Dotted Hole",
+    "rom_name": "Dotted Hole",
+    "weather": 0
+  },
+  "1:116": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 180,
+    "name": "Dotted Hole",
+    "rom_name": "Dotted Hole",
+    "weather": 0
+  },
+  "1:117": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 180,
+    "name": "Dotted Hole",
+    "rom_name": "Dotted Hole",
+    "weather": 0
+  },
+  "1:118": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 180,
+    "name": "Dotted Hole",
+    "rom_name": "Dotted Hole",
+    "weather": 0
+  },
+  "1:119": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 180,
+    "name": "Dotted Hole",
+    "rom_name": "Dotted Hole",
+    "weather": 0
+  },
+  "1:12": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:120": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 180,
+    "name": "Dotted Hole",
+    "rom_name": "Dotted Hole",
+    "weather": 0
+  },
+  "1:121": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 182,
+    "name": "Pattern Bush",
+    "rom_name": "Pattern Bush",
+    "weather": 0
+  },
+  "1:122": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 183,
+    "name": "Altering Cave",
+    "rom_name": "Altering Cave",
+    "weather": 0
+  },
+  "1:123": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 138,
+    "name": "Rock Tunnel",
+    "rom_name": "Rock Tunnel",
+    "weather": 0
+  },
+  "1:124": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 139,
+    "name": "Seafoam Islands",
+    "rom_name": "Seafoam Islands",
+    "weather": 0
+  },
+  "1:125": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 140,
+    "name": "Pok\u00e9mon Tower",
+    "rom_name": "Pok,mon Tower",
+    "weather": 0
+  },
+  "1:126": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 140,
+    "name": "Pok\u00e9mon Tower",
+    "rom_name": "Pok,mon Tower",
+    "weather": 0
+  },
+  "1:127": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 126,
+    "name": "Viridian Forest",
+    "rom_name": "Viridian Forest",
+    "weather": 11
+  },
+  "1:128": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "1:129": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "1:13": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:14": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:15": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:16": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:17": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:18": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:19": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:2": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 127,
+    "name": "Mt. Moon",
+    "rom_name": "Mt. Moon",
+    "weather": 0
+  },
+  "1:20": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:21": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:22": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:23": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:24": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:25": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:26": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:27": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:28": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:29": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:3": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 127,
+    "name": "Mt. Moon",
+    "rom_name": "Mt. Moon",
+    "weather": 0
+  },
+  "1:30": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 129,
+    "name": "Underground Path",
+    "rom_name": "Underground Path",
+    "weather": 0
+  },
+  "1:31": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 129,
+    "name": "Underground Path",
+    "rom_name": "Underground Path",
+    "weather": 0
+  },
+  "1:32": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 129,
+    "name": "Underground Path",
+    "rom_name": "Underground Path",
+    "weather": 0
+  },
+  "1:33": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 130,
+    "name": "Underground Path",
+    "rom_name": "Underground Path",
+    "weather": 0
+  },
+  "1:34": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 130,
+    "name": "Underground Path",
+    "rom_name": "Underground Path",
+    "weather": 0
+  },
+  "1:35": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 130,
+    "name": "Underground Path",
+    "rom_name": "Underground Path",
+    "weather": 0
+  },
+  "1:36": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 131,
+    "name": "Diglett's Cave",
+    "rom_name": "Diglett{B3}s Cave",
+    "weather": 0
+  },
+  "1:37": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 131,
+    "name": "Diglett's Cave",
+    "rom_name": "Diglett{B3}s Cave",
+    "weather": 0
+  },
+  "1:38": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 131,
+    "name": "Diglett's Cave",
+    "rom_name": "Diglett{B3}s Cave",
+    "weather": 0
+  },
+  "1:39": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 132,
+    "name": "Victory Road",
+    "rom_name": "Victory Road",
+    "weather": 0
+  },
+  "1:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:40": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 132,
+    "name": "Victory Road",
+    "rom_name": "Victory Road",
+    "weather": 0
+  },
+  "1:41": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 132,
+    "name": "Victory Road",
+    "rom_name": "Victory Road",
+    "weather": 0
+  },
+  "1:42": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 133,
+    "name": "Rocket Hideout",
+    "rom_name": "Rocket Hideout",
+    "weather": 0
+  },
+  "1:43": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 133,
+    "name": "Rocket Hideout",
+    "rom_name": "Rocket Hideout",
+    "weather": 0
+  },
+  "1:44": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 133,
+    "name": "Rocket Hideout",
+    "rom_name": "Rocket Hideout",
+    "weather": 0
+  },
+  "1:45": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 133,
+    "name": "Rocket Hideout",
+    "rom_name": "Rocket Hideout",
+    "weather": 0
+  },
+  "1:46": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 133,
+    "name": "Rocket Hideout",
+    "rom_name": "Rocket Hideout",
+    "weather": 0
+  },
+  "1:47": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "1:48": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "1:49": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "1:5": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:50": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "1:51": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "1:52": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "1:53": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "1:54": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "1:55": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "1:56": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "1:57": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "1:58": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "1:59": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 135,
+    "name": "Pok\u00e9mon Mansion",
+    "rom_name": "Pok,mon Mansion",
+    "weather": 11
+  },
+  "1:6": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:60": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 135,
+    "name": "Pok\u00e9mon Mansion",
+    "rom_name": "Pok,mon Mansion",
+    "weather": 11
+  },
+  "1:61": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 135,
+    "name": "Pok\u00e9mon Mansion",
+    "rom_name": "Pok,mon Mansion",
+    "weather": 11
+  },
+  "1:62": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 135,
+    "name": "Pok\u00e9mon Mansion",
+    "rom_name": "Pok,mon Mansion",
+    "weather": 11
+  },
+  "1:63": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 136,
+    "name": "Safari Zone",
+    "rom_name": "Safari Zone",
+    "weather": 0
+  },
+  "1:64": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 136,
+    "name": "Safari Zone",
+    "rom_name": "Safari Zone",
+    "weather": 0
+  },
+  "1:65": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 136,
+    "name": "Safari Zone",
+    "rom_name": "Safari Zone",
+    "weather": 0
+  },
+  "1:66": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 136,
+    "name": "Safari Zone",
+    "rom_name": "Safari Zone",
+    "weather": 0
+  },
+  "1:67": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 136,
+    "name": "Safari Zone",
+    "rom_name": "Safari Zone",
+    "weather": 0
+  },
+  "1:68": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 136,
+    "name": "Safari Zone",
+    "rom_name": "Safari Zone",
+    "weather": 0
+  },
+  "1:69": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 136,
+    "name": "Safari Zone",
+    "rom_name": "Safari Zone",
+    "weather": 0
+  },
+  "1:7": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:70": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 136,
+    "name": "Safari Zone",
+    "rom_name": "Safari Zone",
+    "weather": 0
+  },
+  "1:71": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 136,
+    "name": "Safari Zone",
+    "rom_name": "Safari Zone",
+    "weather": 0
+  },
+  "1:72": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 141,
+    "name": "Cerulean Cave",
+    "rom_name": "Cerulean Cave",
+    "weather": 0
+  },
+  "1:73": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 141,
+    "name": "Cerulean Cave",
+    "rom_name": "Cerulean Cave",
+    "weather": 0
+  },
+  "1:74": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 141,
+    "name": "Cerulean Cave",
+    "rom_name": "Cerulean Cave",
+    "weather": 0
+  },
+  "1:75": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 137,
+    "name": "Pok\u00e9mon League",
+    "rom_name": "Pok,mon League",
+    "weather": 0
+  },
+  "1:76": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 137,
+    "name": "Pok\u00e9mon League",
+    "rom_name": "Pok,mon League",
+    "weather": 0
+  },
+  "1:77": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 137,
+    "name": "Pok\u00e9mon League",
+    "rom_name": "Pok,mon League",
+    "weather": 0
+  },
+  "1:78": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 137,
+    "name": "Pok\u00e9mon League",
+    "rom_name": "Pok,mon League",
+    "weather": 0
+  },
+  "1:79": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 137,
+    "name": "Pok\u00e9mon League",
+    "rom_name": "Pok,mon League",
+    "weather": 0
+  },
+  "1:8": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:80": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 137,
+    "name": "Pok\u00e9mon League",
+    "rom_name": "Pok,mon League",
+    "weather": 0
+  },
+  "1:81": {
+    "cave": 1,
+    "map_type": 4,
+    "mapsec": 138,
+    "name": "Rock Tunnel",
+    "rom_name": "Rock Tunnel",
+    "weather": 0
+  },
+  "1:82": {
+    "cave": 1,
+    "map_type": 4,
+    "mapsec": 138,
+    "name": "Rock Tunnel",
+    "rom_name": "Rock Tunnel",
+    "weather": 0
+  },
+  "1:83": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 139,
+    "name": "Seafoam Islands",
+    "rom_name": "Seafoam Islands",
+    "weather": 0
+  },
+  "1:84": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 139,
+    "name": "Seafoam Islands",
+    "rom_name": "Seafoam Islands",
+    "weather": 0
+  },
+  "1:85": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 139,
+    "name": "Seafoam Islands",
+    "rom_name": "Seafoam Islands",
+    "weather": 0
+  },
+  "1:86": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 139,
+    "name": "Seafoam Islands",
+    "rom_name": "Seafoam Islands",
+    "weather": 0
+  },
+  "1:87": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 139,
+    "name": "Seafoam Islands",
+    "rom_name": "Seafoam Islands",
+    "weather": 0
+  },
+  "1:88": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 140,
+    "name": "Pok\u00e9mon Tower",
+    "rom_name": "Pok,mon Tower",
+    "weather": 0
+  },
+  "1:89": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 140,
+    "name": "Pok\u00e9mon Tower",
+    "rom_name": "Pok,mon Tower",
+    "weather": 0
+  },
+  "1:9": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 128,
+    "name": "S.S. Anne",
+    "rom_name": "S.S. Anne",
+    "weather": 0
+  },
+  "1:90": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 140,
+    "name": "Pok\u00e9mon Tower",
+    "rom_name": "Pok,mon Tower",
+    "weather": 0
+  },
+  "1:91": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 140,
+    "name": "Pok\u00e9mon Tower",
+    "rom_name": "Pok,mon Tower",
+    "weather": 0
+  },
+  "1:92": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 140,
+    "name": "Pok\u00e9mon Tower",
+    "rom_name": "Pok,mon Tower",
+    "weather": 0
+  },
+  "1:93": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 140,
+    "name": "Pok\u00e9mon Tower",
+    "rom_name": "Pok,mon Tower",
+    "weather": 0
+  },
+  "1:94": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 140,
+    "name": "Pok\u00e9mon Tower",
+    "rom_name": "Pok,mon Tower",
+    "weather": 0
+  },
+  "1:95": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 142,
+    "name": "Power Plant",
+    "rom_name": "Power Plant",
+    "weather": 0
+  },
+  "1:96": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 175,
+    "name": "Mt. Ember",
+    "rom_name": "Mt. Ember",
+    "weather": 0
+  },
+  "1:97": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 175,
+    "name": "Mt. Ember",
+    "rom_name": "Mt. Ember",
+    "weather": 0
+  },
+  "1:98": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 175,
+    "name": "Mt. Ember",
+    "rom_name": "Mt. Ember",
+    "weather": 0
+  },
+  "1:99": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 175,
+    "name": "Mt. Ember",
+    "rom_name": "Mt. Ember",
+    "weather": 0
+  },
+  "20:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 108,
+    "name": "Route 8",
+    "rom_name": "Route 8",
+    "weather": 0
+  },
+  "21:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 110,
+    "name": "Route 10",
+    "rom_name": "Route 10",
+    "weather": 0
+  },
+  "21:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 110,
+    "name": "Route 10",
+    "rom_name": "Route 10",
+    "weather": 0
+  },
+  "22:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 111,
+    "name": "Route 11",
+    "rom_name": "Route 11",
+    "weather": 0
+  },
+  "22:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 111,
+    "name": "Route 11",
+    "rom_name": "Route 11",
+    "weather": 0
+  },
+  "23:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 112,
+    "name": "Route 12",
+    "rom_name": "Route 12",
+    "weather": 0
+  },
+  "23:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 112,
+    "name": "Route 12",
+    "rom_name": "Route 12",
+    "weather": 0
+  },
+  "23:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 112,
+    "name": "Route 12",
+    "rom_name": "Route 12",
+    "weather": 0
+  },
+  "24:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 115,
+    "name": "Route 15",
+    "rom_name": "Route 15",
+    "weather": 0
+  },
+  "24:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 115,
+    "name": "Route 15",
+    "rom_name": "Route 15",
+    "weather": 0
+  },
+  "25:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 116,
+    "name": "Route 16",
+    "rom_name": "Route 16",
+    "weather": 0
+  },
+  "25:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 116,
+    "name": "Route 16",
+    "rom_name": "Route 16",
+    "weather": 0
+  },
+  "25:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 116,
+    "name": "Route 16",
+    "rom_name": "Route 16",
+    "weather": 0
+  },
+  "26:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 118,
+    "name": "Route 18",
+    "rom_name": "Route 18",
+    "weather": 0
+  },
+  "26:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 118,
+    "name": "Route 18",
+    "rom_name": "Route 18",
+    "weather": 0
+  },
+  "27:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 119,
+    "name": "Route 19",
+    "rom_name": "Route 19",
+    "weather": 0
+  },
+  "28:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 122,
+    "name": "Route 22",
+    "rom_name": "Route 22",
+    "weather": 0
+  },
+  "29:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 123,
+    "name": "Route 23",
+    "rom_name": "Route 23",
+    "weather": 0
+  },
+  "2:0": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 179,
+    "name": "Trainer Tower",
+    "rom_name": "Trainer Tower",
+    "weather": 0
+  },
+  "2:10": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 179,
+    "name": "Trainer Tower",
+    "rom_name": "Trainer Tower",
+    "weather": 0
+  },
+  "2:11": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 179,
+    "name": "Trainer Tower",
+    "rom_name": "Trainer Tower",
+    "weather": 0
+  },
+  "2:12": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 0
+  },
+  "2:13": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 6
+  },
+  "2:14": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 6
+  },
+  "2:15": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 6
+  },
+  "2:16": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 6
+  },
+  "2:17": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 6
+  },
+  "2:18": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 6
+  },
+  "2:19": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 6
+  },
+  "2:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 179,
+    "name": "Trainer Tower",
+    "rom_name": "Trainer Tower",
+    "weather": 0
+  },
+  "2:20": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 6
+  },
+  "2:21": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 6
+  },
+  "2:22": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 6
+  },
+  "2:23": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 6
+  },
+  "2:24": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 6
+  },
+  "2:25": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 6
+  },
+  "2:26": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 181,
+    "name": "Lost Cave",
+    "rom_name": "Lost Cave",
+    "weather": 6
+  },
+  "2:27": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 188,
+    "name": "Oak's Lab",
+    "rom_name": "Oak{B3}s Lab",
+    "weather": 0
+  },
+  "2:28": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 189,
+    "name": "Liptoo Chamber",
+    "rom_name": "Liptoo Chamber",
+    "weather": 0
+  },
+  "2:29": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 190,
+    "name": "Weepth Chamber",
+    "rom_name": "Weepth Chamber",
+    "weather": 0
+  },
+  "2:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 179,
+    "name": "Trainer Tower",
+    "rom_name": "Trainer Tower",
+    "weather": 0
+  },
+  "2:30": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 191,
+    "name": "Dilford Chamber",
+    "rom_name": "Dilford Chamber",
+    "weather": 0
+  },
+  "2:31": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 192,
+    "name": "Scufib Chamber",
+    "rom_name": "Scufib Chamber",
+    "weather": 0
+  },
+  "2:32": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 193,
+    "name": "Rixy Chamber",
+    "rom_name": "Rixy Chamber",
+    "weather": 0
+  },
+  "2:33": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 194,
+    "name": "Viapois Chamber",
+    "rom_name": "Viapois Chamber",
+    "weather": 0
+  },
+  "2:34": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 185,
+    "name": "Three Isle Path",
+    "rom_name": "Three Isle Path",
+    "weather": 0
+  },
+  "2:35": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 186,
+    "name": "Tanoby Key",
+    "rom_name": "Tanoby Key",
+    "weather": 0
+  },
+  "2:36": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:37": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 11
+  },
+  "2:38": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:39": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 179,
+    "name": "Trainer Tower",
+    "rom_name": "Trainer Tower",
+    "weather": 0
+  },
+  "2:40": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:41": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:42": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:43": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:44": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:45": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:46": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:47": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:48": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:49": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:5": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 179,
+    "name": "Trainer Tower",
+    "rom_name": "Trainer Tower",
+    "weather": 0
+  },
+  "2:50": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:51": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:52": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:53": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:54": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:55": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:56": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 187,
+    "name": "Birth Island",
+    "rom_name": "Birth Island",
+    "weather": 0
+  },
+  "2:57": {
+    "cave": 0,
+    "map_type": 4,
+    "mapsec": 195,
+    "name": "Ember Spa",
+    "rom_name": "Ember Spa",
+    "weather": 0
+  },
+  "2:58": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 187,
+    "name": "Birth Island",
+    "rom_name": "Birth Island",
+    "weather": 0
+  },
+  "2:59": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 174,
+    "name": "Navel Rock",
+    "rom_name": "Navel Rock",
+    "weather": 0
+  },
+  "2:6": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 179,
+    "name": "Trainer Tower",
+    "rom_name": "Trainer Tower",
+    "weather": 0
+  },
+  "2:60": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "2:61": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 134,
+    "name": "Silph Co.",
+    "rom_name": "Silph Co.",
+    "weather": 0
+  },
+  "2:62": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 135,
+    "name": "Pok\u00e9mon Mansion",
+    "rom_name": "Pok,mon Mansion",
+    "weather": 11
+  },
+  "2:63": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 135,
+    "name": "Pok\u00e9mon Mansion",
+    "rom_name": "Pok,mon Mansion",
+    "weather": 11
+  },
+  "2:64": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 136,
+    "name": "Safari Zone",
+    "rom_name": "Safari Zone",
+    "weather": 0
+  },
+  "2:7": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 179,
+    "name": "Trainer Tower",
+    "rom_name": "Trainer Tower",
+    "weather": 0
+  },
+  "2:8": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 179,
+    "name": "Trainer Tower",
+    "rom_name": "Trainer Tower",
+    "weather": 0
+  },
+  "2:9": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 179,
+    "name": "Trainer Tower",
+    "rom_name": "Trainer Tower",
+    "weather": 0
+  },
+  "30:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 125,
+    "name": "Route 25",
+    "rom_name": "Route 25",
+    "weather": 0
+  },
+  "31:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 148,
+    "name": "Seven Island",
+    "rom_name": "Seven Island",
+    "weather": 0
+  },
+  "31:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 148,
+    "name": "Seven Island",
+    "rom_name": "Seven Island",
+    "weather": 0
+  },
+  "31:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 148,
+    "name": "Seven Island",
+    "rom_name": "Seven Island",
+    "weather": 0
+  },
+  "31:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 148,
+    "name": "Seven Island",
+    "rom_name": "Seven Island",
+    "weather": 0
+  },
+  "31:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 148,
+    "name": "Seven Island",
+    "rom_name": "Seven Island",
+    "weather": 0
+  },
+  "31:5": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 148,
+    "name": "Seven Island",
+    "rom_name": "Seven Island",
+    "weather": 0
+  },
+  "31:6": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 148,
+    "name": "Seven Island",
+    "rom_name": "Seven Island",
+    "weather": 0
+  },
+  "32:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 143,
+    "name": "One Island",
+    "rom_name": "One Island",
+    "weather": 0
+  },
+  "32:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 143,
+    "name": "One Island",
+    "rom_name": "One Island",
+    "weather": 0
+  },
+  "32:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 143,
+    "name": "One Island",
+    "rom_name": "One Island",
+    "weather": 0
+  },
+  "32:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 143,
+    "name": "One Island",
+    "rom_name": "One Island",
+    "weather": 0
+  },
+  "32:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 143,
+    "name": "One Island",
+    "rom_name": "One Island",
+    "weather": 0
+  },
+  "33:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 144,
+    "name": "Two Island",
+    "rom_name": "Two Island",
+    "weather": 0
+  },
+  "33:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 144,
+    "name": "Two Island",
+    "rom_name": "Two Island",
+    "weather": 0
+  },
+  "33:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 144,
+    "name": "Two Island",
+    "rom_name": "Two Island",
+    "weather": 0
+  },
+  "33:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 144,
+    "name": "Two Island",
+    "rom_name": "Two Island",
+    "weather": 0
+  },
+  "33:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 144,
+    "name": "Two Island",
+    "rom_name": "Two Island",
+    "weather": 0
+  },
+  "34:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 145,
+    "name": "Three Island",
+    "rom_name": "Three Island",
+    "weather": 0
+  },
+  "34:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 145,
+    "name": "Three Island",
+    "rom_name": "Three Island",
+    "weather": 0
+  },
+  "34:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 145,
+    "name": "Three Island",
+    "rom_name": "Three Island",
+    "weather": 0
+  },
+  "34:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 145,
+    "name": "Three Island",
+    "rom_name": "Three Island",
+    "weather": 0
+  },
+  "34:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 145,
+    "name": "Three Island",
+    "rom_name": "Three Island",
+    "weather": 0
+  },
+  "34:5": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 145,
+    "name": "Three Island",
+    "rom_name": "Three Island",
+    "weather": 0
+  },
+  "34:6": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 145,
+    "name": "Three Island",
+    "rom_name": "Three Island",
+    "weather": 0
+  },
+  "34:7": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 145,
+    "name": "Three Island",
+    "rom_name": "Three Island",
+    "weather": 0
+  },
+  "35:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 146,
+    "name": "Four Island",
+    "rom_name": "Four Island",
+    "weather": 0
+  },
+  "35:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 146,
+    "name": "Four Island",
+    "rom_name": "Four Island",
+    "weather": 0
+  },
+  "35:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 146,
+    "name": "Four Island",
+    "rom_name": "Four Island",
+    "weather": 0
+  },
+  "35:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 146,
+    "name": "Four Island",
+    "rom_name": "Four Island",
+    "weather": 0
+  },
+  "35:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 146,
+    "name": "Four Island",
+    "rom_name": "Four Island",
+    "weather": 0
+  },
+  "35:5": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 146,
+    "name": "Four Island",
+    "rom_name": "Four Island",
+    "weather": 0
+  },
+  "35:6": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 146,
+    "name": "Four Island",
+    "rom_name": "Four Island",
+    "weather": 0
+  },
+  "35:7": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 146,
+    "name": "Four Island",
+    "rom_name": "Four Island",
+    "weather": 0
+  },
+  "36:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 147,
+    "name": "Five Island",
+    "rom_name": "Five Island",
+    "weather": 0
+  },
+  "36:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 147,
+    "name": "Five Island",
+    "rom_name": "Five Island",
+    "weather": 0
+  },
+  "36:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 147,
+    "name": "Five Island",
+    "rom_name": "Five Island",
+    "weather": 0
+  },
+  "36:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 147,
+    "name": "Five Island",
+    "rom_name": "Five Island",
+    "weather": 0
+  },
+  "36:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 147,
+    "name": "Five Island",
+    "rom_name": "Five Island",
+    "weather": 0
+  },
+  "37:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 149,
+    "name": "Six Island",
+    "rom_name": "Six Island",
+    "weather": 0
+  },
+  "37:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 149,
+    "name": "Six Island",
+    "rom_name": "Six Island",
+    "weather": 0
+  },
+  "37:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 149,
+    "name": "Six Island",
+    "rom_name": "Six Island",
+    "weather": 0
+  },
+  "37:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 149,
+    "name": "Six Island",
+    "rom_name": "Six Island",
+    "weather": 0
+  },
+  "37:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 149,
+    "name": "Six Island",
+    "rom_name": "Six Island",
+    "weather": 0
+  },
+  "38:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 154,
+    "name": "Three Isle Port",
+    "rom_name": "Three Isle Port",
+    "weather": 0
+  },
+  "39:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 159,
+    "name": "Resort Gorgeous",
+    "rom_name": "Resort Gorgeous",
+    "weather": 0
+  },
+  "3:0": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 88,
+    "name": "Pallet Town",
+    "rom_name": "Pallet Town",
+    "weather": 2
+  },
+  "3:1": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 89,
+    "name": "Viridian City",
+    "rom_name": "Viridian City",
+    "weather": 2
+  },
+  "3:10": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 98,
+    "name": "Saffron City",
+    "rom_name": "Saffron City",
+    "weather": 2
+  },
+  "3:11": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 98,
+    "name": "Saffron City",
+    "rom_name": "Saffron City",
+    "weather": 2
+  },
+  "3:12": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 143,
+    "name": "One Island",
+    "rom_name": "One Island",
+    "weather": 2
+  },
+  "3:13": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 144,
+    "name": "Two Island",
+    "rom_name": "Two Island",
+    "weather": 2
+  },
+  "3:14": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 145,
+    "name": "Three Island",
+    "rom_name": "Three Island",
+    "weather": 2
+  },
+  "3:15": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 146,
+    "name": "Four Island",
+    "rom_name": "Four Island",
+    "weather": 2
+  },
+  "3:16": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 147,
+    "name": "Five Island",
+    "rom_name": "Five Island",
+    "weather": 2
+  },
+  "3:17": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 148,
+    "name": "Seven Island",
+    "rom_name": "Seven Island",
+    "weather": 2
+  },
+  "3:18": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 149,
+    "name": "Six Island",
+    "rom_name": "Six Island",
+    "weather": 2
+  },
+  "3:19": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 101,
+    "name": "Route 1",
+    "rom_name": "Route 1",
+    "weather": 2
+  },
+  "3:2": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 90,
+    "name": "Pewter City",
+    "rom_name": "Pewter City",
+    "weather": 2
+  },
+  "3:20": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 102,
+    "name": "Route 2",
+    "rom_name": "Route 2",
+    "weather": 2
+  },
+  "3:21": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 103,
+    "name": "Route 3",
+    "rom_name": "Route 3",
+    "weather": 2
+  },
+  "3:22": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 104,
+    "name": "Route 4",
+    "rom_name": "Route 4",
+    "weather": 2
+  },
+  "3:23": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 105,
+    "name": "Route 5",
+    "rom_name": "Route 5",
+    "weather": 2
+  },
+  "3:24": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 106,
+    "name": "Route 6",
+    "rom_name": "Route 6",
+    "weather": 2
+  },
+  "3:25": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 107,
+    "name": "Route 7",
+    "rom_name": "Route 7",
+    "weather": 2
+  },
+  "3:26": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 108,
+    "name": "Route 8",
+    "rom_name": "Route 8",
+    "weather": 2
+  },
+  "3:27": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 109,
+    "name": "Route 9",
+    "rom_name": "Route 9",
+    "weather": 2
+  },
+  "3:28": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 110,
+    "name": "Route 10",
+    "rom_name": "Route 10",
+    "weather": 2
+  },
+  "3:29": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 111,
+    "name": "Route 11",
+    "rom_name": "Route 11",
+    "weather": 2
+  },
+  "3:3": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 91,
+    "name": "Cerulean City",
+    "rom_name": "Cerulean City",
+    "weather": 2
+  },
+  "3:30": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 112,
+    "name": "Route 12",
+    "rom_name": "Route 12",
+    "weather": 4
+  },
+  "3:31": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 113,
+    "name": "Route 13",
+    "rom_name": "Route 13",
+    "weather": 12
+  },
+  "3:32": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 114,
+    "name": "Route 14",
+    "rom_name": "Route 14",
+    "weather": 2
+  },
+  "3:33": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 115,
+    "name": "Route 15",
+    "rom_name": "Route 15",
+    "weather": 2
+  },
+  "3:34": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 116,
+    "name": "Route 16",
+    "rom_name": "Route 16",
+    "weather": 8
+  },
+  "3:35": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 117,
+    "name": "Route 17",
+    "rom_name": "Route 17",
+    "weather": 2
+  },
+  "3:36": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 118,
+    "name": "Route 18",
+    "rom_name": "Route 18",
+    "weather": 3
+  },
+  "3:37": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 119,
+    "name": "Route 19",
+    "rom_name": "Route 19",
+    "weather": 2
+  },
+  "3:38": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 120,
+    "name": "Route 20",
+    "rom_name": "Route 20",
+    "weather": 4
+  },
+  "3:39": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 121,
+    "name": "Route 21",
+    "rom_name": "Route 21",
+    "weather": 2
+  },
+  "3:4": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 92,
+    "name": "Lavender Town",
+    "rom_name": "Lavender Town",
+    "weather": 2
+  },
+  "3:40": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 121,
+    "name": "Route 21",
+    "rom_name": "Route 21",
+    "weather": 2
+  },
+  "3:41": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 122,
+    "name": "Route 22",
+    "rom_name": "Route 22",
+    "weather": 2
+  },
+  "3:42": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 123,
+    "name": "Route 23",
+    "rom_name": "Route 23",
+    "weather": 2
+  },
+  "3:43": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 124,
+    "name": "Route 24",
+    "rom_name": "Route 24",
+    "weather": 2
+  },
+  "3:44": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 125,
+    "name": "Route 25",
+    "rom_name": "Route 25",
+    "weather": 3
+  },
+  "3:45": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 150,
+    "name": "Kindle Road",
+    "rom_name": "Kindle Road",
+    "weather": 2
+  },
+  "3:46": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 151,
+    "name": "Treasure Beach",
+    "rom_name": "Treasure Beach",
+    "weather": 2
+  },
+  "3:47": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 152,
+    "name": "Cape Brink",
+    "rom_name": "Cape Brink",
+    "weather": 2
+  },
+  "3:48": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 153,
+    "name": "Bond Bridge",
+    "rom_name": "Bond Bridge",
+    "weather": 2
+  },
+  "3:49": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 154,
+    "name": "Three Isle Port",
+    "rom_name": "Three Isle Port",
+    "weather": 2
+  },
+  "3:5": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 93,
+    "name": "Vermilion City",
+    "rom_name": "Vermilion City",
+    "weather": 2
+  },
+  "3:50": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 155,
+    "name": "Sevii Isle 6",
+    "rom_name": "Sevii Isle 6",
+    "weather": 2
+  },
+  "3:51": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 156,
+    "name": "Sevii Isle 7",
+    "rom_name": "Sevii Isle 7",
+    "weather": 2
+  },
+  "3:52": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 157,
+    "name": "Oak's Lab",
+    "rom_name": "Oak{B3}s Lab",
+    "weather": 2
+  },
+  "3:53": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 158,
+    "name": "Sevii Isle 9",
+    "rom_name": "Sevii Isle 9",
+    "weather": 2
+  },
+  "3:54": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 159,
+    "name": "Resort Gorgeous",
+    "rom_name": "Resort Gorgeous",
+    "weather": 2
+  },
+  "3:55": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 160,
+    "name": "Water Labyrinth",
+    "rom_name": "Water Labyrinth",
+    "weather": 2
+  },
+  "3:56": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 161,
+    "name": "Five Isle Meadow",
+    "rom_name": "Five Isle Meadow",
+    "weather": 2
+  },
+  "3:57": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 162,
+    "name": "Memorial Pillar",
+    "rom_name": "Memorial Pillar",
+    "weather": 2
+  },
+  "3:58": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 163,
+    "name": "Outcast Island",
+    "rom_name": "Outcast Island",
+    "weather": 2
+  },
+  "3:59": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 164,
+    "name": "Green Path",
+    "rom_name": "Green Path",
+    "weather": 2
+  },
+  "3:6": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 94,
+    "name": "Celadon City",
+    "rom_name": "Celadon City",
+    "weather": 2
+  },
+  "3:60": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 165,
+    "name": "Water Path",
+    "rom_name": "Water Path",
+    "weather": 2
+  },
+  "3:61": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 166,
+    "name": "Ruin Valley",
+    "rom_name": "Ruin Valley",
+    "weather": 2
+  },
+  "3:62": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 167,
+    "name": "Trainer Tower",
+    "rom_name": "Trainer Tower",
+    "weather": 2
+  },
+  "3:63": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 168,
+    "name": "Canyon Entrance",
+    "rom_name": "Canyon Entrance",
+    "weather": 2
+  },
+  "3:64": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 169,
+    "name": "Sevault Canyon",
+    "rom_name": "Sevault Canyon",
+    "weather": 2
+  },
+  "3:65": {
+    "cave": 0,
+    "map_type": 3,
+    "mapsec": 170,
+    "name": "Tanoby Ruins",
+    "rom_name": "Tanoby Ruins",
+    "weather": 2
+  },
+  "3:7": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 95,
+    "name": "Fuchsia City",
+    "rom_name": "Fuchsia City",
+    "weather": 2
+  },
+  "3:8": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 96,
+    "name": "Cinnabar Island",
+    "rom_name": "Cinnabar Island",
+    "weather": 2
+  },
+  "3:9": {
+    "cave": 0,
+    "map_type": 1,
+    "mapsec": 97,
+    "name": "Indigo Plateau",
+    "rom_name": "Indigo Plateau",
+    "weather": 2
+  },
+  "40:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 152,
+    "name": "Cape Brink",
+    "rom_name": "Cape Brink",
+    "weather": 0
+  },
+  "41:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 165,
+    "name": "Water Path",
+    "rom_name": "Water Path",
+    "weather": 0
+  },
+  "41:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 165,
+    "name": "Water Path",
+    "rom_name": "Water Path",
+    "weather": 0
+  },
+  "42:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 169,
+    "name": "Sevault Canyon",
+    "rom_name": "Sevault Canyon",
+    "weather": 0
+  },
+  "4:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 88,
+    "name": "Pallet Town",
+    "rom_name": "Pallet Town",
+    "weather": 0
+  },
+  "4:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 88,
+    "name": "Pallet Town",
+    "rom_name": "Pallet Town",
+    "weather": 0
+  },
+  "4:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 88,
+    "name": "Pallet Town",
+    "rom_name": "Pallet Town",
+    "weather": 0
+  },
+  "4:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 88,
+    "name": "Pallet Town",
+    "rom_name": "Pallet Town",
+    "weather": 0
+  },
+  "5:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 89,
+    "name": "Viridian City",
+    "rom_name": "Viridian City",
+    "weather": 0
+  },
+  "5:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 89,
+    "name": "Viridian City",
+    "rom_name": "Viridian City",
+    "weather": 0
+  },
+  "5:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 89,
+    "name": "Viridian City",
+    "rom_name": "Viridian City",
+    "weather": 0
+  },
+  "5:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 89,
+    "name": "Viridian City",
+    "rom_name": "Viridian City",
+    "weather": 0
+  },
+  "5:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 89,
+    "name": "Viridian City",
+    "rom_name": "Viridian City",
+    "weather": 0
+  },
+  "5:5": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 89,
+    "name": "Viridian City",
+    "rom_name": "Viridian City",
+    "weather": 0
+  },
+  "6:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 90,
+    "name": "Pewter City",
+    "rom_name": "Pewter City",
+    "weather": 0
+  },
+  "6:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 90,
+    "name": "Pewter City",
+    "rom_name": "Pewter City",
+    "weather": 0
+  },
+  "6:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 90,
+    "name": "Pewter City",
+    "rom_name": "Pewter City",
+    "weather": 0
+  },
+  "6:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 90,
+    "name": "Pewter City",
+    "rom_name": "Pewter City",
+    "weather": 0
+  },
+  "6:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 90,
+    "name": "Pewter City",
+    "rom_name": "Pewter City",
+    "weather": 0
+  },
+  "6:5": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 90,
+    "name": "Pewter City",
+    "rom_name": "Pewter City",
+    "weather": 0
+  },
+  "6:6": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 90,
+    "name": "Pewter City",
+    "rom_name": "Pewter City",
+    "weather": 0
+  },
+  "6:7": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 90,
+    "name": "Pewter City",
+    "rom_name": "Pewter City",
+    "weather": 0
+  },
+  "7:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 91,
+    "name": "Cerulean City",
+    "rom_name": "Cerulean City",
+    "weather": 0
+  },
+  "7:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 91,
+    "name": "Cerulean City",
+    "rom_name": "Cerulean City",
+    "weather": 0
+  },
+  "7:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 91,
+    "name": "Cerulean City",
+    "rom_name": "Cerulean City",
+    "weather": 0
+  },
+  "7:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 91,
+    "name": "Cerulean City",
+    "rom_name": "Cerulean City",
+    "weather": 0
+  },
+  "7:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 91,
+    "name": "Cerulean City",
+    "rom_name": "Cerulean City",
+    "weather": 0
+  },
+  "7:5": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 91,
+    "name": "Cerulean City",
+    "rom_name": "Cerulean City",
+    "weather": 0
+  },
+  "7:6": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 91,
+    "name": "Cerulean City",
+    "rom_name": "Cerulean City",
+    "weather": 0
+  },
+  "7:7": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 91,
+    "name": "Cerulean City",
+    "rom_name": "Cerulean City",
+    "weather": 0
+  },
+  "7:8": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 91,
+    "name": "Cerulean City",
+    "rom_name": "Cerulean City",
+    "weather": 0
+  },
+  "7:9": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 91,
+    "name": "Cerulean City",
+    "rom_name": "Cerulean City",
+    "weather": 0
+  },
+  "8:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 92,
+    "name": "Lavender Town",
+    "rom_name": "Lavender Town",
+    "weather": 0
+  },
+  "8:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 92,
+    "name": "Lavender Town",
+    "rom_name": "Lavender Town",
+    "weather": 0
+  },
+  "8:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 92,
+    "name": "Lavender Town",
+    "rom_name": "Lavender Town",
+    "weather": 0
+  },
+  "8:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 92,
+    "name": "Lavender Town",
+    "rom_name": "Lavender Town",
+    "weather": 0
+  },
+  "8:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 92,
+    "name": "Lavender Town",
+    "rom_name": "Lavender Town",
+    "weather": 0
+  },
+  "8:5": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 92,
+    "name": "Lavender Town",
+    "rom_name": "Lavender Town",
+    "weather": 0
+  },
+  "9:0": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 93,
+    "name": "Vermilion City",
+    "rom_name": "Vermilion City",
+    "weather": 0
+  },
+  "9:1": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 93,
+    "name": "Vermilion City",
+    "rom_name": "Vermilion City",
+    "weather": 0
+  },
+  "9:2": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 93,
+    "name": "Vermilion City",
+    "rom_name": "Vermilion City",
+    "weather": 0
+  },
+  "9:3": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 93,
+    "name": "Vermilion City",
+    "rom_name": "Vermilion City",
+    "weather": 0
+  },
+  "9:4": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 93,
+    "name": "Vermilion City",
+    "rom_name": "Vermilion City",
+    "weather": 0
+  },
+  "9:5": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 93,
+    "name": "Vermilion City",
+    "rom_name": "Vermilion City",
+    "weather": 0
+  },
+  "9:6": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 93,
+    "name": "Vermilion City",
+    "rom_name": "Vermilion City",
+    "weather": 0
+  },
+  "9:7": {
+    "cave": 0,
+    "map_type": 8,
+    "mapsec": 93,
+    "name": "Vermilion City",
+    "rom_name": "Vermilion City",
+    "weather": 0
+  }
+}

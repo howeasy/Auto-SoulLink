@@ -1,0 +1,3627 @@
+{
+  "base": "0x0823EAF0",
+  "struct_size": 40,
+  "count": 742,
+  "trainers": {
+    "0": {
+      "name": "           ",
+      "class": 0,
+      "party_size": 1
+    },
+    "1": {
+      "name": "Andrew",
+      "class": 9,
+      "party_size": 1
+    },
+    "2": {
+      "name": "Red",
+      "class": 13,
+      "party_size": 1
+    },
+    "3": {
+      "name": "Anne",
+      "class": 49,
+      "party_size": 1
+    },
+    "4": {
+      "name": "Komodo",
+      "class": 22,
+      "party_size": 1
+    },
+    "6": {
+      "name": "Teacher",
+      "class": 20,
+      "party_size": 1
+    },
+    "7": {
+      "name": "Bugsy",
+      "class": 4,
+      "party_size": 1
+    },
+    "8": {
+      "name": "Coach",
+      "class": 20,
+      "party_size": 6
+    },
+    "9": {
+      "name": "Coach",
+      "class": 20,
+      "party_size": 6
+    },
+    "10": {
+      "name": "Coach",
+      "class": 20,
+      "party_size": 6
+    },
+    "11": {
+      "name": "Coach",
+      "class": 20,
+      "party_size": 6
+    },
+    "12": {
+      "name": "Coach",
+      "class": 20,
+      "party_size": 6
+    },
+    "13": {
+      "name": "Gambler",
+      "class": 5,
+      "party_size": 1
+    },
+    "14": {
+      "name": "Haley",
+      "class": 1,
+      "party_size": 6
+    },
+    "15": {
+      "name": "Sam",
+      "class": 1,
+      "party_size": 3
+    },
+    "16": {
+      "name": "Shelly",
+      "class": 1,
+      "party_size": 4
+    },
+    "17": {
+      "name": "Cole",
+      "class": 1,
+      "party_size": 6
+    },
+    "18": {
+      "name": "Ketchup",
+      "class": 1,
+      "party_size": 6
+    },
+    "19": {
+      "name": "Ketchup",
+      "class": 1,
+      "party_size": 6
+    },
+    "20": {
+      "name": "Nelle",
+      "class": 9,
+      "party_size": 2
+    },
+    "21": {
+      "name": "Thug",
+      "class": 20,
+      "party_size": 2
+    },
+    "22": {
+      "name": "Thug",
+      "class": 3,
+      "party_size": 4
+    },
+    "23": {
+      "name": "Creator",
+      "class": 5,
+      "party_size": 6
+    },
+    "24": {
+      "name": "Kid",
+      "class": 5,
+      "party_size": 6
+    },
+    "25": {
+      "name": "Brendan",
+      "class": 1,
+      "party_size": 6
+    },
+    "26": {
+      "name": "Coach",
+      "class": 20,
+      "party_size": 6
+    },
+    "27": {
+      "name": "Morty",
+      "class": 4,
+      "party_size": 6
+    },
+    "28": {
+      "name": "Jasmine",
+      "class": 4,
+      "party_size": 6
+    },
+    "29": {
+      "name": "Aide",
+      "class": 97,
+      "party_size": 1
+    },
+    "30": {
+      "name": "BrunoRe",
+      "class": 25,
+      "party_size": 1
+    },
+    "31": {
+      "name": "Misty",
+      "class": 8,
+      "party_size": 1
+    },
+    "32": {
+      "name": "AgathaRe",
+      "class": 27,
+      "party_size": 1
+    },
+    "33": {
+      "name": "AgathaRe",
+      "class": 27,
+      "party_size": 1
+    },
+    "34": {
+      "name": "Gian",
+      "class": 5,
+      "party_size": 1
+    },
+    "35": {
+      "name": "LanceRe",
+      "class": 10,
+      "party_size": 1
+    },
+    "36": {
+      "name": "LanceRe",
+      "class": 10,
+      "party_size": 1
+    },
+    "37": {
+      "name": "Clair",
+      "class": 8,
+      "party_size": 1
+    },
+    "38": {
+      "name": "Lance",
+      "class": 7,
+      "party_size": 3
+    },
+    "39": {
+      "name": "Jojo Fan",
+      "class": 5,
+      "party_size": 6
+    },
+    "40": {
+      "name": "Ariana",
+      "class": 2,
+      "party_size": 6
+    },
+    "41": {
+      "name": "Archer",
+      "class": 2,
+      "party_size": 6
+    },
+    "42": {
+      "name": "Falkner",
+      "class": 4,
+      "party_size": 6
+    },
+    "43": {
+      "name": "Brendan",
+      "class": 1,
+      "party_size": 2
+    },
+    "44": {
+      "name": "Falkner",
+      "class": 4,
+      "party_size": 3
+    },
+    "45": {
+      "name": "Archer",
+      "class": 2,
+      "party_size": 3
+    },
+    "46": {
+      "name": "Bugsy",
+      "class": 4,
+      "party_size": 4
+    },
+    "47": {
+      "name": "Misty",
+      "class": 8,
+      "party_size": 6
+    },
+    "48": {
+      "name": "Whitney",
+      "class": 4,
+      "party_size": 5
+    },
+    "49": {
+      "name": "Brendan",
+      "class": 1,
+      "party_size": 4
+    },
+    "50": {
+      "name": "Lt. Surge",
+      "class": 8,
+      "party_size": 6
+    },
+    "51": {
+      "name": "Morty",
+      "class": 4,
+      "party_size": 5
+    },
+    "52": {
+      "name": "Archer",
+      "class": 2,
+      "party_size": 3
+    },
+    "53": {
+      "name": "Ariana",
+      "class": 2,
+      "party_size": 3
+    },
+    "54": {
+      "name": "Brendan",
+      "class": 1,
+      "party_size": 3
+    },
+    "55": {
+      "name": "Brock",
+      "class": 8,
+      "party_size": 6
+    },
+    "56": {
+      "name": "Brendan",
+      "class": 1,
+      "party_size": 6
+    },
+    "57": {
+      "name": "Pryce",
+      "class": 4,
+      "party_size": 6
+    },
+    "58": {
+      "name": "Pryce",
+      "class": 4,
+      "party_size": 6
+    },
+    "59": {
+      "name": "Pryce",
+      "class": 4,
+      "party_size": 6
+    },
+    "60": {
+      "name": "May",
+      "class": 1,
+      "party_size": 6
+    },
+    "61": {
+      "name": "Jasmine",
+      "class": 4,
+      "party_size": 6
+    },
+    "62": {
+      "name": "Jasmine",
+      "class": 4,
+      "party_size": 6
+    },
+    "63": {
+      "name": "Jasmine",
+      "class": 4,
+      "party_size": 6
+    },
+    "64": {
+      "name": "Erika",
+      "class": 8,
+      "party_size": 6
+    },
+    "65": {
+      "name": "Jojo Fan",
+      "class": 5,
+      "party_size": 6
+    },
+    "66": {
+      "name": "Archer",
+      "class": 2,
+      "party_size": 4
+    },
+    "67": {
+      "name": "Ariana",
+      "class": 2,
+      "party_size": 4
+    },
+    "68": {
+      "name": "Giovanni",
+      "class": 3,
+      "party_size": 6
+    },
+    "69": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "70": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "71": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "72": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "73": {
+      "name": "Clair",
+      "class": 8,
+      "party_size": 6
+    },
+    "74": {
+      "name": "Bugsy",
+      "class": 4,
+      "party_size": 6
+    },
+    "75": {
+      "name": "Whitney",
+      "class": 4,
+      "party_size": 6
+    },
+    "76": {
+      "name": "Lorelei",
+      "class": 87,
+      "party_size": 6
+    },
+    "77": {
+      "name": "Lorelei",
+      "class": 87,
+      "party_size": 6
+    },
+    "78": {
+      "name": "Pryce",
+      "class": 4,
+      "party_size": 1
+    },
+    "79": {
+      "name": "Bruno",
+      "class": 87,
+      "party_size": 6
+    },
+    "80": {
+      "name": "Bruno",
+      "class": 87,
+      "party_size": 6
+    },
+    "81": {
+      "name": "Samantha",
+      "class": 9,
+      "party_size": 1
+    },
+    "82": {
+      "name": "Agatha",
+      "class": 87,
+      "party_size": 6
+    },
+    "83": {
+      "name": "Agatha",
+      "class": 87,
+      "party_size": 6
+    },
+    "84": {
+      "name": "Nick",
+      "class": 9,
+      "party_size": 1
+    },
+    "85": {
+      "name": "Lance",
+      "class": 10,
+      "party_size": 6
+    },
+    "86": {
+      "name": "Lance",
+      "class": 10,
+      "party_size": 6
+    },
+    "87": {
+      "name": "Barry",
+      "class": 9,
+      "party_size": 1
+    },
+    "88": {
+      "name": "Ben",
+      "class": 57,
+      "party_size": 2
+    },
+    "89": {
+      "name": "Calvin",
+      "class": 57,
+      "party_size": 1
+    },
+    "90": {
+      "name": "Josh",
+      "class": 57,
+      "party_size": 3
+    },
+    "91": {
+      "name": "Timmy",
+      "class": 57,
+      "party_size": 2
+    },
+    "92": {
+      "name": "Joey",
+      "class": 57,
+      "party_size": 2
+    },
+    "93": {
+      "name": "Dan",
+      "class": 57,
+      "party_size": 1
+    },
+    "94": {
+      "name": "Chad",
+      "class": 57,
+      "party_size": 2
+    },
+    "95": {
+      "name": "Tyler",
+      "class": 57,
+      "party_size": 1
+    },
+    "96": {
+      "name": "Eddie",
+      "class": 57,
+      "party_size": 1
+    },
+    "97": {
+      "name": "Dillon",
+      "class": 57,
+      "party_size": 2
+    },
+    "98": {
+      "name": "Yasu",
+      "class": 57,
+      "party_size": 3
+    },
+    "99": {
+      "name": "Dave",
+      "class": 57,
+      "party_size": 2
+    },
+    "100": {
+      "name": "Ben",
+      "class": 57,
+      "party_size": 2
+    },
+    "101": {
+      "name": "Rick",
+      "class": 58,
+      "party_size": 2
+    },
+    "102": {
+      "name": "Doug",
+      "class": 58,
+      "party_size": 3
+    },
+    "103": {
+      "name": "Sammy",
+      "class": 58,
+      "party_size": 1
+    },
+    "104": {
+      "name": "Colton",
+      "class": 58,
+      "party_size": 3
+    },
+    "105": {
+      "name": "Greg",
+      "class": 58,
+      "party_size": 4
+    },
+    "106": {
+      "name": "James",
+      "class": 58,
+      "party_size": 2
+    },
+    "107": {
+      "name": "Kent",
+      "class": 58,
+      "party_size": 2
+    },
+    "108": {
+      "name": "Robby",
+      "class": 58,
+      "party_size": 3
+    },
+    "109": {
+      "name": "Cale",
+      "class": 58,
+      "party_size": 4
+    },
+    "110": {
+      "name": "Keigo",
+      "class": 58,
+      "party_size": 3
+    },
+    "111": {
+      "name": "Elijah",
+      "class": 58,
+      "party_size": 1
+    },
+    "112": {
+      "name": "Symes",
+      "class": 9,
+      "party_size": 3
+    },
+    "113": {
+      "name": "Brent",
+      "class": 58,
+      "party_size": 2
+    },
+    "114": {
+      "name": "Conner",
+      "class": 58,
+      "party_size": 3
+    },
+    "115": {
+      "name": "Janice",
+      "class": 59,
+      "party_size": 2
+    },
+    "116": {
+      "name": "Sally",
+      "class": 59,
+      "party_size": 2
+    },
+    "117": {
+      "name": "Robin",
+      "class": 59,
+      "party_size": 1
+    },
+    "118": {
+      "name": "Crissy",
+      "class": 59,
+      "party_size": 3
+    },
+    "119": {
+      "name": "Miriam",
+      "class": 59,
+      "party_size": 2
+    },
+    "120": {
+      "name": "Iris",
+      "class": 59,
+      "party_size": 1
+    },
+    "121": {
+      "name": "Reli",
+      "class": 59,
+      "party_size": 2
+    },
+    "122": {
+      "name": "Ali",
+      "class": 59,
+      "party_size": 3
+    },
+    "123": {
+      "name": "Runan",
+      "class": 9,
+      "party_size": 2
+    },
+    "124": {
+      "name": "Haley",
+      "class": 59,
+      "party_size": 3
+    },
+    "125": {
+      "name": "Ann",
+      "class": 59,
+      "party_size": 2
+    },
+    "126": {
+      "name": "Dawn",
+      "class": 59,
+      "party_size": 2
+    },
+    "127": {
+      "name": "Paige",
+      "class": 59,
+      "party_size": 2
+    },
+    "128": {
+      "name": "Andrea",
+      "class": 59,
+      "party_size": 3
+    },
+    "129": {
+      "name": "Megan",
+      "class": 59,
+      "party_size": 5
+    },
+    "130": {
+      "name": "Julia",
+      "class": 59,
+      "party_size": 2
+    },
+    "131": {
+      "name": "Kay",
+      "class": 59,
+      "party_size": 2
+    },
+    "132": {
+      "name": "Lisa",
+      "class": 59,
+      "party_size": 2
+    },
+    "133": {
+      "name": "Edmond",
+      "class": 60,
+      "party_size": 2
+    },
+    "134": {
+      "name": "Trevor",
+      "class": 60,
+      "party_size": 2
+    },
+    "135": {
+      "name": "Leonard",
+      "class": 60,
+      "party_size": 1
+    },
+    "136": {
+      "name": "Duncan",
+      "class": 60,
+      "party_size": 3
+    },
+    "137": {
+      "name": "Huey",
+      "class": 60,
+      "party_size": 2
+    },
+    "138": {
+      "name": "Dylan",
+      "class": 60,
+      "party_size": 3
+    },
+    "139": {
+      "name": "Phillip",
+      "class": 60,
+      "party_size": 1
+    },
+    "140": {
+      "name": "Dwayne",
+      "class": 60,
+      "party_size": 2
+    },
+    "141": {
+      "name": "Liam",
+      "class": 61,
+      "party_size": 2
+    },
+    "142": {
+      "name": "Shane",
+      "class": 61,
+      "party_size": 2
+    },
+    "143": {
+      "name": "Ethan",
+      "class": 61,
+      "party_size": 1
+    },
+    "144": {
+      "name": "Ricky",
+      "class": 61,
+      "party_size": 1
+    },
+    "145": {
+      "name": "Jeff",
+      "class": 61,
+      "party_size": 2
+    },
+    "146": {
+      "name": "Rachel",
+      "class": 91,
+      "party_size": 1
+    },
+    "147": {
+      "name": "Chris",
+      "class": 61,
+      "party_size": 2
+    },
+    "148": {
+      "name": "Drew",
+      "class": 61,
+      "party_size": 4
+    },
+    "149": {
+      "name": "Diana",
+      "class": 62,
+      "party_size": 1
+    },
+    "150": {
+      "name": "Nancy",
+      "class": 62,
+      "party_size": 2
+    },
+    "151": {
+      "name": "Isabelle",
+      "class": 62,
+      "party_size": 3
+    },
+    "152": {
+      "name": "Kelsey",
+      "class": 62,
+      "party_size": 2
+    },
+    "153": {
+      "name": "Alicia",
+      "class": 62,
+      "party_size": 4
+    },
+    "154": {
+      "name": "Caitlin",
+      "class": 62,
+      "party_size": 1
+    },
+    "155": {
+      "name": "Heidi",
+      "class": 62,
+      "party_size": 2
+    },
+    "156": {
+      "name": "Carol",
+      "class": 62,
+      "party_size": 2
+    },
+    "157": {
+      "name": "Sofia",
+      "class": 62,
+      "party_size": 3
+    },
+    "158": {
+      "name": "Martha",
+      "class": 62,
+      "party_size": 2
+    },
+    "159": {
+      "name": "Tina",
+      "class": 62,
+      "party_size": 2
+    },
+    "160": {
+      "name": "Hannah",
+      "class": 62,
+      "party_size": 5
+    },
+    "161": {
+      "name": "Mark",
+      "class": 63,
+      "party_size": 2
+    },
+    "162": {
+      "name": "Herman",
+      "class": 63,
+      "party_size": 2
+    },
+    "163": {
+      "name": "Cooprt",
+      "class": 63,
+      "party_size": 3
+    },
+    "164": {
+      "name": "Steve",
+      "class": 63,
+      "party_size": 2
+    },
+    "165": {
+      "name": "Winston",
+      "class": 63,
+      "party_size": 1
+    },
+    "166": {
+      "name": "Dawson",
+      "class": 63,
+      "party_size": 3
+    },
+    "167": {
+      "name": "Ashton",
+      "class": 63,
+      "party_size": 2
+    },
+    "168": {
+      "name": "Jovan",
+      "class": 64,
+      "party_size": 2
+    },
+    "169": {
+      "name": "Miguel",
+      "class": 64,
+      "party_size": 3
+    },
+    "170": {
+      "name": "Aidan",
+      "class": 64,
+      "party_size": 4
+    },
+    "171": {
+      "name": "Glenn",
+      "class": 64,
+      "party_size": 3
+    },
+    "172": {
+      "name": "Leslie",
+      "class": 64,
+      "party_size": 1
+    },
+    "173": {
+      "name": "Sharon",
+      "class": 9,
+      "party_size": 3
+    },
+    "174": {
+      "name": "Janny",
+      "class": 9,
+      "party_size": 4
+    },
+    "175": {
+      "name": "Owen",
+      "class": 48,
+      "party_size": 2
+    },
+    "176": {
+      "name": "Erik",
+      "class": 64,
+      "party_size": 3
+    },
+    "177": {
+      "name": "Aavery",
+      "class": 64,
+      "party_size": 4
+    },
+    "178": {
+      "name": "Derek",
+      "class": 9,
+      "party_size": 1
+    },
+    "179": {
+      "name": "Zac",
+      "class": 9,
+      "party_size": 2
+    },
+    "180": {
+      "name": "Marcos",
+      "class": 65,
+      "party_size": 3
+    },
+    "181": {
+      "name": "Franklin",
+      "class": 65,
+      "party_size": 2
+    },
+    "182": {
+      "name": "Nob",
+      "class": 65,
+      "party_size": 4
+    },
+    "183": {
+      "name": "Wayne",
+      "class": 65,
+      "party_size": 1
+    },
+    "184": {
+      "name": "Alan",
+      "class": 65,
+      "party_size": 2
+    },
+    "185": {
+      "name": "Brice",
+      "class": 65,
+      "party_size": 3
+    },
+    "186": {
+      "name": "Clark",
+      "class": 65,
+      "party_size": 2
+    },
+    "187": {
+      "name": "Trent",
+      "class": 65,
+      "party_size": 2
+    },
+    "188": {
+      "name": "Dudley",
+      "class": 65,
+      "party_size": 3
+    },
+    "189": {
+      "name": "Allen",
+      "class": 65,
+      "party_size": 1
+    },
+    "190": {
+      "name": "Eric",
+      "class": 65,
+      "party_size": 2
+    },
+    "191": {
+      "name": "Lenny",
+      "class": 65,
+      "party_size": 4
+    },
+    "192": {
+      "name": "Oliver",
+      "class": 65,
+      "party_size": 3
+    },
+    "193": {
+      "name": "Lucas",
+      "class": 65,
+      "party_size": 2
+    },
+    "194": {
+      "name": "Jared",
+      "class": 66,
+      "party_size": 3
+    },
+    "195": {
+      "name": "Malik",
+      "class": 66,
+      "party_size": 2
+    },
+    "196": {
+      "name": "Ernest",
+      "class": 66,
+      "party_size": 5
+    },
+    "197": {
+      "name": "Alex",
+      "class": 66,
+      "party_size": 3
+    },
+    "198": {
+      "name": "Lao",
+      "class": 66,
+      "party_size": 2
+    },
+    "199": {
+      "name": "Oak",
+      "class": 32,
+      "party_size": 1
+    },
+    "200": {
+      "name": "Hideo",
+      "class": 66,
+      "party_size": 1
+    },
+    "201": {
+      "name": "Ruben",
+      "class": 66,
+      "party_size": 3
+    },
+    "202": {
+      "name": "Billy",
+      "class": 66,
+      "party_size": 1
+    },
+    "203": {
+      "name": "Nikolas",
+      "class": 66,
+      "party_size": 2
+    },
+    "204": {
+      "name": "Jaxon",
+      "class": 66,
+      "party_size": 2
+    },
+    "205": {
+      "name": "William",
+      "class": 66,
+      "party_size": 5
+    },
+    "206": {
+      "name": "Lukas",
+      "class": 66,
+      "party_size": 4
+    },
+    "207": {
+      "name": "Isaac",
+      "class": 66,
+      "party_size": 3
+    },
+    "208": {
+      "name": "Gerald",
+      "class": 66,
+      "party_size": 2
+    },
+    "209": {
+      "name": "Oak",
+      "class": 32,
+      "party_size": 2
+    },
+    "212": {
+      "name": "Quinn",
+      "class": 67,
+      "party_size": 3
+    },
+    "213": {
+      "name": "Ramon",
+      "class": 67,
+      "party_size": 1
+    },
+    "214": {
+      "name": "Lucy",
+      "class": 9,
+      "party_size": 2
+    },
+    "215": {
+      "name": "Arnie",
+      "class": 67,
+      "party_size": 2
+    },
+    "217": {
+      "name": "Simon",
+      "class": 67,
+      "party_size": 1
+    },
+    "218": {
+      "name": "Lewis",
+      "class": 67,
+      "party_size": 2
+    },
+    "219": {
+      "name": "Baily",
+      "class": 68,
+      "party_size": 2
+    },
+    "220": {
+      "name": "Braxton",
+      "class": 68,
+      "party_size": 1
+    },
+    "221": {
+      "name": "Bernie",
+      "class": 68,
+      "party_size": 3
+    },
+    "222": {
+      "name": "Dale",
+      "class": 69,
+      "party_size": 3
+    },
+    "223": {
+      "name": "Barny",
+      "class": 69,
+      "party_size": 3
+    },
+    "224": {
+      "name": "Ned",
+      "class": 69,
+      "party_size": 3
+    },
+    "225": {
+      "name": "Chip",
+      "class": 69,
+      "party_size": 2
+    },
+    "226": {
+      "name": "Hank",
+      "class": 69,
+      "party_size": 1
+    },
+    "227": {
+      "name": "Elliot",
+      "class": 69,
+      "party_size": 4
+    },
+    "228": {
+      "name": "Ronald",
+      "class": 69,
+      "party_size": 4
+    },
+    "229": {
+      "name": "Claude",
+      "class": 69,
+      "party_size": 2
+    },
+    "230": {
+      "name": "Wade",
+      "class": 69,
+      "party_size": 6
+    },
+    "231": {
+      "name": "Nolan",
+      "class": 69,
+      "party_size": 2
+    },
+    "232": {
+      "name": "Andrew",
+      "class": 69,
+      "party_size": 2
+    },
+    "233": {
+      "name": "Luis",
+      "class": 70,
+      "party_size": 2
+    },
+    "234": {
+      "name": "Richard",
+      "class": 70,
+      "party_size": 2
+    },
+    "235": {
+      "name": "Reece",
+      "class": 70,
+      "party_size": 3
+    },
+    "236": {
+      "name": "Matthew",
+      "class": 70,
+      "party_size": 2
+    },
+    "237": {
+      "name": "Douglas",
+      "class": 70,
+      "party_size": 4
+    },
+    "238": {
+      "name": "David",
+      "class": 70,
+      "party_size": 3
+    },
+    "239": {
+      "name": "Tony",
+      "class": 70,
+      "party_size": 2
+    },
+    "240": {
+      "name": "Axle",
+      "class": 70,
+      "party_size": 5
+    },
+    "241": {
+      "name": "Barry",
+      "class": 70,
+      "party_size": 2
+    },
+    "242": {
+      "name": "Dean",
+      "class": 70,
+      "party_size": 1
+    },
+    "243": {
+      "name": "Darrin",
+      "class": 70,
+      "party_size": 4
+    },
+    "244": {
+      "name": "Spencer",
+      "class": 70,
+      "party_size": 2
+    },
+    "245": {
+      "name": "Jack",
+      "class": 70,
+      "party_size": 1
+    },
+    "246": {
+      "name": "Jerome",
+      "class": 70,
+      "party_size": 2
+    },
+    "247": {
+      "name": "Roland",
+      "class": 70,
+      "party_size": 3
+    },
+    "248": {
+      "name": "Koji",
+      "class": 71,
+      "party_size": 3
+    },
+    "249": {
+      "name": "Luke",
+      "class": 71,
+      "party_size": 2
+    },
+    "250": {
+      "name": "Camron",
+      "class": 71,
+      "party_size": 2
+    },
+    "251": {
+      "name": "Raul",
+      "class": 71,
+      "party_size": 2
+    },
+    "252": {
+      "name": "Isaiah",
+      "class": 71,
+      "party_size": 2
+    },
+    "253": {
+      "name": "Zeek",
+      "class": 71,
+      "party_size": 1
+    },
+    "254": {
+      "name": "Jamal",
+      "class": 71,
+      "party_size": 4
+    },
+    "255": {
+      "name": "Corey",
+      "class": 71,
+      "party_size": 2
+    },
+    "256": {
+      "name": "Chase",
+      "class": 71,
+      "party_size": 3
+    },
+    "257": {
+      "name": "Hugo",
+      "class": 72,
+      "party_size": 2
+    },
+    "258": {
+      "name": "Jasper",
+      "class": 72,
+      "party_size": 2
+    },
+    "259": {
+      "name": "Dirk",
+      "class": 72,
+      "party_size": 2
+    },
+    "260": {
+      "name": "Darian",
+      "class": 72,
+      "party_size": 2
+    },
+    "261": {
+      "name": "Stan",
+      "class": 72,
+      "party_size": 3
+    },
+    "263": {
+      "name": "Rich",
+      "class": 72,
+      "party_size": 2
+    },
+    "264": {
+      "name": "Bridget",
+      "class": 73,
+      "party_size": 4
+    },
+    "265": {
+      "name": "Tamia",
+      "class": 73,
+      "party_size": 2
+    },
+    "266": {
+      "name": "Lori",
+      "class": 73,
+      "party_size": 1
+    },
+    "267": {
+      "name": "Lola",
+      "class": 73,
+      "party_size": 3
+    },
+    "268": {
+      "name": "Sheila",
+      "class": 73,
+      "party_size": 2
+    },
+    "269": {
+      "name": "Tiffany",
+      "class": 74,
+      "party_size": 1
+    },
+    "270": {
+      "name": "Nora",
+      "class": 74,
+      "party_size": 3
+    },
+    "271": {
+      "name": "Melissa",
+      "class": 74,
+      "party_size": 2
+    },
+    "272": {
+      "name": "Grace",
+      "class": 73,
+      "party_size": 2
+    },
+    "273": {
+      "name": "Olivia",
+      "class": 73,
+      "party_size": 2
+    },
+    "274": {
+      "name": "Lauren",
+      "class": 73,
+      "party_size": 3
+    },
+    "275": {
+      "name": "Anya",
+      "class": 74,
+      "party_size": 5
+    },
+    "276": {
+      "name": "Alice",
+      "class": 74,
+      "party_size": 2
+    },
+    "277": {
+      "name": "Connie",
+      "class": 74,
+      "party_size": 3
+    },
+    "278": {
+      "name": "Shirley",
+      "class": 74,
+      "party_size": 3
+    },
+    "279": {
+      "name": "Johan",
+      "class": 75,
+      "party_size": 4
+    },
+    "280": {
+      "name": "Tyron",
+      "class": 75,
+      "party_size": 2
+    },
+    "281": {
+      "name": "Cameron",
+      "class": 75,
+      "party_size": 3
+    },
+    "282": {
+      "name": "Preston",
+      "class": 75,
+      "party_size": 1
+    },
+    "283": {
+      "name": "Randall",
+      "class": 76,
+      "party_size": 3
+    },
+    "284": {
+      "name": "Luca",
+      "class": 76,
+      "party_size": 2
+    },
+    "285": {
+      "name": "Dalton",
+      "class": 77,
+      "party_size": 2
+    },
+    "286": {
+      "name": "Nelson",
+      "class": 77,
+      "party_size": 4
+    },
+    "287": {
+      "name": "Kirk",
+      "class": 77,
+      "party_size": 4
+    },
+    "288": {
+      "name": "Shawn",
+      "class": 77,
+      "party_size": 2
+    },
+    "289": {
+      "name": "Gregory",
+      "class": 77,
+      "party_size": 1
+    },
+    "290": {
+      "name": "Edward",
+      "class": 77,
+      "party_size": 4
+    },
+    "291": {
+      "name": "Kayden",
+      "class": 77,
+      "party_size": 1
+    },
+    "292": {
+      "name": "Nate",
+      "class": 77,
+      "party_size": 2
+    },
+    "293": {
+      "name": "Phil",
+      "class": 78,
+      "party_size": 2
+    },
+    "294": {
+      "name": "Edgar",
+      "class": 78,
+      "party_size": 3
+    },
+    "295": {
+      "name": "Jason",
+      "class": 78,
+      "party_size": 1
+    },
+    "296": {
+      "name": "Cole",
+      "class": 78,
+      "party_size": 2
+    },
+    "297": {
+      "name": "Vincent",
+      "class": 78,
+      "party_size": 2
+    },
+    "298": {
+      "name": "John",
+      "class": 78,
+      "party_size": 4
+    },
+    "299": {
+      "name": "Sebastian",
+      "class": 79,
+      "party_size": 2
+    },
+    "300": {
+      "name": "Perry",
+      "class": 79,
+      "party_size": 5
+    },
+    "301": {
+      "name": "Robert",
+      "class": 79,
+      "party_size": 4
+    },
+    "302": {
+      "name": "Donald",
+      "class": 79,
+      "party_size": 1
+    },
+    "303": {
+      "name": "Benny",
+      "class": 79,
+      "party_size": 2
+    },
+    "304": {
+      "name": "Edwin",
+      "class": 79,
+      "party_size": 4
+    },
+    "305": {
+      "name": "Chester",
+      "class": 79,
+      "party_size": 3
+    },
+    "306": {
+      "name": "Wilton",
+      "class": 9,
+      "party_size": 2
+    },
+    "307": {
+      "name": "Ramiro",
+      "class": 33,
+      "party_size": 1
+    },
+    "308": {
+      "name": "Jacob",
+      "class": 79,
+      "party_size": 4
+    },
+    "309": {
+      "name": "Roger",
+      "class": 79,
+      "party_size": 3
+    },
+    "310": {
+      "name": "Reed",
+      "class": 79,
+      "party_size": 4
+    },
+    "311": {
+      "name": "Keith",
+      "class": 79,
+      "party_size": 2
+    },
+    "312": {
+      "name": "Carter",
+      "class": 79,
+      "party_size": 3
+    },
+    "313": {
+      "name": "Mitch",
+      "class": 79,
+      "party_size": 4
+    },
+    "314": {
+      "name": "Beck",
+      "class": 79,
+      "party_size": 2
+    },
+    "315": {
+      "name": "Marlon",
+      "class": 79,
+      "party_size": 3
+    },
+    "316": {
+      "name": "Chuck",
+      "class": 4,
+      "party_size": 5
+    },
+    "317": {
+      "name": "Mike",
+      "class": 80,
+      "party_size": 3
+    },
+    "318": {
+      "name": "Hideki",
+      "class": 80,
+      "party_size": 2
+    },
+    "319": {
+      "name": "Aaron",
+      "class": 80,
+      "party_size": 1
+    },
+    "320": {
+      "name": "Hitoshi",
+      "class": 80,
+      "party_size": 3
+    },
+    "321": {
+      "name": "Atsushi",
+      "class": 80,
+      "party_size": 2
+    },
+    "322": {
+      "name": "Kiyo",
+      "class": 80,
+      "party_size": 1
+    },
+    "323": {
+      "name": "Takashi",
+      "class": 80,
+      "party_size": 3
+    },
+    "324": {
+      "name": "Daisuke",
+      "class": 80,
+      "party_size": 3
+    },
+    "325": {
+      "name": "Terry",
+      "class": 81,
+      "party_size": 1
+    },
+    "326": {
+      "name": "Terry",
+      "class": 81,
+      "party_size": 1
+    },
+    "327": {
+      "name": "Terry",
+      "class": 81,
+      "party_size": 1
+    },
+    "328": {
+      "name": "Terry",
+      "class": 81,
+      "party_size": 2
+    },
+    "329": {
+      "name": "Terry",
+      "class": 81,
+      "party_size": 2
+    },
+    "330": {
+      "name": "Terry",
+      "class": 81,
+      "party_size": 2
+    },
+    "331": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 4
+    },
+    "332": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 4
+    },
+    "333": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 4
+    },
+    "334": {
+      "name": "Ted",
+      "class": 82,
+      "party_size": 2
+    },
+    "335": {
+      "name": "Connor",
+      "class": 82,
+      "party_size": 4
+    },
+    "336": {
+      "name": "Jerry",
+      "class": 82,
+      "party_size": 3
+    },
+    "337": {
+      "name": "Jose",
+      "class": 82,
+      "party_size": 2
+    },
+    "338": {
+      "name": "Rodney",
+      "class": 82,
+      "party_size": 1
+    },
+    "339": {
+      "name": "Beau",
+      "class": 82,
+      "party_size": 4
+    },
+    "340": {
+      "name": "Taylor",
+      "class": 82,
+      "party_size": 5
+    },
+    "341": {
+      "name": "Joshua",
+      "class": 82,
+      "party_size": 2
+    },
+    "342": {
+      "name": "Parkker",
+      "class": 82,
+      "party_size": 2
+    },
+    "343": {
+      "name": "Ed",
+      "class": 82,
+      "party_size": 3
+    },
+    "344": {
+      "name": "Travis",
+      "class": 82,
+      "party_size": 2
+    },
+    "345": {
+      "name": "Braydon",
+      "class": 82,
+      "party_size": 3
+    },
+    "346": {
+      "name": "Ivan",
+      "class": 82,
+      "party_size": 2
+    },
+    "347": {
+      "name": "Giovanni",
+      "class": 83,
+      "party_size": 5
+    },
+    "348": {
+      "name": "Giovanni",
+      "class": 83,
+      "party_size": 5
+    },
+    "349": {
+      "name": "Giovanni",
+      "class": 84,
+      "party_size": 5
+    },
+    "350": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "351": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "352": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "353": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "354": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "355": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "356": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "357": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "358": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "359": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "360": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 4
+    },
+    "361": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "362": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 5
+    },
+    "363": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "364": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "365": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "366": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "367": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "368": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "369": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "370": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 4
+    },
+    "371": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "372": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "373": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 5
+    },
+    "374": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "375": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "376": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "377": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 1
+    },
+    "378": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 1
+    },
+    "379": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "380": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "381": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 4
+    },
+    "382": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "383": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "384": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 4
+    },
+    "385": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "386": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "387": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "388": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 1
+    },
+    "389": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 5
+    },
+    "390": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "391": {
+      "name": "Samuel",
+      "class": 86,
+      "party_size": 5
+    },
+    "392": {
+      "name": "George",
+      "class": 86,
+      "party_size": 5
+    },
+    "393": {
+      "name": "Colby",
+      "class": 86,
+      "party_size": 5
+    },
+    "394": {
+      "name": "Paul",
+      "class": 86,
+      "party_size": 5
+    },
+    "395": {
+      "name": "Rolando",
+      "class": 86,
+      "party_size": 5
+    },
+    "396": {
+      "name": "Gilbert",
+      "class": 86,
+      "party_size": 5
+    },
+    "397": {
+      "name": "Owen",
+      "class": 86,
+      "party_size": 5
+    },
+    "398": {
+      "name": "Berke",
+      "class": 86,
+      "party_size": 5
+    },
+    "399": {
+      "name": "Yuji",
+      "class": 86,
+      "party_size": 5
+    },
+    "400": {
+      "name": "Warren",
+      "class": 86,
+      "party_size": 5
+    },
+    "401": {
+      "name": "Mary",
+      "class": 86,
+      "party_size": 5
+    },
+    "402": {
+      "name": "Caroline",
+      "class": 86,
+      "party_size": 5
+    },
+    "403": {
+      "name": "Alexa",
+      "class": 86,
+      "party_size": 5
+    },
+    "404": {
+      "name": "Shannon",
+      "class": 86,
+      "party_size": 5
+    },
+    "405": {
+      "name": "Naomi",
+      "class": 86,
+      "party_size": 5
+    },
+    "406": {
+      "name": "Brooke",
+      "class": 86,
+      "party_size": 5
+    },
+    "407": {
+      "name": "Austina",
+      "class": 86,
+      "party_size": 5
+    },
+    "408": {
+      "name": "Julie",
+      "class": 86,
+      "party_size": 5
+    },
+    "409": {
+      "name": "Lorelei",
+      "class": 87,
+      "party_size": 5
+    },
+    "410": {
+      "name": "Bruno",
+      "class": 87,
+      "party_size": 5
+    },
+    "411": {
+      "name": "Agatha",
+      "class": 87,
+      "party_size": 5
+    },
+    "412": {
+      "name": "Lance",
+      "class": 87,
+      "party_size": 5
+    },
+    "413": {
+      "name": "Brock",
+      "class": 84,
+      "party_size": 4
+    },
+    "414": {
+      "name": "Misty",
+      "class": 84,
+      "party_size": 4
+    },
+    "415": {
+      "name": "Lt. Surge",
+      "class": 84,
+      "party_size": 5
+    },
+    "416": {
+      "name": "Erika",
+      "class": 84,
+      "party_size": 5
+    },
+    "417": {
+      "name": "Koga",
+      "class": 84,
+      "party_size": 6
+    },
+    "418": {
+      "name": "Blaine",
+      "class": 84,
+      "party_size": 6
+    },
+    "419": {
+      "name": "Sabrina",
+      "class": 84,
+      "party_size": 6
+    },
+    "420": {
+      "name": "Thomas",
+      "class": 88,
+      "party_size": 2
+    },
+    "421": {
+      "name": "Arthur",
+      "class": 88,
+      "party_size": 2
+    },
+    "422": {
+      "name": "Tucker",
+      "class": 88,
+      "party_size": 1
+    },
+    "423": {
+      "name": "Norton",
+      "class": 88,
+      "party_size": 1
+    },
+    "424": {
+      "name": "Walter",
+      "class": 88,
+      "party_size": 2
+    },
+    "425": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 4
+    },
+    "426": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 4
+    },
+    "427": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 4
+    },
+    "428": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 5
+    },
+    "429": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 5
+    },
+    "430": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 5
+    },
+    "431": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 5
+    },
+    "432": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 5
+    },
+    "433": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 5
+    },
+    "434": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 6
+    },
+    "435": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 6
+    },
+    "436": {
+      "name": "Terry",
+      "class": 89,
+      "party_size": 6
+    },
+    "437": {
+      "name": "Terry",
+      "class": 90,
+      "party_size": 6
+    },
+    "438": {
+      "name": "Terry",
+      "class": 90,
+      "party_size": 6
+    },
+    "439": {
+      "name": "Terry",
+      "class": 90,
+      "party_size": 6
+    },
+    "440": {
+      "name": "Patricia",
+      "class": 91,
+      "party_size": 1
+    },
+    "441": {
+      "name": "Carly",
+      "class": 91,
+      "party_size": 1
+    },
+    "442": {
+      "name": "Hope",
+      "class": 91,
+      "party_size": 1
+    },
+    "443": {
+      "name": "Paula",
+      "class": 91,
+      "party_size": 1
+    },
+    "444": {
+      "name": "Laurel",
+      "class": 91,
+      "party_size": 2
+    },
+    "445": {
+      "name": "Jody",
+      "class": 91,
+      "party_size": 1
+    },
+    "446": {
+      "name": "Tammy",
+      "class": 91,
+      "party_size": 1
+    },
+    "447": {
+      "name": "Ruth",
+      "class": 91,
+      "party_size": 1
+    },
+    "448": {
+      "name": "Karina",
+      "class": 91,
+      "party_size": 1
+    },
+    "449": {
+      "name": "Janae",
+      "class": 91,
+      "party_size": 1
+    },
+    "450": {
+      "name": "Angelica",
+      "class": 91,
+      "party_size": 3
+    },
+    "451": {
+      "name": "Emilia",
+      "class": 91,
+      "party_size": 1
+    },
+    "452": {
+      "name": "Jennifer",
+      "class": 91,
+      "party_size": 1
+    },
+    "453": {
+      "name": "Max",
+      "class": 67,
+      "party_size": 1
+    },
+    "454": {
+      "name": "Anson",
+      "class": 67,
+      "party_size": 1
+    },
+    "461": {
+      "name": "Amanda",
+      "class": 91,
+      "party_size": 2
+    },
+    "462": {
+      "name": "Stacy",
+      "class": 91,
+      "party_size": 1
+    },
+    "463": {
+      "name": "Tasha",
+      "class": 91,
+      "party_size": 3
+    },
+    "464": {
+      "name": "Jeremy",
+      "class": 65,
+      "party_size": 2
+    },
+    "465": {
+      "name": "Alma",
+      "class": 62,
+      "party_size": 3
+    },
+    "466": {
+      "name": "Susie",
+      "class": 62,
+      "party_size": 5
+    },
+    "467": {
+      "name": "Valerie",
+      "class": 62,
+      "party_size": 2
+    },
+    "468": {
+      "name": "Gwen",
+      "class": 62,
+      "party_size": 4
+    },
+    "469": {
+      "name": "Virgil",
+      "class": 66,
+      "party_size": 3
+    },
+    "470": {
+      "name": "Flint",
+      "class": 61,
+      "party_size": 2
+    },
+    "471": {
+      "name": "Missy",
+      "class": 62,
+      "party_size": 2
+    },
+    "472": {
+      "name": "Irene",
+      "class": 62,
+      "party_size": 3
+    },
+    "473": {
+      "name": "Dana",
+      "class": 62,
+      "party_size": 3
+    },
+    "474": {
+      "name": "Ariana",
+      "class": 62,
+      "party_size": 4
+    },
+    "475": {
+      "name": "Leah",
+      "class": 62,
+      "party_size": 2
+    },
+    "476": {
+      "name": "Justin",
+      "class": 61,
+      "party_size": 2
+    },
+    "477": {
+      "name": "Yazmin",
+      "class": 62,
+      "party_size": 3
+    },
+    "478": {
+      "name": "Kindra",
+      "class": 62,
+      "party_size": 3
+    },
+    "479": {
+      "name": "Becky",
+      "class": 62,
+      "party_size": 2
+    },
+    "480": {
+      "name": "Celia",
+      "class": 62,
+      "party_size": 1
+    },
+    "481": {
+      "name": "Brooks",
+      "class": 88,
+      "party_size": 1
+    },
+    "482": {
+      "name": "Lamar",
+      "class": 88,
+      "party_size": 2
+    },
+    "483": {
+      "name": "Eli {2D} Anne",
+      "class": 92,
+      "party_size": 2
+    },
+    "484": {
+      "name": "Ray {2D} Tyra",
+      "class": 93,
+      "party_size": 2
+    },
+    "485": {
+      "name": "Gia {2D} Jes",
+      "class": 94,
+      "party_size": 2
+    },
+    "486": {
+      "name": "Kiri {2D} Jan",
+      "class": 92,
+      "party_size": 2
+    },
+    "487": {
+      "name": "Ron {2D} Mya",
+      "class": 95,
+      "party_size": 2
+    },
+    "488": {
+      "name": "Lea {2D} Jed",
+      "class": 94,
+      "party_size": 2
+    },
+    "489": {
+      "name": "Lia {2D} Luc",
+      "class": 96,
+      "party_size": 2
+    },
+    "490": {
+      "name": "Lil {2D} Ian",
+      "class": 96,
+      "party_size": 2
+    },
+    "497": {
+      "name": "Ben",
+      "class": 57,
+      "party_size": 2
+    },
+    "498": {
+      "name": "Ben",
+      "class": 57,
+      "party_size": 2
+    },
+    "499": {
+      "name": "Chad",
+      "class": 57,
+      "party_size": 2
+    },
+    "500": {
+      "name": "Reli",
+      "class": 59,
+      "party_size": 2
+    },
+    "501": {
+      "name": "Reli",
+      "class": 59,
+      "party_size": 2
+    },
+    "502": {
+      "name": "Timmy",
+      "class": 57,
+      "party_size": 3
+    },
+    "503": {
+      "name": "Timmy",
+      "class": 57,
+      "party_size": 3
+    },
+    "504": {
+      "name": "Timmy",
+      "class": 57,
+      "party_size": 3
+    },
+    "505": {
+      "name": "Chad",
+      "class": 57,
+      "party_size": 2
+    },
+    "506": {
+      "name": "Janice",
+      "class": 59,
+      "party_size": 2
+    },
+    "507": {
+      "name": "Janice",
+      "class": 59,
+      "party_size": 2
+    },
+    "508": {
+      "name": "Chad",
+      "class": 57,
+      "party_size": 2
+    },
+    "509": {
+      "name": "Franklin",
+      "class": 65,
+      "party_size": 2
+    },
+    "510": {
+      "name": "Prof. Oak",
+      "class": 97,
+      "party_size": 1
+    },
+    "511": {
+      "name": "Brendan",
+      "class": 98,
+      "party_size": 1
+    },
+    "512": {
+      "name": "May",
+      "class": 98,
+      "party_size": 1
+    },
+    "513": {
+      "name": "Red",
+      "class": 98,
+      "party_size": 1
+    },
+    "514": {
+      "name": "Leaf",
+      "class": 98,
+      "party_size": 1
+    },
+    "515": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "516": {
+      "name": "Jaclyn",
+      "class": 75,
+      "party_size": 3
+    },
+    "517": {
+      "name": "Sharon",
+      "class": 99,
+      "party_size": 2
+    },
+    "518": {
+      "name": "Amira",
+      "class": 100,
+      "party_size": 3
+    },
+    "519": {
+      "name": "Alize",
+      "class": 101,
+      "party_size": 3
+    },
+    "520": {
+      "name": "Nicolas",
+      "class": 102,
+      "party_size": 2
+    },
+    "521": {
+      "name": "Madeline",
+      "class": 102,
+      "party_size": 2
+    },
+    "522": {
+      "name": "Nikki",
+      "class": 103,
+      "party_size": 2
+    },
+    "523": {
+      "name": "Stanly",
+      "class": 104,
+      "party_size": 3
+    },
+    "524": {
+      "name": "Jacki",
+      "class": 105,
+      "party_size": 2
+    },
+    "525": {
+      "name": "Daisy",
+      "class": 106,
+      "party_size": 1
+    },
+    "526": {
+      "name": "Goon",
+      "class": 66,
+      "party_size": 2
+    },
+    "527": {
+      "name": "Goon",
+      "class": 66,
+      "party_size": 1
+    },
+    "528": {
+      "name": "Goon",
+      "class": 66,
+      "party_size": 1
+    },
+    "530": {
+      "name": "Anthony",
+      "class": 58,
+      "party_size": 2
+    },
+    "531": {
+      "name": "Charlie",
+      "class": 58,
+      "party_size": 3
+    },
+    "532": {
+      "name": "Eli {2D} Anne",
+      "class": 92,
+      "party_size": 2
+    },
+    "533": {
+      "name": "Johnson",
+      "class": 57,
+      "party_size": 3
+    },
+    "534": {
+      "name": "Ricardo",
+      "class": 66,
+      "party_size": 3
+    },
+    "535": {
+      "name": "Jaren",
+      "class": 66,
+      "party_size": 2
+    },
+    "536": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "537": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 4
+    },
+    "538": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "539": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "540": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "541": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "542": {
+      "name": "Admin",
+      "class": 85,
+      "party_size": 3
+    },
+    "543": {
+      "name": "Admin",
+      "class": 85,
+      "party_size": 3
+    },
+    "544": {
+      "name": "Gideon",
+      "class": 82,
+      "party_size": 5
+    },
+    "545": {
+      "name": "Amara",
+      "class": 74,
+      "party_size": 3
+    },
+    "546": {
+      "name": "Maria",
+      "class": 74,
+      "party_size": 2
+    },
+    "547": {
+      "name": "Abigail",
+      "class": 74,
+      "party_size": 3
+    },
+    "548": {
+      "name": "Finn",
+      "class": 70,
+      "party_size": 1
+    },
+    "549": {
+      "name": "Garrett",
+      "class": 70,
+      "party_size": 3
+    },
+    "550": {
+      "name": "Tommy",
+      "class": 69,
+      "party_size": 5
+    },
+    "551": {
+      "name": "Tanya",
+      "class": 99,
+      "party_size": 2
+    },
+    "552": {
+      "name": "Shea",
+      "class": 80,
+      "party_size": 2
+    },
+    "553": {
+      "name": "Hugh",
+      "class": 80,
+      "party_size": 2
+    },
+    "554": {
+      "name": "Bryce",
+      "class": 61,
+      "party_size": 3
+    },
+    "555": {
+      "name": "Claire",
+      "class": 62,
+      "party_size": 4
+    },
+    "556": {
+      "name": "Mik {2D} Kia",
+      "class": 95,
+      "party_size": 2
+    },
+    "557": {
+      "name": "Violet",
+      "class": 103,
+      "party_size": 3
+    },
+    "558": {
+      "name": "Alexis",
+      "class": 100,
+      "party_size": 4
+    },
+    "559": {
+      "name": "Joy {2D} Meg",
+      "class": 92,
+      "party_size": 2
+    },
+    "560": {
+      "name": "Tisha",
+      "class": 74,
+      "party_size": 1
+    },
+    "561": {
+      "name": "Celina",
+      "class": 106,
+      "party_size": 1
+    },
+    "562": {
+      "name": "Rayna",
+      "class": 106,
+      "party_size": 1
+    },
+    "563": {
+      "name": "Gillian",
+      "class": 105,
+      "party_size": 3
+    },
+    "564": {
+      "name": "Destin",
+      "class": 57,
+      "party_size": 2
+    },
+    "565": {
+      "name": "Toby",
+      "class": 70,
+      "party_size": 3
+    },
+    "566": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "567": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 2
+    },
+    "568": {
+      "name": "Grunt",
+      "class": 85,
+      "party_size": 3
+    },
+    "569": {
+      "name": "Milo",
+      "class": 79,
+      "party_size": 2
+    },
+    "570": {
+      "name": "Chaz",
+      "class": 79,
+      "party_size": 2
+    },
+    "571": {
+      "name": "Harold",
+      "class": 79,
+      "party_size": 2
+    },
+    "572": {
+      "name": "Tylor",
+      "class": 69,
+      "party_size": 2
+    },
+    "573": {
+      "name": "Mymo",
+      "class": 70,
+      "party_size": 2
+    },
+    "574": {
+      "name": "Nicole",
+      "class": 74,
+      "party_size": 1
+    },
+    "575": {
+      "name": "Ava {2D} Geb",
+      "class": 96,
+      "party_size": 2
+    },
+    "576": {
+      "name": "Rose",
+      "class": 103,
+      "party_size": 2
+    },
+    "577": {
+      "name": "Samir",
+      "class": 70,
+      "party_size": 1
+    },
+    "578": {
+      "name": "Denise",
+      "class": 74,
+      "party_size": 2
+    },
+    "579": {
+      "name": "Miu {2D} Mia",
+      "class": 92,
+      "party_size": 2
+    },
+    "580": {
+      "name": "Earl",
+      "class": 65,
+      "party_size": 2
+    },
+    "581": {
+      "name": "Foster",
+      "class": 104,
+      "party_size": 1
+    },
+    "582": {
+      "name": "Larry",
+      "class": 104,
+      "party_size": 2
+    },
+    "583": {
+      "name": "Daryl",
+      "class": 65,
+      "party_size": 1
+    },
+    "584": {
+      "name": "Hector",
+      "class": 63,
+      "party_size": 2
+    },
+    "585": {
+      "name": "Dario",
+      "class": 75,
+      "party_size": 1
+    },
+    "586": {
+      "name": "Rodette",
+      "class": 75,
+      "party_size": 3
+    },
+    "587": {
+      "name": "Miah",
+      "class": 103,
+      "party_size": 2
+    },
+    "588": {
+      "name": "Eve {2D} Jon",
+      "class": 94,
+      "party_size": 2
+    },
+    "589": {
+      "name": "Mason",
+      "class": 77,
+      "party_size": 4
+    },
+    "590": {
+      "name": "Cyndy",
+      "class": 99,
+      "party_size": 3
+    },
+    "591": {
+      "name": "Jocelyn",
+      "class": 99,
+      "party_size": 2
+    },
+    "592": {
+      "name": "Evan",
+      "class": 78,
+      "party_size": 3
+    },
+    "593": {
+      "name": "Mark",
+      "class": 63,
+      "party_size": 2
+    },
+    "594": {
+      "name": "Logan",
+      "class": 48,
+      "party_size": 2
+    },
+    "595": {
+      "name": "Jackson",
+      "class": 102,
+      "party_size": 3
+    },
+    "596": {
+      "name": "Beth",
+      "class": 46,
+      "party_size": 3
+    },
+    "597": {
+      "name": "Katelyn",
+      "class": 102,
+      "party_size": 1
+    },
+    "598": {
+      "name": "Leroy",
+      "class": 86,
+      "party_size": 5
+    },
+    "599": {
+      "name": "Michelle",
+      "class": 86,
+      "party_size": 5
+    },
+    "600": {
+      "name": "Lex {2D} Nya",
+      "class": 93,
+      "party_size": 2
+    },
+    "601": {
+      "name": "Brandon",
+      "class": 104,
+      "party_size": 1
+    },
+    "602": {
+      "name": "Benjamin",
+      "class": 104,
+      "party_size": 3
+    },
+    "603": {
+      "name": "Edna",
+      "class": 106,
+      "party_size": 1
+    },
+    "604": {
+      "name": "Clifford",
+      "class": 88,
+      "party_size": 2
+    },
+    "605": {
+      "name": "Selphy",
+      "class": 105,
+      "party_size": 2
+    },
+    "606": {
+      "name": "Lawson",
+      "class": 104,
+      "party_size": 3
+    },
+    "607": {
+      "name": "Laura",
+      "class": 75,
+      "party_size": 3
+    },
+    "608": {
+      "name": "Bethany",
+      "class": 101,
+      "party_size": 1
+    },
+    "609": {
+      "name": "Allison",
+      "class": 101,
+      "party_size": 3
+    },
+    "610": {
+      "name": "Garret",
+      "class": 58,
+      "party_size": 1
+    },
+    "611": {
+      "name": "Jonah",
+      "class": 58,
+      "party_size": 4
+    },
+    "612": {
+      "name": "Vance",
+      "class": 58,
+      "party_size": 2
+    },
+    "613": {
+      "name": "Nash",
+      "class": 57,
+      "party_size": 3
+    },
+    "614": {
+      "name": "Cordell",
+      "class": 57,
+      "party_size": 2
+    },
+    "615": {
+      "name": "Dalia",
+      "class": 59,
+      "party_size": 4
+    },
+    "616": {
+      "name": "Joana",
+      "class": 59,
+      "party_size": 1
+    },
+    "617": {
+      "name": "Riley",
+      "class": 61,
+      "party_size": 2
+    },
+    "618": {
+      "name": "Marcy",
+      "class": 62,
+      "party_size": 3
+    },
+    "619": {
+      "name": "Layton",
+      "class": 104,
+      "party_size": 3
+    },
+    "620": {
+      "name": "Kelsey",
+      "class": 62,
+      "party_size": 2
+    },
+    "621": {
+      "name": "Kelsey",
+      "class": 62,
+      "party_size": 2
+    },
+    "622": {
+      "name": "Kelsey",
+      "class": 62,
+      "party_size": 2
+    },
+    "623": {
+      "name": "Ricky",
+      "class": 61,
+      "party_size": 1
+    },
+    "624": {
+      "name": "Ricky",
+      "class": 61,
+      "party_size": 1
+    },
+    "625": {
+      "name": "Ricky",
+      "class": 61,
+      "party_size": 1
+    },
+    "626": {
+      "name": "Jeff",
+      "class": 61,
+      "party_size": 2
+    },
+    "627": {
+      "name": "Jeff",
+      "class": 61,
+      "party_size": 2
+    },
+    "628": {
+      "name": "Jeff",
+      "class": 61,
+      "party_size": 2
+    },
+    "629": {
+      "name": "Isabelle",
+      "class": 62,
+      "party_size": 3
+    },
+    "630": {
+      "name": "Isabelle",
+      "class": 62,
+      "party_size": 3
+    },
+    "631": {
+      "name": "Isabelle",
+      "class": 62,
+      "party_size": 3
+    },
+    "632": {
+      "name": "Yasu",
+      "class": 57,
+      "party_size": 3
+    },
+    "633": {
+      "name": "Yasu",
+      "class": 57,
+      "party_size": 3
+    },
+    "634": {
+      "name": "Bernie",
+      "class": 68,
+      "party_size": 3
+    },
+    "635": {
+      "name": "Darian",
+      "class": 72,
+      "party_size": 2
+    },
+    "636": {
+      "name": "Chris",
+      "class": 61,
+      "party_size": 2
+    },
+    "637": {
+      "name": "Chris",
+      "class": 61,
+      "party_size": 2
+    },
+    "638": {
+      "name": "Chris",
+      "class": 61,
+      "party_size": 2
+    },
+    "639": {
+      "name": "Alicia",
+      "class": 62,
+      "party_size": 1
+    },
+    "640": {
+      "name": "Alicia",
+      "class": 62,
+      "party_size": 1
+    },
+    "641": {
+      "name": "Alicia",
+      "class": 62,
+      "party_size": 1
+    },
+    "642": {
+      "name": "Jeremy",
+      "class": 65,
+      "party_size": 2
+    },
+    "643": {
+      "name": "Mark",
+      "class": 63,
+      "party_size": 2
+    },
+    "644": {
+      "name": "Herman",
+      "class": 63,
+      "party_size": 2
+    },
+    "645": {
+      "name": "Herman",
+      "class": 63,
+      "party_size": 2
+    },
+    "646": {
+      "name": "Trent",
+      "class": 65,
+      "party_size": 2
+    },
+    "647": {
+      "name": "Megan",
+      "class": 59,
+      "party_size": 5
+    },
+    "648": {
+      "name": "Megan",
+      "class": 59,
+      "party_size": 5
+    },
+    "649": {
+      "name": "Glenn",
+      "class": 64,
+      "party_size": 3
+    },
+    "650": {
+      "name": "Rich",
+      "class": 72,
+      "party_size": 2
+    },
+    "651": {
+      "name": "Jaren",
+      "class": 66,
+      "party_size": 2
+    },
+    "652": {
+      "name": "Elliot",
+      "class": 69,
+      "party_size": 4
+    },
+    "653": {
+      "name": "Luca",
+      "class": 76,
+      "party_size": 2
+    },
+    "654": {
+      "name": "Sheila",
+      "class": 73,
+      "party_size": 2
+    },
+    "655": {
+      "name": "Robert",
+      "class": 79,
+      "party_size": 4
+    },
+    "656": {
+      "name": "Robert",
+      "class": 79,
+      "party_size": 4
+    },
+    "657": {
+      "name": "Susie",
+      "class": 62,
+      "party_size": 5
+    },
+    "658": {
+      "name": "Susie",
+      "class": 62,
+      "party_size": 5
+    },
+    "659": {
+      "name": "Susie",
+      "class": 62,
+      "party_size": 5
+    },
+    "660": {
+      "name": "Lukas",
+      "class": 66,
+      "party_size": 4
+    },
+    "661": {
+      "name": "Benny",
+      "class": 79,
+      "party_size": 2
+    },
+    "662": {
+      "name": "Benny",
+      "class": 79,
+      "party_size": 2
+    },
+    "663": {
+      "name": "Marlon",
+      "class": 79,
+      "party_size": 3
+    },
+    "664": {
+      "name": "Marlon",
+      "class": 79,
+      "party_size": 3
+    },
+    "665": {
+      "name": "Grace",
+      "class": 73,
+      "party_size": 2
+    },
+    "666": {
+      "name": "Chester",
+      "class": 79,
+      "party_size": 3
+    },
+    "667": {
+      "name": "Chester",
+      "class": 79,
+      "party_size": 3
+    },
+    "668": {
+      "name": "Becky",
+      "class": 62,
+      "party_size": 2
+    },
+    "669": {
+      "name": "Becky",
+      "class": 62,
+      "party_size": 2
+    },
+    "670": {
+      "name": "Becky",
+      "class": 62,
+      "party_size": 2
+    },
+    "671": {
+      "name": "Ron {2D} Mya",
+      "class": 95,
+      "party_size": 2
+    },
+    "672": {
+      "name": "Ron {2D} Mya",
+      "class": 95,
+      "party_size": 2
+    },
+    "673": {
+      "name": "Ron {2D} Mya",
+      "class": 95,
+      "party_size": 2
+    },
+    "674": {
+      "name": "Ruben",
+      "class": 66,
+      "party_size": 3
+    },
+    "675": {
+      "name": "Camron",
+      "class": 71,
+      "party_size": 2
+    },
+    "676": {
+      "name": "Jaxon",
+      "class": 66,
+      "party_size": 2
+    },
+    "677": {
+      "name": "Isaiah",
+      "class": 71,
+      "party_size": 2
+    },
+    "678": {
+      "name": "Corey",
+      "class": 71,
+      "party_size": 2
+    },
+    "679": {
+      "name": "Jacob",
+      "class": 79,
+      "party_size": 4
+    },
+    "680": {
+      "name": "Jacob",
+      "class": 79,
+      "party_size": 4
+    },
+    "681": {
+      "name": "Alice",
+      "class": 74,
+      "party_size": 2
+    },
+    "682": {
+      "name": "Darrin",
+      "class": 70,
+      "party_size": 4
+    },
+    "683": {
+      "name": "Missy",
+      "class": 62,
+      "party_size": 2
+    },
+    "684": {
+      "name": "Missy",
+      "class": 62,
+      "party_size": 2
+    },
+    "685": {
+      "name": "Wade",
+      "class": 69,
+      "party_size": 6
+    },
+    "686": {
+      "name": "Jack",
+      "class": 70,
+      "party_size": 1
+    },
+    "687": {
+      "name": "Lil {2D} Ian",
+      "class": 96,
+      "party_size": 2
+    },
+    "688": {
+      "name": "Lil {2D} Ian",
+      "class": 96,
+      "party_size": 2
+    },
+    "689": {
+      "name": "Finn",
+      "class": 70,
+      "party_size": 1
+    },
+    "690": {
+      "name": "Sharon",
+      "class": 99,
+      "party_size": 2
+    },
+    "691": {
+      "name": "Sharon",
+      "class": 99,
+      "party_size": 2
+    },
+    "692": {
+      "name": "Tanya",
+      "class": 99,
+      "party_size": 2
+    },
+    "693": {
+      "name": "Tanya",
+      "class": 99,
+      "party_size": 2
+    },
+    "694": {
+      "name": "Shea",
+      "class": 80,
+      "party_size": 2
+    },
+    "695": {
+      "name": "Shea",
+      "class": 80,
+      "party_size": 2
+    },
+    "696": {
+      "name": "Hugh",
+      "class": 80,
+      "party_size": 2
+    },
+    "697": {
+      "name": "Hugh",
+      "class": 80,
+      "party_size": 2
+    },
+    "698": {
+      "name": "Mik {2D} Kia",
+      "class": 95,
+      "party_size": 2
+    },
+    "699": {
+      "name": "Mik {2D} Kia",
+      "class": 95,
+      "party_size": 2
+    },
+    "700": {
+      "name": "Amira",
+      "class": 100,
+      "party_size": 3
+    },
+    "701": {
+      "name": "Joy {2D} Meg",
+      "class": 92,
+      "party_size": 2
+    },
+    "702": {
+      "name": "Rayna",
+      "class": 106,
+      "party_size": 1
+    },
+    "703": {
+      "name": "Destin",
+      "class": 57,
+      "party_size": 2
+    },
+    "704": {
+      "name": "Alize",
+      "class": 101,
+      "party_size": 3
+    },
+    "705": {
+      "name": "Gia {2D} Jes",
+      "class": 94,
+      "party_size": 2
+    },
+    "706": {
+      "name": "Gia {2D} Jes",
+      "class": 94,
+      "party_size": 2
+    },
+    "707": {
+      "name": "Milo",
+      "class": 79,
+      "party_size": 2
+    },
+    "708": {
+      "name": "Chaz",
+      "class": 79,
+      "party_size": 2
+    },
+    "709": {
+      "name": "Harold",
+      "class": 79,
+      "party_size": 2
+    },
+    "710": {
+      "name": "Nicole",
+      "class": 74,
+      "party_size": 1
+    },
+    "711": {
+      "name": "Jaclyn",
+      "class": 75,
+      "party_size": 3
+    },
+    "712": {
+      "name": "Samir",
+      "class": 70,
+      "party_size": 1
+    },
+    "713": {
+      "name": "Earl",
+      "class": 65,
+      "party_size": 2
+    },
+    "714": {
+      "name": "Larry",
+      "class": 104,
+      "party_size": 2
+    },
+    "715": {
+      "name": "Hector",
+      "class": 63,
+      "party_size": 2
+    },
+    "716": {
+      "name": "Dario",
+      "class": 75,
+      "party_size": 1
+    },
+    "717": {
+      "name": "Rodette",
+      "class": 75,
+      "party_size": 3
+    },
+    "718": {
+      "name": "Mason",
+      "class": 77,
+      "party_size": 4
+    },
+    "719": {
+      "name": "Nicolas",
+      "class": 102,
+      "party_size": 2
+    },
+    "720": {
+      "name": "Madeline",
+      "class": 102,
+      "party_size": 2
+    },
+    "721": {
+      "name": "Cyndy",
+      "class": 99,
+      "party_size": 3
+    },
+    "722": {
+      "name": "Evan",
+      "class": 78,
+      "party_size": 3
+    },
+    "723": {
+      "name": "Jackson",
+      "class": 102,
+      "party_size": 3
+    },
+    "724": {
+      "name": "Katelyn",
+      "class": 102,
+      "party_size": 1
+    },
+    "725": {
+      "name": "Leroy",
+      "class": 86,
+      "party_size": 5
+    },
+    "726": {
+      "name": "Michelle",
+      "class": 86,
+      "party_size": 5
+    },
+    "727": {
+      "name": "Lex {2D} Nya",
+      "class": 93,
+      "party_size": 2
+    },
+    "728": {
+      "name": "Colton",
+      "class": 58,
+      "party_size": 3
+    },
+    "729": {
+      "name": "Colton",
+      "class": 58,
+      "party_size": 3
+    },
+    "730": {
+      "name": "Colton",
+      "class": 58,
+      "party_size": 3
+    },
+    "731": {
+      "name": "Matthew",
+      "class": 70,
+      "party_size": 2
+    },
+    "732": {
+      "name": "Tony",
+      "class": 70,
+      "party_size": 2
+    },
+    "733": {
+      "name": "Melissa",
+      "class": 74,
+      "party_size": 2
+    },
+    "734": {
+      "name": "Lorelei",
+      "class": 87,
+      "party_size": 5
+    },
+    "735": {
+      "name": "Bruno",
+      "class": 87,
+      "party_size": 5
+    },
+    "736": {
+      "name": "Agatha",
+      "class": 87,
+      "party_size": 5
+    },
+    "737": {
+      "name": "Lance",
+      "class": 87,
+      "party_size": 5
+    },
+    "738": {
+      "name": "Terry",
+      "class": 90,
+      "party_size": 6
+    },
+    "739": {
+      "name": "Terry",
+      "class": 90,
+      "party_size": 6
+    },
+    "740": {
+      "name": "Terry",
+      "class": 90,
+      "party_size": 6
+    },
+    "741": {
+      "name": "Paxton",
+      "class": 71,
+      "party_size": 2
+    }
+  }
+}

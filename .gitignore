@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+data/links.json
+data/memorial.json
+data/events.json
+data/runs/
+data/backups/
+*.State
+*.sav
+slink_path.cfg
+node_modules/
+.claude/

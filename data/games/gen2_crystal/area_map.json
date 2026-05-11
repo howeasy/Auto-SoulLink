@@ -1,0 +1,498 @@
+{
+  "268": {
+    "area_id": "route_38",
+    "name": "Route 38"
+  },
+  "269": {
+    "area_id": "route_39",
+    "name": "Route 39"
+  },
+  "270": {
+    "area_id": "olivine_city",
+    "name": "Olivine City"
+  },
+  "517": {
+    "area_id": "route_42",
+    "name": "Route 42"
+  },
+  "518": {
+    "area_id": "route_44",
+    "name": "Route 44"
+  },
+  "769": {
+    "area_id": "sprout_tower",
+    "name": "Sprout Tower"
+  },
+  "770": {
+    "area_id": "sprout_tower",
+    "name": "Sprout Tower 2F"
+  },
+  "771": {
+    "area_id": "sprout_tower",
+    "name": "Sprout Tower 3F"
+  },
+  "772": {
+    "area_id": "tin_tower",
+    "name": "Tin Tower"
+  },
+  "773": {
+    "area_id": "tin_tower",
+    "name": "Tin Tower 2F"
+  },
+  "774": {
+    "area_id": "tin_tower",
+    "name": "Tin Tower 3F"
+  },
+  "775": {
+    "area_id": "tin_tower",
+    "name": "Tin Tower 4F"
+  },
+  "776": {
+    "area_id": "tin_tower",
+    "name": "Tin Tower 5F"
+  },
+  "777": {
+    "area_id": "tin_tower",
+    "name": "Tin Tower 6F"
+  },
+  "778": {
+    "area_id": "tin_tower",
+    "name": "Tin Tower 7F"
+  },
+  "779": {
+    "area_id": "tin_tower",
+    "name": "Tin Tower 8F"
+  },
+  "780": {
+    "area_id": "tin_tower",
+    "name": "Tin Tower 9F"
+  },
+  "781": {
+    "area_id": "burned_tower",
+    "name": "Burned Tower"
+  },
+  "782": {
+    "area_id": "burned_tower",
+    "name": "Burned Tower B1F"
+  },
+  "783": {
+    "area_id": "national_park",
+    "name": "National Park"
+  },
+  "784": {
+    "area_id": "national_park",
+    "name": "National Park Bug Contest"
+  },
+  "790": {
+    "area_id": "ruins_of_alph",
+    "name": "Ruins of Alph"
+  },
+  "795": {
+    "area_id": "ruins_of_alph",
+    "name": "Ruins of Alph Inner Chamber"
+  },
+  "805": {
+    "area_id": "union_cave",
+    "name": "Union Cave"
+  },
+  "806": {
+    "area_id": "union_cave",
+    "name": "Union Cave B1F"
+  },
+  "807": {
+    "area_id": "union_cave",
+    "name": "Union Cave B2F"
+  },
+  "808": {
+    "area_id": "slowpoke_well",
+    "name": "Slowpoke Well"
+  },
+  "809": {
+    "area_id": "slowpoke_well",
+    "name": "Slowpoke Well B2F"
+  },
+  "820": {
+    "area_id": "ilex_forest",
+    "name": "Ilex Forest"
+  },
+  "825": {
+    "area_id": "mt_mortar",
+    "name": "Mt. Mortar"
+  },
+  "826": {
+    "area_id": "mt_mortar",
+    "name": "Mt. Mortar 1F Inside"
+  },
+  "827": {
+    "area_id": "mt_mortar",
+    "name": "Mt. Mortar 2F Inside"
+  },
+  "828": {
+    "area_id": "mt_mortar",
+    "name": "Mt. Mortar B1F"
+  },
+  "829": {
+    "area_id": "ice_path",
+    "name": "Ice Path"
+  },
+  "830": {
+    "area_id": "ice_path",
+    "name": "Ice Path B1F"
+  },
+  "831": {
+    "area_id": "ice_path",
+    "name": "Ice Path B2F Mahogany Side"
+  },
+  "832": {
+    "area_id": "ice_path",
+    "name": "Ice Path B2F Blackthorn Side"
+  },
+  "833": {
+    "area_id": "ice_path",
+    "name": "Ice Path B3F"
+  },
+  "834": {
+    "area_id": "whirl_islands",
+    "name": "Whirl Islands"
+  },
+  "835": {
+    "area_id": "whirl_islands",
+    "name": "Whirl Islands NE"
+  },
+  "836": {
+    "area_id": "whirl_islands",
+    "name": "Whirl Islands SW"
+  },
+  "837": {
+    "area_id": "whirl_islands",
+    "name": "Whirl Islands Cave"
+  },
+  "838": {
+    "area_id": "whirl_islands",
+    "name": "Whirl Islands SE"
+  },
+  "839": {
+    "area_id": "whirl_islands",
+    "name": "Whirl Islands B1F"
+  },
+  "840": {
+    "area_id": "whirl_islands",
+    "name": "Whirl Islands B2F"
+  },
+  "841": {
+    "area_id": "whirl_islands",
+    "name": "Whirl Islands Lugia Chamber"
+  },
+  "842": {
+    "area_id": "silver_cave",
+    "name": "Silver Cave"
+  },
+  "843": {
+    "area_id": "silver_cave",
+    "name": "Silver Cave Room 2"
+  },
+  "844": {
+    "area_id": "silver_cave",
+    "name": "Silver Cave Room 3"
+  },
+  "845": {
+    "area_id": "silver_cave",
+    "name": "Silver Cave Item Rooms"
+  },
+  "846": {
+    "area_id": "dark_cave",
+    "name": "Dark Cave"
+  },
+  "847": {
+    "area_id": "dark_cave",
+    "name": "Dark Cave Blackthorn Entrance"
+  },
+  "848": {
+    "area_id": "dragons_den",
+    "name": "Dragon's Den"
+  },
+  "849": {
+    "area_id": "dragons_den",
+    "name": "Dragon's Den B1F"
+  },
+  "850": {
+    "area_id": "dragons_den",
+    "name": "Dragon Shrine"
+  },
+  "851": {
+    "area_id": "tohjo_falls",
+    "name": "Tohjo Falls"
+  },
+  "852": {
+    "area_id": "digletts_cave",
+    "name": "Diglett's Cave"
+  },
+  "853": {
+    "area_id": "mt_moon",
+    "name": "Mt. Moon"
+  },
+  "855": {
+    "area_id": "rock_tunnel",
+    "name": "Rock Tunnel"
+  },
+  "856": {
+    "area_id": "rock_tunnel",
+    "name": "Rock Tunnel B1F"
+  },
+  "859": {
+    "area_id": "victory_road",
+    "name": "Victory Road"
+  },
+  "1033": {
+    "area_id": "ecruteak_city",
+    "name": "Ecruteak City"
+  },
+  "1288": {
+    "area_id": "route_45",
+    "name": "Route 45"
+  },
+  "1289": {
+    "area_id": "route_46",
+    "name": "Route 46"
+  },
+  "1290": {
+    "area_id": "blackthorn_city",
+    "name": "Blackthorn City"
+  },
+  "1541": {
+    "area_id": "route_19",
+    "name": "Route 19"
+  },
+  "1542": {
+    "area_id": "route_20",
+    "name": "Route 20"
+  },
+  "1543": {
+    "area_id": "route_21",
+    "name": "Route 21"
+  },
+  "1544": {
+    "area_id": "cinnabar_island",
+    "name": "Cinnabar Island"
+  },
+  "1804": {
+    "area_id": "route_4",
+    "name": "Route 4"
+  },
+  "1805": {
+    "area_id": "route_9",
+    "name": "Route 9"
+  },
+  "1806": {
+    "area_id": "route_10",
+    "name": "Route 10"
+  },
+  "1807": {
+    "area_id": "route_24",
+    "name": "Route 24"
+  },
+  "1808": {
+    "area_id": "route_25",
+    "name": "Route 25"
+  },
+  "1809": {
+    "area_id": "cerulean_city",
+    "name": "Cerulean City"
+  },
+  "2054": {
+    "area_id": "route_33",
+    "name": "Route 33"
+  },
+  "2309": {
+    "area_id": "route_43",
+    "name": "Route 43"
+  },
+  "2310": {
+    "area_id": "lake_of_rage",
+    "name": "Lake of Rage"
+  },
+  "2561": {
+    "area_id": "route_32",
+    "name": "Route 32"
+  },
+  "2562": {
+    "area_id": "route_35",
+    "name": "Route 35"
+  },
+  "2563": {
+    "area_id": "route_36",
+    "name": "Route 36"
+  },
+  "2564": {
+    "area_id": "route_37",
+    "name": "Route 37"
+  },
+  "2565": {
+    "area_id": "violet_city",
+    "name": "Violet City"
+  },
+  "2817": {
+    "area_id": "route_34",
+    "name": "Route 34"
+  },
+  "2822": {
+    "area_id": "goldenrod_city",
+    "name": "Goldenrod City"
+  },
+  "3073": {
+    "area_id": "route_6",
+    "name": "Route 6"
+  },
+  "3074": {
+    "area_id": "route_11",
+    "name": "Route 11"
+  },
+  "3075": {
+    "area_id": "vermilion_city",
+    "name": "Vermilion City"
+  },
+  "3329": {
+    "area_id": "route_1",
+    "name": "Route 1"
+  },
+  "3330": {
+    "area_id": "pallet_town",
+    "name": "Pallet Town"
+  },
+  "3585": {
+    "area_id": "route_3",
+    "name": "Route 3"
+  },
+  "3841": {
+    "area_id": "olivine_city",
+    "name": "Olivine Port"
+  },
+  "3842": {
+    "area_id": "vermilion_city",
+    "name": "Vermilion Port"
+  },
+  "3850": {
+    "area_id": "mt_moon",
+    "name": "Mt. Moon Square"
+  },
+  "3852": {
+    "area_id": "tin_tower",
+    "name": "Tin Tower Roof"
+  },
+  "4353": {
+    "area_id": "route_13",
+    "name": "Route 13"
+  },
+  "4354": {
+    "area_id": "route_14",
+    "name": "Route 14"
+  },
+  "4355": {
+    "area_id": "route_15",
+    "name": "Route 15"
+  },
+  "4356": {
+    "area_id": "route_18",
+    "name": "Route 18"
+  },
+  "4357": {
+    "area_id": "fuchsia_city",
+    "name": "Fuchsia City"
+  },
+  "4609": {
+    "area_id": "route_8",
+    "name": "Route 8"
+  },
+  "4610": {
+    "area_id": "route_12",
+    "name": "Route 12"
+  },
+  "4865": {
+    "area_id": "route_28",
+    "name": "Route 28"
+  },
+  "4866": {
+    "area_id": "silver_cave",
+    "name": "Silver Cave Outside"
+  },
+  "5377": {
+    "area_id": "route_7",
+    "name": "Route 7"
+  },
+  "5378": {
+    "area_id": "route_16",
+    "name": "Route 16"
+  },
+  "5379": {
+    "area_id": "route_17",
+    "name": "Route 17"
+  },
+  "5380": {
+    "area_id": "celadon_city",
+    "name": "Celadon City"
+  },
+  "5633": {
+    "area_id": "route_40",
+    "name": "Route 40"
+  },
+  "5634": {
+    "area_id": "route_41",
+    "name": "Route 41"
+  },
+  "5635": {
+    "area_id": "cianwood_city",
+    "name": "Cianwood City"
+  },
+  "5636": {
+    "area_id": "cianwood_city",
+    "name": "Mania's House"
+  },
+  "5889": {
+    "area_id": "route_2",
+    "name": "Route 2"
+  },
+  "5890": {
+    "area_id": "route_22",
+    "name": "Route 22"
+  },
+  "5891": {
+    "area_id": "viridian_city",
+    "name": "Viridian City"
+  },
+  "6145": {
+    "area_id": "route_26",
+    "name": "Route 26"
+  },
+  "6146": {
+    "area_id": "route_27",
+    "name": "Route 27"
+  },
+  "6147": {
+    "area_id": "route_29",
+    "name": "Route 29"
+  },
+  "6148": {
+    "area_id": "new_bark_town",
+    "name": "New Bark Town"
+  },
+  "6149": {
+    "area_id": "elms_lab",
+    "name": "Elm's Lab"
+  },
+  "6401": {
+    "area_id": "route_5",
+    "name": "Route 5"
+  },
+  "6657": {
+    "area_id": "route_30",
+    "name": "Route 30"
+  },
+  "6658": {
+    "area_id": "route_31",
+    "name": "Route 31"
+  },
+  "6659": {
+    "area_id": "cherrygrove_city",
+    "name": "Cherrygrove City"
+  }
+}
