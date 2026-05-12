@@ -1667,12 +1667,14 @@
         _data      = json;
         _connected = true;
         _enrichEnemyMons();
+        // Don't repaint while the user is typing inside the panel.
+        if (_isPanelInputFocused()) { _fetchPending = true; return; }
         refreshPanel();
       })
       .catch(function (err) {
         _fetching  = false;
         _connected = false;
-        refreshPanel();
+        if (!_isPanelInputFocused()) refreshPanel();
         return Promise.reject(err);
       });
   }
