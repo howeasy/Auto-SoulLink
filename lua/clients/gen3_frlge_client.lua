@@ -1405,7 +1405,7 @@ local function on_frame()
     -- 5. Flush one deferred sync cmd if safe (BEFORE party diff so writes are clean)
     -- Gate on: overworld, cooldown expired, NOT the battle-end frame, and
     -- post-battle grace window finished (avoids writes during catch/exp/evo anims).
-    local safe_now = is_overworld and sync_cooldown == 0
+    local safe_now = is_overworld and sync_cooldown == 0 and not party_frozen
                      and not battle_just_ended and post_battle_frames == 0
                      and not party_frozen
     if #pending_sync_cmds > 0 then
