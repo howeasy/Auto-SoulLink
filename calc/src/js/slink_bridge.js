@@ -1705,6 +1705,32 @@
     }
   }, { passive: true });
 
+  // Typing guard: don't wipe the panel while the user is typing in an input
+  // inside it (e.g. the Prep tab search box).
+  function _isPanelInputFocused() {
+    var ae = document.activeElement;
+    if (!ae) return false;
+    var tag = ae.tagName;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA') return false;
+    var panel = document.getElementById(PANEL_ID);
+    return !!(panel && panel.contains(ae));
+  }
+
+  // When the input loses focus, flush any deferred fetch.
+  document.addEventListener('focusout', function (e) {
+    var panel = document.getElementById(PANEL_ID);
+    if (!panel || !panel.contains(e.target)) return;
+    var tag = e.target.tagName;
+    if (tag !== 'INPUT' && tag !== 'TEXTAREA') return;
+    // Small delay so the new focus settles before we re-check.
+    setTimeout(function () {
+      if (!_isPanelInputFocused() && _fetchPending) {
+        _fetchPending = false;
+        fetchMons();
+      }
+    }, 100);
+  });
+
   /**
    * Subscribe to /api/events SSE.  Re-fetches /api/calc/mons on every ping.
    * If SSE errors out, schedules a retry after 10 s.
@@ -1722,9 +1748,9 @@
     var src   = new EventSource(SLINK_BASE + '/api/events');
     _sseSource = src;
 
-    // Re-fetch on each state change signal — defer if user is interacting
-    src.addEventListener('ping',   function () { _userInteracting ? (_fetchPending = true) : fetchMons(); });
-    src.addEventListener('status', function () { _userInteracting ? (_fetchPending = true) : fetchMons(); }); // belt-and-suspenders
+    // Re-fetch on each state change signal — defer if user is interacting or typing
+    src.addEventListener('ping',   function () { (_userInteracting || _isPanelInputFocused()) ? (_fetchPending = true) : fetchMons(); });
+    src.addEventListener('status', function () { (_userInteracting || _isPanelInputFocused()) ? (_fetchPending = true) : fetchMons(); }); // belt-and-suspenders
 
     src.onerror = function () {
       src.close();
