@@ -1,6 +1,6 @@
--- gen1_rby_locations.lua — Generated location name lookup for Gen 1 RBY
+-- gen1_rby_locations.lua â€” Generated location name lookup for Gen 1 RBY
 -- area_id -> display name (from data/games/gen1_rby/area_map.json)
--- DO NOT EDIT — regenerate with: python tools/gen_gen1_area_map.py
+-- DO NOT EDIT â€” regenerate with: python tools/gen_gen1_area_map.py
 
 local T = {}
 

@@ -1,6 +1,6 @@
--- gen1_rby_areas.lua — Generated area lookup table for Gen 1 RBY
+-- gen1_rby_areas.lua â€” Generated area lookup table for Gen 1 RBY
 -- mapId -> area_id (from data/games/gen1_rby/area_map.json)
--- DO NOT EDIT — regenerate with: python tools/gen_gen1_area_map.py
+-- DO NOT EDIT â€” regenerate with: python tools/gen_gen1_area_map.py
 
 local T = {}
 

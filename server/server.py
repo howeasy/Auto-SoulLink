@@ -927,106 +927,232 @@ _STATUS_HTML = """<!DOCTYPE html>
 # return early when it is unchanged (see _STREAM_BADGES_JS for the pattern).
 
 _STREAM_SHARED_CSS = """
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: 100%; height: 100%; overflow: hidden; }
-  body { background: transparent; font-family: 'Segoe UI', system-ui, sans-serif; font-size: clamp(10px, 1.6vmin, 15px); }
-  body.theme-dark { color: #eee; }
-  body.theme-light { color: #222; }
-  #root { padding: clamp(3px, 1vmin, 10px); height: 100%; overflow: hidden; }
-
-  /* Sprites — stream overlays use spriteTag() for consistent markup */
-  .mon-sprite { width: clamp(24px, 5vmin, 44px); aspect-ratio: 1; image-rendering: pixelated; flex-shrink: 0; }
-
-  /* Section label */
-  .section-label { font-size: 0.72em; font-weight: bold; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.55; margin-bottom: clamp(2px, 0.4vmin, 6px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .theme-dark .section-label { color: #ff0; opacity: 0.7; }
-  .theme-light .section-label { color: #444; opacity: 0.7; }
-
-  /* Party flex layout */
-  .party-grid { display: flex; flex-direction: column; gap: clamp(2px, 0.5vmin, 5px); }
-  .mon-card { display: flex; align-items: center; gap: clamp(3px, 0.8vmin, 7px); min-width: 0; }
-  .mon-card.fainted { opacity: 0.5; }
-  .mon-card.fainted .mon-name { color: #f44; }
-  .mon-info { flex: 1; min-width: 0; overflow: hidden; }
-  .mon-name { font-size: clamp(0.75em, 1.2vmin, 0.92em); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
-  .mon-stats { display: flex; align-items: center; gap: clamp(2px, 0.5vmin, 5px); }
-  .mon-level { font-size: 0.72em; flex-shrink: 0; opacity: 0.6; }
-
-  /* HP bar fills available space */
-  .hp-bar-bg { flex: 1; min-width: clamp(20px, 3vw, 60px); height: clamp(3px, 0.5vmin, 5px); border-radius: 99px; }
-  .theme-dark .hp-bar-bg { background: rgba(255,255,255,0.15); }
-  .theme-light .hp-bar-bg { background: rgba(0,0,0,0.12); }
-  .hp-bar { height: 100%; border-radius: 99px; transition: width 0.4s; }
-  .hp-high { background: #4f4; }
-  .hp-mid  { background: #fa0; }
-  .hp-low  { background: #f44; }
-  .hp-label { font-size: 0.7em; flex-shrink: 0; opacity: 0.6; }
-
-  /* Status */
-  .alive { color: #4f4; }
-  .dead, .dead_zone { color: #f44; }
-  .pending { color: #fa0; }
-  .dim { opacity: 0.45; }
-
-  /* Tables (links overlay) */
-  table { border-collapse: collapse; width: 100%; }
-  th { font-size: 0.68em; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 4px; text-align: left; opacity: 0.5; }
-  .theme-dark th { border-bottom: 1px solid rgba(255,255,255,0.1); }
-  .theme-light th { border-bottom: 1px solid rgba(0,0,0,0.1); }
-  td { padding: 2px 4px; font-size: 0.82em; }
-  .theme-dark td { border-bottom: 1px solid rgba(255,255,255,0.05); }
-  .theme-light td { border-bottom: 1px solid rgba(0,0,0,0.05); }
-
-  /* Links flex rows */
-  .link-row { display: flex; align-items: center; gap: clamp(3px, 0.8vmin, 8px); padding: clamp(2px, 0.4vmin, 4px) 0; }
-  .theme-dark .link-row { border-bottom: 1px solid rgba(255,255,255,0.05); }
-  .theme-light .link-row { border-bottom: 1px solid rgba(0,0,0,0.05); }
-  .link-side { flex: 1; min-width: 0; display: flex; align-items: center; gap: clamp(2px, 0.5vmin, 4px); }
-  .link-side-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.82em; }
-  .link-sep { flex-shrink: 0; opacity: 0.35; font-size: 0.75em; }
-  .link-status { flex-shrink: 0; font-size: 0.78em; font-weight: bold; }
-
-  /* Death counter — fills widget */
-  .counters-wrap { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
-  .counters { display: flex; gap: clamp(12px, 5vw, 50px); align-items: center; }
-  .counter-box { text-align: center; }
-  .counter { font-size: clamp(2em, 10vmin, 6em); font-weight: bold; line-height: 1; }
-  .counter-label { font-size: clamp(0.55em, 1.2vmin, 0.8em); opacity: 0.55; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
-
+  :root {
+    --c-alive:#3de85a; --c-dead:#f03838; --c-pend:#f8a020;
+    --c-gold:#f8d030;  --c-txt:#e6e6e6;  --c-dim:rgba(220,220,220,.4);
+    --c-bg:rgba(7,9,16,.90); --c-card:rgba(255,255,255,.038);
+    --c-edge:rgba(255,255,255,.09); --c-sep:rgba(255,255,255,.06);
+    --px:'Press Start 2P','Courier New',monospace;
+  }
+  body.theme-light {
+    --c-alive:#1a9a38; --c-dead:#c82020; --c-pend:#c86010;
+    --c-gold:#1a5fb0;  --c-txt:#18182a;  --c-dim:rgba(24,24,42,.5);
+    --c-bg:rgba(238,242,252,.92); --c-card:rgba(0,0,0,.028);
+    --c-edge:rgba(0,0,0,.10); --c-sep:rgba(0,0,0,.07);
+  }
+  body.theme-transparent {
+    --c-bg:transparent; --c-card:transparent;
+    --c-edge:transparent; --c-sep:transparent;
+  }
+  body.theme-transparent #root{border:none}
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden}
+  body{background:transparent;font-family:system-ui,'Segoe UI',sans-serif;font-size:clamp(14px,4.5vmin,22px);color:var(--c-txt);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+  #root{width:100%;height:100%;background:var(--c-bg);border:1px solid var(--c-edge);border-top:2px solid var(--c-gold);padding:clamp(8px,1.6vmin,18px);overflow:hidden;display:flex;flex-direction:column;gap:clamp(4px,.8vmin,10px);transform:translateZ(0);will-change:transform}
+  /* Widget title — Press Start 2P: fixed 10px so all overlays render the same regardless of OBS window size */
+  .wtitle{font-family:var(--px);font-size:10px;-webkit-font-smoothing:none;color:var(--c-gold);letter-spacing:.06em;padding-bottom:clamp(4px,.7vmin,9px);border-bottom:1px solid var(--c-sep);flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  /* Sprites */
+  .mon-sprite{width:clamp(38px,6.5vmin,58px);aspect-ratio:1;image-rendering:pixelated;image-rendering:crisp-edges;flex-shrink:0}
+  .lk-row .mon-sprite{width:clamp(30px,5vmin,46px)}
+  /* HP system */
+  .hp-row{display:flex;align-items:center;gap:clamp(3px,.55vmin,7px);margin-top:clamp(2px,.35vmin,5px)}
+  .hp-lbl{font-size:.78em;color:var(--c-dim);flex-shrink:0}
+  .hp-trk{flex:1;min-width:clamp(24px,4vw,70px);height:clamp(5px,.75vmin,8px);background:rgba(128,128,128,.18);border-radius:99px;overflow:hidden}
+  .hp-fill{height:100%;border-radius:99px;transition:width .4s ease}
+  .hp-h{background:var(--c-alive)}.hp-m{background:#f0c030}.hp-l{background:var(--c-dead);box-shadow:0 0 4px var(--c-dead)}
+  .hp-pct{font-size:.83em;min-width:3.3ch;text-align:right;flex-shrink:0;opacity:.62}
+  .lv{font-size:.8em;background:rgba(128,128,128,.15);padding:1px 5px;border-radius:3px;flex-shrink:0;white-space:nowrap;opacity:.8}
+  /* Party list — fainted: opacity only, no filter (filter rasterises the whole layer → blurs text) */
+  .p-list{display:flex;flex-direction:column;gap:clamp(3px,.55vmin,7px);flex:1;overflow:hidden}
+  .mc{display:flex;align-items:center;gap:clamp(6px,1.1vmin,13px);padding:clamp(4px,.7vmin,9px) clamp(7px,1.1vmin,13px);background:var(--c-card);border-radius:4px;border-left:3px solid rgba(128,128,128,.18);min-width:0}
+  .mc.bh{border-left-color:var(--c-alive)}.mc.bm{border-left-color:#f0c030}.mc.bl,.mc.fnt{border-left-color:var(--c-dead)}.mc.fnt{opacity:.45}
+  .mc.fnt .mon-sprite{filter:grayscale(60%)}
+  .m-info{flex:1;min-width:0}
+  .m-name{font-size:1em;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+  .m-name .sp{font-weight:400;opacity:.48;font-size:.87em}
+  .fnt-tag{font-size:.72em;background:var(--c-dead);color:#fff;padding:1px 6px;border-radius:3px;margin-left:4px;vertical-align:middle}
+  /* Links list */
+  .lk-list{display:flex;flex-direction:column;gap:clamp(3px,.55vmin,6px);flex:1;overflow:hidden}
+  .lk-row{display:flex;align-items:center;gap:clamp(4px,.8vmin,10px);padding:clamp(4px,.7vmin,8px) clamp(7px,1.1vmin,13px);background:var(--c-card);border-radius:4px;border-left:3px solid rgba(128,128,128,.18);min-width:0}
+  .lk-row.la{border-left-color:var(--c-alive)}.lk-row.ld{border-left-color:var(--c-dead);opacity:.45}
+  .lk-row.ld .mon-sprite{filter:grayscale(60%)}
+  .lk-half{flex:1;min-width:0;display:flex;align-items:center;gap:clamp(3px,.55vmin,7px)}.lk-half.r{flex-direction:row-reverse}
+  .lk-nm{flex:1;min-width:0;font-size:.9em;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lk-half.r .lk-nm{text-align:right}
+  .lk-lv{font-size:.82em;opacity:.5;flex-shrink:0;white-space:nowrap}
+  .lk-div{flex-shrink:0;font-size:1.1em;opacity:.3;color:var(--c-gold)}
+  /* Deaths counter */
+  .d-wrap{display:flex;align-items:center;justify-content:center;width:100%;height:100%}
+  .d-grid{display:flex;gap:clamp(18px,9vw,80px);align-items:center}
+  .d-box{text-align:center;line-height:1}
+  .d-num{font-family:var(--px);font-size:clamp(2.8em,13vmin,7em);line-height:1;display:block;-webkit-font-smoothing:none}
+  .d-lbl{font-family:var(--px);font-size:clamp(8px,1.6vmin,14px);-webkit-font-smoothing:none;opacity:.5;letter-spacing:.07em;display:block;margin-top:clamp(6px,1.1vmin,12px)}
+  .d-alive .d-num{color:var(--c-alive);text-shadow:0 0 20px rgba(61,232,90,.45)}.d-dead .d-num{color:var(--c-dead);text-shadow:0 0 20px rgba(240,56,56,.45)}
+  .d-attempts .d-num{color:var(--c-gold);text-shadow:0 0 20px rgba(248,208,48,.45)}
   /* Event feed */
-  .event-row { display: flex; gap: 5px; align-items: baseline; padding: clamp(1px, 0.3vmin, 3px) 0; font-size: 0.82em; line-height: 1.35; }
-  .theme-dark .event-row { border-bottom: 1px solid rgba(255,255,255,0.05); }
-  .theme-light .event-row { border-bottom: 1px solid rgba(0,0,0,0.05); }
-  .event-time { opacity: 0.4; flex-shrink: 0; font-size: 0.8em; min-width: 4em; }
-  .event-player { font-weight: bold; flex-shrink: 0; min-width: 1.5em; }
-  .event-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .event-type-capture { color: #4f4; }
-  .event-type-faint { color: #f44; }
-  .event-type-whiteout { color: #f80; }
-  .event-type-no_catch { color: #fa0; }
-  .event-type-area_enter { color: #7cf; }
-  .event-type-hello { opacity: 0.4; }
-  .event-type-linked { color: #4f4; font-weight: bold; }
-  .event-type-dead_zone { color: #f44; font-weight: bold; }
-  .event-type-force_faint { color: #f88; }
-  .event-type-key_change { color: #c8f; }
-  .event-type-violation { color: #f80; font-weight: bold; }
-  .event-type-reroll { color: #8cf; }
+  .e-list{display:flex;flex-direction:column;flex:1;overflow:hidden}
+  .e-row{display:flex;align-items:baseline;gap:clamp(5px,.9vmin,11px);padding:clamp(3px,.5vmin,6px) 0;border-bottom:1px solid var(--c-sep);overflow:hidden;flex-shrink:0}
+  .e-ts{font-family:var(--px);font-size:clamp(7px,1.3vmin,11px);-webkit-font-smoothing:none;opacity:.36;flex-shrink:0;white-space:nowrap;padding-top:1px;min-width:4.5em}
+  .e-who{font-family:var(--px);font-size:clamp(7px,1.3vmin,11px);-webkit-font-smoothing:none;font-weight:bold;flex-shrink:0;white-space:nowrap;padding-top:1px}
+  .e-msg{flex:1;min-width:0;font-size:.93em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ec{color:var(--c-alive)}.ef{color:var(--c-dead)}.ew{color:#f87020;font-weight:700}.en{color:var(--c-pend)}.ea{color:#5ac8f8}.el{color:var(--c-alive);font-weight:700}.ed{color:var(--c-dead);font-weight:700}.ev{color:#f8a030;font-weight:700}.ek{color:#c080f8}.eh{opacity:.32}
+  /* Area stats */
+  .a-wrap{display:flex;flex-direction:column;gap:clamp(6px,1.2vmin,14px);flex:1;justify-content:center}
+  .a-row{display:flex;align-items:center;gap:clamp(8px,1.6vmin,20px)}
+  .a-num{font-family:var(--px);font-size:clamp(20px,4.2vmin,38px);-webkit-font-smoothing:none;min-width:3ch;text-align:right;flex-shrink:0;line-height:1}
+  .a-lbl{font-size:.93em;flex:1;opacity:.8}
+  .an{color:var(--c-alive)}.ad{color:var(--c-dead)}.ap{color:var(--c-pend)}
+  /* Badges */
+  .bdg-wrap{display:flex;gap:clamp(10px,2.8vw,32px);flex-wrap:wrap;align-items:flex-start}
+  .bdg-player{display:flex;flex-direction:column;gap:clamp(4px,.8vmin,9px)}
+  .bdg-name{font-family:var(--px);font-size:clamp(7px,1.4vmin,12px);-webkit-font-smoothing:none;color:var(--c-gold);letter-spacing:.03em;white-space:nowrap}
+  .bdg-strip{display:flex;gap:clamp(3px,.6vw,8px);flex-wrap:wrap}
+  .bdg-img{width:clamp(24px,4.5vmin,42px);aspect-ratio:1;image-rendering:pixelated;image-rendering:crisp-edges;transition:opacity .2s}
+  .bdg-img.on{opacity:1}.bdg-img.off{opacity:.1;filter:grayscale(100%)}
 
-  /* Area tracker */
-  .area-row { display: flex; gap: 8px; align-items: center; font-size: 0.9em; padding: 2px 0; }
-  .area-count { font-size: clamp(1.2em, 3vmin, 2em); font-weight: bold; min-width: 2ch; text-align: right; flex-shrink: 0; }
+  /* ─── Links widget (redesigned) ──────────────────────────────────────── */
+  /* Alive pair card */
+  .lk-card{background:var(--c-card);border-radius:5px;border-left:3px solid var(--c-alive);padding:clamp(4px,.7vmin,9px) clamp(6px,1.1vmin,13px);display:flex;flex-direction:column;gap:clamp(2px,.4vmin,5px)}
+  .lk-area{font-size:.72em;color:var(--c-gold);opacity:.75;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lk-pair{display:flex;align-items:center;gap:clamp(4px,.7vmin,8px)}
+  /* Dead section */
+  .lk-dead-hdr{font-family:var(--px);font-size:clamp(7px,1.3vmin,10px);-webkit-font-smoothing:none;color:var(--c-dead);opacity:.45;text-align:center;letter-spacing:.1em;padding:clamp(2px,.4vmin,4px) 0;flex-shrink:0}
+  .lk-dead-row{display:flex;align-items:center;gap:clamp(4px,.7vmin,8px);padding:clamp(2px,.35vmin,3px) clamp(6px,1vmin,12px);opacity:.35;flex-shrink:0}
+  .lk-dead-x{color:var(--c-dead);flex-shrink:0;font-size:.85em}
+  .lk-dead-nm{flex:1;min-width:0;font-size:.82em;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lk-dead-nm.r{text-align:right}
+  .lk-dead-sep{opacity:.25;color:var(--c-gold);flex-shrink:0}
 
-  /* Badge overlay */
-  .badges-overlay { display: flex; gap: clamp(8px, 2vw, 24px); flex-wrap: wrap; align-items: flex-start; }
-  .player-badges { display: flex; flex-direction: column; gap: 4px; }
-  .player-badges-label { font-size: 0.72em; font-weight: bold; letter-spacing: 0.03em; text-transform: uppercase; opacity: 0.65; }
-  .theme-dark .player-badges-label { color: #ff0; }
-  .theme-light .player-badges-label { color: #eee; }
-  .badge-strip { display: flex; gap: clamp(2px, 0.5vw, 5px); flex-wrap: wrap; }
-  .badge-img { width: clamp(18px, 3.5vmin, 32px); aspect-ratio: 1; image-rendering: pixelated; transition: opacity 0.2s; }
-  .badge-img.earned { opacity: 1; }
-  .badge-img.unearned { opacity: 0.12; filter: grayscale(100%); }
+  /* ─── Linked Party widget ─────────────────────────────────────────────── */
+  .lp-list{display:flex;flex-direction:column;gap:clamp(4px,.8vmin,10px);flex:1;overflow:hidden}
+  .lp-card{background:var(--c-card);border-radius:6px;border-left:3px solid var(--c-alive);padding:clamp(5px,.9vmin,11px) clamp(7px,1.2vmin,14px);display:flex;flex-direction:column;gap:clamp(3px,.5vmin,6px)}
+  .lp-card.ld{border-left-color:var(--c-dead);opacity:.5}
+  .lp-area{font-size:.72em;color:var(--c-gold);opacity:.75;letter-spacing:.04em;text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lp-mons{display:flex;align-items:center;gap:clamp(4px,.8vmin,10px)}
+  .lp-side{flex:1;min-width:0;display:flex;align-items:center;gap:clamp(4px,.7vmin,9px)}
+  .lp-side.lp-r{flex-direction:row-reverse}
+  .lp-info{flex:1;min-width:0}
+  .lp-info.lp-ir{text-align:right}
+  .lp-nm{font-size:.9em;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;margin-bottom:clamp(2px,.35vmin,4px)}
+  .lp-hr{flex-direction:row-reverse}
+  .lp-sep{flex-shrink:0;font-size:1.2em;opacity:.35;color:var(--c-gold)}
+
+  /* ─── Boxed Links widget ──────────────────────────────────────────────── */
+  .bl-list{display:flex;flex-direction:column;gap:clamp(4px,.8vmin,10px);flex:1;overflow:hidden}
+  .bl-card{background:var(--c-card);border-radius:6px;border-left:3px solid var(--c-gold);padding:clamp(5px,.9vmin,11px) clamp(7px,1.2vmin,14px);display:flex;flex-direction:column;gap:clamp(3px,.5vmin,6px)}
+  .bl-area{font-size:.72em;color:var(--c-gold);opacity:.75;letter-spacing:.04em;text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bl-row{display:flex;align-items:center;gap:clamp(4px,.8vmin,10px)}
+  .bl-side{flex:1;min-width:0;display:flex;align-items:center;gap:clamp(4px,.7vmin,9px)}
+  .bl-side.bl-r{flex-direction:row-reverse}
+  .bl-bx{}
+  .bl-info{flex:1;min-width:0}
+  .bl-info.bl-ir{text-align:right}
+  .bl-nm{font-size:.9em;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
+  .bl-lv{font-size:.7em;opacity:.65;line-height:1.3}
+  .bl-tag{display:inline-block;font-family:var(--px);font-size:clamp(5px,.9vmin,8px);-webkit-font-smoothing:none;color:var(--c-gold);opacity:.6;letter-spacing:.06em;line-height:1.4}
+  .bl-sep{flex-shrink:0;font-size:1.1em;opacity:.3;color:var(--c-gold)}
+  .bl-side .mon-sprite{width:clamp(28px,5vmin,44px)}
+
+  /* thin-v overrides for boxed links */
+  body.ltv .bl-list{gap:clamp(2px,.5vw,5px)}
+  body.ltv .bl-card{padding:clamp(3px,2vw,7px) clamp(3px,2vw,7px);gap:clamp(1px,1vw,4px)}
+  body.ltv .bl-area{font-size:clamp(7px,4vw,10px)}
+  body.ltv .bl-nm{font-size:clamp(9px,5.5vw,13px)}
+  body.ltv .bl-lv{font-size:clamp(7px,4vw,10px)}
+  body.ltv .bl-side .mon-sprite{width:clamp(24px,20vw,40px)!important;height:auto!important;aspect-ratio:unset!important}
+
+  /* ─── Horizontal layout mode  (body.lh via ?layout=h) ─────────────── */
+  /* Party: 6 cards side-by-side in a row */
+  body.lh .p-list{flex-direction:row;align-items:stretch;overflow:hidden;gap:clamp(2px,.35vmin,4px)}
+  body.lh .mc{flex-direction:column;align-items:center;flex:1;min-width:0;text-align:center;gap:clamp(1px,.25vmin,3px)}
+  body.lh .m-info{display:flex;flex-direction:column;align-items:center;width:100%}
+  body.lh .m-name{text-align:center;font-size:clamp(7px,1.05vmin,10px)}
+  body.lh .m-name .sp{display:none}
+  body.lh .fnt-tag{display:block;margin:2px auto 0}
+  body.lh .hp-row{justify-content:center;flex-wrap:wrap;gap:clamp(2px,.3vmin,4px)}
+  body.lh .hp-lbl{display:none}
+  body.lh .lv{margin-top:1px}
+  /* Areas: 3 stats side-by-side */
+  body.lh .a-wrap{flex-direction:row;justify-content:space-evenly;align-items:center;gap:0}
+  body.lh .a-row{flex-direction:column;align-items:center;gap:clamp(2px,.4vmin,4px)}
+  body.lh .a-num{text-align:center;min-width:2ch}
+  /* Links: cards wrap into a grid */
+  body.lh .lk-list{flex-direction:row;flex-wrap:wrap;align-content:flex-start;gap:clamp(2px,.4vmin,5px)}
+  body.lh .lk-card{flex:0 0 auto;min-width:clamp(140px,22vw,220px)}
+
+  /* ─── Thin-H: constrained HEIGHT (~100-200px), wide width ──────────── */
+  /* Use ?layout=thin-h  — ideal for bottom/top-of-stream bars             */
+  body.lth{padding:clamp(3px,2vh,8px) clamp(5px,1vw,14px);overflow:hidden}
+  body.lth .wtitle{font-size:10px;-webkit-font-smoothing:none;margin-bottom:clamp(2px,.5vh,5px)}
+  /* Party thin-h: row of cards */
+  body.lth .p-list{flex-direction:row;align-items:stretch;gap:clamp(2px,.5vw,6px);overflow:hidden}
+  body.lth .mc{flex-direction:column;align-items:center;justify-content:center;flex:1;min-width:0;padding:clamp(3px,2vh,8px) clamp(3px,.6vw,8px);gap:clamp(2px,.5vh,5px)}
+  body.lth .m-name{display:none}
+  body.lth .fnt-tag{font-size:clamp(5px,1vh,8px);padding:0 2px}
+  /* Sprite: height tracks the constrained vh dimension — unset aspect-ratio */
+  body.lth .mon-sprite{height:clamp(55px,50vh,100px)!important;width:auto!important;aspect-ratio:unset!important}
+  /* hp-row stays ROW (not column) — hp-trk flex:1 fills width, not height */
+  body.lth .hp-row{flex-direction:row;margin-top:0;gap:clamp(2px,.4vw,5px)}
+  body.lth .hp-lbl{display:none}
+  body.lth .hp-trk{height:clamp(5px,4vh,9px);min-width:0}
+  body.lth .lv{flex-shrink:0;font-size:clamp(9px,7vh,13px);white-space:nowrap;line-height:1;opacity:.75}
+  /* Linked-party thin-h: pairs in a row */
+  body.lth .lp-list{flex-direction:row;gap:clamp(3px,.6vw,8px);overflow:hidden}
+  body.lth .lp-card{flex:1;min-width:0;flex-direction:row;align-items:center;padding:clamp(3px,2vh,8px) clamp(4px,.8vw,10px);gap:clamp(4px,.7vw,9px)}
+  body.lth .lp-area{display:none}
+  body.lth .lp-mons{flex:1;min-width:0;gap:clamp(4px,.7vw,9px)}
+  body.lth .lp-nm{font-size:clamp(10px,8vh,14px);margin-bottom:clamp(2px,.4vh,4px)}
+  body.lth .lp-side .mon-sprite,body.lth .lp-side img.mon-sprite{height:clamp(48px,48vh,90px)!important;width:auto!important;aspect-ratio:unset!important}
+  body.lth .lp-info .hp-row{margin-top:0;flex-direction:row}
+  body.lth .lp-info .hp-trk{height:clamp(5px,4vh,9px)}
+  /* Links thin-h: alive cards in a row */
+  body.lth .lk-list{flex-direction:row;flex-wrap:nowrap;gap:clamp(3px,.6vw,8px);overflow:hidden}
+  body.lth .lk-card{flex:1;min-width:0;padding:clamp(3px,2vh,7px) clamp(4px,.8vw,9px);gap:clamp(1px,.3vh,3px)}
+  body.lth .lk-area{display:none}
+  body.lth .lk-half .mon-sprite{height:clamp(42px,44vh,80px)!important;width:auto!important;aspect-ratio:unset!important}
+  body.lth .lk-nm{font-size:clamp(9px,7vh,13px)}
+  body.lth .lk-lv{font-size:clamp(6px,1.1vh,9px)}
+  body.lth .lk-dead-hdr{display:none}
+  body.lth .lk-dead-row{padding:clamp(2px,.4vh,5px) clamp(4px,.8vw,9px)}
+
+  /* ─── Thin-V: constrained WIDTH (~100-200px), tall height ──────────── */
+  /* Use ?layout=thin-v  — ideal for left/right sidebars                  */
+  body.ltv{padding:clamp(3px,2vw,8px) clamp(4px,2vw,9px);overflow:hidden}
+  body.ltv .wtitle{font-size:10px;-webkit-font-smoothing:none;margin-bottom:clamp(2px,.5vw,5px)}
+  /* Party thin-v: stack of horizontal rows, sprite + hp side by side */
+  body.ltv .p-list{flex-direction:column;gap:clamp(2px,.5vw,5px);overflow:hidden}
+  body.ltv .mc{flex-direction:row;align-items:center;padding:clamp(3px,2vw,7px) clamp(3px,2vw,7px);gap:clamp(3px,2vw,7px)}
+  body.ltv .m-name{font-size:clamp(11px,7vw,15px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  body.ltv .m-name .sp{display:none}
+  body.ltv .hp-pct{display:none}
+  body.ltv .m-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:clamp(2px,.4vw,4px)}
+  body.ltv .hp-row{margin-top:0;gap:clamp(2px,1.5vw,5px)}
+  body.ltv .hp-lbl{display:none}
+  body.ltv .hp-trk{height:clamp(5px,3vw,9px)}
+  body.ltv .lv{font-size:clamp(9px,5.5vw,13px);white-space:nowrap;opacity:.75;line-height:1}
+  /* Sprite: width tracks the constrained vw dimension — unset aspect-ratio */
+  body.ltv .mon-sprite{width:clamp(32px,28vw,56px)!important;height:auto!important;aspect-ratio:unset!important;flex-shrink:0}
+  body.ltv .fnt-tag{font-size:clamp(6px,3.5vw,9px);padding:0 2px}
+  /* Linked-party thin-v: compact pair rows */
+  body.ltv .lp-list{flex-direction:column;gap:clamp(2px,.5vw,6px);overflow:hidden}
+  body.ltv .lp-card{padding:clamp(3px,2vw,7px) clamp(3px,2vw,7px);gap:clamp(2px,1.5vw,5px)}
+  body.ltv .lp-area{font-size:clamp(8px,5vw,12px)}
+  body.ltv .lp-mons{gap:clamp(3px,2vw,8px)}
+  body.ltv .lp-nm{font-size:clamp(10px,6.5vw,14px);margin-bottom:1px}
+  body.ltv .lp-side .mon-sprite,body.ltv .lp-side img.mon-sprite{width:clamp(26px,22vw,44px)!important;height:auto!important;aspect-ratio:unset!important}
+  body.ltv .lp-info .hp-row{margin-top:0}
+  body.ltv .lp-info .hp-trk{height:clamp(5px,3vw,9px)}
+  body.ltv .lp-sep{font-size:.9em}
+  /* Links thin-v: compact card stack */
+  body.ltv .lk-list{flex-direction:column;gap:clamp(2px,.5vw,5px);overflow:hidden}
+  body.ltv .lk-card{padding:clamp(2px,1.5vw,6px) clamp(3px,2vw,7px);gap:clamp(1px,1vw,4px)}
+  body.ltv .lk-area{font-size:clamp(8px,4.5vw,11px)}
+  body.ltv .lk-half .mon-sprite{width:clamp(24px,20vw,40px)!important;height:auto!important;aspect-ratio:unset!important}
+  body.ltv .lk-nm{font-size:clamp(9px,5.5vw,13px)}
+  body.ltv .lk-lv{display:none}
+  body.ltv .lk-dead-hdr{font-size:clamp(7px,4vw,10px)}
+  body.ltv .lk-dead-nm{font-size:clamp(9px,5.5vw,13px)}
+
 """
 
 _STREAM_SHARED_JS = r"""
@@ -1062,6 +1188,43 @@ function processSprites() {
     if (img.dataset.bgRemoved) return;
     if (img.complete && img.naturalWidth) removeSpriteBackground(img);
     else { img.crossOrigin='anonymous'; img.addEventListener('load', function(){removeSpriteBackground(img);}, {once:true}); }
+  });
+}
+
+var badgeCache = {};
+function trimBadge(img) {
+  if (img.dataset.trimmed || !img.naturalWidth) return;
+  var src = img.src;
+  if (badgeCache[src]) { img.src = badgeCache[src]; img.dataset.trimmed='1'; return; }
+  var w = img.naturalWidth, h = img.naturalHeight;
+  if (w < 3 || h < 3) { img.dataset.trimmed='1'; return; }
+  var c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  var ctx = c.getContext('2d');
+  try {
+    ctx.drawImage(img, 0, 0);
+    var data = ctx.getImageData(0, 0, w, h);
+    var px = data.data;
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        if (x === 0 || x === w-1 || y === 0 || y === h-1) {
+          px[(y*w+x)*4+3] = 0;
+        }
+      }
+    }
+    ctx.putImageData(data, 0, 0);
+    var dataUrl = c.toDataURL();
+    badgeCache[src] = dataUrl;
+    img.src = dataUrl;
+  } catch(e) {}
+  img.dataset.trimmed = '1';
+}
+
+function processBadges() {
+  document.querySelectorAll('img.bdg-img').forEach(function(img) {
+    if (img.dataset.trimmed) return;
+    if (img.complete && img.naturalWidth) trimBadge(img);
+    else { img.crossOrigin='anonymous'; img.addEventListener('load', function(){trimBadge(img);}, {once:true}); }
   });
 }
 
@@ -1142,13 +1305,31 @@ function doRefresh() {
       if (d) d.setAttribute('open', '');
     });
     processSprites();
+    autoFit();
   }).catch(function(){ _refreshInFlight = false; });
+}
+
+function autoFit() {
+  var root = document.getElementById('root');
+  if (!root) return;
+  // Reset transform so we measure natural content height
+  root.style.transform = '';
+  root.style.transformOrigin = '';
+  var sh = root.scrollHeight;
+  var ch = root.clientHeight;
+  if (sh > ch && ch > 0) {
+    var scale = ch / sh;
+    root.style.transformOrigin = 'top center';
+    root.style.transform = 'scale(' + scale + ')';
+  }
 }
 
 function init() {
   var params = new URLSearchParams(window.location.search);
   var theme = params.get('theme') || 'dark';
-  document.body.className = 'theme-' + theme;
+  var layout = params.get('layout') || '';
+  var layoutCls = layout === 'h' ? ' lh' : layout === 'thin-h' ? ' lth' : layout === 'thin-v' ? ' ltv' : '';
+  document.body.className = 'theme-' + theme + layoutCls;
 
   // Poll /api/status on a timer — no SSE connection.
   // Stream overlays intentionally avoid SSE to stay within Chrome's
@@ -1177,7 +1358,10 @@ def _stream_overlay_page(title: str, render_js: str) -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{title} — Soul Link Stream</title>
+  <title>{title} — Soul Link</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <style>{_STREAM_SHARED_CSS}</style>
 </head>
 <body>
@@ -1192,59 +1376,239 @@ def _stream_overlay_page(title: str, render_js: str) -> str:
 
 _STREAM_PARTY_JS = r"""
 var PLAYER_ID = '%PLAYER%';
+function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
 function render(d) {
   var p = d.players[PLAYER_ID];
-  if (!p) { document.getElementById('root').innerHTML = '<span class="dim">—</span>'; return; }
-  var name = p.trainer_name || PLAYER_ID.toUpperCase();
+  if (!p) { document.getElementById('root').innerHTML = '<div class="wtitle">PARTY \xb7 ' + PLAYER_ID.toUpperCase() + '</div><div style="opacity:.4;padding-top:6px">No data</div>'; return; }
+  var name = escHtml(p.trainer_name || PLAYER_ID.toUpperCase());
   var keys = p.party_keys || [];
-  var h = '<div class="section-label">' + name + '</div>';
+  var h = '<div class="wtitle">PARTY \xb7 ' + name + '</div>';
+  h += '<div class="p-list">';
   if (!keys.length) {
-    h += '<div class="dim" style="font-size:0.85em">No party</div>';
+    h += '<div style="opacity:.4;font-size:.9em">No party data</div>';
   } else {
-    h += '<div class="party-grid">';
     keys.forEach(function(key) {
-      var det = p.party_details[key] || {};
-      var hp = det.hp || 0, maxHP = det.maxHP || 1, lv = det.level || 0;
-      var fainted = hp === 0 ? ' fainted' : '';
-      var pct = maxHP > 0 ? Math.max(0, Math.min(100, Math.round(hp / maxHP * 100))) : 0;
-      var barCls = pct > 50 ? 'hp-high' : (pct > 20 ? 'hp-mid' : 'hp-low');
-      h += '<div class="mon-card' + fainted + '">';
-      h += spriteTag(det.species_id || 0);
-      h += '<div class="mon-info">';
-      h += '<div class="mon-name">' + monLabel(det.nickname, det.species_name, key) + '</div>';
-      h += '<div class="mon-stats">';
-      h += '<span class="mon-level">Lv.' + (lv || '?') + '</span>';
-      h += '<div class="hp-bar-bg"><div class="hp-bar ' + barCls + '" style="width:' + pct + '%"></div></div>';
-      h += '<span class="hp-label">' + pct + '%</span>';
+      var det = (p.party_details && p.party_details[key]) || {};
+      var hp = typeof det.hp === 'number' ? det.hp : 1;
+      var maxHP = det.maxHP > 0 ? det.maxHP : (hp || 1);
+      var lv = det.level || '?';
+      var fnt = hp === 0;
+      var pct = fnt ? 0 : Math.max(0, Math.min(100, Math.round(hp / maxHP * 100)));
+      var hpCls = pct > 50 ? 'hp-h' : (pct > 20 ? 'hp-m' : 'hp-l');
+      var bCls  = fnt ? 'fnt' : (pct > 50 ? 'bh' : (pct > 20 ? 'bm' : 'bl'));
+      var nick  = escHtml(det.nickname || det.species_name || key.substring(0, 8));
+      var spLbl = (det.species_name && det.nickname && det.nickname !== det.species_name)
+                  ? ' <span class="sp">(' + escHtml(det.species_name) + ')</span>' : '';
+      var fntTag = fnt ? '<span class="fnt-tag">FNT</span>' : '';
+      h += '<div class="mc ' + bCls + '">';
+      h += (det.sprite_html || spriteTag(det.species_id || 0));
+      h += '<div class="m-info">';
+      h += '<div class="m-name">' + nick + spLbl + fntTag + '</div>';
+      h += '<div class="hp-row">';
+      h += '<span class="hp-lbl">HP</span>';
+      h += '<div class="hp-trk"><div class="hp-fill ' + hpCls + '" style="width:' + pct + '%"></div></div>';
+      h += '<span class="hp-pct">' + (fnt ? '\u2014' : pct + '%') + '</span>';
+      h += '<span class="lv">Lv ' + lv + '</span>';
       h += '</div></div></div>';
     });
-    h += '</div>';
   }
+  h += '</div>';
   document.getElementById('root').innerHTML = h;
 }
 """
 
 _STREAM_LINKS_JS = r"""
+function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+function areaLabel(id){
+  if (!id) return '';
+  if (id.indexOf('_bonus_') === 0) return '\u2736 Bonus Pair';
+  return id.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
+}
+function render(d) {
+  var links  = d.links || [];
+  var alive  = links.filter(function(l){return l.status==='alive';});
+  var dead   = links.filter(function(l){return l.status!=='alive';});
+  var h = '<div class="wtitle">SOUL LINK \xb7 ' + alive.length + ' ALIVE \xb7 ' + dead.length + ' DEAD</div>';
+  if (!links.length) {
+    h += '<div style="opacity:.4;padding-top:.5em">No links yet</div>';
+    document.getElementById('root').innerHTML = h; return;
+  }
+  h += '<div class="lk-list">';
+  // ── Alive pairs — full card with area name and sprites ──────────────────
+  alive.forEach(function(lnk) {
+    var aN  = escHtml(lnk.a_nickname || lnk.a_species_name || '\u2014');
+    var bN  = escHtml(lnk.b_nickname || lnk.b_species_name || '\u2014');
+    var aL  = lnk.a_level ? 'Lv\u00a0' + lnk.a_level : '';
+    var bL  = lnk.b_level ? 'Lv\u00a0' + lnk.b_level : '';
+    var aSp = lnk.a_sprite_html || (lnk.a_species ? spriteTag(lnk.a_species) : '');
+    var bSp = lnk.b_sprite_html || (lnk.b_species ? spriteTag(lnk.b_species) : '');
+    var area = escHtml(lnk.area_display || areaLabel(lnk.area_id));
+    h += '<div class="lk-card">';
+    if (area) h += '<div class="lk-area">' + area + '</div>';
+    h += '<div class="lk-pair">';
+    h += '<div class="lk-half">' + aSp + '<span class="lk-nm">' + aN + '</span>';
+    if (aL) h += '<span class="lk-lv">' + aL + '</span>';
+    h += '</div>';
+    h += '<span class="lk-div">\u25c8</span>';
+    h += '<div class="lk-half r">';
+    if (bL) h += '<span class="lk-lv">' + bL + '</span>';
+    h += '<span class="lk-nm">' + bN + '</span>' + bSp;
+    h += '</div></div></div>';
+  });
+  // ── Dead pairs — compact list, no sprites ───────────────────────────────
+  if (dead.length) {
+    h += '<div class="lk-dead-hdr">\u2015\u2015 ' + dead.length + ' DEAD \u2015\u2015</div>';
+    dead.forEach(function(lnk) {
+      var aN = escHtml(lnk.a_nickname || lnk.a_species_name || '\u2014');
+      var bN = escHtml(lnk.b_nickname || lnk.b_species_name || '\u2014');
+      h += '<div class="lk-dead-row">';
+      h += '<span class="lk-dead-x">\u2717</span>';
+      h += '<span class="lk-dead-nm">' + aN + '</span>';
+      h += '<span class="lk-dead-sep">\u25c8</span>';
+      h += '<span class="lk-dead-nm r">' + bN + '</span>';
+      h += '</div>';
+    });
+  }
+  h += '</div>';
+  document.getElementById('root').innerHTML = h;
+  processSprites();
+}
+"""
+
+_STREAM_LINKED_PARTY_JS = r"""
+function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+function areaLabel(id){
+  if (!id) return '';
+  if (id.indexOf('_bonus_') === 0) return '\u2736 Bonus Pair';
+  return id.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
+}
+function hpCls(pct){ return pct > 50 ? 'hp-h' : (pct > 20 ? 'hp-m' : 'hp-l'); }
 function render(d) {
   var links = d.links || [];
-  if (!links.length) { document.getElementById('root').innerHTML = '<div class="dim">No links yet</div>'; return; }
-  var nameA = (d.players.a && d.players.a.trainer_name) || 'A';
-  var nameB = (d.players.b && d.players.b.trainer_name) || 'B';
-  var h = '';
-  links.forEach(function(lnk) {
-    var status = lnk.status;
-    var statusCls = status === 'alive' ? 'alive' : (status === 'dead' || status === 'memorial' || status === 'dead_zone' ? 'dead' : 'pending');
-    var statusIcon = status === 'alive' ? '✓' : (statusCls === 'dead' ? '☠' : '⏳');
-    var aName = lnk.a_nickname ? monLabel(lnk.a_nickname, lnk.a_species_name, lnk.a_key) : '<span class="dim">—</span>';
-    var bName = lnk.b_nickname ? monLabel(lnk.b_nickname, lnk.b_species_name, lnk.b_key) : '<span class="dim">—</span>';
-    h += '<div class="link-row">';
-    h += '<div class="link-side">' + spriteTag(lnk.a_species || 0) + '<span class="link-side-name">' + aName + '</span></div>';
-    h += '<span class="link-sep">↔</span>';
-    h += '<div class="link-side">' + spriteTag(lnk.b_species || 0) + '<span class="link-side-name">' + bName + '</span></div>';
-    h += '<span class="link-status ' + statusCls + '">' + statusIcon + '</span>';
-    h += '</div>';
+  var pa = (d.players && d.players['a']) || {};
+  var pb = (d.players && d.players['b']) || {};
+  var aKeys = pa.party_keys || [];
+  var bKeys = pb.party_keys || [];
+  var pairs = links.filter(function(lnk) {
+    return lnk.status === 'alive'
+        && aKeys.indexOf(lnk.a_key) !== -1
+        && bKeys.indexOf(lnk.b_key) !== -1;
   });
+  var cnt = pairs.length;
+  var h = '<div class="wtitle">LINKED PARTY</div>';
+  if (!cnt) {
+    h += '<div style="opacity:.4;padding-top:.5em;font-size:.9em">No linked pairs in party</div>';
+    document.getElementById('root').innerHTML = h; return;
+  }
+  h += '<div class="lp-list">';
+  pairs.forEach(function(lnk) {
+    var aDet = (pa.party_details && pa.party_details[lnk.a_key]) || {};
+    var bDet = (pb.party_details && pb.party_details[lnk.b_key]) || {};
+    var aHp = typeof aDet.hp === 'number' ? aDet.hp : 1;
+    var aMx = aDet.maxHP > 0 ? aDet.maxHP : (aHp || 1);
+    var bHp = typeof bDet.hp === 'number' ? bDet.hp : 1;
+    var bMx = bDet.maxHP > 0 ? bDet.maxHP : (bHp || 1);
+    var aPct = aHp === 0 ? 0 : Math.max(0, Math.min(100, Math.round(aHp / aMx * 100)));
+    var bPct = bHp === 0 ? 0 : Math.max(0, Math.min(100, Math.round(bHp / bMx * 100)));
+    var aFnt = aHp === 0, bFnt = bHp === 0;
+    var bothFnt = aFnt && bFnt;
+    var aN  = escHtml(aDet.nickname || lnk.a_nickname || lnk.a_species_name || '\u2014');
+    var bN  = escHtml(bDet.nickname || lnk.b_nickname || lnk.b_species_name || '\u2014');
+    var aL  = aDet.level || lnk.a_level || '';
+    var bL  = bDet.level || lnk.b_level || '';
+    var aSp = aDet.sprite_html || lnk.a_sprite_html || (lnk.a_species ? spriteTag(lnk.a_species) : '');
+    var bSp = bDet.sprite_html || lnk.b_sprite_html || (lnk.b_species ? spriteTag(lnk.b_species) : '');
+    var area = escHtml(lnk.area_display || areaLabel(lnk.area_id));
+    h += '<div class="lp-card' + (bothFnt ? ' ld' : '') + '">';
+    if (area) h += '<div class="lp-area">' + area + '</div>';
+    h += '<div class="lp-mons">';
+    // Side A
+    h += '<div class="lp-side' + (aFnt ? ' mc fnt' : '') + '">';
+    h += aSp;
+    h += '<div class="lp-info">';
+    h += '<div class="lp-nm">' + aN + (aFnt ? '<span class="fnt-tag">FNT</span>' : '') + '</div>';
+    h += '<div class="hp-row">';
+    h += '<div class="hp-trk"><div class="hp-fill ' + hpCls(aPct) + '" style="width:' + aPct + '%"></div></div>';
+    if (aL) h += '<span class="lv">Lv\u00a0' + aL + '</span>';
+    h += '</div></div></div>';
+    // Center
+    h += '<span class="lp-sep">\u25c8</span>';
+    // Side B (mirrored)
+    h += '<div class="lp-side lp-r' + (bFnt ? ' mc fnt' : '') + '">';
+    h += '<div class="lp-info lp-ir">';
+    h += '<div class="lp-nm">' + (bFnt ? '<span class="fnt-tag">FNT</span>' : '') + bN + '</div>';
+    h += '<div class="hp-row lp-hr">';
+    if (bL) h += '<span class="lv">Lv\u00a0' + bL + '</span>';
+    h += '<div class="hp-trk"><div class="hp-fill ' + hpCls(bPct) + '" style="width:' + bPct + '%"></div></div>';
+    h += '</div></div>';
+    h += bSp;
+    h += '</div>';
+    h += '</div></div>';
+  });
+  h += '</div>';
   document.getElementById('root').innerHTML = h;
+  processSprites();
+}
+"""
+
+_STREAM_BOXED_LINKS_JS = r"""
+function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+function areaLabel(id){
+  if (!id) return '';
+  if (id.indexOf('_bonus_') === 0) return '\u2736 Bonus';
+  return id.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
+}
+function render(d) {
+  var links = d.links || [];
+  var pa = (d.players && d.players['a']) || {};
+  var pb = (d.players && d.players['b']) || {};
+  var aKeys = pa.party_keys || [];
+  var bKeys = pb.party_keys || [];
+  /* Pairs where both are alive but at least one is NOT in party */
+  var pairs = links.filter(function(lnk) {
+    if (lnk.status !== 'alive') return false;
+    var aIn = aKeys.indexOf(lnk.a_key) !== -1;
+    var bIn = bKeys.indexOf(lnk.b_key) !== -1;
+    return !(aIn && bIn);
+  });
+  var h = '<div class="wtitle">BOXED LINKS</div>';
+  if (!pairs.length) {
+    h += '<div style="opacity:.4;font-size:.9em;padding-top:.4em">All pairs in party</div>';
+    document.getElementById('root').innerHTML = h; return;
+  }
+  h += '<div class="bl-list">';
+  pairs.forEach(function(lnk) {
+    var aIn = aKeys.indexOf(lnk.a_key) !== -1;
+    var bIn = bKeys.indexOf(lnk.b_key) !== -1;
+    var aN = escHtml(lnk.a_nickname || lnk.a_species_name || '\u2014');
+    var bN = escHtml(lnk.b_nickname || lnk.b_species_name || '\u2014');
+    var aL = lnk.a_level ? 'Lv\u00a0' + lnk.a_level : '';
+    var bL = lnk.b_level ? 'Lv\u00a0' + lnk.b_level : '';
+    var aSp = lnk.a_sprite_html || (lnk.a_species ? spriteTag(lnk.a_species) : '');
+    var bSp = lnk.b_sprite_html || (lnk.b_species ? spriteTag(lnk.b_species) : '');
+    var area = escHtml(lnk.area_display || areaLabel(lnk.area_id));
+    h += '<div class="bl-card">';
+    if (area) h += '<div class="bl-area">' + area + '</div>';
+    h += '<div class="bl-row">';
+    /* Side A */
+    h += '<div class="bl-side' + (!aIn ? ' bl-bx' : '') + '">';
+    h += aSp;
+    h += '<div class="bl-info"><div class="bl-nm">' + aN + '</div>';
+    if (aL) h += '<div class="bl-lv">' + aL + '</div>';
+    h += '</div></div>';
+    h += '<span class="bl-sep">\u25c8</span>';
+    /* Side B */
+    h += '<div class="bl-side bl-r' + (!bIn ? ' bl-bx' : '') + '">';
+    h += '<div class="bl-info bl-ir"><div class="bl-nm">' + bN + '</div>';
+    if (bL) h += '<div class="bl-lv">' + bL + '</div>';
+    h += '</div>';
+    h += bSp;
+    h += '</div>';
+    h += '</div></div>';
+  });
+  h += '</div>';
+  document.getElementById('root').innerHTML = h;
+  processSprites();
 }
 """
 
@@ -1254,11 +1618,21 @@ function render(d) {
   var alive = 0, dead = 0;
   links.forEach(function(l) {
     if (l.status === 'alive') alive++;
-    else if (l.status === 'dead' || l.status === 'memorial' || l.status === 'dead_zone') dead++;
+    else if (l.status === 'dead' || l.status === 'memorial') dead++;
   });
-  var h = '<div class="counters-wrap"><div class="counters">';
-  h += '<div class="counter-box"><div class="counter alive">' + alive + '</div><div class="counter-label">Alive</div></div>';
-  h += '<div class="counter-box"><div class="counter dead">' + dead + '</div><div class="counter-label">Dead</div></div>';
+  var h = '<div class="d-wrap"><div class="d-grid">';
+  h += '<div class="d-box d-alive"><span class="d-num">' + alive + '</span><span class="d-lbl">ALIVE</span></div>';
+  h += '<div class="d-box d-dead"><span class="d-num">'  + dead  + '</span><span class="d-lbl">DEAD</span></div>';
+  h += '</div></div>';
+  document.getElementById('root').innerHTML = h;
+}
+"""
+
+_STREAM_ATTEMPTS_JS = r"""
+function render(d) {
+  var count = d.attempts_count || 0;
+  var h = '<div class="d-wrap"><div class="d-grid">';
+  h += '<div class="d-box d-attempts"><span class="d-num">' + count + '</span><span class="d-lbl">ATTEMPTS</span></div>';
   h += '</div></div>';
   document.getElementById('root').innerHTML = h;
 }
@@ -1267,50 +1641,53 @@ function render(d) {
 _STREAM_AREAS_JS = r"""
 function render(d) {
   var areas = d.area_states || {};
-  var counts = { linked: 0, pending_a: 0, pending_b: 0, pending_both: 0, dead_zone: 0 };
-  for (var a in areas) { var st = areas[a]; if (st in counts) counts[st]++; }
-  var pending = counts.pending_a + counts.pending_b + counts.pending_both;
-  var nameA = (d.players.a && d.players.a.trainer_name) || 'A';
-  var nameB = (d.players.b && d.players.b.trainer_name) || 'B';
-  var h = '<div class="section-label">Areas</div>';
-  h += '<div class="area-row"><span class="area-count alive">' + counts.linked + '</span><span>Linked</span></div>';
-  h += '<div class="area-row"><span class="area-count dead">' + counts.dead_zone + '</span><span>Dead Zones</span></div>';
-  if (pending > 0) {
-    var parts = [];
-    if (counts.pending_a > 0) parts.push(counts.pending_a + ' on ' + nameA);
-    if (counts.pending_b > 0) parts.push(counts.pending_b + ' on ' + nameB);
-    if (counts.pending_both > 0) parts.push(counts.pending_both + ' both in');
-    h += '<div class="area-row"><span class="area-count pending">' + pending + '</span><span>Pending <span class="dim">(' + parts.join(', ') + ')</span></span></div>';
+  var linked = 0, dead = 0, pend = 0;
+  for (var a in areas) {
+    var st = areas[a];
+    if (st === 'linked') linked++;
+    else if (st === 'dead_zone') dead++;
+    else if (st === 'pending_a' || st === 'pending_b' || st === 'pending_both') pend++;
   }
+  var h = '<div class="wtitle">AREAS</div><div class="a-wrap">';
+  h += '<div class="a-row"><span class="a-num an">' + linked + '</span><span class="a-lbl">Linked</span></div>';
+  h += '<div class="a-row"><span class="a-num ad">' + dead   + '</span><span class="a-lbl">Dead Zones</span></div>';
+  if (pend > 0) {
+    h += '<div class="a-row"><span class="a-num ap">' + pend + '</span><span class="a-lbl">Pending</span></div>';
+  }
+  h += '</div>';
   document.getElementById('root').innerHTML = h;
 }
 """
 
 _STREAM_EVENTS_JS = r"""
+function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
 function render(d) {
   var events = d.recent_events || [];
-  if (!events.length) { document.getElementById('root').innerHTML = '<div class="dim" style="font-size:0.85em">No events yet</div>'; return; }
-  var nameA = (d.players.a && d.players.a.trainer_name) || 'A';
-  var nameB = (d.players.b && d.players.b.trainer_name) || 'B';
-  var h = '';
-  events.slice(0, 20).forEach(function(ev) {
-    var time = '';
+  var nameA = escHtml((d.players.a && d.players.a.trainer_name) || 'A');
+  var nameB = escHtml((d.players.b && d.players.b.trainer_name) || 'B');
+  var typeMap = {capture:'ec',faint:'ef',whiteout:'ew',no_catch:'en',area_enter:'ea',
+                 linked:'el',dead_zone:'ed',violation:'ev',key_change:'ek',force_faint:'ef',hello:'eh'};
+  var h = '<div class="wtitle">EVENTS</div><div class="e-list">';
+  if (!events.length) { h += '<div style="opacity:.4;font-size:.9em">No events yet</div>'; }
+  events.slice(0, 16).forEach(function(ev) {
+    var ts = '';
     if (ev.ts) {
       var dt = new Date(ev.ts);
       if (!isNaN(dt)) {
-        var h12 = dt.getHours() % 12 || 12;
-        var mn = ('0' + dt.getMinutes()).slice(-2);
-        time = h12 + ':' + mn + (dt.getHours() >= 12 ? 'p' : 'a');
-      } else { time = ev.ts.substring(11, 16); }
+        var hh = dt.getHours() % 12 || 12;
+        var mm = ('0' + dt.getMinutes()).slice(-2);
+        ts = hh + ':' + mm + (dt.getHours() >= 12 ? 'p' : 'a');
+      } else { ts = String(ev.ts).substring(11, 16); }
     }
-    var pName = ev.player === 'a' ? nameA : nameB;
-    var cls = 'event-type-' + (ev.type || 'hello');
-    h += '<div class="event-row">';
-    h += '<span class="event-time">' + time + '</span>';
-    h += '<span class="event-player">' + pName + '</span>';
-    h += '<span class="event-text ' + cls + '">' + (ev.text || ev.type) + '</span>';
+    var who = ev.player === 'a' ? nameA : nameB;
+    var cls = typeMap[ev.type] || '';
+    h += '<div class="e-row">';
+    h += '<span class="e-ts">'  + escHtml(ts) + '</span>';
+    h += '<span class="e-who">' + who + '</span>';
+    h += '<span class="e-msg ' + cls + '">' + escHtml(ev.text || ev.type || '') + '</span>';
     h += '</div>';
   });
+  h += '</div>';
   document.getElementById('root').innerHTML = h;
 }
 """
@@ -1336,13 +1713,14 @@ function render(data) {
     var primary = playerData.badges || 0;
     var kanto   = playerData.kanto_badges || 0;
     var name = playerData.trainer_name || label;
-    var html = '<div class="player-badges">';
-    html += '<div class="player-badges-label">' + name + '</div>';
-    html += '<div class="badge-strip">';
+    var html = '<div class="bdg-player">';
+    html += '<div class="bdg-name">' + name + '</div>';
+    html += '<div class="bdg-strip">';
     slugs.forEach(function(pair, i) {
       // First 8 bits come from primary bitmask; next 8 from kanto_badges
       var earned = i < 8 ? ((primary >> i) & 1) : ((kanto >> (i - 8)) & 1);
-      html += '<img class="badge-img ' + (earned ? 'earned' : 'unearned') + '"'
+      html += '<img class="bdg-img ' + (earned ? 'on' : 'off') + '"'
+            + ' crossorigin="anonymous"'
             + ' src="' + BASE + pair[0] + '.png"'
             + ' title="' + pair[1] + '" alt="' + pair[1] + '"'
             + ' onerror="this.style.display=\'none\';">';
@@ -1350,11 +1728,12 @@ function render(data) {
     html += '</div></div>';
     return html;
   }
-  var h = '<div class="badges-overlay">';
+  var h = '<div class="bdg-wrap">';
   h += strip(pa, 'Player A');
   h += strip(pb, 'Player B');
   h += '</div>';
   document.getElementById('root').innerHTML = h;
+  processBadges();
 }
 """
 
@@ -1362,21 +1741,28 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Soul Link Stream Overlays</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <style>
-    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #111; color: #eee; padding: 1.5em; margin: 0; }
-    h1 { color: #ff0; margin-bottom: 0.3em; }
-    p.sub { color: #888; margin-bottom: 1.5em; }
+    body { font-family: system-ui,'Segoe UI',sans-serif; background: #0a0c14; color: #e0e0e0; padding: 1.5em; margin: 0; }
+    h1 { font-family: 'Press Start 2P','Courier New',monospace; color: #f8d030; margin-bottom: 0.4em; font-size: 1.1em; letter-spacing: .04em; }
+    p.sub { color: #888; margin-bottom: 1.5em; font-size: .88em; }
+    .obs-tip { background: rgba(248,208,48,.08); border: 1px solid rgba(248,208,48,.25); border-radius: 6px; padding: 10px 14px; margin-bottom: 1.5em; font-size: .83em; color: #bba; }
+    .obs-tip b { color: #f8d030; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.2em; }
-    .overlay-card { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; overflow: hidden; }
-    .overlay-card:hover { border-color: #6af; }
-    .preview { width: 100%%; height: 180px; background: repeating-conic-gradient(#222 0%% 25%%, #1a1a1a 0%% 50%%) 50%%/16px 16px; border-bottom: 1px solid #333; }
-    .preview iframe { width: 100%%; height: 100%%; border: none; pointer-events: none; }
+    .overlay-card { background: #12141e; border: 1px solid #2a2c3a; border-top: 2px solid #2a2c3a; border-radius: 8px; overflow: hidden; transition: border-color .2s; }
+    .overlay-card:hover { border-color: #6af; border-top-color: #f8d030; }
+    .preview { width: 100%; height: 180px; background: repeating-conic-gradient(#1a1c26 0% 25%, #141620 0% 50%) 50%/16px 16px; border-bottom: 1px solid #2a2c3a; }
+    .preview iframe { width: 100%; height: 100%; border: none; pointer-events: none; }
     .overlay-info { padding: 12px 14px; }
-    .overlay-info h3 { color: #eee; margin: 0 0 4px 0; font-size: 1em; }
-    .overlay-info p { color: #888; font-size: 0.85em; margin: 0 0 8px 0; }
+    .overlay-info h3 { color: #eee; margin: 0 0 2px 0; font-size: .95em; }
+    .size-hint { font-family: 'Press Start 2P','Courier New',monospace; font-size: .6em; color: #f8d030; opacity: .7; margin-bottom: 6px; }
+    .overlay-info p { color: #888; font-size: .83em; margin: 0 0 8px 0; }
     .url-row { display: flex; gap: 6px; align-items: center; }
-    .url-box { flex: 1; background: #222; color: #6af; border: 1px solid #444; border-radius: 4px; padding: 4px 8px; font-family: monospace; font-size: 0.82em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .url-box { flex: 1; background: #1a1c28; color: #6af; border: 1px solid #363850; border-radius: 4px; padding: 4px 8px; font-family: monospace; font-size: .82em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .copy-btn { background: #1a2a3a; color: #6af; border: 1px solid #6af; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 0.82em; white-space: nowrap; }
     .copy-btn:hover { background: #2a3a4a; }
     .theme-toggle { margin-top: 8px; display: flex; gap: 6px; }
@@ -1385,70 +1771,112 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
   </style>
 </head>
 <body>
-  <h1>&#127909; Soul Link Stream Overlays</h1>
-  <p class="sub">OBS Browser Source-ready overlays. Copy URLs and add as browser sources with transparent background.</p>
+  <h1>&#9670; Soul Link Overlays</h1>
+  <p class="sub">OBS Browser Source-ready overlays — designed for Soul Link Nuzlocke streams.</p>
+  <div class="obs-tip"><b>OBS setup:</b> Add a Browser Source &rarr; paste the URL &rarr; set width/height per the recommended size. The default Browser Source Custom CSS already handles transparent backgrounds &mdash; no extra settings needed.</div>
   <div class="grid">
     <div class="overlay-card">
       <div class="preview"><iframe src="/stream/party-a?theme=dark"></iframe></div>
       <div class="overlay-info">
         <h3>Player A Party</h3>
-        <p>Compact party list with sprites, levels, and HP bars.</p>
+        <div class="size-hint">Vertical: 280 &times; 380 &nbsp;|&nbsp; Horizontal: 580 &times; 130 &nbsp;|&nbsp; Strip: 1200 &times; 150</div>
+        <p>Sprites, HP bars, and levels. Designed for a tall side panel alongside the game.</p>
         <div class="url-row"><span class="url-box" id="u1">/stream/party-a</span><button class="copy-btn" onclick="copyUrl('u1')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/party-a?theme=dark" target="_blank">Dark</a><a href="/stream/party-a?theme=light" target="_blank">Light</a></div>
+        <div class="theme-toggle"><a href="/stream/party-a?theme=dark" target="_blank">Dark</a><a href="/stream/party-a?theme=light" target="_blank">Light</a><a href="/stream/party-a?theme=transparent" target="_blank">Transparent</a><a href="/stream/party-a?layout=h&theme=dark" target="_blank">Horizontal</a><a href="/stream/party-a?layout=thin-h&theme=dark" target="_blank">Thin strip</a><a href="/stream/party-a?layout=thin-v&theme=dark" target="_blank">Thin sidebar</a></div>
       </div>
     </div>
     <div class="overlay-card">
       <div class="preview"><iframe src="/stream/party-b?theme=dark"></iframe></div>
       <div class="overlay-info">
         <h3>Player B Party</h3>
-        <p>Compact party list with sprites, levels, and HP bars.</p>
+        <div class="size-hint">Vertical: 280 &times; 380 &nbsp;|&nbsp; Horizontal: 580 &times; 130 &nbsp;|&nbsp; Strip: 1200 &times; 150</div>
+        <p>Sprites, HP bars, and levels. Designed for a tall side panel alongside the game.</p>
         <div class="url-row"><span class="url-box" id="u2">/stream/party-b</span><button class="copy-btn" onclick="copyUrl('u2')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/party-b?theme=dark" target="_blank">Dark</a><a href="/stream/party-b?theme=light" target="_blank">Light</a></div>
+        <div class="theme-toggle"><a href="/stream/party-b?theme=dark" target="_blank">Dark</a><a href="/stream/party-b?theme=light" target="_blank">Light</a><a href="/stream/party-b?theme=transparent" target="_blank">Transparent</a><a href="/stream/party-b?layout=h&theme=dark" target="_blank">Horizontal</a><a href="/stream/party-b?layout=thin-h&theme=dark" target="_blank">Thin strip</a><a href="/stream/party-b?layout=thin-v&theme=dark" target="_blank">Thin sidebar</a></div>
       </div>
     </div>
     <div class="overlay-card">
       <div class="preview"><iframe src="/stream/links?theme=dark"></iframe></div>
       <div class="overlay-info">
         <h3>Linked Pairs</h3>
-        <p>All linked pairs with area, sprites, and alive/dead status.</p>
+        <div class="size-hint">Vertical: 420 &times; 340 &nbsp;|&nbsp; Horizontal: 900 &times; 200 &nbsp;|&nbsp; Strip: 1400 &times; 180</div>
+        <p>Alive pairs as full cards (area name + sprites). Dead pairs as a compact dimmed list below.</p>
         <div class="url-row"><span class="url-box" id="u3">/stream/links</span><button class="copy-btn" onclick="copyUrl('u3')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/links?theme=dark" target="_blank">Dark</a><a href="/stream/links?theme=light" target="_blank">Light</a></div>
+        <div class="theme-toggle"><a href="/stream/links?theme=dark" target="_blank">Dark</a><a href="/stream/links?theme=light" target="_blank">Light</a><a href="/stream/links?theme=transparent" target="_blank">Transparent</a><a href="/stream/links?layout=h&theme=dark" target="_blank">Horizontal</a><a href="/stream/links?layout=thin-h&theme=dark" target="_blank">Thin strip</a><a href="/stream/links?layout=thin-v&theme=dark" target="_blank">Thin sidebar</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/linked-party?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Linked Party ★</h3>
+        <div class="size-hint">Standard: 500 &times; 320 &nbsp;|&nbsp; Bottom strip: 1400 &times; 150 &nbsp;|&nbsp; Sidebar: 160 &times; 500</div>
+        <p>Shows only linked pairs where <b>both mons are currently in party</b> &mdash; HP bars, levels, area. The primary overlay for active streaming.</p>
+        <div class="url-row"><span class="url-box" id="u3b">/stream/linked-party</span><button class="copy-btn" onclick="copyUrl('u3b')">Copy</button></div>
+        <div class="theme-toggle"><a href="/stream/linked-party?theme=dark" target="_blank">Dark</a><a href="/stream/linked-party?theme=light" target="_blank">Light</a><a href="/stream/linked-party?theme=transparent" target="_blank">Transparent</a><a href="/stream/linked-party?layout=thin-h&theme=dark" target="_blank">Thin strip</a><a href="/stream/linked-party?layout=thin-v&theme=dark" target="_blank">Thin sidebar</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/boxed-links?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Boxed Links</h3>
+        <div class="size-hint">Sidebar: 200 &times; 600 &nbsp;|&nbsp; Standard: 420 &times; 340</div>
+        <p>Alive linked pairs where one or both mons are currently in the PC box.</p>
+        <div class="url-row"><span class="url-box" id="u3c">/stream/boxed-links</span><button class="copy-btn" onclick="copyUrl('u3c')">Copy</button></div>
+        <div class="theme-toggle"><a href="/stream/boxed-links?theme=dark" target="_blank">Dark</a><a href="/stream/boxed-links?theme=light" target="_blank">Light</a><a href="/stream/boxed-links?theme=transparent" target="_blank">Transparent</a><a href="/stream/boxed-links?layout=thin-v&theme=dark" target="_blank">Thin sidebar</a></div>
       </div>
     </div>
     <div class="overlay-card">
       <div class="preview"><iframe src="/stream/deaths?theme=dark"></iframe></div>
       <div class="overlay-info">
         <h3>Death Counter</h3>
-        <p>Alive / dead pair counts. Compact — good for corner placement.</p>
+        <div class="size-hint">Recommended: 280 &times; 160</div>
+        <p>Alive / dead pair counts with glow. Scales to any size &mdash; great for a corner badge.</p>
         <div class="url-row"><span class="url-box" id="u4">/stream/deaths</span><button class="copy-btn" onclick="copyUrl('u4')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/deaths?theme=dark" target="_blank">Dark</a><a href="/stream/deaths?theme=light" target="_blank">Light</a></div>
+        <div class="theme-toggle"><a href="/stream/deaths?theme=dark" target="_blank">Dark</a><a href="/stream/deaths?theme=light" target="_blank">Light</a><a href="/stream/deaths?theme=transparent" target="_blank">Transparent</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/attempts?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Attempts Counter</h3>
+        <div class="size-hint">Recommended: 200 &times; 160</div>
+        <p>Manual run attempt counter with glow. Set the number below or via the API.</p>
+        <div class="url-row"><span class="url-box" id="u4b">/stream/attempts</span><button class="copy-btn" onclick="copyUrl('u4b')">Copy</button></div>
+        <div class="theme-toggle"><a href="/stream/attempts?theme=dark" target="_blank">Dark</a><a href="/stream/attempts?theme=light" target="_blank">Light</a><a href="/stream/attempts?theme=transparent" target="_blank">Transparent</a></div>
+        <div style="margin-top:8px;display:flex;gap:6px;align-items:center">
+          <input type="number" id="attempts-input" min="0" value="0" style="width:60px;background:#1a1c28;color:#f8d030;border:1px solid #363850;border-radius:4px;padding:4px 8px;font-family:'Press Start 2P',monospace;font-size:.7em;text-align:center">
+          <button class="copy-btn" onclick="setAttempts()">Set</button>
+        </div>
       </div>
     </div>
     <div class="overlay-card">
       <div class="preview"><iframe src="/stream/areas?theme=dark"></iframe></div>
       <div class="overlay-info">
         <h3>Area Tracker</h3>
-        <p>Linked / dead zone / pending area counts.</p>
+        <div class="size-hint">Vertical: 220 &times; 160 &nbsp;|&nbsp; Horizontal: 380 &times; 80</div>
+        <p>Linked / dead zone / pending area counts at a glance.</p>
         <div class="url-row"><span class="url-box" id="u5">/stream/areas</span><button class="copy-btn" onclick="copyUrl('u5')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/areas?theme=dark" target="_blank">Dark</a><a href="/stream/areas?theme=light" target="_blank">Light</a></div>
+        <div class="theme-toggle"><a href="/stream/areas?theme=dark" target="_blank">Dark</a><a href="/stream/areas?theme=light" target="_blank">Light</a><a href="/stream/areas?theme=transparent" target="_blank">Transparent</a><a href="/stream/areas?layout=h&theme=dark" target="_blank">Horizontal</a></div>
       </div>
     </div>
     <div class="overlay-card">
       <div class="preview"><iframe src="/stream/events?theme=dark"></iframe></div>
       <div class="overlay-info">
         <h3>Event Feed</h3>
-        <p>Scrolling recent events — captures, faints, area entries.</p>
+        <div class="size-hint">Recommended: 400 &times; 280</div>
+        <p>Live feed of captures, faints, area entries, and soul link events.</p>
         <div class="url-row"><span class="url-box" id="u6">/stream/events</span><button class="copy-btn" onclick="copyUrl('u6')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/events?theme=dark" target="_blank">Dark</a><a href="/stream/events?theme=light" target="_blank">Light</a></div>
+        <div class="theme-toggle"><a href="/stream/events?theme=dark" target="_blank">Dark</a><a href="/stream/events?theme=light" target="_blank">Light</a><a href="/stream/events?theme=transparent" target="_blank">Transparent</a></div>
       </div>
     </div>
     <div class="overlay-card">
       <div class="preview"><iframe src="/stream/badges?theme=dark"></iframe></div>
       <div class="overlay-info">
         <h3>Gym Badges</h3>
-        <p>Both players' earned gym badges with official icons. Unearned badges are dimmed.</p>
+        <div class="size-hint">Recommended: 340 &times; 120</div>
+        <p>Both players' earned gym badges. Unearned badges are dimmed.</p>
         <div class="url-row"><span class="url-box" id="u7">/stream/badges</span><button class="copy-btn" onclick="copyUrl('u7')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/badges?theme=dark" target="_blank">Dark</a><a href="/stream/badges?theme=light" target="_blank">Light</a></div>
+        <div class="theme-toggle"><a href="/stream/badges?theme=dark" target="_blank">Dark</a><a href="/stream/badges?theme=light" target="_blank">Light</a><a href="/stream/badges?theme=transparent" target="_blank">Transparent</a></div>
       </div>
     </div>
   </div>
@@ -1461,6 +1889,19 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         setTimeout(function(){el.style.color='';}, 1500);
       });
     }
+    function setAttempts() {
+      var inp = document.getElementById('attempts-input');
+      var val = parseInt(inp.value, 10);
+      if (isNaN(val) || val < 0) return;
+      fetch('/api/attempts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({count:val})})
+        .then(function(r){return r.json();})
+        .then(function(j){ if(j.ok) { inp.style.borderColor='#4f4'; setTimeout(function(){inp.style.borderColor='';},1500); }});
+    }
+    // Load current attempts count on page load
+    fetch('/api/status').then(function(r){return r.json();}).then(function(d){
+      var inp = document.getElementById('attempts-input');
+      if (inp && typeof d.attempts_count === 'number') inp.value = d.attempts_count;
+    });
   </script>
 </body>
 </html>"""
@@ -3512,6 +3953,22 @@ class SLinkServer:
                 enriched.append(b)
             return enriched
 
+        def _enrich_battle_state(pid):
+            """Add sprite_html and species_name to each enemy_party entry."""
+            bs = dict(self.battle_state.get(pid, {"in_battle": False, "enemy_party": []}))
+            ep = bs.get("enemy_party", [])
+            enriched = []
+            for em in ep:
+                em2 = dict(em)
+                sid = em2.get("species_id", 0)
+                if sid and not em2.get("sprite_html"):
+                    em2["sprite_html"] = self._get_sprite_html(sid)
+                if sid and not em2.get("species_name"):
+                    em2["species_name"] = self.adapter.species_name(sid)
+                enriched.append(em2)
+            bs["enemy_party"] = enriched
+            return bs
+
         return {
             "players": {
                 pid: {
@@ -3533,7 +3990,7 @@ class SLinkServer:
                     "party_keys":     self._get_party_ordered(pid),
                     "party_details":  _enrich_party(pid),
                     "queued":         len(s.queued_commands.get(pid, [])),
-                    "battle_state":   self.battle_state.get(pid, {"in_battle": False, "enemy_party": []}),
+                    "battle_state":   _enrich_battle_state(pid),
                     "identity_error": s.identity_error.get(pid, ""),
                 }
                 for pid in ["a", "b"]
@@ -3611,6 +4068,7 @@ class SLinkServer:
                 reverse=True,
             ),
             "run_over": s.run_over,
+            "attempts_count": s.attempts_count,
             "bonus_keys": {
                 pid: sorted(s.bonus_keys.get(pid, set()))
                 for pid in ["a", "b"]
@@ -4600,15 +5058,45 @@ class SLinkServer:
             text=_stream_overlay_page("Linked Pairs", _STREAM_LINKS_JS),
             content_type="text/html")
 
+    async def handle_stream_linked_party(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Linked Party", _STREAM_LINKED_PARTY_JS),
+            content_type="text/html")
+
+    async def handle_stream_boxed_links(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Boxed Links", _STREAM_BOXED_LINKS_JS),
+            content_type="text/html")
+
     async def handle_stream_deaths(self, request):
         return aiohttp_web.Response(
             text=_stream_overlay_page("Death Counter", _STREAM_DEATHS_JS),
+            content_type="text/html")
+
+    async def handle_stream_attempts(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Attempts Counter", _STREAM_ATTEMPTS_JS),
             content_type="text/html")
 
     async def handle_stream_areas(self, request):
         return aiohttp_web.Response(
             text=_stream_overlay_page("Area Tracker", _STREAM_AREAS_JS),
             content_type="text/html")
+
+    async def handle_api_attempts(self, request):
+        """POST /api/attempts — set the manual attempts counter."""
+        try:
+            body = await request.json()
+        except Exception:
+            return aiohttp_web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        count = body.get("count")
+        if count is None or not isinstance(count, int) or count < 0:
+            return aiohttp_web.json_response(
+                {"ok": False, "error": "count must be a non-negative integer"}, status=400)
+        self.state.attempts_count = count
+        self.state._save()
+        self._notify_sse()
+        return aiohttp_web.json_response({"ok": True, "attempts_count": count})
 
     async def handle_stream_events(self, request):
         return aiohttp_web.Response(
@@ -5683,8 +6171,12 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         app.router.add_get("/stream/",         srv.handle_stream_index)
         app.router.add_get("/stream/party-a",  srv.handle_stream_party_a)
         app.router.add_get("/stream/party-b",  srv.handle_stream_party_b)
-        app.router.add_get("/stream/links",    srv.handle_stream_links)
+        app.router.add_get("/stream/links",         srv.handle_stream_links)
+        app.router.add_get("/stream/linked-party", srv.handle_stream_linked_party)
+        app.router.add_get("/stream/boxed-links",  srv.handle_stream_boxed_links)
         app.router.add_get("/stream/deaths",   srv.handle_stream_deaths)
+        app.router.add_get("/stream/attempts", srv.handle_stream_attempts)
+        app.router.add_post("/api/attempts",   srv.handle_api_attempts)
         app.router.add_get("/stream/areas",    srv.handle_stream_areas)
         app.router.add_get("/stream/events",   srv.handle_stream_events)
         app.router.add_get("/stream/badges",   srv.handle_stream_badges)

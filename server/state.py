@@ -153,6 +153,8 @@ class SoulLinkState:
         self.pending_bonus: dict[str, deque[str]] = {"a": deque(), "b": deque()}
         # True once the run is definitively over (no alive links, no pending captures).
         self.run_over: bool = False
+        # Manual attempts counter (set by the user via the stream index page).
+        self.attempts_count: int = 0
         # Player identity lock: {player_id: {"ot_id": str, "trainer_name": str}}
         # Set on first hello with a non-empty party; verified on subsequent hellos.
         self.player_identity: dict[str, dict] = {}
@@ -298,6 +300,7 @@ class SoulLinkState:
                 state.gender_lock = bool(saved_rules.get("gender_lock", gender_lock))
                 state.type_lock = bool(saved_rules.get("type_lock", type_lock))
             state.run_over = bool(data.get("run_over", False))
+            state.attempts_count = int(data.get("attempts_count", 0))
             state.rom_type = data.get("rom_type", "")
             # Infer is_rr from persisted rom_type (belt-and-suspenders with CLI flag)
             if state.rom_type.endswith("_rr"):
@@ -1657,6 +1660,7 @@ class SoulLinkState:
                 pid: list(q) for pid, q in self.pending_bonus.items()
             },
             "run_over": self.run_over,
+            "attempts_count": self.attempts_count,
         }
         with open(self._links_path, "w") as f:
             json.dump(payload, f, indent=2)

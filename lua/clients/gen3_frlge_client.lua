@@ -289,6 +289,11 @@ local pending_faint_debounce = {}  -- [monKey] → frames_remaining
 -- Forward-declared here so dispatch_commands can see it (populated by index_party below).
 local _quarantined_slots = {} -- [slot] → true if key changed this frame (reset each frame)
 
+-- One-shot flags: log stale gBattleMons detection only once per transition
+-- (resets when identity matches again, so the next switch also logs once).
+local _stale_logged_0 = false
+local _stale_logged_2 = false
+
 -- ── Command dispatcher ────────────────────────────────────────────────────────
 local function dispatch_commands(cmds)
     for _, c in ipairs(cmds) do
@@ -330,8 +335,8 @@ local function dispatch_commands(cmds)
                             hud_show("!! " .. nick_label(c.key) .. " — faint pending switch!", 255, 80, 80, 360)
                         else
                             -- Safe to write: not in battle, or mon is on the bench.
-                            -- Write HP=0 to party only (skip gBattleMons for bench mons).
-                            memory.write_u16_le(base + M.OFF_HP, 0)
+                            -- Write HP=0 to both party struct and gBattleMons (if on field).
+                            M.forceFaint(slot)
                             _battle_hp_cache[c.key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
                             force_fainted_keys[c.key] = true
                             M.playSE(M.SE_FAINT)
@@ -772,7 +777,7 @@ local all_known_keys   = {}   -- all keys ever seen in party or box
 local sync_cooldown        = 0
 local SYNC_COOLDOWN_FRAMES = 30
 local GIFT_COOLDOWN_FRAMES = 1800 -- 30s for naming dialog after gift/starter
-local sync_block_log_timer = 0  -- throttle SYNC BLOCKED spam
+local _sync_blocked_logged = false  -- one-shot: log once when entering blocked state
 -- Debounce: require keys to appear/disappear for N consecutive frames before
 -- firing box_to_party / party_to_box.  Prevents false events from memory read
 -- glitches during BizHawk window move/resize.
@@ -1375,7 +1380,7 @@ local function on_frame()
                     if _quarantined_slots[slot] then break end
                     if not in_battle or (slot ~= active_slot and slot ~= active_slot2) then
                         -- Mon is no longer active (or battle ended) — safe to faint.
-                        memory.write_u16_le(base + M.OFF_HP, 0)
+                        M.forceFaint(slot)
                         _battle_hp_cache[key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
                         force_fainted_keys[key] = true
                         pending_battle_faints[key] = nil
@@ -1404,15 +1409,14 @@ local function on_frame()
                      and not party_frozen
     if #pending_sync_cmds > 0 then
         if not safe_now or not writes_enabled then
-            sync_block_log_timer = sync_block_log_timer - 1
-            if sync_block_log_timer <= 0 then
-                sync_block_log_timer = 120
-                console.log(string.format("[SLink-FRLGE] SYNC BLOCKED: safe=%s writes=%s cooldown=%d pbf=%d cmd=%s",
+            if not _sync_blocked_logged then
+                _sync_blocked_logged = true
+                console.log(string.format("[SLink-FRLGE] SYNC BLOCKED: safe=%s writes=%s cooldown=%d pbf=%d cmd=%s (%d queued)",
                     tostring(safe_now), tostring(writes_enabled), sync_cooldown,
-                    post_battle_frames, pending_sync_cmds[1].cmd))
+                    post_battle_frames, pending_sync_cmds[1].cmd, #pending_sync_cmds))
             end
         else
-            sync_block_log_timer = 0
+            _sync_blocked_logged = false
         end
     end
     if safe_now and #pending_sync_cmds > 0 and writes_enabled then
@@ -1615,9 +1619,21 @@ local function on_frame()
                 local bmon_hp    = mem_u16(bmon + M.BATTLE_MON_HP_OFF)
                 local bmon_maxHP = mem_u16(bmon + 0x2C)
                 local bmon_level = mem_u8(bmon + 0x2A)
-                -- Only update cache if gBattleMons has valid data (maxHP > 0).
-                -- At battle end, gBattleMons may be cleared — don't poison the cache.
-                if bmon_maxHP > 0 then
+                -- Identity cross-check: verify gBattleMons[0] actually belongs to the
+                -- mon at gBattlerPartyIndexes[0].  During mon switches, the battle engine
+                -- updates gBattlerPartyIndexes BEFORE refreshing gBattleMons, so for
+                -- several frames the new key maps to stale data (including hp=0 from
+                -- the fainted outgoing mon).  Comparing personality:otId catches this:
+                -- the outgoing mon's identity ≠ incoming mon's identity.
+                local bmon_pers = mem_u32(bmon + M.BATTLE_MON_PERS_OFF)
+                local bmon_otid = mem_u32(bmon + M.BATTLE_MON_OTID_OFF)
+                local party_pers = mem_u32(base0)
+                local party_otid = mem_u32(base0 + 4)
+                local bmon_fresh = (bmon_pers == party_pers and bmon_otid == party_otid)
+                -- Only update cache if gBattleMons has valid data (maxHP > 0) AND
+                -- the identity matches (not stale from a previous battler).
+                if bmon_maxHP > 0 and bmon_fresh then
+                    _stale_logged_0 = false
                     local bc = _battle_hp_cache[k0]
                     if bc then
                         -- Existing entry: update normally.
@@ -1631,19 +1647,21 @@ local function on_frame()
                         bc.level = bmon_level
                     elseif bmon_hp > 0 and not _quarantined_slots[idx0] then
                         -- New entry: only create when HP is positive AND slot identity is stable.
-                        -- gBattlerPartyIndexes[0] switches to the incoming mon before
-                        -- gBattleMons[0] is refreshed, so for 1-2 frames the new key
-                        -- maps to stale hp=0 from the fainted mon.  Skipping that frame
-                        -- prevents a false faint on the just-sent-out replacement.
-                        -- _quarantined_slots[idx0] adds a second gate: if the party slot
-                        -- identity is mid-copy, defer to the next stable frame.
                         _battle_hp_cache[k0] = {hp=bmon_hp, maxHP=bmon_maxHP, level=bmon_level}
                     end
+                elseif bmon_maxHP > 0 and not bmon_fresh and not _stale_logged_0 then
+                    _stale_logged_0 = true
+                    console.log(string.format(
+                        "[SLink-FRLGE] [cache] stale gBattleMons[0]: party=%s bmon=%08X:%08X — skipping",
+                        k0:sub(1,8), bmon_pers, bmon_otid))
                 end
                 -- Cache resolved ability keyed by monKey (persists across battles;
                 -- essential fallback for AP where gBaseStats address is unknown).
-                local aid0 = memory.read_u8(bmon + 0x20)
-                if aid0 > 0 then _ability_cache[k0] = aid0 end
+                -- Only cache when gBattleMons identity matches to avoid wrong ability.
+                if bmon_fresh then
+                    local aid0 = memory.read_u8(bmon + 0x20)
+                    if aid0 > 0 then _ability_cache[k0] = aid0 end
+                end
             end
         end
         -- Double battles: battler 2 is the player's second mon
@@ -1657,22 +1675,34 @@ local function on_frame()
                     local bmon2_hp    = mem_u16(bmon2 + M.BATTLE_MON_HP_OFF)
                     local bmon2_maxHP = mem_u16(bmon2 + 0x2C)
                     local bmon2_level = mem_u8(bmon2 + 0x2A)
-                    if bmon2_maxHP > 0 then
+                    -- Same identity cross-check as battler 0.
+                    local bmon2_pers = mem_u32(bmon2 + M.BATTLE_MON_PERS_OFF)
+                    local bmon2_otid = mem_u32(bmon2 + M.BATTLE_MON_OTID_OFF)
+                    local party2_pers = mem_u32(base2)
+                    local party2_otid = mem_u32(base2 + 4)
+                    local bmon2_fresh = (bmon2_pers == party2_pers and bmon2_otid == party2_otid)
+                    if bmon2_maxHP > 0 and bmon2_fresh then
+                        _stale_logged_2 = false
                         local bc2 = _battle_hp_cache[k2]
                         if bc2 then
-                            -- Same guard as battler 0: preserve force-fainted hp=0.
                             if not force_fainted_keys[k2] then
                                 bc2.hp = bmon2_hp
                             end
                             bc2.maxHP = bmon2_maxHP
                             bc2.level = bmon2_level
                         elseif bmon2_hp > 0 and not _quarantined_slots[idx2] then
-                            -- Same guard as battler 0: don't initialize with hp=0 or mid-copy data.
                             _battle_hp_cache[k2] = {hp=bmon2_hp, maxHP=bmon2_maxHP, level=bmon2_level}
                         end
+                    elseif bmon2_maxHP > 0 and not bmon2_fresh and not _stale_logged_2 then
+                        _stale_logged_2 = true
+                        console.log(string.format(
+                            "[SLink-FRLGE] [cache] stale gBattleMons[2]: party=%s bmon=%08X:%08X — skipping",
+                            k2:sub(1,8), bmon2_pers, bmon2_otid))
                     end
-                    local aid2 = memory.read_u8(bmon2 + 0x20)
-                    if aid2 > 0 then _ability_cache[k2] = aid2 end
+                    if bmon2_fresh then
+                        local aid2 = memory.read_u8(bmon2 + 0x20)
+                        if aid2 > 0 then _ability_cache[k2] = aid2 end
+                    end
                 end
             end
         end
@@ -2041,9 +2071,12 @@ local function on_frame()
             pending_party_to_box[k] = nil
             if prev_info.hp > 0 then had_alive = true end
             if prev_info.hp > 0 and curr_info.hp == 0 and not party_frozen then
-                -- Don't re-report faints that we caused via force_faint command.
+                -- Don't re-report faints that we caused via force_faint command,
+                -- or that are pending deferral (active battler awaiting switch-out).
                 if force_fainted_keys[k] then
                     console.log("[SLink-FRLGE]   ↳ faint suppressed (force_fainted) key="..k:sub(1,8))
+                elseif pending_battle_faints[k] then
+                    console.log("[SLink-FRLGE]   ↳ faint suppressed (pending_battle_faint) key="..k:sub(1,8))
                 elseif in_battle then
                     -- In-battle: start debounce instead of sending immediately.
                     -- CFRU may show transient HP=0 before abilities (Sturdy, Focus Sash)
@@ -2097,8 +2130,9 @@ local function on_frame()
                 console.log("[SLink-FRLGE]   ↳ faint debounce CANCELLED (HP recovered) key="..k:sub(1,8))
             end
             pending_faint_debounce[k] = nil
-        elseif force_fainted_keys[k] then
-            -- Server already force-fainted this mon — don't double-report.
+        elseif force_fainted_keys[k] or pending_battle_faints[k] then
+            -- Server already force-fainted this mon, or faint is pending deferral
+            -- (active battler awaiting switch-out) — don't double-report.
             pending_faint_debounce[k] = nil
         else
             frames_left = frames_left - 1

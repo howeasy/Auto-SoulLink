@@ -374,6 +374,8 @@ M.OUTCOME_CAUGHT            = 6           -- B_OUTCOME_CAUGHT_MON (vanilla/AP de
 -- gBattleMons struct layout (profile-independent sizes/offsets)
 M.BATTLE_MON_SIZE            = 0x58        -- sizeof(struct BattlePokemon) = 88 bytes
 M.BATTLE_MON_HP_OFF          = 0x28        -- BattlePokemon.hp offset (u16)
+M.BATTLE_MON_PERS_OFF        = 0x48        -- BattlePokemon.personality offset (u32)
+M.BATTLE_MON_OTID_OFF        = 0x54        -- BattlePokemon.otId offset (u32)
 
 -- gMain inBattle bit mask (used in vanilla mode)
 M.GMAIN_INBATTLE_MASK = 0x02              -- bit 1 = inBattle
