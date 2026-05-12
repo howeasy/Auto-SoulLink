@@ -476,6 +476,102 @@ def test_box_to_party_not_blocked_by_stale_party_size_during_swap(tmp_path, monk
     assert has_cmd(state.queued_commands["b"], "party_mon", "B:4"), "party_mon queued for partner B:4"
 
 
+def test_box_to_party_not_blocked_after_stats_cache_clears_partner(tmp_path, monkeypatch):
+    """
+    Regression: partner executes a box_mon and sends stats_cache (confirming deposit), but
+    party_size is still stale (6) because no tick has arrived yet.  A subsequent
+    box_to_party from the other side must NOT be falsely blocked.
+
+    Real-world scenario from the bug report:
+      1. B had their linked mon in party.  Some event triggered box_mon for B's mon.
+      2. B's Lua executed the deposit and sent stats_cache — party_keys["b"] lost the key
+         but party_size["b"] stayed at 6 (stale).
+      3. A tried to take their linked mon out of the box (box_to_party).
+      4. Server checked: logical_size = max(linked_party_size=5, adjusted_party_size=6) = 6
+         → falsely blocked and re-deposited A's mon ("deleted" from the player's perspective).
+    """
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+
+    # Create linked pair A:1 <-> B:2
+    entry = LinkEntry(
+        area_id="route_1",
+        a=MonInfo(key="A:1", level=10),
+        b=MonInfo(key="B:2", level=10),
+        status=LinkStatus.ALIVE,
+    )
+    state.links.append(entry)
+    state._index_entry(entry)
+    state.area_states["route_1"] = AreaStatus.LINKED
+
+    # B has 6 mons in party (B:2 + 5 fillers); A has B:2's partner (A:1) in the box
+    state.party_keys["b"] = {"B:2", "FILL_B:1", "FILL_B:2", "FILL_B:3", "FILL_B:4", "FILL_B:5"}
+    state.party_keys["a"] = set()  # A:1 is in the box
+    state.party_size = {"a": 0, "b": 6}
+    state._has_helld.add("b")
+
+    # B's box_mon for B:2 is executed — Lua sends stats_cache (no party_to_box to avoid feedback loop)
+    state.handle_event("b", {
+        "event": "stats_cache", "key": "B:2",
+        "stats": {"level": 10, "maxHP": 40}
+    })
+    # party_size["b"] must be decremented so it reflects the deposit
+    assert state.party_size["b"] == 5, "stats_cache should decrement party_size"
+    assert "B:2" not in state.party_keys["b"]
+
+    # A now withdraws their linked mon from the box — should succeed (B's party has room)
+    cmds = state.handle_event("a", {"event": "box_to_party", "key": "A:1"})
+    assert not has_cmd(cmds, "box_mon", "A:1"), \
+        "A:1 must NOT be re-deposited — B's party has room after stats_cache decrement"
+    assert "A:1" in state.party_keys["a"]
+    # Server should also pull B:2 back out for B
+    assert has_cmd(state.queued_commands["b"], "party_mon", "B:2"), \
+        "party_mon queued for B:2 so the pair reunites in party"
+
+
+def test_box_to_party_not_blocked_by_stale_party_size_after_manual_deposit(tmp_path, monkeypatch):
+    """
+    Regression: player manually deposits a mon (party_to_box); party_size stays stale
+    until the next tick.  If the partner immediately withdraws their linked mon the server
+    must NOT falsely block using the stale party_size.
+    """
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+
+    # Two linked pairs: A:1<->B:2, A:3<->B:4
+    for a_k, b_k, area in [("A:1", "B:2", "route_1"), ("A:3", "B:4", "route_2")]:
+        e = LinkEntry(
+            area_id=area,
+            a=MonInfo(key=a_k, level=5),
+            b=MonInfo(key=b_k, level=5),
+            status=LinkStatus.ALIVE,
+        )
+        state.links.append(e)
+        state._index_entry(e)
+        state.area_states[area] = AreaStatus.LINKED
+
+    # A has A:1 and A:3 in party plus 4 fillers (6 total); B has 6 mons including B:2 and B:4
+    state.party_keys["a"] = {"A:1", "A:3", "FA:1", "FA:2", "FA:3", "FA:4"}
+    state.party_keys["b"] = {"B:2", "B:4", "FB:1", "FB:2", "FB:3", "FB:4"}
+    state.party_size = {"a": 6, "b": 6}
+    state._has_helld.update({"a", "b"})
+
+    # A manually deposits A:1 → server queues box_mon(B:2) for B, party_size["a"] decremented
+    state.handle_event("a", {"event": "party_to_box", "key": "A:1",
+                              "stats": {"level": 5, "maxHP": 20}})
+    assert state.party_size["a"] == 5, "party_to_box should decrement party_size"
+
+    # Now B tries to withdraw B:4 (linked to A:3, which is still in A's party).
+    # B:4 is in the box (not in party_keys["b"]).
+    # Partner (A) just deposited A:1 — party_size["a"] is now 5, so logical_size = 5 < 6 → allow.
+    cmds = state.handle_event("b", {"event": "box_to_party", "key": "B:4"})
+    assert not has_cmd(cmds, "box_mon", "B:4"), \
+        "B:4 must NOT be re-deposited — A's party has room after manual deposit decremented party_size"
+    assert "B:4" in state.party_keys["b"]
+
+
 def test_sync_retrieve_failed_reboxes_partner(tmp_path, monkeypatch):
     """When one side fails to retrieve, the partner who succeeded is re-boxed."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))

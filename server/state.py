@@ -195,10 +195,16 @@ class SoulLinkState:
         elif event == "stats_cache":
             # Stats-only update from exec_box_mon: cache without triggering sync commands.
             # Also mark key as no longer in party so subsequent party_to_box decisions are accurate.
+            # Decrement party_size immediately so box_to_party full-party checks use the current
+            # count; otherwise party_size stays stale until the next tick (up to 0.5 s), which
+            # can cause a false "partner's party full" block if the partner tries to withdraw
+            # their linked mon during that window.
             key = msg.get("key", "")
             stats = msg.get("stats")
             if key and stats:
                 self.mon_stats[key] = stats
+                if key in self.party_keys[player_id]:
+                    self.party_size[player_id] = max(0, self.party_size.get(player_id, 0) - 1)
                 self.party_keys[player_id].discard(key)
         elif event == "sync_retrieve_done":
             # Sent by exec_party_mon after successfully retrieving a mon from the box.
@@ -1185,6 +1191,11 @@ class SoulLinkState:
         stats = msg.get("stats")
         if stats:
             self.mon_stats[key] = stats
+        # Decrement party_size immediately (same reason as stats_cache handler): avoids a
+        # false "partner's party full" block if the partner tries to withdraw their linked mon
+        # before the next tick arrives and corrects the count.
+        if key in self.party_keys[player_id]:
+            self.party_size[player_id] = max(0, self.party_size.get(player_id, 0) - 1)
         self.party_keys[player_id].discard(key)
         entry = self._key_index.get(key)
         if not entry or entry.status != LinkStatus.ALIVE:
