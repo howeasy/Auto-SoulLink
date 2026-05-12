@@ -82,10 +82,10 @@ _STREAM_SHARED_CSS = """
   .lk-lv{font-size:.82em;opacity:.5;flex-shrink:0;white-space:nowrap}
   .lk-div{flex-shrink:0;font-size:1.1em;opacity:.3;color:var(--c-gold)}
   /* Deaths counter */
-  .d-wrap{display:flex;align-items:center;justify-content:center;width:100%;height:100%}
+  .d-wrap{display:flex;align-items:center;justify-content:center;width:100%;flex:1;min-height:0}
   .d-grid{display:flex;gap:clamp(18px,9vw,80px);align-items:center}
   .d-box{text-align:center;line-height:1}
-  .d-num{font-family:var(--px);font-size:clamp(2.8em,13vmin,7em);line-height:1;display:block;-webkit-font-smoothing:none}
+  .d-num{font-family:var(--px);font-size:clamp(1.8em,8vmin,4.5em);line-height:1;display:block;-webkit-font-smoothing:none}
   .d-lbl{font-family:var(--px);font-size:clamp(8px,1.6vmin,14px);-webkit-font-smoothing:none;opacity:.5;letter-spacing:.07em;display:block;margin-top:clamp(6px,1.1vmin,12px)}
   .d-alive .d-num{color:var(--c-alive);text-shadow:0 0 20px rgba(61,232,90,.45)}.d-dead .d-num{color:var(--c-dead);text-shadow:0 0 20px rgba(240,56,56,.45)}
   .d-attempts .d-num{color:var(--c-gold);text-shadow:0 0 20px rgba(248,208,48,.45)}
@@ -96,17 +96,12 @@ _STREAM_SHARED_CSS = """
   .e-who{font-family:var(--px);font-size:clamp(7px,1.3vmin,11px);-webkit-font-smoothing:none;font-weight:bold;flex-shrink:0;white-space:nowrap;padding-top:1px}
   .e-msg{flex:1;min-width:0;font-size:.93em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ec{color:var(--c-alive)}.ef{color:var(--c-dead)}.ew{color:#f87020;font-weight:700}.en{color:var(--c-pend)}.ea{color:#5ac8f8}.el{color:var(--c-alive);font-weight:700}.ed{color:var(--c-dead);font-weight:700}.ev{color:#f8a030;font-weight:700}.ek{color:#c080f8}.eh{opacity:.32}
-  /* Area stats */
-  .a-wrap{display:flex;flex-direction:column;gap:clamp(6px,1.2vmin,14px);flex:1;justify-content:center}
-  .a-row{display:flex;align-items:center;gap:clamp(8px,1.6vmin,20px)}
-  .a-num{font-family:var(--px);font-size:clamp(20px,4.2vmin,38px);-webkit-font-smoothing:none;min-width:3ch;text-align:right;flex-shrink:0;line-height:1}
-  .a-lbl{font-size:.93em;flex:1;opacity:.8}
-  .an{color:var(--c-alive)}.ad{color:var(--c-dead)}.ap{color:var(--c-pend)}
+  /* Area stats — reuses d-* death/attempts counter style */
+  .a-pend .d-num{color:var(--c-pend);text-shadow:0 0 20px rgba(248,160,32,.45)}
   /* Badges */
-  .bdg-wrap{display:flex;gap:clamp(10px,2.8vw,32px);flex-wrap:wrap;align-items:flex-start}
-  .bdg-player{display:flex;flex-direction:column;gap:clamp(4px,.8vmin,9px)}
-  .bdg-name{font-family:var(--px);font-size:clamp(7px,1.4vmin,12px);-webkit-font-smoothing:none;color:var(--c-gold);letter-spacing:.03em;white-space:nowrap}
-  .bdg-strip{display:flex;gap:clamp(3px,.6vw,8px);flex-wrap:wrap}
+  .bdg-wrap{display:flex;flex:1;align-items:center;justify-content:center}
+  .bdg-player{display:flex;flex-direction:column;align-items:center;gap:clamp(4px,.8vmin,9px)}
+  .bdg-strip{display:flex;gap:clamp(3px,.6vw,8px);flex-wrap:wrap;justify-content:center}
   .bdg-img{width:clamp(24px,4.5vmin,42px);aspect-ratio:1;image-rendering:pixelated;image-rendering:crisp-edges;transition:opacity .2s}
   .bdg-img.on{opacity:1}.bdg-img.off{opacity:.1;filter:grayscale(100%)}
 
@@ -130,11 +125,11 @@ _STREAM_SHARED_CSS = """
   .lp-area{font-size:.72em;color:var(--c-gold);opacity:.75;letter-spacing:.04em;text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .lp-mons{display:flex;align-items:center;gap:clamp(4px,.8vmin,10px)}
   .lp-side{flex:1;min-width:0;display:flex;align-items:center;gap:clamp(4px,.7vmin,9px)}
-  .lp-side.lp-r{flex-direction:row-reverse}
+  /* lp-r: Side B — no row-reverse; DOM order [Info][Sprite] already mirrors Side A */
   .lp-info{flex:1;min-width:0}
   .lp-info.lp-ir{text-align:right}
   .lp-nm{font-size:.9em;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;margin-bottom:clamp(2px,.35vmin,4px)}
-  .lp-hr{flex-direction:row-reverse}
+  .lp-r .hp-trk{transform:scaleX(-1)}
   .lp-sep{flex-shrink:0;font-size:1.2em;opacity:.35;color:var(--c-gold)}
 
   /* ─── Boxed Links widget ──────────────────────────────────────────────── */
@@ -143,15 +138,21 @@ _STREAM_SHARED_CSS = """
   .bl-area{font-size:.72em;color:var(--c-gold);opacity:.75;letter-spacing:.04em;text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .bl-row{display:flex;align-items:center;gap:clamp(4px,.8vmin,10px)}
   .bl-side{flex:1;min-width:0;display:flex;align-items:center;gap:clamp(4px,.7vmin,9px)}
-  .bl-side.bl-r{flex-direction:row-reverse}
+  /* bl-r: Side B — no row-reverse; DOM order [Info][Sprite] already mirrors Side A */
   .bl-bx{}
-  .bl-info{flex:1;min-width:0}
-  .bl-info.bl-ir{text-align:right}
+  .bl-info{flex:1;min-width:0;text-align:right;padding-right:clamp(4px,.7vmin,8px)}
+  .bl-info.bl-ir{text-align:left;padding-right:0;padding-left:clamp(4px,.7vmin,8px)}
   .bl-nm{font-size:.9em;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2}
   .bl-lv{font-size:.7em;opacity:.65;line-height:1.3}
   .bl-tag{display:inline-block;font-family:var(--px);font-size:clamp(5px,.9vmin,8px);-webkit-font-smoothing:none;color:var(--c-gold);opacity:.6;letter-spacing:.06em;line-height:1.4}
   .bl-sep{flex-shrink:0;font-size:1.1em;opacity:.3;color:var(--c-gold)}
   .bl-side .mon-sprite{width:clamp(28px,5vmin,44px)}
+
+  /* Boxed Links compact grid (sprites-only when many pairs) */
+  .bl-grid{display:flex;flex-wrap:wrap;gap:clamp(4px,.8vmin,10px);flex:1;overflow:hidden;align-content:flex-start;justify-content:center}
+  .bl-gpair{display:flex;align-items:center;gap:clamp(3px,.5vmin,6px);background:var(--c-card);border-radius:5px;padding:clamp(3px,.5vmin,7px) clamp(5px,.9vmin,10px)}
+  .bl-gpair .mon-sprite{width:clamp(32px,5.5vmin,50px)}
+  .bl-garr{flex-shrink:0;font-size:.9em;opacity:.3;color:var(--c-gold)}
 
   /* thin-v overrides for boxed links */
   body.ltv .bl-list{gap:clamp(2px,.5vw,5px)}
@@ -172,10 +173,7 @@ _STREAM_SHARED_CSS = """
   body.lh .hp-row{justify-content:center;flex-wrap:wrap;gap:clamp(2px,.3vmin,4px)}
   body.lh .hp-lbl{display:none}
   body.lh .lv{margin-top:1px}
-  /* Areas: 3 stats side-by-side */
-  body.lh .a-wrap{flex-direction:row;justify-content:space-evenly;align-items:center;gap:0}
-  body.lh .a-row{flex-direction:column;align-items:center;gap:clamp(2px,.4vmin,4px)}
-  body.lh .a-num{text-align:center;min-width:2ch}
+  /* Areas: already centered d-grid layout — no horizontal override needed */
   /* Links: cards wrap into a grid */
   body.lh .lk-list{flex-direction:row;flex-wrap:wrap;align-content:flex-start;gap:clamp(2px,.4vmin,5px)}
   body.lh .lk-card{flex:0 0 auto;min-width:clamp(140px,22vw,220px)}
@@ -637,7 +635,7 @@ function render(d) {
     h += '<div class="lp-side lp-r' + (bFnt ? ' mc fnt' : '') + '">';
     h += '<div class="lp-info lp-ir">';
     h += '<div class="lp-nm">' + (bFnt ? '<span class="fnt-tag">FNT</span>' : '') + bN + '</div>';
-    h += '<div class="hp-row lp-hr">';
+    h += '<div class="hp-row">';
     if (bL) h += '<span class="lv">Lv\u00a0' + bL + '</span>';
     h += '<div class="hp-trk"><div class="hp-fill ' + hpCls(bPct) + '" style="width:' + bPct + '%"></div></div>';
     h += '</div></div>';
@@ -671,13 +669,29 @@ function render(d) {
     var bIn = bKeys.indexOf(lnk.b_key) !== -1;
     return !(aIn && bIn);
   });
-  var h = '<div class="wtitle">BOXED LINKS</div>';
+  var compact = pairs.length > 4;
+  var h = '<div class="wtitle">BOXED LINKS \xb7 ' + pairs.length + '</div>';
   if (!pairs.length) {
     h += '<div style="opacity:.4;font-size:.9em;padding-top:.4em">All pairs in party</div>';
     document.getElementById('root').innerHTML = h; return;
   }
-  h += '<div class="bl-list">';
-  pairs.forEach(function(lnk) {
+  if (compact) {
+    /* Compact grid — sprites only with arrow */
+    h += '<div class="bl-grid">';
+    pairs.forEach(function(lnk) {
+      var aSp = lnk.a_sprite_html || (lnk.a_species ? spriteTag(lnk.a_species) : '');
+      var bSp = lnk.b_sprite_html || (lnk.b_species ? spriteTag(lnk.b_species) : '');
+      h += '<div class="bl-gpair">';
+      h += aSp;
+      h += '<span class="bl-garr">\u25c8</span>';
+      h += bSp;
+      h += '</div>';
+    });
+    h += '</div>';
+  } else {
+    /* Detailed cards with names/levels */
+    h += '<div class="bl-list">';
+    pairs.forEach(function(lnk) {
     var aIn = aKeys.indexOf(lnk.a_key) !== -1;
     var bIn = bKeys.indexOf(lnk.b_key) !== -1;
     var aN = escHtml(lnk.a_nickname || lnk.a_species_name || '\u2014');
@@ -707,6 +721,7 @@ function render(d) {
     h += '</div></div>';
   });
   h += '</div>';
+  }
   document.getElementById('root').innerHTML = h;
   processSprites();
 }
@@ -720,7 +735,8 @@ function render(d) {
     if (l.status === 'alive') alive++;
     else if (l.status === 'dead' || l.status === 'memorial') dead++;
   });
-  var h = '<div class="d-wrap"><div class="d-grid">';
+  var h = '<div class="wtitle">SOUL LINK</div>';
+  h += '<div class="d-wrap"><div class="d-grid">';
   h += '<div class="d-box d-alive"><span class="d-num">' + alive + '</span><span class="d-lbl">ALIVE</span></div>';
   h += '<div class="d-box d-dead"><span class="d-num">'  + dead  + '</span><span class="d-lbl">DEAD</span></div>';
   h += '</div></div>';
@@ -748,13 +764,14 @@ function render(d) {
     else if (st === 'dead_zone') dead++;
     else if (st === 'pending_a' || st === 'pending_b' || st === 'pending_both') pend++;
   }
-  var h = '<div class="wtitle">AREAS</div><div class="a-wrap">';
-  h += '<div class="a-row"><span class="a-num an">' + linked + '</span><span class="a-lbl">Linked</span></div>';
-  h += '<div class="a-row"><span class="a-num ad">' + dead   + '</span><span class="a-lbl">Dead Zones</span></div>';
+  var h = '<div class="wtitle">AREAS</div>';
+  h += '<div class="d-wrap"><div class="d-grid">';
+  h += '<div class="d-box d-alive"><span class="d-num">' + linked + '</span><span class="d-lbl">LINKED</span></div>';
+  h += '<div class="d-box d-dead"><span class="d-num">'  + dead   + '</span><span class="d-lbl">DEAD</span></div>';
   if (pend > 0) {
-    h += '<div class="a-row"><span class="a-num ap">' + pend + '</span><span class="a-lbl">Pending</span></div>';
+    h += '<div class="d-box a-pend"><span class="d-num">' + pend + '</span><span class="d-lbl">PENDING</span></div>';
   }
-  h += '</div>';
+  h += '</div></div>';
   document.getElementById('root').innerHTML = h;
 }
 """
@@ -794,13 +811,13 @@ function render(d) {
 
 _STREAM_BADGES_JS = r"""
 var _badgeStateKey = null;
+var PLAYER = "%PLAYER%";
 
 function render(data) {
   var slugs = data.badge_slugs || [];
-  var pa = data.players.a || {}, pb = data.players.b || {};
+  var p = data.players[PLAYER] || {};
   var stateKey = JSON.stringify(slugs) + '|'
-    + (pa.badges||0) + ',' + (pa.kanto_badges||0) + ',' + (pa.trainer_name||'')
-    + '|' + (pb.badges||0) + ',' + (pb.kanto_badges||0) + ',' + (pb.trainer_name||'');
+    + (p.badges||0) + ',' + (p.kanto_badges||0) + ',' + (p.trainer_name||'');
   if (stateKey === _badgeStateKey) return;
   _badgeStateKey = stateKey;
 
@@ -809,29 +826,20 @@ function render(data) {
     return;
   }
   var BASE = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/';
-  function strip(playerData, label) {
-    var primary = playerData.badges || 0;
-    var kanto   = playerData.kanto_badges || 0;
-    var name = playerData.trainer_name || label;
-    var html = '<div class="bdg-player">';
-    html += '<div class="bdg-name">' + name + '</div>';
-    html += '<div class="bdg-strip">';
-    slugs.forEach(function(pair, i) {
-      // First 8 bits come from primary bitmask; next 8 from kanto_badges
-      var earned = i < 8 ? ((primary >> i) & 1) : ((kanto >> (i - 8)) & 1);
-      html += '<img class="bdg-img ' + (earned ? 'on' : 'off') + '"'
-            + ' crossorigin="anonymous"'
-            + ' src="' + BASE + pair[0] + '.png"'
-            + ' title="' + pair[1] + '" alt="' + pair[1] + '"'
-            + ' onerror="this.style.display=\'none\';">';
-    });
-    html += '</div></div>';
-    return html;
-  }
-  var h = '<div class="bdg-wrap">';
-  h += strip(pa, 'Player A');
-  h += strip(pb, 'Player B');
-  h += '</div>';
+  var primary = p.badges || 0;
+  var kanto   = p.kanto_badges || 0;
+  var name = p.trainer_name || ('Player ' + PLAYER.toUpperCase());
+  var h = '<div class="wtitle">' + name + ' BADGES</div>';
+  h += '<div class="bdg-wrap"><div class="bdg-player"><div class="bdg-strip">';
+  slugs.forEach(function(pair, i) {
+    var earned = i < 8 ? ((primary >> i) & 1) : ((kanto >> (i - 8)) & 1);
+    h += '<img class="bdg-img ' + (earned ? 'on' : 'off') + '"'
+          + ' crossorigin="anonymous"'
+          + ' src="' + BASE + pair[0] + '.png"'
+          + ' title="' + pair[1] + '" alt="' + pair[1] + '"'
+          + ' onerror="this.style.display=\'none\';">';
+  });
+  h += '</div></div></div>';
   document.getElementById('root').innerHTML = h;
   processBadges();
 }
@@ -970,13 +978,23 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
       </div>
     </div>
     <div class="overlay-card">
-      <div class="preview"><iframe src="/stream/badges?theme=dark"></iframe></div>
+      <div class="preview"><iframe src="/stream/badges-a?theme=dark"></iframe></div>
       <div class="overlay-info">
-        <h3>Gym Badges</h3>
-        <div class="size-hint">Recommended: 340 &times; 120</div>
-        <p>Both players' earned gym badges. Unearned badges are dimmed.</p>
-        <div class="url-row"><span class="url-box" id="u7">/stream/badges</span><button class="copy-btn" onclick="copyUrl('u7')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/badges?theme=dark" target="_blank">Dark</a><a href="/stream/badges?theme=light" target="_blank">Light</a><a href="/stream/badges?theme=transparent" target="_blank">Transparent</a></div>
+        <h3>Gym Badges — Player A</h3>
+        <div class="size-hint">Recommended: 340 &times; 80</div>
+        <p>Player A's earned gym badges. Unearned badges are dimmed.</p>
+        <div class="url-row"><span class="url-box" id="u7">/stream/badges-a</span><button class="copy-btn" onclick="copyUrl('u7')">Copy</button></div>
+        <div class="theme-toggle"><a href="/stream/badges-a?theme=dark" target="_blank">Dark</a><a href="/stream/badges-a?theme=light" target="_blank">Light</a><a href="/stream/badges-a?theme=transparent" target="_blank">Transparent</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/badges-b?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Gym Badges — Player B</h3>
+        <div class="size-hint">Recommended: 340 &times; 80</div>
+        <p>Player B's earned gym badges. Unearned badges are dimmed.</p>
+        <div class="url-row"><span class="url-box" id="u8">/stream/badges-b</span><button class="copy-btn" onclick="copyUrl('u8')">Copy</button></div>
+        <div class="theme-toggle"><a href="/stream/badges-b?theme=dark" target="_blank">Dark</a><a href="/stream/badges-b?theme=light" target="_blank">Light</a><a href="/stream/badges-b?theme=transparent" target="_blank">Transparent</a></div>
       </div>
     </div>
   </div>

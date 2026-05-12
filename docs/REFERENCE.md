@@ -136,36 +136,358 @@ Alternatively, load `lua/slink.lua` directly — it auto-detects the game but us
 
 ## HTTP Pages & API
 
-The status server (default port 8080) exposes these pages and endpoints:
+The status server (default port 8080) exposes these pages and endpoints.
 
-| Path | Description |
-|---|---|
-| `GET /` | Main status page — live player cards, encounters, linked pairs, area states |
-| `GET /memorial` | Memorial wall — tombstone cards for each dead linked pair with sprites, cause of death |
-| `GET /debug` | Debug console — live SSE, link management (create/unlink/override/revive), mon key & area autofill, event injection, command queuing, state toggles, live state panel, backup rollback |
-| `GET /stream` | Stream overlay index — links to individual overlay pages for OBS |
-| `GET /stream/party-a` | Stream overlay — Player A party |
-| `GET /stream/party-b` | Stream overlay — Player B party |
-| `GET /stream/links` | Stream overlay — linked pairs |
-| `GET /stream/deaths` | Stream overlay — death feed |
-| `GET /stream/areas` | Stream overlay — area states |
-| `GET /stream/events` | Stream overlay — recent events |
-| `GET /launcher/{player}` | Download launcher Lua script (pre-configured for this run) |
-| `GET /api/status` | JSON status dump (full state) |
-| `GET /api/events` | SSE stream (pushes `event: status` and `event: ping` on state changes) |
-| `POST /api/reset` | Wipe all state and start fresh |
-| `POST /api/inject_link` | Manually create a link between two mons |
-| `GET /api/debug/raw_state` | Raw links.json + live state |
-| `GET /api/debug/manual_link_data` | Mon options + area data for manual link UI |
-| `POST /api/debug/inject_event` | Inject a synthetic event through the state machine |
-| `POST /api/debug/queue_command` | Manually queue a command for a player |
-| `POST /api/debug/set_pokeballs` | Toggle pokeballs_obtained for a player |
-| `POST /api/debug/set_area_state` | Override an area's state |
-| `POST /api/debug/clear_pending` | Clear pending captures (all or per-area) |
-| `POST /api/debug/unlink` | Remove a link entry (unlink two mons) |
-| `POST /api/debug/revive` | Revive a dead/memorial link back to alive |
-| `GET /api/debug/backups` | List rolling backups with state summaries |
-| `POST /api/debug/rollback` | Roll back to a backup slot |
+### Quick Reference
+
+| Path | Method | Description |
+|---|---|---|
+| `/` | GET | Main status page |
+| `/memorial` | GET | Memorial wall — dead pairs |
+| `/debug` | GET | Debug console |
+| `/stream` | GET | Stream overlay index |
+| `/stream/party-a` | GET | Overlay — Player A party |
+| `/stream/party-b` | GET | Overlay — Player B party |
+| `/stream/links` | GET | Overlay — linked pairs |
+| `/stream/linked-party` | GET | Overlay — both players' linked mons side-by-side |
+| `/stream/boxed-links` | GET | Overlay — boxed linked pairs |
+| `/stream/deaths` | GET | Overlay — death feed |
+| `/stream/attempts` | GET | Overlay — attempts counter |
+| `/stream/areas` | GET | Overlay — area states |
+| `/stream/events` | GET | Overlay — recent events log |
+| `/stream/badges-a` | GET | Overlay — Player A gym badges |
+| `/stream/badges-b` | GET | Overlay — Player B gym badges |
+| `/launcher/{player}` | GET | Download pre-configured launcher Lua script |
+| `/calc/` | GET | Damage calculator |
+| `/api/status` | GET | Full state JSON dump |
+| `/api/events` | GET | SSE event stream |
+| `/api/calc/mons` | GET | Live party + enemy data for calc bridge |
+| `/api/reset` | POST | Wipe all state and start fresh |
+| `/api/inject_link` | POST | Manually link two mons by key |
+| `/api/inject_link_by_slot` | POST | Manually link two mons by party slot index |
+| `/api/attempts` | POST | Set manual attempts counter |
+| `/api/debug/raw_state` | GET | Raw JSON state (links.json + live fields) |
+| `/api/debug/manual_link_data` | GET | Mon keys and area IDs for link UI |
+| `/api/debug/backups` | GET | List rolling backup slots |
+| `/api/debug/inject_event` | POST | Inject synthetic event through state machine |
+| `/api/debug/queue_command` | POST | Queue a command for a player |
+| `/api/debug/set_pokeballs` | POST | Set pokeballs_obtained for a player |
+| `/api/debug/set_area_state` | POST | Override an area's state |
+| `/api/debug/clear_pending` | POST | Clear pending captures |
+| `/api/debug/unlink` | POST | Remove a link entry |
+| `/api/debug/revive` | POST | Revive a dead/memorial link |
+| `/api/debug/rollback` | POST | Restore state from a backup slot |
+
+### Pages
+
+All pages update live via SSE — no manual refresh needed.
+
+**`GET /`** — Main status page showing both player cards with party, current area, ball count, linked pair table, area state table, and killfeed.
+
+**`GET /memorial`** — Tombstone cards for every dead linked pair with greyscale sprites, nicknames, species, level, cause of death, and killer details.
+
+**`GET /debug`** — Full debug console with panels for manual linking, event injection, command queuing, state toggles, raw state viewer, and backup rollback. Prefer this UI over raw curl calls for one-off corrections.
+
+**`GET /stream`** — Index listing all available OBS overlays with browser source URLs.
+
+### Stream Overlays
+
+All overlays are designed as OBS browser sources. Each connects its own SSE feed and updates automatically. Add them in OBS via **Sources → Browser** and paste the URL.
+
+| Overlay | URL | Use |
+|---|---|---|
+| Player A party | `/stream/party-a` | Player A's live party |
+| Player B party | `/stream/party-b` | Player B's live party |
+| Linked pairs | `/stream/links` | All linked pairs and their status |
+| Linked party | `/stream/linked-party` | Both players' linked party mons side-by-side |
+| Boxed links | `/stream/boxed-links` | Linked pairs currently in the PC box |
+| Death feed | `/stream/deaths` | Scrolling log of deaths with cause and killer |
+| Attempts counter | `/stream/attempts` | Current run attempt count (set via `POST /api/attempts`) |
+| Area states | `/stream/areas` | All encounter areas and their current state |
+| Events log | `/stream/events` | Recent game events (captures, faints, area changes) |
+| Player A badges | `/stream/badges-a` | Player A's earned gym badges |
+| Player B badges | `/stream/badges-b` | Player B's earned gym badges |
+
+### Launcher Script
+
+**`GET /launcher/{player}`** — Returns a pre-configured `.lua` launcher script for the given player (`a` or `b`). The embedded server IP is taken from the HTTP `Host` header so the script works for LAN connections without editing.
+
+```bash
+# Download Player A launcher
+curl http://localhost:8080/launcher/a -o slink_a.lua
+
+# Download Player B launcher
+curl http://localhost:8080/launcher/b -o slink_b.lua
+```
+
+### JSON API
+
+---
+
+**`GET /api/status`** — Returns the full current state as JSON.
+
+```bash
+curl http://localhost:8080/api/status
+```
+
+Example response (abbreviated):
+```json
+{
+  "players": {
+    "a": { "connected": true, "area": "route_3", "ball_count": 12, "party": [...] },
+    "b": { "connected": true, "area": "mt_moon", "ball_count": 8,  "party": [...] }
+  },
+  "links": [
+    {
+      "area_id": "route_1",
+      "a": { "key": "12345678:87654321", "nickname": "PIDGEY",  "species": 16, "level": 12 },
+      "b": { "key": "11111111:22222222", "nickname": "RATTATA", "species": 19, "level": 12 },
+      "status": "alive"
+    }
+  ],
+  "area_states": { "route_1": "linked", "route_3": "pending_b" },
+  "pokeballs_obtained": { "a": true, "b": true }
+}
+```
+
+---
+
+**`GET /api/events`** — SSE stream. Pushes `event: ping` on every state change (triggers the status page to re-fetch) and `event: status` with the full JSON payload for direct consumers such as stream overlays and the calc bridge.
+
+```bash
+curl -N http://localhost:8080/api/events
+# event: ping
+# data:
+#
+# event: status
+# data: {"players": {...}, "links": [...], ...}
+```
+
+---
+
+**`GET /api/calc/mons`** — Returns live party and enemy data formatted for the calc bridge panel. Includes Showdown pastes, sprites, HP percentages, and matched trainer moves.
+
+```bash
+curl http://localhost:8080/api/calc/mons
+```
+
+```json
+{
+  "a": {
+    "party": [
+      {
+        "key": "12345678:87654321",
+        "species_name": "Charizard",
+        "nickname": "CHAR",
+        "level": 50,
+        "ability_name": "Blaze",
+        "item_name": "Charcoal",
+        "hp_pct": 85,
+        "showdown_paste": "Charizard @ Charcoal\nAbility: Blaze\nLevel: 50\n...",
+        "sprite_html": "<img ...>",
+        "moves": ["Flamethrower", "Air Slash", "Dragon Pulse", "Roost"]
+      }
+    ],
+    "enemy": [...],
+    "matched_set": "Leader Blaine"
+  },
+  "b": { "..." : "..." }
+}
+```
+
+---
+
+**`POST /api/reset`** — Deletes `data/links.json` and resets all in-memory state. Irreversible unless a backup exists.
+
+```bash
+curl -X POST http://localhost:8080/api/reset
+# {"ok": true}
+```
+
+---
+
+**`POST /api/inject_link`** — Manually create a linked pair. Resolves mon info from current party, box, and pending captures.
+
+```bash
+curl -X POST http://localhost:8080/api/inject_link \
+  -H "Content-Type: application/json" \
+  -d '{"a_key": "12345678:87654321", "b_key": "11111111:22222222", "area_id": "route_1"}'
+```
+
+If a mon already has a pending capture on a different area, the server returns `requires_force: true`. Add `"force": true` to override:
+
+```bash
+curl -X POST http://localhost:8080/api/inject_link \
+  -H "Content-Type: application/json" \
+  -d '{"a_key": "12345678:87654321", "b_key": "11111111:22222222", "area_id": "route_1", "force": true}'
+# {"ok": true}
+```
+
+---
+
+**`POST /api/inject_link_by_slot`** — Create a linked pair using party slot indices instead of mon keys. The keys are resolved server-side from the current party snapshot. Slots are 0-indexed.
+
+```bash
+# Link Player A's slot 0 to Player B's slot 0 on Route 1
+curl -X POST http://localhost:8080/api/inject_link_by_slot \
+  -H "Content-Type: application/json" \
+  -d '{"a_slot": 0, "b_slot": 0, "area_id": "route_1"}'
+# {"ok": true, "a_key": "12345678:87654321", "b_key": "11111111:22222222"}
+```
+
+---
+
+**`POST /api/attempts`** — Set the run attempts counter shown on the `/stream/attempts` overlay. The value persists in `links.json`.
+
+```bash
+curl -X POST http://localhost:8080/api/attempts \
+  -H "Content-Type: application/json" \
+  -d '{"count": 7}'
+# {"ok": true, "count": 7}
+```
+
+### Debug API
+
+> All debug endpoints are also accessible through the `/debug` page UI. Prefer the UI for one-off corrections; use these endpoints for scripted or automated workflows.
+
+---
+
+**`GET /api/debug/raw_state`** — Returns the raw `links.json` contents plus any live-only fields not written to disk.
+
+```bash
+curl http://localhost:8080/api/debug/raw_state
+```
+
+---
+
+**`GET /api/debug/manual_link_data`** — Returns all known mon keys (from party, box, and pending captures) and all area IDs. Used to populate the manual link form on the debug page.
+
+```bash
+curl http://localhost:8080/api/debug/manual_link_data
+# {"a_mons": [{"key": "...", "display": "PIDGEY Lv12"}], "b_mons": [...], "areas": ["route_1", ...]}
+```
+
+---
+
+**`GET /api/debug/backups`** — Lists rolling backup slots with timestamps and link/death counts. Up to 6 slots, oldest overwritten first.
+
+```bash
+curl http://localhost:8080/api/debug/backups
+# {"backups": [{"slot": 1, "ts": "2025-05-01T12:00:00", "links": 14, "deaths": 2}, ...]}
+```
+
+---
+
+**`POST /api/debug/inject_event`** — Send any synthetic event through the state machine exactly as if a Lua client had sent it. Returns any commands that were generated.
+
+```bash
+# Simulate Player A capturing a Pidgey on Route 1
+curl -X POST http://localhost:8080/api/debug/inject_event \
+  -H "Content-Type: application/json" \
+  -d '{"player": "a", "event": "capture", "key": "12345678:87654321", "area_id": "route_1", "level": 12}'
+
+# Simulate a faint
+curl -X POST http://localhost:8080/api/debug/inject_event \
+  -H "Content-Type: application/json" \
+  -d '{"player": "a", "event": "faint", "key": "12345678:87654321"}'
+# {"ok": true, "commands": [{"cmd": "force_faint", "key": "11111111:22222222"}]}
+```
+
+---
+
+**`POST /api/debug/queue_command`** — Manually queue a command to be delivered to a player on their next TCP tick.
+
+```bash
+# Queue a force_faint for Player B
+curl -X POST http://localhost:8080/api/debug/queue_command \
+  -H "Content-Type: application/json" \
+  -d '{"player": "b", "cmd": "force_faint", "key": "11111111:22222222"}'
+
+# Queue a HUD message for Player A
+curl -X POST http://localhost:8080/api/debug/queue_command \
+  -H "Content-Type: application/json" \
+  -d '{"player": "a", "cmd": "hud_show", "message": "Route 3 is dead zone!", "color": "255,80,80", "duration": 180}'
+```
+
+---
+
+**`POST /api/debug/set_pokeballs`** — Set `pokeballs_obtained` for a player. Use to manually activate the nuzlocke gate without waiting for the game to detect a ball in the bag.
+
+```bash
+# Activate nuzlocke gate for Player A
+curl -X POST http://localhost:8080/api/debug/set_pokeballs \
+  -H "Content-Type: application/json" \
+  -d '{"player": "a", "value": true}'
+
+# Deactivate (reset gate)
+curl -X POST http://localhost:8080/api/debug/set_pokeballs \
+  -H "Content-Type: application/json" \
+  -d '{"player": "a", "value": false}'
+```
+
+---
+
+**`POST /api/debug/set_area_state`** — Manually override an area's state. Valid states: `unseen`, `pending_a`, `pending_b`, `pending_both`, `linked`, `dead_zone`.
+
+```bash
+curl -X POST http://localhost:8080/api/debug/set_area_state \
+  -H "Content-Type: application/json" \
+  -d '{"area_id": "route_3", "state": "dead_zone"}'
+# {"ok": true, "area_id": "route_3", "state": "dead_zone"}
+```
+
+---
+
+**`POST /api/debug/clear_pending`** — Remove pending captures. Omit `area_id` to clear all; include it to clear only that area.
+
+```bash
+# Clear all pending captures
+curl -X POST http://localhost:8080/api/debug/clear_pending \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Clear a specific area
+curl -X POST http://localhost:8080/api/debug/clear_pending \
+  -H "Content-Type: application/json" \
+  -d '{"area_id": "route_3"}'
+```
+
+---
+
+**`POST /api/debug/unlink`** — Remove a link entry and reset the area state to `unseen`. Use `index` (0-based) as a tiebreaker if multiple links share the same area.
+
+```bash
+curl -X POST http://localhost:8080/api/debug/unlink \
+  -H "Content-Type: application/json" \
+  -d '{"area_id": "route_1"}'
+# {"ok": true}
+```
+
+---
+
+**`POST /api/debug/revive`** — Revive a dead or memorial pair back to alive status. Clears death metadata, removes from `pending_memorials`, and re-adds keys to `party_keys`. **You must manually restore the mons in-game** — the server only updates its own records.
+
+```bash
+curl -X POST http://localhost:8080/api/debug/revive \
+  -H "Content-Type: application/json" \
+  -d '{"area_id": "route_1"}'
+# {"ok": true, "area_id": "route_1", "message": "Link revived to alive"}
+```
+
+---
+
+**`POST /api/debug/rollback`** — Restore `links.json` and `events.json` from a rolling backup slot (1–6). The current state is saved as `links.pre_rollback.json` and `events.pre_rollback.json` before restoring.
+
+```bash
+# List available backups first
+curl http://localhost:8080/api/debug/backups
+
+# Roll back to slot 2
+curl -X POST http://localhost:8080/api/debug/rollback \
+  -H "Content-Type: application/json" \
+  -d '{"slot": 2}'
+# {"ok": true, "slot": 2, "message": "Rolled back to backup 2"}
+```
 
 ---
 
@@ -605,12 +927,39 @@ python -m server.manager --host 0.0.0.0
 | Endpoint | Description |
 |---|---|
 | `GET /` | Manager dashboard |
-| `POST /api/runs` | Create a new run |
+| `GET /api/runs` | List all runs (JSON) |
+| `GET /api/runs/cards` | HTML run cards (used internally by dashboard SSE) |
+| `POST /api/runs/new` | Create a new run |
 | `POST /api/runs/<id>/start` | Start a run |
 | `POST /api/runs/<id>/stop` | Stop a run |
 | `POST /api/runs/<id>/archive` | Archive a run |
-| `DELETE /api/runs/<id>` | Delete a run |
-| `GET /api/runs/<id>/launcher/<player>` | Download launcher script (player = "a" or "b") |
+| `POST /api/runs/<id>/delete` | Delete a run |
+| `GET /api/runs/<id>/launcher/<player>` | Download launcher script (`player` = `"a"` or `"b"`) |
+
+**Examples:**
+
+```bash
+# List all runs
+curl http://localhost:8090/api/runs
+# [{"id": "my-run", "name": "RR Season 3", "status": "running", "tcp_port": 54321, "http_port": 8080}, ...]
+
+# Create a new run (species clause + type clause enabled)
+curl -X POST http://localhost:8090/api/runs/new \
+  -H "Content-Type: application/json" \
+  -d '{"name": "RR Season 3", "species_clause": true, "gender_clause": false, "type_clause": true}'
+# {"ok": true, "id": "rr-season-3"}
+
+# Start a run
+curl -X POST http://localhost:8090/api/runs/rr-season-3/start
+# {"ok": true}
+
+# Stop a run
+curl -X POST http://localhost:8090/api/runs/rr-season-3/stop
+# {"ok": true}
+
+# Download Player A launcher script for a specific run
+curl http://localhost:8090/api/runs/rr-season-3/launcher/a -o slink_a.lua
+```
 
 ---
 
@@ -634,14 +983,15 @@ All other upstream calc pages (`randoms`, `index`, `honkalculate`, `oms`) have b
 A floating, draggable panel injected by `calc/src/js/slink_bridge.js` connects to the SLink server over SSE and displays:
 
 - **Player A / Player B tabs** — each showing the active party, enemy battle mons, and linked mons
+- **Prep tab** — searchable trainer index built from SETDEX data; select any trainer to view their full party with one-click import into the defender (`p2`) slot for pre-battle planning. Supports Normal and Hardcore modes with a toggle, multi-encounter trainers (Set 1 / Set 2 / Base sub-toggle sorted by average level), and multi-word search with token highlighting
 - **Party rows** — sprite (32×32), nickname/species, level, nature, ability, held item, HP bar
 - **Enemy rows** — matched trainer set moves with Normal/Hardcore difficulty badge
 - **Active mon highlight** — orange left border + faint orange background on the currently active battler
 - **One-click import** — clicking any row loads that mon's full Showdown paste into the calc attacker (`p1`) or defender (`p2`) slot automatically
 
-The panel saves its position and collapsed state in `localStorage`. It reconnects automatically via SSE on disconnect (3-second retry). Pings arriving while the user is interacting with the panel are deferred until `mouseup` to prevent DOM rebuilds mid-interaction.
+The panel saves its position, collapsed state, and Prep tab selections (mode, trainer, encounter) in `localStorage`. It reconnects automatically via SSE on disconnect (3-second retry). Pings arriving while the user is interacting with the panel are deferred until `mouseup` to prevent DOM rebuilds mid-interaction.
 
-**Server endpoint:** `GET /api/calc/mons` — returns per-player party, linked pairs, and enemy battle data in calc-friendly JSON format including `showdown_paste`, `sprite_html`, `hp_pct`, `ability_name`, `item_name`, and matched `moves`.
+**Server endpoint:** `GET /api/calc/mons` — returns per-player party, linked pairs, and enemy battle data in calc-friendly JSON format including `showdown_paste`, `sprite_html`, `hp_pct`, `ability_name`, `item_name`, and matched `moves`. See [JSON API](#json-api) for the full response shape.
 
 ### Trainer Set Matching
 

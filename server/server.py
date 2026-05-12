@@ -3909,9 +3909,16 @@ class SLinkServer:
             text=_stream_overlay_page("Event Feed", _STREAM_EVENTS_JS),
             content_type="text/html")
 
-    async def handle_stream_badges(self, request):
+    async def handle_stream_badges_a(self, request):
         return aiohttp_web.Response(
-            text=_stream_overlay_page("Gym Badges", _STREAM_BADGES_JS),
+            text=_stream_overlay_page("Gym Badges A",
+                                     _STREAM_BADGES_JS.replace("%PLAYER%", "a")),
+            content_type="text/html")
+
+    async def handle_stream_badges_b(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Gym Badges B",
+                                     _STREAM_BADGES_JS.replace("%PLAYER%", "b")),
             content_type="text/html")
 
     # ── Launcher script download ─────────────────────────────────────────────
@@ -4985,7 +4992,8 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         app.router.add_post("/api/attempts",   srv.handle_api_attempts)
         app.router.add_get("/stream/areas",    srv.handle_stream_areas)
         app.router.add_get("/stream/events",   srv.handle_stream_events)
-        app.router.add_get("/stream/badges",   srv.handle_stream_badges)
+        app.router.add_get("/stream/badges-a", srv.handle_stream_badges_a)
+        app.router.add_get("/stream/badges-b", srv.handle_stream_badges_b)
         app.router.add_get("/launcher/{player}", srv.handle_launcher)
         # Debug routes
         app.router.add_get("/debug",                       srv.handle_debug_html)

@@ -5091,6 +5091,19 @@ const RR_PATCH: {[name: string]: DeepPartial<MoveData>} = {
     zp: 180,
     maxPower: 130,
   },
+  // RR custom moves not present in any vanilla generation
+  'Soupercell Slam': {
+    bp: 120,
+    type: 'Electric',
+    category: 'Physical',
+    zp: 180,
+    maxPower: 140,
+  },
+  'Forbidden Spell': {
+    bp: 0,
+    type: 'Dark',
+    category: 'Status',
+  },
 }
 
 const SV: {[name: string]: MoveData} = extend(true, {}, SS, SV_PATCH, RR_PATCH);

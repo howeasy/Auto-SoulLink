@@ -71,6 +71,25 @@
   var _sseSource      = null;
   var _retryTimer     = null;
 
+  // RR set names that differ from the calc engine's move name table.
+  // Funnotbun uses its own names for some moves; two RR customs don't exist in
+  // the calc at all (Soupercell Slam, Forbidden Spell) and are added to moves.ts.
+  var MOVE_ALIASES = {
+    'Drain Kiss': 'Draining Kiss',    // funnotbun canonical → calc name
+    'Disarm Cry': 'Disarming Voice',  // funnotbun canonical → calc name
+  };
+  function _normalizeMoveName(name) {
+    return MOVE_ALIASES[name] || name;
+  }
+
+  // Prep tab state — mode is fixed to the current page (no cross-mode toggle)
+  var _pageIsHC      = /hardcore/i.test(window.location.href);
+  var _prepMode      = _pageIsHC ? 'hardcore' : 'normal';
+  var _prepTrainer   = localStorage.getItem('slink_prep_trainer')   || '';
+  var _prepEncounter = localStorage.getItem('slink_prep_encounter') || '';       // '' = first enc
+  var _trainerIndex  = { nm: {}, hc: {} };  // baseName → { encounters, encounterOrder }
+  var _trainerNames  = [];                  // sorted union of trainer names for datalist
+
   // ---------------------------------------------------------------------------
   // SETDEX_HC loading trick
   //
@@ -106,7 +125,11 @@
         window.SETDEX_HC = window.SETDEX_SV;           // capture HC
         window.SETDEX_SV = window.SETDEX_NORMAL_SNAP;  // restore normal
       }
+
+      // * prefix = boss/ace encounter, NOT HC-only.  Keep all keys in SETDEX_SV.
+
       _setdexReady = true;
+      _buildBothIndexes();   // build prep-tab trainer index now both setdexes are ready
       _enrichEnemyMons(); // re-run with both datasets now available
       refreshPanel(); // re-render difficulty badges now both datasets are live
     };
@@ -303,6 +326,95 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Trainer index — inverted lookup for Prep tab
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Build an inverted trainer index from a SETDEX.
+   *
+   * Input:  SETDEX_SV or SETDEX_HC  (species → setKey → set-entry)
+   * Output: {
+   *   "Leader Falkner": { encounters: { null: [mons], "HC": [mons] },
+   *                       encounterOrder: ["HC", null] },
+   *   "Rival Blue":     { encounters: { "Set 1": [mons], null: [mons] },
+   *                       encounterOrder: ["Set 1", null] },
+   *   ...
+   * }
+   *
+   * Encounter label decoding (* = boss/ace variant, Set N = numbered encounter):
+   *   non-starred + no Set N  → '__base__'   ("Base" single encounter)
+   *   starred     + no Set N  → 'Boss'
+   *   non-starred + Set N     → 'Set N'
+   *   starred     + Set N     → 'Boss Set N'
+   */
+  function _buildTrainerIndex(setdex) {
+    var index = {};
+
+    Object.keys(setdex).forEach(function (species) {
+      var sets = setdex[species];
+      Object.keys(sets).forEach(function (setKey) {
+        var isAce   = setKey.charAt(0) === '*';
+        var bare    = isAce ? setKey.slice(1) : setKey;
+        var setNm   = bare.match(/\s+Set\s+(\d+)$/i);
+        var setNum  = setNm ? 'Set ' + setNm[1] : null;
+        var base    = setNm ? bare.slice(0, bare.length - setNm[0].length) : bare;
+
+        var encLabel;
+        if (isAce && setNum)       encLabel = 'Boss ' + setNum;
+        else if (isAce)            encLabel = 'Boss';
+        else if (setNum)           encLabel = setNum;
+        else                       encLabel = '__base__';   // single / base encounter
+
+        if (!index[base]) index[base] = { encounters: {}, encounterOrder: [] };
+        var tr = index[base];
+        if (!tr.encounters[encLabel]) tr.encounters[encLabel] = [];
+        tr.encounters[encLabel].push({ species: species, set: sets[setKey] });
+      });
+    });
+
+    // Sort each trainer's mons within an encounter by level descending,
+    // then sort encounter order by avg level descending (latest fight first).
+    Object.keys(index).forEach(function (base) {
+      var tr  = index[base];
+      var enc = tr.encounters;
+
+      // Sort mons within each encounter by level desc
+      Object.keys(enc).forEach(function (lbl) {
+        enc[lbl].sort(function (a, b) {
+          return (b.set.level || 0) - (a.set.level || 0);
+        });
+      });
+
+      // Sort encounterOrder: Base always first, then by avg level desc
+      tr.encounterOrder = Object.keys(enc).sort(function (a, b) {
+        if (a === '__base__') return -1;
+        if (b === '__base__') return  1;
+        function avg(mons) {
+          if (!mons.length) return 0;
+          return mons.reduce(function (s, m) { return s + (m.set.level || 0); }, 0) / mons.length;
+        }
+        return avg(enc[b]) - avg(enc[a]);
+      });
+    });
+
+    return index;
+  }
+
+  /**
+   * Build both indexes (NM + HC) and update the trainer names list for autocomplete.
+   * Called once both setdexes are ready (from initSetdex onload).
+   */
+  function _buildBothIndexes() {
+    _trainerIndex.nm = _buildTrainerIndex(window.SETDEX_SV || {});   // Normal sets (normal.js)
+    _trainerIndex.hc = _buildTrainerIndex(window.SETDEX_HC || {});   // HC sets (hardcore.js)
+
+    var allNames = {};
+    Object.keys(_trainerIndex.nm).forEach(function (k) { allNames[k] = 1; });
+    Object.keys(_trainerIndex.hc).forEach(function (k) { allNames[k] = 1; });
+    _trainerNames = Object.keys(allNames).sort();
+  }
+
+  // ---------------------------------------------------------------------------
   // Import mechanism
   // ---------------------------------------------------------------------------
 
@@ -368,7 +480,7 @@
         ability : mon.ability_name || '',
         item    : mon.item_name    || '',
         level   : mon.level        || 50,
-        moves   : mon.moves        || [],
+        moves   : (mon.moves || []).map(_normalizeMoveName),
       };
       var namedId = species + ' (' + setName + ')';
       ss.select2('data', { id: namedId, text: namedId, pokemon: species, set: setName })
@@ -426,7 +538,7 @@
     var moves = mon.moves || [];
     for (var i = 0; i < 4; i++) {
       var moveObj = pokeObj.find('.move' + (i + 1) + ' select.move-selector');
-      var moveName = moves[i] || '(No Move)';
+      var moveName = _normalizeMoveName(moves[i] || '(No Move)');
       moveObj.attr('data-prev', moveObj.val());
       moveObj.val(moveName);
       if (!moveObj.val()) moveObj.val('(No Move)'); // fallback if not found
@@ -655,11 +767,26 @@
     body.innerHTML = '';
     if (_isCollapsed()) return;
 
-    if (!_data) {
+    // Prep tab is available even without SLink data (it only needs the SETDEX)
+    if (!_data && _activeTab !== 'prep') {
       var msg = ce('div');
       css(msg, { padding: '10px', textAlign: 'center', color: C.text, fontSize: '12px' });
       msg.textContent = _fetching ? '⟳ Connecting to SLink...' : '⚠ No data';
       body.appendChild(msg);
+
+      // Still render tab row so user can switch to Prep
+      var tabRowFallback = ce('div');
+      css(tabRowFallback, { display: 'flex', borderBottom: '1px solid ' + C.border, marginBottom: '4px' });
+      var prepTabFb = ce('button');
+      css(prepTabFb, {
+        flex: '1', padding: '7px 10px', background: 'transparent', border: 'none',
+        color: C.text, cursor: 'pointer', fontFamily: 'monospace', fontSize: '12px',
+      });
+      prepTabFb.textContent = '📋 Prep';
+      prepTabFb.onclick = function () { _activeTab = 'prep'; refreshPanel(); };
+      tabRowFallback.appendChild(prepTabFb);
+      body.insertBefore(tabRowFallback, msg);
+
       body.appendChild(_statusFooter());
       return;
     }
@@ -668,9 +795,10 @@
     var tabRow = ce('div');
     css(tabRow, { display: 'flex', borderBottom: '1px solid ' + C.border });
 
-    ['a', 'b'].forEach(function (side) {
-      var pd    = _data[side];
-      var badge = getDifficultyBadge(pd, side);
+    ['a', 'b', 'prep'].forEach(function (side) {
+      var isPrep = side === 'prep';
+      var pd     = (!isPrep && _data) ? _data[side] : null;
+      var badge  = !isPrep ? getDifficultyBadge(pd, side) : null;
 
       var tab = ce('button');
       css(tab, {
@@ -678,7 +806,7 @@
         padding       : '7px 10px',
         background    : _activeTab === side ? C.activeTab : 'transparent',
         border        : 'none',
-        borderRight   : side === 'a' ? '1px solid ' + C.border : 'none',
+        borderRight   : side !== 'prep' ? '1px solid ' + C.border : 'none',
         color         : C.text,
         cursor        : 'pointer',
         fontFamily    : 'monospace',
@@ -690,9 +818,13 @@
       });
 
       var labelSpan = ce('span');
-      labelSpan.textContent = 'Player ' + side.toUpperCase();
-      if (pd && pd.trainer_name) {
-        labelSpan.textContent += ' (' + pd.trainer_name + ')';
+      if (isPrep) {
+        labelSpan.textContent = '📋 Prep';
+      } else {
+        labelSpan.textContent = 'Player ' + side.toUpperCase();
+        if (pd && pd.trainer_name) {
+          labelSpan.textContent += ' (' + pd.trainer_name + ')';
+        }
       }
       tab.appendChild(labelSpan);
 
@@ -723,7 +855,6 @@
     body.appendChild(tabRow);
 
     // ── Active tab content ────────────────────────────────────────────────────
-    var pd      = _data[_activeTab];
     var content = ce('div');
     content.setAttribute('data-slink-scroll', '1');
     css(content, {
@@ -732,6 +863,14 @@
       overflowY: 'auto',
     });
 
+    if (_activeTab === 'prep') {
+      _renderPrepTab(content);
+      body.appendChild(content);
+      body.appendChild(_statusFooter());
+      return;
+    }
+
+    var pd      = _data[_activeTab];
     var hasContent = false;
 
     if (pd) {
@@ -789,6 +928,424 @@
       marginTop    : '4px',
     });
     return el;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Prep tab rendering
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Populate `container` with the Prep tab UI:
+   *   [Normal] [Hardcore] mode toggle
+   *   Search input with datalist
+   *   Trainer party display with encounter sub-toggle
+   */
+  function _renderPrepTab(container) {
+    var activeIndex = _pageIsHC ? _trainerIndex.hc : _trainerIndex.nm;
+
+    // ── Custom search input with dropdown ───────────────────────────────────
+    var listNames = _pageIsHC
+      ? Object.keys(_trainerIndex.hc).sort()
+      : Object.keys(_trainerIndex.nm).sort();
+
+    var searchWrap = ce('div');
+    css(searchWrap, { position: 'relative', marginBottom: '6px' });
+
+    var searchInput = ce('input');
+    searchInput.type        = 'text';
+    searchInput.placeholder = 'Search trainer… (e.g. "rival blue" or "falkner")';
+    searchInput.autocomplete = 'off';
+    searchInput.value       = _prepTrainer;
+    css(searchInput, {
+      width        : '100%',
+      boxSizing    : 'border-box',
+      padding      : '5px 28px 5px 8px',
+      background   : '#0d1a2e',
+      border       : '1px solid ' + C.border,
+      borderRadius : '3px',
+      color        : C.text,
+      fontFamily   : 'monospace',
+      fontSize     : '12px',
+      outline      : 'none',
+    });
+
+    var clearBtn = ce('button');
+    clearBtn.textContent = '✕';
+    css(clearBtn, {
+      position  : 'absolute',
+      right     : '5px',
+      top       : '50%',
+      transform : 'translateY(-50%)',
+      background: 'transparent',
+      border    : 'none',
+      color     : C.dim,
+      cursor    : 'pointer',
+      fontSize  : '13px',
+      padding   : '0',
+      lineHeight: '1',
+      display   : _prepTrainer ? 'block' : 'none',
+    });
+    clearBtn.onclick = function (e) {
+      e.stopPropagation();
+      _prepTrainer   = '';
+      _prepEncounter = '';
+      localStorage.removeItem('slink_prep_trainer');
+      localStorage.removeItem('slink_prep_encounter');
+      refreshPanel();
+    };
+
+    // Dropdown list
+    var dropdownEl = ce('div');
+    css(dropdownEl, {
+      display     : 'none',
+      position    : 'absolute',
+      top         : '100%',
+      left        : '0',
+      right       : '0',
+      zIndex      : '99999',
+      background  : '#0d1a2e',
+      border      : '1px solid ' + C.border,
+      borderTop   : 'none',
+      borderRadius: '0 0 3px 3px',
+      maxHeight   : '220px',
+      overflowY   : 'auto',
+      boxShadow   : '0 4px 12px rgba(0,0,0,0.6)',
+    });
+
+    var ddHighlight = -1; // index of keyboard-highlighted item
+
+    /** Return names matching all space-separated tokens (same logic as the calc set selector) */
+    function filterNames(term) {
+      if (!term) return listNames.slice(0, 30);
+      var tokens = term.toUpperCase().split(/\s+/).filter(function (t) { return t; });
+      return listNames.filter(function (n) {
+        var up = n.toUpperCase();
+        return tokens.every(function (tok) { return up.indexOf(tok) >= 0; });
+      });
+    }
+
+    /** Wrap matching tokens in a red <mark> span (same style as the calc) */
+    function hlHtml(name, term) {
+      if (!term) return document.createTextNode(name);
+      var frag = document.createDocumentFragment();
+      var tokens = term.split(/\s+/).filter(function (t) { return t; });
+      var re = new RegExp('(' + tokens.map(function (t) {
+        return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      }).join('|') + ')', 'gi');
+      var parts = name.split(re);
+      parts.forEach(function (part) {
+        if (re.test(part)) {
+          var mark = ce('mark');
+          mark.textContent = part;
+          css(mark, { background: C.btn, color: '#fff', borderRadius: '2px', padding: '0 2px' });
+          frag.appendChild(mark);
+        } else {
+          frag.appendChild(document.createTextNode(part));
+        }
+      });
+      return frag;
+    }
+
+    function buildDropdown(term) {
+      dropdownEl.innerHTML = '';
+      ddHighlight = -1;
+      var matches = filterNames(term);
+      if (!matches.length || (matches.length === 1 && matches[0] === term)) {
+        dropdownEl.style.display = 'none';
+        return;
+      }
+      matches.forEach(function (name, idx) {
+        var item = ce('div');
+        css(item, {
+          padding   : '5px 8px',
+          cursor    : 'pointer',
+          fontFamily: 'monospace',
+          fontSize  : '12px',
+          color     : C.text,
+          borderBottom: idx < matches.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+        });
+        item.appendChild(hlHtml(name, term));
+        item.addEventListener('mousedown', function (e) {
+          e.preventDefault(); // prevent input blur before we set value
+          selectTrainer(name);
+        });
+        item.addEventListener('mouseenter', function () {
+          setHighlight(idx);
+        });
+        dropdownEl.appendChild(item);
+      });
+      dropdownEl.style.display = 'block';
+    }
+
+    function setHighlight(idx) {
+      var items = dropdownEl.children;
+      if (ddHighlight >= 0 && items[ddHighlight]) {
+        items[ddHighlight].style.background = '';
+      }
+      ddHighlight = idx;
+      if (ddHighlight >= 0 && items[ddHighlight]) {
+        items[ddHighlight].style.background = C.activeTab;
+        // Scroll into view
+        var el = items[ddHighlight];
+        if (el.offsetTop < dropdownEl.scrollTop) {
+          dropdownEl.scrollTop = el.offsetTop;
+        } else if (el.offsetTop + el.offsetHeight > dropdownEl.scrollTop + dropdownEl.clientHeight) {
+          dropdownEl.scrollTop = el.offsetTop + el.offsetHeight - dropdownEl.clientHeight;
+        }
+      }
+    }
+
+    function selectTrainer(name) {
+      _prepTrainer   = name;
+      _prepEncounter = '';
+      localStorage.setItem('slink_prep_trainer', name);
+      localStorage.removeItem('slink_prep_encounter');
+      dropdownEl.style.display = 'none';
+      refreshPanel();
+    }
+
+    searchInput.addEventListener('input', function () {
+      var val = searchInput.value;
+      clearBtn.style.display = val ? 'block' : 'none';
+      buildDropdown(val.trim());
+    });
+
+    searchInput.addEventListener('keydown', function (e) {
+      var items = dropdownEl.children;
+      var count = items.length;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlight(Math.min(ddHighlight + 1, count - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlight(Math.max(ddHighlight - 1, 0));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (ddHighlight >= 0 && items[ddHighlight]) {
+          selectTrainer(items[ddHighlight].textContent);
+        } else {
+          var val = searchInput.value.trim();
+          if (activeIndex[val]) selectTrainer(val);
+        }
+      } else if (e.key === 'Escape') {
+        dropdownEl.style.display = 'none';
+      }
+    });
+
+    searchInput.addEventListener('focus', function () {
+      if (searchInput.value && !activeIndex[searchInput.value.trim()]) {
+        buildDropdown(searchInput.value.trim());
+      }
+    });
+
+    searchInput.addEventListener('blur', function () {
+      // Slight delay so mousedown on a dropdown item fires first
+      setTimeout(function () { dropdownEl.style.display = 'none'; }, 150);
+    });
+
+    searchWrap.appendChild(searchInput);
+    searchWrap.appendChild(clearBtn);
+    searchWrap.appendChild(dropdownEl);
+    container.appendChild(searchWrap);
+
+    // ── Results area ─────────────────────────────────────────────────────────
+    if (!_prepTrainer) {
+      if (!_setdexReady) {
+        var loading = ce('div');
+        loading.textContent = '⟳ Loading trainer data…';
+        css(loading, { color: C.dim, textAlign: 'center', padding: '12px', fontSize: '11px' });
+        container.appendChild(loading);
+      } else {
+        var hint = ce('div');
+        hint.textContent = 'Type a trainer name to see their party.';
+        css(hint, { color: C.dim, textAlign: 'center', padding: '12px', fontSize: '11px' });
+        container.appendChild(hint);
+      }
+      return;
+    }
+
+    var trEntry = activeIndex[_prepTrainer];
+
+    if (!trEntry) {
+      // The dropdown handles discovery; this only shows if user typed something
+      // and committed (Enter) without selecting from the list.
+      var noMatch = ce('div');
+      noMatch.textContent = 'No trainer found for "' + _prepTrainer + '". Try a different search.';
+      css(noMatch, { color: C.dim, textAlign: 'center', padding: '10px', fontSize: '11px' });
+      container.appendChild(noMatch);
+      return;
+    }
+
+    // ── Trainer found — encounter sub-toggle + party ──────────────────────────
+    var encOrder = trEntry.encounterOrder;
+
+    // Resolve active encounter: use saved label if valid, else first in order.
+    // _prepEncounter defaults to '' which is falsy, so it falls back to encOrder[0].
+    // When the user selects '__base__' it is stored literally and matched here.
+    var encLabel = (_prepEncounter && trEntry.encounters[_prepEncounter] !== undefined)
+      ? _prepEncounter
+      : encOrder[0];
+
+    if (encOrder.length > 1) {
+      var encRow = ce('div');
+      css(encRow, { display: 'flex', gap: '4px', marginBottom: '6px', flexWrap: 'wrap' });
+
+      encOrder.forEach(function (lbl) {
+        var mons    = trEntry.encounters[lbl] || [];
+        var avgLvl  = mons.length
+          ? Math.round(mons.reduce(function (s, m) { return s + (m.set.level || 0); }, 0) / mons.length)
+          : 0;
+        var dispLbl = lbl === '__base__' ? 'Base' : lbl;
+
+        var btn = ce('button');
+        btn.textContent = dispLbl + (avgLvl ? ' ~Lv' + avgLvl : '');
+        css(btn, {
+          padding     : '3px 8px',
+          border      : '1px solid ' + C.border,
+          borderRadius: '3px',
+          cursor      : 'pointer',
+          fontFamily  : 'monospace',
+          fontSize    : '10px',
+          background  : lbl === encLabel ? C.activeTab : 'transparent',
+          color       : lbl === encLabel ? C.text : C.dim,
+          fontWeight  : lbl === encLabel ? 'bold' : 'normal',
+        });
+        btn.onclick = (function (l) {
+          return function () {
+            _prepEncounter = l;
+            localStorage.setItem('slink_prep_encounter', l);
+            refreshPanel();
+          };
+        })(lbl);
+        encRow.appendChild(btn);
+      });
+
+      container.appendChild(encRow);
+    }
+
+    var mons = trEntry.encounters[encLabel] || [];
+    if (!mons.length) {
+      var emptyEnc = ce('div');
+      emptyEnc.textContent = 'No mons found for this encounter.';
+      css(emptyEnc, { color: C.dim, padding: '10px', fontSize: '11px' });
+      container.appendChild(emptyEnc);
+      return;
+    }
+
+    mons.forEach(function (monEntry) {
+      container.appendChild(_prepMonRow(monEntry, _prepTrainer));
+    });
+  }
+
+  /**
+   * Build a single mon row for the Prep tab.
+   * Similar to _monRow but simpler — no HP bar, no active state.
+   */
+  function _prepMonRow(monEntry, baseName) {
+    var species = monEntry.species;
+    var set     = monEntry.set;
+
+    var row = ce('div');
+    var _downY = 0;
+    css(row, {
+      display      : 'flex',
+      alignItems   : 'flex-start',
+      gap          : '6px',
+      padding      : '5px 2px',
+      borderBottom : '1px solid rgba(255,255,255,0.05)',
+      cursor       : 'pointer',
+      borderLeft   : '2px solid transparent',
+    });
+    row.onmouseenter = function () { row.style.background = 'rgba(255,255,255,0.06)'; };
+    row.onmouseleave = function () { row.style.background = ''; };
+    row.onmousedown  = function (e) { _downY = e.clientY; };
+    row.onclick = function (e) {
+      if (Math.abs(e.clientY - _downY) > 6) return;
+      e.stopPropagation();
+      importMon({
+        species_name: species,
+        level       : set.level   || 50,
+        nature      : set.nature  || 'Hardy',
+        ability_name: set.ability || '',
+        item_name   : set.item    || '',
+        moves       : set.moves   || [],
+        _matched_key: baseName,
+      }, 'p2');
+    };
+
+    // ── Info block ────────────────────────────────────────────────────────────
+    var info = ce('div');
+    css(info, { flex: '1', minWidth: '0', lineHeight: '1.7' });
+
+    // Line 1: name + meta tokens
+    var line1 = ce('div');
+    css(line1, { display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'baseline' });
+
+    var nameEl = ce('span');
+    nameEl.textContent = species;
+    css(nameEl, {
+      color      : '#ffd700',
+      fontWeight : 'bold',
+      maxWidth   : '140px',
+      overflow   : 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace : 'nowrap',
+    });
+    line1.appendChild(nameEl);
+
+    if (set.level) {
+      var lvlEl = ce('span');
+      lvlEl.textContent = 'Lv' + set.level;
+      css(lvlEl, { color: C.dim, fontSize: '11px' });
+      line1.appendChild(lvlEl);
+    }
+
+    if (set.nature) {
+      var natEl = ce('span');
+      natEl.textContent = set.nature;
+      css(natEl, { color: C.nature, fontSize: '11px' });
+      line1.appendChild(natEl);
+    }
+
+    if (set.ability) {
+      var ablEl = ce('span');
+      ablEl.textContent = set.ability;
+      css(ablEl, { color: C.nature, fontSize: '11px' });
+      line1.appendChild(ablEl);
+    }
+
+    if (set.item) {
+      var itmEl = ce('span');
+      itmEl.textContent = '@ ' + set.item;
+      css(itmEl, { color: C.item, fontSize: '11px' });
+      line1.appendChild(itmEl);
+    }
+
+    info.appendChild(line1);
+
+    // Move chips
+    if (set.moves && set.moves.length) {
+      var moveLine = ce('div');
+      css(moveLine, { display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '2px' });
+      set.moves.forEach(function (mv) {
+        var chip = ce('span');
+        chip.textContent = mv;
+        css(chip, {
+          background  : 'rgba(255,255,255,0.07)',
+          borderRadius: '3px',
+          padding     : '0 4px',
+          fontSize    : '10px',
+          color       : '#cde',
+          whiteSpace  : 'nowrap',
+        });
+        moveLine.appendChild(chip);
+      });
+      info.appendChild(moveLine);
+    }
+
+    row.appendChild(info);
+
+    return row;
   }
 
   // ── Individual mon row ──────────────────────────────────────────────────────

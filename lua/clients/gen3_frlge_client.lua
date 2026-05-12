@@ -228,6 +228,7 @@ local memorial_overflow_renamed = {} -- overflow boxes already renamed
 
 -- ── Deferred sync state (declared before dispatch_commands uses them) ─────────
 local pending_sync_cmds = {}  -- deferred box_mon / party_mon commands
+local _memorial_hold_frames = 0 -- countdown for periodic "go to PC" HUD reminder
 local sync_written_keys = {}  -- keys written by auto-sync this frame (suppress re-fire)
 local nick_cache        = {}  -- key → display label (updated from party snapshots)
 
@@ -1422,21 +1423,37 @@ local function on_frame()
     if safe_now and #pending_sync_cmds > 0 and writes_enabled then
         local cmd = pending_sync_cmds[1]  -- peek before removing
         -- Safety gate: if target party slot is in mid-copy quarantine, defer one frame.
-        local quarantine_blocked = false
+        local blocked = false
         if (cmd.cmd == "box_mon" or cmd.cmd == "memorialize") and cmd.key then
             local q_count = memory.read_u8(M.PARTY_COUNT_ADDR)
             for q_s = 0, q_count - 1 do
                 if M.monKey(M.PARTY_BASE + q_s * M.MON_SIZE) == cmd.key then
                     if _quarantined_slots[q_s] then
-                        quarantine_blocked = true
+                        blocked = true
                         console.log(string.format("[SLink-FRLGE] SYNC DEFERRED (slot quarantined, mid-copy) cmd=%s key=%s slot=%d",
                             cmd.cmd, cmd.key:sub(1,8), q_s))
+                    end
+                    -- Never memorialize the last party mon — emptying the party
+                    -- softlocks the Pokémon Center healing animation after whiteout.
+                    if cmd.cmd == "memorialize" and q_count <= 1 and not blocked then
+                        if game_over_flag then
+                            -- No replacements exist. Drop the command.
+                            table.remove(pending_sync_cmds, 1)
+                            blocked = true
+                            console.log("[SLink-FRLGE] memorialize dropped (game over, last party mon): "..cmd.key:sub(1,8))
+                        else
+                            blocked = true
+                            if _memorial_hold_frames <= 0 then
+                                hud_show("Go to PC! Withdraw alive mons first", 255, 200, 60, 300)
+                                _memorial_hold_frames = 300
+                            end
+                        end
                     end
                     break
                 end
             end
         end
-        if not quarantine_blocked then
+        if not blocked then
             table.remove(pending_sync_cmds, 1)
             local exec_ok, exec_err = true, nil
             if cmd.cmd == "box_mon" then
@@ -1461,6 +1478,7 @@ local function on_frame()
             end
         end
     end
+    if _memorial_hold_frames > 0 then _memorial_hold_frames = _memorial_hold_frames - 1 end
 
     -- 5b. Per-frame item integrity check (catches game-engine interference between frames)
     if _party_verify_frames > 0 and is_overworld and writes_enabled then
@@ -2599,7 +2617,10 @@ local function on_frame()
     end
     if pressed("F9") then
         -- Manual: directly memorialize party slot 0 (skips server — tests Lua write)
-        if M.slotOccupied(M.PARTY_BASE) or M.monKey(M.PARTY_BASE) ~= "00000000:00000000" then
+        local f9_count = memory.read_u8(M.PARTY_COUNT_ADDR)
+        if f9_count <= 1 then
+            console.log("[SLink-FRLGE] F9: blocked — would empty party")
+        elseif M.slotOccupied(M.PARTY_BASE) or M.monKey(M.PARTY_BASE) ~= "00000000:00000000" then
             local k = M.monKey(M.PARTY_BASE)
             console.log("[SLink-FRLGE] F9: manually memorializing "..k:sub(1,8))
             exec_memorialize(k)

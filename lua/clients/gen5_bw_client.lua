@@ -171,6 +171,7 @@ local game_over_flag = false
 
 -- ── Deferred sync state ────────────────────────────────────────────────────────
 local pending_sync_cmds = {}
+local _memorial_hold_frames = 0 -- countdown for periodic "go to PC" HUD reminder
 local resolved_areas    = {}
 local resolved_seeded   = false
 local pending_hud_area  = nil
@@ -901,6 +902,32 @@ local function on_frame()
         end
     end
     if safe_now and #pending_sync_cmds > 0 and writes_enabled then
+        local cmd = pending_sync_cmds[1]  -- peek before removing
+        -- Never memorialize the last party mon — emptying the party softlocks.
+        local blocked = false
+        if cmd.cmd == "memorialize" and cmd.key then
+            local q_count = M.readPartyCount()
+            if q_count <= 1 then
+                for q_s = 0, q_count - 1 do
+                    local addr = M.partyAddr(q_s)
+                    if addr and M.monKey(addr) == cmd.key then
+                        if game_over_flag then
+                            table.remove(pending_sync_cmds, 1)
+                            blocked = true
+                            console.log("[SLink] memorialize dropped (game over, last party mon): "..cmd.key:sub(1,8))
+                        else
+                            blocked = true
+                            if _memorial_hold_frames <= 0 then
+                                hud_show("Go to PC! Withdraw alive mons first", 255, 200, 60, 300)
+                                _memorial_hold_frames = 300
+                            end
+                        end
+                        break
+                    end
+                end
+            end
+        end
+        if not blocked then
         local cmd = table.remove(pending_sync_cmds, 1)
         local exec_ok, exec_result = true, nil
         if cmd.cmd == "box_mon" then
@@ -939,7 +966,9 @@ local function on_frame()
                      "memorialize_failed:"..(cmd.key or "?"):sub(1,8), true, true)
             end
         end
+        end -- not blocked
     end
+    if _memorial_hold_frames > 0 then _memorial_hold_frames = _memorial_hold_frames - 1 end
 
     -- 6. area_enter
     if zone_id ~= prev_zone_id then
@@ -1316,7 +1345,10 @@ local function on_frame()
     if pressed("F9") then
         if writes_enabled then
             local addr = M.partyAddr(0)
-            if addr and mem_u32(addr) ~= 0 then
+            local f9_count = M.readPartyCount()
+            if f9_count <= 1 then
+                console.log("[SLink] F9: blocked — would empty party")
+            elseif addr and mem_u32(addr) ~= 0 then
                 local k = cachedMonKey(0, addr)
                 pcall(exec_memorialize, k)
             end

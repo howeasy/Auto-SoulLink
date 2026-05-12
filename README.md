@@ -78,7 +78,7 @@ Shiny bonus pairs are always on — catching a shiny gives the partner an extra 
 | `/` | Live status — parties, encounters, linked pairs, badges |
 | `/memorial` | Tombstone cards for dead pairs |
 | `/debug` | Manual linking, event injection, backup rollback |
-| `/stream/*` | OBS overlays (party, links, deaths, areas) |
+| `/stream/*` | OBS overlays — party, links, linked-party, boxed-links, deaths, attempts, areas, events, badges |
 | `/calc/` | Radical Red damage calculator with live party bridge |
 
 ## Run Manager
