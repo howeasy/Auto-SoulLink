@@ -1389,10 +1389,12 @@ class SoulLinkState:
         return sum(1 for k in self.party_keys[player_id] if k not in bonus)
 
     def _handle_key_change(self, player_id: str, msg: dict):
-        """Handle a key change (nature change or evolution).
+        """Handle a key change (nature change, NPC trade, or evolution).
 
         The Lua client detected that a mon's key changed.  For Gen 3 (RR Nature
         Changer), personality changes but otId/species/nickname stay the same.
+        For NPC in-game trades, the outgoing mon's key is replaced by the
+        received mon's key and the Soul Link pair is preserved.
         For Gen 1, evolution changes the internal species index in the key, and
         may also update species/nickname.
 
@@ -1405,7 +1407,8 @@ class SoulLinkState:
         if not old_key or not new_key or old_key == new_key:
             return
 
-        log.info(f"[{player_id}] key_change: {old_key[:8]} → {new_key[:8]}")
+        reason = msg.get("reason", "nature_change")
+        log.info(f"[{player_id}] key_change ({reason}): {old_key[:8]} → {new_key[:8]}")
 
         _migrated = False
 

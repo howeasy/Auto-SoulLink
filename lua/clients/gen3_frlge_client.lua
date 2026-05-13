@@ -1457,7 +1457,7 @@ local function on_frame()
     -- Must run BEFORE capture/faint diff so false events are suppressed.
     -- Suppressed while gift buffer has entries — mass party swaps produce false
     -- signature matches that corrupt local state.
-    local nature_migrated = {}  -- old_key → true AND new_key → true (skip set)
+    local key_migrated = {}  -- old_key → true AND new_key → true (skip downstream diff loops)
     if #gift_capture_buffer == 0 then
     do
         local disappeared, appeared = {}, {}
@@ -1506,8 +1506,8 @@ local function on_frame()
                     if old_k and not dis_dups[sig] then
                         -- 1:1 match — this is a nature change, not a new capture.
                         console.log(string.format("[SLink-FRLGE] nature change detected: %s → %s", old_k:sub(1,8), new_k:sub(1,8)))
-                        nature_migrated[old_k] = true
-                        nature_migrated[new_k] = true
+                        key_migrated[old_k] = true
+                        key_migrated[new_k] = true
 
                         -- Migrate tracking state: old key → new key
                         all_known_keys[old_k] = nil
@@ -1570,6 +1570,77 @@ local function on_frame()
                 end
             end
         end
+
+        -- ── NPC trade detection ────────────────────────────────────────────
+        -- A key that left the party WITHOUT landing in any PC box, paired with
+        -- a new key appearing in the same frame, is an NPC in-game trade.
+        -- key_migrated suppresses party_to_box (departure) + gift_capture (arrival).
+        -- Only fire when exactly 1 unambiguous departure + 1 arrival candidate.
+        if #disappeared > 0 and #appeared > 0 then
+            local trade_deps, trade_arrs = {}, {}
+            for _, old_k in ipairs(disappeared) do
+                if not key_migrated[old_k] and not M.scanBoxForKey(old_k) then
+                    trade_deps[#trade_deps+1] = old_k
+                end
+            end
+            for _, app in ipairs(appeared) do
+                if not key_migrated[app.key] then
+                    trade_arrs[#trade_arrs+1] = app
+                end
+            end
+            if #trade_deps == 1 and #trade_arrs == 1 then
+                local old_k   = trade_deps[1]
+                local new_app = trade_arrs[1]
+                local new_k   = new_app.key
+                local ok_ps, ps = pcall(M.readPartySlot, new_app.slot)
+                local new_sid  = ok_ps and ps and ps.species_id  or 0
+                local new_nick = ok_ps and ps and ps.nickname     or ""
+                console.log(string.format("[SLink-FRLGE] NPC trade detected: %s → %s",
+                    old_k:sub(1,8), new_k:sub(1,8)))
+                key_migrated[old_k] = true
+                key_migrated[new_k] = true
+
+                all_known_keys[old_k] = nil
+                all_known_keys[new_k] = true
+
+                _display_cache[old_k] = nil
+                _display_cache[new_k] = ok_ps and ps and {
+                    nickname     = new_nick,
+                    species_id   = new_sid,
+                    held_item_id = ps.held_item_id or 0,
+                    ability_id   = ps.ability_id   or 0,
+                } or {nickname="", species_id=0, held_item_id=0, ability_id=0}
+
+                -- nick_cache: new mon gets its own name, not the traded-away mon's
+                nick_cache[old_k] = nil
+                nick_cache[new_k] = new_nick ~= "" and new_nick or (new_sid ~= 0 and "#"..new_sid or nil)
+
+                _ability_cache[old_k] = nil
+                -- mon_stats_cache: index_party() already ran this frame and populated
+                -- new_k's stats from live party RAM — do NOT copy old_k's stale stats.
+                mon_stats_cache[old_k] = nil
+
+                if sync_written_keys[old_k] then
+                    sync_written_keys[old_k] = nil; sync_written_keys[new_k] = true
+                end
+                -- Faint/battle caches: irrelevant for overworld trades, but clear defensively.
+                pending_faint_debounce[old_k] = nil
+                force_fainted_keys[old_k]     = nil
+                _battle_hp_cache[old_k]       = nil
+
+                for _, sc in ipairs(pending_sync_cmds) do
+                    if sc.key == old_k then sc.key = new_k end
+                end
+
+                send({event="key_change", old_key=old_k, new_key=new_k,
+                      reason="trade", new_species=new_sid, new_nickname=new_nick},
+                     "trade:"..old_k:sub(1,8).."->"..new_k:sub(1,8), true)
+            elseif #trade_deps > 1 or #trade_arrs > 1 then
+                console.log(string.format(
+                    "[SLink-FRLGE] trade detection ambiguous: %d departures, %d arrivals — skipped",
+                    #trade_deps, #trade_arrs))
+            end
+        end
     end
     end -- #gift_capture_buffer == 0
 
@@ -1581,7 +1652,7 @@ local function on_frame()
                 console.log(string.format("[SLink-FRLGE] [DIAG] capture BLOCKED by sync_written: %s", k:sub(1,8)))
             end
         end
-        if not prev_party[k] and not sync_written_keys[k] and not nature_migrated[k] then
+        if not prev_party[k] and not sync_written_keys[k] and not key_migrated[k] then
             -- Read display data for this party slot (pcall-guarded).
             local ok_ps, ps = pcall(M.readPartySlot, info.slot)
             local cap_nick = ok_ps and ps and ps.nickname      or ""
@@ -1674,8 +1745,8 @@ local function on_frame()
     local real_faint_occurred = false  -- track if any non-force faint happened
     for k, prev_info in pairs(prev_party) do
         local curr_info = curr_party[k]
-        if nature_migrated[k] then
-            -- Nature change: old key vanished but migrated — not a real disappearance.
+        if key_migrated[k] then
+            -- Key migrated (nature change or NPC trade): old key vanished but handled — not a real disappearance.
             all_zero = false
         elseif curr_info then
             -- Key still in party
