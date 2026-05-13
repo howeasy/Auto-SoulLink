@@ -374,6 +374,7 @@ M.OUTCOME_CAUGHT            = 6           -- B_OUTCOME_CAUGHT_MON (vanilla/AP de
 -- gBattleMons struct layout (profile-independent sizes/offsets)
 M.BATTLE_MON_SIZE            = 0x58        -- sizeof(struct BattlePokemon) = 88 bytes
 M.BATTLE_MON_HP_OFF          = 0x28        -- BattlePokemon.hp offset (u16)
+M.BATTLE_MON_STATUS_OFF      = 0x4C        -- BattlePokemon.status1 offset (u32, non-volatile status; CFRU pokemon.h)
 M.BATTLE_MON_PERS_OFF        = 0x48        -- BattlePokemon.personality offset (u32)
 M.BATTLE_MON_OTID_OFF        = 0x54        -- BattlePokemon.otId offset (u32)
 
@@ -1265,6 +1266,7 @@ function M.readEnemyParty()
             maxHP         = maxHP,
             ability_id    = (ok_a and aid) or 0,
             held_item_id  = (ok_i and iid) or 0,
+            status_cond   = mem_r32(base + M.OFF_STATUS),
         }
     end
     return result

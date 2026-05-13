@@ -95,6 +95,8 @@ M.PROFILES = {
         level_offset         = 0x1F,    -- actual level (party-calculated)
         hp_offset            = 0x22,    -- current HP (2 bytes big-endian)
         maxhp_offset         = 0x24,    -- max HP (2 bytes big-endian)
+        status_offset        = 0x20,    -- non-volatile status (u8: bits 0-2 SLP, 3 PSN, 4 BRN, 5 FRZ, 6 PAR, 7 TOX)
+        enemy_status_offset  = 0x20,    -- same offset in active enemy battle struct (mirrors party struct)
 
         -- Box struct offsets (32 bytes — truncated party struct, no stats)
         box_species_offset   = 0x00,

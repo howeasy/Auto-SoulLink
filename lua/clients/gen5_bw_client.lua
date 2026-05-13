@@ -684,6 +684,7 @@ local function build_party_snapshot(in_battle)
                     held_item_id = held_item or 0,
                     ability_id   = ability or 0,
                     nickname     = nickname or "",
+                    status_cond  = s.status_cond or 0,
                 }
             end
         end

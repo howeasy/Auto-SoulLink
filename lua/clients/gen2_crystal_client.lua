@@ -339,6 +339,7 @@ local function build_party_snapshot()
                 level = mon.level,
                 species_id = G.toNatDex(mon.species_index),
                 nickname = nick,
+                status_cond = mon.status_cond or 0,
             }
             -- Gen 2: include held item if present
             if mon.held_item and mon.held_item > 0 then
@@ -374,6 +375,7 @@ local function build_enemy_snapshot()
             hp = active.hp,
             maxHP = active.maxHP,
             active = true,
+            status_cond = active.status_cond or 0,
         }
     else
         -- Trainer: read species list for full team; match active by species
@@ -384,13 +386,14 @@ local function build_enemy_snapshot()
             local sp_idx = species_list[i]
             if sp_idx and sp_idx ~= 0 and sp_idx ~= 0xFF then
                 if not active_used and sp_idx == active.species_index then
-                    -- This is the active mon — use battle struct for live HP/level
+                    -- This is the active mon — use battle struct for live HP/level/status
                     enemy[#enemy + 1] = {
                         species_id = G.toNatDex(active.species_index),
                         level = active.level,
                         hp = active.hp,
                         maxHP = active.maxHP,
                         active = true,
+                        status_cond = active.status_cond or 0,
                     }
                     active_used = true
                 else

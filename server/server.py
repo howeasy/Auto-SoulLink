@@ -220,6 +220,25 @@ def _nature_from_key(key: str) -> str:
         return "Hardy"
 
 
+def _status_icon_html(status_cond: int) -> str:
+    """Return a colored HTML badge for the given status condition bitmask, or ''."""
+    if not status_cond:
+        return ""
+    if status_cond & 0x07:   # bits 0–2: sleep counter (> 0 = asleep)
+        return '<span class="status-icon s-slp">SLP</span>'
+    if status_cond & 0x80:   # bit 7: badly poisoned (Toxic) — check before PSN, sets both bits
+        return '<span class="status-icon s-tox">TOX</span>'
+    if status_cond & 0x08:   # bit 3: poisoned
+        return '<span class="status-icon s-psn">PSN</span>'
+    if status_cond & 0x10:   # bit 4: burned
+        return '<span class="status-icon s-brn">BRN</span>'
+    if status_cond & 0x20:   # bit 5: frozen
+        return '<span class="status-icon s-frz">FRZ</span>'
+    if status_cond & 0x40:   # bit 6: paralyzed
+        return '<span class="status-icon s-par">PAR</span>'
+    return ""
+
+
 def _build_mon_entry(key, detail, adapter):
     """Build a JSON-serialisable dict for one mon, suitable for /api/calc/mons."""
     sid = detail.get("species_id", 0)
@@ -519,6 +538,14 @@ _STATUS_HTML = """<!DOCTYPE html>
     .held-item {{ color:#adf; font-size:0.80em; display:block; margin-top:0.1em; }}
     .held-item::before {{ content:"ITEM: "; color:#778; font-weight:600; }}
     .ability {{ color:#cba; font-size:0.82em; }}
+    .status-icon {{ display:inline-block; padding:1px 5px; border-radius:3px; font-size:0.75em;
+      font-weight:bold; white-space:nowrap; vertical-align:middle; margin-left:3px; }}
+    .s-slp {{ background:#7a7a7a; color:#fff; }}
+    .s-psn {{ background:#c040c0; color:#fff; }}
+    .s-brn {{ background:#d06020; color:#fff; }}
+    .s-frz {{ background:#5ab8e4; color:#fff; }}
+    .s-par {{ background:#c8a800; color:#000; }}
+    .s-tox {{ background:#6a00aa; color:#fff; }}
     .sortable {{ cursor:pointer; user-select:none; position:relative; padding-right:14px !important; }}
     .sortable:hover {{ color:#fff; }}
     .sortable::after {{ content:"⇅"; position:absolute; right:2px; font-size:0.75em; opacity:0.4; }}
@@ -2468,6 +2495,7 @@ class SLinkServer:
                     "pp":           m.get("pp", []),
                     "slot":         m.get("slot", idx),
                     "active":       m.get("active", False),
+                    "status_cond":  m.get("status_cond", 0),
                 }
                 for idx, m in enumerate(msg.get("party", [])) if m.get("key")
             }
@@ -2660,6 +2688,7 @@ class SLinkServer:
                     "pp":           m.get("pp", []),
                     "slot":         m.get("slot", idx),
                     "active":       m.get("active", False),
+                    "status_cond":  m.get("status_cond", 0),
                 }
                 for idx, m in enumerate(msg["party"]) if m.get("key")
             }
@@ -3129,6 +3158,7 @@ class SLinkServer:
                         active = em.get("active", False)
                         eaid   = em.get("ability_id", 0)
                         eiid   = em.get("held_item_id", 0)
+                        esc    = em.get("status_cond", 0)
                         ename  = html.escape(self.adapter.species_name(esid)) if esid else "?"
                         eabl   = self.adapter.ability_name(eaid) if eaid else ""
                         eadesc = self.adapter.ability_description(eaid) if eaid else ""
@@ -3144,6 +3174,7 @@ class SLinkServer:
                             f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
                             f'</div>'
                             f'<span class="dim">{ehp}/{emaxHP}</span>'
+                            + _status_icon_html(esc)
                         )
                         foe_cls = "fainted" if ehp == 0 else ("active-foe" if active else "")
                         active_marker = "⚔ " if active else ""
@@ -3255,11 +3286,13 @@ class SLinkServer:
                     )
                     pct     = max(0, min(100, int(hp / maxhp * 100))) if maxhp else 0
                     bar_cls = "hp-high" if pct > 50 else ("hp-mid" if pct > 20 else "hp-low")
+                    status_cond = detail.get("status_cond", 0)
                     hp_cell = (
                         f'<div class="hp-bar-bg">'
                         f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
                         f'</div>'
                         f'<span class="dim">{hp}/{maxhp}</span>'
+                        + _status_icon_html(status_cond)
                     )
                     type_cell = _type_badges_html(sid, adapter=self.adapter)
                     abl_name = detail.get("ability_name", "")
@@ -3861,6 +3894,7 @@ class SLinkServer:
                         "ability_id":   em.get("ability_id", 0),
                         "ability_name": "",
                         "moves":        em.get("moves", []),
+                        "status_cond":  em.get("status_cond", 0),
                     }
                     entry = _build_mon_entry(f"foe-{ei}", detail, self.adapter)
                     if entry:

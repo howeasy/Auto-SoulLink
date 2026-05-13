@@ -67,21 +67,23 @@ end
 -- Returns level (u8), curHP (u16), maxHP (u16) as plain integers.
 -- Advance schedule (each u16 word at offset N uses the Nth LCRNG step):
 --   s1 → offset 0  (status lo-word, discarded)
---   s2 → offset 2  (status hi-word, discarded)
+--   s2 → offset 2  (status hi-word)
 --   s3 → offset 4  (level in low byte)
 --   s4 → offset 6  (curHP)
 --   s5 → offset 8  (maxHP)
 local function decrypt_stats(bs_addr, pid)
     local s = lcrng(pid)                               -- s1 → offset 0 (status lo)
-    xor16(r16(bs_addr), s)                             -- consume slot; result discarded
-    s = lcrng(s)                                       -- s2 → offset 2 (status hi, skip)
+    local status_lo = xor16(r16(bs_addr), s)
+    s = lcrng(s)                                       -- s2 → offset 2 (status hi)
+    local status_hi = xor16(r16(bs_addr + 2), s)
+    local status = status_lo | (status_hi << 16)
     s = lcrng(s)                                       -- s3 → offset 4
     local level = xor16(r16(bs_addr + 4), s) & 0xFF   -- low byte = level
     s = lcrng(s)                                       -- s4 → offset 6
     local curHP = xor16(r16(bs_addr + 6), s)
     s = lcrng(s)                                       -- s5 → offset 8
     local maxHP = xor16(r16(bs_addr + 8), s)
-    return level, curHP, maxHP
+    return level, curHP, maxHP, status
 end
 
 -- Export so test scripts can use it for verified scan output.
@@ -930,17 +932,18 @@ function M.readPartySlot(slot)
     if pid == 0 then return nil end
     local chk = r16(a + M.PKM.CHKSUM)
     if chk == 0 then return nil end
-    local level, curHP, maxHP = decrypt_stats(a + M.PKM.STATUS, pid)
+    local level, curHP, maxHP, status = decrypt_stats(a + M.PKM.STATUS, pid)
     if maxHP == 0 then return nil end
     return {
-        key   = fmt("%08X", pid),
-        level = level,
-        hp    = curHP,
-        maxHP = maxHP,
+        key         = fmt("%08X", pid),
+        level       = level,
+        hp          = curHP,
+        maxHP       = maxHP,
+        status_cond = status,
     }
 end
 
--- Returns {key, level, hp, maxHP} from the player's battle copy for the slot,
+-- Returns {key, level, hp, maxHP, status_cond} from the player's battle copy for the slot,
 -- or nil if the slot is empty / base not resolved.
 -- Use during battle for live HP — the party copy only syncs at battle end.
 function M.readBattleSlot(slot)
@@ -950,17 +953,18 @@ function M.readBattleSlot(slot)
     if pid == 0 then return nil end
     local chk = r16(a + M.PKM.CHKSUM)
     if chk == 0 then return nil end
-    local level, curHP, maxHP = decrypt_stats(a + M.PKM.STATUS, pid)
+    local level, curHP, maxHP, status = decrypt_stats(a + M.PKM.STATUS, pid)
     if maxHP == 0 then return nil end
     return {
-        key   = fmt("%08X", pid),
-        level = level,
-        hp    = curHP,
-        maxHP = maxHP,
+        key         = fmt("%08X", pid),
+        level       = level,
+        hp          = curHP,
+        maxHP       = maxHP,
+        status_cond = status,
     }
 end
 
--- Returns {key, level, hp, maxHP} from the enemy battle party for the slot,
+-- Returns {key, level, hp, maxHP, status_cond} from the enemy battle party for the slot,
 -- or nil if the slot is empty / base not resolved.
 function M.readEnemySlot(slot)
     local a = M.enemyBattleAddr(slot)
@@ -969,13 +973,14 @@ function M.readEnemySlot(slot)
     if pid == 0 then return nil end
     local chk = r16(a + M.PKM.CHKSUM)
     if chk == 0 then return nil end
-    local level, curHP, maxHP = decrypt_stats(a + M.PKM.STATUS, pid)
+    local level, curHP, maxHP, status = decrypt_stats(a + M.PKM.STATUS, pid)
     if maxHP == 0 then return nil end
     return {
-        key   = fmt("%08X", pid),
-        level = level,
-        hp    = curHP,
-        maxHP = maxHP,
+        key         = fmt("%08X", pid),
+        level       = level,
+        hp          = curHP,
+        maxHP       = maxHP,
+        status_cond = status,
     }
 end
 

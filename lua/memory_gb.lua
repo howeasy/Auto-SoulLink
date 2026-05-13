@@ -192,6 +192,10 @@ function M.initProfile(game_module, variant)
     M.HP_OFFSET           = prof.hp_offset or 0x01      -- current HP (2 bytes BE)
     M.MAXHP_OFFSET        = prof.maxhp_offset or 0x22   -- max HP (2 bytes BE)
     M.LEVEL_OFFSET        = prof.level_offset or 0x21   -- actual level
+    -- Status condition offset within party struct (u8)
+    M.STATUS_OFFSET       = prof.status_offset or 0x04
+    -- Status condition offset within active enemy battle struct (u8)
+    M.ENEMY_MON_STATUS_OFFSET = prof.enemy_status_offset or 0x04
     -- Box in SRAM flag: if true, box addresses are in CartRAM domain (Gen 1/2 GBC)
     M.BOX_IN_SRAM         = prof.box_in_sram or false
     M.SRAM_BANK           = prof.sram_bank or 0
@@ -272,6 +276,7 @@ function M.readPartySlot(slot)
         level = level,
         species_index = species_idx,
         slot = slot,
+        status_cond = M.read_u8(base + M.STATUS_OFFSET),
     }
     -- Gen 2: include held item
     if M.HELD_ITEM_OFFSET then
@@ -372,6 +377,7 @@ function M.readActiveBattleMon()
     local level = M.read_u8(M.ENEMY_MON_LEVEL_ADDR)
     -- PartyPos at battle_struct offset +0x03 (0-indexed slot within trainer's team)
     local party_pos = M.read_u8(M.ENEMY_MON_SPECIES_ADDR + 0x03)
+    local status_cond = M.read_u8(M.ENEMY_MON_SPECIES_ADDR + M.ENEMY_MON_STATUS_OFFSET)
     return {
         hp = hp,
         maxHP = maxHP,
@@ -379,6 +385,7 @@ function M.readActiveBattleMon()
         species_index = species_idx,
         party_pos = party_pos,
         slot = 0,
+        status_cond = status_cond,
     }
 end
 

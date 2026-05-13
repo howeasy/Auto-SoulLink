@@ -89,6 +89,8 @@ M.PROFILES = {
         hp_offset          = 0x01,    -- current HP (2 bytes BE)
         maxhp_offset       = 0x22,    -- max HP (2 bytes BE)
         level_offset       = 0x21,    -- actual level
+        status_offset      = 0x04,    -- non-volatile status (u8: bits 0-2 SLP, 3 PSN, 4 BRN, 5 FRZ, 6 PAR)
+        enemy_status_offset = 0x04,   -- same offset in active enemy battle struct (mirrors party struct)
         -- Ball item IDs
         ball_item_ids      = {0x01, 0x02, 0x03, 0x04},  -- Master, Ultra, Great, Poke
         -- Badges
@@ -131,6 +133,8 @@ M.PROFILES = {
         hp_offset          = 0x01,
         maxhp_offset       = 0x22,
         level_offset       = 0x21,
+        status_offset      = 0x04,    -- non-volatile status (u8)
+        enemy_status_offset = 0x04,   -- same offset in active enemy battle struct
         ball_item_ids      = {0x01, 0x02, 0x03, 0x04},
         badges_addr        = 0xD355,  -- wObtainedBadges (Yellow, shifted -1)
     },

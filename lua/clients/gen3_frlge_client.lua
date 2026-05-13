@@ -527,10 +527,12 @@ local function build_party_snapshot(battle_active)
     if M.PARTY_IN_SB1 and M.PARTY_BASE == 0 then return {} end
     -- Active battler detection: read gBattleMons[0] (player's side), same approach as
     -- enemy active detection which reads gBattleMons[1] and compares species+level.
-    local player_species, player_level = 0, 0
+    local player_species, player_level, player_status = 0, 0, 0
     if battle_active and M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
         player_species = mem_u16(M.BATTLE_MONS_ADDR + 0x00)
         player_level   = mem_u8(M.BATTLE_MONS_ADDR + 0x2A)
+        -- Read live status from gBattleMons[0] — party struct status is stale during battle.
+        player_status  = memory.read_u32_le(M.BATTLE_MONS_ADDR + M.BATTLE_MON_STATUS_OFF)
     end
     local count = mem_u8(M.PARTY_COUNT_ADDR)
     local snap  = {}
@@ -583,10 +585,16 @@ local function build_party_snapshot(battle_active)
             -- Active battler: mirrors enemy detection (species + level match gBattleMons[0])
             local is_active = battle_active and dc.species_id > 0
                               and dc.species_id == player_species and level == player_level
+            -- Status: use live gBattleMons value for active battler; party struct otherwise.
+            local status_cond = mem_u32(base + M.OFF_STATUS)
+            if is_active and player_status ~= 0 then
+                status_cond = player_status
+            end
             snap[#snap+1] = {key=k, hp=hp, maxHP=maxHP, level=level,
                              slot=i, active=is_active,
                              nickname=dc.nickname, species_id=dc.species_id,
-                             held_item_id=dc.held_item_id, ability_id=final_aid or 0}
+                             held_item_id=dc.held_item_id, ability_id=final_aid or 0,
+                             status_cond=status_cond}
             -- Read moves + PP (cheap, re-read every tick for level-up/TM changes)
             local ok_mv, mv, pp = pcall(M.decryptMoves, base)
             if ok_mv and mv then
@@ -2076,8 +2084,8 @@ local function on_frame()
                 end
                 local enemy_party = {}
                 -- Read active foe from gBattleMons[1] (always valid during battle).
-                -- BattlePokemon: species +0x00, ability +0x20, hp +0x28, level +0x2A, maxHP +0x2C
-                local foe_species, foe_level, foe_hp, foe_maxHP, foe_ability, foe_item = 0, 0, 0, 0, 0, 0
+                -- BattlePokemon: species +0x00, ability +0x20, status1 +0x24, hp +0x28, level +0x2A, maxHP +0x2C
+                local foe_species, foe_level, foe_hp, foe_maxHP, foe_ability, foe_item, foe_status = 0, 0, 0, 0, 0, 0, 0
                 if M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
                     local foe_base = M.BATTLE_MONS_ADDR + 1 * M.BATTLE_MON_SIZE
                     foe_species = memory.read_u16_le(foe_base + 0x00)
@@ -2085,6 +2093,7 @@ local function on_frame()
                     foe_hp      = memory.read_u16_le(foe_base + M.BATTLE_MON_HP_OFF)
                     foe_maxHP   = memory.read_u16_le(foe_base + 0x2C)
                     foe_ability = memory.read_u8(foe_base + 0x20)
+                    foe_status  = memory.read_u32_le(foe_base + M.BATTLE_MON_STATUS_OFF)
                     -- BattlePokemon.item is at +0x2E (confirmed from pret/pokefirered and CFRU
                     -- pokemon.h: struct BattlePokemon { ... /*0x2E*/ u16 item; ... }).
                     -- Skip for wild battles: wild mons in CFRU/RR have item=0 in gBattleMons.
@@ -2100,6 +2109,10 @@ local function on_frame()
                         -- Active foe: prefer gBattleMons ability (resolved at battle start)
                         if mon.active and foe_ability > 0 then
                             mon.ability_id = foe_ability
+                        end
+                        -- Active foe: prefer gBattleMons status (authoritative during battle)
+                        if mon.active then
+                            mon.status_cond = foe_status
                         end
                         -- Item field unreliable for wild mons in CFRU/RR
                         if not evt.is_trainer_battle then
@@ -2117,6 +2130,7 @@ local function on_frame()
                         maxHP        = foe_maxHP,
                         ability_id   = foe_ability,
                         held_item_id = foe_item,
+                        status_cond  = foe_status,
                     }
                     for k, mon in pairs(battle_seen_enemies) do
                         enemy_party[#enemy_party + 1] = {
@@ -2126,6 +2140,7 @@ local function on_frame()
                             maxHP        = mon.maxHP,
                             ability_id   = mon.ability_id,
                             held_item_id = (k == foe_key) and foe_item or mon.held_item_id,
+                            status_cond  = (k == foe_key) and foe_status or (mon.status_cond or 0),
                             active       = (k == foe_key),
                         }
                     end
