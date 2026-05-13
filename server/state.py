@@ -244,10 +244,19 @@ class SoulLinkState:
             # Update party size from tick/safe snapshots for paired retrieval checks.
             party = msg.get("party")
             if party is not None:
+                old_size = self.party_size.get(player_id, 0)
                 self.party_size[player_id] = len(party)
+                if old_size != len(party):
+                    log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {len(party)}  (tick/safe)")
 
         cmds = self.queued_commands[player_id][:]
         self.queued_commands[player_id].clear()
+        if cmds:
+            _summary = ", ".join(
+                c.get("cmd", "?") + (":" + c["key"][:8] if "key" in c else "")
+                for c in cmds
+            )
+            log.debug(f"[CMD QUEUE→{player_id}] flushing {len(cmds)} cmd(s): {_summary}")
         return cmds if cmds else [{"cmd": "noop"}]
 
     @classmethod
@@ -355,6 +364,20 @@ class SoulLinkState:
 
     # ── event handlers ───────────────────────────────────────────────────────
 
+    def _set_area_state(self, area_id: str, new_status: AreaStatus, *,
+                        player: str = "", reason: str = "") -> None:
+        """Set area_states[area_id] and emit a DEBUG log when the value changes."""
+        old = self.area_states.get(area_id, AreaStatus.UNSEEN)
+        self.area_states[area_id] = new_status
+        if old != new_status:
+            ctx_parts = []
+            if player:
+                ctx_parts.append(f"player={player}")
+            if reason:
+                ctx_parts.append(f"reason={reason}")
+            ctx = "  " + "  ".join(ctx_parts) if ctx_parts else ""
+            log.debug(f"[AREA] {area_id}: {old.value} → {new_status.value}{ctx}")
+
     def _handle_hello(self, player_id: str, msg: dict):
         """
         Reconcile on reconnect.
@@ -362,7 +385,9 @@ class SoulLinkState:
         missing-from-party mons may simply be boxed (do not treat as dead).
         """
         party = msg.get("party", [])
+        old_size = self.party_size.get(player_id, 0)
         self.party_size[player_id] = len(party)
+        log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {len(party)}  (hello)")
 
         # ── Identity lock ──
         # Extract OT ID from first party mon's key via the adapter.
@@ -397,6 +422,8 @@ class SoulLinkState:
                 else:
                     # Identity matches — clear any previous error
                     self.identity_error.pop(player_id, None)
+                    log.debug(f"[IDENTITY] player={player_id}  stored_ot={existing['ot_id'][:8]}  "
+                              f"incoming_ot={incoming_ot[:8]}  result=ok")
                     # Update trainer name if it changed (e.g. first connect had no name)
                     if incoming_name:
                         self.player_identity[player_id]["trainer_name"] = incoming_name
@@ -429,6 +456,12 @@ class SoulLinkState:
         self.party_keys[player_id] = {
             m["key"] for m in party if m.get("maxHP", 0) > 0
         }
+        # Strip dead/memorial mons that may have been re-added (e.g. hp=0 mon still in party
+        # slot when a reconnect happens before the Lua sends the faint event back).
+        for _k in list(self.party_keys[player_id]):
+            _e = self._key_index.get(_k)
+            if _e and _e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL):
+                self.party_keys[player_id].discard(_k)
 
         # Re-quarantine: if any pending (unlinked) captures are in the party,
         # remove from party_keys and re-queue box_mon so they go back to the box.
@@ -450,17 +483,26 @@ class SoulLinkState:
         for m in party:
             key = m.get("key", "")
             hp  = m.get("hp", 1)
-            if not key or hp > 0:
+            if not key:
+                continue
+            if hp > 0:
+                # Mon is alive — log confirmation if it's a known linked mon.
+                entry = self._key_index.get(key)
+                if entry and entry.status == LinkStatus.ALIVE:
+                    log.debug(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=alive_confirmed")
                 continue
             # Mon is in party but hp == 0 → it fainted while we were disconnected.
             # Only treat as a Soul Link death if the nuzlocke run was already active.
             if not self.pokeballs_obtained[player_id]:
-                log.debug(f"[{player_id}] reconcile: {key} hp=0 but nuzlocke not yet active — ignored")
+                log.debug(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=ignored  reason=pre_nuzlocke")
                 continue
             entry = self._key_index.get(key)
             if entry and entry.status == LinkStatus.ALIVE:
-                log.info(f"[{player_id}] reconcile: {key} is hp=0 in party, treating as faint")
+                log.info(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=faint_detected  reason=hp=0_in_party")
                 self._propagate_faint(player_id, entry, level=m.get("level", 0))
+            else:
+                reason = "not_linked" if not entry else f"status={entry.status.value}"
+                log.debug(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=ignored  reason={reason}")
 
         # Re-queue any memorials that were not yet confirmed before disconnecting
         for key in list(self.pending_memorials[player_id]):
@@ -547,13 +589,13 @@ class SoulLinkState:
         status = self.area_states.get(area_id, AreaStatus.UNSEEN)
         if status == AreaStatus.UNSEEN:
             # PENDING_X means "waiting for X to act" — the other player already entered.
-            self.area_states[area_id] = (
-                AreaStatus.PENDING_B if player_id == "a" else AreaStatus.PENDING_A
-            )
+            self._set_area_state(area_id,
+                AreaStatus.PENDING_B if player_id == "a" else AreaStatus.PENDING_A,
+                player=player_id)
         elif status == AreaStatus.PENDING_B and player_id == "b":
-            self.area_states[area_id] = AreaStatus.PENDING_BOTH
+            self._set_area_state(area_id, AreaStatus.PENDING_BOTH, player=player_id)
         elif status == AreaStatus.PENDING_A and player_id == "a":
-            self.area_states[area_id] = AreaStatus.PENDING_BOTH
+            self._set_area_state(area_id, AreaStatus.PENDING_BOTH, player=player_id)
         self._save()
 
     def _handle_capture(self, player_id: str, msg: dict):
@@ -571,6 +613,7 @@ class SoulLinkState:
         # They bypass all area state checks, species/gender/type clauses, and quarantine.
         if self.adapter.is_shiny(key):
             if key in self.bonus_keys[player_id]:
+                log.debug(f"[SHINY] player={player_id}  key={key[:8]}  action=duplicate_skip")
                 return  # duplicate event, already handled
             self.bonus_keys[player_id].add(key)
             self.party_keys[player_id].add(key)
@@ -578,6 +621,7 @@ class SoulLinkState:
             species = msg.get("species_id", 0)
             sname = self.adapter.species_name(species) if species else "Pokémon"
             log.info(f"[{player_id}] ★ SHINY CLAUSE: {sname} ({key[:8]}) in {area_id} — kept as bonus")
+            log.debug(f"[SHINY] player={player_id}  key={key[:8]}  action=detected  species={sname}  area={area_id}")
             # Capturing player: shiny sound + prominent GUI prompt
             self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 95})  # SE_SHINY
             self.queued_commands[player_id].append({
@@ -607,6 +651,7 @@ class SoulLinkState:
                 })
             # Queue a pending bonus slot for the partner
             self.pending_bonus[partner].append(key)
+            log.debug(f"[SHINY] player={player_id}  key={key[:8]}  action=queued  pending_for={partner}  queue_depth={len(self.pending_bonus[partner])}")
             # Cache stats (including species_id) so bonus pair formation can check lock clauses
             stats = msg.get("stats")
             if not stats:
@@ -654,6 +699,7 @@ class SoulLinkState:
             result = self._check_link_violation(a_mon_for_check, b_mon_for_check)
             if result:
                 violation, _violator = result
+                log.debug(f"[SHINY] player={player_id}  key={key[:8]}  action=violated  reason={violation!r}  shiny_key={shiny_key[:8]}")
                 nickname = msg.get("nickname", "")
                 self.party_keys[player_id].discard(key)
                 self.queued_commands[player_id].append({"cmd": "force_faint", "key": key, "nickname": nickname})
@@ -730,6 +776,7 @@ class SoulLinkState:
             shiny_sname = self.adapter.species_name(shiny_species) if shiny_species else "Pokémon"
             link_text = f"★ Bonus Pair: {shiny_sname} <> {cap_sname}!"
             log.info(f"[{player_id}] ★ BONUS PAIR: {shiny_key[:8]} ↔ {key[:8]} in {bonus_area_id}")
+            log.debug(f"[SHINY] player={player_id}  key={key[:8]}  action=formed  shiny_key={shiny_key[:8]}  area={bonus_area_id}  shiny_species={shiny_sname}  cap_species={cap_sname}")
             self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 25})   # SE_SUCCESS
             self.queued_commands[partner].append({"cmd": "play_sound", "sound": 25})
             self.queued_commands[player_id].append({
@@ -851,6 +898,8 @@ class SoulLinkState:
                       nickname=msg.get("nickname", ""),
                       species=msg.get("species_id", 0))
         self.pending_captures[area_id][player_id] = mon
+        log.debug(f"[PENDING] {area_id}  player={player_id}  action=add  key={key[:8]}"
+                  f"  species={mon.species}  lv={mon.level}")
         self.retry_areas[player_id].discard(area_id)  # valid capture clears retry
         in_box = msg.get("in_box", False)
         # Quarantine: unlinked mons must go to the box until linked.
@@ -906,10 +955,11 @@ class SoulLinkState:
                 self.queued_commands[reject_pid].append({"cmd": "play_sound", "sound": 26})   # SE_FAILURE
                 self.queued_commands[_partner(reject_pid)].append({"cmd": "play_sound", "sound": 22})  # SE_BOO
                 del self.pending_captures[area_id][reject_pid]
+                log.debug(f"[PENDING] {area_id}  player={reject_pid}  action=reject  key={reject_key[:8]}  reason={violation!r}")
                 # Area stays pending — waiting for the violating player to retry
-                self.area_states[area_id] = (
-                    AreaStatus.PENDING_A if reject_pid == "a" else AreaStatus.PENDING_B
-                )
+                self._set_area_state(area_id,
+                    AreaStatus.PENDING_A if reject_pid == "a" else AreaStatus.PENDING_B,
+                    player=reject_pid, reason="clause_violation_retry")
                 self.queued_commands[reject_pid].append({
                     "cmd": "gui_prompt",
                     "text": violation + " -- catch again!",
@@ -929,8 +979,9 @@ class SoulLinkState:
             entry = LinkEntry(area_id=area_id, a=a_mon, b=b_mon, status=LinkStatus.ALIVE)
             self.links.append(entry)
             self._index_entry(entry)
-            self.area_states[area_id] = AreaStatus.LINKED
+            self._set_area_state(area_id, AreaStatus.LINKED, player=player_id, reason="both_captured")
             del self.pending_captures[area_id]
+            log.debug(f"[PENDING] {area_id}  removed  (link formed)")
             log.info(f"Linked {a_mon.key} ↔ {b_mon.key} in {area_id}")
             # Notify both players with success sound + link info HUD
             a_label = a_mon.nickname or self.adapter.species_name(a_mon.species) or a_mon.key[:8]
@@ -977,9 +1028,9 @@ class SoulLinkState:
                 log.info(f"Post-link: both stay in box — {full_pid} party full ({self.party_size.get(full_pid, 0)}/6)")
         else:
             # PENDING_X = "waiting for X to act"
-            self.area_states[area_id] = (
-                AreaStatus.PENDING_B if player_id == "a" else AreaStatus.PENDING_A
-            )
+            self._set_area_state(area_id,
+                AreaStatus.PENDING_B if player_id == "a" else AreaStatus.PENDING_A,
+                player=player_id, reason="first_capture")
             # Notify partner that a new link opportunity is available.
             disp = area_id.replace("_", " ").title()
             nick = mon.nickname or self.adapter.species_name(mon.species)
@@ -997,14 +1048,19 @@ class SoulLinkState:
         key = msg.get("key", "")
         if not key:
             return
+        was_in_party = key in self.party_keys[player_id]
         self.party_keys[player_id].discard(key)
+        if was_in_party:
+            log.debug(f"[PARTY] player={player_id}  party_keys remove {key[:8]}  (faint)")
         # Soul Link deaths only count once the nuzlocke run is active (pokéballs obtained).
         # Faints before that point (e.g. starter knocked out before first Pokéball) are ignored.
         if not self.pokeballs_obtained[player_id]:
-            log.debug(f"[{player_id}] faint ignored — nuzlocke not yet active (key={key})")
+            log.debug(f"[FAINT GATE] player={player_id}  key={key[:8]}  suppressed=True  reason=nuzlocke_not_active")
             return
         entry = self._key_index.get(key)
         if not entry or entry.status != LinkStatus.ALIVE:
+            log.debug(f"[{player_id}] faint {key[:8]}: no alive linked entry — ignored "
+                      f"(status={entry.status.value if entry else 'not_found'})")
             return
         # Build killer info from server-enriched fields (injected by server.py before routing here).
         killer_species = msg.get("_killer_species", 0)
@@ -1103,8 +1159,10 @@ class SoulLinkState:
                     self._dupes_reroll(player_id, area_id, f"Dupes clause: {enc_name} -- reroll!")
                     return
 
-        self.area_states[area_id] = AreaStatus.DEAD_ZONE
-        log.info(f"[{player_id}] no_catch → dead zone for {area_id}")
+        self._set_area_state(area_id, AreaStatus.DEAD_ZONE,
+                            player=player_id, reason="no_catch")
+        partner_cap = self.pending_captures.get(area_id, {}).get(partner)
+        log.info(f"[DEAD ZONE] {area_id}  reason=no_catch  triggered_by={player_id}  partner_had_capture={partner_cap is not None}")
         # Notify both players with a failure sound
         self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 26})   # SE_FAILURE
         partner     = _partner(player_id)
@@ -1138,6 +1196,7 @@ class SoulLinkState:
 
         if area_id in self.pending_captures:
             del self.pending_captures[area_id]
+            log.debug(f"[PENDING] {area_id}  removed  (dead zone)")
 
         self._check_game_over()
         self._save()
@@ -1195,8 +1254,11 @@ class SoulLinkState:
         # false "partner's party full" block if the partner tries to withdraw their linked mon
         # before the next tick arrives and corrects the count.
         if key in self.party_keys[player_id]:
-            self.party_size[player_id] = max(0, self.party_size.get(player_id, 0) - 1)
+            old_size = self.party_size.get(player_id, 0)
+            self.party_size[player_id] = max(0, old_size - 1)
+            log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {self.party_size[player_id]}  (party_to_box)")
         self.party_keys[player_id].discard(key)
+        log.debug(f"[PARTY] player={player_id}  party_keys remove {key[:8]}  (party_to_box)")
         entry = self._key_index.get(key)
         if not entry or entry.status != LinkStatus.ALIVE:
             return
@@ -1218,6 +1280,7 @@ class SoulLinkState:
             ]
             self.queued_commands[partner].append({"cmd": "box_mon", "key": partner_mon.key})
             self.party_keys[partner].discard(partner_mon.key)
+            log.debug(f"[PARTY] player={partner}  party_keys remove {partner_mon.key[:8]}  (partner party_to_box sync)")
             log.info(f"[{player_id}] party_to_box {key[:8]} → box_mon {partner}:{partner_mon.key[:8]}")
         else:
             log.info(f"[{player_id}] party_to_box {key[:8]} → no box_mon queued (no linked partner or partner already boxed)")
@@ -1283,6 +1346,9 @@ class SoulLinkState:
             )
             adjusted_party_size = max(0, self.party_size.get(partner, 0) - pending_box_mons)
             logical_size = max(self._linked_party_size(partner), adjusted_party_size)
+            log.debug(f"[PARTY] box_to_party full-check: partner={partner}  "
+                      f"party_size={self.party_size.get(partner,0)}  "
+                      f"pending_box_mons={pending_box_mons}  logical={logical_size}")
             if logical_size >= 6:
                 self.queued_commands[player_id].append({"cmd": "box_mon", "key": key})
                 my_mon = entry.a if entry.a.key == key else entry.b
@@ -1296,6 +1362,7 @@ class SoulLinkState:
                 return
 
         self.party_keys[player_id].add(key)
+        log.debug(f"[PARTY] player={player_id}  party_keys add {key[:8]}  (box_to_party)")
         if partner_mon and partner_mon.key not in self.party_keys[partner]:
             cmd: dict = {"cmd": "party_mon", "key": partner_mon.key}
             if partner_mon.nickname:
@@ -1458,6 +1525,18 @@ class SoulLinkState:
                     shared_names = ", ".join(sorted(self.adapter.type_name(t) for t in shared))
                     return (f"Type clause: shared {shared_names}", "")
 
+        # All clause checks passed — log the evaluation summary at DEBUG.
+        a_name = self.adapter.species_name(a_mon.species) if a_mon.species else a_mon.key[:8]
+        b_name = self.adapter.species_name(b_mon.species) if b_mon.species else b_mon.key[:8]
+        checks = []
+        if self.species_lock:
+            checks.append("species=OK")
+        if self.gender_lock:
+            checks.append("gender=OK")
+        if self.type_lock:
+            checks.append("type=OK")
+        if checks:
+            log.debug(f"[CLAUSE] {a_name} ↔ {b_name}  " + "  ".join(checks))
         return None
 
     def _propagate_faint(self, player_id: str, entry: LinkEntry, killer: Optional[dict] = None,
@@ -1468,6 +1547,8 @@ class SoulLinkState:
         partner_mon = entry.b if player_id == "a" else entry.a
         if partner_mon:
             self.queued_commands[partner].append({"cmd": "force_faint", "key": partner_mon.key, "nickname": partner_mon.nickname or ""})
+            self.party_keys[partner].discard(partner_mon.key)
+            log.debug(f"[PARTY] player={partner}  party_keys remove {partner_mon.key[:8]}  (force_faint from {player_id})")
             log.info(f"[{player_id}] faint → force_faint {partner}:{partner_mon.key}")
         entry.status = LinkStatus.DEAD
         entry.killed_at = datetime.now(timezone.utc).isoformat()
@@ -1518,6 +1599,7 @@ class SoulLinkState:
         if not key:
             return
         self.pending_memorials[player_id].discard(key)
+        self.party_keys[player_id].discard(key)
         log.info(f"[{player_id}] memorialize_done key={key[:8]}")
         entry = self._key_index.get(key)
         if not entry or entry.status != LinkStatus.DEAD:

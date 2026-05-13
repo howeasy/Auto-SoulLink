@@ -18,6 +18,7 @@ Run:
 import asyncio
 import json
 import logging
+import logging.handlers
 import argparse
 import os
 import re
@@ -66,6 +67,38 @@ log = logging.getLogger(__name__)
 
 VALID_PLAYERS = {"a", "b"}
 _EVENTS_MAX = 200  # max entries kept in memory and written to events.json
+
+
+def _configure_logging(data_dir: str | None, verbose: bool) -> None:
+    """Add a RotatingFileHandler next to links.json.
+
+    Without ``--verbose``: both file and console stay at INFO.
+    With    ``--verbose``: file and console are both lowered to DEBUG so every
+    state-machine decision is captured for post-mortem analysis.
+    """
+    log_dir = data_dir if data_dir else DATA_DIR
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "slink.log")
+
+    fh = logging.handlers.RotatingFileHandler(
+        log_path, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+    )
+    fh.setLevel(logging.DEBUG if verbose else logging.INFO)
+    fh.setFormatter(logging.Formatter(
+        "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    ))
+    root = logging.getLogger()
+    root.addHandler(fh)
+
+    if verbose:
+        root.setLevel(logging.DEBUG)
+        # Also lower the existing console StreamHandler so DEBUG appears on screen.
+        for h in root.handlers:
+            if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.handlers.RotatingFileHandler):
+                h.setLevel(logging.DEBUG)
+        log.info(f"[--verbose] DEBUG logging enabled → {log_path}")
+    else:
+        log.info(f"Logging to {log_path}")
 
 
 
@@ -2231,6 +2264,7 @@ class SLinkServer:
                         self.state.is_rr = new_is_rr
                         self.adapter = self.state.adapter
                         log.info(f"Adapter switched to {new_game_id} (rom_type={rom_type})")
+                        log.debug(f"[ADAPTER] player={player_id}  game_id={new_game_id}  is_rr={new_is_rr}  rom_type={rom_type!r}  reason=game_id_changed")
                     elif new_is_rr != self.state.is_rr:
                         self.state.is_rr = new_is_rr
                         from server.adapters import get_adapter
@@ -2238,6 +2272,7 @@ class SLinkServer:
                             self.state.adapter.game_id, is_rr=new_is_rr)
                         self.adapter = self.state.adapter
                         log.info(f"Adapter updated: is_rr={new_is_rr}")
+                        log.debug(f"[ADAPTER] player={player_id}  game_id={self.state.adapter.game_id}  is_rr={new_is_rr}  rom_type={rom_type!r}  reason=is_rr_changed")
                 # Duplicate-event guard.  Detect client restarts by seq resetting to 0/1.
                 seq = msg.get("seq", -1)
                 if seq != -1:
@@ -2251,9 +2286,18 @@ class SLinkServer:
                             await self._respond(writer, [{"cmd": "noop"}])
                             continue
                     self._last_seq[player_id] = seq
+                    log.debug(f"[TCP] player={player_id}  seq={seq}  last={last}  outcome=accepted  event={msg.get('event','?')}")
 
                 commands = self._dispatch(player_id, msg)
                 await self._respond(writer, commands)
+                # Log non-trivial responses at DEBUG for post-mortem tracing.
+                _real_cmds = [c for c in commands if c.get("cmd") not in ("noop", "resolved_areas")]
+                if _real_cmds:
+                    _summary = ", ".join(
+                        c["cmd"] + (":" + c["key"][:8] if "key" in c else "")
+                        for c in _real_cmds
+                    )
+                    log.debug(f"[CMD FLUSH] player={player_id}  {len(_real_cmds)} cmd(s): {_summary}")
                 # Notify SSE clients after TCP response (no game-client latency impact)
                 self._notify_sse()
 
@@ -4947,7 +4991,8 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                data_dir: str = None, run_id: str = None, run_name: str = "",
                species_lock: bool = False, gender_lock: bool = False,
                type_lock: bool = False,
-               manager_port: int = 0):
+               manager_port: int = 0, verbose: bool = False):
+    _configure_logging(data_dir, verbose)
     if reset:
         links_path = os.path.join(data_dir, "links.json") if data_dir else LINKS_PATH
         if os.path.exists(links_path):
@@ -5042,9 +5087,11 @@ if __name__ == "__main__":
     parser.add_argument("--gender-clause",  action="store_true", dest="gender_lock",  help="Reject links where both mons share the same gender")
     parser.add_argument("--type-clause",    action="store_true", dest="type_lock",    help="Reject links where both mons share any type")
     parser.add_argument("--manager-port", type=int, default=0,   help="Manager HTTP port (enables 'Run Manager' link on status page)")
+    parser.add_argument("--verbose",      action="store_true",   help="Enable DEBUG-level logging to file and console (default: INFO only)")
     args = parser.parse_args()
     asyncio.run(main(args.host, args.port, args.http_port, args.reset, args.data_dir, args.run_id,
                      run_name=args.run_name,
                      species_lock=args.species_lock, gender_lock=args.gender_lock,
                      type_lock=args.type_lock,
-                     manager_port=args.manager_port))
+                     manager_port=args.manager_port,
+                     verbose=args.verbose))

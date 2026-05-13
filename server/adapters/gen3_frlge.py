@@ -278,6 +278,8 @@ class Gen3Adapter(GameAdapter):
             is_rr: True for Radical Red / CFRU ROMs, False for vanilla/AP/Emerald.
         """
         self._is_rr = is_rr
+        profile = "Radical Red / CFRU" if is_rr else "vanilla / AP / Emerald"
+        log.debug(f"[ADAPTER] Gen3Adapter initialized: profile={profile!r}")
 
     @property
     def game_id(self) -> str:

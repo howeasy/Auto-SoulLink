@@ -221,6 +221,8 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
         cmd.append("--gender-clause")
     if run.get("type_lock"):
         cmd.append("--type-clause")
+    if run.get("verbose"):
+        cmd.append("--verbose")
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.DEVNULL,
@@ -353,6 +355,7 @@ def _adopt_orphans(runs: list[dict]) -> bool:
             "species_lock": bool(rules.get("species_lock", False)),
             "gender_lock":  bool(rules.get("gender_lock", False)),
             "type_lock":    bool(rules.get("type_lock", False)),
+            "verbose":      False,
         }
         runs.append(run)
         known_ids.add(run_id)  # avoid port collision across multiple orphans
@@ -403,6 +406,8 @@ def _render_cards(runs: list[dict], host: str) -> str:
             lock_badges += '<span class="lock-badge">⚥ Gender</span>'
         if run.get("type_lock"):
             lock_badges += '<span class="lock-badge">🔮 Type</span>'
+        if run.get("verbose"):
+            lock_badges += '<span class="lock-badge verbose-badge">📋 Verbose</span>'
 
         # Read game/rom_type from the run's links.json
         game_badge = ""
@@ -534,6 +539,7 @@ def _render_html(runs: list[dict], host: str) -> str:
     <label><input type="checkbox" id="species_lock" /> 🧬 Species Clause</label>
     <label><input type="checkbox" id="gender_lock" /> ⚥ Gender Clause</label>
     <label><input type="checkbox" id="type_lock" /> 🔮 Type Clause</label>
+    <label><input type="checkbox" id="verbose_log" /> 📋 Verbose Logging</label>
   </div>
   <button class="btn new" onclick="newRun()">＋ New Run</button>
 </div>
@@ -576,11 +582,12 @@ async function newRun() {{
   const species_lock = document.getElementById('species_lock').checked;
   const gender_lock = document.getElementById('gender_lock').checked;
   const type_lock = document.getElementById('type_lock').checked;
+  const verbose = document.getElementById('verbose_log').checked;
   if (!name) {{ alert('Enter a run name'); return; }}
   const res = await fetch('/api/runs/new', {{
     method: 'POST',
     headers: {{'Content-Type': 'application/json'}},
-    body: JSON.stringify({{name, species_lock, gender_lock, type_lock}})
+    body: JSON.stringify({{name, species_lock, gender_lock, type_lock, verbose}})
   }});
   const j = await res.json();
   if (!j.ok) alert(j.error || 'Error');
@@ -649,6 +656,7 @@ class RunManager:
             "species_lock": bool(body.get("species_lock", False)),
             "gender_lock":  bool(body.get("gender_lock", False)),
             "type_lock":    bool(body.get("type_lock", False)),
+            "verbose":      bool(body.get("verbose", False)),
         }
         # Create data directory immediately
         os.makedirs(os.path.join(MANAGER_DIR, run_id), exist_ok=True)
