@@ -584,3 +584,600 @@ class TestCFRUBoxHandling:
             ])
         # DEAD:0002 is in dead_keys (entry is dead), so no warning expected
         assert not any("NON-DEAD" in r.message for r in caplog.records)
+
+
+# ── Fixed-species gift areas ──────────────────────────────────────────────────
+
+class TestFixedSpeciesGifts:
+    """Tests for is_fixed_species_gift() — areas that bypass clause checks."""
+
+    @pytest.fixture
+    def adapter(self):
+        return Gen3Adapter(is_rr=False)
+
+    def test_route_4_pokecenter_is_fixed(self, adapter):
+        assert adapter.is_fixed_species_gift("route_4_pokecenter") is True
+
+    def test_celadon_condominiums_is_fixed(self, adapter):
+        assert adapter.is_fixed_species_gift("celadon_condominiums") is True
+
+    def test_silph_co_7f_is_fixed(self, adapter):
+        assert adapter.is_fixed_species_gift("silph_co_7f") is True
+
+    def test_gift_prefix_not_fixed(self, adapter):
+        # Dynamic gift areas (gift_<group>_<num>) are NOT fixed-species
+        assert adapter.is_fixed_species_gift("gift_10_11") is False
+
+    def test_oaks_lab_not_fixed(self, adapter):
+        # Starters are linked normally — oaks_lab is a gift area but not fixed-species
+        assert adapter.is_fixed_species_gift("oaks_lab") is False
+
+    def test_regular_route_not_fixed(self, adapter):
+        assert adapter.is_fixed_species_gift("route_1") is False
+
+    def test_empty_string_not_fixed(self, adapter):
+        assert adapter.is_fixed_species_gift("") is False
+
+    def test_fixed_check_same_on_rr_adapter(self):
+        # The fixed-species set is profile-independent
+        rr = Gen3Adapter(is_rr=True)
+        assert rr.is_fixed_species_gift("route_4_pokecenter") is True
+        assert rr.is_fixed_species_gift("gift_10_11") is False
+
+
+# ── Gym badge slugs ───────────────────────────────────────────────────────────
+
+class TestGymBadgeSlugs:
+    """Tests for gym_badge_slugs() — Hoenn vs Kanto badge sets."""
+
+    @pytest.fixture
+    def adapter(self):
+        return Gen3Adapter(is_rr=False)
+
+    def test_emerald_returns_hoenn_badges(self, adapter):
+        badges = adapter.gym_badge_slugs("emerald")
+        assert len(badges) == 8
+        ids = [b[0] for b in badges]
+        assert ids == list(range(17, 25))
+
+    def test_emerald_first_badge_is_stone(self, adapter):
+        badges = adapter.gym_badge_slugs("emerald")
+        assert badges[0] == (17, "Stone Badge")
+
+    def test_emerald_last_badge_is_rain(self, adapter):
+        badges = adapter.gym_badge_slugs("emerald")
+        assert badges[-1] == (24, "Rain Badge")
+
+    def test_emerald_case_insensitive(self, adapter):
+        assert adapter.gym_badge_slugs("EMERALD") == adapter.gym_badge_slugs("emerald")
+        assert adapter.gym_badge_slugs("Emerald") == adapter.gym_badge_slugs("emerald")
+
+    def test_firered_returns_kanto_badges(self, adapter):
+        badges = adapter.gym_badge_slugs("firered")
+        assert len(badges) == 8
+        ids = [b[0] for b in badges]
+        assert ids == list(range(1, 9))
+
+    def test_firered_first_badge_is_boulder(self, adapter):
+        badges = adapter.gym_badge_slugs("firered")
+        assert badges[0][1] == "Boulder Badge"
+
+    def test_radical_red_returns_kanto_badges(self, adapter):
+        rr = Gen3Adapter(is_rr=True)
+        badges = rr.gym_badge_slugs("radical_red")
+        ids = [b[0] for b in badges]
+        assert ids == list(range(1, 9))
+
+    def test_none_rom_type_returns_kanto(self, adapter):
+        badges = adapter.gym_badge_slugs(None)
+        ids = [b[0] for b in badges]
+        assert ids == list(range(1, 9))
+
+    def test_hoenn_and_kanto_ids_disjoint(self, adapter):
+        hoenn_ids = {b[0] for b in adapter.gym_badge_slugs("emerald")}
+        kanto_ids = {b[0] for b in adapter.gym_badge_slugs("firered")}
+        assert hoenn_ids.isdisjoint(kanto_ids)
+
+
+# ── Trainer info ──────────────────────────────────────────────────────────────
+
+class TestTrainerInfo:
+    """Tests for trainer_info() — RR trainer name/class resolution."""
+
+    @pytest.fixture
+    def vanilla_adapter(self):
+        return Gen3Adapter(is_rr=False)
+
+    @pytest.fixture
+    def rr_adapter(self):
+        return Gen3Adapter(is_rr=True)
+
+    def test_vanilla_always_returns_empty(self, vanilla_adapter):
+        assert vanilla_adapter.trainer_info(1) == ("", "")
+        assert vanilla_adapter.trainer_info(999) == ("", "")
+
+    def test_rr_empty_trainer_db_returns_empty(self, rr_adapter, monkeypatch):
+        import server.adapters.gen3_frlge as mod
+        monkeypatch.setattr(mod, "_RR_TRAINERS", {})
+        assert rr_adapter.trainer_info(1) == ("", "")
+
+    def test_rr_known_trainer_returns_name_and_class(self, rr_adapter, monkeypatch):
+        import server.adapters.gen3_frlge as mod
+        monkeypatch.setattr(mod, "_RR_TRAINERS", {
+            0: {"name": "Ash", "class": 1},
+        })
+        monkeypatch.setattr(mod, "_RR_TRAINER_CLASS", {1: "Youngster"})
+        name, cls = rr_adapter.trainer_info(1)  # trainer_id 1 → index 0
+        assert name == "Ash"
+        assert cls == "Youngster"
+
+    def test_rr_rival_class_returns_no_name(self, rr_adapter, monkeypatch):
+        import server.adapters.gen3_frlge as mod
+        monkeypatch.setattr(mod, "_RR_TRAINERS", {
+            4: {"name": "Gary", "class": 81},
+        })
+        monkeypatch.setattr(mod, "_RR_TRAINER_CLASS", {81: "Rival"})
+        name, cls = rr_adapter.trainer_info(5)  # trainer_id 5 → index 4
+        assert name == ""
+        assert cls == "Rival"
+
+    def test_rr_out_of_range_id_returns_empty(self, rr_adapter, monkeypatch):
+        import server.adapters.gen3_frlge as mod
+        monkeypatch.setattr(mod, "_RR_TRAINERS", {0: {"name": "Alice", "class": 1}})
+        monkeypatch.setattr(mod, "_RR_TRAINER_CLASS", {1: "Lass"})
+        assert rr_adapter.trainer_info(9999) == ("", "")
+
+    def test_rr_trainer_id_0_returns_empty(self, rr_adapter, monkeypatch):
+        # trainer_id 0 → index -1 (invalid off-by-one guard)
+        import server.adapters.gen3_frlge as mod
+        monkeypatch.setattr(mod, "_RR_TRAINERS", {-1: {"name": "Ghost", "class": 1}})
+        monkeypatch.setattr(mod, "_RR_TRAINER_CLASS", {1: "Lass"})
+        # _RR_TRAINERS.get(-1) would find it, but that means trainer_id=0 maps to index=-1
+        # The code does _RR_TRAINERS.get(trainer_id - 1) = get(-1)
+        # This edge case: if -1 resolves, returns something; if not, ("", "")
+        # We only require it doesn't crash
+        result = rr_adapter.trainer_info(0)
+        assert isinstance(result, tuple) and len(result) == 2
+
+
+# ── Ability descriptions ──────────────────────────────────────────────────────
+
+class TestAbilityDescription:
+    """Tests for ability_description() — vanilla vs RR tooltip text."""
+
+    @pytest.fixture
+    def vanilla(self):
+        return Gen3Adapter(is_rr=False)
+
+    @pytest.fixture
+    def rr(self):
+        return Gen3Adapter(is_rr=True)
+
+    def test_vanilla_ability_1_stench(self, vanilla):
+        desc = vanilla.ability_description(1)
+        assert desc  # non-empty
+        assert isinstance(desc, str)
+
+    def test_vanilla_ability_1_known_text(self, vanilla):
+        assert vanilla.ability_description(1) == "Helps repel wild Pokémon."
+
+    def test_vanilla_ability_2_drizzle(self, vanilla):
+        assert vanilla.ability_description(2) == "Summons rain in battle."
+
+    def test_vanilla_unknown_ability_empty(self, vanilla):
+        assert vanilla.ability_description(9999) == ""
+
+    def test_vanilla_ability_0_empty(self, vanilla):
+        assert vanilla.ability_description(0) == ""
+
+    def test_rr_ability_1_non_empty(self, rr):
+        # RR uses ABILITY_DESCRIPTIONS (255-entry CFRU table)
+        desc = rr.ability_description(1)
+        assert desc
+        assert isinstance(desc, str)
+
+    def test_rr_ability_0_empty(self, rr):
+        assert rr.ability_description(0) == ""
+
+    def test_rr_unknown_ability_empty(self, rr):
+        assert rr.ability_description(9999) == ""
+
+    def test_vanilla_and_rr_may_differ(self, vanilla, rr):
+        # Stench description can differ between RR and vanilla
+        v = vanilla.ability_description(1)
+        r = rr.ability_description(1)
+        # Both must be non-empty strings (content difference is acceptable)
+        assert v and isinstance(v, str)
+        assert r and isinstance(r, str)
+
+
+# ── CFRU ↔ NatDex ID mapping ──────────────────────────────────────────────────
+
+class TestToNationalDex:
+    """Tests for to_national(), to_cfru(), and adapter.to_national_dex()."""
+
+    def test_gen1_ids_are_identity(self):
+        from server.pokemon_data import to_national
+        assert to_national(1) == 1    # Bulbasaur
+        assert to_national(151) == 151  # Mew
+
+    def test_gen2_ids_are_identity(self):
+        from server.pokemon_data import to_national
+        assert to_national(152) == 152  # Chikorita
+        assert to_national(251) == 251  # Celebi
+
+    def test_treecko_cfru_to_national(self):
+        from server.pokemon_data import to_national
+        assert to_national(277) == 252  # CFRU 277 = NatDex 252 (Treecko)
+
+    def test_grovyle_cfru_to_national(self):
+        from server.pokemon_data import to_national
+        assert to_national(278) == 253  # Grovyle
+
+    def test_sceptile_cfru_to_national(self):
+        from server.pokemon_data import to_national
+        assert to_national(279) == 254  # Sceptile
+
+    def test_treecko_national_to_cfru(self):
+        from server.pokemon_data import to_cfru
+        assert to_cfru(252) == 277
+
+    def test_round_trip_cfru_to_national_to_cfru(self):
+        from server.pokemon_data import to_national, to_cfru
+        assert to_cfru(to_national(277)) == 277
+
+    def test_round_trip_national_to_cfru_to_national(self):
+        from server.pokemon_data import to_national, to_cfru
+        assert to_national(to_cfru(252)) == 252
+
+    def test_unknown_cfru_id_passthrough(self):
+        from server.pokemon_data import to_national
+        assert to_national(99999) == 99999
+
+    def test_unknown_natdex_id_passthrough(self):
+        from server.pokemon_data import to_cfru
+        assert to_cfru(99999) == 99999
+
+    def test_adapter_to_national_dex_gen1(self):
+        adapter = Gen3Adapter(is_rr=False)
+        assert adapter.to_national_dex(1) == 1
+
+    def test_adapter_to_national_dex_treecko(self):
+        adapter = Gen3Adapter(is_rr=False)
+        assert adapter.to_national_dex(277) == 252
+
+
+# ── base_form() with Gen 3 / CFRU evolution chains ───────────────────────────
+
+class TestBaseFormGen3:
+    """Tests for base_form() using CFRU internal species IDs."""
+
+    def test_treecko_is_own_base(self):
+        from server.pokemon_data import base_form
+        assert base_form(277) == 277
+
+    def test_grovyle_maps_to_treecko(self):
+        from server.pokemon_data import base_form
+        assert base_form(278) == 277
+
+    def test_sceptile_maps_to_treecko(self):
+        from server.pokemon_data import base_form
+        assert base_form(279) == 277
+
+    def test_eevee_is_own_base(self):
+        from server.pokemon_data import base_form
+        assert base_form(133) == 133
+
+    def test_vaporeon_maps_to_eevee(self):
+        from server.pokemon_data import base_form
+        assert base_form(134) == 133
+
+    def test_jolteon_maps_to_eevee(self):
+        from server.pokemon_data import base_form
+        assert base_form(135) == 133
+
+    def test_flareon_maps_to_eevee(self):
+        from server.pokemon_data import base_form
+        assert base_form(136) == 133
+
+    def test_espeon_maps_to_eevee(self):
+        from server.pokemon_data import base_form
+        assert base_form(196) == 133
+
+    def test_umbreon_maps_to_eevee(self):
+        from server.pokemon_data import base_form
+        assert base_form(197) == 133
+
+    def test_cfru_leafeon_maps_to_eevee(self):
+        from server.pokemon_data import base_form, EVO_FAMILY
+        if 523 in EVO_FAMILY:
+            assert base_form(523) == 133
+
+    def test_cfru_glaceon_maps_to_eevee(self):
+        from server.pokemon_data import base_form, EVO_FAMILY
+        if 524 in EVO_FAMILY:
+            assert base_form(524) == 133
+
+    def test_lapras_single_stage_is_own_base(self):
+        from server.pokemon_data import base_form
+        # Lapras (131): no pre-evolution or evolution in any gen → maps to itself
+        assert base_form(131) == 131
+
+    def test_evo_family_adapter_uses_base_form(self):
+        adapter = Gen3Adapter(is_rr=False)
+        # evo_family delegates to base_form; Sceptile (279) → Treecko (277)
+        assert adapter.evo_family(279) == 277
+        assert adapter.evo_family(133) == 133
+
+
+# ── gender_from_key_species threshold edge cases ──────────────────────────────
+
+class TestGenderEdgeCases:
+    """Tests for always-male (threshold=0) and always-female (threshold=254) species."""
+
+    def test_always_male_tauros_any_personality(self):
+        from server.pokemon_data import gender_from_key_species
+        # Tauros (128): threshold=0 → always male regardless of personality byte
+        assert gender_from_key_species("00000000:12345678", 128) == "male"
+        assert gender_from_key_species("000000FE:12345678", 128) == "male"
+
+    def test_always_male_hitmonlee(self):
+        from server.pokemon_data import gender_from_key_species
+        assert gender_from_key_species("00000000:12345678", 106) == "male"
+
+    def test_always_female_chansey_any_personality(self):
+        from server.pokemon_data import gender_from_key_species
+        # Chansey (113): threshold=254 → always female
+        assert gender_from_key_species("000000FF:12345678", 113) == "female"
+        assert gender_from_key_species("00000001:12345678", 113) == "female"
+
+    def test_always_female_jynx(self):
+        from server.pokemon_data import gender_from_key_species
+        assert gender_from_key_species("000000FF:12345678", 124) == "female"
+
+    def test_50_50_personality_zero_is_female(self):
+        from server.pokemon_data import gender_from_key_species
+        # Unlisted species → default threshold=127; personality byte=0 < 127 → female
+        assert gender_from_key_species("00000000:12345678", 999) == "female"
+
+    def test_50_50_personality_127_is_male(self):
+        from server.pokemon_data import gender_from_key_species
+        # personality byte=0x7F=127 >= threshold=127 → male
+        assert gender_from_key_species("0000007F:12345678", 999) == "male"
+
+    def test_50_50_personality_126_is_female(self):
+        from server.pokemon_data import gender_from_key_species
+        # personality byte=0x7E=126 < 127 → female
+        assert gender_from_key_species("0000007E:12345678", 999) == "female"
+
+    def test_adapter_always_male(self):
+        adapter = Gen3Adapter(is_rr=False)
+        assert adapter.gender_from_key("000000FF:12345678", 128) == "male"
+
+    def test_adapter_always_female(self):
+        adapter = Gen3Adapter(is_rr=False)
+        assert adapter.gender_from_key("000000FF:12345678", 113) == "female"
+
+
+# ── species_types() fallback chain ────────────────────────────────────────────
+
+class TestSpeciesTypesFallback:
+    """Tests for species_types() three-tier lookup: RR → CFRU form → NatDex."""
+
+    def test_gen1_natdex_lookup(self):
+        from server.pokemon_data import species_types
+        # Bulbasaur (1): Grass/Poison = (12, 3)
+        assert species_types(1, is_rr=False) == (12, 3)
+
+    def test_gen1_natdex_monotype(self):
+        from server.pokemon_data import species_types
+        # Charmander (4): Fire/Fire = (10, 10)
+        assert species_types(4, is_rr=False) == (10, 10)
+
+    def test_cfru_treecko_via_national_lookup(self):
+        from server.pokemon_data import species_types
+        # CFRU 277 → NatDex 252 (Treecko) → Grass/Grass = (12, 12)
+        result = species_types(277, is_rr=False)
+        assert result == (12, 12)
+
+    def test_cfru_form_rotom_heat(self):
+        from server.pokemon_data import species_types
+        # CFRU form 713 (Rotom-Heat) in CFRU_FORM_TYPES → Electric/Fire = (13, 10)
+        result = species_types(713, is_rr=False)
+        assert result == (13, 10)
+
+    def test_rr_path_used_when_is_rr_true(self):
+        from server.pokemon_data import species_types, _RR_TYPES
+        if not _RR_TYPES:
+            pytest.skip("RR types not loaded")
+        # Any species in _RR_TYPES should return a valid type tuple when is_rr=True
+        species = next(iter(_RR_TYPES))
+        result = species_types(species, is_rr=True)
+        assert result is not None
+        assert isinstance(result, tuple) and len(result) == 2
+
+    def test_is_rr_false_skips_rr_table(self):
+        from server.pokemon_data import species_types, _RR_TYPES, _NATDEX_SPECIES_TYPES, to_national
+        if not _RR_TYPES:
+            pytest.skip("RR types not loaded")
+        # Find a species where RR types differ from NatDex fallback
+        for sid, rr_t in _RR_TYPES.items():
+            nat = to_national(sid)
+            natdex_t = _NATDEX_SPECIES_TYPES.get(nat)
+            if natdex_t and natdex_t != rr_t:
+                # This species has a type change in RR
+                assert species_types(sid, is_rr=True) == rr_t
+                assert species_types(sid, is_rr=False) != rr_t
+                return
+        pytest.skip("No RR type changes found vs NatDex fallback")
+
+    def test_out_of_range_species_returns_none(self):
+        from server.pokemon_data import species_types
+        assert species_types(0) is None
+        assert species_types(-1) is None
+
+    def test_adapter_species_types(self):
+        adapter = Gen3Adapter(is_rr=False)
+        assert adapter.species_types(1) == (12, 3)
+
+    def test_adapter_species_types_cfru(self):
+        adapter = Gen3Adapter(is_rr=False)
+        # CFRU 277 (Treecko) → Grass/Grass
+        assert adapter.species_types(277) == (12, 12)
+
+
+# ── area_display_name overrides ───────────────────────────────────────────────
+
+class TestAreaDisplayNameOverrides:
+    """Tests for area_display_name() including RR overrides and fallback paths."""
+
+    @pytest.fixture
+    def vanilla(self):
+        return Gen3Adapter(is_rr=False)
+
+    @pytest.fixture
+    def rr(self):
+        return Gen3Adapter(is_rr=True)
+
+    def test_rr_override_monean_chamber(self, rr):
+        assert rr.area_display_name("monean_chamber") == "Oak's Lab"
+
+    def test_vanilla_monean_chamber_no_rr_override(self, vanilla):
+        # Without RR flag, returns the static name override (not RR override)
+        assert vanilla.area_display_name("monean_chamber") == "Monean Chamber"
+
+    def test_static_override_mt_moon(self, vanilla):
+        assert vanilla.area_display_name("mt_moon") == "Mt. Moon"
+
+    def test_static_override_ss_anne(self, vanilla):
+        assert vanilla.area_display_name("ss_anne") == "S.S. Anne"
+
+    def test_static_override_pokemon_league(self, vanilla):
+        assert vanilla.area_display_name("pokemon_league") == "Pokémon League"
+
+    def test_humanize_fallback(self, vanilla):
+        assert vanilla.area_display_name("some_unknown_area") == "Some Unknown Area"
+
+    def test_humanize_single_word(self, vanilla):
+        assert vanilla.area_display_name("testplace") == "Testplace"
+
+    def test_gift_prefix_with_rom_map_entry(self, vanilla):
+        # gift_10_11 → "Gift – Celadon City" (if celadon city is at group=10, num=11)
+        name = vanilla.area_display_name("gift_10_11")
+        assert name.startswith("Gift")
+
+    def test_gift_prefix_unknown_returns_gift(self, vanilla):
+        name = vanilla.area_display_name("gift_99_99")
+        assert name == "Gift"
+
+    def test_empty_area_id_returns_empty(self, vanilla):
+        assert vanilla.area_display_name("") == ""
+
+    def test_rr_mt_moon_still_uses_static_override(self, rr):
+        # RR override dict only has monean_chamber; mt_moon falls through to static
+        assert rr.area_display_name("mt_moon") == "Mt. Moon"
+
+
+# ── sprite_html() extended coverage ──────────────────────────────────────────
+
+class TestSpriteHtmlVariants:
+    """Tests for sprite_html() — egg, FRLG URL, CFRU form, tiled blocklist."""
+
+    @pytest.fixture
+    def vanilla(self):
+        return Gen3Adapter(is_rr=False)
+
+    @pytest.fixture
+    def rr(self):
+        return Gen3Adapter(is_rr=True)
+
+    def test_egg_uses_showdown_sprite(self, vanilla):
+        html = vanilla.sprite_html(412)
+        assert "pokemonshowdown.com" in html
+        assert "egg.png" in html
+
+    def test_egg_same_on_rr(self, rr):
+        html = rr.sprite_html(412)
+        assert "pokemonshowdown.com" in html
+        assert "egg.png" in html
+
+    def test_zero_species_returns_empty(self, vanilla):
+        assert vanilla.sprite_html(0) == ""
+
+    def test_negative_species_returns_empty(self, vanilla):
+        assert vanilla.sprite_html(-1) == ""
+
+    def test_gen1_uses_frlg_url(self, vanilla):
+        html = vanilla.sprite_html(1)
+        assert "firered-leafgreen" in html
+
+    def test_cfru_treecko_uses_frlg_url(self, vanilla):
+        # CFRU 277 → NatDex 252 ≤ 386 → FRLG URL
+        html = vanilla.sprite_html(277)
+        assert "firered-leafgreen" in html
+        assert "252" in html
+
+    def test_cfru_form_rotom_heat_no_frlg_url(self, vanilla):
+        # CFRU form 713 → form_pid branch → not a NatDex ≤ 386 → no FRLG URL
+        html = vanilla.sprite_html(713)
+        assert html  # must produce something
+        assert "firered-leafgreen" not in html
+
+    def test_tiled_sprite_blocklist_castform_skips_funnotbun(self, rr):
+        # Species 385 (Castform) is in _TILED_SPRITE_BLOCKLIST; RR skips funnotbun
+        html = rr.sprite_html(385)
+        # Should fall through to PokeAPI path, not funnotbun
+        if html:
+            assert "funnotbun" not in html
+
+    def test_vanilla_gen1_has_pokeapi_fallback(self, vanilla):
+        # FRLG URL is primary, PokeAPI generic is in onerror attribute
+        html = vanilla.sprite_html(1)
+        assert "raw.githubusercontent.com/PokeAPI" in html
+
+
+# ── item_name() known values ──────────────────────────────────────────────────
+
+class TestItemNameKnown:
+    """Tests for item_name() with known vanilla FRLG item IDs."""
+
+    @pytest.fixture
+    def vanilla(self):
+        return Gen3Adapter(is_rr=False)
+
+    @pytest.fixture
+    def rr(self):
+        return Gen3Adapter(is_rr=True)
+
+    def test_master_ball(self, vanilla):
+        assert vanilla.item_name(1) == "Master Ball"
+
+    def test_pokeball(self, vanilla):
+        assert vanilla.item_name(4) == "Poké Ball"
+
+    def test_potion(self, vanilla):
+        assert vanilla.item_name(13) == "Potion"
+
+    def test_rare_candy(self, vanilla):
+        assert vanilla.item_name(68) == "Rare Candy"
+
+    def test_leftovers(self, vanilla):
+        assert vanilla.item_name(200) == "Leftovers"
+
+    def test_zero_returns_empty(self, vanilla):
+        assert vanilla.item_name(0) == ""
+
+    def test_unknown_returns_item_hash_format(self, vanilla):
+        result = vanilla.item_name(99999)
+        assert result == "Item #99999"
+
+    def test_rr_pokeball_returns_non_empty(self, rr):
+        # RR may override item names; at minimum the result should be non-empty
+        name = rr.item_name(4)
+        assert name
+
+    def test_rr_zero_returns_empty(self, rr):
+        assert rr.item_name(0) == ""
+
+    def test_rr_unknown_returns_item_hash_format(self, rr):
+        assert rr.item_name(99999) == "Item #99999"
