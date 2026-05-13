@@ -108,9 +108,11 @@ local game_module = detected.module
 local mem_u8   = memory.read_u8
 local mem_u16  = memory.read_u16_le
 local mem_u32  = memory.read_u32_le
-local mem_w8   = memory.write_u8
-local mem_w16  = memory.write_u16_le
-local fmt      = string.format
+
+-- ── Utility helpers ───────────────────────────────────────────────────────────
+local function area_display(id)
+    return id:gsub("_", " "):gsub("(%a)([%w]*)", function(a, b) return a:upper()..b end)
+end
 
 -- ── JSON encoder ──────────────────────────────────────────────────────────────
 -- Optimised: O(n) array check, pre-built format strings, minimal allocations.
@@ -384,7 +386,7 @@ local function dispatch_commands(cmds)
             console.log(string.format("[SLink-FRLGE]   ↳ resolved_areas: %d areas seeded", #c.areas))
             -- Fire deferred encounter HUD if area_enter happened before seeding arrived.
             if pending_hud_area and not resolved_areas[pending_hud_area] then
-                local disp = pending_hud_area:gsub("_", " "):gsub("(%a)([%w]*)", function(a, b) return a:upper()..b end)
+                local disp = area_display(pending_hud_area)
                 hud_show(">> New encounter: " .. disp, 80, 255, 120, 180)
             end
             pending_hud_area = nil
@@ -439,7 +441,7 @@ local function cachedMonKey(slot)
     local p = mem_u32(base + M.OFF_PERSONALITY)
     local o = mem_u32(base + M.OFF_OTID)
     if p == _mk_pers[slot] and o == _mk_otid[slot] then return _mk_str[slot] end
-    local key = fmt("%08X:%08X", p, o)
+    local key = string.format("%08X:%08X", p, o)
     _mk_pers[slot] = p; _mk_otid[slot] = o; _mk_str[slot] = key
     return key
 end
@@ -1144,7 +1146,7 @@ local function on_frame()
         if nuzlocke_active and area ~= "" and not game_module.is_gift_area(area) then
             if resolved_areas_seeded then
                 if not resolved_areas[area] then
-                    local disp = area:gsub("_", " "):gsub("(%a)([%w]*)", function(a, b) return a:upper()..b end)
+                    local disp = area_display(area)
                     hud_show("** NEW ENCOUNTER **  " .. disp, 255, 220, 60, 240)
                     M.playSE(M.SE_SUCCESS)
                 end
@@ -1257,7 +1259,7 @@ local function on_frame()
         -- Show encounter prompt when a wild battle starts in an unresolved area.
         if battle_is_wild and nuzlocke_active and battle_area_id and battle_area_id ~= ""
                 and not resolved_areas[battle_area_id] and not game_module.is_gift_area(battle_area_id) then
-            local disp = battle_area_id:gsub("_", " "):gsub("(%a)([%w]*)", function(a, b) return a:upper()..b end)
+            local disp = area_display(battle_area_id)
             hud_show("** NEW ENCOUNTER **  " .. disp, 255, 220, 60, 360)
             M.playSE(M.SE_SUCCESS)
         end
@@ -1503,7 +1505,7 @@ local function on_frame()
                     local old_k = dis_sigs[sig]
                     if old_k and not dis_dups[sig] then
                         -- 1:1 match — this is a nature change, not a new capture.
-                        console.log(fmt("[SLink-FRLGE] nature change detected: %s → %s", old_k:sub(1,8), new_k:sub(1,8)))
+                        console.log(string.format("[SLink-FRLGE] nature change detected: %s → %s", old_k:sub(1,8), new_k:sub(1,8)))
                         nature_migrated[old_k] = true
                         nature_migrated[new_k] = true
 
@@ -2012,10 +2014,11 @@ local function on_frame()
                     foe_hp      = memory.read_u16_le(foe_base + M.BATTLE_MON_HP_OFF)
                     foe_maxHP   = memory.read_u16_le(foe_base + 0x2C)
                     foe_ability = memory.read_u8(foe_base + 0x20)
-                    -- Item field at +0x02 is unreliable for wild mons in CFRU/RR;
-                    -- only read it for trainer battles where gEnemyParty is populated.
+                    -- BattlePokemon.item is at +0x2E (confirmed from pret/pokefirered and CFRU
+                    -- pokemon.h: struct BattlePokemon { ... /*0x2E*/ u16 item; ... }).
+                    -- Skip for wild battles: wild mons in CFRU/RR have item=0 in gBattleMons.
                     if evt.is_trainer_battle then
-                        foe_item = memory.read_u16_le(foe_base + 0x02)
+                        foe_item = memory.read_u16_le(foe_base + 0x2E)
                     end
                 end
                 -- Primary: read full team from gEnemyParty if count is valid (vanilla/AP).
