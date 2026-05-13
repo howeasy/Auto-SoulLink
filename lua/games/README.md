@@ -9,24 +9,30 @@ mon data reading, and area resolution.
 ```
 lua/
 ├── slink.lua              ← Universal entry point (auto-detects game)
+├── slink_gen1.lua         ← Manual launcher for Gen 1
+├── slink_gen2.lua         ← Manual launcher for Gen 2
 ├── slink_gen3.lua         ← Manual launcher for Gen 3
 ├── slink_gen4.lua         ← Manual launcher for Gen 4
+├── slink_gen5.lua         ← Manual launcher for Gen 5
 ├── game_detect.lua        ← Game detection dispatcher
 ├── hud.lua                ← Shared HUD overlay module
 ├── connector.lua          ← Shared TCP connector
 ├── socket.lua             ← LuaSocket loader
+├── memory_gb.lua          ← GB/GBC memory helpers (Gen 1 & Gen 2)
 ├── memory_gba.lua         ← GBA memory helpers (Gen 3)
-├── memory_nds.lua         ← NDS memory helpers (Gen 4)
+├── memory_nds.lua         ← NDS memory helpers (Gen 4 & Gen 5)
 ├── games/                 ← Game modules (this directory)
+│   ├── gen1_rby.lua           — Gen 1 (Red / Blue / Yellow)
+│   ├── gen2_crystal.lua       — Gen 2 (Crystal)
 │   ├── gen3_frlge.lua         — Gen 3 (FRLG / Emerald)
 │   ├── gen4_hgsspt.lua        — Gen 4 (HGSS / Platinum)
-│   ├── gen1_rby.lua           — Gen 1 (Red / Blue / Yellow)
-│   ├── gen2_gsc.lua           — Gen 2 stub
-│   └── gen5_bw.lua            — Gen 5 stub
+│   └── gen5_bw.lua            — Gen 5 (Black / White / BW2)
 ├── clients/               ← Game-specific client scripts
 │   ├── gen1_rby_client.lua    — Gen 1 client (Red / Blue / Yellow)
+│   ├── gen2_crystal_client.lua — Gen 2 client (Crystal)
 │   ├── gen3_frlge_client.lua  — Gen 3 client (FRLG / Emerald / RR)
-│   └── gen4_hgsspt_client.lua — Gen 4 client (HGSS / Platinum)
+│   ├── gen4_hgsspt_client.lua — Gen 4 client (HGSS / Platinum)
+│   └── gen5_bw_client.lua     — Gen 5 client (Black / White / BW2)
 ├── tests/                 ← BizHawk test scripts
 └── x64/                   ← LuaSocket native DLLs
 ```
@@ -128,6 +134,18 @@ Game module for HeartGold, SoulSilver, and Platinum.
 
 Auto-generated area lookup table for HGSS. Maps 195 zone IDs to area_id strings. Includes 4 gift areas (`dragons_den`, `new_bark_town`, `route_30`, `ruins_of_alph`). Regenerated from `data/games/gen4_hgsspt/area_map_hgss.json`.
 
+### Gen 5 — `gen5_bw.lua`
+
+Game module for Pokémon Black, White, Black 2, and White 2.
+
+- **ROM codes**: `IRBO`/`IRGO` (BW US), `IREO`/`IRDO` (BW2 US) — read from NDS ROM header
+- **Variants**: `black`, `white`, `black2`, `white2`
+- **Platform**: NDS — uses `memory_nds.lua` for party/box reads
+- **Memory domain**: `"Main RAM"` (NDS ARM9)
+- **Area lookup**: zone IDs → area_id strings via `data/games/gen5_bw/gen5_bw_areas.lua`
+- **Gift areas**: `nuvema_town`, `accumula_town`, `castelia_city` (BW); `aspertia_city` (BW2)
+- **Exports**: `profiles` (per-variant NDS addresses), `detect()`, `detect_variant()`, `rom_type_for_variant()`, `is_gift_area()`, `resolve_area()`
+
 ## Detection Order
 
 Modules are sorted by `detect_priority` (descending) and checked in order.
@@ -150,8 +168,3 @@ vanilla FRLG (priority 10) since RR is a superset ROM.
 4. Add area map data in `data/games/<game_id>/`
 5. Optionally create a client script in `lua/clients/<game_id>_client.lua`
 6. Create a top-level launcher in `lua/slink_<gen>.lua`
-
-## Stub Modules
-
-Modules with `implemented = false` are placeholders for future games.
-They always return `false` from `detect()` and exist to document intent.

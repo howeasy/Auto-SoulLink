@@ -65,7 +65,7 @@ Additional pages:
 2. Load `lua/slink_gen1.lua` (Gen 1), `lua/slink_gen3.lua` (Gen 3) or `lua/slink_gen4.lua` (Gen 4).
 3. Edit the top of the launcher to set `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER` before loading.
 
-Alternatively, load `lua/slink.lua` directly — it auto-detects the game but uses default connection settings (`127.0.0.1:54322`, player `"a"`).
+Alternatively, load `lua/slink.lua` directly — it auto-detects the game but uses default connection settings (`127.0.0.1:54321`, player `"a"`).
 
 **Option B — Direct client load:**
 1. Open the BizHawk Lua Console.
@@ -511,7 +511,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 
 ---
 
-## Feature Status (Alpha)
+## Feature Status
 
 | Feature | Status |
 |---|---|
@@ -643,7 +643,7 @@ pytest tests/unit/test_phase1_comms.py -v
 
 ### BizHawk live tests
 
-See `tests/TESTING.md` for the full 9-step alpha test procedure. Load `lua/slink.lua` on both instances and run through Steps 1–9 in order.
+See `tests/TESTING.md` for the full 9-step end-to-end test procedure. Load `lua/slink.lua` on both instances and run through Steps 1–9 in order.
 
 ---
 
@@ -660,7 +660,7 @@ See `tests/TESTING.md` for the full 9-step alpha test procedure. Load `lua/slink
 | `lua/clients/gen5_bw_client.lua` | Gen 5 production client — Black, White, Black 2, White 2. PID:OTID keys, 220-byte PKM structs, shared NDS helpers. |
 | `lua/memory_gba.lua` | Gen 3 GBA RAM helpers — auto-detecting profiles (vanilla, AP, CFRU/RR), read/write, force-faint, box/party transfer, memorial write, SE playback via m4a engine |
 | `lua/memory_nds.lua` | Gen 4/5 NDS RAM helpers — LCRNG encryption/decryption, 2-level pointer chain, HP debounce, party/box/battle reads |
-| `data/games/gen3_frlge/gen3_frlge_areas.lua` | Gen 3 area lookup — `mapGroup*256+mapNum → area_id` (175 entries; `python tools/gen_area_map.py` to regenerate) |
+| `data/games/gen3_frlge/gen3_frlge_areas.lua` | Gen 3 area lookup — `mapGroup*256+mapNum → area_id` (184 entries; `python tools/gen_area_map.py` to regenerate) |
 | `data/games/gen4_hgsspt/gen4_hgsspt_areas.lua` | Gen 4 area lookup — `zoneId → area_id` (195 entries, auto-generated) |
 | `lua/connector.lua` | Shared TCP connector — fully non-blocking connect, exponential backoff (2s → 30s cap) |
 | `lua/game_detect.lua` | Shared game detection framework — scans ROM header to identify game family |
@@ -695,23 +695,6 @@ See `tests/TESTING.md` for the full 9-step alpha test procedure. Load `lua/slink
 | `calc/src/js/data/sets/hardcore.js` | Hardcore-mode trainer sets data |
 | `calc/calc/src/desc.ts` | Result description string builder — EV display suppressed (always assumed max, not shown) |
 | `calc/build` | Build script — compiles TypeScript, copies assets, hashes HTML; runs `node build` (full) or `node build view` (HTML-only) |
-
----
-
-## Known Issues
-
-- **Overworld whiteout:** The game engine doesn't provide a hook for auto-whiteout from the overworld. SLink detects it via a party snapshot diff on the next tick but cannot force the game to teleport the player. The player must walk to a Pokémon Center manually.
-- **Savestates and rewind:** Must be disabled during a live run. Rewinding can create duplicate capture events or ghost HP values. Use BizHawk's save state only before a test session, never during.
-- **Party HP (tick-based):** The status page shows HP from the most recent `tick` event (~0.5s interval), not a per-frame stream. HP bars update twice per second during gameplay. Fainted mons are shown in red at 0 HP immediately when the faint event fires.
-- **HUD overlay:** The in-game HUD displays event notifications (force faint, deposit, retrieve, memorialize, new encounter areas) at the bottom of the GBA screen. It is minimal by design — it only appears during Soul Link events, not during normal gameplay. The new encounter notification ("★ New encounter: Route 3") excludes gift areas (oaks_lab, intro, cinnabar_lab, etc.) and only shows once per area.
-- **Party sync (full party):** If the partner's party is full when a `party_mon` command arrives, the retrieval fails gracefully — the client shows a persistent HUD notice ("⚠ Make room & retrieve [name] from PC") and sends `sync_retrieve_failed` to the server. Paired sync enforcement then kicks in: if one player successfully retrieved but the partner failed, the server finds the first player's linked mon and queues `box_mon` to re-box it — maintaining the invariant that both linked mons are always in the same place (both in party or both in box). When a new link forms (un-quarantine), retrieval is only attempted if **both** players have `party_size < 6`; otherwise both mons stay in the box with a HUD notification. Manual withdrawal of a linked mon is also blocked if the partner's party is full — the mon is re-deposited with a HUD warning.
-- **Script load order:** If the script is loaded before a save file is open in BizHawk, writes will be initially disabled (SaveBlock pointers aren't valid yet). The script re-validates every frame and enables writes automatically once the save is loaded — you'll see `✓ ROM validation passed — writes enabled` in the Lua console.
-- **Pre-save garbage data:** During the title screen, intro cutscene, and Oak's speech (before a save is loaded), RAM contains uninitialized data. The Lua client gates party/box/enemy data in hello and tick events behind a `gPlayerPartyCount` sanity check (0–6 range). Ticks during this period send only connection metadata (area, trainer name, ball count) without party snapshots, preventing garbage from appearing on the status page.
-- **Gym badge bitmask:** Badges are sent as a raw bitmask from `SaveBlock1.flags[0x104]`, not a sequential count. This supports Archipelago's out-of-order badge acquisition (e.g. getting Badge 5 before Badge 2). The status page renders each badge independently with `badge_mask & (1 << i)`.
-- **CFRU battle timing (gBattleOutcome same-frame):** In CFRU/Radical Red, the game engine can set `gBattleOutcome` on the same frame as the last mon's HP drops to 0. The Lua client handles this via a `battle_just_ended` gate on the HP cache update, ensuring the final `gBattleMons` state is captured even when `isInBattle()` returns false on the transition frame. This is transparent to the user but important for contributors modifying the battle detection code.
-- **Borrowed-party battles (CFRU):** Radical Red has battles that completely replace the player's party (Poké Dude tutorial, mock/scripted battles) and tag battles where an NPC partner fights alongside you. Two detection methods are used: (1) `M.isBorrowedBattle()` checks `gBattleTypeFlags` for `BATTLE_TYPE_POKE_DUDE | BATTLE_TYPE_MOCK_BATTLE` mask `0x1010000`, and (2) a **rolling gift capture buffer** — if 3+ gift captures arrive within 45 frames, party tracking freezes until originals return or battle ends. The buffer approach catches RR scripted battles where `gBattleTypeFlags` isn't set until after the party swap. When frozen, `party_diff_ok` is set to false, tick events omit party data, and battle-end logic restores the pre-borrowed party snapshot instead of writing back battle HP. Tag battles (`BATTLE_TYPE_INGAME_PARTNER = 0x400000`) are NOT frozen — NPC partners use separate battler slots and don't affect the player's party.
-- **Persistent run metadata:** The game variant (`rom_type`) and trainer names are committed on the first `hello` event and never overwritten. This ensures page titles and display labels remain stable after server restarts. Both are persisted in `links.json` under `"rom_type"` and `"trainer_names"` keys.
-- **PC box level resolution:** Box mons in RAM store EXP, not level. For manual links or mons that were never in a party during the session, the server uses a multi-source fallback: MonInfo.level (from link entry) → `mon_stats` cache (from deposit events) → `party_details` from either player's most recent tick/hello. When a tick provides party data with a level, any linked MonInfo with `level=0` is permanently backfilled and saved.
 
 ---
 
@@ -851,6 +834,8 @@ SLink supports three ROM profiles, auto-detected at startup by `memory_gba.lua`.
 | **`radical_red`** | Radical Red 4.1 / CFRU-based hacks | CFRU signature bytes in ROM binary | `gBattleOutcome`-based ("battle_outcome" mode) — `gMain` unreliable in CFRU | 58-byte `CompressedPokemon` × 30 × 25 boxes (4 EWRAM regions) | **Unencrypted**; fixed order: Growth / Attacks / EVs / Misc |
 
 For full address tables, see the [AP Support](#archipelago-ap-support) and [RR Support](#radical-red-cfru-support) sections above. All vanilla addresses in the FRLG Memory Map section below apply only to the `vanilla` profile — AP and RR use different addresses as documented in their respective profiles in `lua/memory_gba.lua`.
+
+---
 
 ---
 
@@ -1053,7 +1038,7 @@ The adapter pattern (`server/adapters/`) isolates game-specific logic. **All dis
 3. Use `gen4_hgsspt.py` as the template for new adapters (cleanest: zero deps, all data embedded)
 4. Test ALL active games after changing `server.py`, `state.py`, or `adapters/base.py`
 
-See `.github/copilot-instructions.md` → "Adapter Isolation Rules" for the complete technical debt inventory and refactoring roadmap.
+See `.github/copilot-instructions.md` → "Adapter Isolation Rules" for the full interface contract.
 
 ### Adding a New Game
 

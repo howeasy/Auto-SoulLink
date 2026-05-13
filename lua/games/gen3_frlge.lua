@@ -323,21 +323,6 @@ function GEN3.detect_variant()
     return "vanilla"
 end
 
--- ── Area / location resolution ────────────────────────────────────────────────
--- Encapsulates the areas.lua and locations.lua lookups for this game.
-
-function GEN3.resolve_area(mapGroup, mapNum)
-    local areas = require("gen3_frlge_areas")
-    local k = mapGroup .. ":" .. mapNum
-    return areas[k] or ""
-end
-
-function GEN3.resolve_location(mapGroup, mapNum)
-    local locs = require("gen3_frlge_locations")
-    local k = mapGroup .. ":" .. mapNum
-    return locs[k] or ""
-end
-
 --- Returns the rom_type string for the server hello event.
 --- @param variant string "vanilla", "ap", "radical_red", or "emerald"
 --- @return string rom_type (e.g. "firered", "firered_ap", "firered_rr", "emerald")

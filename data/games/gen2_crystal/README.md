@@ -2,15 +2,14 @@
 
 Data files for Gen 2 Pokémon games (Game Boy Color).
 
-## Status: Not Yet Implemented
+## Status: Implemented (Crystal)
 
-## Required Data Files (when implemented)
+## Data Files
 
-- `area_map.json` — Route/city → area_id mapping
-- `species.json` — 251 species names and IDs
-- `evo_families.json` — Evolution family mappings
-- `types.json` — Type data (17 types, Dark/Steel added)
-- `gift_areas.json` — Gift/static encounter locations
+- `area_map.json` — Route/city → area_id mapping (124 entries)
+- `species_types.json` — Species type data (251 species)
+- `gender_ratios.json` — Species gender ratio data
+- `item_names.json` — Item ID → name mapping
 
 ## Notes
 
@@ -18,3 +17,4 @@ Data files for Gen 2 Pokémon games (Game Boy Color).
 - Gender: Determined by Atk DV vs species threshold.
 - Platform: Game Boy Color (Gambatte core in BizHawk).
 - Memory map: Well-documented via pret/pokecrystal decomp.
+- Crystal only — Gold/Silver can be added later as variant profiles in `gen2_crystal.lua`.

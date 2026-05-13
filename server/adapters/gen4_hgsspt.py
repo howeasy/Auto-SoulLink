@@ -22,7 +22,7 @@ from server.pokemon_data import (
     species_types as _species_types,
     type_name as _type_name,
     to_cfru as _to_cfru,
-    to_national as _to_national,
+    natdex_base_form as _natdex_base_form,
 )
 
 log = logging.getLogger(__name__)
@@ -131,16 +131,6 @@ _GEN4_ITEM_NAMES: dict[int, str] = {
     281:"Light Clay",  282:"Rocky Helmet",
     289:"Silk Scarf",
 }
-
-
-def _natdex_base_form(natdex_id: int) -> int:
-    """Return the base-form NatDex ID for an evolution family.
-
-    Converts NatDex→CFRU, looks up EVO_FAMILY, converts back.
-    """
-    cfru_id = _to_cfru(natdex_id)
-    base_cfru = EVO_FAMILY.get(cfru_id, cfru_id)
-    return _to_national(base_cfru)
 
 
 class Gen4Adapter(GameAdapter):

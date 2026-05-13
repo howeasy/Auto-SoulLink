@@ -2,16 +2,14 @@
 
 Data files for Gen 5 Pokémon games (Nintendo DS).
 
-## Status: Not Yet Implemented
+## Status: Implemented (Black, White, Black 2, White 2)
 
-## Required Data Files (when implemented)
+## Data Files
 
-- `area_map.json` — Route/city → area_id mapping
-- `species.json` — 649 species names and IDs
-- `evo_families.json` — Evolution family mappings
-- `types.json` — Type data (17 types)
-- `abilities.json` — Ability data
-- `gift_areas.json` — Gift/static encounter locations
+- `area_map_bw.json` — Black/White zone ID → area_id mapping
+- `area_map_bw2.json` — Black 2/White 2 zone ID → area_id mapping
+- `gen5_bw_areas.lua` — Generated zone lookup table (BW + BW2)
+- `gen5_bw_locations.lua` — Area display name lookup
 
 ## Notes
 

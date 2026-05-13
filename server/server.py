@@ -1991,8 +1991,6 @@ class SLinkServer:
 
         Only populated for RR runs (adapter.encounter_table returns non-None).
         """
-        if not self.adapter:
-            return ""
         enc = self.adapter.encounter_table(area_id)
         if not enc:
             return ""

@@ -473,16 +473,18 @@ Run through the steps below **in order**. Each step depends on the previous.
 ## Unit Tests (pytest — no emulator required)
 
 ```bash
-pytest tests/unit/test_state.py -v          # 228 tests
-pytest tests/unit/test_gen3_adapter.py -v   # 50 tests
+pytest tests/unit/test_state.py -v          # 234 tests
+pytest tests/unit/test_gen3_adapter.py -v   # 77 tests
 pytest tests/unit/test_gen4_adapter.py -v   # 62 tests (incl. species/evo/gender data)
 pytest tests/unit/test_gen1_adapter.py -v   # 78 tests
 pytest tests/unit/test_gen2_adapter.py -v   # 127 tests
+pytest tests/unit/test_gen5_adapter.py -v   # 63 tests
+pytest tests/unit/test_phase1_comms.py -v   # 6 tests
 ```
 
 All tests use `tmp_path` + `monkeypatch` fixtures for isolated file I/O. No server, no emulator, no network.
 
-### test_state.py — State Machine Tests (228 tests)
+### test_state.py — State Machine Tests (234 tests)
 
 Covers the core `SoulLinkState` FSM in `server/state.py`. Key helper: `make_state_with_link()` creates a pre-linked pair with `pokeballs_obtained` active and party size 2.
 
@@ -652,20 +654,10 @@ This deletes `data/links.json` and clears all in-memory state. The Lua clients w
 |---|---|---|
 | Overworld full-party wipe does not auto-whiteout | No game engine hook for this without a ROM patch | Server detects it via snapshot diff; player must manually visit Pokémon Center |
 | Party HP values on status page not live | Server only receives HP on faint or hello — no per-frame HP stream | Shows 0 for fainted mons; non-zero for others reflects last-seen value, not current |
-| Party levels are live | Level included in every tick event's party snapshot | Levels update at tick rate (~1 s) |
 | Pokéball count updates at tick rate | Sent with each tick event | Brief lag between bag change and status page update (~1 s) |
 | Party sync executes on next safe state tick | Sync writes deferred until fresh `isInOverworld()` check at execution point | Up to ~0.5 s delay after a party/box action before partner's game updates |
 | Party sync may require manual PC action | `party_mon` fails closed if partner's party is full or stats are missing | Player sees persistent HUD notice and must manually withdraw from PC |
 | Memorial box write requires safe state | `memorialize` command deferred until overworld | Brief delay between faint confirmation and Box 13 move; mon may still appear at 0 HP in party during that window |
-| Dead zone encounter species missing for old sessions | `species_id`/`level` on `no_catch` events added in current alpha | Status page shows "— no catch" for encounters from sessions before this fix; new sessions always show species |
 | AP starter location varies | AP randomized start puts player in random town | Starter capture uses `"intro"` area_id — both players link even if they start in different towns |
-| AP party menu false battle trigger | `gBattleTypeFlags` stays stale in AP after battle | Three-condition `isInBattle()` check prevents this (gMain+0x038 + gBattleTypeFlags + gBattleOutcome) |
-| Memorial box name | Box 13 is auto-renamed to "THE DEAD" at startup | Name write happens once, on first frame with writes enabled |
-| Pre-save garbage data | During title screen/intro, RAM is uninitialized | Tick/hello events gate party data behind `gPlayerPartyCount` sanity check (0–6 range); no garbage on status page |
-| Party event debounce | Memory reads can glitch during BizHawk window resize | 3-frame debounce on box_to_party and party_to_box; `party_diff_ok` gate freezes detection during menus |
-| Gift area mapping | Eevee room corrected from `celadon_hotel` (10:19) to `celadon_condominiums` (10:11); area_map.json now has 150 entries | Regenerate with `python tools/gen_area_map.py` if editing area mappings |
-| Dynamic gift area IDs | Gift captures in unmapped rooms use `gift_<mapGroup>_<mapNum>` (e.g. `gift_10_11`) | Prevents collisions when multiple gift locations shared the old generic `"gift"` area_id; server's `_is_gift_area()` matches both static names and `gift_*` prefix |
-| Resolved areas on reconnect | Server sends `resolved_areas` command in hello response | Lua client seeds its `resolved_areas` table from this, preventing the "New Encounter" HUD from re-firing after script reload |
-| Gift area `no_catch` protection | `no_catch` events in gift areas (static + dynamic `gift_*`) are silently ignored | Prevents false dead zones in gift/static encounter areas |
 | Quarantine enforcement on reconnect | Server re-quarantines pending keys from hello party snapshot | Brief window (~1 tick) where quarantined mon may be in party before re-deposit |
 | `party_size` tracking ~1s stale | Updated from tick events, not real-time | Reactive `sync_retrieve_failed` catches cases where stale data caused incorrect proactive decisions |
