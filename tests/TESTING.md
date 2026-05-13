@@ -187,8 +187,7 @@ The `nuzlocke_active` flag activates when `M.hasPokeballs()` returns true (reads
 | Log line | Meaning |
 |---|---|
 | `[battle] cache update: slot N hp=X→Y` | HP change detected in gBattleMons during battle |
-| `[battle] wrote back cached HP/level to party struct` | Battle ended — cache values written to gPlayerParty |
-| `[battle] cache cleared` | Cache reset (battle start or post-writeback) |
+| `[battle] cache cleared` | Cache reset (battle start or borrowed-battle cleanup) |
 
 **CFRU Borrowed-Party Battle Logging:**
 

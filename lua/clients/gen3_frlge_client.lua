@@ -503,7 +503,7 @@ local function index_party(battle_active)
             _quarantined_slots[i] = (prev_k ~= nil and k ~= prev_k)
             local lv = mem_u8(base + M.OFF_LEVEL)
             local hp = mem_u16(base + M.OFF_HP)
-            -- CFRU doesn't copy battle HP/level back to the party struct.
+            -- During battle, party struct HP is stale (game updates gBattleMons, not party).
             -- Use the persistent battle cache (survives mon switches).
             if battle_active then
                 local bc = _battle_hp_cache[k]
@@ -579,8 +579,7 @@ local function build_party_snapshot(battle_active)
             local hp    = mem_u16(base + M.OFF_HP)
             local maxHP = mem_u16(base + M.OFF_MAX_HP)
             local level = mem_u8(base + M.OFF_LEVEL)
-            -- CFRU doesn't copy battle HP/level back to party struct.
-            -- Use the persistent battle cache (survives mon switches).
+            -- During battle, party struct HP is stale; use gBattleMons cache for live HP.
             if battle_active then
                 local bc = _battle_hp_cache[k]
                 if bc then
@@ -1446,30 +1445,7 @@ local function on_frame()
             pending_safe       = true
             -- Skip normal writeback — fall through to party read below.
         else
-        -- CFRU doesn't copy gBattleMons HP/level back to the party struct after
-        -- battle.  Write the last-known battle values so post-battle reads and
-        -- faint detection see the correct (actual) HP, not stale pre-battle values.
-        if writes_enabled then
-            local count = mem_u8(M.PARTY_COUNT_ADDR)
-            for key, bc in pairs(_battle_hp_cache) do
-                -- Only write back if maxHP > 0 (sanity check: 0 means garbage data).
-                if bc.maxHP > 0 then
-                    for slot = 0, count - 1 do
-                        local base = M.PARTY_BASE + slot * M.MON_SIZE
-                        if M.monKey(base) == key then
-                            mem_w16(base + M.OFF_HP, bc.hp)
-                            mem_w16(base + M.OFF_MAX_HP, bc.maxHP)
-                            mem_w8(base + M.OFF_LEVEL, bc.level)
-                            break
-                        end
-                    end
-                end
-            end
-            if next(_battle_hp_cache) then
-                console.log("[SLink-FRLGE] [battle] wrote back cached HP/level to party struct")
-            end
-        end
-        _battle_hp_cache   = {}  -- clear cache; party struct is now authoritative
+        _battle_hp_cache   = {}  -- clear cache
         pending_battle_faints = {}  -- all deferred faints should be flushed by now
         force_fainted_keys    = {}  -- clear battle-scoped guard
         pending_faint_debounce = {}  -- clear any debounce state
@@ -1483,7 +1459,7 @@ local function on_frame()
         end -- not borrowed_battle
     end
 
-    -- 6. Read party AFTER battle end writeback so diff sees correct HP.
+    -- 6. Read party; diff sees correct HP (game writes back gBattleMons→party on battle end).
     -- Stats cache is merged into index_party() — no separate pass needed.
     local curr_party, party_count = index_party(in_battle)
 
