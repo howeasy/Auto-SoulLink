@@ -1404,17 +1404,17 @@ function M.memorializeMon(key)
                     memory.write_u8(memAddr + i, memory.read_u8(base + i))
                 end
             end
-            -- Zero full 100-byte party slot then compact
+            -- Zero full 100-byte party slot, swap with last slot (no shift — preserves
+            -- slot indices of surviving mons so CFRU deferred writes can't hit wrong targets).
             for i = 0, M.MON_SIZE - 1 do memory.write_u8(base + i, 0) end
-            for s = slot, count - 2 do
-                local src = M.PARTY_BASE + (s + 1) * M.MON_SIZE
-                local dst = M.PARTY_BASE + s * M.MON_SIZE
+            if slot < count - 1 then
+                -- Copy last slot into the vacated slot, then zero the last slot
+                local lastBase = M.PARTY_BASE + (count - 1) * M.MON_SIZE
                 for i = 0, M.MON_SIZE - 1 do
-                    memory.write_u8(dst + i, memory.read_u8(src + i))
+                    memory.write_u8(base + i, memory.read_u8(lastBase + i))
                 end
+                for i = 0, M.MON_SIZE - 1 do memory.write_u8(lastBase + i, 0) end
             end
-            local lastBase = M.PARTY_BASE + (count - 1) * M.MON_SIZE
-            for i = 0, M.MON_SIZE - 1 do memory.write_u8(lastBase + i, 0) end
             memory.write_u8(M.PARTY_COUNT_ADDR, count - 1)
             return memBox, memSlot
         end

@@ -238,11 +238,6 @@ local nick_cache        = {}  -- key → display label (updated from party snaps
 -- between party mons. When species is corrupted, the engine recalculates the
 -- entire stat block (HP, maxHP, attack, …) from wrong base stats.
 -- We snapshot critical fields before sync ops and verify/restore after.
-local _party_snapshot     = {}   -- {[monKey] = {species, item, level, hp, maxHP, atk, def, spe, spa, spd}}
-local _party_verify_frames = 0   -- countdown: frames remaining to verify party integrity
-local _STAT_OFFSETS = {
-    {0x5A, "atk"}, {0x5C, "def"}, {0x5E, "spe"}, {0x60, "spa"}, {0x62, "spd"},
-}
 
 -- Forward-declare variables used by dispatch_commands but initialized later
 local resolved_areas        = {}
@@ -790,265 +785,8 @@ local pending_party_to_box  = {}  -- key → {frames=N, info=prev_info}
 local nuzlocke_active = false
 
 
--- ── Item integrity helpers ────────────────────────────────────────────────────
--- Snapshot critical party fields for all current party mons (by monKey).
--- When called during an active verify window (consecutive sync ops), preserves
--- existing snapshot entries — they hold the pre-corruption baseline from the
--- first sync in the batch and must not be overwritten with values the game
--- engine may have already corrupted in reaction to the previous compaction.
-local function snapshot_party_fields()
-    local count = memory.read_u8(M.PARTY_COUNT_ADDR)
-    if _party_verify_frames > 0 then
-        -- Active verify window — merge new mons only; keep pre-corruption baselines.
-        for i = 0, count - 1 do
-            local base = M.PARTY_BASE + i * M.MON_SIZE
-            -- Skip quarantined slots: identity just changed, substruct/stat bytes
-            -- still belong to the old mon. Snapshotting now would store new key + old data,
-            -- causing verify_party_fields() to attempt a wrong restoration next frame.
-            if not _quarantined_slots[i] and M.slotOccupied(base) then
-                local k = M.monKey(base)
-                if not _party_snapshot[k] then
-                    local ok_s, sid = pcall(M.decryptSpecies, base)
-                    local ok_i, iid = pcall(M.decryptHeldItem, base)
-                    _party_snapshot[k] = {
-                        species = ok_s and sid or 0,
-                        item    = ok_i and iid or 0,
-                        level   = mem_u8(base + M.OFF_LEVEL),
-                        hp      = mem_u16(base + M.OFF_HP),
-                        maxHP   = mem_u16(base + M.OFF_MAX_HP),
-                        atk     = mem_u16(base + 0x5A),
-                        def     = mem_u16(base + 0x5C),
-                        spe     = mem_u16(base + 0x5E),
-                        spa     = mem_u16(base + 0x60),
-                        spd     = mem_u16(base + 0x62),
-                    }
-                end
-            end
-        end
-    else
-        -- No active verify — fresh snapshot.
-        _party_snapshot = {}
-        for i = 0, count - 1 do
-            local base = M.PARTY_BASE + i * M.MON_SIZE
-            -- Skip quarantined slots: same reasoning as active-verify branch above.
-            if not _quarantined_slots[i] and M.slotOccupied(base) then
-                local k = M.monKey(base)
-                local ok_s, sid = pcall(M.decryptSpecies, base)
-                local ok_i, iid = pcall(M.decryptHeldItem, base)
-                _party_snapshot[k] = {
-                    species = ok_s and sid or 0,
-                    item    = ok_i and iid or 0,
-                    level   = mem_u8(base + M.OFF_LEVEL),
-                    hp      = mem_u16(base + M.OFF_HP),
-                    maxHP   = mem_u16(base + M.OFF_MAX_HP),
-                    atk     = mem_u16(base + 0x5A),
-                    def     = mem_u16(base + 0x5C),
-                    spe     = mem_u16(base + 0x5E),
-                    spa     = mem_u16(base + 0x60),
-                    spd     = mem_u16(base + 0x62),
-                }
-            end
-        end
-    end
-    _party_verify_frames = 8  -- verify for 8 frames after sync (covers multi-op batches)
-end
-
--- Verify and restore party fields if they've been changed by the game engine.
--- Only restores fields for mons that were in the pre-sync snapshot.
--- Returns true if any repairs were made (caller can extend verify window).
---
--- CFRU's engine can swap the entire 48-byte substruct block (+0x20..+0x4F) between
--- party slots when compacting after a deposit/memorialize. Individual field patching
--- (old approach) left moves/EVs/nature/IVs wrong. This version detects pairwise
--- swaps via species cross-validation and repairs all 48 bytes atomically.
-local function _restore_stats(base, expected)
-    local fixed = 0
-    if mem_u16(base + M.OFF_MAX_HP) ~= expected.maxHP then
-        mem_w16(base + M.OFF_MAX_HP, expected.maxHP)
-        fixed = fixed + 1
-    end
-    if mem_u16(base + M.OFF_HP) ~= expected.hp then
-        local k = M.monKey(base)
-        if expected.hp > 0 and not force_fainted_keys[k] then
-            mem_w16(base + M.OFF_HP, expected.hp)
-            fixed = fixed + 1
-        end
-    end
-    if mem_u8(base + M.OFF_LEVEL) ~= expected.level then
-        mem_w8(base + M.OFF_LEVEL, expected.level)
-        fixed = fixed + 1
-    end
-    for _, pair in ipairs(_STAT_OFFSETS) do
-        if mem_u16(base + pair[1]) ~= expected[pair[2]] then
-            mem_w16(base + pair[1], expected[pair[2]])
-            fixed = fixed + 1
-        end
-    end
-    return fixed
-end
-
-local function verify_party_fields()
-    if not M.CFRU_NO_ENCRYPT then return false end  -- only CFRU has this issue
-    local count = memory.read_u8(M.PARTY_COUNT_ADDR)
-    local fixed_sub = 0
-    local fixed_stat = 0
-
-    -- Build slot map: monKey → {base, cur_species} for all occupied slots.
-    local slot_map = {}
-    for i = 0, count - 1 do
-        local base = M.PARTY_BASE + i * M.MON_SIZE
-        if M.slotOccupied(base) then
-            local k = M.monKey(base)
-            local ok_s, cs = pcall(M.decryptSpecies, base)
-            slot_map[k] = { base = base, cur_species = ok_s and cs or 0 }
-        end
-    end
-
-    -- Pass 1: detect and repair pairwise substruct swaps.
-    -- A swap is confirmed when slot A's cur_species == expected_B AND slot B's
-    -- cur_species == expected_A. Repair by swapping all 48 bytes (+0x20..+0x4F).
-    local handled = {}
-    for k, info in pairs(slot_map) do
-        if not handled[k] then
-            local expected = _party_snapshot[k]
-            if expected and expected.species > 0 and info.cur_species ~= expected.species then
-                -- Find the partner whose cur_species matches our expected species
-                -- and whose own expected species matches our cur_species (confirming swap).
-                local partner_k, partner_info = nil, nil
-                for k2, info2 in pairs(slot_map) do
-                    if k2 ~= k and not handled[k2] then
-                        local exp2 = _party_snapshot[k2]
-                        if info2.cur_species == expected.species and
-                           exp2 and exp2.species == info.cur_species then
-                            partner_k, partner_info = k2, info2
-                            break
-                        end
-                    end
-                end
-                if partner_k then
-                    -- Confirmed pairwise swap: exchange all 48 substruct bytes.
-                    local base_a, base_b = info.base, partner_info.base
-                    for j = 0, 47 do
-                        local a = memory.read_u8(base_a + M.OFF_SUBSTRUCT + j)
-                        local b = memory.read_u8(base_b + M.OFF_SUBSTRUCT + j)
-                        memory.write_u8(base_a + M.OFF_SUBSTRUCT + j, b)
-                        memory.write_u8(base_b + M.OFF_SUBSTRUCT + j, a)
-                    end
-                    -- Restore stat blocks for both slots (engine recalculated from
-                    -- the wrong substruct before we could repair it).
-                    fixed_stat = fixed_stat + _restore_stats(base_a, expected)
-                    local exp2 = _party_snapshot[partner_k]
-                    if exp2 then
-                        fixed_stat = fixed_stat + _restore_stats(base_b, exp2)
-                    end
-                    handled[k] = true
-                    handled[partner_k] = true
-                    fixed_sub = fixed_sub + 2
-                    console.log(string.format(
-                        "[SLink-FRLGE] ⚠ Substruct swap REPAIRED: %s ↔ %s",
-                        k:sub(1,8), partner_k:sub(1,8)))
-                end
-                -- No partner found: fall through to Pass 2 for individual field restore.
-            end
-        end
-    end
-
-    -- Pass 1b: detect and repair cyclic rotations (3+ way).
-    -- After Pass 1 exhausts pairwise matches, any remaining unmatched slots whose
-    -- species mismatch implies a cycle (A→B→C→A) are resolved by iteratively
-    -- placing each slot's expected substruct data from wherever it currently sits.
-    local unmatched = {}
-    for k, info in pairs(slot_map) do
-        if not handled[k] then
-            local expected = _party_snapshot[k]
-            if expected and expected.species > 0 and info.cur_species ~= expected.species then
-                unmatched[#unmatched + 1] = k
-            end
-        end
-    end
-    if #unmatched >= 3 then
-        -- Build reverse lookup: cur_species → key (for slots in the unmatched set)
-        local species_to_key = {}
-        for _, k in ipairs(unmatched) do
-            species_to_key[slot_map[k].cur_species] = k
-        end
-        local cycle_fixed = 0
-        for _, k in ipairs(unmatched) do
-            if not handled[k] then
-                local expected = _party_snapshot[k]
-                -- Find which slot currently holds our expected species
-                local donor_k = species_to_key[expected.species]
-                if donor_k and donor_k ~= k and not handled[donor_k] then
-                    -- Copy donor's full 48-byte substruct block into our slot
-                    local dst_base = slot_map[k].base
-                    local src_base = slot_map[donor_k].base
-                    for j = 0, 47 do
-                        local b = memory.read_u8(src_base + M.OFF_SUBSTRUCT + j)
-                        memory.write_u8(dst_base + M.OFF_SUBSTRUCT + j, b)
-                    end
-                    fixed_stat = fixed_stat + _restore_stats(dst_base, expected)
-                    handled[k] = true
-                    cycle_fixed = cycle_fixed + 1
-                    -- Update reverse lookup: our slot now holds expected species
-                    species_to_key[expected.species] = nil
-                    -- Donor slot's species is now "available" at our old cur_species
-                    -- (we overwrote dst but src still has its data until it's fixed)
-                end
-            end
-        end
-        if cycle_fixed > 0 then
-            -- Mark remaining donors as handled if their species now matches
-            for _, k in ipairs(unmatched) do
-                if not handled[k] then
-                    local expected = _party_snapshot[k]
-                    local ok_s, cs = pcall(M.decryptSpecies, slot_map[k].base)
-                    if ok_s and cs == expected.species then
-                        handled[k] = true
-                        cycle_fixed = cycle_fixed + 1
-                    end
-                end
-            end
-            fixed_sub = fixed_sub + cycle_fixed
-            console.log(string.format(
-                "[SLink-FRLGE] ⚠ Cyclic rotation REPAIRED: %d slots", cycle_fixed))
-        end
-    end
-
-    -- Pass 2: individual field + stat restoration for unhandled slots.
-    -- Covers partial corruptions (item-only changes) and unmatched species mismatches.
-    for k, info in pairs(slot_map) do
-        if not handled[k] then
-            local expected = _party_snapshot[k]
-            if expected then
-                local base = info.base
-                -- Species (individual fallback if no swap partner was found)
-                if expected.species > 0 and info.cur_species ~= expected.species then
-                    mem_w16(base + M.OFF_SUBSTRUCT, expected.species)
-                    fixed_sub = fixed_sub + 1
-                end
-                -- Item
-                local ok_i, cur_item = pcall(M.decryptHeldItem, base)
-                if ok_i and cur_item ~= expected.item then
-                    mem_w16(base + M.OFF_SUBSTRUCT + 2, expected.item)
-                    fixed_sub = fixed_sub + 1
-                end
-                -- Stat block
-                fixed_stat = fixed_stat + _restore_stats(base, expected)
-            end
-        end
-    end
-
-    if fixed_sub > 0 or fixed_stat > 0 then
-        console.log(string.format(
-            "[SLink-FRLGE] ⚠ Party integrity: restored %d substruct + %d stat field(s)",
-            fixed_sub, fixed_stat))
-    end
-    return (fixed_sub + fixed_stat) > 0
-end
-
 -- ── Sync write helpers ─────────────────────────────────────────────────────────
 local function exec_box_mon(key)
-    snapshot_party_fields()  -- protect remaining mons' fields during compaction
     local count = memory.read_u8(M.PARTY_COUNT_ADDR)
     -- Never deposit the last party mon — game crashes with 0 party mons.
     if count <= 1 then
@@ -1080,9 +818,6 @@ local function exec_box_mon(key)
             if bi then
                 console.log(string.format("[SLink-FRLGE] ✓ box_mon: %s → box%d s%d", key:sub(1,8), bi, si))
                 sync_written_keys[key] = true
-                -- Remove deposited mon from snapshot (no longer in party)
-                _party_snapshot[key] = nil
-                verify_party_fields()  -- immediate post-compact integrity check
                 hud_show("v " .. nick_label(key) .. " deposited", 100, 180, 255, 200)
                 -- Cache stats on server so party_mon can restore them correctly later.
                 -- Use stats_cache (not party_to_box) to avoid triggering sync feedback loop.
@@ -1128,7 +863,6 @@ local function exec_party_mon(key, stats)
              "sync_retrieve_failed:"..key:sub(1,8), true, true)
         return
     end
-    snapshot_party_fields()  -- protect existing mons' fields during retrieval
     if count >= 6 then
         -- Party full — a preceding box_mon should free a slot. Re-queue to retry
         -- (up to 3 attempts) instead of giving up immediately.
@@ -1153,26 +887,6 @@ local function exec_party_mon(key, stats)
         console.log("[SLink-FRLGE] ✓ party_mon: "..key:sub(1,8).." added to party (full heal)")
         sync_written_keys[key] = true
         all_known_keys[key]    = true  -- prevent false gift-capture on subsequent frames
-        -- Add retrieved mon to snapshot so verify_party_fields protects its items
-        -- against CFRU engine substruct swaps.  Data is clean: we just wrote it
-        -- within this Lua frame; the engine hasn't run yet.
-        local new_count = memory.read_u8(M.PARTY_COUNT_ADDR)
-        local ret_base = M.PARTY_BASE + (new_count - 1) * M.MON_SIZE
-        local ok_s, sid = pcall(M.decryptSpecies, ret_base)
-        local ok_i, iid = pcall(M.decryptHeldItem, ret_base)
-        _party_snapshot[key] = {
-            species = ok_s and sid or 0,
-            item    = ok_i and iid or 0,
-            level   = mem_u8(ret_base + M.OFF_LEVEL),
-            hp      = mem_u16(ret_base + M.OFF_HP),
-            maxHP   = mem_u16(ret_base + M.OFF_MAX_HP),
-            atk     = mem_u16(ret_base + 0x5A),
-            def     = mem_u16(ret_base + 0x5C),
-            spe     = mem_u16(ret_base + 0x5E),
-            spa     = mem_u16(ret_base + 0x60),
-            spd     = mem_u16(ret_base + 0x62),
-        }
-        verify_party_fields()  -- immediate post-retrieval integrity check (now covers new mon)
         -- Populate nick_cache from the retrieved mon's actual nickname in RAM
         local ok_n, nick = pcall(M.readNickname, ret_base)
         if ok_n and nick and nick ~= "" then nick_cache[key] = nick end
@@ -1189,7 +903,6 @@ local function exec_party_mon(key, stats)
 end
 
 local function exec_memorialize(key)
-    snapshot_party_fields()  -- protect remaining mons' fields during memorialize compaction
     -- Drain any stale box_mon/party_mon for this key from the queue
     local filtered = {}
     for _, c in ipairs(pending_sync_cmds) do
@@ -1205,9 +918,6 @@ local function exec_memorialize(key)
 
     local bi, si = M.memorializeMon(key)
     if bi then
-        -- Remove memorialized mon from snapshot, verify remaining items
-        _party_snapshot[key] = nil
-        verify_party_fields()
         -- Verify: confirm the key is gone from party and present in memorial box
         local post_count = memory.read_u8(M.PARTY_COUNT_ADDR)
         local still_in_party = false
@@ -1480,15 +1190,6 @@ local function on_frame()
     end
     if _memorial_hold_frames > 0 then _memorial_hold_frames = _memorial_hold_frames - 1 end
 
-    -- 5b. Per-frame item integrity check (catches game-engine interference between frames)
-    if _party_verify_frames > 0 and is_overworld and writes_enabled then
-        _party_verify_frames = _party_verify_frames - 1
-        local repaired = verify_party_fields()
-        -- Self-extending window: if CFRU engine is still corrupting, keep verifying.
-        if repaired and _party_verify_frames < 4 then
-            _party_verify_frames = 8
-        end
-    end
     -- ── area_enter / loc_enter ────────────────────────────────────────────────
     -- Fire on any map change (encounter zones get area_id; towns/buildings get loc_name only).
     if loc ~= prev_loc then
