@@ -590,11 +590,12 @@ local function build_party_snapshot(battle_active)
             if is_active and player_status ~= 0 then
                 status_cond = player_status
             end
+            local stat_stages = is_active and M.readStatStages(0) or nil
             snap[#snap+1] = {key=k, hp=hp, maxHP=maxHP, level=level,
                              slot=i, active=is_active,
                              nickname=dc.nickname, species_id=dc.species_id,
                              held_item_id=dc.held_item_id, ability_id=final_aid or 0,
-                             status_cond=status_cond}
+                             status_cond=status_cond, stat_stages=stat_stages}
             -- Read moves + PP (cheap, re-read every tick for level-up/TM changes)
             local ok_mv, mv, pp = pcall(M.decryptMoves, base)
             if ok_mv and mv then
@@ -2086,6 +2087,7 @@ local function on_frame()
                 -- Read active foe from gBattleMons[1] (always valid during battle).
                 -- BattlePokemon: species +0x00, ability +0x20, status1 +0x24, hp +0x28, level +0x2A, maxHP +0x2C
                 local foe_species, foe_level, foe_hp, foe_maxHP, foe_ability, foe_item, foe_status = 0, 0, 0, 0, 0, 0, 0
+                local foe_stat_stages = nil
                 if M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
                     local foe_base = M.BATTLE_MONS_ADDR + 1 * M.BATTLE_MON_SIZE
                     foe_species = memory.read_u16_le(foe_base + 0x00)
@@ -2094,6 +2096,7 @@ local function on_frame()
                     foe_maxHP   = memory.read_u16_le(foe_base + 0x2C)
                     foe_ability = memory.read_u8(foe_base + 0x20)
                     foe_status  = memory.read_u32_le(foe_base + M.BATTLE_MON_STATUS_OFF)
+                    foe_stat_stages = M.readStatStages(1)
                     -- BattlePokemon.item is at +0x2E (confirmed from pret/pokefirered and CFRU
                     -- pokemon.h: struct BattlePokemon { ... /*0x2E*/ u16 item; ... }).
                     -- Skip for wild battles: wild mons in CFRU/RR have item=0 in gBattleMons.
@@ -2113,6 +2116,7 @@ local function on_frame()
                         -- Active foe: prefer gBattleMons status (authoritative during battle)
                         if mon.active then
                             mon.status_cond = foe_status
+                            mon.stat_stages = foe_stat_stages
                         end
                         -- Item field unreliable for wild mons in CFRU/RR
                         if not evt.is_trainer_battle then
@@ -2131,6 +2135,7 @@ local function on_frame()
                         ability_id   = foe_ability,
                         held_item_id = foe_item,
                         status_cond  = foe_status,
+                        stat_stages  = foe_stat_stages,
                     }
                     for k, mon in pairs(battle_seen_enemies) do
                         enemy_party[#enemy_party + 1] = {
@@ -2141,6 +2146,7 @@ local function on_frame()
                             ability_id   = mon.ability_id,
                             held_item_id = (k == foe_key) and foe_item or mon.held_item_id,
                             status_cond  = (k == foe_key) and foe_status or (mon.status_cond or 0),
+                            stat_stages  = (k == foe_key) and foe_stat_stages or nil,
                             active       = (k == foe_key),
                         }
                     end

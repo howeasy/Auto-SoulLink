@@ -377,6 +377,11 @@ M.BATTLE_MON_HP_OFF          = 0x28        -- BattlePokemon.hp offset (u16)
 M.BATTLE_MON_STATUS_OFF      = 0x4C        -- BattlePokemon.status1 offset (u32, non-volatile status; CFRU pokemon.h)
 M.BATTLE_MON_PERS_OFF        = 0x48        -- BattlePokemon.personality offset (u32)
 M.BATTLE_MON_OTID_OFF        = 0x54        -- BattlePokemon.otId offset (u32)
+-- statStages[0..6] = ATK,DEF,SPD,SPATK,SPDEF,ACC,EVA (raw 0–12, neutral=6)
+-- Offset 0x19 is correct for BOTH vanilla (statStages[1]) and CFRU (statStages[0]);
+-- offset +0x18 must be skipped — it is the HP-stage placeholder in vanilla (always 6)
+-- but is the type3 byte in CFRU (third type for Fairy support) — not a stat stage.
+M.BATTLE_MON_STAT_STAGES_OFF = 0x19        -- BattlePokemon.statStages offset for ATK (profile-independent)
 
 -- gMain inBattle bit mask (used in vanilla mode)
 M.GMAIN_INBATTLE_MASK = 0x02              -- bit 1 = inBattle
@@ -392,6 +397,20 @@ function M.getBattlerForPartySlot(slot)
         if idx2 == slot then return 2 end
     end
     return -1
+end
+
+-- Read 7 raw stat stage bytes (ATK–EVA) for one battler from gBattleMons.
+-- Returns a 7-element Lua table {atk, def, spd, spatk, spdef, acc, eva} where
+-- each value is in the range 0–12 (6 = neutral). Returns nil if unavailable.
+function M.readStatStages(battler_idx)
+    if not M.BATTLE_MONS_ADDR or M.BATTLE_MONS_ADDR == 0 then return nil end
+    local base = M.BATTLE_MONS_ADDR + battler_idx * M.BATTLE_MON_SIZE
+    local stages = {}
+    for i = 0, 6 do
+        local ok, v = pcall(memory.read_u8, base + M.BATTLE_MON_STAT_STAGES_OFF + i)
+        stages[i + 1] = ok and v or 6
+    end
+    return stages
 end
 
 -- ── Overworld / in-battle detection ──────────────────────────────────────────

@@ -239,6 +239,35 @@ def _status_icon_html(status_cond: int) -> str:
     return ""
 
 
+_STAT_STAGE_LABELS = ["ATK", "DEF", "SPD", "SATK", "SDEF", "ACC", "EVA"]
+
+
+def _stat_stages_html(stages) -> str:
+    """Return HTML badges for non-neutral stat stages.
+
+    ``stages`` is a 7-element list (ATK–EVA), raw values 0–12 where 6 = neutral.
+    Returns '' when all stages are neutral or stages is None/empty/malformed.
+    """
+    if not isinstance(stages, (list, tuple)) or not stages:
+        return ""
+    parts = []
+    for i, raw in enumerate(stages):
+        if i >= len(_STAT_STAGE_LABELS):
+            break
+        try:
+            stage = int(raw) - 6
+        except (TypeError, ValueError):
+            continue
+        if not (-6 <= stage <= 6) or stage == 0:
+            continue
+        arrow = "↑" if stage > 0 else "↓"
+        cls   = "ss-up" if stage > 0 else "ss-dn"
+        parts.append(
+            f'<span class="stat-stage {cls}">{arrow}{abs(stage)} {_STAT_STAGE_LABELS[i]}</span>'
+        )
+    return "".join(parts)
+
+
 def _build_mon_entry(key, detail, adapter):
     """Build a JSON-serialisable dict for one mon, suitable for /api/calc/mons."""
     sid = detail.get("species_id", 0)
@@ -546,6 +575,10 @@ _STATUS_HTML = """<!DOCTYPE html>
     .s-frz {{ background:#5ab8e4; color:#fff; }}
     .s-par {{ background:#c8a800; color:#000; }}
     .s-tox {{ background:#6a00aa; color:#fff; }}
+    .stat-stage {{ display:inline-block; padding:1px 5px; border-radius:3px; font-size:0.75em;
+      font-weight:bold; white-space:nowrap; vertical-align:middle; margin-left:3px; }}
+    .ss-up {{ background:#1a5c2a; color:#4ddd7a; }}
+    .ss-dn {{ background:#5c1a1a; color:#dd4d4d; }}
     .sortable {{ cursor:pointer; user-select:none; position:relative; padding-right:14px !important; }}
     .sortable:hover {{ color:#fff; }}
     .sortable::after {{ content:"⇅"; position:absolute; right:2px; font-size:0.75em; opacity:0.4; }}
@@ -2689,6 +2722,7 @@ class SLinkServer:
                     "slot":         m.get("slot", idx),
                     "active":       m.get("active", False),
                     "status_cond":  m.get("status_cond", 0),
+                    "stat_stages":  m.get("stat_stages"),
                 }
                 for idx, m in enumerate(msg["party"]) if m.get("key")
             }
@@ -3175,6 +3209,7 @@ class SLinkServer:
                             f'</div>'
                             f'<span class="dim">{ehp}/{emaxHP}</span>'
                             + _status_icon_html(esc)
+                            + (active and _stat_stages_html(em.get("stat_stages")) or "")
                         )
                         foe_cls = "fainted" if ehp == 0 else ("active-foe" if active else "")
                         active_marker = "⚔ " if active else ""
@@ -3287,12 +3322,14 @@ class SLinkServer:
                     pct     = max(0, min(100, int(hp / maxhp * 100))) if maxhp else 0
                     bar_cls = "hp-high" if pct > 50 else ("hp-mid" if pct > 20 else "hp-low")
                     status_cond = detail.get("status_cond", 0)
+                    is_active   = detail.get("active", False)
                     hp_cell = (
                         f'<div class="hp-bar-bg">'
                         f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
                         f'</div>'
                         f'<span class="dim">{hp}/{maxhp}</span>'
                         + _status_icon_html(status_cond)
+                        + (is_active and _stat_stages_html(detail.get("stat_stages")) or "")
                     )
                     type_cell = _type_badges_html(sid, adapter=self.adapter)
                     abl_name = detail.get("ability_name", "")

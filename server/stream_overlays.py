@@ -65,6 +65,9 @@ _STREAM_SHARED_CSS = """
   .sc{display:inline-block;padding:1px 5px;border-radius:3px;font-size:.72em;font-weight:bold;white-space:nowrap;flex-shrink:0;line-height:1.4}
   .sc-slp{background:#7a7a7a;color:#fff}.sc-psn{background:#c040c0;color:#fff}.sc-brn{background:#d06020;color:#fff}
   .sc-frz{background:#5ab8e4;color:#fff}.sc-par{background:#c8a800;color:#000}.sc-tox{background:#6a00aa;color:#fff}
+  .stat-stage{display:inline-block;padding:1px 4px;border-radius:3px;font-size:0.7em;font-weight:bold;white-space:nowrap;margin:1px 2px}
+  .ss-up{background:#1a5c2a;color:#4ddd7a}.ss-dn{background:#5c1a1a;color:#dd4d4d}
+  .stat-stages-row{padding:2px 0 1px 0;display:flex;flex-wrap:wrap;gap:2px}
   /* Party list — fainted: opacity only, no filter (filter rasterises the whole layer → blurs text) */
   .p-list{display:flex;flex-direction:column;gap:clamp(3px,.55vmin,7px);flex:1;overflow:hidden}
   .mc{display:flex;align-items:center;gap:clamp(6px,1.1vmin,13px);padding:clamp(4px,.7vmin,9px) clamp(7px,1.1vmin,13px);background:var(--c-card);border-radius:4px;border-left:3px solid rgba(128,128,128,.18);min-width:0}
@@ -365,6 +368,20 @@ function statusIcon(cond) {
   return '';
 }
 
+var _STAT_LABELS = ['ATK','DEF','SPD','SATK','SDEF','ACC','EVA'];
+function statStagesHtml(stages) {
+  if (!Array.isArray(stages) || !stages.length) return '';
+  var out = '';
+  for (var i = 0; i < stages.length && i < _STAT_LABELS.length; i++) {
+    var s = stages[i] - 6;
+    if (!isFinite(s) || s === 0 || s < -6 || s > 6) continue;
+    var arrow = s > 0 ? '\u2191' : '\u2193';
+    var cls   = s > 0 ? 'ss-up' : 'ss-dn';
+    out += '<span class="stat-stage ' + cls + '">' + arrow + Math.abs(s) + ' ' + _STAT_LABELS[i] + '</span>';
+  }
+  return out;
+}
+
 var _SPLIT_ICON_BASE = 'https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/src/moves';
 var _SPLIT_NAMES = ['SPLIT_PHYSICAL', 'SPLIT_SPECIAL', 'SPLIT_STATUS'];
 var _SPLIT_CSS = ['split-physical', 'split-special', 'split-status'];
@@ -522,7 +539,12 @@ function render(d) {
       h += '<span class="hp-pct">' + (fnt ? '\u2014' : pct + '%') + '</span>';
       h += statusIcon(det.status_cond || 0);
       h += '<span class="lv">Lv ' + lv + '</span>';
-      h += '</div></div></div>';
+      h += '</div>';
+      if (det.active && det.stat_stages) {
+        var stH = statStagesHtml(det.stat_stages);
+        if (stH) h += '<div class="stat-stages-row">' + stH + '</div>';
+      }
+      h += '</div></div>';
     });
   }
   h += '</div>';
