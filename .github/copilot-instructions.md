@@ -24,6 +24,7 @@ python -m server.server --reset   # wipe all state and start a fresh run
 #   --gender-clause        Reject same-gender links
 #   --type-clause          Reject shared-type links
 #   --manager-port PORT  Manager HTTP port (enables back-link)
+#   --verbose            Enable structured DEBUG logging to <data-dir>/slink.log
 
 # Unit tests — no emulator or server required (234 + 77 + 62 + 78 + 127 + 63 + 6 = 647 tests)
 pytest tests/unit/test_state.py -v
@@ -37,7 +38,7 @@ pytest tests/unit/test_phase1_comms.py -v
 # Single test
 pytest tests/unit/test_state.py::test_faint_queues_force_faint_for_partner -v
 
-# Regenerate data/games/gen3_frlge/gen3_frlge_areas.lua from area_map.json (175 entries)
+# Regenerate data/games/gen3_frlge/gen3_frlge_areas.lua from area_map.json (184 entries)
 python tools/gen_area_map.py
 
 # Regenerate lua/gen2_crystal_areas.lua from area_map.json (124 entries)
@@ -252,9 +253,9 @@ SLink-RR/
 *Gen 3 Lua (GBA — FRLG / Emerald / Radical Red):*
 - **`lua/slink.lua`** — Universal entry point: auto-detects game via game_detect.lua and loads the correct client.
 - **`lua/slink_gen3.lua`** — Gen 3 launcher script (configure host/port/player, loads gen3_frlge_client.lua).
-- **`lua/clients/gen3_frlge_client.lua`** — **Gen 3 production script**: ROM validation, event detection, TCP transport, command dispatch, party-sync writes, battle HP cache with frame-ordered writeback (CFRU), double-buffer `index_party()` with per-buffer entry pools, F-key manual overrides, nature change detection (personality-changed key migration via otId+species+level+nickname signature matching), borrowed battle rolling gift capture buffer (3+ gifts in 45 frames triggers freeze), encounter GUI prompts.
+- **`lua/clients/gen3_frlge_client.lua`** — **Gen 3 production script**: ROM validation, event detection, TCP transport, command dispatch, party-sync writes, battle HP cache with frame-ordered writeback (CFRU), double-buffer `index_party()` with per-buffer entry pools, F-key manual overrides, nature change detection (personality-changed key migration via otId+species+level+nickname signature matching), borrowed battle rolling gift capture buffer (3+ gifts in 45 frames triggers freeze), encounter GUI prompts. Party compaction after memorialize uses **swap-to-end** (last slot moves into vacated slot, no sequential shift) to preserve surviving mons' slot indices.
 - **`lua/memory_gba.lua`** — FRLG address constants and read/write helpers (including `M.hasPokeballs()`, `M.countPokeballs()`). Contains `PROFILES` table with vanilla, AP, and Radical Red/CFRU address profiles. `M.initProfile()` auto-detects ROM type and applies the correct profile. Extended `_CHARSET` with `/` (0xBA), `,` (0xB9), `$` (0xB8), `♂` (0xB5), `♀` (0xB6), `'` (0xB3), `'` (0xB4), `·` (0xAF), `…` (0xB0), `«` (0xB1), `»` (0xB2).
-- **`data/games/gen3_frlge/gen3_frlge_areas.lua`** — Generated lookup: `mapGroup*256+mapNum → area_id` (175 entries). Regenerate with `python tools/gen_area_map.py`.
+- **`data/games/gen3_frlge/gen3_frlge_areas.lua`** — Generated lookup: `mapGroup*256+mapNum → area_id` (184 entries). Regenerate with `python tools/gen_area_map.py`.
 
 *Gen 2 Lua (GBC — Crystal):*
 - **`lua/slink_gen2.lua`** — Gen 2 launcher script (configure host/port/player, loads gen2_crystal_client.lua).
@@ -284,7 +285,7 @@ SLink-RR/
 
 *Server:*
 - **`server/state.py`** — `SoulLinkState` FSM: processes event dicts, queues commands for each player, persists state. Includes `_check_link_violation()` for species/gender/type clause rules.
-- **`server/server.py`** — asyncio TCP coordinator + aiohttp status page. Routes events to the FSM. Tracks per-player area, ball count, and party snapshots for the status page. Dynamic page titles via `_page_title()` method (shows "Pokémon Soul Link Tracker — \<variant\> — \<run name\>" with Pokéball SVG icon). `_resolve_level()` provides multi-source level fallback for manual links and PC box mons. Commits `rom_type` and `trainer_names` on first hello (set-once). Memorial wall page at `/memorial` (SSE live updates, tombstone cards with server-side `_sprite_img_html()` for correct CFRU→NatDex sprite conversion). Debug page at `/debug` (manual linking/unlinking, event injection, command queuing, state toggles, backup rollback, raw state — all panels live-updating via SSE). Launcher script download at `/launcher/{player}` (host from HTTP Host header). Accepts `--manager-port` CLI arg for Run Manager back-link. RR item names loaded from `data/games/gen3_frlge/rr_items.json`. TCP port displayed on status page. Rolling backups of `links.json` **and `events.json`** every 5 min when both players connected (6 slots with rotation; rollback restores both files atomically). `_cache_mon_info()` backfills stale link entry nicknames from live party data. Capture events populate `mon_stats` directly (fallback from top-level `hp`/`maxHP`/`level` fields). `sprite_html` field in party_details and killfeed JSON APIs. Enemy battle type badges and held items in status page.
+- **`server/server.py`** — asyncio TCP coordinator + aiohttp status page. Routes events to the FSM. Tracks per-player area, ball count, and party snapshots for the status page. Dynamic page titles via `_page_title()` method (shows "Pokémon Soul Link Tracker — \<variant\> — \<run name\>" with Pokéball SVG icon). `_resolve_level()` provides multi-source level fallback for manual links and PC box mons. Commits `rom_type` and `trainer_names` on first hello (set-once). Memorial wall page at `/memorial` (SSE live updates, tombstone cards with server-side `_sprite_img_html()` for correct CFRU→NatDex sprite conversion). Debug page at `/debug` (manual linking/unlinking, event injection, command queuing, state toggles, backup rollback, raw state — all panels live-updating via SSE). Launcher script download at `/launcher/{player}` (host from HTTP Host header). Accepts `--manager-port` CLI arg for Run Manager back-link. Accepts `--verbose` CLI flag: enables `_configure_logging()` which adds a `RotatingFileHandler` (10 MB × 5) to `<data_dir>/slink.log` with structured DEBUG tags for every accepted event, command flush, FSM transitions, party/faint/clause/reconcile/shiny lifecycle events, and adapter init. RR item names loaded from `data/games/gen3_frlge/rr_items.json`. TCP port displayed on status page. Rolling backups of `links.json` **and `events.json`** every 5 min when both players connected (6 slots with rotation; rollback restores both files atomically). `_cache_mon_info()` backfills stale link entry nicknames from live party data. Capture events populate `mon_stats` directly (fallback from top-level `hp`/`maxHP`/`level` fields). `sprite_html` field in party_details and killfeed JSON APIs. Enemy battle type badges and held items in status page.
 - **`server/pokemon_data.py`** — Shared Pokémon data module: `SPECIES_NAMES`, `GENDER_RATIO`, `gender_from_key_species()`, `EVO_FAMILY` (Gen I–IX evolution families including CFRU/RR extended IDs), `base_form()`.
 - **`server/adapters/base.py`** — GameAdapter ABC: GameRulesAdapter (10 methods) + GamePresentationAdapter (9 methods). All game-specific server logic flows through adapter interfaces.
 - **`server/adapters/gen3_frlge.py`** — Gen 3 adapter: GBA PID:OTID key format, FRLG+Emerald gift areas, Gen 1-3 species data, RR variant support.
@@ -292,7 +293,7 @@ SLink-RR/
 - **`server/adapters/gen4_hgsspt.py`** — Gen 4 adapter: PID:OTID key format, HGSS gift areas, Gen 1-4 species (NatDex 1-493).
 - **`server/adapters/gen5_bw.py`** — Gen 5 adapter: PID:OTID key format, BW/BW2 gift areas, Gen 1-5 species (NatDex 1-649).
 - **`server/adapters/__init__.py`** — Adapter registry: get_adapter(game_id) with backward-compat aliases.
-- **`server/manager.py`** — Run Manager (port 8090): creates/starts/stops/archives named runs, each a `server.py` subprocess. Supports per-run lock rule configuration. Passes `--run-name` from run registry to spawned subprocess. Dynamic launcher script endpoints (`GET /api/runs/<id>/launcher/<player>`). Passes `--manager-port` when spawning subprocesses.
+- **`server/manager.py`** — Run Manager (port 8090): creates/starts/stops/archives named runs, each a `server.py` subprocess. Supports per-run lock rule configuration. Passes `--run-name` from run registry to spawned subprocess. Dynamic launcher script endpoints (`GET /api/runs/<id>/launcher/<player>`). Passes `--manager-port` when spawning subprocesses. Verbose Logging checkbox in New Run form; `--verbose` forwarded to spawned subprocess; badge shown on run card.
 
 *Data:*
 - **`data/links.json`** — Link table + area states + pokeballs_obtained flags + lock rules, written on every state change.
@@ -835,7 +836,7 @@ Do not zero the entire slot during battle. Deferred memorialization happens post
 
 ### Area Normalization
 
-Raw `mapGroup:mapNum` maps to a canonical `area_id` via a lookup table in `data/games/gen3_frlge/gen3_frlge_areas.lua`. **175 entries** generated from `data/games/gen3_frlge/area_map.json` by `python tools/gen_area_map.py`. Key decisions:
+Raw `mapGroup:mapNum` maps to a canonical `area_id` via a lookup table in `data/games/gen3_frlge/gen3_frlge_areas.lua`. **184 entries** generated from `data/games/gen3_frlge/area_map.json` by `python tools/gen_area_map.py`. Key decisions:
 
 - Multi-floor dungeons share one area_id (e.g., all Mt. Moon floors → `"mt_moon"`)
 - Building interiors with wild encounters (Safari Zone areas) each get their own area_id
