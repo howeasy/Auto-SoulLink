@@ -282,14 +282,6 @@ local force_fainted_keys = {}  -- [monKey] → true
 local FAINT_DEBOUNCE_FRAMES = 3
 local pending_faint_debounce = {}  -- [monKey] → frames_remaining
 
--- Forward-declared here so dispatch_commands can see it (populated by index_party below).
-local _quarantined_slots = {} -- [slot] → true if key changed this frame (reset each frame)
-
--- One-shot flags: log stale gBattleMons detection only once per transition
--- (resets when identity matches again, so the next switch also logs once).
-local _stale_logged_0 = false
-local _stale_logged_2 = false
-
 -- ── Command dispatcher ────────────────────────────────────────────────────────
 local function dispatch_commands(cmds)
     for _, c in ipairs(cmds) do
@@ -306,12 +298,6 @@ local function dispatch_commands(cmds)
                 for slot = 0, count - 1 do
                     local base = M.PARTY_BASE + slot * M.MON_SIZE
                     if M.monKey(base) == c.key then
-                        -- Safety gate: if slot is quarantined (mid-copy), defer.
-                        if _quarantined_slots[slot] then
-                            pending_battle_faints[c.key] = true
-                            console.log(string.format("[SLink-FRLGE]   ↳ force_faint DEFERRED (slot quarantined, mid-copy) slot=%d key=%s", slot, c.key))
-                            break
-                        end
                         -- Check if this mon is an active battler (battler 0 or battler 2 in doubles).
                         local is_active_battler = false
                         if currently_in_battle and M.BATTLER_PARTY_INDEXES_ADDR then
@@ -448,13 +434,6 @@ local _mk_pers, _mk_otid, _mk_str = {}, {}, {}
 local _sc_key   = {}  -- [slot] → previous monKey string at this slot
 local _sc_level = {}  -- [slot] → previous level byte at this slot
 local mon_stats_cache  = {}   -- key → {level, maxHP, attack, defense, speed, spAtk, spDef}
--- Cross-frame party slot stability (quarantine guard).
--- If a slot's monKey changes between frames, the game is mid-copy (100-byte struct
--- copy in progress). During this window: identity bytes (0-7) = new mon, substructs
--- and stats (0x20+) = old mon's data. We quarantine the slot for one frame to prevent
--- caching old data under the new key. Write commands also check this before executing.
-local _slot_prev_keys   = {}  -- [slot] → monKey seen last frame
--- _quarantined_slots: forward-declared before dispatch_commands (line ~289)
 local function cachedMonKey(slot)
     local base = M.PARTY_BASE + slot * M.MON_SIZE
     local p = mem_u32(base + M.OFF_PERSONALITY)
@@ -483,8 +462,6 @@ local function index_party(battle_active)
     local t = _ip_buf[_ip_idx]
     local pool = _ip_entry_pool[_ip_idx]
     for k in pairs(t) do t[k] = nil end  -- clear reused buffer
-    -- Reset quarantine flags (will be set per-slot below)
-    for ii = 0, 5 do _quarantined_slots[ii] = nil end
     if M.PARTY_IN_SB1 and M.PARTY_BASE == 0 then return t, 0 end
     local count = mem_u8(M.PARTY_COUNT_ADDR)
     for i = 0, count - 1 do
@@ -493,14 +470,6 @@ local function index_party(battle_active)
         local maxHP = mem_u16(base + M.OFF_MAX_HP)
         if (flags & 0x02) ~= 0 and maxHP > 0 then
             local k  = cachedMonKey(i)
-            -- Cross-frame stability: quarantine if key changed from last frame.
-            -- During a party struct copy (reorder, PC swap), personality+otId bytes are
-            -- written before the substruct/stat bytes — key changes one frame before data
-            -- is valid. Quarantined slots: curr_party is still updated (so diff detects
-            -- key changes) but stats/display caches are NOT written to.
-            local prev_k = _slot_prev_keys[i]
-            _slot_prev_keys[i] = k
-            _quarantined_slots[i] = (prev_k ~= nil and k ~= prev_k)
             local lv = mem_u8(base + M.OFF_LEVEL)
             local hp = mem_u16(base + M.OFF_HP)
             -- During battle, party struct HP is stale (game updates gBattleMons, not party).
@@ -519,34 +488,30 @@ local function index_party(battle_active)
             t[k] = entry
             -- Inline delta stats cache: only re-read full stats when identity or level changes.
             -- Saves a separate 6-slot loop with redundant personality/otid/level reads.
-            -- Skipped entirely if slot is quarantined (mid-copy: stats belong to old mon).
-            if not _quarantined_slots[i] then
-                if k ~= _sc_key[i] or lv ~= _sc_level[i] then
-                    _sc_key[i] = k; _sc_level[i] = lv
-                    local st = mon_stats_cache[k]
-                    if not st then st = {}; mon_stats_cache[k] = st end
-                    st.level = lv; st.maxHP = maxHP
-                    st.attack  = mem_u16(base + 0x5A)
-                    st.defense = mem_u16(base + 0x5C)
-                    st.speed   = mem_u16(base + 0x5E)
-                    st.spAtk   = mem_u16(base + 0x60)
-                    st.spDef   = mem_u16(base + 0x62)
-                    -- Cache move PP (4 bytes at Attacks substruct +8, i.e. data+0x2C+8=data+0x34)
-                    -- For CFRU (unencrypted fixed-order): directly at base+0x34
-                    -- For vanilla/AP: PP is inside encrypted substruct — skip (retrieveBoxMon handles it)
-                    if M.CFRU_NO_ENCRYPT then
-                        st.pp1 = mem_u8(base + 0x34)
-                        st.pp2 = mem_u8(base + 0x35)
-                        st.pp3 = mem_u8(base + 0x36)
-                        st.pp4 = mem_u8(base + 0x37)
-                    end
+            if k ~= _sc_key[i] or lv ~= _sc_level[i] then
+                _sc_key[i] = k; _sc_level[i] = lv
+                local st = mon_stats_cache[k]
+                if not st then st = {}; mon_stats_cache[k] = st end
+                st.level = lv; st.maxHP = maxHP
+                st.attack  = mem_u16(base + 0x5A)
+                st.defense = mem_u16(base + 0x5C)
+                st.speed   = mem_u16(base + 0x5E)
+                st.spAtk   = mem_u16(base + 0x60)
+                st.spDef   = mem_u16(base + 0x62)
+                -- Cache move PP (4 bytes at Attacks substruct +8, i.e. data+0x2C+8=data+0x34)
+                -- For CFRU (unencrypted fixed-order): directly at base+0x34
+                -- For vanilla/AP: PP is inside encrypted substruct — skip (retrieveBoxMon handles it)
+                if M.CFRU_NO_ENCRYPT then
+                    st.pp1 = mem_u8(base + 0x34)
+                    st.pp2 = mem_u8(base + 0x35)
+                    st.pp3 = mem_u8(base + 0x36)
+                    st.pp4 = mem_u8(base + 0x37)
                 end
             end
         end
     end
     for slot = count, 5 do
         _sc_key[slot] = nil; _sc_level[slot] = nil
-        _slot_prev_keys[slot] = nil
     end
     return t, count
 end
@@ -570,11 +535,6 @@ local function build_party_snapshot(battle_active)
     for i = 0, count - 1 do
         local base = M.PARTY_BASE + i * M.MON_SIZE
         if M.slotOccupied(base) then
-            -- Skip quarantined slots: their struct is mid-copy (new identity, old data).
-            -- The slot will be included next frame once stable.
-            if _quarantined_slots[i] then
-                -- continue (no snap entry, no display cache update)
-            else
             local k     = cachedMonKey(i)
             local hp    = mem_u16(base + M.OFF_HP)
             local maxHP = mem_u16(base + M.OFF_MAX_HP)
@@ -634,7 +594,6 @@ local function build_party_snapshot(battle_active)
             if dc.nickname ~= "" or dc.species_id ~= 0 then
                 nick_cache[k] = dc.nickname ~= "" and dc.nickname or ("#"..dc.species_id)
             end
-            end -- quarantine check
         end
     end
     return snap
@@ -773,12 +732,6 @@ local sync_cooldown        = 0
 local SYNC_COOLDOWN_FRAMES = 30
 local GIFT_COOLDOWN_FRAMES = 1800 -- 30s for naming dialog after gift/starter
 local _sync_blocked_logged = false  -- one-shot: log once when entering blocked state
--- Debounce: require keys to appear/disappear for N consecutive frames before
--- firing box_to_party / party_to_box.  Prevents false events from memory read
--- glitches during BizHawk window move/resize.
-local PARTY_DEBOUNCE_FRAMES = 3
-local pending_box_to_party  = {}  -- key → frames_seen (confirmed once >= threshold)
-local pending_party_to_box  = {}  -- key → {frames=N, info=prev_info}
 -- Pokéball gate: no_catch suppressed until player enters a non-gift encounter area.
 -- Gift area classification now handled by game_module.is_gift_area()
 local nuzlocke_active = false
@@ -1086,8 +1039,6 @@ local function on_frame()
                 local base = M.PARTY_BASE + slot * M.MON_SIZE
                 if M.monKey(base) == key then
                     found_slot = true
-                    -- Safety gate: if slot is quarantined (mid-copy), skip this frame.
-                    if _quarantined_slots[slot] then break end
                     if not in_battle or (slot ~= active_slot and slot ~= active_slot2) then
                         -- Mon is no longer active (or battle ended) — safe to faint.
                         M.forceFaint(slot)
@@ -1112,11 +1063,10 @@ local function on_frame()
     end
 
     -- 5. Flush one deferred sync cmd if safe (BEFORE party diff so writes are clean)
-    -- Gate on: overworld, cooldown expired, NOT the battle-end frame, and
-    -- post-battle grace window finished (avoids writes during catch/exp/evo anims).
+    -- Gate on: overworld, cooldown expired, and post-battle grace window finished
+    -- (avoids writes during catch/exp/evo anims).
     local safe_now = is_overworld and sync_cooldown == 0 and not party_frozen
-                     and not battle_just_ended and post_battle_frames == 0
-                     and not party_frozen
+                     and post_battle_frames == 0
     if #pending_sync_cmds > 0 then
         if not safe_now or not writes_enabled then
             if not _sync_blocked_logged then
@@ -1137,11 +1087,6 @@ local function on_frame()
             local q_count = memory.read_u8(M.PARTY_COUNT_ADDR)
             for q_s = 0, q_count - 1 do
                 if M.monKey(M.PARTY_BASE + q_s * M.MON_SIZE) == cmd.key then
-                    if _quarantined_slots[q_s] then
-                        blocked = true
-                        console.log(string.format("[SLink-FRLGE] SYNC DEFERRED (slot quarantined, mid-copy) cmd=%s key=%s slot=%d",
-                            cmd.cmd, cmd.key:sub(1,8), q_s))
-                    end
                     -- Never memorialize the last party mon — emptying the party
                     -- softlocks the Pokémon Center healing animation after whiteout.
                     if cmd.cmd == "memorialize" and q_count <= 1 and not blocked then
@@ -1351,7 +1296,6 @@ local function on_frame()
                 -- Only update cache if gBattleMons has valid data (maxHP > 0) AND
                 -- the identity matches (not stale from a previous battler).
                 if bmon_maxHP > 0 and bmon_fresh then
-                    _stale_logged_0 = false
                     local bc = _battle_hp_cache[k0]
                     if bc then
                         -- Existing entry: update normally.
@@ -1363,15 +1307,10 @@ local function on_frame()
                         end
                         bc.maxHP = bmon_maxHP
                         bc.level = bmon_level
-                    elseif bmon_hp > 0 and not _quarantined_slots[idx0] then
-                        -- New entry: only create when HP is positive AND slot identity is stable.
+                    elseif bmon_hp > 0 then
+                        -- New entry: only create when HP is positive.
                         _battle_hp_cache[k0] = {hp=bmon_hp, maxHP=bmon_maxHP, level=bmon_level}
                     end
-                elseif bmon_maxHP > 0 and not bmon_fresh and not _stale_logged_0 then
-                    _stale_logged_0 = true
-                    console.log(string.format(
-                        "[SLink-FRLGE] [cache] stale gBattleMons[0]: party=%s bmon=%08X:%08X — skipping",
-                        k0:sub(1,8), bmon_pers, bmon_otid))
                 end
                 -- Cache resolved ability keyed by monKey (persists across battles;
                 -- essential fallback for AP where gBaseStats address is unknown).
@@ -1400,7 +1339,6 @@ local function on_frame()
                     local party2_otid = mem_u32(base2 + 4)
                     local bmon2_fresh = (bmon2_pers == party2_pers and bmon2_otid == party2_otid)
                     if bmon2_maxHP > 0 and bmon2_fresh then
-                        _stale_logged_2 = false
                         local bc2 = _battle_hp_cache[k2]
                         if bc2 then
                             if not force_fainted_keys[k2] then
@@ -1408,14 +1346,9 @@ local function on_frame()
                             end
                             bc2.maxHP = bmon2_maxHP
                             bc2.level = bmon2_level
-                        elseif bmon2_hp > 0 and not _quarantined_slots[idx2] then
+                        elseif bmon2_hp > 0 then
                             _battle_hp_cache[k2] = {hp=bmon2_hp, maxHP=bmon2_maxHP, level=bmon2_level}
                         end
-                    elseif bmon2_maxHP > 0 and not bmon2_fresh and not _stale_logged_2 then
-                        _stale_logged_2 = true
-                        console.log(string.format(
-                            "[SLink-FRLGE] [cache] stale gBattleMons[2]: party=%s bmon=%08X:%08X — skipping",
-                            k2:sub(1,8), bmon2_pers, bmon2_otid))
                     end
                     if bmon2_fresh then
                         local aid2 = memory.read_u8(bmon2 + 0x20)
@@ -1493,8 +1426,6 @@ local function on_frame()
             -- Resync baseline so the next diff doesn't compare stale prev_party
             -- against the current (possibly changed) party.
             prev_party = curr_party
-            pending_party_to_box = {}
-            pending_box_to_party = {}
             gift_capture_buffer  = {}
         end
     end
@@ -1607,16 +1538,6 @@ local function on_frame()
                             sync_written_keys[new_k] = true
                         end
 
-                        -- Pending debounce state
-                        if pending_party_to_box[old_k] then
-                            pending_party_to_box[new_k] = pending_party_to_box[old_k]
-                            pending_party_to_box[old_k] = nil
-                        end
-                        if pending_box_to_party[old_k] then
-                            pending_box_to_party[new_k] = pending_box_to_party[old_k]
-                            pending_box_to_party[old_k] = nil
-                        end
-
                         -- Faint debounce / force-faint / battle caches
                         if pending_faint_debounce[old_k] then
                             pending_faint_debounce[new_k] = pending_faint_debounce[old_k]
@@ -1652,16 +1573,12 @@ local function on_frame()
 
     -- ── capture (party, battle-scoped or gift/box) ────────────────────────────
     for k, info in pairs(curr_party) do
-        -- DEBUG: log when a key appears as "new" during battle but gets blocked
+        -- DEBUG: log when a key appears as "new" during battle but gets blocked by sync_written
         if not prev_party[k] and (in_battle or post_battle_frames > 0) then
-            if _quarantined_slots[info.slot] then
-                console.log(string.format("[SLink-FRLGE] [DIAG] capture BLOCKED by quarantine: %s slot=%d", k:sub(1,8), info.slot))
-            elseif sync_written_keys[k] then
+            if sync_written_keys[k] then
                 console.log(string.format("[SLink-FRLGE] [DIAG] capture BLOCKED by sync_written: %s", k:sub(1,8)))
             end
         end
-        -- Skip quarantined slots: the new key is mid-copy (not yet a confirmed new mon).
-        -- It will appear again next frame when the slot is stable.
         if not prev_party[k] and not sync_written_keys[k] and not nature_migrated[k] then
             -- Read display data for this party slot (pcall-guarded).
             local ok_ps, ps = pcall(M.readPartySlot, info.slot)
@@ -1690,12 +1607,9 @@ local function on_frame()
                     console.log(string.format("[SLink-FRLGE] [DIAG] capture BLOCKED by all_known_keys: %s slot=%d battle=%s grace=%d",
                         k:sub(1,8), info.slot, tostring(in_battle), post_battle_frames))
                 end
-                -- Previously seen key reappeared → candidate for box_to_party.
-                -- Queue it; confirmed after PARTY_DEBOUNCE_FRAMES of persistence.
-                -- Skip quarantined slots: the reappearance may be a mid-copy artifact.
-                if not _quarantined_slots[info.slot] and not pending_box_to_party[k] then
-                    pending_box_to_party[k] = PARTY_DEBOUNCE_FRAMES
-                end
+                -- Previously seen key reappeared → fire box_to_party immediately.
+                send({event="box_to_party", key=k, area_id=area},
+                     "box_to_party:"..k:sub(1,8), true)
             else
                 -- New key outside battle → gift/starter/trade
                 -- Before nuzlocke_active (no Pokéballs), this is always the starter —
@@ -1762,8 +1676,7 @@ local function on_frame()
             -- Nature change: old key vanished but migrated — not a real disappearance.
             all_zero = false
         elseif curr_info then
-            -- Key still in party — clear any party_to_box debounce
-            pending_party_to_box[k] = nil
+            -- Key still in party
             if prev_info.hp > 0 then had_alive = true end
             if prev_info.hp > 0 and curr_info.hp == 0 and not party_frozen then
                 -- Don't re-report faints that we caused via force_faint command,
@@ -1796,19 +1709,17 @@ local function on_frame()
                 all_zero = false
             end
         else
-            -- Key disappeared from party — candidate for party_to_box.
-            -- Queue it; confirmed after PARTY_DEBOUNCE_FRAMES of absence.
-            -- Note: _quarantined_slots protects new keys (captures at mid-copy slots).
-            -- Old keys disappearing in key-based tracking always indicate genuine removal:
-            -- party reorders keep both keys present in curr_party (different slots),
-            -- so they never reach this branch. Only genuine deposits hit this path.
+            -- Key disappeared from party → party_to_box.
+            -- Key-based tracking means only genuine deposits hit this path
+            -- (party reorders keep both keys present in curr_party).
             if not in_battle and prev_info.hp > 0 and not sync_written_keys[k]
                and not party_frozen then
-                if not pending_party_to_box[k] then
-                    pending_party_to_box[k] = {frames=PARTY_DEBOUNCE_FRAMES,
-                        info={hp=prev_info.hp, maxHP=prev_info.maxHP,
-                              level=prev_info.level, slot=prev_info.slot}}
-                end
+                local st = mon_stats_cache[k]
+                local stats_tbl = st and {level=st.level, maxHP=st.maxHP,
+                    attack=st.attack, defense=st.defense, speed=st.speed,
+                    spAtk=st.spAtk, spDef=st.spDef} or nil
+                send({event="party_to_box", key=k, stats=stats_tbl},
+                     "party_to_box:"..k:sub(1,8), true)
             end
             all_zero = false  -- gone from party, can't be all-zero anymore
         end
@@ -1840,53 +1751,6 @@ local function on_frame()
                 real_faint_occurred = true
             else
                 pending_faint_debounce[k] = frames_left
-            end
-        end
-    end
-
-    -- ── debounce: party_to_box confirmation ─────────────────────────────────
-    -- Keys must stay absent from the party for PARTY_DEBOUNCE_FRAMES before we fire.
-    -- Skip sends if party_frozen — pending entries are cleared on unfreeze.
-    for k, ptb in pairs(pending_party_to_box) do
-        if curr_party[k] then
-            -- Key came back → was a memory glitch, cancel.
-            pending_party_to_box[k] = nil
-        elseif party_frozen then
-            -- Freeze active — hold, don't decrement or send.
-        else
-            ptb.frames = ptb.frames - 1
-            if ptb.frames <= 0 then
-                pending_party_to_box[k] = nil
-                local st = mon_stats_cache[k]
-                local stats_tbl = st and {level=st.level, maxHP=st.maxHP,
-                    attack=st.attack, defense=st.defense, speed=st.speed,
-                    spAtk=st.spAtk, spDef=st.spDef} or nil
-                send({event="party_to_box", key=k, stats=stats_tbl},
-                     "party_to_box:"..k:sub(1,8), true)
-            end
-        end
-    end
-
-    -- ── debounce: box_to_party confirmation ─────────────────────────────────
-    -- Keys must persist in the party for PARTY_DEBOUNCE_FRAMES before we fire.
-    -- Skip sends if party_frozen just triggered this frame.
-    -- NOTE: Runs AFTER party_to_box confirmation so that PC swaps (Move Pokemon)
-    -- send the deposit event before the retrieval event.  This ensures the server
-    -- knows about the freed party slot before checking partner room.
-    for k, remaining in pairs(pending_box_to_party) do
-        if not curr_party[k] then
-            -- Key vanished again → was a memory glitch, cancel.
-            pending_box_to_party[k] = nil
-        elseif party_frozen then
-            -- Freeze active — don't decrement or send; hold until unfreeze clears.
-        else
-            remaining = remaining - 1
-            if remaining <= 0 then
-                pending_box_to_party[k] = nil
-                send({event="box_to_party", key=k, area_id=area},
-                     "box_to_party:"..k:sub(1,8), true)
-            else
-                pending_box_to_party[k] = remaining
             end
         end
     end
@@ -2320,13 +2184,6 @@ local function on_frame()
     -- accumulate into the baseline used for diff detection.
     if party_diff_ok then
         prev_party     = curr_party
-        -- Inject keys still debouncing for party_to_box so the detection loop
-        -- continues to see them as "previously in party" on subsequent frames.
-        for k, ptb in pairs(pending_party_to_box) do
-            if not prev_party[k] then
-                prev_party[k] = ptb.info
-            end
-        end
     elseif post_unfreeze_frames > 0 then
         -- During post-unfreeze settle, keep baseline synced so diffs are clean
         -- when the settle period ends (game may still be restoring real party).
