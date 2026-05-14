@@ -260,10 +260,10 @@ def _stat_stages_html(stages) -> str:
             continue
         if not (-6 <= stage <= 6) or stage == 0:
             continue
-        arrow = "↑" if stage > 0 else "↓"
+        sign  = "+" if stage > 0 else "−"
         cls   = "ss-up" if stage > 0 else "ss-dn"
         parts.append(
-            f'<span class="stat-stage {cls}">{arrow}{abs(stage)} {_STAT_STAGE_LABELS[i]}</span>'
+            f'<span class="stat-stage {cls}">{sign}{abs(stage)} {_STAT_STAGE_LABELS[i]}</span>'
         )
     return "".join(parts)
 
@@ -308,6 +308,10 @@ def _build_mon_entry(key, detail, adapter):
         "item_name":     item,
         "moves":         moves,
         "hp_pct":        hp_pct,
+        "hp":            hp,
+        "maxHP":         maxhp,
+        "status_cond":   detail.get("status_cond", 0),
+        "stat_stages":   detail.get("stat_stages"),
         "slot":          detail.get("slot", 999),
         "active":        detail.get("active", False),
         "showdown_paste": "\n".join(lines),
@@ -575,10 +579,11 @@ _STATUS_HTML = """<!DOCTYPE html>
     .s-frz {{ background:#5ab8e4; color:#fff; }}
     .s-par {{ background:#c8a800; color:#000; }}
     .s-tox {{ background:#6a00aa; color:#fff; }}
-    .stat-stage {{ display:inline-block; padding:1px 5px; border-radius:3px; font-size:0.75em;
-      font-weight:bold; white-space:nowrap; vertical-align:middle; margin-left:3px; }}
-    .ss-up {{ background:#1a5c2a; color:#4ddd7a; }}
-    .ss-dn {{ background:#5c1a1a; color:#dd4d4d; }}
+    .stat-stage {{ display:inline-block; padding:1px 6px; border-radius:3px; font-size:0.75em;
+      font-weight:bold; white-space:nowrap; vertical-align:middle; margin-left:3px;
+      border:1px solid; }}
+    .ss-up {{ background:rgba(46,204,113,0.15); color:#5af09a; border-color:rgba(46,204,113,0.55); }}
+    .ss-dn {{ background:rgba(231,76,60,0.15); color:#ff7f72; border-color:rgba(231,76,60,0.55); }}
     .sortable {{ cursor:pointer; user-select:none; position:relative; padding-right:14px !important; }}
     .sortable:hover {{ color:#fff; }}
     .sortable::after {{ content:"⇅"; position:absolute; right:2px; font-size:0.75em; opacity:0.4; }}
@@ -3932,6 +3937,7 @@ class SLinkServer:
                         "ability_name": "",
                         "moves":        em.get("moves", []),
                         "status_cond":  em.get("status_cond", 0),
+                        "stat_stages":  em.get("stat_stages"),
                     }
                     entry = _build_mon_entry(f"foe-{ei}", detail, self.adapter)
                     if entry:

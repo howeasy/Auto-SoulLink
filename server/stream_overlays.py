@@ -65,8 +65,8 @@ _STREAM_SHARED_CSS = """
   .sc{display:inline-block;padding:1px 5px;border-radius:3px;font-size:.72em;font-weight:bold;white-space:nowrap;flex-shrink:0;line-height:1.4}
   .sc-slp{background:#7a7a7a;color:#fff}.sc-psn{background:#c040c0;color:#fff}.sc-brn{background:#d06020;color:#fff}
   .sc-frz{background:#5ab8e4;color:#fff}.sc-par{background:#c8a800;color:#000}.sc-tox{background:#6a00aa;color:#fff}
-  .stat-stage{display:inline-block;padding:1px 4px;border-radius:3px;font-size:0.7em;font-weight:bold;white-space:nowrap;margin:1px 2px}
-  .ss-up{background:#1a5c2a;color:#4ddd7a}.ss-dn{background:#5c1a1a;color:#dd4d4d}
+  .stat-stage{display:inline-block;padding:1px 5px;border-radius:3px;font-size:0.7em;font-weight:bold;white-space:nowrap;margin:1px 2px;border:1px solid}
+  .ss-up{background:rgba(46,204,113,0.15);color:#5af09a;border-color:rgba(46,204,113,0.55)}.ss-dn{background:rgba(231,76,60,0.15);color:#ff7f72;border-color:rgba(231,76,60,0.55)}
   .stat-stages-row{padding:2px 0 1px 0;display:flex;flex-wrap:wrap;gap:2px}
   /* Party list — fainted: opacity only, no filter (filter rasterises the whole layer → blurs text) */
   .p-list{display:flex;flex-direction:column;gap:clamp(3px,.55vmin,7px);flex:1;overflow:hidden}
@@ -375,9 +375,9 @@ function statStagesHtml(stages) {
   for (var i = 0; i < stages.length && i < _STAT_LABELS.length; i++) {
     var s = stages[i] - 6;
     if (!isFinite(s) || s === 0 || s < -6 || s > 6) continue;
-    var arrow = s > 0 ? '\u2191' : '\u2193';
+    var sign  = s > 0 ? '+' : '\u2212';
     var cls   = s > 0 ? 'ss-up' : 'ss-dn';
-    out += '<span class="stat-stage ' + cls + '">' + arrow + Math.abs(s) + ' ' + _STAT_LABELS[i] + '</span>';
+    out += '<span class="stat-stage ' + cls + '">' + sign + Math.abs(s) + ' ' + _STAT_LABELS[i] + '</span>';
   }
   return out;
 }
