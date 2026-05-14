@@ -488,6 +488,7 @@
       setTimeout(function () {
         try { ss.select2('container').find('.select2-chosen').text(namedId); } catch (e) {}
       }, 0);
+      setTimeout(function () { _applyBattleState(pokeObj, mon); }, 0);
       showToast('✓ ' + species + ' (' + setName + ') → ' + (side === 'p1' ? 'Attacker' : 'Defender'), 'ok');
       return;
     }
@@ -544,6 +545,8 @@
       if (!moveObj.val()) moveObj.val('(No Move)'); // fallback if not found
       moveObj.trigger('change');
     }
+
+    setTimeout(function () { _applyBattleState(pokeObj, mon); }, 0);
 
     showToast(
       '✓ ' + species + ' → ' + (side === 'p1' ? 'Attacker' : 'Defender'),
@@ -700,8 +703,10 @@
     if (savedPos) {
       panel.style.bottom = '';
       panel.style.right  = '';
-      panel.style.left   = savedPos.x + 'px';
-      panel.style.top    = savedPos.y + 'px';
+      // Clamp so a stale/offscreen saved position is brought back into view
+      var clamped = _clampPos(savedPos.x, savedPos.y, panel);
+      panel.style.left   = clamped.x + 'px';
+      panel.style.top    = clamped.y + 'px';
     }
 
     // ── Header ────────────────────────────────────────────────────────────────
@@ -1348,6 +1353,79 @@
     return row;
   }
 
+  // ── Battle-state helpers ────────────────────────────────────────────────────
+
+  // Maps Gen 3 status condition bitmask to a calc status string.
+  function _statusCondToCalc(sc) {
+    if (!sc) return 'Healthy';
+    if (sc & 0x7)  return 'Asleep';
+    if (sc & 0x80) return 'Badly Poisoned'; // Toxic — check before plain PSN (bit 3)
+    if (sc & 0x08) return 'Poisoned';
+    if (sc & 0x10) return 'Burned';
+    if (sc & 0x20) return 'Frostbitten';    // "Frozen" in the calc for all gens
+    if (sc & 0x40) return 'Paralyzed';
+    return 'Healthy';
+  }
+
+  // Returns a DOM line of stage chips for non-neutral stages, or null.
+  // Only call when mon.active is true (stages only exist for the active battler).
+  function _statStageBadges(stages) {
+    if (!stages || !stages.length) return null;
+    var labels = ['ATK', 'DEF', 'SPD', 'SATK', 'SDEF'];
+    var wrap = null;
+    for (var i = 0; i < 5; i++) {
+      var raw = stages[i];
+      if (typeof raw !== 'number') continue;
+      var stage = raw - 6;
+      if (stage === 0) continue;
+      if (!wrap) {
+        wrap = ce('div');
+        css(wrap, { display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '2px' });
+      }
+      var chip = ce('span');
+      chip.textContent = (stage > 0 ? '+' : '') + stage + '\u00a0' + labels[i];
+      css(chip, {
+        background  : stage > 0 ? 'rgba(76,175,80,0.25)' : 'rgba(244,67,54,0.25)',
+        color       : stage > 0 ? '#81c784' : '#e57373',
+        borderRadius: '3px',
+        padding     : '0 4px',
+        fontSize    : '10px',
+        whiteSpace  : 'nowrap',
+      });
+      wrap.appendChild(chip);
+    }
+    return wrap;
+  }
+
+  // Applies battle state (status, stat stages, HP) to a calc panel element.
+  // Must be called from setTimeout(fn, 0) so it runs after the synchronous
+  // set-selector change handler (which resets these fields).
+  function _applyBattleState(pokeObj, mon) {
+    // Status — always apply to override any item-auto-set (e.g. Flame Orb → Burned)
+    var status = _statusCondToCalc(mon.status_cond || 0);
+    pokeObj.find('.status').val(status).trigger('change');
+
+    // Stat stages (only present for active battler; null for benched mons)
+    var stageMap = ['.at', '.df', '.sp', '.sa', '.sd'];
+    var stages = mon.stat_stages;
+    if (stages) {
+      for (var i = 0; i < 5; i++) {
+        var raw = stages[i];
+        if (typeof raw !== 'number') continue;
+        var stage = raw - 6;
+        if (stage === 0 || stage < -6 || stage > 6) continue;
+        pokeObj.find(stageMap[i] + ' .boost').val(stage).trigger('change');
+      }
+    }
+
+    // HP — use raw hp/maxHP for precision; skip fainted (hp=0) or full health
+    var hp = mon.hp, maxHP = mon.maxHP;
+    if (hp > 0 && maxHP > 0 && hp < maxHP) {
+      var pct = Math.max(1, Math.round(hp / maxHP * 100));
+      pokeObj.find('.percent-hp').val(pct).trigger('keyup');
+    }
+  }
+
   // ── Individual mon row ──────────────────────────────────────────────────────
   //   [sprite] NICKNAME / Species   Lv50  Timid  Blaze  @ Charcoal  [← Atk]  (enemy: [Def →])
 
@@ -1461,6 +1539,31 @@
       line1.appendChild(itmEl);
     }
 
+    // Status badge (BRN / PSN / TOX / PAR / SLP / FRZ)
+    var statusStr = _statusCondToCalc(mon.status_cond || 0);
+    if (statusStr !== 'Healthy') {
+      var STATUS_ABBR = {
+        'Burned': 'BRN', 'Poisoned': 'PSN', 'Badly Poisoned': 'TOX',
+        'Paralyzed': 'PAR', 'Asleep': 'SLP', 'Frostbitten': 'FRZ',
+      };
+      var STATUS_COLOR = {
+        'Burned': '#e67e22', 'Poisoned': '#9b59b6', 'Badly Poisoned': '#6c3483',
+        'Paralyzed': '#f1c40f', 'Asleep': '#95a5a6', 'Frostbitten': '#3498db',
+      };
+      var sbEl = ce('span');
+      sbEl.textContent = STATUS_ABBR[statusStr] || statusStr;
+      css(sbEl, {
+        background  : STATUS_COLOR[statusStr] || '#666',
+        color       : '#fff',
+        borderRadius: '3px',
+        padding     : '0 4px',
+        fontSize    : '10px',
+        fontWeight  : 'bold',
+        whiteSpace  : 'nowrap',
+      });
+      line1.appendChild(sbEl);
+    }
+
     info.appendChild(line1);
 
     // Move list (enemy mons only, when set data was matched)
@@ -1496,6 +1599,12 @@
         moveLine.appendChild(dBadge);
       }
       info.appendChild(moveLine);
+    }
+
+    // Stat stage chips (active battler only — stages are null for benched mons)
+    if (mon.active && mon.stat_stages) {
+      var stageLine = _statStageBadges(mon.stat_stages);
+      if (stageLine) info.appendChild(stageLine);
     }
 
     // HP bar (if available)
@@ -1622,8 +1731,9 @@
     });
 
     function onMove(e) {
-      panel.style.left = (ol + e.clientX - ox) + 'px';
-      panel.style.top  = (ot + e.clientY - oy) + 'px';
+      var c = _clampPos(ol + e.clientX - ox, ot + e.clientY - oy, panel);
+      panel.style.left = c.x + 'px';
+      panel.style.top  = c.y + 'px';
     }
 
     function onUp() {
@@ -1638,6 +1748,18 @@
     try {
       localStorage.setItem(LS_POS, JSON.stringify({ x: Math.round(x), y: Math.round(y) }));
     } catch (e) { /* storage unavailable */ }
+  }
+
+  /** Clamp panel position so at least GRAB pixels remain visible on every edge. */
+  function _clampPos(x, y, panel) {
+    var grab = 40;
+    var vw = window.innerWidth;
+    var vh = window.innerHeight;
+    var pw = panel.offsetWidth  || 440;
+    var ph = panel.offsetHeight || 50;
+    x = Math.max(grab - pw, Math.min(vw - grab, x));
+    y = Math.max(0,         Math.min(vh - grab, y));
+    return { x: x, y: y };
   }
 
   function _loadPos() {
