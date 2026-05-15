@@ -611,10 +611,12 @@ local function build_party_snapshot(battle_active)
 end
 
 -- ── Incremental box scanner ──────────────────────────────────────────────────
--- Scans 2 boxes per tick instead of all 13 at once, eliminating periodic stutter.
+-- Scans ceil(BOXES_PER_STORE / 7) boxes per tick, targeting a ~3.5 s full cycle
+-- regardless of storage size (14 boxes → 2/tick; 25 boxes → 4/tick).
 -- Accumulates results client-side; always sends full cache to server.
-local _box_cache = {}
-local _box_next  = 0
+local _box_cache        = {}
+local _box_next         = 0
+local _boxes_per_tick   = math.max(2, math.ceil((M.BOXES_PER_STORE or 14) / 7))
 
 -- Validate that box storage is accessible and currentBox is in range.
 -- Returns true if safe to scan; false during transitions/menus.
@@ -641,7 +643,7 @@ local function scan_next_boxes()
     -- Guard: skip scan when the storage pointer is invalid (save not loaded,
     -- title screen, or mid-transition garbage) — mirrors party_diff_ok gate.
     if not _box_ptr_valid() then return _box_cache end
-    for _ = 1, 2 do
+    for _ = 1, _boxes_per_tick do
         local boxIdx = _box_next
         -- Remove stale entries for this box (in-place to avoid table allocation)
         local j = 1
