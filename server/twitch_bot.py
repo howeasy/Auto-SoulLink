@@ -46,9 +46,53 @@ def _area_display(area_id: str) -> str:
     return area_id.replace("_", " ").title()
 
 
-def _load_run_links(data_dir: str, run_id: str) -> list[dict]:
+def _format_cause(cause: str) -> str:
+    """Convert raw cause strings to human-readable labels."""
+    return {"battle": "KO'd in battle", "dead_zone": "dead zone", "whiteout": "wiped out"}.get(cause, cause or "fainted")
+
+
+def _format_killer(killer) -> str:
+    """Format a killer dict (or string) as a human-readable string."""
+    if not killer:
+        return ""
+    if not isinstance(killer, dict):
+        return str(killer)
+    sp = killer.get("species_name") or f"Species #{killer.get('species', '?')}"
+    lv = killer.get("level", "")
+    lv_str = f" Lv{lv}" if lv else ""
+    if killer.get("is_trainer"):
+        tc = killer.get("trainer_class", "")
+        tn = killer.get("trainer_name", "")
+        prefix = f"{tc} {tn}".strip() or "Trainer"
+        return f"{prefix}'s {sp}{lv_str}"
+    return f"wild {sp}{lv_str}"
+
+
+def _get_runs_dir(data_dir: str) -> str:
+    """Return the directory that contains run subdirs and registry.json.
+
+    When run standalone: data_dir is 'data/', runs live at 'data/runs/'.
+    When run via manager: data_dir is 'data/runs/<run_id>/', runs live at 'data/runs/'.
+    """
+    # Standalone: data_dir/runs/registry.json exists
+    candidate = os.path.join(data_dir, "runs")
+    if os.path.exists(os.path.join(candidate, "registry.json")) or os.path.isdir(candidate):
+        return candidate
+    # Manager mode: data_dir is itself a run dir inside the runs directory
+    parent = os.path.dirname(data_dir.rstrip("/\\"))
+    if os.path.isdir(parent):
+        return parent
+    return candidate
+
+
+def _run_display_name(run: dict) -> str:
+    """Return a human-readable run name from a registry entry."""
+    return run.get("name") or run.get("run_name") or run.get("run_id") or "?"
+
+
+def _load_run_links(runs_dir: str, run_id: str) -> list[dict]:
     """Load links list from a run's links.json. Returns [] on error."""
-    path = os.path.join(data_dir, "runs", run_id, "links.json")
+    path = os.path.join(runs_dir, run_id, "links.json")
     try:
         with open(path) as f:
             return json.load(f).get("links", [])
@@ -58,19 +102,19 @@ def _load_run_links(data_dir: str, run_id: str) -> list[dict]:
 
 def _load_all_runs(data_dir: str) -> list[dict]:
     """Load run registry, with a directory scan fallback."""
-    reg_path = os.path.join(data_dir, "runs", "registry.json")
+    runs_dir = _get_runs_dir(data_dir)
+    reg_path = os.path.join(runs_dir, "registry.json")
     if os.path.exists(reg_path):
         try:
             with open(reg_path) as f:
                 return json.load(f).get("runs", [])
         except Exception:
             pass
-    runs_dir = os.path.join(data_dir, "runs")
     found = []
     for path in sorted(glob(os.path.join(runs_dir, "*", "links.json"))):
         run_dir = os.path.dirname(path)
         run_id = os.path.basename(run_dir)
-        found.append({"run_id": run_id, "run_name": run_id})
+        found.append({"run_id": run_id, "name": run_id})
     return found
 
 
@@ -113,14 +157,14 @@ class _ReplyHelper:
             a_name = k.get("a_nickname") or k.get("a_species_name") or "?"
             b_name = k.get("b_nickname") or k.get("b_species_name") or "?"
             area = k.get("area_display") or _area_display(k.get("area_id", ""))
-            cause = k.get("cause") or "fainted"
-            killer = k.get("killer", "")
-            out = f"{a_name} & {b_name}"
+            cause = _format_cause(k.get("cause", ""))
+            killer_str = _format_killer(k.get("killer"))
+            out = f"RIP {a_name} & {b_name}"
             if area:
                 out += f" @ {area}"
             out += f" — {cause}"
-            if killer:
-                out += f" by {killer}"
+            if killer_str:
+                out += f" by {killer_str}"
             return out
 
         if cmd == "runstats":
@@ -148,13 +192,14 @@ class _ReplyHelper:
             runs = await asyncio.to_thread(_load_all_runs, self._data_dir)
             if not runs:
                 return "No multi-run history yet (run manager not used)"
+            runs_dir = _get_runs_dir(self._data_dir)
             total_attempts = len(runs)
             total_deaths = 0
             total_shinies = 0
             best_run_name = None
             best_alive = -1
             for run in runs:
-                links = await asyncio.to_thread(_load_run_links, self._data_dir, run.get("run_id", ""))
+                links = await asyncio.to_thread(_load_run_links, runs_dir, run.get("run_id", ""))
                 alive = sum(1 for l in links if l.get("status") == "alive")
                 dead = sum(1 for l in links if l.get("status") != "alive")
                 shiny_count = sum(1 for l in links if l.get("a_shiny") or l.get("b_shiny"))
@@ -162,7 +207,7 @@ class _ReplyHelper:
                 total_shinies += shiny_count
                 if alive > best_alive:
                     best_alive = alive
-                    best_run_name = run.get("run_name") or run.get("run_id") or "?"
+                    best_run_name = _run_display_name(run)
             return (f"{total_attempts} attempts · best: {best_run_name} ({best_alive} links) · "
                     f"all-time deaths: {total_deaths} · shinies: {total_shinies}")
 
@@ -173,10 +218,11 @@ class _ReplyHelper:
             if not past:
                 return "No previous run found"
             last = past[-1]
-            links = await asyncio.to_thread(_load_run_links, self._data_dir, last.get("run_id", ""))
+            runs_dir = _get_runs_dir(self._data_dir)
+            links = await asyncio.to_thread(_load_run_links, runs_dir, last.get("run_id", ""))
             alive = sum(1 for l in links if l.get("status") == "alive")
             dead = sum(1 for l in links if l.get("status") != "alive")
-            name = last.get("run_name") or last.get("run_id") or "previous run"
+            name = _run_display_name(last)
             return f"{name}: {alive} alive links, {dead} dead"
 
         if cmd == "attempts":
