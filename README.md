@@ -75,13 +75,62 @@ Shiny bonus pairs are always on — catching a shiny gives the partner an extra 
 
 | Path | Description |
 |------|-------------|
-| `/` | Live status — parties, encounters, linked pairs, badges |
-| `/memorial` | Tombstone cards for dead pairs |
-| `/obs` | OBS scene trigger configuration — per-player connections, draggable priority rules |
+| `/` | Live status — parties, encounters, linked pairs, area states, enemy battle info |
+| `/memorial` | Tombstone cards for dead pairs, live-updating via SSE |
+| `/obs` | OBS scene trigger configuration — per-player WebSocket connections, draggable priority rules |
 | `/twitch` | Twitch bot configuration and activity log |
-| `/debug` | Manual linking, event injection, backup rollback |
-| `/stream/*` | OBS overlays — party, links, linked-party, boxed-links, deaths, attempts, areas, events, badges, encounters, stream-memorial, ticker, focus-a, focus-b, shiny-alert, area-encounter, enc-table-a, enc-table-b |
+| `/debug` | Manual linking, event injection, state toggles, backup rollback |
+| `/stream/` | Stream overlay index — preview and configure all overlays |
+| `/stream/party-a`, `/stream/party-b` | Party cards with HP bars, moves, held item, status ailments, stat stage icons |
+| `/stream/links` | Linked pairs with both mons side-by-side |
+| `/stream/linked-party` | Party filtered to only linked mons |
+| `/stream/deaths` | Death feed with sprites and cause |
+| `/stream/encounters` | Encounter log per area |
+| `/stream/enc-table-a`, `/stream/enc-table-b` | Wild encounter rate table for current area (RR/CFRU) |
+| `/stream/areas` | Area link state grid |
+| `/stream/focus-a`, `/stream/focus-b` | Active battle mon — large sprite, moves, type matchups |
+| `/stream/shiny-alert` | Full-screen shiny alert overlay |
+| `/stream/ticker` | Scrolling event ticker |
+| `/stream/badges` | Badge display |
+| `/stream/stream-memorial` | Memorial wall for stream |
 | `/calc/` | Radical Red damage calculator with live party bridge |
+
+## OBS Scene Triggers
+
+Automatically switch OBS scenes based on game events. Configure from the `/obs` page.
+
+### Setup
+
+1. In OBS, enable **Tools → WebSocket Server Settings** (obs-websocket v5, OBS 28+). Set a port (default 4455) and optional password.
+2. Open `/obs` on the status page, enter the host/port/password for each player's OBS instance, and click **Connect**.
+3. Add trigger rules: choose an event, which player triggers it, which OBS to target, and the scene to switch to.
+
+### Trigger Events
+
+| Event | When it fires |
+|-------|--------------|
+| `battle_start` | Any battle begins |
+| `wild_battle_start` | Wild encounter starts |
+| `trainer_battle_start` | Trainer battle starts |
+| `battle_start_new` | Battle in an area with an open encounter slot |
+| `battle_end` | Battle ends (returned to overworld) |
+| `area_enter` | Player enters any area |
+| `area_enter_new` | Player enters an area with an open encounter slot |
+| `capture` | A Pokémon is caught |
+| `shiny` | A shiny is caught |
+| `faint` | Own mon faints |
+| `link_death` | Partner's linked mon faints |
+| `whiteout` | Full party wipe |
+| `linked` | Area becomes fully linked |
+| `dead_zone` | Area becomes a dead zone |
+| `party_to_box` | Mon moved to PC |
+| `box_to_party` | Mon retrieved from PC |
+| `memorialize_done` | Dead pair memorialized |
+| `run_over` | No usable pairs remain |
+
+### Priority
+
+Rules are evaluated **top to bottom** — when multiple events fire in the same frame, the highest-ranked rule wins per player. Drag the ⠿ handle to reorder. Changes save automatically.
 
 ## Twitch Bot
 
@@ -182,11 +231,14 @@ server/
   server.py              # TCP + HTTP server (aiohttp)
   state.py               # SoulLinkState FSM
   adapters/              # Game-specific adapters (gen1–5)
+  obs_controller.py      # OBS WebSocket scene trigger integration
+  twitch_bot.py          # Twitch chat bot (twitchio 3.x)
   pokemon_data.py        # Species, abilities, types, evos
 data/
   games/                 # Per-game static data (area maps, items)
-calc/                    # Radical Red damage calculator fork
-tests/                   # pytest unit tests + BizHawk test scripts
+  obs_config.json        # OBS connection + trigger rule config
+calc/                    # Radical Red damage calculator + live bridge
+tests/                   # pytest unit tests (800) + BizHawk test scripts
 tools/                   # Code generators (area maps, data tables)
 ```
 
