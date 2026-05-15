@@ -145,6 +145,7 @@ The status server (default port 8080) exposes these pages and endpoints.
 | `/` | GET | Main status page |
 | `/memorial` | GET | Memorial wall — dead pairs |
 | `/debug` | GET | Debug console |
+| `/twitch` | GET | Twitch bot configuration and activity log |
 | `/stream` | GET | Stream overlay index |
 | `/stream/party-a` | GET | Overlay — Player A party |
 | `/stream/party-b` | GET | Overlay — Player B party |
@@ -157,11 +158,23 @@ The status server (default port 8080) exposes these pages and endpoints.
 | `/stream/events` | GET | Overlay — recent events log |
 | `/stream/badges-a` | GET | Overlay — Player A gym badges |
 | `/stream/badges-b` | GET | Overlay — Player B gym badges |
+| `/stream/encounters` | GET | Overlay — all encounter areas and states |
+| `/stream/stream-memorial` | GET | Overlay — memorial wall |
+| `/stream/ticker` | GET | Overlay — scrolling text ticker |
+| `/stream/focus-a` | GET | Overlay — Player A focused mon view |
+| `/stream/focus-b` | GET | Overlay — Player B focused mon view |
+| `/stream/shiny-alert` | GET | Overlay — shiny encounter alert |
 | `/launcher/{player}` | GET | Download pre-configured launcher Lua script |
 | `/calc/` | GET | Damage calculator |
 | `/api/status` | GET | Full state JSON dump |
 | `/api/events` | GET | SSE event stream |
 | `/api/calc/mons` | GET | Live party + enemy data for calc bridge |
+| `/api/bot/status` | GET | Bot status, config, and recent activity log |
+| `/api/bot/config` | POST | Save non-sensitive bot config (channel, client_id, prefix, etc.) |
+| `/api/bot/reload` | POST | Cancel and restart the bot connection |
+| `/api/bot/enable` | POST | Enable the bot and restart |
+| `/api/bot/disable` | POST | Disable the bot and cancel the task |
+| `/api/bot/preview` | POST | Preview what a command would reply (without sending to Twitch) |
 | `/api/reset` | POST | Wipe all state and start fresh |
 | `/api/inject_link` | POST | Manually link two mons by key |
 | `/api/inject_link_by_slot` | POST | Manually link two mons by party slot index |
@@ -207,6 +220,12 @@ All overlays are designed as OBS browser sources. Each connects its own SSE feed
 | Events log | `/stream/events` | Recent game events (captures, faints, area changes) |
 | Player A badges | `/stream/badges-a` | Player A's earned gym badges |
 | Player B badges | `/stream/badges-b` | Player B's earned gym badges |
+| Encounters | `/stream/encounters` | All encounter areas and their current state |
+| Memorial wall | `/stream/stream-memorial` | Scrolling memorial for dead pairs |
+| Ticker | `/stream/ticker` | Scrolling text ticker |
+| Player A focus | `/stream/focus-a` | Player A focused mon view |
+| Player B focus | `/stream/focus-b` | Player B focused mon view |
+| Shiny alert | `/stream/shiny-alert` | Full-screen shiny encounter alert |
 
 ### Launcher Script
 
@@ -612,6 +631,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | EV display suppressed in calc result — always assumed max, not shown in output string | ✅ Working |
 | Calc search — full substring matching (Pokémon name, trainer/set name, moves) | ✅ Working |
 | Calc search — match highlighting in dropdown results (accent-colour mark around matched terms) | ✅ Working |
+| Twitch chat bot (twitchio 3.x EventSub WebSocket) | ✅ Working |
 
 ---
 
@@ -620,7 +640,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 ### Unit tests (no emulator required)
 
 ```bash
-pytest tests/unit/ -v          # all 647 tests
+pytest tests/unit/ -v          # all 796 tests
 pytest tests/unit/test_state.py -v        # 234 state machine tests
 pytest tests/unit/test_gen3_adapter.py -v  # 77 Gen 3 adapter tests
 pytest tests/unit/test_gen4_adapter.py -v  # 62 Gen 4 adapter tests
@@ -681,6 +701,7 @@ See `tests/TESTING.md` for the full 9-step end-to-end test procedure. Load `lua/
 | `data/links.json` | Persisted link table — written after every state change |
 | `data/memorial.json` | Persisted memorial log |
 | `server/manager.py` | Run Manager — creates/starts/stops/archives named runs on port 8090 |
+| `server/twitch_bot.py` | Twitch chat bot — twitchio 3.x EventSub, command handling, activity log |
 | `lua/tests/` | BizHawk test scripts (memory, force-faint, server comms, ability diag, etc.) |
 | `tools/` | Generator scripts — ability descriptions, ability names, form data, species data, RR data, sprites, types |
 | `tests/TESTING.md` | Live BizHawk test guide |
@@ -952,7 +973,11 @@ $env:TWITCH_CLIENT_SECRET = "your_client_secret" # from dev.twitch.tv/console �
 python -m server.manager
 ```
 
-Tokens are never written to disk or logged. The `/twitch` page shows **✓ Access Token set** and **✓ Client ID set** badges when detected. Connection errors appear in a red error box.
+Tokens are never written to disk or logged.
+
+> **Note:** twitchio may create a `.tio.tokens.json` file in the project root as a local token cache. This file is safe to delete and is already listed in `.gitignore`.
+
+The `/twitch` page shows **✓ Access Token set** and **✓ Client ID set** badges when detected. Connection errors appear in a red error box.
 
 ### Configuration
 

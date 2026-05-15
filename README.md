@@ -77,8 +77,9 @@ Shiny bonus pairs are always on — catching a shiny gives the partner an extra 
 |------|-------------|
 | `/` | Live status — parties, encounters, linked pairs, badges |
 | `/memorial` | Tombstone cards for dead pairs |
+| `/twitch` | Twitch bot configuration and activity log |
 | `/debug` | Manual linking, event injection, backup rollback |
-| `/stream/*` | OBS overlays — party, links, linked-party, boxed-links, deaths, attempts, areas, events, badges |
+| `/stream/*` | OBS overlays — party, links, linked-party, boxed-links, deaths, attempts, areas, events, badges, encounters, stream-memorial, ticker, focus-a, focus-b, shiny-alert |
 | `/calc/` | Radical Red damage calculator with live party bridge |
 
 ## Twitch Bot
@@ -164,7 +165,7 @@ python -m server.manager --host 0.0.0.0
 ## Tests
 
 ```bash
-pytest tests/unit/ -v        # 647 tests, no emulator needed
+pytest tests/unit/ -v        # 796 tests, no emulator needed
 ```
 
 ## Project Structure
