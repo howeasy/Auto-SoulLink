@@ -265,7 +265,7 @@ def _stat_stages_html(stages) -> str:
             continue
         if not (-6 <= stage <= 6) or stage == 0:
             continue
-        sign  = "+" if stage > 0 else "−"
+        sign  = "↑" if stage > 0 else "↓"
         cls   = "ss-up" if stage > 0 else "ss-dn"
         parts.append(
             f'<span class="stat-stage {cls}">{sign}{abs(stage)} {_STAT_STAGE_LABELS[i]}</span>'
