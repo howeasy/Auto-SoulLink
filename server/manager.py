@@ -32,12 +32,34 @@ except ImportError:
     PSUTIL_AVAILABLE = False
 
 try:
+    import aiohttp
     from aiohttp import web
     AIOHTTP_AVAILABLE = True
 except ImportError:
     AIOHTTP_AVAILABLE = False
     print("ERROR: aiohttp required. Run: pip install aiohttp", file=sys.stderr)
     sys.exit(1)
+
+from server.stream_overlays import (
+    _stream_overlay_page,
+    _STREAM_INDEX_HTML,
+    _STREAM_PARTY_JS,
+    _STREAM_LINKS_JS,
+    _STREAM_LINKED_PARTY_JS,
+    _STREAM_BOXED_LINKS_JS,
+    _STREAM_DEATHS_JS,
+    _STREAM_ATTEMPTS_JS,
+    _STREAM_AREAS_JS,
+    _STREAM_EVENTS_JS,
+    _STREAM_BADGES_JS,
+    _STREAM_ENCOUNTERS_JS,
+    _STREAM_MEMORIAL_JS,
+    _STREAM_TICKER_JS,
+    _STREAM_FOCUS_JS,
+    _STREAM_SHINY_ALERT_JS,
+    _STREAM_AREA_ENCOUNTER_JS,
+    _STREAM_ENC_TABLE_JS,
+)
 
 log = logging.getLogger("slink.manager")
 
@@ -53,6 +75,57 @@ MANAGER_HTTP_PORT = 8090
 # Port ranges for spawned runs
 TCP_PORT_BASE  = 54321
 HTTP_PORT_BASE = 8081   # 8090 reserved for manager
+
+
+# ---------------------------------------------------------------------------
+# Stream overlay dispatch table — single handler covers all overlays.
+# Each entry: overlay_path_name → (page title, JS constant, player or None)
+# ---------------------------------------------------------------------------
+_OVERLAY_PAGES: dict[str, tuple[str, str, Optional[str]]] = {
+    "party-a":          ("Player A Party",    _STREAM_PARTY_JS,          "a"),
+    "party-b":          ("Player B Party",    _STREAM_PARTY_JS,          "b"),
+    "links":            ("Linked Pairs",      _STREAM_LINKS_JS,          None),
+    "linked-party":     ("Linked Party",      _STREAM_LINKED_PARTY_JS,   None),
+    "boxed-links":      ("Boxed Links",       _STREAM_BOXED_LINKS_JS,    None),
+    "deaths":           ("Death Counter",     _STREAM_DEATHS_JS,         None),
+    "attempts":         ("Attempts Counter",  _STREAM_ATTEMPTS_JS,       None),
+    "areas":            ("Area Tracker",      _STREAM_AREAS_JS,          None),
+    "events":           ("Event Feed",        _STREAM_EVENTS_JS,         None),
+    "badges-a":         ("Gym Badges A",      _STREAM_BADGES_JS,         "a"),
+    "badges-b":         ("Gym Badges B",      _STREAM_BADGES_JS,         "b"),
+    "encounters":       ("Encounter Tracker", _STREAM_ENCOUNTERS_JS,     None),
+    "stream-memorial":  ("Memorial Scroll",   _STREAM_MEMORIAL_JS,       None),
+    "ticker":           ("Event Ticker",      _STREAM_TICKER_JS,         None),
+    "focus-a":          ("Focus A",           _STREAM_FOCUS_JS,          "a"),
+    "focus-b":          ("Focus B",           _STREAM_FOCUS_JS,          "b"),
+    "shiny-alert":      ("Shiny Alert",       _STREAM_SHINY_ALERT_JS,    None),
+    "area-encounter":   ("Area Encounter",    _STREAM_AREA_ENCOUNTER_JS, None),
+    "enc-table-a":      ("Encounter Table A", _STREAM_ENC_TABLE_JS,      "a"),
+    "enc-table-b":      ("Encounter Table B", _STREAM_ENC_TABLE_JS,      "b"),
+}
+
+# Schema-compatible empty /api/status returned when no run is active.
+_EMPTY_STATUS: dict = {
+    "players": {
+        "a": {"connected": False, "status": "disconnected", "area": "", "ball_count": 0,
+              "last_event": "", "last_event_ts": "", "party": [], "nuzlocke_active": False,
+              "trainer_name": "", "identity_error": None},
+        "b": {"connected": False, "status": "disconnected", "area": "", "ball_count": 0,
+              "last_event": "", "last_event_ts": "", "party": [], "nuzlocke_active": False,
+              "trainer_name": "", "identity_error": None},
+    },
+    "links": [],
+    "area_states": {},
+    "pending_captures": {},
+    "recent_events": [],
+    "killfeed": [],
+    "party_details": {"a": [], "b": []},
+    "badge_slugs": {"a": [], "b": []},
+    "attempts_count": 0,
+    "rules": {},
+    "rom_type": "",
+    "run_name": "",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -446,6 +519,8 @@ def _render_cards(runs: list[dict], host: str) -> str:
         btn_archive = f'<button class="btn archive" onclick="archive_run(\'{rid}\',\'{name.replace(chr(39), chr(92)+chr(39))}\')">📦 Archive</button>' if status != "archived" else ""
         btn_delete  = f'<button class="btn delete"  onclick="del_run(\'{rid}\',\'{name.replace(chr(39), chr(92)+chr(39))}\')">🗑️ Delete</button>'
         btn_view    = f'<a class="btn view" href="#" onclick="window.open({status_url_js});return false" target="_blank">🔗 Status</a>'
+        btn_pin     = (f'<button class="btn pin" title="Pin as stream overlay source" '
+                       f'onclick="pinRun(\'{rid}\')">📌 Stream</button>') if status == "running" else ""
 
         launcher_html = ""
         if status != "archived":
@@ -471,7 +546,7 @@ def _render_cards(runs: list[dict], host: str) -> str:
           {launcher_html}
           {last_event_html}
           <div class="card-actions">
-            {btn_start}{btn_stop}{btn_archive}{btn_delete}{btn_view}
+            {btn_start}{btn_stop}{btn_archive}{btn_delete}{btn_view}{btn_pin}
           </div>
         </div>"""
     return cards or '<p style="color:var(--muted)">No runs yet. Create one above.</p>'
@@ -527,11 +602,25 @@ def _render_html(runs: list[dict], host: str) -> str:
   .lock-opts label {{ cursor: pointer; display: flex; align-items: center; gap: 4px; }}
   .last-event  {{ font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
   .last-event .ev-ts {{ color: #555; }}
+  .stream-banner {{ background: #0d1b2a; border: 1px solid #1e3a5f; border-radius: 8px; padding: 10px 16px;
+                    margin-bottom: 20px; display: flex; align-items: center; gap: 14px; font-size: 0.88rem; color: var(--muted); }}
+  .stream-banner a {{ color: #6af; font-weight: 600; text-decoration: none; }}
+  .stream-banner a:hover {{ text-decoration: underline; }}
+  .stream-banner .stream-port {{ color: #4f4; font-family: monospace; }}
+  .btn.pin     {{ background: #2a1a3e; color: #c084fc; border: 1px solid #7c3aed; }}
+  .btn.pin.active {{ background: #4c1d95; color: #e9d5ff; }}
   footer {{ margin-top: 32px; color: var(--muted); font-size: 0.78rem; text-align: center; }}
 </style>
 </head>
 <body>
 <h1>🔗 Soul Link Run Manager</h1>
+
+<div class="stream-banner">
+  🎬 <strong>Stream Overlays</strong> — always on port <span class="stream-port">{MANAGER_HTTP_PORT}</span>:
+  &nbsp;<a href="/stream" target="_blank">Open Stream Gallery ↗</a>
+  &nbsp;·&nbsp; Point OBS browser sources to <code>http://localhost:{MANAGER_HTTP_PORT}/stream/party-a</code> etc. — port never changes.
+  <span id="stream-active" style="margin-left:auto;font-size:0.8rem"></span>
+</div>
 
 <div class="new-run">
   <input type="text" id="rname" placeholder="Run name (e.g. Randomizer Run #1)" />
@@ -554,8 +643,26 @@ async function refreshCards() {{
     const res = await fetch('/api/runs/cards');
     if (res.ok) document.querySelector('.cards').innerHTML = await res.text();
   }} catch (_) {{}}
+  await refreshStreamPin();
 }}
 setInterval(refreshCards, 10000);
+
+async function refreshStreamPin() {{
+  try {{
+    const r = await fetch('/api/stream/pin');
+    const j = await r.json();
+    const el = document.getElementById('stream-active');
+    if (el) el.textContent = j.active_run_name ? `▶ Active: ${{j.active_run_name}}${{j.pinned ? ' 📌' : ''}}` : '';
+  }} catch (_) {{}}
+}}
+refreshStreamPin();
+
+async function pinRun(runId) {{
+  const r = await fetch('/api/stream/pin', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{run_id:runId}})}});
+  const j = await r.json();
+  if (!j.ok) alert(j.error || 'Error');
+  else {{ await refreshStreamPin(); location.reload(); }}
+}}
 
 async function act(runId, action) {{
   const res = await fetch(`/api/runs/${{runId}}/${{action}}`, {{method:'POST'}});
@@ -606,12 +713,33 @@ class RunManager:
     def __init__(self, bind_host: str, manager_port: int = MANAGER_HTTP_PORT):
         self.bind_host = bind_host
         self.manager_port = manager_port
+        self._stream_pin_id: Optional[str] = None  # run_id pinned for stream overlays
 
     def _get(self) -> list[dict]:
         runs = _load_registry()
         if _reconcile(runs):
             _save_registry(runs)
         return runs
+
+    def _active_stream_run(self) -> Optional[dict]:
+        """Return the run that stream overlays should proxy to.
+
+        Priority:
+        1. Explicitly pinned run (if still running and alive).
+        2. Most recently started running run (latest created_at).
+        Returns None if no run is running.
+        """
+        runs = self._get()
+        running = [r for r in runs if r.get("status") == "running" and _is_alive(r.get("pid"))]
+        if not running:
+            return None
+        if self._stream_pin_id:
+            for r in running:
+                if r["run_id"] == self._stream_pin_id:
+                    return r
+            # Pinned run stopped — clear pin, fall through to auto
+            self._stream_pin_id = None
+        return max(running, key=lambda r: r.get("created_at", ""))
 
     async def handle_index(self, request: web.Request) -> web.Response:
         runs = self._get()
@@ -767,6 +895,110 @@ class RunManager:
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
+    # ── Stream pin ─────────────────────────────────────────────────────────────
+
+    async def handle_stream_pin(self, request: web.Request) -> web.Response:
+        """POST /api/stream/pin — pin a run as the stream overlay target."""
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        run_id = body.get("run_id") or None
+        if run_id is not None:
+            runs = _load_registry()
+            if not any(r["run_id"] == run_id for r in runs):
+                return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        self._stream_pin_id = run_id
+        log.info(f"Stream overlay pin set to: {run_id!r}")
+        active = self._active_stream_run()
+        return web.json_response({
+            "ok": True,
+            "pinned": run_id,
+            "active_run_id": active["run_id"] if active else None,
+        })
+
+    async def handle_stream_pin_status(self, request: web.Request) -> web.Response:
+        """GET /api/stream/pin — return current pin and active run."""
+        active = self._active_stream_run()
+        return web.json_response({
+            "pinned": self._stream_pin_id,
+            "active_run_id": active["run_id"] if active else None,
+            "active_run_name": active.get("name") if active else None,
+        })
+
+    # ── Stream overlay pages (served at fixed manager port 8090) ───────────────
+
+    async def handle_stream_index(self, request: web.Request) -> web.Response:
+        return web.Response(text=_STREAM_INDEX_HTML, content_type="text/html")
+
+    async def handle_stream_overlay(self, request: web.Request) -> web.Response:
+        """Single handler for all /stream/{name} overlay pages."""
+        name = request.match_info["name"]
+        entry = _OVERLAY_PAGES.get(name)
+        if entry is None:
+            raise web.HTTPNotFound()
+        title, js, player = entry
+        if player:
+            js = js.replace("%PLAYER%", player)
+        return web.Response(text=_stream_overlay_page(title, js), content_type="text/html")
+
+    # ── API proxy endpoints (relay to active run) ──────────────────────────────
+
+    async def handle_proxy_status(self, request: web.Request) -> web.Response:
+        """GET /api/status — proxy to the active run or return empty status."""
+        active = self._active_stream_run()
+        if active is None:
+            return web.json_response(_EMPTY_STATUS)
+        url = f"http://127.0.0.1:{active['http_port']}/api/status"
+        try:
+            async with request.app["proxy_session"].get(
+                url, timeout=aiohttp.ClientTimeout(total=3)
+            ) as resp:
+                data = await resp.json(content_type=None)
+                return web.json_response(data)
+        except Exception as e:
+            log.debug(f"Proxy /api/status → run {active['run_id']} failed: {e}")
+            return web.json_response(_EMPTY_STATUS)
+
+    async def handle_proxy_events(self, request: web.Request) -> web.StreamResponse:
+        """GET /api/events — SSE ping stream that triggers overlay re-renders."""
+        response = web.StreamResponse(headers={
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        })
+        await response.prepare(request)
+        try:
+            await response.write(b"retry: 3000\n\n")
+            while True:
+                await response.write(b"event: ping\ndata:\n\n")
+                await asyncio.sleep(1.5)
+        except (asyncio.CancelledError, ConnectionResetError):
+            pass
+        except Exception as e:
+            log.debug(f"SSE /api/events closed: {e}")
+        return response
+
+    async def handle_proxy_attempts(self, request: web.Request) -> web.Response:
+        """POST /api/attempts — proxy to the active run."""
+        active = self._active_stream_run()
+        if active is None:
+            return web.json_response({"ok": False, "error": "No active run"}, status=503)
+        url = f"http://127.0.0.1:{active['http_port']}/api/attempts"
+        try:
+            body = await request.read()
+            async with request.app["proxy_session"].post(
+                url,
+                data=body,
+                headers={"Content-Type": "application/json"},
+                timeout=aiohttp.ClientTimeout(total=3),
+            ) as resp:
+                data = await resp.json(content_type=None)
+                return web.json_response(data, status=resp.status)
+        except Exception as e:
+            log.debug(f"Proxy /api/attempts failed: {e}")
+            return web.json_response({"ok": False, "error": "proxy_failed"}, status=503)
+
 
 # ---------------------------------------------------------------------------
 # Entry point
@@ -775,6 +1007,8 @@ class RunManager:
 async def main(host: str, port: int):
     manager = RunManager(bind_host=host, manager_port=port)
     app = web.Application()
+
+    # Run-management routes
     app.router.add_get("/",                           manager.handle_index)
     app.router.add_get("/api/runs",                   manager.handle_list)
     app.router.add_get("/api/runs/cards",             manager.handle_cards)
@@ -785,12 +1019,39 @@ async def main(host: str, port: int):
     app.router.add_post("/api/runs/{run_id}/delete",  manager.handle_delete)
     app.router.add_get("/api/runs/{run_id}/launcher/{player}", manager.handle_launcher)
 
+    # Stream pin API
+    app.router.add_get("/api/stream/pin",  manager.handle_stream_pin_status)
+    app.router.add_post("/api/stream/pin", manager.handle_stream_pin)
+
+    # Stream overlay pages — fixed at manager port 8090
+    app.router.add_get("/stream",         manager.handle_stream_index)
+    app.router.add_get("/stream/",        manager.handle_stream_index)
+    app.router.add_get("/stream/{name}",  manager.handle_stream_overlay)
+
+    # API proxy — relays to the active (pinned or latest) run
+    app.router.add_get("/api/status",         manager.handle_proxy_status)
+    app.router.add_get("/api/events",         manager.handle_proxy_events)
+    app.router.add_post("/api/attempts",      manager.handle_proxy_attempts)
+
+    # Lifecycle: shared aiohttp ClientSession for proxy requests
+    async def _startup(app: web.Application) -> None:
+        app["proxy_session"] = aiohttp.ClientSession()
+
+    async def _cleanup(app: web.Application) -> None:
+        session = app.get("proxy_session")
+        if session and not session.closed:
+            await session.close()
+
+    app.on_startup.append(_startup)
+    app.on_cleanup.append(_cleanup)
+
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, host, port)
     await site.start()
     display = "localhost" if host in ("0.0.0.0", "127.0.0.1") else host
     log.info(f"SLink Manager running at http://{display}:{port}/")
+    log.info(f"Stream overlays at http://{display}:{port}/stream (fixed port — safe for OBS)")
 
     try:
         await asyncio.Event().wait()

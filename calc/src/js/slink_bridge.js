@@ -271,44 +271,95 @@
       if (!pd || !pd.enemy || !pd.enemy.length) return;
 
       var trainerLabel = (pd.enemy[0] && pd.enemy[0].trainer_label) || '';
-      if (!trainerLabel || trainerLabel === 'Wild') return;
+      // Wild battles never have setdex entries; trainer battles with empty labels may still match
+      if (trainerLabel === 'Wild') return;
 
-      // Discover mode + matched trainer key via party-composition matching
-      var diff    = detectDifficulty(pd.enemy);
-      var setdex  = (diff.mode === 'hardcore' ? (window.SETDEX_HC || window.SETDEX_SV) : window.SETDEX_SV) || {};
-      var matchedKey = diff.matchedKey; // e.g. "Lass Anne"
+      var matchedKey, mode, trEntry;
+
+      // ── Method 1: direct _trainerIndex lookup by trainer_label (same path as Prep tab) ──
+      // This is the primary method and mirrors exactly how the Prep tab resolves moves.
+      if (trainerLabel && (_trainerIndex.nm[trainerLabel] || _trainerIndex.hc[trainerLabel])) {
+        var nmEntry = _trainerIndex.nm[trainerLabel];
+        var hcEntry = _trainerIndex.hc[trainerLabel];
+
+        // Detect mode by counting exact-level species matches in each index
+        var nmScore = 0, hcScore = 0;
+        pd.enemy.forEach(function (em) {
+          if (!em.species_name || !em.level) return;
+          function scoreEntry(entry) {
+            if (!entry) return 0;
+            var n = 0;
+            Object.keys(entry.encounters).forEach(function (enc) {
+              entry.encounters[enc].forEach(function (item) {
+                if (item.species === em.species_name && item.set.level === em.level) n++;
+              });
+            });
+            return n;
+          }
+          nmScore += scoreEntry(nmEntry);
+          hcScore += scoreEntry(hcEntry);
+        });
+
+        if (hcScore > nmScore) { mode = 'hardcore'; trEntry = hcEntry; }
+        else if (nmEntry)      { mode = 'normal';   trEntry = nmEntry; }
+        else                   { mode = 'hardcore'; trEntry = hcEntry; }
+        matchedKey = trainerLabel;
+      }
+
+      // ── Method 2: fallback — detect trainer by party composition (species+level tally) ──
+      if (!matchedKey) {
+        var diff   = detectDifficulty(pd.enemy);
+        matchedKey = diff.matchedKey;
+        mode       = diff.mode;
+        // trEntry stays null; we'll use raw setdex below
+      }
 
       if (!matchedKey) return;
 
       pd.enemy.forEach(function (mon) {
         if (!mon.species_name) return;
 
-        var sets = setdex[mon.species_name];
-        if (!sets) return;
+        var best = null;
 
-        // Find set entries under matchedKey (exact or "Set N" variant, with/without *)
-        var candidates = [];
-        Object.keys(sets).forEach(function (setKey) {
-          var bare = (setKey.charAt(0) === '*' ? setKey.slice(1) : setKey);
-          var baseBare = bare.replace(/\s+Set\s+\d+$/i, '');
-          if (baseBare === matchedKey) {
-            candidates.push({ key: setKey, set: sets[setKey] });
-          }
-        });
-        if (!candidates.length) return;
+        if (trEntry) {
+          // Method 1 path: search all encounters for this species, pick closest level
+          var bestDist = Infinity;
+          Object.keys(trEntry.encounters).forEach(function (encLabel) {
+            trEntry.encounters[encLabel].forEach(function (item) {
+              if (item.species === mon.species_name) {
+                var dist = Math.abs((item.set.level || 0) - mon.level);
+                if (dist < bestDist) { bestDist = dist; best = item.set; }
+              }
+            });
+          });
+        } else {
+          // Method 2 path: use raw setdex with setKey matching
+          var setdex = (mode === 'hardcore' ? (window.SETDEX_HC || window.SETDEX_SV) : window.SETDEX_SV) || {};
+          var sets   = setdex[mon.species_name];
+          if (!sets) return;
 
-        // Pick the candidate whose level is closest to the mon's actual level
-        candidates.sort(function (a, b) {
-          return Math.abs((a.set.level || 0) - mon.level) -
-                 Math.abs((b.set.level || 0) - mon.level);
-        });
-        var best = candidates[0].set;
+          var candidates = [];
+          Object.keys(sets).forEach(function (setKey) {
+            var bare     = (setKey.charAt(0) === '*' ? setKey.slice(1) : setKey);
+            var baseBare = bare.replace(/\s+Set\s+\d+$/i, '');
+            if (baseBare === matchedKey) candidates.push({ key: setKey, set: sets[setKey] });
+          });
+          if (!candidates.length) return;
+
+          candidates.sort(function (a, b) {
+            return Math.abs((a.set.level || 0) - mon.level) -
+                   Math.abs((b.set.level || 0) - mon.level);
+          });
+          best = candidates[0].set;
+        }
+
+        if (!best) return;
 
         mon.moves        = best.moves   || [];
         mon.nature       = best.nature  || mon.nature       || 'Hardy';
         mon.ability_name = best.ability || mon.ability_name || '';
         mon.item_name    = best.item    || mon.item_name    || '';
-        mon._diff_mode   = diff.mode;
+        mon._diff_mode   = mode;
         mon._matched_key = matchedKey;
 
         // Rebuild showdown paste
@@ -318,7 +369,7 @@
         var lines = [dispName + (mon.item_name ? ' @ ' + mon.item_name : '')];
         if (mon.ability_name) lines.push('Ability: ' + mon.ability_name);
         lines.push('Level: ' + mon.level);
-        lines.push(mon.nature + ' Nature');
+        lines.push((mon.nature || 'Hardy') + ' Nature');
         mon.moves.forEach(function (m) { lines.push('- ' + m); });
         mon.showdown_paste = lines.join('\n');
       });
@@ -328,6 +379,82 @@
   // ---------------------------------------------------------------------------
   // Trainer index — inverted lookup for Prep tab
   // ---------------------------------------------------------------------------
+
+  // Trainers fought at multiple points in the game (e.g. Rocket Admin Archer) have
+  // mons from different fights all sharing the plain trainer-name key, which collapses
+  // them into one '__base__' bucket.  Only the mon that appears in EVERY fight
+  // (often the trainer's signature ace) gets "Set N" suffixes.  We split '__base__'
+  // (and 'Boss') by level-gap clustering and merge each cluster with the nearest
+  // numbered encounter so every fight gets its own encounter tab.
+  var LEVEL_GAP_THRESHOLD = 15;  // levels; mons further apart belong to different fights
+
+  /**
+   * Post-process a single encounter group (e.g. '__base__' or 'Boss'):
+   *   - Sort mons by level and cluster by gaps > LEVEL_GAP_THRESHOLD
+   *   - If only one cluster → nothing to do
+   *   - Otherwise merge each cluster into the closest numbered Set-N encounter
+   *     (within LEVEL_GAP_THRESHOLD) or create synthetic 'Encounter N' labels
+   *   - Delete the original flat group
+   *
+   * @param {Object} tr         Trainer entry { encounters, encounterOrder }
+   * @param {string} baseLabel  '__base__' or 'Boss'
+   * @param {RegExp} numberedRe Matches the numbered variants of this group ('Set N' or 'Boss Set N')
+   * @param {string} synthPfx   Prefix for synthetic labels ('Encounter ' or 'Boss Encounter ')
+   */
+  function _splitEncounterGroup(tr, baseLabel, numberedRe, synthPfx) {
+    var baseEnc = tr.encounters[baseLabel];
+    if (!baseEnc || baseEnc.length <= 1) return;
+
+    // Sort ascending so gaps are easy to detect
+    var sorted = baseEnc.slice().sort(function (a, b) {
+      return (a.set.level || 0) - (b.set.level || 0);
+    });
+
+    // Build level-gap clusters
+    var groups = [[sorted[0]]];
+    for (var i = 1; i < sorted.length; i++) {
+      var prevLvl = sorted[i - 1].set.level || 0;
+      var currLvl = sorted[i].set.level     || 0;
+      if (currLvl - prevLvl > LEVEL_GAP_THRESHOLD) groups.push([]);
+      groups[groups.length - 1].push(sorted[i]);
+    }
+    if (groups.length <= 1) return;  // all at similar levels — no split needed
+
+    function avgLvl(mons) {
+      if (!mons.length) return 0;
+      return mons.reduce(function (s, m) { return s + (m.set.level || 0); }, 0) / mons.length;
+    }
+
+    // Numbered Set-N keys available to absorb clusters (e.g. 'Set 1', 'Boss Set 2')
+    var numberedKeys = Object.keys(tr.encounters).filter(function (k) {
+      return numberedRe.test(k);
+    });
+    var usedKeys    = {};
+    var synthCount  = 0;
+
+    groups.forEach(function (group) {
+      var ga = avgLvl(group);
+
+      // Find the nearest unused numbered encounter
+      var bestKey = null, bestDist = Infinity;
+      numberedKeys.forEach(function (k) {
+        if (usedKeys[k]) return;
+        var dist = Math.abs(avgLvl(tr.encounters[k]) - ga);
+        if (dist < bestDist) { bestDist = dist; bestKey = k; }
+      });
+
+      if (bestKey && bestDist <= LEVEL_GAP_THRESHOLD) {
+        // Merge cluster mons into the numbered encounter (prepend; per-enc sort runs later)
+        usedKeys[bestKey] = true;
+        tr.encounters[bestKey] = group.concat(tr.encounters[bestKey]);
+      } else {
+        synthCount++;
+        tr.encounters[synthPfx + synthCount] = group;
+      }
+    });
+
+    delete tr.encounters[baseLabel];
+  }
 
   /**
    * Build an inverted trainer index from a SETDEX.
@@ -372,11 +499,16 @@
       });
     });
 
-    // Sort each trainer's mons within an encounter by level descending,
-    // then sort encounter order by avg level descending (latest fight first).
+    // Split multi-fight flat groups, then sort mons within each encounter,
+    // then build encounterOrder.
     Object.keys(index).forEach(function (base) {
       var tr  = index[base];
       var enc = tr.encounters;
+
+      // Split '__base__' mons by level-gap clusters (multi-fight trainers like Archer)
+      _splitEncounterGroup(tr, '__base__', /^Set\s+\d+$/i,       'Encounter ');
+      // Split 'Boss' mons similarly (starred multi-fight aces)
+      _splitEncounterGroup(tr, 'Boss',     /^Boss\s+Set\s+\d+$/i, 'Boss Encounter ');
 
       // Sort mons within each encounter by level desc
       Object.keys(enc).forEach(function (lbl) {
@@ -385,15 +517,20 @@
         });
       });
 
-      // Sort encounterOrder: Base always first, then by avg level desc
+      // Sort encounterOrder: '__base__' first (single-fight trainers), then
+      // non-Boss encounters ascending by avg level (game-chronological order),
+      // then Boss encounters ascending by avg level.
       tr.encounterOrder = Object.keys(enc).sort(function (a, b) {
         if (a === '__base__') return -1;
         if (b === '__base__') return  1;
+        var aBoss = /^Boss/.test(a);
+        var bBoss = /^Boss/.test(b);
+        if (aBoss !== bBoss) return aBoss ? 1 : -1;  // Boss after non-Boss
         function avg(mons) {
           if (!mons.length) return 0;
           return mons.reduce(function (s, m) { return s + (m.set.level || 0); }, 0) / mons.length;
         }
-        return avg(enc[b]) - avg(enc[a]);
+        return avg(enc[a]) - avg(enc[b]);  // ascending = game-chronological
       });
     });
 
@@ -881,6 +1018,7 @@
     if (_activeTab === 'prep') {
       _renderPrepTab(content);
       body.appendChild(content);
+      content.scrollTop = savedScroll;  // restore scroll after appending to DOM
       body.appendChild(_statusFooter());
       return;
     }

@@ -25,6 +25,8 @@ from server.pokemon_data import (
     type_name as _type_name,
     to_cfru as _to_cfru,
     natdex_base_form as _natdex_base_form,
+    _parse_pid_otid_key,
+    pid_otid_shiny,
 )
 
 log = logging.getLogger(__name__)
@@ -190,39 +192,10 @@ class Gen5Adapter(GameAdapter):
 
         Same formula as Gen 3/4.
         """
-        try:
-            parts = key.split(":")
-            if len(parts) != 2:
-                return False
-            personality = int(parts[0], 16)
-            ot_id = int(parts[1], 16)
-        except (ValueError, IndexError):
+        parsed = _parse_pid_otid_key(key)
+        if parsed is None:
             return False
-        tid = ot_id & 0xFFFF
-        sid = (ot_id >> 16) & 0xFFFF
-        p_upper = (personality >> 16) & 0xFFFF
-        p_lower = personality & 0xFFFF
-        return (tid ^ sid ^ p_upper ^ p_lower) < 8
-
-    def parse_ot_id(self, key: str) -> str:
-        try:
-            parts = key.split(":")
-            if len(parts) == 2:
-                return parts[1]
-        except (ValueError, IndexError):
-            pass
-        return ""
-
-    def is_valid_mon_key(self, key: str) -> bool:
-        try:
-            parts = key.split(":")
-            if len(parts) != 2:
-                return False
-            int(parts[0], 16)
-            int(parts[1], 16)
-            return len(parts[0]) <= 8 and len(parts[1]) <= 8
-        except (ValueError, IndexError):
-            return False
+        return pid_otid_shiny(*parsed)
 
     def species_name(self, species_id: int) -> str:
         return NATIONAL_SPECIES_NAMES.get(species_id, f"#{species_id}")

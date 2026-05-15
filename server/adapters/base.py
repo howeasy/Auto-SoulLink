@@ -19,6 +19,30 @@ ISOLATION CONTRACT:
 """
 
 from abc import ABC, abstractmethod
+import json
+import logging
+import os
+
+log = logging.getLogger(__name__)
+
+
+def load_area_names_from_obj_map(json_path: str) -> "dict[str, str]":
+    """Load area display names from a JSON file with {key: {area_id, name}} schema.
+
+    Used by Gen 1 and Gen 2 adapters whose area_map.json files share this format.
+    Returns a dict mapping area_id → display name.
+    """
+    result: dict[str, str] = {}
+    if not os.path.exists(json_path):
+        log.warning("Area map not found: %s — area names will use fallback", json_path)
+        return result
+    with open(json_path, "r") as f:
+        raw = json.load(f)
+    entries = raw.values() if isinstance(raw, dict) else raw
+    for entry in entries:
+        if isinstance(entry, dict) and "area_id" in entry:
+            result[entry["area_id"]] = entry.get("name", entry["area_id"])
+    return result
 
 
 class GameRulesAdapter(ABC):
@@ -253,5 +277,38 @@ class GameAdapter(GameRulesAdapter, GamePresentationAdapter):
 
     Subclass this for a complete game adapter that provides both
     rule logic and presentation methods.
+
+    Default implementations are provided for the PID:OTID key format
+    (Gen 3/4/5). Gen 1 and Gen 2 override these with their 3-part
+    key format (DDDD:TTTT:SS).
     """
-    pass
+
+    def parse_ot_id(self, key: str) -> str:
+        """Extract OT ID from PID:OTID key (personality:otId).
+
+        Default for Gen 3/4/5 two-part key format.
+        Gen 1 and Gen 2 override this (three-part DDDD:TTTT:SS format).
+        """
+        try:
+            parts = key.split(":")
+            if len(parts) == 2:
+                return parts[1]
+        except (ValueError, IndexError):
+            pass
+        return ""
+
+    def is_valid_mon_key(self, key: str) -> bool:
+        """Validate PID:OTID format: two hex segments each ≤ 8 digits.
+
+        Default for Gen 3/4/5 two-part key format.
+        Gen 1 and Gen 2 override this (three-part DDDD:TTTT:SS format).
+        """
+        try:
+            parts = key.split(":")
+            if len(parts) != 2:
+                return False
+            int(parts[0], 16)
+            int(parts[1], 16)
+            return len(parts[0]) <= 8 and len(parts[1]) <= 8
+        except (ValueError, IndexError):
+            return False

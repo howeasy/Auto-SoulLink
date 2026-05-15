@@ -108,8 +108,8 @@ _STREAM_SHARED_CSS = """
   .bdg-wrap{display:flex;flex:1;align-items:center;justify-content:center}
   .bdg-player{display:flex;flex-direction:column;align-items:center;gap:clamp(4px,.8vmin,9px)}
   .bdg-strip{display:flex;gap:clamp(3px,.6vw,8px);flex-wrap:wrap;justify-content:center}
-  .bdg-img{width:clamp(24px,4.5vmin,42px);aspect-ratio:1;image-rendering:pixelated;image-rendering:crisp-edges;transition:opacity .2s}
-  .bdg-img.on{opacity:1}.bdg-img.off{opacity:.1;filter:grayscale(100%)}
+  .bdg-img{width:clamp(24px,4.5vmin,42px);aspect-ratio:1;image-rendering:auto;transition:opacity .2s}
+  .bdg-img.on{opacity:1;filter:drop-shadow(0 0 2px rgba(0,0,0,0.9)) drop-shadow(0 0 1px rgba(0,0,0,0.9))}.bdg-img.off{opacity:.15;filter:grayscale(100%)}
 
   /* ─── Links widget (redesigned) ──────────────────────────────────────── */
   /* Alive pair card */
@@ -392,38 +392,47 @@ function processSprites() {
 
 var badgeCache = {};
 function trimBadge(img) {
-  if (img.dataset.trimmed || !img.naturalWidth) return;
-  var src = img.src;
-  if (badgeCache[src]) { img.src = badgeCache[src]; img.dataset.trimmed='1'; return; }
-  var w = img.naturalWidth, h = img.naturalHeight;
-  if (w < 3 || h < 3) { img.dataset.trimmed='1'; return; }
-  var c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  var ctx = c.getContext('2d');
-  try {
-    ctx.drawImage(img, 0, 0);
-    var data = ctx.getImageData(0, 0, w, h);
-    var px = data.data;
-    for (var y = 0; y < h; y++) {
-      for (var x = 0; x < w; x++) {
-        if (x === 0 || x === w-1 || y === 0 || y === h-1) {
-          px[(y*w+x)*4+3] = 0;
-        }
-      }
-    }
-    ctx.putImageData(data, 0, 0);
-    var dataUrl = c.toDataURL();
-    badgeCache[src] = dataUrl;
-    img.src = dataUrl;
-  } catch(e) {}
+  if (img.dataset.trimmed) return;
   img.dataset.trimmed = '1';
+  var src = img.getAttribute('src');
+  if (!src || src.startsWith('data:')) return;
+  if (badgeCache[src]) { img.src = badgeCache[src]; return; }
+  /* Use fetch() to guarantee a CORS response regardless of what the browser
+     has cached.  Relying on <img crossorigin> + canvas.getImageData() silently
+     fails with SecurityError when the browser cache holds a non-CORS entry. */
+  fetch(src, {mode: 'cors', credentials: 'omit'})
+    .then(function(r) { return r.blob(); })
+    .then(function(blob) {
+      var burl = URL.createObjectURL(blob);
+      var loader = new Image();
+      loader.onload = function() {
+        var w = loader.naturalWidth, h = loader.naturalHeight;
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        var ctx = c.getContext('2d');
+        ctx.drawImage(loader, 0, 0);
+        var data = ctx.getImageData(0, 0, w, h);
+        var px = data.data;
+        /* Snap all semi-transparent fringe pixels to fully transparent.
+           Badge sprites are pixel art — real pixels are opaque (alpha ~255);
+           edge fringe (anti-aliased against a light BG) sits below ~200. */
+        for (var j = 3; j < px.length; j += 4) {
+          px[j] = px[j] < 200 ? 0 : 255;
+        }
+        ctx.putImageData(data, 0, 0);
+        var dataUrl = c.toDataURL();
+        badgeCache[src] = dataUrl;
+        img.src = dataUrl;
+        URL.revokeObjectURL(burl);
+      };
+      loader.src = burl;
+    })
+    .catch(function() { /* network unavailable — leave original */ });
 }
 
 function processBadges() {
   document.querySelectorAll('img.bdg-img').forEach(function(img) {
-    if (img.dataset.trimmed) return;
-    if (img.complete && img.naturalWidth) trimBadge(img);
-    else { img.crossOrigin='anonymous'; img.addEventListener('load', function(){trimBadge(img);}, {once:true}); }
+    trimBadge(img);
   });
 }
 

@@ -10,7 +10,7 @@ import logging
 import os
 import re
 
-from .base import GameAdapter
+from .base import GameAdapter, load_area_names_from_obj_map
 from server.pokemon_data import base_form, species_name as _species_name
 
 log = logging.getLogger(__name__)
@@ -219,20 +219,10 @@ _SPECIES_TYPES: dict[int, tuple[int, int]] = {
 # Mon key validation pattern: XXXX:XXXX:XX (4 hex : 4 hex : 1-2 hex)
 _KEY_PATTERN = re.compile(r'^[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4}:[0-9A-Fa-f]{1,2}$')
 
-# Load area display names from data/games/gen1_rby/area_map.json if it exists
-_AREA_DISPLAY_NAMES: dict[str, str] = {}
-_area_map_path = os.path.join(
+_AREA_DISPLAY_NAMES: dict[str, str] = load_area_names_from_obj_map(os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "data", "games", "gen1_rby", "area_map.json"
-)
-if os.path.exists(_area_map_path):
-    with open(_area_map_path, "r") as _f:
-        _raw_areas = json.load(_f)
-        for _entry in _raw_areas.values() if isinstance(_raw_areas, dict) else _raw_areas:
-            if isinstance(_entry, dict) and "area_id" in _entry:
-                _AREA_DISPLAY_NAMES[_entry["area_id"]] = _entry.get("name", _entry["area_id"])
-else:
-    log.warning("Gen 1 area map not found: %s — area names will use fallback", _area_map_path)
+))
 
 # Load species index conversion table
 _INDEX_TO_NATIONAL: dict[int, int] = {}

@@ -1,7 +1,7 @@
--- gen2_crystal_areas.lua — Generated area lookup table for Gen 2 Crystal
+-- gen2_crystal_areas.lua â€” Generated area lookup table for Gen 2 Crystal
 -- compositeId (mapGroup*256+mapNum) -> area_id
 -- Source: data/games/gen2_crystal/area_map.json
--- DO NOT EDIT — regenerate with: python tools/gen_gen2_area_map.py
+-- DO NOT EDIT â€” regenerate with: python tools/gen_gen2_area_map.py
 
 local T = {}
 

@@ -488,27 +488,28 @@ local function index_party(battle_active)
             local entry = pool[i]
             entry.hp = hp; entry.maxHP = maxHP; entry.level = lv; entry.slot = i
             t[k] = entry
-            -- Inline delta stats cache: only re-read full stats when identity or level changes.
+            -- Inline delta stats cache: only re-read combat stats when identity or level changes.
             -- Saves a separate 6-slot loop with redundant personality/otid/level reads.
+            -- PP is read every frame because it changes on every move use, not just level-up.
+            local st = mon_stats_cache[k]
+            if not st then st = {}; mon_stats_cache[k] = st end
+            -- Cache move PP every frame (4 bytes at Attacks substruct +8, i.e. data+0x2C+8=data+0x34)
+            -- For CFRU (unencrypted fixed-order): directly at base+0x34
+            -- For vanilla/AP: PP is inside encrypted substruct — skip (retrieveBoxMon handles it)
+            if M.CFRU_NO_ENCRYPT then
+                st.pp1 = mem_u8(base + 0x34)
+                st.pp2 = mem_u8(base + 0x35)
+                st.pp3 = mem_u8(base + 0x36)
+                st.pp4 = mem_u8(base + 0x37)
+            end
             if k ~= _sc_key[i] or lv ~= _sc_level[i] then
                 _sc_key[i] = k; _sc_level[i] = lv
-                local st = mon_stats_cache[k]
-                if not st then st = {}; mon_stats_cache[k] = st end
                 st.level = lv; st.maxHP = maxHP
                 st.attack  = mem_u16(base + 0x5A)
                 st.defense = mem_u16(base + 0x5C)
                 st.speed   = mem_u16(base + 0x5E)
                 st.spAtk   = mem_u16(base + 0x60)
                 st.spDef   = mem_u16(base + 0x62)
-                -- Cache move PP (4 bytes at Attacks substruct +8, i.e. data+0x2C+8=data+0x34)
-                -- For CFRU (unencrypted fixed-order): directly at base+0x34
-                -- For vanilla/AP: PP is inside encrypted substruct — skip (retrieveBoxMon handles it)
-                if M.CFRU_NO_ENCRYPT then
-                    st.pp1 = mem_u8(base + 0x34)
-                    st.pp2 = mem_u8(base + 0x35)
-                    st.pp3 = mem_u8(base + 0x36)
-                    st.pp4 = mem_u8(base + 0x37)
-                end
             end
         end
     end
@@ -716,6 +717,13 @@ local battle_box_slot_count = 0   -- number of occupied slots at battle start
 local post_battle_frames   = 0
 local pending_safe         = false
 local POST_BATTLE_GRACE    = 90  -- 1.5s; CFRU needs longer for catch/exp/level-up animations
+-- Extra cooldown before memorialize is allowed to run after a battle.
+-- CFRU may continue writing party data (HP restoration, party sync from gBattleParty)
+-- for several frames after the general post_battle_frames window expires.
+-- Without this guard, the swap-to-end in memorializeMon can fire while the engine
+-- is still writing, causing the moved mon to inherit the dead mon's item/data.
+local memorialize_battle_cooldown = 0
+local MEMORIALIZE_POST_BATTLE_COOLDOWN = 180  -- 3s at 60fps
 -- Accumulates enemy mons seen during the current trainer battle.
 -- Keyed by "species_id:level" to deduplicate.  Reset on battle start.
 local battle_seen_enemies  = {}  -- key → {species_id, level, hp, maxHP}
@@ -1120,6 +1128,16 @@ local function on_frame()
                 end
             end
         end
+        -- Extra post-battle cooldown for memorialize only: CFRU may continue writing party
+        -- data after the general post_battle_frames window, corrupting the swap-to-end.
+        if cmd.cmd == "memorialize" and memorialize_battle_cooldown > 0 then
+            blocked = true
+            if not _sync_blocked_logged then
+                _sync_blocked_logged = true
+                console.log(string.format("[SLink-FRLGE] memorialize HELD: battle cooldown %d frames remaining  key=%s",
+                    memorialize_battle_cooldown, (cmd.key or "?"):sub(1,8)))
+            end
+        end
         if not blocked then
             table.remove(pending_sync_cmds, 1)
             local exec_ok, exec_err = true, nil
@@ -1388,6 +1406,7 @@ local function on_frame()
             force_fainted_keys    = {}  -- clear battle-scoped guard
             pending_faint_debounce = {}  -- clear any debounce state
             post_battle_frames = POST_BATTLE_GRACE
+            memorialize_battle_cooldown = MEMORIALIZE_POST_BATTLE_COOLDOWN
             pending_safe       = true
             -- Skip normal writeback — fall through to party read below.
         else
@@ -1396,6 +1415,7 @@ local function on_frame()
         force_fainted_keys    = {}  -- clear battle-scoped guard
         pending_faint_debounce = {}  -- clear any debounce state
         post_battle_frames = POST_BATTLE_GRACE
+        memorialize_battle_cooldown = MEMORIALIZE_POST_BATTLE_COOLDOWN
         pending_safe       = true
         console.log("[SLink-FRLGE] [battle] end  grace window started")
         -- DEBUG: log party state at battle end to diagnose capture detection
@@ -1647,9 +1667,30 @@ local function on_frame()
                       reason="trade", new_species=new_sid, new_nickname=new_nick},
                      "trade:"..old_k:sub(1,8).."->"..new_k:sub(1,8), true)
             elseif #trade_deps > 1 or #trade_arrs > 1 then
-                console.log(string.format(
-                    "[SLink-FRLGE] trade detection ambiguous: %d departures, %d arrivals — skipped",
-                    #trade_deps, #trade_arrs))
+                -- Multiple unexplained departures + arrivals = party swap in progress
+                -- (e.g. borrowed-party battle where the CFRU flag isn't set yet, or an
+                -- overworld scripted party replacement).  Trigger party freeze immediately
+                -- so the departed mons don't get party_to_box events and the gift buffer
+                -- doesn't need to accumulate to threshold before protection kicks in.
+                if #trade_deps >= 1 and #trade_arrs >= 1 then
+                    console.log(string.format(
+                        "[SLink-FRLGE] trade detection ambiguous: %d departures, %d arrivals — triggering party freeze",
+                        #trade_deps, #trade_arrs))
+                    party_frozen       = true
+                    freeze_frames_left = FREEZE_TIMEOUT_FRAMES
+                    pending_faint_debounce = {}
+                    pre_freeze_keys = {}
+                    for pk, _ in pairs(prev_party) do
+                        if all_known_keys[pk] then
+                            pre_freeze_keys[pk] = true
+                        end
+                    end
+                    gift_capture_buffer = {}
+                else
+                    console.log(string.format(
+                        "[SLink-FRLGE] trade detection ambiguous: %d departures, %d arrivals — skipped",
+                        #trade_deps, #trade_arrs))
+                end
             end
         end
     end
@@ -1801,7 +1842,8 @@ local function on_frame()
                 local st = mon_stats_cache[k]
                 local stats_tbl = st and {level=st.level, maxHP=st.maxHP,
                     attack=st.attack, defense=st.defense, speed=st.speed,
-                    spAtk=st.spAtk, spDef=st.spDef} or nil
+                    spAtk=st.spAtk, spDef=st.spDef,
+                    pp1=st.pp1, pp2=st.pp2, pp3=st.pp3, pp4=st.pp4} or nil
                 send({event="party_to_box", key=k, stats=stats_tbl},
                      "party_to_box:"..k:sub(1,8), true)
             end
@@ -1873,6 +1915,9 @@ local function on_frame()
     end
 
     -- ── post-battle grace window ──────────────────────────────────────────────
+    if memorialize_battle_cooldown > 0 then
+        memorialize_battle_cooldown = memorialize_battle_cooldown - 1
+    end
     if post_battle_frames > 0 then
         post_battle_frames = post_battle_frames - 1
 
@@ -2245,7 +2290,8 @@ local function on_frame()
                 local st = mon_stats_cache[k]
                 local stats_tbl = st and {level=st.level, maxHP=st.maxHP,
                     attack=st.attack, defense=st.defense, speed=st.speed,
-                    spAtk=st.spAtk, spDef=st.spDef} or nil
+                    spAtk=st.spAtk, spDef=st.spDef,
+                    pp1=st.pp1, pp2=st.pp2, pp3=st.pp3, pp4=st.pp4} or nil
                 send({event="party_to_box", key=k, stats=stats_tbl},
                      "party_to_box:"..k:sub(1,8), false)
             else

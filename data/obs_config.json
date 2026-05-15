@@ -7,9 +7,9 @@
       "password": "RFbzAAAAAGf2NAAA"
     },
     "b": {
-      "host": "",
+      "host": "192.168.1.5",
       "port": 4455,
-      "password": "RFbzAAAAAGf2NAAA"
+      "password": "PHl4zhiGedUaxGzF"
     }
   },
   "triggers": [

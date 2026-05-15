@@ -1,7 +1,7 @@
--- gen2_crystal_locations.lua — Generated location name lookup for Gen 2 Crystal
+-- gen2_crystal_locations.lua â€” Generated location name lookup for Gen 2 Crystal
 -- area_id -> display name
 -- Source: data/games/gen2_crystal/area_map.json
--- DO NOT EDIT — regenerate with: python tools/gen_gen2_area_map.py
+-- DO NOT EDIT â€” regenerate with: python tools/gen_gen2_area_map.py
 
 local T = {}
 

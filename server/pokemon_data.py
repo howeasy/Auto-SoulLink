@@ -1374,3 +1374,30 @@ def type_name(type_byte: int) -> str:
     """Return the display name for a Gen III type byte value."""
     return TYPE_NAMES.get(type_byte, "???")
 
+
+def _parse_pid_otid_key(key: str) -> "tuple[int, int] | None":
+    """Parse a PID:OTID key string into (personality, ot_id) integers.
+
+    Returns None if the key is malformed or not a 2-part hex key.
+    Used by Gen 3/4/5 adapters and the state.py shiny helper.
+    """
+    try:
+        parts = key.split(":")
+        if len(parts) != 2:
+            return None
+        return int(parts[0], 16), int(parts[1], 16)
+    except (ValueError, IndexError):
+        return None
+
+
+def pid_otid_shiny(personality: int, ot_id: int) -> bool:
+    """Return True if the Gen III/IV/V shiny formula fires.
+
+    Shiny iff (TID ^ SID ^ upper16(PID) ^ lower16(PID)) < 8.
+    """
+    tid = ot_id & 0xFFFF
+    sid = (ot_id >> 16) & 0xFFFF
+    p_upper = (personality >> 16) & 0xFFFF
+    p_lower = personality & 0xFFFF
+    return (tid ^ sid ^ p_upper ^ p_lower) < 8
+

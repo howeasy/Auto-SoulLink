@@ -19,6 +19,8 @@ from server.pokemon_data import (
     ability_name as _ability_name,
     ability_description as _ability_description,
     to_national as _to_national,
+    _parse_pid_otid_key,
+    pid_otid_shiny,
     SPECIES_NAMES,
     GENDER_SYMBOL,
     CFRU_FORM_SPRITE_ID,
@@ -83,16 +85,6 @@ _RR_TRAINER_CLASS: dict[int, str] = {
     102: "Pokémon Ranger", 103: "Twins", 104: "Ruin Maniac",
     105: "Lady", 106: "Painter",
 }
-
-# Area display names for the FRLG map
-_AREA_DISPLAY_NAMES: dict[str, str] = {}
-_area_map_path = os.path.join(_DATA_DIR, "area_map.json")
-if os.path.exists(_area_map_path):
-    with open(_area_map_path, "r") as _f:
-        _raw_areas = json.load(_f)
-        for _entry in _raw_areas.values() if isinstance(_raw_areas, dict) else _raw_areas:
-            if isinstance(_entry, dict) and "area_id" in _entry:
-                _AREA_DISPLAY_NAMES[_entry["area_id"]] = _entry.get("name", _entry["area_id"])
 
 # ROM map names scraped from the live RR ROM via test_map_names.lua + parse_map_names.py.
 # Keys are "group:num" strings; values have a "name" field (mapsec-level display name).
@@ -304,41 +296,10 @@ class Gen3Adapter(GameAdapter):
 
     def is_shiny(self, key: str) -> bool:
         """Gen III shiny: (tid ^ sid ^ p_upper ^ p_lower) < 8."""
-        try:
-            parts = key.split(":")
-            if len(parts) != 2:
-                return False
-            personality = int(parts[0], 16)
-            ot_id = int(parts[1], 16)
-        except (ValueError, IndexError):
+        parsed = _parse_pid_otid_key(key)
+        if parsed is None:
             return False
-        tid = ot_id & 0xFFFF
-        sid = (ot_id >> 16) & 0xFFFF
-        p_upper = (personality >> 16) & 0xFFFF
-        p_lower = personality & 0xFFFF
-        return (tid ^ sid ^ p_upper ^ p_lower) < 8
-
-    def parse_ot_id(self, key: str) -> str:
-        """Extract OT ID from Gen 3 key format (personality:otId)."""
-        try:
-            parts = key.split(":")
-            if len(parts) == 2:
-                return parts[1]
-        except (ValueError, IndexError):
-            pass
-        return ""
-
-    def is_valid_mon_key(self, key: str) -> bool:
-        """Validate Gen 3 key format: 8-hex-digit:8-hex-digit."""
-        try:
-            parts = key.split(":")
-            if len(parts) != 2:
-                return False
-            int(parts[0], 16)
-            int(parts[1], 16)
-            return len(parts[0]) <= 8 and len(parts[1]) <= 8
-        except (ValueError, IndexError):
-            return False
+        return pid_otid_shiny(*parsed)
 
     def species_name(self, species_id: int) -> str:
         return _species_name(species_id, self._is_rr)
@@ -472,9 +433,6 @@ class Gen3Adapter(GameAdapter):
         # Manual overrides (apostrophes, accents, abbreviations)
         if area_id in _AREA_DISPLAY_OVERRIDES:
             return _AREA_DISPLAY_OVERRIDES[area_id]
-        # area_map.json names
-        if area_id in _AREA_DISPLAY_NAMES:
-            return _AREA_DISPLAY_NAMES[area_id]
         # Dynamic gift area: "gift_<group>_<num>" → "Gift – <ROM map name>"
         if area_id.startswith("gift_"):
             parts = area_id[5:].split("_", 1)  # "10_11" → ["10", "11"]

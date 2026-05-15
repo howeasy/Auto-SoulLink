@@ -26,6 +26,7 @@ from enum import Enum
 from typing import Optional
 
 from server.adapters.base import GameRulesAdapter
+from server.pokemon_data import _parse_pid_otid_key, pid_otid_shiny
 
 log = logging.getLogger(__name__)
 
@@ -82,19 +83,10 @@ def is_shiny(key: str) -> bool:
     NOTE: This is a standalone utility kept for backward compatibility with tests.
     The state machine uses self.adapter.is_shiny() at runtime for game-appropriate logic.
     """
-    try:
-        parts = key.split(":")
-        if len(parts) != 2:
-            return False
-        personality = int(parts[0], 16)
-        ot_id = int(parts[1], 16)
-    except (ValueError, IndexError):
+    parsed = _parse_pid_otid_key(key)
+    if parsed is None:
         return False
-    tid = ot_id & 0xFFFF
-    sid = (ot_id >> 16) & 0xFFFF
-    p_upper = (personality >> 16) & 0xFFFF
-    p_lower = personality & 0xFFFF
-    return (tid ^ sid ^ p_upper ^ p_lower) < 8
+    return pid_otid_shiny(*parsed)
 
 
 class SoulLinkState:
@@ -163,6 +155,10 @@ class SoulLinkState:
         # Areas where a species/lock clause rejected a capture — suppress no_catch
         # until the player successfully captures a valid mon on this area.
         self.retry_areas: dict[str, set[str]] = {"a": set(), "b": set()}
+        # Areas where dupes clause was already notified at wild battle start.
+        # Suppresses the duplicate gui_prompt on the subsequent no_catch event.
+        # In-memory only — not persisted (tied to the current session).
+        self.dupe_notified_areas: dict[str, set[str]] = {"a": set(), "b": set()}
 
     # ── public API ───────────────────────────────────────────────────────────
 
@@ -1089,6 +1085,60 @@ class SoulLinkState:
             "area_id": area_id,
         })
 
+    def check_dupe_on_encounter(self, player_id: str, area_id: str, enc_species: int) -> bool:
+        """Check for a dupes-clause reroll at wild battle start and notify the player immediately.
+
+        Called as soon as the enemy species is known (first tick with in_battle=True) so the
+        player sees the gui_prompt during the battle rather than after fleeing.
+
+        Returns True if a dupe was detected and the gui_prompt was queued.
+        """
+        if not self.species_lock or not enc_species or not area_id:
+            return False
+        if not self.pokeballs_obtained.get(player_id):
+            return False
+        current = self.area_states.get(area_id, AreaStatus.UNSEEN)
+        if current in (AreaStatus.LINKED, AreaStatus.DEAD_ZONE):
+            return False
+        # Skip if player already has a capture pending for this area (they caught already).
+        if self.pending_captures.get(area_id, {}).get(player_id):
+            return False
+
+        partner = _partner(player_id)
+        enc_base = self.adapter.evo_family(enc_species)
+        enc_name = self.adapter.species_name(enc_species)
+
+        # Check 1: same family as something this player already has in an alive link.
+        for entry in self.links:
+            if entry.status != LinkStatus.ALIVE:
+                continue
+            player_mon = entry.a if player_id == "a" else entry.b
+            if player_mon and player_mon.species and self.adapter.evo_family(player_mon.species) == enc_base:
+                existing_name = self.adapter.species_name(player_mon.species)
+                log.info(
+                    f"[{player_id}] dupes clause (battle start): {enc_name} "
+                    f"same family as existing {existing_name} in {entry.area_id}"
+                )
+                self.dupe_notified_areas[player_id].add(area_id)
+                self._dupes_reroll(player_id, area_id, f"Dupes clause: {enc_name} -- reroll!")
+                return True
+
+        # Check 2: partner already captured on this area with same evo family.
+        partner_cap = self.pending_captures.get(area_id, {}).get(partner)
+        if partner_cap and partner_cap.species:
+            partner_base = self.adapter.evo_family(partner_cap.species)
+            if enc_base == partner_base:
+                partner_name = self.adapter.species_name(partner_cap.species)
+                log.info(
+                    f"[{player_id}] dupes clause (battle start): {enc_name} "
+                    f"same family as partner's {partner_name} on {area_id}"
+                )
+                self.dupe_notified_areas[player_id].add(area_id)
+                self._dupes_reroll(player_id, area_id, f"Dupes clause: {enc_name} -- reroll!")
+                return True
+
+        return False
+
     def _handle_no_catch(self, player_id: str, msg: dict):
         area_id = msg.get("area_id", "")
         if not area_id:
@@ -1126,6 +1176,14 @@ class SoulLinkState:
         # the encounter doesn't count — area stays open for a different catch.
         enc_species = msg.get("species_id", 0)
         enc_level   = msg.get("level", 0)
+
+        # Dupes already notified at battle start — keep area open without repeating the prompt.
+        if area_id in self.dupe_notified_areas[player_id]:
+            self.dupe_notified_areas[player_id].discard(area_id)
+            self.queued_commands[player_id].append({"cmd": "unresolve_area", "area_id": area_id})
+            log.info(f"[{player_id}] no_catch — dupes reroll for {area_id} (already notified at battle start)")
+            return
+
         if self.species_lock and enc_species:
             enc_base = self.adapter.evo_family(enc_species)
             enc_name = self.adapter.species_name(enc_species)

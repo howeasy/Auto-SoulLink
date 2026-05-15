@@ -272,7 +272,7 @@ def _stat_stages_html(stages) -> str:
             continue
         if not (-6 <= stage <= 6) or stage == 0:
             continue
-        sign  = "↑" if stage > 0 else "↓"
+        sign  = "+" if stage > 0 else "\u2212"
         cls   = "ss-up" if stage > 0 else "ss-dn"
         parts.append(
             f'<span class="stat-stage {cls}">{sign}{abs(stage)} {_STAT_STAGE_LABELS[i]}</span>'
@@ -532,6 +532,10 @@ _STATUS_HTML = """<!DOCTYPE html>
     .gym-badge {{ width: 16px; height: 16px; border-radius: 50%; display: inline-block; border: 1px solid #555; opacity: 0.25; cursor: default; }}
     .gym-badge.earned {{ opacity: 1; border-color: #fff8; box-shadow: 0 0 4px #fff4; }}
     .lock-rules {{ margin: 0.5em 0 0.8em 0; font-size: 0.95em; color: #ccc; }}
+    .attempts-bar {{ display: inline-flex; align-items: center; gap: 0.5em; margin: 0.3em 0 0.8em 0; font-size: 0.9em; color: #888; }}
+    .attempts-num {{ color: #f8d030; font-weight: bold; }}
+    .adj-btn {{ background: #1a1c28; color: #f8d030; border: 1px solid #444; border-radius: 3px; padding: 1px 8px; cursor: pointer; font-size: 0.95em; line-height: 1.6; font-family: inherit; }}
+    .adj-btn:hover {{ background: #2a2c38; border-color: #f8d030; }}
     .info-row {{ display: flex; gap: 2em; margin: 0.5em 0 0.35em 0; font-size: 0.9em; color: #aaa; }}
     .info-row span b {{ color: #eee; }}
     table {{ border-collapse: collapse; width: 100%; margin-bottom: 1em; table-layout: auto; }}
@@ -923,6 +927,15 @@ _STATUS_HTML = """<!DOCTYPE html>
       }}
 
       processAllSprites();  // Initial page load
+
+      window.adjAttempts = function(delta) {{
+        var bar = document.getElementById('attempts-bar');
+        var cur = bar ? parseInt(bar.dataset.count, 10) : 0;
+        var next = Math.max(0, cur + delta);
+        fetch('/api/attempts', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{count:next}})}})
+          .then(function(r) {{ return r.json(); }})
+          .then(function(j) {{ if (j.ok) {{ triggerRefresh(); }} }});
+      }};
     }})();
 
     // ── Encounters table sort ───────────────────────────────────────────
@@ -2793,6 +2806,17 @@ class SLinkServer:
                     self.battle_state[player_id]["opponent_name"] = msg["opponent_name"]
             if "enemy_party" in msg:
                 self.battle_state[player_id]["enemy_party"] = msg["enemy_party"]
+            # Dupes clause: notify at wild battle start (before handle_event flushes the queue).
+            if "in_battle" in msg and not was_in_battle and now_in_battle \
+                    and not self.battle_state[player_id].get("is_trainer_battle"):
+                _battle_area_id = msg.get("area_id", "")
+                _ep = self.battle_state[player_id].get("enemy_party", [])
+                _enc_species = _ep[0].get("species_id", 0) if _ep else 0
+                if _battle_area_id and _enc_species:
+                    if self.state.check_dupe_on_encounter(player_id, _battle_area_id, _enc_species):
+                        _sp_name = self.adapter.species_name(_enc_species)
+                        self._log_event(player_id, "reroll",
+                                        f"🔁 Dupes clause: {_sp_name} -- reroll!", _battle_area_id)
             # Update location from tick in case area_enter was missed (e.g. on reconnect).
             tick_area = msg.get("loc_name", "") or msg.get("area_id", "")
             if tick_area:
@@ -3288,6 +3312,17 @@ class SLinkServer:
             lock_badges.append('<span class="badge badge-lock">🔮 Type Clause</span>')
         if lock_badges:
             parts.append(f'<div class="lock-rules">Rules: {" ".join(lock_badges)}</div>')
+
+        # ── Attempt counter ───────────────────────────────────────────────────
+        attempts = s.attempts_count
+        parts.append(
+            f'<div class="attempts-bar" id="attempts-bar" data-count="{attempts}">'
+            f'<span class="dim">Attempt:</span>'
+            f'<span class="attempts-num">#{attempts}</span>'
+            f'<button class="adj-btn" onclick="adjAttempts(-1)">&#8722;</button>'
+            f'<button class="adj-btn" onclick="adjAttempts(+1)">+</button>'
+            f'</div>'
+        )
 
         # ── Players (side-by-side cards) ─────────────────────────────────────
         parts.append('<h2>Players</h2><div class="players-grid">')
@@ -4809,8 +4844,10 @@ class SLinkServer:
       </div>
       <div>
         <label>Scene Name</label>
-        <input id="new-scene" type="text" list="scene-list-a" placeholder="e.g. Battle Scene">
+        <input id="new-scene" type="text" list="scene-list-both" placeholder="e.g. Battle Scene">
         <datalist id="scene-list-a"></datalist>
+        <datalist id="scene-list-b"></datalist>
+        <datalist id="scene-list-both"></datalist>
       </div>
       <div>
         <label>Area Filter <small style="color:#666">(area_enter only)</small></label>
@@ -4945,19 +4982,51 @@ class SLinkServer:
           renderTriggers();
         }
         loadScenes('a');
+        loadScenes('b');
       }).catch(function(){});
     }
 
+    var _scenesCache = {a: [], b: []};
     function loadScenes(player) {
       fetch('/api/obs/scenes/' + player).then(function(r){return r.json();}).then(function(d) {
-        var dl = document.getElementById('scene-list-' + player);
-        if (!dl) return;
-        dl.innerHTML = '';
-        (d.scenes || []).forEach(function(s) {
-          var o = document.createElement('option'); o.value = s; dl.appendChild(o);
-        });
+        _scenesCache[player] = d.scenes || [];
+        _updateSceneLists();
       }).catch(function(){});
     }
+    function _updateSceneLists() {
+      var setA = new Set(_scenesCache.a);
+      var setB = new Set(_scenesCache.b);
+      // Per-player datalists (raw scene names)
+      ['a','b'].forEach(function(p) {
+        var dl = document.getElementById('scene-list-' + p);
+        if (!dl) return;
+        dl.innerHTML = '';
+        _scenesCache[p].forEach(function(s) {
+          var o = document.createElement('option'); o.value = s; dl.appendChild(o);
+        });
+      });
+      // Combined datalist: common scenes unlabeled, unique scenes prefixed with [A]/[B]
+      var dlBoth = document.getElementById('scene-list-both');
+      if (!dlBoth) return;
+      dlBoth.innerHTML = '';
+      var added = new Set();
+      _scenesCache.a.forEach(function(s) {
+        var o = document.createElement('option');
+        o.value = setB.has(s) ? s : '[A] ' + s;
+        dlBoth.appendChild(o); added.add(s);
+      });
+      _scenesCache.b.forEach(function(s) {
+        if (added.has(s)) return;
+        var o = document.createElement('option');
+        o.value = '[B] ' + s;
+        dlBoth.appendChild(o);
+      });
+    }
+    // Strip [A]/[B] prefix inserted by combined datalist when user selects an entry
+    document.getElementById('new-scene').addEventListener('change', function() {
+      var m = this.value.match(/^\[(?:A|B)\] (.+)/);
+      if (m) this.value = m[1];
+    });
 
     function saveConfig() {
       var cfg = {
@@ -4983,8 +5052,14 @@ class SLinkServer:
     }
 
     function connect(player) {
-      fetch('/api/obs/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:player})})
+      var host = document.getElementById('host-'+player).value.trim();
+      var port = parseInt(document.getElementById('port-'+player).value)||4455;
+      var pw   = document.getElementById('pw-'+player).value;
+      var body = {player:player, host:host, port:port};
+      if (pw) body.password = pw;
+      fetch('/api/obs/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
         .then(function(r){return r.json();}).then(function(d){
+          if (d.ok && pw) document.getElementById('pw-'+player).value='';
           msg(d.ok ? ('Connecting player '+player.toUpperCase()+'...') : ('Error: '+d.error), !d.ok);
           setTimeout(loadStatus, 1500);
         });
@@ -5062,9 +5137,9 @@ class SLinkServer:
         for t in triggers:
             if not t.get("id"):
                 t["id"] = _uuid.uuid4().hex[:8]
-        new_cfg = dict(self.obs._config)
-        new_cfg["triggers"] = triggers
-        await self.obs.apply_new_config(new_cfg)
+        # Update triggers in-place — don't restart OBS connections (would briefly disconnect both players)
+        self.obs._config["triggers"] = triggers
+        self.obs.save_config()
         return aiohttp_web.json_response({"ok": True})
 
     async def handle_obs_scenes(self, request):
@@ -5091,7 +5166,7 @@ class SLinkServer:
         return aiohttp_web.json_response(result)
 
     async def handle_obs_connect(self, request):
-        """POST /api/obs/connect — (re)connect a player's OBS."""
+        """POST /api/obs/connect — save connection settings for this player and (re)connect."""
         try:
             body = await request.json()
         except Exception:
@@ -5099,6 +5174,23 @@ class SLinkServer:
         player = body.get("player", "a")
         if player not in ("a", "b"):
             return aiohttp_web.json_response({"ok": False, "error": "Invalid player"}, status=400)
+        # Persist any connection settings provided — preserves the other player's settings
+        host = str(body.get("host", "")).strip()
+        port_raw = body.get("port")
+        port = int(port_raw) if port_raw else None
+        password = body.get("password")  # None = not provided; "" = explicitly cleared
+        if host or port is not None or password:
+            conns = {k: dict(v) for k, v in self.obs._config.get("connections", {}).items()}
+            conn = dict(conns.get(player, {}))
+            if host:
+                conn["host"] = host
+            if port is not None:
+                conn["port"] = port
+            if password:  # only update if non-empty; blank = keep existing
+                conn["password"] = password
+            conns[player] = conn
+            self.obs._config = {**self.obs._config, "connections": conns}
+            self.obs.save_config()
         await self.obs.connect_player(player)
         return aiohttp_web.json_response({"ok": True})
 

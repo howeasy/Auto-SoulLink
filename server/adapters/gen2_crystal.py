@@ -11,7 +11,7 @@ import logging
 import os
 import re
 
-from .base import GameAdapter
+from .base import GameAdapter, load_area_names_from_obj_map
 from server.pokemon_data import base_form
 
 log = logging.getLogger(__name__)
@@ -92,15 +92,9 @@ if os.path.exists(_items_path):
 else:
     log.warning("Gen 2 item_names.json not found: %s", _items_path)
 
-# ── Load area display names from area_map.json if it exists ─────────────
-_AREA_DISPLAY_NAMES: dict[str, str] = {}
-_area_map_path = os.path.join(_DATA_DIR, "area_map.json")
-if os.path.exists(_area_map_path):
-    with open(_area_map_path, "r") as _f:
-        _raw_areas = json.load(_f)
-        for _entry in _raw_areas.values() if isinstance(_raw_areas, dict) else _raw_areas:
-            if isinstance(_entry, dict) and "area_id" in _entry:
-                _AREA_DISPLAY_NAMES[_entry["area_id"]] = _entry.get("name", _entry["area_id"])
+_AREA_DISPLAY_NAMES: dict[str, str] = load_area_names_from_obj_map(
+    os.path.join(_DATA_DIR, "area_map.json")
+)
 
 
 class Gen2CrystalAdapter(GameAdapter):

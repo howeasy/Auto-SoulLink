@@ -40,7 +40,7 @@ class TestStatStagesHtmlContent:
     def test_atk_boost_2(self):
         # ATK = 8, all others neutral
         result = _stat_stages_html([8, 6, 6, 6, 6, 6, 6])
-        assert "↑2" in result
+        assert "+2" in result
         assert "ATK" in result
         assert "ss-up" in result
         assert "ss-dn" not in result
@@ -48,7 +48,7 @@ class TestStatStagesHtmlContent:
     def test_spd_drop_1(self):
         # SPD = 5 (index 2)
         result = _stat_stages_html([6, 6, 5, 6, 6, 6, 6])
-        assert "↓1" in result
+        assert "\u22121" in result
         assert "SPD" in result
         assert "ss-dn" in result
         assert "ss-up" not in result
@@ -56,17 +56,17 @@ class TestStatStagesHtmlContent:
     def test_multiple_stages(self):
         # ATK +2, DEF -1, ACC +1
         result = _stat_stages_html([8, 5, 6, 6, 6, 7, 6])
-        assert "↑2 ATK" in result
-        assert "↓1 DEF" in result
-        assert "↑1 ACC" in result
+        assert "+2 ATK" in result
+        assert "\u22121 DEF" in result
+        assert "+1 ACC" in result
 
     def test_max_stage_12(self):
         result = _stat_stages_html([12, 6, 6, 6, 6, 6, 6])
-        assert "↑6 ATK" in result
+        assert "+6 ATK" in result
 
     def test_min_stage_0(self):
         result = _stat_stages_html([0, 6, 6, 6, 6, 6, 6])
-        assert "↓6 ATK" in result
+        assert "\u22126 ATK" in result
 
     def test_label_order(self):
         # Each stat should map to correct label
@@ -98,7 +98,7 @@ class TestStatStagesHtmlMalformed:
         # Mixed list: one None value should not raise
         result = _stat_stages_html([None, 8, 6, 6, 6, 6, 6])
         assert "ATK" not in result  # first slot skipped
-        assert "↑2 DEF" in result   # second slot rendered
+        assert "+2 DEF" in result   # second slot rendered
 
     def test_string_entry_in_list_skipped(self):
         result = _stat_stages_html(["bad", 6, 6, 6, 6, 6, 6])
@@ -113,8 +113,8 @@ class TestStatStagesHtmlMalformed:
     def test_shorter_list_renders_available(self):
         # Only first 3 elements provided
         result = _stat_stages_html([8, 6, 4])
-        assert "↑2 ATK" in result
-        assert "↓2 SPD" in result
+        assert "+2 ATK" in result
+        assert "\u22122 SPD" in result
         assert "DEF" not in result  # neutral, no badge
 
 
@@ -243,7 +243,7 @@ class TestEnrichBattleStatePassthrough:
     def test_stat_stages_html_renders_enemy_active(self):
         stages = [6, 9, 6, 6, 6, 6, 6]  # DEF +3
         result = _stat_stages_html(stages)
-        assert "↑3 DEF" in result
+        assert "+3 DEF" in result
         assert "ss-up" in result
 
 

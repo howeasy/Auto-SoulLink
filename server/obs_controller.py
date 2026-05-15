@@ -359,18 +359,21 @@ class OBSController:
 
     def get_status(self) -> dict:
         """Return connection status for each player (safe for API responses)."""
+        conns = self._config.get("connections", {})
+        conn_a = conns.get("a", {})
+        conn_b = conns.get("b", {})
         return {
             "available": _OBS_AVAILABLE,
             "enabled": self._config.get("enabled", False),
             "connections": {
                 "a": {
-                    "host":   self._config.get("connections", {}).get("a", {}).get("host", ""),
-                    "port":   self._config.get("connections", {}).get("a", {}).get("port", 4455),
+                    "host":   conn_a.get("host", ""),
+                    "port":   conn_a.get("port", 4455),
                     "status": self._status.get("a", "disconnected"),
                 },
                 "b": {
-                    "host":   self._config.get("connections", {}).get("b", {}).get("host", ""),
-                    "port":   self._config.get("connections", {}).get("b", {}).get("port", 4455),
+                    "host":   conn_b.get("host", ""),
+                    "port":   conn_b.get("port", 4455),
                     "status": self._status.get("b", "disconnected"),
                 },
             },
