@@ -30,4 +30,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "$GITHUB_REF_NAME" \
-            "dist/SLink-player-${{ steps.version.outputs.version }}.zip"
+            "dist/SLink-player-${{ steps.version.outputs.version }}.zip" \
+            --clobber
