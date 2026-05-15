@@ -101,7 +101,7 @@ _STREAM_SHARED_CSS = """
   .e-ts{font-family:var(--px);font-size:clamp(7px,1.3vmin,11px);-webkit-font-smoothing:none;opacity:.36;flex-shrink:0;white-space:nowrap;padding-top:1px;min-width:4.5em}
   .e-who{font-family:var(--px);font-size:clamp(7px,1.3vmin,11px);-webkit-font-smoothing:none;font-weight:bold;flex-shrink:0;white-space:nowrap;padding-top:1px}
   .e-msg{flex:1;min-width:0;font-size:.93em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .ec{color:var(--c-alive)}.ef{color:var(--c-dead)}.ew{color:#f87020;font-weight:700}.en{color:var(--c-pend)}.ea{color:#5ac8f8}.el{color:var(--c-alive);font-weight:700}.ed{color:var(--c-dead);font-weight:700}.ev{color:#f8a030;font-weight:700}.ek{color:#c080f8}.eh{opacity:.32}
+  .ec{color:var(--c-alive)}.ef{color:var(--c-dead)}.ew{color:#f87020;font-weight:700}.en{color:var(--c-pend)}.ea{color:#5ac8f8}.el{color:var(--c-alive);font-weight:700}.ed{color:var(--c-dead);font-weight:700}.ev{color:#f8a030;font-weight:700}.ek{color:#c080f8}.eh{opacity:.32}.es{color:var(--c-gold);font-weight:700}.em{opacity:.35}.ep{color:#60a8f8}.er{color:#f86820}
   /* Area stats — reuses d-* death/attempts counter style */
   .a-pend .d-num{color:var(--c-pend);text-shadow:0 0 20px rgba(248,160,32,.45)}
   /* Badges */
@@ -608,49 +608,33 @@ function areaLabel(id){
   if (id.indexOf('_bonus_') === 0) return '\u2736 Bonus Pair';
   return id.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
 }
+var _linksStateKey = null;
 function render(d) {
   var links  = d.links || [];
+  var stateKey = JSON.stringify(links.map(function(l){return [l.status,l.area_id,l.area_display,l.a_key,l.b_key,l.a_nickname,l.b_nickname,l.a_species_name,l.b_species_name,l.a_species,l.b_species];}));
+  if (stateKey === _linksStateKey) return;
+  _linksStateKey = stateKey;
   var alive  = links.filter(function(l){return l.status==='alive';});
   var dead   = links.filter(function(l){return l.status!=='alive';});
   var h = '<div class="wtitle">SOUL LINK \xb7 ' + alive.length + ' ALIVE \xb7 ' + dead.length + ' DEAD</div>';
-  if (!links.length) {
-    h += '<div style="opacity:.4;padding-top:.5em">No links yet</div>';
-    document.getElementById('root').innerHTML = h; return;
-  }
+  if (!links.length) { h += '<div style="opacity:.4;padding-top:.5em">No links yet</div>'; document.getElementById('root').innerHTML = h; return; }
   h += '<div class="lk-list">';
-  // ── Alive pairs — full card with area name and sprites ──────────────────
   alive.forEach(function(lnk) {
-    var aN  = escHtml(lnk.a_nickname || lnk.a_species_name || '\u2014');
-    var bN  = escHtml(lnk.b_nickname || lnk.b_species_name || '\u2014');
-    var aL  = lnk.a_level ? 'Lv\u00a0' + lnk.a_level : '';
-    var bL  = lnk.b_level ? 'Lv\u00a0' + lnk.b_level : '';
+    var aN = escHtml(lnk.a_nickname || lnk.a_species_name || '\u2014');
+    var bN = escHtml(lnk.b_nickname || lnk.b_species_name || '\u2014');
     var aSp = lnk.a_sprite_html || (lnk.a_species ? spriteTag(lnk.a_species) : '');
     var bSp = lnk.b_sprite_html || (lnk.b_species ? spriteTag(lnk.b_species) : '');
     var area = escHtml(lnk.area_display || areaLabel(lnk.area_id));
     h += '<div class="lk-card">';
     if (area) h += '<div class="lk-area">' + area + '</div>';
-    h += '<div class="lk-pair">';
-    h += '<div class="lk-half">' + aSp + '<span class="lk-nm">' + aN + '</span>';
-    if (aL) h += '<span class="lk-lv">' + aL + '</span>';
-    h += '</div>';
-    h += '<span class="lk-div">\u25c8</span>';
-    h += '<div class="lk-half r">';
-    if (bL) h += '<span class="lk-lv">' + bL + '</span>';
-    h += '<span class="lk-nm">' + bN + '</span>' + bSp;
-    h += '</div></div></div>';
+    h += '<div class="lk-pair"><div class="lk-half">' + aSp + '<span class="lk-nm">' + aN + '</span></div><span class="lk-div">\u25c8</span><div class="lk-half r"><span class="lk-nm">' + bN + '</span>' + bSp + '</div></div></div>';
   });
-  // ── Dead pairs — compact list, no sprites ───────────────────────────────
   if (dead.length) {
     h += '<div class="lk-dead-hdr">\u2015\u2015 ' + dead.length + ' DEAD \u2015\u2015</div>';
     dead.forEach(function(lnk) {
       var aN = escHtml(lnk.a_nickname || lnk.a_species_name || '\u2014');
       var bN = escHtml(lnk.b_nickname || lnk.b_species_name || '\u2014');
-      h += '<div class="lk-dead-row">';
-      h += '<span class="lk-dead-x">\u2717</span>';
-      h += '<span class="lk-dead-nm">' + aN + '</span>';
-      h += '<span class="lk-dead-sep">\u25c8</span>';
-      h += '<span class="lk-dead-nm r">' + bN + '</span>';
-      h += '</div>';
+      h += '<div class="lk-dead-row"><span class="lk-dead-x">\u2717</span><span class="lk-dead-nm">' + aN + '</span><span class="lk-dead-sep">\u25c8</span><span class="lk-dead-nm r">' + bN + '</span></div>';
     });
   }
   h += '</div>';
@@ -864,15 +848,21 @@ function render(d) {
 
 _STREAM_EVENTS_JS = r"""
 function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+var _filterTypes = (new URLSearchParams(window.location.search).get('filter')||'').split(',').filter(Boolean);
+var _eventsStateKey = null;
 function render(d) {
   var events = d.recent_events || [];
-  var nameA = escHtml((d.players.a && d.players.a.trainer_name) || 'A');
-  var nameB = escHtml((d.players.b && d.players.b.trainer_name) || 'B');
-  var typeMap = {capture:'ec',faint:'ef',whiteout:'ew',no_catch:'en',area_enter:'ea',
-                 linked:'el',dead_zone:'ed',violation:'ev',key_change:'ek',force_faint:'ef',hello:'eh'};
+  var nameA = escHtml((d.players && d.players.a && d.players.a.trainer_name) || 'A');
+  var nameB = escHtml((d.players && d.players.b && d.players.b.trainer_name) || 'B');
+  var typeMap = {capture:'ec',faint:'ef',whiteout:'ew',no_catch:'en',area_enter:'ea',linked:'el',dead_zone:'ed',violation:'ev',key_change:'ek',force_faint:'ef',hello:'eh',shiny:'es',memorialize:'em',party_to_box:'ep',box_to_party:'ep',reroll:'er'};
+  if (_filterTypes.length) { events = events.filter(function(ev){ return _filterTypes.indexOf(ev.type) >= 0; }); }
+  events = events.slice(0, 16);
+  var stateKey = JSON.stringify(events.map(function(ev){return [ev.ts,ev.player,ev.type,ev.text];})) + '|' + nameA + '|' + nameB;
+  if (stateKey === _eventsStateKey) return;
+  _eventsStateKey = stateKey;
   var h = '<div class="wtitle">EVENTS</div><div class="e-list">';
   if (!events.length) { h += '<div style="opacity:.4;font-size:.9em">No events yet</div>'; }
-  events.slice(0, 16).forEach(function(ev) {
+  events.forEach(function(ev) {
     var ts = '';
     if (ev.ts) {
       var dt = new Date(ev.ts);
@@ -884,11 +874,7 @@ function render(d) {
     }
     var who = ev.player === 'a' ? nameA : nameB;
     var cls = typeMap[ev.type] || '';
-    h += '<div class="e-row">';
-    h += '<span class="e-ts">'  + escHtml(ts) + '</span>';
-    h += '<span class="e-who">' + who + '</span>';
-    h += '<span class="e-msg ' + cls + '">' + escHtml(ev.text || ev.type || '') + '</span>';
-    h += '</div>';
+    h += '<div class="e-row"><span class="e-ts">' + escHtml(ts) + '</span><span class="e-who">' + who + '</span><span class="e-msg ' + cls + '">' + escHtml(ev.text || ev.type || '') + '</span></div>';
   });
   h += '</div>';
   document.getElementById('root').innerHTML = h;
@@ -994,6 +980,7 @@ function areaLabel(id){
   if (id.indexOf('_bonus_') === 0) return '\u2736 Bonus Pair';
   return id.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
 }
+var _speed = Math.min(3, Math.max(0.25, parseFloat(new URLSearchParams(window.location.search).get('speed')||'1')||1));
 var _memStateKey = null;
 function render(d) {
   var kf = (d.killfeed || []).slice();
@@ -1002,33 +989,15 @@ function render(d) {
   if (stateKey === _memStateKey) return;
   _memStateKey = stateKey;
   var h = '<div class="wtitle">IN MEMORIAM \xb7 '+kf.length+'</div>';
-  if (!kf.length) {
-    h += '<div style="opacity:.4;padding-top:.5em;font-size:.9em">No losses yet</div>';
-    document.getElementById('root').innerHTML = h;
-    return;
-  }
+  if (!kf.length) { h += '<div style="opacity:.4;padding-top:.5em;font-size:.9em">No losses yet</div>'; document.getElementById('root').innerHTML = h; return; }
   var listHtml = '';
   kf.forEach(function(k) {
     var aN = escHtml(k.a_nickname||k.a_species_name||'\u2014');
     var bN = escHtml(k.b_nickname||k.b_species_name||'\u2014');
-    var aL = k.a_level ? 'Lv\u00a0'+k.a_level : '';
-    var bL = k.b_level ? 'Lv\u00a0'+k.b_level : '';
     var aSp = k.a_sprite_html||(k.a_species?spriteTag(k.a_species):'');
     var bSp = k.b_sprite_html||(k.b_species?spriteTag(k.b_species):'');
     var area = escHtml(k.area_display||areaLabel(k.area_id));
-    listHtml += '<div class="lk-row ld">';
-    listHtml += aSp;
-    listHtml += '<div class="lk-half"><span class="lk-nm">'+aN+'</span>';
-    if(aL) listHtml += '<span class="lk-lv">'+aL+'</span>';
-    listHtml += '</div>';
-    listHtml += '<span class="lk-div">\u271D</span>';
-    listHtml += '<div class="lk-half r">';
-    if(bL) listHtml += '<span class="lk-lv">'+bL+'</span>';
-    listHtml += '<span class="lk-nm">'+bN+'</span>';
-    listHtml += '</div>';
-    listHtml += bSp;
-    if(area) listHtml += '<span style="font-size:.65em;opacity:.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:6em">'+area+'</span>';
-    listHtml += '</div>';
+    listHtml += '<div class="lk-row ld">' + aSp + '<div class="lk-half"><span class="lk-nm">'+aN+'</span></div><span class="lk-div">\u271D</span><div class="lk-half r"><span class="lk-nm">'+bN+'</span></div>' + bSp + (area ? '<span style="font-size:.65em;opacity:.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:6em">'+area+'</span>' : '') + '</div>';
   });
   var doubled = listHtml + listHtml;
   h += '<div class="mem-scroll-mask" id="mem-mask"><div class="lk-list" id="mem-list">'+doubled+'</div></div>';
@@ -1036,22 +1005,21 @@ function render(d) {
   processSprites();
   var mask = document.getElementById('mem-mask');
   var list = document.getElementById('mem-list');
-  if (list && mask && list.scrollHeight > mask.clientHeight * 2) {
-    var dur = Math.max(6, kf.length * 3);
-    list.style.animation = 'memorial-scroll '+dur+'s linear infinite';
-  }
+  if (list && mask && list.scrollHeight > mask.clientHeight * 2) { list.style.animation = 'memorial-scroll ' + (Math.max(6, kf.length * 3) / _speed) + 's linear infinite'; }
 }
 """
 
 _STREAM_TICKER_JS = r"""
 function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+var _speed = Math.min(3, Math.max(0.25, parseFloat(new URLSearchParams(window.location.search).get('speed')||'1')||1));
+var _filterTypes = (new URLSearchParams(window.location.search).get('filter')||'').split(',').filter(Boolean);
 var _tickerStateKey = null;
 function render(d) {
   var events = (d.recent_events || []).slice(0, 16);
   var nameA = escHtml((d.players.a && d.players.a.trainer_name) || 'A');
   var nameB = escHtml((d.players.b && d.players.b.trainer_name) || 'B');
-  var typeMap = {capture:'ec',faint:'ef',whiteout:'ew',no_catch:'en',area_enter:'ea',
-                 linked:'el',dead_zone:'ed',violation:'ev',key_change:'ek',force_faint:'ef',hello:'eh'};
+  var typeMap = {capture:'ec',faint:'ef',whiteout:'ew',no_catch:'en',area_enter:'ea',linked:'el',dead_zone:'ed',violation:'ev',key_change:'ek',force_faint:'ef',hello:'eh',shiny:'es',memorialize:'em',party_to_box:'ep',box_to_party:'ep',reroll:'er'};
+  if (_filterTypes.length) { events = events.filter(function(ev){ return _filterTypes.indexOf(ev.type) >= 0; }); }
   var stateKey = JSON.stringify(events.map(function(e){return [e.ts,e.type,e.text];}));
   if (stateKey === _tickerStateKey) return;
   _tickerStateKey = stateKey;
@@ -1068,16 +1036,10 @@ function render(d) {
     }
     var who = ev.player === 'a' ? nameA : nameB;
     var cls = typeMap[ev.type] || '';
-    pills += '<div class="t-pill">';
-    pills += '<span class="e-ts">'+escHtml(ts)+'</span>';
-    pills += '<span class="e-who">'+who+'</span>';
-    pills += '<span class="e-msg '+cls+'">'+escHtml(ev.text||ev.type||'')+'</span>';
-    pills += '</div>';
-    pills += '<span style="opacity:.2;align-self:center;flex-shrink:0">\u25c8</span>';
+    pills += '<div class="t-pill"><span class="e-ts">'+escHtml(ts)+'</span><span class="e-who">'+who+'</span><span class="e-msg '+cls+'">'+escHtml(ev.text||ev.type||'')+'</span></div><span style="opacity:.2;align-self:center;flex-shrink:0">\u25c8</span>';
   });
   var track = pills + pills;
-  var h = '<div class="ticker-mask"><div class="ticker-track">'+track+'</div></div>';
-  document.getElementById('root').innerHTML = h;
+  document.getElementById('root').innerHTML = '<div class="ticker-mask"><div class="ticker-track" style="animation-duration:'+(40/_speed)+'s">'+track+'</div></div>';
 }
 """
 
@@ -1165,85 +1127,37 @@ function render(d) {
 
 _STREAM_SHINY_ALERT_JS = r"""
 function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+var _testMode = new URLSearchParams(window.location.search).get('test') === '1';
 var _seenShinies = null;
 var _shinyStateKey = null;
 function _getAllShinies(d) {
   var seen = {};
-  (d.links || []).forEach(function(l) {
-    if (l.a_shiny && l.a_key) seen[l.a_key] = l;
-    if (l.b_shiny && l.b_key) seen[l.b_key] = l;
-  });
+  (d.links || []).forEach(function(l) { if (l.a_shiny && l.a_key) seen[l.a_key] = l; if (l.b_shiny && l.b_key) seen[l.b_key] = l; });
   var bk = d.bonus_keys || {};
   (bk.a || []).forEach(function(k){ if (!seen[k]) seen[k] = {a_key:k,a_shiny:true,a_species:0}; });
   (bk.b || []).forEach(function(k){ if (!seen[k]) seen[k] = {b_key:k,b_shiny:true,b_species:0}; });
   return seen;
 }
 function _fireAlert(shinySide) {
-  var wrap = document.createElement('div');
-  wrap.className = 'shiny-backdrop';
-  wrap.id = 'shiny-alert-wrap';
-  var sparkleWrap = document.createElement('div');
-  sparkleWrap.className = 'shiny-sparkle-wrap';
-  for (var i = 0; i < 18; i++) {
-    var sp = document.createElement('div');
-    sp.className = 'shiny-sparkle';
-    sp.style.cssText = 'left:'+Math.random()*100+'%;top:'+Math.random()*100+'%;'
-      +'--dur:'+(0.8+Math.random()*1.2)+'s;--delay:'+(Math.random()*1.5)+'s';
-    sparkleWrap.appendChild(sp);
-  }
+  var wrap = document.createElement('div'); wrap.className = 'shiny-backdrop'; wrap.id = 'shiny-alert-wrap';
+  var sparkleWrap = document.createElement('div'); sparkleWrap.className = 'shiny-sparkle-wrap';
+  for (var i = 0; i < 18; i++) { var sp = document.createElement('div'); sp.className = 'shiny-sparkle'; sp.style.cssText = 'left:'+Math.random()*100+'%;top:'+Math.random()*100+'%;'+'--dur:'+(0.8+Math.random()*1.2)+'s;--delay:'+(Math.random()*1.5)+'s'; sparkleWrap.appendChild(sp); }
   wrap.appendChild(sparkleWrap);
-  var txt = document.createElement('div');
-  txt.className = 'shiny-text';
-  txt.innerHTML = '\u2728 SHINY ENCOUNTER \u2728<div class="shiny-sub">'
-    + escHtml(shinySide.nickname||shinySide.species_name||'') + '</div>';
-  var sprites = document.createElement('div');
-  sprites.className = 'shiny-sprites';
+  var txt = document.createElement('div'); txt.className = 'shiny-text'; txt.innerHTML = '\u2728 SHINY ENCOUNTER \u2728<div class="shiny-sub">' + escHtml(shinySide.nickname||shinySide.species_name||'') + '</div>';
+  var sprites = document.createElement('div'); sprites.className = 'shiny-sprites';
   var spA = shinySide.sprite_html || (shinySide.species_id ? '<img class="shiny-sprite" crossorigin="anonymous" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/shiny/'+shinySide.species_id+'.png" onerror="this.src=\'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/'+shinySide.species_id+'.png\'" alt="">' : '');
-  if (spA) {
-    var imgEl = document.createElement('div');
-    imgEl.className = 'shiny-sprite';
-    imgEl.innerHTML = spA;
-    sprites.appendChild(imgEl);
-  }
-  if (shinySide.partner_sprite_html || shinySide.partner_species_id) {
-    var pSp = shinySide.partner_sprite_html || '<img class="shiny-sprite" crossorigin="anonymous" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/'+shinySide.partner_species_id+'.png" alt="">';
-    var pEl = document.createElement('div');
-    pEl.className = 'shiny-sprite';
-    pEl.innerHTML = pSp;
-    sprites.appendChild(pEl);
-  }
-  wrap.appendChild(sprites);
-  wrap.appendChild(txt);
-  document.body.appendChild(wrap);
-  processSprites();
-  function cleanup() {
-    if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
-  }
-  setTimeout(cleanup, 7000);
+  if (spA) { var imgEl = document.createElement('div'); imgEl.className = 'shiny-sprite'; imgEl.innerHTML = spA; sprites.appendChild(imgEl); }
+  if (shinySide.partner_sprite_html || shinySide.partner_species_id) { var pSp = shinySide.partner_sprite_html || '<img class="shiny-sprite" crossorigin="anonymous" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/'+shinySide.partner_species_id+'.png" alt="">'; var pEl = document.createElement('div'); pEl.className = 'shiny-sprite'; pEl.innerHTML = pSp; sprites.appendChild(pEl); }
+  wrap.appendChild(sprites); wrap.appendChild(txt); document.body.appendChild(wrap); processSprites(); setTimeout(function(){ if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 7000);
 }
 function render(d) {
   document.getElementById('root').innerHTML = '';
-  var current = _getAllShinies(d);
-  var currentKeys = Object.keys(current).sort();
-  var stateKey = currentKeys.join('|');
-  if (stateKey === _shinyStateKey) return;
-  _shinyStateKey = stateKey;
-  if (_seenShinies === null) {
-    _seenShinies = {};
-    currentKeys.forEach(function(k){ _seenShinies[k] = true; });
-    return;
-  }
+  var current = _getAllShinies(d); var currentKeys = Object.keys(current).sort(); var stateKey = currentKeys.join('|');
+  if (stateKey === _shinyStateKey) return; _shinyStateKey = stateKey;
+  if (_seenShinies === null) { _seenShinies = {}; currentKeys.forEach(function(k){ _seenShinies[k] = true; }); if (_testMode) { _fireAlert({species_id:25, nickname:'PIKACHU', species_name:'Pikachu', sprite_html:'', partner_sprite_html:'', partner_species_id:132}); } return; }
   currentKeys.forEach(function(k) {
-    if (_seenShinies[k]) return;
-    _seenShinies[k] = true;
-    if (document.getElementById('shiny-alert-wrap')) return;
-    var entry = current[k];
-    var isA = entry.a_key === k;
-    var sid = isA ? (entry.a_species||0) : (entry.b_species||0);
-    var nick = isA ? (entry.a_nickname||entry.a_species_name||'') : (entry.b_nickname||entry.b_species_name||'');
-    var spHtml = isA ? (entry.a_sprite_html||'') : (entry.b_sprite_html||'');
-    var pSid = isA ? (entry.b_species||0) : (entry.a_species||0);
-    var pSpHtml = isA ? (entry.b_sprite_html||'') : (entry.a_sprite_html||'');
+    if (_seenShinies[k]) return; _seenShinies[k] = true; if (document.getElementById('shiny-alert-wrap')) return;
+    var entry = current[k]; var isA = entry.a_key === k; var sid = isA ? (entry.a_species||0) : (entry.b_species||0); var nick = isA ? (entry.a_nickname||entry.a_species_name||'') : (entry.b_nickname||entry.b_species_name||''); var spHtml = isA ? (entry.a_sprite_html||'') : (entry.b_sprite_html||''); var pSid = isA ? (entry.b_species||0) : (entry.a_species||0); var pSpHtml = isA ? (entry.b_sprite_html||'') : (entry.a_sprite_html||'');
     _fireAlert({sprite_html:spHtml, species_id:sid, nickname:nick, species_name:nick, partner_sprite_html:pSpHtml, partner_species_id:pSid});
   });
 }
@@ -1272,19 +1186,26 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
     .overlay-info { padding: 12px 14px; }
     .overlay-info h3 { color: #eee; margin: 0 0 2px 0; font-size: .95em; }
     .size-hint { font-family: 'Press Start 2P','Courier New',monospace; font-size: .6em; color: #f8d030; opacity: .7; margin-bottom: 6px; }
-    .overlay-info p { color: #888; font-size: .83em; margin: 0 0 8px 0; }
-    .url-row { display: flex; gap: 6px; align-items: center; }
+    .overlay-info p { color: #888; font-size: .83em; margin: 0; }
+    .card-cfg  { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+    .cfg-row   { display: flex; align-items: flex-start; gap: 6px; }
+    .cfg-lbl   { font-size: .72em; color: #666; min-width: 52px; padding-top: 3px; flex-shrink: 0; }
+    .cfg-pills { display: flex; flex-wrap: wrap; gap: 4px; flex: 1; }
+    .cpill     { background: #1a1c28; color: #999; border: 1px solid #363850; border-radius: 3px; padding: 2px 7px; font-size: .77em; cursor: pointer; white-space: nowrap; font-family: inherit; }
+    .cpill:hover { color: #eee; border-color: #666; }
+    .cpill.active { color: #f8d030; border-color: #f8d030; background: rgba(248,208,48,.08); }
+    .cpill.factive { color: #3de85a; border-color: #3de85a; background: rgba(61,232,90,.08); }
+    .url-row { display: flex; gap: 6px; align-items: center; margin-top: 8px; }
     .url-box { flex: 1; background: #1a1c28; color: #6af; border: 1px solid #363850; border-radius: 4px; padding: 4px 8px; font-family: monospace; font-size: .82em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .copy-btn { background: #1a2a3a; color: #6af; border: 1px solid #6af; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 0.82em; white-space: nowrap; }
     .copy-btn:hover { background: #2a3a4a; }
-    .theme-toggle { margin-top: 8px; display: flex; gap: 6px; }
-    .theme-toggle a { color: #aaa; font-size: 0.8em; text-decoration: none; padding: 2px 8px; border: 1px solid #444; border-radius: 3px; }
-    .theme-toggle a:hover { color: #fff; border-color: #666; }
+    .open-btn  { background: #1a3a1a; color: #4f4; border: 1px solid #4f4; border-radius: 4px; padding: 4px 10px; font-size: .82em; text-decoration: none; white-space: nowrap; flex-shrink: 0; }
+    .open-btn:hover { background: #2a4a2a; }
   </style>
 </head>
 <body>
   <h1>&#9670; Soul Link Overlays</h1>
-  <p class="sub">OBS Browser Source-ready overlays — designed for Soul Link Nuzlocke streams.</p>
+  <p class="sub">OBS Browser Source-ready overlays &mdash; designed for Soul Link Nuzlocke streams.</p>
   <div class="obs-tip"><b>OBS setup:</b> Add a Browser Source &rarr; paste the URL &rarr; set width/height per the recommended size. The default Browser Source Custom CSS already handles transparent backgrounds &mdash; no extra settings needed.</div>
   <div class="grid">
     <div class="overlay-card">
@@ -1293,8 +1214,8 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <h3>Player A Party</h3>
         <div class="size-hint">Vertical: 280 &times; 380 &nbsp;|&nbsp; Horizontal: 580 &times; 130 &nbsp;|&nbsp; Strip: 1200 &times; 150</div>
         <p>Sprites, HP bars, and levels. Designed for a tall side panel alongside the game.</p>
-        <div class="url-row"><span class="url-box" id="u1">/stream/party-a</span><button class="copy-btn" onclick="copyUrl('u1')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/party-a?theme=dark" target="_blank">Dark</a><a href="/stream/party-a?theme=light" target="_blank">Light</a><a href="/stream/party-a?theme=transparent" target="_blank">Transparent</a><a href="/stream/party-a?layout=h&theme=dark" target="_blank">Horizontal</a><a href="/stream/party-a?layout=thin-h&theme=dark" target="_blank">Thin strip</a><a href="/stream/party-a?layout=thin-v&theme=dark" target="_blank">Thin sidebar</a></div>
+        <div class="card-cfg" data-id="u1" data-base="/stream/party-a"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div><div class="cfg-row"><span class="cfg-lbl">Layout</span><div class="cfg-pills"><button class="cpill active" data-param="layout" data-val="" onclick="cpillClick(this)">Default</button><button class="cpill" data-param="layout" data-val="h" onclick="cpillClick(this)">Horizontal</button><button class="cpill" data-param="layout" data-val="thin-h" onclick="cpillClick(this)">Thin strip</button><button class="cpill" data-param="layout" data-val="thin-v" onclick="cpillClick(this)">Thin sidebar</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="u1">/stream/party-a</span><button class="copy-btn" onclick="copyUrl('u1')">Copy</button><a class="open-btn" id="u1-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
@@ -1303,8 +1224,8 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <h3>Player B Party</h3>
         <div class="size-hint">Vertical: 280 &times; 380 &nbsp;|&nbsp; Horizontal: 580 &times; 130 &nbsp;|&nbsp; Strip: 1200 &times; 150</div>
         <p>Sprites, HP bars, and levels. Designed for a tall side panel alongside the game.</p>
-        <div class="url-row"><span class="url-box" id="u2">/stream/party-b</span><button class="copy-btn" onclick="copyUrl('u2')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/party-b?theme=dark" target="_blank">Dark</a><a href="/stream/party-b?theme=light" target="_blank">Light</a><a href="/stream/party-b?theme=transparent" target="_blank">Transparent</a><a href="/stream/party-b?layout=h&theme=dark" target="_blank">Horizontal</a><a href="/stream/party-b?layout=thin-h&theme=dark" target="_blank">Thin strip</a><a href="/stream/party-b?layout=thin-v&theme=dark" target="_blank">Thin sidebar</a></div>
+        <div class="card-cfg" data-id="u2" data-base="/stream/party-b"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div><div class="cfg-row"><span class="cfg-lbl">Layout</span><div class="cfg-pills"><button class="cpill active" data-param="layout" data-val="" onclick="cpillClick(this)">Default</button><button class="cpill" data-param="layout" data-val="h" onclick="cpillClick(this)">Horizontal</button><button class="cpill" data-param="layout" data-val="thin-h" onclick="cpillClick(this)">Thin strip</button><button class="cpill" data-param="layout" data-val="thin-v" onclick="cpillClick(this)">Thin sidebar</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="u2">/stream/party-b</span><button class="copy-btn" onclick="copyUrl('u2')">Copy</button><a class="open-btn" id="u2-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
@@ -1313,18 +1234,18 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <h3>Linked Pairs</h3>
         <div class="size-hint">Vertical: 420 &times; 340 &nbsp;|&nbsp; Horizontal: 900 &times; 200 &nbsp;|&nbsp; Strip: 1400 &times; 180</div>
         <p>Alive pairs as full cards (area name + sprites). Dead pairs as a compact dimmed list below.</p>
-        <div class="url-row"><span class="url-box" id="u3">/stream/links</span><button class="copy-btn" onclick="copyUrl('u3')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/links?theme=dark" target="_blank">Dark</a><a href="/stream/links?theme=light" target="_blank">Light</a><a href="/stream/links?theme=transparent" target="_blank">Transparent</a><a href="/stream/links?layout=h&theme=dark" target="_blank">Horizontal</a><a href="/stream/links?layout=thin-h&theme=dark" target="_blank">Thin strip</a><a href="/stream/links?layout=thin-v&theme=dark" target="_blank">Thin sidebar</a></div>
+        <div class="card-cfg" data-id="u3" data-base="/stream/links"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div><div class="cfg-row"><span class="cfg-lbl">Layout</span><div class="cfg-pills"><button class="cpill active" data-param="layout" data-val="" onclick="cpillClick(this)">Default</button><button class="cpill" data-param="layout" data-val="h" onclick="cpillClick(this)">Horizontal</button><button class="cpill" data-param="layout" data-val="thin-h" onclick="cpillClick(this)">Thin strip</button><button class="cpill" data-param="layout" data-val="thin-v" onclick="cpillClick(this)">Thin sidebar</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="u3">/stream/links</span><button class="copy-btn" onclick="copyUrl('u3')">Copy</button><a class="open-btn" id="u3-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
       <div class="preview"><iframe src="/stream/linked-party?theme=dark"></iframe></div>
       <div class="overlay-info">
-        <h3>Linked Party ★</h3>
+        <h3>Linked Party &#9733;</h3>
         <div class="size-hint">Standard: 500 &times; 320 &nbsp;|&nbsp; Bottom strip: 1400 &times; 150 &nbsp;|&nbsp; Sidebar: 160 &times; 500</div>
         <p>Shows only linked pairs where <b>both mons are currently in party</b> &mdash; HP bars, levels, area. The primary overlay for active streaming.</p>
-        <div class="url-row"><span class="url-box" id="u3b">/stream/linked-party</span><button class="copy-btn" onclick="copyUrl('u3b')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/linked-party?theme=dark" target="_blank">Dark</a><a href="/stream/linked-party?theme=light" target="_blank">Light</a><a href="/stream/linked-party?theme=transparent" target="_blank">Transparent</a><a href="/stream/linked-party?layout=thin-h&theme=dark" target="_blank">Thin strip</a><a href="/stream/linked-party?layout=thin-v&theme=dark" target="_blank">Thin sidebar</a></div>
+        <div class="card-cfg" data-id="u3b" data-base="/stream/linked-party"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div><div class="cfg-row"><span class="cfg-lbl">Layout</span><div class="cfg-pills"><button class="cpill active" data-param="layout" data-val="" onclick="cpillClick(this)">Default</button><button class="cpill" data-param="layout" data-val="thin-h" onclick="cpillClick(this)">Thin strip</button><button class="cpill" data-param="layout" data-val="thin-v" onclick="cpillClick(this)">Thin sidebar</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="u3b">/stream/linked-party</span><button class="copy-btn" onclick="copyUrl('u3b')">Copy</button><a class="open-btn" id="u3b-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
@@ -1333,8 +1254,8 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <h3>Boxed Links</h3>
         <div class="size-hint">Sidebar: 200 &times; 600 &nbsp;|&nbsp; Standard: 420 &times; 340</div>
         <p>Alive linked pairs where one or both mons are currently in the PC box.</p>
-        <div class="url-row"><span class="url-box" id="u3c">/stream/boxed-links</span><button class="copy-btn" onclick="copyUrl('u3c')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/boxed-links?theme=dark" target="_blank">Dark</a><a href="/stream/boxed-links?theme=light" target="_blank">Light</a><a href="/stream/boxed-links?theme=transparent" target="_blank">Transparent</a><a href="/stream/boxed-links?layout=thin-v&theme=dark" target="_blank">Thin sidebar</a></div>
+        <div class="card-cfg" data-id="u3c" data-base="/stream/boxed-links"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div><div class="cfg-row"><span class="cfg-lbl">Layout</span><div class="cfg-pills"><button class="cpill active" data-param="layout" data-val="" onclick="cpillClick(this)">Default</button><button class="cpill" data-param="layout" data-val="thin-v" onclick="cpillClick(this)">Thin sidebar</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="u3c">/stream/boxed-links</span><button class="copy-btn" onclick="copyUrl('u3c')">Copy</button><a class="open-btn" id="u3c-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
@@ -1343,8 +1264,8 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <h3>Death Counter</h3>
         <div class="size-hint">Recommended: 280 &times; 160</div>
         <p>Alive / dead pair counts with glow. Scales to any size &mdash; great for a corner badge.</p>
-        <div class="url-row"><span class="url-box" id="u4">/stream/deaths</span><button class="copy-btn" onclick="copyUrl('u4')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/deaths?theme=dark" target="_blank">Dark</a><a href="/stream/deaths?theme=light" target="_blank">Light</a><a href="/stream/deaths?theme=transparent" target="_blank">Transparent</a></div>
+        <div class="card-cfg" data-id="u4" data-base="/stream/deaths"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="u4">/stream/deaths</span><button class="copy-btn" onclick="copyUrl('u4')">Copy</button><a class="open-btn" id="u4-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
@@ -1353,12 +1274,9 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <h3>Attempts Counter</h3>
         <div class="size-hint">Recommended: 200 &times; 160</div>
         <p>Manual run attempt counter with glow. Set the number below or via the API.</p>
-        <div class="url-row"><span class="url-box" id="u4b">/stream/attempts</span><button class="copy-btn" onclick="copyUrl('u4b')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/attempts?theme=dark" target="_blank">Dark</a><a href="/stream/attempts?theme=light" target="_blank">Light</a><a href="/stream/attempts?theme=transparent" target="_blank">Transparent</a></div>
-        <div style="margin-top:8px;display:flex;gap:6px;align-items:center">
-          <input type="number" id="attempts-input" min="0" value="0" style="width:60px;background:#1a1c28;color:#f8d030;border:1px solid #363850;border-radius:4px;padding:4px 8px;font-family:'Press Start 2P',monospace;font-size:.7em;text-align:center">
-          <button class="copy-btn" onclick="setAttempts()">Set</button>
-        </div>
+        <div class="card-cfg" data-id="u4b" data-base="/stream/attempts"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="u4b">/stream/attempts</span><button class="copy-btn" onclick="copyUrl('u4b')">Copy</button><a class="open-btn" id="u4b-open" href="#" target="_blank">Open &#8599;</a></div>
+        <div style="margin-top:8px;display:flex;gap:6px;align-items:center"><input type="number" id="attempts-input" min="0" value="0" style="width:60px;background:#1a1c28;color:#f8d030;border:1px solid #363850;border-radius:4px;padding:4px 8px;font-family:'Press Start 2P',monospace;font-size:.7em;text-align:center"><button class="copy-btn" onclick="setAttempts()">Set</button></div>
       </div>
     </div>
     <div class="overlay-card">
@@ -1367,8 +1285,8 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <h3>Area Tracker</h3>
         <div class="size-hint">Vertical: 220 &times; 160 &nbsp;|&nbsp; Horizontal: 380 &times; 80</div>
         <p>Linked / dead zone / pending area counts at a glance.</p>
-        <div class="url-row"><span class="url-box" id="u5">/stream/areas</span><button class="copy-btn" onclick="copyUrl('u5')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/areas?theme=dark" target="_blank">Dark</a><a href="/stream/areas?theme=light" target="_blank">Light</a><a href="/stream/areas?theme=transparent" target="_blank">Transparent</a><a href="/stream/areas?layout=h&theme=dark" target="_blank">Horizontal</a></div>
+        <div class="card-cfg" data-id="u5" data-base="/stream/areas"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div><div class="cfg-row"><span class="cfg-lbl">Layout</span><div class="cfg-pills"><button class="cpill active" data-param="layout" data-val="" onclick="cpillClick(this)">Default</button><button class="cpill" data-param="layout" data-val="h" onclick="cpillClick(this)">Horizontal</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="u5">/stream/areas</span><button class="copy-btn" onclick="copyUrl('u5')">Copy</button><a class="open-btn" id="u5-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
@@ -1377,28 +1295,28 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <h3>Event Feed</h3>
         <div class="size-hint">Recommended: 400 &times; 280</div>
         <p>Live feed of captures, faints, area entries, and soul link events.</p>
-        <div class="url-row"><span class="url-box" id="u6">/stream/events</span><button class="copy-btn" onclick="copyUrl('u6')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/events?theme=dark" target="_blank">Dark</a><a href="/stream/events?theme=light" target="_blank">Light</a><a href="/stream/events?theme=transparent" target="_blank">Transparent</a></div>
+        <div class="card-cfg" data-id="u6" data-base="/stream/events"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div><div class="cfg-row"><span class="cfg-lbl">Events</span><div class="cfg-pills"><button class="cpill factive" data-filter="capture" onclick="filterPillClick(this)">capture</button><button class="cpill factive" data-filter="shiny" onclick="filterPillClick(this)">shiny</button><button class="cpill factive" data-filter="faint" onclick="filterPillClick(this)">faint</button><button class="cpill factive" data-filter="force_faint" onclick="filterPillClick(this)">force_faint</button><button class="cpill factive" data-filter="whiteout" onclick="filterPillClick(this)">whiteout</button><button class="cpill factive" data-filter="area_enter" onclick="filterPillClick(this)">area_enter</button><button class="cpill factive" data-filter="no_catch" onclick="filterPillClick(this)">no_catch</button><button class="cpill factive" data-filter="linked" onclick="filterPillClick(this)">linked</button><button class="cpill factive" data-filter="dead_zone" onclick="filterPillClick(this)">dead_zone</button><button class="cpill factive" data-filter="violation" onclick="filterPillClick(this)">violation</button><button class="cpill factive" data-filter="memorialize" onclick="filterPillClick(this)">memorialize</button><button class="cpill factive" data-filter="key_change" onclick="filterPillClick(this)">key_change</button><button class="cpill factive" data-filter="hello" onclick="filterPillClick(this)">hello</button><button class="cpill factive" data-filter="reroll" onclick="filterPillClick(this)">reroll</button><button class="cpill" data-filter="party_to_box" onclick="filterPillClick(this)">party_to_box</button><button class="cpill" data-filter="box_to_party" onclick="filterPillClick(this)">box_to_party</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="u6">/stream/events</span><button class="copy-btn" onclick="copyUrl('u6')">Copy</button><a class="open-btn" id="u6-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
       <div class="preview"><iframe src="/stream/badges-a?theme=dark"></iframe></div>
       <div class="overlay-info">
-        <h3>Gym Badges — Player A</h3>
+        <h3>Gym Badges &mdash; Player A</h3>
         <div class="size-hint">Recommended: 340 &times; 80</div>
         <p>Player A's earned gym badges. Unearned badges are dimmed.</p>
-        <div class="url-row"><span class="url-box" id="u7">/stream/badges-a</span><button class="copy-btn" onclick="copyUrl('u7')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/badges-a?theme=dark" target="_blank">Dark</a><a href="/stream/badges-a?theme=light" target="_blank">Light</a><a href="/stream/badges-a?theme=transparent" target="_blank">Transparent</a></div>
+        <div class="card-cfg" data-id="u7" data-base="/stream/badges-a"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="u7">/stream/badges-a</span><button class="copy-btn" onclick="copyUrl('u7')">Copy</button><a class="open-btn" id="u7-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
       <div class="preview"><iframe src="/stream/badges-b?theme=dark"></iframe></div>
       <div class="overlay-info">
-        <h3>Gym Badges — Player B</h3>
+        <h3>Gym Badges &mdash; Player B</h3>
         <div class="size-hint">Recommended: 340 &times; 80</div>
         <p>Player B's earned gym badges. Unearned badges are dimmed.</p>
-        <div class="url-row"><span class="url-box" id="u8">/stream/badges-b</span><button class="copy-btn" onclick="copyUrl('u8')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/badges-b?theme=dark" target="_blank">Dark</a><a href="/stream/badges-b?theme=light" target="_blank">Light</a><a href="/stream/badges-b?theme=transparent" target="_blank">Transparent</a></div>
+        <div class="card-cfg" data-id="u8" data-base="/stream/badges-b"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="u8">/stream/badges-b</span><button class="copy-btn" onclick="copyUrl('u8')">Copy</button><a class="open-btn" id="u8-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
@@ -1407,8 +1325,8 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <h3>Encounter Tracker</h3>
         <div class="size-hint">Standard: 340 &times; 200 &nbsp;|&nbsp; Wide: 560 &times; 120</div>
         <p>Total encounters, shiny count, and last linked encounter pair.</p>
-        <div class="url-row"><span class="url-box" id="ue1">/stream/encounters</span><button class="copy-btn" onclick="copyUrl('ue1')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/encounters?theme=dark" target="_blank">Dark</a><a href="/stream/encounters?theme=light" target="_blank">Light</a><a href="/stream/encounters?theme=transparent" target="_blank">Transparent</a></div>
+        <div class="card-cfg" data-id="ue1" data-base="/stream/encounters"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="ue1">/stream/encounters</span><button class="copy-btn" onclick="copyUrl('ue1')">Copy</button><a class="open-btn" id="ue1-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
@@ -1417,8 +1335,8 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <h3>Memorial Scroll</h3>
         <div class="size-hint">Sidebar: 320 &times; 600</div>
         <p>Chronological scrolling list of all dead pairs with sprites. Auto-scrolls when content exceeds height.</p>
-        <div class="url-row"><span class="url-box" id="um1">/stream/stream-memorial</span><button class="copy-btn" onclick="copyUrl('um1')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/stream-memorial?theme=dark" target="_blank">Dark</a><a href="/stream/stream-memorial?theme=light" target="_blank">Light</a><a href="/stream/stream-memorial?theme=transparent" target="_blank">Transparent</a></div>
+        <div class="card-cfg" data-id="um1" data-base="/stream/stream-memorial"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div><div class="cfg-row"><span class="cfg-lbl">Speed</span><div class="cfg-pills"><button class="cpill" data-param="speed" data-val="0.5" onclick="cpillClick(this)">0.5&times;</button><button class="cpill active" data-param="speed" data-val="1" onclick="cpillClick(this)">1&times;</button><button class="cpill" data-param="speed" data-val="1.5" onclick="cpillClick(this)">1.5&times;</button><button class="cpill" data-param="speed" data-val="2" onclick="cpillClick(this)">2&times;</button><button class="cpill" data-param="speed" data-val="3" onclick="cpillClick(this)">3&times;</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="um1">/stream/stream-memorial</span><button class="copy-btn" onclick="copyUrl('um1')">Copy</button><a class="open-btn" id="um1-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
@@ -1427,28 +1345,28 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <h3>Event Ticker</h3>
         <div class="size-hint">Bottom strip: 1920 &times; 60</div>
         <p>Horizontally scrolling marquee of recent events. Place at the bottom of the stream.</p>
-        <div class="url-row"><span class="url-box" id="ut1">/stream/ticker</span><button class="copy-btn" onclick="copyUrl('ut1')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/ticker?theme=dark" target="_blank">Dark</a><a href="/stream/ticker?theme=light" target="_blank">Light</a><a href="/stream/ticker?theme=transparent" target="_blank">Transparent</a></div>
+        <div class="card-cfg" data-id="ut1" data-base="/stream/ticker"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div><div class="cfg-row"><span class="cfg-lbl">Speed</span><div class="cfg-pills"><button class="cpill" data-param="speed" data-val="0.5" onclick="cpillClick(this)">0.5&times;</button><button class="cpill active" data-param="speed" data-val="1" onclick="cpillClick(this)">1&times;</button><button class="cpill" data-param="speed" data-val="1.5" onclick="cpillClick(this)">1.5&times;</button><button class="cpill" data-param="speed" data-val="2" onclick="cpillClick(this)">2&times;</button><button class="cpill" data-param="speed" data-val="3" onclick="cpillClick(this)">3&times;</button></div></div><div class="cfg-row"><span class="cfg-lbl">Events</span><div class="cfg-pills"><button class="cpill factive" data-filter="capture" onclick="filterPillClick(this)">capture</button><button class="cpill factive" data-filter="shiny" onclick="filterPillClick(this)">shiny</button><button class="cpill factive" data-filter="faint" onclick="filterPillClick(this)">faint</button><button class="cpill factive" data-filter="force_faint" onclick="filterPillClick(this)">force_faint</button><button class="cpill factive" data-filter="whiteout" onclick="filterPillClick(this)">whiteout</button><button class="cpill factive" data-filter="area_enter" onclick="filterPillClick(this)">area_enter</button><button class="cpill factive" data-filter="no_catch" onclick="filterPillClick(this)">no_catch</button><button class="cpill factive" data-filter="linked" onclick="filterPillClick(this)">linked</button><button class="cpill factive" data-filter="dead_zone" onclick="filterPillClick(this)">dead_zone</button><button class="cpill factive" data-filter="violation" onclick="filterPillClick(this)">violation</button><button class="cpill factive" data-filter="memorialize" onclick="filterPillClick(this)">memorialize</button><button class="cpill factive" data-filter="key_change" onclick="filterPillClick(this)">key_change</button><button class="cpill factive" data-filter="hello" onclick="filterPillClick(this)">hello</button><button class="cpill factive" data-filter="reroll" onclick="filterPillClick(this)">reroll</button><button class="cpill" data-filter="party_to_box" onclick="filterPillClick(this)">party_to_box</button><button class="cpill" data-filter="box_to_party" onclick="filterPillClick(this)">box_to_party</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="ut1">/stream/ticker</span><button class="copy-btn" onclick="copyUrl('ut1')">Copy</button><a class="open-btn" id="ut1-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
       <div class="preview"><iframe src="/stream/focus-a?theme=dark"></iframe></div>
       <div class="overlay-info">
-        <h3>Focus Card — Player A</h3>
+        <h3>Focus Card &mdash; Player A</h3>
         <div class="size-hint">Recommended: 340 &times; 380</div>
         <p>Active battle mon hero card: sprite, HP, status, stat stages, and 4-move grid with PP bars.</p>
-        <div class="url-row"><span class="url-box" id="uf1">/stream/focus-a</span><button class="copy-btn" onclick="copyUrl('uf1')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/focus-a?theme=dark" target="_blank">Dark</a><a href="/stream/focus-a?theme=light" target="_blank">Light</a><a href="/stream/focus-a?theme=transparent" target="_blank">Transparent</a></div>
+        <div class="card-cfg" data-id="uf1" data-base="/stream/focus-a"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="uf1">/stream/focus-a</span><button class="copy-btn" onclick="copyUrl('uf1')">Copy</button><a class="open-btn" id="uf1-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
       <div class="preview"><iframe src="/stream/focus-b?theme=dark"></iframe></div>
       <div class="overlay-info">
-        <h3>Focus Card — Player B</h3>
+        <h3>Focus Card &mdash; Player B</h3>
         <div class="size-hint">Recommended: 340 &times; 380</div>
         <p>Active battle mon hero card: sprite, HP, status, stat stages, and 4-move grid with PP bars.</p>
-        <div class="url-row"><span class="url-box" id="uf2">/stream/focus-b</span><button class="copy-btn" onclick="copyUrl('uf2')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/focus-b?theme=dark" target="_blank">Dark</a><a href="/stream/focus-b?theme=light" target="_blank">Light</a><a href="/stream/focus-b?theme=transparent" target="_blank">Transparent</a></div>
+        <div class="card-cfg" data-id="uf2" data-base="/stream/focus-b"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="uf2">/stream/focus-b</span><button class="copy-btn" onclick="copyUrl('uf2')">Copy</button><a class="open-btn" id="uf2-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
@@ -1457,39 +1375,25 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <h3>Shiny Alert &#10024;</h3>
         <div class="size-hint">Full canvas: 1920 &times; 1080 &mdash; use transparent theme</div>
         <p>Full-screen celebration animation when a shiny is encountered. Add above all other sources. Normally invisible.</p>
-        <div class="url-row"><span class="url-box" id="us1">/stream/shiny-alert</span><button class="copy-btn" onclick="copyUrl('us1')">Copy</button></div>
-        <div class="theme-toggle"><a href="/stream/shiny-alert?theme=transparent" target="_blank">Transparent (recommended)</a><a href="/stream/shiny-alert?theme=dark" target="_blank">Dark</a></div>
+        <div class="card-cfg" data-id="us1" data-base="/stream/shiny-alert"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button><button class="cpill" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="us1">/stream/shiny-alert</span><button class="copy-btn" onclick="copyUrl('us1')">Copy</button><a class="open-btn" id="us1-open" href="#" target="_blank">Open &#8599;</a></div>
+        <div style="margin-top:8px"><a class="open-btn" href="/stream/shiny-alert?test=1&theme=transparent" target="_blank">&#128276; Test Alert</a></div>
       </div>
     </div>
+
   </div>
   <script>
-    function copyUrl(id) {
-      var el = document.getElementById(id);
-      var url = window.location.origin + el.textContent;
-      navigator.clipboard.writeText(url).then(function() {
-        el.style.color = '#4f4';
-        setTimeout(function(){el.style.color='';}, 1500);
-      });
-    }
-    function setAttempts() {
-      var inp = document.getElementById('attempts-input');
-      var val = parseInt(inp.value, 10);
-      if (isNaN(val) || val < 0) return;
-      fetch('/api/attempts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({count:val})})
-        .then(function(r){return r.json();})
-        .then(function(j){ if(j.ok) { inp.style.borderColor='#4f4'; setTimeout(function(){inp.style.borderColor='';},1500); }});
-    }
-    // Load current attempts count on page load
-    fetch('/api/status').then(function(r){return r.json();}).then(function(d){
-      var inp = document.getElementById('attempts-input');
-      if (inp && typeof d.attempts_count === 'number') inp.value = d.attempts_count;
-    });
+    var _cardState = {};
+    function cpillClick(btn) { var cfg = btn.closest('.card-cfg'); var id = cfg.dataset.id; btn.closest('.cfg-pills').querySelectorAll('.cpill:not([data-filter])').forEach(function(b){ b.classList.remove('active'); }); btn.classList.add('active'); _cardState[id].params[btn.dataset.param] = btn.dataset.val; refreshUrl(id); }
+    function filterPillClick(btn) { var cfg = btn.closest('.card-cfg'); var id = cfg.dataset.id; var pills = cfg.querySelectorAll('.cpill[data-filter]'); var active = Array.from(pills).filter(function(b){ return b.classList.contains('factive'); }); if (active.length === 1 && btn.classList.contains('factive')) return; btn.classList.toggle('factive'); refreshUrl(id); }
+    function refreshUrl(id) { var cfg = document.querySelector('.card-cfg[data-id="'+id+'"]'); if (!cfg) return; var base = cfg.dataset.base; var st = _cardState[id]; var q = []; if (st.params.theme && st.params.theme !== '') q.push('theme=' + st.params.theme); if (st.params.layout && st.params.layout !== '') q.push('layout=' + st.params.layout); if (st.params.speed && st.params.speed !== '') q.push('speed=' + st.params.speed); var filterPills = Array.from(cfg.querySelectorAll('.cpill[data-filter]')); if (filterPills.length > 0) { var activeFilters = filterPills.filter(function(b){ return b.classList.contains('factive'); }); if (activeFilters.length < filterPills.length && activeFilters.length > 0) { q.push('filter=' + activeFilters.map(function(b){ return b.dataset.filter; }).join(',')); } } var url = base + (q.length ? '?' + q.join('&') : ''); var box = document.getElementById(id); if (box) box.textContent = url; var openBtn = document.getElementById(id + '-open'); if (openBtn) openBtn.href = url; }
+    function initCards() { document.querySelectorAll('.card-cfg').forEach(function(cfg) { var id = cfg.dataset.id; _cardState[id] = { params: {} }; cfg.querySelectorAll('.cpill:not([data-filter]).active').forEach(function(b) { if (b.dataset.param) _cardState[id].params[b.dataset.param] = b.dataset.val; }); refreshUrl(id); }); }
+    function copyUrl(id) { var el = document.getElementById(id); var url = window.location.origin + el.textContent; navigator.clipboard.writeText(url).then(function() { el.style.color = '#4f4'; setTimeout(function(){ el.style.color = ''; }, 1500); }); }
+    function setAttempts() { var inp = document.getElementById('attempts-input'); var val = parseInt(inp.value, 10); if (isNaN(val) || val < 0) return; fetch('/api/attempts', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({count:val})}).then(function(r){ return r.json(); }).then(function(j){ if(j.ok) { inp.style.borderColor='#4f4'; setTimeout(function(){ inp.style.borderColor=''; }, 1500); }}); }
+    document.addEventListener('DOMContentLoaded', function() { initCards(); fetch('/api/status').then(function(r){ return r.json(); }).then(function(d) { var inp = document.getElementById('attempts-input'); if (inp && typeof d.attempts_count === 'number') inp.value = d.attempts_count; }); });
   </script>
 </body>
 </html>"""
-
-
-# ── Memorial Wall page ─────────────────────────────────────────────────────────
 
 _MEMORIAL_HTML = r"""<!DOCTYPE html>
 <html>

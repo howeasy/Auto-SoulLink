@@ -611,6 +611,10 @@ _STATUS_HTML = """<!DOCTYPE html>
     .event-type-key_change {{ color: #c8f; }}
     .event-type-violation {{ color: #f80; font-weight: bold; }}
     .event-type-reroll {{ color: #8cf; }}
+    .event-type-shiny {{ color: #f8d030; font-weight: bold; }}
+    .event-type-memorialize {{ color: #aaa; opacity: .35; }}
+    .event-type-party_to_box {{ color: #60a8f8; }}
+    .event-type-box_to_party {{ color: #60a8f8; }}
     /* ── Move table (collapsible) ───────────────────────────── */
     .move-row td {{ padding: 0 !important; }}
     .move-row details {{ margin: 0; padding-left: 8px; max-width: 80%; }}
@@ -2463,6 +2467,25 @@ class SLinkServer:
             if dirty:
                 self.state._save()
 
+    def _mon_display_name(self, player_id: str, key: str) -> str:
+        if not key:
+            return "?"
+        detail = self.party_details.get(player_id, {}).get(key, {})
+        if detail.get("nickname"):
+            return detail["nickname"]
+        cached = self._mon_cache.get(key, {})
+        if cached.get("nickname"):
+            return cached["nickname"]
+        species_id = detail.get("species_id", 0) or cached.get("species_id", 0)
+        if species_id:
+            return self.adapter.species_name(species_id)
+        link_entry = self.state._key_index.get(key)
+        if link_entry:
+            for mon in (link_entry.a, link_entry.b):
+                if mon and mon.key == key:
+                    return mon.nickname or self.adapter.species_name(mon.species) or key[:8]
+        return key[:8]
+
     def _load_events(self):
         """Load persisted recent events from events.json on startup."""
         try:
@@ -2499,6 +2522,11 @@ class SLinkServer:
         event = msg.get("event", "unknown")
         # Snapshot area state before the event so we can detect outcome transitions.
         _pre_area_state = self.state.area_states.get(msg.get("area_id", ""))
+        _pre_memorial_status = None
+        if event == "memorialize_done":
+            _pre_memorial_link = self.state._key_index.get(msg.get("key", ""))
+            if _pre_memorial_link:
+                _pre_memorial_status = getattr(_pre_memorial_link.status, "value", _pre_memorial_link.status)
 
         # Block all events from a player whose identity was rejected.
         # Only a hello with correct identity can clear the error.
@@ -2816,6 +2844,37 @@ class SLinkServer:
                     self._log_event(_partner, "force_faint",
                                     f"⚡ {_p_nick} force fainted!",
                                     _area_id, _p_mon.key)
+
+        if event == "capture":
+            _cap_key = msg.get("key", "")
+            if _cap_key and _cap_key in self.state.bonus_keys.get(player_id, set()):
+                _nick = self._mon_display_name(player_id, _cap_key)
+                self._log_event(player_id, "shiny",
+                                f"✨ Shiny {_nick}!", _area_id, _cap_key)
+
+        if event == "party_to_box":
+            _box_key = msg.get("key", "")
+            if _box_key:
+                _nick = self._mon_display_name(player_id, _box_key)
+                self._log_event(player_id, "party_to_box",
+                                f"📦 {_nick} deposited", "", _box_key)
+
+        if event == "box_to_party":
+            _box_key = msg.get("key", "")
+            if _box_key:
+                _nick = self._mon_display_name(player_id, _box_key)
+                self._log_event(player_id, "box_to_party",
+                                f"↑ {_nick} retrieved", "", _box_key)
+
+        if event == "memorialize_done":
+            _mem_key = msg.get("key", "")
+            _link = self.state._key_index.get(_mem_key) if _mem_key else None
+            _post_status = getattr(getattr(_link, "status", None), "value", getattr(_link, "status", None))
+            if _link and _post_status == "memorial" and _pre_memorial_status != "memorial":
+                _a_name = (_link.a.nickname or self.adapter.species_name(_link.a.species)) if _link.a else "?"
+                _b_name = (_link.b.nickname or self.adapter.species_name(_link.b.species)) if _link.b else "?"
+                self._log_event(player_id, "memorialize",
+                                f"⚰ {_a_name} × {_b_name} laid to rest", _link.area_id, _mem_key)
 
         if event == "key_change":
             _new_key = msg.get("new_key", "")
