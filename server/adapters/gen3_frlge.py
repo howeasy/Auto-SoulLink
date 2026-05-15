@@ -413,6 +413,29 @@ class Gen3Adapter(GameAdapter):
             return None
         return _RR_ENCOUNTERS.get(area_id) or None
 
+    def sprite_src(self, species_id: int) -> str:
+        """Return the best sprite URL for this species.
+
+        For RR runs: funnotbun URL when available (correct CFRU/custom forms).
+        Fallback: PokeAPI with CFRU→NatDex conversion.
+        """
+        if not species_id or species_id < 1:
+            return ""
+        if self._is_rr:
+            rr_file = _RR_SPRITE_FILE.get(species_id)
+            if rr_file and species_id not in _TILED_SPRITE_BLOCKLIST:
+                return (f"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io"
+                        f"/main/data/species/frontspr/{rr_file}.png")
+        form_pid = CFRU_FORM_SPRITE_ID.get(species_id)
+        if form_pid:
+            return (f"https://raw.githubusercontent.com/PokeAPI/sprites/master"
+                    f"/sprites/pokemon/{form_pid}.png")
+        nat = _to_national(species_id)
+        if nat and 1 <= nat <= 1025:
+            return (f"https://raw.githubusercontent.com/PokeAPI/sprites/master"
+                    f"/sprites/pokemon/{nat}.png")
+        return ""
+
     def ability_name(self, ability_id: int) -> str:
         return _ability_name(ability_id, self._is_rr)
 

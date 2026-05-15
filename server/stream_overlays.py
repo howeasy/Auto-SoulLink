@@ -282,13 +282,13 @@ _STREAM_SHARED_CSS = """
   /* ─── Focus card overlay ──────────────────────────────────────────────── */
   .moves-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(3px,.6vmin,7px);margin-top:clamp(4px,.7vmin,9px)}
   .move-tile{background:rgba(255,255,255,.05);border-radius:4px;padding:clamp(3px,.55vmin,7px);display:flex;flex-direction:column;gap:clamp(2px,.35vmin,4px);min-width:0}
-  .move-name{font-family:var(--px);font-size:clamp(6px,1.1vmin,9px);-webkit-font-smoothing:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .move-name{font-family:var(--px);font-size:clamp(9px,1.5vmin,12px);-webkit-font-smoothing:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .pp-row{display:flex;align-items:center;gap:clamp(2px,.4vmin,5px);margin-top:clamp(1px,.2vmin,2px)}
   .pp-trk{flex:1;height:clamp(3px,.5vmin,5px);background:rgba(128,128,128,.18);border-radius:99px;overflow:hidden}
   .pp-fill{height:100%;border-radius:99px;transition:width .3s}
   .pp-h{background:var(--c-alive)}.pp-m{background:var(--c-gold)}.pp-l{background:var(--c-dead)}
   .pp-num{font-size:.72em;opacity:.55;flex-shrink:0;white-space:nowrap}
-  .move-type{display:inline-block;font-family:var(--px);font-size:clamp(5px,.9vmin,7px);-webkit-font-smoothing:none;padding:1px 4px;border-radius:2px;color:#fff;letter-spacing:.04em;white-space:nowrap;align-self:flex-start;margin-top:clamp(1px,.2vmin,2px)}
+  .move-type{display:inline-block;font-family:var(--px);font-size:clamp(7px,1.1vmin,9px);-webkit-font-smoothing:none;padding:1px 4px;border-radius:2px;color:#fff;letter-spacing:.04em;white-space:nowrap;align-self:flex-start;margin-top:clamp(1px,.2vmin,2px)}
   /* Gen 3 type colors by type_name */
   .mt-Normal{background:#a8a878;color:#fff}.mt-Fighting{background:#c03028}.mt-Flying{background:#a890f0}
   .mt-Poison{background:#a040a0}.mt-Ground{background:#e0c068;color:#111}.mt-Rock{background:#b8a038}
@@ -299,12 +299,58 @@ _STREAM_SHARED_CSS = """
   .mt-unknown,.mt-{background:#666}
   .focus-not-active{display:flex;flex:1;align-items:center;justify-content:center;opacity:.3;font-size:.85em;letter-spacing:.08em}
 
+  /* ─── Focus overlay body class — fills available space at any small size ─── */
+  body.ov-focus #root{padding:clamp(5px,1vmin,14px);gap:clamp(3px,.6vmin,8px)}
+  /* Bigger sprite so it proportionally fills the card */
+  body.ov-focus .mc .mon-sprite{width:clamp(54px,15vmin,80px)!important;aspect-ratio:1!important}
+  /* Moves grid expands to fill all remaining vertical space */
+  body.ov-focus .moves-grid{flex:1;min-height:0;grid-template-rows:1fr 1fr;margin-top:0}
+  /* Distribute move-name / type badge / pp-row evenly within each tile's height */
+  body.ov-focus .move-tile{justify-content:space-evenly;gap:0}
+  /* Scale pp bar and number up to match the tile breathing room */
+  body.ov-focus .pp-trk{height:clamp(5px,.8vmin,8px)}
+  body.ov-focus .pp-num{font-size:clamp(10px,1.4vmin,13px);opacity:.7}
+
   /* ─── Encounters overlay ──────────────────────────────────────────────── */
   .enc-last{margin-top:clamp(5px,.9vmin,11px);display:flex;align-items:center;gap:clamp(4px,.8vmin,10px);padding:clamp(4px,.7vmin,8px) clamp(7px,1.1vmin,13px);background:var(--c-card);border-radius:4px;border-left:3px solid var(--c-gold);min-width:0}
   .enc-nms{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
   .enc-nm{font-size:.88em;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .enc-lv{font-size:.75em;opacity:.5;white-space:nowrap}
   .shiny-star{color:var(--c-gold);margin-left:3px}
+
+  /* ─── Area Encounter overlay ──────────────────────────────────────────── */
+  .ae-badge{display:inline-block;font-family:var(--px);font-size:clamp(7px,1.2vmin,10px);-webkit-font-smoothing:none;padding:clamp(2px,.4vmin,4px) clamp(6px,1vmin,11px);border-radius:3px;letter-spacing:.05em;margin-bottom:clamp(3px,.5vmin,7px);flex-shrink:0}
+  .ae-s-alive{background:rgba(61,232,90,.14);color:var(--c-alive);border:1px solid rgba(61,232,90,.35)}
+  .ae-s-dead{background:rgba(240,56,56,.14);color:var(--c-dead);border:1px solid rgba(240,56,56,.35)}
+  .ae-s-pend{background:rgba(248,160,32,.14);color:var(--c-pend);border:1px solid rgba(248,160,32,.35)}
+  .ae-s-dim{background:rgba(128,128,128,.1);color:var(--c-dim);border:1px solid rgba(128,128,128,.2)}
+  .ae-pair{display:flex;align-items:center;gap:clamp(5px,.9vmin,11px);flex:1;min-height:0;padding:clamp(4px,.7vmin,9px) clamp(7px,1.2vmin,14px);background:var(--c-card);border-radius:4px;border-left:3px solid rgba(128,128,128,.18)}
+  .ae-pair.ae-pair-alive{border-left-color:var(--c-alive)}
+  .ae-pair.ae-pair-dead{border-left-color:var(--c-dead)}
+  .ae-pair.ae-pair-pend{border-left-color:var(--c-pend)}
+  .ae-side{flex:1;min-width:0;display:flex;align-items:center;gap:clamp(4px,.7vmin,9px);overflow:hidden}
+  .ae-side.r{flex-direction:row-reverse}
+  .ae-info{min-width:0;display:flex;flex-direction:column;gap:clamp(1px,.2vmin,3px)}
+  .ae-side.r .ae-info{text-align:right;align-items:flex-end}
+  .ae-name{font-size:.9em;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .ae-lv{font-size:.75em;opacity:.55;white-space:nowrap}
+  .ae-tag{font-family:var(--px);font-size:clamp(7px,1.1vmin,9px);-webkit-font-smoothing:none;padding:1px 5px;border-radius:3px;white-space:nowrap;flex-shrink:0}
+  .ae-tag-caught{background:rgba(61,232,90,.15);color:var(--c-alive)}
+  .ae-tag-dead{background:rgba(240,56,56,.15);color:var(--c-dead)}
+  .ae-tag-waiting{color:var(--c-dim)}
+
+  /* ─── Encounter Table overlay ─────────────────────────────────────────── */
+  @keyframes enc-scroll{from{transform:translateY(0)}to{transform:translateY(-50%)}}
+  .et-area{font-family:var(--px);font-size:clamp(11px,2vmin,15px);-webkit-font-smoothing:none;color:var(--c-gold);opacity:.75;letter-spacing:.04em;margin-bottom:clamp(3px,.5vmin,6px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+  .et-scroll{flex:1;min-height:0;overflow:hidden}
+  .et-methods{display:flex;flex-direction:column;gap:clamp(7px,1.2vmin,13px)}
+  .et-method-hdr{font-family:var(--px);font-size:clamp(11px,2vmin,15px);-webkit-font-smoothing:none;color:var(--c-pend);letter-spacing:.05em;padding-bottom:clamp(2px,.4vmin,5px);border-bottom:1px solid var(--c-sep);margin-bottom:clamp(2px,.4vmin,5px);flex-shrink:0}
+  .et-list{display:flex;flex-direction:column;gap:0}
+  .et-entry{display:flex;align-items:center;gap:clamp(5px,1vmin,9px);padding:clamp(2px,.3vmin,4px) 0}
+  .et-sprite{width:clamp(30px,5.5vmin,42px);height:clamp(30px,5.5vmin,42px);image-rendering:pixelated;image-rendering:crisp-edges;flex-shrink:0;object-fit:contain}
+  .et-name{flex:1;min-width:0;font-size:clamp(13px,2.4vmin,18px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .et-rate{font-family:var(--px);font-size:clamp(11px,1.9vmin,14px);-webkit-font-smoothing:none;white-space:nowrap;min-width:2.8em;text-align:right;flex-shrink:0}
+  .et-lv{font-size:clamp(11px,1.9vmin,14px);opacity:.42;white-space:nowrap;flex-shrink:0}
 
 """
 
@@ -1011,6 +1057,13 @@ function render(d) {
 
 _STREAM_TICKER_JS = r"""
 function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+// The ticker is a horizontal strip that must always fill the full viewport width.
+// Override autoFit so that uniform scale-down (which would visually narrow the strip)
+// is never applied — just clear any stale transform from a previous render cycle.
+function autoFit() {
+  var root = document.getElementById('root');
+  if (root) { root.style.transform = ''; root.style.transformOrigin = ''; }
+}
 var _speed = Math.min(3, Math.max(0.25, parseFloat(new URLSearchParams(window.location.search).get('speed')||'1')||1));
 var _filterTypes = (new URLSearchParams(window.location.search).get('filter')||'').split(',').filter(Boolean);
 var _tickerStateKey = null;
@@ -1038,13 +1091,42 @@ function render(d) {
     var cls = typeMap[ev.type] || '';
     pills += '<div class="t-pill"><span class="e-ts">'+escHtml(ts)+'</span><span class="e-who">'+who+'</span><span class="e-msg '+cls+'">'+escHtml(ev.text||ev.type||'')+'</span></div><span style="opacity:.2;align-self:center;flex-shrink:0">\u25c8</span>';
   });
-  var track = pills + pills;
-  document.getElementById('root').innerHTML = '<div class="ticker-mask"><div class="ticker-track" style="animation-duration:'+(40/_speed)+'s">'+track+'</div></div>';
+  var baseDur = 40 / _speed;
+  document.getElementById('root').innerHTML = '<div class="ticker-mask"><div class="ticker-track" id="ttrack" style="animation-duration:'+baseDur+'s">'+(pills+pills)+'</div></div>';
+  if (!pills) return;
+  // After layout: ensure one content copy is at least as wide as the viewport so
+  // the scrolling track covers the full strip with no blank gap between repetitions.
+  // The @keyframes translate -50% of total track width (= one copy width), so
+  // one copy must be >= viewport width for uninterrupted coverage.
+  requestAnimationFrame(function() {
+    var t = document.getElementById('ttrack');
+    var m = t && t.parentElement;
+    if (!t || !m) return;
+    var oneCopy = t.scrollWidth / 2;
+    if (oneCopy <= 0) return;
+    var vw = m.clientWidth || window.innerWidth;
+    // Number of copies needed so that oneCopy × reps >= vw
+    var reps = Math.ceil(vw / oneCopy) + 1;
+    if (reps <= 2) return; // already wide enough
+    var multi = '';
+    for (var i = 0; i < reps; i++) multi += pills;
+    t.innerHTML = multi + multi; // doubled for seamless loop
+    t.style.animationDuration = (reps * baseDur) + 's';
+  });
 }
 """
 
 _STREAM_FOCUS_JS = r"""
 function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+function init() {
+  var params = new URLSearchParams(window.location.search);
+  var theme = params.get('theme') || 'dark';
+  var layout = params.get('layout') || '';
+  var layoutCls = layout === 'h' ? ' lh' : layout === 'thin-h' ? ' lth' : layout === 'thin-v' ? ' ltv' : '';
+  document.body.className = 'theme-' + theme + layoutCls + ' ov-focus';
+  doRefresh();
+  setInterval(doRefresh, 2000);
+}
 var _focusStateKey = null;
 var PLAYER_ID = '%PLAYER%';
 function render(d) {
@@ -1160,6 +1242,215 @@ function render(d) {
     var entry = current[k]; var isA = entry.a_key === k; var sid = isA ? (entry.a_species||0) : (entry.b_species||0); var nick = isA ? (entry.a_nickname||entry.a_species_name||'') : (entry.b_nickname||entry.b_species_name||''); var spHtml = isA ? (entry.a_sprite_html||'') : (entry.b_sprite_html||''); var pSid = isA ? (entry.b_species||0) : (entry.a_species||0); var pSpHtml = isA ? (entry.b_sprite_html||'') : (entry.a_sprite_html||'');
     _fireAlert({sprite_html:spHtml, species_id:sid, nickname:nick, species_name:nick, partner_sprite_html:pSpHtml, partner_species_id:pSid});
   });
+}
+"""
+
+_STREAM_AREA_ENCOUNTER_JS = r"""
+function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+function areaLabel(id){
+  if (!id) return '';
+  if (id.indexOf('_bonus_') === 0) return '\u2736 Bonus Pair';
+  return id.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
+}
+var _aeKey = null;
+
+function _pickArea(d) {
+  var pA = d.players.a || {}, pB = d.players.b || {};
+  var aId = pA.current_area_id || '';
+  var bId = pB.current_area_id || '';
+  if (!aId && !bId) return '';
+  if (aId === bId) return aId;
+  var pend = d.pending_captures || {};
+  var aHasPend = !!(pend[aId] && (pend[aId].a || pend[aId].b));
+  var bHasPend = !!(pend[bId] && (pend[bId].a || pend[bId].b));
+  if (aHasPend && !bHasPend) return aId;
+  if (bHasPend && !aHasPend) return bId;
+  return aId || bId;
+}
+
+function _getAreaDisp(d, areaId) {
+  var pA = d.players.a || {}, pB = d.players.b || {};
+  if ((pA.current_area_id || pA.current_area) === areaId && pA.current_area_display) return pA.current_area_display;
+  if ((pB.current_area_id || pB.current_area) === areaId && pB.current_area_display) return pB.current_area_display;
+  return areaLabel(areaId);
+}
+
+function render(d) {
+  var areaId = _pickArea(d);
+  var links = d.links || [];
+  var link = null;
+  for (var i = 0; i < links.length; i++) { if (links[i].area_id === areaId) { link = links[i]; break; } }
+  var pend = ((d.pending_captures || {})[areaId]) || {};
+  var stateVal = ((d.area_states || {})[areaId]) || (link ? link.status : 'unseen');
+  var sk = areaId + '|' + stateVal + '|' + JSON.stringify(pend) + '|' + (link ? link.status + (link.a_key||'') + (link.b_key||'') : '');
+  if (sk === _aeKey) return;
+  _aeKey = sk;
+
+  var root = document.getElementById('root');
+  if (!areaId) {
+    root.innerHTML = '<div class="wtitle">AREA</div><div class="focus-not-active">Waiting for data\u2026</div>';
+    return;
+  }
+
+  var pA = d.players.a || {}, pB = d.players.b || {};
+  var nameA = escHtml(pA.trainer_name || 'A');
+  var nameB = escHtml(pB.trainer_name || 'B');
+  var dispName = escHtml(_getAreaDisp(d, areaId));
+
+  /* Badge */
+  var badgeCls, badgeTxt, pairBorder;
+  if (link) {
+    if (link.status === 'alive') {
+      badgeCls = 'ae-s-alive'; badgeTxt = '\u2713 Linked'; pairBorder = 'ae-pair-alive';
+    } else if (link.status === 'dead' || link.status === 'memorial') {
+      badgeCls = 'ae-s-dead'; badgeTxt = '\u2620 Dead'; pairBorder = 'ae-pair-dead';
+    } else {
+      badgeCls = 'ae-s-pend'; badgeTxt = stateVal; pairBorder = 'ae-pair-pend';
+    }
+  } else if (stateVal === 'dead_zone') {
+    badgeCls = 'ae-s-dead'; badgeTxt = '\u2620 Dead Zone'; pairBorder = 'ae-pair-dead';
+  } else if (stateVal === 'pending_b') {
+    badgeCls = 'ae-s-pend'; badgeTxt = '\u25cf Waiting for ' + nameB; pairBorder = 'ae-pair-pend';
+  } else if (stateVal === 'pending_a') {
+    badgeCls = 'ae-s-pend'; badgeTxt = '\u25cf Waiting for ' + nameA; pairBorder = 'ae-pair-pend';
+  } else if (stateVal === 'pending_both') {
+    badgeCls = 'ae-s-pend'; badgeTxt = '\u25cf Both Entered'; pairBorder = 'ae-pair-pend';
+  } else if (stateVal === 'linked') {
+    badgeCls = 'ae-s-alive'; badgeTxt = '\u2713 Linked'; pairBorder = 'ae-pair-alive';
+  } else {
+    badgeCls = 'ae-s-dim'; badgeTxt = 'Unseen'; pairBorder = '';
+  }
+
+  function buildSide(side, isRight) {
+    var mon = link ? {
+      key: link[side+'_key'], nick: link[side+'_nickname'],
+      sp: link[side+'_species'], spHtml: link[side+'_sprite_html'],
+      lv: link[side+'_level'], shiny: link[side+'_shiny'],
+      spName: link[side+'_species_name']
+    } : null;
+    var pc = pend[side] || null;
+    var isDead = link && (link.status === 'dead' || link.status === 'memorial');
+    var out = '<div class="ae-side' + (isRight ? ' r' : '') + '">';
+    if (mon && mon.key) {
+      out += mon.spHtml || (mon.sp ? spriteTag(mon.sp) : '');
+      out += '<div class="ae-info">';
+      out += '<div class="ae-name">' + escHtml(mon.nick || mon.spName || mon.key.substring(0,8));
+      if (mon.shiny) out += ' <span class="shiny-star">\u2728</span>';
+      out += '</div>';
+      if (mon.lv) out += '<div class="ae-lv">Lv\u00a0' + mon.lv + '</div>';
+      if (isDead) out += '<span class="ae-tag ae-tag-dead">\u2620 Fainted</span>';
+      out += '</div>';
+    } else if (pc) {
+      out += (pc.species ? spriteTag(pc.species) : '');
+      out += '<div class="ae-info">';
+      out += '<div class="ae-name">' + escHtml(pc.nickname || pc.species_name || '\u2014') + '</div>';
+      if (pc.level) out += '<div class="ae-lv">Lv\u00a0' + pc.level + '</div>';
+      out += '<span class="ae-tag ae-tag-caught">\u25c6 Caught</span>';
+      out += '</div>';
+    } else if (stateVal === 'dead_zone') {
+      out += '<div class="ae-info"><div class="ae-name" style="opacity:.3">\u2014</div>'
+           + '<span class="ae-tag ae-tag-dead">Dead Zone</span></div>';
+    } else {
+      var entered = (side === 'a' && (stateVal === 'pending_b' || stateVal === 'pending_both'))
+                 || (side === 'b' && (stateVal === 'pending_a' || stateVal === 'pending_both'));
+      out += '<div class="ae-info">';
+      if (entered) {
+        out += '<div class="ae-name" style="opacity:.55">Entered</div>'
+             + '<span class="ae-tag ae-tag-waiting">\u25ef No catch</span>';
+      } else {
+        out += '<div class="ae-name" style="opacity:.28">\u2014</div>';
+      }
+      out += '</div>';
+    }
+    out += '</div>';
+    return out;
+  }
+
+  var h = '<div class="wtitle">AREA \xb7 ' + dispName + '</div>';
+  h += '<span class="ae-badge ' + badgeCls + '">' + badgeTxt + '</span>';
+  h += '<div class="ae-pair ' + pairBorder + '">';
+  h += buildSide('a', false);
+  h += '<span class="lk-div">\u25c8</span>';
+  h += buildSide('b', true);
+  h += '</div>';
+  root.innerHTML = h;
+  processSprites();
+}
+"""
+
+_STREAM_ENC_TABLE_JS = r"""
+function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+var PLAYER_ID = '%PLAYER%';
+var _speed = Math.min(3, Math.max(0.25, parseFloat(new URLSearchParams(window.location.search).get('speed')||'1')||1));
+var _METHOD_ICONS = {'Day':'\u2600','Night':'\ud83c\udf19','Surfing':'\ud83c\udf0a','Rock Smash':'\ud83e\udea8','Old Rod':'\ud83c\udfa3\u00a0Old','Good Rod':'\ud83c\udfa3\u00a0Good','Super Rod':'\ud83c\udfa3\u00a0Super'};
+var _etKey = null;
+function render(d) {
+  var p = d.players[PLAYER_ID] || {};
+  var areaId = p.current_area_id || '';
+  if (areaId === _etKey) return;
+  _etKey = areaId;
+  var root = document.getElementById('root');
+  var playerLabel = escHtml(p.trainer_name || PLAYER_ID.toUpperCase());
+  var h = '<div class="wtitle">ENCOUNTERS \xb7 ' + playerLabel + '</div>';
+  var enc = p.encounter_table;
+  if (!enc || !Object.keys(enc).length) {
+    var areaDisp = escHtml(p.current_area_display || areaId.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();}) || '');
+    h += '<div class="focus-not-active">' + (areaId ? (areaDisp ? areaDisp + '<br>' : '') + 'No encounter data' : 'Waiting for data\u2026') + '</div>';
+    root.innerHTML = h;
+    return;
+  }
+  var areaDisp = escHtml(p.current_area_display || areaId.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();}));
+  h += '<div class="et-area">' + areaDisp + '</div>';
+  /* Build the methods block once, then double it for seamless autoscroll */
+  var methodsHtml = '';
+  var totalEntries = 0;
+  var methods = Object.keys(enc);
+  for (var mi = 0; mi < methods.length; mi++) {
+    var method = methods[mi];
+    var entries = enc[method];
+    if (!entries || !entries.length) continue;
+    var icon = _METHOD_ICONS[method] || '';
+    methodsHtml += '<div class="et-method">';
+    methodsHtml += '<div class="et-method-hdr">' + escHtml(icon ? icon + '\u00a0' + method : method) + '</div>';
+    methodsHtml += '<div class="et-list">';
+    for (var ei = 0; ei < entries.length; ei++) {
+      var e = entries[ei];
+      var sid = e.species_id || 0;
+      var name = escHtml(e.name || '?');
+      var rate = e.rate || 0;
+      var minLv = e.min_level || 0, maxLv = e.max_level || 0;
+      var lvTxt = minLv === maxLv ? 'lv' + minLv : 'lv' + minLv + '\u2013' + maxLv;
+      var hue = Math.min(rate * 2, 120);
+      var rateCol = 'hsl(' + hue + ',85%,58%)';
+      /* Build sprite from pre-computed sprite_src URL (CFRU/NatDex already resolved server-side) */
+      var spr;
+      if (e.sprite_src) {
+        spr = '<img class="mon-sprite et-sprite" crossorigin="anonymous" src="' + e.sprite_src
+            + '" onerror="this.style.display=\'none\'" alt="">';
+      } else {
+        spr = '<span class="et-sprite"></span>';
+      }
+      methodsHtml += '<div class="et-entry">' + spr
+         + '<span class="et-name">' + name + '</span>'
+         + '<span class="et-rate" style="color:' + rateCol + '">' + rate + '%</span>'
+         + '<span class="et-lv">(' + lvTxt + ')</span>'
+         + '</div>';
+      totalEntries++;
+    }
+    methodsHtml += '</div></div>';
+  }
+  h += '<div class="et-scroll" id="et-mask"><div class="et-methods" id="et-list">'
+     + methodsHtml + methodsHtml  /* doubled for seamless loop */
+     + '</div></div>';
+  root.innerHTML = h;
+  processSprites();
+  /* Start autoscroll only when content is taller than the visible area */
+  var mask = document.getElementById('et-mask');
+  var list = document.getElementById('et-list');
+  if (list && mask && list.scrollHeight > mask.clientHeight * 2) {
+    var dur = Math.max(8, totalEntries * 2.2) / _speed;
+    list.style.animation = 'enc-scroll ' + dur + 's linear infinite';
+  }
 }
 """
 
@@ -1367,6 +1658,36 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <p>Active battle mon hero card: sprite, HP, status, stat stages, and 4-move grid with PP bars.</p>
         <div class="card-cfg" data-id="uf2" data-base="/stream/focus-b"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
         <div class="url-row"><span class="url-box" id="uf2">/stream/focus-b</span><button class="copy-btn" onclick="copyUrl('uf2')">Copy</button><a class="open-btn" id="uf2-open" href="#" target="_blank">Open &#8599;</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/enc-table-a?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Wild Encounters &mdash; Player A</h3>
+        <div class="size-hint">Recommended: 280 &times; 320</div>
+        <p>Encounter rates for Player A's current area (Radical Red only). Shows each method — Walking, Surfing, Fishing — with species, rate %, and level range.</p>
+        <div class="card-cfg" data-id="uet1" data-base="/stream/enc-table-a"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div><div class="cfg-row"><span class="cfg-lbl">Speed</span><div class="cfg-pills"><button class="cpill" data-param="speed" data-val="0.5" onclick="cpillClick(this)">0.5&times;</button><button class="cpill active" data-param="speed" data-val="1" onclick="cpillClick(this)">1&times;</button><button class="cpill" data-param="speed" data-val="1.5" onclick="cpillClick(this)">1.5&times;</button><button class="cpill" data-param="speed" data-val="2" onclick="cpillClick(this)">2&times;</button><button class="cpill" data-param="speed" data-val="3" onclick="cpillClick(this)">3&times;</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="uet1">/stream/enc-table-a</span><button class="copy-btn" onclick="copyUrl('uet1')">Copy</button><a class="open-btn" id="uet1-open" href="#" target="_blank">Open &#8599;</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/enc-table-b?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Wild Encounters &mdash; Player B</h3>
+        <div class="size-hint">Recommended: 280 &times; 320</div>
+        <p>Encounter rates for Player B's current area (Radical Red only). Shows each method — Walking, Surfing, Fishing — with species, rate %, and level range.</p>
+        <div class="card-cfg" data-id="uet2" data-base="/stream/enc-table-b"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div><div class="cfg-row"><span class="cfg-lbl">Speed</span><div class="cfg-pills"><button class="cpill" data-param="speed" data-val="0.5" onclick="cpillClick(this)">0.5&times;</button><button class="cpill active" data-param="speed" data-val="1" onclick="cpillClick(this)">1&times;</button><button class="cpill" data-param="speed" data-val="1.5" onclick="cpillClick(this)">1.5&times;</button><button class="cpill" data-param="speed" data-val="2" onclick="cpillClick(this)">2&times;</button><button class="cpill" data-param="speed" data-val="3" onclick="cpillClick(this)">3&times;</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="uet2">/stream/enc-table-b</span><button class="copy-btn" onclick="copyUrl('uet2')">Copy</button><a class="open-btn" id="uet2-open" href="#" target="_blank">Open &#8599;</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/area-encounter?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Area Encounter</h3>
+        <div class="size-hint">Recommended: 380 &times; 160</div>
+        <p>Soul Link status for the current area: linked pair, pending captures, or dead zone. Auto-follows the most active area.</p>
+        <div class="card-cfg" data-id="uae1" data-base="/stream/area-encounter"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="uae1">/stream/area-encounter</span><button class="copy-btn" onclick="copyUrl('uae1')">Copy</button><a class="open-btn" id="uae1-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">

@@ -44,6 +44,8 @@ from server.stream_overlays import (
     _STREAM_TICKER_JS,
     _STREAM_FOCUS_JS,
     _STREAM_SHINY_ALERT_JS,
+    _STREAM_AREA_ENCOUNTER_JS,
+    _STREAM_ENC_TABLE_JS,
     _STREAM_INDEX_HTML,
     _MEMORIAL_HTML,
 )
@@ -66,6 +68,11 @@ except ImportError:
     from server.pokemon_data import (
         GENDER_SYMBOL as _GENDER_SYMBOL,
     )
+
+try:
+    from .obs_controller import OBSController, obs_config_path, ALL_TRIGGER_EVENTS
+except ImportError:
+    from server.obs_controller import OBSController, obs_config_path, ALL_TRIGGER_EVENTS
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -675,7 +682,7 @@ _STATUS_HTML = """<!DOCTYPE html>
 <body>
   <h1><svg viewBox="0 0 595.3 594.1" style="width:1.3em;height:1.3em;vertical-align:-0.15em;margin-right:0.12em"><path fill="#fff" d="M297.6,380.9c-40.4,0-74.1-28.6-82.1-66.6H81.1c9.5,110.5,102.2,197.2,215.1,197.2s205.7-86.7,215.1-197.2H379.7C371.7,352.4,338,380.9,297.6,380.9z"/><path fill="#FF1C1C" d="M297.7,213.2c40.4,0,74.1,28.6,82.1,66.6h134.4C504.7,169.2,412,82.5,299,82.5S93.4,169.2,83.9,279.7h131.7C223.6,241.7,257.3,213.2,297.7,213.2z"/><path fill="#fff" d="M347.1,297c0-6.1-1.1-11.9-3.2-17.3c-7-18.8-25.1-32.1-46.3-32.1s-39.3,13.4-46.3,32.1c-2,5.4-3.1,11.2-3.1,17.3s1.1,11.9,3.1,17.3c7,18.8,25.1,32.1,46.3,32.1c21.2,0,39.3-13.4,46.3-32.1C346,309,347.1,303.1,347.1,297z"/><path d="M299,82.5c113,0,205.7,86.7,215.1,197.2H379.7c-8-38-41.7-66.6-82.1-66.6c-40.4,0-74.1,28.6-82.1,66.6H83.9C93.4,169.2,186.1,82.5,299,82.5z M343.9,279.7c2,5.4,3.1,11.2,3.1,17.3s-1.1,11.9-3.1,17.3c-7,18.8-25.1,32.1-46.3,32.1c-21.2,0-39.3-13.4-46.3-32.1c-2-5.4-3.1-11.2-3.1-17.3s1.1-11.9,3.1-17.3c7-18.8,25.1-32.1,46.3-32.1S336.9,261,343.9,279.7z M296.2,511.6c-113,0-205.7-86.7-215.1-197.2h134.4c8,38,41.7,66.6,82.1,66.6s74.1-28.6,82.1-66.6h131.7C501.9,424.8,409.2,511.6,296.2,511.6z M297.6,41.3C156.4,41.3,41.9,155.8,41.9,297s114.5,255.7,255.7,255.7S553.4,438.3,553.4,297S438.9,41.3,297.6,41.3z"/></svg>{page_title}</h1>
   <p class="sub">Live updates via SSE &mdash; <span id="ts">{timestamp}</span></p>
-  <p class="sub">TCP port: {tcp_port} &nbsp;·&nbsp; <a href="/memorial" style="color:#f44;text-decoration:none">&#x1FAA6; Memorial Wall</a> &nbsp;·&nbsp; <a href="/stream" style="color:#6af;text-decoration:none">&#127909; Stream Overlays</a> &nbsp;·&nbsp; <a href="/twitch" style="color:#f8d030;text-decoration:none">&#129302; Twitch Bot</a> &nbsp;·&nbsp; <a href="/debug" style="color:#f90;text-decoration:none">&#128295; Debug</a> &nbsp;·&nbsp; <a href="/calc/normal.html" style="color:#fa0;text-decoration:none">&#9876;&#65039; RR Calc</a>{manager_link}</p>
+  <p class="sub">TCP port: {tcp_port} &nbsp;·&nbsp; <a href="/memorial" style="color:#f44;text-decoration:none">&#x1FAA6; Memorial Wall</a> &nbsp;·&nbsp; <a href="/stream" style="color:#6af;text-decoration:none">&#127909; Stream Overlays</a> &nbsp;·&nbsp; <a href="/twitch" style="color:#f8d030;text-decoration:none">&#129302; Twitch Bot</a> &nbsp;·&nbsp; <a href="/obs" style="color:#b8f0ff;text-decoration:none">&#128225; OBS</a> &nbsp;·&nbsp; <a href="/debug" style="color:#f90;text-decoration:none">&#128295; Debug</a> &nbsp;·&nbsp; <a href="/calc/normal.html" style="color:#fa0;text-decoration:none">&#9876;&#65039; RR Calc</a>{manager_link}</p>
   <div id="content">
   {body}
   </div>
@@ -2075,6 +2082,9 @@ class SLinkServer:
         self._bot_last_error: str = ""
         self._bot_task = None
         self._bot_instance = None
+        # OBS WebSocket integration
+        _obs_cfg = obs_config_path(data_dir)
+        self.obs = OBSController(_obs_cfg)
 
     def _get_sprite_html(self, species_id: int) -> str:
         """Get sprite HTML by delegating to the game adapter."""
@@ -2146,6 +2156,26 @@ class SLinkServer:
             f'<div class="enc-methods">{methods_html}</div>'
             f'</details>'
         )
+
+    def _enc_table_for_status(self, area_id: str) -> dict | None:
+        """Return encounter table dict with sprite_src added to each entry.
+
+        sprite_src is just the image URL — much smaller than sprite_html
+        (~115 chars vs ~400 chars per entry). The overlay JS builds the
+        <img> tag. CFRU→NatDex conversion is handled by the adapter.
+
+        Returns None when no encounter data exists (non-RR or unmapped area).
+        """
+        enc = self.adapter.encounter_table(area_id)
+        if not enc:
+            return None
+        return {
+            method: [
+                {**e, "sprite_src": self.adapter.sprite_src(e.get("species_id", 0))}
+                for e in entries
+            ]
+            for method, entries in enc.items()
+        }
 
     # rom_type string → adapter game_id mapping.
     _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
@@ -2523,6 +2553,7 @@ class SLinkServer:
         event = msg.get("event", "unknown")
         # Snapshot area state before the event so we can detect outcome transitions.
         _pre_area_state = self.state.area_states.get(msg.get("area_id", ""))
+        _pre_battle = self.battle_state[player_id]["in_battle"]
         _pre_memorial_status = None
         if event == "memorialize_done":
             _pre_memorial_link = self.state._key_index.get(msg.get("key", ""))
@@ -2897,14 +2928,113 @@ class SLinkServer:
                         self._log_event(player_id, "reroll",
                                         f"🔁 {_prompt_text}", _area_id)
 
+        self._emit_obs_triggers(player_id, msg, cmds, _pre_area_state, _pre_battle)
         return cmds
 
+
+    def _emit_obs_triggers(self, player_id: str, msg: dict, cmds: list,
+                           pre_area_state, pre_battle: bool):
+        """Collect all game events that fired this dispatch cycle and submit them
+        to OBSController.submit_fired() for priority-ordered scene resolution.
+
+        Rules are evaluated in list order — the first matching rule per target player
+        wins regardless of how many events fire simultaneously.
+        """
+        event = msg.get("event", "")
+        _area_id = msg.get("area_id", "")
+        _partner = "b" if player_id == "a" else "a"
+
+        # fired: list of (trigger_name, src_player, metadata)
+        fired = []
+
+        # battle_start / battle_end — in_battle transition from tick
+        if event == "tick" and "in_battle" in msg:
+            now_battle = self.battle_state[player_id]["in_battle"]
+            if not pre_battle and now_battle:
+                fired.append(("battle_start", player_id, {}))
+                if self.battle_state[player_id].get("is_trainer_battle"):
+                    fired.append(("trainer_battle_start", player_id, {}))
+                else:
+                    fired.append(("wild_battle_start", player_id, {}))
+                _cur_area = self.player_area_id.get(player_id, "")
+                if self._area_has_open_encounter(_cur_area):
+                    fired.append(("battle_start_new", player_id, {}))
+            elif pre_battle and not now_battle:
+                fired.append(("battle_end", player_id, {}))
+
+        if event == "faint":
+            fired.append(("faint", player_id, {}))
+            # link_death — partner receives force_faint command
+            _faint_key = msg.get("key", "")
+            if _faint_key:
+                _link = self.state._key_index.get(_faint_key)
+                if _link:
+                    _p_mon = _link.b if player_id == "a" else _link.a
+                    if _p_mon and any(
+                        c.get("cmd") == "force_faint" and c.get("key") == _p_mon.key
+                        for c in self.state.queued_commands.get(_partner, [])
+                    ):
+                        fired.append(("link_death", _partner, {}))
+
+        if event == "whiteout":
+            fired.append(("whiteout", player_id, {}))
+
+        if event == "capture":
+            fired.append(("capture", player_id, {}))
+            _cap_key = msg.get("key", "")
+            if _cap_key and _cap_key in self.state.bonus_keys.get(player_id, set()):
+                fired.append(("shiny", player_id, {}))
+
+        if event == "area_enter":
+            fired.append(("area_enter", player_id, {"area_id": _area_id}))
+            if self._area_has_open_encounter(_area_id):
+                fired.append(("area_enter_new", player_id, {"area_id": _area_id}))
+
+        if event == "party_to_box":
+            fired.append(("party_to_box", player_id, {}))
+
+        if event == "box_to_party":
+            fired.append(("box_to_party", player_id, {}))
+
+        if event == "memorialize_done":
+            fired.append(("memorialize_done", player_id, {}))
+
+        # linked / dead_zone — area state transition post-dispatch
+        if event in ("capture", "no_catch") and _area_id:
+            _new_state = self.state.area_states.get(_area_id)
+            if _new_state is not None and _new_state != pre_area_state:
+                _sv = _new_state.value if hasattr(_new_state, "value") else str(_new_state)
+                if _sv == "linked":
+                    fired.append(("linked", player_id, {}))
+                    fired.append(("linked", _partner, {}))
+                elif _sv == "dead_zone":
+                    fired.append(("dead_zone", player_id, {}))
+                    fired.append(("dead_zone", _partner, {}))
+
+        if self.state.run_over:
+            fired.append(("run_over", player_id, {}))
+
+        if fired:
+            self.obs.submit_fired(fired)
 
     def _area_display(self, area_id: str) -> str:
         """Return a human-readable display name for area_id, handling bonus pair synthetic IDs."""
         if area_id.startswith("_bonus_"):
             return "✦ Bonus Pair"
         return self.adapter.area_display_name(area_id)
+
+    def _area_has_open_encounter(self, area_id: str) -> bool:
+        """True if area_id is an active nuzlocke area that hasn't been fully resolved.
+
+        Returns False if: area not tracked, already linked, or dead zone.
+        """
+        if not area_id:
+            return False
+        state = self.state.area_states.get(area_id)
+        if state is None:
+            return False
+        sv = state.value if hasattr(state, "value") else str(state)
+        return sv not in ("linked", "dead_zone")
 
     def _build_status_dict(self) -> dict:
         """Serialize current server state to a JSON-safe dict."""
@@ -3004,6 +3134,9 @@ class SLinkServer:
                     "queued":         len(s.queued_commands.get(pid, [])),
                     "battle_state":   _enrich_battle_state(pid),
                     "identity_error": s.identity_error.get(pid, ""),
+                    "encounter_table": self._enc_table_for_status(
+                        self.player_area_id.get(pid, "") or self.player_area.get(pid, "")
+                    ),
                 }
                 for pid in ["a", "b"]
             },
@@ -4168,6 +4301,21 @@ class SLinkServer:
             text=_stream_overlay_page("Shiny Alert", _STREAM_SHINY_ALERT_JS),
             content_type="text/html")
 
+    async def handle_stream_area_encounter(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Area Encounter", _STREAM_AREA_ENCOUNTER_JS),
+            content_type="text/html")
+
+    async def handle_stream_enc_table_a(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Encounter Table A", _STREAM_ENC_TABLE_JS.replace("%PLAYER%", "a")),
+            content_type="text/html")
+
+    async def handle_stream_enc_table_b(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Encounter Table B", _STREAM_ENC_TABLE_JS.replace("%PLAYER%", "b")),
+            content_type="text/html")
+
     # ── Launcher script download ─────────────────────────────────────────────
 
     _LAUNCHER_TEMPLATE = (
@@ -4516,6 +4664,455 @@ class SLinkServer:
 
     async def handle_twitch_page(self, request):
         return aiohttp_web.Response(text=self._TWITCH_PAGE_HTML, content_type="text/html")
+
+    # ── OBS integration page & API ────────────────────────────────────────────
+
+    _OBS_PAGE_HTML = r"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>OBS Triggers — Soul Link</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,'Segoe UI',sans-serif;background:#0a0c14;color:#e0e0e0;padding:1.5em;min-height:100vh}
+    h1{font-family:'Press Start 2P',monospace;color:#b8f0ff;font-size:1em;margin-bottom:.3em}
+    .sub{color:#888;font-size:.85em;margin-bottom:1.5em}
+    .sub a{color:#6af;text-decoration:none}
+    .panel{background:#12141e;border:1px solid #2a2c3a;border-radius:8px;padding:1.2em;margin-bottom:1.2em}
+    .panel h2{font-family:'Press Start 2P',monospace;font-size:.7em;color:#b8f0ff;margin-bottom:.8em;letter-spacing:.05em}
+    .sb{display:inline-block;padding:3px 10px;border-radius:3px;font-size:.8em;font-weight:700}
+    .sb-ok{background:#1a4a1a;color:#3de85a;border:1px solid #3de85a}
+    .sb-off{background:#3a1a1a;color:#f03838;border:1px solid #f03838}
+    .sb-mid{background:#3a2a1a;color:#f8a030;border:1px solid #f8a030}
+    label{display:block;color:#aaa;font-size:.8em;margin-bottom:.2em;margin-top:.6em}
+    input[type=text],input[type=number],input[type=password],select{width:100%;background:#1a1c28;color:#e0e0e0;border:1px solid #363850;border-radius:4px;padding:6px 10px;font-size:.85em}
+    input:focus,select:focus{outline:none;border-color:#b8f0ff}
+    .btn{background:#1a2a3a;color:#6af;border:1px solid #6af;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:.82em}
+    .btn:hover{background:#2a3a4a}
+    .btn-g{color:#3de85a;border-color:#3de85a}.btn-g:hover{background:#1a3a1a}
+    .btn-r{color:#f03838;border-color:#f03838}.btn-r:hover{background:#3a1a1a}
+    .btn-s{color:#b8f0ff;border-color:#b8f0ff}.btn-s:hover{background:#1a3050}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.2em}
+    table{width:100%;border-collapse:collapse;font-size:.82em}
+    th{color:#888;font-weight:600;padding:5px 8px;text-align:left;border-bottom:1px solid #2a2c3a}
+    td{padding:5px 8px;border-bottom:1px solid #1e2030;vertical-align:middle}
+    tr:hover td{background:#1a1c28}
+    .frow{display:flex;gap:.5em;align-items:flex-end;flex-wrap:wrap}
+    .frow>*{flex:1;min-width:110px}
+    .frow>.btn{flex:0;margin-top:1.1em}
+    #msg{margin:.6em 0;font-size:.82em;color:#3de85a;min-height:1.2em}
+    #msg.err{color:#f03838}
+    .cbtns{display:flex;gap:.4em;margin-top:.7em;flex-wrap:wrap}
+    code{color:#b8f0ff;background:#1a1c28;padding:1px 5px;border-radius:3px;font-size:.9em}
+  </style>
+</head>
+<body>
+  <h1>&#128225; OBS Scene Triggers</h1>
+  <p class="sub"><a href="/">&#8592; Back to status</a></p>
+  <div id="msg"></div>
+
+  <div class="panel">
+    <h2>CONNECTIONS</h2>
+    <div class="grid2">
+      <div>
+        <div style="display:flex;align-items:center;gap:.5em;margin-bottom:.4em">
+          <strong style="font-size:.9em">Player A</strong>
+          <span id="status-a" class="sb sb-off">disconnected</span>
+        </div>
+        <label>Host<input id="host-a" type="text" placeholder="192.168.1.x"></label>
+        <label>Port<input id="port-a" type="number" value="4455" min="1" max="65535"></label>
+        <label>Password <small style="color:#666">(blank = keep current)</small>
+          <input id="pw-a" type="password" placeholder=""></label>
+        <div class="cbtns">
+          <button class="btn btn-g" onclick="connect('a')">Connect</button>
+          <button class="btn btn-r" onclick="disconnect('a')">Disconnect</button>
+          <button class="btn" onclick="testScene('a')">Test Scene</button>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;align-items:center;gap:.5em;margin-bottom:.4em">
+          <strong style="font-size:.9em">Player B</strong>
+          <span id="status-b" class="sb sb-off">disconnected</span>
+        </div>
+        <label>Host<input id="host-b" type="text" placeholder="192.168.1.x"></label>
+        <label>Port<input id="port-b" type="number" value="4455" min="1" max="65535"></label>
+        <label>Password <small style="color:#666">(blank = keep current)</small>
+          <input id="pw-b" type="password" placeholder=""></label>
+        <div class="cbtns">
+          <button class="btn btn-g" onclick="connect('b')">Connect</button>
+          <button class="btn btn-r" onclick="disconnect('b')">Disconnect</button>
+          <button class="btn" onclick="testScene('b')">Test Scene</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:1em;display:flex;align-items:center;gap:1em;flex-wrap:wrap">
+      <label style="margin:0;display:flex;align-items:center;gap:.4em;color:#e0e0e0;cursor:pointer">
+        <input type="checkbox" id="enabled"> Enable OBS integration
+      </label>
+      <button class="btn btn-s" onclick="saveConfig()">&#128190; Save Config</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>TRIGGER RULES</h2>
+    <p style="margin:0 0 .6em;color:#888;font-size:.85em">Rules are evaluated <strong>top-to-bottom</strong> — when multiple events fire at once, the highest row wins per OBS player. Drag <span style="font-size:1em">⠿</span> to reorder.</p>
+    <table id="triggers-table">
+      <thead><tr><th style="width:1.6em"></th><th>#</th><th>Event</th><th>Player Filter</th><th>Target OBS</th><th>Scene</th><th>Area Filter</th><th></th></tr></thead>
+      <tbody id="triggers-body"></tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>ADD TRIGGER</h2>
+    <div class="frow">
+      <div>
+        <label>Event</label>
+        <select id="new-evt">
+          <option value="battle_start">battle_start</option>
+          <option value="wild_battle_start">wild_battle_start</option>
+          <option value="trainer_battle_start">trainer_battle_start</option>
+          <option value="battle_end">battle_end</option>
+          <option value="faint">faint (own mon)</option>
+          <option value="link_death">link_death (partner)</option>
+          <option value="whiteout">whiteout</option>
+          <option value="capture">capture</option>
+          <option value="shiny">shiny</option>
+          <option value="linked">linked (area linked)</option>
+          <option value="dead_zone">dead_zone</option>
+          <option value="area_enter">area_enter</option>
+          <option value="area_enter_new">area_enter_new (open slot)</option>
+          <option value="battle_start_new">battle_start_new (open slot)</option>
+          <option value="party_to_box">party_to_box</option>
+          <option value="box_to_party">box_to_party</option>
+          <option value="run_over">run_over</option>
+          <option value="memorialize_done">memorialize_done</option>
+        </select>
+      </div>
+      <div>
+        <label>Player Filter</label>
+        <select id="new-pf">
+          <option value="any">any</option>
+          <option value="a">Player A only</option>
+          <option value="b">Player B only</option>
+        </select>
+      </div>
+      <div>
+        <label>Target OBS</label>
+        <select id="new-tgt">
+          <option value="own">own (triggering player)</option>
+          <option value="a">Player A</option>
+          <option value="b">Player B</option>
+          <option value="both">both</option>
+        </select>
+      </div>
+      <div>
+        <label>Scene Name</label>
+        <input id="new-scene" type="text" list="scene-list-a" placeholder="e.g. Battle Scene">
+        <datalist id="scene-list-a"></datalist>
+      </div>
+      <div>
+        <label>Area Filter <small style="color:#666">(area_enter only)</small></label>
+        <input id="new-area" type="text" placeholder="e.g. route_1">
+      </div>
+      <button class="btn btn-g" onclick="addTrigger()">+ Add</button>
+    </div>
+  </div>
+
+  <style>
+    .drag-handle { cursor: grab; color: #888; font-size: 1.1em; user-select: none; padding: 0 4px; }
+    .drag-handle:active { cursor: grabbing; }
+    tr.drag-over td { border-top: 2px solid #58a6ff; }
+    .priority-badge { display:inline-block;min-width:1.6em;text-align:center;background:#30363d;color:#8b949e;border-radius:3px;font-size:.75em;padding:1px 4px;font-family:monospace; }
+  </style>
+
+  <script>
+    var triggers = [];
+    var triggersLoaded = false;
+    var _dragSrcIdx = null;
+
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function msg(text, isErr) {
+      var el = document.getElementById('msg');
+      el.textContent = text;
+      el.className = isErr ? 'err' : '';
+    }
+
+    function renderTriggers() {
+      var tbody = document.getElementById('triggers-body');
+      if (!triggers.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="color:#555;text-align:center;padding:1em">No triggers — add one below</td></tr>';
+        return;
+      }
+      tbody.innerHTML = triggers.map(function(t, i) {
+        var af = t.area_id_filter ? ('<code>' + esc(t.area_id_filter) + '</code>') : '<span style="color:#444">—</span>';
+        return '<tr draggable="true" data-idx="' + i + '">' +
+          '<td><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span></td>' +
+          '<td><span class="priority-badge">#' + (i+1) + '</span></td>' +
+          '<td><code>' + esc(t.event) + '</code></td>' +
+          '<td>' + esc(t.player_filter || 'any') + '</td>' +
+          '<td>' + esc(t.target || 'own') + '</td>' +
+          '<td>' + esc(t.scene) + '</td>' +
+          '<td>' + af + '</td>' +
+          '<td><button class="btn btn-r" style="padding:2px 8px;font-size:.75em" onclick="delTrigger(' + i + ')">&#10005;</button></td>' +
+          '</tr>';
+      }).join('');
+      // Attach drag events to rows
+      Array.from(tbody.querySelectorAll('tr[draggable]')).forEach(function(row) {
+        row.addEventListener('dragstart', function(e) {
+          _dragSrcIdx = parseInt(row.dataset.idx);
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(_dragSrcIdx));
+        });
+        row.addEventListener('dragover', function(e) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          tbody.querySelectorAll('tr').forEach(function(r){ r.classList.remove('drag-over'); });
+          row.classList.add('drag-over');
+        });
+        row.addEventListener('dragleave', function() {
+          row.classList.remove('drag-over');
+        });
+        row.addEventListener('drop', function(e) {
+          e.preventDefault();
+          row.classList.remove('drag-over');
+          var destIdx = parseInt(row.dataset.idx);
+          if (_dragSrcIdx === null || _dragSrcIdx === destIdx) return;
+          var moved = triggers.splice(_dragSrcIdx, 1)[0];
+          triggers.splice(destIdx, 0, moved);
+          _dragSrcIdx = null;
+          renderTriggers();
+          autoSaveTriggers();
+        });
+      });
+    }
+
+    function autoSaveTriggers() {
+      fetch('/api/obs/triggers', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({triggers:triggers})})
+        .then(function(r){return r.json();}).then(function(d) {
+          msg(d.ok ? '\u2714 Triggers saved' : 'Save error: '+(d.error||'unknown'), !d.ok);
+        }).catch(function(e){ msg('Save failed: '+e, true); });
+    }
+
+    function addTrigger() {
+      var scene = document.getElementById('new-scene').value.trim();
+      if (!scene) { msg('Scene name is required', true); return; }
+      triggers.push({
+        id: 't' + Date.now(),
+        event: document.getElementById('new-evt').value,
+        player_filter: document.getElementById('new-pf').value,
+        target: document.getElementById('new-tgt').value,
+        scene: scene,
+        area_id_filter: document.getElementById('new-area').value.trim()
+      });
+      document.getElementById('new-scene').value = '';
+      document.getElementById('new-area').value = '';
+      renderTriggers();
+      autoSaveTriggers();
+    }
+
+    function delTrigger(i) {
+      triggers.splice(i, 1);
+      renderTriggers();
+      autoSaveTriggers();
+    }
+
+    function loadStatus() {
+      fetch('/api/obs/status').then(function(r){return r.json();}).then(function(d) {
+        ['a','b'].forEach(function(p) {
+          var badge = document.getElementById('status-' + p);
+          var cs = (d.connections && d.connections[p]) ? d.connections[p].status : 'disconnected';
+          badge.textContent = cs;
+          badge.className = 'sb ' + (cs==='connected'?'sb-ok':cs==='connecting'?'sb-mid':'sb-off');
+        });
+        ['a','b'].forEach(function(p) {
+          var c = d.connections && d.connections[p];
+          if (c) {
+            var he = document.getElementById('host-' + p);
+            var pe = document.getElementById('port-' + p);
+            if (document.activeElement !== he) he.value = c.host || '';
+            if (document.activeElement !== pe) pe.value = c.port || 4455;
+          }
+        });
+        var en = document.getElementById('enabled');
+        if (document.activeElement !== en) en.checked = !!d.enabled;
+        if (!triggersLoaded && d.triggers) {
+          triggers = d.triggers;
+          triggersLoaded = true;
+          renderTriggers();
+        }
+        loadScenes('a');
+      }).catch(function(){});
+    }
+
+    function loadScenes(player) {
+      fetch('/api/obs/scenes/' + player).then(function(r){return r.json();}).then(function(d) {
+        var dl = document.getElementById('scene-list-' + player);
+        if (!dl) return;
+        dl.innerHTML = '';
+        (d.scenes || []).forEach(function(s) {
+          var o = document.createElement('option'); o.value = s; dl.appendChild(o);
+        });
+      }).catch(function(){});
+    }
+
+    function saveConfig() {
+      var cfg = {
+        enabled: document.getElementById('enabled').checked,
+        connections: {
+          a: { host: document.getElementById('host-a').value.trim(),
+               port: parseInt(document.getElementById('port-a').value)||4455,
+               password: document.getElementById('pw-a').value },
+          b: { host: document.getElementById('host-b').value.trim(),
+               port: parseInt(document.getElementById('port-b').value)||4455,
+               password: document.getElementById('pw-b').value }
+        },
+        triggers: triggers
+      };
+      fetch('/api/obs/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)})
+        .then(function(r){return r.json();}).then(function(d) {
+          if (d.ok) {
+            msg('Config saved!', false);
+            document.getElementById('pw-a').value = '';
+            document.getElementById('pw-b').value = '';
+          } else { msg('Error: ' + (d.error||'unknown'), true); }
+        }).catch(function(e){ msg('Request failed: '+e, true); });
+    }
+
+    function connect(player) {
+      fetch('/api/obs/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:player})})
+        .then(function(r){return r.json();}).then(function(d){
+          msg(d.ok ? ('Connecting player '+player.toUpperCase()+'...') : ('Error: '+d.error), !d.ok);
+          setTimeout(loadStatus, 1500);
+        });
+    }
+
+    function disconnect(player) {
+      fetch('/api/obs/disconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:player})})
+        .then(function(r){return r.json();}).then(function(d){
+          msg(d.ok ? ('Disconnected player '+player.toUpperCase()) : ('Error: '+d.error), !d.ok);
+          setTimeout(loadStatus, 500);
+        });
+    }
+
+    function testScene(player) {
+      var scene = prompt('Scene name to switch to for Player ' + player.toUpperCase() + ':');
+      if (!scene) return;
+      fetch('/api/obs/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:player,scene:scene})})
+        .then(function(r){return r.json();}).then(function(d){
+          msg(d.ok ? ('\u2714 Scene changed to "'+scene+'"') : ('Error: '+d.error), !d.ok);
+        });
+    }
+
+    loadStatus();
+    setInterval(loadStatus, 5000);
+  </script>
+</body>
+</html>"""
+
+    async def handle_obs_page(self, request):
+        return aiohttp_web.Response(text=self._OBS_PAGE_HTML, content_type="text/html")
+
+    async def handle_obs_status(self, request):
+        """GET /api/obs/status — connection status + config (passwords omitted)."""
+        status = self.obs.get_status()
+        # Include triggers (no passwords in triggers)
+        status["triggers"] = self.obs._config.get("triggers", [])
+        return aiohttp_web.json_response(status)
+
+    async def handle_obs_config(self, request):
+        """POST /api/obs/config — save config and hot-reload connections."""
+        try:
+            body = await request.json()
+        except Exception:
+            return aiohttp_web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        new_cfg = {
+            "enabled": bool(body.get("enabled", False)),
+            "connections": {},
+            "triggers": body.get("triggers", []),
+        }
+        for pid in ("a", "b"):
+            conn_in = body.get("connections", {}).get(pid, {})
+            existing_pw = self.obs._config.get("connections", {}).get(pid, {}).get("password", "")
+            new_cfg["connections"][pid] = {
+                "host": str(conn_in.get("host", "")),
+                "port": int(conn_in.get("port", 4455)),
+                # Empty password = keep existing; non-empty = update
+                "password": conn_in.get("password") or existing_pw,
+            }
+        # Ensure each trigger has an id
+        import uuid as _uuid
+        for t in new_cfg["triggers"]:
+            if not t.get("id"):
+                t["id"] = _uuid.uuid4().hex[:8]
+        await self.obs.apply_new_config(new_cfg)
+        return aiohttp_web.json_response({"ok": True})
+
+    async def handle_obs_triggers(self, request):
+        """POST /api/obs/triggers — save only the triggers list (auto-save, no creds)."""
+        try:
+            body = await request.json()
+        except Exception:
+            return aiohttp_web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        import uuid as _uuid
+        triggers = body.get("triggers", [])
+        for t in triggers:
+            if not t.get("id"):
+                t["id"] = _uuid.uuid4().hex[:8]
+        new_cfg = dict(self.obs._config)
+        new_cfg["triggers"] = triggers
+        await self.obs.apply_new_config(new_cfg)
+        return aiohttp_web.json_response({"ok": True})
+
+    async def handle_obs_scenes(self, request):
+        """GET /api/obs/scenes/{player} — list available scene names from OBS."""
+        player = request.match_info.get("player", "a")
+        if player not in ("a", "b"):
+            return aiohttp_web.json_response({"ok": False, "scenes": []}, status=400)
+        scenes = await self.obs.list_scenes(player)
+        return aiohttp_web.json_response({"ok": True, "scenes": scenes})
+
+    async def handle_obs_test(self, request):
+        """POST /api/obs/test — fire a test scene change immediately."""
+        try:
+            body = await request.json()
+        except Exception:
+            return aiohttp_web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        player = body.get("player", "a")
+        scene  = body.get("scene", "")
+        if player not in ("a", "b"):
+            return aiohttp_web.json_response({"ok": False, "error": "Invalid player"}, status=400)
+        if not scene:
+            return aiohttp_web.json_response({"ok": False, "error": "scene required"}, status=400)
+        result = await self.obs.test_scene(player, scene)
+        return aiohttp_web.json_response(result)
+
+    async def handle_obs_connect(self, request):
+        """POST /api/obs/connect — (re)connect a player's OBS."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        player = body.get("player", "a")
+        if player not in ("a", "b"):
+            return aiohttp_web.json_response({"ok": False, "error": "Invalid player"}, status=400)
+        await self.obs.connect_player(player)
+        return aiohttp_web.json_response({"ok": True})
+
+    async def handle_obs_disconnect(self, request):
+        """POST /api/obs/disconnect — disconnect a player's OBS."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        player = body.get("player", "a")
+        if player not in ("a", "b"):
+            return aiohttp_web.json_response({"ok": False, "error": "Invalid player"}, status=400)
+        await self.obs.disconnect_player(player)
+        return aiohttp_web.json_response({"ok": True})
 
     async def handle_bot_status(self, request):
         """GET /api/bot/status — returns current bot status + config + recent activity."""
@@ -5630,6 +6227,8 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
 
     # Start rolling backup task
     srv.start_backup_task()
+    # Start OBS worker tasks
+    srv.obs.start_workers()
 
     # HTTP status page
     if AIOHTTP_AVAILABLE:
@@ -5662,6 +6261,9 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         app.router.add_get("/stream/focus-a",         srv.handle_stream_focus_a)
         app.router.add_get("/stream/focus-b",         srv.handle_stream_focus_b)
         app.router.add_get("/stream/shiny-alert",     srv.handle_stream_shiny_alert)
+        app.router.add_get("/stream/area-encounter",  srv.handle_stream_area_encounter)
+        app.router.add_get("/stream/enc-table-a",     srv.handle_stream_enc_table_a)
+        app.router.add_get("/stream/enc-table-b",     srv.handle_stream_enc_table_b)
         app.router.add_get("/launcher/{player}", srv.handle_launcher)
         # Twitch bot routes
         app.router.add_get("/twitch",               srv.handle_twitch_page)
@@ -5671,6 +6273,15 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         app.router.add_post("/api/bot/enable",      srv.handle_bot_enable)
         app.router.add_post("/api/bot/disable",     srv.handle_bot_disable)
         app.router.add_post("/api/bot/preview",     srv.handle_bot_preview)
+        # OBS scene trigger routes
+        app.router.add_get("/obs",                  srv.handle_obs_page)
+        app.router.add_get("/api/obs/status",       srv.handle_obs_status)
+        app.router.add_post("/api/obs/config",      srv.handle_obs_config)
+        app.router.add_post("/api/obs/triggers",    srv.handle_obs_triggers)
+        app.router.add_get("/api/obs/scenes/{player}", srv.handle_obs_scenes)
+        app.router.add_post("/api/obs/test",        srv.handle_obs_test)
+        app.router.add_post("/api/obs/connect",     srv.handle_obs_connect)
+        app.router.add_post("/api/obs/disconnect",  srv.handle_obs_disconnect)
         # Debug routes
         app.router.add_get("/debug",                       srv.handle_debug_html)
         app.router.add_get("/api/debug/raw_state",         srv.handle_debug_raw_state)

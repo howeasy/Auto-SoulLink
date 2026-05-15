@@ -189,6 +189,19 @@ class GamePresentationAdapter(ABC):
         """
         return None
 
+    def sprite_src(self, species_id: int) -> str:
+        """Return just the sprite image URL for a species (no HTML wrapping).
+
+        Default returns a PokeAPI URL. Override in adapters that need
+        game-specific sprite repositories (e.g. funnotbun for RR/CFRU).
+        Used by _enc_table_for_status() to keep the JSON payload small.
+        """
+        if not species_id or species_id < 1:
+            return ""
+        nat = self.to_national_dex(species_id)
+        sid = nat if (nat and 1 <= nat <= 1025) else species_id
+        return f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{sid}.png"
+
     def move_name(self, move_id: int) -> str:
         """Return display name for a move ID.
 
