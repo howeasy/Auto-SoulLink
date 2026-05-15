@@ -698,17 +698,6 @@
       userSelect  : 'none',
     });
 
-    // Restore saved absolute position (overrides bottom/right default)
-    var savedPos = _loadPos();
-    if (savedPos) {
-      panel.style.bottom = '';
-      panel.style.right  = '';
-      // Clamp so a stale/offscreen saved position is brought back into view
-      var clamped = _clampPos(savedPos.x, savedPos.y, panel);
-      panel.style.left   = clamped.x + 'px';
-      panel.style.top    = clamped.y + 'px';
-    }
-
     // ── Header ────────────────────────────────────────────────────────────────
     var header = ce('div');
     header.id  = PANEL_ID + '-header';
@@ -753,7 +742,28 @@
     panel.appendChild(body);
     document.body.appendChild(panel);
 
+    // Restore saved position after panel is in the DOM so offsetWidth/Height
+    // are accurate. Clamping here also fixes stale positions from smaller screens.
+    var savedPos = _loadPos();
+    if (savedPos) {
+      panel.style.bottom = '';
+      panel.style.right  = '';
+      var clamped = _clampPos(savedPos.x, savedPos.y, panel);
+      panel.style.left   = clamped.x + 'px';
+      panel.style.top    = clamped.y + 'px';
+    }
+
     initDrag(header, panel);
+
+    // Re-clamp on window resize so the panel can never escape the viewport.
+    window.addEventListener('resize', function () {
+      if (!panel.style.left) return; // still using default bottom/right CSS
+      var r = panel.getBoundingClientRect();
+      var c = _clampPos(r.left, r.top, panel);
+      panel.style.left = c.x + 'px';
+      panel.style.top  = c.y + 'px';
+      _savePos(c.x, c.y); // persist so reload doesn't restore the stale position
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -1750,15 +1760,15 @@
     } catch (e) { /* storage unavailable */ }
   }
 
-  /** Clamp panel position so at least GRAB pixels remain visible on every edge. */
+  /** Clamp panel position so it stays fully within the viewport. */
   function _clampPos(x, y, panel) {
-    var grab = 40;
     var vw = window.innerWidth;
     var vh = window.innerHeight;
     var pw = panel.offsetWidth  || 440;
     var ph = panel.offsetHeight || 50;
-    x = Math.max(grab - pw, Math.min(vw - grab, x));
-    y = Math.max(0,         Math.min(vh - grab, y));
+    // Keep panel fully visible; if viewport is narrower than panel, pin to 0.
+    x = Math.max(0, Math.min(Math.max(0, vw - pw), x));
+    y = Math.max(0, Math.min(Math.max(0, vh - ph), y));
     return { x: x, y: y };
   }
 
