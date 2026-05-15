@@ -39,6 +39,11 @@ from server.stream_overlays import (
     _STREAM_AREAS_JS,
     _STREAM_EVENTS_JS,
     _STREAM_BADGES_JS,
+    _STREAM_ENCOUNTERS_JS,
+    _STREAM_MEMORIAL_JS,
+    _STREAM_TICKER_JS,
+    _STREAM_FOCUS_JS,
+    _STREAM_SHINY_ALERT_JS,
     _STREAM_INDEX_HTML,
     _MEMORIAL_HTML,
 )
@@ -666,7 +671,7 @@ _STATUS_HTML = """<!DOCTYPE html>
 <body>
   <h1><svg viewBox="0 0 595.3 594.1" style="width:1.3em;height:1.3em;vertical-align:-0.15em;margin-right:0.12em"><path fill="#fff" d="M297.6,380.9c-40.4,0-74.1-28.6-82.1-66.6H81.1c9.5,110.5,102.2,197.2,215.1,197.2s205.7-86.7,215.1-197.2H379.7C371.7,352.4,338,380.9,297.6,380.9z"/><path fill="#FF1C1C" d="M297.7,213.2c40.4,0,74.1,28.6,82.1,66.6h134.4C504.7,169.2,412,82.5,299,82.5S93.4,169.2,83.9,279.7h131.7C223.6,241.7,257.3,213.2,297.7,213.2z"/><path fill="#fff" d="M347.1,297c0-6.1-1.1-11.9-3.2-17.3c-7-18.8-25.1-32.1-46.3-32.1s-39.3,13.4-46.3,32.1c-2,5.4-3.1,11.2-3.1,17.3s1.1,11.9,3.1,17.3c7,18.8,25.1,32.1,46.3,32.1c21.2,0,39.3-13.4,46.3-32.1C346,309,347.1,303.1,347.1,297z"/><path d="M299,82.5c113,0,205.7,86.7,215.1,197.2H379.7c-8-38-41.7-66.6-82.1-66.6c-40.4,0-74.1,28.6-82.1,66.6H83.9C93.4,169.2,186.1,82.5,299,82.5z M343.9,279.7c2,5.4,3.1,11.2,3.1,17.3s-1.1,11.9-3.1,17.3c-7,18.8-25.1,32.1-46.3,32.1c-21.2,0-39.3-13.4-46.3-32.1c-2-5.4-3.1-11.2-3.1-17.3s1.1-11.9,3.1-17.3c7-18.8,25.1-32.1,46.3-32.1S336.9,261,343.9,279.7z M296.2,511.6c-113,0-205.7-86.7-215.1-197.2h134.4c8,38,41.7,66.6,82.1,66.6s74.1-28.6,82.1-66.6h131.7C501.9,424.8,409.2,511.6,296.2,511.6z M297.6,41.3C156.4,41.3,41.9,155.8,41.9,297s114.5,255.7,255.7,255.7S553.4,438.3,553.4,297S438.9,41.3,297.6,41.3z"/></svg>{page_title}</h1>
   <p class="sub">Live updates via SSE &mdash; <span id="ts">{timestamp}</span></p>
-  <p class="sub">TCP port: {tcp_port} &nbsp;·&nbsp; <a href="/memorial" style="color:#f44;text-decoration:none">&#x1FAA6; Memorial Wall</a> &nbsp;·&nbsp; <a href="/stream" style="color:#6af;text-decoration:none">&#127909; Stream Overlays</a> &nbsp;·&nbsp; <a href="/debug" style="color:#f90;text-decoration:none">&#128295; Debug</a> &nbsp;·&nbsp; <a href="/calc/normal.html" style="color:#fa0;text-decoration:none">&#9876;&#65039; RR Calc</a>{manager_link}</p>
+  <p class="sub">TCP port: {tcp_port} &nbsp;·&nbsp; <a href="/memorial" style="color:#f44;text-decoration:none">&#x1FAA6; Memorial Wall</a> &nbsp;·&nbsp; <a href="/stream" style="color:#6af;text-decoration:none">&#127909; Stream Overlays</a> &nbsp;·&nbsp; <a href="/twitch" style="color:#f8d030;text-decoration:none">&#129302; Twitch Bot</a> &nbsp;·&nbsp; <a href="/debug" style="color:#f90;text-decoration:none">&#128295; Debug</a> &nbsp;·&nbsp; <a href="/calc/normal.html" style="color:#fa0;text-decoration:none">&#9876;&#65039; RR Calc</a>{manager_link}</p>
   <div id="content">
   {body}
   </div>
@@ -1973,6 +1978,34 @@ setInterval(function() { if (!_sseOk) refreshAll(); }, 10000);
 </body></html>"""
 
 
+def _bot_load_config(data_dir: str | None) -> dict:
+    """Load bot config from data/twitch_bot.json. Returns defaults if absent."""
+    bot_dir = data_dir or DATA_DIR
+    path = os.path.join(bot_dir, "twitch_bot.json")
+    defaults = {"channel": "", "nick": "", "prefix": "!", "command_cooldown_sec": 5, "enabled": True}
+    if not os.path.exists(path):
+        return dict(defaults)
+    try:
+        with open(path) as f:
+            cfg = json.load(f)
+        for k, v in defaults.items():
+            cfg.setdefault(k, v)
+        return cfg
+    except Exception:
+        return dict(defaults)
+
+
+
+def _bot_save_config(data_dir: str | None, cfg: dict):
+    """Save bot config to data/twitch_bot.json. Never writes token/oauth fields."""
+    bot_dir = data_dir or DATA_DIR
+    path = os.path.join(bot_dir, "twitch_bot.json")
+    safe = {k: v for k, v in cfg.items() if k not in ("token", "oauth", "oauth_token")}
+    os.makedirs(bot_dir, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(safe, f, indent=2)
+
+
 # ── per-connection handler ─────────────────────────────────────────────────────
 
 class SLinkServer:
@@ -2034,6 +2067,9 @@ class SLinkServer:
         self._backup_task: asyncio.Task | None = None
         self._backup_interval = 300  # seconds
         self._backup_max = 6
+        self._bot_activity = []   # ring buffer, max 50 entries [{ts, text}]
+        self._bot_task = None
+        self._bot_instance = None
 
     def _get_sprite_html(self, species_id: int) -> str:
         """Get sprite HTML by delegating to the game adapter."""
@@ -4040,6 +4076,38 @@ class SLinkServer:
                                      _STREAM_BADGES_JS.replace("%PLAYER%", "b")),
             content_type="text/html")
 
+    async def handle_stream_encounters(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Encounter Tracker", _STREAM_ENCOUNTERS_JS),
+            content_type="text/html")
+
+    async def handle_stream_stream_memorial(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Memorial Scroll", _STREAM_MEMORIAL_JS),
+            content_type="text/html")
+
+    async def handle_stream_ticker(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Event Ticker", _STREAM_TICKER_JS),
+            content_type="text/html")
+
+    async def handle_stream_focus_a(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Focus A",
+                                     _STREAM_FOCUS_JS.replace("%PLAYER%", "a")),
+            content_type="text/html")
+
+    async def handle_stream_focus_b(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Focus B",
+                                     _STREAM_FOCUS_JS.replace("%PLAYER%", "b")),
+            content_type="text/html")
+
+    async def handle_stream_shiny_alert(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Shiny Alert", _STREAM_SHINY_ALERT_JS),
+            content_type="text/html")
+
     # ── Launcher script download ─────────────────────────────────────────────
 
     _LAUNCHER_TEMPLATE = (
@@ -4132,6 +4200,322 @@ class SLinkServer:
             content_type="application/octet-stream",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+
+    # ── Twitch bot management page ───────────────────────────────────────────
+
+    _TWITCH_PAGE_HTML = r"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Twitch Bot — Soul Link</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,'Segoe UI',sans-serif;background:#0a0c14;color:#e0e0e0;padding:1.5em;min-height:100vh}
+    h1{font-family:'Press Start 2P',monospace;color:#f8d030;font-size:1em;margin-bottom:.3em}
+    .sub{color:#888;font-size:.85em;margin-bottom:1.5em}
+    .sub a{color:#6af;text-decoration:none}
+    .panel{background:#12141e;border:1px solid #2a2c3a;border-radius:8px;padding:1.2em;margin-bottom:1.2em}
+    .panel h2{font-family:'Press Start 2P',monospace;font-size:.7em;color:#f8d030;margin-bottom:.8em;letter-spacing:.05em}
+    .status-badge{display:inline-block;padding:3px 12px;border-radius:3px;font-size:.82em;font-weight:700;letter-spacing:.05em}
+    .sb-on{background:#1a4a1a;color:#3de85a;border:1px solid #3de85a}
+    .sb-off{background:#3a1a1a;color:#f03838;border:1px solid #f03838}
+    .sb-dis{background:#2a2a2a;color:#888;border:1px solid #888}
+    label{display:block;color:#aaa;font-size:.8em;margin-bottom:.2em;margin-top:.7em}
+    input[type=text],input[type=number]{width:100%;background:#1a1c28;color:#e0e0e0;border:1px solid #363850;border-radius:4px;padding:6px 10px;font-size:.85em}
+    input[type=text]:focus,input[type=number]:focus{outline:none;border-color:#f8d030}
+    .btn{background:#1a2a3a;color:#6af;border:1px solid #6af;border-radius:4px;padding:6px 14px;cursor:pointer;font-size:.82em;white-space:nowrap}
+    .btn:hover{background:#2a3a4a}
+    .btn-red{color:#f03838;border-color:#f03838}.btn-red:hover{background:#3a1a1a}
+    .btn-grn{color:#3de85a;border-color:#3de85a}.btn-grn:hover{background:#1a3a1a}
+    .btn-row{display:flex;gap:.6em;flex-wrap:wrap;margin-top:.8em}
+    .hint{color:#666;font-size:.75em;margin-top:.3em}
+    table{width:100%;border-collapse:collapse;font-size:.83em}
+    th{text-align:left;color:#888;padding:4px 8px;border-bottom:1px solid #2a2c3a;font-weight:400}
+    td{padding:4px 8px;border-bottom:1px solid #1a1c24;vertical-align:top}
+    td.cmd{font-family:monospace;color:#f8d030;white-space:nowrap}
+    td.arg{font-family:monospace;color:#aaa;white-space:nowrap}
+    .log-entry{font-size:.78em;padding:4px 0;border-bottom:1px solid #1a1c24;display:flex;gap:.7em}
+    .log-ts{color:#555;flex-shrink:0;white-space:nowrap}
+    .log-txt{color:#ccc;word-break:break-all}
+    #log-list .log-entry:last-child{border-bottom:none}
+    .empty{color:#555;font-size:.82em;font-style:italic}
+    .preview-box{background:#1a1c28;border:1px solid #363850;border-radius:4px;padding:8px 12px;font-size:.82em;min-height:2em;color:#6af;font-family:monospace;white-space:pre-wrap;word-break:break-all}
+    select{background:#1a1c28;color:#e0e0e0;border:1px solid #363850;border-radius:4px;padding:6px 10px;font-size:.85em;width:100%}
+    .row2{display:grid;grid-template-columns:1fr 1fr;gap:1em}
+    @media(max-width:600px){.row2{grid-template-columns:1fr}}
+    .sec-note{color:#f8d030;background:rgba(248,208,48,.07);border:1px solid rgba(248,208,48,.2);border-radius:4px;padding:8px 12px;font-size:.78em;margin-bottom:.8em}
+  </style>
+</head>
+<body>
+  <h1>&#x1F916; Twitch Bot</h1>
+  <p class="sub"><a href="/">&larr; Status Page</a> &nbsp;&middot;&nbsp; <a href="/debug">Debug</a></p>
+
+  <div class="panel">
+    <h2>STATUS</h2>
+    <span id="status-badge" class="status-badge sb-dis">Loading&hellip;</span>
+    <span id="status-channel" style="margin-left:.8em;color:#888;font-size:.85em"></span>
+  </div>
+
+  <div class="panel">
+    <h2>CONFIGURATION</h2>
+    <div class="sec-note">&#x26A0; OAuth token must be set via the <code>TWITCH_OAUTH_TOKEN</code> environment variable. It is never stored in any file or shown in this UI.</div>
+    <div class="row2">
+      <div>
+        <label>Channel (without #)</label>
+        <input type="text" id="cfg-channel" placeholder="your_channel">
+        <label>Bot Nick</label>
+        <input type="text" id="cfg-nick" placeholder="slink_bot">
+      </div>
+      <div>
+        <label>Command Prefix</label>
+        <input type="text" id="cfg-prefix" value="!" maxlength="3" style="width:80px">
+        <label>Command Cooldown (seconds)</label>
+        <input type="number" id="cfg-cooldown" min="1" max="60" value="5" style="width:80px">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="saveConfig()">Save Config</button>
+      <button class="btn" onclick="reloadBot()">Reconnect</button>
+      <button class="btn btn-grn" onclick="enableBot()">Enable</button>
+      <button class="btn btn-red" onclick="disableBot()">Disable</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>COMMAND PREVIEW</h2>
+    <p style="color:#888;font-size:.82em;margin-bottom:.7em">Test what the bot would reply — no message is sent to chat.</p>
+    <div style="display:flex;gap:.6em;flex-wrap:wrap;align-items:flex-end">
+      <div style="flex:1;min-width:160px">
+        <label>Command</label>
+        <select id="prev-cmd">
+          <option value="soullink">!soullink</option>
+          <option value="clauses">!clauses</option>
+          <option value="rip">!rip</option>
+          <option value="runstats">!runstats</option>
+          <option value="alltime">!alltime</option>
+          <option value="lastrun">!lastrun</option>
+          <option value="attempts">!attempts</option>
+          <option value="partner">!partner &lt;name&gt;</option>
+          <option value="area">!area &lt;name&gt;</option>
+        </select>
+      </div>
+      <div style="flex:1;min-width:120px">
+        <label>Argument (optional)</label>
+        <input type="text" id="prev-arg" placeholder="e.g. PIDGEY">
+      </div>
+      <button class="btn" onclick="previewCmd()" style="margin-bottom:2px">Preview</button>
+    </div>
+    <div id="preview-out" class="preview-box" style="margin-top:.7em">&hellip;</div>
+  </div>
+
+  <div class="panel">
+    <h2>COMMAND REFERENCE</h2>
+    <table>
+      <thead><tr><th>Command</th><th>Arg</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">!soullink</td><td class="arg"></td><td>Plain-English Soul Link rules for new viewers</td></tr>
+        <tr><td class="cmd">!clauses</td><td class="arg"></td><td>Active clause rules (Species / Gender / Type)</td></tr>
+        <tr><td class="cmd">!rip</td><td class="arg"></td><td>Most recent death with killer detail</td></tr>
+        <tr><td class="cmd">!runstats</td><td class="arg"></td><td>Attempt #, alive/dead/shinies, oldest linked pair</td></tr>
+        <tr><td class="cmd">!alltime</td><td class="arg"></td><td>Cross-run aggregate: attempts, deaths, shinies, best run</td></tr>
+        <tr><td class="cmd">!lastrun</td><td class="arg"></td><td>How the previous run ended</td></tr>
+        <tr><td class="cmd">!attempts</td><td class="arg"></td><td>Current attempt number</td></tr>
+        <tr><td class="cmd">!partner</td><td class="arg">&lt;name&gt;</td><td>Look up a mon's Soul Link partner by nickname</td></tr>
+        <tr><td class="cmd">!area</td><td class="arg">&lt;name&gt;</td><td>Look up the link status of an area</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>RECENT ACTIVITY</h2>
+    <div id="log-list"><span class="empty">No activity yet.</span></div>
+  </div>
+
+  <script>
+    function showToast(msg, ok) {
+      var t = document.createElement('div');
+      t.textContent = msg;
+      t.style.cssText = 'position:fixed;bottom:1.5em;right:1.5em;background:'+(ok?'#1a3a1a':'#3a1a1a')+';color:'+(ok?'#3de85a':'#f03838')+';border-radius:5px;padding:8px 16px;font-size:.85em;z-index:999';
+      document.body.appendChild(t);
+      setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},2500);
+    }
+    function post(url, body) {
+      return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}).then(function(r){return r.json();});
+    }
+    function loadStatus() {
+      fetch('/api/bot/status').then(function(r){return r.json();}).then(function(j){
+        var badge = document.getElementById('status-badge');
+        var chan  = document.getElementById('status-channel');
+        if (!badge) return;
+        if (j.status === 'connected') { badge.className='status-badge sb-on'; badge.textContent='Connected'; }
+        else if (j.status === 'disabled') { badge.className='status-badge sb-dis'; badge.textContent='Disabled'; }
+        else { badge.className='status-badge sb-off'; badge.textContent='Disconnected'; }
+        chan.textContent = j.channel ? '#' + j.channel : '';
+        if (j.config) {
+          document.getElementById('cfg-channel').value = j.config.channel || '';
+          document.getElementById('cfg-nick').value = j.config.nick || '';
+          document.getElementById('cfg-prefix').value = j.config.prefix || '!';
+          document.getElementById('cfg-cooldown').value = j.config.command_cooldown_sec || 5;
+        }
+        var ll = document.getElementById('log-list');
+        if (j.activity && j.activity.length) {
+          ll.innerHTML = '';
+          j.activity.forEach(function(e){
+            var d = document.createElement('div'); d.className='log-entry';
+            d.innerHTML='<span class="log-ts">'+e.ts.substring(11,19)+'</span><span class="log-txt">'+e.text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</span>';
+            ll.appendChild(d);
+          });
+        }
+      }).catch(function(){});
+    }
+    function saveConfig() {
+      var body = {
+        channel: document.getElementById('cfg-channel').value.trim(),
+        nick:    document.getElementById('cfg-nick').value.trim(),
+        prefix:  document.getElementById('cfg-prefix').value.trim() || '!',
+        command_cooldown_sec: parseInt(document.getElementById('cfg-cooldown').value,10)||5
+      };
+      post('/api/bot/config', body).then(function(j){ showToast(j.ok?'Saved':'Error: '+(j.error||'?'), j.ok); loadStatus(); });
+    }
+    function reloadBot() { post('/api/bot/reload').then(function(j){ showToast(j.ok?'Reconnecting…':'Error', j.ok); setTimeout(loadStatus,1200); }); }
+    function enableBot()  { post('/api/bot/enable').then(function(j){ showToast(j.ok?'Enabled':'Error', j.ok); loadStatus(); }); }
+    function disableBot() { post('/api/bot/disable').then(function(j){ showToast(j.ok?'Disabled':'Error', j.ok); loadStatus(); }); }
+    function previewCmd() {
+      var cmd = document.getElementById('prev-cmd').value;
+      var arg = document.getElementById('prev-arg').value.trim();
+      var box = document.getElementById('preview-out');
+      box.textContent = 'Loading…';
+      post('/api/bot/preview', {command: cmd, arg: arg}).then(function(j){
+        box.textContent = j.reply || '(no reply)';
+      }).catch(function(){ box.textContent = 'Error'; });
+    }
+    loadStatus();
+    setInterval(loadStatus, 5000);
+  </script>
+</body>
+</html>"""
+
+    async def handle_twitch_page(self, request):
+        return aiohttp_web.Response(text=self._TWITCH_PAGE_HTML, content_type="text/html")
+
+    async def handle_bot_status(self, request):
+        """GET /api/bot/status — returns current bot status + config + recent activity."""
+        cfg = _bot_load_config(self._data_dir)
+        token = os.environ.get("TWITCH_OAUTH_TOKEN", "")
+        connected = (self._bot_instance is not None
+                     and self._bot_task is not None
+                     and not self._bot_task.done()
+                     and bool(token))
+        status = "disabled" if not cfg.get("enabled", True) else ("connected" if connected else "disconnected")
+        return aiohttp_web.json_response({
+            "ok": True,
+            "status": status,
+            "channel": cfg.get("channel", ""),
+            "config": {k: v for k, v in cfg.items() if k != "token"},
+            "activity": list(self._bot_activity[-50:]),
+        })
+
+    async def handle_bot_config(self, request):
+        """POST /api/bot/config — save non-sensitive config to data/twitch_bot.json."""
+        try:
+            body = await request.json()
+        except Exception:
+            return aiohttp_web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        body.pop("token", None)
+        body.pop("oauth", None)
+        body.pop("oauth_token", None)
+        cfg = _bot_load_config(self._data_dir)
+        allowed = {"channel", "nick", "prefix", "command_cooldown_sec", "enabled"}
+        for k in allowed:
+            if k in body:
+                cfg[k] = body[k]
+        _bot_save_config(self._data_dir, cfg)
+        return aiohttp_web.json_response({"ok": True})
+
+    async def handle_bot_reload(self, request):
+        """POST /api/bot/reload — cancel + restart the bot task."""
+        await self._restart_bot()
+        return aiohttp_web.json_response({"ok": True})
+
+    async def handle_bot_enable(self, request):
+        """POST /api/bot/enable — mark enabled in config and restart."""
+        cfg = _bot_load_config(self._data_dir)
+        cfg["enabled"] = True
+        _bot_save_config(self._data_dir, cfg)
+        await self._restart_bot()
+        return aiohttp_web.json_response({"ok": True})
+
+    async def handle_bot_disable(self, request):
+        """POST /api/bot/disable — mark disabled and cancel task."""
+        cfg = _bot_load_config(self._data_dir)
+        cfg["enabled"] = False
+        _bot_save_config(self._data_dir, cfg)
+        if self._bot_task and not self._bot_task.done():
+            self._bot_task.cancel()
+            try:
+                await self._bot_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+        self._bot_task = None
+        self._bot_instance = None
+        return aiohttp_web.json_response({"ok": True})
+
+    async def handle_bot_preview(self, request):
+        """POST /api/bot/preview — return what a command would reply without sending."""
+        try:
+            body = await request.json()
+        except Exception:
+            return aiohttp_web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+        cmd = (body.get("command") or "").lower().strip()
+        arg = (body.get("arg") or "").strip()
+        if self._bot_instance:
+            reply = await self._bot_instance.build_reply(cmd, arg)
+        else:
+            try:
+                from server.twitch_bot import build_reply_standalone
+                reply = await build_reply_standalone(cmd, arg, self, self._data_dir or DATA_DIR)
+            except Exception as e:
+                reply = f"(Bot not running — {e})"
+        return aiohttp_web.json_response({"ok": True, "reply": reply})
+
+    async def _restart_bot(self):
+        """Cancel the existing bot task (if any) and start a fresh one."""
+        if self._bot_task and not self._bot_task.done():
+            self._bot_task.cancel()
+            try:
+                await self._bot_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+        self._bot_task = None
+        self._bot_instance = None
+        cfg = _bot_load_config(self._data_dir)
+        if not cfg.get("enabled", True):
+            return
+        token = os.environ.get("TWITCH_OAUTH_TOKEN", "")
+        if not token or not cfg.get("channel"):
+            log.warning("Twitch bot: TWITCH_OAUTH_TOKEN or channel not set — bot disabled")
+            return
+        try:
+            from server.twitch_bot import SLinkChatBot
+            bot = SLinkChatBot(self, self._data_dir or DATA_DIR, cfg, token)
+            self._bot_instance = bot
+            self._bot_task = asyncio.create_task(bot.start())
+            self._bot_task.add_done_callback(self._on_bot_done)
+            log.info(f"Twitch bot started for channel #{cfg.get('channel','?')}")
+        except Exception as e:
+            log.error(f"Twitch bot startup failed: {e}")
+
+    def _on_bot_done(self, task):
+        if not task.cancelled() and task.exception():
+            log.error(f"Twitch bot task failed: {task.exception()}")
+        self._bot_task = None
+        self._bot_instance = None
 
     # ── Debug page & API ─────────────────────────────────────────────────────
 
@@ -5114,7 +5498,21 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         app.router.add_get("/stream/events",   srv.handle_stream_events)
         app.router.add_get("/stream/badges-a", srv.handle_stream_badges_a)
         app.router.add_get("/stream/badges-b", srv.handle_stream_badges_b)
+        app.router.add_get("/stream/encounters",      srv.handle_stream_encounters)
+        app.router.add_get("/stream/stream-memorial", srv.handle_stream_stream_memorial)
+        app.router.add_get("/stream/ticker",          srv.handle_stream_ticker)
+        app.router.add_get("/stream/focus-a",         srv.handle_stream_focus_a)
+        app.router.add_get("/stream/focus-b",         srv.handle_stream_focus_b)
+        app.router.add_get("/stream/shiny-alert",     srv.handle_stream_shiny_alert)
         app.router.add_get("/launcher/{player}", srv.handle_launcher)
+        # Twitch bot routes
+        app.router.add_get("/twitch",               srv.handle_twitch_page)
+        app.router.add_get("/api/bot/status",       srv.handle_bot_status)
+        app.router.add_post("/api/bot/config",      srv.handle_bot_config)
+        app.router.add_post("/api/bot/reload",      srv.handle_bot_reload)
+        app.router.add_post("/api/bot/enable",      srv.handle_bot_enable)
+        app.router.add_post("/api/bot/disable",     srv.handle_bot_disable)
+        app.router.add_post("/api/bot/preview",     srv.handle_bot_preview)
         # Debug routes
         app.router.add_get("/debug",                       srv.handle_debug_html)
         app.router.add_get("/api/debug/raw_state",         srv.handle_debug_raw_state)
@@ -5137,6 +5535,8 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         await runner.setup()
         http_site = aiohttp_web.TCPSite(runner, host, http_port)
         await http_site.start()
+        # Start Twitch bot if configured
+        await srv._restart_bot()
         log.info(f"SLink{run_label} status page at http://{host if host != '0.0.0.0' else 'localhost'}:{http_port}/")
     else:
         log.warning("aiohttp not installed — HTTP status page disabled. Run: pip install aiohttp")

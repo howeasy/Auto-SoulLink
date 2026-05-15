@@ -257,6 +257,55 @@ _STREAM_SHARED_CSS = """
   body.ltv .lk-dead-hdr{font-size:clamp(7px,4vw,10px)}
   body.ltv .lk-dead-nm{font-size:clamp(9px,5.5vw,13px)}
 
+  /* ─── Ticker overlay ──────────────────────────────────────────────────── */
+  @keyframes ticker { from{transform:translateX(0)} to{transform:translateX(-50%)} }
+  .ticker-mask{overflow:hidden;flex:1;min-width:0}
+  .ticker-track{display:inline-flex;gap:clamp(8px,1.5vw,20px);animation:ticker 40s linear infinite;white-space:nowrap;will-change:transform}
+  .t-pill{display:inline-flex;align-items:baseline;gap:clamp(4px,.8vmin,9px);padding:clamp(3px,.5vmin,6px) clamp(7px,1.2vmin,14px);background:var(--c-card);border-radius:4px;flex-shrink:0}
+
+  /* ─── Memorial stream overlay ─────────────────────────────────────────── */
+  @keyframes memorial-scroll { from{transform:translateY(0)} to{transform:translateY(-50%)} }
+  .mem-scroll-mask{overflow:hidden;flex:1;min-height:0}
+
+  /* ─── Shiny alert overlay ─────────────────────────────────────────────── */
+  @keyframes shiny-pop{0%{opacity:0;transform:scale(.3) rotate(-10deg)}60%{transform:scale(1.1) rotate(2deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
+  @keyframes shiny-sparkle{0%,100%{opacity:0;transform:scale(0)}50%{opacity:1;transform:scale(1)}}
+  .shiny-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:clamp(12px,2vmin,24px);z-index:9999}
+  .shiny-sprites{display:flex;gap:clamp(16px,3vmin,36px);align-items:center;justify-content:center}
+  .shiny-sprite{width:clamp(80px,16vmin,160px);aspect-ratio:1;image-rendering:pixelated;animation:shiny-pop .6s ease-out both}
+  .shiny-sprite img,.shiny-sprite .mon-sprite{width:100%;height:100%;object-fit:contain;image-rendering:pixelated}
+  .shiny-text{font-family:var(--px);font-size:clamp(12px,3vmin,26px);-webkit-font-smoothing:none;color:var(--c-gold);text-shadow:0 0 30px var(--c-gold),0 0 60px rgba(248,208,48,.4);text-align:center;animation:shiny-pop .6s ease-out .1s both}
+  .shiny-sub{font-size:.7em;opacity:.6;margin-top:.4em}
+  .shiny-sparkle-wrap{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+  .shiny-sparkle{position:absolute;width:clamp(6px,1.2vmin,14px);aspect-ratio:1;border-radius:50%;background:var(--c-gold);animation:shiny-sparkle var(--dur,1.2s) ease-in-out var(--delay,0s) infinite}
+
+  /* ─── Focus card overlay ──────────────────────────────────────────────── */
+  .moves-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(3px,.6vmin,7px);margin-top:clamp(4px,.7vmin,9px)}
+  .move-tile{background:rgba(255,255,255,.05);border-radius:4px;padding:clamp(3px,.55vmin,7px);display:flex;flex-direction:column;gap:clamp(2px,.35vmin,4px);min-width:0}
+  .move-name{font-family:var(--px);font-size:clamp(6px,1.1vmin,9px);-webkit-font-smoothing:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pp-row{display:flex;align-items:center;gap:clamp(2px,.4vmin,5px);margin-top:clamp(1px,.2vmin,2px)}
+  .pp-trk{flex:1;height:clamp(3px,.5vmin,5px);background:rgba(128,128,128,.18);border-radius:99px;overflow:hidden}
+  .pp-fill{height:100%;border-radius:99px;transition:width .3s}
+  .pp-h{background:var(--c-alive)}.pp-m{background:var(--c-gold)}.pp-l{background:var(--c-dead)}
+  .pp-num{font-size:.72em;opacity:.55;flex-shrink:0;white-space:nowrap}
+  .move-type{display:inline-block;font-family:var(--px);font-size:clamp(5px,.9vmin,7px);-webkit-font-smoothing:none;padding:1px 4px;border-radius:2px;color:#fff;letter-spacing:.04em;white-space:nowrap;align-self:flex-start;margin-top:clamp(1px,.2vmin,2px)}
+  /* Gen 3 type colors by type_name */
+  .mt-Normal{background:#a8a878;color:#fff}.mt-Fighting{background:#c03028}.mt-Flying{background:#a890f0}
+  .mt-Poison{background:#a040a0}.mt-Ground{background:#e0c068;color:#111}.mt-Rock{background:#b8a038}
+  .mt-Bug{background:#a8b820;color:#111}.mt-Ghost{background:#705898}.mt-Steel{background:#b8b8d0;color:#111}
+  .mt-Fire{background:#f08030}.mt-Water{background:#6890f0}.mt-Grass{background:#78c850;color:#111}
+  .mt-Electric{background:#f8d030;color:#111}.mt-Psychic{background:#f85888}.mt-Ice{background:#98d8d8;color:#111}
+  .mt-Dragon{background:#7038f8}.mt-Dark{background:#705848}
+  .mt-unknown,.mt-{background:#666}
+  .focus-not-active{display:flex;flex:1;align-items:center;justify-content:center;opacity:.3;font-size:.85em;letter-spacing:.08em}
+
+  /* ─── Encounters overlay ──────────────────────────────────────────────── */
+  .enc-last{margin-top:clamp(5px,.9vmin,11px);display:flex;align-items:center;gap:clamp(4px,.8vmin,10px);padding:clamp(4px,.7vmin,8px) clamp(7px,1.1vmin,13px);background:var(--c-card);border-radius:4px;border-left:3px solid var(--c-gold);min-width:0}
+  .enc-nms{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+  .enc-nm{font-size:.88em;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .enc-lv{font-size:.75em;opacity:.5;white-space:nowrap}
+  .shiny-star{color:var(--c-gold);margin-left:3px}
+
 """
 
 _STREAM_SHARED_JS = r"""
@@ -882,6 +931,324 @@ function render(data) {
 }
 """
 
+_STREAM_ENCOUNTERS_JS = r"""
+function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+function areaLabel(id){
+  if (!id) return '';
+  if (id.indexOf('_bonus_') === 0) return '\u2736 Bonus Pair';
+  return id.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
+}
+var _encStateKey = null;
+function render(d) {
+  var links = d.links || [];
+  var alive = links.filter(function(l){return l.status==='alive';}).length;
+  var dead  = links.filter(function(l){return l.status!=='alive';}).length;
+  var shinies = links.filter(function(l){return l.a_shiny||l.b_shiny;}).length;
+  var bk = d.bonus_keys || {};
+  var bKA = bk.a || []; var bKB = bk.b || [];
+  shinies += bKA.length + bKB.length;
+  var last = links.length > 0 ? links[links.length-1] : null;
+  var lastA = last ? (last.a_species||0) : 0;
+  var lastB = last ? (last.b_species||0) : 0;
+  var stateKey = alive+','+dead+','+shinies+','+lastA+','+lastB;
+  if (stateKey === _encStateKey) return;
+  _encStateKey = stateKey;
+  var h = '<div class="wtitle">ENCOUNTERS</div>';
+  h += '<div class="d-wrap"><div class="d-grid">';
+  h += '<div class="d-box d-alive"><span class="d-num">'+(alive+dead)+'</span><span class="d-lbl">LINKED</span></div>';
+  h += '<div class="d-box d-dead"><span class="d-num">'+dead+'</span><span class="d-lbl">DEAD</span></div>';
+  h += '<div class="d-box d-attempts"><span class="d-num">'+shinies+'</span><span class="d-lbl">SHINIES</span></div>';
+  h += '</div></div>';
+  if (last) {
+    var aN = escHtml(last.a_nickname||last.a_species_name||'\u2014');
+    var bN = escHtml(last.b_nickname||last.b_species_name||'\u2014');
+    var aL = last.a_level ? 'Lv\u00a0'+last.a_level : '';
+    var bL = last.b_level ? 'Lv\u00a0'+last.b_level : '';
+    var aSp = last.a_sprite_html||(last.a_species?spriteTag(last.a_species):'');
+    var bSp = last.b_sprite_html||(last.b_species?spriteTag(last.b_species):'');
+    var aStar = last.a_shiny ? '<span class="shiny-star">\u2728</span>' : '';
+    var bStar = last.b_shiny ? '<span class="shiny-star">\u2728</span>' : '';
+    var area = escHtml(last.area_display||areaLabel(last.area_id));
+    h += '<div class="wtitle" style="margin-top:clamp(5px,.9vmin,11px)">LAST ENCOUNTER'+(area?' \xb7 '+area:'')+'</div>';
+    h += '<div class="enc-last">';
+    h += aSp;
+    h += '<div class="enc-nms"><div class="enc-nm">'+aN+aStar+'</div>';
+    if(aL) h += '<div class="enc-lv">'+aL+'</div>';
+    h += '</div>';
+    h += '<span class="lk-div">\u25c8</span>';
+    h += '<div class="enc-nms" style="text-align:right"><div class="enc-nm">'+bStar+bN+'</div>';
+    if(bL) h += '<div class="enc-lv">'+bL+'</div>';
+    h += '</div>';
+    h += bSp;
+    h += '</div>';
+  }
+  document.getElementById('root').innerHTML = h;
+  processSprites();
+}
+"""
+
+_STREAM_MEMORIAL_JS = r"""
+function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+function areaLabel(id){
+  if (!id) return '';
+  if (id.indexOf('_bonus_') === 0) return '\u2736 Bonus Pair';
+  return id.replace(/_/g,' ').replace(/\b\w/g,function(c){return c.toUpperCase();});
+}
+var _memStateKey = null;
+function render(d) {
+  var kf = (d.killfeed || []).slice();
+  kf.sort(function(a,b){return (a.killed_at||'').localeCompare(b.killed_at||'');});
+  var stateKey = JSON.stringify(kf.map(function(k){return [k.killed_at,k.area_id,k.a_key,k.b_key];}));
+  if (stateKey === _memStateKey) return;
+  _memStateKey = stateKey;
+  var h = '<div class="wtitle">IN MEMORIAM \xb7 '+kf.length+'</div>';
+  if (!kf.length) {
+    h += '<div style="opacity:.4;padding-top:.5em;font-size:.9em">No losses yet</div>';
+    document.getElementById('root').innerHTML = h;
+    return;
+  }
+  var listHtml = '';
+  kf.forEach(function(k) {
+    var aN = escHtml(k.a_nickname||k.a_species_name||'\u2014');
+    var bN = escHtml(k.b_nickname||k.b_species_name||'\u2014');
+    var aL = k.a_level ? 'Lv\u00a0'+k.a_level : '';
+    var bL = k.b_level ? 'Lv\u00a0'+k.b_level : '';
+    var aSp = k.a_sprite_html||(k.a_species?spriteTag(k.a_species):'');
+    var bSp = k.b_sprite_html||(k.b_species?spriteTag(k.b_species):'');
+    var area = escHtml(k.area_display||areaLabel(k.area_id));
+    listHtml += '<div class="lk-row ld">';
+    listHtml += aSp;
+    listHtml += '<div class="lk-half"><span class="lk-nm">'+aN+'</span>';
+    if(aL) listHtml += '<span class="lk-lv">'+aL+'</span>';
+    listHtml += '</div>';
+    listHtml += '<span class="lk-div">\u271D</span>';
+    listHtml += '<div class="lk-half r">';
+    if(bL) listHtml += '<span class="lk-lv">'+bL+'</span>';
+    listHtml += '<span class="lk-nm">'+bN+'</span>';
+    listHtml += '</div>';
+    listHtml += bSp;
+    if(area) listHtml += '<span style="font-size:.65em;opacity:.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:6em">'+area+'</span>';
+    listHtml += '</div>';
+  });
+  var doubled = listHtml + listHtml;
+  h += '<div class="mem-scroll-mask" id="mem-mask"><div class="lk-list" id="mem-list">'+doubled+'</div></div>';
+  document.getElementById('root').innerHTML = h;
+  processSprites();
+  var mask = document.getElementById('mem-mask');
+  var list = document.getElementById('mem-list');
+  if (list && mask && list.scrollHeight > mask.clientHeight * 2) {
+    var dur = Math.max(6, kf.length * 3);
+    list.style.animation = 'memorial-scroll '+dur+'s linear infinite';
+  }
+}
+"""
+
+_STREAM_TICKER_JS = r"""
+function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+var _tickerStateKey = null;
+function render(d) {
+  var events = (d.recent_events || []).slice(0, 16);
+  var nameA = escHtml((d.players.a && d.players.a.trainer_name) || 'A');
+  var nameB = escHtml((d.players.b && d.players.b.trainer_name) || 'B');
+  var typeMap = {capture:'ec',faint:'ef',whiteout:'ew',no_catch:'en',area_enter:'ea',
+                 linked:'el',dead_zone:'ed',violation:'ev',key_change:'ek',force_faint:'ef',hello:'eh'};
+  var stateKey = JSON.stringify(events.map(function(e){return [e.ts,e.type,e.text];}));
+  if (stateKey === _tickerStateKey) return;
+  _tickerStateKey = stateKey;
+  var pills = '';
+  events.forEach(function(ev) {
+    var ts = '';
+    if (ev.ts) {
+      var dt = new Date(ev.ts);
+      if (!isNaN(dt)) {
+        var hh = dt.getHours() % 12 || 12;
+        var mm = ('0' + dt.getMinutes()).slice(-2);
+        ts = hh + ':' + mm + (dt.getHours() >= 12 ? 'p' : 'a');
+      } else { ts = String(ev.ts).substring(11, 16); }
+    }
+    var who = ev.player === 'a' ? nameA : nameB;
+    var cls = typeMap[ev.type] || '';
+    pills += '<div class="t-pill">';
+    pills += '<span class="e-ts">'+escHtml(ts)+'</span>';
+    pills += '<span class="e-who">'+who+'</span>';
+    pills += '<span class="e-msg '+cls+'">'+escHtml(ev.text||ev.type||'')+'</span>';
+    pills += '</div>';
+    pills += '<span style="opacity:.2;align-self:center;flex-shrink:0">\u25c8</span>';
+  });
+  var track = pills + pills;
+  var h = '<div class="ticker-mask"><div class="ticker-track">'+track+'</div></div>';
+  document.getElementById('root').innerHTML = h;
+}
+"""
+
+_STREAM_FOCUS_JS = r"""
+function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+var _focusStateKey = null;
+var PLAYER_ID = '%PLAYER%';
+function render(d) {
+  var p = d.players[PLAYER_ID] || {};
+  var keys = p.party_keys || [];
+  var activeKey = null, det = {};
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    var candidate = (p.party_details && p.party_details[k]) || {};
+    if (candidate.active) { activeKey = k; det = candidate; break; }
+  }
+  var ppList = det.move_details ? det.move_details.map(function(m){return m.current_pp;}) : [];
+  var stateKey = (activeKey||'')+'|'+(det.hp||0)+'|'+(det.status_cond||0)+'|'+JSON.stringify(det.stat_stages||[])+'|'+JSON.stringify(ppList);
+  if (stateKey === _focusStateKey) return;
+  _focusStateKey = stateKey;
+  var root = document.getElementById('root');
+  var name = escHtml(p.trainer_name || PLAYER_ID.toUpperCase());
+  if (!activeKey) {
+    root.innerHTML = '<div class="wtitle">FOCUS \xb7 '+name+'</div><div class="focus-not-active">NOT IN BATTLE</div>';
+    return;
+  }
+  var hp = typeof det.hp === 'number' ? det.hp : 1;
+  var maxHP = det.maxHP > 0 ? det.maxHP : (hp || 1);
+  var lv = det.level || '?';
+  var fnt = hp === 0;
+  var pct = fnt ? 0 : Math.max(0, Math.min(100, Math.round(hp/maxHP*100)));
+  var hpCls = pct > 50 ? 'hp-h' : (pct > 20 ? 'hp-m' : 'hp-l');
+  var bCls  = fnt ? 'fnt' : (pct > 50 ? 'bh' : (pct > 20 ? 'bm' : 'bl'));
+  var nick  = escHtml(det.nickname || det.species_name || activeKey.substring(0,8));
+  var spLbl = (det.species_name && det.nickname && det.nickname !== det.species_name)
+              ? ' <span class="sp">('+escHtml(det.species_name)+')</span>' : '';
+  var h = '<div class="wtitle">FOCUS \xb7 '+name+'</div>';
+  h += '<div class="mc '+bCls+'">';
+  h += (det.sprite_html || spriteTag(det.species_id||0));
+  h += '<div class="m-info">';
+  h += '<div class="m-name">'+nick+spLbl+'</div>';
+  h += '<div class="hp-row">';
+  h += '<span class="hp-lbl">HP</span>';
+  h += '<div class="hp-trk"><div class="hp-fill '+hpCls+'" style="width:'+pct+'%"></div></div>';
+  h += '<span class="hp-pct">'+(fnt?'\u2014':pct+'%')+'</span>';
+  h += statusIcon(det.status_cond||0);
+  h += '<span class="lv">Lv '+lv+'</span>';
+  h += '</div>';
+  if (det.stat_stages) {
+    var stH = statStagesHtml(det.stat_stages);
+    if (stH) h += '<div class="stat-stages-row">'+stH+'</div>';
+  }
+  h += '</div></div>';
+  var moves = det.move_details || [];
+  if (moves.length) {
+    h += '<div class="moves-grid">';
+    for (var mi = 0; mi < 4; mi++) {
+      var md = moves[mi] || null;
+      h += '<div class="move-tile">';
+      if (md) {
+        var mn = escHtml(md.name || '?');
+        var tn = escHtml(md.type_name || '');
+        var pp = md.pp > 0 ? md.current_pp : 0;
+        var ppMax = md.pp || 1;
+        var ppPct = Math.max(0, Math.min(100, Math.round(pp/ppMax*100)));
+        var ppCls = ppPct > 50 ? 'pp-h' : (ppPct > 25 ? 'pp-m' : 'pp-l');
+        var tc = 'mt-'+(tn||'unknown');
+        h += '<div class="move-name">'+mn+'</div>';
+        h += '<span class="move-type '+tc+'">'+tn+'</span>';
+        h += '<div class="pp-row">';
+        h += '<div class="pp-trk"><div class="pp-fill '+ppCls+'" style="width:'+ppPct+'%"></div></div>';
+        h += '<span class="pp-num">'+pp+'/'+ppMax+'</span>';
+        h += '</div>';
+      } else {
+        h += '<div class="move-name" style="opacity:.25">\u2014</div>';
+      }
+      h += '</div>';
+    }
+    h += '</div>';
+  }
+  root.innerHTML = h;
+  processSprites();
+}
+"""
+
+_STREAM_SHINY_ALERT_JS = r"""
+function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+var _seenShinies = null;
+var _shinyStateKey = null;
+function _getAllShinies(d) {
+  var seen = {};
+  (d.links || []).forEach(function(l) {
+    if (l.a_shiny && l.a_key) seen[l.a_key] = l;
+    if (l.b_shiny && l.b_key) seen[l.b_key] = l;
+  });
+  var bk = d.bonus_keys || {};
+  (bk.a || []).forEach(function(k){ if (!seen[k]) seen[k] = {a_key:k,a_shiny:true,a_species:0}; });
+  (bk.b || []).forEach(function(k){ if (!seen[k]) seen[k] = {b_key:k,b_shiny:true,b_species:0}; });
+  return seen;
+}
+function _fireAlert(shinySide) {
+  var wrap = document.createElement('div');
+  wrap.className = 'shiny-backdrop';
+  wrap.id = 'shiny-alert-wrap';
+  var sparkleWrap = document.createElement('div');
+  sparkleWrap.className = 'shiny-sparkle-wrap';
+  for (var i = 0; i < 18; i++) {
+    var sp = document.createElement('div');
+    sp.className = 'shiny-sparkle';
+    sp.style.cssText = 'left:'+Math.random()*100+'%;top:'+Math.random()*100+'%;'
+      +'--dur:'+(0.8+Math.random()*1.2)+'s;--delay:'+(Math.random()*1.5)+'s';
+    sparkleWrap.appendChild(sp);
+  }
+  wrap.appendChild(sparkleWrap);
+  var txt = document.createElement('div');
+  txt.className = 'shiny-text';
+  txt.innerHTML = '\u2728 SHINY ENCOUNTER \u2728<div class="shiny-sub">'
+    + escHtml(shinySide.nickname||shinySide.species_name||'') + '</div>';
+  var sprites = document.createElement('div');
+  sprites.className = 'shiny-sprites';
+  var spA = shinySide.sprite_html || (shinySide.species_id ? '<img class="shiny-sprite" crossorigin="anonymous" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/shiny/'+shinySide.species_id+'.png" onerror="this.src=\'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/'+shinySide.species_id+'.png\'" alt="">' : '');
+  if (spA) {
+    var imgEl = document.createElement('div');
+    imgEl.className = 'shiny-sprite';
+    imgEl.innerHTML = spA;
+    sprites.appendChild(imgEl);
+  }
+  if (shinySide.partner_sprite_html || shinySide.partner_species_id) {
+    var pSp = shinySide.partner_sprite_html || '<img class="shiny-sprite" crossorigin="anonymous" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/'+shinySide.partner_species_id+'.png" alt="">';
+    var pEl = document.createElement('div');
+    pEl.className = 'shiny-sprite';
+    pEl.innerHTML = pSp;
+    sprites.appendChild(pEl);
+  }
+  wrap.appendChild(sprites);
+  wrap.appendChild(txt);
+  document.body.appendChild(wrap);
+  processSprites();
+  function cleanup() {
+    if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+  }
+  setTimeout(cleanup, 7000);
+}
+function render(d) {
+  document.getElementById('root').innerHTML = '';
+  var current = _getAllShinies(d);
+  var currentKeys = Object.keys(current).sort();
+  var stateKey = currentKeys.join('|');
+  if (stateKey === _shinyStateKey) return;
+  _shinyStateKey = stateKey;
+  if (_seenShinies === null) {
+    _seenShinies = {};
+    currentKeys.forEach(function(k){ _seenShinies[k] = true; });
+    return;
+  }
+  currentKeys.forEach(function(k) {
+    if (_seenShinies[k]) return;
+    _seenShinies[k] = true;
+    if (document.getElementById('shiny-alert-wrap')) return;
+    var entry = current[k];
+    var isA = entry.a_key === k;
+    var sid = isA ? (entry.a_species||0) : (entry.b_species||0);
+    var nick = isA ? (entry.a_nickname||entry.a_species_name||'') : (entry.b_nickname||entry.b_species_name||'');
+    var spHtml = isA ? (entry.a_sprite_html||'') : (entry.b_sprite_html||'');
+    var pSid = isA ? (entry.b_species||0) : (entry.a_species||0);
+    var pSpHtml = isA ? (entry.b_sprite_html||'') : (entry.a_sprite_html||'');
+    _fireAlert({sprite_html:spHtml, species_id:sid, nickname:nick, species_name:nick, partner_sprite_html:pSpHtml, partner_species_id:pSid});
+  });
+}
+"""
+
 _STREAM_INDEX_HTML = """<!DOCTYPE html>
 <html>
 <head>
@@ -1032,6 +1399,66 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <p>Player B's earned gym badges. Unearned badges are dimmed.</p>
         <div class="url-row"><span class="url-box" id="u8">/stream/badges-b</span><button class="copy-btn" onclick="copyUrl('u8')">Copy</button></div>
         <div class="theme-toggle"><a href="/stream/badges-b?theme=dark" target="_blank">Dark</a><a href="/stream/badges-b?theme=light" target="_blank">Light</a><a href="/stream/badges-b?theme=transparent" target="_blank">Transparent</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/encounters?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Encounter Tracker</h3>
+        <div class="size-hint">Standard: 340 &times; 200 &nbsp;|&nbsp; Wide: 560 &times; 120</div>
+        <p>Total encounters, shiny count, and last linked encounter pair.</p>
+        <div class="url-row"><span class="url-box" id="ue1">/stream/encounters</span><button class="copy-btn" onclick="copyUrl('ue1')">Copy</button></div>
+        <div class="theme-toggle"><a href="/stream/encounters?theme=dark" target="_blank">Dark</a><a href="/stream/encounters?theme=light" target="_blank">Light</a><a href="/stream/encounters?theme=transparent" target="_blank">Transparent</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/stream-memorial?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Memorial Scroll</h3>
+        <div class="size-hint">Sidebar: 320 &times; 600</div>
+        <p>Chronological scrolling list of all dead pairs with sprites. Auto-scrolls when content exceeds height.</p>
+        <div class="url-row"><span class="url-box" id="um1">/stream/stream-memorial</span><button class="copy-btn" onclick="copyUrl('um1')">Copy</button></div>
+        <div class="theme-toggle"><a href="/stream/stream-memorial?theme=dark" target="_blank">Dark</a><a href="/stream/stream-memorial?theme=light" target="_blank">Light</a><a href="/stream/stream-memorial?theme=transparent" target="_blank">Transparent</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/ticker?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Event Ticker</h3>
+        <div class="size-hint">Bottom strip: 1920 &times; 60</div>
+        <p>Horizontally scrolling marquee of recent events. Place at the bottom of the stream.</p>
+        <div class="url-row"><span class="url-box" id="ut1">/stream/ticker</span><button class="copy-btn" onclick="copyUrl('ut1')">Copy</button></div>
+        <div class="theme-toggle"><a href="/stream/ticker?theme=dark" target="_blank">Dark</a><a href="/stream/ticker?theme=light" target="_blank">Light</a><a href="/stream/ticker?theme=transparent" target="_blank">Transparent</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/focus-a?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Focus Card — Player A</h3>
+        <div class="size-hint">Recommended: 340 &times; 380</div>
+        <p>Active battle mon hero card: sprite, HP, status, stat stages, and 4-move grid with PP bars.</p>
+        <div class="url-row"><span class="url-box" id="uf1">/stream/focus-a</span><button class="copy-btn" onclick="copyUrl('uf1')">Copy</button></div>
+        <div class="theme-toggle"><a href="/stream/focus-a?theme=dark" target="_blank">Dark</a><a href="/stream/focus-a?theme=light" target="_blank">Light</a><a href="/stream/focus-a?theme=transparent" target="_blank">Transparent</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/focus-b?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Focus Card — Player B</h3>
+        <div class="size-hint">Recommended: 340 &times; 380</div>
+        <p>Active battle mon hero card: sprite, HP, status, stat stages, and 4-move grid with PP bars.</p>
+        <div class="url-row"><span class="url-box" id="uf2">/stream/focus-b</span><button class="copy-btn" onclick="copyUrl('uf2')">Copy</button></div>
+        <div class="theme-toggle"><a href="/stream/focus-b?theme=dark" target="_blank">Dark</a><a href="/stream/focus-b?theme=light" target="_blank">Light</a><a href="/stream/focus-b?theme=transparent" target="_blank">Transparent</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview" style="background:#000"><iframe src="/stream/shiny-alert?theme=transparent"></iframe></div>
+      <div class="overlay-info">
+        <h3>Shiny Alert &#10024;</h3>
+        <div class="size-hint">Full canvas: 1920 &times; 1080 &mdash; use transparent theme</div>
+        <p>Full-screen celebration animation when a shiny is encountered. Add above all other sources. Normally invisible.</p>
+        <div class="url-row"><span class="url-box" id="us1">/stream/shiny-alert</span><button class="copy-btn" onclick="copyUrl('us1')">Copy</button></div>
+        <div class="theme-toggle"><a href="/stream/shiny-alert?theme=transparent" target="_blank">Transparent (recommended)</a><a href="/stream/shiny-alert?theme=dark" target="_blank">Dark</a></div>
       </div>
     </div>
   </div>
