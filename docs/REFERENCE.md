@@ -893,6 +893,104 @@ python -m server.server --help
 
 ---
 
+---
+
+## Twitch Bot
+
+The built-in Twitch chat bot lets viewers query Soul Link run state in real time.
+
+> **Requires twitchio 3.x** — the old IRC-based integration is discontinued by Twitch. This uses EventSub WebSocket.
+
+### Bot Account Options
+
+You have two setups to choose from:
+
+**Option A — Broadcaster account as bot** (simpler)
+The bot posts messages as your own channel account. Easiest to start with.
+
+**Option B — Separate bot account** (recommended for stream)
+Create a second Twitch account (e.g. "MySLinkBot"). The bot posts as that account so viewers see a distinct bot name. Both options use the exact same code — the only difference is which account you authorize when generating tokens.
+
+### One-Time App Registration
+
+Register a Twitch Developer app (on your own account) at [dev.twitch.tv/console](https://dev.twitch.tv/console):
+- **Register Your Application** → Name: anything, Category: Chat Bot, Client Type: Confidential
+- **OAuth Redirect URL: `https://twitchtokengenerator.com/`** ← required so twitchtokengenerator can complete the OAuth flow with your Client ID
+- Copy your **Client ID**. Click **New Secret** and copy the **Client Secret**.
+
+### Token Setup
+
+**Required OAuth scopes** (twitchio 3.x EventSub — completely different from old IRC scopes):
+- `user:read:chat` — receive messages from chat
+- `user:write:chat` — send messages to chat
+- `user:bot` — identify this account as a bot
+- `channel:bot` — allow the bot in the broadcaster's channel
+
+**Get tokens for the BOT account:** Visit [twitchtokengenerator.com](https://twitchtokengenerator.com):
+1. **Option A:** stay logged in as your normal account.
+   **Option B:** open an incognito window and log in as the bot account first.
+2. Select **Custom Scope Token**
+3. Paste your **Client ID** (from dev.twitch.tv — same for both options)
+4. Enable the four scopes listed above
+5. Click Generate Token, authorize **as the bot account**, and copy the **Access Token** and **Refresh Token**
+
+Set environment variables **before** starting the server or manager:
+
+```cmd
+:: Windows cmd.exe — no spaces around =, no quotes
+set TWITCH_ACCESS_TOKEN=bot_access_token        ← from twitchtokengenerator (bot account)
+set TWITCH_REFRESH_TOKEN=bot_refresh_token      ← from twitchtokengenerator (bot account)
+set TWITCH_CLIENT_SECRET=your_client_secret     ← from dev.twitch.tv/console → your app → New Secret
+python -m server.manager
+```
+
+```powershell
+# PowerShell
+$env:TWITCH_ACCESS_TOKEN = "bot_access_token"   # from twitchtokengenerator (bot account)
+$env:TWITCH_REFRESH_TOKEN = "bot_refresh_token" # from twitchtokengenerator (bot account)
+$env:TWITCH_CLIENT_SECRET = "your_client_secret" # from dev.twitch.tv/console → your app → New Secret
+python -m server.manager
+```
+
+Tokens are never written to disk or logged. The `/twitch` page shows **✓ Access Token set** and **✓ Client ID set** badges when detected. Connection errors appear in a red error box.
+
+### Configuration
+
+Non-sensitive settings live in `data/twitch_bot.json` (created from `data/twitch_bot.example.json`):
+
+```json
+{
+  "channel": "your_broadcaster_channel",
+  "nick": "your_bot_account_name",
+  "client_id": "your_client_id_from_dev_twitch_tv",
+  "prefix": "!",
+  "command_cooldown_sec": 5,
+  "enabled": true
+}
+```
+
+- **`channel`**: your broadcaster channel name where viewers type commands (not the bot account name)
+- **`nick`**: the bot account's username (for display only)
+- **`client_id`**: not sensitive — safe to store here
+
+These can also be edited live from the `/twitch` page without restarting the server.
+
+### Commands
+
+| Command | Argument | Description |
+|---------|----------|-------------|
+| `!soullink` | — | Plain-English Soul Link rules for new viewers |
+| `!clauses` | — | Active clause rules (species / gender / type) |
+| `!rip` | — | Most recent death with killer detail |
+| `!runstats` | — | Attempt #, alive/dead counts, shinies, oldest pair |
+| `!alltime` | — | Cross-run aggregate: attempts, deaths, shinies, best run |
+| `!lastrun` | — | How the previous run ended |
+| `!attempts` | — | Current attempt number |
+| `!partner` | `<name>` | Look up a mon's Soul Link partner by nickname |
+| `!area` | `<name>` | Look up an area's link status |
+
+---
+
 ## Run Manager
 
 The Run Manager provides multi-run orchestration from a single web interface on port 8090.

@@ -1,10 +1,72 @@
 """Twitch chat bot for SLink Soul Link Nuzlocke tracker.
 
-Requires twitchio>=2.0,<3.0:  pip install twitchio>=2.0,<3.0
+Requires twitchio>=3.0:  pip install "twitchio>=3.0"
 
-Configuration (non-sensitive fields) lives in data/twitch_bot.json.
-The OAuth token MUST be set via the TWITCH_OAUTH_TOKEN environment variable.
-It is NEVER written to any file or logged.
+twitchio 3.x uses Twitch EventSub (WebSocket) — NOT the old IRC protocol.
+You MUST register your own Twitch Developer app and use your own Client ID.
+The old IRC-based tokens (chat:read / chat:edit) no longer work.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ONE-TIME SETUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+You have two options: use your broadcaster account as the bot (simple),
+or use a dedicated second Twitch account as the bot (recommended for stream).
+
+OPTION A — Broadcaster account as bot (simpler, one account)
+  The bot posts as your own channel account.
+  Viewers will see messages from "YourName: No deaths yet PogChamp", etc.
+
+OPTION B — Separate bot account (recommended)
+  Create a second Twitch account (e.g. "MySLinkBot").
+  The bot posts as that account.
+  Viewers see "MySLinkBot: No deaths yet PogChamp".
+
+Both options use the SAME steps below. The only difference is which
+Twitch account you are logged into when generating tokens in step 2.
+
+1. Register a Twitch Developer app (do this once, on YOUR account):
+   https://dev.twitch.tv/console → Register Your Application
+   - Name: anything (e.g. "MySLink Bot")
+   - OAuth Redirect URL: https://twitchtokengenerator.com/  ← required for token generation
+   - Category: Chat Bot
+   - Client Type: Confidential
+   → Copy the Client ID.  Click "New Secret" and copy the Client Secret.
+
+2. Get tokens for the BOT account at:
+   https://twitchtokengenerator.com
+   - OPTION A: stay logged into your normal Twitch account
+   - OPTION B: open an incognito window and log in as your bot account first
+   - Select "Custom Scope Token"
+   - Paste your Client ID (from step 1 — same for both options)
+   - Enable these scopes:
+       user:read:chat     — read messages from chat
+       user:write:chat    — send messages to chat
+       user:bot           — identify this account as a bot
+       channel:bot        — allow the bot in the broadcaster's channel
+   - Click Generate Token and authorize AS THE BOT ACCOUNT.
+   → Copy the Access Token and Refresh Token.
+
+3. Set environment variables BEFORE starting the server/manager:
+
+   Windows cmd.exe (no spaces around =, no quotes):
+     set TWITCH_ACCESS_TOKEN=bot_access_token_here        <- from twitchtokengenerator (bot account)
+     set TWITCH_REFRESH_TOKEN=bot_refresh_token_here      <- from twitchtokengenerator (bot account)
+     set TWITCH_CLIENT_SECRET=your_client_secret_here     <- from dev.twitch.tv/console → New Secret
+     python -m server.manager
+
+   PowerShell:
+     $env:TWITCH_ACCESS_TOKEN = "bot_access_token_here"   # from twitchtokengenerator (bot account)
+     $env:TWITCH_REFRESH_TOKEN = "bot_refresh_token_here" # from twitchtokengenerator (bot account)
+     $env:TWITCH_CLIENT_SECRET = "your_client_secret_here" # from dev.twitch.tv/console → New Secret
+     python -m server.manager
+
+4. On the /twitch page:
+   - Channel: your broadcaster channel name (where chat commands will be read)
+   - Client ID: from dev.twitch.tv/console (same app as step 1)
+   - Click Save Config, then Reconnect.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Commands:
   !soullink  — plain-English Soul Link rules
@@ -286,60 +348,208 @@ class _ReplyHelper:
 
 
 class SLinkChatBot(_ReplyHelper):
-    """Twitch chat bot for SLink. Requires twitchio>=2.0,<3.0."""
+    """Twitch chat bot for SLink. Requires twitchio>=3.0 (EventSub, not IRC)."""
 
-    def __init__(self, srv, data_dir: str, cfg: dict, token: str):
+    def __init__(self, srv, data_dir: str, cfg: dict,
+                 access_token: str, refresh_token: str = "",
+                 client_id: str = "", client_secret: str | None = None):
         super().__init__(srv, data_dir)
         self._cfg = cfg
-        self._token = token
+        self._access_token = access_token
+        self._refresh_token = refresh_token
+        self._client_id = client_id or cfg.get("client_id", "")
+        self._client_secret = client_secret
         self._channel = cfg.get("channel", "").lstrip("#")
         self._prefix = cfg.get("prefix", "!")
         self._cooldown = int(cfg.get("command_cooldown_sec", 5))
+        self._nick = cfg.get("nick", "").lower().strip()
         self._last_cmd_ts: dict[str, float] = {}
         self._tio_bot = None
 
     async def start(self):
-        """Construct twitchio Bot and run it."""
+        """Validate token, then build and run the twitchio 3.x bot."""
+        import aiohttp as _aiohttp
+        from twitchio import eventsub as _eventsub
         from twitchio.ext import commands as tio_commands
 
+        access_token = self._access_token
+        refresh_token = self._refresh_token
+        client_id = self._client_id
+        client_secret = self._client_secret
         channel = self._channel
         prefix = self._prefix
-        token = self._token
         helper = self
 
-        class _TioBot(tio_commands.Bot):
-            def __init__(self):
-                super().__init__(token=token, prefix=prefix, initial_channels=[channel])
+        # ── Step 1: Validate token against Twitch and resolve bot user ID ──
+        async with _aiohttp.ClientSession() as _session:
+            async with _session.get(
+                "https://id.twitch.tv/oauth2/validate",
+                headers={"Authorization": f"OAuth {access_token}"},
+            ) as _resp:
+                if _resp.status != 200:
+                    body = await _resp.text()
+                    raise RuntimeError(
+                        f"Token rejected by Twitch ({_resp.status}): {body.strip()}. "
+                        "Ensure scopes user:read:chat user:write:chat user:bot channel:bot are granted."
+                    )
+                _data = await _resp.json()
 
-            async def event_ready(self):
-                log.info(f"Twitch bot ready as {self.nick} in #{channel}")
+        bot_user_id = str(_data.get("user_id", ""))
+        bot_login = _data.get("login", self._nick or "?")
+        scopes = set(_data.get("scopes", []))
+        log.info(f"Twitch token valid for {bot_login} (id={bot_user_id}), scopes={scopes}")
 
-            async def event_message(self, message):
-                if message.echo:
-                    return
-                content = (message.content or "").strip()
-                if not content.startswith(prefix):
-                    return
+        needed = {"user:read:chat", "user:write:chat"}
+        missing = needed - scopes
+        if missing:
+            log.warning(f"Twitch bot: token missing recommended scopes: {missing}")
+
+        if not bot_user_id:
+            raise RuntimeError("Token validation returned no user_id — is the token valid?")
+
+        # ── Step 2: Commands component ──────────────────────────────────────
+        class _SLinkCommands(tio_commands.Component):
+            def _check_cooldown(self_comp) -> bool:
                 now = time.monotonic()
                 last = helper._last_cmd_ts.get(channel, 0)
                 if now - last < helper._cooldown:
-                    return
-                parts = content[len(prefix):].split(None, 1)
-                cmd = parts[0].lower() if parts else ""
-                arg = parts[1] if len(parts) > 1 else ""
-                reply = await helper.build_reply(cmd, arg)
-                if reply:
-                    helper._last_cmd_ts[channel] = now
-                    try:
-                        await message.channel.send(reply)
-                    except Exception as e:
-                        log.warning(f"Twitch bot send error: {e}")
-                        return
-                    entry = {"ts": datetime.utcnow().isoformat(),
-                             "text": f"[#{channel}] {reply}"}
+                    return False
+                helper._last_cmd_ts[channel] = now
+                return True
+
+            async def _reply(self_comp, ctx: tio_commands.Context, cmd: str, arg: str = ""):
+                def _log(text: str):
+                    entry = {"ts": datetime.utcnow().isoformat(), "text": text}
                     helper._srv._bot_activity.append(entry)
                     if len(helper._srv._bot_activity) > 50:
                         helper._srv._bot_activity = helper._srv._bot_activity[-50:]
 
-        self._tio_bot = _TioBot()
-        await self._tio_bot.start()
+                if not self_comp._check_cooldown():
+                    _log(f"⏱ cooldown: !{cmd} ignored")
+                    return
+                reply = await helper.build_reply(cmd, arg)
+                if not reply:
+                    _log(f"dbg: empty reply for !{cmd}")
+                    return
+                try:
+                    # Use token_for=bot_user_id so the user access token is used
+                    # (not the app token, which requires additional broadcaster permissions)
+                    await ctx.channel.send_message(
+                        sender=bot_user_id,
+                        message=reply,
+                        token_for=bot_user_id,
+                    )
+                    _log(f"[#{channel}] {reply}")
+                except Exception as exc:
+                    err = f"{type(exc).__name__}: {exc}"
+                    log.error(f"Twitch send_message failed for !{cmd}: {err}")
+                    helper._srv._bot_last_error = f"Send failed: {err}"
+                    _log(f"⚠ send failed !{cmd}: {err}")
+
+            @tio_commands.command()
+            async def soullink(self_comp, ctx: tio_commands.Context):
+                await self_comp._reply(ctx, "soullink")
+
+            @tio_commands.command()
+            async def clauses(self_comp, ctx: tio_commands.Context):
+                await self_comp._reply(ctx, "clauses")
+
+            @tio_commands.command()
+            async def rip(self_comp, ctx: tio_commands.Context):
+                await self_comp._reply(ctx, "rip")
+
+            @tio_commands.command()
+            async def runstats(self_comp, ctx: tio_commands.Context):
+                await self_comp._reply(ctx, "runstats")
+
+            @tio_commands.command()
+            async def alltime(self_comp, ctx: tio_commands.Context):
+                await self_comp._reply(ctx, "alltime")
+
+            @tio_commands.command()
+            async def lastrun(self_comp, ctx: tio_commands.Context):
+                await self_comp._reply(ctx, "lastrun")
+
+            @tio_commands.command()
+            async def attempts(self_comp, ctx: tio_commands.Context):
+                await self_comp._reply(ctx, "attempts")
+
+            @tio_commands.command()
+            async def partner(self_comp, ctx: tio_commands.Context, *, name: str = ""):
+                await self_comp._reply(ctx, "partner", name)
+
+            @tio_commands.command()
+            async def area(self_comp, ctx: tio_commands.Context, *, name: str = ""):
+                await self_comp._reply(ctx, "area", name)
+
+        # ── Step 3: Bot ─────────────────────────────────────────────────────
+        class _TioBot(tio_commands.Bot):
+            def __init__(self_bot):
+                super().__init__(
+                    client_id=client_id,
+                    client_secret=client_secret,
+                    bot_id=bot_user_id,
+                    prefix=prefix,
+                )
+
+            async def setup_hook(self_bot):
+                await self_bot.add_token(access_token, refresh_token)
+                broadcaster_users = await self_bot.fetch_users(logins=[channel])
+                if not broadcaster_users:
+                    raise ValueError(f"Twitch channel '{channel}' not found")
+                broadcaster_id = str(broadcaster_users[0].id)
+                sub = _eventsub.ChatMessageSubscription(
+                    broadcaster_user_id=broadcaster_id,
+                    user_id=bot_user_id,
+                )
+                await self_bot.subscribe_websocket(sub)
+                await self_bot.add_component(_SLinkCommands())
+
+            async def event_ready(self_bot):
+                log.info(f"Twitch bot ready as {bot_login} in #{channel}")
+                entry = {"ts": datetime.utcnow().isoformat(),
+                         "text": f"✓ Connected as {bot_login} in #{channel}"}
+                helper._srv._bot_activity.append(entry)
+                if len(helper._srv._bot_activity) > 50:
+                    helper._srv._bot_activity = helper._srv._bot_activity[-50:]
+                helper._srv._bot_last_error = ""
+
+            async def event_message(self_bot, payload):
+                # Log incoming commands to activity for diagnostics
+                txt = getattr(payload, "text", "") or ""
+                if txt.startswith(prefix):
+                    entry = {"ts": datetime.utcnow().isoformat(),
+                             "text": f"← {txt[:120]}"}
+                    helper._srv._bot_activity.append(entry)
+                    if len(helper._srv._bot_activity) > 50:
+                        helper._srv._bot_activity = helper._srv._bot_activity[-50:]
+                # Skip shared-chat messages from other channels
+                if getattr(payload, "source_broadcaster", None) is not None:
+                    return
+                # Process commands for all messages, including from the bot's own account.
+                # twitchio's default event_message skips self-messages to prevent loops,
+                # but our bot responses are plain text (never start with !) so no loop risk.
+                # This also handles the common case where bot and broadcaster are the same account.
+                await self_bot.process_commands(payload)
+
+            async def event_command_error(self_bot, payload):
+                err = str(payload.exception)
+                log.error(f"Twitch command error: {err}", exc_info=payload.exception)
+                helper._srv._bot_last_error = f"Command error: {err}"
+                entry = {"ts": datetime.utcnow().isoformat(), "text": f"⚠ cmd error: {err}"}
+                helper._srv._bot_activity.append(entry)
+                if len(helper._srv._bot_activity) > 50:
+                    helper._srv._bot_activity = helper._srv._bot_activity[-50:]
+
+            async def event_error(self_bot, payload):
+                err = str(payload.error)
+                log.error(f"Twitch bot error: {err}")
+                helper._srv._bot_last_error = f"Error: {err}"
+                entry = {"ts": datetime.utcnow().isoformat(), "text": f"⚠ {err}"}
+                helper._srv._bot_activity.append(entry)
+                if len(helper._srv._bot_activity) > 50:
+                    helper._srv._bot_activity = helper._srv._bot_activity[-50:]
+
+        async with _TioBot() as bot_instance:
+            helper._tio_bot = bot_instance
+            await bot_instance.start()

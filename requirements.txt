@@ -2,4 +2,4 @@ pytest
 pytest-asyncio
 aiohttp
 psutil
-twitchio>=2.0,<3.0
+twitchio>=3.0

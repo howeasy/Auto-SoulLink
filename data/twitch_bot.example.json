@@ -1,7 +1,8 @@
 {
-  "_comment": "Copy this file to twitch_bot.json and fill in your values. NEVER put your OAuth token here — set TWITCH_OAUTH_TOKEN as an environment variable instead.",
+  "_comment": "Copy to twitch_bot.json. Set TWITCH_ACCESS_TOKEN, TWITCH_REFRESH_TOKEN, TWITCH_CLIENT_SECRET as env vars — never put tokens here.",
   "channel": "your_twitch_channel",
   "nick": "your_bot_account_name",
+  "client_id": "your_client_id_from_dev_twitch_tv",
   "prefix": "!",
   "command_cooldown_sec": 5,
   "enabled": true

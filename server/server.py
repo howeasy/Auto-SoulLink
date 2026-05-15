@@ -2001,10 +2001,10 @@ def _bot_load_config(data_dir: str | None) -> dict:
 
 
 def _bot_save_config(data_dir: str | None, cfg: dict):
-    """Save bot config to data/twitch_bot.json. Never writes token/oauth fields."""
+    """Save bot config to data/twitch_bot.json. Tokens are never stored here — use env vars."""
     bot_dir = data_dir or DATA_DIR
     path = os.path.join(bot_dir, "twitch_bot.json")
-    safe = {k: v for k, v in cfg.items() if k not in ("token", "oauth", "oauth_token")}
+    safe = dict(cfg)
     os.makedirs(bot_dir, exist_ok=True)
     with open(path, "w") as f:
         json.dump(safe, f, indent=2)
@@ -2072,6 +2072,7 @@ class SLinkServer:
         self._backup_interval = 300  # seconds
         self._backup_max = 6
         self._bot_activity = []   # ring buffer, max 50 entries [{ts, text}]
+        self._bot_last_error: str = ""
         self._bot_task = None
         self._bot_instance = None
 
@@ -4315,11 +4316,25 @@ class SLinkServer:
     <h2>STATUS</h2>
     <span id="status-badge" class="status-badge sb-dis">Loading&hellip;</span>
     <span id="status-channel" style="margin-left:.8em;color:#888;font-size:.85em"></span>
+    <span id="token-badge" style="margin-left:1em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block"></span>
+    <span id="clientid-badge" style="margin-left:.5em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block"></span>
+    <div id="status-error" style="display:none;margin-top:.7em;background:rgba(240,56,56,.1);border:1px solid #f03838;border-radius:4px;padding:7px 12px;color:#f03838;font-size:.82em;font-family:monospace;word-break:break-all"></div>
   </div>
 
   <div class="panel">
     <h2>CONFIGURATION</h2>
-    <div class="sec-note">&#x26A0; OAuth token must be set via the <code>TWITCH_OAUTH_TOKEN</code> environment variable. It is never stored in any file or shown in this UI.</div>
+    <div class="sec-note">
+      &#x26A0; <strong>twitchio 3.x setup — Twitch IRC is discontinued. You must use EventSub.</strong><br>
+      <strong>Step 1 — Register your app</strong> at <a href="https://dev.twitch.tv/console" target="_blank" style="color:#f8d030">dev.twitch.tv/console</a> → Register Your Application.<br>
+      &nbsp;&nbsp;• Name: anything &nbsp;• Category: Chat Bot &nbsp;• OAuth Redirect URL: <code>https://twitchtokengenerator.com/</code> &nbsp;• Client Type: Confidential<br>
+      &nbsp;&nbsp;Copy your <strong>Client ID</strong> and click <em>New Secret</em> to generate a <strong>Client Secret</strong>.<br>
+      <strong>Step 2 — Get tokens</strong> at <a href="https://twitchtokengenerator.com" target="_blank" style="color:#f8d030">twitchtokengenerator.com</a> → Custom Scope Token → paste your Client ID → enable scopes: <code>user:read:chat</code> <code>user:write:chat</code> <code>user:bot</code> <code>channel:bot</code> → Generate. Copy <strong>Access Token</strong> and <strong>Refresh Token</strong>.<br>
+      <strong>Step 3 — Set env vars</strong> before starting the server (cmd.exe — no spaces, no quotes):<br>
+      &nbsp;&nbsp;<code>set TWITCH_ACCESS_TOKEN=...</code> &nbsp; ← from twitchtokengenerator<br>
+      &nbsp;&nbsp;<code>set TWITCH_REFRESH_TOKEN=...</code> &nbsp; ← from twitchtokengenerator<br>
+      &nbsp;&nbsp;<code>set TWITCH_CLIENT_SECRET=...</code> &nbsp; ← from dev.twitch.tv/console → your app → New Secret<br>
+      <strong>Step 4 — Fill in Channel and Client ID below</strong>, click Save Config, then Reconnect.
+    </div>
     <div class="row2">
       <div>
         <label>Channel (without #)</label>
@@ -4328,6 +4343,8 @@ class SLinkServer:
         <input type="text" id="cfg-nick" placeholder="slink_bot">
       </div>
       <div>
+        <label>Client ID (from dev.twitch.tv/console)</label>
+        <input type="text" id="cfg-client-id" placeholder="abcdef1234567890abcdef1234567890" style="width:260px">
         <label>Command Prefix</label>
         <input type="text" id="cfg-prefix" value="!" maxlength="3" style="width:80px">
         <label>Command Cooldown (seconds)</label>
@@ -4393,6 +4410,7 @@ class SLinkServer:
   </div>
 
   <script>
+    var _cfgLoaded = false;
     function showToast(msg, ok) {
       var t = document.createElement('div');
       t.textContent = msg;
@@ -4403,20 +4421,58 @@ class SLinkServer:
     function post(url, body) {
       return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}).then(function(r){return r.json();});
     }
-    function loadStatus() {
+    var _cfgInputIds = ['cfg-channel','cfg-nick','cfg-prefix','cfg-cooldown','cfg-client-id'];
+    function _anyConfigFocused() {
+      var a = document.activeElement;
+      return a && _cfgInputIds.indexOf(a.id) !== -1;
+    }
+    function loadStatus(forceConfig) {
       fetch('/api/bot/status').then(function(r){return r.json();}).then(function(j){
         var badge = document.getElementById('status-badge');
         var chan  = document.getElementById('status-channel');
+        var tBadge = document.getElementById('token-badge');
+        var cidBadge = document.getElementById('clientid-badge');
+        var errBox = document.getElementById('status-error');
         if (!badge) return;
         if (j.status === 'connected') { badge.className='status-badge sb-on'; badge.textContent='Connected'; }
         else if (j.status === 'disabled') { badge.className='status-badge sb-dis'; badge.textContent='Disabled'; }
         else { badge.className='status-badge sb-off'; badge.textContent='Disconnected'; }
         chan.textContent = j.channel ? '#' + j.channel : '';
-        if (j.config) {
+        if (tBadge) {
+          if (j.access_token_set) {
+            tBadge.style.cssText = 'background:#1a2a1a;color:#3de85a;border:1px solid #3de85a;margin-left:1em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
+            tBadge.textContent = '✓ Access Token set';
+          } else {
+            tBadge.style.cssText = 'background:#3a1a1a;color:#f03838;border:1px solid #f03838;margin-left:1em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
+            tBadge.textContent = '✗ TWITCH_ACCESS_TOKEN not set';
+          }
+        }
+        if (cidBadge) {
+          if (j.client_id_set) {
+            cidBadge.style.cssText = 'background:#1a2a1a;color:#3de85a;border:1px solid #3de85a;margin-left:.5em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
+            cidBadge.textContent = '✓ Client ID set';
+          } else {
+            cidBadge.style.cssText = 'background:#3a1a1a;color:#f03838;border:1px solid #f03838;margin-left:.5em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
+            cidBadge.textContent = '✗ Client ID not set';
+          }
+        }
+        if (errBox) {
+          if (j.last_error) {
+            errBox.style.display = 'block';
+            errBox.textContent = j.last_error;
+          } else {
+            errBox.style.display = 'none';
+            errBox.textContent = '';
+          }
+        }
+        if (j.config && (forceConfig || !_cfgLoaded) && !_anyConfigFocused()) {
           document.getElementById('cfg-channel').value = j.config.channel || '';
           document.getElementById('cfg-nick').value = j.config.nick || '';
           document.getElementById('cfg-prefix').value = j.config.prefix || '!';
           document.getElementById('cfg-cooldown').value = j.config.command_cooldown_sec || 5;
+          var ciEl = document.getElementById('cfg-client-id');
+          if (ciEl) ciEl.value = j.config.client_id || '';
+          _cfgLoaded = true;
         }
         var ll = document.getElementById('log-list');
         if (j.activity && j.activity.length) {
@@ -4430,13 +4486,15 @@ class SLinkServer:
       }).catch(function(){});
     }
     function saveConfig() {
+      var ciEl = document.getElementById('cfg-client-id');
       var body = {
-        channel: document.getElementById('cfg-channel').value.trim(),
-        nick:    document.getElementById('cfg-nick').value.trim(),
-        prefix:  document.getElementById('cfg-prefix').value.trim() || '!',
-        command_cooldown_sec: parseInt(document.getElementById('cfg-cooldown').value,10)||5
+        channel:  document.getElementById('cfg-channel').value.trim(),
+        nick:     document.getElementById('cfg-nick').value.trim(),
+        prefix:   document.getElementById('cfg-prefix').value.trim() || '!',
+        command_cooldown_sec: parseInt(document.getElementById('cfg-cooldown').value,10)||5,
+        client_id: ciEl ? ciEl.value.trim() : ''
       };
-      post('/api/bot/config', body).then(function(j){ showToast(j.ok?'Saved':'Error: '+(j.error||'?'), j.ok); loadStatus(); });
+      post('/api/bot/config', body).then(function(j){ showToast(j.ok?'Saved':'Error: '+(j.error||'?'), j.ok); loadStatus(true); });
     }
     function reloadBot() { post('/api/bot/reload').then(function(j){ showToast(j.ok?'Reconnecting…':'Error', j.ok); setTimeout(loadStatus,1200); }); }
     function enableBot()  { post('/api/bot/enable').then(function(j){ showToast(j.ok?'Enabled':'Error', j.ok); loadStatus(); }); }
@@ -4462,15 +4520,18 @@ class SLinkServer:
     async def handle_bot_status(self, request):
         """GET /api/bot/status — returns current bot status + config + recent activity."""
         cfg = _bot_load_config(self._data_dir)
-        token = os.environ.get("TWITCH_OAUTH_TOKEN", "")
+        access_token = os.environ.get("TWITCH_ACCESS_TOKEN", "")
         connected = (self._bot_instance is not None
                      and self._bot_task is not None
                      and not self._bot_task.done()
-                     and bool(token))
+                     and bool(access_token))
         status = "disabled" if not cfg.get("enabled", True) else ("connected" if connected else "disconnected")
         return aiohttp_web.json_response({
             "ok": True,
             "status": status,
+            "access_token_set": bool(access_token),
+            "client_id_set": bool(cfg.get("client_id", "")),
+            "last_error": self._bot_last_error,
             "channel": cfg.get("channel", ""),
             "config": {k: v for k, v in cfg.items() if k != "token"},
             "activity": list(self._bot_activity[-50:]),
@@ -4482,11 +4543,8 @@ class SLinkServer:
             body = await request.json()
         except Exception:
             return aiohttp_web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
-        body.pop("token", None)
-        body.pop("oauth", None)
-        body.pop("oauth_token", None)
         cfg = _bot_load_config(self._data_dir)
-        allowed = {"channel", "nick", "prefix", "command_cooldown_sec", "enabled"}
+        allowed = {"channel", "nick", "prefix", "command_cooldown_sec", "enabled", "client_id"}
         for k in allowed:
             if k in body:
                 cfg[k] = body[k]
@@ -4556,23 +4614,64 @@ class SLinkServer:
         cfg = _bot_load_config(self._data_dir)
         if not cfg.get("enabled", True):
             return
-        token = os.environ.get("TWITCH_OAUTH_TOKEN", "")
-        if not token or not cfg.get("channel"):
-            log.warning("Twitch bot: TWITCH_OAUTH_TOKEN or channel not set — bot disabled")
+        access_token = os.environ.get("TWITCH_ACCESS_TOKEN", "")
+        if not access_token:
+            self._bot_last_error = (
+                "TWITCH_ACCESS_TOKEN environment variable is not set. "
+                "Set it before starting the server (see /twitch for instructions)."
+            )
+            log.warning("Twitch bot: TWITCH_ACCESS_TOKEN not set — bot disabled")
             return
+        refresh_token = os.environ.get("TWITCH_REFRESH_TOKEN", "")
+        client_secret = os.environ.get("TWITCH_CLIENT_SECRET", "")
+        if not client_secret:
+            self._bot_last_error = (
+                "TWITCH_CLIENT_SECRET environment variable is not set. "
+                "Generate a Client Secret at dev.twitch.tv/console → your app → New Secret."
+            )
+            log.warning("Twitch bot: TWITCH_CLIENT_SECRET not set — bot disabled")
+            return
+        client_id = cfg.get("client_id", "")
+        if not client_id:
+            self._bot_last_error = (
+                "Client ID is not configured. Register an app at dev.twitch.tv/console, "
+                "copy the Client ID, and save it in the config form."
+            )
+            log.warning("Twitch bot: client_id not set — bot disabled")
+            return
+        if not cfg.get("channel"):
+            self._bot_last_error = "Channel is not configured. Enter a channel name and save."
+            log.warning("Twitch bot: channel not set — bot disabled")
+            return
+        self._bot_last_error = ""
         try:
             from server.twitch_bot import SLinkChatBot
-            bot = SLinkChatBot(self, self._data_dir or DATA_DIR, cfg, token)
+            bot = SLinkChatBot(
+                self, self._data_dir or DATA_DIR, cfg,
+                access_token=access_token,
+                refresh_token=refresh_token,
+                client_id=client_id,
+                client_secret=client_secret,
+            )
             self._bot_instance = bot
             self._bot_task = asyncio.create_task(bot.start())
             self._bot_task.add_done_callback(self._on_bot_done)
             log.info(f"Twitch bot started for channel #{cfg.get('channel','?')}")
         except Exception as e:
+            self._bot_last_error = f"Startup failed: {e}"
             log.error(f"Twitch bot startup failed: {e}")
 
     def _on_bot_done(self, task):
-        if not task.cancelled() and task.exception():
-            log.error(f"Twitch bot task failed: {task.exception()}")
+        if task.cancelled():
+            pass
+        elif task.exception():
+            err = str(task.exception())
+            self._bot_last_error = f"Connection failed: {err}"
+            log.error(f"Twitch bot task failed: {err}")
+            entry = {"ts": datetime.utcnow().isoformat(), "text": f"⚠ Error: {err}"}
+            self._bot_activity.append(entry)
+            if len(self._bot_activity) > 50:
+                self._bot_activity = self._bot_activity[-50:]
         self._bot_task = None
         self._bot_instance = None
 
