@@ -34,11 +34,14 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # ── Generators to run before packaging ────────────────────────────────────────
-# These produce the area/location .lua files that live in data/games/ and are
-# not committed to the repo.
+# These produce the area/location .lua files that live in lua/ and data/games/
+# and are not committed to the repo.
 GENERATORS: list[tuple[str, str]] = [
-    ("tools/gen_area_map.py",      "Gen 3 FRLGE area tables"),
     ("tools/gen_gen1_area_map.py", "Gen 1 RBY area tables"),
+    ("tools/gen_gen2_area_map.py", "Gen 2 Crystal area tables"),
+    ("tools/gen_area_map.py",      "Gen 3 FRLGE area tables"),
+    ("tools/gen_gen4_area_map.py", "Gen 4 HGSS/Platinum area tables"),
+    ("tools/gen_gen5_area_map.py", "Gen 5 BW/BW2 area tables"),
 ]
 
 # ── File manifests ────────────────────────────────────────────────────────────
