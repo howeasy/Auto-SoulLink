@@ -26,14 +26,16 @@ python -m server.server --reset   # wipe all state and start a fresh run
 #   --manager-port PORT  Manager HTTP port (enables back-link)
 #   --verbose            Enable structured DEBUG logging to <data-dir>/slink.log
 
-# Unit tests — no emulator or server required (234 + 77 + 62 + 78 + 127 + 63 + 6 = 647 tests)
+# Unit tests — no emulator or server required (236 + 182 + 62 + 78 + 127 + 63 + 42 + 6 + 4 = 800 tests)
 pytest tests/unit/test_state.py -v
 pytest tests/unit/test_gen3_adapter.py -v
 pytest tests/unit/test_gen4_adapter.py -v
 pytest tests/unit/test_gen1_adapter.py -v
 pytest tests/unit/test_gen2_adapter.py -v
 pytest tests/unit/test_gen5_adapter.py -v
+pytest tests/unit/test_stat_stages.py -v
 pytest tests/unit/test_phase1_comms.py -v
+pytest tests/unit/test_obs_priority.py -v
 
 # Single test
 pytest tests/unit/test_state.py::test_faint_queues_force_faint_for_partner -v
@@ -200,6 +202,7 @@ SLink-RR/
 ├── server/                      # Python server (TCP + HTTP)
 │   ├── server.py                # Main TCP/HTTP server (asyncio + aiohttp)
 │   ├── state.py                 # SoulLinkState FSM (game-agnostic)
+│   ├── obs_controller.py        # OBS WebSocket controller (simpleobsws, per-player queues)
 │   ├── pokemon_data.py          # Species names, evo families, types, abilities
 │   ├── move_data.py             # Move names and properties (Gen 3 RR + vanilla)
 │   ├── manager.py               # Run Manager (multi-run orchestration)
@@ -285,7 +288,8 @@ SLink-RR/
 
 *Server:*
 - **`server/state.py`** — `SoulLinkState` FSM: processes event dicts, queues commands for each player, persists state. Includes `_check_link_violation()` for species/gender/type clause rules.
-- **`server/server.py`** — asyncio TCP coordinator + aiohttp status page. Routes events to the FSM. Tracks per-player area, ball count, and party snapshots for the status page. Dynamic page titles via `_page_title()` method (shows "Pokémon Soul Link Tracker — \<variant\> — \<run name\>" with Pokéball SVG icon). `_resolve_level()` provides multi-source level fallback for manual links and PC box mons. Commits `rom_type` and `trainer_names` on first hello (set-once). Memorial wall page at `/memorial` (SSE live updates, tombstone cards with server-side `_sprite_img_html()` for correct CFRU→NatDex sprite conversion). Debug page at `/debug` (manual linking/unlinking, event injection, command queuing, state toggles, backup rollback, raw state — all panels live-updating via SSE). Launcher script download at `/launcher/{player}` (host from HTTP Host header). Accepts `--manager-port` CLI arg for Run Manager back-link. Accepts `--verbose` CLI flag: enables `_configure_logging()` which adds a `RotatingFileHandler` (10 MB × 5) to `<data_dir>/slink.log` with structured DEBUG tags for every accepted event, command flush, FSM transitions, party/faint/clause/reconcile/shiny lifecycle events, and adapter init. RR item names loaded from `data/games/gen3_frlge/rr_items.json`. TCP port displayed on status page. Rolling backups of `links.json` **and `events.json`** every 5 min when both players connected (6 slots with rotation; rollback restores both files atomically). `_cache_mon_info()` backfills stale link entry nicknames from live party data. Capture events populate `mon_stats` directly (fallback from top-level `hp`/`maxHP`/`level` fields). `sprite_html` field in party_details and killfeed JSON APIs. Enemy battle type badges and held items in status page.
+- **`server/server.py`** — asyncio TCP coordinator + aiohttp status page. Routes events to the FSM. Tracks per-player area, ball count, and party snapshots for the status page. Dynamic page titles via `_page_title()` method (shows "Pokémon Soul Link Tracker — \<variant\> — \<run name\>" with Pokéball SVG icon). `_resolve_level()` provides multi-source level fallback for manual links and PC box mons. Commits `rom_type` and `trainer_names` on first hello (set-once). Memorial wall page at `/memorial` (SSE live updates, tombstone cards with server-side `_sprite_img_html()` for correct CFRU→NatDex sprite conversion). Debug page at `/debug` (manual linking/unlinking, event injection, command queuing, state toggles, backup rollback, raw state — all panels live-updating via SSE). OBS page at `/obs` (per-player connection management, draggable priority trigger rules). Launcher script download at `/launcher/{player}` (host from HTTP Host header). Accepts `--manager-port` CLI arg for Run Manager back-link. Accepts `--verbose` CLI flag: enables `_configure_logging()` which adds a `RotatingFileHandler` (10 MB × 5) to `<data_dir>/slink.log` with structured DEBUG tags for every accepted event, command flush, FSM transitions, party/faint/clause/reconcile/shiny lifecycle events, and adapter init. RR item names loaded from `data/games/gen3_frlge/rr_items.json`. TCP port displayed on status page. Rolling backups of `links.json` **and `events.json`** every 5 min when both players connected (6 slots with rotation; rollback restores both files atomically). `_cache_mon_info()` backfills stale link entry nicknames from live party data. Capture events populate `mon_stats` directly (fallback from top-level `hp`/`maxHP`/`level` fields). `sprite_html` field in party_details and killfeed JSON APIs. Enemy battle type badges and held items in status page.
+- **`server/obs_controller.py`** — `OBSController`: per-player `simpleobsws` WebSocket connections (obs-websocket v5, port 4455), per-player coalescing `asyncio.Queue` + worker tasks, reconnect loop with exponential backoff (5 s → 60 s cap). `submit_fired(fired_list)` priority-resolves a list of `(event_name, src_player, metadata)` tuples in one pass — iterates rules in list order, first match per target player wins. Config persisted at `data/obs_config.json` (global, not per-run). Passwords never returned in GET responses.
 - **`server/pokemon_data.py`** — Shared Pokémon data module: `SPECIES_NAMES`, `GENDER_RATIO`, `gender_from_key_species()`, `EVO_FAMILY` (Gen I–IX evolution families including CFRU/RR extended IDs), `base_form()`.
 - **`server/adapters/base.py`** — GameAdapter ABC: GameRulesAdapter (10 methods) + GamePresentationAdapter (9 methods). All game-specific server logic flows through adapter interfaces.
 - **`server/adapters/gen3_frlge.py`** — Gen 3 adapter: GBA PID:OTID key format, FRLG+Emerald gift areas, Gen 1-3 species data, RR variant support.
@@ -297,6 +301,7 @@ SLink-RR/
 
 *Data:*
 - **`data/links.json`** — Link table + area states + pokeballs_obtained flags + lock rules, written on every state change.
+- **`data/obs_config.json`** — OBS WebSocket config (host, port, password per player, enabled flag, trigger rules list). Written by `OBSController.save_config()`. Not per-run — shared across all server instances. Passwords stored in plaintext locally; never returned in HTTP responses.
 - **`data/games/gen3_frlge/rr_items.json`** — 746 RR item ID → name mappings (generated by `lua/tests/test_item_discovery.lua`). Loaded at server startup; used when `_is_rr` is True.
 - **`tools/gen_area_map.py`** — Generates `data/games/gen3_frlge/gen3_frlge_areas.lua` and `data/games/gen3_frlge/gen3_frlge_locations.lua` from `data/games/gen3_frlge/area_map.json`.
 - **`tools/gen_gen2_area_map.py`** — Generates `lua/gen2_crystal_areas.lua` and `lua/gen2_crystal_locations.lua` from `data/games/gen2_crystal/area_map.json`.
@@ -308,12 +313,14 @@ SLink-RR/
 - **`lua/tests/test_sound_discovery.lua`** — Diagnostic script: scans ROM for gSongTable and reports SE song header addresses for the current ROM profile.
 - **`lua/tests/test_ability_diag.lua`** — Diagnostic script: auto-detects ROM profile, validates gBaseStats address, shows party ability data per slot.
 - **`lua/tests/test_item_discovery.lua`** — ROM scanner for RR/CFRU gItems table. Uses CFRU probe scoring (IDs 52-62) and itemId field validation to find the correct table. Outputs JSON to `rr_items.json`.
-- **`tests/unit/test_state.py`** — 234 pytest unit tests for the state machine.
+- **`tests/unit/test_state.py`** — 236 pytest unit tests for the state machine.
 - **`tests/unit/test_gen1_adapter.py`** — 78 tests for the Gen 1 adapter.
 - **`tests/unit/test_gen2_adapter.py`** — 127 tests for the Gen 2 adapter.
-- **`tests/unit/test_gen3_adapter.py`** — 77 tests for the Gen 3 adapter.
+- **`tests/unit/test_gen3_adapter.py`** — 182 tests for the Gen 3 adapter.
 - **`tests/unit/test_gen4_adapter.py`** — 62 tests for the Gen 4 adapter.
 - **`tests/unit/test_gen5_adapter.py`** — 63 tests for the Gen 5 adapter.
+- **`tests/unit/test_stat_stages.py`** — 42 tests for stat stage calculations.
+- **`tests/unit/test_obs_priority.py`** — 4 tests for OBS priority-based trigger resolution (`submit_fired` — first-match-wins, per-player independence, area filter).
 - **`tests/unit/test_phase1_comms.py`** — 6 TCP integration tests.
 
 ---
@@ -978,6 +985,7 @@ Endpoints:
 |---|---|
 | `GET /` | HTML status page |
 | `GET /memorial` | Memorial wall page — tombstone cards for dead pairs |
+| `GET /obs` | OBS scene trigger configuration page |
 | `GET /debug` | Debug console — manual link, event injection, state manipulation |
 | `GET /stream` | Stream overlay index |
 | `GET /stream/party-a` | Stream overlay — Player A party |
@@ -1001,6 +1009,12 @@ Endpoints:
 | `POST /api/debug/unlink` | Remove an existing link by area_id |
 | `GET /api/debug/backups` | List rolling backup slots with metadata |
 | `POST /api/debug/rollback` | Restore state from a backup slot (saves pre-rollback as `links.pre_rollback.json` and `events.pre_rollback.json`) |
+| `GET /api/obs/status` | OBS connection status + trigger rules (passwords redacted) |
+| `POST /api/obs/config` | Save OBS config and hot-reload connections |
+| `POST /api/obs/connect` | Connect one OBS player |
+| `POST /api/obs/disconnect` | Disconnect one OBS player |
+| `GET /api/obs/scenes/{player}` | List available scenes from a connected OBS instance |
+| `POST /api/obs/test` | Test a scene switch for a player |
 
 **Player cards** (side-by-side) show for each player:
 - Connection status (online/offline badge)
@@ -1030,14 +1044,16 @@ Below the cards:
 ### Unit tests — no emulator or server required
 
 ```bash
-pytest tests/unit/ -v   # 647 tests
-pytest tests/unit/test_state.py -v          # 234 tests
+pytest tests/unit/ -v   # 800 tests
+pytest tests/unit/test_state.py -v          # 236 tests
 pytest tests/unit/test_gen1_adapter.py -v   # 78 tests
 pytest tests/unit/test_gen2_adapter.py -v   # 127 tests
-pytest tests/unit/test_gen3_adapter.py -v   # 77 tests
+pytest tests/unit/test_gen3_adapter.py -v   # 182 tests
 pytest tests/unit/test_gen4_adapter.py -v   # 62 tests
 pytest tests/unit/test_gen5_adapter.py -v   # 63 tests
+pytest tests/unit/test_stat_stages.py -v    # 42 tests
 pytest tests/unit/test_phase1_comms.py -v   # 6 tests
+pytest tests/unit/test_obs_priority.py -v   # 4 tests
 ```
 
 Feed event dicts directly to `SoulLinkState.handle_event()`. Use `monkeypatch` to redirect `LINKS_PATH` to `tmp_path`. Helper `make_state_with_link()` creates a pre-linked pair with `pokeballs_obtained = {"a": True, "b": True}`.
@@ -1345,6 +1361,63 @@ The status page party tables now display enemy battle type badges (Wild, Trainer
 - **Danger Zone** — reset run, clear pending captures
 - **Raw State** — view `links.json` + live server state
 - **Backup Rollback** — view rolling backup slots with clickable slot table, restore any backup via `/api/debug/rollback`
+
+---
+
+## OBS Scene Trigger Integration
+
+SLink can automatically switch OBS scenes in response to game events via `server/obs_controller.py`.
+
+### Architecture
+
+- **Library:** `simpleobsws>=1.4` — fully async obs-websocket v5 client. URL must be `ws://HOST:4455` (obs-websocket v5 port; do NOT use the v4 default 4444).
+- **Per-player workers:** each player slot (`a`, `b`) has an `asyncio.Queue(maxsize=1)` and a dedicated `_worker()` coroutine. The worker is connected to a `_reconnect_loop()` that retries with exponential backoff (5 s → 60 s cap) whenever OBS disconnects.
+- **Coalescing:** if OBS is slow, the queue only keeps the most-recent desired scene (drain + put). This prevents stale scene commands from stacking up.
+- **Isolation:** all OBS I/O is in the worker tasks — failures never raise into the game server event loop.
+
+### Config (`data/obs_config.json`)
+
+```json
+{
+  "enabled": true,
+  "connections": {
+    "a": {"host": "127.0.0.1", "port": 4455, "password": "..."},
+    "b": {"host": "",          "port": 4455, "password": ""}
+  },
+  "triggers": [
+    {"id": "t1", "event": "battle_start_new", "player_filter": "any",
+     "target": "own", "scene": "NEW ENCOUNTER", "area_id_filter": ""},
+    {"id": "t2", "event": "wild_battle_start", "player_filter": "any",
+     "target": "own", "scene": "WILD BATTLE",   "area_id_filter": ""},
+    {"id": "t3", "event": "battle_start",      "player_filter": "any",
+     "target": "own", "scene": "BATTLE",        "area_id_filter": ""}
+  ]
+}
+```
+
+Config is **global** (not per-run). Empty host (`""`) = disabled for that player. Passwords never returned in HTTP GET responses.
+
+### Priority Resolution (`submit_fired`)
+
+`_emit_obs_triggers()` in `server.py` collects all `(event_name, src_player, metadata)` tuples that fire during a single `_dispatch()` call and passes them to `obs.submit_fired(fired)` once at the end.
+
+`submit_fired` iterates rules in list order. For each rule it scans the `fired` list for a match. When a match is found it records `winners[target_player] = scene` — only if that player hasn't already been claimed by a higher-priority rule. Once both players have a winner the loop exits early.
+
+```
+fired = [("battle_start", "a"), ("wild_battle_start", "a"), ("battle_start_new", "a")]
+rules = [battle_start_new → "NEW ENCOUNTER", wild_battle_start → "WILD BATTLE", battle_start → "BATTLE"]
+→ player a gets "NEW ENCOUNTER"  (first rule, first match)
+```
+
+### 18 Supported Trigger Events
+
+`battle_start`, `wild_battle_start`, `trainer_battle_start`, `battle_end`, `battle_start_new` (open encounter slot), `area_enter` (with optional area_id filter), `area_enter_new` (open slot), `faint`, `link_death`, `whiteout`, `capture`, `shiny`, `linked`, `dead_zone`, `party_to_box`, `box_to_party`, `run_over`, `memorialize_done`.
+
+### UI (`/obs`)
+
+- Connection status badges per player, host/port/password fields, Save Config + Connect/Disconnect/Test buttons.
+- Trigger rules table: drag ⠿ handle to reorder (HTML5 drag-and-drop, reorders `triggers[]` JS array in-place, re-renders priority badges #1/#2/…). Click 💾 Save Config to persist.
+- Scene name `<datalist>` populated from connected OBS instance.
 
 ---
 

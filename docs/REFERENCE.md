@@ -56,7 +56,7 @@ Navigate to `http://localhost:8080/` in a browser. The page title dynamically sh
 Additional pages:
 - **Memorial wall** at `/memorial` — tombstone cards for each dead linked pair with species-accurate sprites (CFRU→NatDex conversion), RR sprite background removal, nicknames, species, cause of death. Live updates via SSE.
 - **Debug console** at `/debug` — live SSE updates, status banner (connections/areas/link counts/queued commands), link management (create/unlink/override/revive with live table), mon key autofill (datalist from party/link/pending data), area ID autofill (183+ areas annotated with state), event injection, command queuing, state toggles, live state panel (lock rules, player identity, party keys, bonus keys, pending bonus queue), backup rollback (clickable slot rows, restores both `links.json` and `events.json`).
-- **Stream overlays** at `/stream` — individual overlay pages for OBS (party, links, deaths, areas, events).
+- **Stream overlays** at `/stream` — individual overlay pages for OBS (party, links, deaths, areas, events, focus cards, encounter table, and more).
 
 ### 4. Load the Lua client in each BizHawk instance
 
@@ -144,6 +144,7 @@ The status server (default port 8080) exposes these pages and endpoints.
 |---|---|---|
 | `/` | GET | Main status page |
 | `/memorial` | GET | Memorial wall — dead pairs |
+| `/obs` | GET | OBS scene trigger configuration |
 | `/debug` | GET | Debug console |
 | `/twitch` | GET | Twitch bot configuration and activity log |
 | `/stream` | GET | Stream overlay index |
@@ -164,6 +165,9 @@ The status server (default port 8080) exposes these pages and endpoints.
 | `/stream/focus-a` | GET | Overlay — Player A focused mon view |
 | `/stream/focus-b` | GET | Overlay — Player B focused mon view |
 | `/stream/shiny-alert` | GET | Overlay — shiny encounter alert |
+| `/stream/area-encounter` | GET | Overlay — Soul Link status for the current area |
+| `/stream/enc-table-a` | GET | Overlay — wild encounter rates for Player A's current area |
+| `/stream/enc-table-b` | GET | Overlay — wild encounter rates for Player B's current area |
 | `/launcher/{player}` | GET | Download pre-configured launcher Lua script |
 | `/calc/` | GET | Damage calculator |
 | `/api/status` | GET | Full state JSON dump |
@@ -175,6 +179,13 @@ The status server (default port 8080) exposes these pages and endpoints.
 | `/api/bot/enable` | POST | Enable the bot and restart |
 | `/api/bot/disable` | POST | Disable the bot and cancel the task |
 | `/api/bot/preview` | POST | Preview what a command would reply (without sending to Twitch) |
+| `/obs` | GET | OBS scene trigger configuration page |
+| `/api/obs/status` | GET | OBS connection status + trigger rules (passwords redacted) |
+| `/api/obs/config` | POST | Save OBS config and hot-reload connections |
+| `/api/obs/connect` | POST | Connect one or both OBS players |
+| `/api/obs/disconnect` | POST | Disconnect one or both OBS players |
+| `/api/obs/scenes/{player}` | GET | List available scenes from a connected OBS instance |
+| `/api/obs/test` | POST | Test a scene switch for a player |
 | `/api/reset` | POST | Wipe all state and start fresh |
 | `/api/inject_link` | POST | Manually link two mons by key |
 | `/api/inject_link_by_slot` | POST | Manually link two mons by party slot index |
@@ -205,7 +216,14 @@ All pages update live via SSE — no manual refresh needed.
 
 ### Stream Overlays
 
-All overlays are designed as OBS browser sources. Each connects its own SSE feed and updates automatically. Add them in OBS via **Sources → Browser** and paste the URL.
+All overlays are designed as OBS browser sources. Each polls `/api/status` every 2 s and updates automatically. Add them in OBS via **Sources → Browser** and paste the URL.
+
+URL parameters supported by all overlays:
+- `?theme=dark` (default) / `?theme=light` / `?theme=transparent`
+- `?layout=h` / `?layout=thin-h` / `?layout=thin-v` (party overlays only)
+
+Scrolling overlays additionally accept:
+- `?speed=1` (default) — multiplier from `0.25`–`3.0`. Values on the index page's speed pill buttons update the URL automatically.
 
 | Overlay | URL | Use |
 |---|---|---|
@@ -226,6 +244,9 @@ All overlays are designed as OBS browser sources. Each connects its own SSE feed
 | Player A focus | `/stream/focus-a` | Player A focused mon view |
 | Player B focus | `/stream/focus-b` | Player B focused mon view |
 | Shiny alert | `/stream/shiny-alert` | Full-screen shiny encounter alert |
+| Area encounter | `/stream/area-encounter` | Soul Link status for the most-active area — linked pair, pending captures, or dead zone. Auto-follows the area with the most recent action. |
+| Wild encounters A | `/stream/enc-table-a` | Wild Pokémon encounter rates for Player A's current area (Radical Red only). Shows each method — Walking, Surfing, Fishing — with sprite, species, rate %, and level range. Auto-scrolls when the list is taller than the overlay; supports `?speed=` multiplier. |
+| Wild encounters B | `/stream/enc-table-b` | Wild Pokémon encounter rates for Player B's current area (Radical Red only). Same as above for Player B. |
 
 ### Launcher Script
 
@@ -253,8 +274,10 @@ Example response (abbreviated):
 ```json
 {
   "players": {
-    "a": { "connected": true, "area": "route_3", "ball_count": 12, "party": [...] },
-    "b": { "connected": true, "area": "mt_moon", "ball_count": 8,  "party": [...] }
+    "a": { "connected": true, "area": "route_3", "ball_count": 12, "party": [...],
+           "encounter_table": {"Day": [{"species_id": 16, "name": "Pidgey", "rate": 45, "min_level": 3, "max_level": 5}]} },
+    "b": { "connected": true, "area": "mt_moon", "ball_count": 8,  "party": [...],
+           "encounter_table": null }
   },
   "links": [
     {
@@ -591,6 +614,8 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Paired party sync — retrieval requires both players have room | ✅ Working |
 | Lua client performance optimization (localized functions, display cache, frame-cached state) | ✅ Working |
 | Status page — Pokémon sprites (PokeAPI + RR custom forms) | ✅ Working |
+| Stream overlay — area encounter (Soul Link status for current area, SSE live updates) | ✅ Working |
+| Stream overlay — wild encounter table per player (Radical Red; autoscroll; speed control) | ✅ Working |
 | Stream overlay — correct CFRU species sprites (server-side NatDex conversion) | ✅ Working |
 | Status page — Pokémon ability names (party, PC box, enemy) | ✅ Working |
 | Status page — enemy held item display (inline with name, Gen 3 + Gen 4) | ✅ Working |
@@ -632,6 +657,8 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Calc search — full substring matching (Pokémon name, trainer/set name, moves) | ✅ Working |
 | Calc search — match highlighting in dropdown results (accent-colour mark around matched terms) | ✅ Working |
 | Twitch chat bot (twitchio 3.x EventSub WebSocket) | ✅ Working |
+| OBS scene trigger integration (simpleobsws v5 async) | ✅ Working |
+| OBS priority-based trigger resolution (draggable rules list) | ✅ Working |
 
 ---
 
@@ -640,16 +667,20 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 ### Unit tests (no emulator required)
 
 ```bash
-pytest tests/unit/ -v          # all 796 tests
-pytest tests/unit/test_state.py -v        # 234 state machine tests
-pytest tests/unit/test_gen3_adapter.py -v  # 77 Gen 3 adapter tests
+pytest tests/unit/ -v          # all 800 tests
+pytest tests/unit/test_state.py -v        # 236 state machine tests
+pytest tests/unit/test_gen3_adapter.py -v  # 182 Gen 3 adapter tests
 pytest tests/unit/test_gen4_adapter.py -v  # 62 Gen 4 adapter tests
 pytest tests/unit/test_gen1_adapter.py -v  # 78 Gen 1 adapter tests
 pytest tests/unit/test_gen2_adapter.py -v  # 127 Gen 2 adapter tests
 pytest tests/unit/test_gen5_adapter.py -v  # 63 Gen 5 adapter tests
+pytest tests/unit/test_stat_stages.py -v   # 42 stat stage tests
+pytest tests/unit/test_obs_priority.py -v  # 4 OBS priority tests
 ```
 
-234 state machine tests covering: linking, dead zones, faint propagation, whiteout, party sync (including confirmation-based `sync_retrieve_done`/`sync_retrieve_failed`, PC swap event ordering), box capture stats caching, memorial box, reconnect re-queuing, illegal captures, encounter logging, AP ROM type handling, species clause (evo families), gender clause (genderless edge cases), type clause (shared types, partial overlap, monotypes), combined clauses, violation recovery, clause rule persistence, same-save species duplicate prevention, dynamic gift areas, hello resolved_areas, gift area no_catch protection, unlinked encounter quarantine, paired party sync enforcement, dead zone quarantined mon retirement, CFRU/RR species data validation (Gen 3 ID rekey, Gen 4+ cross-gen evolutions, gender ratios), battle HP cache writeback (CFRU), double-buffer party diff, frame ordering, player identity lock (OT ID per slot — first lock, wrong OT rejection, event blocking, persistence, empty party skip, per-player independence), persistent run metadata (rom_type, trainer_names), shiny bonus pairs (pending_bonus FIFO queue, pair formation, faint propagation both directions, party sync at formation, FIFO multi-bonus, lock clause violations with retry, area unresolve, persistence, key migration, no-wildcard-exemption), nature change (key_change migration), and dupes clause partner pending capture check.
+236 state machine tests covering: linking, dead zones, faint propagation, whiteout, party sync (including confirmation-based `sync_retrieve_done`/`sync_retrieve_failed`, PC swap event ordering), box capture stats caching, memorial box, reconnect re-queuing, illegal captures, encounter logging, AP ROM type handling, species clause (evo families), gender clause (genderless edge cases), type clause (shared types, partial overlap, monotypes), combined clauses, violation recovery, clause rule persistence, same-save species duplicate prevention, dynamic gift areas, hello resolved_areas, gift area no_catch protection, unlinked encounter quarantine, paired party sync enforcement, dead zone quarantined mon retirement, CFRU/RR species data validation (Gen 3 ID rekey, Gen 4+ cross-gen evolutions, gender ratios), battle HP cache writeback (CFRU), double-buffer party diff, frame ordering, player identity lock (OT ID per slot — first lock, wrong OT rejection, event blocking, persistence, empty party skip, per-player independence), persistent run metadata (rom_type, trainer_names), shiny bonus pairs (pending_bonus FIFO queue, pair formation, faint propagation both directions, party sync at formation, FIFO multi-bonus, lock clause violations with retry, area unresolve, persistence, key migration, no-wildcard-exemption), nature change (key_change migration), and dupes clause partner pending capture check.
+
+4 OBS priority tests covering: highest-priority rule wins when multiple events fire simultaneously, lower-priority fallback when high-priority event didn't fire, independent per-player resolution, and area_id filter matching.
 
 ### Integration tests (server required)
 
@@ -701,6 +732,7 @@ See `tests/TESTING.md` for the full 9-step end-to-end test procedure. Load `lua/
 | `data/links.json` | Persisted link table — written after every state change |
 | `data/memorial.json` | Persisted memorial log |
 | `server/manager.py` | Run Manager — creates/starts/stops/archives named runs on port 8090 |
+| `server/obs_controller.py` | OBS Controller — per-player `simpleobsws` connections, coalescing queue workers, priority-based `submit_fired()` resolver, config I/O at `data/obs_config.json` |
 | `server/twitch_bot.py` | Twitch chat bot — twitchio 3.x EventSub, command handling, activity log |
 | `lua/tests/` | BizHawk test scripts (memory, force-faint, server comms, ability diag, etc.) |
 | `tools/` | Generator scripts — ability descriptions, ability names, form data, species data, RR data, sprites, types |
@@ -1013,6 +1045,70 @@ These can also be edited live from the `/twitch` page without restarting the ser
 | `!attempts` | — | Current attempt number |
 | `!partner` | `<name>` | Look up a mon's Soul Link partner by nickname |
 | `!area` | `<name>` | Look up an area's link status |
+
+---
+
+## OBS Scene Trigger Integration
+
+SLink can automatically switch OBS scenes in response to game events, with independent control of each player's OBS instance.
+
+### Setup
+
+1. Enable **OBS WebSocket** in OBS Studio (`Tools → WebSocket Server Settings`) — default port 4455.
+2. Navigate to `http://localhost:8080/obs`.
+3. Enter the host, port, and password for each player's OBS instance and click **Save Config**.
+4. Click **Connect** for each player. Status badges show `connected` when the WebSocket handshake succeeds.
+
+Config is persisted at `data/obs_config.json` (global, not per-run). Passwords are write-only — they are never returned in GET responses.
+
+### Trigger Rules
+
+Create rules on the `/obs` page. Each rule maps a game event to a scene name:
+
+| Field | Values | Description |
+|---|---|---|
+| Event | See table below | The game event that fires the rule |
+| Player Filter | `any`, `a`, `b` | Only fire when this player triggers the event |
+| Target OBS | `own`, `a`, `b`, `both` | Which OBS instance receives the scene change |
+| Scene Name | any string | The scene to switch to (datalist populated from connected OBS) |
+| Area Filter | `area_id` string | *(area_enter only)* restrict to a specific area |
+
+### Supported Events
+
+| Event | Fires when |
+|---|---|
+| `battle_start` | Any battle begins |
+| `wild_battle_start` | A wild Pokémon battle begins |
+| `trainer_battle_start` | A trainer battle begins |
+| `battle_end` | A battle ends |
+| `battle_start_new` | Battle starts in an area that still has an open encounter slot |
+| `area_enter` | Player enters any area (with optional area_id filter) |
+| `area_enter_new` | Player enters an area with an open encounter slot |
+| `faint` | A player's own mon faints |
+| `link_death` | A partner mon receives a `force_faint` command (linked death) |
+| `whiteout` | A player blacks out |
+| `capture` | A mon is caught |
+| `shiny` | A shiny mon is caught (bonus pair trigger) |
+| `linked` | An encounter area transitions to `linked` state |
+| `dead_zone` | An encounter area transitions to `dead_zone` state |
+| `party_to_box` | A mon is deposited from party to PC |
+| `box_to_party` | A mon is retrieved from PC to party |
+| `memorialize_done` | A dead pair is moved to the memorial box |
+| `run_over` | The Soul Link run ends |
+
+### Priority Resolution
+
+Multiple events can fire in the same dispatch cycle (e.g., entering battle in a new encounter area fires `battle_start`, `wild_battle_start`, and `battle_start_new` simultaneously). Rules are evaluated **top-to-bottom** — for each OBS instance (player A or B), only the **first** matching rule wins.
+
+Reorder rules by dragging the ⠿ handle. Click **💾 Save Config** after reordering.
+
+### Implementation Details
+
+- **Library:** `simpleobsws>=1.4` (fully async, obs-websocket v5). URL must be `ws://HOST:4455` — default v4 port (4444) is wrong.
+- **Per-player coalescing queue:** each OBS player has an `asyncio.Queue(maxsize=1)` + dedicated worker task. If OBS is slow, only the latest desired scene is sent.
+- **Reconnect loop:** exponential backoff 5 s → 60 s cap. OBS failures are fully isolated — they never affect game server operation.
+- **`submit_fired(fired_list)`** — priority resolver called once per dispatch cycle with all `(event_name, src_player, metadata)` tuples; iterates rules in list order, sets winners dict (first match per target player wins).
+- **`_emit_obs_triggers()`** in `server.py` collects all fired events for a dispatch cycle into a list and calls `obs.submit_fired(fired)` once at the end.
 
 ---
 
