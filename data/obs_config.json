@@ -1,0 +1,41 @@
+{
+  "enabled": true,
+  "connections": {
+    "a": {
+      "host": "127.0.0.1",
+      "port": 4455,
+      "password": "RFbzAAAAAGf2NAAA"
+    },
+    "b": {
+      "host": "",
+      "port": 4455,
+      "password": "RFbzAAAAAGf2NAAA"
+    }
+  },
+  "triggers": [
+    {
+      "id": "t1778868449832",
+      "event": "area_enter_new",
+      "player_filter": "a",
+      "target": "own",
+      "scene": "NewEnc",
+      "area_id_filter": ""
+    },
+    {
+      "id": "t1778868457937",
+      "event": "battle_start",
+      "player_filter": "a",
+      "target": "own",
+      "scene": "Battle",
+      "area_id_filter": ""
+    },
+    {
+      "id": "t1778868473044",
+      "event": "battle_end",
+      "player_filter": "a",
+      "target": "own",
+      "scene": "Default",
+      "area_id_filter": ""
+    }
+  ]
+}

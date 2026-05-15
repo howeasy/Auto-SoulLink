@@ -3,3 +3,4 @@ pytest-asyncio
 aiohttp
 psutil
 twitchio>=3.0
+simpleobsws>=1.4
