@@ -13,3 +13,6 @@ slink_path.cfg
 node_modules/
 .claude/
 tests/_tmp/
+data/twitch_bot.json
+.env
+.env.*
