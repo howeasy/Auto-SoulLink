@@ -1702,7 +1702,10 @@ local function on_frame()
                 -- overworld scripted party replacement).  Trigger party freeze immediately
                 -- so the departed mons don't get party_to_box events and the gift buffer
                 -- doesn't need to accumulate to threshold before protection kicks in.
-                if #trade_deps >= 1 and #trade_arrs >= 1 then
+                -- Exception: suppress during post_battle_frames — post-battle party
+                -- restoration (borrowed team departing, real mons returning) looks
+                -- identical to an ambiguous trade but is expected cleanup, not a real swap.
+                if #trade_deps >= 1 and #trade_arrs >= 1 and post_battle_frames == 0 then
                     console.log(string.format(
                         "[SLink-FRLGE] trade detection ambiguous: %d departures, %d arrivals — triggering party freeze",
                         #trade_deps, #trade_arrs))
@@ -1719,8 +1722,9 @@ local function on_frame()
                     gift_capture_buffer = {}
                 else
                     console.log(string.format(
-                        "[SLink-FRLGE] trade detection ambiguous: %d departures, %d arrivals — skipped",
-                        #trade_deps, #trade_arrs))
+                        "[SLink-FRLGE] trade detection ambiguous: %d departures, %d arrivals — skipped%s",
+                        #trade_deps, #trade_arrs,
+                        post_battle_frames > 0 and " (post-battle window)" or ""))
                 end
             end
         end
