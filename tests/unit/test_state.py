@@ -2006,6 +2006,7 @@ def _make_mock_server(state) -> object:
     """Return a minimal mock object that exposes _check_memorial_box_contamination."""
     class _MS:
         adapter = _MockAdapter()
+        _warned_orphan_keys: set = set()
 
         def _check_memorial_box_contamination(self_inner, player_id, pc_boxes):
             return SLinkServer._check_memorial_box_contamination(self_inner, player_id, pc_boxes)
@@ -4208,3 +4209,73 @@ def test_save_crash_mid_write_preserves_previous_links_json(tmp_path, monkeypatc
     with open(links_path) as f:
         survived = _json.load(f)
     assert survived == good_payload, "links.json must be unchanged after crashed write"
+
+
+# ── key_change undo (trade_undo) round-trip ───────────────────────────────────
+
+def test_key_change_undo_restores_link_entry(tmp_path, monkeypatch):
+    """NPC trade forward then trade_undo backward fully restores link entry and key index."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    ORIG_KEY   = "AAAA:1111"
+    TRADED_KEY = "CCCC:3333"
+
+    state = make_state_with_link(a_key=ORIG_KEY, b_key="BBBB:2222")
+    state.mon_stats[ORIG_KEY] = {"level": 20, "maxHP": 60}
+
+    # Forward: NPC trade — A's mon gets a new key
+    state.handle_event("a", {"event": "key_change", "old_key": ORIG_KEY, "new_key": TRADED_KEY})
+    assert state.links[0].a.key == TRADED_KEY
+    assert TRADED_KEY in state._key_index
+    assert ORIG_KEY not in state._key_index
+    assert TRADED_KEY in state.party_keys["a"]
+    assert TRADED_KEY in state.mon_stats
+
+    # Undo: freeze fires within 5 frames; Lua sends trade_undo B→A
+    state.handle_event("a", {"event": "key_change", "old_key": TRADED_KEY, "new_key": ORIG_KEY,
+                             "reason": "trade_undo"})
+    assert state.links[0].a.key == ORIG_KEY
+    assert ORIG_KEY in state._key_index
+    assert TRADED_KEY not in state._key_index
+    assert ORIG_KEY in state.party_keys["a"]
+    assert TRADED_KEY not in state.party_keys["a"]
+    assert ORIG_KEY in state.mon_stats
+    assert TRADED_KEY not in state.mon_stats
+    assert state.mon_stats[ORIG_KEY]["level"] == 20
+
+
+def test_key_change_undo_restores_pending_capture(tmp_path, monkeypatch):
+    """trade_undo key_change migrates the key back in pending_captures."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.party_size = {"a": 2, "b": 2}
+
+    state.handle_event("a", {"event": "capture", "key": "AA:11", "area_id": "route_5", "level": 5})
+    assert state.pending_captures["route_5"]["a"].key == "AA:11"
+
+    # Trade key forward
+    state.handle_event("a", {"event": "key_change", "old_key": "AA:11", "new_key": "BB:22"})
+    assert state.pending_captures["route_5"]["a"].key == "BB:22"
+
+    # Undo
+    state.handle_event("a", {"event": "key_change", "old_key": "BB:22", "new_key": "AA:11",
+                             "reason": "trade_undo"})
+    assert state.pending_captures["route_5"]["a"].key == "AA:11"
+
+
+def test_key_change_undo_faint_propagates_with_restored_key(tmp_path, monkeypatch):
+    """After a trade_undo, a faint on the restored original key still propagates to partner."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    ORIG_KEY   = "AAAA:1111"
+    TRADED_KEY = "CCCC:3333"
+
+    state = make_state_with_link(a_key=ORIG_KEY, b_key="BBBB:2222")
+
+    state.handle_event("a", {"event": "key_change", "old_key": ORIG_KEY, "new_key": TRADED_KEY})
+    state.handle_event("a", {"event": "key_change", "old_key": TRADED_KEY, "new_key": ORIG_KEY,
+                             "reason": "trade_undo"})
+
+    # Faint the restored key — partner should still receive force_faint
+    state.handle_event("a", {"event": "faint", "key": ORIG_KEY})
+    cmds = state.handle_event("b", {"event": "tick"})
+    assert has_cmd(cmds, "force_faint", "BBBB:2222")

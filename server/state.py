@@ -1762,13 +1762,25 @@ class SoulLinkState:
 
         On crash mid-write, the original file at `path` is untouched.
         `os.replace` is atomic on both Windows and POSIX.
+
+        On Windows, file sync software (e.g. Google Drive) can briefly hold
+        a lock on the target file, making `os.replace` raise PermissionError.
+        We retry up to 5 times with a short sleep before giving up.
         """
+        import time
         tmp_path = path + ".tmp"
         with open(tmp_path, "w") as f:
             json.dump(payload, f, indent=2)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp_path, path)
+        for attempt in range(5):
+            try:
+                os.replace(tmp_path, path)
+                return
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.2 * (attempt + 1))
 
     def _save(self):
         os.makedirs(self._data_dir, exist_ok=True)
