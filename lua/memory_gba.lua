@@ -57,7 +57,8 @@ local _PROFILE_RESET_KEYS = {
     "BATTLE_MAIN_FUNC_ADDR", "RETURN_FROM_BATTLE_ADDR",
     "GMAIN_ADDR", "SB1_PTR_ADDR", "SB2_PTR_ADDR", "PSP_PTR_ADDR",
     "SB2_ENC_KEY_OFFSET", "SB1_BALL_POCKET_OFFSET", "SB1_BALL_POCKET_COUNT",
-    "SB1_FLAGS_OFFSET", "SE_SONG_HEADERS",
+    "SB1_FLAGS_OFFSET", "SB1_VARS_OFFSET", "SE_SONG_HEADERS",
+    "SPECIAL_VAR_BOX_ID_ADDR", "SPECIAL_VAR_BOX_POS_ADDR",
     "_overworld_mode", "supports_battle_redirect",
 }
 
@@ -1225,6 +1226,55 @@ function M.readCurrentBox()
         end
     end
     return boxIndex, keys
+end
+
+-- VAR_PC_BOX_TO_SEND_MON: the persistent SaveBlock1.vars[] entry that SendMonToPC
+-- sets to the destination box index each time a mon is deposited to the PC.
+-- Index 0x37 within vars[]; two bytes per entry; base at SB1+0x1000 (vanilla/CFRU).
+M.VAR_PC_BOX_TO_SEND_MON = 0x4037
+
+-- Read a saved game variable (var_id 0x4000–0x40FF) from SaveBlock1.vars[].
+-- Returns the u16 value, or nil if the profile has no SB1_VARS_OFFSET, the pointer
+-- is invalid, or the read faults.
+function M.readSB1Var(var_id)
+    if not M.SB1_VARS_OFFSET then return nil end
+    if var_id < 0x4000 or var_id > 0x40FF then return nil end
+    local ok, sb1 = pcall(mem_r32, M.SB1_PTR_ADDR)
+    if not ok or not sb1 or sb1 < 0x02000000 or sb1 >= 0x02040000 then return nil end
+    local ok2, val = pcall(mem_r16, sb1 + M.SB1_VARS_OFFSET + (var_id - 0x4000) * 2)
+    return ok2 and val or nil
+end
+
+-- Returns (box_id, slot) — the box index and slot index where the last caught mon
+-- was sent to the PC — using the fastest available method for this profile.
+--
+-- Tier 1 (O(1), vanilla + CFRU/RR): read gSpecialVar_MonBoxId + gSpecialVar_MonBoxPos
+--   from fixed EWRAM addresses.  Both box and slot are known; direct slot read.
+-- Tier 2 (O(30), all profiles with SB1_VARS_OFFSET): read VAR_PC_BOX_TO_SEND_MON
+--   from SaveBlock1.vars[].  Box known; slot unknown (nil); caller scans that box.
+-- Tier 3: returns (nil, nil); caller falls back to full-scan across all boxes.
+--
+-- Validation: box_id is clamped to [0, BOXES_PER_STORE-1]; slot to [0, MONS_PER_BOX-1].
+-- Memorial box is NOT filtered here — caller must skip it.
+function M.readLastPCDeposit()
+    -- Tier 1: EWRAM special vars — available for vanilla BPRE and CFRU/RR profiles.
+    if M.SPECIAL_VAR_BOX_ID_ADDR then
+        local ok1, box_id = pcall(mem_r16, M.SPECIAL_VAR_BOX_ID_ADDR)
+        local ok2, slot   = pcall(mem_r16, M.SPECIAL_VAR_BOX_POS_ADDR)
+        if ok1 and ok2
+            and box_id >= 0 and box_id < M.BOXES_PER_STORE
+            and slot   >= 0 and slot   < M.MONS_PER_BOX then
+            return box_id, slot
+        end
+    end
+    -- Tier 2: SaveBlock1 VAR_PC_BOX_TO_SEND_MON — available when SB1_VARS_OFFSET is set.
+    if M.SB1_VARS_OFFSET then
+        local box_id = M.readSB1Var(M.VAR_PC_BOX_TO_SEND_MON)
+        if box_id and box_id >= 0 and box_id < M.BOXES_PER_STORE then
+            return box_id, nil  -- slot unknown; caller must scan the box
+        end
+    end
+    return nil, nil  -- no info; caller falls back to full scan
 end
 
 -- Returns true if the current battle is a wild encounter (not a trainer battle).

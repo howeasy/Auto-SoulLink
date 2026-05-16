@@ -1918,23 +1918,63 @@ local function on_frame()
                 captured_this_battle = true
                 console.log(string.format("[SLink-FRLGE] box: %d new slots — ambiguous, no_catch suppressed", #new_slots))
             else
-                -- No new slot in the battle-start box. The game may have auto-advanced
-                -- to a different box after the catch (box was full).
+                -- No new slot in the battle-start box. The game auto-advanced to a
+                -- different box after the catch (box was full). Use the engine's own
+                -- deposit bookkeeping to locate the slot without a full-box scan.
                 if M.getBattleOutcome() == M.OUTCOME_CAUGHT then
-                    -- The game auto-advanced to a different box after the catch.
-                    -- Scan all non-memorial boxes for exactly one key not seen before this battle.
+                    -- Three-tier approach using the engine's own deposit bookkeeping:
+                    --   Tier 1 — EWRAM gSpecialVar_MonBoxId + MonBoxPos (vanilla/CFRU): O(1)
+                    --   Tier 2 — SaveBlock1 VAR_PC_BOX_TO_SEND_MON (all profiles):     O(30)
+                    --   Tier 3 — full scan across all boxes (Emerald / no info):        O(750)
+                    -- Tier 3 also runs if Tier 2 finds nothing (guards against stale vars).
                     local new_key, found_count = nil, 0
-                    for bi = 0, M.BOXES_PER_STORE - 1 do
-                        if bi ~= M.MEMORIAL_BOX then
-                            for si = 0, M.MONS_PER_BOX - 1 do
-                                local k = M.boxMonKey(bi, si)
-                                if k and not all_known_keys[k] then
-                                    found_count = found_count + 1
-                                    new_key = k
+                    local dep_box, dep_slot = M.readLastPCDeposit()
+
+                    -- Tier 1: exact slot known — single direct read.
+                    if dep_box ~= nil and dep_box ~= M.MEMORIAL_BOX and dep_slot ~= nil then
+                        local k = M.boxMonKey(dep_box, dep_slot)
+                        if k and not all_known_keys[k] then
+                            found_count, new_key = 1, k
+                        else
+                            -- EWRAM special vars stale: box and slot are written as a pair
+                            -- by SendMonToPC, so distrust both.  Re-read box from the
+                            -- persistent SB1 var (VAR_PC_BOX_TO_SEND_MON) instead.
+                            console.log("[SLink-FRLGE] box: EWRAM deposit vars stale, re-reading box from SB1")
+                            dep_box  = M.readSB1Var(M.VAR_PC_BOX_TO_SEND_MON)
+                            dep_slot = nil
+                            if dep_box and (dep_box >= M.BOXES_PER_STORE or dep_box == M.MEMORIAL_BOX) then
+                                dep_box = nil  -- out of range; will trigger Tier 3
+                            end
+                        end
+                    end
+
+                    -- Tier 2: box known, slot unknown — scan just that box.
+                    if new_key == nil and dep_box ~= nil and dep_box ~= M.MEMORIAL_BOX then
+                        for si = 0, M.MONS_PER_BOX - 1 do
+                            local k = M.boxMonKey(dep_box, si)
+                            if k and not all_known_keys[k] then
+                                found_count = found_count + 1
+                                new_key = k
+                            end
+                        end
+                    end
+
+                    -- Tier 3: no deposit info, or Tier 2 found nothing (var may be stale).
+                    if new_key == nil and found_count == 0 then
+                        console.log("[SLink-FRLGE] box: deposit VAR miss; full scan fallback")
+                        for bi = 0, M.BOXES_PER_STORE - 1 do
+                            if bi ~= M.MEMORIAL_BOX then
+                                for si = 0, M.MONS_PER_BOX - 1 do
+                                    local k = M.boxMonKey(bi, si)
+                                    if k and not all_known_keys[k] then
+                                        found_count = found_count + 1
+                                        new_key = k
+                                    end
                                 end
                             end
                         end
                     end
+
                     if found_count == 1 then
                         local evt_area = battle_area_id or area
                         captured_this_battle    = true

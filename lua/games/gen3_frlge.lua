@@ -81,7 +81,12 @@ GEN3.profiles = {
         SB2_ENC_KEY_OFFSET         = 0x0F20,
         SB1_BALL_POCKET_OFFSET     = 0x0430,
         SB1_BALL_POCKET_COUNT      = 13,
-        SB1_FLAGS_OFFSET           = 0x0EE0,   -- SaveBlock1.flags[] bitfield
+        SB1_FLAGS_OFFSET           = 0x0EE0,   -- SaveBlock1.flags[] bitfield (SB1+0x0EE0)
+        SB1_VARS_OFFSET            = 0x1000,   -- SaveBlock1.vars[] (SB1+0x1000; confirmed pret/pokefirered global.h /*0x1000*/)
+        -- EWRAM special vars: set by SendMonToPC during catch; give box+slot of last PC deposit.
+        -- These are fixed vanilla BPRE addresses (preserved by CFRU and data-only randomizers).
+        SPECIAL_VAR_BOX_ID_ADDR    = 0x020370D6,  -- gSpecialVar_MonBoxId (0-indexed box)
+        SPECIAL_VAR_BOX_POS_ADDR   = 0x020370D8,  -- gSpecialVar_MonBoxPos (0-indexed slot in box)
         -- Vanilla: inBattle detection via gMain+0x439 bit 1
         OVERWORLD_MODE             = "gmain_flags",
         -- SongHeader ROM addresses (FireRed US 1.0, vanilla ROM code)
@@ -118,6 +123,9 @@ GEN3.profiles = {
         SB1_BALL_POCKET_OFFSET     = 0x0680,
         SB1_BALL_POCKET_COUNT      = 13,
         SB1_FLAGS_OFFSET           = 0x1130,   -- SaveBlock1.flags[] (+0x250 from vanilla 0x0EE0)
+        SB1_VARS_OFFSET            = 0x1250,   -- SaveBlock1.vars[] (0x1130 + 0x120 flags_size; derived estimate)
+        -- AP recompiles the binary, so gSpecialVar_MonBoxId EWRAM addresses differ from vanilla.
+        -- Use SB1 VAR_PC_BOX_TO_SEND_MON (SB1_VARS_OFFSET + 0x6E) as the box hint instead.
         -- AP: overworld detection via gMain+0x038 == 1 (AP custom field)
         OVERWORLD_MODE             = "gmain_038",
         -- AP recompiles ROM code; addresses found via test_sound_discovery.lua.
@@ -210,6 +218,10 @@ GEN3.profiles = {
 
         SB2_ENC_KEY_OFFSET         = 0x0F20,
         SB1_FLAGS_OFFSET           = 0x0EE0,
+        SB1_VARS_OFFSET            = 0x1000,   -- SaveBlock1.vars[] (SB1+0x1000; confirmed CFRU global.h /*0x1000*/)
+        -- EWRAM special vars: set by CFRU's SendMonToPC; hardcoded in CFRU event_data.h.
+        SPECIAL_VAR_BOX_ID_ADDR    = 0x020370D6,  -- gSpecialVar_MonBoxId (0-indexed box)
+        SPECIAL_VAR_BOX_POS_ADDR   = 0x020370D8,  -- gSpecialVar_MonBoxPos (0-indexed slot in box)
         -- Ball pocket in EWRAM (not inside SB1); quantities NOT encrypted
         BAG_IN_EWRAM               = true,
         BALL_POCKET_ADDR           = 0x0203C354,
