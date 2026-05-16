@@ -56,7 +56,6 @@ from server.stream_overlays import (
     _STREAM_MEMORIAL_JS,
     _STREAM_TICKER_JS,
     _STREAM_FOCUS_JS,
-    _STREAM_SHINY_ALERT_JS,
     _STREAM_AREA_ENCOUNTER_JS,
     _STREAM_ENC_TABLE_JS,
 )
@@ -98,7 +97,6 @@ _OVERLAY_PAGES: dict[str, tuple[str, str, Optional[str]]] = {
     "ticker":           ("Event Ticker",      _STREAM_TICKER_JS,         None),
     "focus-a":          ("Focus A",           _STREAM_FOCUS_JS,          "a"),
     "focus-b":          ("Focus B",           _STREAM_FOCUS_JS,          "b"),
-    "shiny-alert":      ("Shiny Alert",       _STREAM_SHINY_ALERT_JS,    None),
     "area-encounter":   ("Area Encounter",    _STREAM_AREA_ENCOUNTER_JS, None),
     "enc-table-a":      ("Encounter Table A", _STREAM_ENC_TABLE_JS,      "a"),
     "enc-table-b":      ("Encounter Table B", _STREAM_ENC_TABLE_JS,      "b"),

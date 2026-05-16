@@ -164,7 +164,6 @@ The status server (default port 8080) exposes these pages and endpoints.
 | `/stream/ticker` | GET | Overlay — scrolling text ticker |
 | `/stream/focus-a` | GET | Overlay — Player A focused mon view |
 | `/stream/focus-b` | GET | Overlay — Player B focused mon view |
-| `/stream/shiny-alert` | GET | Overlay — shiny encounter alert |
 | `/stream/area-encounter` | GET | Overlay — Soul Link status for the current area |
 | `/stream/enc-table-a` | GET | Overlay — wild encounter rates for Player A's current area |
 | `/stream/enc-table-b` | GET | Overlay — wild encounter rates for Player B's current area |
@@ -243,7 +242,6 @@ Scrolling overlays additionally accept:
 | Ticker | `/stream/ticker` | Scrolling text ticker |
 | Player A focus | `/stream/focus-a` | Player A focused mon view |
 | Player B focus | `/stream/focus-b` | Player B focused mon view |
-| Shiny alert | `/stream/shiny-alert` | Full-screen shiny encounter alert |
 | Area encounter | `/stream/area-encounter` | Soul Link status for the most-active area — linked pair, pending captures, or dead zone. Auto-follows the area with the most recent action. |
 | Wild encounters A | `/stream/enc-table-a` | Wild Pokémon encounter rates for Player A's current area (Radical Red only). Shows each method — Walking, Surfing, Fishing — with sprite, species, rate %, and level range. Auto-scrolls when the list is taller than the overlay; supports `?speed=` multiplier. |
 | Wild encounters B | `/stream/enc-table-b` | Wild Pokémon encounter rates for Player B's current area (Radical Red only). Same as above for Player B. |

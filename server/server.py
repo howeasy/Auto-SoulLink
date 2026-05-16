@@ -43,7 +43,6 @@ from server.stream_overlays import (
     _STREAM_MEMORIAL_JS,
     _STREAM_TICKER_JS,
     _STREAM_FOCUS_JS,
-    _STREAM_SHINY_ALERT_JS,
     _STREAM_AREA_ENCOUNTER_JS,
     _STREAM_ENC_TABLE_JS,
     _STREAM_INDEX_HTML,
@@ -4331,11 +4330,6 @@ class SLinkServer:
                                      _STREAM_FOCUS_JS.replace("%PLAYER%", "b")),
             content_type="text/html")
 
-    async def handle_stream_shiny_alert(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Shiny Alert", _STREAM_SHINY_ALERT_JS),
-            content_type="text/html")
-
     async def handle_stream_area_encounter(self, request):
         return aiohttp_web.Response(
             text=_stream_overlay_page("Area Encounter", _STREAM_AREA_ENCOUNTER_JS),
@@ -6352,7 +6346,6 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         app.router.add_get("/stream/ticker",          srv.handle_stream_ticker)
         app.router.add_get("/stream/focus-a",         srv.handle_stream_focus_a)
         app.router.add_get("/stream/focus-b",         srv.handle_stream_focus_b)
-        app.router.add_get("/stream/shiny-alert",     srv.handle_stream_shiny_alert)
         app.router.add_get("/stream/area-encounter",  srv.handle_stream_area_encounter)
         app.router.add_get("/stream/enc-table-a",     srv.handle_stream_enc_table_a)
         app.router.add_get("/stream/enc-table-b",     srv.handle_stream_enc_table_b)

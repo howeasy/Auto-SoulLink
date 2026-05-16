@@ -267,18 +267,6 @@ _STREAM_SHARED_CSS = """
   @keyframes memorial-scroll { from{transform:translateY(0)} to{transform:translateY(-50%)} }
   .mem-scroll-mask{overflow:hidden;flex:1;min-height:0}
 
-  /* ─── Shiny alert overlay ─────────────────────────────────────────────── */
-  @keyframes shiny-pop{0%{opacity:0;transform:scale(.3) rotate(-10deg)}60%{transform:scale(1.1) rotate(2deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
-  @keyframes shiny-sparkle{0%,100%{opacity:0;transform:scale(0)}50%{opacity:1;transform:scale(1)}}
-  .shiny-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:clamp(12px,2vmin,24px);z-index:9999}
-  .shiny-sprites{display:flex;gap:clamp(16px,3vmin,36px);align-items:center;justify-content:center}
-  .shiny-sprite{width:clamp(80px,16vmin,160px);aspect-ratio:1;image-rendering:pixelated;animation:shiny-pop .6s ease-out both}
-  .shiny-sprite img,.shiny-sprite .mon-sprite{width:100%;height:100%;object-fit:contain;image-rendering:pixelated}
-  .shiny-text{font-family:var(--px);font-size:clamp(12px,3vmin,26px);-webkit-font-smoothing:none;color:var(--c-gold);text-shadow:0 0 30px var(--c-gold),0 0 60px rgba(248,208,48,.4);text-align:center;animation:shiny-pop .6s ease-out .1s both}
-  .shiny-sub{font-size:.7em;opacity:.6;margin-top:.4em}
-  .shiny-sparkle-wrap{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-  .shiny-sparkle{position:absolute;width:clamp(6px,1.2vmin,14px);aspect-ratio:1;border-radius:50%;background:var(--c-gold);animation:shiny-sparkle var(--dur,1.2s) ease-in-out var(--delay,0s) infinite}
-
   /* ─── Focus card overlay ──────────────────────────────────────────────── */
   .moves-grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(3px,.6vmin,7px);margin-top:clamp(4px,.7vmin,9px)}
   .move-tile{background:rgba(255,255,255,.05);border-radius:4px;padding:clamp(3px,.55vmin,7px);display:flex;flex-direction:column;gap:clamp(2px,.35vmin,4px);min-width:0}
@@ -1216,44 +1204,6 @@ function render(d) {
 }
 """
 
-_STREAM_SHINY_ALERT_JS = r"""
-function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
-var _testMode = new URLSearchParams(window.location.search).get('test') === '1';
-var _seenShinies = null;
-var _shinyStateKey = null;
-function _getAllShinies(d) {
-  var seen = {};
-  (d.links || []).forEach(function(l) { if (l.a_shiny && l.a_key) seen[l.a_key] = l; if (l.b_shiny && l.b_key) seen[l.b_key] = l; });
-  var bk = d.bonus_keys || {};
-  (bk.a || []).forEach(function(k){ if (!seen[k]) seen[k] = {a_key:k,a_shiny:true,a_species:0}; });
-  (bk.b || []).forEach(function(k){ if (!seen[k]) seen[k] = {b_key:k,b_shiny:true,b_species:0}; });
-  return seen;
-}
-function _fireAlert(shinySide) {
-  var wrap = document.createElement('div'); wrap.className = 'shiny-backdrop'; wrap.id = 'shiny-alert-wrap';
-  var sparkleWrap = document.createElement('div'); sparkleWrap.className = 'shiny-sparkle-wrap';
-  for (var i = 0; i < 18; i++) { var sp = document.createElement('div'); sp.className = 'shiny-sparkle'; sp.style.cssText = 'left:'+Math.random()*100+'%;top:'+Math.random()*100+'%;'+'--dur:'+(0.8+Math.random()*1.2)+'s;--delay:'+(Math.random()*1.5)+'s'; sparkleWrap.appendChild(sp); }
-  wrap.appendChild(sparkleWrap);
-  var txt = document.createElement('div'); txt.className = 'shiny-text'; txt.innerHTML = '\u2728 SHINY ENCOUNTER \u2728<div class="shiny-sub">' + escHtml(shinySide.nickname||shinySide.species_name||'') + '</div>';
-  var sprites = document.createElement('div'); sprites.className = 'shiny-sprites';
-  var spA = shinySide.sprite_html || (shinySide.species_id ? '<img class="shiny-sprite" crossorigin="anonymous" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/shiny/'+shinySide.species_id+'.png" onerror="this.src=\'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/'+shinySide.species_id+'.png\'" alt="">' : '');
-  if (spA) { var imgEl = document.createElement('div'); imgEl.className = 'shiny-sprite'; imgEl.innerHTML = spA; sprites.appendChild(imgEl); }
-  if (shinySide.partner_sprite_html || shinySide.partner_species_id) { var pSp = shinySide.partner_sprite_html || '<img class="shiny-sprite" crossorigin="anonymous" src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/'+shinySide.partner_species_id+'.png" alt="">'; var pEl = document.createElement('div'); pEl.className = 'shiny-sprite'; pEl.innerHTML = pSp; sprites.appendChild(pEl); }
-  wrap.appendChild(sprites); wrap.appendChild(txt); document.body.appendChild(wrap); processSprites(); setTimeout(function(){ if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, 7000);
-}
-function render(d) {
-  document.getElementById('root').innerHTML = '';
-  var current = _getAllShinies(d); var currentKeys = Object.keys(current).sort(); var stateKey = currentKeys.join('|');
-  if (stateKey === _shinyStateKey) return; _shinyStateKey = stateKey;
-  if (_seenShinies === null) { _seenShinies = {}; currentKeys.forEach(function(k){ _seenShinies[k] = true; }); if (_testMode) { _fireAlert({species_id:25, nickname:'PIKACHU', species_name:'Pikachu', sprite_html:'', partner_sprite_html:'', partner_species_id:132}); } return; }
-  currentKeys.forEach(function(k) {
-    if (_seenShinies[k]) return; _seenShinies[k] = true; if (document.getElementById('shiny-alert-wrap')) return;
-    var entry = current[k]; var isA = entry.a_key === k; var sid = isA ? (entry.a_species||0) : (entry.b_species||0); var nick = isA ? (entry.a_nickname||entry.a_species_name||'') : (entry.b_nickname||entry.b_species_name||''); var spHtml = isA ? (entry.a_sprite_html||'') : (entry.b_sprite_html||''); var pSid = isA ? (entry.b_species||0) : (entry.a_species||0); var pSpHtml = isA ? (entry.b_sprite_html||'') : (entry.a_sprite_html||'');
-    _fireAlert({sprite_html:spHtml, species_id:sid, nickname:nick, species_name:nick, partner_sprite_html:pSpHtml, partner_species_id:pSid});
-  });
-}
-"""
-
 _STREAM_AREA_ENCOUNTER_JS = r"""
 function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
 function areaLabel(id){
@@ -1697,17 +1647,6 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <p>Soul Link status for the current area: linked pair, pending captures, or dead zone. Auto-follows the most active area.</p>
         <div class="card-cfg" data-id="uae1" data-base="/stream/area-encounter"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
         <div class="url-row"><span class="url-box" id="uae1">/stream/area-encounter</span><button class="copy-btn" onclick="copyUrl('uae1')">Copy</button><a class="open-btn" id="uae1-open" href="#" target="_blank">Open &#8599;</a></div>
-      </div>
-    </div>
-    <div class="overlay-card">
-      <div class="preview" style="background:#000"><iframe src="/stream/shiny-alert?theme=transparent"></iframe></div>
-      <div class="overlay-info">
-        <h3>Shiny Alert &#10024;</h3>
-        <div class="size-hint">Full canvas: 1920 &times; 1080 &mdash; use transparent theme</div>
-        <p>Full-screen celebration animation when a shiny is encountered. Add above all other sources. Normally invisible.</p>
-        <div class="card-cfg" data-id="us1" data-base="/stream/shiny-alert"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button><button class="cpill" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button></div></div></div>
-        <div class="url-row"><span class="url-box" id="us1">/stream/shiny-alert</span><button class="copy-btn" onclick="copyUrl('us1')">Copy</button><a class="open-btn" id="us1-open" href="#" target="_blank">Open &#8599;</a></div>
-        <div style="margin-top:8px"><a class="open-btn" href="/stream/shiny-alert?test=1&theme=transparent" target="_blank">&#128276; Test Alert</a></div>
       </div>
     </div>
 
