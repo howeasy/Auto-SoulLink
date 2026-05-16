@@ -2821,7 +2821,16 @@ class SLinkServer:
                 _ep = self.battle_state[player_id].get("enemy_party", [])
                 _enc_species = _ep[0].get("species_id", 0) if _ep else 0
                 if _battle_area_id and _enc_species:
-                    if self.state.check_dupe_on_encounter(player_id, _battle_area_id, _enc_species):
+                    # Check if partner is also in a concurrent wild battle on the same area.
+                    _partner_id = "b" if player_id == "a" else "a"
+                    _partner_bs = self.battle_state[_partner_id]
+                    _partner_battle_species = 0
+                    if (_partner_bs.get("in_battle") and not _partner_bs.get("is_trainer_battle")
+                            and self.player_area_id.get(_partner_id) == _battle_area_id):
+                        _partner_ep = _partner_bs.get("enemy_party", [])
+                        _partner_battle_species = _partner_ep[0].get("species_id", 0) if _partner_ep else 0
+                    if self.state.check_dupe_on_encounter(player_id, _battle_area_id, _enc_species,
+                                                          partner_battle_species=_partner_battle_species):
                         _sp_name = self.adapter.species_name(_enc_species)
                         self._log_event(player_id, "reroll",
                                         f"🔁 Dupes clause: {_sp_name} -- reroll!", _battle_area_id)

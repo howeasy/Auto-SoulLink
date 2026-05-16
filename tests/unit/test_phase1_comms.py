@@ -2,7 +2,8 @@
 Phase 1 test: verify the server handles all event types and responds correctly.
 Tests use asyncio TCP (matching the LuaSocket Lua client).
 
-The live_server fixture (conftest.py) starts a server subprocess automatically.
+The live_server fixture (conftest.py) starts a server subprocess automatically
+on a dynamically-allocated port exposed via the server_port fixture.
 """
 import asyncio
 import json
@@ -12,7 +13,6 @@ pytestmark = pytest.mark.usefixtures("live_server")
 
 
 SERVER_HOST = "127.0.0.1"
-SERVER_PORT = 54321
 
 
 async def send_event(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, payload: dict) -> dict:
@@ -24,9 +24,9 @@ async def send_event(reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
 
 
 @pytest.mark.asyncio
-async def test_hello_event_gets_response():
+async def test_hello_event_gets_response(server_port):
     """hello event is accepted and returns a commands list."""
-    reader, writer = await asyncio.open_connection(SERVER_HOST, SERVER_PORT)
+    reader, writer = await asyncio.open_connection(SERVER_HOST, server_port)
     try:
         result = await send_event(reader, writer, {
             "event": "hello", "player": "a", "seq": 1,
@@ -41,9 +41,9 @@ async def test_hello_event_gets_response():
 
 
 @pytest.mark.asyncio
-async def test_capture_event_gets_response():
+async def test_capture_event_gets_response(server_port):
     """capture event is accepted and returns a commands list."""
-    reader, writer = await asyncio.open_connection(SERVER_HOST, SERVER_PORT)
+    reader, writer = await asyncio.open_connection(SERVER_HOST, server_port)
     try:
         result = await send_event(reader, writer, {
             "event": "capture", "player": "a", "seq": 2,
@@ -57,9 +57,9 @@ async def test_capture_event_gets_response():
 
 
 @pytest.mark.asyncio
-async def test_faint_event_gets_response():
+async def test_faint_event_gets_response(server_port):
     """faint event is accepted and returns a commands list."""
-    reader, writer = await asyncio.open_connection(SERVER_HOST, SERVER_PORT)
+    reader, writer = await asyncio.open_connection(SERVER_HOST, server_port)
     try:
         result = await send_event(reader, writer, {
             "event": "faint", "player": "b", "seq": 3,
@@ -72,9 +72,9 @@ async def test_faint_event_gets_response():
 
 
 @pytest.mark.asyncio
-async def test_area_enter_event_gets_response():
+async def test_area_enter_event_gets_response(server_port):
     """area_enter event is accepted and returns a commands list."""
-    reader, writer = await asyncio.open_connection(SERVER_HOST, SERVER_PORT)
+    reader, writer = await asyncio.open_connection(SERVER_HOST, server_port)
     try:
         result = await send_event(reader, writer, {
             "event": "area_enter", "player": "a", "seq": 4,
@@ -87,9 +87,9 @@ async def test_area_enter_event_gets_response():
 
 
 @pytest.mark.asyncio
-async def test_duplicate_seq_still_gets_response():
+async def test_duplicate_seq_still_gets_response(server_port):
     """Server must always return a response, even for duplicate seq numbers."""
-    reader, writer = await asyncio.open_connection(SERVER_HOST, SERVER_PORT)
+    reader, writer = await asyncio.open_connection(SERVER_HOST, server_port)
     try:
         for _ in range(3):
             result = await send_event(reader, writer, {
@@ -103,9 +103,9 @@ async def test_duplicate_seq_still_gets_response():
 
 
 @pytest.mark.asyncio
-async def test_invalid_player_gets_noop():
+async def test_invalid_player_gets_noop(server_port):
     """Unknown player_id is rejected gracefully with a noop response."""
-    reader, writer = await asyncio.open_connection(SERVER_HOST, SERVER_PORT)
+    reader, writer = await asyncio.open_connection(SERVER_HOST, server_port)
     try:
         result = await send_event(reader, writer, {
             "event": "hello", "player": "z", "seq": 1,

@@ -795,9 +795,16 @@ class SoulLinkState:
                 f"[{player_id}] capture in dead-zone area={area_id} key={key} — retiring immediately"
             )
             nickname = msg.get("nickname", "")
+            label = self._label_from_msg(msg, key)
             self.party_keys[player_id].discard(key)
             self.queued_commands[player_id].append({"cmd": "force_faint", "key": key, "nickname": nickname})
             self._queue_memorialize(player_id, key)
+            self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 26})  # SE_FAILURE
+            self.queued_commands[player_id].append({
+                "cmd": "hud_show",
+                "text": f"Dead zone \u2014 {label} retired!",
+                "r": 255, "g": 80, "b": 80, "frames": 360,
+            })
             self._save()
             return
 
@@ -807,9 +814,16 @@ class SoulLinkState:
                 f"[{player_id}] extra capture in already-linked area={area_id} key={key} — retiring immediately"
             )
             nickname = msg.get("nickname", "")
+            label = self._label_from_msg(msg, key)
             self.party_keys[player_id].discard(key)
             self.queued_commands[player_id].append({"cmd": "force_faint", "key": key, "nickname": nickname})
             self._queue_memorialize(player_id, key)
+            self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 26})  # SE_FAILURE
+            self.queued_commands[player_id].append({
+                "cmd": "hud_show",
+                "text": f"Already linked here \u2014 {label} retired!",
+                "r": 255, "g": 80, "b": 80, "frames": 360,
+            })
             self._save()
             return
 
@@ -824,13 +838,16 @@ class SoulLinkState:
                 f"(already have {existing.key}), retiring {key}"
             )
             nickname = msg.get("nickname", "")
+            label = self._label_from_msg(msg, key)
+            existing_label = existing.nickname or (self.adapter.species_name(existing.species) if existing.species else None) or existing.key[:8]
             self.party_keys[player_id].discard(key)
             self.queued_commands[player_id].append({"cmd": "force_faint", "key": key, "nickname": nickname})
             self._queue_memorialize(player_id, key)
+            self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 26})  # SE_FAILURE
             self.queued_commands[player_id].append({
                 "cmd": "hud_show",
-                "text": "Already captured here -- retiring!",
-                "r": 255, "g": 80, "b": 80,
+                "text": f"2nd catch! {label} retired (already have {existing_label})",
+                "r": 255, "g": 80, "b": 80, "frames": 360,
             })
             self._save()
             return
@@ -1085,7 +1102,8 @@ class SoulLinkState:
             "area_id": area_id,
         })
 
-    def check_dupe_on_encounter(self, player_id: str, area_id: str, enc_species: int) -> bool:
+    def check_dupe_on_encounter(self, player_id: str, area_id: str, enc_species: int,
+                                partner_battle_species: int = 0) -> bool:
         """Check for a dupes-clause reroll at wild battle start and notify the player immediately.
 
         Called as soon as the enemy species is known (first tick with in_battle=True) so the
@@ -1132,6 +1150,20 @@ class SoulLinkState:
                 log.info(
                     f"[{player_id}] dupes clause (battle start): {enc_name} "
                     f"same family as partner's {partner_name} on {area_id}"
+                )
+                self.dupe_notified_areas[player_id].add(area_id)
+                self._dupes_reroll(player_id, area_id, f"Dupes clause: {enc_name} -- reroll!")
+                return True
+
+        # Check 3: partner is currently in a wild battle on the same area with the same evo family.
+        # Covers the concurrent-battle case where neither player has captured yet.
+        if partner_battle_species:
+            partner_base = self.adapter.evo_family(partner_battle_species)
+            if enc_base == partner_base:
+                partner_name = self.adapter.species_name(partner_battle_species)
+                log.info(
+                    f"[{player_id}] dupes clause (battle start): {enc_name} "
+                    f"same family as partner's concurrent battle {partner_name} on {area_id}"
                 )
                 self.dupe_notified_areas[player_id].add(area_id)
                 self._dupes_reroll(player_id, area_id, f"Dupes clause: {enc_name} -- reroll!")
@@ -1650,6 +1682,12 @@ class SoulLinkState:
         self.queued_commands[player_id].append({"cmd": "memorialize", "key": key})
         self.pending_memorials[player_id].add(key)
         log.info(f"[{player_id}] memorialize queued for {key[:8]}")
+
+    def _label_from_msg(self, msg: dict, key: str) -> str:
+        """Return the best available display label for a mon from a capture event dict."""
+        nick = msg.get("nickname", "")
+        species = msg.get("species_id", 0)
+        return nick or (self.adapter.species_name(species) if species else None) or key[:8]
 
     def _handle_memorialize_done(self, player_id: str, msg: dict):
         """

@@ -2349,6 +2349,63 @@ def test_dupes_clause_different_species_still_dead_zones(tmp_path, monkeypatch):
     assert state.area_states["route_1"] == AreaStatus.DEAD_ZONE
 
 
+# ── Dupes clause: concurrent battle detection (Check 3) ──────────────────────
+
+def test_dupes_clause_concurrent_same_species(tmp_path, monkeypatch):
+    """B enters battle on same area as A (concurrent) with same species → reroll via Check 3."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(species_lock=True)
+    state.pokeballs_obtained = {"a": True, "b": True}
+    # Neither player has captured yet — area is UNSEEN.
+    # Call check_dupe_on_encounter for B with A's concurrent battle species passed in.
+    fired = state.check_dupe_on_encounter("b", "route_1", 16, partner_battle_species=16)
+    assert fired is True
+    # Area should NOT be dead-zoned — B gets a reroll
+    assert state.area_states.get("route_1") != AreaStatus.DEAD_ZONE
+    assert "route_1" in state.dupe_notified_areas["b"]
+    cmds = state.queued_commands["b"]
+    assert any(c.get("cmd") == "gui_prompt" and "reroll" in c.get("text", "").lower() for c in cmds)
+    assert any(c.get("cmd") == "unresolve_area" and c.get("area_id") == "route_1" for c in cmds)
+
+
+def test_dupes_clause_concurrent_evo_family(tmp_path, monkeypatch):
+    """Concurrent battle with an evolution of the same family also triggers reroll."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(species_lock=True)
+    state.pokeballs_obtained = {"a": True, "b": True}
+    # A is in battle with Pidgey (16), B encounters Pidgeotto (17, same family).
+    fired = state.check_dupe_on_encounter("b", "route_2", 17, partner_battle_species=16)
+    assert fired is True
+    assert "route_2" in state.dupe_notified_areas["b"]
+
+
+def test_dupes_clause_concurrent_zero_partner(tmp_path, monkeypatch):
+    """No reroll when partner_battle_species is 0 (partner not in battle)."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(species_lock=True)
+    state.pokeballs_obtained = {"a": True, "b": True}
+    fired = state.check_dupe_on_encounter("b", "route_1", 16, partner_battle_species=0)
+    assert fired is False
+    assert "route_1" not in state.dupe_notified_areas["b"]
+
+
+def test_dupes_clause_concurrent_no_catch_suppresses_dead_zone(tmp_path, monkeypatch):
+    """After Check 3 fires, B fleeing (no_catch) should not dead-zone the area."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(species_lock=True)
+    state.pokeballs_obtained = {"a": True, "b": True}
+    # Simulate B's battle start triggering Check 3 (A is in concurrent battle same species).
+    state.check_dupe_on_encounter("b", "route_1", 16, partner_battle_species=16)
+    assert "route_1" in state.dupe_notified_areas["b"]
+    # B flees — no_catch should suppress dead zone.
+    cmds = state.handle_event("b", {"event": "no_catch", "area_id": "route_1", "species_id": 16})
+    assert state.area_states.get("route_1") != AreaStatus.DEAD_ZONE
+    assert any(c.get("cmd") == "unresolve_area" and c.get("area_id") == "route_1" for c in cmds)
+
+
+
+
+
 # ── Extended species data tests (CFRU/RR internal IDs) ───────────────────────
 
 def test_species_names_gen1_unchanged():
