@@ -724,6 +724,10 @@ local POST_BATTLE_GRACE    = 90  -- 1.5s; CFRU needs longer for catch/exp/level-
 -- is still writing, causing the moved mon to inherit the dead mon's item/data.
 local memorialize_battle_cooldown = 0
 local MEMORIALIZE_POST_BATTLE_COOLDOWN = 180  -- 3s at 60fps
+-- Hard delay after EOB (hardware or soft) before any sync write is allowed.
+-- Prevents item/data mix-ups when CFRU is still writing party state post-EOB.
+local post_eob_frames = 0
+local POST_EOB_DELAY  = 180  -- 3s at 60fps
 -- Accumulates enemy mons seen during the current trainer battle.
 -- Keyed by "species_id:level" to deduplicate.  Reset on battle start.
 local battle_seen_enemies  = {}  -- key → {species_id, level, hp, maxHP}
@@ -738,7 +742,6 @@ local pre_borrowed_party   = nil  -- snapshot of real party before the swap
 -- isBorrowedBattle() fires too late.  Detect the swap by counting gift captures
 -- within a rolling window — normal gameplay never produces 3+ gifts in <1s.
 local party_frozen          = false
-local pre_freeze_keys       = {}   -- set of monKeys that were in party before freeze
 local freeze_frames_left    = 0
 local FREEZE_TIMEOUT_FRAMES = 3600 -- 60s failsafe
 local POST_UNFREEZE_SETTLE  = 15   -- ~0.25s for game to restore real party after unfreeze
@@ -748,6 +751,9 @@ local freeze_release_reason  = nil   -- reason string for unfreeze log
 local gift_capture_buffer   = {}   -- buffered gift events: {key,hp,maxHP,level,area,nickname,species_id,held_item_id,frame}
 local GIFT_BUFFER_WINDOW    = 45   -- hold gifts for ~0.75s before confirming real
 local GIFT_FREEZE_THRESHOLD = 3    -- 3+ gifts in window = borrowed swap
+-- Last committed NPC trade migration — saved so it can be undone if a freeze triggers
+-- shortly after, indicating the "trade" was actually the first step of a party swap.
+local last_npc_trade        = nil  -- {old_k, new_k, old_dc, old_nick, old_stats, frame}
 
 -- Per-session:
 local all_known_keys   = {}   -- all keys ever seen in party or box
@@ -1044,6 +1050,7 @@ local function on_frame()
         -- battle-end frame the hardware check sees cooldown > 0 and defers eob_clear.
         -- (The battle_just_ended handler at step 6 also sets this — same value, no harm.)
         memorialize_battle_cooldown = MEMORIALIZE_POST_BATTLE_COOLDOWN
+        post_eob_frames             = POST_EOB_DELAY
     elseif sync_cooldown > 0 then
         sync_cooldown = sync_cooldown - 1
     end
@@ -1110,7 +1117,7 @@ local function on_frame()
     local eob_clear = not (M.BATTLE_MAIN_FUNC_ADDR and M.RETURN_FROM_BATTLE_ADDR)
                       or memorialize_battle_cooldown == 0
     local safe_now = is_overworld and sync_cooldown == 0 and not party_frozen
-                     and post_battle_frames == 0 and eob_clear
+                     and post_battle_frames == 0 and eob_clear and post_eob_frames == 0
     if #pending_sync_cmds > 0 then
         if not safe_now or not writes_enabled then
             if not _sync_blocked_logged then
@@ -1119,9 +1126,9 @@ local function on_frame()
                 if not eob_clear and M.BATTLE_MAIN_FUNC_ADDR then
                     eob_note = string.format("  eob=0x%08X(not done)", mem_u32(M.BATTLE_MAIN_FUNC_ADDR))
                 end
-                console.log(string.format("[SLink-FRLGE] SYNC BLOCKED: safe=%s writes=%s cooldown=%d pbf=%d cmd=%s (%d queued)%s",
+                console.log(string.format("[SLink-FRLGE] SYNC BLOCKED: safe=%s writes=%s cooldown=%d pbf=%d peof=%d cmd=%s (%d queued)%s",
                     tostring(safe_now), tostring(writes_enabled), sync_cooldown,
-                    post_battle_frames, pending_sync_cmds[1].cmd, #pending_sync_cmds, eob_note))
+                    post_battle_frames, post_eob_frames, pending_sync_cmds[1].cmd, #pending_sync_cmds, eob_note))
             end
         else
             _sync_blocked_logged = false
@@ -1212,6 +1219,7 @@ local function on_frame()
         _battle_hp_cache     = {}  -- fresh cache for this battle
         force_fainted_keys   = {}  -- fresh guard set for this battle
         pending_faint_debounce = {}  -- clear any stale debounce state
+        post_eob_frames      = 0   -- clear any leftover post-EOB delay
         -- Detect borrowed-party battles (CFRU/RR only).
         local ok_bb, is_bb = pcall(M.isBorrowedBattle)
         borrowed_battle = ok_bb and is_bb or false
@@ -1424,8 +1432,8 @@ local function on_frame()
             pending_faint_debounce = {}  -- clear any debounce state
             post_battle_frames = POST_BATTLE_GRACE
             memorialize_battle_cooldown = MEMORIALIZE_POST_BATTLE_COOLDOWN
+            post_eob_frames    = POST_EOB_DELAY
             pending_safe       = true
-            -- Skip normal writeback — fall through to party read below.
         else
         _battle_hp_cache   = {}  -- clear cache
         pending_battle_faints = {}  -- all deferred faints should be flushed by now
@@ -1433,6 +1441,7 @@ local function on_frame()
         pending_faint_debounce = {}  -- clear any debounce state
         post_battle_frames = POST_BATTLE_GRACE
         memorialize_battle_cooldown = MEMORIALIZE_POST_BATTLE_COOLDOWN
+        post_eob_frames    = POST_EOB_DELAY
         pending_safe       = true
         console.log("[SLink-FRLGE] [battle] end  grace window started")
         -- DEBUG: log party state at battle end to diagnose capture detection
@@ -1453,23 +1462,11 @@ local function on_frame()
         if not in_battle then
             freeze_frames_left = freeze_frames_left - 1
         end
-        -- Check if original mons have returned
-        local returned, total = 0, 0
-        for k, _ in pairs(pre_freeze_keys) do
-            total = total + 1
-            if curr_party[k] then returned = returned + 1 end
-        end
-        -- Record the trigger condition the first time it fires, but do NOT unfreeze
-        -- yet — wait for eob_clear so EndOfBattleThings (FormsRevert, RecalcAllStats)
-        -- has finished before we resume party diffing.
-        if not pending_freeze_release then
-            if total > 0 and returned >= total then
-                pending_freeze_release = true
-                freeze_release_reason  = "originals returned"
-            elseif battle_just_ended then
-                pending_freeze_release = true
-                freeze_release_reason  = "battle ended"
-            end
+        -- Unfreeze when the battle ends — EOB routines restore the real party,
+        -- so by the time eob_clear is true the baseline is clean.
+        if not pending_freeze_release and battle_just_ended then
+            pending_freeze_release = true
+            freeze_release_reason  = "battle ended"
         end
         -- Unfreeze when trigger has fired AND EndOfBattleThings is done.
         -- Timeout (60 s failsafe) bypasses the eob gate to prevent a permanent freeze.
@@ -1661,6 +1658,17 @@ local function on_frame()
                 key_migrated[old_k] = true
                 key_migrated[new_k] = true
 
+                -- Save rollback state before mutating — if a freeze triggers within
+                -- the next few frames this was actually the first step of a party swap.
+                last_npc_trade = {
+                    old_k    = old_k,
+                    new_k    = new_k,
+                    old_dc   = _display_cache[old_k],
+                    old_nick = nick_cache[old_k],
+                    old_stats= mon_stats_cache[old_k],
+                    frame    = frame_count,
+                }
+
                 all_known_keys[old_k] = nil
                 all_known_keys[new_k] = true
 
@@ -1709,16 +1717,33 @@ local function on_frame()
                     console.log(string.format(
                         "[SLink-FRLGE] trade detection ambiguous: %d departures, %d arrivals — triggering party freeze",
                         #trade_deps, #trade_arrs))
+                    -- If a 1:1 NPC trade fired on the previous frame it was likely the
+                    -- first step of this same party swap — undo it.
+                    if last_npc_trade and frame_count - last_npc_trade.frame <= 5 then
+                        local lt = last_npc_trade
+                        console.log(string.format("[SLink-FRLGE] undoing false NPC trade: %s → %s",
+                            lt.new_k:sub(1,8), lt.old_k:sub(1,8)))
+                        all_known_keys[lt.new_k] = nil
+                        all_known_keys[lt.old_k] = true
+                        _display_cache[lt.new_k] = nil
+                        _display_cache[lt.old_k] = lt.old_dc
+                        nick_cache[lt.new_k]     = nil
+                        nick_cache[lt.old_k]     = lt.old_nick
+                        mon_stats_cache[lt.new_k]= nil
+                        mon_stats_cache[lt.old_k]= lt.old_stats
+                        for _, sc in ipairs(pending_sync_cmds) do
+                            if sc.key == lt.new_k then sc.key = lt.old_k end
+                        end
+                        -- Reverse the key_change on the server.
+                        send({event="key_change", old_key=lt.new_k, new_key=lt.old_k,
+                              reason="trade_undo"},
+                             "trade_undo:"..lt.new_k:sub(1,8).."->"..lt.old_k:sub(1,8), true)
+                        last_npc_trade = nil
+                    end
                     party_frozen           = true
                     freeze_frames_left     = FREEZE_TIMEOUT_FRAMES
                     pending_faint_debounce = {}
                     pending_freeze_release = false
-                    pre_freeze_keys = {}
-                    for pk, _ in pairs(prev_party) do
-                        if all_known_keys[pk] then
-                            pre_freeze_keys[pk] = true
-                        end
-                    end
                     gift_capture_buffer = {}
                 else
                     console.log(string.format(
@@ -1803,19 +1828,31 @@ local function on_frame()
                     }
                     if #gift_capture_buffer >= GIFT_FREEZE_THRESHOLD then
                         -- Mass swap detected — freeze party diff.
+                        -- Undo any recent NPC trade — it was likely the first step of this swap.
+                        if last_npc_trade and frame_count - last_npc_trade.frame <= 5 then
+                            local lt = last_npc_trade
+                            console.log(string.format("[SLink-FRLGE] undoing false NPC trade: %s → %s",
+                                lt.new_k:sub(1,8), lt.old_k:sub(1,8)))
+                            all_known_keys[lt.new_k] = nil
+                            all_known_keys[lt.old_k] = true
+                            _display_cache[lt.new_k] = nil
+                            _display_cache[lt.old_k] = lt.old_dc
+                            nick_cache[lt.new_k]     = nil
+                            nick_cache[lt.old_k]     = lt.old_nick
+                            mon_stats_cache[lt.new_k]= nil
+                            mon_stats_cache[lt.old_k]= lt.old_stats
+                            for _, sc in ipairs(pending_sync_cmds) do
+                                if sc.key == lt.new_k then sc.key = lt.old_k end
+                            end
+                            send({event="key_change", old_key=lt.new_k, new_key=lt.old_k,
+                                  reason="trade_undo"},
+                                 "trade_undo:"..lt.new_k:sub(1,8).."->"..lt.old_k:sub(1,8), true)
+                            last_npc_trade = nil
+                        end
                         party_frozen           = true
                         freeze_frames_left     = FREEZE_TIMEOUT_FRAMES
                         pending_faint_debounce = {}  -- clear stale debounce state
                         pending_freeze_release = false
-                        -- Only track REAL mons for the unfreeze check.
-                        -- Buffered gift keys are NOT in all_known_keys (deferred),
-                        -- so filtering prev_party by all_known_keys excludes them.
-                        pre_freeze_keys    = {}
-                        for pk, _ in pairs(prev_party) do
-                            if all_known_keys[pk] then
-                                pre_freeze_keys[pk] = true
-                            end
-                        end
                         console.log(string.format(
                             "[SLink-FRLGE] ★ PARTY FREEZE: %d gift captures in %d frames — borrowed party swap",
                             #gift_capture_buffer,
@@ -1953,6 +1990,9 @@ local function on_frame()
     -- ── post-battle grace window ──────────────────────────────────────────────
     if memorialize_battle_cooldown > 0 then
         memorialize_battle_cooldown = memorialize_battle_cooldown - 1
+    end
+    if post_eob_frames > 0 then
+        post_eob_frames = post_eob_frames - 1
     end
     if post_battle_frames > 0 then
         post_battle_frames = post_battle_frames - 1
@@ -2363,6 +2403,9 @@ local function on_frame()
     -- accumulate into the baseline used for diff detection.
     if party_diff_ok then
         prev_party     = curr_party
+        -- Party diff ran cleanly with no freeze — safe to expire the NPC trade
+        -- rollback window (it wasn't a false positive from a party swap).
+        last_npc_trade = nil
     elseif post_unfreeze_frames > 0 then
         -- During post-unfreeze settle, keep baseline synced so diffs are clean
         -- when the settle period ends (game may still be restoring real party).
