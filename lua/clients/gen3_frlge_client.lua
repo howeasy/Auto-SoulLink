@@ -1084,17 +1084,38 @@ local function on_frame()
     end
 
     -- 5. Flush one deferred sync cmd if safe (BEFORE party diff so writes are clean)
-    -- Gate on: overworld, cooldown expired, and post-battle grace window finished
-    -- (avoids writes during catch/exp/evo anims).
+    -- Pre-advance the EndOfBattleThings hardware gate (CFRU profiles with known addresses).
+    -- While the post-battle window is armed (memorialize_battle_cooldown > 0), check
+    -- gBattleMainFunc every frame.  The moment EndOfBattleThings completes (gBattleMainFunc
+    -- transitions to RETURN_FROM_BATTLE_ADDR), clear the cooldown — unblocking ALL sync
+    -- commands (box_mon, party_mon, memorialize).  The cooldown serves as the armed-window
+    -- guard so this read is a no-op in the overworld where the cooldown is already 0.
+    if memorialize_battle_cooldown > 0
+            and M.BATTLE_MAIN_FUNC_ADDR and M.RETURN_FROM_BATTLE_ADDR then
+        if mem_u32(M.BATTLE_MAIN_FUNC_ADDR) == M.RETURN_FROM_BATTLE_ADDR then
+            memorialize_battle_cooldown = 0  -- signal fired; all sync commands unblocked
+        end
+    end
+    -- Gate on: overworld, cooldown expired, post-battle grace window finished, and
+    -- (when BATTLE_MAIN_FUNC_ADDR is known) EndOfBattleThings completed.
+    -- Vanilla FRLG and CFRU/RR both have known addresses and use the hardware gate.
+    -- AP has RETURN_FROM_BATTLE_ADDR = nil (unknown), so eob_clear is always true
+    -- for AP and the 90-frame post_battle_frames guard is used instead.
+    local eob_clear = not (M.BATTLE_MAIN_FUNC_ADDR and M.RETURN_FROM_BATTLE_ADDR)
+                      or memorialize_battle_cooldown == 0
     local safe_now = is_overworld and sync_cooldown == 0 and not party_frozen
-                     and post_battle_frames == 0
+                     and post_battle_frames == 0 and eob_clear
     if #pending_sync_cmds > 0 then
         if not safe_now or not writes_enabled then
             if not _sync_blocked_logged then
                 _sync_blocked_logged = true
-                console.log(string.format("[SLink-FRLGE] SYNC BLOCKED: safe=%s writes=%s cooldown=%d pbf=%d cmd=%s (%d queued)",
+                local eob_note = ""
+                if not eob_clear and M.BATTLE_MAIN_FUNC_ADDR then
+                    eob_note = string.format("  eob=0x%08X(not done)", mem_u32(M.BATTLE_MAIN_FUNC_ADDR))
+                end
+                console.log(string.format("[SLink-FRLGE] SYNC BLOCKED: safe=%s writes=%s cooldown=%d pbf=%d cmd=%s (%d queued)%s",
                     tostring(safe_now), tostring(writes_enabled), sync_cooldown,
-                    post_battle_frames, pending_sync_cmds[1].cmd, #pending_sync_cmds))
+                    post_battle_frames, pending_sync_cmds[1].cmd, #pending_sync_cmds, eob_note))
             end
         else
             _sync_blocked_logged = false
@@ -1126,16 +1147,6 @@ local function on_frame()
                     end
                     break
                 end
-            end
-        end
-        -- Extra post-battle cooldown for memorialize only: CFRU may continue writing party
-        -- data after the general post_battle_frames window, corrupting the swap-to-end.
-        if cmd.cmd == "memorialize" and memorialize_battle_cooldown > 0 then
-            blocked = true
-            if not _sync_blocked_logged then
-                _sync_blocked_logged = true
-                console.log(string.format("[SLink-FRLGE] memorialize HELD: battle cooldown %d frames remaining  key=%s",
-                    memorialize_battle_cooldown, (cmd.key or "?"):sub(1,8)))
             end
         end
         if not blocked then

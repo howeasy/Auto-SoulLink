@@ -156,8 +156,8 @@ GEN3.profiles = {
         BATTLE_MONS_ADDR           = 0x02023BE4,
         BATTLER_PARTY_INDEXES_ADDR = 0x02023BCE,  -- vanilla addr (CFRU preserves)
         BATTLERS_COUNT_ADDR        = 0x02023BCC,  -- vanilla addr (CFRU preserves)
-        BATTLE_MAIN_FUNC_ADDR      = nil,
-        RETURN_FROM_BATTLE_ADDR    = nil,
+        BATTLE_MAIN_FUNC_ADDR      = 0x03004F84,  -- confirmed same as vanilla FRLG
+        RETURN_FROM_BATTLE_ADDR    = 0x08015B59,  -- confirmed same as vanilla FRLG
         GMAIN_ADDR                 = nil,
         -- IWRAM pointers
         SB1_PTR_ADDR               = 0x03003840,
