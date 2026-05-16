@@ -751,9 +751,6 @@ local freeze_release_reason  = nil   -- reason string for unfreeze log
 local gift_capture_buffer   = {}   -- buffered gift events: {key,hp,maxHP,level,area,nickname,species_id,held_item_id,frame}
 local GIFT_BUFFER_WINDOW    = 45   -- hold gifts for ~0.75s before confirming real
 local GIFT_FREEZE_THRESHOLD = 3    -- 3+ gifts in window = borrowed swap
--- Last committed NPC trade migration — saved so it can be undone if a freeze triggers
--- shortly after, indicating the "trade" was actually the first step of a party swap.
-local last_npc_trade        = nil  -- {old_k, new_k, old_dc, old_nick, old_stats, frame}
 
 -- Per-session:
 local all_known_keys   = {}   -- all keys ever seen in party or box
@@ -1444,10 +1441,12 @@ local function on_frame()
         post_eob_frames    = POST_EOB_DELAY
         pending_safe       = true
         console.log("[SLink-FRLGE] [battle] end  grace window started")
-        -- DEBUG: log party state at battle end to diagnose capture detection
-        console.log(string.format("[SLink-FRLGE] [DIAG] battle_end: captured=%s count=%d box_idx=%s",
-            tostring(captured_this_battle), mem_u8(M.PARTY_COUNT_ADDR),
-            battle_box_index ~= nil and tostring(battle_box_index) or "nil"))
+        console.log(string.format(
+            "[SLink-FRLGE] [battle] end: wild=%s captured=%s outcome=%d count=%d box=%s eob=%s",
+            tostring(battle_is_wild), tostring(captured_this_battle),
+            M.getBattleOutcome(), mem_u8(M.PARTY_COUNT_ADDR),
+            battle_box_index ~= nil and tostring(battle_box_index) or "nil",
+            tostring(eob_clear)))
         end -- not borrowed_battle
     end
 
@@ -1629,130 +1628,6 @@ local function on_frame()
             end
         end
 
-        -- ── NPC trade detection ────────────────────────────────────────────
-        -- A key that left the party WITHOUT landing in any PC box, paired with
-        -- a new key appearing in the same frame, is an NPC in-game trade.
-        -- key_migrated suppresses party_to_box (departure) + gift_capture (arrival).
-        -- Only fire when exactly 1 unambiguous departure + 1 arrival candidate.
-        if #disappeared > 0 and #appeared > 0 then
-            local trade_deps, trade_arrs = {}, {}
-            for _, old_k in ipairs(disappeared) do
-                if not key_migrated[old_k] and not M.scanBoxForKey(old_k) then
-                    trade_deps[#trade_deps+1] = old_k
-                end
-            end
-            for _, app in ipairs(appeared) do
-                if not key_migrated[app.key] then
-                    trade_arrs[#trade_arrs+1] = app
-                end
-            end
-            if #trade_deps == 1 and #trade_arrs == 1 then
-                local old_k   = trade_deps[1]
-                local new_app = trade_arrs[1]
-                local new_k   = new_app.key
-                local ok_ps, ps = pcall(M.readPartySlot, new_app.slot)
-                local new_sid  = ok_ps and ps and ps.species_id  or 0
-                local new_nick = ok_ps and ps and ps.nickname     or ""
-                console.log(string.format("[SLink-FRLGE] NPC trade detected: %s → %s",
-                    old_k:sub(1,8), new_k:sub(1,8)))
-                key_migrated[old_k] = true
-                key_migrated[new_k] = true
-
-                -- Save rollback state before mutating — if a freeze triggers within
-                -- the next few frames this was actually the first step of a party swap.
-                last_npc_trade = {
-                    old_k    = old_k,
-                    new_k    = new_k,
-                    old_dc   = _display_cache[old_k],
-                    old_nick = nick_cache[old_k],
-                    old_stats= mon_stats_cache[old_k],
-                    frame    = frame_count,
-                }
-
-                all_known_keys[old_k] = nil
-                all_known_keys[new_k] = true
-
-                _display_cache[old_k] = nil
-                _display_cache[new_k] = ok_ps and ps and {
-                    nickname     = new_nick,
-                    species_id   = new_sid,
-                    held_item_id = ps.held_item_id or 0,
-                    ability_id   = ps.ability_id   or 0,
-                } or {nickname="", species_id=0, held_item_id=0, ability_id=0}
-
-                -- nick_cache: new mon gets its own name, not the traded-away mon's
-                nick_cache[old_k] = nil
-                nick_cache[new_k] = new_nick ~= "" and new_nick or (new_sid ~= 0 and "#"..new_sid or nil)
-
-                _ability_cache[old_k] = nil
-                -- mon_stats_cache: index_party() already ran this frame and populated
-                -- new_k's stats from live party RAM — do NOT copy old_k's stale stats.
-                mon_stats_cache[old_k] = nil
-
-                if sync_written_keys[old_k] then
-                    sync_written_keys[old_k] = nil; sync_written_keys[new_k] = true
-                end
-                -- Faint/battle caches: irrelevant for overworld trades, but clear defensively.
-                pending_faint_debounce[old_k] = nil
-                force_fainted_keys[old_k]     = nil
-                _battle_hp_cache[old_k]       = nil
-
-                for _, sc in ipairs(pending_sync_cmds) do
-                    if sc.key == old_k then sc.key = new_k end
-                end
-
-                send({event="key_change", old_key=old_k, new_key=new_k,
-                      reason="trade", new_species=new_sid, new_nickname=new_nick},
-                     "trade:"..old_k:sub(1,8).."->"..new_k:sub(1,8), true)
-            elseif #trade_deps > 1 or #trade_arrs > 1 then
-                -- Multiple unexplained departures + arrivals = party swap in progress
-                -- (e.g. borrowed-party battle where the CFRU flag isn't set yet, or an
-                -- overworld scripted party replacement).  Trigger party freeze immediately
-                -- so the departed mons don't get party_to_box events and the gift buffer
-                -- doesn't need to accumulate to threshold before protection kicks in.
-                -- Exception: suppress during post_battle_frames — post-battle party
-                -- restoration (borrowed team departing, real mons returning) looks
-                -- identical to an ambiguous trade but is expected cleanup, not a real swap.
-                if #trade_deps >= 1 and #trade_arrs >= 1 and post_battle_frames == 0 then
-                    console.log(string.format(
-                        "[SLink-FRLGE] trade detection ambiguous: %d departures, %d arrivals — triggering party freeze",
-                        #trade_deps, #trade_arrs))
-                    -- If a 1:1 NPC trade fired on the previous frame it was likely the
-                    -- first step of this same party swap — undo it.
-                    if last_npc_trade and frame_count - last_npc_trade.frame <= 5 then
-                        local lt = last_npc_trade
-                        console.log(string.format("[SLink-FRLGE] undoing false NPC trade: %s → %s",
-                            lt.new_k:sub(1,8), lt.old_k:sub(1,8)))
-                        all_known_keys[lt.new_k] = nil
-                        all_known_keys[lt.old_k] = true
-                        _display_cache[lt.new_k] = nil
-                        _display_cache[lt.old_k] = lt.old_dc
-                        nick_cache[lt.new_k]     = nil
-                        nick_cache[lt.old_k]     = lt.old_nick
-                        mon_stats_cache[lt.new_k]= nil
-                        mon_stats_cache[lt.old_k]= lt.old_stats
-                        for _, sc in ipairs(pending_sync_cmds) do
-                            if sc.key == lt.new_k then sc.key = lt.old_k end
-                        end
-                        -- Reverse the key_change on the server.
-                        send({event="key_change", old_key=lt.new_k, new_key=lt.old_k,
-                              reason="trade_undo"},
-                             "trade_undo:"..lt.new_k:sub(1,8).."->"..lt.old_k:sub(1,8), true)
-                        last_npc_trade = nil
-                    end
-                    party_frozen           = true
-                    freeze_frames_left     = FREEZE_TIMEOUT_FRAMES
-                    pending_faint_debounce = {}
-                    pending_freeze_release = false
-                    gift_capture_buffer = {}
-                else
-                    console.log(string.format(
-                        "[SLink-FRLGE] trade detection ambiguous: %d departures, %d arrivals — skipped%s",
-                        #trade_deps, #trade_arrs,
-                        post_battle_frames > 0 and " (post-battle window)" or ""))
-                end
-            end
-        end
     end
     end -- #gift_capture_buffer == 0
 
@@ -1828,27 +1703,6 @@ local function on_frame()
                     }
                     if #gift_capture_buffer >= GIFT_FREEZE_THRESHOLD then
                         -- Mass swap detected — freeze party diff.
-                        -- Undo any recent NPC trade — it was likely the first step of this swap.
-                        if last_npc_trade and frame_count - last_npc_trade.frame <= 5 then
-                            local lt = last_npc_trade
-                            console.log(string.format("[SLink-FRLGE] undoing false NPC trade: %s → %s",
-                                lt.new_k:sub(1,8), lt.old_k:sub(1,8)))
-                            all_known_keys[lt.new_k] = nil
-                            all_known_keys[lt.old_k] = true
-                            _display_cache[lt.new_k] = nil
-                            _display_cache[lt.old_k] = lt.old_dc
-                            nick_cache[lt.new_k]     = nil
-                            nick_cache[lt.old_k]     = lt.old_nick
-                            mon_stats_cache[lt.new_k]= nil
-                            mon_stats_cache[lt.old_k]= lt.old_stats
-                            for _, sc in ipairs(pending_sync_cmds) do
-                                if sc.key == lt.new_k then sc.key = lt.old_k end
-                            end
-                            send({event="key_change", old_key=lt.new_k, new_key=lt.old_k,
-                                  reason="trade_undo"},
-                                 "trade_undo:"..lt.new_k:sub(1,8).."->"..lt.old_k:sub(1,8), true)
-                            last_npc_trade = nil
-                        end
                         party_frozen           = true
                         freeze_frames_left     = FREEZE_TIMEOUT_FRAMES
                         pending_faint_debounce = {}  -- clear stale debounce state
@@ -1871,7 +1725,7 @@ local function on_frame()
     for k, prev_info in pairs(prev_party) do
         local curr_info = curr_party[k]
         if key_migrated[k] then
-            -- Key migrated (nature change or NPC trade): old key vanished but handled — not a real disappearance.
+            -- Key migrated (nature change): old key vanished but handled — not a real disappearance.
             all_zero = false
         elseif curr_info then
             -- Key still in party
@@ -2403,9 +2257,6 @@ local function on_frame()
     -- accumulate into the baseline used for diff detection.
     if party_diff_ok then
         prev_party     = curr_party
-        -- Party diff ran cleanly with no freeze — safe to expire the NPC trade
-        -- rollback window (it wasn't a false positive from a party swap).
-        last_npc_trade = nil
     elseif post_unfreeze_frames > 0 then
         -- During post-unfreeze settle, keep baseline synced so diffs are clean
         -- when the settle period ends (game may still be restoring real party).
