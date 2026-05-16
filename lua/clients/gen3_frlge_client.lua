@@ -743,6 +743,8 @@ local freeze_frames_left    = 0
 local FREEZE_TIMEOUT_FRAMES = 3600 -- 60s failsafe
 local POST_UNFREEZE_SETTLE  = 15   -- ~0.25s for game to restore real party after unfreeze
 local post_unfreeze_frames  = 0    -- countdown: suppress party diffs while settling
+local pending_freeze_release = false  -- trigger condition met; waiting for eob_clear
+local freeze_release_reason  = nil   -- reason string for unfreeze log
 local gift_capture_buffer   = {}   -- buffered gift events: {key,hp,maxHP,level,area,nickname,species_id,held_item_id,frame}
 local GIFT_BUFFER_WINDOW    = 45   -- hold gifts for ~0.75s before confirming real
 local GIFT_FREEZE_THRESHOLD = 3    -- 3+ gifts in window = borrowed swap
@@ -1038,6 +1040,10 @@ local function on_frame()
     local battle_just_ended = prev_in_battle and not in_battle
     if battle_just_ended then
         sync_cooldown = SYNC_COOLDOWN_FRAMES
+        -- Arm the EOB gate HERE, before the hardware gate check below, so that on the
+        -- battle-end frame the hardware check sees cooldown > 0 and defers eob_clear.
+        -- (The battle_just_ended handler at step 6 also sets this — same value, no harm.)
+        memorialize_battle_cooldown = MEMORIALIZE_POST_BATTLE_COOLDOWN
     elseif sync_cooldown > 0 then
         sync_cooldown = sync_cooldown - 1
     end
@@ -1453,15 +1459,28 @@ local function on_frame()
             total = total + 1
             if curr_party[k] then returned = returned + 1 end
         end
-        -- Unfreeze when: originals returned, battle ended, or timeout (overworld only).
-        if (total > 0 and returned >= total)
-           or battle_just_ended
-           or freeze_frames_left <= 0 then
-            local reason = freeze_frames_left <= 0 and "timeout"
-                or battle_just_ended and "battle ended"
-                or "originals returned"
+        -- Record the trigger condition the first time it fires, but do NOT unfreeze
+        -- yet — wait for eob_clear so EndOfBattleThings (FormsRevert, RecalcAllStats)
+        -- has finished before we resume party diffing.
+        if not pending_freeze_release then
+            if total > 0 and returned >= total then
+                pending_freeze_release = true
+                freeze_release_reason  = "originals returned"
+            elseif battle_just_ended then
+                pending_freeze_release = true
+                freeze_release_reason  = "battle ended"
+            end
+        end
+        -- Unfreeze when trigger has fired AND EndOfBattleThings is done.
+        -- Timeout (60 s failsafe) bypasses the eob gate to prevent a permanent freeze.
+        local force_timeout = freeze_frames_left <= 0
+        if (pending_freeze_release and eob_clear) or force_timeout then
+            local reason = force_timeout and "timeout"
+                or freeze_release_reason or "unknown"
             console.log("[SLink-FRLGE] ★ PARTY UNFREEZE: " .. reason)
-            party_frozen = false
+            party_frozen           = false
+            pending_freeze_release = false
+            freeze_release_reason  = nil
             pending_faint_debounce = {}  -- clear stale debounce state
             -- Start settle period: keep prev_party synced for a few frames
             -- before allowing party diffs, so the game has time to restore
@@ -1687,9 +1706,10 @@ local function on_frame()
                     console.log(string.format(
                         "[SLink-FRLGE] trade detection ambiguous: %d departures, %d arrivals — triggering party freeze",
                         #trade_deps, #trade_arrs))
-                    party_frozen       = true
-                    freeze_frames_left = FREEZE_TIMEOUT_FRAMES
+                    party_frozen           = true
+                    freeze_frames_left     = FREEZE_TIMEOUT_FRAMES
                     pending_faint_debounce = {}
+                    pending_freeze_release = false
                     pre_freeze_keys = {}
                     for pk, _ in pairs(prev_party) do
                         if all_known_keys[pk] then
@@ -1779,9 +1799,10 @@ local function on_frame()
                     }
                     if #gift_capture_buffer >= GIFT_FREEZE_THRESHOLD then
                         -- Mass swap detected — freeze party diff.
-                        party_frozen       = true
-                        freeze_frames_left = FREEZE_TIMEOUT_FRAMES
+                        party_frozen           = true
+                        freeze_frames_left     = FREEZE_TIMEOUT_FRAMES
                         pending_faint_debounce = {}  -- clear stale debounce state
+                        pending_freeze_release = false
                         -- Only track REAL mons for the unfreeze check.
                         -- Buffered gift keys are NOT in all_known_keys (deferred),
                         -- so filtering prev_party by all_known_keys excludes them.
