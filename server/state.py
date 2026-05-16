@@ -1720,7 +1720,10 @@ class SoulLinkState:
             "killer": entry.killer,
             "initiating_player": entry.initiating_player,
         })
-        self._atomic_write_json(self._memorial_path, data)
+        try:
+            self._atomic_write_json(self._memorial_path, data)
+        except OSError as e:
+            log.warning(f"[SAVE] memorial.json write failed (non-fatal): {e}")
 
     def _check_game_over(self):
         """
@@ -1840,4 +1843,7 @@ class SoulLinkState:
             "run_over": self.run_over,
             "attempts_count": self.attempts_count,
         }
-        self._atomic_write_json(self._links_path, payload)
+        try:
+            self._atomic_write_json(self._links_path, payload)
+        except OSError as e:
+            log.warning(f"[SAVE] links.json write failed (non-fatal): {e}")

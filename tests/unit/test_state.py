@@ -4203,8 +4203,9 @@ def test_save_crash_mid_write_preserves_previous_links_json(tmp_path, monkeypatc
         raise OSError("simulated disk full")
     monkeypatch.setattr("server.state.json.dump", exploding_dump)
 
-    with pytest.raises(OSError):
-        state.handle_event("a", {"event": "faint", "key": "A:1"})
+    # The save failure is swallowed (logged as warning), so no exception propagates.
+    # The important invariant is that links.json still holds the prior good payload.
+    state.handle_event("a", {"event": "faint", "key": "A:1"})
 
     with open(links_path) as f:
         survived = _json.load(f)
