@@ -313,6 +313,20 @@ function GEN3.detect_variant()
             return "ap"
         elseif _detectRR() then
             return "radical_red"
+        else
+            -- IWRAM not yet initialised (game resetting / loading save).
+            -- Vanilla FRLG NEVER has the version string at ROM 0x108, so this
+            -- is definitely AP or RR — returning "vanilla" here is always wrong.
+            -- Use a ROM-stable probe to distinguish them:
+            --   CFRU/RR places a gBaseStats ROM pointer at ROM address 0x080001BC.
+            --   AP (recompiled vanilla) has ARM code there, not a ROM pointer.
+            -- ROM is immutable; this read is always valid regardless of save state.
+            local ok, cfru_ptr = pcall(memory.read_u32_le, 0x080001BC, "System Bus")
+            if ok and cfru_ptr >= 0x08000000 and cfru_ptr < 0x09000000 then
+                return "radical_red"
+            end
+            -- No CFRU ROM pointer → assume AP.
+            return "ap"
         end
     else
         -- No version string — could be vanilla or RR (future builds)
