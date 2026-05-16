@@ -1181,3 +1181,64 @@ class TestItemNameKnown:
 
     def test_rr_unknown_returns_item_hash_format(self, rr):
         assert rr.item_name(99999) == "Item #99999"
+
+
+# ── CFRU ability name overrides ───────────────────────────────────────────────
+
+class TestCFRUAbilityNameOverrides:
+    """Tests for species-specific ability name overrides in RR/CFRU runs."""
+
+    @pytest.fixture
+    def rr(self):
+        return Gen3Adapter(is_rr=True)
+
+    @pytest.fixture
+    def vanilla(self):
+        return Gen3Adapter(is_rr=False)
+
+    # Override entries from CFRU_ABILITY_NAME_OVERRIDES (keyed by NatDex after to_national conversion):
+    # ability 13: (13, NatDex 384) → "Air Lock"  — Rayquaza is CFRU ID 406
+    # ability 37: (37, NatDex 307) → "Pure Power" — Meditite is CFRU ID 356
+    # ability 121: (121, NatDex 50) → "Tangling Hair" — Diglett is CFRU ID 50 (Gen 1, identity)
+
+    def test_rr_cloudnine_rayquaza_returns_air_lock(self, rr):
+        """Ability 13 (Cloud Nine in vanilla) → "Air Lock" for Rayquaza (CFRU ID 406) in RR."""
+        assert rr.ability_name(13, species_id=406) == "Air Lock"
+
+    def test_rr_hugepower_meditite_returns_pure_power(self, rr):
+        """Ability 37 (Huge Power in vanilla) → "Pure Power" for Meditite (CFRU ID 356) in RR."""
+        assert rr.ability_name(37, species_id=356) == "Pure Power"
+
+    def test_rr_gooey_diglett_returns_tangling_hair(self, rr):
+        """Ability 121 (Gooey in vanilla) → "Tangling Hair" for Diglett (CFRU ID 50) in RR."""
+        assert rr.ability_name(121, species_id=50) == "Tangling Hair"
+
+    def test_rr_gooey_without_species_returns_base_cfru_name(self, rr):
+        """Without a species_id, ability 121 returns the base CFRU ability name, not an override."""
+        base_name = rr.ability_name(121)
+        assert base_name != "Tangling Hair", "species_id=0 must not trigger an override"
+        assert base_name  # still non-empty (CFRU knows this ability)
+
+    def test_rr_override_non_matching_species_returns_base_name(self, rr):
+        """Ability 121 on a species without an override returns the base CFRU name."""
+        base_name = rr.ability_name(121)
+        non_override_name = rr.ability_name(121, species_id=1)  # Bulbasaur — no override for (121, 1)
+        assert non_override_name == base_name
+
+    def test_vanilla_ignores_cfru_override_for_rayquaza(self, vanilla):
+        """Vanilla adapter (is_rr=False) must NOT use CFRU overrides even when species_id is passed."""
+        name = vanilla.ability_name(13, species_id=406)
+        assert name != "Air Lock", "Vanilla adapter must not apply CFRU override"
+
+    def test_vanilla_ignores_cfru_override_for_diglett(self, vanilla):
+        """Vanilla adapter (is_rr=False) must NOT use CFRU overrides."""
+        name = vanilla.ability_name(121, species_id=50)
+        assert name != "Tangling Hair", "Vanilla adapter must not apply CFRU override"
+
+    def test_rr_medicham_pure_power(self, rr):
+        """Ability 37 → "Pure Power" for Medicham (CFRU ID 357) in RR."""
+        assert rr.ability_name(37, species_id=357) == "Pure Power"
+
+    def test_rr_dugtrio_tangling_hair(self, rr):
+        """Ability 121 → "Tangling Hair" for Dugtrio (CFRU ID 51) in RR."""
+        assert rr.ability_name(121, species_id=51) == "Tangling Hair"

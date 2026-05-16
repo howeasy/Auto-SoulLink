@@ -310,7 +310,7 @@ class Gen1Adapter(GameAdapter):
             f'</span>'
         )
 
-    def ability_name(self, ability_id: int) -> str:
+    def ability_name(self, ability_id: int, species_id: int = 0) -> str:
         # Gen 1 has no abilities
         return ""
 

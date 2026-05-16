@@ -157,8 +157,12 @@ class GamePresentationAdapter(ABC):
         ...
 
     @abstractmethod
-    def ability_name(self, ability_id: int) -> str:
-        """Return display name for an ability ID."""
+    def ability_name(self, ability_id: int, species_id: int = 0) -> str:
+        """Return display name for an ability ID.
+
+        species_id: internal species ID (optional). Passed through to enable
+        species-specific name overrides for aliased abilities in RR/CFRU.
+        """
         ...
 
     @abstractmethod

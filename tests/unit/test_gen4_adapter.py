@@ -282,3 +282,18 @@ def test_adapter_registered():
     from server.adapters import get_adapter
     a = get_adapter("gen4_hgsspt")
     assert a.game_id == "gen4_hgsspt"
+
+
+# ── ability_name species_id parameter is ignored ─────────────────────────────
+
+def test_ability_name_species_id_ignored(adapter):
+    """Gen 4 adapter ignores species_id — result must be the same with or without it."""
+    base = adapter.ability_name(1)
+    with_species = adapter.ability_name(1, species_id=999)
+    assert with_species == base
+
+def test_ability_name_species_id_does_not_inject_cfru_override(adapter):
+    """Gen 4 adapter must not return an RR-specific override name even when an override species_id is passed."""
+    # (121, 50) is "Tangling Hair" in RR — Gen 4 must return the plain vanilla name instead
+    name = adapter.ability_name(121, species_id=50)
+    assert name != "Tangling Hair"

@@ -492,3 +492,11 @@ def test_to_national_dex_above_151(adapter):
     result = adapter.to_national_dex(190)
     # Should be either 112 (if lookup works) or 190 (passthrough)
     assert isinstance(result, int)
+
+
+# ── ability_name species_id parameter is ignored ─────────────────────────────
+
+def test_ability_name_species_id_ignored(adapter):
+    """Gen 1 has no abilities; species_id must not change the empty-string result."""
+    assert adapter.ability_name(1, species_id=999) == adapter.ability_name(1)
+    assert adapter.ability_name(1, species_id=999) == ""

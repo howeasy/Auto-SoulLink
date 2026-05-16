@@ -413,6 +413,14 @@ def test_area_display_name_known_route(adapter):
     assert name  # non-empty
 
 
+# ── ability_name species_id parameter is ignored ─────────────────────────────
+
+def test_ability_name_species_id_ignored(adapter):
+    """Gen 2 has no abilities; species_id must not change the empty-string result."""
+    assert adapter.ability_name(1, species_id=999) == adapter.ability_name(1)
+    assert adapter.ability_name(1, species_id=999) == ""
+
+
 # ── to_national_dex ──────────────────────────────────────────────────────
 
 def test_to_national_dex_passthrough(adapter):

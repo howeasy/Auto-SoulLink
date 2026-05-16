@@ -207,14 +207,13 @@ class Gen4Adapter(GameAdapter):
         url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{species_id}.png"
         return f'<img src="{url}" width="40" height="40" loading="lazy">'
 
-    def ability_name(self, ability_id: int) -> str:
+    def ability_name(self, ability_id: int, species_id: int = 0) -> str:
         return _ability_name(ability_id, is_rr=False)
 
     def ability_description(self, ability_id: int) -> str:
         return _ability_description(ability_id, is_rr=False)
 
     def trainer_info(self, trainer_id: int) -> tuple[str, str]:
-        # Gen 4 doesn't have a trainer table
         return ("", "")
 
     def item_name(self, item_id: int) -> str:

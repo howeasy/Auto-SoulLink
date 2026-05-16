@@ -239,7 +239,7 @@ class Gen2CrystalAdapter(GameAdapter):
             f'</span>'
         )
 
-    def ability_name(self, ability_id: int) -> str:
+    def ability_name(self, ability_id: int, species_id: int = 0) -> str:
         # Gen 2 has no abilities
         return ""
 

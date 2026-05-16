@@ -397,8 +397,8 @@ class Gen3Adapter(GameAdapter):
                     f"/sprites/pokemon/{nat}.png")
         return ""
 
-    def ability_name(self, ability_id: int) -> str:
-        return _ability_name(ability_id, self._is_rr)
+    def ability_name(self, ability_id: int, species_id: int = 0) -> str:
+        return _ability_name(ability_id, self._is_rr, species_id)
 
     def ability_description(self, ability_id: int) -> str:
         return _ability_description(ability_id, self._is_rr)

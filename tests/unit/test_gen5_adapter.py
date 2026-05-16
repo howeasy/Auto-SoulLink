@@ -332,3 +332,18 @@ def test_server_variant_label(rom_type, expected_label):
     """Server's _VARIANT_LABEL must have all Gen 5 variants."""
     from server.server import SLinkServer
     assert SLinkServer._VARIANT_LABEL.get(rom_type) == expected_label
+
+
+# ── ability_name species_id parameter is ignored ─────────────────────────────
+
+def test_ability_name_species_id_ignored(adapter):
+    """Gen 5 adapter ignores species_id — result must be the same with or without it."""
+    base = adapter.ability_name(1)
+    with_species = adapter.ability_name(1, species_id=999)
+    assert with_species == base
+
+def test_ability_name_species_id_does_not_inject_cfru_override(adapter):
+    """Gen 5 adapter must not return an RR-specific override name even when an override species_id is passed."""
+    # (121, 50) is "Tangling Hair" in RR — Gen 5 must return the plain vanilla name instead
+    name = adapter.ability_name(121, species_id=50)
+    assert name != "Tangling Hair"

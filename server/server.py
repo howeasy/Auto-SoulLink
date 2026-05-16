@@ -286,7 +286,7 @@ def _build_mon_entry(key, detail, adapter):
         return None
     species = adapter.species_name(sid)
     nature   = _nature_from_key(key)
-    abl_name = detail.get("ability_name", "") or adapter.ability_name(detail.get("ability_id", 0))
+    abl_name = detail.get("ability_name", "") or adapter.ability_name(detail.get("ability_id", 0), sid)
     item_id  = detail.get("held_item_id", 0)
     item     = adapter.item_name(item_id) if item_id else ""
     raw_moves = [m for m in (detail.get("moves") or []) if m][:4]
@@ -2068,6 +2068,8 @@ class SLinkServer:
         # Persistent per-monKey cache of display info (species_id, nickname, level, gender).
         # Survives party↔box transitions so sprites don't go blank between ticks.
         self._mon_cache: dict[str, dict] = {}
+        # Orphan keys already warned about — suppress repeat warnings on every tick.
+        self._warned_orphan_keys: set[str] = set()
         # Battle state: in_battle flag + enemy team snapshot
         self.battle_state: dict[str, dict] = {
             "a": {"in_battle": False, "is_trainer_battle": False, "enemy_party": [],
@@ -2401,24 +2403,31 @@ class SLinkServer:
                 if msg.get("event") == "hello":
                     self.connected_players[player_id]["rom_type"] = msg.get("rom_type", "?")
                     # Resolve correct adapter from rom_type.
+                    # Once rom_type is committed (set-once), the adapter is locked — ignore
+                    # any later hello that carries a different rom_type (e.g. early-boot
+                    # detect_variant returning 'vanilla' before IWRAM is initialised).
                     rom_type = msg.get("rom_type", "")
-                    new_game_id = self._ROM_TYPE_TO_GAME_ID.get(rom_type)
-                    new_is_rr = rom_type.endswith("_rr")
-                    if new_game_id and new_game_id != self.state.adapter.game_id:
-                        from server.adapters import get_adapter
-                        self.state.adapter = get_adapter(new_game_id, is_rr=new_is_rr)
-                        self.state.is_rr = new_is_rr
-                        self.adapter = self.state.adapter
-                        log.info(f"Adapter switched to {new_game_id} (rom_type={rom_type})")
-                        log.debug(f"[ADAPTER] player={player_id}  game_id={new_game_id}  is_rr={new_is_rr}  rom_type={rom_type!r}  reason=game_id_changed")
-                    elif new_is_rr != self.state.is_rr:
-                        self.state.is_rr = new_is_rr
-                        from server.adapters import get_adapter
-                        self.state.adapter = get_adapter(
-                            self.state.adapter.game_id, is_rr=new_is_rr)
-                        self.adapter = self.state.adapter
-                        log.info(f"Adapter updated: is_rr={new_is_rr}")
-                        log.debug(f"[ADAPTER] player={player_id}  game_id={self.state.adapter.game_id}  is_rr={new_is_rr}  rom_type={rom_type!r}  reason=is_rr_changed")
+                    if not self.state.rom_type:
+                        new_game_id = self._ROM_TYPE_TO_GAME_ID.get(rom_type)
+                        new_is_rr = rom_type.endswith("_rr")
+                        if new_game_id and new_game_id != self.state.adapter.game_id:
+                            from server.adapters import get_adapter
+                            self.state.adapter = get_adapter(new_game_id, is_rr=new_is_rr)
+                            self.state.is_rr = new_is_rr
+                            self.adapter = self.state.adapter
+                            log.info(f"Adapter switched to {new_game_id} (rom_type={rom_type})")
+                            log.debug(f"[ADAPTER] player={player_id}  game_id={new_game_id}  is_rr={new_is_rr}  rom_type={rom_type!r}  reason=game_id_changed")
+                        elif new_is_rr != self.state.is_rr:
+                            self.state.is_rr = new_is_rr
+                            from server.adapters import get_adapter
+                            self.state.adapter = get_adapter(
+                                self.state.adapter.game_id, is_rr=new_is_rr)
+                            self.adapter = self.state.adapter
+                            log.info(f"Adapter updated: is_rr={new_is_rr}")
+                            log.debug(f"[ADAPTER] player={player_id}  game_id={self.state.adapter.game_id}  is_rr={new_is_rr}  rom_type={rom_type!r}  reason=is_rr_changed")
+                    elif rom_type and rom_type != self.state.rom_type:
+                        log.warning(f"[{player_id}] hello rom_type={rom_type!r} ignored — "
+                                    f"run already locked to {self.state.rom_type!r}")
                 # Duplicate-event guard.  Detect client restarts by seq resetting to 0/1.
                 seq = msg.get("seq", -1)
                 if seq != -1:
@@ -3083,8 +3092,8 @@ class SLinkServer:
                 d["species_name"] = self.adapter.species_name(sid) if sid else ""
                 d["sprite_html"] = self._get_sprite_html(sid) if sid else ""
                 aid = d.get("ability_id", 0)
-                d["ability_name"] = self.adapter.ability_name(aid) if aid else ""
-                # Enrich moves: resolve raw move IDs → full move detail dicts
+                d["ability_name"] = self.adapter.ability_name(aid, sid) if aid else ""
+                # Enrich moves: resolve raw move IDs -> full move detail dicts
                 raw_moves = d.get("moves", [])
                 raw_pp = d.get("pp", [])
                 move_details = []
@@ -3462,7 +3471,7 @@ class SLinkServer:
                         eiid   = em.get("held_item_id", 0)
                         esc    = em.get("status_cond", 0)
                         ename  = html.escape(self.adapter.species_name(esid)) if esid else "?"
-                        eabl   = self.adapter.ability_name(eaid) if eaid else ""
+                        eabl   = self.adapter.ability_name(eaid, esid) if eaid else ""
                         eadesc = self.adapter.ability_description(eaid) if eaid else ""
                         eitem  = self.adapter.item_name(eiid) if eiid else ""
                         eitem_html = (f'<span class="held-item">{html.escape(eitem)}</span>'
@@ -3721,7 +3730,7 @@ class SLinkServer:
                     )
                     b_types   = _type_badges_html(b_sid, adapter=self.adapter)
                     b_aid     = bentry.get("ability_id", 0)
-                    b_abl     = self.adapter.ability_name(b_aid) if b_aid else ""
+                    b_abl     = self.adapter.ability_name(b_aid, b_sid) if b_aid else ""
                     b_adesc   = self.adapter.ability_description(b_aid) if b_aid else ""
                     b_abl_h   = (f'<span class="ability" title="{html.escape(b_adesc)}">{html.escape(b_abl)}</span>'
                                  if b_abl else '<span class="dim">—</span>')
@@ -6012,14 +6021,16 @@ class SLinkServer:
                             s.queued_commands[player_id].append({"cmd": "box_mon", "key": key})
                             break
 
-                    # ── Check 3: orphan in memorial box (log-only) ──────────────
+                    # ── Check 3: orphan in memorial box (log-only, once per key) ────
                     # Only log if not a quarantine case (already logged above).
                     else:
-                        log.warning(
-                            f"[{player_id}] ⚠ Orphan mon in memorial box: {nick} [{key[:8]}] "
-                            f"(box {mem_idx} slot {bentry.get('slot', '?')}) — "
-                            f"not tracked as dead/memorial; investigate manually"
-                        )
+                        if key not in self._warned_orphan_keys:
+                            self._warned_orphan_keys.add(key)
+                            log.warning(
+                                f"[{player_id}] ⚠ Orphan mon in memorial box: {nick} [{key[:8]}] "
+                                f"(box {mem_idx} slot {bentry.get('slot', '?')}) — "
+                                f"not tracked as dead/memorial; investigate manually"
+                            )
 
             elif key in all_dead_keys:
                 # ── Check 2: dead/memorial mon found in a regular box ───────────

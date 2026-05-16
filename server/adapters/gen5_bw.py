@@ -211,7 +211,7 @@ class Gen5Adapter(GameAdapter):
         url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{species_id}.png"
         return f'<img src="{url}" width="40" height="40" loading="lazy">'
 
-    def ability_name(self, ability_id: int) -> str:
+    def ability_name(self, ability_id: int, species_id: int = 0) -> str:
         return _ability_name(ability_id, is_rr=False)
 
     def ability_description(self, ability_id: int) -> str:
