@@ -1704,7 +1704,7 @@ class SoulLinkState:
         self._save()
 
     def _write_memorial(self, entry: LinkEntry):
-        """Append the retired pair to memorial.json (atomic rewrite of the array)."""
+        """Append the retired pair to memorial.json via atomic rewrite."""
         os.makedirs(self._data_dir, exist_ok=True)
         try:
             with open(self._memorial_path) as f:
@@ -1720,8 +1720,7 @@ class SoulLinkState:
             "killer": entry.killer,
             "initiating_player": entry.initiating_player,
         })
-        with open(self._memorial_path, "w") as f:
-            json.dump(data, f, indent=2)
+        self._atomic_write_json(self._memorial_path, data)
 
     def _check_game_over(self):
         """
@@ -1757,6 +1756,19 @@ class SoulLinkState:
         log.info("GAME OVER — no alive links and no pending captures remain")
         for pid in ("a", "b"):
             self.queued_commands[pid].append({"cmd": "game_over"})
+
+    def _atomic_write_json(self, path: str, payload):
+        """Write JSON atomically: write to .tmp, fsync, rename over target.
+
+        On crash mid-write, the original file at `path` is untouched.
+        `os.replace` is atomic on both Windows and POSIX.
+        """
+        tmp_path = path + ".tmp"
+        with open(tmp_path, "w") as f:
+            json.dump(payload, f, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
 
     def _save(self):
         os.makedirs(self._data_dir, exist_ok=True)
@@ -1816,5 +1828,4 @@ class SoulLinkState:
             "run_over": self.run_over,
             "attempts_count": self.attempts_count,
         }
-        with open(self._links_path, "w") as f:
-            json.dump(payload, f, indent=2)
+        self._atomic_write_json(self._links_path, payload)

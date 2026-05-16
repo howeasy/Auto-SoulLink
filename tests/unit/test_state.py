@@ -4159,3 +4159,52 @@ def test_mixed_sync_and_hud_commands_all_delivered(tmp_path, monkeypatch):
     assert has_cmd(cmds_b, "hud_show"), "HUD command should be delivered"
     assert has_cmd(cmds_b, "box_mon", "B:1"), "box_mon for B:1 should be delivered"
     assert has_cmd(cmds_b, "party_mon", "B:2"), "party_mon for B:2 should be delivered"
+
+
+# ── atomic persistence ───────────────────────────────────────────────────────────────────────
+
+def test_save_writes_valid_json_and_leaves_no_tmp(tmp_path):
+    """_save() produces a parseable links.json and removes its .tmp scratch file."""
+    import json as _json
+    state = SoulLinkState(data_dir=str(tmp_path))
+    state.pokeballs_obtained = {"a": True, "b": True}
+
+    state.handle_event("a", {"event": "capture", "key": "A:1", "area_id": "route_1", "level": 5})
+    state.handle_event("b", {"event": "capture", "key": "B:2", "area_id": "route_1", "level": 7})
+
+    links_path = tmp_path / "links.json"
+    assert links_path.exists(), "links.json should exist after captures trigger _save()"
+    with open(links_path) as f:
+        payload = _json.load(f)
+    assert any(e.get("area_id") == "route_1" for e in payload["links"])
+
+    assert not (tmp_path / "links.json.tmp").exists(), ".tmp scratch must not leak"
+
+
+def test_save_crash_mid_write_preserves_previous_links_json(tmp_path, monkeypatch):
+    """If json.dump raises mid-write, links.json must remain at its prior content."""
+    import json as _json
+    state = SoulLinkState(data_dir=str(tmp_path))
+    state.pokeballs_obtained = {"a": True, "b": True}
+
+    state.handle_event("a", {"event": "capture", "key": "A:1", "area_id": "route_1", "level": 5})
+    state.handle_event("b", {"event": "capture", "key": "B:2", "area_id": "route_1", "level": 7})
+    links_path = tmp_path / "links.json"
+    with open(links_path) as f:
+        good_payload = _json.load(f)
+
+    # Inject a crash inside json.dump. Because _atomic_write_json writes to
+    # links.json.tmp first and only os.replaces on success, the original file
+    # must survive untouched.
+    real_dump = _json.dump
+    def exploding_dump(*args, **kwargs):
+        real_dump(*args, **kwargs)
+        raise OSError("simulated disk full")
+    monkeypatch.setattr("server.state.json.dump", exploding_dump)
+
+    with pytest.raises(OSError):
+        state.handle_event("a", {"event": "faint", "key": "A:1"})
+
+    with open(links_path) as f:
+        survived = _json.load(f)
+    assert survived == good_payload, "links.json must be unchanged after crashed write"
