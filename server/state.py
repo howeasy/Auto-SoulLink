@@ -869,6 +869,10 @@ class SoulLinkState:
                 if player_mon and player_mon.species and self.adapter.evo_family(player_mon.species) == cap_base:
                     dup_name = self.adapter.species_name(player_mon.species)
                     break
+                partner_mon = entry.b if player_id == "a" else entry.a
+                if partner_mon and partner_mon.species and self.adapter.evo_family(partner_mon.species) == cap_base:
+                    dup_name = self.adapter.species_name(partner_mon.species)
+                    break
 
             # Check pending captures in OTHER areas
             if not dup_name:
@@ -876,6 +880,10 @@ class SoulLinkState:
                     if pend_area == area_id:
                         continue
                     pend_mon = pend_map.get(player_id)
+                    if pend_mon and pend_mon.species and self.adapter.evo_family(pend_mon.species) == cap_base:
+                        dup_name = self.adapter.species_name(pend_mon.species)
+                        break
+                    pend_mon = pend_map.get(_partner(player_id))
                     if pend_mon and pend_mon.species and self.adapter.evo_family(pend_mon.species) == cap_base:
                         dup_name = self.adapter.species_name(pend_mon.species)
                         break
@@ -1140,6 +1148,16 @@ class SoulLinkState:
                 self.dupe_notified_areas[player_id].add(area_id)
                 self._dupes_reroll(player_id, area_id, f"Dupes clause: {enc_name} -- reroll!")
                 return True
+            partner_mon = entry.b if player_id == "a" else entry.a
+            if partner_mon and partner_mon.species and self.adapter.evo_family(partner_mon.species) == enc_base:
+                existing_name = self.adapter.species_name(partner_mon.species)
+                log.info(
+                    f"[{player_id}] dupes clause (battle start): {enc_name} "
+                    f"same family as partner's {existing_name} in {entry.area_id}"
+                )
+                self.dupe_notified_areas[player_id].add(area_id)
+                self._dupes_reroll(player_id, area_id, f"Dupes clause: {enc_name} -- reroll!")
+                return True
 
         # Check 2: partner already captured on this area with same evo family.
         partner_cap = self.pending_captures.get(area_id, {}).get(partner)
@@ -1150,6 +1168,19 @@ class SoulLinkState:
                 log.info(
                     f"[{player_id}] dupes clause (battle start): {enc_name} "
                     f"same family as partner's {partner_name} on {area_id}"
+                )
+                self.dupe_notified_areas[player_id].add(area_id)
+                self._dupes_reroll(player_id, area_id, f"Dupes clause: {enc_name} -- reroll!")
+                return True
+        for pend_area, pend_map in self.pending_captures.items():
+            if pend_area == area_id:
+                continue
+            pend_mon = pend_map.get(partner)
+            if pend_mon and pend_mon.species and self.adapter.evo_family(pend_mon.species) == enc_base:
+                partner_name = self.adapter.species_name(pend_mon.species)
+                log.info(
+                    f"[{player_id}] dupes clause (battle start): {enc_name} "
+                    f"same family as partner's pending {partner_name} on {pend_area}"
                 )
                 self.dupe_notified_areas[player_id].add(area_id)
                 self._dupes_reroll(player_id, area_id, f"Dupes clause: {enc_name} -- reroll!")
@@ -1233,6 +1264,15 @@ class SoulLinkState:
                     )
                     self._dupes_reroll(player_id, area_id, f"Dupes clause: {enc_name} -- reroll!")
                     return
+                partner_mon = entry.b if player_id == "a" else entry.a
+                if partner_mon and partner_mon.species and self.adapter.evo_family(partner_mon.species) == enc_base:
+                    existing_name = self.adapter.species_name(partner_mon.species)
+                    log.info(
+                        f"[{player_id}] species clause reroll: {enc_name} "
+                        f"same family as partner's {existing_name} in {entry.area_id} — no_catch suppressed"
+                    )
+                    self._dupes_reroll(player_id, area_id, f"Dupes clause: {enc_name} -- reroll!")
+                    return
 
             # Check 2: partner already captured on this area and species would
             # violate species lock (same family) — catching it would be rejected
@@ -1245,6 +1285,18 @@ class SoulLinkState:
                     log.info(
                         f"[{player_id}] dupes clause reroll: {enc_name} "
                         f"same family as partner's {partner_name} on {area_id} — no_catch suppressed"
+                    )
+                    self._dupes_reroll(player_id, area_id, f"Dupes clause: {enc_name} -- reroll!")
+                    return
+            for pend_area, pend_map in self.pending_captures.items():
+                if pend_area == area_id:
+                    continue
+                pend_mon = pend_map.get(partner)
+                if pend_mon and pend_mon.species and self.adapter.evo_family(pend_mon.species) == enc_base:
+                    partner_name = self.adapter.species_name(pend_mon.species)
+                    log.info(
+                        f"[{player_id}] dupes clause reroll: {enc_name} "
+                        f"same family as partner's pending {partner_name} on {pend_area} — no_catch suppressed"
                     )
                     self._dupes_reroll(player_id, area_id, f"Dupes clause: {enc_name} -- reroll!")
                     return
@@ -1597,6 +1649,14 @@ class SoulLinkState:
                     existing_name = self.adapter.species_name(entry.b.species)
                     b_name = self.adapter.species_name(b_mon.species)
                     return (f"Species clause: {b_name} — B already has {existing_name}", "b")
+                if entry.a and entry.a.species and self.adapter.evo_family(entry.a.species) == b_base:
+                    existing_name = self.adapter.species_name(entry.a.species)
+                    b_name = self.adapter.species_name(b_mon.species)
+                    return (f"Species clause: {b_name} — already have {existing_name}", "b")
+                if entry.b and entry.b.species and self.adapter.evo_family(entry.b.species) == a_base:
+                    existing_name = self.adapter.species_name(entry.b.species)
+                    a_name = self.adapter.species_name(a_mon.species)
+                    return (f"Species clause: {a_name} — already have {existing_name}", "a")
 
         if self.gender_lock and a_mon.key and b_mon.key and a_mon.species and b_mon.species:
             a_gender = self.adapter.gender_from_key(a_mon.key, a_mon.species)

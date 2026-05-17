@@ -72,6 +72,7 @@ _STREAM_SHARED_CSS = """
   .p-list{display:flex;flex-direction:column;gap:clamp(3px,.55vmin,7px);flex:1;overflow:hidden}
   .mc{display:flex;align-items:center;gap:clamp(6px,1.1vmin,13px);padding:clamp(4px,.7vmin,9px) clamp(7px,1.1vmin,13px);background:var(--c-card);border-radius:4px;border-left:3px solid rgba(128,128,128,.18);min-width:0}
   .mc.bh{border-left-color:var(--c-alive)}.mc.bm{border-left-color:#f0c030}.mc.bl,.mc.fnt{border-left-color:var(--c-dead)}.mc.fnt{opacity:.45}
+  .active-mon{border-left:3px solid var(--c-gold);padding-left:4px}
   .mc.fnt .mon-sprite{filter:grayscale(60%)}
   .m-info{flex:1;min-width:0}
   .m-name{font-size:1em;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
@@ -641,6 +642,133 @@ function render(d) {
   }
   h += '</div>';
   document.getElementById('root').innerHTML = h;
+}
+"""
+
+_STREAM_ENEMY_WILD_JS = r"""
+var PLAYER_ID = '%PLAYER%';
+var _lastKey = '';
+function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+function render(d) {
+  var p = d.players[PLAYER_ID];
+  var bs = p && p.battle_state;
+  if (!bs || !bs.in_battle || bs.is_trainer_battle) {
+    if (_lastKey !== '__empty__') {
+      document.getElementById('root').innerHTML = '';
+      _lastKey = '__empty__';
+    }
+    return;
+  }
+  var mon = null;
+  var ep = bs.enemy_party || [];
+  for (var i = 0; i < ep.length; i++) {
+    if (ep[i].active) { mon = ep[i]; break; }
+  }
+  if (!mon && ep.length) mon = ep[0];
+  if (!mon) {
+    if (_lastKey !== '__loading__') {
+      document.getElementById('root').innerHTML = '<div class="wtitle">Wild encounter</div><div style="opacity:.4;padding-top:6px">Loading...</div>';
+      _lastKey = '__loading__';
+    }
+    return;
+  }
+  var key = [mon.species_id, mon.hp, mon.maxHP, mon.level, mon.status_cond].join('|');
+  if (key === _lastKey) return;
+  _lastKey = key;
+
+  var hp = typeof mon.hp === 'number' ? mon.hp : 1;
+  var maxHP = mon.maxHP > 0 ? mon.maxHP : (hp || 1);
+  var lv = mon.level || '?';
+  var fnt = hp === 0;
+  var pct = fnt ? 0 : Math.max(0, Math.min(100, Math.round(hp / maxHP * 100)));
+  var hpCls = pct > 50 ? 'hp-h' : (pct > 20 ? 'hp-m' : 'hp-l');
+  var bCls  = fnt ? 'fnt' : (pct > 50 ? 'bh' : (pct > 20 ? 'bm' : 'bl'));
+  var nick  = escHtml(mon.nickname || mon.species_name || '???');
+  var spLbl = (mon.species_name && mon.nickname && mon.nickname !== mon.species_name)
+              ? ' <span class="sp">(' + escHtml(mon.species_name) + ')</span>' : '';
+  var fntTag = fnt ? '<span class="fnt-tag">FNT</span>' : '';
+
+  var h = '<div class="wtitle">Wild Encounter</div>';
+  h += '<div class="p-list">';
+  h += '<div class="mc ' + bCls + ' active-mon">';
+  h += (mon.sprite_html || spriteTag(mon.species_id || 0));
+  h += '<div class="m-info">';
+  h += '<div class="m-name">' + nick + spLbl + fntTag + '</div>';
+  h += '<div class="hp-row">';
+  h += '<span class="hp-lbl">HP</span>';
+  h += '<div class="hp-trk"><div class="hp-fill ' + hpCls + '" style="width:' + pct + '%"></div></div>';
+  h += '<span class="hp-pct">' + (fnt ? '\u2014' : pct + '%') + '</span>';
+  h += statusIcon(mon.status_cond || 0);
+  h += '<span class="lv">Lv ' + lv + '</span>';
+  h += '</div></div></div>';
+  h += '</div>';
+  document.getElementById('root').innerHTML = h;
+  processSprites();
+}
+"""
+
+_STREAM_ENEMY_TRAINER_JS = r"""
+var PLAYER_ID = '%PLAYER%';
+var _lastKey = '';
+function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+function render(d) {
+  var p = d.players[PLAYER_ID];
+  var bs = p && p.battle_state;
+  if (!bs || !bs.in_battle || !bs.is_trainer_battle) {
+    if (_lastKey !== '__empty__') {
+      document.getElementById('root').innerHTML = '';
+      _lastKey = '__empty__';
+    }
+    return;
+  }
+  var ep = bs.enemy_party || [];
+  if (!ep.length) {
+    if (_lastKey !== '__loading__') {
+      document.getElementById('root').innerHTML = '<div class="wtitle">Trainer Battle</div><div style="opacity:.4;padding-top:6px">Loading...</div>';
+      _lastKey = '__loading__';
+    }
+    return;
+  }
+  var keyParts = [];
+  ep.forEach(function(m) { keyParts.push([m.species_id, m.hp, m.maxHP, m.level, m.status_cond, m.active ? 1 : 0].join(',')); });
+  var tName = (bs.opponent_class || '') + '|' + (bs.opponent_name || '');
+  var key = tName + '||' + keyParts.join(';');
+  if (key === _lastKey) return;
+  _lastKey = key;
+
+  var header = escHtml(bs.opponent_class || 'Trainer');
+  if (bs.opponent_name) header += ' ' + escHtml(bs.opponent_name);
+  var h = '<div class="wtitle">' + header + '</div>';
+  h += '<div class="p-list">';
+  ep.forEach(function(mon) {
+    var hp = typeof mon.hp === 'number' ? mon.hp : 1;
+    var maxHP = mon.maxHP > 0 ? mon.maxHP : (hp || 1);
+    var lv = mon.level || '?';
+    var fnt = hp === 0;
+    var pct = fnt ? 0 : Math.max(0, Math.min(100, Math.round(hp / maxHP * 100)));
+    var hpCls = pct > 50 ? 'hp-h' : (pct > 20 ? 'hp-m' : 'hp-l');
+    var bCls  = fnt ? 'fnt' : (pct > 50 ? 'bh' : (pct > 20 ? 'bm' : 'bl'));
+    var nick  = escHtml(mon.nickname || mon.species_name || '???');
+    var spLbl = (mon.species_name && mon.nickname && mon.nickname !== mon.species_name)
+                ? ' <span class="sp">(' + escHtml(mon.species_name) + ')</span>' : '';
+    var fntTag = fnt ? '<span class="fnt-tag">FNT</span>' : '';
+    var activeCls = mon.active ? ' active-mon' : '';
+
+    h += '<div class="mc ' + bCls + activeCls + '">';
+    h += (mon.sprite_html || spriteTag(mon.species_id || 0));
+    h += '<div class="m-info">';
+    h += '<div class="m-name">' + nick + spLbl + fntTag + '</div>';
+    h += '<div class="hp-row">';
+    h += '<span class="hp-lbl">HP</span>';
+    h += '<div class="hp-trk"><div class="hp-fill ' + hpCls + '" style="width:' + pct + '%"></div></div>';
+    h += '<span class="hp-pct">' + (fnt ? '\u2014' : pct + '%') + '</span>';
+    h += statusIcon(mon.status_cond || 0);
+    h += '<span class="lv">Lv ' + lv + '</span>';
+    h += '</div></div></div>';
+  });
+  h += '</div>';
+  document.getElementById('root').innerHTML = h;
+  processSprites();
 }
 """
 
@@ -1527,6 +1655,46 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
         <div class="card-cfg" data-id="u4b" data-base="/stream/attempts"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
         <div class="url-row"><span class="url-box" id="u4b">/stream/attempts</span><button class="copy-btn" onclick="copyUrl('u4b')">Copy</button><a class="open-btn" id="u4b-open" href="#" target="_blank">Open &#8599;</a></div>
         <div style="margin-top:8px;display:flex;gap:6px;align-items:center"><input type="number" id="attempts-input" min="0" value="0" style="width:60px;background:#1a1c28;color:#f8d030;border:1px solid #363850;border-radius:4px;padding:4px 8px;font-family:'Press Start 2P',monospace;font-size:.7em;text-align:center"><button class="copy-btn" onclick="setAttempts()">Set</button></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/enemy-wild-a?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Enemy Wild &middot; A</h3>
+        <div class="size-hint">Recommended: 280 &times; 100</div>
+        <p>Wild encounter opponent &mdash; single mon with sprite, HP, level. Hidden during trainer battles.</p>
+        <div class="card-cfg" data-id="uEWA" data-base="/stream/enemy-wild-a"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="uEWA">/stream/enemy-wild-a</span><button class="copy-btn" onclick="copyUrl('uEWA')">Copy</button><a class="open-btn" id="uEWA-open" href="#" target="_blank">Open &#8599;</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/enemy-wild-b?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Enemy Wild &middot; B</h3>
+        <div class="size-hint">Recommended: 280 &times; 100</div>
+        <p>Wild encounter opponent &mdash; single mon with sprite, HP, level. Hidden during trainer battles.</p>
+        <div class="card-cfg" data-id="uEWB" data-base="/stream/enemy-wild-b"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="uEWB">/stream/enemy-wild-b</span><button class="copy-btn" onclick="copyUrl('uEWB')">Copy</button><a class="open-btn" id="uEWB-open" href="#" target="_blank">Open &#8599;</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/enemy-trainer-a?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Enemy Trainer &middot; A</h3>
+        <div class="size-hint">Vertical: 280 &times; 380 &nbsp;|&nbsp; Horizontal: 580 &times; 130</div>
+        <p>Trainer battle opponent party &mdash; full team with sprites, HP bars, levels. Header shows trainer class/name. Hidden during wild encounters.</p>
+        <div class="card-cfg" data-id="uETA" data-base="/stream/enemy-trainer-a"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="uETA">/stream/enemy-trainer-a</span><button class="copy-btn" onclick="copyUrl('uETA')">Copy</button><a class="open-btn" id="uETA-open" href="#" target="_blank">Open &#8599;</a></div>
+      </div>
+    </div>
+    <div class="overlay-card">
+      <div class="preview"><iframe src="/stream/enemy-trainer-b?theme=dark"></iframe></div>
+      <div class="overlay-info">
+        <h3>Enemy Trainer &middot; B</h3>
+        <div class="size-hint">Vertical: 280 &times; 380 &nbsp;|&nbsp; Horizontal: 580 &times; 130</div>
+        <p>Trainer battle opponent party &mdash; full team with sprites, HP bars, levels. Header shows trainer class/name. Hidden during wild encounters.</p>
+        <div class="card-cfg" data-id="uETB" data-base="/stream/enemy-trainer-b"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="uETB">/stream/enemy-trainer-b</span><button class="copy-btn" onclick="copyUrl('uETB')">Copy</button><a class="open-btn" id="uETB-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">

@@ -2403,7 +2403,122 @@ def test_dupes_clause_concurrent_no_catch_suppresses_dead_zone(tmp_path, monkeyp
     assert any(c.get("cmd") == "unresolve_area" and c.get("area_id") == "route_1" for c in cmds)
 
 
+def test_dupes_clause_cross_player_alive_link_encounter(tmp_path, monkeypatch):
+    """A-side Mareep in an alive link should block B's Mareep encounter elsewhere."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(species_lock=True)
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.links.append(LinkEntry(
+        area_id="viridian_city",
+        a=MonInfo(key="AA:11", nickname="Watame", species=180),
+        b=MonInfo(key="BB:11", nickname="Rat", species=19),
+        status=LinkStatus.ALIVE,
+    ))
+    state._save()
 
+    fired = state.check_dupe_on_encounter("b", "route_3", 180)
+
+    assert fired is True
+    assert "route_3" in state.dupe_notified_areas["b"]
+
+
+def test_dupes_clause_cross_player_alive_link_capture(tmp_path, monkeypatch):
+    """A-side Mareep in an alive link should reject B's Mareep capture elsewhere."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(species_lock=True)
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.links.append(LinkEntry(
+        area_id="viridian_city",
+        a=MonInfo(key="AA:11", nickname="Watame", species=180),
+        b=MonInfo(key="BB:11", nickname="Rat", species=19),
+        status=LinkStatus.ALIVE,
+    ))
+    state._save()
+
+    cmds = state.handle_event("b", {
+        "event": "capture",
+        "key": "CC:33",
+        "area_id": "route_3",
+        "level": 5,
+        "species_id": 180,
+    })
+
+    assert any(c.get("cmd") == "force_faint" and c.get("key") == "CC:33" for c in cmds)
+
+
+def test_dupes_clause_cross_player_pending_other_area(tmp_path, monkeypatch):
+    """A pending Mareep in another area should block B's Mareep encounter."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(species_lock=True)
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.handle_event("a", {
+        "event": "capture",
+        "key": "AA:11",
+        "area_id": "viridian_city",
+        "level": 5,
+        "species_id": 180,
+    })
+
+    fired = state.check_dupe_on_encounter("b", "route_3", 180)
+
+    assert fired is True
+
+
+def test_dupes_clause_cross_player_evo_family(tmp_path, monkeypatch):
+    """A-side Pikachu should block B's Pichu encounter as the same evo family."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(species_lock=True)
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.links.append(LinkEntry(
+        area_id="viridian_forest",
+        a=MonInfo(key="AA:22", nickname="Pika", species=25),
+        b=MonInfo(key="BB:22", nickname="Nido", species=32),
+        status=LinkStatus.ALIVE,
+    ))
+    state._save()
+
+    fired = state.check_dupe_on_encounter("b", "route_3", 172)
+
+    assert fired is True
+
+
+def test_dupes_clause_cross_player_link_violation(tmp_path, monkeypatch):
+    """Cross-player roster dupes should be caught during link formation too."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(species_lock=True)
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.links.append(LinkEntry(
+        area_id="viridian_city",
+        a=MonInfo(key="AA:11", nickname="Watame", species=180),
+        b=MonInfo(key="BB:11", nickname="Rat", species=19),
+        status=LinkStatus.ALIVE,
+    ))
+
+    a_mon = MonInfo(key="AA:99", nickname="Bird", species=16)
+    b_mon = MonInfo(key="BB:99", nickname="Sheep", species=180)
+    result = state._check_link_violation(a_mon, b_mon)
+
+    assert result is not None
+    assert result[1] == "b"
+
+
+def test_dupes_clause_cross_player_alive_link_no_catch(tmp_path, monkeypatch):
+    """A-side dupes should also suppress B's no_catch dead zone via reroll."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(species_lock=True)
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.links.append(LinkEntry(
+        area_id="viridian_city",
+        a=MonInfo(key="AA:11", nickname="Watame", species=180),
+        b=MonInfo(key="BB:11", nickname="Rat", species=19),
+        status=LinkStatus.ALIVE,
+    ))
+    state._save()
+
+    cmds = state.handle_event("b", {"event": "no_catch", "area_id": "route_3", "species_id": 180})
+
+    assert state.area_states.get("route_3", AreaStatus.UNSEEN) != AreaStatus.DEAD_ZONE
+    assert any(c.get("cmd") == "unresolve_area" and c.get("area_id") == "route_3" for c in cmds)
 
 
 # ── Extended species data tests (CFRU/RR internal IDs) ───────────────────────

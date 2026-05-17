@@ -240,6 +240,51 @@ class TestFRLGPresentation:
         assert isinstance(result, int)
 
 
+def test_rr_ability_name_illuminate():
+    """ID 89 should be Illuminate in RR (was Big Pecks in CFRU)."""
+    from server.pokemon_data import ability_name
+    assert ability_name(89, is_rr=True) == "Illuminate"
+
+
+def test_rr_ability_name_wind_rider():
+    """ID 16 should be Wind Rider in RR (was Color Change in CFRU)."""
+    from server.pokemon_data import ability_name
+    assert ability_name(16, is_rr=True) == "Wind Rider"
+
+
+def test_rr_ability_name_dragons_maw():
+    """ID 38 should be Dragon's Maw in RR (was Poison Point in CFRU)."""
+    from server.pokemon_data import ability_name
+    assert ability_name(38, is_rr=True) == "Dragon's Maw"
+
+
+def test_rr_ability_name_quick_draw():
+    """ID 24 should be Quick Draw in RR (was Rough Skin in CFRU)."""
+    from server.pokemon_data import ability_name
+    assert ability_name(24, is_rr=True) == "Quick Draw"
+
+
+def test_rr_ability_name_gulp_missile():
+    """ID 35 should be Gulp Missile in RR (was Illuminate in CFRU)."""
+    from server.pokemon_data import ability_name
+    assert ability_name(35, is_rr=True) == "Gulp Missile"
+
+
+def test_vanilla_ability_unchanged():
+    """Vanilla and CFRU fallback ability names should not be affected by RR table."""
+    from server.pokemon_data import ABILITY_NAMES, ability_name
+    assert ability_name(89, is_rr=False) == "Download"
+    assert ability_name(16, is_rr=False) == "Color Change"
+    assert ABILITY_NAMES[89] == "Big Pecks"
+    assert ABILITY_NAMES[16] == "Color Change"
+
+
+def test_cfru_override_still_works():
+    """CFRU_ABILITY_NAME_OVERRIDES should still take precedence for specific species."""
+    from server.pokemon_data import ability_name
+    assert ability_name(121, is_rr=True, species_id=50) == "Tangling Hair"
+
+
 # ── Integration: adapter used by SoulLinkState ────────────────────────────────
 
 class TestAdapterIntegration:

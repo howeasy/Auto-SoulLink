@@ -31,6 +31,8 @@ from datetime import datetime
 from server.stream_overlays import (
     _stream_overlay_page,
     _STREAM_PARTY_JS,
+    _STREAM_ENEMY_WILD_JS,
+    _STREAM_ENEMY_TRAINER_JS,
     _STREAM_LINKS_JS,
     _STREAM_LINKED_PARTY_JS,
     _STREAM_BOXED_LINKS_JS,
@@ -4257,6 +4259,30 @@ class SLinkServer:
                                      _STREAM_PARTY_JS.replace("%PLAYER%", "b")),
             content_type="text/html")
 
+    async def handle_stream_enemy_wild_a(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Enemy Wild A",
+                                      _STREAM_ENEMY_WILD_JS.replace("%PLAYER%", "a")),
+            content_type="text/html")
+
+    async def handle_stream_enemy_wild_b(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Enemy Wild B",
+                                      _STREAM_ENEMY_WILD_JS.replace("%PLAYER%", "b")),
+            content_type="text/html")
+
+    async def handle_stream_enemy_trainer_a(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Enemy Trainer A",
+                                      _STREAM_ENEMY_TRAINER_JS.replace("%PLAYER%", "a")),
+            content_type="text/html")
+
+    async def handle_stream_enemy_trainer_b(self, request):
+        return aiohttp_web.Response(
+            text=_stream_overlay_page("Enemy Trainer B",
+                                      _STREAM_ENEMY_TRAINER_JS.replace("%PLAYER%", "b")),
+            content_type="text/html")
+
     async def handle_stream_links(self, request):
         return aiohttp_web.Response(
             text=_stream_overlay_page("Linked Pairs", _STREAM_LINKS_JS),
@@ -6347,9 +6373,13 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         # Stream overlay routes
         app.router.add_get("/stream",          srv.handle_stream_index)
         app.router.add_get("/stream/",         srv.handle_stream_index)
-        app.router.add_get("/stream/party-a",  srv.handle_stream_party_a)
-        app.router.add_get("/stream/party-b",  srv.handle_stream_party_b)
-        app.router.add_get("/stream/links",         srv.handle_stream_links)
+        app.router.add_get("/stream/party-a",        srv.handle_stream_party_a)
+        app.router.add_get("/stream/party-b",        srv.handle_stream_party_b)
+        app.router.add_get("/stream/enemy-wild-a",   srv.handle_stream_enemy_wild_a)
+        app.router.add_get("/stream/enemy-wild-b",   srv.handle_stream_enemy_wild_b)
+        app.router.add_get("/stream/enemy-trainer-a", srv.handle_stream_enemy_trainer_a)
+        app.router.add_get("/stream/enemy-trainer-b", srv.handle_stream_enemy_trainer_b)
+        app.router.add_get("/stream/links",          srv.handle_stream_links)
         app.router.add_get("/stream/linked-party", srv.handle_stream_linked_party)
         app.router.add_get("/stream/boxed-links",  srv.handle_stream_boxed_links)
         app.router.add_get("/stream/deaths",   srv.handle_stream_deaths)
