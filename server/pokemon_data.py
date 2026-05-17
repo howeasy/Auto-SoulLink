@@ -11,11 +11,9 @@ Gen 9 and RR-exclusive Sevii forms occupy custom slots.
 Regenerate with: python tools/gen_rr_species.py + tools/gen_rr_natdex.py
 """
 
-# -------------------------------------------------------------------------
-# RR 4.1 internal species IDs → display names (1329 species).
+# ── RR 4.1 internal species IDs → display names (1329 species) ──────────────
 # Keyed by RR internal ID (NOT national dex number).
 # Generated from funnotbun/funnotbun.github.io species.h
-# -------------------------------------------------------------------------
 SPECIES_NAMES: dict[int, str] = {
     1:'Bulbasaur',2:'Ivysaur',3:'Venusaur',4:'Charmander',5:'Charmeleon',
     6:'Charizard',7:'Squirtle',8:'Wartortle',9:'Blastoise',10:'Caterpie',
@@ -286,12 +284,10 @@ SPECIES_NAMES: dict[int, str] = {
 }
 
 
-# -------------------------------------------------------------------------
-# Gender ratio thresholds.
+# ── Gender ratio thresholds ─────────────────────────────────────────────────
 # threshold 0=always-male, 254=always-female, 255=genderless.
 # Otherwise: personality&0xFF < threshold → Female, else → Male.
 # Default for unlisted species: 127 (50/50).
-# -------------------------------------------------------------------------
 GENDER_RATIO: dict[int, int] = {
     1:31,2:31,3:31,4:31,5:31,6:31,7:31,8:31,9:31,29:254,
     30:254,31:254,32:0,33:0,34:0,35:191,36:191,37:191,38:191,39:191,
@@ -357,13 +353,10 @@ def gender_from_key_species(key_str: str, species_id: int, is_rr: bool = True) -
 GENDER_SYMBOL = {"male": "♂", "female": "♀", "genderless": ""}
 
 
-# -------------------------------------------------------------------------
-# Evolution families — maps evolved species → base-form species ID.
-#
+# ── Evolution families — evolved species → base-form species ID ─────────────
 # Single-stage mons are NOT listed — base_form() returns the species
 # itself for any missing key.  Split evos share the same base form.
 # Uses CFRU internal IDs.
-# -------------------------------------------------------------------------
 EVO_FAMILY: dict[int, int] = {
     2:1,3:1,5:4,6:4,8:7,9:7,11:10,12:10,14:13,15:13,
     17:16,18:16,20:19,22:21,24:23,25:172,26:172,28:27,30:29,31:29,
@@ -417,12 +410,10 @@ EVO_FAMILY: dict[int, int] = {
 }
 
 
-# -------------------------------------------------------------------------
-# CFRU internal species ID → National Pokédex number.
+# ── CFRU internal species ID → National Pokédex number ──────────────────────
 # Only non-identity mappings (where CFRU ID != NatDex).
 # Gen 1–2 (1–251) are identity and not listed.
 # Use to_national() for sprite URLs and display.
-# -------------------------------------------------------------------------
 CFRU_TO_NATIONAL: dict[int, int] = {
     277:252,278:253,279:254,280:255,281:256,282:257,283:258,284:259,
     285:260,286:261,287:262,288:263,289:264,290:265,291:266,292:267,
@@ -574,10 +565,8 @@ def to_national(cfru_id: int) -> int:
     return CFRU_TO_NATIONAL.get(cfru_id, cfru_id)
 
 
-# -------------------------------------------------------------------------
-# National Dex species names — built from SPECIES_NAMES + CFRU_TO_NATIONAL.
+# ── National Dex species names — built from SPECIES_NAMES + CFRU_TO_NATIONAL ──
 # For vanilla / AP clients that send NatDex IDs instead of CFRU IDs.
-# -------------------------------------------------------------------------
 NATIONAL_SPECIES_NAMES: dict[int, str] = {}
 for _cfru_id, _name in SPECIES_NAMES.items():
     _nat = to_national(_cfru_id)
@@ -597,10 +586,8 @@ def species_name(species_id: int, is_rr: bool = False) -> str:
     return SPECIES_NAMES.get(species_id, f"#{species_id}")
 
 
-# -------------------------------------------------------------------------
-# National Dex → CFRU reverse mapping (for converting vanilla/AP IDs).
+# ── National Dex → CFRU reverse mapping (for vanilla/AP IDs) ────────────────
 # Only non-identity entries (Gen 1–2 are identity).
-# -------------------------------------------------------------------------
 NATIONAL_TO_CFRU: dict[int, int] = {}
 for _cfru_id2, _nat_id2 in CFRU_TO_NATIONAL.items():
     # Prefer the lowest CFRU ID for each NatDex (avoids alt-form collisions).
@@ -620,13 +607,11 @@ def to_cfru(natdex_id: int) -> int:
     return NATIONAL_TO_CFRU.get(natdex_id, natdex_id)
 
 
-# -------------------------------------------------------------------------
-# Ability ID → display name.
+# ── Ability ID → display name ───────────────────────────────────────────────
 # CFRU renumbers a handful of vanilla Gen III ability IDs (72-74, 76) to
 # make room for Gen 8+ abilities.  The main table uses CFRU numbering;
 # vanilla overrides are applied server-side when rom_type is not RR.
 # Generated from Complete-Fire-Red-Upgrade/include/constants/abilities.h
-# -------------------------------------------------------------------------
 ABILITY_NAMES: dict[int, str] = {
     0: "None",
     1: "Stench", 2: "Drizzle", 3: "Speed Boost", 4: "Battle Armor",
@@ -1315,9 +1300,7 @@ CFRU_FORM_TYPES: dict[int, tuple[int, int]] = {
 }
 
 
-# -------------------------------------------------------------------------
-# Type data — Gen III type byte values and lookup
-# -------------------------------------------------------------------------
+# ── Type data — Gen III type byte values and lookup ─────────────────────────
 
 # Gen III type byte → display name (from pret/pokefirered include/constants/pokemon.h)
 TYPE_NAMES: dict[int, str] = {

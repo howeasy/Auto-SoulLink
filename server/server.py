@@ -329,11 +329,9 @@ def _build_mon_entry(key, detail, adapter):
     }
 
 
-# ---------------------------------------------------------------------------
-# Inline damage-preview widget (loaded lazily on the status page)
+# ── Inline damage-preview widget (lazy-loaded on the status page) ───────────
 # Uses the calc engine served at /calc/ — silent no-op if not built.
 # Raw string so no {{ }} escaping needed.
-# ---------------------------------------------------------------------------
 _CALC_PREVIEW_JS = r"""
 // ── RR Damage Calculator Preview ────────────────────────────────────────────
 window.SLinkCalc = (function () {
