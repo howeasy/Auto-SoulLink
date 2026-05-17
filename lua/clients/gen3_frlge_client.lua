@@ -1246,7 +1246,18 @@ local function on_frame()
             elseif cmd.cmd == "memorialize" then
                 exec_ok, exec_err = pcall(exec_memorialize, cmd.key)
             end
-            if not exec_ok then
+            if exec_ok then
+                -- Sync command modified party slots — immediately update the
+                -- PID swap detector's stable baseline so rapid back-to-back
+                -- commands (e.g. 3× box_mon) don't accumulate diffs and
+                -- falsely trigger a borrowed-party freeze.
+                local _post = _read_party_pids()
+                for i = 0, 5 do
+                    _stable_party_pids[i] = _post[i]
+                    _last_party_pids[i]   = _post[i]
+                end
+                _last_pid_change_frame = frame_count
+            else
                 console.log(string.format("[SLink-FRLGE] ✗ SYNC CMD ERROR (%s key=%s): %s",
                     cmd.cmd, (cmd.key or "?"):sub(1,8), tostring(exec_err)))
                 -- Re-queue with a retry counter to avoid infinite loops.
