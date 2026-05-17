@@ -372,6 +372,7 @@ M.BATTLE_TYPE_FIRST_MASK    = 0x10        -- bit 4: first rival battle (also a t
 -- faint detection must be frozen while any of these flags are set.
 -- NOTE: INGAME_PARTNER (0x400000) is NOT included — that's for tag/multi
 -- battles where your party stays intact and an NPC fights alongside you.
+M.BATTLE_TYPE_DOUBLE_MASK   = 0x0001      -- bit 0: double battle (BATTLE_TYPE_DOUBLE)
 M.BATTLE_TYPE_POKE_DUDE     = 0x10000     -- Poké Dude tutorial
 M.BATTLE_TYPE_MOCK_BATTLE   = 0x1000000   -- scripted mock battle
 M.BATTLE_TYPE_BORROWED_MASK = 0x1010000   -- Poké Dude | Mock Battle
@@ -1389,6 +1390,14 @@ function M.isBorrowedBattle()
         return false
     end
     return (memory.read_u32_le(M.BATTLE_TYPE_ADDR) & M.BATTLE_TYPE_BORROWED_MASK) ~= 0
+end
+
+--- Returns true if the current battle is a doubles (2v2) battle.
+-- Primary signal: gBattlersCount >= 4 (set by InitBtlControllers; 2 in singles, 4 in doubles).
+-- Returns false when BATTLERS_COUNT_ADDR is unavailable (should not occur on any Gen 3 profile).
+function M.isDoubleBattle()
+    if not M.BATTLERS_COUNT_ADDR then return false end
+    return memory.read_u8(M.BATTLERS_COUNT_ADDR) >= 4
 end
 
 --- Read the current trainer opponent index (gTrainerBattleOpponent_A).

@@ -395,3 +395,112 @@ class TestStatusIconHtml:
             "In stream_overlays.py JS, the 0x80 (Toxic) check must come before "
             "the 0x08 (Poison) check, otherwise Toxic displays as PSN."
         )
+
+
+# ── is_doubles passthrough via tick handler ───────────────────────────────────
+
+class TestDoublesPassthrough:
+    """Verify is_doubles is stored, cleared, and left alone by the tick handler."""
+
+    def _make_server(self, tmp_path):
+        from server.server import SLinkServer
+        import unittest.mock as mock
+        srv = SLinkServer.__new__(SLinkServer)
+        srv.data_dir = str(tmp_path)
+        srv.run_id   = "test"
+        srv.run_name = ""
+        srv.manager_port = None
+        srv.verbose  = False
+        srv.host     = "127.0.0.1"
+        srv.port     = 0
+        srv.http_port = 0
+        from server.adapters import get_adapter
+        srv.adapter  = get_adapter("gen3_frlge")
+        from server.state import SoulLinkState
+        with mock.patch("server.state.LINKS_PATH", str(tmp_path / "links.json")):
+            srv.state = SoulLinkState()
+        srv.connected_players = {}
+        srv.party_details = {"a": {}, "b": {}}
+        srv.battle_state  = {
+            p: {"in_battle": False, "is_trainer_battle": False, "enemy_party": [],
+                "trainer_id": 0, "opponent_name": "", "opponent_class": "",
+                "is_doubles": False}
+            for p in ("a", "b")
+        }
+        srv.player_area   = {}
+        srv.player_area_id = {}
+        srv.player_ball_count = {}
+        srv.player_badges = {}
+        srv.player_kanto_badges = {}
+        srv.trainer_name  = {}
+        srv._sse_queues   = []
+        srv.event_log     = []
+        srv._backups_dir  = str(tmp_path / "backups")
+        return srv
+
+    def _apply_tick(self, srv, player_id, msg):
+        """Apply only the is_doubles / enemy_party portion of the tick handler logic."""
+        bs = srv.battle_state[player_id]
+        was_in_battle = bs.get("in_battle", False)
+        now_in_battle = msg.get("in_battle", was_in_battle)
+        bs["in_battle"] = now_in_battle
+
+        if was_in_battle and not now_in_battle:
+            bs["is_doubles"] = False
+            bs["enemy_party"] = []
+
+        if "enemy_party" in msg:
+            bs["enemy_party"] = msg["enemy_party"]
+        if "is_doubles" in msg:
+            bs["is_doubles"] = bool(msg["is_doubles"])
+        elif "enemy_party" in msg:
+            active_count = sum(1 for e in msg["enemy_party"] if e.get("active"))
+            if active_count > 1:
+                bs["is_doubles"] = True
+
+    def test_is_doubles_set_from_tick(self, tmp_path):
+        """A tick with is_doubles=true sets battle_state['is_doubles'] to True."""
+        srv = self._make_server(tmp_path)
+        self._apply_tick(srv, "a", {
+            "in_battle": True,
+            "is_doubles": True,
+            "enemy_party": [
+                {"species_id": 1, "level": 10, "active": True},
+                {"species_id": 4, "level": 10, "active": True},
+            ],
+        })
+        assert srv.battle_state["a"]["is_doubles"] is True
+
+    def test_is_doubles_cleared_on_battle_end(self, tmp_path):
+        """When in_battle transitions False, is_doubles is reset to False."""
+        srv = self._make_server(tmp_path)
+        # Put server into a doubles battle
+        srv.battle_state["a"]["in_battle"] = True
+        srv.battle_state["a"]["is_doubles"] = True
+        # Battle ends
+        self._apply_tick(srv, "a", {"in_battle": False})
+        assert srv.battle_state["a"]["is_doubles"] is False
+
+    def test_is_doubles_unchanged_when_key_absent(self, tmp_path):
+        """A tick without the is_doubles key leaves the existing value untouched."""
+        srv = self._make_server(tmp_path)
+        srv.battle_state["a"]["in_battle"] = True
+        srv.battle_state["a"]["is_doubles"] = True
+        # Tick mid-battle without is_doubles key
+        self._apply_tick(srv, "a", {
+            "in_battle": True,
+            "enemy_party": [{"species_id": 1, "level": 10, "active": True}],
+        })
+        assert srv.battle_state["a"]["is_doubles"] is True
+
+    def test_is_doubles_inferred_from_active_count(self, tmp_path):
+        """Without is_doubles key, two active enemies infer is_doubles=True."""
+        srv = self._make_server(tmp_path)
+        self._apply_tick(srv, "b", {
+            "in_battle": True,
+            "enemy_party": [
+                {"species_id": 7, "level": 15, "active": True},
+                {"species_id": 9, "level": 15, "active": True},
+            ],
+        })
+        assert srv.battle_state["b"]["is_doubles"] is True

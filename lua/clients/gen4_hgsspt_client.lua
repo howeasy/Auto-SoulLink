@@ -1405,6 +1405,8 @@ local function on_frame()
             area_id       = area,
             loc_name      = loc,
             in_battle     = in_battle,
+            -- TODO(NDS doubles): gBattlersCount address not yet discovered; always false.
+            is_doubles    = false,
             badges        = M.readBadges1(),
             kanto_badges  = M.readBadges2(),
             trainer_name  = M.readTrainerName(),

@@ -649,6 +649,15 @@ _STREAM_ENEMY_WILD_JS = r"""
 var PLAYER_ID = '%PLAYER%';
 var _lastKey = '';
 function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+function init() {
+  var params = new URLSearchParams(window.location.search);
+  var theme = params.get('theme') || 'dark';
+  var layout = params.get('layout') || '';
+  var layoutCls = layout === 'h' ? ' lh' : layout === 'thin-h' ? ' lth' : layout === 'thin-v' ? ' ltv' : '';
+  document.body.className = 'theme-' + theme + layoutCls + ' ov-focus';
+  doRefresh();
+  setInterval(doRefresh, 2000);
+}
 function render(d) {
   var p = d.players[PLAYER_ID];
   var bs = p && p.battle_state;
@@ -667,12 +676,12 @@ function render(d) {
   if (!mon && ep.length) mon = ep[0];
   if (!mon) {
     if (_lastKey !== '__loading__') {
-      document.getElementById('root').innerHTML = '<div class="wtitle">Wild encounter</div><div style="opacity:.4;padding-top:6px">Loading...</div>';
+      document.getElementById('root').innerHTML = '<div class="wtitle">WILD ENCOUNTER</div><div class="focus-not-active">Loading\u2026</div>';
       _lastKey = '__loading__';
     }
     return;
   }
-  var key = [mon.species_id, mon.hp, mon.maxHP, mon.level, mon.status_cond].join('|');
+  var key = [mon.species_id, mon.hp, mon.maxHP, mon.level, mon.status_cond, JSON.stringify(mon.stat_stages||[])].join('|');
   if (key === _lastKey) return;
   _lastKey = key;
 
@@ -686,22 +695,24 @@ function render(d) {
   var nick  = escHtml(mon.nickname || mon.species_name || '???');
   var spLbl = (mon.species_name && mon.nickname && mon.nickname !== mon.species_name)
               ? ' <span class="sp">(' + escHtml(mon.species_name) + ')</span>' : '';
-  var fntTag = fnt ? '<span class="fnt-tag">FNT</span>' : '';
 
-  var h = '<div class="wtitle">Wild Encounter</div>';
-  h += '<div class="p-list">';
-  h += '<div class="mc ' + bCls + ' active-mon">';
+  var h = '<div class="wtitle">WILD ENCOUNTER</div>';
+  h += '<div class="mc ' + bCls + '">';
   h += (mon.sprite_html || spriteTag(mon.species_id || 0));
   h += '<div class="m-info">';
-  h += '<div class="m-name">' + nick + spLbl + fntTag + '</div>';
+  h += '<div class="m-name">' + nick + spLbl + '</div>';
   h += '<div class="hp-row">';
   h += '<span class="hp-lbl">HP</span>';
   h += '<div class="hp-trk"><div class="hp-fill ' + hpCls + '" style="width:' + pct + '%"></div></div>';
   h += '<span class="hp-pct">' + (fnt ? '\u2014' : pct + '%') + '</span>';
   h += statusIcon(mon.status_cond || 0);
   h += '<span class="lv">Lv ' + lv + '</span>';
-  h += '</div></div></div>';
   h += '</div>';
+  if (mon.stat_stages) {
+    var stH = statStagesHtml(mon.stat_stages);
+    if (stH) h += '<div class="stat-stages-row">' + stH + '</div>';
+  }
+  h += '</div></div>';
   document.getElementById('root').innerHTML = h;
   processSprites();
 }
@@ -1661,8 +1672,8 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
       <div class="preview"><iframe src="/stream/enemy-wild-a?theme=dark"></iframe></div>
       <div class="overlay-info">
         <h3>Enemy Wild &middot; A</h3>
-        <div class="size-hint">Recommended: 280 &times; 100</div>
-        <p>Wild encounter opponent &mdash; single mon with sprite, HP, level. Hidden during trainer battles.</p>
+        <div class="size-hint">Recommended: 340 &times; 180</div>
+        <p>Wild encounter focus card &mdash; large sprite, HP bar, stat stages. Hidden during trainer battles.</p>
         <div class="card-cfg" data-id="uEWA" data-base="/stream/enemy-wild-a"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
         <div class="url-row"><span class="url-box" id="uEWA">/stream/enemy-wild-a</span><button class="copy-btn" onclick="copyUrl('uEWA')">Copy</button><a class="open-btn" id="uEWA-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
@@ -1671,8 +1682,8 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
       <div class="preview"><iframe src="/stream/enemy-wild-b?theme=dark"></iframe></div>
       <div class="overlay-info">
         <h3>Enemy Wild &middot; B</h3>
-        <div class="size-hint">Recommended: 280 &times; 100</div>
-        <p>Wild encounter opponent &mdash; single mon with sprite, HP, level. Hidden during trainer battles.</p>
+        <div class="size-hint">Recommended: 340 &times; 180</div>
+        <p>Wild encounter focus card &mdash; large sprite, HP bar, stat stages. Hidden during trainer battles.</p>
         <div class="card-cfg" data-id="uEWB" data-base="/stream/enemy-wild-b"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
         <div class="url-row"><span class="url-box" id="uEWB">/stream/enemy-wild-b</span><button class="copy-btn" onclick="copyUrl('uEWB')">Copy</button><a class="open-btn" id="uEWB-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>

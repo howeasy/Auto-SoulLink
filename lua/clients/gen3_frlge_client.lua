@@ -533,8 +533,8 @@ local _display_cache = {}  -- key → {nickname, species_id, held_item_id, abili
 
 local function build_party_snapshot(battle_active)
     if M.PARTY_IN_SB1 and M.PARTY_BASE == 0 then return {} end
-    -- Active battler detection: read gBattleMons[0] (player's side), same approach as
-    -- enemy active detection which reads gBattleMons[1] and compares species+level.
+    -- Active battler detection: read gBattleMons[0] for the singles active mon (species+level).
+    -- In doubles, getBattlerForPartySlot() is used instead to identify both active slots.
     local player_species, player_level, player_status = 0, 0, 0
     if battle_active and M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
         player_species = mem_u16(M.BATTLE_MONS_ADDR + 0x00)
@@ -542,6 +542,7 @@ local function build_party_snapshot(battle_active)
         -- Read live status from gBattleMons[0] — party struct status is stale during battle.
         player_status  = memory.read_u32_le(M.BATTLE_MONS_ADDR + M.BATTLE_MON_STATUS_OFF)
     end
+    local is_doubles_battle = battle_active and M.isDoubleBattle()
     local count = mem_u8(M.PARTY_COUNT_ADDR)
     local snap  = {}
     for i = 0, count - 1 do
@@ -590,15 +591,30 @@ local function build_party_snapshot(battle_active)
             if (not final_aid or final_aid == 0) and _ability_cache[k] then
                 final_aid = _ability_cache[k]
             end
-            -- Active battler: mirrors enemy detection (species + level match gBattleMons[0])
-            local is_active = battle_active and dc.species_id > 0
-                              and dc.species_id == player_species and level == player_level
-            -- Status: use live gBattleMons value for active battler; party struct otherwise.
-            local status_cond = mem_u32(base + M.OFF_STATUS)
-            if is_active and player_status ~= 0 then
-                status_cond = player_status
+            -- Active battler detection.
+            -- Doubles: use getBattlerForPartySlot (returns battler index 0/2 or -1) — unambiguous.
+            -- Singles: existing species+level match against gBattleMons[0] — unchanged from before.
+            local active_battler_idx = nil
+            if is_doubles_battle then
+                local b = M.getBattlerForPartySlot(i)
+                if b >= 0 then active_battler_idx = b end
+            elseif battle_active and dc.species_id > 0
+                    and dc.species_id == player_species and level == player_level then
+                active_battler_idx = 0
             end
-            local stat_stages = is_active and M.readStatStages(0) or nil
+            local is_active = active_battler_idx ~= nil and dc.species_id > 0
+            -- Status: use live gBattleMons value for the active battler; party struct otherwise.
+            local status_cond = mem_u32(base + M.OFF_STATUS)
+            if active_battler_idx == 0 and player_status ~= 0 then
+                status_cond = player_status
+            elseif active_battler_idx == 2
+                    and M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
+                local b2s = memory.read_u32_le(
+                    M.BATTLE_MONS_ADDR + 2 * M.BATTLE_MON_SIZE + M.BATTLE_MON_STATUS_OFF)
+                if b2s ~= 0 then status_cond = b2s end
+            end
+            local stat_stages = active_battler_idx ~= nil
+                                 and M.readStatStages(active_battler_idx) or nil
             snap[#snap+1] = {key=k, hp=hp, maxHP=maxHP, level=level,
                              slot=i, active=is_active,
                              nickname=dc.nickname, species_id=dc.species_id,
@@ -2409,7 +2425,7 @@ local function on_frame()
         local ok_b2, badge_n, badge_bm = pcall(M.readBadges)
         local evt = {event="tick", ball_count=M.countPokeballs(), has_pokeballs=nuzlocke_active,
                      area_id=area, loc_name=loc,
-                     in_battle=in_battle,
+                     in_battle=in_battle, is_doubles=false,
                      badges=ok_b2 and badge_bm or 0,
                      trainer_name=ok_t and tname or ""}
         -- Only include party/box/enemy data once save data looks valid.
@@ -2436,8 +2452,11 @@ local function on_frame()
                     if tid > 0 then evt.trainer_id = tid end
                 end
                 local enemy_party = {}
-                -- Read active foe from gBattleMons[1] (always valid during battle).
-                -- BattlePokemon: species +0x00, ability +0x20, status1 +0x24, hp +0x28, level +0x2A, maxHP +0x2C
+                -- Detect doubles: gBattlersCount=4 in 2v2, 2 in singles.
+                local is_doubles_battle = M.isDoubleBattle()
+                evt.is_doubles = is_doubles_battle
+                -- Read active foe from gBattleMons[1] (battler 1 = enemy left, always valid during battle).
+                -- BattlePokemon: species +0x00, ability +0x20, status1 +0x4C, hp +0x28, level +0x2A, maxHP +0x2C
                 local foe_species, foe_level, foe_hp, foe_maxHP, foe_ability, foe_item, foe_status = 0, 0, 0, 0, 0, 0, 0
                 local foe_stat_stages = nil
                 if M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
@@ -2456,24 +2475,71 @@ local function on_frame()
                         foe_item = memory.read_u16_le(foe_base + 0x2E)
                     end
                 end
+                -- Doubles: read gBattleMons[3] (battler 3 = enemy right). Same field layout.
+                local foe2_species, foe2_level, foe2_hp, foe2_maxHP = 0, 0, 0, 0
+                local foe2_ability, foe2_item, foe2_status = 0, 0, 0
+                local foe2_stat_stages = nil
+                if is_doubles_battle and M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
+                    local b3 = M.BATTLE_MONS_ADDR + 3 * M.BATTLE_MON_SIZE
+                    foe2_species     = memory.read_u16_le(b3 + 0x00)
+                    foe2_level       = memory.read_u8(b3 + 0x2A)
+                    foe2_hp          = memory.read_u16_le(b3 + M.BATTLE_MON_HP_OFF)
+                    foe2_maxHP       = memory.read_u16_le(b3 + 0x2C)
+                    foe2_ability     = memory.read_u8(b3 + 0x20)
+                    foe2_status      = memory.read_u32_le(b3 + M.BATTLE_MON_STATUS_OFF)
+                    foe2_stat_stages = M.readStatStages(3)
+                    if evt.is_trainer_battle then
+                        foe2_item = memory.read_u16_le(b3 + 0x2E)
+                    end
+                end
                 -- Primary: read full team from gEnemyParty if count is valid (vanilla/AP).
                 local ok_ep, full_team = pcall(M.readEnemyParty)
                 if ok_ep and full_team and #full_team > 1 then
+                    -- Doubles: use gBattlerPartyIndexes[1/3] for unambiguous active detection.
+                    -- gBattlerPartyIndexes is u16[4]; battler N → offset BATTLER_PARTY_INDEXES_ADDR + N*2.
+                    -- Singles: fall back to species+level (identical to previous behaviour).
+                    local ep_idx1 = (is_doubles_battle and M.BATTLER_PARTY_INDEXES_ADDR)
+                        and memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR + 2)   -- battler 1 party slot
+                    local ep_idx3 = (is_doubles_battle and M.BATTLER_PARTY_INDEXES_ADDR)
+                        and memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR + 6)   -- battler 3 party slot
+                    -- Bounds guard: valid party slot is 0-5. Values ≥ 6 mean the
+                    -- address is stale or wrong (e.g. CFRU address drift), so nil
+                    -- out and fall through to the species+level fallback below.
+                    if ep_idx1 and ep_idx1 >= 6 then ep_idx1 = nil end
+                    if ep_idx3 and ep_idx3 >= 6 then ep_idx3 = nil end
                     for idx, mon in ipairs(full_team) do
-                        mon.active = (mon.species_id == foe_species and mon.level == foe_level)
-                        -- Active foe: prefer gBattleMons ability (resolved at battle start)
-                        if mon.active and foe_ability > 0 then
-                            mon.ability_id = foe_ability
+                        local is_foe1, is_foe2
+                        if is_doubles_battle then
+                            local slot = idx - 1   -- 0-indexed party slot
+                            is_foe1 = ep_idx1 ~= nil and (slot == ep_idx1)
+                            is_foe2 = ep_idx3 ~= nil and (slot == ep_idx3)
+                            -- Fallback to species+level if index reads unavailable
+                            if ep_idx1 == nil then
+                                is_foe1 = (mon.species_id == foe_species  and mon.level == foe_level)
+                            end
+                        else
+                            -- Singles: existing species+level match — unchanged from before.
+                            is_foe1 = (mon.species_id == foe_species and mon.level == foe_level)
+                            is_foe2 = false
                         end
-                        -- Active foe: prefer gBattleMons status (authoritative during battle)
-                        if mon.active then
+                        mon.active = is_foe1 or is_foe2
+                        if is_foe1 then
+                            if foe_ability > 0  then mon.ability_id = foe_ability  end
                             mon.status_cond = foe_status
                             mon.stat_stages = foe_stat_stages
+                            if evt.is_trainer_battle and foe_item  > 0 then
+                                mon.held_item_id = foe_item
+                            end
+                        elseif is_foe2 then
+                            if foe2_ability > 0 then mon.ability_id = foe2_ability end
+                            mon.status_cond = foe2_status
+                            mon.stat_stages = foe2_stat_stages
+                            if evt.is_trainer_battle and foe2_item > 0 then
+                                mon.held_item_id = foe2_item
+                            end
                         end
                         -- Item field unreliable for wild mons in CFRU/RR
-                        if not evt.is_trainer_battle then
-                            mon.held_item_id = 0
-                        end
+                        if not evt.is_trainer_battle then mon.held_item_id = 0 end
                         enemy_party[idx] = mon
                     end
                 elseif foe_species > 0 and foe_maxHP > 0 then
@@ -2489,17 +2555,35 @@ local function on_frame()
                         status_cond  = foe_status,
                         stat_stages  = foe_stat_stages,
                     }
+                    -- Doubles: also seed foe2 into the accumulator.
+                    local foe2_key = (is_doubles_battle and foe2_species > 0 and foe2_maxHP > 0)
+                                     and (foe2_species .. ":" .. foe2_level) or nil
+                    if foe2_key then
+                        battle_seen_enemies[foe2_key] = {
+                            species_id   = foe2_species,
+                            level        = foe2_level,
+                            hp           = foe2_hp,
+                            maxHP        = foe2_maxHP,
+                            ability_id   = foe2_ability,
+                            held_item_id = foe2_item,
+                            status_cond  = foe2_status,
+                            stat_stages  = foe2_stat_stages,
+                        }
+                    end
                     for k, mon in pairs(battle_seen_enemies) do
+                        local is_f1 = (k == foe_key)
+                        local is_f2 = (is_doubles_battle and k == foe2_key)
                         enemy_party[#enemy_party + 1] = {
                             species_id   = mon.species_id,
                             level        = mon.level,
-                            hp           = (k == foe_key) and foe_hp or mon.hp,
+                            hp           = is_f1 and foe_hp  or (is_f2 and foe2_hp  or mon.hp),
                             maxHP        = mon.maxHP,
-                            ability_id   = mon.ability_id,
-                            held_item_id = (k == foe_key) and foe_item or mon.held_item_id,
-                            status_cond  = (k == foe_key) and foe_status or (mon.status_cond or 0),
-                            stat_stages  = (k == foe_key) and foe_stat_stages or nil,
-                            active       = (k == foe_key),
+                            ability_id   = is_f1 and foe_ability  or (is_f2 and foe2_ability  or mon.ability_id),
+                            held_item_id = (not evt.is_trainer_battle) and 0 or
+                                           (is_f1 and foe_item or (is_f2 and foe2_item or mon.held_item_id)),
+                            status_cond  = is_f1 and foe_status  or (is_f2 and foe2_status  or (mon.status_cond or 0)),
+                            stat_stages  = is_f1 and foe_stat_stages or (is_f2 and foe2_stat_stages or nil),
+                            active       = is_f1 or is_f2,
                         }
                     end
                 end

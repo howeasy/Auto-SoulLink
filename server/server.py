@@ -525,6 +525,7 @@ _STATUS_HTML = """<!DOCTYPE html>
     .badge-waiting {{ background: #2a1a00; color: #fa0; }}
     .badge-lock {{ background: #1a2a3a; color: #6af; font-size: 0.85em; padding: 2px 8px; border-radius: 10px; }}
     .badge-bonus {{ background: #2a2000; color: #ffd700; }}
+    .dbl-chip {{ background: #663; color: #ffa; font-size: .75em; padding: 1px 5px; border-radius: 3px; font-weight: bold; margin-left: 0.4em; }}
     .bonus-pair-row td {{ background: #1a1500; }}
     .bonus-pair-row td:first-child {{ border-left: 3px solid #ffd700; padding-left: 5px; }}
     .gym-badges {{ display: inline-flex; gap: 3px; margin-left: 0.7em; vertical-align: middle; }}
@@ -2073,9 +2074,11 @@ class SLinkServer:
         # Battle state: in_battle flag + enemy team snapshot
         self.battle_state: dict[str, dict] = {
             "a": {"in_battle": False, "is_trainer_battle": False, "enemy_party": [],
-                  "trainer_id": 0, "opponent_name": "", "opponent_class": ""},
+                  "trainer_id": 0, "opponent_name": "", "opponent_class": "",
+                  "is_doubles": False},
             "b": {"in_battle": False, "is_trainer_battle": False, "enemy_party": [],
-                  "trainer_id": 0, "opponent_name": "", "opponent_class": ""},
+                  "trainer_id": 0, "opponent_name": "", "opponent_class": "",
+                  "is_doubles": False},
         }
         # Ring buffer of recent events for the stream overlay event feed.
         self._recent_events: deque[dict] = deque(maxlen=_EVENTS_MAX)
@@ -2799,6 +2802,7 @@ class SLinkServer:
                     self.battle_state[player_id]["opponent_class"] = ""
                     self.battle_state[player_id]["is_trainer_battle"] = False
                     self.battle_state[player_id]["enemy_party"] = []
+                    self.battle_state[player_id]["is_doubles"] = False
             if "is_trainer_battle" in msg:
                 self.battle_state[player_id]["is_trainer_battle"] = bool(msg["is_trainer_battle"])
             if "trainer_id" in msg:
@@ -2814,6 +2818,13 @@ class SLinkServer:
                     self.battle_state[player_id]["opponent_name"] = msg["opponent_name"]
             if "enemy_party" in msg:
                 self.battle_state[player_id]["enemy_party"] = msg["enemy_party"]
+            if "is_doubles" in msg:
+                self.battle_state[player_id]["is_doubles"] = bool(msg["is_doubles"])
+            elif "enemy_party" in msg:
+                # Passive inference: >1 active enemy implies doubles (benefits Gen 4/5 automatically).
+                active_count = sum(1 for e in msg["enemy_party"] if e.get("active"))
+                if active_count > 1:
+                    self.battle_state[player_id]["is_doubles"] = True
             # Dupes clause: notify at wild battle start (before handle_event flushes the queue).
             if "in_battle" in msg and not was_in_battle and now_in_battle \
                     and not self.battle_state[player_id].get("is_trainer_battle"):
@@ -3465,8 +3476,10 @@ class SLinkServer:
                     if cur_area and area_st not in ("linked", "dead_zone") and not has_pending:
                         new_enc = True
                 new_enc_badge = ' <span style="color:#5f5;font-weight:bold">★ NEW ENCOUNTER</span>' if new_enc else ""
+                doubles_chip = (' <span class="dbl-chip">⚔⚔&nbsp;DOUBLES</span>'
+                                if bs.get("is_doubles") else "")
                 parts.append('<div class="battle-panel">')
-                parts.append(f'<h4 style="margin:0 0 0.3em">⚔ IN BATTLE &mdash; {battle_lbl}{new_enc_badge}</h4>')
+                parts.append(f'<h4 style="margin:0 0 0.3em">⚔ IN BATTLE &mdash; {battle_lbl}{new_enc_badge}{doubles_chip}</h4>')
                 enemy_party = bs.get("enemy_party", [])
                 if enemy_party:
                     parts.append(f'<table class="foe-table"><tr><th></th><th>Foe</th><th>Lv</th><th>HP</th><th>Type</th>{"<th>Ability</th>" if has_abilities else ""}</tr>')
@@ -5940,7 +5953,8 @@ class SLinkServer:
         self._mon_cache.clear()
         self.battle_state = {
             p: {"in_battle": False, "is_trainer_battle": False, "enemy_party": [],
-                "trainer_id": 0, "opponent_name": "", "opponent_class": ""}
+                "trainer_id": 0, "opponent_name": "", "opponent_class": "",
+                "is_doubles": False}
             for p in ("a", "b")
         }
         self._recent_events.clear()
