@@ -1236,7 +1236,8 @@ def test_tick_without_has_pokeballs_leaves_gate_unchanged(tmp_path, monkeypatch)
     state.handle_event("a", {"event": "tick", "ball_count": 0})
     assert not state.pokeballs_obtained["a"], "tick without has_pokeballs must not activate gate"
 
-
+
+
 # ── memorial box ──────────────────────────────────────────────────────────────
 
 def test_faint_queues_memorialize_both(tmp_path, monkeypatch):
