@@ -669,6 +669,26 @@ local function _pids_all_match(a, b)
     return true
 end
 
+-- Returns true if the diff between curr and stable is explainable by a normal
+-- party compaction (deposit or withdrawal).  A compaction only repositions
+-- existing mons — every non-zero PID in curr must already be present in stable.
+-- A borrowed-party swap introduces foreign PIDs never seen in stable, so this
+-- correctly separates deposits (all PIDs known) from swaps (new PIDs present).
+local function _is_compaction_shift(curr, stable)
+    local stable_set = {}
+    for i = 0, 5 do
+        local p = stable[i] or 0
+        if p ~= 0 then stable_set[p] = true end
+    end
+    for i = 0, 5 do
+        local p = curr[i] or 0
+        if p ~= 0 and not stable_set[p] then
+            return false  -- foreign PID → genuine borrowed-party swap
+        end
+    end
+    return true
+end
+
 -- Validate that box storage is accessible and currentBox is in range.
 -- Returns true if safe to scan; false during transitions/menus.
 local function _box_ptr_valid()
@@ -1633,6 +1653,16 @@ local function on_frame()
     if not party_frozen and not in_battle then
         local diff = _pids_diff_count(_curr_pids, _stable_party_pids)
         if diff >= PID_SWAP_THRESHOLD then
+            if _is_compaction_shift(_curr_pids, _stable_party_pids) then
+                -- All new PIDs are from the existing party — normal deposit or
+                -- withdrawal caused slot compaction.  Update stable baseline
+                -- immediately so subsequent frames don't re-trigger.
+                for i = 0, 5 do _stable_party_pids[i] = _curr_pids[i] end
+                _last_pid_change_frame = frame_count
+                console.log(string.format(
+                    "[SLink-FRLGE] PID shift: %d/6 slots moved (party compaction, not a swap)",
+                    diff))
+            else
             party_frozen           = true
             freeze_frames_left     = FREEZE_TIMEOUT_FRAMES
             pending_freeze_release = false
@@ -1654,6 +1684,7 @@ local function on_frame()
             console.log(string.format(
                 "[SLink-FRLGE] ★ PID SWAP: %d/6 slots differ from stable baseline; freezing party diff",
                 diff))
+            end
         end
     else
         -- While frozen: revert = "live party matches the real party again".
