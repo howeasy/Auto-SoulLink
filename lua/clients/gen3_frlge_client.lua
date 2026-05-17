@@ -724,10 +724,15 @@ local POST_BATTLE_GRACE    = 90  -- 1.5s; CFRU needs longer for catch/exp/level-
 -- is still writing, causing the moved mon to inherit the dead mon's item/data.
 local memorialize_battle_cooldown = 0
 local MEMORIALIZE_POST_BATTLE_COOLDOWN = 180  -- 3s at 60fps
--- Hard delay after EOB (hardware or soft) before any sync write is allowed.
--- Prevents item/data mix-ups when CFRU is still writing party state post-EOB.
-local post_eob_frames = 0
-local POST_EOB_DELAY  = 180  -- 3s at 60fps
+-- Safety cap before any sync write is allowed after EOB-clear.
+-- The primary gate is M.isPostBattleSettled() (gTasks + gMain.callback2);
+-- this counter is a "predicate should have fired by now" backstop in case
+-- the profile lacks the new addresses (Task_GiveExpToMon needs runtime
+-- discovery on each CFRU build — see test_post_eob_settle_discovery.lua)
+-- or a discovered address is wrong. 10 s at 60fps. Hit means the
+-- discovery values for the active profile need attention.
+local post_eob_frames     = 0
+local POST_EOB_SAFETY_CAP = 600  -- 10s at 60fps; was 180 (3s) prior to gTasks gate
 -- Accumulates enemy mons seen during the current trainer battle.
 -- Keyed by "species_id:level" to deduplicate.  Reset on battle start.
 local battle_seen_enemies  = {}  -- key → {species_id, level, hp, maxHP}
@@ -1047,7 +1052,7 @@ local function on_frame()
         -- battle-end frame the hardware check sees cooldown > 0 and defers eob_clear.
         -- (The battle_just_ended handler at step 6 also sets this — same value, no harm.)
         memorialize_battle_cooldown = MEMORIALIZE_POST_BATTLE_COOLDOWN
-        post_eob_frames             = POST_EOB_DELAY
+        post_eob_frames             = POST_EOB_SAFETY_CAP
     elseif sync_cooldown > 0 then
         sync_cooldown = sync_cooldown - 1
     end
@@ -1113,8 +1118,13 @@ local function on_frame()
     -- for AP and the 90-frame post_battle_frames guard is used instead.
     local eob_clear = not (M.BATTLE_MAIN_FUNC_ADDR and M.RETURN_FROM_BATTLE_ADDR)
                       or memorialize_battle_cooldown == 0
+    -- Post-EOB write window: prefer the authoritative gTasks/CB2 predicate
+    -- when available (M.isPostBattleSettled). The post_eob_frames counter is
+    -- a safety cap that backs the predicate up when a profile lacks the
+    -- discovery values or one of them is wrong.
+    local post_eob_clear = post_eob_frames == 0 or M.isPostBattleSettled()
     local safe_now = is_overworld and sync_cooldown == 0 and not party_frozen
-                     and post_battle_frames == 0 and eob_clear and post_eob_frames == 0
+                     and post_battle_frames == 0 and eob_clear and post_eob_clear
     if #pending_sync_cmds > 0 then
         if not safe_now or not writes_enabled then
             if not _sync_blocked_logged then
@@ -1429,7 +1439,7 @@ local function on_frame()
             pending_faint_debounce = {}  -- clear any debounce state
             post_battle_frames = POST_BATTLE_GRACE
             memorialize_battle_cooldown = MEMORIALIZE_POST_BATTLE_COOLDOWN
-            post_eob_frames    = POST_EOB_DELAY
+            post_eob_frames    = POST_EOB_SAFETY_CAP
             pending_safe       = true
         else
         _battle_hp_cache   = {}  -- clear cache
@@ -1438,7 +1448,7 @@ local function on_frame()
         pending_faint_debounce = {}  -- clear any debounce state
         post_battle_frames = POST_BATTLE_GRACE
         memorialize_battle_cooldown = MEMORIALIZE_POST_BATTLE_COOLDOWN
-        post_eob_frames    = POST_EOB_DELAY
+        post_eob_frames    = POST_EOB_SAFETY_CAP
         pending_safe       = true
         console.log("[SLink-FRLGE] [battle] end  grace window started")
         console.log(string.format(
@@ -1847,6 +1857,12 @@ local function on_frame()
     end
     if post_eob_frames > 0 then
         post_eob_frames = post_eob_frames - 1
+        if post_eob_frames == 0 and not M.isPostBattleSettled() then
+            console.log("[SLink-FRLGE] post-EOB safety cap exhausted; isPostBattleSettled still false. "
+                .. "Sync writes will proceed; if a corruption follows, the profile's "
+                .. "POST_BATTLE_WRITER_TASKS set likely needs another discovery run "
+                .. "(test_post_eob_settle_discovery.lua) on the battle type that just happened.")
+        end
     end
     if post_battle_frames > 0 then
         post_battle_frames = post_battle_frames - 1

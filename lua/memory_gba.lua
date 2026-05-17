@@ -59,6 +59,11 @@ local _PROFILE_RESET_KEYS = {
     "SB2_ENC_KEY_OFFSET", "SB1_BALL_POCKET_OFFSET", "SB1_BALL_POCKET_COUNT",
     "SB1_FLAGS_OFFSET", "SB1_VARS_OFFSET", "SE_SONG_HEADERS",
     "SPECIAL_VAR_BOX_ID_ADDR", "SPECIAL_VAR_BOX_POS_ADDR",
+    "TASKS_BASE_ADDR", "TASK_STRUCT_SIZE",
+    "POST_BATTLE_WRITER_TASKS",
+    "CB2_EVOLUTION_LOAD_ADDR", "CB2_EVOLUTION_BEGIN_ADDR",
+    "CB2_EVOLUTION_UPDATE_ADDR", "CB2_TRADE_EVOLUTION_UPDATE_ADDR",
+    "GMAIN_CB2_OFFSET",
     "_overworld_mode", "supports_battle_redirect",
 }
 
@@ -444,6 +449,63 @@ function M.isInBattle()
         if not M.GMAIN_ADDR or M.GMAIN_ADDR == 0 then return false end
         return (mem_r8(M.GMAIN_ADDR + 0x439) & M.GMAIN_INBATTLE_MASK) ~= 0
     end
+end
+
+-- True iff the post-battle write window is genuinely closed.
+-- Three layered checks, all authoritative:
+--   1. gBattleMainFunc has settled to ReturnFromBattleToOverworld (EOB-clear).
+--   2. No priority-10 task in gTasks[] is in POST_BATTLE_WRITER_TASKS
+--      (CFRU's post-battle exp/level-up writers — Task_GiveExpToMon
+--      variants and Task_LaunchLvlUpAnim). These run independently of
+--      gBattleMainFunc (the Brock-fight failure mode the 180-frame
+--      POST_EOB_DELAY masks). CFRU forks the exp logic by level-cap
+--      state, hold-item, and other context, so multiple addresses can
+--      occupy the priority-10 slot across different battles — discovery
+--      may need to be run on several battle types to accumulate them.
+--   3. gMain.callback2 is not in the evolution-scene CB2 set.
+-- Returns false when any required address is missing on the active profile,
+-- so the caller's safety-cap timer remains the effective gate.
+-- Sources: CFRU src/exp.c:648 (CreateTask(Task_GiveExpToMon, 10)),
+-- CFRU BPRE.ld for vanilla CB2 / task ROM addresses, pret/pokefirered
+-- include/task.h (Task struct = 40 bytes) and include/main.h
+-- (callback2 at gMain+0x04).
+function M.isPostBattleSettled()
+    -- Require at least the EOB-clear info and at least one writer-task
+    -- address to make any positive claim. Without these we cannot
+    -- authoritatively assert that exp/level-up writes are complete, so
+    -- fall through to the safety-cap timer.
+    local writers = M.POST_BATTLE_WRITER_TASKS
+    if not (M.BATTLE_MAIN_FUNC_ADDR and M.RETURN_FROM_BATTLE_ADDR
+            and M.TASKS_BASE_ADDR and writers and writers[1]) then
+        return false
+    end
+    -- Gate 1: EOB-clear hardware signal.
+    if mem_r32(M.BATTLE_MAIN_FUNC_ADDR) ~= M.RETURN_FROM_BATTLE_ADDR then
+        return false
+    end
+    -- Gate 2: no post-battle writer task active anywhere in gTasks[].
+    local task_size = M.TASK_STRUCT_SIZE or 40
+    local nwriters  = #writers
+    for i = 0, 15 do
+        local fn = mem_r32(M.TASKS_BASE_ADDR + i * task_size)
+        if fn ~= 0 then
+            for j = 1, nwriters do
+                if fn == writers[j] then return false end
+            end
+        end
+    end
+    -- Gate 3: not in an evolution scene (optional — only checked when
+    -- the CB2 set and gMain.callback2 offset are known).
+    if M.GMAIN_ADDR and M.GMAIN_CB2_OFFSET and M.CB2_EVOLUTION_LOAD_ADDR then
+        local cb2 = mem_r32(M.GMAIN_ADDR + M.GMAIN_CB2_OFFSET)
+        if cb2 == M.CB2_EVOLUTION_LOAD_ADDR
+           or cb2 == M.CB2_EVOLUTION_BEGIN_ADDR
+           or cb2 == M.CB2_EVOLUTION_UPDATE_ADDR
+           or cb2 == M.CB2_TRADE_EVOLUTION_UPDATE_ADDR then
+            return false
+        end
+    end
+    return true
 end
 
 function M.isInOverworld()

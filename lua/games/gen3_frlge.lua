@@ -101,6 +101,23 @@ GEN3.profiles = {
         -- gBaseStats ROM table (pret/pokefirered: data/pokemon/base_stats.h)
         BASESTATS_ADDR       = 0x08254784,
         BASESTATS_ENTRY_SIZE = 28,  -- sizeof(struct BaseStats) including padding
+        -- Post-battle settle gate (isPostBattleSettled). All ROM addresses
+        -- from CFRU BPRE.ld; thumb-bit (|1) stripped — function pointers in
+        -- gTasks[].func and gMain.callback2 are stored with the thumb bit,
+        -- so values read from RAM include the +1.
+        TASKS_BASE_ADDR              = 0x03005090,  -- gTasks (IWRAM)
+        TASK_STRUCT_SIZE             = 40,           -- pret/pokefirered include/task.h
+        -- Priority-10 task functions that write party state post-battle.
+        -- BPRE.ld names Task_LaunchLvlUpAnim; the vanilla exp-distribution
+        -- task isn't in BPRE.ld and needs runtime discovery on vanilla FR/LG.
+        POST_BATTLE_WRITER_TASKS     = {
+            0x08030239,  -- Task_LaunchLvlUpAnim (BPRE.ld)
+        },
+        CB2_EVOLUTION_LOAD_ADDR      = 0x080CE0E9,  -- CB2_EvolutionSceneLoadGraphics (thumb)
+        CB2_EVOLUTION_BEGIN_ADDR     = 0x080CDD19,  -- CB2_BeginEvolutionScene (thumb)
+        CB2_EVOLUTION_UPDATE_ADDR    = 0x080CE711,  -- CB2_EvolutionSceneUpdate (thumb)
+        CB2_TRADE_EVOLUTION_UPDATE_ADDR = 0x080CE72D,  -- CB2_TradeEvolutionSceneUpdate (thumb)
+        GMAIN_CB2_OFFSET             = 0x04,         -- struct Main: callback2 at +0x04
     },
     ap = {
         PARTY_COUNT_ADDR           = 0x0202403D,
@@ -245,6 +262,33 @@ GEN3.profiles = {
         -- Dereferenced at init time; supports any CFRU-based ROM hack.
         CFRU_BASESTATS_PTR         = 0x080001BC,
         BASESTATS_ENTRY_SIZE       = 28,
+        -- Post-battle settle gate (isPostBattleSettled). Discovered via
+        -- test_post_eob_settle_discovery.lua on RR 4.1 across multiple
+        -- battle types (at-cap, under-cap, under-cap-with-levelup).
+        --
+        -- CFRU does NOT use vanilla's two-task exp pipeline. Instead it
+        -- consolidates exp distribution AND level-up stat writes into a
+        -- single priority-10 task (Task_GiveExpToMon) which CFRU forks
+        -- on level-cap state. The vanilla Task_LaunchLvlUpAnim
+        -- (BPRE.ld 0x08030239) is therefore NOT in this set — it's never
+        -- scheduled on CFRU. The level-up UI continuation tasks observed
+        -- post-exp (priorities 0/2 at vanilla ROM addresses) are read-only
+        -- display routines and do not write gPlayerParty[].
+        --
+        -- Note: GMAIN_ADDR = nil on RR so the CB2_EVOLUTION_* fields are
+        -- written but the predicate's evolution-scene check is dormant
+        -- on this profile. They become live only if GMAIN_ADDR is added.
+        TASKS_BASE_ADDR              = 0x03005090,
+        TASK_STRUCT_SIZE             = 40,
+        POST_BATTLE_WRITER_TASKS     = {
+            0x09094295,   -- Task_GiveExpToMon (CFRU; at-cap variant — active battler at level cap)
+            0x0909411D,   -- Task_GiveExpToMon (CFRU; under-cap variant — handles exp + level-up stat writes)
+        },
+        CB2_EVOLUTION_LOAD_ADDR      = 0x080CE0E9,
+        CB2_EVOLUTION_BEGIN_ADDR     = 0x080CDD19,
+        CB2_EVOLUTION_UPDATE_ADDR    = 0x080CE711,
+        CB2_TRADE_EVOLUTION_UPDATE_ADDR = 0x080CE72D,
+        GMAIN_CB2_OFFSET             = 0x04,
     },
     -- Emerald US 1.0 — stub profile (addresses TBD, requires research)
     -- Game code: BPEE. Same Gen 3 Pokemon struct (100 bytes, encrypted substructs).
