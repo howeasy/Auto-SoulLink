@@ -573,6 +573,34 @@
     _loadMonIntoPanel(mon, targetSide);
   }
 
+  // Server emits form names as "Species (Form)" or "Species Form" (e.g.
+  // "Lycanroc (Dusk)", "Deoxys Attack"); Smogon's calc keys its pokedex on
+  // hyphenated forms ("Lycanroc-Dusk", "Deoxys-Attack"). Try variants in
+  // order of likelihood and return the first that hits window.pokedex.
+  var _SPECIES_NAME_OVERRIDES = {
+    // Explicit overrides for names the generic rules can't derive.
+    // (Populate as we find them; e.g. 'Type: Null': 'Type: Null'.)
+  };
+  function _normalizeSpeciesForCalc(name) {
+    if (!name || !window.pokedex) return name;
+    if (window.pokedex[name]) return name;
+    if (_SPECIES_NAME_OVERRIDES[name] && window.pokedex[_SPECIES_NAME_OVERRIDES[name]]) {
+      return _SPECIES_NAME_OVERRIDES[name];
+    }
+    // "Species (Form)" or "Species (Form Words)" → "Species-Form" / "Species-Form-Words"
+    var parens = name.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+    if (parens) {
+      var candidate = parens[1] + '-' + parens[2].trim().replace(/\s+/g, '-');
+      if (window.pokedex[candidate]) return candidate;
+    }
+    // Plain space → hyphen ("Deoxys Attack" → "Deoxys-Attack")
+    if (name.indexOf(' ') !== -1) {
+      var spaced = name.replace(/\s+/g, '-');
+      if (window.pokedex[spaced]) return spaced;
+    }
+    return name;
+  }
+
   /**
    * Directly populate a calc panel (#p1 or #p2) from a mon object.
    *
@@ -597,9 +625,9 @@
       return;
     }
 
-    var species = mon.species_name;
+    var species = _normalizeSpeciesForCalc(mon.species_name);
     if (!window.pokedex || !window.pokedex[species]) {
-      showToast('⚠ Species "' + species + '" not in calc data.', 'error');
+      showToast('⚠ Species "' + mon.species_name + '" not in calc data.', 'error');
       return;
     }
 
