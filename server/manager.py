@@ -58,6 +58,8 @@ from server.stream_overlays import (
     _STREAM_FOCUS_JS,
     _STREAM_AREA_ENCOUNTER_JS,
     _STREAM_ENC_TABLE_JS,
+    _STREAM_ENEMY_WILD_JS,
+    _STREAM_ENEMY_TRAINER_JS,
 )
 
 log = logging.getLogger("slink.manager")
@@ -97,6 +99,10 @@ _OVERLAY_PAGES: dict[str, tuple[str, str, Optional[str]]] = {
     "area-encounter":   ("Area Encounter",    _STREAM_AREA_ENCOUNTER_JS, None),
     "enc-table-a":      ("Encounter Table A", _STREAM_ENC_TABLE_JS,      "a"),
     "enc-table-b":      ("Encounter Table B", _STREAM_ENC_TABLE_JS,      "b"),
+    "enemy-wild-a":     ("Enemy Wild A",      _STREAM_ENEMY_WILD_JS,     "a"),
+    "enemy-wild-b":     ("Enemy Wild B",      _STREAM_ENEMY_WILD_JS,     "b"),
+    "enemy-trainer-a":  ("Enemy Trainer A",   _STREAM_ENEMY_TRAINER_JS,  "a"),
+    "enemy-trainer-b":  ("Enemy Trainer B",   _STREAM_ENEMY_TRAINER_JS,  "b"),
 }
 
 # Schema-compatible empty /api/status returned when no run is active.
