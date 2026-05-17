@@ -1600,8 +1600,12 @@ local function on_frame()
     -- Freeze detection always uses the stable baseline (tracks the real party
     -- through normal catches/deposits).  The backup buffer is NOT used here —
     -- it only updates before borrowed-party battles and goes stale otherwise.
+    -- Gated on `not in_battle`: CFRU can cause transient PID glitches during
+    -- battle (animation writebacks etc.) that resolve within 1-2 frames.
+    -- Borrowed-party battles are already caught by isBorrowedBattle() at
+    -- battle start; the PID detector is only needed for overworld transitions.
     local _pid_reverted = false
-    if not party_frozen then
+    if not party_frozen and not in_battle then
         local diff = _pids_diff_count(_curr_pids, _stable_party_pids)
         if diff >= PID_SWAP_THRESHOLD then
             party_frozen           = true
