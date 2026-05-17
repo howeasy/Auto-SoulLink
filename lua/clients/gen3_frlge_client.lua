@@ -281,8 +281,15 @@ local force_fainted_keys = {}  -- [monKey] → true
 -- sequences within a single game frame.  Between steps, gBattleMons may show
 -- transient HP=0 before abilities (Sturdy, Focus Sash, Endure) restore HP=1.
 -- We require HP to stay at 0 for FAINT_DEBOUNCE_FRAMES before confirming.
+--
+-- Fast-path: profiles with M.BATTLE_RESULTS_ADDR (vanilla + CFRU) can confirm
+-- via gBattleResults.playerFaintCounter delta, which only increments after
+-- protection (Sturdy/Focus Sash/Endure) resolves.  AP has no address yet and
+-- falls through to the 3-frame timer.
 local FAINT_DEBOUNCE_FRAMES = 3
 local pending_faint_debounce = {}  -- [monKey] → frames_remaining
+local battle_start_player_faints  = nil  -- gBattleResults snapshot at battle start
+local confirmed_real_player_faints = 0   -- count we've already credited via counter
 
 -- ── Command dispatcher ────────────────────────────────────────────────────────
 local function dispatch_commands(cmds)
@@ -619,6 +626,33 @@ local _box_cache        = {}
 local _box_next         = 0
 local _boxes_per_tick   = math.max(2, math.ceil((M.BOXES_PER_STORE or 14) / 7))
 
+-- Read the personality (PID, first 4 bytes) of each party slot 0..5.
+-- Empty slots return 0.  No decryption needed — PID is the first u32 of the
+-- struct and is never encrypted.
+local function _read_party_pids()
+    local p = {}
+    for slot = 0, 5 do
+        local ok, pid = pcall(memory.read_u32_le, M.PARTY_BASE + slot * M.MON_SIZE)
+        p[slot] = ok and pid or 0
+    end
+    return p
+end
+
+local function _pids_diff_count(a, b)
+    local n = 0
+    for i = 0, 5 do
+        if (a[i] or 0) ~= (b[i] or 0) then n = n + 1 end
+    end
+    return n
+end
+
+local function _pids_all_match(a, b)
+    for i = 0, 5 do
+        if (a[i] or 0) ~= (b[i] or 0) then return false end
+    end
+    return true
+end
+
 -- Validate that box storage is accessible and currentBox is in range.
 -- Returns true if safe to scan; false during transitions/menus.
 local function _box_ptr_valid()
@@ -742,10 +776,22 @@ local battle_seen_enemies  = {}  -- key → {species_id, level, hp, maxHP}
 local borrowed_battle      = false
 local pre_borrowed_party   = nil  -- snapshot of real party before the swap
 
--- Mass party swap freeze (pre-battle borrowed party detection).
--- The Poké Dude tutorial swaps the party BEFORE the battle starts, so
--- isBorrowedBattle() fires too late.  Detect the swap by counting gift captures
--- within a rolling window — normal gameplay never produces 3+ gifts in <1s.
+-- Borrowed-party swap detection.
+-- Primary signal: PID-based detector below.  Watches the first 4 bytes
+-- (personality value) of each party slot every frame; triggers when N slots
+-- differ from the "stable" snapshot (party that's been unchanged for
+-- PID_STABILITY_WINDOW frames).  Auto-releases when ALL slots revert to the
+-- pre-swap snapshot — covers both mid-overworld menu backouts and the
+-- engine's post-battle party restore.
+--
+-- Discovered via lua/tests/test_battle_facility_flag_discovery.lua on RR
+-- scripted-trainer-preset-party battles: gBattleTypeFlags shows only
+-- TRAINER|IS_MASTER (0x0C) and no SaveBlock1 flag fires, so the
+-- party-PID mass change is the only authoritative signal.
+--
+-- The gift_capture_buffer below remains as a 45-frame DELIVERY DELAY for
+-- normal captures (so events can be cancelled if a swap retroactively
+-- starts).  The buffer no longer triggers freeze on its own.
 local party_frozen          = false
 local freeze_frames_left    = 0
 local FREEZE_TIMEOUT_FRAMES = 3600 -- 60s failsafe
@@ -753,9 +799,32 @@ local POST_UNFREEZE_SETTLE  = 15   -- ~0.25s for game to restore real party afte
 local post_unfreeze_frames  = 0    -- countdown: suppress party diffs while settling
 local pending_freeze_release = false  -- trigger condition met; waiting for eob_clear
 local freeze_release_reason  = nil   -- reason string for unfreeze log
-local gift_capture_buffer   = {}   -- buffered gift events: {key,hp,maxHP,level,area,nickname,species_id,held_item_id,frame}
-local GIFT_BUFFER_WINDOW    = 45   -- hold gifts for ~0.75s before confirming real
-local GIFT_FREEZE_THRESHOLD = 3    -- 3+ gifts in window = borrowed swap
+local gift_capture_buffer   = {}   -- buffered captures: {key,hp,maxHP,level,area,nickname,species_id,held_item_id,frame}
+local GIFT_BUFFER_WINDOW    = 45   -- hold captures for ~0.75s so a late swap can cancel them
+
+-- Buffered party_to_box events.  The PID detector fires within 2-3 frames of
+-- a borrowed-party swap starting, but the per-key diff loop can see slot-0's
+-- previous mon "disappear" on frame 1 of the swap (slot rewrite) and would
+-- otherwise emit a spurious party_to_box.  Holding for PARTY_TO_BOX_BUFFER_WINDOW
+-- frames lets the PID detector catch up and discard the buffer before it flushes.
+local party_to_box_buffer   = {}   -- buffered deposits: {key, stats, frame}
+local PARTY_TO_BOX_BUFFER_WINDOW = 5  -- ~83ms — long enough for PID detector to fire
+
+-- PID-based swap detector state
+local PID_SWAP_THRESHOLD     = 3   -- ≥N slots changed since stable = swap
+local PID_STABILITY_WINDOW   = 30  -- frames of no PID change before re-snapshot
+local _last_party_pids       = {[0]=0,[1]=0,[2]=0,[3]=0,[4]=0,[5]=0}
+local _last_pid_change_frame = 0
+local _stable_party_pids     = {[0]=0,[1]=0,[2]=0,[3]=0,[4]=0,[5]=0}
+local pre_swap_pids          = nil -- pre-swap snapshot used for revert detection
+-- Authoritative real-party source when the profile provides one (CFRU/RR
+-- backup buffer at M.REAL_PARTY_BACKUP_ADDR).  Verified at script startup;
+-- if the backup doesn't match the live party, falls back to snapshot mode.
+-- NOTE: the backup buffer is only updated by the engine before borrowed-party
+-- battles — it does NOT track normal catches/deposits.  The stable baseline
+-- cross-check prevents stale backup from triggering false freezes.
+local _backup_trusted        = false
+local _stale_backup_logged   = false  -- one-shot log for stale backup detection
 
 -- Per-session:
 local all_known_keys   = {}   -- all keys ever seen in party or box
@@ -1227,6 +1296,10 @@ local function on_frame()
         force_fainted_keys   = {}  -- fresh guard set for this battle
         pending_faint_debounce = {}  -- clear any stale debounce state
         post_eob_frames      = 0   -- clear any leftover post-EOB delay
+        -- Snapshot gBattleResults.playerFaintCounter so debounce ticks can
+        -- fast-confirm via counter delta on profiles that expose it.
+        battle_start_player_faints  = (M.readFaintCounters())
+        confirmed_real_player_faints = 0
         -- Detect borrowed-party battles (CFRU/RR only).
         local ok_bb, is_bb = pcall(M.isBorrowedBattle)
         borrowed_battle = ok_bb and is_bb or false
@@ -1437,6 +1510,8 @@ local function on_frame()
             pending_battle_faints = {}  -- discard any deferred faints from borrowed battle
             force_fainted_keys    = {}  -- clear battle-scoped guard
             pending_faint_debounce = {}  -- clear any debounce state
+            battle_start_player_faints  = nil
+            confirmed_real_player_faints = 0
             post_battle_frames = POST_BATTLE_GRACE
             memorialize_battle_cooldown = MEMORIALIZE_POST_BATTLE_COOLDOWN
             post_eob_frames    = POST_EOB_SAFETY_CAP
@@ -1446,6 +1521,8 @@ local function on_frame()
         pending_battle_faints = {}  -- all deferred faints should be flushed by now
         force_fainted_keys    = {}  -- clear battle-scoped guard
         pending_faint_debounce = {}  -- clear any debounce state
+        battle_start_player_faints  = nil
+        confirmed_real_player_faints = 0
         post_battle_frames = POST_BATTLE_GRACE
         memorialize_battle_cooldown = MEMORIALIZE_POST_BATTLE_COOLDOWN
         post_eob_frames    = POST_EOB_SAFETY_CAP
@@ -1464,6 +1541,119 @@ local function on_frame()
     -- Stats cache is merged into index_party() — no separate pass needed.
     local curr_party, party_count = index_party(in_battle)
 
+    -- ── PID-based borrowed-party detector ──────────────────────────────────
+    -- Frame-accurate borrowed-party trigger.  Two sources of "real party
+    -- PIDs" depending on profile:
+    --   (a) CFRU/RR real-party backup buffer (M.REAL_PARTY_BACKUP_ADDR) —
+    --       a live mirror that the engine maintains; authoritative.  Used
+    --       when _backup_trusted (verified at startup that backup == live).
+    --   (b) Path A snapshot: _stable_party_pids, updated after
+    --       PID_STABILITY_WINDOW frames of no live changes.  Used for
+    --       vanilla/AP profiles and as a safety fallback.
+    -- Swap detection: ≥PID_SWAP_THRESHOLD slots in gPlayerParty differ
+    -- from the reference.  Revert: all slots match the reference again.
+    local _curr_pids = _read_party_pids()
+    local _slot_changed = false
+    for slot = 0, 5 do
+        if _curr_pids[slot] ~= _last_party_pids[slot] then
+            _slot_changed = true
+            _last_party_pids[slot] = _curr_pids[slot]
+        end
+    end
+    if _slot_changed then _last_pid_change_frame = frame_count end
+
+    -- Bootstrap: if the profile has a real-party backup address, trust it
+    -- the first time we observe (live party == backup) with a non-empty
+    -- party.  This means we caught the engine in a quiet overworld state
+    -- where the backup is correctly mirroring gPlayerParty.  After this
+    -- point the detector uses the backup as the authoritative reference.
+    if M.REAL_PARTY_BACKUP_ADDR and not _backup_trusted and _curr_pids[0] ~= 0 then
+        local _bp = M.readBackupPartyPids()
+        if _bp and _pids_all_match(_curr_pids, _bp) then
+            _backup_trusted = true
+            -- Seed the stable baseline so the cross-check has valid data
+            -- from the moment backup trust is established.
+            for i = 0, 5 do _stable_party_pids[i] = _curr_pids[i] end
+            _last_pid_change_frame = frame_count
+            console.log(string.format(
+                "[SLink-FRLGE] real-party backup verified @ 0x%08X — using as authoritative reference",
+                M.REAL_PARTY_BACKUP_ADDR))
+        end
+    end
+
+    -- Always maintain stable baseline — tracks gradual party changes (catches,
+    -- deposits) regardless of backup trust.  Without this, a stale backup
+    -- buffer diverges by ≥PID_SWAP_THRESHOLD after enough party changes and
+    -- triggers false freezes.  Guarded by `not party_frozen` so the borrowed
+    -- party never contaminates the baseline.
+    if not party_frozen and frame_count - _last_pid_change_frame >= PID_STABILITY_WINDOW then
+        for i = 0, 5 do _stable_party_pids[i] = _curr_pids[i] end
+    end
+
+    -- Determine the authoritative reference PIDs for this frame.
+    local _ref_pids
+    if _backup_trusted then
+        _ref_pids = M.readBackupPartyPids() or _stable_party_pids
+    else
+        _ref_pids = _stable_party_pids
+    end
+
+    local _pid_reverted = false
+    if not party_frozen then
+        local diff = _pids_diff_count(_curr_pids, _ref_pids)
+        if diff >= PID_SWAP_THRESHOLD then
+            -- Cross-check: a real borrowed-party swap is sudden — BOTH the
+            -- backup AND the stable baseline disagree with live.  If only the
+            -- backup disagrees (gradual drift from catches/deposits), the
+            -- stable baseline still tracks the live party → skip freeze.
+            local stable_diff = _backup_trusted
+                and _pids_diff_count(_curr_pids, _stable_party_pids) or diff
+            if stable_diff < PID_SWAP_THRESHOLD then
+                if not _stale_backup_logged then
+                    console.log(string.format(
+                        "[SLink-FRLGE] backup stale (%d/6 differ) — stable baseline matches; skipping freeze",
+                        diff))
+                    _stale_backup_logged = true
+                end
+            else
+                _stale_backup_logged = false
+                party_frozen           = true
+                freeze_frames_left     = FREEZE_TIMEOUT_FRAMES
+                pending_freeze_release = false
+                pre_swap_pids          = {}
+                for i = 0, 5 do pre_swap_pids[i] = _ref_pids[i] end
+                pending_faint_debounce = {}
+                gift_capture_buffer    = {}
+                -- Discard any buffered party_to_box events — the "missing" keys
+                -- were the real party that just got swapped out, not deposits.
+                if #party_to_box_buffer > 0 then
+                    console.log(string.format(
+                        "[SLink-FRLGE]   ↳ discarding %d buffered party_to_box (borrowed-party swap)",
+                        #party_to_box_buffer))
+                    party_to_box_buffer = {}
+                end
+                console.log(string.format(
+                    "[SLink-FRLGE] ★ PID SWAP: %d/6 slots differ from %s; freezing party diff",
+                    diff, _backup_trusted and "backup buffer" or "stable snapshot"))
+            end
+        else
+            _stale_backup_logged = false
+        end
+    else
+        -- While frozen: revert is "live party matches the reference again".
+        -- When backup is trusted, _ref_pids is the live backup (changes if
+        -- the engine updates the backup mid-battle — unlikely but safe).
+        -- When using snapshot mode, _ref_pids = pre_swap_pids effectively
+        -- (since stable doesn't update while frozen).
+        if _backup_trusted then
+            if _pids_all_match(_curr_pids, _ref_pids) then
+                _pid_reverted = true
+            end
+        elseif pre_swap_pids and _pids_all_match(_curr_pids, pre_swap_pids) then
+            _pid_reverted = true
+        end
+    end
+
     -- ── party freeze: unfreeze check ───────────────────────────────────────────
     if party_frozen then
         -- Only count down timeout when NOT in battle — borrowed battles can
@@ -1471,16 +1661,28 @@ local function on_frame()
         if not in_battle then
             freeze_frames_left = freeze_frames_left - 1
         end
-        -- Unfreeze when the battle ends — EOB routines restore the real party,
-        -- so by the time eob_clear is true the baseline is clean.
-        if not pending_freeze_release and battle_just_ended then
+        -- battle_just_ended is NOT a release trigger when backup is trusted:
+        -- it fires before the engine restores gPlayerParty from the backup,
+        -- causing a spurious "release then immediately re-freeze" cycle.
+        -- The PID revert signal is authoritative and fires the moment the
+        -- engine completes the restore.
+        if not _backup_trusted
+           and not pending_freeze_release and battle_just_ended then
             pending_freeze_release = true
             freeze_release_reason  = "battle ended"
         end
-        -- Unfreeze when trigger has fired AND EndOfBattleThings is done.
-        -- Timeout (60 s failsafe) bypasses the eob gate to prevent a permanent freeze.
+        -- Unfreeze immediately when PID revert is observed.  Covers two
+        -- cases: (1) mid-overworld backout of a preview menu, (2) engine
+        -- restores the real party after a borrowed-party battle ends.
+        if _pid_reverted and not pending_freeze_release then
+            pending_freeze_release = true
+            freeze_release_reason  = "PID revert"
+        end
+        -- Release when: (a) trigger fired AND eob_clear, OR (b) trigger
+        -- fired via PID revert (bypass eob gate — revert is authoritative),
+        -- OR (c) timeout backstop.
         local force_timeout = freeze_frames_left <= 0
-        if (pending_freeze_release and eob_clear) or force_timeout then
+        if (pending_freeze_release and (eob_clear or _pid_reverted)) or force_timeout then
             local reason = force_timeout and "timeout"
                 or freeze_release_reason or "unknown"
             console.log("[SLink-FRLGE] ★ PARTY UNFREEZE: " .. reason)
@@ -1488,6 +1690,11 @@ local function on_frame()
             pending_freeze_release = false
             freeze_release_reason  = nil
             pending_faint_debounce = {}  -- clear stale debounce state
+            -- Reset PID detector state so the next swap re-baselines cleanly.
+            pre_swap_pids            = nil
+            _stale_backup_logged     = false
+            for i = 0, 5 do _stable_party_pids[i] = _curr_pids[i] end
+            _last_pid_change_frame   = frame_count
             -- Start settle period: keep prev_party synced for a few frames
             -- before allowing party diffs, so the game has time to restore
             -- the real party after a borrowed-party battle.
@@ -1496,6 +1703,7 @@ local function on_frame()
             -- against the current (possibly changed) party.
             prev_party = curr_party
             gift_capture_buffer  = {}
+            party_to_box_buffer  = {}  -- any pre-freeze deposits are no longer trustworthy
         end
     end
 
@@ -1711,18 +1919,11 @@ local function on_frame()
                         area=gift_area, nickname=cap_nick, species_id=cap_sid,
                         held_item_id=cap_iid, frame=frame_count
                     }
-                    if #gift_capture_buffer >= GIFT_FREEZE_THRESHOLD then
-                        -- Mass swap detected — freeze party diff.
-                        party_frozen           = true
-                        freeze_frames_left     = FREEZE_TIMEOUT_FRAMES
-                        pending_faint_debounce = {}  -- clear stale debounce state
-                        pending_freeze_release = false
-                        console.log(string.format(
-                            "[SLink-FRLGE] ★ PARTY FREEZE: %d gift captures in %d frames — borrowed party swap",
-                            #gift_capture_buffer,
-                            frame_count - gift_capture_buffer[1].frame))
-                        gift_capture_buffer = {}
-                    end
+                    -- Note: borrowed-party detection no longer keys off
+                    -- buffer length; the PID detector fires earlier and
+                    -- on a more authoritative signal.  Buffer remains
+                    -- a 45-frame delivery delay so a late-arriving swap
+                    -- can retroactively cancel pending captures.
                 end
             end
         end
@@ -1774,23 +1975,50 @@ local function on_frame()
             -- Key disappeared from party → party_to_box.
             -- Key-based tracking means only genuine deposits hit this path
             -- (party reorders keep both keys present in curr_party).
+            -- BUFFERED for PARTY_TO_BOX_BUFFER_WINDOW frames so a borrowed-party
+            -- swap that starts on this frame can trigger the PID detector and
+            -- cancel the event before it goes out.  Without this buffer, the
+            -- first slot rewrite of a swap fires a spurious party_to_box for
+            -- whatever was in slot 0 (e.g. Charmander).
             if not in_battle and prev_info.hp > 0 and not sync_written_keys[k]
                and not party_frozen then
-                local st = mon_stats_cache[k]
-                local stats_tbl = st and {level=st.level, maxHP=st.maxHP,
-                    attack=st.attack, defense=st.defense, speed=st.speed,
-                    spAtk=st.spAtk, spDef=st.spDef,
-                    pp1=st.pp1, pp2=st.pp2, pp3=st.pp3, pp4=st.pp4} or nil
-                send({event="party_to_box", key=k, stats=stats_tbl},
-                     "party_to_box:"..k:sub(1,8), true)
+                local already_buffered = false
+                for _, buf in ipairs(party_to_box_buffer) do
+                    if buf.key == k then already_buffered = true; break end
+                end
+                if not already_buffered then
+                    local st = mon_stats_cache[k]
+                    local stats_tbl = st and {level=st.level, maxHP=st.maxHP,
+                        attack=st.attack, defense=st.defense, speed=st.speed,
+                        spAtk=st.spAtk, spDef=st.spDef,
+                        pp1=st.pp1, pp2=st.pp2, pp3=st.pp3, pp4=st.pp4} or nil
+                    party_to_box_buffer[#party_to_box_buffer + 1] = {
+                        key = k, stats = stats_tbl, frame = frame_count
+                    }
+                end
             end
             all_zero = false  -- gone from party, can't be all-zero anymore
         end
     end
 
     -- ── debounce: in-battle faint confirmation ──────────────────────────────
-    -- Keys must remain at HP=0 for FAINT_DEBOUNCE_FRAMES before confirming.
-    -- This filters out transient HP=0 from CFRU multi-step damage processing.
+    -- Keys must remain at HP=0 for FAINT_DEBOUNCE_FRAMES before confirming,
+    -- UNLESS gBattleResults.playerFaintCounter has already incremented past
+    -- the count we've credited — that's an authoritative "Cmd_tryfaintmon
+    -- committed a faint" signal (post-Sturdy/Focus-Sash/Endure resolution),
+    -- so we can skip the timer.
+    --
+    -- Fast-path safety: only fire when EXACTLY ONE key is pending. With
+    -- multiple pending we can't safely pick which one to credit (pairs()
+    -- order is undefined) — fall through to the timer, which gives time
+    -- for transient HP=0 to recover.
+    local n_pending = 0
+    for _ in pairs(pending_faint_debounce) do n_pending = n_pending + 1 end
+    local curr_pfc = nil
+    if n_pending == 1 and battle_start_player_faints then
+        curr_pfc = (M.readFaintCounters())
+    end
+
     for k, frames_left in pairs(pending_faint_debounce) do
         local ci = curr_party[k]
         if not ci or ci.hp > 0 then
@@ -1803,10 +2031,19 @@ local function on_frame()
             -- Server already force-fainted this mon, or faint is pending deferral
             -- (active battler awaiting switch-out) — don't double-report.
             pending_faint_debounce[k] = nil
+        elseif curr_pfc
+               and (curr_pfc - battle_start_player_faints) > confirmed_real_player_faints then
+            -- Fast-path: counter delta exceeds the count we've already credited.
+            pending_faint_debounce[k] = nil
+            confirmed_real_player_faints = confirmed_real_player_faints + 1
+            console.log("[SLink-FRLGE]   ↳ faint CONFIRMED via gBattleResults delta key="..k:sub(1,8))
+            send({event="faint", key=k, area_id=area},
+                 "faint:"..k:sub(1,8), true)
+            real_faint_occurred = true
         else
             frames_left = frames_left - 1
             if frames_left <= 0 then
-                -- Confirmed: HP stayed at 0 for N frames — real faint.
+                -- Confirmed via timer fallback.
                 pending_faint_debounce[k] = nil
                 console.log("[SLink-FRLGE]   ↳ faint debounce CONFIRMED key="..k:sub(1,8))
                 send({event="faint", key=k, area_id=area},
@@ -1828,6 +2065,24 @@ local function on_frame()
     end
 
     end -- party_diff_ok
+
+    -- ── party_to_box buffer: flush confirmed deposits ───────────────────────
+    -- Entries older than PARTY_TO_BOX_BUFFER_WINDOW are confirmed real (no
+    -- swap triggered) and sent.  If party_frozen was triggered, the buffer
+    -- was already cleared by the PID detector.
+    if #party_to_box_buffer > 0 and not party_frozen and not borrowed_battle then
+        local i = 1
+        while i <= #party_to_box_buffer do
+            local buf = party_to_box_buffer[i]
+            if frame_count - buf.frame >= PARTY_TO_BOX_BUFFER_WINDOW then
+                send({event="party_to_box", key=buf.key, stats=buf.stats},
+                     "party_to_box:"..buf.key:sub(1,8), true)
+                table.remove(party_to_box_buffer, i)
+            else
+                i = i + 1
+            end
+        end
+    end
 
     -- ── gift capture buffer: flush confirmed gifts ──────────────────────────
     -- Entries older than GIFT_BUFFER_WINDOW are confirmed real and sent.
@@ -1856,12 +2111,26 @@ local function on_frame()
         memorialize_battle_cooldown = memorialize_battle_cooldown - 1
     end
     if post_eob_frames > 0 then
-        post_eob_frames = post_eob_frames - 1
-        if post_eob_frames == 0 and not M.isPostBattleSettled() then
-            console.log("[SLink-FRLGE] post-EOB safety cap exhausted; isPostBattleSettled still false. "
-                .. "Sync writes will proceed; if a corruption follows, the profile's "
-                .. "POST_BATTLE_WRITER_TASKS set likely needs another discovery run "
-                .. "(test_post_eob_settle_discovery.lua) on the battle type that just happened.")
+        -- Only count down once the engine has actually transitioned to the
+        -- "return from battle" function (gBattleMainFunc == RETURN_FROM_BATTLE_ADDR).
+        -- Otherwise the cap exhausts on player input timing: slow post-battle
+        -- dialog clicking keeps gBattleMainFunc stuck in the dialog handler,
+        -- and the bridge would falsely warn while EOB hasn't even started.
+        -- Profiles without these addresses (AP) fall through and count down
+        -- normally (no engine-state gate available).
+        local engine_eob_done = true
+        if M.BATTLE_MAIN_FUNC_ADDR and M.RETURN_FROM_BATTLE_ADDR then
+            local ok, v = pcall(memory.read_u32_le, M.BATTLE_MAIN_FUNC_ADDR)
+            engine_eob_done = ok and v == M.RETURN_FROM_BATTLE_ADDR
+        end
+        if engine_eob_done then
+            post_eob_frames = post_eob_frames - 1
+            if post_eob_frames == 0 and not M.isPostBattleSettled() then
+                console.log("[SLink-FRLGE] post-EOB safety cap exhausted; isPostBattleSettled still false. "
+                    .. "Sync writes will proceed; if a corruption follows, the profile's "
+                    .. "POST_BATTLE_WRITER_TASKS set likely needs another discovery run "
+                    .. "(test_post_eob_settle_discovery.lua) on the battle type that just happened.")
+            end
         end
     end
     if post_battle_frames > 0 then
