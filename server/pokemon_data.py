@@ -996,69 +996,85 @@ _VANILLA_ABILITY_NAMES: dict[int, str] = {
 }
 
 
-# CFRU uses a single ability ID for several functionally-identical ability pairs,
-# showing the species-appropriate name via GetAbilityNameOverride() in ability_util.c.
-# Keys are (ability_id, natdex_base_form). Alolan/regional forms map to their base
-# form NatDex (e.g. Alolan Diglett → NatDex 50) via to_national().
-CFRU_ABILITY_NAME_OVERRIDES: dict[tuple[int, int], str] = {
-    # ABILITY_CLOUDNINE (13) / Air Lock
-    (13, 384): "Air Lock",              # Rayquaza
-    # ABILITY_HUGEPOWER (37) / Pure Power
-    (37, 307): "Pure Power", (37, 308): "Pure Power",   # Meditite, Medicham
+# RR per-species ability name overrides.
+#
+# CFRU uses a single ability ID for several functionally-identical ability pairs
+# (e.g. ABILITY_GOOEY is the engine name; the dex displays "Tangling Hair" for
+# Diglett-Alola). RR's GetAbilityNameOverride() function provides the per-species
+# display.
+#
+# Most entries are auto-generated from funnotbun's duplicate_abilities.h — the
+# same source the funnotbun web dex uses. Regenerate with:
+#   python tools/gen_ability_name_overrides_rr.py
+#
+# Manual entries below cover renames that funnotbun's file doesn't include
+# (observed in-game but absent from upstream data). Manual entries take
+# precedence over generated ones (use sparingly, prefer fixing the generator
+# or filing a funnotbun PR).
+#
+# Keys are (ability_id, natdex_base_form). Alolan/regional forms map to their
+# base form NatDex via to_national() in the lookup path.
+from server.rr_ability_overrides import CFRU_ABILITY_NAME_OVERRIDES_GENERATED
+
+CFRU_ABILITY_NAME_OVERRIDES_MANUAL: dict[tuple[int, int], str] = {
+    # Carried over from the pre-generator hand-curated dict. funnotbun's
+    # duplicate_abilities.h does not include these as of 2026-05-17. If a future
+    # funnotbun update adds them, the generator will pick them up and these can
+    # be removed.
+
     # ABILITY_STURDY (5) / Nine Lives
-    (5, 52): "Nine Lives",  (5, 53): "Nine Lives",      # Meowth (incl. Alolan), Persian (incl. Alolan)
+    (5, 52): "Nine Lives", (5, 53): "Nine Lives",                  # Meowth (incl. Alolan), Persian (incl. Alolan)
     # ABILITY_STURDY (5) / Focus Belt
-    (5, 67): "Focus Belt",  (5, 68): "Focus Belt",      # Machoke, Machamp
+    (5, 67): "Focus Belt", (5, 68): "Focus Belt",                  # Machoke, Machamp
+    # ABILITY_MULTISCALE (81) / Multieye
+    (81, 343): "Multieye", (81, 344): "Multieye",                  # Baltoy, Claydol
     # ABILITY_FILTER (101) / Solid Rock
     (101, 323): "Solid Rock", (101, 464): "Solid Rock",
     (101, 564): "Solid Rock", (101, 565): "Solid Rock", (101, 825): "Solid Rock",
+    # ABILITY_QUICKFEET (112) / Strong Jaws
+    (112, 262): "Strong Jaws",                                     # Mightyena
     # ABILITY_MOXIE (118) / Fiery Neigh
-    (118, 77): "Fiery Neigh",   (118, 78): "Fiery Neigh",   # Ponyta, Rapidash
-    # ABILITY_MOXIE (118) / Shocking Neigh
-    (118, 522): "Shocking Neigh", (118, 523): "Shocking Neigh",  # Blitzle, Zebstrika
+    (118, 77): "Fiery Neigh", (118, 78): "Fiery Neigh",            # Ponyta-Galar, Rapidash-Galar
     # ABILITY_MOXIE (118) / Pride
-    (118, 519): "Pride", (118, 520): "Pride", (118, 521): "Pride",  # Pidove, Tranquill, Unfezant
+    (118, 519): "Pride", (118, 520): "Pride", (118, 521): "Pride", # Pidove, Tranquill, Unfezant
+    # ABILITY_MOXIE (118) / Shocking Neigh
+    (118, 522): "Shocking Neigh", (118, 523): "Shocking Neigh",    # Blitzle, Zebstrika
     # ABILITY_MOXIE (118) / Chilling Neigh
-    (118, 896): "Chilling Neigh",   # Glastrier
-    # ABILITY_MULTISCALE (81) / Multieye
-    (81, 343): "Multieye",  (81, 344): "Multieye",      # Baltoy, Claydol
-    # ABILITY_PROTEAN (150) / Libero
-    (150, 813): "Libero", (150, 814): "Libero", (150, 815): "Libero",  # Scorbunny, Raboot, Cinderace
-    # ABILITY_PROTEAN (150) / Subterfuge
-    (150, 414): "Subterfuge",       # Mothim
-    # ABILITY_GOOEY (121) / Tangling Hair
-    (121, 50): "Tangling Hair",  (121, 51): "Tangling Hair",   # Diglett (incl. Alolan), Dugtrio (incl. Alolan)
+    (118, 896): "Chilling Neigh",                                  # Spectrier
     # ABILITY_GOOEY (121) / Tangling Wool
-    (121, 179): "Tangling Wool", (121, 180): "Tangling Wool", (121, 181): "Tangling Wool",
+    (121, 179): "Tangling Wool", (121, 180): "Tangling Wool", (121, 181): "Tangling Wool",  # Mareep, Flaaffy, Ampharos
+    # ABILITY_GRIMNEIGH (123) / Royal Roar
+    (123, 667): "Royal Roar", (123, 668): "Royal Roar",            # Litleo, Pyroar
+    # ABILITY_PROTEAN (150) / Subterfuge
+    (150, 414): "Subterfuge",                                      # Mothim
     # ABILITY_PARENTALBOND (151) / Brain Bond
-    (151, 203): "Brain Bond",       # Girafarig
-    # ABILITY_EMERGENCYEXIT (160) / Wimp Out
-    (160, 767): "Wimp Out",         # Wimpod
+    (151, 203): "Brain Bond",                                      # Girafarig
+    # ABILITY_GORILLATACTICS (215) / Crabby Tactics
+    (215, 739): "Crabby Tactics",                                  # Crabrawler/Crabominable
     # ABILITY_DAZZLING (221) / Queenly Majesty
-    (221, 763): "Queenly Majesty", (221, 31): "Queenly Majesty", (221, 416): "Queenly Majesty",
-    # ABILITY_RECEIVER (234) / Power of Alchemy
-    (234, 88): "Power of Alchemy", (234, 89): "Power of Alchemy",  # Grimer (incl. Alolan), Muk (incl. Alolan)
-    # ABILITY_STALWART (244) / Propeller Tail
-    (244, 846): "Propeller Tail", (244, 847): "Propeller Tail",    # Arrokuda, Barraskewda
+    (221, 31): "Queenly Majesty",                                  # Nidoqueen
+    # ABILITY_DAUNTLESSSHIELD (239) / Face Shield
+    (239, 410): "Face Shield", (239, 411): "Face Shield",          # Shieldon, Bastiodon
+    # ABILITY_DAUNTLESSSHIELD (239) / Honey Armor
+    (239, 416): "Honey Armor",                                     # Vespiquen
     # ABILITY_COTTONDOWN (241) / Cotton Cloud
     (241, 333): "Cotton Cloud", (241, 334): "Cotton Cloud",        # Swablu, Altaria
+    # ABILITY_STALWART (244) / Propeller Tail
+    (244, 846): "Propeller Tail", (244, 847): "Propeller Tail",    # Arrokuda, Barraskewda
     # ABILITY_PUNKROCK (246) / Bellow
     (246, 293): "Bellow", (246, 294): "Bellow", (246, 295): "Bellow",  # Whismur, Loudred, Exploud
     # ABILITY_PUNKROCK (246) / Sound Waves
     (246, 329): "Sound Waves", (246, 330): "Sound Waves",          # Vibrava, Flygon
     (246, 714): "Sound Waves", (246, 715): "Sound Waves",          # Noibat, Noivern
     # ABILITY_ICESCALES (248) / Icy Skin
-    (248, 471): "Icy Skin", (248, 238): "Icy Skin", (248, 124): "Icy Skin",  # Glaceon, Smoochum, Jynx
+    (248, 124): "Icy Skin", (248, 238): "Icy Skin", (248, 471): "Icy Skin",  # Jynx, Smoochum, Glaceon
     # ABILITY_ICESCALES (248) / Dusty Scales
-    (248, 269): "Dusty Scales",     # Dustox
-    # ABILITY_GORILLATACTICS (215) / Crabby Tactics
-    (215, 739): "Crabby Tactics",   # Crabominable
-    # ABILITY_DAUNTLESSSHIELD (239) / Face Shield
-    (239, 410): "Face Shield", (239, 411): "Face Shield",          # Shieldon, Bastiodon
-    # ABILITY_DAUNTLESSSHIELD (239) / Honey Armor
-    (239, 416): "Honey Armor",      # Vespiquen
-    # ABILITY_GRIMNEIGH (123) / Royal Roar
-    (123, 667): "Royal Roar", (123, 668): "Royal Roar",            # Litleo, Pyroar
+    (248, 269): "Dusty Scales",                                    # Dustox
+}
+
+CFRU_ABILITY_NAME_OVERRIDES: dict[tuple[int, int], str] = {
+    **CFRU_ABILITY_NAME_OVERRIDES_GENERATED,
+    **CFRU_ABILITY_NAME_OVERRIDES_MANUAL,
 }
 
 

@@ -1301,3 +1301,37 @@ class TestCFRUAbilityNameOverrides:
     def test_rr_dugtrio_tangling_hair(self, rr):
         """Ability 121 → "Tangling Hair" for Dugtrio (CFRU ID 51) in RR."""
         assert rr.ability_name(121, species_id=51) == "Tangling Hair"
+
+    def test_rr_quickfeet_mightyena_returns_strong_jaws(self, rr):
+        """Ability 112 (Quick Feet in CFRU) → "Strong Jaws" for Mightyena (CFRU ID 287)."""
+        assert rr.ability_name(112, species_id=287) == "Strong Jaws"
+
+    def test_rr_quickfeet_non_mightyena_returns_base_name(self, rr):
+        """Ability 112 on a species without the override returns the base CFRU name (Quick Feet)."""
+        assert rr.ability_name(112, species_id=1) == "Quick Feet"
+
+    def test_manual_overrides_do_not_silently_shadow_generated(self):
+        """MANUAL entries should never duplicate GENERATED entries with the same display name —
+        any overlap means the MANUAL entry is dead code that should be removed.
+        MANUAL entries with a DIFFERENT display name are allowed (intentional override)."""
+        from server.pokemon_data import (
+            CFRU_ABILITY_NAME_OVERRIDES_MANUAL as MANUAL,
+            CFRU_ABILITY_NAME_OVERRIDES_GENERATED as GEN,
+        )
+        redundant = {k for k in MANUAL if k in GEN and MANUAL[k] == GEN[k]}
+        assert not redundant, (
+            f"MANUAL entries duplicate GENERATED with identical values "
+            f"(remove them from MANUAL): {sorted(redundant)}"
+        )
+
+    def test_generator_output_present(self):
+        """The generated override module must produce a non-trivial number of entries."""
+        from server.pokemon_data import CFRU_ABILITY_NAME_OVERRIDES_GENERATED as GEN
+        assert len(GEN) >= 80, f"Generator output unexpectedly small: {len(GEN)}"
+
+    def test_rr_known_generated_overrides(self, rr):
+        """Sanity-check a handful of GENERATED-source overrides resolve correctly."""
+        # Pure Power / Meditite (NatDex 307)
+        assert rr.ability_name(37, species_id=356) == "Pure Power"  # CFRU 356 -> NatDex 307
+        # Air Lock / Rayquaza (NatDex 384)
+        assert rr.ability_name(13, species_id=406) == "Air Lock"
