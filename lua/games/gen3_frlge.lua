@@ -118,6 +118,11 @@ GEN3.profiles = {
         CB2_EVOLUTION_UPDATE_ADDR    = 0x080CE711,  -- CB2_EvolutionSceneUpdate (thumb)
         CB2_TRADE_EVOLUTION_UPDATE_ADDR = 0x080CE72D,  -- CB2_TradeEvolutionSceneUpdate (thumb)
         GMAIN_CB2_OFFSET             = 0x04,         -- struct Main: callback2 at +0x04
+        -- gBattleResults (IWRAM): playerFaintCounter@+0, opponentFaintCounter@+1.
+        -- Address from pret include/battle.h linker map (preserved by CFRU).
+        BATTLE_RESULTS_ADDR              = 0x03004F90,
+        BATTLE_RESULTS_PLAYER_FAINTS_OFF = 0x00,
+        BATTLE_RESULTS_FOE_FAINTS_OFF    = 0x01,
     },
     ap = {
         PARTY_COUNT_ADDR           = 0x0202403D,
@@ -289,6 +294,20 @@ GEN3.profiles = {
         CB2_EVOLUTION_UPDATE_ADDR    = 0x080CE711,
         CB2_TRADE_EVOLUTION_UPDATE_ADDR = 0x080CE72D,
         GMAIN_CB2_OFFSET             = 0x04,
+        -- gBattleResults preserved verbatim by CFRU (commented in ram_locs_battle.h).
+        BATTLE_RESULTS_ADDR              = 0x03004F90,
+        BATTLE_RESULTS_PLAYER_FAINTS_OFF = 0x00,
+        BATTLE_RESULTS_FOE_FAINTS_OFF    = 0x01,
+        -- CFRU/RR real-party backup buffer.  Discovered empirically via
+        -- lua/tests/test_battle_facility_flag_discovery.lua: a full
+        -- struct Pokemon[6] copy that mirrors gPlayerParty's layout (100
+        -- bytes per slot, unencrypted substructs) and holds the REAL
+        -- party throughout any scripted-trainer-preset-party scenario.
+        -- Verified stable across emulator restarts (compile-time CFRU
+        -- symbol, not heap-allocated).  When this buffer disagrees with
+        -- gPlayerParty by ≥3 PIDs, a borrowed-party swap is active and
+        -- this address is the authoritative real-party reference.
+        REAL_PARTY_BACKUP_ADDR           = 0x02025564,
     },
     -- Emerald US 1.0 — stub profile (addresses TBD, requires research)
     -- Game code: BPEE. Same Gen 3 Pokemon struct (100 bytes, encrypted substructs).

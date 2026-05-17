@@ -61,6 +61,9 @@ local _PROFILE_RESET_KEYS = {
     "SPECIAL_VAR_BOX_ID_ADDR", "SPECIAL_VAR_BOX_POS_ADDR",
     "TASKS_BASE_ADDR", "TASK_STRUCT_SIZE",
     "POST_BATTLE_WRITER_TASKS",
+    "BATTLE_RESULTS_ADDR",
+    "BATTLE_RESULTS_PLAYER_FAINTS_OFF", "BATTLE_RESULTS_FOE_FAINTS_OFF",
+    "REAL_PARTY_BACKUP_ADDR",
     "CB2_EVOLUTION_LOAD_ADDR", "CB2_EVOLUTION_BEGIN_ADDR",
     "CB2_EVOLUTION_UPDATE_ADDR", "CB2_TRADE_EVOLUTION_UPDATE_ADDR",
     "GMAIN_CB2_OFFSET",
@@ -1294,6 +1297,33 @@ end
 -- sets to the destination box index each time a mon is deposited to the PC.
 -- Index 0x37 within vars[]; two bytes per entry; base at SB1+0x1000 (vanilla/CFRU).
 M.VAR_PC_BOX_TO_SEND_MON = 0x4037
+
+-- Read the 6 slot-0 personality values (PIDs) from the CFRU/RR real-party
+-- backup buffer.  Returns {[0..5] = u32} or nil if the profile has no
+-- REAL_PARTY_BACKUP_ADDR (e.g. vanilla/AP).  The buffer mirrors gPlayerParty's
+-- 100-byte stride; empty slots are 0.
+function M.readBackupPartyPids()
+    if not M.REAL_PARTY_BACKUP_ADDR or not M.MON_SIZE then return nil end
+    local pids = {}
+    for slot = 0, 5 do
+        local ok, pid = pcall(mem_r32, M.REAL_PARTY_BACKUP_ADDR + slot * M.MON_SIZE)
+        pids[slot] = ok and pid or 0
+    end
+    return pids
+end
+
+-- Read the two u8 faint counters from gBattleResults (IWRAM).
+-- Returns (playerFaintCounter, opponentFaintCounter), or (nil, nil) if the
+-- profile does not provide BATTLE_RESULTS_ADDR (e.g. AP, until the +0x14 shift
+-- is discovered).  Counters are incremented by Cmd_tryfaintmon AFTER protection
+-- (Sturdy/Focus Sash/Endure) resolves, so a delta >= 1 is the authoritative
+-- "real faint committed" signal.  Reset on battle start by the engine.
+function M.readFaintCounters()
+    if not M.BATTLE_RESULTS_ADDR then return nil, nil end
+    local ok1, pfc = pcall(mem_r8, M.BATTLE_RESULTS_ADDR + (M.BATTLE_RESULTS_PLAYER_FAINTS_OFF or 0))
+    local ok2, ofc = pcall(mem_r8, M.BATTLE_RESULTS_ADDR + (M.BATTLE_RESULTS_FOE_FAINTS_OFF or 1))
+    return ok1 and pfc or nil, ok2 and ofc or nil
+end
 
 -- Read a saved game variable (var_id 0x4000–0x40FF) from SaveBlock1.vars[].
 -- Returns the u16 value, or nil if the profile has no SB1_VARS_OFFSET, the pointer
