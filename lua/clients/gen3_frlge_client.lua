@@ -807,8 +807,17 @@ local GIFT_BUFFER_WINDOW    = 45   -- hold captures for ~0.75s so a late swap ca
 -- previous mon "disappear" on frame 1 of the swap (slot rewrite) and would
 -- otherwise emit a spurious party_to_box.  Holding for PARTY_TO_BOX_BUFFER_WINDOW
 -- frames lets the PID detector catch up and discard the buffer before it flushes.
+-- Also protects against transient 1-frame party RAM glitches (CFRU animation
+-- write-backs, DMA, script engine states) that cause mons to briefly "disappear."
 local party_to_box_buffer   = {}   -- buffered deposits: {key, stats, frame}
 local PARTY_TO_BOX_BUFFER_WINDOW = 5  -- ~83ms — long enough for PID detector to fire
+
+-- Buffered box_to_party events.  Mirrors party_to_box_buffer: a known key must
+-- remain present in the party for BOX_TO_PARTY_BUFFER_WINDOW consecutive frames
+-- before the event is sent.  Prevents false "withdrawal" events from 1-frame
+-- party RAM glitches where mons transiently appear then vanish.
+local box_to_party_buffer    = {}   -- buffered withdrawals: {key, frame}
+local BOX_TO_PARTY_BUFFER_WINDOW = 5  -- ~83ms — matches party_to_box window
 
 -- PID-based swap detector state
 local PID_SWAP_THRESHOLD     = 3   -- ≥N slots changed since stable = swap
@@ -1623,6 +1632,9 @@ local function on_frame()
                     #party_to_box_buffer))
                 party_to_box_buffer = {}
             end
+            -- Discard buffered box_to_party events (same reasoning — transient
+            -- keys from the borrowed party are not real withdrawals).
+            box_to_party_buffer = {}
             console.log(string.format(
                 "[SLink-FRLGE] ★ PID SWAP: %d/6 slots differ from stable baseline; freezing party diff",
                 diff))
@@ -1691,6 +1703,7 @@ local function on_frame()
             prev_party = curr_party
             gift_capture_buffer  = {}
             party_to_box_buffer  = {}  -- any pre-freeze deposits are no longer trustworthy
+            box_to_party_buffer  = {}  -- any pre-freeze withdrawals are no longer trustworthy
         end
     end
 
@@ -1825,6 +1838,14 @@ local function on_frame()
                             if sc.key == old_k then sc.key = new_k end
                         end
 
+                        -- Buffered box_to_party/party_to_box referencing old key
+                        for _, buf in ipairs(box_to_party_buffer) do
+                            if buf.key == old_k then buf.key = new_k end
+                        end
+                        for _, buf in ipairs(party_to_box_buffer) do
+                            if buf.key == old_k then buf.key = new_k end
+                        end
+
                         -- Notify server
                         send({event="key_change", old_key=old_k, new_key=new_k},
                              "key_change:"..old_k:sub(1,8).."->"..new_k:sub(1,8), true)
@@ -1872,9 +1893,23 @@ local function on_frame()
                     console.log(string.format("[SLink-FRLGE] [DIAG] capture BLOCKED by all_known_keys: %s slot=%d battle=%s grace=%d",
                         k:sub(1,8), info.slot, tostring(in_battle), post_battle_frames))
                 end
-                -- Previously seen key reappeared → fire box_to_party immediately.
-                send({event="box_to_party", key=k, area_id=area},
-                     "box_to_party:"..k:sub(1,8), true)
+                -- Previously seen key reappeared → buffer for confirmation.
+                -- Cross-cancel any pending party_to_box for this key (flicker protection).
+                for pi = #party_to_box_buffer, 1, -1 do
+                    if party_to_box_buffer[pi].key == k then
+                        table.remove(party_to_box_buffer, pi)
+                    end
+                end
+                -- Dedup: skip if already buffered.
+                local already_buffered = false
+                for _, buf in ipairs(box_to_party_buffer) do
+                    if buf.key == k then already_buffered = true; break end
+                end
+                if not already_buffered then
+                    box_to_party_buffer[#box_to_party_buffer + 1] = {
+                        key = k, frame = frame_count
+                    }
+                end
             else
                 -- New key outside battle → gift/starter/trade
                 -- Before nuzlocke_active (no Pokéballs), this is always the starter —
@@ -1967,6 +2002,12 @@ local function on_frame()
             -- cancel the event before it goes out.  Without this buffer, the
             -- first slot rewrite of a swap fires a spurious party_to_box for
             -- whatever was in slot 0 (e.g. Charmander).
+            -- Cross-cancel any pending box_to_party for this key (flicker protection).
+            for pi = #box_to_party_buffer, 1, -1 do
+                if box_to_party_buffer[pi].key == k then
+                    table.remove(box_to_party_buffer, pi)
+                end
+            end
             if not in_battle and prev_info.hp > 0 and not sync_written_keys[k]
                and not party_frozen then
                 local already_buffered = false
@@ -2057,14 +2098,36 @@ local function on_frame()
     -- Entries older than PARTY_TO_BOX_BUFFER_WINDOW are confirmed real (no
     -- swap triggered) and sent.  If party_frozen was triggered, the buffer
     -- was already cleared by the PID detector.
+    -- Presence validation: only fire if key is STILL absent from curr_party.
     if #party_to_box_buffer > 0 and not party_frozen and not borrowed_battle then
         local i = 1
         while i <= #party_to_box_buffer do
             local buf = party_to_box_buffer[i]
             if frame_count - buf.frame >= PARTY_TO_BOX_BUFFER_WINDOW then
-                send({event="party_to_box", key=buf.key, stats=buf.stats},
-                     "party_to_box:"..buf.key:sub(1,8), true)
+                if not curr_party[buf.key] then
+                    send({event="party_to_box", key=buf.key, stats=buf.stats},
+                         "party_to_box:"..buf.key:sub(1,8), true)
+                end
                 table.remove(party_to_box_buffer, i)
+            else
+                i = i + 1
+            end
+        end
+    end
+
+    -- ── box_to_party buffer: flush confirmed withdrawals ─────────────────────
+    -- Entries older than BOX_TO_PARTY_BUFFER_WINDOW are confirmed real and sent.
+    -- Presence validation: only fire if key is STILL in curr_party.
+    if #box_to_party_buffer > 0 and not party_frozen and not borrowed_battle then
+        local i = 1
+        while i <= #box_to_party_buffer do
+            local buf = box_to_party_buffer[i]
+            if frame_count - buf.frame >= BOX_TO_PARTY_BUFFER_WINDOW then
+                if curr_party[buf.key] then
+                    send({event="box_to_party", key=buf.key, area_id=area},
+                         "box_to_party:"..buf.key:sub(1,8), true)
+                end
+                table.remove(box_to_party_buffer, i)
             else
                 i = i + 1
             end
