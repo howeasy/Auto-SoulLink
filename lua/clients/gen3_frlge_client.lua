@@ -817,14 +817,12 @@ local _last_party_pids       = {[0]=0,[1]=0,[2]=0,[3]=0,[4]=0,[5]=0}
 local _last_pid_change_frame = 0
 local _stable_party_pids     = {[0]=0,[1]=0,[2]=0,[3]=0,[4]=0,[5]=0}
 local pre_swap_pids          = nil -- pre-swap snapshot used for revert detection
--- Authoritative real-party source when the profile provides one (CFRU/RR
--- backup buffer at M.REAL_PARTY_BACKUP_ADDR).  Verified at script startup;
--- if the backup doesn't match the live party, falls back to snapshot mode.
--- NOTE: the backup buffer is only updated by the engine before borrowed-party
--- battles — it does NOT track normal catches/deposits.  The stable baseline
--- cross-check prevents stale backup from triggering false freezes.
+-- CFRU/RR real-party backup buffer (M.REAL_PARTY_BACKUP_ADDR).  Only used
+-- for REVERT detection during an active freeze — the engine saves the real
+-- party here before a borrowed-party swap, so "live == backup" is the
+-- authoritative unfreeze signal.  NOT used for freeze triggering (it goes
+-- stale between swaps; _stable_party_pids is the freeze baseline).
 local _backup_trusted        = false
-local _stale_backup_logged   = false  -- one-shot log for stale backup detection
 
 -- Per-session:
 local all_known_keys   = {}   -- all keys ever seen in party or box
@@ -1582,71 +1580,46 @@ local function on_frame()
     end
 
     -- Always maintain stable baseline — tracks gradual party changes (catches,
-    -- deposits) regardless of backup trust.  Without this, a stale backup
-    -- buffer diverges by ≥PID_SWAP_THRESHOLD after enough party changes and
-    -- triggers false freezes.  Guarded by `not party_frozen` so the borrowed
-    -- party never contaminates the baseline.
+    -- deposits) so the freeze detector never triggers on normal gameplay.
+    -- Guarded by `not party_frozen` so the borrowed party never contaminates it.
     if not party_frozen and frame_count - _last_pid_change_frame >= PID_STABILITY_WINDOW then
         for i = 0, 5 do _stable_party_pids[i] = _curr_pids[i] end
     end
 
-    -- Determine the authoritative reference PIDs for this frame.
-    local _ref_pids
-    if _backup_trusted then
-        _ref_pids = M.readBackupPartyPids() or _stable_party_pids
-    else
-        _ref_pids = _stable_party_pids
-    end
-
+    -- Freeze detection always uses the stable baseline (tracks the real party
+    -- through normal catches/deposits).  The backup buffer is NOT used here —
+    -- it only updates before borrowed-party battles and goes stale otherwise.
     local _pid_reverted = false
     if not party_frozen then
-        local diff = _pids_diff_count(_curr_pids, _ref_pids)
+        local diff = _pids_diff_count(_curr_pids, _stable_party_pids)
         if diff >= PID_SWAP_THRESHOLD then
-            -- Cross-check: a real borrowed-party swap is sudden — BOTH the
-            -- backup AND the stable baseline disagree with live.  If only the
-            -- backup disagrees (gradual drift from catches/deposits), the
-            -- stable baseline still tracks the live party → skip freeze.
-            local stable_diff = _backup_trusted
-                and _pids_diff_count(_curr_pids, _stable_party_pids) or diff
-            if stable_diff < PID_SWAP_THRESHOLD then
-                if not _stale_backup_logged then
-                    console.log(string.format(
-                        "[SLink-FRLGE] backup stale (%d/6 differ) — stable baseline matches; skipping freeze",
-                        diff))
-                    _stale_backup_logged = true
-                end
-            else
-                _stale_backup_logged = false
-                party_frozen           = true
-                freeze_frames_left     = FREEZE_TIMEOUT_FRAMES
-                pending_freeze_release = false
-                pre_swap_pids          = {}
-                for i = 0, 5 do pre_swap_pids[i] = _ref_pids[i] end
-                pending_faint_debounce = {}
-                gift_capture_buffer    = {}
-                -- Discard any buffered party_to_box events — the "missing" keys
-                -- were the real party that just got swapped out, not deposits.
-                if #party_to_box_buffer > 0 then
-                    console.log(string.format(
-                        "[SLink-FRLGE]   ↳ discarding %d buffered party_to_box (borrowed-party swap)",
-                        #party_to_box_buffer))
-                    party_to_box_buffer = {}
-                end
+            party_frozen           = true
+            freeze_frames_left     = FREEZE_TIMEOUT_FRAMES
+            pending_freeze_release = false
+            pre_swap_pids          = {}
+            for i = 0, 5 do pre_swap_pids[i] = _stable_party_pids[i] end
+            pending_faint_debounce = {}
+            gift_capture_buffer    = {}
+            -- Discard any buffered party_to_box events — the "missing" keys
+            -- were the real party that just got swapped out, not deposits.
+            if #party_to_box_buffer > 0 then
                 console.log(string.format(
-                    "[SLink-FRLGE] ★ PID SWAP: %d/6 slots differ from %s; freezing party diff",
-                    diff, _backup_trusted and "backup buffer" or "stable snapshot"))
+                    "[SLink-FRLGE]   ↳ discarding %d buffered party_to_box (borrowed-party swap)",
+                    #party_to_box_buffer))
+                party_to_box_buffer = {}
             end
-        else
-            _stale_backup_logged = false
+            console.log(string.format(
+                "[SLink-FRLGE] ★ PID SWAP: %d/6 slots differ from stable baseline; freezing party diff",
+                diff))
         end
     else
-        -- While frozen: revert is "live party matches the reference again".
-        -- When backup is trusted, _ref_pids is the live backup (changes if
-        -- the engine updates the backup mid-battle — unlikely but safe).
-        -- When using snapshot mode, _ref_pids = pre_swap_pids effectively
-        -- (since stable doesn't update while frozen).
+        -- While frozen: revert = "live party matches the real party again".
+        -- When backup is trusted, the engine saved the real party there before
+        -- the swap — use it as the authoritative revert signal.
+        -- Otherwise fall back to pre_swap_pids (stable baseline at freeze time).
         if _backup_trusted then
-            if _pids_all_match(_curr_pids, _ref_pids) then
+            local _bp = M.readBackupPartyPids()
+            if _bp and _pids_all_match(_curr_pids, _bp) then
                 _pid_reverted = true
             end
         elseif pre_swap_pids and _pids_all_match(_curr_pids, pre_swap_pids) then
@@ -1692,7 +1665,6 @@ local function on_frame()
             pending_faint_debounce = {}  -- clear stale debounce state
             -- Reset PID detector state so the next swap re-baselines cleanly.
             pre_swap_pids            = nil
-            _stale_backup_logged     = false
             for i = 0, 5 do _stable_party_pids[i] = _curr_pids[i] end
             _last_pid_change_frame   = frame_count
             -- Start settle period: keep prev_party synced for a few frames
