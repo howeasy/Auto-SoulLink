@@ -533,8 +533,9 @@ local _display_cache = {}  -- key → {nickname, species_id, held_item_id, abili
 
 local function build_party_snapshot(battle_active)
     if M.PARTY_IN_SB1 and M.PARTY_BASE == 0 then return {} end
-    -- Active battler detection: read gBattleMons[0] for the singles active mon (species+level).
-    -- In doubles, getBattlerForPartySlot() is used instead to identify both active slots.
+    -- Active battler detection (singles & doubles): primary path is gBattlerPartyIndexes
+    -- via getBattlerForPartySlot(). Species+level match against gBattleMons[0] is kept
+    -- as a fallback for when the index read is stale (e.g. CFRU address drift).
     local player_species, player_level, player_status = 0, 0, 0
     if battle_active and M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
         player_species = mem_u16(M.BATTLE_MONS_ADDR + 0x00)
@@ -543,6 +544,14 @@ local function build_party_snapshot(battle_active)
         player_status  = memory.read_u32_le(M.BATTLE_MONS_ADDR + M.BATTLE_MON_STATUS_OFF)
     end
     local is_doubles_battle = battle_active and M.isDoubleBattle()
+    -- Bounds check on gBattlerPartyIndexes[0]: valid party slots are 0–5. A value
+    -- ≥ 6 means the address is stale/wrong, in which case the species+level fallback
+    -- is allowed to fire below.
+    local indexes_trustworthy = false
+    if battle_active and M.BATTLER_PARTY_INDEXES_ADDR then
+        local idx0 = memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR)
+        if idx0 < 6 then indexes_trustworthy = true end
+    end
     local count = mem_u8(M.PARTY_COUNT_ADDR)
     local snap  = {}
     for i = 0, count - 1 do
@@ -591,16 +600,20 @@ local function build_party_snapshot(battle_active)
             if (not final_aid or final_aid == 0) and _ability_cache[k] then
                 final_aid = _ability_cache[k]
             end
-            -- Active battler detection.
-            -- Doubles: use getBattlerForPartySlot (returns battler index 0/2 or -1) — unambiguous.
-            -- Singles: existing species+level match against gBattleMons[0] — unchanged from before.
+            -- Active battler detection (unified singles & doubles).
+            -- Primary: getBattlerForPartySlot reads gBattlerPartyIndexes[0/2] — unambiguous.
+            -- Fallback: species+level match against gBattleMons[0] when the index read
+            -- appears stale (idx0 ≥ 6, e.g. CFRU address drift), preserving prior singles
+            -- behaviour on profiles where gBattlerPartyIndexes can't be trusted.
             local active_battler_idx = nil
-            if is_doubles_battle then
+            if battle_active then
                 local b = M.getBattlerForPartySlot(i)
-                if b >= 0 then active_battler_idx = b end
-            elseif battle_active and dc.species_id > 0
-                    and dc.species_id == player_species and level == player_level then
-                active_battler_idx = 0
+                if b >= 0 then
+                    active_battler_idx = b
+                elseif not indexes_trustworthy and dc.species_id > 0
+                        and dc.species_id == player_species and level == player_level then
+                    active_battler_idx = 0
+                end
             end
             local is_active = active_battler_idx ~= nil and dc.species_id > 0
             -- Status: use live gBattleMons value for the active battler; party struct otherwise.
@@ -2526,10 +2539,12 @@ local function on_frame()
                 -- Primary: read full team from gEnemyParty if count is valid (vanilla/AP).
                 local ok_ep, full_team = pcall(M.readEnemyParty)
                 if ok_ep and full_team and #full_team > 1 then
-                    -- Doubles: use gBattlerPartyIndexes[1/3] for unambiguous active detection.
-                    -- gBattlerPartyIndexes is u16[4]; battler N → offset BATTLER_PARTY_INDEXES_ADDR + N*2.
-                    -- Singles: fall back to species+level (identical to previous behaviour).
-                    local ep_idx1 = (is_doubles_battle and M.BATTLER_PARTY_INDEXES_ADDR)
+                    -- Active detection (unified singles & doubles): gBattlerPartyIndexes[1/3]
+                    -- is primary; species+level matching against gBattleMons[1] is the
+                    -- fallback when the index read is stale (≥ 6 → CFRU address drift).
+                    -- gBattlerPartyIndexes is u16[4]; battler N → BATTLER_PARTY_INDEXES_ADDR + N*2.
+                    -- battler 3 (foe2) is only read in doubles.
+                    local ep_idx1 = M.BATTLER_PARTY_INDEXES_ADDR
                         and memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR + 2)   -- battler 1 party slot
                     local ep_idx3 = (is_doubles_battle and M.BATTLER_PARTY_INDEXES_ADDR)
                         and memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR + 6)   -- battler 3 party slot
@@ -2539,19 +2554,16 @@ local function on_frame()
                     if ep_idx1 and ep_idx1 >= 6 then ep_idx1 = nil end
                     if ep_idx3 and ep_idx3 >= 6 then ep_idx3 = nil end
                     for idx, mon in ipairs(full_team) do
-                        local is_foe1, is_foe2
-                        if is_doubles_battle then
-                            local slot = idx - 1   -- 0-indexed party slot
-                            is_foe1 = ep_idx1 ~= nil and (slot == ep_idx1)
-                            is_foe2 = ep_idx3 ~= nil and (slot == ep_idx3)
-                            -- Fallback to species+level if index reads unavailable
-                            if ep_idx1 == nil then
-                                is_foe1 = (mon.species_id == foe_species  and mon.level == foe_level)
-                            end
+                        local slot = idx - 1   -- 0-indexed party slot
+                        local is_foe1, is_foe2 = false, false
+                        if ep_idx1 ~= nil then
+                            is_foe1 = (slot == ep_idx1)
                         else
-                            -- Singles: existing species+level match — unchanged from before.
+                            -- Fallback when gBattlerPartyIndexes unavailable/stale
                             is_foe1 = (mon.species_id == foe_species and mon.level == foe_level)
-                            is_foe2 = false
+                        end
+                        if is_doubles_battle and ep_idx3 ~= nil then
+                            is_foe2 = (slot == ep_idx3)
                         end
                         mon.active = is_foe1 or is_foe2
                         if is_foe1 then
