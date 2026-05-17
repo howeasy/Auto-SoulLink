@@ -594,14 +594,27 @@ class SoulLinkState:
             self._set_area_state(area_id, AreaStatus.PENDING_BOTH, player=player_id)
         self._save()
 
+    def _is_gift_capture(self, area_id: str, is_egg: bool) -> bool:
+        """Effective gift status for a capture event.
+
+        True if the area is a known gift area OR the capture is a definitive egg
+        from outside the daycare (NPC egg-givers in encounter areas).
+        """
+        if self.adapter.is_gift_area(area_id):
+            return True
+        if is_egg and not self.adapter.is_daycare_area(area_id):
+            return True
+        return False
+
     def _handle_capture(self, player_id: str, msg: dict):
         area_id = msg.get("area_id", "")
         key     = msg.get("key", "")
         if not area_id or not key:
             return
+        is_egg  = bool(msg.get("is_egg", False))
 
         # A catch in any non-gift area confirms Pokéballs are available.
-        if not self.adapter.is_gift_area(area_id):
+        if not self._is_gift_capture(area_id, is_egg):
             self.pokeballs_obtained[player_id] = True
 
         # ── Shiny Clause (always on) ──────────────────────────────────────────
@@ -930,11 +943,11 @@ class SoulLinkState:
         # when party_size hasn't been reported yet — prevents quarantining the
         # starter before the first hello sets the actual count.
         party_count = self.party_size.get(player_id, 0)
-        if not in_box and party_count >= 1 and not self.adapter.is_gift_area(area_id):
+        if not in_box and party_count >= 1 and not self._is_gift_capture(area_id, is_egg):
             self.queued_commands[player_id].append({"cmd": "box_mon", "key": key})
             log.info(f"[{player_id}] quarantine: {key[:8]} → box (pending link)")
-        elif not in_box and self.adapter.is_gift_area(area_id):
-            log.info(f"[{player_id}] skip quarantine: {key[:8]} (gift area {area_id})")
+        elif not in_box and self._is_gift_capture(area_id, is_egg):
+            log.info(f"[{player_id}] skip quarantine: {key[:8]} (gift area {area_id}{', egg' if is_egg else ''})")
         elif not in_box:
             log.info(f"[{player_id}] skip quarantine: {key[:8]} (only mon in party)")
         # Cache stats from capture event so party_mon can restore them later.

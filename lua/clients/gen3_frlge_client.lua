@@ -1932,6 +1932,9 @@ local function on_frame()
             local cap_sid  = ok_ps and ps and ps.species_id    or 0
             local cap_iid  = ok_ps and ps and ps.held_item_id  or 0
             local cap_aid  = ok_ps and ps and ps.ability_id    or 0
+            -- isEgg = FLAGS bit 2 — definitive egg detection (NPC gifts + daycare).
+            local cap_flags  = mem_u8(M.PARTY_BASE + info.slot * M.MON_SIZE + M.OFF_FLAGS)
+            local cap_is_egg = (cap_flags & 0x04) ~= 0
             -- Populate display + nick caches so snapshot/HUD use fresh data.
             _display_cache[k] = {nickname=cap_nick, species_id=cap_sid,
                                  held_item_id=cap_iid, ability_id=cap_aid}
@@ -1945,7 +1948,8 @@ local function on_frame()
                 all_known_keys[k]        = true
                 send({event="capture", key=k, hp=info.hp, maxHP=info.maxHP,
                       level=info.level, area_id=evt_area,
-                      nickname=cap_nick, species_id=cap_sid, held_item_id=cap_iid},
+                      nickname=cap_nick, species_id=cap_sid, held_item_id=cap_iid,
+                      is_egg=cap_is_egg},
                      "capture(battle):"..k:sub(1,8), true)
             elseif all_known_keys[k] then
                 -- DEBUG: log when a "new" party key is blocked by all_known_keys during battle
@@ -1999,7 +2003,7 @@ local function on_frame()
                     gift_capture_buffer[#gift_capture_buffer + 1] = {
                         key=k, hp=info.hp, maxHP=info.maxHP, level=info.level,
                         area=gift_area, nickname=cap_nick, species_id=cap_sid,
-                        held_item_id=cap_iid, frame=frame_count
+                        held_item_id=cap_iid, is_egg=cap_is_egg, frame=frame_count
                     }
                     -- Note: borrowed-party detection no longer keys off
                     -- buffer length; the PID detector fires earlier and
@@ -2207,7 +2211,7 @@ local function on_frame()
                 send({event="capture", key=buf.key, hp=buf.hp, maxHP=buf.maxHP,
                       level=buf.level, area_id=buf.area,
                       nickname=buf.nickname, species_id=buf.species_id,
-                      held_item_id=buf.held_item_id},
+                      held_item_id=buf.held_item_id, is_egg=buf.is_egg},
                      "capture(gift):"..buf.key:sub(1,8), true)
                 table.remove(gift_capture_buffer, i)
             else

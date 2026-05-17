@@ -50,6 +50,12 @@ _FIXED_SPECIES_GIFTS = frozenset({
     "silph_co_7f",          # Lapras
 })
 
+# Daycare areas — eggs picked up here are bred from deposited mons, not gifts.
+_DAYCARE_AREAS = frozenset({
+    "route5_pokemon_day_care",
+    "four_island_pokemon_day_care",
+})
+
 # RR trainer table: trainer index → {name, class, party_size}
 _RR_TRAINERS: dict[int, dict] = {}
 _rr_trainers_path = os.path.join(_DATA_DIR, "rr_trainers.json")
@@ -284,6 +290,9 @@ class Gen3Adapter(GameAdapter):
 
     def is_fixed_species_gift(self, area_id: str) -> bool:
         return area_id in _FIXED_SPECIES_GIFTS
+
+    def is_daycare_area(self, area_id: str) -> bool:
+        return area_id in _DAYCARE_AREAS
 
     def evo_family(self, species_id: int) -> int:
         return base_form(species_id, self._is_rr)

@@ -81,6 +81,17 @@ class GameRulesAdapter(ABC):
         """
         return False
 
+    def is_daycare_area(self, area_id: str) -> bool:
+        """Return True if the area is a daycare where eggs originate from breeding.
+
+        Used to distinguish egg captures that should be treated as gifts (NPC
+        egg-givers in encounter areas) from daycare-bred eggs (player has
+        already deposited mons; the egg is not a gift).
+
+        Default: False. Adapters override this for games with known daycare areas.
+        """
+        return False
+
     @abstractmethod
     def evo_family(self, species_id: int) -> int:
         """Return the base-form species ID for species lock checks.

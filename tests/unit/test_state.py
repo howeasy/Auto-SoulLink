@@ -1174,6 +1174,46 @@ def test_dynamic_gift_area_no_pokeball_activation(tmp_path, monkeypatch):
     assert not state.pokeballs_obtained["a"]
 
 
+def test_egg_capture_in_encounter_area_treated_as_gift(tmp_path, monkeypatch):
+    """An egg captured in a normal encounter area (NPC egg-giver) is_egg=True must
+    bypass the Pokéball gate and skip quarantine — same as a known gift area."""
+    state = make_fresh_state(tmp_path, monkeypatch)
+    # Player has an existing party member (party_size >= 1 would normally trigger quarantine).
+    state.party_size = {"a": 1, "b": 0}
+    cmds = state.handle_event("a", {"event": "capture", "key": "A:42", "area_id": "route_5",
+                                    "level": 1, "is_egg": True})
+    # No Pokéball gate flip (egg gifts don't require pokéballs).
+    assert not state.pokeballs_obtained["a"], "Egg gift must not activate pokéball gate"
+    # No quarantine command queued (egg gifts skip the box).
+    assert not has_cmd(cmds, "box_mon", "A:42"),         "Egg gift must not be quarantined to box"
+
+
+def test_egg_capture_in_daycare_not_treated_as_gift(tmp_path, monkeypatch):
+    """An egg picked up at the daycare is bred, not a gift — it must follow normal
+    capture rules (pokéball gate activates, quarantine applies)."""
+    state = make_fresh_state(tmp_path, monkeypatch)
+    state.party_size = {"a": 2, "b": 0}
+    cmds = state.handle_event("a", {"event": "capture", "key": "A:43",
+                                    "area_id": "four_island_pokemon_day_care",
+                                    "level": 1, "is_egg": True})
+    # Daycare is NOT a gift area, so pokéball gate fires (daycare requires player to be
+    # active in the game with full progression, and the egg is the result of breeding).
+    assert state.pokeballs_obtained["a"], "Daycare egg must activate pokéball gate"
+    # Quarantine applies (egg must be linked or boxed).
+    assert has_cmd(cmds, "box_mon", "A:43"),         "Daycare egg must be quarantined like a normal capture"
+
+
+def test_capture_without_is_egg_field_unchanged(tmp_path, monkeypatch):
+    """Old clients (no is_egg field) must continue to work — defaults to False."""
+    state = make_fresh_state(tmp_path, monkeypatch)
+    state.party_size = {"a": 2, "b": 0}
+    cmds = state.handle_event("a", {"event": "capture", "key": "A:1",
+                                    "area_id": "route_1", "level": 5})
+    # Normal capture flow: pokéball gate activates, quarantine applies.
+    assert state.pokeballs_obtained["a"]
+    assert has_cmd(cmds, "box_mon", "A:1")
+
+
 def test_dynamic_gift_areas_dont_collide(tmp_path, monkeypatch):
     """Two different gift_* areas must NOT share encounters (the old 'gift' fallback bug)."""
     state = make_fresh_state(tmp_path, monkeypatch)

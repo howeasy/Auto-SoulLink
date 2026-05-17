@@ -71,6 +71,20 @@ class TestFRLGRules:
     def test_gift_area_empty(self, adapter):
         assert adapter.is_gift_area("") is False
 
+    # ── is_daycare_area ──────────────────────────────────────────────────
+
+    def test_daycare_area_route5(self, adapter):
+        assert adapter.is_daycare_area("route5_pokemon_day_care") is True
+
+    def test_daycare_area_four_island(self, adapter):
+        assert adapter.is_daycare_area("four_island_pokemon_day_care") is True
+
+    def test_daycare_area_normal_route(self, adapter):
+        assert adapter.is_daycare_area("route_5") is False
+
+    def test_daycare_area_empty(self, adapter):
+        assert adapter.is_daycare_area("") is False
+
     # ── evo_family ────────────────────────────────────────────────────────
 
     def test_evo_family_base_form(self, adapter):
