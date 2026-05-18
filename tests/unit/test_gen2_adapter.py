@@ -543,6 +543,45 @@ def test_move_data_count(adapter):
     assert valid == 251
 
 
+# ── Phase 6: Encounter tables ────────────────────────────────────────────
+
+def test_encounter_table_route_29(adapter):
+    enc = adapter.encounter_table("route_29")
+    assert enc is not None
+    # Gen 2 has time-of-day variants
+    assert "Morn" in enc
+    assert "Day" in enc
+    assert "Nite" in enc
+
+
+def test_encounter_table_route_29_has_sentret(adapter):
+    enc = adapter.encounter_table("route_29")
+    morn = {e["name"] for e in enc["Morn"]}
+    assert "Sentret" in morn
+
+
+def test_encounter_table_nite_has_hoothoot(adapter):
+    """Hoothoot is a night-only encounter on Route 29/30/31."""
+    enc = adapter.encounter_table("route_29")
+    nite = {e["name"] for e in enc["Nite"]}
+    assert "Hoothoot" in nite
+
+
+def test_encounter_table_unknown_area(adapter):
+    assert adapter.encounter_table("nonexistent_area") is None
+
+
+def test_encounter_table_entry_schema(adapter):
+    enc = adapter.encounter_table("route_29")
+    for method, entries in enc.items():
+        for entry in entries:
+            assert "species_id" in entry
+            assert "name" in entry
+            assert "rate" in entry
+            assert "min_level" in entry
+            assert "max_level" in entry
+
+
 # ── Registry ─────────────────────────────────────────────────────────────
 
 def test_adapter_registered():

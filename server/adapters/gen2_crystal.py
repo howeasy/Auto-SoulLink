@@ -118,6 +118,16 @@ if os.path.exists(_moves_path):
 else:
     log.warning("Gen 2 moves.json not found: %s", _moves_path)
 
+# ── Load Gen 2 wild encounter tables (Phase 6) ─────────────────────────
+_GEN2_ENCOUNTERS: dict[str, dict[str, list[dict]]] = {}
+_enc_path = os.path.join(_DATA_DIR, "encounter_tables.json")
+if os.path.exists(_enc_path):
+    with open(_enc_path, "r") as _f:
+        for _area_id, _methods in json.load(_f).get("areas", {}).items():
+            _GEN2_ENCOUNTERS[_area_id] = _methods
+else:
+    log.warning("Gen 2 encounter_tables.json not found: %s", _enc_path)
+
 # Move split → integer ID expected by renderer (0=Physical, 1=Special, 2=Status)
 _SPLIT_NAME_TO_ID = {"Physical": 0, "Special": 1, "Status": 2}
 
@@ -168,6 +178,13 @@ class Gen2CrystalAdapter(GameAdapter):
             "split": _SPLIT_NAME_TO_ID.get(m["split"], 2),
             "effect_chance": m.get("effect_chance", 0),
         }
+
+    # ── Encounter tables (Phase 6) ───────────────────────────────────────
+
+    def encounter_table(self, area_id: str) -> dict[str, list[dict]] | None:
+        """Return wild encounter data keyed by method (Morn/Day/Nite/Surf/...).
+        Partial coverage — see data/games/gen2_crystal/encounter_tables.json."""
+        return _GEN2_ENCOUNTERS.get(area_id)
 
     def evo_family(self, species_id: int) -> int:
         return base_form(species_id, False)

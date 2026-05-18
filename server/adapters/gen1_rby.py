@@ -47,17 +47,29 @@ _TYPE_NAME_TO_ID = {v: k for k, v in _TYPE_IDS.items()}
 _SPLIT_NAME_TO_ID = {"Physical": 0, "Special": 1, "Status": 2}
 
 # ── Load Gen 1 moves data (Phase 3) ─────────────────────────────────────
-_GEN1_MOVES: dict[int, dict] = {}
-_moves_path = os.path.join(
+_GEN1_DATA_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-    "data", "games", "gen1_rby", "moves.json",
+    "data", "games", "gen1_rby",
 )
+_GEN1_MOVES: dict[int, dict] = {}
+_moves_path = os.path.join(_GEN1_DATA_DIR, "moves.json")
 if os.path.exists(_moves_path):
     with open(_moves_path, "r") as _f:
         for _entry in json.load(_f).get("moves", []):
             _GEN1_MOVES[int(_entry["id"])] = _entry
 else:
     log.warning("Gen 1 moves.json not found: %s", _moves_path)
+
+# ── Load Gen 1 wild encounter tables (Phase 6) ─────────────────────────
+_GEN1_ENCOUNTERS: dict[str, dict[str, list[dict]]] = {}
+_enc_path = os.path.join(_GEN1_DATA_DIR, "encounter_tables.json")
+if os.path.exists(_enc_path):
+    with open(_enc_path, "r") as _f:
+        _raw_enc = json.load(_f).get("areas", {})
+        for _area_id, _methods in _raw_enc.items():
+            _GEN1_ENCOUNTERS[_area_id] = _methods
+else:
+    log.warning("Gen 1 encounter_tables.json not found: %s", _enc_path)
 
 # Gen 1 item names (common items)
 _ITEM_NAMES = {
@@ -359,6 +371,13 @@ class Gen1Adapter(GameAdapter):
             "pp": m["pp"],
             "split": _SPLIT_NAME_TO_ID.get(m["split"], 2),
         }
+
+    # ── Encounter tables (Phase 6) ───────────────────────────────────────
+
+    def encounter_table(self, area_id: str) -> dict[str, list[dict]] | None:
+        """Return wild encounter data for the given area, or None if unknown.
+        Partial coverage — see data/games/gen1_rby/encounter_tables.json."""
+        return _GEN1_ENCOUNTERS.get(area_id)
 
     def item_name(self, item_id: int) -> str:
         if not item_id:

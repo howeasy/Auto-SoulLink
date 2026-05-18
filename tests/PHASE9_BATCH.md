@@ -254,7 +254,22 @@ Both clients' `build_party_snapshot` attach `moves[]`, `pp[]`, and `pp_bonuses` 
 
 ## Phase 6 — Wild encounter tables
 
-*Filled in as Phase 6 lands.*
+**What changed**:
+- `data/games/gen{1_rby,2_crystal}/encounter_tables.json` — encounter data per area, keyed by method (Grass/Water for Gen 1; Morn/Day/Nite/Surf/... for Gen 2). Initial coverage is partial (early-game routes); the schema supports incremental expansion.
+- Both adapters implement `encounter_table(area_id)` returning the per-method entries.
+- The stream overlay `/stream/enc-table-{a,b}` already calls `adapter.encounter_table()` and is gen-agnostic — no overlay changes required.
+
+**Verification**:
+1. Run the regular SLink client + server.
+2. Open `http://localhost:8080/stream/enc-table-a` (or -b) in a browser.
+3. Walk player A's tracker into a covered area:
+   - Gen 1: Route 1, Route 2, Viridian Forest, Mt. Moon 1F, etc.
+   - Gen 2: Route 29, Route 30, Route 31, Sprout Tower, Union Cave.
+4. The overlay should show the species/rates/levels for that area.
+5. For uncovered areas, overlay shows blank — that's expected.
+6. **FAIL** if overlay shows blank on a covered route (encounter JSON didn't load or area_id mismatch).
+
+**Coverage expansion**: edit the relevant `encounter_tables.json` file to add more areas. The adapter loads on import — restart server to pick up changes.
 
 ---
 

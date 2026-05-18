@@ -1,0 +1,87 @@
+{
+  "_comment": "Gen 2 Crystal wild encounter tables per pret/pokecrystal data/wild/. Methods: 'Morn', 'Day', 'Nite' for grass; 'Surf', 'Old Rod', 'Good Rod', 'Super Rod' for water. Partial coverage — early-game Johto routes shipped; expand by editing this file.",
+  "areas": {
+    "route_29": {
+      "Morn": [
+        {"species_id": 16,  "name": "Pidgey",   "rate": 50, "min_level": 2, "max_level": 4},
+        {"species_id": 19,  "name": "Rattata",  "rate": 20, "min_level": 2, "max_level": 4},
+        {"species_id": 161, "name": "Sentret",  "rate": 30, "min_level": 2, "max_level": 4}
+      ],
+      "Day": [
+        {"species_id": 16,  "name": "Pidgey",   "rate": 30, "min_level": 2, "max_level": 4},
+        {"species_id": 19,  "name": "Rattata",  "rate": 20, "min_level": 2, "max_level": 4},
+        {"species_id": 161, "name": "Sentret",  "rate": 50, "min_level": 2, "max_level": 4}
+      ],
+      "Nite": [
+        {"species_id": 19,  "name": "Rattata",  "rate": 50, "min_level": 2, "max_level": 4},
+        {"species_id": 163, "name": "Hoothoot", "rate": 50, "min_level": 2, "max_level": 4}
+      ]
+    },
+    "route_30": {
+      "Morn": [
+        {"species_id":  10, "name": "Caterpie", "rate": 25, "min_level": 3, "max_level": 4},
+        {"species_id":  13, "name": "Weedle",   "rate": 25, "min_level": 3, "max_level": 4},
+        {"species_id":  16, "name": "Pidgey",   "rate": 30, "min_level": 3, "max_level": 5},
+        {"species_id": 161, "name": "Sentret",  "rate": 15, "min_level": 4, "max_level": 5},
+        {"species_id": 167, "name": "Spinarak", "rate":  5, "min_level": 5, "max_level": 5}
+      ],
+      "Day": [
+        {"species_id":  10, "name": "Caterpie", "rate": 30, "min_level": 3, "max_level": 5},
+        {"species_id":  13, "name": "Weedle",   "rate": 30, "min_level": 3, "max_level": 5},
+        {"species_id":  16, "name": "Pidgey",   "rate": 20, "min_level": 3, "max_level": 5},
+        {"species_id": 161, "name": "Sentret",  "rate": 20, "min_level": 4, "max_level": 5}
+      ],
+      "Nite": [
+        {"species_id":  19, "name": "Rattata",   "rate": 20, "min_level": 4, "max_level": 5},
+        {"species_id":  41, "name": "Zubat",     "rate": 20, "min_level": 4, "max_level": 5},
+        {"species_id": 163, "name": "Hoothoot",  "rate": 30, "min_level": 4, "max_level": 6},
+        {"species_id": 165, "name": "Ledyba",    "rate": 30, "min_level": 5, "max_level": 5}
+      ]
+    },
+    "route_31": {
+      "Morn": [
+        {"species_id":  10, "name": "Caterpie", "rate": 25, "min_level": 4, "max_level": 5},
+        {"species_id":  13, "name": "Weedle",   "rate": 25, "min_level": 4, "max_level": 5},
+        {"species_id":  16, "name": "Pidgey",   "rate": 25, "min_level": 4, "max_level": 5},
+        {"species_id":  43, "name": "Oddish",   "rate": 15, "min_level": 5, "max_level": 5},
+        {"species_id":  46, "name": "Paras",    "rate": 10, "min_level": 5, "max_level": 6}
+      ],
+      "Nite": [
+        {"species_id":  41, "name": "Zubat",     "rate": 25, "min_level": 4, "max_level": 5},
+        {"species_id": 163, "name": "Hoothoot",  "rate": 25, "min_level": 4, "max_level": 6},
+        {"species_id": 165, "name": "Ledyba",    "rate": 25, "min_level": 5, "max_level": 5},
+        {"species_id": 167, "name": "Spinarak",  "rate": 25, "min_level": 5, "max_level": 5}
+      ]
+    },
+    "sprout_tower": {
+      "Day": [
+        {"species_id":  16, "name": "Pidgey",   "rate": 50, "min_level": 3, "max_level": 5},
+        {"species_id":  19, "name": "Rattata",  "rate": 50, "min_level": 3, "max_level": 5}
+      ],
+      "Nite": [
+        {"species_id":  19, "name": "Rattata",  "rate":100, "min_level": 3, "max_level": 5}
+      ]
+    },
+    "dark_cave_violet": {
+      "Day": [
+        {"species_id":  41, "name": "Zubat",   "rate": 50, "min_level": 2, "max_level": 6},
+        {"species_id":  74, "name": "Geodude", "rate": 50, "min_level": 2, "max_level": 6}
+      ]
+    },
+    "union_cave": {
+      "Day": [
+        {"species_id":  41, "name": "Zubat",   "rate": 40, "min_level": 4, "max_level": 7},
+        {"species_id":  74, "name": "Geodude", "rate": 40, "min_level": 4, "max_level": 7},
+        {"species_id":  95, "name": "Onix",    "rate": 20, "min_level": 4, "max_level": 7}
+      ]
+    },
+    "route_34": {
+      "Morn": [
+        {"species_id":  19, "name": "Rattata",   "rate": 25, "min_level": 10, "max_level": 12},
+        {"species_id":  39, "name": "Jigglypuff","rate": 35, "min_level": 11, "max_level": 13},
+        {"species_id":  43, "name": "Oddish",    "rate": 20, "min_level": 11, "max_level": 13},
+        {"species_id":  17, "name": "Pidgeotto", "rate": 20, "min_level": 12, "max_level": 13}
+      ]
+    }
+  }
+}

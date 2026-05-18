@@ -567,3 +567,36 @@ def test_move_data_count(adapter):
     """All 165 Gen 1 moves should be loaded."""
     valid = sum(1 for i in range(1, 166) if adapter.move_data(i) is not None)
     assert valid == 165
+
+
+# ── Phase 6: Encounter tables ────────────────────────────────────────────
+
+def test_encounter_table_route_1(adapter):
+    enc = adapter.encounter_table("route_1")
+    assert enc is not None
+    assert "Grass" in enc
+    names = {entry["name"] for entry in enc["Grass"]}
+    assert "Pidgey" in names
+    assert "Rattata" in names
+
+
+def test_encounter_table_viridian_forest_has_pikachu(adapter):
+    enc = adapter.encounter_table("viridian_forest")
+    assert enc is not None
+    names = {e["name"] for e in enc["Grass"]}
+    assert "Pikachu" in names
+
+
+def test_encounter_table_unknown_area(adapter):
+    assert adapter.encounter_table("unknown_area_xyz") is None
+
+
+def test_encounter_table_entry_schema(adapter):
+    """Entries must include species_id, rate, min_level, max_level."""
+    enc = adapter.encounter_table("route_1")
+    for entry in enc["Grass"]:
+        assert "species_id" in entry
+        assert "rate" in entry
+        assert "min_level" in entry
+        assert "max_level" in entry
+        assert entry["min_level"] <= entry["max_level"]

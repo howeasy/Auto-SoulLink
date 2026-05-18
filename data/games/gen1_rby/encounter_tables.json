@@ -1,0 +1,79 @@
+{
+  "_comment": "Gen 1 wild encounter tables per pret/pokered data/wild/maps/. Methods: 'Grass' and 'Water'. Each entry has species_id (NatDex), rate (slot weight 0..100), min_level, max_level. Partial coverage — early-game routes shipped; add more by extending this file (regenerate via tools/gen_encounter_tables.py if needed).",
+  "areas": {
+    "route_1": {
+      "Grass": [
+        {"species_id": 16, "name": "Pidgey",  "rate": 50, "min_level": 2, "max_level": 5},
+        {"species_id": 19, "name": "Rattata", "rate": 50, "min_level": 2, "max_level": 4}
+      ]
+    },
+    "route_2": {
+      "Grass": [
+        {"species_id": 16, "name": "Pidgey",   "rate": 45, "min_level": 3, "max_level": 5},
+        {"species_id": 19, "name": "Rattata",  "rate": 45, "min_level": 3, "max_level": 4},
+        {"species_id": 10, "name": "Caterpie", "rate":  5, "min_level": 4, "max_level": 4},
+        {"species_id": 13, "name": "Weedle",   "rate":  5, "min_level": 4, "max_level": 4}
+      ]
+    },
+    "viridian_forest": {
+      "Grass": [
+        {"species_id": 10, "name": "Caterpie", "rate": 30, "min_level": 3, "max_level": 5},
+        {"species_id": 13, "name": "Weedle",   "rate": 30, "min_level": 3, "max_level": 5},
+        {"species_id": 11, "name": "Metapod",  "rate": 15, "min_level": 4, "max_level": 6},
+        {"species_id": 14, "name": "Kakuna",   "rate": 15, "min_level": 4, "max_level": 6},
+        {"species_id": 25, "name": "Pikachu",  "rate":  5, "min_level": 3, "max_level": 5}
+      ]
+    },
+    "route_22": {
+      "Grass": [
+        {"species_id": 19, "name": "Rattata",   "rate": 35, "min_level": 2, "max_level": 4},
+        {"species_id": 21, "name": "Spearow",   "rate": 35, "min_level": 3, "max_level": 5},
+        {"species_id": 29, "name": "Nidoran♀", "rate": 15, "min_level": 2, "max_level": 4},
+        {"species_id": 32, "name": "Nidoran♂", "rate": 15, "min_level": 2, "max_level": 4}
+      ]
+    },
+    "route_3": {
+      "Grass": [
+        {"species_id": 21, "name": "Spearow",   "rate": 35, "min_level": 6, "max_level": 8},
+        {"species_id": 16, "name": "Pidgey",    "rate": 30, "min_level": 6, "max_level": 8},
+        {"species_id": 56, "name": "Mankey",    "rate": 15, "min_level": 7, "max_level": 8},
+        {"species_id": 29, "name": "Nidoran♀", "rate": 10, "min_level": 6, "max_level": 7},
+        {"species_id": 32, "name": "Nidoran♂", "rate": 10, "min_level": 6, "max_level": 7}
+      ]
+    },
+    "mt_moon_1f": {
+      "Grass": [
+        {"species_id": 41, "name": "Zubat",    "rate": 70, "min_level": 6, "max_level": 11},
+        {"species_id": 74, "name": "Geodude",  "rate": 25, "min_level": 7, "max_level": 10},
+        {"species_id": 46, "name": "Paras",    "rate":  4, "min_level": 9, "max_level":  9},
+        {"species_id": 35, "name": "Clefairy", "rate":  1, "min_level": 8, "max_level":  8}
+      ]
+    },
+    "route_25": {
+      "Grass": [
+        {"species_id": 13, "name": "Weedle",   "rate": 35, "min_level":  8, "max_level": 10},
+        {"species_id": 10, "name": "Caterpie", "rate": 35, "min_level":  8, "max_level": 10},
+        {"species_id": 14, "name": "Kakuna",   "rate": 15, "min_level":  9, "max_level": 10},
+        {"species_id": 11, "name": "Metapod",  "rate": 15, "min_level":  9, "max_level": 10}
+      ]
+    },
+    "rock_tunnel_1f": {
+      "Grass": [
+        {"species_id": 41, "name": "Zubat",      "rate": 50, "min_level": 15, "max_level": 17},
+        {"species_id": 74, "name": "Geodude",    "rate": 25, "min_level": 15, "max_level": 17},
+        {"species_id": 66, "name": "Machop",     "rate": 10, "min_level": 15, "max_level": 17},
+        {"species_id": 95, "name": "Onix",       "rate":  5, "min_level": 13, "max_level": 17},
+        {"species_id": 27, "name": "Sandshrew",  "rate":  5, "min_level": 17, "max_level": 17},
+        {"species_id": 56, "name": "Mankey",     "rate":  5, "min_level": 17, "max_level": 17}
+      ]
+    },
+    "power_plant": {
+      "Grass": [
+        {"species_id": 100, "name": "Voltorb",   "rate": 60, "min_level": 21, "max_level": 24},
+        {"species_id":  81, "name": "Magnemite", "rate": 25, "min_level": 22, "max_level": 23},
+        {"species_id":  82, "name": "Magneton",  "rate": 10, "min_level": 23, "max_level": 26},
+        {"species_id":  25, "name": "Pikachu",   "rate":  5, "min_level": 24, "max_level": 24}
+      ]
+    }
+  }
+}
