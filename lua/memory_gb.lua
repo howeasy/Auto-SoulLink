@@ -999,6 +999,23 @@ function M.playSfxRaw(sfx_id)
     return true
 end
 
+-- Maps Gen 3 (FRLG/RR) m4a SE_* sound IDs to semantic event names. The server
+-- emits play_sound commands with these numeric IDs for cross-gen events
+-- (shiny clause, bonus pair formed/rejected). Gen 1/2 profiles bind the
+-- semantic name to a ROM-specific SFX ID via the sfx_ids table (Phase 7).
+M.GEN3_SE_TO_EVENT = {
+    [95] = "shiny",    -- SE_SHINY  (shiny encountered, bonus mon)
+    [26] = "failure",  -- SE_FAILURE (rejection, error)
+    [25] = "success",  -- SE_SUCCESS (bonus pair formed)
+    [22] = "boo",      -- SE_BOO    (partner rejection)
+}
+
+function M.playSfxFromGen3Id(sound_id)
+    local event_name = M.GEN3_SE_TO_EVENT[sound_id]
+    if not event_name then return false end
+    return M.playSfx(event_name)
+end
+
 -- Read the active enemy battler's 4 moves + 4 PP bytes. Returns
 -- {moves=[id1..4], pp=[cur1..4]}, or nil if the profile doesn't declare
 -- enemy_battle_moves_addr. Used by build_enemy_snapshot in battle. Enemy PP

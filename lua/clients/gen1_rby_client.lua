@@ -170,8 +170,9 @@ end
 -- GB screen: 160 × 144
 HUD.init({screen_w = 160, screen_h = 144, hud_x = 2, hud_y = 134, hud_right = 158,
           prompt_y = 36, prompt_h = 10, gameover_y = 50, font_size = 8})
-local hud_show   = HUD.show
-local hud_render = HUD.render
+local hud_show    = HUD.show
+local hud_render  = HUD.render
+local prompt_show = HUD.prompt
 
 -- ── Nick cache for HUD display ────────────────────────────────────────────────
 local nick_cache = {}
@@ -220,6 +221,14 @@ local function dispatch_commands(cmds)
             end
         elseif c.cmd == "hud_show" and c.text then
             hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+        elseif c.cmd == "gui_prompt" and c.text then
+            prompt_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+            console.log("[SLink-RBY]   ↳ gui_prompt: " .. c.text)
+        elseif c.cmd == "play_sound" and c.sound then
+            -- Gen 3 emits m4a SE_* IDs (95=SHINY, 26=FAILURE, 25=SUCCESS, 22=BOO).
+            -- Translated to semantic event names; profile sfx_ids resolves to a
+            -- ROM-specific SFX ID. No-op until Phase 7 sfx_dispatch_addr is set.
+            M.playSfxFromGen3Id(c.sound)
         elseif c.cmd == "box_mon" and c.key then
             -- Cancel any pending party_mon for the same key
             local filtered = {}
