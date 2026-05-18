@@ -205,7 +205,8 @@ class Gen5Adapter(GameAdapter):
 
     # ── GamePresentationAdapter ──────────────────────────────────────────
 
-    def sprite_html(self, species_id: int) -> str:
+    def sprite_html(self, species_id: int, form: int = 0) -> str:
+        # form not yet used by Gen 5 adapter — to be wired when Gen 5 form sprites land
         if not species_id or species_id < 1:
             return ""
         url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{species_id}.png"

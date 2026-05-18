@@ -150,6 +150,51 @@ _GEN4_ITEM_NAMES: dict[int, str] = {
 }
 
 
+# Gen 4 alternate-form sprite mapping.
+# Keys: (species_id, form_byte) tuple matching the form byte from Block B.
+# Values: PokeAPI URL slug — replaces `species_id` in the sprite filename.
+# Form-byte semantics per pret/pokeheartgold include/constants/forms.h (Bulbapedia
+# corroboration: https://bulbapedia.bulbagarden.net/wiki/Pok%C3%A9mon_with_form_differences).
+# Only non-default forms are mapped here — form 0 (the base form) falls back to
+# the plain `<species_id>.png` sprite via the None default in form_sprite_url.
+_FORM_SPRITE: dict[tuple[int, int], str] = {
+    # Unown (201): form byte = letter index (0=A, 1=B, ..., 25=Z, 26=!, 27=?).
+    # PokeAPI uses /pokemon/201-b.png .. 201-z.png plus 201-question and 201-exclamation.
+    **{(201, i): f"201-{chr(ord('a') + i)}" for i in range(1, 26)},
+    (201, 26): "201-exclamation",
+    (201, 27): "201-question",
+    # Castform (351): 0=Normal, 1=Sunny, 2=Rainy, 3=Snowy
+    (351, 1): "351-sunny", (351, 2): "351-rainy", (351, 3): "351-snowy",
+    # Deoxys (386): 0=Normal, 1=Attack, 2=Defense, 3=Speed
+    (386, 1): "386-attack", (386, 2): "386-defense", (386, 3): "386-speed",
+    # Burmy (412) cloaks: 0=Plant, 1=Sandy, 2=Trash
+    (412, 1): "412-sandy", (412, 2): "412-trash",
+    # Wormadam (413) cloaks: 0=Plant, 1=Sandy, 2=Trash
+    (413, 1): "413-sandy", (413, 2): "413-trash",
+    # Cherrim (421): 0=Overcast (sprite default), 1=Sunshine
+    (421, 1): "421-sunshine",
+    # Shellos (422) / Gastrodon (423): 0=West Sea, 1=East Sea
+    (422, 1): "422-east", (423, 1): "423-east",
+    # Rotom (479): 0=Normal, 1=Heat, 2=Wash, 3=Frost, 4=Fan, 5=Mow
+    (479, 1): "479-heat", (479, 2): "479-wash", (479, 3): "479-frost",
+    (479, 4): "479-fan",  (479, 5): "479-mow",
+    # Giratina (487): 0=Altered (sprite default), 1=Origin
+    (487, 1): "487-origin",
+    # Shaymin (492): 0=Land (sprite default), 1=Sky
+    (492, 1): "492-sky",
+    # Arceus (493): each plate sets form byte to 1..17 corresponding to type ID.
+    # PokeAPI hosts 493-<type-slug>.png; mapping by canonical Gen 4 plate order.
+    (493,  1): "493-fighting", (493,  2): "493-flying",   (493,  3): "493-poison",
+    (493,  4): "493-ground",   (493,  5): "493-rock",     (493,  6): "493-bug",
+    (493,  7): "493-ghost",    (493,  8): "493-steel",    (493,  9): "493-fire",
+    (493, 10): "493-water",    (493, 11): "493-grass",    (493, 12): "493-electric",
+    (493, 13): "493-psychic",  (493, 14): "493-ice",      (493, 15): "493-dragon",
+    (493, 16): "493-dark",
+    # Pichu (172): HGSS introduces the Spiky-eared Pichu event form (form byte 1).
+    (172, 1): "172-spiky-eared",
+}
+
+
 class Gen4Adapter(GameAdapter):
     """Adapter for Gen 4: HeartGold/SoulSilver/Platinum.
 
@@ -230,10 +275,11 @@ class Gen4Adapter(GameAdapter):
 
     # ── GamePresentationAdapter ──────────────────────────────────────────
 
-    def sprite_html(self, species_id: int) -> str:
+    def sprite_html(self, species_id: int, form: int = 0) -> str:
         if not species_id or species_id < 1:
             return ""
-        url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{species_id}.png"
+        slug = self.form_sprite_url(species_id, form) or str(species_id)
+        url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{slug}.png"
         return f'<img src="{url}" width="40" height="40" loading="lazy">'
 
     def ability_name(self, ability_id: int, species_id: int = 0) -> str:
@@ -261,6 +307,16 @@ class Gen4Adapter(GameAdapter):
 
     def form_sprite_id(self, species_id: int) -> int | None:
         return None
+
+    def form_sprite_url(self, species_id: int, form: int = 0) -> str | None:
+        """Return the PokeAPI URL slug for the given (species, form), or None
+        for the base form (caller uses str(species_id) as the slug).
+
+        Form byte values per pret/pokeheartgold include/constants/forms.h
+        (and Bulbapedia / PKHeX PK4 form documentation). Slugs match the
+        PokeAPI sprite repository filename convention.
+        """
+        return _FORM_SPRITE.get((species_id, form))
 
     @property
     def memorial_box_index(self) -> int:

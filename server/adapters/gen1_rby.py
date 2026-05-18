@@ -298,7 +298,8 @@ class Gen1Adapter(GameAdapter):
 
     # ── GamePresentationAdapter ──────────────────────────────────────────
 
-    def sprite_html(self, species_id: int) -> str:
+    def sprite_html(self, species_id: int, form: int = 0) -> str:
+        # form unused (no alternate forms in Gen 1)
         if not species_id or species_id < 1:
             return ""
         # Use Gen 1 Red/Blue sprites from PokeAPI, cropped 5px on each edge via overflow

@@ -2105,10 +2105,14 @@ class SLinkServer:
         _obs_cfg = obs_config_path(data_dir)
         self.obs = OBSController(_obs_cfg)
 
-    def _get_sprite_html(self, species_id: int) -> str:
-        """Get sprite HTML by delegating to the game adapter."""
+    def _get_sprite_html(self, species_id: int, form: int = 0) -> str:
+        """Get sprite HTML by delegating to the game adapter.
+
+        Optional `form` byte (default 0) is the alt-form discriminator from Block B
+        (Gen 4+). Adapters that ignore it still produce correct base-form sprites.
+        """
         if self.adapter and hasattr(self.adapter, "sprite_html"):
-            return self.adapter.sprite_html(species_id)
+            return self.adapter.sprite_html(species_id, form)
         return ""  # Dead fallback
 
     _METHOD_ICON: dict[str, str] = {
@@ -3111,8 +3115,9 @@ class SLinkServer:
             for key, det in raw.items():
                 d = dict(det)
                 sid = d.get("species_id", 0)
+                form = d.get("form", 0)
                 d["species_name"] = self.adapter.species_name(sid) if sid else ""
-                d["sprite_html"] = self._get_sprite_html(sid) if sid else ""
+                d["sprite_html"] = self._get_sprite_html(sid, form) if sid else ""
                 aid = d.get("ability_id", 0)
                 d["ability_name"] = self.adapter.ability_name(aid, sid) if aid else ""
                 # Enrich moves: resolve raw move IDs -> full move detail dicts
@@ -3162,8 +3167,9 @@ class SLinkServer:
             for em in ep:
                 em2 = dict(em)
                 sid = em2.get("species_id", 0)
+                form = em2.get("form", 0)
                 if sid and not em2.get("sprite_html"):
-                    em2["sprite_html"] = self._get_sprite_html(sid)
+                    em2["sprite_html"] = self._get_sprite_html(sid, form)
                 if sid and not em2.get("species_name"):
                     em2["species_name"] = self.adapter.species_name(sid)
                 # Enrich moves: resolve raw move IDs -> full move detail dicts (mirrors _enrich_party).

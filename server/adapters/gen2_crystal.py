@@ -223,7 +223,8 @@ class Gen2CrystalAdapter(GameAdapter):
 
     # ── GamePresentationAdapter ──────────────────────────────────────────
 
-    def sprite_html(self, species_id: int) -> str:
+    def sprite_html(self, species_id: int, form: int = 0) -> str:
+        # form unused (Gen 2 Unown letters use a single shared sprite in PokeAPI)
         if not species_id or species_id < 1 or species_id > 251:
             return ""
         # Crystal sprites from PokeAPI, with overflow crop for consistent sizing

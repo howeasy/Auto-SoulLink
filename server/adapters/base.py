@@ -178,8 +178,13 @@ class GamePresentationAdapter(ABC):
     """
 
     @abstractmethod
-    def sprite_html(self, species_id: int) -> str:
-        """Return an HTML <img> tag for the species sprite."""
+    def sprite_html(self, species_id: int, form: int = 0) -> str:
+        """Return an HTML <img> tag for the species sprite.
+
+        Optional `form` byte (default 0) selects alternate-form sprites for games
+        that support them (Gen 4+). Adapters that don't support forms can ignore
+        the parameter — the default keeps the existing single-arg call sites valid.
+        """
         ...
 
     @abstractmethod
@@ -229,6 +234,19 @@ class GamePresentationAdapter(ABC):
     def form_sprite_id(self, species_id: int) -> int | None:
         """Return alternative sprite ID for forms, or None for base form."""
         ...
+
+    def form_sprite_url(self, species_id: int, form: int = 0) -> str | None:
+        """Return a PokeAPI sprite URL for an alternate form, or None for base form.
+
+        Gen 4+ Pokémon (Rotom appliances, Giratina Origin, Shaymin Sky, Wormadam
+        cloaks, Burmy, Cherrim, Castform, Shellos/Gastrodon, Deoxys, Unown letters,
+        Arceus plates) have a `form` byte from Block B that distinguishes visuals.
+        Adapters that support form-aware sprites override this; default is None
+        (no alternate form), which makes callers fall back to the base sprite URL.
+
+        Returned URL is the full PNG URL on github.com/PokeAPI/sprites.
+        """
+        return None
 
     def encounter_table(self, area_id: str) -> dict[str, list[dict]] | None:
         """Return wild encounter data for an area, or None if unavailable.
