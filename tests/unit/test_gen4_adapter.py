@@ -393,6 +393,33 @@ class TestEggPickupArea:
         assert adapter.is_fixed_species_gift("egg_route_30") is True
 
 
+class TestDaycareArea:
+    """Daycare detection (Phase 4 addendum) — distinguishes NPC eggs from bred eggs."""
+
+    def test_hgss_daycare_route_34(self, adapter):
+        assert adapter.is_daycare_area("route_34") is True
+
+    def test_platinum_daycare_solaceon(self, adapter):
+        assert adapter.is_daycare_area("solaceon_town") is True
+        assert adapter.is_daycare_area("route_209") is True
+
+    def test_non_daycare_route_returns_false(self, adapter):
+        assert adapter.is_daycare_area("route_30") is False
+        assert adapter.is_daycare_area("eterna_city") is False
+
+    def test_daycare_egg_prefix_recognized(self, adapter):
+        # "egg_route_34" → strip prefix → route_34 → daycare.
+        assert adapter.is_daycare_area("egg_route_34") is True
+
+    def test_daycare_overrides_egg_pickup(self, adapter):
+        # Daycare-bred eggs aren't NPC pickups — clause logic gets different treatment.
+        assert adapter.is_egg_pickup_area("route_34") is False
+        assert adapter.is_egg_pickup_area("egg_route_34") is False
+        # But the route_30 (Mr. Pokémon) IS an NPC egg pickup, not daycare.
+        assert adapter.is_egg_pickup_area("route_30") is True
+        assert adapter.is_daycare_area("route_30") is False
+
+
 class TestRomTypeVariants:
     """ROM-type-aware adapter behavior (Phase 6 + 8)."""
 

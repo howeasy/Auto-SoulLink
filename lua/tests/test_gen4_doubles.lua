@@ -1,7 +1,11 @@
 --[[
   lua/tests/test_gen4_doubles.lua — Verify Gen 4 doubles + stat-stage + enemy-party reads.
-  READ-ONLY. Run after BATTLERS_COUNT_OFF + BATTLE_INFO_* are populated in
-  lua/games/gen4_hgsspt.lua (via test_gen4_battlers_count.lua + test_gen4_stat_stages.lua).
+  READ-ONLY. Run while in a battle on HGSS or Platinum.
+
+  HGSS/Pt offsets are confirmed (NDS-Ironmon-Tracker MemoryAddresses.lua) so this
+  should produce real values immediately. For Renegade Platinum or other ROM
+  hacks where the BattleMon heap chunk may have shifted, re-run
+  test_gen4_battlers_count.lua + test_gen4_stat_stages.lua to validate.
 
   Checks each frame:
     • M.isInBattle() result

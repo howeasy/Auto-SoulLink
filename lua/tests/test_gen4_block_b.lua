@@ -94,11 +94,12 @@ local function dump_slot(slot)
         log("    Block B decode failed")
     end
 
-    -- Block D: pokeball, met level, encounter type
+    -- Block D: pokeball (resolved HGSS / DP fallback), met level, met terrain, met location
     local bd = M.decrypt_block_d(addr)
     if bd then
-        log(string.format("    Block D: ball=%d  metLv=%d  encType=%d  pokerus=0x%02X  metLoc=%d",
-            bd.pokeball, bd.met_level, bd.encounter_type, bd.pokerus, bd.met_location))
+        log(string.format("    Block D: ball=%d (DP=%d HGSS=%d)  metLv=%d  terrain=%d  metLoc=%d  pokerus=0x%02X",
+            bd.pokeball, bd.pokeball_dp, bd.pokeball_hgss,
+            bd.met_level, bd.met_terrain, bd.met_location, bd.pokerus))
         local d_ok = bd.pokeball >= 1 and bd.pokeball <= 0xFF
                      and bd.met_level >= 0 and bd.met_level <= 100
         log(string.format("    Block D sanity  %s", d_ok and "OK ✓" or "FAIL ⚠️"))

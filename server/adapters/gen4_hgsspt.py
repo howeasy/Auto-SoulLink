@@ -69,6 +69,20 @@ _EGG_PICKUP_AREAS = frozenset({
     "route_212",       # Cynthia's alternate Togepi egg cutscene
 })
 
+# Daycare areas — eggs ORIGINATE from a breeding pair the player deposited.
+# Treated separately from egg pickups: daycare eggs hatch into a random species
+# determined by the parents' species/breeding rules, so the linked players may get
+# different species. Clause logic uses this to decide whether to skip the egg.
+# HGSS: Day-Care Couple on Route 34 (Goldenrod). Pt: Solaceon Town Day-Care.
+_DAYCARE_AREAS = frozenset({
+    # HGSS
+    "route_34",          # Pokémon Day Care (Goldenrod outskirts)
+    "goldenrod_city",    # parents handed off egg in town
+    # Platinum
+    "solaceon_town",     # Solaceon Day Care
+    "route_209",         # adjacent route to Solaceon
+})
+
 # Gift areas with a forced, identical species (no player choice).
 # Excludes starters, Odd Egg / random eggs, and variable Game Corner prizes.
 _FIXED_SPECIES_GIFTS = frozenset({
@@ -248,9 +262,19 @@ class Gen4Adapter(GameAdapter):
     def is_egg_pickup_area(self, area_id: str) -> bool:
         # NPC-given eggs (route_30 Togepi, iron_island Riolu, etc.). Daycare eggs
         # use is_daycare_area instead — they aren't pickups, they're player-bred.
+        # Strip the "egg_" prefix the client emits to consult the underlying area.
+        bare = area_id[4:] if area_id.startswith("egg_") else area_id
+        # Daycare always wins over egg-pickup classification (player-bred ≠ NPC gift).
+        if bare in _DAYCARE_AREAS:
+            return False
         if area_id.startswith("egg_"):
             return True
-        return area_id in _EGG_PICKUP_AREAS
+        return bare in _EGG_PICKUP_AREAS
+
+    def is_daycare_area(self, area_id: str) -> bool:
+        # Pokémon Day Care locations: Route 34 (HGSS), Solaceon Town (Platinum).
+        bare = area_id[4:] if area_id.startswith("egg_") else area_id
+        return bare in _DAYCARE_AREAS
 
     def evo_family(self, species_id: int) -> int:
         return _natdex_base_form(species_id)

@@ -29,6 +29,36 @@ layout that justifies the byte offsets within each chunk.
 | `maxHP` | +0x090 | u16 | `pokemon_types_def.h struct PartyPokemon.maxHp` |
 | `atk / def / speed / spatk / spdef` | +0x092..+0x09B | u16 × 5 | `pokemon_types_def.h struct PartyPokemon (stat block)` |
 
+### Block B (0x20 bytes) — within `dataBlocks[B_slot]`
+
+| Field | Offset within block | Type | Notes |
+|---|---|---|---|
+| `moves[4]` | +0x00..+0x07 | u16 × 4 | |
+| `movePP[4]` | +0x08..+0x0B | u8 × 4 | current PP per move |
+| `movePPUps[4]` | +0x0C..+0x0F | u8 × 4 | PP-Up count (0..3) per move |
+| `ivEgg` (packed) | +0x10..+0x13 | u32 | bits 0-4=HP, 5-9=ATK, 10-14=DEF, 15-19=SPE, 20-24=SPA, 25-29=SPD, 30=isEgg, 31=isNicknamed |
+| `ribbonsGBA` | +0x14..+0x17 | u32 | |
+| `fateful / gender / form` (packed) | +0x18 | u8 | bit 0=fatefulEncounter, bits 1-2=gender, bits 3-7=altForm |
+| `HGSS_shinyLeaves` | +0x19 | u8 | |
+| `eggLocation_PtHGSS` | +0x1C | u16 | Pt/HGSS-specific egg location |
+| `metLocation_PtHGSS` | +0x1E | u16 | Pt/HGSS-specific met location |
+
+### Block D (0x20 bytes)
+
+| Field | Offset within block | Type | Notes |
+|---|---|---|---|
+| `otName[8]` | +0x00..+0x0F | u16 × 8 | Gen IV charcode, 0xFFFF EOS |
+| `eggDate` | +0x10..+0x12 | u8 × 3 | year, month, day |
+| `metDate` | +0x13..+0x15 | u8 × 3 | year, month, day |
+| `eggLocation_DP` | +0x16..+0x17 | u16 | legacy DP encounter code |
+| `metLocation_DP` | +0x18..+0x19 | u16 | legacy DP encounter code |
+| `pokerus` | +0x1A | u8 | |
+| `pokeball_DP` | +0x1B | u8 | DP-format ball ID |
+| `metLevel / otGender` | +0x1C | u8 | bits 0-6=metLevel, bit 7=otGender |
+| `metTerrain` | +0x1D | u8 | encounter-method enum |
+| `HGSS_pokeball` | +0x1E | u8 | HGSS-format ball; takes precedence in HGSS when non-zero |
+| `mood` | +0x1F | s8 | signed |
+
 Block-order permutation: `((pid & 0x3E000) >> 13) % 24` (NOT `pid % 24`). Each
 permutation selects a 24-entry table mapping block A→{0,32,64,96}. Reference table
 in `pokemon_types_def.h` plus Project Pokemon Gen IV PKM docs.
@@ -90,13 +120,16 @@ as a pointer and reading u16 at `ptr+2`.
 | Enemy battle copy slot 0 | base+0x4F068 | base+0x4BE5C | `pret/pokeheartgold src/battle/battle_setup.c — opponent party buffer` |
 | Enemy trainer ID (u16) | base+0x440AA | base+0x4189E | `pret/pokeheartgold src/battle/battle_setup.c — TrainerData.id` |
 | Battle status absolute | 0x246F48 | 0x24A55A | `pret/pokeheartgold include/battle/battle.h BATTLE_STATUS_* macros` |
-| `gBattlersCount` equivalent | TBD (Phase 3 scan) | TBD | `pret/pokeheartgold src/battle/battle_controllers.c — BattleSystem_NumBattlers / MaxBattlersByMode` |
-| Per-battler `statChanges[7]` | TBD (Phase 3 scan) | TBD | `pret/pokeheartgold src/battle/battle_system.c — struct BattleMon.statChanges` |
+| Player_L stat stages (battler 0) `s8[7]` | base+0x49E2C | base+0x475D0 | `pret/pokeheartgold src/battle/struct_battle_mon.c BattleMon.statChanges` + `NDS-Ironmon-Tracker MemoryAddresses.lua statStagesPlayer` |
+| Enemy_L stat stages (battler 1) | base+0x49EEC | base+0x47690 | (above) `statStagesEnemy` |
+| Player_R / Enemy_R (doubles) | += 0x180 | += 0x180 | left-side base + `BATTLE_R_STRIDE` (constant across HGSS/Pt) |
+| Active mon PID (per battler) | stat_stages + 0x50 | stat_stages + 0x50 | `BattleMon.activeMonPid` offset within the BattleMon struct |
 
 `pret` does not symbolise the BattleSystem heap chunk's RAM address — it allocates
 dynamically. Concrete RAM offsets are sourced from `NDS-Ironmon-Tracker
-MemoryAddresses.lua` (HEART_GOLD playerBattleBase / enemyBase) and confirmed against
-live battles. Phase 3 adds live discovery scripts for the doubles + stat-stage offsets.
+MemoryAddresses.lua` (HEART_GOLD / PLATINUM blocks) and confirmed against live battles.
+Doubles detection uses a heuristic: read the active PID of battler 2 (player_R) at
+`statStagesPlayer + BATTLE_R_STRIDE + ACTIVE_MON_PID_DELTA`; non-zero ⇒ doubles.
 
 ## Item ID ranges (balls)
 
