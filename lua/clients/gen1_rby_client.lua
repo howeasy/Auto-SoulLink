@@ -358,6 +358,7 @@ local function build_enemy_snapshot()
     if not active then return enemy end
 
     local enemy_stages = M.readEnemyStatStages()
+    local enemy_moves = M.readEnemyBattleMovesAndPP()
     if battle_is_wild then
         -- Wild: just the one active mon
         enemy[1] = {
@@ -368,6 +369,9 @@ local function build_enemy_snapshot()
             active = true,
             status_cond = active.status_cond or 0,
             stat_stages = enemy_stages,
+            moves = enemy_moves and enemy_moves.moves or nil,
+            pp = enemy_moves and enemy_moves.pp or nil,
+            pp_bonuses = 0,
         }
     else
         -- Trainer: read species list for full team; use party_pos to mark active slot
@@ -387,6 +391,9 @@ local function build_enemy_snapshot()
                         active = true,
                         status_cond = active.status_cond or 0,
                         stat_stages = enemy_stages,
+                        moves = enemy_moves and enemy_moves.moves or nil,
+                        pp = enemy_moves and enemy_moves.pp or nil,
+                        pp_bonuses = 0,
                     }
                 else
                     -- Bench mons — only species known from list

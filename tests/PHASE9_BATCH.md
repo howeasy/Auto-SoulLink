@@ -218,7 +218,16 @@ Both clients' `build_party_snapshot` attach `moves[]`, `pp[]`, and `pp_bonuses` 
 
 ## Phase 4 — Enemy moves + PP
 
-*Filled in as Phase 4 lands.*
+**What changed**: Profile declares `enemy_battle_moves_addr` and `enemy_battle_pp_addr` per variant (absolute addresses into the wEnemyMon battle struct). `M.readEnemyBattleMovesAndPP()` returns `{moves[], pp[], pp_bonuses=0}`. Both clients' `build_enemy_snapshot` attach these to the active enemy entry. Renderer's `_enrich_battle_state` resolves into `move_details`.
+
+**Verification**:
+1. Load `lua/tests/test_gen{1,2}_enemy_moves.lua` per gen.
+2. Enter a wild battle. Press **F1** once the battle screen is visible.
+3. Expect 1-4 valid move IDs (Gen 1: 1..165; Gen 2: 1..251) and reasonable PP values.
+4. Watch the enemy use a move → PP decrements. Press F1 again to confirm.
+5. **FAIL** if all 4 move IDs are 0, or if IDs exceed valid range, or if PP doesn't decrement after enemy attacks.
+
+**Status page check**: with the regular client running, the enemy display panel during battle should show a Moves(N) badge expanding to the same moves shown by the diagnostic.
 
 ---
 

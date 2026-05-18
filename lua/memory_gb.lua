@@ -211,6 +211,10 @@ function M.initProfile(game_module, variant)
     M.MOVES_OFFSET            = prof.moves_offset
     M.PP_OFFSET               = prof.pp_offset
     M.PP_ENCODING             = prof.pp_encoding or "raw"
+    -- Enemy battle struct moves + PP (Phase 4). Different from party struct in Gen 2.
+    M.ENEMY_BATTLE_MOVES_ADDR = prof.enemy_battle_moves_addr
+    M.ENEMY_BATTLE_PP_ADDR    = prof.enemy_battle_pp_addr
+    M.ENEMY_BATTLE_PP_ENCODING = prof.enemy_battle_pp_encoding or "raw"
 end
 
 -- ═══ Box Memory Helpers (routes to SRAM when BOX_IN_SRAM is set) ═══
@@ -885,6 +889,27 @@ function M.readMovesAndPP(struct_base, base_pp_table)
         end
     end
     return result
+end
+
+-- Read the active enemy battler's 4 moves + 4 PP bytes. Returns
+-- {moves=[id1..4], pp=[cur1..4]}, or nil if the profile doesn't declare
+-- enemy_battle_moves_addr. Used by build_enemy_snapshot in battle. Enemy PP
+-- is treated as raw (no PP-Up encoding) regardless of party-struct encoding —
+-- the active battler's PP byte holds the live current PP and PP-Up doesn't
+-- need to be displayed for display-only enemy info.
+function M.readEnemyBattleMovesAndPP()
+    if not M.ENEMY_BATTLE_MOVES_ADDR or not M.ENEMY_BATTLE_PP_ADDR then return nil end
+    local moves, pp = {}, {}
+    for i = 0, 3 do
+        moves[i + 1] = M.read_u8(M.ENEMY_BATTLE_MOVES_ADDR + i)
+        local b = M.read_u8(M.ENEMY_BATTLE_PP_ADDR + i)
+        if M.ENEMY_BATTLE_PP_ENCODING == "ppup_packed" then
+            pp[i + 1] = b % 64  -- unpack current PP
+        else
+            pp[i + 1] = b
+        end
+    end
+    return {moves = moves, pp = pp, pp_bonuses = 0}
 end
 
 --- Deposit party slot directly to the dedicated memorial box (last box).

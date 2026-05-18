@@ -108,6 +108,12 @@ M.PROFILES = {
         moves_offset            = 0x08,    -- 4 move IDs at +0x08..0x0B
         pp_offset               = 0x1D,    -- 4 PP bytes at +0x1D..0x20 (simple counters, no PP-Up encoding in Gen 1)
         pp_encoding             = "raw",   -- Gen 1 PP is raw 0..40, no top-bits PP-Up
+        -- Enemy battle struct moves + PP (Phase 4 — wEnemyMon is a battle_struct with the
+        -- same layout as party_struct in Gen 1). wEnemyMon @ 0xCFE5; moves at +0x08 = 0xCFED;
+        -- PP at +0x19 = 0xCFFE (DataCrystal RBY map). PP is raw (no PP-Ups).
+        enemy_battle_moves_addr = 0xCFED,
+        enemy_battle_pp_addr    = 0xCFFE,
+        enemy_battle_pp_encoding = "raw",
     },
 
     -- Yellow has shifted WRAM addresses
@@ -159,6 +165,10 @@ M.PROFILES = {
         moves_offset            = 0x08,
         pp_offset               = 0x1D,
         pp_encoding             = "raw",
+        -- Yellow's wEnemyMon is shifted -1 like other battle addresses.
+        enemy_battle_moves_addr = 0xCFEC,
+        enemy_battle_pp_addr    = 0xCFFD,
+        enemy_battle_pp_encoding = "raw",
     },
 }
 

@@ -153,6 +153,14 @@ M.PROFILES = {
         moves_offset            = 0x02,
         pp_offset               = 0x17,
         pp_encoding             = "ppup_packed",
+
+        -- Enemy battle struct moves + PP (Phase 4 — wEnemyMon battle struct
+        -- has its own layout, NOT party_struct). Per DataCrystal Crystal RAM
+        -- map: wEnemyMon @ 0xD206 (species); moves @ 0xD208 (+0x02); PP @ 0xD20E (+0x08).
+        -- Enemy battle PP is raw (no PP-Up encoding — display only, not bred).
+        enemy_battle_moves_addr = 0xD208,
+        enemy_battle_pp_addr    = 0xD20E,
+        enemy_battle_pp_encoding = "raw",
     },
 }
 
