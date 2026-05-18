@@ -326,6 +326,27 @@ class Gen4Adapter(GameAdapter):
     def item_name(self, item_id: int) -> str:
         return _GEN4_ITEM_NAMES.get(item_id, f"Item #{item_id}") if item_id else ""
 
+    def move_name(self, move_id: int) -> str:
+        # Gen 4 lookup chain: GEN4_MOVE_NAMES (355–467) → VANILLA_MOVE_NAMES (1–354).
+        from server.move_data import move_name as _move_name
+        return _move_name(move_id, is_rr=False)
+
+    def move_data(self, move_id: int) -> dict | None:
+        from server.move_data import move_data as _move_data
+        raw = _move_data(move_id, is_rr=False)
+        if raw is None:
+            return None
+        type_id = raw.get("type", 0)
+        return {
+            "name":      self.move_name(move_id),
+            "type_id":   type_id,
+            "type_name": self.type_name(type_id),
+            "power":     raw.get("power", 0),
+            "accuracy":  raw.get("accuracy", 0),
+            "pp":        raw.get("pp", 0),
+            "split":     raw.get("split", 0),
+        }
+
     def area_display_name(self, area_id: str) -> str:
         if area_id in _AREA_DISPLAY_NAMES:
             return _AREA_DISPLAY_NAMES[area_id]

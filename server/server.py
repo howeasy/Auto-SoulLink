@@ -3120,10 +3120,13 @@ class SLinkServer:
                 d["sprite_html"] = self._get_sprite_html(sid, form) if sid else ""
                 aid = d.get("ability_id", 0)
                 d["ability_name"] = self.adapter.ability_name(aid, sid) if aid else ""
-                # Enrich moves: resolve raw move IDs -> full move detail dicts
+                # Enrich moves: resolve raw move IDs -> full move detail dicts.
+                # Gen 3 sends pp_bonuses as a packed bitfield (2 bits per move).
+                # Gen 4 sends pp_ups as a list[4]. Support both shapes.
                 raw_moves = d.get("moves", [])
                 raw_pp = d.get("pp", [])
                 pp_bonuses = d.get("pp_bonuses", 0)
+                pp_ups_list = d.get("pp_ups") or []
                 move_details = []
                 for idx, mid in enumerate(raw_moves):
                     if mid and mid > 0:
@@ -3131,7 +3134,10 @@ class SLinkServer:
                         if md:
                             md = dict(md)
                             base_pp = md.get("pp", 0)
-                            pp_ups = (pp_bonuses >> (idx * 2)) & 0x3
+                            if idx < len(pp_ups_list):
+                                pp_ups = pp_ups_list[idx]
+                            else:
+                                pp_ups = (pp_bonuses >> (idx * 2)) & 0x3
                             if base_pp:
                                 md["pp"] = base_pp + (base_pp * pp_ups) // 5
                             md["current_pp"] = raw_pp[idx] if idx < len(raw_pp) else md["pp"]
@@ -3173,9 +3179,11 @@ class SLinkServer:
                 if sid and not em2.get("species_name"):
                     em2["species_name"] = self.adapter.species_name(sid)
                 # Enrich moves: resolve raw move IDs -> full move detail dicts (mirrors _enrich_party).
+                # Gen 3 sends pp_bonuses (packed u8); Gen 4 sends pp_ups list[4]. Support both.
                 raw_moves = em2.get("moves", [])
                 raw_pp = em2.get("pp", [])
                 pp_bonuses = em2.get("pp_bonuses", 0)
+                pp_ups_list = em2.get("pp_ups") or []
                 move_details = []
                 for idx, mid in enumerate(raw_moves):
                     if mid and mid > 0:
@@ -3183,7 +3191,10 @@ class SLinkServer:
                         if md:
                             md = dict(md)
                             base_pp = md.get("pp", 0)
-                            pp_ups = (pp_bonuses >> (idx * 2)) & 0x3
+                            if idx < len(pp_ups_list):
+                                pp_ups = pp_ups_list[idx]
+                            else:
+                                pp_ups = (pp_bonuses >> (idx * 2)) & 0x3
                             if base_pp:
                                 md["pp"] = base_pp + (base_pp * pp_ups) // 5
                             md["current_pp"] = raw_pp[idx] if idx < len(raw_pp) else md["pp"]
