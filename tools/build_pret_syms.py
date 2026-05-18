@@ -73,6 +73,15 @@ PRET_REPOS = {
         "ram_files": ["ram/wram.asm", "ram/hram.asm", "ram/sram.asm", "ram/vram.asm"],
         "link_mode": "cgb",
     },
+    # Gold + Silver share a single pret repo (pokegold). One build produces
+    # gold.sym; pokesilver_obj uses -D _SILVER but WRAM symbols are identical
+    # since both games share the engine. Build once, the .sym is valid for both.
+    "pokegold": {
+        "url": "https://github.com/pret/pokegold.git",
+        "variant_define": "_GOLD",
+        "ram_files": ["ram/wram.asm", "ram/hram.asm", "ram/sram.asm", "ram/vram.asm"],
+        "link_mode": "cgb",
+    },
 }
 
 # Layout-script section-name regex. Captures the quoted name only.
@@ -244,11 +253,14 @@ def _parse_sym(sym_path: pathlib.Path) -> dict[str, int]:
     """Parse .sym file → {symbol_name: absolute_address}.
 
     .sym format: `BB:OOOO symbol_name` where BB is bank, OOOO is offset.
-    We keep only WRAM symbols (0xC000-0xDFFF). For WRAM0 (bank 00), the
-    offset IS the absolute address. For WRAMX (banks 01-07), the offset
-    is in 0xD000-0xDFFF when mapped, so the offset is also the absolute
-    address from a tracker's perspective. Other regions (ROM, VRAM, OAM,
-    HRAM, SRAM) are filtered out — we don't track those.
+    Keeps WRAM (0xC000-0xDFFF) AND SRAM (0xA000-0xBFFF) symbols. SRAM
+    is needed for current-PC-box tracking (Gen 2 stores the active box
+    in SRAM at sBox); the SRAM bank context (which 8KB cartridge bank
+    is mapped) lives in the Lua profile's `sram_bank` field.
+
+    Other regions (ROM 0x0000-0x7FFF, VRAM 0x8000-0x9FFF, OAM 0xFE00-0xFE9F,
+    HRAM 0xFF80-0xFFFE) are not tracked — we don't read those from the
+    tracker.
     """
     out: dict[str, int] = {}
     line_re = re.compile(r'^([0-9A-Fa-f]+):([0-9A-Fa-f]+)\s+(\S+)\s*$')
@@ -261,8 +273,10 @@ def _parse_sym(sym_path: pathlib.Path) -> dict[str, int]:
             continue
         bank_hex, addr_hex, name = m.group(1), m.group(2), m.group(3)
         addr = int(addr_hex, 16)
-        # Filter: keep WRAM only (0xC000-0xDFFF). Drop everything else.
-        if not (0xC000 <= addr <= 0xDFFF):
+        # Filter: keep WRAM (0xC000-0xDFFF) + SRAM (0xA000-0xBFFF).
+        is_wram = 0xC000 <= addr <= 0xDFFF
+        is_sram = 0xA000 <= addr <= 0xBFFF
+        if not (is_wram or is_sram):
             continue
         # Last-write-wins on duplicates (a few pret symbols are unions/aliases at
         # the same address — `wPartyMon1Species` and `wPartyMon1` for example).

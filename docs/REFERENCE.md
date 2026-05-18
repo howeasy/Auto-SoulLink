@@ -5,7 +5,7 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 **Supported Games:**
 - **Gen 3** — FireRed, LeafGreen, Emerald (vanilla, randomized, Archipelago, Radical Red/CFRU) — **✅ stable**
 - **Gen 1** — Red, Blue, Yellow (US English) — feature-parity with Gen 3 ⚠️ pending Phase 9 live verification (`tests/PHASE9_BATCH.md`). Archipelago Red/Blue (Alchav) auto-detected.
-- **Gen 2** — Crystal (GBC) — feature-parity with Gen 3 ⚠️ pending Phase 9 live verification. Archipelago Crystal (gerbiljames fork) auto-detected.
+- **Gen 2** — Crystal, Gold, Silver (GB/GBC) — feature-parity with Gen 3 ⚠️ pending Phase 9 live verification. Archipelago Crystal (gerbiljames fork) auto-detected. Gold/Silver added in Phase 11 with pret-authoritative addresses via [tools/build_pret_syms.py](../tools/build_pret_syms.py).
 - **Gen 4** — HeartGold, SoulSilver, Platinum — ⚠️ experimental
 - **Gen 5** — Black, White, Black 2, White 2 — ⚠️ experimental
 

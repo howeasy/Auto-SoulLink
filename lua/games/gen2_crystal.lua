@@ -10,7 +10,7 @@
 
 local M = {}
 M.game_id = "gen2_crystal"
-M.display_name = "Crystal"
+M.display_name = "Crystal / Gold / Silver"
 M.implemented = true
 M.generation = 2
 M.detect_priority = 15  -- higher than Gen 1 (10) to detect Crystal before RBY
@@ -171,6 +171,202 @@ M.PROFILES = {
         trainer_class_addr      = 0xD22F,
         trainer_id_addr         = 0xD231,
     },
+
+    -- ═══ Pokémon Gold (Phase 11 — Gold/Silver Phase 10-style addresses) ═══
+    -- pret/pokegold + pret/pokegold's _GOLD build. Gold/Silver share the same
+    -- WRAM/SRAM layout (the _GOLD vs _SILVER ASM flag affects trainer-party
+    -- data only, not memory layout). All addresses below were verified via
+    -- tools/verify_profile_addresses.py against pret/pokegold/master .sym.
+    --
+    -- WRAM layout differs substantially from Crystal because Crystal added
+    -- the Mobile Adapter, Phone, and Time Capsule sections which shifted
+    -- everything in WRAMX bank 1. Roughly: Gold/Silver addresses are
+    -- 690 bytes EARLIER in WRAMX than the equivalent Crystal addresses.
+    gold = {
+        -- Party (pret/pokegold wPartyCount / wPartyMon1)
+        party_count_addr     = 0xDA22,
+        party_species_addr   = 0xDA23,  -- 6 bytes + 0xFF terminator
+        party_base_addr      = 0xDA2A,  -- 6 × 48 bytes
+        party_ot_names_addr  = 0xDB4A,
+        party_nicks_addr     = 0xDB8C,
+        party_struct_size    = 48,
+
+        -- Enemy party (pret/pokegold wOTPartyCount / wOTPartyMons)
+        enemy_count_addr     = 0xDD55,
+        enemy_species_list_addr = 0xDD56,
+        enemy_base_addr      = 0xDD5D,
+
+        -- Current active box (SRAM bank 1)
+        box_count_addr       = 0xAD6C,  -- sBoxCount
+        box_species_addr     = 0xAD6D,  -- sBoxSpecies
+        box_base_addr        = 0xAD82,  -- sBoxMons (20 × 32 bytes)
+        box_ot_names_addr    = 0xB002,  -- sBoxMonOTs
+        box_nicks_addr       = 0xB0DE,  -- sBoxMonNicknames
+        box_struct_size      = 32,
+        box_max_mons         = 20,
+        box_in_sram          = true,
+        sram_bank            = 1,
+
+        -- Ball pocket (wNumBalls / wBalls)
+        bag_count_addr       = 0xD5FC,
+        bag_items_addr       = 0xD5FD,
+        bag_max_items        = 12,
+
+        -- Battle (wBattleMode: 0=overworld, 1=wild, 2=trainer)
+        battle_flag_addr     = 0xD116,
+
+        -- Active enemy battle struct (wEnemyMon @ 0xD0EF — different offsets
+        -- than Crystal's 0xD206 because the Mobile-related sections aren't here)
+        enemy_mon_species_addr = 0xD0EF,
+        enemy_mon_hp_addr      = 0xD0FF,
+        enemy_mon_level_addr   = 0xD0FC,
+        enemy_mon_maxhp_addr   = 0xD101,
+
+        -- Map (2-byte group:number addressing, same as Crystal)
+        map_group_addr       = 0xDA00,
+        map_number_addr      = 0xDA01,
+
+        -- Player
+        player_id_addr       = 0xD1A1,
+        player_name_addr     = 0xD1A3,
+
+        -- Badges
+        badges_addr          = 0xD57C,  -- wJohtoBadges
+        kanto_badges_addr    = 0xD57D,  -- wKantoBadges
+
+        -- Party struct offsets (identical to Crystal — 48-byte party_struct
+        -- macro is shared across pokegold/pokecrystal)
+        species_offset       = 0x00,
+        held_item_offset     = 0x01,
+        otid_offset          = 0x06,
+        dv_offset_1          = 0x15,
+        dv_offset_2          = 0x16,
+        level_offset         = 0x1F,
+        hp_offset            = 0x22,
+        maxhp_offset         = 0x24,
+        status_offset        = 0x20,
+        enemy_status_offset  = 0x20,
+
+        -- Box struct offsets (32-byte truncated party_struct)
+        box_species_offset   = 0x00,
+        box_held_item_offset = 0x01,
+        box_otid_offset      = 0x06,
+        box_dv_offset_1      = 0x15,
+        box_dv_offset_2      = 0x16,
+        box_level_offset     = 0x1F,
+
+        -- Ball item IDs — Gold/Silver have the same Apricorn ball constants as
+        -- Crystal, except no Park Ball (introduced in Crystal's Bug Catching
+        -- Contest only).
+        ball_item_ids        = {
+            0x01,  -- Master Ball
+            0x02,  -- Ultra Ball
+            0x04,  -- Great Ball
+            0x05,  -- Poké Ball
+            0xA9,  -- Fast Ball
+            0xAA,  -- Level Ball
+            0xAB,  -- Lure Ball
+            0xAC,  -- Heavy Ball
+            0xAD,  -- Love Ball
+            0xAE,  -- Friend Ball
+            0xAF,  -- Moon Ball
+        },
+
+        generation     = 2,
+        uses_map_group = true,
+        is_egg_species = 0xFD,
+
+        -- Stat stages (pret/pokegold wPlayerStatLevels / wEnemyStatLevels)
+        player_stat_stages_addr = 0xCBAA,
+        enemy_stat_stages_addr  = 0xCBB2,
+        stat_stages_count       = 7,
+        stat_stages_layout      = "gen2",
+
+        -- Moves + PP — Gen 2 party_struct layout is identical to Crystal
+        moves_offset            = 0x02,
+        pp_offset               = 0x17,
+        pp_encoding             = "ppup_packed",
+
+        -- Enemy battle moves + PP (wEnemyMonMoves / wEnemyMonPP)
+        enemy_battle_moves_addr = 0xD0F1,
+        enemy_battle_pp_addr    = 0xD0F7,
+        enemy_battle_pp_encoding = "raw",
+
+        -- Trainer class / id (wOtherTrainerClass / wOtherTrainerID)
+        trainer_class_addr      = 0xD118,
+        trainer_id_addr         = 0xD11B,
+    },
+
+    -- Silver shares Gold's WRAM/SRAM layout (the _GOLD vs _SILVER pret build
+    -- flag only differs in trainer party data, not memory layout). Profile
+    -- duplicated explicitly so verify_profile_addresses.py validates each
+    -- address against pokegold.sym independently.
+    silver = {
+        party_count_addr     = 0xDA22,
+        party_species_addr   = 0xDA23,
+        party_base_addr      = 0xDA2A,
+        party_ot_names_addr  = 0xDB4A,
+        party_nicks_addr     = 0xDB8C,
+        party_struct_size    = 48,
+        enemy_count_addr     = 0xDD55,
+        enemy_species_list_addr = 0xDD56,
+        enemy_base_addr      = 0xDD5D,
+        box_count_addr       = 0xAD6C,
+        box_species_addr     = 0xAD6D,
+        box_base_addr        = 0xAD82,
+        box_ot_names_addr    = 0xB002,
+        box_nicks_addr       = 0xB0DE,
+        box_struct_size      = 32,
+        box_max_mons         = 20,
+        box_in_sram          = true,
+        sram_bank            = 1,
+        bag_count_addr       = 0xD5FC,
+        bag_items_addr       = 0xD5FD,
+        bag_max_items        = 12,
+        battle_flag_addr     = 0xD116,
+        enemy_mon_species_addr = 0xD0EF,
+        enemy_mon_hp_addr      = 0xD0FF,
+        enemy_mon_level_addr   = 0xD0FC,
+        enemy_mon_maxhp_addr   = 0xD101,
+        map_group_addr       = 0xDA00,
+        map_number_addr      = 0xDA01,
+        player_id_addr       = 0xD1A1,
+        player_name_addr     = 0xD1A3,
+        badges_addr          = 0xD57C,
+        kanto_badges_addr    = 0xD57D,
+        species_offset       = 0x00,
+        held_item_offset     = 0x01,
+        otid_offset          = 0x06,
+        dv_offset_1          = 0x15,
+        dv_offset_2          = 0x16,
+        level_offset         = 0x1F,
+        hp_offset            = 0x22,
+        maxhp_offset         = 0x24,
+        status_offset        = 0x20,
+        enemy_status_offset  = 0x20,
+        box_species_offset   = 0x00,
+        box_held_item_offset = 0x01,
+        box_otid_offset      = 0x06,
+        box_dv_offset_1      = 0x15,
+        box_dv_offset_2      = 0x16,
+        box_level_offset     = 0x1F,
+        ball_item_ids        = {0x01, 0x02, 0x04, 0x05, 0xA9, 0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF},
+        generation     = 2,
+        uses_map_group = true,
+        is_egg_species = 0xFD,
+        player_stat_stages_addr = 0xCBAA,
+        enemy_stat_stages_addr  = 0xCBB2,
+        stat_stages_count       = 7,
+        stat_stages_layout      = "gen2",
+        moves_offset            = 0x02,
+        pp_offset               = 0x17,
+        pp_encoding             = "ppup_packed",
+        enemy_battle_moves_addr = 0xD0F1,
+        enemy_battle_pp_addr    = 0xD0F7,
+        enemy_battle_pp_encoding = "raw",
+        trainer_class_addr      = 0xD118,
+        trainer_id_addr         = 0xD11B,
+    },
 }
 
 -- ═══ Archipelago variant (Phase 8) ═══════════════════════════════════════
@@ -204,22 +400,30 @@ end
 -- ═══ ROM Detection ═══
 
 function M.detect()
-    -- Crystal is GBC-only (0x0143 = 0xC0)
+    -- Crystal is GBC-only; Gold/Silver run on both GB and GBC.
     local ok, sysId = pcall(function() return emu.getsystemid() end)
     if not ok or (sysId ~= "GBC" and sysId ~= "GB") then
         return false
     end
     local title = M._readRomTitle()
     if not title then return false end
-    -- ROM title: "PM_CRYSTAL" (vanilla) or "AP_CRYSTAL" (gerbiljames AP fork).
-    -- Also accept any title containing "CRYSTAL" for tolerance.
-    return title == "PM_CRYSTAL" or title == "AP_CRYSTAL" or title:find("CRYSTAL") ~= nil
+    -- ROM titles per pret/pokecrystal + pret/pokegold Makefiles:
+    --   "PM_CRYSTAL" — vanilla Crystal
+    --   "AP_CRYSTAL" — gerbiljames Archipelago-Crystal fork
+    --   "POKEMON_GLD" — vanilla Gold
+    --   "POKEMON_SLV" — vanilla Silver
+    return title == "PM_CRYSTAL" or title == "AP_CRYSTAL"
+        or title == "POKEMON_GLD" or title == "POKEMON_SLV"
+        or title:find("CRYSTAL") ~= nil
 end
 
 function M.detect_variant()
-    -- Phase 8: distinguish AP-patched ROM from vanilla via ROM title at 0x134.
+    -- Phase 8: distinguish AP-patched ROM from vanilla.
+    -- Phase 11: also detect Gold / Silver.
     local title = M._readRomTitle()
-    if title == "AP_CRYSTAL" then return "crystal_ap" end
+    if title == "AP_CRYSTAL"  then return "crystal_ap" end
+    if title == "POKEMON_GLD" then return "gold" end
+    if title == "POKEMON_SLV" then return "silver" end
     return "crystal"
 end
 
@@ -239,6 +443,8 @@ end
 
 function M.rom_type_for_variant(variant)
     if variant == "crystal_ap" then return "Crystal (AP)" end
+    if variant == "gold"       then return "Gold" end
+    if variant == "silver"     then return "Silver" end
     return "Crystal"
 end
 

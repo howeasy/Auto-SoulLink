@@ -11,10 +11,12 @@ pytest tests/unit/test_profile_addresses.py # CI-friendly gate
 What remains is a focused 30–60 minute runtime sanity check covering behaviors that no amount of static analysis can validate: server state-machine reactions, status-page rendering, AP-ROM detection, and the Gen 3 regression spot-check. The original day-long Phase 0 address-audit per ROM is gone.
 
 **Setup**
-- BizHawk with Gambatte (GB/GBC) core for Gen 1/2 ROMs.
+- BizHawk with Gambatte (GB/GBC) core for Gen 1/2 ROMs (Crystal, Gold, Silver — same `lua/clients/gen2_crystal_client.lua` for all three).
 - BizHawk with mGBA core for Gen 3 regression check.
 - SLink server running: `python -m server.server --host 127.0.0.1 --port 54321`.
 - A second player (or yourself with two clients) may be required for soul-link partner events.
+
+**Gold/Silver coverage** (Phase 11): every address in the gold / silver profile blocks of `lua/games/gen2_crystal.lua` is verified against pret/pokegold via the same Phase 10 pipeline. The runtime smoke checks below apply to Crystal, Gold, AND Silver — you may want to spot-check on one of each.
 
 **How to load a diagnostic Lua script in BizHawk**
 1. Tools → Lua Console → Open Script…

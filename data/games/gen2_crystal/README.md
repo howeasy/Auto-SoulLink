@@ -1,13 +1,15 @@
 # Gen 2 Game Data (Gold/Silver/Crystal)
 
-Data files for Gen 2 Pokémon games (Game Boy Color).
+Data files for Gen 2 Pokémon games (Game Boy / Game Boy Color).
 
-## Status: Feature-parity with Gen 3 (Crystal — pending Phase 9 live verification)
+## Status: Feature-parity with Gen 3 (Crystal + Gold + Silver — pending Phase 9-smoke live verification)
 
-Phases 0-8 of `gen1-gen2-parity` brought Crystal up to Gen 3's feature
-set: moves+PP, stat stages, enemy moves+PP, trainer names, encounter
-tables, SFX infrastructure, and Archipelago detection (gerbiljames fork).
-Gold/Silver remain deferred as variant profiles to add later.
+Phases 0-8 of `gen1-gen2-parity` brought Crystal up to Gen 3's feature set:
+moves+PP, stat stages, enemy moves+PP, trainer names, encounter tables, SFX
+infrastructure, and Archipelago detection (gerbiljames fork). Phase 11
+added Gold + Silver as variant profiles with pret-authoritative addresses
+from pret/pokegold (every address verified by
+[tools/verify_profile_addresses.py](../../../tools/verify_profile_addresses.py)).
 
 ## Data Files
 

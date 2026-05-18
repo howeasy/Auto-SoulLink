@@ -184,6 +184,33 @@ _CRYSTAL_MAP: dict[str, Optional[str]] = {
 }
 _add("crystal", "pokecrystal", _CRYSTAL_MAP)
 
+# ── Gold / Silver (pokegold; _GOLD and _SILVER share WRAM layout) ────────────
+# Maps to the same pret symbols as crystal, but resolved against pokegold.sym
+# (which has different absolute addresses because Crystal added Mobile / Phone /
+# Time Capsule sections that shifted WRAMX bank 1 layout).
+_GOLD_MAP = dict(_CRYSTAL_MAP)
+# Active box lives in SRAM; the same sBox* symbol names work in pokegold too.
+_GOLD_MAP.update({
+    "box_count_addr": "sBoxCount",
+    "box_species_addr": "sBoxSpecies",
+    "box_base_addr": "sBoxMons",
+    "box_ot_names_addr": "sBoxMonOTs",
+    "box_nicks_addr": "sBoxMonNicknames",
+})
+_add("gold", "pokegold", _GOLD_MAP)
+_add("silver", "pokegold", _GOLD_MAP)
+
+# Also enable SRAM checks for crystal now that build_pret_syms ships SRAM syms
+_CRYSTAL_SRAM_OVERRIDES = {
+    "box_count_addr": "sBoxCount",
+    "box_species_addr": "sBoxSpecies",
+    "box_base_addr": "sBoxMons",
+    "box_ot_names_addr": "sBoxMonOTs",
+    "box_nicks_addr": "sBoxMonNicknames",
+}
+for field, sym in _CRYSTAL_SRAM_OVERRIDES.items():
+    PROFILE_TO_PRET[("crystal", field)] = ("pokecrystal", sym)
+
 
 # ── Lua profile parser ───────────────────────────────────────────────────────
 
