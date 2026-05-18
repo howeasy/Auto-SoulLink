@@ -2421,7 +2421,7 @@ class SLinkServer:
                         new_is_rr = rom_type.endswith("_rr")
                         if new_game_id and new_game_id != self.state.adapter.game_id:
                             from server.adapters import get_adapter
-                            self.state.adapter = get_adapter(new_game_id, is_rr=new_is_rr)
+                            self.state.adapter = get_adapter(new_game_id, is_rr=new_is_rr, rom_type=rom_type)
                             self.state.is_rr = new_is_rr
                             self.adapter = self.state.adapter
                             log.info(f"Adapter switched to {new_game_id} (rom_type={rom_type})")
@@ -2430,7 +2430,7 @@ class SLinkServer:
                             self.state.is_rr = new_is_rr
                             from server.adapters import get_adapter
                             self.state.adapter = get_adapter(
-                                self.state.adapter.game_id, is_rr=new_is_rr)
+                                self.state.adapter.game_id, is_rr=new_is_rr, rom_type=rom_type)
                             self.adapter = self.state.adapter
                             log.info(f"Adapter updated: is_rr={new_is_rr}")
                             log.debug(f"[ADAPTER] player={player_id}  game_id={self.state.adapter.game_id}  is_rr={new_is_rr}  rom_type={rom_type!r}  reason=is_rr_changed")

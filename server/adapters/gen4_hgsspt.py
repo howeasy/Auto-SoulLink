@@ -97,6 +97,23 @@ for _map_file in ("area_map_hgss.json", "area_map_platinum.json"):
                 if isinstance(_entry, dict) and "display" in _entry:
                     _AREA_DISPLAY_NAMES[_area_id] = _entry["display"]
 
+
+def _load_trainer_table(filename: str) -> dict:
+    """Load a trainer table JSON, returning an empty dict on miss."""
+    path = os.path.join(_data_dir, filename)
+    if not os.path.exists(path):
+        return {"trainers": {}, "classes": {}}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        log.warning("Failed to load %s: %s", filename, e)
+        return {"trainers": {}, "classes": {}}
+
+
+_HGSS_TRAINERS = _load_trainer_table("trainers_hgss.json")
+_PT_TRAINERS   = _load_trainer_table("trainers_pt.json")
+
 # Gen 4 item names (HGSS/Platinum item IDs — differ from Gen 3)
 _GEN4_ITEM_NAMES: dict[int, str] = {
     1:"Master Ball",   2:"Ultra Ball",    3:"Great Ball",    4:"Poké Ball",
@@ -202,8 +219,12 @@ class Gen4Adapter(GameAdapter):
     identical to Gen 3.
     """
 
-    def __init__(self, **kwargs):
-        pass
+    def __init__(self, rom_type: str = "heartgold", **kwargs):
+        self._rom_type = (rom_type or "heartgold").lower()
+        # Sinnoh trainers live in Platinum (and RP); Johto/Kanto in HGSS.
+        self._trainers = (_PT_TRAINERS
+                          if self._rom_type in ("platinum", "renegade_platinum")
+                          else _HGSS_TRAINERS)
 
     @property
     def game_id(self) -> str:
@@ -289,7 +310,18 @@ class Gen4Adapter(GameAdapter):
         return _ability_description(ability_id, is_rr=False)
 
     def trainer_info(self, trainer_id: int) -> tuple[str, str]:
-        return ("", "")
+        # Sparse table: returns ("", "") for any ID not yet seeded. Run
+        # tools/gen_gen4_trainers.py --pret-hgss <path> --pret-pt <path>
+        # against cloned pret decomps to populate.
+        if not self._trainers or not trainer_id:
+            return ("", "")
+        entry = self._trainers.get("trainers", {}).get(str(trainer_id))
+        if not entry:
+            return ("", "")
+        name = entry.get("name", "").strip()
+        cls_id = entry.get("class", 0)
+        cls = self._trainers.get("classes", {}).get(str(cls_id), "")
+        return (name, cls)
 
     def item_name(self, item_id: int) -> str:
         return _GEN4_ITEM_NAMES.get(item_id, f"Item #{item_id}") if item_id else ""

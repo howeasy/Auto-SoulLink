@@ -1,0 +1,124 @@
+{
+  "trainers": {
+    "seed_1": {
+      "name": "Falkner",
+      "class": 21
+    },
+    "seed_2": {
+      "name": "Bugsy",
+      "class": 21
+    },
+    "seed_3": {
+      "name": "Whitney",
+      "class": 21
+    },
+    "seed_4": {
+      "name": "Morty",
+      "class": 21
+    },
+    "seed_5": {
+      "name": "Chuck",
+      "class": 21
+    },
+    "seed_6": {
+      "name": "Jasmine",
+      "class": 21
+    },
+    "seed_7": {
+      "name": "Pryce",
+      "class": 21
+    },
+    "seed_8": {
+      "name": "Clair",
+      "class": 21
+    },
+    "seed_9": {
+      "name": "Will",
+      "class": 12
+    },
+    "seed_10": {
+      "name": "Koga",
+      "class": 12
+    },
+    "seed_11": {
+      "name": "Bruno",
+      "class": 12
+    },
+    "seed_12": {
+      "name": "Karen",
+      "class": 12
+    },
+    "seed_13": {
+      "name": "Lance",
+      "class": 13
+    },
+    "seed_14": {
+      "name": "Brock",
+      "class": 21
+    },
+    "seed_15": {
+      "name": "Misty",
+      "class": 21
+    },
+    "seed_16": {
+      "name": "Lt. Surge",
+      "class": 21
+    },
+    "seed_17": {
+      "name": "Erika",
+      "class": 21
+    },
+    "seed_18": {
+      "name": "Janine",
+      "class": 21
+    },
+    "seed_19": {
+      "name": "Sabrina",
+      "class": 21
+    },
+    "seed_20": {
+      "name": "Blaine",
+      "class": 21
+    },
+    "seed_21": {
+      "name": "Blue",
+      "class": 21
+    },
+    "seed_22": {
+      "name": "Red",
+      "class": 22
+    },
+    "seed_23": {
+      "name": "Silver",
+      "class": 23
+    }
+  },
+  "classes": {
+    "1": "Leader",
+    "2": "Leader",
+    "3": "Leader",
+    "4": "Leader",
+    "5": "Leader",
+    "6": "Leader",
+    "7": "Leader",
+    "8": "Leader",
+    "9": "Elite Four",
+    "10": "Elite Four",
+    "11": "Elite Four",
+    "12": "Elite Four",
+    "13": "Champion",
+    "14": "Leader",
+    "15": "Leader",
+    "16": "Leader",
+    "17": "Leader",
+    "18": "Leader",
+    "19": "Leader",
+    "20": "Leader",
+    "21": "Leader",
+    "22": "Pokémon Trainer",
+    "23": "Rival"
+  },
+  "_meta": {
+    "note": "Stub seed data. Run gen_gen4_trainers.py with --pret-* paths to extract real IDs from pret trainer_data.h. Synthetic seed_* keys are present for documentation but never match live RAM IDs."
+  }
+}

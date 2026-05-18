@@ -907,6 +907,12 @@ local pending_safe         = false
 local battle_box_snapshot  = nil  -- {[pid_hex]=true} — snapshot of current box at battle start (party==6)
 local battle_enc_species   = 0    -- enemy species cached during battle for no_catch
 local battle_enc_level     = 0    -- enemy level cached during battle for no_catch
+-- Enemy team accumulator (mirrors gen3 battle_seen_enemies in gen3_frlge_client.lua).
+-- Tracks the full opponent roster as it's revealed via switches across the battle.
+-- Keyed by "species:level" (PID:OTID isn't always available pre-decryption for the
+-- inactive slots in the buffer). Reset at every battle start. Each entry is the
+-- live mon table from M.readEnemyParty() plus an `active=true|false` flag.
+local battle_seen_enemies  = {}
 
 -- Party change debounce
 local PARTY_DEBOUNCE_FRAMES  = 3
@@ -1158,6 +1164,7 @@ local function on_frame()
         battle_box_snapshot  = nil
         battle_enc_species   = 0
         battle_enc_level     = 0
+        battle_seen_enemies  = {}  -- reset enemy team accumulator
         M.clearDebounce()         -- clear on battle start; battle copy has fresh values
         -- If party is full (6), snapshot current PC box to detect box captures.
         local pcount = M.readPartyCount()
@@ -1455,29 +1462,40 @@ local function on_frame()
             evt.is_trainer_battle = not M.isWildBattle()
             evt.trainer_id = M.readEnemyTrainerId()
             evt.opponent_name = M.readEnemyTrainerName()
-            local enemy_list = {}
-            for ei = 0, 5 do
-                local es = M.enemyHP(ei)
-                if es then
-                    local ea = M.enemyBattleAddr(ei)
-                    local e_sid, e_item, e_ability = 0, 0, 0
-                    if ea then
-                        local sp, _, hi, abl = M.decrypt_block_a_ext(ea)
-                        e_sid     = sp or 0
-                        e_item    = hi or 0
-                        e_ability = abl or 0
-                    end
-                    enemy_list[#enemy_list + 1] = {
-                        species_id   = e_sid,
-                        level        = es.level,
-                        hp           = es.hp,
-                        maxHP        = es.maxHP,
-                        held_item_id = e_item,
-                        ability_id   = e_ability,
-                        active       = (ei == 0),
-                    }
+            evt.is_doubles = M.isDoubleBattle()
+            -- Read the full opponent party (moves, PP, form, abilities, items per slot)
+            -- and merge into battle_seen_enemies so the team persists across switches.
+            local fresh = M.readEnemyParty()
+            local active_l = M.getBattlerPartyIndex(1) or 0  -- enemy_L party slot
+            local active_r = evt.is_doubles and M.getBattlerPartyIndex(3) or nil
+            -- Stat stages overlay for the currently-active enemy battlers.
+            local stages_l = M.readStatStages(1)
+            local stages_r = evt.is_doubles and M.readStatStages(3) or nil
+            for ei, mon in ipairs(fresh) do
+                local key = tostring(mon.species_id) .. ":" .. tostring(mon.level)
+                mon.active = ((ei - 1) == active_l) or (active_r and (ei - 1) == active_r) or false
+                if mon.active then
+                    if (ei - 1) == active_l and stages_l then mon.stat_stages = stages_l end
+                    if active_r and (ei - 1) == active_r and stages_r then mon.stat_stages = stages_r end
                 end
+                -- Merge into accumulator. Overwrite with live HP/PP/stat_stages on each tick,
+                -- but keep the entry so switches don't lose history.
+                battle_seen_enemies[key] = mon
             end
+            -- Flatten accumulator → list for the event.
+            local enemy_list = {}
+            for _, mon in pairs(battle_seen_enemies) do
+                enemy_list[#enemy_list + 1] = mon
+            end
+            -- Stable order: actives first, then by species:level lexicographic.
+            table.sort(enemy_list, function(a, b)
+                if (a.active and 1 or 0) ~= (b.active and 1 or 0) then
+                    return (a.active and 1 or 0) > (b.active and 1 or 0)
+                end
+                local ka = tostring(a.species_id) .. ":" .. tostring(a.level)
+                local kb = tostring(b.species_id) .. ":" .. tostring(b.level)
+                return ka < kb
+            end)
             evt.enemy_party = enemy_list
         end
         -- Incremental PC box scan: scan 1 box per tick cycle.
