@@ -23,17 +23,29 @@ _DATA_DIR = os.path.join(
 )
 
 # ── Gift/static encounter area_ids ──────────────────────────────────────
+# Route 34 is intentionally NOT here — it's a daycare area (see _DAYCARE_AREAS).
+# Wild captures on Route 34 grass go through the normal pokéball + quarantine
+# flow; daycare-bred eggs picked up at Route 34 are classified by is_daycare_area.
 _GIFT_AREAS = frozenset({
     "new_bark_town",     # Starter (Chikorita/Cyndaquil/Totodile)
-    "goldenrod_city",    # Eevee from Bill / Game Corner prizes / Odd Egg
+    "goldenrod_city",    # Eevee from Bill / Game Corner prizes
     "olivine_city",      # Shuckle from Kirk (temporary trade)
     "dragons_den",       # Dratini from Elder
-    "route_34",          # Odd Egg from Day-Care Man
     "route_35",          # Kenya the Spearow (guard delivery)
     "mt_mortar",         # Tyrogue from Kiyo
     "cianwood_city",     # Shuckle from Kirk
     "celadon_city",      # Eevee (if Kanto gift)
     "gift",              # Fallback for unmapped gift areas
+})
+
+# Daycare areas — eggs picked up here are bred from deposited mons, not gifts.
+# Crystal has exactly one daycare (Route 34, Day-Care Man). The Odd Egg is also
+# given here, but it's mechanically indistinguishable from a daycare-bred egg,
+# so it gets treated as a daycare pickup (not a gift) for tracker purposes.
+# Mystery Egg from Mr. Pokemon is given on Route 30 — that's a non-daycare egg
+# and correctly classified as a gift via the is_egg + !daycare path in state.py.
+_DAYCARE_AREAS = frozenset({
+    "route_34",
 })
 
 # Gift areas with a forced, identical species (no player choice).
@@ -118,6 +130,9 @@ class Gen2CrystalAdapter(GameAdapter):
 
     def is_fixed_species_gift(self, area_id: str) -> bool:
         return area_id in _FIXED_SPECIES_GIFTS
+
+    def is_daycare_area(self, area_id: str) -> bool:
+        return area_id in _DAYCARE_AREAS
 
     def evo_family(self, species_id: int) -> int:
         return base_form(species_id, False)

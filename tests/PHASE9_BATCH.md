@@ -73,7 +73,63 @@ Address fixes get rolled into a Phase 9a commit by Claude.
 
 ## Phase 1 — Gen 2 plumbing (no user-facing UI changes beyond labels)
 
-*Filled in as Phase 1 lands.*
+### 1.1 Memorialize routing (Gen 1 AND Gen 2)
+
+**What changed**: Both `lua/clients/gen1_rby_client.lua` and `lua/clients/gen2_crystal_client.lua` now call `M.depositMemorialMon(slot)` for the `memorialize` command instead of `M.depositPartyMon(slot)`. Dead pairs go to:
+- Gen 1: Box 12 (CartRAM 0x75EA)
+- Gen 2: Box 14 (CartRAM 0x79E0)
+
+**Live verification**:
+1. Load Red or Crystal in BizHawk.
+2. Run the regular SLink client (`lua/clients/gen1_rby_client.lua` or `lua/clients/gen2_crystal_client.lua`).
+3. Start a soul-linked run (catch a Pokemon, link with partner B).
+4. Faint your linked mon → server fires `memorialize` for B's partner.
+5. **Open the PC** and check: B's deceased mon should be in **Box 12 (Gen 1)** or **Box 14 (Gen 2)** — NOT the current active box.
+6. The corresponding partner should also end up in the same memorial box on the other side.
+
+**FAIL if**: dead mon appears in the active PC box instead of Box 12/14.
+
+### 1.2 Egg-gift classification (Gen 2 only)
+
+**What changed**: `lua/games/gen2_crystal.lua` now declares `is_egg_species = 0xFD`. `lua/memory_gb.lua` sets `result.is_egg = true` on any party/box slot whose species byte equals `0xFD`. `lua/clients/gen2_crystal_client.lua` forwards `is_egg` in capture events. `server/adapters/gen2_crystal.py` exposes `is_daycare_area("route_34") = True`, and Route 34 is removed from `_GIFT_AREAS` (it was previously misclassified as a gift area which made wild captures there false-positive gifts).
+
+**Live verification**:
+
+A. **Wild capture on Route 34 grass (Crystal)** — was broken before Phase 1, should now work like any normal route:
+1. Walk to Route 34 grass with Pokéballs.
+2. Catch a wild Pokemon (Rattata/Drowzee/etc).
+3. The server should:
+   - Activate the Pokéball gate (if not already active)
+   - Queue a `box_mon` quarantine if partner B hasn't caught yet on Route 34
+4. **FAIL** if the capture is treated as a gift (no quarantine, no Pokéball gate flip).
+
+B. **Mystery Egg from Mr. Pokemon (Route 30, classified as gift)**:
+1. Progress to the early-game Mr. Pokemon errand.
+2. Accept the Mystery Egg (will become Togepi).
+3. Walk back to Professor Elm's lab and continue until egg joins party.
+4. When the egg appears in party (party scan fires `capture` event with `is_egg=true`):
+   - Server should NOT activate Pokéball gate.
+   - Server should NOT quarantine to box.
+   - Egg should be classified as gift.
+5. **FAIL** if egg gets quarantined or Pokéball gate flips.
+
+C. **Daycare-bred egg on Route 34 (NOT a gift)**:
+1. Deposit two compatible Pokemon at the Day-Care on Route 34.
+2. Walk steps until the Day-Care Man has an egg ready.
+3. Accept the egg.
+4. When the egg joins party:
+   - Server SHOULD activate Pokéball gate (if not yet active).
+   - Server SHOULD queue `box_mon` quarantine.
+5. **FAIL** if egg is misclassified as gift (would let user "free-equip" daycare eggs).
+
+D. **Box pickup of an existing egg (sanity)**:
+1. Move a daycare egg from party to PC box.
+2. Move it back from box to party.
+3. Confirm normal behavior (no spurious gift classification).
+
+### 1.3 No live verification needed for force_whiteout
+
+The handoff's claim that Gen 2 was missing `force_whiteout` was incorrect — neither Gen 1 nor Gen 2 has (or needs) a separate dispatcher case. Whiteout propagation is handled by the server sending individual `force_faint` commands per slot, which both gens already process correctly. No action taken in Phase 1.
 
 ---
 

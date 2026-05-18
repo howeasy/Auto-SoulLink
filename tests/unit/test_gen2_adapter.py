@@ -28,7 +28,6 @@ def test_adapter_instantiation():
     "goldenrod_city",    # Eevee from Bill / Game Corner
     "olivine_city",      # Shuckle from Kirk
     "dragons_den",       # Dratini from Elder
-    "route_34",          # Odd Egg from Day-Care Man
     "route_35",          # Kenya the Spearow
     "mt_mortar",         # Tyrogue from Kiyo
     "cianwood_city",     # Shuckle from Kirk
@@ -49,6 +48,7 @@ def test_gift_prefix_area_2(adapter):
 
 @pytest.mark.parametrize("area_id", [
     "route_29",
+    "route_34",          # daycare area, NOT gift — wild captures here use normal flow
     "dark_cave",
     "sprout_tower",
     "ilex_forest",
@@ -56,6 +56,24 @@ def test_gift_prefix_area_2(adapter):
 ])
 def test_non_gift_areas_return_false(adapter, area_id):
     assert adapter.is_gift_area(area_id) is False
+
+
+# ── Daycare areas (Phase 1d) ────────────────────────────────────────────
+
+def test_route_34_is_daycare(adapter):
+    """Route 34 hosts the Day-Care Man — bred eggs and the Odd Egg both originate here."""
+    assert adapter.is_daycare_area("route_34") is True
+
+
+@pytest.mark.parametrize("area_id", [
+    "new_bark_town",
+    "goldenrod_city",
+    "route_30",          # Mystery Egg from Mr. Pokemon — NOT daycare (egg=gift)
+    "route_29",
+    "ilex_forest",
+])
+def test_non_daycare_areas_return_false(adapter, area_id):
+    assert adapter.is_daycare_area(area_id) is False
 
 
 # ── Key validation ───────────────────────────────────────────────────────
@@ -612,3 +630,86 @@ def test_integration_identity_lock(tmp_path, monkeypatch):
         "has_pokeballs": True, "area_id": "route_29", "trainer_name": "SILVER"
     })
     assert any(c.get("cmd") == "hud_show" and "WRONG SAVE" in c.get("text", "") for c in cmds)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Phase 1d: Egg-gift classification (mirrors Gen 3 commit be648eb)
+# ══════════════════════════════════════════════════════════════════════════
+
+def _has_cmd(cmds, cmd_name, key=None):
+    for c in cmds:
+        if c.get("cmd") == cmd_name and (key is None or c.get("key") == key):
+            return True
+    return False
+
+
+def test_egg_capture_on_route_30_treated_as_gift(tmp_path, monkeypatch):
+    """Mystery Egg from Mr. Pokemon on Route 30: is_egg=True + non-daycare area → gift.
+    Bypasses Pokéball gate and skips quarantine."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(adapter=Gen2CrystalAdapter())
+    state.party_size = {"a": 1, "b": 0}  # A already has a starter
+
+    cmds = state.handle_event("a", {
+        "event": "capture", "key": "A5F3:1234:98",
+        "area_id": "route_30", "species_id": 175,  # Togepi (Mystery Egg hatches into Togepi)
+        "level": 1, "is_egg": True,
+    })
+    # Egg from non-daycare area is gift-like — no pokéball gate flip, no quarantine.
+    assert not state.pokeballs_obtained.get("a"), \
+        "Mystery Egg from Mr. Pokemon must not activate the Pokéball gate"
+    assert not _has_cmd(cmds, "box_mon", "A5F3:1234:98"), \
+        "Mystery Egg must not be quarantined to box"
+
+
+def test_egg_capture_on_route_34_not_treated_as_gift(tmp_path, monkeypatch):
+    """Daycare-bred egg picked up at Route 34: is_egg=True + daycare area → normal capture.
+    Pokéball gate activates and quarantine applies (player must have full progression)."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(adapter=Gen2CrystalAdapter())
+    state.party_size = {"a": 2, "b": 0}  # A has multiple mons, daycare egg goes to box
+
+    cmds = state.handle_event("a", {
+        "event": "capture", "key": "B2C1:5678:9B",
+        "area_id": "route_34", "species_id": 172,  # Pichu (common bred result)
+        "level": 1, "is_egg": True,
+    })
+    assert state.pokeballs_obtained.get("a"), \
+        "Daycare egg must activate the Pokéball gate"
+    assert _has_cmd(cmds, "box_mon", "B2C1:5678:9B"), \
+        "Daycare egg must be quarantined like a normal capture"
+
+
+def test_capture_without_is_egg_field_unchanged(tmp_path, monkeypatch):
+    """Old clients (no is_egg field) keep working — defaults to False, normal capture flow."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(adapter=Gen2CrystalAdapter())
+    state.party_size = {"a": 2, "b": 0}
+
+    cmds = state.handle_event("a", {
+        "event": "capture", "key": "C0DE:0001:0F",
+        "area_id": "route_29", "species_id": 16, "level": 5,
+        # no is_egg field
+    })
+    assert state.pokeballs_obtained.get("a")
+    assert _has_cmd(cmds, "box_mon", "C0DE:0001:0F")
+
+
+def test_wild_capture_on_route_34_no_longer_treated_as_gift(tmp_path, monkeypatch):
+    """Regression test for Phase 1d: previously route_34 was in _GIFT_AREAS which
+    treated every wild capture there as a gift. After fix, Route 34 is a daycare,
+    so wild captures (no is_egg flag) go through normal flow."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(adapter=Gen2CrystalAdapter())
+    state.party_size = {"a": 2, "b": 0}
+
+    cmds = state.handle_event("a", {
+        "event": "capture", "key": "F00D:0002:13",
+        "area_id": "route_34", "species_id": 19,  # Rattata
+        "level": 8,
+        # no is_egg — this is a wild capture in Route 34 grass
+    })
+    assert state.pokeballs_obtained.get("a"), \
+        "Wild capture on Route 34 must activate the Pokéball gate"
+    assert _has_cmd(cmds, "box_mon", "F00D:0002:13"), \
+        "Wild capture on Route 34 must be quarantined like any other route"

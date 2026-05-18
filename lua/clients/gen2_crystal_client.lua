@@ -522,6 +522,11 @@ local function on_new_mon(mon, slot, is_gift)
     if mon.held_item and mon.held_item > 0 then
         evt.held_item = mon.held_item
     end
+    -- Gen 2: forward egg flag so server can classify Mystery-Egg-style NPC gifts (Mr. Pokemon
+    -- on Route 30) as gifts while excluding daycare-bred eggs picked up at Route 34.
+    if mon.is_egg then
+        evt.is_egg = true
+    end
 
     send(evt, "capture(" .. (is_gift and "gift" or "battle") .. "):" .. mon.key:sub(1, 9), true)
     captured_this_battle = true
@@ -1086,7 +1091,9 @@ local function on_frame()
                 end
                 sync_written_keys[cmd.key] = true
             elseif cmd.cmd == "memorialize" then
-                -- Memorialize = deposit to box (memorial). Same as box_mon for now.
+                -- Memorialize = deposit to dedicated memorial box (Crystal: Box 14, CartRAM
+                -- offset 0x79E0). depositMemorialMon falls back to depositPartyMon if the
+                -- memorial box is full or unconfigured.
                 local pcount = M.getPartyCount()
                 local found_slot = nil
                 for i = 0, pcount - 1 do
@@ -1095,7 +1102,7 @@ local function on_frame()
                     if k == cmd.key then found_slot = i; break end
                 end
                 if found_slot then
-                    local ok, err = M.depositPartyMon(found_slot)
+                    local ok, err = M.depositMemorialMon(found_slot)
                     if ok then
                         console.log("[SLink-Crystal]   ↳ memorialize OK: deposited slot " .. found_slot)
                         hud_show("RIP " .. nick_label(cmd.key), 180, 180, 180, 300)

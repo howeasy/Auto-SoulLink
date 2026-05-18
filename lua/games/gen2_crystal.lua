@@ -129,6 +129,10 @@ M.PROFILES = {
 
         -- Crystal uses 2-byte map addressing (group + number)
         uses_map_group = true,
+
+        -- Egg species sentinel: pret/pokecrystal constants/pokemon_constants.asm defines EGG = $FD.
+        -- A party / box slot with species == 0xFD is an egg (no separate flag byte in Gen 2).
+        is_egg_species = 0xFD,
     },
 }
 

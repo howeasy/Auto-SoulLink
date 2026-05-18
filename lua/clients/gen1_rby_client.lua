@@ -1015,7 +1015,10 @@ local function on_frame()
                 send({event = "memorialize_failed", key = cmd.key, reason = "last_mon"},
                      "memorialize_failed:" .. cmd.key:sub(1, 8), true)
             else
-                ok, err = M.depositPartyMon(found_slot)
+                -- Memorialize = deposit to dedicated memorial box (Gen 1: Box 12, CartRAM
+                -- offset 0x75EA). depositMemorialMon falls back to depositPartyMon if the
+                -- memorial box is full or unconfigured.
+                ok, err = M.depositMemorialMon(found_slot)
                 if ok then
                     sync_written_keys[cmd.key] = true
                     console.log("[SLink-RBY]   ↳ memorialize OK: " .. cmd.key:sub(1, 8))

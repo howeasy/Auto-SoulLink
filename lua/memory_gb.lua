@@ -179,6 +179,8 @@ function M.initProfile(game_module, variant)
     M.USES_MAP_GROUP         = prof.uses_map_group or false
     -- Gen 2: held item offset (nil for Gen 1)
     M.HELD_ITEM_OFFSET       = prof.held_item_offset
+    -- Gen 2: species ID that marks a party slot as an egg (0xFD in pokecrystal). Nil for Gen 1.
+    M.IS_EGG_SPECIES         = prof.is_egg_species
     -- Generation tag for conditional logic
     M.GENERATION             = prof.generation or 1
     -- DV offsets within party struct
@@ -282,6 +284,10 @@ function M.readPartySlot(slot)
     if M.HELD_ITEM_OFFSET then
         result.held_item = M.read_u8(base + M.HELD_ITEM_OFFSET)
     end
+    -- Gen 2: flag eggs (species == 0xFD per pret/pokecrystal constants/pokemon_constants.asm)
+    if M.IS_EGG_SPECIES and species_idx == M.IS_EGG_SPECIES then
+        result.is_egg = true
+    end
     return result
 end
 
@@ -315,6 +321,10 @@ function M.readBoxSlot(slot)
     if M.HELD_ITEM_OFFSET then
         local held_offset = M.profile and M.profile.box_held_item_offset or M.HELD_ITEM_OFFSET
         result.held_item = M.box_read_u8(base + held_offset)
+    end
+    -- Gen 2: flag eggs in boxes (eggs can be moved to PC like normal mons)
+    if M.IS_EGG_SPECIES and species_idx == M.IS_EGG_SPECIES then
+        result.is_egg = true
     end
     return result
 end
