@@ -1,250 +1,160 @@
-# Handoff — Gen 1 + Gen 2 parity work
+# Handoff — Gen 1 + Gen 2 parity work — **PHASES 0-11 COMPLETE**
 
-## What this worktree is for
+## Current status (as of commit b4a869c)
 
-Bring Gen 1 (Red/Blue/Yellow) and Gen 2 (Crystal) up to parity with Gen 3
-(FRLG / AP / Radical Red) in this SLink Soul Link Nuzlocke tracker. Gen 3
-is the production-stable gold standard; Gen 1/2 are marked ⚠️ experimental
-in [docs/REFERENCE.md](../../../docs/REFERENCE.md) and need the missing
-visible features (moves+PP display, stat stages, trainer names, encounter
-tables, etc.) plus a few Gen 2 plumbing fixes.
-
-**Branch**: `gen1-gen2-parity` (off `master` @ `c976065`).
+**Branch**: `gen1-gen2-parity` — **15 commits ahead of master**, ready for runtime smoke testing then merge.
 **Worktree path**: `E:\Google Drive\SLink\.claude\worktrees\gen1-gen2-parity`.
-**Full plan**: [`~/.claude/plans/gen1-gen2-parity-with-gen3.md`](file:///C:/Users/howar/.claude/plans/gen1-gen2-parity-with-gen3.md)
-— read this in full before starting; the table below is just the
-executive summary.
+**Full plan (with revision history)**: [`~/.claude/plans/read-the-handoff-file-mellow-crown.md`](file:///C:/Users/howar/.claude/plans/read-the-handoff-file-mellow-crown.md)
 
-## HARD constraint — do not edit any Gen 3 code
+**Test state**:
+- `pytest tests/unit/` → **897 passing** (was 853 baseline; +44 new tests)
+- `python tools/verify_profile_addresses.py` → **156 ok / 0 fail / 0 warn / 79 skip**
+- Gen 3 regression: 207 Gen 3 adapter tests still pass
 
-Gen 3 just shipped 10 commits to master. Any regression there is
-unacceptable. The following files / sections are off-limits:
+**What's still required**: a 30–60 minute runtime smoke session in BizHawk — see [tests/PHASE9_BATCH.md](tests/PHASE9_BATCH.md). The original day-long Phase 0 address audit is gone (replaced by Phase 10 automation).
 
-- `lua/clients/gen3_frlge_client.lua`, `lua/memory_gba.lua`,
-  `lua/games/gen3_frlge.lua`
-- `server/adapters/gen3_frlge.py`
-- Gen 3 / RR sections of `server/pokemon_data.py`
-- Gen 3 branches inside `server/server.py`, `server/state.py`,
-  `server/stream_overlays.py` — you may ADD new `if adapter.game_id in
-  ("gen1_rby", "gen2_crystal"):` branches beside them, but do NOT modify
-  the existing Gen 3 conditions or widen them
-- `tests/unit/test_gen3_adapter.py`
+---
 
-**If a server-side renderer turns out to be Gen 3-gated**, add a parallel
-Gen 1/2 branch beside it — never widen the Gen 3 condition. Goal: Gen 3
-behavior stays bit-identical.
+## What was delivered (commits in chronological order)
 
-**Regression gate**: `pytest tests/unit/` must remain at 853 passing (plus
-whatever new tests are added in the current phase) before any commit.
-
-## Scope decisions locked in by the user
-
-- Phases **1–6** in scope (in order). Phases 7 (sound effects), 8
-  (Gold/Silver variants), 9 (calc bridge) deferred.
-- Order: **1 → 2 → 3 → 4 → 5 → 6**.
-- User available to run BizHawk diagnostic Lua scripts and report back.
-- Pret repos as source-of-truth for addresses, cross-checked against
-  user's live ROM via diagnostic scripts before profile edits:
-  - [pret/pokered](https://github.com/pret/pokered)
-  - [pret/pokeyellow](https://github.com/pret/pokeyellow)
-  - [pret/pokecrystal](https://github.com/pret/pokecrystal)
-
-## Gap matrix (executive view)
-
-| Capability | Gen 1 | Gen 2 |
+| Commit | Phase | What it adds |
 |---|---|---|
-| Party diff / capture / faint / whiteout | ✅ | ✅ |
-| Deposit / retrieve | ✅ | ✅ |
-| Memorialize via `depositMemorialMon` | ✅ | ⚠️ falls back to `box_mon` |
-| `force_faint` command | ✅ | ✅ |
-| `force_whiteout` command | ✅ | ❌ not in dispatcher |
-| Gift areas | ✅ | ✅ |
-| Egg-gift detection (daycare-aware) | N/A (no eggs) | ❌ Route 34 daycare + eggs unhandled |
-| ROM variants | R / B / Y all | ⚠️ Crystal only |
-| Memory addresses verified | ✅ | ⚠️ 4 TODOs in profile |
-| Moves + PP read from party | ❌ | ❌ |
-| Stat stages read in battle | ❌ | ❌ |
-| Enemy moves + PP in battle | ❌ | ❌ |
-| Trainer class / name | ❌ adapter stub | ❌ adapter stub |
-| Wild encounter tables | ❌ | ❌ |
-| Held items / genders / shinies | N/A | ✅ |
-| Abilities | N/A | N/A |
+| `7be27e4` | 0 | pret address audit doc + diagnostic Lua scripts for every profile address |
+| `0a3dcd0` | 1 | Gen 2 egg-gift detection (Route 34 reclassified daycare, not gift); memorialize routing → dedicated Box 12/14 |
+| `033a4d2` | 2 | Stat stages for Gen 1 (R/B/Y) + Gen 2 Crystal; 1..13 → 0..12 normalization for Gen 3 renderer compatibility |
+| `0bb3186` | 3 | Moves + PP from party — 165 Gen 1 + 251 Gen 2 moves.json + `move_data`/`move_name` adapter; Gen 2 PP-Up bit unpacking |
+| `f2bafb9` | 4 | Enemy moves + PP in battle (both gens) |
+| `ac99a8e` | 5 | Trainer class + named gym leaders/E4/rivals; Lua-side resolution; server.py opponent_class fallback widened |
+| `8006a5c` | 6 | Wild encounter tables JSON + adapter `encounter_table()` (partial coverage; expandable) |
+| `9b6822b` | 7 | SFX infrastructure (`M.playSfx`) — disabled by default; diagnostics for live discovery |
+| `71c7523` | 8 | Archipelago variant detection: RB AP (Alchav) + Crystal AP (gerbiljames fork) |
+| `4cde85c` | 9 | Docs handoff: REFERENCE.md + per-game READMEs |
+| `0c9291a` | 10 tools | pret .sym extraction pipeline (RGBDS v1.0.1 auto-installed; rgbasm/rgblink driven directly, no `make` / w64devkit) + pytest-gated verifier |
+| `a494317` | 10 fixes | 7 pret-authoritative address corrections (Gen 1 box_nicks, Yellow stat-stages, Crystal stat-stages, Crystal trainer addresses) |
+| `208050d` | 10 docs | PHASE9_BATCH.md trimmed to runtime-only Phase 9-smoke; phase0_address_audit.md archived |
+| `b4a869c` | 11 | Gold + Silver support via pret/pokegold; ~45 min wall-clock thanks to Phase 10 infrastructure |
 
-## Phase rollout protocol
+---
 
-Each phase is a discrete work session resulting in ONE commit. Steps within
-a phase:
+## Supported games after this branch
 
-1. **Research** — fetch relevant pret tables/addresses, read affected
-   client + adapter + profile files.
-2. **Diagnostic Lua first** — write `lua/tests/test_gen{1,2}_<phase>.lua`
-   that dumps candidate addresses. **Ask the user to F-key through it and
-   report results before editing profiles.**
-3. **Profile + client edits** — update `lua/games/gen{1_rby,2_crystal}.lua`
-   profile and the client's `build_party_snapshot()` /
-   `build_enemy_snapshot()`.
-4. **Adapter + data** — extend `server/adapters/gen{1_rby,2_crystal}.py`,
-   add data JSON in `data/games/gen{1_rby,2_crystal}/`.
-5. **Tests** — extend `tests/unit/test_gen{1,2}_adapter.py`; add
-   state-machine cases to `tests/unit/test_state.py` if applicable. Do
-   NOT touch `test_gen3_adapter.py` fixtures.
-6. **Docs** — flip the relevant row in
-   [docs/REFERENCE.md](../../../docs/REFERENCE.md) Feature Status from ❌
-   → ✅; update the per-game README; add to `tests/TESTING.md` checklist
-   if manual.
-7. **Manual smoke checklist** — provide the user a 5–10 min BizHawk
-   play-through to confirm visible behavior.
-8. **Regression gate** — `pytest tests/unit/` green (853 + new phase
-   tests).
-9. **Commit** — single commit, diff constrained to Gen 1/2/shared-non-Gen-3
-   files. PR-shaped message.
+| Game | Variant string(s) | ROM title at 0x134 |
+|---|---|---|
+| Red | `red`, `red_ap` | `POKEMON RED` + seed-name at 0xFFDB → `red_ap` |
+| Blue | `blue`, `blue_ap` | `POKEMON BLUE` + seed-name at 0xFFDB → `blue_ap` |
+| Yellow | `yellow` | `POKEMON YELLOW` (no upstream AP world) |
+| Crystal | `crystal`, `crystal_ap` | `PM_CRYSTAL` / `AP_CRYSTAL` (gerbiljames fork) |
+| Gold | `gold` | `POKEMON_GLD` |
+| Silver | `silver` | `POKEMON_SLV` |
 
-## Phase 1 starting tactics (begin here)
+All share `game_id = "gen1_rby"` (R/B/Y) or `"gen2_crystal"` (C/G/S) → single adapter per gen handles all variants.
 
-**Goal**: unblock Gen 2 by verifying 4 TODO addresses, wiring two missing
-commands, and adding egg-gift detection. Most plumbing; least risk.
+---
 
-### 1a. Verify Gen 2 battle memory addresses
+## Files to know
 
-[lua/games/gen2_crystal.lua:42-75](../../../lua/games/gen2_crystal.lua:42)
-has these TODOs:
+**For the runtime smoke check** (see `tests/PHASE9_BATCH.md` for the full protocol):
+- `lua/clients/gen1_rby_client.lua` — Gen 1 client (used for R/B/Y, including AP variants)
+- `lua/clients/gen2_crystal_client.lua` — Gen 2 client (used for Crystal, Gold, Silver, and Crystal AP)
+- `lua/games/gen1_rby.lua` — Gen 1 profiles (red/blue/yellow + red_ap/blue_ap)
+- `lua/games/gen2_crystal.lua` — Gen 2 profiles (crystal + crystal_ap + gold + silver)
+- `lua/memory_gb.lua` — shared GB/GBC memory helpers (used by Gen 1/2 only — never touched by Gen 3)
 
-```lua
-enemy_count_addr        = 0xD280  -- TODO: verify in BizHawk
-enemy_base_addr         = 0xD288  -- TODO: verify in BizHawk
-enemy_species_list_addr = 0xD281  -- TODO: verify in BizHawk
-battle_flag_addr        = 0xD22D  -- TODO: verify (already gated as unreliable)
+**For address verification** (Phase 10 pipeline):
+- `tools/_build_tools_bootstrap.py` — auto-installs RGBDS v1.0.1 to `.cache/build-tools/` on Windows
+- `tools/build_pret_syms.py` — clones pret/pokered/pokeyellow/pokecrystal/pokegold, drives rgbasm+rgblink directly, emits `data/pret_syms.json`
+- `tools/verify_profile_addresses.py` — diffs Lua profile addresses vs pret authority
+- `tests/unit/test_profile_addresses.py` — pytest gate (skipped if pret_syms.json missing)
+- `data/pret_syms.json` — 33,686 symbols across 4 repos (~14MB pretty-printed, committed so contributors without RGBDS can still run pytest)
+
+**For the adapters** (Python side, server-rendered features):
+- `server/adapters/gen1_rby.py` — Gen 1 adapter (move_data, encounter_table, item_name, etc.)
+- `server/adapters/gen2_crystal.py` — Gen 2 adapter (same + is_daycare_area, gender from DVs, shinies)
+- `data/games/gen1_rby/` — moves.json, trainers.json, encounter_tables.json
+- `data/games/gen2_crystal/` — same set
+
+**Diagnostic Lua scripts (Phase 9 reference)** in `lua/tests/`:
+- `test_gen{1,2}_profile_audit.lua` — Phase 0 raw address dumps
+- `test_gen{1,2}_stat_stages.lua` — Phase 2
+- `test_gen{1,2}_moves.lua` — Phase 3
+- `test_gen{1,2}_enemy_moves.lua` — Phase 4
+- `test_gen{1,2}_trainer_info.lua` — Phase 5
+- `test_gen{1,2}_sfx.lua` — Phase 7 (SFX dispatch discovery)
+
+---
+
+## Server interaction surface (regression-safe)
+
+The only modification to shared server code is **server/server.py:2818-2825** — a one-block widening of the opponent_class fallback path. The widening is behind an `elif` that only fires when `adapter.trainer_info(tid)` returns empty `("", "")`. Gen 3's adapter always returns non-empty for trainer battles → Gen 3 path is bit-identical to master.
+
+Everything else flows through the adapter:
+- `stat_stages` field in party/enemy snapshots → rendered by `server/server.py:_stat_stages_html()` (gen-agnostic).
+- `moves[]` / `pp[]` / `pp_bonuses` → `_enrich_party()` / `_enrich_battle_state()` resolve to `move_details` via `adapter.move_data()`.
+- `is_egg` capture flag → `state.py:_is_gift_capture(area_id, is_egg)` checks `adapter.is_daycare_area()` (Gen 1/2 had `is_daycare_area` added in Phase 1; Gen 3 already had it).
+- `opponent_class` / `opponent_name` → set via the widened fallback OR adapter `trainer_info`.
+
+No other shared code (server.py, state.py, stream_overlays.py, pokemon_data.py, move_data.py) was modified.
+
+---
+
+## What remains (Phase 9-smoke — for the human user)
+
+Open `tests/PHASE9_BATCH.md` and work through 6 sections (~30-60 min total):
+1. **Memorialize routing** — load a ROM, faint a linked mon, confirm body ends up in Box 12 (Gen 1) or Box 14 (Gen 2)
+2. **Egg-gift classification (Crystal)** — wild Route 34 capture, Mystery Egg from Mr. Pokemon, daycare-bred egg, box pickup
+3. **Status page rendering** — Moves(N) badges, stat-stage badges, trainer name header, encounter overlay
+4. **AP variant detection (optional)** — only if user has Alchav RB AP / gerbiljames Crystal AP patched ROMs
+5. **SFX dispatch (optional)** — Phase 7 is disabled by default; the diagnostic lets the user probe candidate addresses
+6. **Gen 3 regression** — load FireRed, walk 10 paces, confirm no visual differences from master
+
+After verification, branch is ready to merge to master via squash or merge — user's call.
+
+---
+
+## How to continue work in a fresh agent session
+
+```
+# Enter the worktree
+cd "E:/Google Drive/SLink/.claude/worktrees/gen1-gen2-parity"
+
+# Verify state
+git log --oneline master..HEAD          # 15 commits
+python -m pytest tests/unit/ -q          # 897 passing
+python tools/verify_profile_addresses.py # 156 ok / 0 fail
+
+# Re-run address verification (if pret upstream changed)
+python tools/build_pret_syms.py --update # ~30s
+python tools/verify_profile_addresses.py # confirm still all-OK
+
+# To add a new variant (e.g. Crystal_AU localization), pattern from Phase 11:
+# 1. Add repo entry to tools/build_pret_syms.py PRET_REPOS dict
+# 2. Run build_pret_syms.py
+# 3. Inspect symbols vs existing profile
+# 4. Add variant profile to lua/games/gen{1,2}_*.lua
+# 5. Update detect_variant() / rom_type_for_variant()
+# 6. Add variant mapping to tools/verify_profile_addresses.py PROFILE_TO_PRET
+# 7. Run verifier; commit
 ```
 
-Pret cross-check: `pokecrystal/ram/wram.asm` — find `wOTPartyCount`,
-`wOTPartyMon1Species`, `wOTPartySpecies`, `wInBattle`. Then write
-`lua/tests/test_gen2_memory.lua` (model after the existing
-[test_gen1_memory.lua](../../../lua/tests/test_gen1_memory.lua)) that
-dumps reads of these addresses live during:
-- overworld idle
-- wild battle (e.g., grass on Route 29)
-- trainer battle (e.g., Falkner)
+## Plan-file revision history
 
-User runs it with F-keys; verify the bytes you see match expectations
-(party count 1–6, species 1–251, species-list 0xFF terminator). Update
-profile, remove TODOs.
+The plan at `~/.claude/plans/read-the-handoff-file-mellow-crown.md` has the full design discussion with the user across this session, including:
+- Original Phases 1-6 plan
+- Scope expansion (Phase 7 sound, AP variants, testing-at-end)
+- Phase 10 investigation (5 approaches evaluated; pret .sym extraction chosen)
+- Phase 10 → supersede Phase 9 reframing
+- RGBDS direct-invocation rationale (no `make` / w64devkit needed)
+- Cross-generation scope analysis (Gen 3 feasible, Gen 4 deferred)
 
-### 1b. Wire `force_whiteout` for Gen 2
+It's the canonical record. The HANDOFF.md you're reading is the execution summary.
 
-[lua/clients/gen2_crystal_client.lua](../../../lua/clients/gen2_crystal_client.lua)
-~line 212 is the dispatcher. Add a `force_whiteout` case modeled on
-[gen1_rby_client.lua](../../../lua/clients/gen1_rby_client.lua)'s pattern:
-loop slot 0..party_count-1 and call `M.forceFaint(slot)`.
+---
 
-### 1c. Route Gen 2 `memorialize` to `depositMemorialMon`
+## Original handoff context (preserved for reference)
 
-Currently Gen 2 memorialize uses regular `box_mon`. The shared helper
-[memory_gb.lua:789 `M.depositMemorialMon`](../../../lua/memory_gb.lua:789)
-already supports Gen 2 (Box 14 offset `0x79E0`). Switch the dispatcher
-case to call it directly, mirroring Gen 1 client.
+The pre-execution handoff (replaced by this document) is in commit `e625364` — git show that commit to see the original phase plan. The exec turned out close to the original plan with three additions:
+- Phase 7 (sound effects) re-included after being initially deferred
+- Phases 8 (AP variants) + 10 (pret automation) + 11 (Gold/Silver) added during execution
+- Phase 9 collapsed from day-long to 30-60 min smoke check
 
-### 1d. Egg-gift detection (Gen 2)
-
-Gen 2 has Daycare (Route 34) and eggs. Two-part wire-up:
-
-- **Lua**: read the egg flag from the party mon struct. Per pret notes,
-  Gen 2 marks eggs via a flag byte + species `0xFD`. Find the exact
-  offset (probably the same general flag byte that holds the "is shiny"
-  bit). Forward `is_egg=true|false` on capture events (mirroring Gen 3
-  commit `be648eb` — see `git show be648eb -- lua/clients/gen3_frlge_client.lua`
-  for the canonical wire-up shape).
-- **Adapter**: override `is_daycare_area(area_id)` in
-  [server/adapters/gen2_crystal.py](../../../server/adapters/gen2_crystal.py)
-  to return `True` for the Route 34 daycare area_id. Look up the actual
-  ID from
-  [data/games/gen2_crystal/area_map.json](../../../data/games/gen2_crystal/area_map.json).
-- **Tests**: mirror the three Gen 3 egg cases (egg-in-encounter-area-is-gift,
-  egg-in-daycare-is-not-gift, capture-event-without-is_egg-field) that
-  shipped in `be648eb` — see `tests/unit/test_state.py` for the
-  pattern. Don't touch Gen 3 fixtures.
-
-This leverages the existing
-[`_is_gift_capture(area_id, is_egg)` in server/state.py:597](../../../server/state.py:597)
-— zero Gen 3 paths touched.
-
-### Phase 1 expected diff scope
-
-- `lua/games/gen2_crystal.lua` — address fixes
-- `lua/clients/gen2_crystal_client.lua` — dispatcher + egg flag read
-- `lua/tests/test_gen2_memory.lua` — NEW (diagnostic)
-- `server/adapters/gen2_crystal.py` — `is_daycare_area()` override
-- `tests/unit/test_gen2_adapter.py` — daycare tests
-- `tests/unit/test_state.py` — egg-gift state tests for Gen 2
-- `docs/REFERENCE.md` — flip relevant rows ❌ → ✅
-- `data/games/gen2_crystal/README.md` — note the new behavior
-
-## Subsequent phases (one-line each)
-
-- **Phase 2** — stat stages: add ATK/DEF/SPD/SPC/ACC/EVA reads in battle
-  to both gens' `build_party_snapshot()` / `build_enemy_snapshot()`. Will
-  light up the existing stat-stages renderer.
-- **Phase 3** — moves + PP read from party struct for both gens. Generate
-  `data/games/gen{1,2}/moves.json` from pret. Add `move_data()` /
-  `move_name()` to adapters.
-- **Phase 4** — enemy moves + PP in battle. Builds on Phase 3. Lights up
-  the existing collapsible Moves(N) table.
-- **Phase 5** — trainer class + name. Read trainer_class_id /
-  trainer_id from RAM during trainer battles; implement
-  `trainer_info()` on both adapters.
-- **Phase 6** — wild encounter tables. Static JSON for R/B/Y and Crystal
-  encounters; adapter `encounter_table()` impl lights up the existing
-  `/stream/enc-table-{a,b}` overlay.
-
-## Useful pre-existing Gen 3 reference commits
-
-Look at these for the canonical shape of each feature when implementing
-the Gen 1/2 equivalent (read-only — do not modify their code):
-
-- `0c3a389` feat: doubles battle detection for Gen 3 status page
-- `8d2e3f2` feat: detect enemy moves and PP in battle (Gen 3)
-- `be648eb` feat: detect eggs in capture events to flag NPC egg-gifts as gifts
-- `6b9d42f` feat: combined enemy-focus overlay + party-style enemy-trainer
-
-## Key existing utilities (reuse, don't reinvent)
-
-- `_is_gift_capture(area_id, is_egg)` —
-  [server/state.py:597](../../../server/state.py:597)
-- `M.depositMemorialMon(slot)` —
-  [lua/memory_gb.lua:789](../../../lua/memory_gb.lua:789)
-- `M.forceFaint(slot)` —
-  [lua/memory_gb.lua:516](../../../lua/memory_gb.lua:516)
-- `_enrich_party` / `_enrich_battle_state` in
-  [server/server.py](../../../server/server.py) (already attaches move
-  details when `moves[]` is present in the payload — should "just work"
-  for Gen 1/2 once the Lua side emits the data)
-
-## Open items / things to verify as you go
-
-- Phase 2: Gen 1 vs Gen 2 stat-stage byte encoding (centered at 6? at 0?
-  signed?). pret will clarify.
-- Phase 3: Gen 2 PP byte high-2-bits hold PP Up count (similar to Gen 3)
-  — verify formula matches Gen 3's `max_pp = base + base*pp_ups//5`.
-- Phase 5: status page rendering of `bs.opponent_class` /
-  `bs.opponent_name` — does it currently have a Gen 3 gate that would
-  silently exclude Gen 1/2 even with real adapter data? Spot-check
-  before starting Phase 5.
-- Phase 6: `/stream/enc-table-*` overlay — does the current
-  implementation have an `if is_rr:` guard? If yes, add a Gen 1/2
-  parallel branch instead of widening the Gen 3 condition.
-
-## Verification per phase
-
-1. `pytest tests/unit/` green (currently 853 passing; growing per phase).
-2. New phase tests pass.
-3. User runs the manual BizHawk checklist (~5–10 min) and reports
-   visible behavior.
-4. Visual inspection of status page + relevant overlays.
-5. docs/REFERENCE.md Feature Status table updated.
-
-## When all six phases land
-
-Final cleanup pass: update `README.md` if any newly-working features
-warrant a one-line mention (likely yes for trainer names and encounter
-tables). Update `tests/TESTING.md` end-to-end checklist if it diverged.
-Merge `gen1-gen2-parity` → `master` via PR (squash or merge — user's
-call).
+Gen 3 / Radical Red / Emerald — strictly untouched. The hard constraint held throughout.
