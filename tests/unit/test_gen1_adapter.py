@@ -600,3 +600,16 @@ def test_encounter_table_entry_schema(adapter):
         assert "min_level" in entry
         assert "max_level" in entry
         assert entry["min_level"] <= entry["max_level"]
+
+
+# ── Memorial box ─────────────────────────────────────────────────────────
+
+
+def test_memorial_box_index_is_box_12(adapter):
+    """Gen 1 R/B/Y has 12 PC boxes; memorial = last box (0-indexed 11).
+
+    Pairs with depositMemorialMon in lua/memory_gb.lua which writes to SRAM
+    CartRAM offset 0x75EA, and the Gen 1 client's build_box_snapshot which
+    emits memorial entries with box=11.
+    """
+    assert adapter.memorial_box_index == 11

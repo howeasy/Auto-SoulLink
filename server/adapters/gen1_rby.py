@@ -406,3 +406,11 @@ class Gen1Adapter(GameAdapter):
     def form_sprite_id(self, species_id: int) -> int | None:
         # No forms in Gen 1
         return None
+
+    @property
+    def memorial_box_index(self) -> int:
+        # Gen 1 R/B/Y: 12 boxes (0-indexed 0–11), memorial = Box 12 (index 11).
+        # Lua-side depositMemorialMon writes to SRAM CartRAM offset 0x75EA;
+        # the Gen 1 client reads it back into pc_boxes with box=11 so the
+        # server's memorial-contents filter picks it up.
+        return 11

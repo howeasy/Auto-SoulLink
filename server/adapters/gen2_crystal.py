@@ -339,6 +339,14 @@ class Gen2CrystalAdapter(GameAdapter):
         # No alternate forms in Gen 2 (Unown forms are cosmetic, same NatDex)
         return None
 
+    @property
+    def memorial_box_index(self) -> int:
+        # Gen 2 C/G/S: 14 boxes (0-indexed 0–13), memorial = Box 14 (index 13).
+        # Lua-side depositMemorialMon writes to SRAM CartRAM offset 0x79E0;
+        # the Gen 2 client reads it back into pc_boxes with box=13 so the
+        # server's memorial-contents filter picks it up.
+        return 13
+
     def gym_badge_slugs(self, rom_type: str) -> list[tuple[int, str]]:
         return [
             ( 9, "Zephyr Badge"),

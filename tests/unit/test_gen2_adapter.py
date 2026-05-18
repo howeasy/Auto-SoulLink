@@ -825,3 +825,16 @@ def test_wild_capture_on_route_34_no_longer_treated_as_gift(tmp_path, monkeypatc
         "Wild capture on Route 34 must activate the Pokéball gate"
     assert _has_cmd(cmds, "box_mon", "F00D:0002:13"), \
         "Wild capture on Route 34 must be quarantined like any other route"
+
+
+# ── Memorial box ─────────────────────────────────────────────────────────
+
+
+def test_memorial_box_index_is_box_14(adapter):
+    """Gen 2 C/G/S has 14 PC boxes; memorial = last box (0-indexed 13).
+
+    Pairs with depositMemorialMon in lua/memory_gb.lua which writes to SRAM
+    CartRAM offset 0x79E0, and the Gen 2 client's build_box_snapshot which
+    emits memorial entries with box=13.
+    """
+    assert adapter.memorial_box_index == 13

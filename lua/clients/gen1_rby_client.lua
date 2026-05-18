@@ -421,6 +421,63 @@ local function build_enemy_snapshot()
     return enemy
 end
 
+-- ── PC box snapshot ───────────────────────────────────────────────────────────
+-- Emits both the currently-active box (read from WRAM) and the dedicated
+-- memorial box (read from its fixed SRAM offset, regardless of which box is
+-- active). The memorial box gets box=11 (Gen 1 Box 12, 0-indexed) so the
+-- server's memorial_box_index filter in handle_debug_raw_state picks it up.
+local MEMORIAL_BOX_INDEX = 11  -- Gen 1: Box 12 (last box), 0-indexed
+
+local function build_box_snapshot()
+    local entries = {}
+    -- Active box (in WRAM)
+    local ok, bcount = pcall(M.getBoxCount)
+    if ok and bcount and bcount <= M.BOX_MAX_MONS then
+        for i = 0, bcount - 1 do
+            local ok2, slot = pcall(M.readBoxSlot, i)
+            if ok2 and slot and slot.key then
+                local natdex = G.toNatDex(slot.species_index)
+                if natdex > 0 then
+                    local nick = ""
+                    local ok3, n = pcall(M.readBoxNickname, i)
+                    if ok3 and n then nick = n end
+                    entries[#entries + 1] = {
+                        box          = 0,  -- active box (Gen 1 only knows active box index)
+                        slot         = i,
+                        key          = slot.key,
+                        nickname     = nick,
+                        species_id   = natdex,
+                        held_item_id = 0,  -- Gen 1 has no held items
+                        ability_id   = 0,  -- Gen 1 has no abilities
+                    }
+                end
+            end
+        end
+    end
+    -- Memorial box (Box 12, in SRAM at fixed offset)
+    local ok_m, mcount = pcall(M.getMemorialBoxCount)
+    if ok_m and mcount and mcount > 0 then
+        for i = 0, mcount - 1 do
+            local ok2, slot = pcall(M.readMemorialBoxSlot, i)
+            if ok2 and slot and slot.key then
+                local natdex = G.toNatDex(slot.species_index)
+                if natdex > 0 then
+                    entries[#entries + 1] = {
+                        box          = MEMORIAL_BOX_INDEX,
+                        slot         = i,
+                        key          = slot.key,
+                        nickname     = slot.nickname or "",
+                        species_id   = natdex,
+                        held_item_id = 0,
+                        ability_id   = 0,
+                    }
+                end
+            end
+        end
+    end
+    return entries
+end
+
 -- ── Hello event ───────────────────────────────────────────────────────────────
 local function send_hello()
     local cur_map = M.getCurrentMap()
@@ -453,6 +510,8 @@ local function send_hello()
             if trainer_name ~= "" then evt.opponent_name = trainer_name end
         end
     end
+    local ok_b, boxes = pcall(build_box_snapshot)
+    if ok_b and boxes then evt.pc_boxes = boxes end
     send(evt, "hello", true)
 
     -- Log party keys for diagnostics
@@ -499,6 +558,8 @@ local function send_tick()
             if trainer_name ~= "" then evt.opponent_name = trainer_name end
         end
     end
+    local ok_b, boxes = pcall(build_box_snapshot)
+    if ok_b and boxes then evt.pc_boxes = boxes end
     send(evt, "tick", true)
 end
 

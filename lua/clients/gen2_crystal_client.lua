@@ -611,27 +611,54 @@ local function scan_current_box()
     end
 end
 
+-- Memorial box index for Gen 2: Box 14 (last of 14 boxes), 0-indexed.
+local MEMORIAL_BOX_INDEX = 13
+
 local function build_box_snapshot()
-    -- Returns pc_boxes array for tick/hello events (same format as Gen 3)
-    local ok, bcount = pcall(M.getBoxCount)
-    if not ok or not bcount or bcount > M.BOX_MAX_MONS then return {} end
+    -- Returns pc_boxes array for tick/hello events (same format as Gen 3).
+    -- Includes the currently-active box plus the memorial box (read from its
+    -- fixed SRAM offset regardless of which box is active), so the server's
+    -- memorial_box_index filter in handle_debug_raw_state picks up memorial
+    -- contents without requiring the player to switch to Box 14.
     local entries = {}
-    for i = 0, bcount - 1 do
-        local ok2, slot = pcall(M.readBoxSlot, i)
-        if ok2 and slot and slot.key and slot.species_index > 0 and slot.species_index <= 251 then
-            local nick = ""
-            local ok3, n = pcall(M.readBoxNickname, i)
-            if ok3 and n then nick = n end
-            local natdex = G.toNatDex(slot.species_index)
-            entries[#entries + 1] = {
-                box          = 0,  -- active box (Crystal has only 1 active at a time)
-                slot         = i,
-                key          = slot.key,
-                nickname     = nick,
-                species_id   = natdex,
-                held_item_id = slot.held_item or 0,
-                ability_id   = 0,  -- Gen 2 has no abilities
-            }
+    local ok, bcount = pcall(M.getBoxCount)
+    if ok and bcount and bcount <= M.BOX_MAX_MONS then
+        for i = 0, bcount - 1 do
+            local ok2, slot = pcall(M.readBoxSlot, i)
+            if ok2 and slot and slot.key and slot.species_index > 0 and slot.species_index <= 251 then
+                local nick = ""
+                local ok3, n = pcall(M.readBoxNickname, i)
+                if ok3 and n then nick = n end
+                local natdex = G.toNatDex(slot.species_index)
+                entries[#entries + 1] = {
+                    box          = 0,  -- active box (Crystal has only 1 active at a time)
+                    slot         = i,
+                    key          = slot.key,
+                    nickname     = nick,
+                    species_id   = natdex,
+                    held_item_id = slot.held_item or 0,
+                    ability_id   = 0,  -- Gen 2 has no abilities
+                }
+            end
+        end
+    end
+    -- Memorial box (Box 14, in SRAM at fixed offset 0x79E0)
+    local ok_m, mcount = pcall(M.getMemorialBoxCount)
+    if ok_m and mcount and mcount > 0 then
+        for i = 0, mcount - 1 do
+            local ok2, slot = pcall(M.readMemorialBoxSlot, i)
+            if ok2 and slot and slot.key and slot.species_index > 0 and slot.species_index <= 251 then
+                local natdex = G.toNatDex(slot.species_index)
+                entries[#entries + 1] = {
+                    box          = MEMORIAL_BOX_INDEX,
+                    slot         = i,
+                    key          = slot.key,
+                    nickname     = slot.nickname or "",
+                    species_id   = natdex,
+                    held_item_id = slot.held_item or 0,
+                    ability_id   = 0,
+                }
+            end
         end
     end
     return entries

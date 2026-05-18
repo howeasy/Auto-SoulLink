@@ -373,6 +373,80 @@ function M.readBoxNickname(slot)
     return M.decodeString(M.BOX_NICKS_ADDR + slot * 11, 11)
 end
 
+-- ═══ Memorial Box Reading (mirrors depositMemorialMon's layout) ═══
+-- The memorial box lives at a fixed SRAM CartRAM offset (Gen 1: 0x75EA,
+-- Gen 2: 0x79E0). Layout is identical to the active box: count byte, species
+-- list (BOX_MAX_MONS + 1 with terminator), mon structs, OT names, nicknames.
+-- These reads complement depositMemorialMon so the server can display memorial
+-- contents on the status / debug pages.
+
+function M.getMemorialBoxOffset()
+    local mem_off = M.profile and M.profile.memorial_box_cartram_offset
+    if not mem_off then
+        if M.GENERATION == 1 then
+            mem_off = 0x75EA
+        elseif M.GENERATION == 2 then
+            mem_off = 0x79E0
+        end
+    end
+    return mem_off
+end
+
+function M.getMemorialBoxCount()
+    local mem_off = M.getMemorialBoxOffset()
+    if not mem_off then return 0 end
+    local count = mem_r8(mem_off, SRAM_DOMAIN)
+    if count > M.BOX_MAX_MONS then return 0 end
+    return count
+end
+
+function M.readMemorialBoxSlot(slot)
+    local mem_off = M.getMemorialBoxOffset()
+    if not mem_off then return nil end
+    if slot < 0 or slot >= M.BOX_MAX_MONS then return nil end
+
+    local structs_off = mem_off + 1 + (M.BOX_MAX_MONS + 1)
+    local ots_off     = structs_off + M.BOX_MAX_MONS * M.BOX_STRUCT_SIZE
+    local nicks_off   = ots_off + M.BOX_MAX_MONS * 11
+
+    local base = structs_off + slot * M.BOX_STRUCT_SIZE
+    local species_idx = mem_r8(base + M.SPECIES_OFFSET, SRAM_DOMAIN)
+    if species_idx == 0 or species_idx == 0xFF then
+        return nil
+    end
+
+    local dv1 = mem_r8(base + M.DV_OFFSET_1, SRAM_DOMAIN)
+    local dv2 = mem_r8(base + M.DV_OFFSET_2, SRAM_DOMAIN)
+    local otid = mem_r8(base + M.OTID_OFFSET, SRAM_DOMAIN) * 256
+               + mem_r8(base + M.OTID_OFFSET + 1, SRAM_DOMAIN)
+    local key = string.format("%02X%02X:%04X:%02X", dv1, dv2, otid, species_idx)
+
+    local nick_addr = nicks_off + slot * 11
+    local chars = {}
+    for i = 0, 10 do
+        local b = mem_r8(nick_addr + i, SRAM_DOMAIN)
+        if b == 0x50 then break end
+        local ch = M._CHARSET[b]
+        chars[#chars + 1] = ch or "?"
+    end
+    local nickname = table.concat(chars)
+
+    local result = {
+        key = key,
+        species_index = species_idx,
+        slot = slot,
+        nickname = nickname,
+    }
+    if M.HELD_ITEM_OFFSET then
+        local held_offset = M.profile and M.profile.box_held_item_offset or M.HELD_ITEM_OFFSET
+        result.held_item = mem_r8(base + held_offset, SRAM_DOMAIN)
+    end
+    if M.IS_EGG_SPECIES and species_idx == M.IS_EGG_SPECIES then
+        result.is_egg = true
+    end
+    return result
+end
+
 -- ═══ Enemy Party Reading ═══
 
 function M.getEnemyCount()
