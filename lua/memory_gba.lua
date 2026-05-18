@@ -743,6 +743,26 @@ function M.decryptHeldItem(base_addr)
     return (w0 >> 16) & 0xFFFF
 end
 
+-- Reads the ppBonuses byte from a party/box mon's Growth substruct.
+-- ppBonuses encodes PP-Ups: 2 bits per move slot (0–3 PP-Ups applied).
+-- Growth layout: species(u16), heldItem(u16), exp(u32), ppBonuses(u8), …
+-- CFRU: unencrypted Growth at +0x20; ppBonuses at +0x28.
+-- Vanilla/AP: permuted+encrypted Growth substruct.
+function M.decryptPpBonuses(base_addr)
+    if M.CFRU_NO_ENCRYPT then
+        return mem_r8(base_addr + M.OFF_SUBSTRUCT + 8)
+    end
+    local personality = mem_r32(base_addr + M.OFF_PERSONALITY)
+    local otId        = mem_r32(base_addr + M.OFF_OTID)
+    local key         = personality ~ otId
+    local perm        = M.SUBSTRUCT_ORDER[(personality % 24) + 1]
+    local growth_pos  = perm[1]
+    local sub_base    = base_addr + M.OFF_SUBSTRUCT + growth_pos * 12
+    -- ppBonuses is the low byte of the 3rd dword (bytes 8-11) of Growth.
+    local w2 = mem_r32(sub_base + 8) ~ key
+    return w2 & 0xFF
+end
+
 -- Resolves the ability ID for a party/box mon by reading gBaseStats from ROM.
 -- Returns the ability ID (u8), or 0 if gBaseStats is unavailable.
 --
@@ -1429,6 +1449,8 @@ function M.readEnemyParty()
         if not ok_s or not sid or sid == 0 then sid = 0 end
         local ok_a, aid = pcall(M.getAbilityId, base)
         local ok_i, iid = pcall(M.decryptHeldItem, base)
+        local ok_m, mv, pp = pcall(M.decryptMoves, base)
+        local ok_b, ppb = pcall(M.decryptPpBonuses, base)
         result[#result + 1] = {
             species_id    = sid,
             level         = mem_r8(base + M.OFF_LEVEL),
@@ -1437,6 +1459,9 @@ function M.readEnemyParty()
             ability_id    = (ok_a and aid) or 0,
             held_item_id  = (ok_i and iid) or 0,
             status_cond   = mem_r32(base + M.OFF_STATUS),
+            moves         = (ok_m and mv) or {0,0,0,0},
+            pp            = (ok_m and pp) or {0,0,0,0},
+            pp_bonuses    = (ok_b and ppb) or 0,
         }
     end
     return result

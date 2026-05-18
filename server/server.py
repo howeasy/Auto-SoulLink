@@ -581,6 +581,8 @@ _STATUS_HTML = """<!DOCTYPE html>
     .hp-low    {{ background:#f44; }}
     .foe-table td {{ padding: 2px 6px; border-bottom: 1px solid #1e1e1e; }}
     .foe-table th {{ padding: 2px 6px; }}
+    .foe-moves-row > td {{ padding: 0 6px 4px 38px; border-bottom: 1px solid #1e1e1e; }}
+    .foe-moves-row .move-table {{ margin: 0; }}
     .active-foe td:nth-child(2) {{ color: #ff0; }}
     .active-mon td:first-child {{ color: #ff0; }}
     .mon-sprite {{ width:48px; height:48px; image-rendering:pixelated; vertical-align:middle; margin:-2px 2px -2px 0; clip-path:inset(2px); }}
@@ -3116,13 +3118,18 @@ class SLinkServer:
                 # Enrich moves: resolve raw move IDs -> full move detail dicts
                 raw_moves = d.get("moves", [])
                 raw_pp = d.get("pp", [])
+                pp_bonuses = d.get("pp_bonuses", 0)
                 move_details = []
                 for idx, mid in enumerate(raw_moves):
                     if mid and mid > 0:
                         md = self.adapter.move_data(mid)
                         if md:
                             md = dict(md)
-                            md["current_pp"] = raw_pp[idx] if idx < len(raw_pp) else md.get("pp", 0)
+                            base_pp = md.get("pp", 0)
+                            pp_ups = (pp_bonuses >> (idx * 2)) & 0x3
+                            if base_pp:
+                                md["pp"] = base_pp + (base_pp * pp_ups) // 5
+                            md["current_pp"] = raw_pp[idx] if idx < len(raw_pp) else md["pp"]
                             move_details.append(md)
                 d["move_details"] = move_details
                 enriched[key] = d
@@ -3148,7 +3155,7 @@ class SLinkServer:
             return enriched
 
         def _enrich_battle_state(pid):
-            """Add sprite_html and species_name to each enemy_party entry."""
+            """Add sprite_html, species_name, and move_details to each enemy_party entry."""
             bs = dict(self.battle_state.get(pid, {"in_battle": False, "enemy_party": []}))
             ep = bs.get("enemy_party", [])
             enriched = []
@@ -3159,6 +3166,23 @@ class SLinkServer:
                     em2["sprite_html"] = self._get_sprite_html(sid)
                 if sid and not em2.get("species_name"):
                     em2["species_name"] = self.adapter.species_name(sid)
+                # Enrich moves: resolve raw move IDs -> full move detail dicts (mirrors _enrich_party).
+                raw_moves = em2.get("moves", [])
+                raw_pp = em2.get("pp", [])
+                pp_bonuses = em2.get("pp_bonuses", 0)
+                move_details = []
+                for idx, mid in enumerate(raw_moves):
+                    if mid and mid > 0:
+                        md = self.adapter.move_data(mid)
+                        if md:
+                            md = dict(md)
+                            base_pp = md.get("pp", 0)
+                            pp_ups = (pp_bonuses >> (idx * 2)) & 0x3
+                            if base_pp:
+                                md["pp"] = base_pp + (base_pp * pp_ups) // 5
+                            md["current_pp"] = raw_pp[idx] if idx < len(raw_pp) else md["pp"]
+                            move_details.append(md)
+                em2["move_details"] = move_details
                 enriched.append(em2)
             bs["enemy_party"] = enriched
             return bs
@@ -3524,6 +3548,14 @@ class SLinkServer:
                             f'<td>{etype_cell}</td>'
                             f'{"<td>" + abl_html + "</td>" if has_abilities else ""}</tr>'
                         )
+                        emove_html = _move_table_html(em.get("move_details", []),
+                                                      mon_key=f"enemy:{ei}")
+                        if emove_html:
+                            foe_cols = 6 if has_abilities else 5
+                            parts.append(
+                                f'<tr class="foe-moves-row" data-key="{html.escape(foe_key)}:moves">'
+                                f'<td colspan="{foe_cols}">{emove_html}</td></tr>'
+                            )
                     parts.append("</table>")
                 else:
                     parts.append('<p class="empty">No foe data yet.</p>')

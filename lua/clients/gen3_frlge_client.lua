@@ -639,6 +639,8 @@ local function build_party_snapshot(battle_active)
                 snap[#snap].moves = mv
                 snap[#snap].pp    = pp
             end
+            local ok_pb, ppb = pcall(M.decryptPpBonuses, base)
+            snap[#snap].pp_bonuses = (ok_pb and ppb) or 0
             if dc.nickname ~= "" or dc.species_id ~= 0 then
                 nick_cache[k] = dc.nickname ~= "" and dc.nickname or ("#"..dc.species_id)
             end
@@ -2504,9 +2506,11 @@ local function on_frame()
                 local is_doubles_battle = M.isDoubleBattle()
                 evt.is_doubles = is_doubles_battle
                 -- Read active foe from gBattleMons[1] (battler 1 = enemy left, always valid during battle).
-                -- BattlePokemon: species +0x00, ability +0x20, status1 +0x4C, hp +0x28, level +0x2A, maxHP +0x2C
+                -- BattlePokemon: species +0x00, moves +0x0C, ability +0x20, pp +0x24,
+                -- hp +0x28, level +0x2A, maxHP +0x2C, item +0x2E, status1 +0x4C
                 local foe_species, foe_level, foe_hp, foe_maxHP, foe_ability, foe_item, foe_status = 0, 0, 0, 0, 0, 0, 0
                 local foe_stat_stages = nil
+                local foe_moves, foe_pp, foe_pp_bonuses = nil, nil, 0
                 if M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
                     local foe_base = M.BATTLE_MONS_ADDR + 1 * M.BATTLE_MON_SIZE
                     foe_species = memory.read_u16_le(foe_base + 0x00)
@@ -2516,6 +2520,21 @@ local function on_frame()
                     foe_ability = memory.read_u8(foe_base + 0x20)
                     foe_status  = memory.read_u32_le(foe_base + M.BATTLE_MON_STATUS_OFF)
                     foe_stat_stages = M.readStatStages(1)
+                    -- Live moves/PP from gBattleMons (unencrypted, reflects post-use PP immediately).
+                    foe_moves = {
+                        memory.read_u16_le(foe_base + 0x0C),
+                        memory.read_u16_le(foe_base + 0x0E),
+                        memory.read_u16_le(foe_base + 0x10),
+                        memory.read_u16_le(foe_base + 0x12),
+                    }
+                    foe_pp = {
+                        memory.read_u8(foe_base + 0x24),
+                        memory.read_u8(foe_base + 0x25),
+                        memory.read_u8(foe_base + 0x26),
+                        memory.read_u8(foe_base + 0x27),
+                    }
+                    -- ppBonuses byte at +0x3A: 2 bits per move slot (0–3 PP-Ups).
+                    foe_pp_bonuses = memory.read_u8(foe_base + 0x3A)
                     -- BattlePokemon.item is at +0x2E (confirmed from pret/pokefirered and CFRU
                     -- pokemon.h: struct BattlePokemon { ... /*0x2E*/ u16 item; ... }).
                     -- Skip for wild battles: wild mons in CFRU/RR have item=0 in gBattleMons.
@@ -2527,6 +2546,7 @@ local function on_frame()
                 local foe2_species, foe2_level, foe2_hp, foe2_maxHP = 0, 0, 0, 0
                 local foe2_ability, foe2_item, foe2_status = 0, 0, 0
                 local foe2_stat_stages = nil
+                local foe2_moves, foe2_pp, foe2_pp_bonuses = nil, nil, 0
                 if is_doubles_battle and M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
                     local b3 = M.BATTLE_MONS_ADDR + 3 * M.BATTLE_MON_SIZE
                     foe2_species     = memory.read_u16_le(b3 + 0x00)
@@ -2536,6 +2556,19 @@ local function on_frame()
                     foe2_ability     = memory.read_u8(b3 + 0x20)
                     foe2_status      = memory.read_u32_le(b3 + M.BATTLE_MON_STATUS_OFF)
                     foe2_stat_stages = M.readStatStages(3)
+                    foe2_moves = {
+                        memory.read_u16_le(b3 + 0x0C),
+                        memory.read_u16_le(b3 + 0x0E),
+                        memory.read_u16_le(b3 + 0x10),
+                        memory.read_u16_le(b3 + 0x12),
+                    }
+                    foe2_pp = {
+                        memory.read_u8(b3 + 0x24),
+                        memory.read_u8(b3 + 0x25),
+                        memory.read_u8(b3 + 0x26),
+                        memory.read_u8(b3 + 0x27),
+                    }
+                    foe2_pp_bonuses = memory.read_u8(b3 + 0x3A)
                     if evt.is_trainer_battle then
                         foe2_item = memory.read_u16_le(b3 + 0x2E)
                     end
@@ -2574,6 +2607,10 @@ local function on_frame()
                             if foe_ability > 0  then mon.ability_id = foe_ability  end
                             mon.status_cond = foe_status
                             mon.stat_stages = foe_stat_stages
+                            -- Overlay live moves/PP from gBattleMons over the gEnemyParty decrypt.
+                            if foe_moves then mon.moves = foe_moves end
+                            if foe_pp    then mon.pp    = foe_pp    end
+                            mon.pp_bonuses = foe_pp_bonuses
                             if evt.is_trainer_battle and foe_item  > 0 then
                                 mon.held_item_id = foe_item
                             end
@@ -2581,6 +2618,9 @@ local function on_frame()
                             if foe2_ability > 0 then mon.ability_id = foe2_ability end
                             mon.status_cond = foe2_status
                             mon.stat_stages = foe2_stat_stages
+                            if foe2_moves then mon.moves = foe2_moves end
+                            if foe2_pp    then mon.pp    = foe2_pp    end
+                            mon.pp_bonuses = foe2_pp_bonuses
                             if evt.is_trainer_battle and foe2_item > 0 then
                                 mon.held_item_id = foe2_item
                             end
@@ -2601,6 +2641,9 @@ local function on_frame()
                         held_item_id = foe_item,
                         status_cond  = foe_status,
                         stat_stages  = foe_stat_stages,
+                        moves        = foe_moves,
+                        pp           = foe_pp,
+                        pp_bonuses   = foe_pp_bonuses,
                     }
                     -- Doubles: also seed foe2 into the accumulator.
                     local foe2_key = (is_doubles_battle and foe2_species > 0 and foe2_maxHP > 0)
@@ -2615,6 +2658,9 @@ local function on_frame()
                             held_item_id = foe2_item,
                             status_cond  = foe2_status,
                             stat_stages  = foe2_stat_stages,
+                            moves        = foe2_moves,
+                            pp           = foe2_pp,
+                            pp_bonuses   = foe2_pp_bonuses,
                         }
                     end
                     for k, mon in pairs(battle_seen_enemies) do
@@ -2630,6 +2676,9 @@ local function on_frame()
                                            (is_f1 and foe_item or (is_f2 and foe2_item or mon.held_item_id)),
                             status_cond  = is_f1 and foe_status  or (is_f2 and foe2_status  or (mon.status_cond or 0)),
                             stat_stages  = is_f1 and foe_stat_stages or (is_f2 and foe2_stat_stages or nil),
+                            moves        = is_f1 and foe_moves or (is_f2 and foe2_moves or mon.moves),
+                            pp           = is_f1 and foe_pp    or (is_f2 and foe2_pp    or mon.pp),
+                            pp_bonuses   = is_f1 and foe_pp_bonuses or (is_f2 and foe2_pp_bonuses or (mon.pp_bonuses or 0)),
                             active       = is_f1 or is_f2,
                         }
                     end
