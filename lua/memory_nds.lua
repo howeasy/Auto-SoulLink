@@ -269,8 +269,10 @@ M.BAG = {
 }
 
 -- ── Ball item ID ranges ────────────────────────────────────────────────────────
--- 0x0001–0x0010: Master Ball → Cherish Ball (standard)
--- 0x01EC–0x01F4: Kurt / Apricorn balls (HGSS-exclusive)
+-- Source: pret/pokeheartgold include/constants/items.h
+--   ITEM_MASTER_BALL=0x0001 … ITEM_CHERISH_BALL=0x0010 (standard 16 balls)
+--   ITEM_FAST_BALL=0x01EC … ITEM_SPORT_BALL=0x01F4    (Kurt / Apricorn — HGSS only)
+-- For Platinum, only the standard range applies; Apricorn balls don't exist as items.
 M.BALL_ID_MIN  = 0x0001
 M.BALL_ID_MAX  = 0x0010
 M.BALL_APRICORN_MIN = 0x01EC
@@ -298,38 +300,63 @@ local PC_BOX_STRIDE      = 0x1000    -- bytes per PC_BOX (30 slots + padding)
 local PC_SLOT_STRIDE     = 0x88      -- bytes per BoxPokemon slot
 
 -- Party / battle copy offsets (relative to resolved base pointer)
+-- Source: pret/pokeheartgold include/party.h struct Party (curCount + mons[6]); offsets
+-- vary by game-specific SaveData layout — see _HGSS_PROFILE / _PT_PROFILE in
+-- lua/games/gen4_hgsspt.lua for the per-variant deltas.
+-- Battle copy bases: per pret/pokeheartgold src/battle/battle_setup.c the BattleSystem
+-- holds two PartyPokemon[6] buffers — player + opponent — addressed via the gBattle
+-- workspace. Concrete RAM offsets are not symbolised in pret (they live inside a
+-- dynamically-allocated heap chunk); confirmed against
+-- NDS-Ironmon-Tracker MemoryAddresses.lua (HEART_GOLD playerBattleBase / enemyBase).
 local PARTY_COUNT_OFF    = 0xA4      -- u8, party count (0-6)
 local PARTY_OFF          = 0xA8      -- PartyPokemon[0]; stride = MON_SIZE
 local PLAYER_BATTLE_OFF  = 0x4EA98   -- player battle copy slot 0; stride = MON_SIZE
 local ENEMY_BATTLE_OFF   = 0x4F068   -- enemy battle party slot 0; stride = MON_SIZE
 
 -- Bag (relative to base pointer)
+-- Source: pret/pokeheartgold include/bag.h — struct BagItem { u16 id; u16 quantity; }
+-- and BAG_POCKET_BALLS layout. Per-variant base offsets confirmed via
+-- kwsch/PKHeX PlayerBag4HGSS.cs (BaseOffset + balls-pocket offset) and PlayerBag4Pt.cs.
 local BALLS_POCKET_OFF   = 0xD14     -- ball pocket base; 24 × {u16 id, u16 qty}
 local BALLS_POCKET_COUNT = 24        -- number of item slots in ball pocket
 
 -- Zone ID pointer: base+ZONE_ID_OFF is a pointer; the u16 two bytes in = zone.
 -- Falls back to ptr+2 if direct read returns 0. Confirmed in live T3 tests.
+-- Source: pret/pokeheartgold src/field/field_system.c — childMapHeader pointer in
+-- FieldSystem holds the active map header; struct MapHeader at *childMapHeader has
+-- u16 mapID at offset +0x02 (per pret/pokeheartgold include/map_header.h).
+-- Cross-referenced against Brian0255/NDS-Ironmon-Tracker MemoryAddresses.lua childMapHeader.
 local ZONE_ID_OFF        = 0x25FE4
 local ZONE_ID_MAX        = 0x220     -- plausibility upper bound (HGSS: 540 zones, max ID 0x21B)
 
 -- Enemy trainer ID: u16 at base+TRAINER_ID_OFF (0 = wild battle).
--- Confirmed against live wild/trainer battles (NDS-Ironmon-Tracker MemoryAddresses.lua).
+-- Source: pret/pokeheartgold src/battle/battle_setup.c — TrainerData.id field of the
+-- active opponent trainer. The address lives inside the BattleSystem heap chunk and
+-- is not symbolised in pret; concrete offset confirmed against
+-- NDS-Ironmon-Tracker MemoryAddresses.lua (HEART_GOLD enemyTrainerID).
 local TRAINER_ID_OFF     = 0x440AA
 
--- Gym badge bitmasks (HGSS):
---   BADGES_1 = Johto  (bit 0=Zephyr … bit 7=Rising)
---   BADGES_2 = Kanto  (bit 0=Boulder … bit 7=Earth)
--- For Platinum: BADGES_1 = Sinnoh (bit 0=Coal … bit 7=Beacon); BADGES_2_OFF = nil.
+-- Gym badge bitmasks:
+--   HGSS:     BADGES_1 = Johto  (bit 0=Zephyr … bit 7=Rising)
+--             BADGES_2 = Kanto  (bit 0=Boulder … bit 7=Earth)
+--   Platinum: BADGES_1 = Sinnoh (bit 0=Coal … bit 7=Beacon); BADGES_2_OFF = nil.
+-- Source: pret/pokeheartgold include/player_data.h struct PlayerProfile —
+--   u8 johtoBadges at profile+0x1A, u8 kantoBadges at profile+0x1F. Add the per-variant
+--   PlayerProfile base offset (HGSS 0x64, Pt 0x68) + 0x10 (HGSS dynamic_region) or
+--   +0x14 (Pt dynamic_region) to land at the base-relative offsets below.
 local BADGES_1_OFF       = 0x8E
 local BADGES_2_OFF       = 0x93      -- nil for Platinum
 
 -- Player trainer name: u16[8] at base+PLAYER_NAME_OFF (PlayerProfile.name).
--- Source: pret/pokeheartgold include/player_data.h (johtoBadges at profile+0x1A).
--- Chars are standard Unicode; Latin letters match ASCII. EOS = 0xFFFF or 0x0000.
+-- Source: pret/pokeheartgold include/player_data.h struct PlayerProfile.name (u16[8]).
+-- Custom Gen IV 16-bit charcode (NOT standard Unicode) — see readTrainerName() below.
+-- EOS = 0xFFFF or 0x0000.
 local PLAYER_NAME_OFF    = 0x74
 
 -- Battle status: absolute RAM address (not base-relative); non-zero in any battle.
--- Source: HGSS disassembly — stable in US 1.0.
+-- Source: pret/pokeheartgold include/battle/battle.h BATTLE_STATUS_* macros.
+-- The address itself is dynamic per build (not exposed by pret as a symbol);
+-- confirmed stable in US 1.0 via NDS-Ironmon-Tracker GLOBAL.battleStatus.
 local BATTLE_STATUS_ADDR = 0x246F48
 
 -- Memorial box index (0-based). Box 17 = UI "Box 18" = "THE DEAD".

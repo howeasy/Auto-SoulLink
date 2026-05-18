@@ -19,15 +19,28 @@
     base = memory.read_u32_le(p1 + 0x20, "Main RAM") & 0xFFFFFF
   All offsets below are relative to `base`.
 
-  Address sources:
-    • Brian0255/NDS-Ironmon-Tracker MemoryAddresses.lua + GameConfigurator.lua
-      — party, battle, zone, trainer ID, badge offsets (confirmed production-tested)
-    • kwsch/PKHeX SAV4HGSS.cs / SAV4Pt.cs / SAV4.cs
-      — Trainer1 field offset (player name, badges), Party field offset
-    • kwsch/PKHeX PlayerBag4HGSS.cs / PlayerBag4Pt.cs
-      — Bag base offset + pocket-relative offsets → BALLS_POCKET_OFF per variant
+  Address sources (cross-referenced; each constant cites its primary source inline):
     • pret/pokeheartgold include/save.h + include/constants/save_arrays.h
       — SaveData struct layout, arrayHeaders[SAVE_PCSTORAGE=41].offset field
+    • pret/pokeheartgold include/party.h
+      — struct Party { u8 curCount; PartyPokemon mons[6]; } → PARTY_COUNT/PARTY_OFF
+    • pret/pokeheartgold include/pokemon_types_def.h
+      — sizeof(PartyPokemon)=0xEC, sizeof(BoxPokemon)=0x88, Block A/B/C/D layouts
+    • pret/pokeheartgold include/pokemon_storage_system.h
+      — NUM_BOXES=18, MONS_PER_BOX=30, PCStorage.boxes[NUM_BOXES][MONS_PER_BOX]
+    • pret/pokeheartgold include/player_data.h
+      — struct PlayerProfile (name[8] @ +0x00, johtoBadges @ +0x1A, kantoBadges @ +0x1F)
+    • pret/pokeheartgold include/field_system.h + include/map_header.h
+      — FieldSystem.childMapHeader → MapHeader.mapID (u16 @ +0x02)
+    • pret/pokeheartgold include/battle/battle.h + src/battle/battle_setup.c
+      — BattleSystem, TrainerData.id (concrete RAM offset not symbolised; see Ironmon)
+    • pret/pokeplatinum — same headers, Platinum-specific offsets (different
+      dynamic_region delta: +0x14 vs HGSS +0x10)
+    • Brian0255/NDS-Ironmon-Tracker MemoryAddresses.lua + GameConfigurator.lua
+      — concrete RAM offsets confirmed against live battles (where pret only
+      provides struct layout, not the runtime heap chunk address)
+    • kwsch/PKHeX SAV4HGSS.cs / SAV4Pt.cs / SAV4.cs / PlayerBag4*.cs
+      — independently verifies Trainer1 / Party / Bag base offsets
 
   Coordinate system:
     PKHeX uses a "General" save buffer whose byte 0 = SaveData.dynamic_region[0].
