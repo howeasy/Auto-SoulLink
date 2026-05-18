@@ -547,9 +547,6 @@ local STAT_STAGES_ENEMY_OFF  = 0x49EEC   -- HGSS default
 local BATTLE_R_STRIDE        = 0x180     -- delta to right-side battler in doubles
 local ACTIVE_MON_PID_DELTA   = 0x50      -- statStages → activeMonPID within BattleMon
 local STAT_STAGES_LEN        = 7         -- atk/def/spe/spa/spd/acc/eva
--- BATTLE_INFO_PARTY_IDX_OFF: u8 party slot in field, relative to stat stages base.
--- Not yet symbolised against pret — set per-profile if/when discovered.
-local BATTLE_INFO_PARTY_IDX_OFF = nil
 
 -- Memorial box index (0-based). Box 17 = UI "Box 18" = "THE DEAD".
 -- Both HGSS and Platinum use 18-box storage; memorial is the last box.
@@ -602,7 +599,6 @@ function M.applyProfile(p)
     if p.STAT_STAGES_ENEMY_OFF     ~= nil then STAT_STAGES_ENEMY_OFF     = p.STAT_STAGES_ENEMY_OFF     end
     if p.BATTLE_R_STRIDE           ~= nil then BATTLE_R_STRIDE           = p.BATTLE_R_STRIDE           end
     if p.ACTIVE_MON_PID_DELTA      ~= nil then ACTIVE_MON_PID_DELTA      = p.ACTIVE_MON_PID_DELTA      end
-    if p.BATTLE_INFO_PARTY_IDX_OFF ~= nil then BATTLE_INFO_PARTY_IDX_OFF = p.BATTLE_INFO_PARTY_IDX_OFF end
     if p.MEMORIAL_BOX        ~= nil then
         MEMORIAL_BOX   = p.MEMORIAL_BOX
         M.MEMORIAL_BOX = p.MEMORIAL_BOX
@@ -1046,16 +1042,37 @@ function M.readStatStages(battler_idx)
     return stages
 end
 
--- Returns the party slot index (0..5) of the mon currently in field for battler_idx,
--- or nil if unavailable. Optional — falls back to ordering-based heuristic in client.
--- Source: pret/pokeheartgold src/battle/battle_system.c struct BattleMon.selectedMonIndex.
+-- Returns the party slot index (0..5) of the mon currently in field for
+-- battler_idx, or nil if not in battle.
+--
+-- Strategy: match the active battler's live PID against the appropriate party
+-- buffer's PIDs (player party for battlers 0/2; enemy battle buffer for 1/3).
+-- This avoids needing to discover BattleMon.selectedMonIndex's exact offset
+-- inside the BattleSystem heap chunk, and is robust against swap/U-turn/etc.
+-- where the active slot changes mid-battle.
+--
+-- Source: pret/pokeheartgold src/battle/struct_battle_mon.c BattleMon.activeMonPid
+-- combined with src/battle/battle_setup.c's player/enemy party buffers.
 function M.getBattlerPartyIndex(battler_idx)
-    if not BATTLE_INFO_PARTY_IDX_OFF then return nil end
-    local addr = _stat_stages_addr(battler_idx)
-    if not addr then return nil end
-    local v = r8(addr + BATTLE_INFO_PARTY_IDX_OFF)
-    if v > 5 then return nil end
-    return v
+    local active_pid = M.readBattlerActivePID(battler_idx)
+    if not active_pid or active_pid == 0 then return nil end
+    -- Player battlers consult party; enemy battlers consult enemy battle buffer.
+    local addr_fn
+    if battler_idx == 0 or battler_idx == 2 then
+        addr_fn = M.partyAddr
+    elseif battler_idx == 1 or battler_idx == 3 then
+        addr_fn = M.enemyBattleAddr
+    else
+        return nil
+    end
+    for slot = 0, 5 do
+        local slot_addr = addr_fn(slot)
+        if not slot_addr then return nil end
+        local slot_pid = r32(slot_addr)
+        if slot_pid == 0 then return nil end   -- past end of party
+        if slot_pid == active_pid then return slot end
+    end
+    return nil   -- PID not matched (shouldn't happen if battle copy is fresh)
 end
 
 -- Returns the active battler's PID, or nil if not in battle. Useful to confirm
