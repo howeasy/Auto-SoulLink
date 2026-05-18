@@ -169,6 +169,17 @@ local _HGSS_PROFILE = {
     PLAYER_BATTLE_OFF = 0x4EA98,
     ENEMY_BATTLE_OFF  = 0x4F068,
     BATTLE_STATUS_ADDR = 0x246F48,  -- absolute (Ironmon GLOBAL.battleStatus); not used by isInBattle()
+    -- Phase 3 discovery targets (run lua/tests/test_gen4_battlers_count.lua + test_gen4_stat_stages.lua).
+    -- Until populated, M.isDoubleBattle() returns false and M.readStatStages() returns nil.
+    -- Source: pret/pokeheartgold src/battle/battle_controllers.c (BattleSystem_NumBattlers,
+    --         MaxBattlersByMode) + src/battle/battle_system.c (struct BattleMon).
+    -- Ironmon-Tracker BattleHandlerGen4.lua reads battler count + stat stages from the
+    -- BattleSystem heap chunk — exact RAM offset varies by build and is live-discovered.
+    BATTLERS_COUNT_OFF        = nil,  -- u8: 2 in singles, 4 in doubles (VERIFY_ME)
+    BATTLE_INFO_BASE_OFF      = nil,  -- start of BattleMon[0] in RAM (VERIFY_ME)
+    BATTLE_INFO_STRIDE        = nil,  -- sizeof(BattleMon) (VERIFY_ME; Ironmon uses 0x5C8 elsewhere)
+    BATTLE_INFO_STAT_STAGES_OFF = nil,  -- offset of statChanges[7] within BattleMon (VERIFY_ME)
+    BATTLE_INFO_PARTY_IDX_OFF = nil,  -- offset of selectedMonIndex within BattleMon (VERIFY_ME)
 
     -- Bag (Pokéball pocket)
     -- PKHeX PlayerBag4HGSS.cs: BaseOffset=0x644, Balls pocket at +0x6C0.
@@ -227,6 +238,13 @@ local _PT_PROFILE = {
     PLAYER_BATTLE_OFF  = 0x4B8AC,
     ENEMY_BATTLE_OFF   = 0x4BE5C,
     BATTLE_STATUS_ADDR = 0x24A55A,  -- absolute (Ironmon GLOBAL.battleStatus); not used by isInBattle()
+    -- Phase 3 discovery targets (run on Platinum with test_gen4_battlers_count.lua etc).
+    -- Same struct layout as HGSS — only the RAM offsets shift. See _HGSS_PROFILE for source citations.
+    BATTLERS_COUNT_OFF        = nil,  -- VERIFY_ME on Platinum
+    BATTLE_INFO_BASE_OFF      = nil,  -- VERIFY_ME on Platinum
+    BATTLE_INFO_STRIDE        = nil,  -- VERIFY_ME on Platinum
+    BATTLE_INFO_STAT_STAGES_OFF = nil,  -- VERIFY_ME on Platinum
+    BATTLE_INFO_PARTY_IDX_OFF = nil,  -- VERIFY_ME on Platinum
 
     -- Bag (Pokéball pocket)
     -- PKHeX PlayerBag4Pt.cs: BaseOffset=0x630, Balls at +0x6BC.
