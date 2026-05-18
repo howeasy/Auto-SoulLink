@@ -201,6 +201,11 @@ function M.initProfile(game_module, variant)
     -- Box in SRAM flag: if true, box addresses are in CartRAM domain (Gen 1/2 GBC)
     M.BOX_IN_SRAM         = prof.box_in_sram or false
     M.SRAM_BANK           = prof.sram_bank or 0
+    -- Stat-stage addresses + layout (Phase 2). Nil-safe — clients only call helpers when set.
+    M.PLAYER_STAT_STAGES_ADDR = prof.player_stat_stages_addr
+    M.ENEMY_STAT_STAGES_ADDR  = prof.enemy_stat_stages_addr
+    M.STAT_STAGES_COUNT       = prof.stat_stages_count or 0
+    M.STAT_STAGES_LAYOUT      = prof.stat_stages_layout or "gen1"
 end
 
 -- ═══ Box Memory Helpers (routes to SRAM when BOX_IN_SRAM is set) ═══
@@ -789,6 +794,55 @@ function M.retrieveBoxMon(key)
     M.box_write_u8(M.BOX_COUNT_ADDR, new_bcount)
 
     return true
+end
+
+-- ═══ Stat Stages (Phase 2) ═══════════════════════════════════════════════
+-- Read in-battle stat-stage bytes and normalize from Gen 1/2's 1..13 (neutral=7)
+-- to the Gen 3 convention 0..12 (neutral=6), so the existing server-side
+-- _stat_stages_html renderer Just Works.
+--
+-- Returns a 7-element table {atk, def, spd, satk, sdef, acc, eva}:
+--   - Gen 2: 7 raw bytes read directly.
+--   - Gen 1: 6 raw bytes (atk, def, spd, spc, acc, eva); the unified Special
+--     stat is mirrored into both satk and sdef slots so the renderer shows
+--     it consistently for both special stats.
+-- Returns nil if the profile doesn't declare stat-stage addresses.
+
+local function _read_stat_stages(base_addr)
+    if not base_addr or M.STAT_STAGES_COUNT == 0 then return nil end
+    if M.STAT_STAGES_LAYOUT == "gen1" then
+        -- 6 raw bytes: atk, def, spd, spc, acc, eva
+        local atk = M.read_u8(base_addr + 0)
+        local def = M.read_u8(base_addr + 1)
+        local spd = M.read_u8(base_addr + 2)
+        local spc = M.read_u8(base_addr + 3)
+        local acc = M.read_u8(base_addr + 4)
+        local eva = M.read_u8(base_addr + 5)
+        -- Sanity: refuse to emit if any value is outside 1..13 (uninitialised RAM
+        -- or wrong address). Returning nil prevents the renderer from showing
+        -- garbage badges.
+        for _, v in ipairs({atk, def, spd, spc, acc, eva}) do
+            if v < 1 or v > 13 then return nil end
+        end
+        -- Convert 1..13 (neutral 7) → 0..12 (neutral 6) and mirror Spc into SpA/SpD.
+        return {atk - 1, def - 1, spd - 1, spc - 1, spc - 1, acc - 1, eva - 1}
+    end
+    -- Gen 2 layout: 7 raw bytes
+    local stages = {}
+    for i = 0, 6 do
+        local v = M.read_u8(base_addr + i)
+        if v < 1 or v > 13 then return nil end
+        stages[i + 1] = v - 1
+    end
+    return stages
+end
+
+function M.readPlayerStatStages()
+    return _read_stat_stages(M.PLAYER_STAT_STAGES_ADDR)
+end
+
+function M.readEnemyStatStages()
+    return _read_stat_stages(M.ENEMY_STAT_STAGES_ADDR)
 end
 
 --- Deposit party slot directly to the dedicated memorial box (last box).

@@ -307,11 +307,18 @@ local sync_written_keys = {}  -- keys recently written to avoid re-triggering ev
 local function build_party_snapshot()
     local count = M.getPartyCount()
     local snap = {}
+    -- Gen 1 doesn't track an "active party slot" pointer; the battle struct
+    -- (wBattleMon) holds the active mon's live stats. For the status page's
+    -- stat-stage badges, mark slot 0 as active when in battle (Gen 1 nuzlocke
+    -- runs typically don't switch mid-battle; switching would shift the badges
+    -- to the wrong slot until the user reports a fix is needed).
+    local in_b = in_battle and M.isInBattle()
+    local player_stages = in_b and M.readPlayerStatStages() or nil
     for slot = 0, count - 1 do
         local mon = M.readPartySlot(slot)
         if mon and mon.maxHP > 0 then
             local nick = M.readPartyNickname(slot)
-            snap[#snap + 1] = {
+            local entry = {
                 key = mon.key,
                 hp = mon.hp,
                 maxHP = mon.maxHP,
@@ -320,6 +327,11 @@ local function build_party_snapshot()
                 nickname = nick,
                 status_cond = mon.status_cond or 0,
             }
+            if slot == 0 and player_stages then
+                entry.active = true
+                entry.stat_stages = player_stages
+            end
+            snap[#snap + 1] = entry
             if nick ~= "" then nick_cache[mon.key] = nick end
         end
     end
@@ -336,6 +348,7 @@ local function build_enemy_snapshot()
     local active = M.readActiveBattleMon()
     if not active then return enemy end
 
+    local enemy_stages = M.readEnemyStatStages()
     if battle_is_wild then
         -- Wild: just the one active mon
         enemy[1] = {
@@ -345,6 +358,7 @@ local function build_enemy_snapshot()
             maxHP = active.maxHP,
             active = true,
             status_cond = active.status_cond or 0,
+            stat_stages = enemy_stages,
         }
     else
         -- Trainer: read species list for full team; use party_pos to mark active slot
@@ -363,6 +377,7 @@ local function build_enemy_snapshot()
                         maxHP = active.maxHP,
                         active = true,
                         status_cond = active.status_cond or 0,
+                        stat_stages = enemy_stages,
                     }
                 else
                     -- Bench mons — only species known from list

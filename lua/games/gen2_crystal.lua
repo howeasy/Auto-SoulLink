@@ -133,6 +133,17 @@ M.PROFILES = {
         -- Egg species sentinel: pret/pokecrystal constants/pokemon_constants.asm defines EGG = $FD.
         -- A party / box slot with species == 0xFD is an egg (no separate flag byte in Gen 2).
         is_egg_species = 0xFD,
+
+        -- Stat stages (Phase 2 — pret/pokecrystal ram/wram.asm "Miscellaneous" UNION section:
+        -- wPlayerStatLevels expands to {wPlayerAtkLevel, ...DefLevel, ...SpdLevel,
+        -- ...SAtkLevel, ...SDefLevel, ...AccLevel, ...EvaLevel} (7 bytes).
+        -- wEnemyStatLevels has the same layout immediately after. Raw range 1..13
+        -- (BASE_STAT_LEVEL EQU 7 per constants/battle_constants.asm). Client normalizes to 0..12.
+        -- Working hypothesis: 0xC68A / 0xC691 (TODO Phase 9 live verification).
+        player_stat_stages_addr = 0xC68A,
+        enemy_stat_stages_addr  = 0xC691,
+        stat_stages_count       = 7,
+        stat_stages_layout      = "gen2",  -- {atk, def, spd, satk, sdef, acc, eva}
     },
 }
 

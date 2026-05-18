@@ -135,7 +135,45 @@ The handoff's claim that Gen 2 was missing `force_whiteout` was incorrect — ne
 
 ## Phase 2 — Stat stages
 
-*Filled in as Phase 2 lands.*
+### 2.1 Gen 1 stat stage live verification (R / B / Y)
+
+**What changed**: Profile declares `player_stat_stages_addr` and `enemy_stat_stages_addr` for each variant. `lua/memory_gb.lua` exposes `M.readPlayerStatStages()` and `M.readEnemyStatStages()` which normalize Gen 1/2's 1..13 (neutral 7) encoding to the Gen 3 0..12 (neutral 6) convention. Gen 1's 6 stat-stage bytes (Atk/Def/Spd/Spc/Acc/Eva) are mapped to the 7-slot Gen 3 array by mirroring the unified Special stat into both SpA and SpD slots. Clients attach `stat_stages` to party slot 0 (assumed active) and to the active enemy battler when in battle.
+
+**Verification (Red, then Blue, then Yellow)**:
+1. Load `lua/tests/test_gen1_stat_stages.lua` in BizHawk.
+2. Engage a wild Pokemon (Route 1 grass).
+3. Wait for the battle intro to finish — at this point both player and enemy stat-stage bytes should read **7** (neutral).
+4. Press F1 — confirm: all 12 bytes (6 player + 6 enemy) read 7, helper output looks like `{6, 6, 6, 6, 6, 6, 6}` (Gen 3 normalized neutral).
+5. Use a stat-debuff move on the enemy: **Growl** (Atk -1) → enemy ATK byte should drop from 7 to 6. Press F1 to confirm.
+6. Use **Sand Attack** → enemy ACC byte drops.
+7. Force a stat-up move via Defense Curl or Withdraw → player DEF byte rises 7 → 8.
+8. **FAIL** if values are 0x00 / 0xFF / random in idle battle state, or if Growl doesn't decrement the enemy ATK byte.
+
+Repeat for Blue and Yellow. Yellow uses tentative -1 shifted addresses; F2 wide sweep can find the right addresses if the dump is out of range.
+
+### 2.2 Gen 2 stat stage live verification (Crystal)
+
+**What changed**: Same plumbing as Gen 1, with 7-byte stat-stage layout (Atk/Def/Spd/SAtk/SDef/Acc/Eva) per pret/pokecrystal `wPlayerStatLevels`/`wEnemyStatLevels`. Profile addresses are **tentative** (0xC68A / 0xC691 working hypothesis).
+
+**Verification**:
+1. Load `lua/tests/test_gen2_stat_stages.lua` in BizHawk on Crystal.
+2. Engage a wild battle (Route 29 grass — Pidgey/Sentret).
+3. Once the battle intro finishes, press F1.
+4. **EXPECT**: 14 bytes (7 player + 7 enemy) all reading 7.
+5. If F1 dump shows values outside 1..13, press **F2** to sweep WRAM0 looking for 14 consecutive bytes all in 1..13 range — that's the right address pair.
+6. Use Growl, Tail Whip, Sand Attack, Defense Curl — verify each modifies the expected stat byte.
+7. Report the correct addresses (if different from 0xC68A / 0xC691) so they can be fixed in the Phase 9a cleanup commit.
+
+### 2.3 Status page rendering
+
+After the addresses are confirmed (steps 2.1 / 2.2 above):
+1. Run the regular SLink client (`lua/clients/gen1_rby_client.lua` or `lua/clients/gen2_crystal_client.lua`).
+2. Open the status page at `http://localhost:8080/` and locate the party panel.
+3. Engage a battle, apply Growl to the enemy → status page should show **−1 ATK** badge on the enemy.
+4. Apply Sand Attack to enemy → **−1 ACC** badge.
+5. Defense Curl on player → **+1 DEF** badge on the player's slot 0.
+
+**FAIL** if badges don't appear despite the diagnostic script showing correct address values (renderer regression — investigate `server/server.py:_stat_stages_html`).
 
 ---
 

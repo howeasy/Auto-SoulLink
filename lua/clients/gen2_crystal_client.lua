@@ -328,6 +328,12 @@ end
 local function build_party_snapshot()
     local count = M.getPartyCount()
     local snap = {}
+    -- Gen 2 doesn't track the active party slot directly; battle struct holds the
+    -- active battler's stats. For status-page stat-stage display, mark slot 0 as
+    -- active when in battle (Gen 2 nuzlocke runs rarely shuffle party order; if
+    -- the user switches mid-battle the displayed stages will trail by 1 slot).
+    local in_b = in_battle and M.isInBattle()
+    local player_stages = in_b and M.readPlayerStatStages() or nil
     for slot = 0, count - 1 do
         local mon = M.readPartySlot(slot)
         if mon and mon.maxHP > 1 and mon.level > 0 then
@@ -344,6 +350,11 @@ local function build_party_snapshot()
             -- Gen 2: include held item if present
             if mon.held_item and mon.held_item > 0 then
                 entry.held_item = mon.held_item
+            end
+            -- Gen 2: tag the assumed-active slot with stat_stages when in battle.
+            if slot == 0 and player_stages then
+                entry.active = true
+                entry.stat_stages = player_stages
             end
             snap[#snap + 1] = entry
             if nick ~= "" then nick_cache[mon.key] = nick end
@@ -367,6 +378,7 @@ local function build_enemy_snapshot()
     if active.level < 1 or active.level > 100 then return enemy end
     if active.maxHP < 1 or active.maxHP > 999 then return enemy end
 
+    local enemy_stages = M.readEnemyStatStages()
     if battle_is_wild then
         -- Wild: just the one active mon
         enemy[1] = {
@@ -376,6 +388,7 @@ local function build_enemy_snapshot()
             maxHP = active.maxHP,
             active = true,
             status_cond = active.status_cond or 0,
+            stat_stages = enemy_stages,
         }
     else
         -- Trainer: read species list for full team; match active by species
@@ -394,6 +407,7 @@ local function build_enemy_snapshot()
                         maxHP = active.maxHP,
                         active = true,
                         status_cond = active.status_cond or 0,
+                        stat_stages = enemy_stages,
                     }
                     active_used = true
                 else

@@ -95,6 +95,15 @@ M.PROFILES = {
         ball_item_ids      = {0x01, 0x02, 0x03, 0x04},  -- Master, Ultra, Great, Poke
         -- Badges
         badges_addr        = 0xD356,  -- wObtainedBadges (bitfield, 8 badges)
+        -- Stat stages (Phase 2 — DataCrystal RBY RAM map, pret/pokered wram.asm
+        -- wPlayerMonAttackMod..wPlayerMonEvasionMod = CD1A..CD1F (6 bytes).
+        -- wEnemyMonAttackMod..wEnemyMonEvasionMod   = CD2E..CD33.
+        -- Raw range 1..13 (BASE_STAT_LEVEL=7 per pret); client normalizes to 0..12/6.
+        -- Gen 1 has 6 stat stages — Special is unified (split into SpA/SpD only in Gen 2).
+        player_stat_stages_addr = 0xCD1A,
+        enemy_stat_stages_addr  = 0xCD2E,
+        stat_stages_count       = 6,
+        stat_stages_layout      = "gen1",  -- {atk, def, spd, spc, acc, eva}
     },
 
     -- Yellow has shifted WRAM addresses
@@ -137,6 +146,11 @@ M.PROFILES = {
         enemy_status_offset = 0x04,   -- same offset in active enemy battle struct
         ball_item_ids      = {0x01, 0x02, 0x03, 0x04},
         badges_addr        = 0xD355,  -- wObtainedBadges (Yellow, shifted -1)
+        -- Stat stages (Phase 2, tentative -1 shift from R/B; Phase 9 diagnostic confirms)
+        player_stat_stages_addr = 0xCD19,
+        enemy_stat_stages_addr  = 0xCD2D,
+        stat_stages_count       = 6,
+        stat_stages_layout      = "gen1",
     },
 }
 
