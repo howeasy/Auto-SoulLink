@@ -215,6 +215,9 @@ function M.initProfile(game_module, variant)
     M.ENEMY_BATTLE_MOVES_ADDR = prof.enemy_battle_moves_addr
     M.ENEMY_BATTLE_PP_ADDR    = prof.enemy_battle_pp_addr
     M.ENEMY_BATTLE_PP_ENCODING = prof.enemy_battle_pp_encoding or "raw"
+    -- Trainer class / index in trainer battles (Phase 5).
+    M.TRAINER_CLASS_ADDR      = prof.trainer_class_addr
+    M.TRAINER_ID_ADDR         = prof.trainer_id_addr
 end
 
 -- ═══ Box Memory Helpers (routes to SRAM when BOX_IN_SRAM is set) ═══

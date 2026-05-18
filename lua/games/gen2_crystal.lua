@@ -161,6 +161,13 @@ M.PROFILES = {
         enemy_battle_moves_addr = 0xD208,
         enemy_battle_pp_addr    = 0xD20E,
         enemy_battle_pp_encoding = "raw",
+
+        -- Trainer class + index (Phase 5 — wOtherTrainerClass / wOtherTrainerID
+        -- per pret/pokecrystal). Working hypothesis from DataCrystal region 0xD233
+        -- (verify Phase 9). Class is 1-based per pret constants (FALKNER=1, BUGSY=3,
+        -- BROCK=17, etc.), trainer_id is 1-based within class.
+        trainer_class_addr      = 0xD233,
+        trainer_id_addr         = 0xD234,
     },
 }
 

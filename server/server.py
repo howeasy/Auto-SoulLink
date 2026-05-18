@@ -2815,9 +2815,14 @@ class SLinkServer:
                 if tr_class:
                     self.battle_state[player_id]["opponent_name"] = tr_name
                     self.battle_state[player_id]["opponent_class"] = tr_class
-                elif "opponent_name" in msg and msg["opponent_name"]:
-                    # Non-RR: use name sent directly from Lua (read from battle RAM)
-                    self.battle_state[player_id]["opponent_name"] = msg["opponent_name"]
+                elif "opponent_name" in msg or "opponent_class" in msg:
+                    # Non-RR (e.g. Gen 1/2 client emits class+name directly because
+                    # trainer_id alone is ambiguous without class context). Accept
+                    # whatever the client provided.
+                    if msg.get("opponent_name"):
+                        self.battle_state[player_id]["opponent_name"] = msg["opponent_name"]
+                    if msg.get("opponent_class"):
+                        self.battle_state[player_id]["opponent_class"] = msg["opponent_class"]
             if "enemy_party" in msg:
                 self.battle_state[player_id]["enemy_party"] = msg["enemy_party"]
             if "is_doubles" in msg:

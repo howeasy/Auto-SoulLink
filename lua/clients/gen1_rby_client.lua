@@ -64,17 +64,19 @@ package.path = _src .. "?.lua;"
            .. package.path
 
 -- Force fresh module loads on script restart
-package.loaded["memory_gb"]       = nil
-package.loaded["connector"]       = nil
-package.loaded["socket"]          = nil
-package.loaded["hud"]             = nil
-package.loaded["games.gen1_rby"]  = nil
-package.loaded["gen1_rby_areas"]  = nil
+package.loaded["memory_gb"]            = nil
+package.loaded["connector"]            = nil
+package.loaded["socket"]               = nil
+package.loaded["hud"]                  = nil
+package.loaded["games.gen1_rby"]       = nil
+package.loaded["games.gen1_rby_trainers"] = nil
+package.loaded["gen1_rby_areas"]       = nil
 
 local M   = require("memory_gb")
 local C   = require("connector")
 local HUD = require("hud")
 local G   = require("games.gen1_rby")
+local TRAINERS = require("games.gen1_rby_trainers")
 
 -- ── Localized hot-path globals ────────────────────────────────────────────────
 local fmt    = string.format
@@ -359,6 +361,14 @@ local function build_enemy_snapshot()
 
     local enemy_stages = M.readEnemyStatStages()
     local enemy_moves = M.readEnemyBattleMovesAndPP()
+    -- Phase 5: trainer class + name lookup for non-wild battles. The Lua-side
+    -- lookup avoids needing a server-adapter call (Gen 1 trainer_id alone is
+    -- ambiguous without the class context).
+    local trainer_class_id, trainer_id_within_class = 0, 0
+    if not battle_is_wild and M.TRAINER_CLASS_ADDR and M.TRAINER_ID_ADDR then
+        trainer_class_id = M.read_u8(M.TRAINER_CLASS_ADDR)
+        trainer_id_within_class = M.read_u8(M.TRAINER_ID_ADDR)
+    end
     if battle_is_wild then
         -- Wild: just the one active mon
         enemy[1] = {
@@ -433,6 +443,15 @@ local function send_hello()
     if cur_in_battle then
         local ep = build_enemy_snapshot()
         if #ep > 0 then evt.enemy_party = ep end
+        if not battle_is_wild and M.TRAINER_CLASS_ADDR then
+            local class_id = M.read_u8(M.TRAINER_CLASS_ADDR)
+            local trainer_id = M.read_u8(M.TRAINER_ID_ADDR)
+            evt.trainer_class_id = class_id
+            evt.trainer_id = trainer_id
+            local class_name, trainer_name = TRAINERS.resolve(class_id, trainer_id)
+            if class_name ~= "" then evt.opponent_class = class_name end
+            if trainer_name ~= "" then evt.opponent_name = trainer_name end
+        end
     end
     send(evt, "hello", true)
 
@@ -467,6 +486,18 @@ local function send_tick()
     if in_battle then
         local ep = build_enemy_snapshot()
         if #ep > 0 then evt.enemy_party = ep end
+        -- Phase 5: emit trainer info for non-wild battles. Server populates
+        -- battle_state.opponent_class / opponent_name from these fields (server
+        -- fallback path widened in phase 5).
+        if not battle_is_wild and M.TRAINER_CLASS_ADDR then
+            local class_id = M.read_u8(M.TRAINER_CLASS_ADDR)
+            local trainer_id = M.read_u8(M.TRAINER_ID_ADDR)
+            evt.trainer_class_id = class_id
+            evt.trainer_id = trainer_id
+            local class_name, trainer_name = TRAINERS.resolve(class_id, trainer_id)
+            if class_name ~= "" then evt.opponent_class = class_name end
+            if trainer_name ~= "" then evt.opponent_name = trainer_name end
+        end
     end
     send(evt, "tick", true)
 end

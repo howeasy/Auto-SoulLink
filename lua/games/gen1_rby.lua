@@ -114,6 +114,11 @@ M.PROFILES = {
         enemy_battle_moves_addr = 0xCFED,
         enemy_battle_pp_addr    = 0xCFFE,
         enemy_battle_pp_encoding = "raw",
+        -- Trainer class + index (Phase 5 — wTrainerClass holds OPP_ID_OFFSET (200)
+        -- + const_id per pret/pokered. wTrainerNo is 1-based index within the class.
+        -- Working hypothesis 0xD031/0xD05D; Phase 9 diagnostic confirms.
+        trainer_class_addr      = 0xD031,
+        trainer_id_addr         = 0xD05D,
     },
 
     -- Yellow has shifted WRAM addresses
@@ -169,6 +174,9 @@ M.PROFILES = {
         enemy_battle_moves_addr = 0xCFEC,
         enemy_battle_pp_addr    = 0xCFFD,
         enemy_battle_pp_encoding = "raw",
+        -- Yellow shift -1
+        trainer_class_addr      = 0xD030,
+        trainer_id_addr         = 0xD05C,
     },
 }
 

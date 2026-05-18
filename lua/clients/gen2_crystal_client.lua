@@ -74,12 +74,14 @@ package.loaded["connector"]          = nil
 package.loaded["socket"]             = nil
 package.loaded["hud"]                = nil
 package.loaded["games.gen2_crystal"] = nil
+package.loaded["games.gen2_crystal_trainers"] = nil
 package.loaded["gen2_crystal_areas"] = nil
 
 local M   = require("memory_gb")
 local C   = require("connector")
 local HUD = require("hud")
 local G   = require("games.gen2_crystal")
+local TRAINERS = require("games.gen2_crystal_trainers")
 
 -- ── Localized hot-path globals ────────────────────────────────────────────────
 local fmt    = string.format
@@ -471,6 +473,15 @@ local function send_hello()
     if cur_in_battle then
         local ep = build_enemy_snapshot()
         if #ep > 0 then evt.enemy_party = ep end
+        if not battle_is_wild and M.TRAINER_CLASS_ADDR then
+            local class_id = M.read_u8(M.TRAINER_CLASS_ADDR)
+            local trainer_id = M.read_u8(M.TRAINER_ID_ADDR)
+            evt.trainer_class_id = class_id
+            evt.trainer_id = trainer_id
+            local class_name, trainer_name = TRAINERS.resolve(class_id, trainer_id)
+            if class_name ~= "" then evt.opponent_class = class_name end
+            if trainer_name ~= "" then evt.opponent_name = trainer_name end
+        end
     end
     local ok_b, boxes = pcall(build_box_snapshot)
     if ok_b and boxes then evt.pc_boxes = boxes end
@@ -508,6 +519,15 @@ local function send_tick()
     if in_battle then
         local ep = build_enemy_snapshot()
         if #ep > 0 then evt.enemy_party = ep end
+        if not battle_is_wild and M.TRAINER_CLASS_ADDR then
+            local class_id = M.read_u8(M.TRAINER_CLASS_ADDR)
+            local trainer_id = M.read_u8(M.TRAINER_ID_ADDR)
+            evt.trainer_class_id = class_id
+            evt.trainer_id = trainer_id
+            local class_name, trainer_name = TRAINERS.resolve(class_id, trainer_id)
+            if class_name ~= "" then evt.opponent_class = class_name end
+            if trainer_name ~= "" then evt.opponent_name = trainer_name end
+        end
     end
     -- PC box snapshot
     local ok_b, boxes = pcall(build_box_snapshot)

@@ -233,7 +233,22 @@ Both clients' `build_party_snapshot` attach `moves[]`, `pp[]`, and `pp_bonuses` 
 
 ## Phase 5 — Trainer class + name
 
-*Filled in as Phase 5 lands.*
+**What changed**:
+- Profile addresses `trainer_class_addr` and `trainer_id_addr` per gen.
+- `lua/games/gen{1_rby,2_crystal}_trainers.lua` — class-name + named-trainer lookup tables matching `data/games/gen*/trainers.json` (covers gym leaders + elite four + named special trainers).
+- Both clients' tick/hello events emit `trainer_class_id`, `trainer_id`, plus resolved `opponent_class`/`opponent_name` when in a trainer battle.
+- `server/server.py` battle-state handler widened to accept `opponent_class` from the message (previously only accepted `opponent_name`). The change only fires when `adapter.trainer_info()` returns empty — Gen 3 path is unchanged.
+
+**Verification**:
+1. Load `lua/tests/test_gen{1,2}_trainer_info.lua` per gen.
+2. Engage a known trainer:
+   - Gen 1: Fight Brock (Pewter Gym). Press F1 mid-battle. Expect `class_id=233`, `class='Leader'`, `name='Brock'`.
+   - Gen 1: Fight a generic Bug Catcher (Route 25). Expect `class_id=202`, `class='Bug Catcher'`, `name=''`.
+   - Gen 2: Fight Falkner (Violet Gym). Expect `class_id=1`, `class='Leader'`, `name='Falkner'`.
+   - Gen 2: Fight a generic Youngster. Expect `class_id=22`, `class='Youngster'`, `name=''`.
+3. **FAIL** if class_id is out of expected range (Gen 1: 200..246; Gen 2: 0..67) — wrong profile address.
+
+**Status page check**: run the regular client. During a trainer battle, the status page enemy panel header should show "Leader Brock" or "Bug Catcher" etc. Generic trainers show the class only; named trainers show class + name.
 
 ---
 
