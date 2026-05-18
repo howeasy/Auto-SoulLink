@@ -297,3 +297,126 @@ def test_ability_name_species_id_does_not_inject_cfru_override(adapter):
     # (121, 50) is "Tangling Hair" in RR — Gen 4 must return the plain vanilla name instead
     name = adapter.ability_name(121, species_id=50)
     assert name != "Tangling Hair"
+
+
+# ── Phase 2-7 additions ──────────────────────────────────────────────────────
+
+class TestFormSprites:
+    """Form-aware sprite resolution (Phase 5)."""
+
+    def test_rotom_heat_form(self, adapter):
+        assert adapter.form_sprite_url(479, 1) == "479-heat"
+        assert "479-heat" in adapter.sprite_html(479, 1)
+
+    def test_giratina_origin_form(self, adapter):
+        assert adapter.form_sprite_url(487, 1) == "487-origin"
+
+    def test_shaymin_sky_form(self, adapter):
+        assert adapter.form_sprite_url(492, 1) == "492-sky"
+
+    def test_deoxys_attack_form(self, adapter):
+        assert adapter.form_sprite_url(386, 1) == "386-attack"
+
+    def test_unown_letter_b(self, adapter):
+        assert adapter.form_sprite_url(201, 1) == "201-b"
+
+    def test_arceus_fire_plate(self, adapter):
+        assert adapter.form_sprite_url(493, 9) == "493-fire"
+
+    def test_base_form_returns_none(self, adapter):
+        # form=0 is the base form for every species — no override needed
+        assert adapter.form_sprite_url(479, 0) is None
+        assert adapter.form_sprite_url(487, 0) is None
+        assert adapter.form_sprite_url(25, 0) is None  # Pikachu has no Gen 4 forms
+
+    def test_sprite_html_uses_base_for_unknown_form(self, adapter):
+        # An unmapped (species, form) pair falls back to the base species sprite.
+        html = adapter.sprite_html(25, 99)
+        assert "/25.png" in html
+
+
+class TestMoveData:
+    """Gen 4 move table (Phase 7)."""
+
+    def test_gen4_only_moves(self, adapter):
+        assert adapter.move_name(369) == "U-turn"
+        assert adapter.move_name(444) == "Stone Edge"
+        assert adapter.move_name(467) == "Shadow Force"
+
+    def test_inherits_gen3_moves(self, adapter):
+        # Move IDs 1-354 should fall through to VANILLA_MOVE_NAMES.
+        assert adapter.move_name(33) == "Tackle"
+        assert adapter.move_name(1) == "Pound"
+
+    def test_unknown_move_returns_empty(self, adapter):
+        # ID 0 is "no move" sentinel — the vanilla table has a placeholder entry there.
+        # IDs beyond the Gen 4 max (467) should return empty.
+        assert adapter.move_name(9999) == ""
+        assert adapter.move_name(468) == ""  # one past Shadow Force
+
+    def test_move_data_shape(self, adapter):
+        md = adapter.move_data(369)  # U-turn
+        assert md is not None
+        assert md["name"] == "U-turn"
+        assert md["type_id"] == 6     # Bug
+        assert md["type_name"] == "Bug"
+        assert md["power"] == 70
+        assert md["pp"] == 20
+        assert md["split"] == 0       # Physical
+
+    def test_move_data_status_split(self, adapter):
+        md = adapter.move_data(355)  # Roost
+        assert md["split"] == 2
+        assert md["type_name"] == "Flying"
+
+
+class TestEggPickupArea:
+    """Egg-pickup detection (Phase 4)."""
+
+    def test_egg_prefix_recognized(self, adapter):
+        assert adapter.is_egg_pickup_area("egg_route_30") is True
+        assert adapter.is_egg_pickup_area("egg_iron_island") is True
+
+    def test_route_30_recognized(self, adapter):
+        assert adapter.is_egg_pickup_area("route_30") is True
+
+    def test_non_egg_area_returns_false(self, adapter):
+        assert adapter.is_egg_pickup_area("new_bark_town") is False
+        assert adapter.is_egg_pickup_area("route_29") is False
+
+    def test_egg_area_also_gift_area(self, adapter):
+        # Egg pickups are treated as gifts for clause-bypass purposes.
+        assert adapter.is_gift_area("egg_route_30") is True
+
+    def test_egg_fixed_species_strips_prefix(self, adapter):
+        # "egg_route_30" should map to route_30 (Togepi, fixed species).
+        assert adapter.is_fixed_species_gift("egg_route_30") is True
+
+
+class TestRomTypeVariants:
+    """ROM-type-aware adapter behavior (Phase 6 + 8)."""
+
+    def test_hgss_default(self):
+        a = Gen4Adapter()  # default rom_type=heartgold
+        assert a._rom_type == "heartgold"
+
+    def test_platinum_selects_pt_trainers(self):
+        from server.adapters.gen4_hgsspt import _PT_TRAINERS
+        a = Gen4Adapter(rom_type="platinum")
+        assert a._trainers is _PT_TRAINERS
+
+    def test_renegade_platinum_shares_pt_trainers(self):
+        from server.adapters.gen4_hgsspt import _PT_TRAINERS
+        a = Gen4Adapter(rom_type="renegade_platinum")
+        assert a._trainers is _PT_TRAINERS
+
+    def test_hgss_uses_hgss_trainers(self):
+        from server.adapters.gen4_hgsspt import _HGSS_TRAINERS
+        a = Gen4Adapter(rom_type="heartgold")
+        assert a._trainers is _HGSS_TRAINERS
+
+    def test_trainer_info_empty_for_unknown_id(self, adapter):
+        # The seed JSONs are sparse; specific IDs aren't populated yet.
+        # Make sure unknown IDs gracefully return empty.
+        assert adapter.trainer_info(99999) == ("", "")
+        assert adapter.trainer_info(0) == ("", "")

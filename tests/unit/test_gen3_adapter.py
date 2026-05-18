@@ -433,9 +433,12 @@ class TestMoveData:
         assert isinstance(name, str)
 
     def test_base_adapter_stubs(self):
-        """Non-Gen3 adapters should return defaults for move methods."""
-        from server.adapters.gen4_hgsspt import Gen4Adapter
-        adapter = Gen4Adapter()
+        """Adapters without move data (Gen 1, Gen 2, Gen 5) should return defaults
+        for move methods. Gen 4 has its own move table since Phase 7 — it shares
+        IDs 1-354 with Gen 3 and adds 355-467 (the Gen 4 introductions).
+        """
+        from server.adapters.gen1_rby import Gen1Adapter
+        adapter = Gen1Adapter()
         assert adapter.move_name(85) == ""
         assert adapter.move_data(85) is None
 
