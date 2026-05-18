@@ -115,10 +115,17 @@ local function run_scan()
             abl and string.format("%d", abl) or "nil"))
     end
 
-    -- 4. PC array header offset (Pt assumed 0x232AC — VERIFY_ME target)
-    local pc_hdr_off = r32(base + 0x232AC)
-    log(string.format("PC arrayHeaders[41].offset @ +0x232AC = 0x%X  %s",
-        pc_hdr_off, plausibility("(0x100..0x23000)", pc_hdr_off >= 0x100 and pc_hdr_off < 0x23000)))
+    -- 4. PC array header offset. Two candidates pending live verification:
+    --   0x232AC  — same SaveData-relative position as HGSS (current _PT_PROFILE assumption)
+    --   0x232B0  — 4-byte shift to match Pt's larger SaveData prefix (alt theory)
+    -- Plausibility: the resulting value should be in 0x100..0x23000 (the offset of
+    -- the PC chunk within dynamic_region, with all 40 prior chunks preceding it).
+    for _, candidate in ipairs({ 0x232AC, 0x232B0 }) do
+        local pc_hdr_off = r32(base + candidate)
+        local ok = pc_hdr_off >= 0x100 and pc_hdr_off < 0x23000
+        log(string.format("PC arrayHeaders[41].offset @ +0x%X = 0x%X  %s",
+            candidate, pc_hdr_off, plausibility("(0x100..0x23000)", ok)))
+    end
 
     -- 5. Zone ID (Pt: base+0x239B0 is a pointer; u16 at ptr+2)
     local zone_raw = r16(base + 0x239B0)

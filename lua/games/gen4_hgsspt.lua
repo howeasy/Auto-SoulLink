@@ -195,11 +195,13 @@ local _HGSS_PROFILE = {
     -- pret/pokeheartgold: SaveData.arrayHeaders[SAVE_PCSTORAGE=41].offset field.
     -- arrayHeaders[0] at SaveData+0x23014; [41] at +0x232A4; .offset (u32, struct+8) at +0x232AC.
     -- Read u32_le at base+0x232AC → byte offset within dynamic_region of PC box data.
-    PC_ARRAY_HDR_OFF = 0x232AC,
-    PC_BOX_STRIDE    = 0x1000,   -- 30 × 0x88 = 0xF90, padded to 0x1000 (Gen 4 style)
-    PC_SLOT_STRIDE   = 0x88,     -- BoxPokemon = 136 bytes
-    BOXES_COUNT      = 18,
-    MEMORIAL_BOX     = 17,       -- Box 18 (0-indexed), UI "Box 18", "THE DEAD"
+    -- HGSS dynamic_region starts at SaveData+0x10 — see PKHeX SAV4HGSS.cs General buffer offset.
+    PC_ARRAY_HDR_OFF   = 0x232AC,
+    DYNAMIC_REGION_OFF = 0x10,   -- SaveData → dynamic_region delta (HGSS)
+    PC_BOX_STRIDE      = 0x1000, -- 30 × 0x88 = 0xF90, padded to 0x1000 (Gen 4 style)
+    PC_SLOT_STRIDE     = 0x88,   -- BoxPokemon = 136 bytes
+    BOXES_COUNT        = 18,
+    MEMORIAL_BOX       = 17,     -- Box 18 (0-indexed), UI "Box 18", "THE DEAD"
 
     -- Battle
     -- Ironmon: playerBattleBase=0x4EA98, enemyBase=0x4F068 ✓
@@ -260,14 +262,17 @@ local _PT_PROFILE = {
     MON_SIZE         = 0xEC,   -- 236 bytes (Ironmon ENCRYPTED_POKEMON_SIZE=236) ✓
 
     -- PC Storage
-    -- Platinum SaveData struct not in public decompilation; assumed same layout as HGSS:
-    -- arrayHeaders[41].offset field at SaveData+0x232AC (VERIFY_ME: pause BizHawk, check
-    -- u32_le at base+0x232AC is a small offset < 0x23000 pointing to PC box data).
-    PC_ARRAY_HDR_OFF = 0x232AC,   -- likely correct (same SaveData layout); VERIFY_ME
-    PC_BOX_STRIDE    = 0x1000,    -- 30 × 0x88 = 0xF90, padded to 0x1000 (same as HGSS)
-    PC_SLOT_STRIDE   = 0x88,      -- BoxPokemon = 136 bytes (confirmed pret/pokeplatinum)
-    BOXES_COUNT      = 18,
-    MEMORIAL_BOX     = 17,
+    -- Platinum SaveData has an extra u32 prefix vs HGSS, shifting dynamic_region from
+    -- SaveData+0x10 → SaveData+0x14. arrayHeaders[41].offset stays at the same SaveData-
+    -- relative position (+0x232AC), but the chunk-offset value it stores must be added
+    -- to SaveData+0x14 (not +0x10) to land on PCStorage.boxes[0].
+    -- Source: PKHeX SAV4Pt.cs General buffer offset = 0x14 (vs SAV4HGSS.cs = 0x10).
+    PC_ARRAY_HDR_OFF   = 0x232AC,
+    DYNAMIC_REGION_OFF = 0x14,   -- SaveData → dynamic_region delta (Platinum-specific)
+    PC_BOX_STRIDE      = 0x1000,
+    PC_SLOT_STRIDE     = 0x88,
+    BOXES_COUNT        = 18,
+    MEMORIAL_BOX       = 17,
 
     -- Battle
     -- Ironmon: playerBattleBase=0x4B8AC, enemyBase=0x4BE5C ✓

@@ -456,10 +456,19 @@ local BASE_PTR_OFF       = 0x20      -- offset within p1 to save-data base point
 -- PC storage (source: pret/pokeheartgold include/pokemon_storage_system.h, src/save.c):
 --   arrayHeaders[41] (SAVE_PCSTORAGE) at base+0x232A4
 --   arrayHeaders[41].offset field (3rd u32 in 0x10-byte header) at base+0x232AC
---   PC storage base = base + 0x10 + r32(base + PC_ARRAY_HDR_OFF)
+--   PC storage base = base + dynamic_region_off + r32(base + PC_ARRAY_HDR_OFF)
+-- where dynamic_region_off = 0x10 on HGSS and 0x14 on Platinum — see DYNAMIC_REGION_OFF.
 local PC_ARRAY_HDR_OFF   = 0x232AC   -- arrayHeaders[SAVE_PCSTORAGE].offset field
 local PC_BOX_STRIDE      = 0x1000    -- bytes per PC_BOX (30 slots + padding)
 local PC_SLOT_STRIDE     = 0x88      -- bytes per BoxPokemon slot
+
+-- SaveData → dynamic_region offset:
+--   HGSS     : SaveData + 0x10 = dynamic_region[0]
+--   Platinum : SaveData + 0x14 = dynamic_region[0]
+-- pcStorageBase() uses this + arrayHeaders[41].offset to land on PCStorage.boxes[0].
+-- Source: pret/pokeheartgold include/save.h vs pret/pokeplatinum equivalent layout
+-- (struct SaveData prefix differs by 4 bytes — Pt has an extra u32 before dynamic_region).
+local DYNAMIC_REGION_OFF = 0x10
 
 -- Party / battle copy offsets (relative to resolved base pointer)
 -- Source: pret/pokeheartgold include/party.h struct Party (curCount + mons[6]); offsets
@@ -576,6 +585,7 @@ function M.applyProfile(p)
     if p.P1_PTR_ADDR        ~= nil then P1_PTR_ADDR        = p.P1_PTR_ADDR        end
     if p.BASE_PTR_OFF        ~= nil then BASE_PTR_OFF       = p.BASE_PTR_OFF       end
     if p.PC_ARRAY_HDR_OFF    ~= nil then PC_ARRAY_HDR_OFF   = p.PC_ARRAY_HDR_OFF   end
+    if p.DYNAMIC_REGION_OFF  ~= nil then DYNAMIC_REGION_OFF = p.DYNAMIC_REGION_OFF end
     if p.PARTY_COUNT_OFF     ~= nil then PARTY_COUNT_OFF    = p.PARTY_COUNT_OFF    end
     if p.PARTY_OFF           ~= nil then PARTY_OFF          = p.PARTY_OFF          end
     if p.PLAYER_BATTLE_OFF   ~= nil then PLAYER_BATTLE_OFF  = p.PLAYER_BATTLE_OFF  end
@@ -1246,9 +1256,11 @@ end
 -- Returns the base address of PCStorage.boxes[0] (Box 1, Slot 0) in RAM,
 -- or nil if the save is not loaded / base pointer not resolved.
 -- Reads arrayHeaders[SAVE_PCSTORAGE=41].offset live from RAM each call.
--- Formula: saveData + 0x10 + arrayHeaders[41].offset
---   saveData      = M._base   (confirmed: base = SaveData*)
---   PC_ARRAY_HDR_OFF = 0x232AC  (saveData + 0x23014 + 41*0x10 + 8)
+-- Formula: saveData + DYNAMIC_REGION_OFF + arrayHeaders[41].offset
+--   saveData            = M._base   (confirmed: base = SaveData*)
+--   DYNAMIC_REGION_OFF  = 0x10 on HGSS, 0x14 on Platinum (struct SaveData prefix differs)
+--   PC_ARRAY_HDR_OFF    = 0x232AC  (saveData + 0x23014 + 41*0x10 + 8 — SaveData-relative,
+--                                    NOT dynamic-region-relative, so same on both games)
 -- Gen 5: PC storage is at an absolute address (PC_STORAGE_BASE); no array header needed.
 function M.pcStorageBase()
     if DIRECT_ADDR then
@@ -1260,7 +1272,7 @@ function M.pcStorageBase()
     -- Valid PC chunk offset must be non-zero and within dynamic_region (0x23000 bytes).
     -- In practice it will be well above 0x100 (all 40 prior chunks precede it).
     if chunk_off < 0x100 or chunk_off >= 0x23000 then return nil end
-    return M._base + 0x10 + chunk_off
+    return M._base + DYNAMIC_REGION_OFF + chunk_off
 end
 
 -- Returns the RAM address of BoxPokemon at PC box `box` (0-based, 0=Box 1)

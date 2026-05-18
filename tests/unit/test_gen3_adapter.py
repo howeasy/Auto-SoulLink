@@ -433,14 +433,31 @@ class TestMoveData:
         assert isinstance(name, str)
 
     def test_base_adapter_stubs(self):
-        """Adapters without move data (Gen 1, Gen 2, Gen 5) should return defaults
-        for move methods. Gen 4 has its own move table since Phase 7 — it shares
-        IDs 1-354 with Gen 3 and adds 355-467 (the Gen 4 introductions).
+        """Adapters that don't ship a move table — Gen 1 here — return empty strings
+        and None for move_name / move_data. Gen 4 has its own table (GEN4_MOVE_DATA)
+        covering IDs 1-467; Gen 1 has no move metadata in the repo.
         """
         from server.adapters.gen1_rby import Gen1Adapter
         adapter = Gen1Adapter()
         assert adapter.move_name(85) == ""
         assert adapter.move_data(85) is None
+
+    def test_other_adapters_ignore_form_arg(self):
+        """Non-gen4 adapters accept the form parameter on sprite_html (Phase 5's
+        signature extension) but silently ignore it — they have no alternate forms.
+        Verify they don't crash AND produce the same output as the no-form call.
+        """
+        from server.adapters.gen1_rby import Gen1Adapter
+        from server.adapters.gen2_crystal import Gen2CrystalAdapter
+        from server.adapters.gen3_frlge import Gen3Adapter
+        from server.adapters.gen5_bw import Gen5Adapter
+        for cls, sp in [(Gen1Adapter, 25), (Gen2CrystalAdapter, 25),
+                        (Gen3Adapter, 25), (Gen5Adapter, 495)]:
+            a = cls() if cls is not Gen3Adapter else cls(is_rr=False)
+            # Calling with explicit form arg must not crash AND must equal the no-form output.
+            assert a.sprite_html(sp, 0)  == a.sprite_html(sp)
+            assert a.sprite_html(sp, 5)  == a.sprite_html(sp)
+            assert a.sprite_html(sp, 99) == a.sprite_html(sp)
 
 
 # ── CFRU Compressed Box Regression Tests ──────────────────────────────────────
