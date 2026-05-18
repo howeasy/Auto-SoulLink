@@ -1,4 +1,34 @@
-# Phase 0 — Gen 1 / Gen 2 profile address audit
+# Phase 0 — Gen 1 / Gen 2 profile address audit (SUPERSEDED by Phase 10)
+
+**STATUS as of Phase 10**: This document is retained for historical context. Address verification is now automated via [tools/build_pret_syms.py](../tools/build_pret_syms.py) + [tools/verify_profile_addresses.py](../tools/verify_profile_addresses.py); the [pytest gate](../tests/unit/test_profile_addresses.py) blocks any profile-address regression at commit time.
+
+To re-verify after a pret upstream change:
+```
+python tools/build_pret_syms.py --update    # rebuild .sym files
+python tools/verify_profile_addresses.py    # diff against profile (exit 0 = clean)
+pytest tests/unit/test_profile_addresses.py # pass = green
+```
+
+### Address-audit findings, applied in commits
+
+Phase 10's first verifier run surfaced 7 address mismatches that have since been corrected. Recorded here for the migration history:
+
+| Variant | Field | Old value | pret-authoritative | Reason |
+|---|---|---|---|---|
+| Gen 1 R/B | box_nicks_addr | 0xDEB8 | 0xDE06 | wBoxMonNicks — old value pointed mid-region (wBoxMon17Nick) |
+| Gen 1 Yellow | box_nicks_addr | 0xDEB7 | 0xDE05 | same bug as R/B, -1 shifted |
+| Gen 1 Yellow | player_stat_stages_addr | 0xCD19 | 0xCD1A | Phase 2 -1 shift assumption was wrong — "Main Data" doesn't shift |
+| Gen 1 Yellow | enemy_stat_stages_addr | 0xCD2D | 0xCD2E | same |
+| Gen 2 Crystal | player_stat_stages_addr | 0xC68A | 0xC6CC | Phase 2 SECTION-analysis hypothesis off by 66 bytes |
+| Gen 2 Crystal | enemy_stat_stages_addr | 0xC691 | 0xC6D4 | same |
+| Gen 2 Crystal | trainer_class_addr | 0xD233 | 0xD22F | Phase 5 used wTrainerClass (player field) instead of wOtherTrainerClass (opponent) |
+| Gen 2 Crystal | trainer_id_addr | 0xD234 | 0xD231 | wOtherTrainerID |
+
+All other profile addresses (~75) were already pret-correct.
+
+---
+
+## Original audit doc (pre-Phase-10) below
 
 **Goal**: cross-reference every memory address in [lua/games/gen1_rby.lua](../lua/games/gen1_rby.lua) and [lua/games/gen2_crystal.lua](../lua/games/gen2_crystal.lua) against authoritative sources (pret disassemblies, DataCrystal RAM map) before adding new features on top. Verification is two-tier:
 
