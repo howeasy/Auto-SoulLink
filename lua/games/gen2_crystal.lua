@@ -139,9 +139,10 @@ M.PROFILES = {
         -- ...SAtkLevel, ...SDefLevel, ...AccLevel, ...EvaLevel} (7 bytes).
         -- wEnemyStatLevels has the same layout immediately after. Raw range 1..13
         -- (BASE_STAT_LEVEL EQU 7 per constants/battle_constants.asm). Client normalizes to 0..12.
-        -- Working hypothesis: 0xC68A / 0xC691 (TODO Phase 9 live verification).
-        player_stat_stages_addr = 0xC68A,
-        enemy_stat_stages_addr  = 0xC691,
+        -- Phase 10: pret-authoritative wPlayerStatLevels=0xC6CC, wEnemyStatLevels=0xC6D4
+        -- (was 0xC68A/0xC691 working hypothesis from SECTION analysis — corrected).
+        player_stat_stages_addr = 0xC6CC,
+        enemy_stat_stages_addr  = 0xC6D4,
         stat_stages_count       = 7,
         stat_stages_layout      = "gen2",  -- {atk, def, spd, satk, sdef, acc, eva}
 
@@ -163,11 +164,12 @@ M.PROFILES = {
         enemy_battle_pp_encoding = "raw",
 
         -- Trainer class + index (Phase 5 — wOtherTrainerClass / wOtherTrainerID
-        -- per pret/pokecrystal). Working hypothesis from DataCrystal region 0xD233
-        -- (verify Phase 9). Class is 1-based per pret constants (FALKNER=1, BUGSY=3,
-        -- BROCK=17, etc.), trainer_id is 1-based within class.
-        trainer_class_addr      = 0xD233,
-        trainer_id_addr         = 0xD234,
+        -- per pret/pokecrystal). Phase 10: pret-authoritative wOtherTrainerClass=0xD22F,
+        -- wOtherTrainerID=0xD231 (Phase 5 hypothesis was 0xD233/0xD234 — corrected).
+        -- Class is 1-based per pret constants (FALKNER=1, BUGSY=3, BROCK=17, etc.),
+        -- trainer_id is 1-based within class.
+        trainer_class_addr      = 0xD22F,
+        trainer_id_addr         = 0xD231,
     },
 }
 

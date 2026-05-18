@@ -59,7 +59,7 @@ M.PROFILES = {
         box_species_addr   = 0xDA81,  -- 20 bytes + 0xFF terminator
         box_base_addr      = 0xDA96,  -- 20 × 33 bytes
         box_ot_names_addr  = 0xDD2A,  -- 20 × 11 bytes
-        box_nicks_addr     = 0xDEB8,  -- 20 × 11 bytes
+        box_nicks_addr     = 0xDE06,  -- 20 × 11 bytes (pret wBoxMonNicks; Phase 10 fix from 0xDEB8)
         box_struct_size    = 33,
         box_max_mons       = 20,
         -- Bag
@@ -135,7 +135,7 @@ M.PROFILES = {
         box_species_addr   = 0xDA80,
         box_base_addr      = 0xDA95,
         box_ot_names_addr  = 0xDD29,
-        box_nicks_addr     = 0xDEB7,
+        box_nicks_addr     = 0xDE05,  -- pret wBoxMonNicks; Phase 10 fix from 0xDEB7
         box_struct_size    = 33,
         box_max_mons       = 20,
         bag_count_addr     = 0xD31C,
@@ -162,8 +162,11 @@ M.PROFILES = {
         ball_item_ids      = {0x01, 0x02, 0x03, 0x04},
         badges_addr        = 0xD355,  -- wObtainedBadges (Yellow, shifted -1)
         -- Stat stages (Phase 2, tentative -1 shift from R/B; Phase 9 diagnostic confirms)
-        player_stat_stages_addr = 0xCD19,
-        enemy_stat_stages_addr  = 0xCD2D,
+        -- Phase 10 fix: Yellow does NOT shift these -1 from R/B (the "Main Data"
+        -- section origin is fixed; the Yellow audio adds bytes earlier in WRAM
+        -- but doesn't push this region). pret/pokeyellow wPlayerMonAttackMod=0xCD1A.
+        player_stat_stages_addr = 0xCD1A,
+        enemy_stat_stages_addr  = 0xCD2E,
         stat_stages_count       = 6,
         stat_stages_layout      = "gen1",
         -- Moves + PP: same struct offsets as Red/Blue (no -1 shift inside the struct).
