@@ -470,6 +470,79 @@ def test_trainer_info_returns_empty(adapter):
     assert adapter.trainer_info(999) == ("", "")
 
 
+# ── Phase 3: Move data ───────────────────────────────────────────────────
+
+def test_move_name_pound(adapter):
+    assert adapter.move_name(1) == "Pound"
+
+
+def test_move_name_thunderbolt(adapter):
+    assert adapter.move_name(85) == "Thunderbolt"
+
+
+def test_move_name_unknown(adapter):
+    assert adapter.move_name(0) == ""
+    assert adapter.move_name(9999) == ""
+
+
+def test_move_data_gen2_karate_chop_is_fighting(adapter):
+    """Gen 2 fixed Karate Chop's type from Normal (Gen 1 bug) to Fighting."""
+    m = adapter.move_data(2)
+    assert m["name"] == "Karate Chop"
+    assert m["type_name"] == "Fighting"
+    assert m["power"] == 50
+
+
+def test_move_data_gen2_bite_is_dark(adapter):
+    """Gen 2 added Dark and reclassified Bite from Normal → Dark."""
+    m = adapter.move_data(44)
+    assert m["type_name"] == "Dark"
+    assert m["split"] == 1  # Special (Dark is special-side in Gen 2)
+
+
+def test_move_data_thunderbolt(adapter):
+    m = adapter.move_data(85)
+    assert m["name"] == "Thunderbolt"
+    assert m["type_name"] == "Electric"
+    assert m["power"] == 95
+    assert m["accuracy"] == 100
+    assert m["pp"] == 15
+    assert m["split"] == 1  # Special
+    assert m["effect_chance"] == 10
+
+
+def test_move_data_status_move(adapter):
+    """Sleep Powder (id=79) is a status move."""
+    m = adapter.move_data(79)
+    assert m["split"] == 2
+    assert m["power"] == 0
+
+
+def test_move_data_unknown(adapter):
+    assert adapter.move_data(0) is None
+    assert adapter.move_data(9999) is None
+
+
+def test_move_data_struggle(adapter):
+    """Struggle is move 165 in Gen 2 (same id as Gen 1 since added Gen 2 moves come after)."""
+    m = adapter.move_data(165)
+    assert m["name"] == "Struggle"
+
+
+def test_move_data_gen2_only_move(adapter):
+    """Crunch (Gen 2 only, id=242) — special Dark move."""
+    m = adapter.move_data(242)
+    assert m["name"] == "Crunch"
+    assert m["type_name"] == "Dark"
+    assert m["power"] == 80
+
+
+def test_move_data_count(adapter):
+    """All 251 Gen 2 moves should be loaded."""
+    valid = sum(1 for i in range(1, 252) if adapter.move_data(i) is not None)
+    assert valid == 251
+
+
 # ── Registry ─────────────────────────────────────────────────────────────
 
 def test_adapter_registered():

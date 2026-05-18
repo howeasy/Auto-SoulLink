@@ -108,6 +108,19 @@ _AREA_DISPLAY_NAMES: dict[str, str] = load_area_names_from_obj_map(
     os.path.join(_DATA_DIR, "area_map.json")
 )
 
+# ── Load Gen 2 moves data (Phase 3) ─────────────────────────────────────
+_GEN2_MOVES: dict[int, dict] = {}
+_moves_path = os.path.join(_DATA_DIR, "moves.json")
+if os.path.exists(_moves_path):
+    with open(_moves_path, "r") as _f:
+        for _entry in json.load(_f).get("moves", []):
+            _GEN2_MOVES[int(_entry["id"])] = _entry
+else:
+    log.warning("Gen 2 moves.json not found: %s", _moves_path)
+
+# Move split → integer ID expected by renderer (0=Physical, 1=Special, 2=Status)
+_SPLIT_NAME_TO_ID = {"Physical": 0, "Special": 1, "Status": 2}
+
 
 class Gen2CrystalAdapter(GameAdapter):
     """Adapter for Gen 2: Pokémon Crystal.
@@ -133,6 +146,28 @@ class Gen2CrystalAdapter(GameAdapter):
 
     def is_daycare_area(self, area_id: str) -> bool:
         return area_id in _DAYCARE_AREAS
+
+    # ── Move data (Phase 3) ───────────────────────────────────────────────
+
+    def move_name(self, move_id: int) -> str:
+        m = _GEN2_MOVES.get(move_id)
+        return m["name"] if m else ""
+
+    def move_data(self, move_id: int) -> dict | None:
+        m = _GEN2_MOVES.get(move_id)
+        if not m:
+            return None
+        type_name = m["type"]
+        return {
+            "name": m["name"],
+            "type_id": _TYPE_NAME_TO_ID.get(type_name, 0),
+            "type_name": type_name,
+            "power": m["power"],
+            "accuracy": m["accuracy"],
+            "pp": m["pp"],
+            "split": _SPLIT_NAME_TO_ID.get(m["split"], 2),
+            "effect_chance": m.get("effect_chance", 0),
+        }
 
     def evo_family(self, species_id: int) -> int:
         return base_form(species_id, False)

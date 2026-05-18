@@ -179,7 +179,40 @@ After the addresses are confirmed (steps 2.1 / 2.2 above):
 
 ## Phase 3 — Moves + PP
 
-*Filled in as Phase 3 lands.*
+### 3.1 Move data files
+
+**What changed**: `data/games/gen1_rby/moves.json` (165 entries) and `data/games/gen2_crystal/moves.json` (251 entries) added. Both adapters now expose `move_name(move_id)` and `move_data(move_id)` returning `{name, type_id, type_name, power, accuracy, pp, split}` (Gen 2 also includes `effect_chance`). The split is type-based (Gen 1/2 convention) but power-0 moves are forced to Status.
+
+Regenerate from pret tables: `python tools/gen_moves_data.py`.
+
+### 3.2 Profile + Lua plumbing
+
+`lua/games/gen1_rby.lua` declares `moves_offset=0x08`, `pp_offset=0x1D`, `pp_encoding="raw"`. `lua/games/gen2_crystal.lua` declares `moves_offset=0x02`, `pp_offset=0x17`, `pp_encoding="ppup_packed"` (top 2 bits of each PP byte = PP-Up count, bottom 6 = current PP). `M.readMovesAndPP(base, nil)` in `lua/memory_gb.lua` reads + decodes both formats.
+
+Both clients' `build_party_snapshot` attach `moves[]`, `pp[]`, and `pp_bonuses` to each party slot. The server's existing `_enrich_party` resolves move IDs to full move details and the status page renders them.
+
+### 3.3 Live verification (Gen 1)
+
+1. Load `lua/tests/test_gen1_moves.lua` on Red, Blue, or Yellow.
+2. Press **F1** in overworld. Expect slot 0's moves to be valid IDs (1..165) for the moves your starter knows, and `0` for empty slots. PP values should be in 5..40 range.
+3. Use a move in battle, return to overworld, press F1. The PP of that move should have decremented.
+4. Use a Heal Item / Pokémon Center → PP refilled to base.
+5. **FAIL** if move IDs are random (>165), or if PP values are unreasonable (>40 / random bytes).
+
+### 3.4 Live verification (Gen 2)
+
+1. Load `lua/tests/test_gen2_moves.lua` on Crystal.
+2. Press **F1**. Expect slot 0 moves valid (1..251), `pp_ups` typically 0, PP in 0..63 (decoded from packed byte).
+3. **Use a PP-Up on one move**, then press F1 + F3. `pp_ups` for that move should increment to 1 and max PP should grow accordingly.
+4. **F3 raw dump**: Verify the raw PP byte = `(pp_ups << 6) | current_pp`. E.g. if a move with base PP 35 has 1 PP Up applied (pp_ups=1) and you've used it down to 30, the raw byte should be `(1 << 6) | 30 = 0x5E = 94`.
+5. **FAIL** if move IDs are out of range, or if PP encoding decodes wrong (max PP doesn't match base+ups formula).
+
+### 3.5 Status page rendering
+
+1. Run the regular SLink client. Open `http://localhost:8080/`.
+2. The party panel should now show a clickable **Moves(N)** badge on each slot.
+3. Expand it — each move should display **name (PP cur/max)** with a colored PP bar.
+4. **FAIL** if Moves(N) doesn't appear (server enrichment broken) or shows ID numbers instead of names (move_data lookup broken).
 
 ---
 

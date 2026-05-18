@@ -351,6 +351,21 @@ local function build_party_snapshot()
             if mon.held_item and mon.held_item > 0 then
                 entry.held_item = mon.held_item
             end
+            -- Phase 3: moves + PP from party struct. Gen 2 encodes PP-Up count in top
+            -- 2 bits of each PP byte. memory_gb's readMovesAndPP() handles the unpack;
+            -- we re-encode the 4 pp_ups values into the single pp_bonuses byte the
+            -- server expects (bits 0-1 = move1, 2-3 = move2, 4-5 = move3, 6-7 = move4).
+            local party_base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
+            local mp = M.readMovesAndPP(party_base, nil)
+            if mp then
+                entry.moves = mp.moves
+                entry.pp    = mp.pp
+                local bonuses = 0
+                for i = 1, 4 do
+                    bonuses = bonuses + (mp.pp_ups[i] * (4 ^ (i - 1)))  -- 2 bits per move
+                end
+                entry.pp_bonuses = bonuses
+            end
             -- Gen 2: tag the assumed-active slot with stat_stages when in battle.
             if slot == 0 and player_stages then
                 entry.active = true

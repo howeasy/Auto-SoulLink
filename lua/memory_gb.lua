@@ -206,6 +206,11 @@ function M.initProfile(game_module, variant)
     M.ENEMY_STAT_STAGES_ADDR  = prof.enemy_stat_stages_addr
     M.STAT_STAGES_COUNT       = prof.stat_stages_count or 0
     M.STAT_STAGES_LAYOUT      = prof.stat_stages_layout or "gen1"
+    -- Moves + PP within party struct (Phase 3). pp_encoding="raw" (Gen 1, simple
+    -- byte) or "ppup_packed" (Gen 2, top 2 bits = PP-Up count, bottom 6 = current PP).
+    M.MOVES_OFFSET            = prof.moves_offset
+    M.PP_OFFSET               = prof.pp_offset
+    M.PP_ENCODING             = prof.pp_encoding or "raw"
 end
 
 -- ═══ Box Memory Helpers (routes to SRAM when BOX_IN_SRAM is set) ═══
@@ -843,6 +848,43 @@ end
 
 function M.readEnemyStatStages()
     return _read_stat_stages(M.ENEMY_STAT_STAGES_ADDR)
+end
+
+-- ═══ Moves + PP (Phase 3) ═════════════════════════════════════════════════
+-- Read 4 move IDs and 4 PP bytes from a party/box struct at the given base
+-- address. Returns {moves=[id1..id4], pp=[pp1..pp4], pp_ups=[u1..u4], max_pp=[m1..m4]}
+-- or nil if the profile doesn't declare offsets.
+--   - Gen 1: pp_encoding="raw", current_pp = byte, pp_ups always 0.
+--   - Gen 2: pp_encoding="ppup_packed": current_pp = byte & 0x3F, pp_ups = byte >> 6.
+-- max_pp is computed from base PP (provided by caller via base_pp_table) + PP-Up bonus:
+--   max_pp = base_pp + (base_pp * pp_ups // 5)
+-- Caller passes nil base_pp_table if not available; max_pp will then be nil.
+
+function M.readMovesAndPP(struct_base, base_pp_table)
+    if not M.MOVES_OFFSET or not M.PP_OFFSET then return nil end
+    local result = {moves = {}, pp = {}, pp_ups = {}, max_pp = {}}
+    for i = 0, 3 do
+        local move_id = M.read_u8(struct_base + M.MOVES_OFFSET + i)
+        local pp_byte = M.read_u8(struct_base + M.PP_OFFSET + i)
+        result.moves[i + 1] = move_id
+        if M.PP_ENCODING == "ppup_packed" then
+            local cur_pp = pp_byte % 64  -- pp_byte & 0x3F
+            local pp_ups = math.floor(pp_byte / 64)  -- (pp_byte >> 6) & 0x03
+            result.pp[i + 1] = cur_pp
+            result.pp_ups[i + 1] = pp_ups
+            if base_pp_table and base_pp_table[move_id] then
+                local base = base_pp_table[move_id]
+                result.max_pp[i + 1] = base + math.floor(base * pp_ups / 5)
+            end
+        else
+            result.pp[i + 1] = pp_byte
+            result.pp_ups[i + 1] = 0
+            if base_pp_table and base_pp_table[move_id] then
+                result.max_pp[i + 1] = base_pp_table[move_id]
+            end
+        end
+    end
+    return result
 end
 
 --- Deposit party slot directly to the dedicated memorial box (last box).

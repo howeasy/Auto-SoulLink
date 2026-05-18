@@ -327,6 +327,15 @@ local function build_party_snapshot()
                 nickname = nick,
                 status_cond = mon.status_cond or 0,
             }
+            -- Phase 3: moves + PP from party struct. Server enriches into move_details.
+            -- Gen 1 has no PP-Up encoding; pp_bonuses stays 0.
+            local party_base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
+            local mp = M.readMovesAndPP(party_base, nil)
+            if mp then
+                entry.moves = mp.moves
+                entry.pp    = mp.pp
+                entry.pp_bonuses = 0
+            end
             if slot == 0 and player_stages then
                 entry.active = true
                 entry.stat_stages = player_stages

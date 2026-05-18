@@ -104,6 +104,10 @@ M.PROFILES = {
         enemy_stat_stages_addr  = 0xCD2E,
         stat_stages_count       = 6,
         stat_stages_layout      = "gen1",  -- {atk, def, spd, spc, acc, eva}
+        -- Moves + PP within party struct (Phase 3 — pret/pokered macros, 4 bytes each).
+        moves_offset            = 0x08,    -- 4 move IDs at +0x08..0x0B
+        pp_offset               = 0x1D,    -- 4 PP bytes at +0x1D..0x20 (simple counters, no PP-Up encoding in Gen 1)
+        pp_encoding             = "raw",   -- Gen 1 PP is raw 0..40, no top-bits PP-Up
     },
 
     -- Yellow has shifted WRAM addresses
@@ -151,6 +155,10 @@ M.PROFILES = {
         enemy_stat_stages_addr  = 0xCD2D,
         stat_stages_count       = 6,
         stat_stages_layout      = "gen1",
+        -- Moves + PP: same struct offsets as Red/Blue (no -1 shift inside the struct).
+        moves_offset            = 0x08,
+        pp_offset               = 0x1D,
+        pp_encoding             = "raw",
     },
 }
 

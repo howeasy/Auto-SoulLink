@@ -144,6 +144,15 @@ M.PROFILES = {
         enemy_stat_stages_addr  = 0xC691,
         stat_stages_count       = 7,
         stat_stages_layout      = "gen2",  -- {atk, def, spd, satk, sdef, acc, eva}
+
+        -- Moves + PP within party struct (Phase 3 — pret/pokecrystal macros).
+        -- Moves at +0x02..0x05 (4 bytes), PP at +0x17..0x1A (4 bytes).
+        -- Gen 2 PP byte format: bits 0-5 = current PP (0..63), bits 6-7 = PP-Up
+        -- count (0..3). Constants PP_MASK=0x3F, PP_UP_MASK=0xC0 per
+        -- pret/pokecrystal engine/items/item_effects.asm.
+        moves_offset            = 0x02,
+        pp_offset               = 0x17,
+        pp_encoding             = "ppup_packed",
     },
 }
 
