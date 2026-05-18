@@ -4,12 +4,12 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 
 **Supported Games:**
 - **Gen 3** — FireRed, LeafGreen, Emerald (vanilla, randomized, Archipelago, Radical Red/CFRU) — **✅ stable**
-- **Gen 1** — Red, Blue, Yellow (US English) — ⚠️ experimental
-- **Gen 2** — Crystal (GBC) — ⚠️ experimental
+- **Gen 1** — Red, Blue, Yellow (US English) — feature-parity with Gen 3 ⚠️ pending Phase 9 live verification (`tests/PHASE9_BATCH.md`). Archipelago Red/Blue (Alchav) auto-detected.
+- **Gen 2** — Crystal (GBC) — feature-parity with Gen 3 ⚠️ pending Phase 9 live verification. Archipelago Crystal (gerbiljames fork) auto-detected.
 - **Gen 4** — HeartGold, SoulSilver, Platinum — ⚠️ experimental
 - **Gen 5** — Black, White, Black 2, White 2 — ⚠️ experimental
 
-> **Note:** Only Gen 3 has been extensively tested in live gameplay. Gen 1, 2, 4, and 5 have unit tests and Lua clients but limited real-world testing.
+> **Note:** Gen 1/2 have full feature pipelines (moves+PP, stat stages, enemy moves+PP, trainer names, encounter tables, AP detection) but their memory addresses are flagged for live BizHawk verification — see `tests/phase0_address_audit.md` and `tests/PHASE9_BATCH.md`. Until that runs, treat them as ⚠️ unverified-implementations rather than untested-stubs.
 
 ---
 

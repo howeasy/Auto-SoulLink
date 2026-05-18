@@ -2,7 +2,12 @@
 
 Data files for Gen 2 Pokémon games (Game Boy Color).
 
-## Status: Implemented (Crystal)
+## Status: Feature-parity with Gen 3 (Crystal — pending Phase 9 live verification)
+
+Phases 0-8 of `gen1-gen2-parity` brought Crystal up to Gen 3's feature
+set: moves+PP, stat stages, enemy moves+PP, trainer names, encounter
+tables, SFX infrastructure, and Archipelago detection (gerbiljames fork).
+Gold/Silver remain deferred as variant profiles to add later.
 
 ## Data Files
 
@@ -10,6 +15,9 @@ Data files for Gen 2 Pokémon games (Game Boy Color).
 - `species_types.json` — Species type data (251 species)
 - `gender_ratios.json` — Species gender ratio data
 - `item_names.json` — Item ID → name mapping
+- `moves.json` — 251 moves with name/type/power/accuracy/pp/split/effect_chance (Phase 3)
+- `trainers.json` — class_id → class_name + named Johto/Kanto leaders + E4 + Red/Blue (Phase 5)
+- `encounter_tables.json` — wild encounter slots by area_id with Morn/Day/Nite variants (Phase 6; partial coverage)
 
 ## Notes
 
