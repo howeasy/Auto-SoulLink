@@ -18,3 +18,4 @@ data/obs_config.json
 .tio.tokens.json
 .env
 .env.*
+/dist/
