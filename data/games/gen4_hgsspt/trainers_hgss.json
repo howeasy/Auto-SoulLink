@@ -1,124 +1,69 @@
 {
-  "trainers": {
-    "seed_1": {
-      "name": "Falkner",
-      "class": 21
-    },
-    "seed_2": {
-      "name": "Bugsy",
-      "class": 21
-    },
-    "seed_3": {
-      "name": "Whitney",
-      "class": 21
-    },
-    "seed_4": {
-      "name": "Morty",
-      "class": 21
-    },
-    "seed_5": {
-      "name": "Chuck",
-      "class": 21
-    },
-    "seed_6": {
-      "name": "Jasmine",
-      "class": 21
-    },
-    "seed_7": {
-      "name": "Pryce",
-      "class": 21
-    },
-    "seed_8": {
-      "name": "Clair",
-      "class": 21
-    },
-    "seed_9": {
-      "name": "Will",
-      "class": 12
-    },
-    "seed_10": {
-      "name": "Koga",
-      "class": 12
-    },
-    "seed_11": {
-      "name": "Bruno",
-      "class": 12
-    },
-    "seed_12": {
-      "name": "Karen",
-      "class": 12
-    },
-    "seed_13": {
-      "name": "Lance",
-      "class": 13
-    },
-    "seed_14": {
-      "name": "Brock",
-      "class": 21
-    },
-    "seed_15": {
-      "name": "Misty",
-      "class": 21
-    },
-    "seed_16": {
-      "name": "Lt. Surge",
-      "class": 21
-    },
-    "seed_17": {
-      "name": "Erika",
-      "class": 21
-    },
-    "seed_18": {
-      "name": "Janine",
-      "class": 21
-    },
-    "seed_19": {
-      "name": "Sabrina",
-      "class": 21
-    },
-    "seed_20": {
-      "name": "Blaine",
-      "class": 21
-    },
-    "seed_21": {
-      "name": "Blue",
-      "class": 21
-    },
-    "seed_22": {
-      "name": "Red",
-      "class": 22
-    },
-    "seed_23": {
-      "name": "Silver",
-      "class": 23
-    }
+  "_meta": {
+    "source": "pret/pokeheartgold include/constants/trainers.h + trainer_class.h",
+    "note": "Trainer IDs verified against pret enum. Run tools/gen_gen4_trainers.py --pret-hgss <path> to populate the full ~800-trainer table; this file holds the key story/rival/E4/champion trainers used by stream overlays.",
+    "schema_version": 1
   },
   "classes": {
-    "1": "Leader",
-    "2": "Leader",
-    "3": "Leader",
-    "4": "Leader",
-    "5": "Leader",
-    "6": "Leader",
-    "7": "Leader",
-    "8": "Leader",
-    "9": "Elite Four",
-    "10": "Elite Four",
-    "11": "Elite Four",
-    "12": "Elite Four",
-    "13": "Champion",
-    "14": "Leader",
-    "15": "Leader",
-    "16": "Leader",
-    "17": "Leader",
-    "18": "Leader",
-    "19": "Leader",
-    "20": "Leader",
-    "21": "Leader",
-    "22": "Pokémon Trainer",
-    "23": "Rival"
+    "0":  "Pokémon Trainer",
+    "23": "Rival",
+    "66": "Gym Leader",
+    "67": "Gym Leader",
+    "70": "Gym Leader",
+    "72": "Gym Leader",
+    "73": "Gym Leader",
+    "74": "Gym Leader",
+    "75": "Gym Leader",
+    "76": "Gym Leader",
+    "86": "Champion",
+    "87": "Elite Four",
+    "88": "Elite Four",
+    "89": "Elite Four",
+    "97": "Tower Tycoon",
+    "98": "Gym Leader",
+    "99": "Hall Matron",
+    "100": "Factory Head",
+    "101": "Arcade Star",
+    "102": "Castle Valet",
+    "103": "Gym Leader",
+    "104": "Gym Leader",
+    "105": "Gym Leader",
+    "106": "Gym Leader",
+    "107": "Gym Leader",
+    "108": "Gym Leader",
+    "109": "Pokémon Trainer",
+    "110": "Gym Leader",
+    "112": "Elite Four",
+    "114": "Rocket Executive",
+    "116": "Rocket Executive",
+    "117": "Rocket Executive",
+    "118": "Rocket Executive",
+    "123": "Dragon Master",
+    "124": "Rocket Boss"
   },
-  "_meta": {
-    "note": "Stub seed data. Run gen_gen4_trainers.py with --pret-* paths to extract real IDs from pret trainer_data.h. Synthetic seed_* keys are present for documentation but never match live RAM IDs."
+  "trainers": {
+    "20":  {"name": "Falkner",    "class": 66},
+    "21":  {"name": "Bugsy",      "class": 67},
+    "30":  {"name": "Whitney",    "class": 70},
+    "31":  {"name": "Morty",      "class": 72},
+    "32":  {"name": "Pryce",      "class": 73},
+    "33":  {"name": "Jasmine",    "class": 74},
+    "34":  {"name": "Chuck",      "class": 75},
+    "35":  {"name": "Clair",      "class": 76},
+    "244": {"name": "Lance",      "class": 86},
+    "245": {"name": "Will",       "class": 87},
+    "246": {"name": "Karen",      "class": 88},
+    "247": {"name": "Koga",       "class": 89},
+    "253": {"name": "Brock",      "class": 98},
+    "254": {"name": "Misty",      "class": 103},
+    "255": {"name": "Lt. Surge",  "class": 104},
+    "256": {"name": "Erika",      "class": 105},
+    "257": {"name": "Janine",     "class": 106},
+    "258": {"name": "Sabrina",    "class": 107},
+    "259": {"name": "Blaine",     "class": 108},
+    "260": {"name": "Red",        "class": 109},
+    "261": {"name": "Blue",       "class": 110},
+    "418": {"name": "Bruno",      "class": 112},
+    "700": {"name": "Giovanni",   "class": 124}
   }
 }

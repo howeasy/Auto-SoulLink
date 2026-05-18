@@ -128,6 +128,32 @@ def _load_trainer_table(filename: str) -> dict:
 _HGSS_TRAINERS = _load_trainer_table("trainers_hgss.json")
 _PT_TRAINERS   = _load_trainer_table("trainers_pt.json")
 
+
+def _load_encounters(filename: str) -> dict:
+    """Load encounter table JSON. Returns the inner 'areas' dict (or {} on miss)."""
+    path = os.path.join(_data_dir, filename)
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+            # Newer schema wraps under "areas"; older flat schema is the dict itself.
+            return raw.get("areas", raw if not raw.get("_meta") else {})
+    except (OSError, json.JSONDecodeError) as e:
+        log.warning("Failed to load %s: %s", filename, e)
+        return {}
+
+
+_HGSS_ENCOUNTERS = _load_encounters("encounters_hgss.json")
+_PT_ENCOUNTERS   = _load_encounters("encounters_pt.json")
+
+
+# Renegade Platinum overrides — empty dicts by default. To populate, drop a
+# rp_<thing>.json file matching the parent's schema and the adapter will pick it
+# up via the override chain when rom_type == "renegade_platinum".
+_RP_TRAINERS   = _load_trainer_table("rp_trainers.json")
+_RP_ENCOUNTERS = _load_encounters("rp_encounters.json")
+
 # Gen 4 item names (HGSS/Platinum item IDs — differ from Gen 3)
 _GEN4_ITEM_NAMES: dict[int, str] = {
     1:"Master Ball",   2:"Ultra Ball",    3:"Great Ball",    4:"Poké Ball",
@@ -235,10 +261,18 @@ class Gen4Adapter(GameAdapter):
 
     def __init__(self, rom_type: str = "heartgold", **kwargs):
         self._rom_type = (rom_type or "heartgold").lower()
+        self._is_rp = (self._rom_type == "renegade_platinum")
         # Sinnoh trainers live in Platinum (and RP); Johto/Kanto in HGSS.
-        self._trainers = (_PT_TRAINERS
-                          if self._rom_type in ("platinum", "renegade_platinum")
-                          else _HGSS_TRAINERS)
+        # RP override chain: prefer rp_*.json when populated, else fall back to vanilla Pt.
+        if self._is_rp:
+            self._trainers   = _RP_TRAINERS   if _RP_TRAINERS.get("trainers") else _PT_TRAINERS
+            self._encounters = _RP_ENCOUNTERS if _RP_ENCOUNTERS               else _PT_ENCOUNTERS
+        elif self._rom_type == "platinum":
+            self._trainers   = _PT_TRAINERS
+            self._encounters = _PT_ENCOUNTERS
+        else:
+            self._trainers   = _HGSS_TRAINERS
+            self._encounters = _HGSS_ENCOUNTERS
 
     @property
     def game_id(self) -> str:
@@ -375,6 +409,19 @@ class Gen4Adapter(GameAdapter):
         if area_id in _AREA_DISPLAY_NAMES:
             return _AREA_DISPLAY_NAMES[area_id]
         return area_id.replace("_", " ").title()
+
+    def encounter_table(self, area_id: str) -> dict | None:
+        """Return wild encounter data for an area, or None if no data.
+
+        Returns a dict mapping method label (Day/Night/Grass/Surfing/Old Rod/
+        Good Rod/Super Rod/Rock Smash/Headbutt/Honey Tree) → list of entries
+        {name, species_id, rate, min_level, max_level}.
+
+        Sparse: returns None for unmapped areas (e.g. towns, dungeons we
+        haven't seeded). Run tools/gen_gen4_encounters.py --pret-* to populate
+        the full ~150 encounter zones.
+        """
+        return self._encounters.get(area_id) or None
 
     def to_national_dex(self, species_id: int) -> int:
         return species_id

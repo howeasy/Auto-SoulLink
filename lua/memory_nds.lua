@@ -958,6 +958,37 @@ function M.isInOverworld()
     return not M.isInBattle()
 end
 
+-- ── Battle outcome ───────────────────────────────────────────────────────────
+-- pret/pokeheartgold include/constants/battle.h BATTLE_OUTCOME_* enum:
+--   0 = NONE         (no outcome yet — still battling)
+--   1 = WIN          (player won)
+--   2 = LOSE         (player whited out)
+--   3 = DRAW         (mutual KO / time-out)
+--   4 = MON_CAUGHT   (caught a wild Pokémon)
+--   5 = PLAYER_FLED  (player ran successfully)
+--   6 = FOE_FLED     (wild mon fled or was caught/teleported away)
+M.OUTCOME_NONE        = 0
+M.OUTCOME_WIN         = 1
+M.OUTCOME_LOSE        = 2
+M.OUTCOME_DRAW        = 3
+M.OUTCOME_MON_CAUGHT  = 4
+M.OUTCOME_PLAYER_FLED = 5
+M.OUTCOME_FOE_FLED    = 6
+
+-- Returns the current battle outcome byte (0..6) or nil if the address is unset
+-- or the byte is implausible. Read directly from BATTLE_STATUS_ADDR (Ironmon-
+-- Tracker's `battleStatus` slot, which on US 1.0 builds holds the outcome flag).
+-- Caveats:
+--   • Mid-battle the field reads 0 (NONE) — only meaningful at battle transitions.
+--   • Reading after battle end captures the terminal outcome before the engine
+--     clears the slot. Pair with the client's post_battle_frames window.
+function M.readBattleOutcome()
+    if not BATTLE_STATUS_ADDR then return nil end
+    local v = r8(BATTLE_STATUS_ADDR)
+    if v > 6 then return nil end
+    return v
+end
+
 -- Returns the absolute RAM address of a battler's stat-stage array, or nil if
 -- the battle struct hasn't been initialized.
 -- Battler indices: 0=player_L, 1=enemy_L, 2=player_R, 3=enemy_R.
@@ -1033,6 +1064,54 @@ function M.readBattlerActivePID(battler_idx)
     local addr = _stat_stages_addr(battler_idx)
     if not addr then return nil end
     return r32(addr + ACTIVE_MON_PID_DELTA)
+end
+
+-- ── API parity stubs (gen3 has these; gen4 wiring matches the surface area) ──
+
+-- Returns (playerFaintCount, opponentFaintCount) for the current battle, or
+-- (nil, nil) if the gen 4 BattleContext.totalTimesFainted[] address hasn't been
+-- located. Pret defines `int totalTimesFainted[4]` per battler in BattleContext
+-- (src/battle/battle_system.c), but the BattleContext heap chunk RAM offset
+-- isn't symbolised — fall back to client-side HP→0 transitions.
+-- Source: pret/pokeheartgold src/battle/battle_system.c struct BattleContext.
+function M.readFaintCounters()
+    -- TODO: locate BattleContext.totalTimesFainted via a future scan. Until
+    -- then, the gen4 client tracks faints from party HP transitions, which
+    -- is sufficient for nuzlocke detection (no Sturdy/Endure near-miss bypass).
+    return nil, nil
+end
+
+-- Returns an array of party-slot PIDs from the backup-party buffer used during
+-- Battle Factory / Trainer Café rentals. Gen 4 only has rentals in Pt Battle
+-- Factory; the backup buffer offset isn't symbolised. Returns {} when no
+-- backup is detected. Client uses this to distinguish "borrowed party" battles
+-- from regular ones so memorialize and capture events aren't misattributed.
+-- Source: pret/pokeplatinum src/battle/battle_factory.c (RentalParty struct).
+function M.readBackupPartyPids()
+    -- Gen 4 Battle Factory rental flow keeps the player's real party stashed
+    -- separately. Without a live-discovered offset, gen 4 SLink falls back to
+    -- treating every battle as the "real" party. For Pt Battle Factory streamers
+    -- who want this, run a live scan during a rental match and populate the
+    -- offset in lua/games/gen4_hgsspt.lua _PT_PROFILE.BACKUP_PARTY_OFF.
+    return {}
+end
+
+-- Plays a sound effect via NDS SDAT. Currently a no-op on gen 4 — NDS audio
+-- runs on ARM7 firmware with the SDAT sequence engine, not the GBA m4a driver
+-- that gen 3 manipulates directly. A complete implementation would require
+-- locating the SoundData heap chunk and writing a SequenceCommand record.
+-- Returns false to indicate the SE wasn't played (parity with gen 3 m4a path).
+-- Source: pret/pokeheartgold src/sound.c (SoundSystem_*).
+M.SE_FAINT   = 16
+M.SE_FLEE    = 17
+M.SE_BOO     = 22
+M.SE_SUCCESS = 25
+M.SE_FAILURE = 26
+M.SE_SHINY   = 95
+function M.playSE(songNum)
+    -- NDS audio injection is non-trivial (SDAT). Server can still emit play_sound
+    -- commands; the client logs them but doesn't actually play. Future work.
+    return false
 end
 
 -- Returns the full enemy party (up to 6 mons) as an array of mon tables with

@@ -1,104 +1,43 @@
 {
-  "trainers": {
-    "seed_1": {
-      "name": "Roark",
-      "class": 8
-    },
-    "seed_2": {
-      "name": "Gardenia",
-      "class": 8
-    },
-    "seed_3": {
-      "name": "Maylene",
-      "class": 8
-    },
-    "seed_4": {
-      "name": "Crasher Wake",
-      "class": 8
-    },
-    "seed_5": {
-      "name": "Fantina",
-      "class": 8
-    },
-    "seed_6": {
-      "name": "Byron",
-      "class": 8
-    },
-    "seed_7": {
-      "name": "Candice",
-      "class": 8
-    },
-    "seed_8": {
-      "name": "Volkner",
-      "class": 8
-    },
-    "seed_9": {
-      "name": "Aaron",
-      "class": 12
-    },
-    "seed_10": {
-      "name": "Bertha",
-      "class": 12
-    },
-    "seed_11": {
-      "name": "Flint",
-      "class": 12
-    },
-    "seed_12": {
-      "name": "Lucian",
-      "class": 12
-    },
-    "seed_13": {
-      "name": "Cynthia",
-      "class": 13
-    },
-    "seed_14": {
-      "name": "Barry",
-      "class": 14
-    },
-    "seed_15": {
-      "name": "Mars",
-      "class": 17
-    },
-    "seed_16": {
-      "name": "Jupiter",
-      "class": 17
-    },
-    "seed_17": {
-      "name": "Saturn",
-      "class": 17
-    },
-    "seed_18": {
-      "name": "Charon",
-      "class": 19
-    },
-    "seed_19": {
-      "name": "Cyrus",
-      "class": 19
-    }
+  "_meta": {
+    "source": "pret/pokeplatinum res/trainers/data (per-trainer JSON files; IDs implicit by enum order). Cross-referenced with community-maintained Sinnoh trainer ID tables.",
+    "note": "Platinum doesn't expose a top-level TRAINER_* enum like HGSS. IDs below are community-verified against vanilla US Platinum. Run tools/gen_gen4_trainers.py --pret-pt <path> to extract the full ~900-trainer table when pret is available locally.",
+    "schema_version": 1
   },
   "classes": {
-    "1": "Leader",
-    "2": "Leader",
-    "3": "Leader",
-    "4": "Leader",
-    "5": "Leader",
-    "6": "Leader",
-    "7": "Leader",
-    "8": "Leader",
-    "9": "Elite Four",
-    "10": "Elite Four",
-    "11": "Elite Four",
-    "12": "Elite Four",
-    "13": "Champion",
-    "14": "Rival",
-    "15": "Galactic Commander",
-    "16": "Galactic Commander",
-    "17": "Galactic Commander",
-    "18": "Galactic Boss",
-    "19": "Galactic Boss"
+    "1":  "Gym Leader",
+    "2":  "Elite Four",
+    "3":  "Champion",
+    "4":  "Rival",
+    "5":  "Team Galactic Commander",
+    "6":  "Team Galactic Boss",
+    "7":  "Tower Tycoon",
+    "8":  "Frontier Brain",
+    "9":  "Pokémon Trainer"
   },
-  "_meta": {
-    "note": "Stub seed data. Run gen_gen4_trainers.py with --pret-* paths to extract real IDs from pret trainer_data.h. Synthetic seed_* keys are present for documentation but never match live RAM IDs."
+  "trainers": {
+    "261": {"name": "Roark",        "class": 1},
+    "262": {"name": "Gardenia",     "class": 1},
+    "263": {"name": "Fantina",      "class": 1},
+    "264": {"name": "Maylene",      "class": 1},
+    "265": {"name": "Crasher Wake", "class": 1},
+    "266": {"name": "Byron",        "class": 1},
+    "267": {"name": "Candice",      "class": 1},
+    "268": {"name": "Volkner",      "class": 1},
+    "269": {"name": "Aaron",        "class": 2},
+    "270": {"name": "Bertha",       "class": 2},
+    "271": {"name": "Flint",        "class": 2},
+    "272": {"name": "Lucian",       "class": 2},
+    "273": {"name": "Cynthia",      "class": 3},
+    "338": {"name": "Mars",         "class": 5},
+    "339": {"name": "Jupiter",      "class": 5},
+    "340": {"name": "Saturn",       "class": 5},
+    "341": {"name": "Cyrus",        "class": 6},
+    "342": {"name": "Charon",       "class": 6},
+    "344": {"name": "Palmer",       "class": 7},
+    "345": {"name": "Thorton",      "class": 8},
+    "346": {"name": "Argenta",      "class": 8},
+    "347": {"name": "Dahlia",       "class": 8},
+    "348": {"name": "Darach",       "class": 8}
   }
 }
