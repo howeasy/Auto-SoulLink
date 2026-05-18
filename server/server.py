@@ -2207,6 +2207,7 @@ class SLinkServer:
         "firered_rr": "gen3_frlge",
         "heartgold": "gen4_hgsspt", "soulsilver": "gen4_hgsspt",
         "platinum": "gen4_hgsspt", "hgss": "gen4_hgsspt",
+        "renegade_platinum": "gen4_hgsspt",  # Drayano60 difficulty hack on Platinum
         "Red": "gen1_rby", "Blue": "gen1_rby", "Yellow": "gen1_rby",
         "red": "gen1_rby", "blue": "gen1_rby", "yellow": "gen1_rby",
         "Crystal": "gen2_crystal", "crystal": "gen2_crystal",

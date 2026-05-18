@@ -58,7 +58,7 @@ M.game_id = "gen4_hgsspt"
 M.display_name = "Gen 4 (HGSS / Platinum)"
 M.implemented = true
 
-M.variants = {"heartgold", "soulsilver", "platinum"}
+M.variants = {"heartgold", "soulsilver", "platinum", "renegade_platinum"}
 
 -- Gift/static encounter areas (matches server/adapters/gen4_hgsspt.py)
 M.GIFT_AREAS_HGSS = {
@@ -99,7 +99,10 @@ local _NDS_GAME_CODES = {
 }
 
 -- Variant name patterns in gameinfo.getromname()
+-- Ordering matters: more specific patterns (e.g. "renegade") must come BEFORE
+-- the general "platinum" pattern so RP isn't misdetected as vanilla Pt.
 local _VARIANT_PATTERNS = {
+    { pattern = "renegade",      variant = "renegade_platinum" },  -- RP ROM filename hint
     { pattern = "heart ?gold",   variant = "heartgold" },
     { pattern = "soul ?silver",  variant = "soulsilver" },
     { pattern = "platinum",      variant = "platinum" },
@@ -107,6 +110,40 @@ local _VARIANT_PATTERNS = {
     { pattern = "ipge",          variant = "soulsilver" },
     { pattern = "cpue",          variant = "platinum" },
 }
+
+-- Renegade Platinum CRC32 / SHA1 whitelist. RP keeps Platinum's CPUE game code,
+-- so the only reliable runtime distinguisher is the ROM hash or filename hint.
+-- Add the SHA1 of any RP build the user wants supported. Empty by default → falls
+-- back to filename pattern detection above (matches "renegade" substring).
+local _RP_ROM_HASHES = {
+    -- ["SHA1:..."] = true,
+}
+
+-- Read a few bytes from ROM banner / build string area to look for an RP marker.
+-- Returns true if a recognizable RP signature is found. Used as last-ditch
+-- detection when neither the filename nor the hash whitelist matches.
+local function _rom_has_rp_signature()
+    if not memory or not memory.read_u8 then return false end
+    -- Try common NDS ROM domains (BizHawk exposes "ROM" or "Cartridge ROM" depending on version).
+    local domains = { "ROM", "Cartridge ROM", "NDS ROM" }
+    for _, dom in ipairs(domains) do
+        local ok, b = pcall(memory.read_u8, 0x200, dom)  -- typical Drayano banner area
+        if ok and b then
+            -- Scan a 256-byte window for "RENEGADE" or "Drayano".
+            local buf = {}
+            for i = 0, 255 do
+                local ok2, c = pcall(memory.read_u8, 0x200 + i, dom)
+                if ok2 then buf[#buf+1] = string.char(c) end
+            end
+            local s = table.concat(buf)
+            if s:find("RENEGADE") or s:find("Renegade") or s:find("Drayano") then
+                return true
+            end
+            return false   -- domain readable but no signature
+        end
+    end
+    return false
+end
 
 function M.detect()
     -- Primary: check if BizHawk reports NDS system
@@ -272,10 +309,22 @@ local _PT_PROFILE = {
     ROM_DOMAIN       = "ROM",
 }
 
+-- Renegade Platinum profile — RP keeps Platinum's CPUE game code AND the same
+-- SaveData layout, so every Pt offset is inherited. RP-specific deltas (if any
+-- are discovered during live scans) are listed below as explicit overrides.
+-- Source: live-scan verification via lua/tests/test_gen4_rp_scan.lua; no pret
+-- citation since RP is a hack on top of pret/pokeplatinum.
+local _RP_PROFILE = {}
+for k, v in pairs(_PT_PROFILE) do _RP_PROFILE[k] = v end
+-- RP-specific deltas go here once discovered. Expected to be empty for the
+-- standard RP releases (Drayano keeps the save format unchanged).
+-- _RP_PROFILE.SOMETHING = 0xNEW
+
 M.profiles = {
-    heartgold  = _HGSS_PROFILE,
-    soulsilver = _HGSS_PROFILE,
-    platinum   = _PT_PROFILE,
+    heartgold          = _HGSS_PROFILE,
+    soulsilver         = _HGSS_PROFILE,
+    platinum           = _PT_PROFILE,
+    renegade_platinum  = _RP_PROFILE,
 }
 
 -- ── Area lookup ─────────────────────────────────────────────────────────────
@@ -293,7 +342,31 @@ function M.is_gift_area(area_id)
 end
 
 -- ── Variant detection ───────────────────────────────────────────────────────
+-- Detection order (most specific first):
+--   1. User override: SLINK_VARIANT_OVERRIDE global set before requiring this module.
+--   2. ROM hash whitelist (_RP_ROM_HASHES) — definitive for known RP builds.
+--   3. ROM banner signature scan (Drayano build string) — best-effort fallback.
+--   4. Filename pattern match via _VARIANT_PATTERNS — catches user-renamed ROMs
+--      containing "renegade" / "heartgold" / "soulsilver" / "platinum".
+-- The 1–3 steps are RP-specific; 4 handles all vanilla variants.
 function M.detect_variant()
+    -- 1. Manual override.
+    if _G.SLINK_VARIANT_OVERRIDE then
+        local ov = tostring(_G.SLINK_VARIANT_OVERRIDE):lower()
+        if M.profiles[ov] then return ov end
+    end
+    -- 2. ROM hash whitelist.
+    if gameinfo and gameinfo.getromhash then
+        local ok_h, hash = pcall(gameinfo.getromhash)
+        if ok_h and hash and _RP_ROM_HASHES[hash] then
+            return "renegade_platinum"
+        end
+    end
+    -- 3. ROM banner signature scan.
+    if _rom_has_rp_signature() then
+        return "renegade_platinum"
+    end
+    -- 4. Filename pattern match.
     if gameinfo and gameinfo.getromname then
         local ok_name, name = pcall(gameinfo.getromname)
         if ok_name and name then
@@ -308,9 +381,10 @@ end
 
 --- Returns the rom_type string sent to the server in hello events.
 function M.rom_type_for_variant(variant)
-    if variant == "heartgold"  then return "heartgold" end
-    if variant == "soulsilver" then return "soulsilver" end
-    if variant == "platinum"   then return "platinum" end
+    if variant == "heartgold"          then return "heartgold" end
+    if variant == "soulsilver"         then return "soulsilver" end
+    if variant == "platinum"           then return "platinum" end
+    if variant == "renegade_platinum"  then return "renegade_platinum" end
     return "hgss"
 end
 

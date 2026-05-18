@@ -87,57 +87,35 @@ local function mem_w16(a,v) return memory.write_u16_le (a, v, _RAM) end
 local fmt     = string.format
 
 -- ── Variant detection ─────────────────────────────────────────────────────────
-local _ROM_TYPE = "heartgold"  -- default
-do
-    -- BizHawk NDS doesn't expose ROM as a memory domain.
-    -- Use gameinfo.getromname() to identify the variant.
-    local detected = false
-    if gameinfo and gameinfo.getromname then
-        local ok_name, name = pcall(gameinfo.getromname)
-        if ok_name and name then
-            local lower = name:lower()
-            if lower:find("heart ?gold") or lower:find("ipke") then
-                _ROM_TYPE = "heartgold"
-                detected = true
-            elseif lower:find("soul ?silver") or lower:find("ipge") then
-                _ROM_TYPE = "soulsilver"
-                detected = true
-            elseif lower:find("platinum") or lower:find("cpue") then
-                _ROM_TYPE = "platinum"
-                detected = true
-            end
-        end
-    end
-    if not detected then
-        console.log("[SLink] WARNING: Could not identify ROM variant — using default HGSS profile")
-        _ROM_TYPE = "heartgold"
-    end
-    console.log(fmt("[SLink] ROM variant: %s", _ROM_TYPE))
+-- Delegate to GAME_MODULE.detect_variant() so the detection logic — including
+-- Renegade Platinum's hash/signature/filename match chain — lives in exactly
+-- one place. Falls back to "heartgold" if the module returns nil.
+local _ROM_TYPE = GAME_MODULE.detect_variant() or "heartgold"
+if not GAME_MODULE.profiles[_ROM_TYPE] then
+    console.log("[SLink] WARNING: Unknown ROM variant '" .. _ROM_TYPE .. "' — falling back to heartgold")
+    _ROM_TYPE = "heartgold"
+end
+console.log(fmt("[SLink] ROM variant: %s", _ROM_TYPE))
 
-    -- Apply game-specific memory address profile (parameterises all address constants
-    -- in memory_nds.lua via upvalue reassignment; must happen before M.init()).
-    local profile = GAME_MODULE.profiles[_ROM_TYPE]
-    if profile then
-        M.applyProfile(profile)
-    else
-        console.log("[SLink] WARNING: No memory profile for variant '" .. _ROM_TYPE .. "' — keeping HGSS defaults")
-    end
+-- Apply game-specific memory address profile (parameterises all address constants
+-- in memory_nds.lua via upvalue reassignment; must happen before M.init()).
+M.applyProfile(GAME_MODULE.profiles[_ROM_TYPE])
 
-    -- Load variant-specific area and location tables.
-    if _ROM_TYPE == "platinum" then
-        package.loaded["gen4_hgsspt_areas_pt"]     = nil
-        package.loaded["gen4_hgsspt_locations_pt"] = nil
-        local ok_a, a = pcall(require, "gen4_hgsspt_areas_pt")
-        local ok_l, l = pcall(require, "gen4_hgsspt_locations_pt")
-        if ok_a then AREAS = a else
-            console.log("[SLink] WARNING: gen4_hgsspt_areas_pt not found — area detection disabled for Platinum")
-            AREAS = {}
-        end
-        if ok_l then LOCATIONS = l else LOCATIONS = {} end
-    else
-        AREAS     = require("gen4_hgsspt_areas")
-        LOCATIONS = require("gen4_hgsspt_locations")
+-- Load variant-specific area and location tables.
+-- Platinum and Renegade Platinum share Sinnoh map structure; HGSS uses Johto/Kanto.
+if _ROM_TYPE == "platinum" or _ROM_TYPE == "renegade_platinum" then
+    package.loaded["gen4_hgsspt_areas_pt"]     = nil
+    package.loaded["gen4_hgsspt_locations_pt"] = nil
+    local ok_a, a = pcall(require, "gen4_hgsspt_areas_pt")
+    local ok_l, l = pcall(require, "gen4_hgsspt_locations_pt")
+    if ok_a then AREAS = a else
+        console.log("[SLink] WARNING: gen4_hgsspt_areas_pt not found — area detection disabled for Platinum")
+        AREAS = {}
     end
+    if ok_l then LOCATIONS = l else LOCATIONS = {} end
+else
+    AREAS     = require("gen4_hgsspt_areas")
+    LOCATIONS = require("gen4_hgsspt_locations")
 end
 
 -- ── JSON encoder ──────────────────────────────────────────────────────────────
@@ -800,9 +778,11 @@ end
 
 local function _is_ball_id(id)
     if id >= 0x0001 and id <= 0x0010 then return true end
-    -- Apricorn balls only exist in HGSS; skip range check for Platinum.
-    if _ROM_TYPE ~= "platinum" and id >= M.BALL_APRICORN_MIN and id <= M.BALL_APRICORN_MAX then
-        return true
+    -- Apricorn balls only exist in HGSS; Platinum + Renegade Platinum (Sinnoh) lack them.
+    if _ROM_TYPE == "heartgold" or _ROM_TYPE == "soulsilver" then
+        if id >= M.BALL_APRICORN_MIN and id <= M.BALL_APRICORN_MAX then
+            return true
+        end
     end
     return false
 end
@@ -830,8 +810,10 @@ end
 
 -- ── Gift area IDs (no wild encounters; only gift/starter Pokémon spawns here)
 -- Pull from game module so adding a new variant's gifts is done in one place.
-local GIFT_AREAS = (_ROM_TYPE == "platinum") and GAME_MODULE.GIFT_AREAS_PT
-                                              or  GAME_MODULE.GIFT_AREAS_HGSS
+-- Platinum + Renegade Platinum share Sinnoh gifts; HGSS uses Johto/Kanto.
+local _is_sinnoh = (_ROM_TYPE == "platinum" or _ROM_TYPE == "renegade_platinum")
+local GIFT_AREAS = _is_sinnoh and GAME_MODULE.GIFT_AREAS_PT
+                              or  GAME_MODULE.GIFT_AREAS_HGSS
 
 -- Areas with wild encounters (routes, caves, forests, etc.) — HUD prompt only fires here.
 -- Johto routes (HGSS):
@@ -873,8 +855,8 @@ local ENCOUNTER_AREAS_PT = {
     victory_road_pt=true, stark_mountain=true, snowpoint_temple=true,
     trophy_garden=true, great_marsh=true,
 }
-local ENCOUNTER_AREAS = (_ROM_TYPE == "platinum") and ENCOUNTER_AREAS_PT
-                                                   or  ENCOUNTER_AREAS_HGSS
+local ENCOUNTER_AREAS = _is_sinnoh and ENCOUNTER_AREAS_PT
+                                   or  ENCOUNTER_AREAS_HGSS
 
 -- ── Per-frame state ───────────────────────────────────────────────────────────
 local initialized    = false
