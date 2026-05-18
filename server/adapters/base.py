@@ -92,6 +92,21 @@ class GameRulesAdapter(ABC):
         """
         return False
 
+    def is_egg_pickup_area(self, area_id: str) -> bool:
+        """Return True if the area is an NPC egg-pickup location.
+
+        Egg pickups (Togepi from Mr. Pokémon, Riolu from Riley, Spiky-eared Pichu
+        from Ilex Forest, etc.) are gift-like: the player receives an unhatched
+        egg whose species is fixed by the NPC, not determined at hatch time. This
+        is used by SoulLinkState to bypass species/gender/type clauses for eggs
+        that would otherwise fail because the hatched species could differ
+        between players' linked saves (it doesn't — it's NPC-fixed).
+
+        Clients emit a "egg_<area>" prefix on the area_id; the default impl
+        recognizes that prefix. Adapters override with explicit area sets.
+        """
+        return (area_id or "").startswith("egg_")
+
     @abstractmethod
     def evo_family(self, species_id: int) -> int:
         """Return the base-form species ID for species lock checks.

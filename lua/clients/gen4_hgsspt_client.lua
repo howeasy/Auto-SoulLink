@@ -5,7 +5,8 @@
   EVENTS DETECTED AUTOMATICALLY
     hello        — on TCP connect / reconnect (party snapshot)
     area_enter   — zone ID changes to a mapped encounter zone
-    capture      — new PID appears in party (battle context or gift)
+    capture      — new PID appears in party (battle / gift / egg pickup; carries is_egg flag)
+    hatch        — an egg in the party transitions to a real species (egg flag clears)
     faint        — party mon HP transitions from > 0 to 0
     whiteout     — all living party mons transition to HP = 0
     no_catch     — wild battle ends without capture (gated by nuzlocke_active)
@@ -761,6 +762,8 @@ local function build_party_snapshot(in_battle)
             if s then
                 local species, ot_id, held_item, ability = M.decrypt_block_a_ext(base)
                 local nickname = M.readNickname(base)
+                local bb = M.decrypt_block_b(base)
+                local bd = M.decrypt_block_d(base)
                 -- Cache nickname for HUD use (real nickname overrides species#N)
                 if k and nickname then
                     _nick_cache[k] = nickname
@@ -775,6 +778,15 @@ local function build_party_snapshot(in_battle)
                     ability_id   = ability or 0,
                     nickname     = nickname or "",
                     status_cond  = s.status_cond or 0,
+                    -- Block B-derived fields (Phase 2+):
+                    moves        = bb and bb.moves or {0, 0, 0, 0},
+                    pp           = bb and bb.pp or {0, 0, 0, 0},
+                    pp_ups       = bb and bb.pp_ups or {0, 0, 0, 0},
+                    is_egg       = (bb and bb.is_egg) or false,
+                    form         = bb and bb.form or 0,
+                    -- Block D-derived fields (Phase 2+):
+                    pokeball     = bd and bd.pokeball or 0,
+                    met_level    = bd and bd.met_level or 0,
                 }
             end
         end
@@ -1253,7 +1265,8 @@ local function on_frame()
                 all_known_keys[k]        = true
                 send({event="capture", key=k, hp=info.hp, maxHP=info.maxHP,
                       level=info.level, species_id=info.species_id or 0,
-                      area_id=evt_area},
+                      area_id=evt_area, is_egg=info.is_egg or false,
+                      form=info.form or 0, pokeball=info.pokeball or 0},
                      "capture(battle):" .. k:sub(1,8), true)
             elseif all_known_keys[k] then
                 -- Previously seen key returned from PC → box_to_party (debounced)
@@ -1261,7 +1274,7 @@ local function on_frame()
                     pending_box_to_party[k] = PARTY_DEBOUNCE_FRAMES
                 end
             else
-                -- New key outside battle → buffer as potential gift/starter.
+                -- New key outside battle → buffer as potential gift/starter (or egg pickup).
                 -- Hold for GIFT_BUFFER_WINDOW frames before confirming (protects against
                 -- mass swaps / transient garbage).
                 if not gift_capture_buffer[k] then
@@ -1272,6 +1285,11 @@ local function on_frame()
                         gift_area = area
                     else
                         gift_area = "gift_zone_" .. tostring(zone_id)
+                    end
+                    -- Tag egg pickups with "egg_" prefix so the server can route them
+                    -- through is_egg_pickup_area (preserves clause semantics for eggs).
+                    if info.is_egg then
+                        gift_area = "egg_" .. gift_area
                     end
                     gift_capture_buffer[k] = {frame=frame_count, info=info, area=gift_area}
                 end
@@ -1285,14 +1303,31 @@ local function on_frame()
             -- Key vanished during buffer window → was transient/glitch; discard.
             gift_capture_buffer[k] = nil
         elseif frame_count - buf.frame >= GIFT_BUFFER_WINDOW then
-            -- Held long enough → confirm as real gift capture.
+            -- Held long enough → confirm as real gift capture (or egg pickup).
             all_known_keys[k] = true
             gift_capture_buffer[k] = nil
             local info = buf.info
             send({event="capture", key=k, hp=info.hp, maxHP=info.maxHP,
                   level=info.level, species_id=info.species_id or 0,
-                  area_id=buf.area},
+                  area_id=buf.area, is_egg=info.is_egg or false,
+                  form=info.form or 0, pokeball=info.pokeball or 0},
                  "capture(gift):" .. k:sub(1,8), true)
+        end
+    end
+
+    -- ── hatch detection ──────────────────────────────────────────────────────
+    -- An egg that hatches: prev_party[k].is_egg = true, curr_party[k].is_egg = false.
+    -- The species_id changes from the egg placeholder (494) to the actual species at
+    -- the same instant. Emit a "hatch" event so the server can update the linked record.
+    for k, prev_info in pairs(prev_party) do
+        local curr_info = curr_party[k]
+        if curr_info and prev_info.is_egg and not curr_info.is_egg then
+            send({event="hatch", key=k, species_id=curr_info.species_id or 0,
+                  area_id=area, form=curr_info.form or 0,
+                  hp=curr_info.hp, maxHP=curr_info.maxHP, level=curr_info.level},
+                 "hatch:" .. k:sub(1,8), true)
+            console.log(fmt("[SLink] hatch: %s → species %d at %s",
+                k:sub(1,8), curr_info.species_id or 0, area))
         end
     end
 

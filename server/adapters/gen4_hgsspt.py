@@ -54,6 +54,21 @@ _GIFT_AREAS = frozenset({
     "gift",            # Fallback for unmapped gift areas
 })
 
+# Egg-pickup areas — locations where an NPC hands the player a Pokémon egg.
+# These are fixed-species (the NPC always gives the same Pokémon's egg) and should
+# bypass species/gender clauses, since both linked players receive the same species
+# from the egg. Distinct from `_DAYCARE_AREAS` (player-bred eggs from breeding pair).
+_EGG_PICKUP_AREAS = frozenset({
+    # HGSS
+    "route_30",        # Togepi egg from Mr. Pokémon
+    "violet_city",     # alt cutscene location for Mr. Pokémon's egg
+    "mt_mortar",       # Tyrogue from Kiyo (handed at L10 in some patches)
+    # Platinum
+    "eterna_city",     # Togepi egg via Underground Man / Cynthia
+    "iron_island",     # Riolu egg from Riley
+    "route_212",       # Cynthia's alternate Togepi egg cutscene
+})
+
 # Gift areas with a forced, identical species (no player choice).
 # Excludes starters, Odd Egg / random eggs, and variable Game Corner prizes.
 _FIXED_SPECIES_GIFTS = frozenset({
@@ -152,10 +167,24 @@ class Gen4Adapter(GameAdapter):
     # ── GameRulesAdapter ─────────────────────────────────────────────────
 
     def is_gift_area(self, area_id: str) -> bool:
-        return area_id in _GIFT_AREAS or area_id.startswith("gift_")
+        # Also recognize the "egg_*" prefix the client emits for egg pickups.
+        if area_id in _GIFT_AREAS or area_id.startswith("gift_"):
+            return True
+        if area_id.startswith("egg_"):
+            return True
+        return False
 
     def is_fixed_species_gift(self, area_id: str) -> bool:
-        return area_id in _FIXED_SPECIES_GIFTS
+        # Strip "egg_" prefix so e.g. "egg_route_30" still matches the Togepi entry.
+        bare = area_id[4:] if area_id.startswith("egg_") else area_id
+        return bare in _FIXED_SPECIES_GIFTS
+
+    def is_egg_pickup_area(self, area_id: str) -> bool:
+        # NPC-given eggs (route_30 Togepi, iron_island Riolu, etc.). Daycare eggs
+        # use is_daycare_area instead — they aren't pickups, they're player-bred.
+        if area_id.startswith("egg_"):
+            return True
+        return area_id in _EGG_PICKUP_AREAS
 
     def evo_family(self, species_id: int) -> int:
         return _natdex_base_form(species_id)
