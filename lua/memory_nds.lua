@@ -160,6 +160,28 @@ local BLOCK_C_OFF = {
     [18]=96,[19]=64,[20]=96,[21]=64,[22]=32,[23]=32,
 }
 
+-- Block B byte offset within the 128-byte data region for each of the 24 block orders.
+-- Block B holds: moves (4 × u16), PP (4 × u8), PP-Ups (4 × u8), IVs+egg flag (u32),
+-- ribbons part 1, fateful/gender/altForm packed byte, met locations (Pt-specific).
+-- Derived from the canonical permutation table — pos of B in each ordering × 32.
+-- Sanity: BLOCK_A_OFF[i] + BLOCK_B_OFF[i] + BLOCK_C_OFF[i] + BLOCK_D_OFF[i] = 192 ∀ i.
+local BLOCK_B_OFF = {
+    [0]=32, [1]=32, [2]=64, [3]=96, [4]=64, [5]=96,
+    [6]=0,  [7]=0,  [8]=0,  [9]=0,  [10]=0, [11]=0,
+    [12]=64,[13]=96,[14]=32,[15]=32,[16]=96,[17]=64,
+    [18]=64,[19]=96,[20]=32,[21]=32,[22]=96,[23]=64,
+}
+
+-- Block D byte offset within the 128-byte data region for each of the 24 block orders.
+-- Block D holds: OT name (8 × u16), egg/met dates, met location, pokeball, met level,
+-- encounter type. Derived from the canonical permutation table.
+local BLOCK_D_OFF = {
+    [0]=96, [1]=64, [2]=96, [3]=64, [4]=32, [5]=32,
+    [6]=96, [7]=64, [8]=96, [9]=64, [10]=32,[11]=32,
+    [12]=96,[13]=64,[14]=96,[15]=64,[16]=32,[17]=32,
+    [18]=0, [19]=0, [20]=0, [21]=0, [22]=0, [23]=0,
+}
+
 -- Decrypt Block A and return (species_id u16, ot_id u32).
 -- ot_id: TID = ot_id & 0xFFFF, SID = (ot_id >> 16) & 0xFFFF.
 -- Returns nil if the slot is empty or the decrypted species is out of range.
@@ -211,6 +233,134 @@ function M.decrypt_block_a_ext(pkm_addr)
     local ability = (packed >> 8) & 0xFF
     if species == 0 or species > 493 then return nil end
     return species, ot_lo | (ot_hi << 16), held_item, ability
+end
+
+-- Decrypt Block B: returns a table with moves, PP, PP-Ups, IVs, egg flag, form byte.
+-- Source: pret/pokeheartgold include/pokemon_types_def.h struct PokemonDataBlockB.
+-- Layout (32 bytes, all little-endian):
+--   +0x00..+0x07  u16 moves[4]
+--   +0x08..+0x0B  u8  movePP[4]
+--   +0x0C..+0x0F  u8  movePpUps[4]
+--   +0x10..+0x13  u32 ivEgg — bits 0-4=HP, 5-9=ATK, 10-14=DEF, 15-19=SPE, 20-24=SPA,
+--                              25-29=SPD, 30=isEgg, 31=isNicknamed
+--   +0x14..+0x17  u8  hoennRibbons[4]
+--   +0x18         u8  packed: bit 0=fatefulEncounter, bits 1-2=gender, bits 3-7=altForm
+--   +0x19         u8  hgssShinyLeaf
+--   +0x1A..+0x1B  u16 unused / padding
+--   +0x1C..+0x1F  u16[2] platinum-specific egg / met location (HGSS stores these in D)
+-- Returns nil if the slot is empty or species (in Block A) doesn't decode.
+function M.decrypt_block_b(pkm_addr)
+    local pid = r32(pkm_addr)
+    if pid == 0 then return nil end
+    local chk       = r16(pkm_addr + 0x006)
+    local order_val = _block_order(pid)
+    local blk_off   = BLOCK_B_OFF[order_val] or 32
+    local data_base = pkm_addr + 0x008 + blk_off
+    local word_base = blk_off >> 1
+    local s = chk
+    for _ = 1, word_base do s = lcrng(s) end
+    local w = {}
+    for i = 0, 15 do
+        s = lcrng(s)
+        w[i] = xor16(r16(data_base + i * 2), s)
+    end
+    local pp_lo, pp_hi   = w[4], w[5]
+    local ppu_lo, ppu_hi = w[6], w[7]
+    local iv_lo, iv_hi   = w[8], w[9]
+    local iv_packed = iv_lo | (iv_hi << 16)
+    local form_byte_packed = w[12] & 0xFF
+    return {
+        moves        = { w[0], w[1], w[2], w[3] },
+        pp           = {  pp_lo & 0xFF,  (pp_lo >> 8) & 0xFF,  pp_hi & 0xFF,  (pp_hi >> 8) & 0xFF },
+        pp_ups       = { ppu_lo & 0xFF, (ppu_lo >> 8) & 0xFF, ppu_hi & 0xFF, (ppu_hi >> 8) & 0xFF },
+        ivs          = {
+            hp  =  iv_packed        & 0x1F,
+            atk = (iv_packed >>  5) & 0x1F,
+            def = (iv_packed >> 10) & 0x1F,
+            spe = (iv_packed >> 15) & 0x1F,
+            spa = (iv_packed >> 20) & 0x1F,
+            spd = (iv_packed >> 25) & 0x1F,
+        },
+        iv_packed    = iv_packed,
+        is_egg       = ((iv_packed >> 30) & 1) == 1,
+        is_nicknamed = ((iv_packed >> 31) & 1) == 1,
+        fateful      = (form_byte_packed & 0x1) == 1,
+        gender_bits  = (form_byte_packed >> 1) & 0x3,
+        form         = (form_byte_packed >> 3) & 0x1F,
+    }
+end
+
+-- Decrypt Block D: returns a table with pokeball, met level, encounter type, met location.
+-- Source: pret/pokeheartgold include/pokemon_types_def.h struct PokemonDataBlockD.
+-- Layout (32 bytes):
+--   +0x00..+0x0F  u16 otName[8] (Gen IV charcode, EOS=0xFFFF)
+--   +0x10..+0x12  u8  eggMetDate[3] (year, month, day)
+--   +0x13         u8  padding
+--   +0x14..+0x16  u8  metDate[3] (year, month, day)
+--   +0x17         u8  padding
+--   +0x18..+0x19  u16 eggLocation (legacy DPP)
+--   +0x1A..+0x1B  u16 metLocation (legacy DPP)
+--   +0x1C         u8  pokerus
+--   +0x1D         u8  pokeball
+--   +0x1E         u8  metLevel (bits 0-6) | femaleOT (bit 7)
+--   +0x1F         u8  encounterType
+-- Returns nil if the slot is empty.
+function M.decrypt_block_d(pkm_addr)
+    local pid = r32(pkm_addr)
+    if pid == 0 then return nil end
+    local chk       = r16(pkm_addr + 0x006)
+    local order_val = _block_order(pid)
+    local blk_off   = BLOCK_D_OFF[order_val] or 96
+    local data_base = pkm_addr + 0x008 + blk_off
+    local word_base = blk_off >> 1
+    local s = chk
+    for _ = 1, word_base do s = lcrng(s) end
+    local w = {}
+    for i = 0, 15 do
+        s = lcrng(s)
+        w[i] = xor16(r16(data_base + i * 2), s)
+    end
+    local w14   = w[14]   -- pokerus(lo) | pokeball(hi)
+    local w15   = w[15]   -- (metLevel|femaleOT)(lo) | encounterType(hi)
+    return {
+        egg_location   = w[12],
+        met_location   = w[13],
+        pokerus        = w14 & 0xFF,
+        pokeball       = (w14 >> 8) & 0xFF,
+        met_level      = w15 & 0x7F,
+        ot_female      = ((w15 >> 7) & 1) == 1,
+        encounter_type = (w15 >> 8) & 0xFF,
+    }
+end
+
+-- Returns true if the mon at pkm_addr is currently an egg.
+-- Two-way check: Block B isEgg bit AND species == SPECIES_EGG (494) sanity.
+-- Source: pret/pokeheartgold include/constants/species.h SPECIES_EGG, include/pokemon.h Pokemon_GetData(MON_DATA_IS_EGG).
+function M.isEgg(pkm_addr)
+    local pid = r32(pkm_addr)
+    if pid == 0 then return false end
+    local bb = M.decrypt_block_b(pkm_addr)
+    if bb and bb.is_egg then return true end
+    -- Fallback: some egg mons have species set to 494 (SPECIES_EGG) in Block A.
+    local species = M.decrypt_block_a(pkm_addr)
+    return species == 494
+end
+
+-- Returns the alternate-form byte (0..31) for the mon, or 0 if Block B can't decode.
+-- Used by form normalization (Rotom, Giratina, Shaymin, Deoxys, Unown, Wormadam, etc).
+function M.readFormByte(pkm_addr)
+    local bb = M.decrypt_block_b(pkm_addr)
+    return bb and bb.form or 0
+end
+
+-- Convenience: returns (moves_array, pp_array, pp_ups_array) for the mon at pkm_addr,
+-- or four nil-filled tables when Block B can't decode. Used by client party/enemy snapshots.
+function M.readMovesPP(pkm_addr)
+    local bb = M.decrypt_block_b(pkm_addr)
+    if not bb then
+        return {0,0,0,0}, {0,0,0,0}, {0,0,0,0}
+    end
+    return bb.moves, bb.pp, bb.pp_ups
 end
 
 -- Decrypt Block C (nickname): returns a Lua string (ASCII, up to 10 chars).
