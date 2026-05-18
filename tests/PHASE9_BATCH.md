@@ -273,9 +273,23 @@ Both clients' `build_party_snapshot` attach `moves[]`, `pp[]`, and `pp_bonuses` 
 
 ---
 
-## Phase 7 — Sound effects
+## Phase 7 — Sound effects (infrastructure only — addresses TBD live)
 
-*Filled in as Phase 7 lands.*
+**What changed**: `lua/memory_gb.lua` exposes `M.playSfx(event_name)` and `M.playSfxRaw(sfx_id)` helpers. Profiles can declare `sfx_dispatch_addr` (the ROM register that triggers a sound when written) and `sfx_ids` (event_name → ROM SFX constant). Both clients call `M.playSfx("capture")`, `M.playSfx("faint")`, etc. at appropriate event points — but `sfx_dispatch_addr` is **nil by default** in both profiles, making the calls **no-ops** until the user verifies dispatch via diagnostic and enables them.
+
+**Why disabled by default**: Writing to a wrong dispatch register can corrupt music state or other RAM. The diagnostic scripts let the user safely probe candidate addresses + SFX IDs before turning auto-play on.
+
+**Verification protocol**:
+
+1. Load `lua/tests/test_gen{1,2}_sfx.lua` in BizHawk.
+2. In overworld (preferably a quiet area with music paused or muted), press F1-F4 to write candidate SFX IDs to candidate dispatch addresses.
+3. Listen for audible sound effects. Note which key+address combination triggered the expected sound (capture chime, faint thump, level-up jingle).
+4. Once identified, edit the profile to populate `sfx_dispatch_addr` and `sfx_ids = {capture=..., faint=..., whiteout=..., gift=...}`.
+5. Restart the regular SLink client. From now on, in-game SFX should auto-play on capture/faint/whiteout events.
+
+**If no F-key combination triggers a sound**: the dispatch protocol in pret/pokered or pret/pokecrystal is more complex than a single-byte write (likely involves writing to multiple registers in sequence). Phase 7 then stays disabled; document findings and leave it as future work.
+
+**FAIL only if**: enabling the profile addresses causes BizHawk audio glitches / silent music / crashes during normal play. Revert the profile change if so.
 
 ---
 

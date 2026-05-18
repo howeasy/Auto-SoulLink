@@ -544,6 +544,8 @@ local function on_new_mon(mon, slot, is_gift)
 
     send(evt, "capture(" .. (is_gift and "gift" or "battle") .. "):" .. mon.key:sub(1, 9), true)
     captured_this_battle = true
+    -- Phase 7: optional SFX play. No-op until profile.sfx_dispatch_addr is set.
+    M.playSfx(is_gift and "gift" or "capture")
 end
 
 -- ── Box capture detection (full-party catch) ──────────────────────────────────
@@ -577,6 +579,7 @@ local function on_faint(mon)
         key = mon.key,
         area_id = last_area_id,
     }, "faint:" .. mon.key:sub(1, 9), true)
+    M.playSfx("faint")  -- Phase 7: no-op until profile.sfx_dispatch_addr set
 end
 
 -- ── Evolution detection ───────────────────────────────────────────────────────
@@ -613,6 +616,7 @@ local function check_whiteout(cur_party, count)
     -- All mons fainted
     whiteout_sent = true
     send({event = "whiteout", area_id = last_area_id}, "whiteout", true)
+    M.playSfx("whiteout")  -- Phase 7: no-op until profile.sfx_dispatch_addr set
 end
 
 -- ── Party diff (core detection logic) ─────────────────────────────────────────

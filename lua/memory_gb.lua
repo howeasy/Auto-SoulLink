@@ -218,6 +218,13 @@ function M.initProfile(game_module, variant)
     -- Trainer class / index in trainer battles (Phase 5).
     M.TRAINER_CLASS_ADDR      = prof.trainer_class_addr
     M.TRAINER_ID_ADDR         = prof.trainer_id_addr
+    -- Sound dispatch (Phase 7). Disabled by default (addr=nil) — when a profile
+    -- declares sfx_dispatch_addr, M.playSfx(id) writes id to that address.
+    -- The profile also provides a sfx_ids table mapping semantic events
+    -- ("capture", "faint", "whiteout", "gift") to ROM SFX constants.
+    -- Without confirmed addresses, leave disabled to avoid corrupting game state.
+    M.SFX_DISPATCH_ADDR       = prof.sfx_dispatch_addr
+    M.SFX_IDS                 = prof.sfx_ids or {}
 end
 
 -- ═══ Box Memory Helpers (routes to SRAM when BOX_IN_SRAM is set) ═══
@@ -892,6 +899,30 @@ function M.readMovesAndPP(struct_base, base_pp_table)
         end
     end
     return result
+end
+
+-- ═══ Sound effects (Phase 7) ═════════════════════════════════════════════
+-- Trigger an in-game sound effect by writing its ROM SFX ID to the music/SFX
+-- dispatch register. Profile-gated: if sfx_dispatch_addr is nil, this is a
+-- no-op (safe default). Use `lua/tests/test_gen{1,2}_sfx.lua` to validate
+-- the dispatch address + SFX IDs before enabling in production profiles.
+--
+-- M.playSfx("capture") looks up profile.sfx_ids.capture and writes it to
+-- the dispatch register. Unknown event names are no-ops.
+
+function M.playSfx(event_name)
+    if not M.SFX_DISPATCH_ADDR then return false end
+    local sfx_id = M.SFX_IDS[event_name]
+    if not sfx_id then return false end
+    M.write_u8(M.SFX_DISPATCH_ADDR, sfx_id)
+    return true
+end
+
+-- Direct write (for diagnostic scripts that want to test arbitrary SFX IDs).
+function M.playSfxRaw(sfx_id)
+    if not M.SFX_DISPATCH_ADDR then return false end
+    M.write_u8(M.SFX_DISPATCH_ADDR, sfx_id)
+    return true
 end
 
 -- Read the active enemy battler's 4 moves + 4 PP bytes. Returns
