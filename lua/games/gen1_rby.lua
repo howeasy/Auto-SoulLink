@@ -183,6 +183,15 @@ M.PROFILES = {
 -- Blue uses same addresses as Red
 M.PROFILES.blue = M.PROFILES.red
 
+-- ═══ Archipelago variants (Phase 8) ═══════════════════════════════════════
+-- Pokemon Red/Blue Archipelago (Alchav, official ArchipelagoMW/Archipelago)
+-- preserves the vanilla WRAM layout — no address relocation. ROM title at
+-- 0x134 is unchanged ("POKEMON RED" / "POKEMON BLUE"); the seed name written
+-- to 0xFFDB by the AP patcher distinguishes it from a vanilla cart. Profiles
+-- clone vanilla addresses with a variant_label override.
+M.PROFILES.red_ap  = setmetatable({variant_label = "Red (AP)"},  {__index = M.PROFILES.red})
+M.PROFILES.blue_ap = setmetatable({variant_label = "Blue (AP)"}, {__index = M.PROFILES.blue})
+
 -- Lowercase alias for game_detect.lua compatibility
 M.profiles = M.PROFILES
 
@@ -221,10 +230,25 @@ end
 
 function M.detect_variant()
     local title = M._readRomTitle()
-    if title == "POKEMON RED" then return "red" end
-    if title == "POKEMON BLUE" then return "blue" end
-    if title == "POKEMON YELLOW" then return "yellow" end
-    return nil
+    local base
+    if title == "POKEMON RED" then base = "red"
+    elseif title == "POKEMON BLUE" then base = "blue"
+    elseif title == "POKEMON YELLOW" then base = "yellow"
+    else return nil end
+    -- Phase 8: detect Archipelago patch via seed name at 0xFFDB (21 bytes).
+    -- Vanilla ROMs have zeros there; AP-patched ROMs write a seed identifier.
+    -- Yellow has no upstream AP world yet — skip the check.
+    if base == "yellow" then return base end
+    local ok, ap_marker = pcall(function()
+        local non_zero = false
+        for i = 0, 5 do
+            local b = memory.read_u8(0xFFDB + i, "System Bus")
+            if b ~= 0 and b ~= 0xFF then non_zero = true; break end
+        end
+        return non_zero
+    end)
+    if ok and ap_marker then return base .. "_ap" end
+    return base
 end
 
 function M._readRomTitle()
@@ -242,7 +266,10 @@ function M._readRomTitle()
 end
 
 function M.rom_type_for_variant(variant)
-    local names = { red = "Red", blue = "Blue", yellow = "Yellow" }
+    local names = {
+        red = "Red", blue = "Blue", yellow = "Yellow",
+        red_ap = "Red (AP)", blue_ap = "Blue (AP)",
+    }
     return names[variant] or variant
 end
 

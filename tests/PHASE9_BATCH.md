@@ -295,7 +295,35 @@ Both clients' `build_party_snapshot` attach `moves[]`, `pp[]`, and `pp_bonuses` 
 
 ## Phase 8 — Archipelago variant detection
 
-*Filled in as Phase 8 lands.*
+**What changed**:
+- `lua/games/gen1_rby.lua`: `detect_variant()` returns `red_ap` / `blue_ap` if the seed-name region at 0xFFDB has non-zero bytes (Alchav AP RB patcher writes a seed identifier there). Yellow has no upstream AP world, so it's not checked. New profile entries `red_ap` and `blue_ap` inherit from vanilla via `setmetatable __index`.
+- `lua/games/gen2_crystal.lua`: `detect_variant()` returns `crystal_ap` if ROM title at 0x134 is exactly "AP_CRYSTAL" (gerbiljames Archipelago-Crystal fork patches the title). Vanilla "PM_CRYSTAL" → `crystal`.
+- `rom_type_for_variant()` returns "Red (AP)", "Blue (AP)", "Crystal (AP)" for the new variants.
+
+**Verification** (requires AP-patched ROMs):
+
+### 8.1 Pokemon Red/Blue Archipelago (Alchav)
+
+1. Patch a vanilla Red or Blue ROM via the Archipelago client (`.apred` or `.apblue` patch).
+2. Load the resulting ROM in BizHawk Gambatte.
+3. Run the regular SLink client.
+4. **Check the SLink server log** on first connect: should announce `variant=red_ap` (or `blue_ap`) rather than `red`/`blue`.
+5. Status page header should display "Red (AP)" / "Blue (AP)" instead of vanilla rom_type.
+6. **FAIL** if status page shows just "Red" / "Blue" — either the seed-name address is wrong, or AP patcher didn't write to 0xFFDB.
+
+### 8.2 Pokemon Crystal Archipelago (gerbiljames)
+
+1. Apply the gerbiljames Archipelago-Crystal patch to a vanilla Crystal ROM.
+2. Load in BizHawk Gambatte.
+3. Run the regular SLink client.
+4. Server log should report `variant=crystal_ap`; status page should show "Crystal (AP)".
+5. **FAIL** if it reports just `crystal` — ROM title at 0x134 isn't actually "AP_CRYSTAL" as expected (the fork may use a different title; check the actual patched ROM's header).
+
+### 8.3 Vanilla regression
+
+1. Without an AP ROM, load plain Red / Blue / Yellow / Crystal.
+2. Confirm `detect_variant()` returns the vanilla variant name (`red`, `blue`, `yellow`, `crystal`) — NOT `*_ap`.
+3. **FAIL** if vanilla ROMs are misclassified as AP (false positive on the 0xFFDB check). This would mean the heuristic is too aggressive — the diagnostic can scan 0xFFDB on a known vanilla ROM to confirm it's zeros.
 
 ---
 

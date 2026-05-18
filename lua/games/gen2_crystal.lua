@@ -171,6 +171,12 @@ M.PROFILES = {
     },
 }
 
+-- ═══ Archipelago variant (Phase 8) ═══════════════════════════════════════
+-- Pokemon Crystal Archipelago (gerbiljames/Archipelago-Crystal fork) uses the
+-- same RAM layout as vanilla Crystal — only the ROM title differs ("AP_CRYSTAL"
+-- vs "PM_CRYSTAL"). The crystal_ap profile inherits all addresses from crystal.
+M.PROFILES.crystal_ap = setmetatable({variant_label = "Crystal (AP)"}, {__index = M.PROFILES.crystal})
+
 -- Lowercase alias for game_detect.lua compatibility
 M.profiles = M.PROFILES
 
@@ -203,12 +209,15 @@ function M.detect()
     end
     local title = M._readRomTitle()
     if not title then return false end
-    -- ROM title: "PM_CRYSTAL" (Crystal US) or contains "CRYSTAL"
-    return title == "PM_CRYSTAL" or title:find("CRYSTAL") ~= nil
+    -- ROM title: "PM_CRYSTAL" (vanilla) or "AP_CRYSTAL" (gerbiljames AP fork).
+    -- Also accept any title containing "CRYSTAL" for tolerance.
+    return title == "PM_CRYSTAL" or title == "AP_CRYSTAL" or title:find("CRYSTAL") ~= nil
 end
 
 function M.detect_variant()
-    -- Crystal has only one variant (US English)
+    -- Phase 8: distinguish AP-patched ROM from vanilla via ROM title at 0x134.
+    local title = M._readRomTitle()
+    if title == "AP_CRYSTAL" then return "crystal_ap" end
     return "crystal"
 end
 
@@ -227,6 +236,7 @@ function M._readRomTitle()
 end
 
 function M.rom_type_for_variant(variant)
+    if variant == "crystal_ap" then return "Crystal (AP)" end
     return "Crystal"
 end
 
