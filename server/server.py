@@ -31,7 +31,7 @@ from datetime import datetime
 from server.stream_overlays import (
     _stream_overlay_page,
     _STREAM_PARTY_JS,
-    _STREAM_ENEMY_WILD_JS,
+    _STREAM_ENEMY_FOCUS_JS,
     _STREAM_ENEMY_TRAINER_JS,
     _STREAM_LINKS_JS,
     _STREAM_LINKED_PARTY_JS,
@@ -4304,16 +4304,16 @@ class SLinkServer:
                                      _STREAM_PARTY_JS.replace("%PLAYER%", "b")),
             content_type="text/html")
 
-    async def handle_stream_enemy_wild_a(self, request):
+    async def handle_stream_enemy_focus_a(self, request):
         return aiohttp_web.Response(
-            text=_stream_overlay_page("Enemy Wild A",
-                                      _STREAM_ENEMY_WILD_JS.replace("%PLAYER%", "a")),
+            text=_stream_overlay_page("Enemy Focus A",
+                                      _STREAM_ENEMY_FOCUS_JS.replace("%PLAYER%", "a")),
             content_type="text/html")
 
-    async def handle_stream_enemy_wild_b(self, request):
+    async def handle_stream_enemy_focus_b(self, request):
         return aiohttp_web.Response(
-            text=_stream_overlay_page("Enemy Wild B",
-                                      _STREAM_ENEMY_WILD_JS.replace("%PLAYER%", "b")),
+            text=_stream_overlay_page("Enemy Focus B",
+                                      _STREAM_ENEMY_FOCUS_JS.replace("%PLAYER%", "b")),
             content_type="text/html")
 
     async def handle_stream_enemy_trainer_a(self, request):
@@ -6421,8 +6421,8 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         app.router.add_get("/stream/",         srv.handle_stream_index)
         app.router.add_get("/stream/party-a",        srv.handle_stream_party_a)
         app.router.add_get("/stream/party-b",        srv.handle_stream_party_b)
-        app.router.add_get("/stream/enemy-wild-a",   srv.handle_stream_enemy_wild_a)
-        app.router.add_get("/stream/enemy-wild-b",   srv.handle_stream_enemy_wild_b)
+        app.router.add_get("/stream/enemy-focus-a",   srv.handle_stream_enemy_focus_a)
+        app.router.add_get("/stream/enemy-focus-b",   srv.handle_stream_enemy_focus_b)
         app.router.add_get("/stream/enemy-trainer-a", srv.handle_stream_enemy_trainer_a)
         app.router.add_get("/stream/enemy-trainer-b", srv.handle_stream_enemy_trainer_b)
         app.router.add_get("/stream/links",          srv.handle_stream_links)

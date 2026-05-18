@@ -292,13 +292,63 @@ _STREAM_SHARED_CSS = """
   body.ov-focus #root{padding:clamp(5px,1vmin,14px);gap:clamp(3px,.6vmin,8px)}
   /* Bigger sprite so it proportionally fills the card */
   body.ov-focus .mc .mon-sprite{width:clamp(54px,15vmin,80px)!important;aspect-ratio:1!important}
-  /* Moves grid expands to fill all remaining vertical space */
-  body.ov-focus .moves-grid{flex:1;min-height:0;grid-template-rows:1fr 1fr;margin-top:0}
-  /* Distribute move-name / type badge / pp-row evenly within each tile's height */
-  body.ov-focus .move-tile{justify-content:space-evenly;gap:0}
+  /* Moves grid expands to fill all remaining vertical space.
+     minmax(0,1fr) (instead of 1fr) lets the rows shrink below their content's
+     natural minimum — critical when stat-stages-row pushes .mc taller, since
+     otherwise the 2×2 tile grid would overflow the .focus-mon column. */
+  body.ov-focus .moves-grid{flex:1;min-height:0;grid-template-rows:minmax(0,1fr) minmax(0,1fr);grid-auto-rows:minmax(0,1fr);margin-top:0;overflow:hidden}
+  /* Tiles must also be shrinkable, with overflow clipped so a too-small row
+     truncates instead of bleeding out of the card. */
+  body.ov-focus .move-tile{justify-content:space-evenly;gap:0;min-height:0;min-width:0;overflow:hidden}
+  /* Safety net: clip anything that escapes a column's allocated height
+     (e.g. many stat stages + tall tiles together) to the column bounds. */
+  body.ov-focus .focus-mons .focus-mon{overflow:hidden}
   /* Scale pp bar and number up to match the tile breathing room */
   body.ov-focus .pp-trk{height:clamp(5px,.8vmin,8px)}
   body.ov-focus .pp-num{font-size:clamp(10px,1.4vmin,13px);opacity:.7}
+  /* Singles: one full-width column (matches pre-doubles layout). */
+  body.ov-focus .focus-mons{display:flex;flex-direction:column;gap:clamp(3px,.6vmin,8px);flex:1;min-height:0}
+  body.ov-focus .focus-mons .focus-mon{display:flex;flex-direction:column;gap:clamp(3px,.6vmin,8px);flex:1;min-height:0;min-width:0}
+  /* ─── Doubles: split horizontally into two equal columns ───────────────────
+     Each column gets roughly half the overlay width (~150–200px in typical
+     focus sizes). Everything inside is re-scaled to fit:
+       • Shrink the column's base font-size (cascades to every em-sized child).
+       • Cap absolute element sizes (sprite, HP track, badges, move tiles)
+         with tighter clamp() ranges so a narrow column doesn't get clipped or
+         wrap awkwardly.
+       • Stack sprite-above-info inside each card so the m-name + HP row have
+         the full column width to breathe.                                        */
+  body.ov-focus .focus-mons.doubles{flex-direction:row;gap:clamp(4px,.8vmin,10px)}
+  /* Cascade-shrink everything inside via the column's base font-size; em-sized
+     children (m-name, hp-pct, lv, status icons, stat stages, move-name) all
+     scale proportionally, so we mostly only need to override absolute-sized
+     chrome (sprite, hp track, paddings, gaps). */
+  body.ov-focus .focus-mons.doubles .focus-mon{flex:1 1 0;min-width:0;font-size:.7em}
+  /* Card: vertical stack (sprite on top, info centered below). Don't let the
+     card shrink — if there's too much content (e.g. many stat stages), the
+     moves-grid absorbs the squeeze via its minmax(0,1fr) rows instead. */
+  body.ov-focus .focus-mons.doubles .mc{flex-direction:column;align-items:center;gap:clamp(2px,.4vmin,5px);padding:clamp(3px,.5vmin,6px);flex-shrink:0}
+  body.ov-focus .focus-mons.doubles .mc .mon-sprite{width:clamp(38px,9vmin,52px)!important;margin:0 auto}
+  body.ov-focus .focus-mons.doubles .m-info{width:100%;text-align:center}
+  body.ov-focus .focus-mons.doubles .m-name{justify-content:center;text-align:center;line-height:1.2}
+  body.ov-focus .focus-mons.doubles .m-name .sp{display:none}  /* nickname only; species in parens too noisy */
+  body.ov-focus .focus-mons.doubles .hp-row{flex-wrap:wrap;justify-content:center;gap:clamp(2px,.35vmin,4px);margin-top:clamp(1px,.25vmin,3px)}
+  body.ov-focus .focus-mons.doubles .hp-lbl{display:none}
+  body.ov-focus .focus-mons.doubles .hp-trk{min-width:clamp(28px,7vmin,50px);height:clamp(4px,.6vmin,6px)}
+  body.ov-focus .focus-mons.doubles .stat-stages-row{padding:1px 0 0 0;gap:1px;justify-content:center}
+  /* Move tiles: smaller padding and tighter font scaling for narrow columns. */
+  body.ov-focus .focus-mons.doubles .moves-grid{gap:clamp(2px,.4vmin,5px);margin-top:clamp(2px,.4vmin,5px)}
+  body.ov-focus .focus-mons.doubles .move-tile{padding:clamp(2px,.4vmin,5px);gap:clamp(1px,.2vmin,3px)}
+  body.ov-focus .focus-mons.doubles .move-name{line-height:1.15}
+  body.ov-focus .focus-mons.doubles .pp-row{gap:clamp(1px,.25vmin,3px);margin-top:0}
+  body.ov-focus .focus-mons.doubles .pp-trk{height:clamp(3px,.5vmin,5px)}
+  .dbl-tag{display:inline-block;background:var(--c-gold,#fc6);color:#111;font-size:.7em;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:4px;vertical-align:middle;letter-spacing:.04em}
+
+  /* ─── Enemy Trainer overlay: PARTY-style list with autoscroll ─────────────
+     The list is doubled in render() so the marquee can loop seamlessly when
+     content overflows the visible mask (same trick as the IN MEMORIAM scroller). */
+  .trainer-scroll-mask{overflow:hidden;flex:1;min-height:0}
+  .trainer-team-list{display:flex;flex-direction:column;gap:clamp(3px,.55vmin,7px);will-change:transform}
 
   /* ─── Encounters overlay ──────────────────────────────────────────────── */
   .enc-last{margin-top:clamp(5px,.9vmin,11px);display:flex;align-items:center;gap:clamp(4px,.8vmin,10px);padding:clamp(4px,.7vmin,8px) clamp(7px,1.1vmin,13px);background:var(--c-card);border-radius:4px;border-left:3px solid var(--c-gold);min-width:0}
@@ -645,7 +695,7 @@ function render(d) {
 }
 """
 
-_STREAM_ENEMY_WILD_JS = r"""
+_STREAM_ENEMY_FOCUS_JS = r"""
 var PLAYER_ID = '%PLAYER%';
 var _lastKey = '';
 function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
@@ -658,61 +708,114 @@ function init() {
   doRefresh();
   setInterval(doRefresh, 2000);
 }
+function enemyMovesHtml(mon) {
+  var moves = (mon && mon.move_details) || [];
+  if (!moves.length) return '';
+  var h = '<div class="moves-grid">';
+  for (var mi = 0; mi < 4; mi++) {
+    var md = moves[mi] || null;
+    h += '<div class="move-tile">';
+    if (md) {
+      var mn = escHtml(md.name || '?');
+      var tn = escHtml(md.type_name || '');
+      var pp = md.pp > 0 ? md.current_pp : 0;
+      var ppMax = md.pp || 1;
+      var ppPct = Math.max(0, Math.min(100, Math.round(pp/ppMax*100)));
+      var ppCls = ppPct > 50 ? 'pp-h' : (ppPct > 25 ? 'pp-m' : 'pp-l');
+      var tc = 'mt-'+(tn||'unknown');
+      h += '<div class="move-name">'+mn+'</div>';
+      h += '<span class="move-type '+tc+'">'+tn+'</span>';
+      h += '<div class="pp-row">';
+      h += '<div class="pp-trk"><div class="pp-fill '+ppCls+'" style="width:'+ppPct+'%"></div></div>';
+      h += '<span class="pp-num">'+pp+'/'+ppMax+'</span>';
+      h += '</div>';
+    } else {
+      h += '<div class="move-name" style="opacity:.25">\u2014</div>';
+    }
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+function enemyMonHtml(mon) {
+  var hp = typeof mon.hp === 'number' ? mon.hp : 1;
+  var maxHP = mon.maxHP > 0 ? mon.maxHP : (hp || 1);
+  var lv = mon.level || '?';
+  var fnt = hp === 0;
+  var pct = fnt ? 0 : Math.max(0, Math.min(100, Math.round(hp/maxHP*100)));
+  var hpCls = pct > 50 ? 'hp-h' : (pct > 20 ? 'hp-m' : 'hp-l');
+  var bCls  = fnt ? 'fnt' : (pct > 50 ? 'bh' : (pct > 20 ? 'bm' : 'bl'));
+  var nick  = escHtml(mon.nickname || mon.species_name || '???');
+  var spLbl = (mon.species_name && mon.nickname && mon.nickname !== mon.species_name)
+              ? ' <span class="sp">('+escHtml(mon.species_name)+')</span>' : '';
+  var h = '<div class="mc '+bCls+'">';
+  h += (mon.sprite_html || spriteTag(mon.species_id || 0));
+  h += '<div class="m-info">';
+  h += '<div class="m-name">'+nick+spLbl+'</div>';
+  h += '<div class="hp-row">';
+  h += '<span class="hp-lbl">HP</span>';
+  h += '<div class="hp-trk"><div class="hp-fill '+hpCls+'" style="width:'+pct+'%"></div></div>';
+  h += '<span class="hp-pct">'+(fnt?'\u2014':pct+'%')+'</span>';
+  h += statusIcon(mon.status_cond || 0);
+  h += '<span class="lv">Lv '+lv+'</span>';
+  h += '</div>';
+  if (mon.stat_stages) {
+    var stH = statStagesHtml(mon.stat_stages);
+    if (stH) h += '<div class="stat-stages-row">'+stH+'</div>';
+  }
+  h += '</div></div>';
+  h += enemyMovesHtml(mon);
+  return h;
+}
 function render(d) {
   var p = d.players[PLAYER_ID];
   var bs = p && p.battle_state;
-  if (!bs || !bs.in_battle || bs.is_trainer_battle) {
+  if (!bs || !bs.in_battle) {
     if (_lastKey !== '__empty__') {
       document.getElementById('root').innerHTML = '';
       _lastKey = '__empty__';
     }
     return;
   }
-  var mon = null;
   var ep = bs.enemy_party || [];
-  for (var i = 0; i < ep.length; i++) {
-    if (ep[i].active) { mon = ep[i]; break; }
-  }
-  if (!mon && ep.length) mon = ep[0];
-  if (!mon) {
+  // Collect active foes (singles = 1; doubles = up to 2). Fall back to first
+  // entry if none are flagged active yet (race during battle start).
+  var active = ep.filter(function(m){return m.active;});
+  if (!active.length && ep.length) active = [ep[0]];
+  if (!active.length) {
     if (_lastKey !== '__loading__') {
-      document.getElementById('root').innerHTML = '<div class="wtitle">WILD ENCOUNTER</div><div class="focus-not-active">Loading\u2026</div>';
+      document.getElementById('root').innerHTML = '<div class="wtitle">ENEMY</div><div class="focus-not-active">Loading\u2026</div>';
       _lastKey = '__loading__';
     }
     return;
   }
-  var key = [mon.species_id, mon.hp, mon.maxHP, mon.level, mon.status_cond, JSON.stringify(mon.stat_stages||[])].join('|');
+  var isDoubles = !!bs.is_doubles || active.length > 1;
+  var isTrainer = !!bs.is_trainer_battle;
+  // Compose title: "WILD ENCOUNTER" for wild, trainer class/name for trainer.
+  var title;
+  if (isTrainer) {
+    title = escHtml(bs.opponent_class || 'TRAINER');
+    if (bs.opponent_name) title += ' ' + escHtml(bs.opponent_name);
+  } else {
+    title = 'WILD ENCOUNTER';
+  }
+  if (isDoubles) title += ' <span class="dbl-tag">DOUBLES</span>';
+  // Cache key: title + each active mon's volatile state.
+  var keyParts = active.map(function(m) {
+    var pp = (m.move_details || []).map(function(x){return x.current_pp;});
+    return [m.species_id, m.hp, m.maxHP, m.level, m.status_cond,
+            JSON.stringify(m.stat_stages||[]), JSON.stringify(pp)].join('|');
+  });
+  var key = (isDoubles?'D':'S')+'|'+(isTrainer?'T':'W')+'||'+title+'||'+keyParts.join(';;');
   if (key === _lastKey) return;
   _lastKey = key;
 
-  var hp = typeof mon.hp === 'number' ? mon.hp : 1;
-  var maxHP = mon.maxHP > 0 ? mon.maxHP : (hp || 1);
-  var lv = mon.level || '?';
-  var fnt = hp === 0;
-  var pct = fnt ? 0 : Math.max(0, Math.min(100, Math.round(hp / maxHP * 100)));
-  var hpCls = pct > 50 ? 'hp-h' : (pct > 20 ? 'hp-m' : 'hp-l');
-  var bCls  = fnt ? 'fnt' : (pct > 50 ? 'bh' : (pct > 20 ? 'bm' : 'bl'));
-  var nick  = escHtml(mon.nickname || mon.species_name || '???');
-  var spLbl = (mon.species_name && mon.nickname && mon.nickname !== mon.species_name)
-              ? ' <span class="sp">(' + escHtml(mon.species_name) + ')</span>' : '';
-
-  var h = '<div class="wtitle">WILD ENCOUNTER</div>';
-  h += '<div class="mc ' + bCls + '">';
-  h += (mon.sprite_html || spriteTag(mon.species_id || 0));
-  h += '<div class="m-info">';
-  h += '<div class="m-name">' + nick + spLbl + '</div>';
-  h += '<div class="hp-row">';
-  h += '<span class="hp-lbl">HP</span>';
-  h += '<div class="hp-trk"><div class="hp-fill ' + hpCls + '" style="width:' + pct + '%"></div></div>';
-  h += '<span class="hp-pct">' + (fnt ? '\u2014' : pct + '%') + '</span>';
-  h += statusIcon(mon.status_cond || 0);
-  h += '<span class="lv">Lv ' + lv + '</span>';
+  var h = '<div class="wtitle">' + title + '</div>';
+  h += '<div class="focus-mons'+(isDoubles?' doubles':'')+'">';
+  active.forEach(function(mon) {
+    h += '<div class="focus-mon">'+enemyMonHtml(mon)+'</div>';
+  });
   h += '</div>';
-  if (mon.stat_stages) {
-    var stH = statStagesHtml(mon.stat_stages);
-    if (stH) h += '<div class="stat-stages-row">' + stH + '</div>';
-  }
-  h += '</div></div>';
   document.getElementById('root').innerHTML = h;
   processSprites();
 }
@@ -722,6 +825,42 @@ _STREAM_ENEMY_TRAINER_JS = r"""
 var PLAYER_ID = '%PLAYER%';
 var _lastKey = '';
 function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
+var _speed = Math.min(3, Math.max(0.25, parseFloat(new URLSearchParams(window.location.search).get('speed')||'1')||1));
+// Pause duration (seconds) held at the end of each full scroll loop. Clamp to
+// a sensible range — 0 disables the pause (continuous scroll like memorial).
+var _pauseSec = Math.min(10, Math.max(0, parseFloat(new URLSearchParams(window.location.search).get('pause')||'2')||0));
+function teamRowHtml(mon) {
+  // Compact .mc row mirroring the standard PARTY overlay layout.
+  var hp = typeof mon.hp === 'number' ? mon.hp : 1;
+  var maxHP = mon.maxHP > 0 ? mon.maxHP : (hp || 1);
+  var lv = mon.level || '?';
+  var fnt = hp === 0;
+  var pct = fnt ? 0 : Math.max(0, Math.min(100, Math.round(hp/maxHP*100)));
+  var hpCls = pct > 50 ? 'hp-h' : (pct > 20 ? 'hp-m' : 'hp-l');
+  var bCls  = fnt ? 'fnt' : (pct > 50 ? 'bh' : (pct > 20 ? 'bm' : 'bl'));
+  var nick  = escHtml(mon.nickname || mon.species_name || '???');
+  var spLbl = (mon.species_name && mon.nickname && mon.nickname !== mon.species_name)
+              ? ' <span class="sp">('+escHtml(mon.species_name)+')</span>' : '';
+  var fntTag = fnt ? '<span class="fnt-tag">FNT</span>' : '';
+  var activeCls = mon.active ? ' active-mon' : '';
+  var h = '<div class="mc '+bCls+activeCls+'">';
+  h += (mon.sprite_html || spriteTag(mon.species_id || 0));
+  h += '<div class="m-info">';
+  h += '<div class="m-name">'+nick+spLbl+fntTag+'</div>';
+  h += '<div class="hp-row">';
+  h += '<span class="hp-lbl">HP</span>';
+  h += '<div class="hp-trk"><div class="hp-fill '+hpCls+'" style="width:'+pct+'%"></div></div>';
+  h += '<span class="hp-pct">'+(fnt?'\u2014':pct+'%')+'</span>';
+  h += statusIcon(mon.status_cond || 0);
+  h += '<span class="lv">Lv '+lv+'</span>';
+  h += '</div>';
+  if (mon.active && mon.stat_stages) {
+    var stH = statStagesHtml(mon.stat_stages);
+    if (stH) h += '<div class="stat-stages-row">'+stH+'</div>';
+  }
+  h += '</div></div>';
+  return h;
+}
 function render(d) {
   var p = d.players[PLAYER_ID];
   var bs = p && p.battle_state;
@@ -735,51 +874,72 @@ function render(d) {
   var ep = bs.enemy_party || [];
   if (!ep.length) {
     if (_lastKey !== '__loading__') {
-      document.getElementById('root').innerHTML = '<div class="wtitle">Trainer Battle</div><div style="opacity:.4;padding-top:6px">Loading...</div>';
+      document.getElementById('root').innerHTML = '<div class="wtitle">TRAINER</div><div style="opacity:.4;padding-top:6px">Loading...</div>';
       _lastKey = '__loading__';
     }
     return;
   }
-  var keyParts = [];
-  ep.forEach(function(m) { keyParts.push([m.species_id, m.hp, m.maxHP, m.level, m.status_cond, m.active ? 1 : 0].join(',')); });
   var tName = (bs.opponent_class || '') + '|' + (bs.opponent_name || '');
+  var keyParts = ep.map(function(m) {
+    return [m.species_id, m.hp, m.maxHP, m.level, m.status_cond,
+            m.active ? 1 : 0,
+            m.active && m.stat_stages ? JSON.stringify(m.stat_stages) : ''].join(',');
+  });
   var key = tName + '||' + keyParts.join(';');
   if (key === _lastKey) return;
   _lastKey = key;
 
   var header = escHtml(bs.opponent_class || 'Trainer');
   if (bs.opponent_name) header += ' ' + escHtml(bs.opponent_name);
-  var h = '<div class="wtitle">' + header + '</div>';
-  h += '<div class="p-list">';
-  ep.forEach(function(mon) {
-    var hp = typeof mon.hp === 'number' ? mon.hp : 1;
-    var maxHP = mon.maxHP > 0 ? mon.maxHP : (hp || 1);
-    var lv = mon.level || '?';
-    var fnt = hp === 0;
-    var pct = fnt ? 0 : Math.max(0, Math.min(100, Math.round(hp / maxHP * 100)));
-    var hpCls = pct > 50 ? 'hp-h' : (pct > 20 ? 'hp-m' : 'hp-l');
-    var bCls  = fnt ? 'fnt' : (pct > 50 ? 'bh' : (pct > 20 ? 'bm' : 'bl'));
-    var nick  = escHtml(mon.nickname || mon.species_name || '???');
-    var spLbl = (mon.species_name && mon.nickname && mon.nickname !== mon.species_name)
-                ? ' <span class="sp">(' + escHtml(mon.species_name) + ')</span>' : '';
-    var fntTag = fnt ? '<span class="fnt-tag">FNT</span>' : '';
-    var activeCls = mon.active ? ' active-mon' : '';
-
-    h += '<div class="mc ' + bCls + activeCls + '">';
-    h += (mon.sprite_html || spriteTag(mon.species_id || 0));
-    h += '<div class="m-info">';
-    h += '<div class="m-name">' + nick + spLbl + fntTag + '</div>';
-    h += '<div class="hp-row">';
-    h += '<span class="hp-lbl">HP</span>';
-    h += '<div class="hp-trk"><div class="hp-fill ' + hpCls + '" style="width:' + pct + '%"></div></div>';
-    h += '<span class="hp-pct">' + (fnt ? '\u2014' : pct + '%') + '</span>';
-    h += statusIcon(mon.status_cond || 0);
-    h += '<span class="lv">Lv ' + lv + '</span>';
-    h += '</div></div></div>';
-  });
-  h += '</div>';
+  var h = '<div class="wtitle">TRAINER \xb7 ' + header + '</div>';
+  // Build a *single* copy first so we can measure its true height against the
+  // mask. Only if it overflows do we render a *doubled* copy (needed for the
+  // seamless marquee). When it fits, we render the single copy unanimated —
+  // mirrors the IN MEMORIAM scroller but avoids unnecessary autoscroll.
+  var listHtml = '';
+  ep.forEach(function(mon) { listHtml += teamRowHtml(mon); });
+  h += '<div class="trainer-scroll-mask" id="trn-mask"><div class="trainer-team-list" id="trn-list">'+listHtml+'</div></div>';
   document.getElementById('root').innerHTML = h;
   processSprites();
+  // Defer overflow check to next frame so layout has settled — measuring
+  // clientHeight synchronously right after innerHTML can read 0 / stale.
+  requestAnimationFrame(function() {
+    var mask = document.getElementById('trn-mask');
+    var list = document.getElementById('trn-list');
+    if (!list || !mask) return;
+    // Clear any stale animation/transform from a previous render so the
+    // measurement reflects the true laid-out content height.
+    list.style.animation = '';
+    list.style.transform = '';
+    // Single copy still in place: scrollHeight = clientHeight = real content height.
+    var singleH = list.scrollHeight;
+    var maskH = mask.clientHeight;
+    if (singleH <= maskH || maskH <= 0) {
+      // Fits — no autoscroll, keep the single static copy.
+      return;
+    }
+    // Overflowing → switch to doubled content and start the pause-after-loop
+    // marquee. Doubling: holding at translateY(-50%) shows the start of copy
+    // #2 (visually identical to copy #1), so the wrap to 0% is invisible.
+    list.innerHTML = listHtml + listHtml;
+    processSprites();
+    var scrollDur = Math.max(6, ep.length * 2.5) / _speed;
+    var totalDur = scrollDur + _pauseSec;
+    var scrollPct = Math.round((scrollDur / totalDur) * 100);
+    var styleEl = document.getElementById('trn-anim-style');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'trn-anim-style';
+      document.head.appendChild(styleEl);
+    }
+    styleEl.textContent =
+      '@keyframes trn-scroll-pause {' +
+        '0%{transform:translateY(0)}' +
+        scrollPct + '%{transform:translateY(-50%)}' +
+        '100%{transform:translateY(-50%)}' +
+      '}';
+    list.style.animation = 'trn-scroll-pause ' + totalDur + 's linear infinite';
+  });
 }
 """
 
@@ -1265,25 +1425,7 @@ function init() {
 }
 var _focusStateKey = null;
 var PLAYER_ID = '%PLAYER%';
-function render(d) {
-  var p = d.players[PLAYER_ID] || {};
-  var keys = p.party_keys || [];
-  var activeKey = null, det = {};
-  for (var i = 0; i < keys.length; i++) {
-    var k = keys[i];
-    var candidate = (p.party_details && p.party_details[k]) || {};
-    if (candidate.active) { activeKey = k; det = candidate; break; }
-  }
-  var ppList = det.move_details ? det.move_details.map(function(m){return m.current_pp;}) : [];
-  var stateKey = (activeKey||'')+'|'+(det.hp||0)+'|'+(det.status_cond||0)+'|'+JSON.stringify(det.stat_stages||[])+'|'+JSON.stringify(ppList);
-  if (stateKey === _focusStateKey) return;
-  _focusStateKey = stateKey;
-  var root = document.getElementById('root');
-  var name = escHtml(p.trainer_name || PLAYER_ID.toUpperCase());
-  if (!activeKey) {
-    root.innerHTML = '<div class="wtitle">FOCUS \xb7 '+name+'</div><div class="focus-not-active">NOT IN BATTLE</div>';
-    return;
-  }
+function focusMonHtml(key, det) {
   var hp = typeof det.hp === 'number' ? det.hp : 1;
   var maxHP = det.maxHP > 0 ? det.maxHP : (hp || 1);
   var lv = det.level || '?';
@@ -1291,11 +1433,10 @@ function render(d) {
   var pct = fnt ? 0 : Math.max(0, Math.min(100, Math.round(hp/maxHP*100)));
   var hpCls = pct > 50 ? 'hp-h' : (pct > 20 ? 'hp-m' : 'hp-l');
   var bCls  = fnt ? 'fnt' : (pct > 50 ? 'bh' : (pct > 20 ? 'bm' : 'bl'));
-  var nick  = escHtml(det.nickname || det.species_name || activeKey.substring(0,8));
+  var nick  = escHtml(det.nickname || det.species_name || key.substring(0,8));
   var spLbl = (det.species_name && det.nickname && det.nickname !== det.species_name)
               ? ' <span class="sp">('+escHtml(det.species_name)+')</span>' : '';
-  var h = '<div class="wtitle">FOCUS \xb7 '+name+'</div>';
-  h += '<div class="mc '+bCls+'">';
+  var h = '<div class="mc '+bCls+'">';
   h += (det.sprite_html || spriteTag(det.species_id||0));
   h += '<div class="m-info">';
   h += '<div class="m-name">'+nick+spLbl+'</div>';
@@ -1338,6 +1479,42 @@ function render(d) {
     }
     h += '</div>';
   }
+  return h;
+}
+function render(d) {
+  var p = d.players[PLAYER_ID] || {};
+  var keys = p.party_keys || [];
+  // Collect all active mons (doubles \u2192 up to two).
+  var active = [];
+  for (var i = 0; i < keys.length; i++) {
+    var k = keys[i];
+    var candidate = (p.party_details && p.party_details[k]) || {};
+    if (candidate.active) active.push({key: k, det: candidate});
+  }
+  var bs = p.battle_state || {};
+  var isDoubles = !!bs.is_doubles || active.length > 1;
+  // Cache key: include each active mon's volatile state + doubles flag.
+  var stateKeyParts = active.map(function(a) {
+    var pp = a.det.move_details ? a.det.move_details.map(function(m){return m.current_pp;}) : [];
+    return [a.key, a.det.hp||0, a.det.status_cond||0,
+            JSON.stringify(a.det.stat_stages||[]), JSON.stringify(pp)].join('|');
+  });
+  var stateKey = (isDoubles?'D':'S')+'||'+stateKeyParts.join(';;');
+  if (stateKey === _focusStateKey) return;
+  _focusStateKey = stateKey;
+  var root = document.getElementById('root');
+  var name = escHtml(p.trainer_name || PLAYER_ID.toUpperCase());
+  if (!active.length) {
+    root.innerHTML = '<div class="wtitle">FOCUS \xb7 '+name+'</div><div class="focus-not-active">NOT IN BATTLE</div>';
+    return;
+  }
+  var title = 'FOCUS \xb7 '+name + (isDoubles ? ' \xb7 <span class="dbl-tag">DOUBLES</span>' : '');
+  var h = '<div class="wtitle">'+title+'</div>';
+  h += '<div class="focus-mons'+(isDoubles?' doubles':'')+'">';
+  active.forEach(function(a) {
+    h += '<div class="focus-mon">'+focusMonHtml(a.key, a.det)+'</div>';
+  });
+  h += '</div>';
   root.innerHTML = h;
   processSprites();
 }
@@ -1669,32 +1846,32 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
       </div>
     </div>
     <div class="overlay-card">
-      <div class="preview"><iframe src="/stream/enemy-wild-a?theme=dark"></iframe></div>
+      <div class="preview"><iframe src="/stream/enemy-focus-a?theme=dark"></iframe></div>
       <div class="overlay-info">
-        <h3>Enemy Wild &middot; A</h3>
-        <div class="size-hint">Recommended: 340 &times; 180</div>
-        <p>Wild encounter focus card &mdash; large sprite, HP bar, stat stages. Hidden during trainer battles.</p>
-        <div class="card-cfg" data-id="uEWA" data-base="/stream/enemy-wild-a"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
-        <div class="url-row"><span class="url-box" id="uEWA">/stream/enemy-wild-a</span><button class="copy-btn" onclick="copyUrl('uEWA')">Copy</button><a class="open-btn" id="uEWA-open" href="#" target="_blank">Open &#8599;</a></div>
+        <h3>Enemy Focus &middot; A</h3>
+        <div class="size-hint">Recommended: 340 &times; 260 &nbsp;|&nbsp; Doubles: 480 &times; 260</div>
+        <p>Active enemy foe(s) for wild <em>or</em> trainer battles &mdash; sprite, HP bar, status, stat stages, moves grid with live PP. Shows both active mons side-by-side in doubles.</p>
+        <div class="card-cfg" data-id="uEFA" data-base="/stream/enemy-focus-a"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="uEFA">/stream/enemy-focus-a</span><button class="copy-btn" onclick="copyUrl('uEFA')">Copy</button><a class="open-btn" id="uEFA-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
-      <div class="preview"><iframe src="/stream/enemy-wild-b?theme=dark"></iframe></div>
+      <div class="preview"><iframe src="/stream/enemy-focus-b?theme=dark"></iframe></div>
       <div class="overlay-info">
-        <h3>Enemy Wild &middot; B</h3>
-        <div class="size-hint">Recommended: 340 &times; 180</div>
-        <p>Wild encounter focus card &mdash; large sprite, HP bar, stat stages. Hidden during trainer battles.</p>
-        <div class="card-cfg" data-id="uEWB" data-base="/stream/enemy-wild-b"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
-        <div class="url-row"><span class="url-box" id="uEWB">/stream/enemy-wild-b</span><button class="copy-btn" onclick="copyUrl('uEWB')">Copy</button><a class="open-btn" id="uEWB-open" href="#" target="_blank">Open &#8599;</a></div>
+        <h3>Enemy Focus &middot; B</h3>
+        <div class="size-hint">Recommended: 340 &times; 260 &nbsp;|&nbsp; Doubles: 480 &times; 260</div>
+        <p>Active enemy foe(s) for wild <em>or</em> trainer battles &mdash; sprite, HP bar, status, stat stages, moves grid with live PP. Shows both active mons side-by-side in doubles.</p>
+        <div class="card-cfg" data-id="uEFB" data-base="/stream/enemy-focus-b"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="url-row"><span class="url-box" id="uEFB">/stream/enemy-focus-b</span><button class="copy-btn" onclick="copyUrl('uEFB')">Copy</button><a class="open-btn" id="uEFB-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
     <div class="overlay-card">
       <div class="preview"><iframe src="/stream/enemy-trainer-a?theme=dark"></iframe></div>
       <div class="overlay-info">
         <h3>Enemy Trainer &middot; A</h3>
-        <div class="size-hint">Vertical: 280 &times; 380 &nbsp;|&nbsp; Horizontal: 580 &times; 130</div>
-        <p>Trainer battle opponent party &mdash; full team with sprites, HP bars, levels. Header shows trainer class/name. Hidden during wild encounters.</p>
-        <div class="card-cfg" data-id="uETA" data-base="/stream/enemy-trainer-a"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="size-hint">Recommended: 280 &times; 220</div>
+        <p>Trainer's full enemy team in compact PARTY-style rows &mdash; sprite, name, HP bar, level, status. Auto-scrolls vertically when the list overflows the box, with a short pause at each loop. Hidden during wild encounters.</p>
+        <div class="card-cfg" data-id="uETA" data-base="/stream/enemy-trainer-a"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div><div class="cfg-row"><span class="cfg-lbl">Speed</span><div class="cfg-pills"><button class="cpill" data-param="speed" data-val="0.5" onclick="cpillClick(this)">0.5&times;</button><button class="cpill active" data-param="speed" data-val="1" onclick="cpillClick(this)">1&times;</button><button class="cpill" data-param="speed" data-val="1.5" onclick="cpillClick(this)">1.5&times;</button><button class="cpill" data-param="speed" data-val="2" onclick="cpillClick(this)">2&times;</button><button class="cpill" data-param="speed" data-val="3" onclick="cpillClick(this)">3&times;</button></div></div><div class="cfg-row"><span class="cfg-lbl">Pause</span><div class="cfg-pills"><button class="cpill" data-param="pause" data-val="0" onclick="cpillClick(this)">0s</button><button class="cpill" data-param="pause" data-val="1" onclick="cpillClick(this)">1s</button><button class="cpill active" data-param="pause" data-val="2" onclick="cpillClick(this)">2s</button><button class="cpill" data-param="pause" data-val="4" onclick="cpillClick(this)">4s</button></div></div></div>
         <div class="url-row"><span class="url-box" id="uETA">/stream/enemy-trainer-a</span><button class="copy-btn" onclick="copyUrl('uETA')">Copy</button><a class="open-btn" id="uETA-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
@@ -1702,9 +1879,9 @@ _STREAM_INDEX_HTML = """<!DOCTYPE html>
       <div class="preview"><iframe src="/stream/enemy-trainer-b?theme=dark"></iframe></div>
       <div class="overlay-info">
         <h3>Enemy Trainer &middot; B</h3>
-        <div class="size-hint">Vertical: 280 &times; 380 &nbsp;|&nbsp; Horizontal: 580 &times; 130</div>
-        <p>Trainer battle opponent party &mdash; full team with sprites, HP bars, levels. Header shows trainer class/name. Hidden during wild encounters.</p>
-        <div class="card-cfg" data-id="uETB" data-base="/stream/enemy-trainer-b"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div></div>
+        <div class="size-hint">Recommended: 280 &times; 220</div>
+        <p>Trainer's full enemy team in compact PARTY-style rows &mdash; sprite, name, HP bar, level, status. Auto-scrolls vertically when the list overflows the box, with a short pause at each loop. Hidden during wild encounters.</p>
+        <div class="card-cfg" data-id="uETB" data-base="/stream/enemy-trainer-b"><div class="cfg-row"><span class="cfg-lbl">Theme</span><div class="cfg-pills"><button class="cpill active" data-param="theme" data-val="dark" onclick="cpillClick(this)">Dark</button><button class="cpill" data-param="theme" data-val="light" onclick="cpillClick(this)">Light</button><button class="cpill" data-param="theme" data-val="transparent" onclick="cpillClick(this)">Transparent</button></div></div><div class="cfg-row"><span class="cfg-lbl">Speed</span><div class="cfg-pills"><button class="cpill" data-param="speed" data-val="0.5" onclick="cpillClick(this)">0.5&times;</button><button class="cpill active" data-param="speed" data-val="1" onclick="cpillClick(this)">1&times;</button><button class="cpill" data-param="speed" data-val="1.5" onclick="cpillClick(this)">1.5&times;</button><button class="cpill" data-param="speed" data-val="2" onclick="cpillClick(this)">2&times;</button><button class="cpill" data-param="speed" data-val="3" onclick="cpillClick(this)">3&times;</button></div></div><div class="cfg-row"><span class="cfg-lbl">Pause</span><div class="cfg-pills"><button class="cpill" data-param="pause" data-val="0" onclick="cpillClick(this)">0s</button><button class="cpill" data-param="pause" data-val="1" onclick="cpillClick(this)">1s</button><button class="cpill active" data-param="pause" data-val="2" onclick="cpillClick(this)">2s</button><button class="cpill" data-param="pause" data-val="4" onclick="cpillClick(this)">4s</button></div></div></div>
         <div class="url-row"><span class="url-box" id="uETB">/stream/enemy-trainer-b</span><button class="copy-btn" onclick="copyUrl('uETB')">Copy</button><a class="open-btn" id="uETB-open" href="#" target="_blank">Open &#8599;</a></div>
       </div>
     </div>
