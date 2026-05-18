@@ -89,6 +89,8 @@ Shiny bonus pairs are always on — catching a shiny gives the partner an extra 
 | `/stream/enc-table-a`, `/stream/enc-table-b` | Wild encounter rate table for current area (RR/CFRU) |
 | `/stream/areas` | Area link state grid |
 | `/stream/focus-a`, `/stream/focus-b` | Active battle mon — large sprite, moves, type matchups |
+| `/stream/enemy-focus-a`, `/stream/enemy-focus-b` | Active enemy mon(s) — large sprite, moves, live PP. Singles or doubles. |
+| `/stream/enemy-trainer-a`, `/stream/enemy-trainer-b` | Trainer's full team — PARTY-style autoscroll. |
 | `/stream/ticker` | Scrolling event ticker |
 | `/stream/badges` | Badge display |
 | `/stream/stream-memorial` | Memorial wall for stream |

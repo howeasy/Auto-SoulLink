@@ -164,6 +164,10 @@ The status server (default port 8080) exposes these pages and endpoints.
 | `/stream/ticker` | GET | Overlay — scrolling text ticker |
 | `/stream/focus-a` | GET | Overlay — Player A focused mon view |
 | `/stream/focus-b` | GET | Overlay — Player B focused mon view |
+| `/stream/enemy-focus-a` | GET | Overlay — Player A active enemy mon(s), focus-style |
+| `/stream/enemy-focus-b` | GET | Overlay — Player B active enemy mon(s), focus-style |
+| `/stream/enemy-trainer-a` | GET | Overlay — Player A enemy trainer team, party-style autoscroll |
+| `/stream/enemy-trainer-b` | GET | Overlay — Player B enemy trainer team, party-style autoscroll |
 | `/stream/area-encounter` | GET | Overlay — Soul Link status for the current area |
 | `/stream/enc-table-a` | GET | Overlay — wild encounter rates for Player A's current area |
 | `/stream/enc-table-b` | GET | Overlay — wild encounter rates for Player B's current area |
@@ -223,6 +227,7 @@ URL parameters supported by all overlays:
 
 Scrolling overlays additionally accept:
 - `?speed=1` (default) — multiplier from `0.25`–`3.0`. Values on the index page's speed pill buttons update the URL automatically.
+- `?pause=2` (default, in seconds) — pause-after-loop on `enemy-trainer-{a,b}` when the doubled list overflows its mask. Range `0`–`10`. Values on the index page's pause pill buttons update the URL automatically.
 
 | Overlay | URL | Use |
 |---|---|---|
@@ -242,6 +247,10 @@ Scrolling overlays additionally accept:
 | Ticker | `/stream/ticker` | Scrolling text ticker |
 | Player A focus | `/stream/focus-a` | Player A focused mon view |
 | Player B focus | `/stream/focus-b` | Player B focused mon view |
+| Enemy focus A | `/stream/enemy-focus-a` | Player A's active enemy mon(s). Combines old `enemy-wild` and trainer-active overlays into one widget. Title shows "WILD ENCOUNTER" or trainer class/name; shows card + moves grid with live PP. In Gen 3 doubles, both active foes side-by-side. |
+| Enemy focus B | `/stream/enemy-focus-b` | Same for Player B. |
+| Enemy trainer A | `/stream/enemy-trainer-a` | Player A's enemy trainer's full team as a PARTY-style autoscrolling list (sprite, name, HP bar, status, Lv; active mons highlighted with stat-stage icons). Supports `?speed=` (0.25–3, default 1) and `?pause=` (0–10s, default 2). |
+| Enemy trainer B | `/stream/enemy-trainer-b` | Same for Player B. |
 | Area encounter | `/stream/area-encounter` | Soul Link status for the most-active area — linked pair, pending captures, or dead zone. Auto-follows the area with the most recent action. |
 | Wild encounters A | `/stream/enc-table-a` | Wild Pokémon encounter rates for Player A's current area (Radical Red only). Shows each method — Walking, Surfing, Fishing — with sprite, species, rate %, and level range. Auto-scrolls when the list is taller than the overlay; supports `?speed=` multiplier. |
 | Wild encounters B | `/stream/enc-table-b` | Wild Pokémon encounter rates for Player B's current area (Radical Red only). Same as above for Player B. |
@@ -543,6 +552,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Party/box sync | If A's linked mon is in the party, B's partner must also be in the party — automatic deposit/retrieval. Paired sync enforcement: retrieval requires both players to have party room; otherwise both stay boxed |
 | Memorial box | Both mons from a dead pair are moved to Box 13 ("Box 14" in-game) after the battle ends |
 | Nuzlocke gate | Dead zone and faint propagation are inactive until the player obtains Pokéballs |
+| Gift capture detection | Captures classified as gifts when (a) the area is a configured gift area (`is_gift_area()`) or (b) the captured mon is an egg in a non-daycare encounter area (NPC egg-gifts like Route 5 Togepi). The Lua client reads `is_egg` from `OFF_FLAGS` bit 2 and forwards it; `_is_gift_capture(area_id, is_egg)` in `server/state.py` combines this with `is_daycare_area()` so daycare-bred eggs (Route 5/Four Island day cares in Gen 3) remain normal captures. Gifts bypass the Pokéball gate and aren't subject to wild-catch quarantine. |
 | Whiteout | All of A's party mons faint → all of B's linked party mons are force-fainted |
 | Species clause (opt-in) | `--species-clause` — rejects links where both mons share the same evolution family (e.g. Charmander ↔ Charmeleon). Also rejects captures where the **same player** already has an alive linked mon of the same evo family (same-save duplicate prevention). Dead/memorial pairs don't block. The violating capture is force-fainted; the area stays pending for retry |
 | Gender clause (opt-in) | `--gender-clause` — rejects links where both mons are the same gender (♂+♂ or ♀+♀). Genderless mons are exempt. The violating capture is force-fainted; the area stays pending for retry |
@@ -638,6 +648,13 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | TCP port display on status page | ✅ Working |
 | Character encoding — extended charset (/, ♂, ♀, «, », etc.) + nickname backfill | ✅ Working |
 | Dupes clause — partner pending capture cross-check | ✅ Working |
+| Doubles battle detection (Gen 3) — DOUBLES chip + side-by-side overlays | ✅ Working |
+| Enemy moves and live PP detection in battle (Gen 3) | ✅ Working |
+| Egg-gift classification (NPC eggs like Route 5 Togepi treated as gifts) | ✅ Working |
+| Combined Enemy Focus + party-style Enemy Trainer overlays | ✅ Working |
+| Auto-generated per-species ability name overrides (RR, from funnotbun) | ✅ Working |
+| Damage calc form-name normalization (Lycanroc-Dusk, Necrozma fusions, etc.) | ✅ Working |
+| Party compaction guard (PC deposit/withdrawal no longer triggers freeze) | ✅ Working |
 | Rolling backups (5-min auto-save, 6 slots, restores `links.json` + `events.json`, rollback via debug page) | ✅ Working |
 | Battle faint cascade prevention (monKey-indexed HP cache + force_fainted_keys guard) | ✅ Working |
 | Item integrity protection (snapshot/verify during party sync — prevents CFRU item swaps) | ✅ Working |
@@ -774,6 +791,13 @@ The status page displays ability names for party mons, PC box mons, and enemy/wi
 2. **Fallback (gBattleMons cache):** During battle, ability IDs are read directly from `gBattleMons[battler].ability` (offset `+0x20`). These are cached in `_ability_cache` keyed by monKey and used as a fallback when substruct decryption fails or returns 0
 3. **Server-side:** `pokemon_data.py` provides `ability_name(ability_id, is_rr)` and `ability_description(ability_id, is_rr)`. For RR/CFRU (`is_rr=True`), uses a 255-entry table with RR-specific ability names and descriptions (sourced from funnotbun's RR Dex). For vanilla/Gen 4 (`is_rr=False`), uses a complete 165-entry vanilla table (Gen III–V, IDs 1-165) with correct standard ability names and descriptions. Hovering ability names on the status page shows a tooltip with the description.
 
+**Per-species ability name overrides (RR/CFRU).** Some abilities have species-specific renames in Radical Red (e.g. Mightyena's "Intimidate" displays as "Strong Jaws"). `pokemon_data.CFRU_ABILITY_NAME_OVERRIDES` is a merge of two layers:
+
+- `CFRU_ABILITY_NAME_OVERRIDES_GENERATED` — auto-built from funnotbun's `data/abilities/duplicate_abilities.h` by `tools/gen_ability_name_overrides_rr.py`. Output is written to `server/rr_ability_overrides.py` (regenerate by running the script; ~87 entries covering Shell Armor on Slowbro-Mega, Vital Spirit on Mankey/Primeape, Air Lock on Rayquaza, etc.).
+- `CFRU_ABILITY_NAME_OVERRIDES_MANUAL` — hand-curated entries for species not yet in funnotbun's upstream file. Shadows GENERATED on key conflict, so locally-observed renames always win.
+
+Override keys are `(ability_id, natdex_base_form)`. Form collisions (e.g. Kyurem-Black "Teravolt" and Kyurem-White "Turboblaze" both mapping to NatDex 646 with `ABILITY_MOLDBREAKER`) are detected by the generator and emit a warning; both entries are dropped so neither shadows the wrong form.
+
 **Profile-specific gBaseStats addresses:**
 | Profile | gBaseStats address | Source |
 |---|---|---|
@@ -871,6 +895,30 @@ In CFRU, `gPlayerParty` is **not updated during battle** — the game engine cop
 5. Party diff (faint/whiteout detection)
 
 **Double-buffer party diff:** `index_party()` uses two independent entry pools (one per buffer frame) to compare previous and current party state. Each buffer owns its own pre-allocated entry tables so that writing current-frame HP never overwrites previous-frame data — this is essential for detecting HP transitions (alive → fainted).
+
+### Doubles battle detection (Gen 3)
+
+`is_doubles` is set on the battle state when `gBattlersCount >= 4` (`M.isDoubleBattle()` in `lua/memory_gba.lua`, `BATTLE_TYPE_DOUBLE_MASK` constant; works on all profiles including RR). Active battlers are read from `gBattlerPartyIndexes`: players are battlers 0+2, enemies are battlers 1+3. The status page renders a DOUBLES chip in the battle panel header; the `enemy-focus` overlay renders both active foes side-by-side via `.focus-mons.doubles`; the player `focus` overlay does the same when two party mons are active.
+
+Singles also use `gBattlerPartyIndexes[0]`/`[1]` as the primary active-detection path, with species+level match against `gBattleMons` as a fallback when the index read is stale (`idx >= 6`, e.g. CFRU address drift). Gen 4/5 clients emit `evt.is_doubles=false` stubs for now.
+
+### Enemy moves and live PP (Gen 3)
+
+Each foe row in the status battle panel has a collapsible "Moves (N)" table. For active enemy battlers, moves and PP come from `gBattleMons[1]` (and `gBattleMons[3]` in doubles) at the following offsets:
+
+- `+0x0C` — moves (4 × `uint16`)
+- `+0x24` — current PP (4 × `uint8`)
+- `+0x3A` — PP-Up bonuses (packed in one `uint8`)
+
+The Lua client overlays these onto the matching enemy party entry so post-use PP shows immediately. CFRU's `battle_seen_enemies` accumulator and the player party snapshot also forward `pp_bonuses`. For full party slots (not just active battlers), `M.decryptMoves` and `M.decryptPpBonuses` in `memory_gba.lua` decode moves/PP/ppBonuses from substructs (CFRU unencrypted layout and vanilla/AP encrypted substruct both supported).
+
+Server enrichment (`_enrich_party` / `_enrich_battle_state` in `server/server.py`) resolves raw move IDs via `adapter.move_data()`, attaches `current_pp` from `raw_pp[]`, and applies the PP-Up multiplier:
+
+```
+max_pp = base_pp + (base_pp * pp_ups) // 5
+```
+
+Without this multiplier, RR trainer mons with PP-Ups would show e.g. `56/35` instead of `56/56`. The formula is guarded by `if base_pp:` so unknown moves (base_pp = 0) don't divide-by-zero. The status page row uses a `data-key` so morphDOM preserves the user-toggled `<details open>` state across SSE refreshes.
 
 ---
 
@@ -1194,6 +1242,8 @@ A floating, draggable panel injected by `calc/src/js/slink_bridge.js` connects t
 The panel saves its position, collapsed state, and Prep tab selections (mode, trainer, encounter) in `localStorage`. It reconnects automatically via SSE on disconnect (3-second retry). Pings arriving while the user is interacting with the panel are deferred until `mouseup` to prevent DOM rebuilds mid-interaction.
 
 **Server endpoint:** `GET /api/calc/mons` — returns per-player party, linked pairs, and enemy battle data in calc-friendly JSON format including `showdown_paste`, `sprite_html`, `hp_pct`, `ability_name`, `item_name`, and matched `moves`. See [JSON API](#json-api) for the full response shape.
+
+**Species form normalization for calc.** The server emits species form names as `"Species (Form)"` or `"Species Form"` (e.g. `"Lycanroc (Dusk)"`, `"Necrozma (Dusk Mane)"`, `"Deoxys Attack"`), but Smogon's calc pokedex is keyed on hyphenated names (`"Lycanroc-Dusk"`, `"Necrozma-Dusk-Mane"`, `"Deoxys-Attack"`). `_normalizeSpeciesForCalc()` in `calc/src/js/slink_bridge.js` tries the name as-is, then `"Species (Form)"` → `"Species-Form"` (internal spaces in the form word also hyphenated), then plain space → hyphen. An override map exists for cases the rules can't catch. This covers Wormadam, Rotom, Burmy, Arceus, Silvally, Mega forms, Necrozma fusion forms, Pumpkaboo/Gourgeist sizes, Deoxys, and Lycanroc Dusk in one shot. Lookups that still miss surface a toast with the original (user-friendly) name.
 
 ### Trainer Set Matching
 
