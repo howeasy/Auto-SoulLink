@@ -433,14 +433,19 @@ class TestMoveData:
         assert isinstance(name, str)
 
     def test_base_adapter_stubs(self):
-        """Adapters that don't ship a move table — Gen 1 here — return empty strings
-        and None for move_name / move_data. Gen 4 has its own table (GEN4_MOVE_DATA)
-        covering IDs 1-467; Gen 1 has no move metadata in the repo.
+        """Adapters with their own move table return real data; the base-class
+        stub returns "" / None for adapters without one. Gen 1 ships its own
+        moves.json (1-165), Gen 4 has GEN4_MOVE_DATA (1-467), Gen 3 has
+        VANILLA_MOVE_DATA. The base stub is exercised by an out-of-range ID.
         """
         from server.adapters.gen1_rby import Gen1Adapter
         adapter = Gen1Adapter()
-        assert adapter.move_name(85) == ""
-        assert adapter.move_data(85) is None
+        # Move 85 (Thunderbolt) is real Gen 1 data — confirm the table is wired.
+        assert adapter.move_name(85) == "Thunderbolt"
+        assert adapter.move_data(85) is not None
+        # Out-of-range ID falls through to the base-class stub.
+        assert adapter.move_name(9999) == ""
+        assert adapter.move_data(9999) is None
 
     def test_other_adapters_ignore_form_arg(self):
         """Non-gen4 adapters accept the form parameter on sprite_html (Phase 5's
