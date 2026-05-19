@@ -1174,6 +1174,13 @@ M.SE_BOO     = 22
 M.SE_SUCCESS = 25
 M.SE_FAILURE = 26
 M.SE_SHINY   = 95
+-- Mirrors the gen3 event-SE constants so the gen4/5 clients can refer to
+-- them uniformly. Playback is a no-op on NDS until SDAT injection lands,
+-- so the actual ids don't matter today.
+M.SE_NUZLOCKE_START = 95
+M.SE_GAME_OVER      = 26
+M.SE_NEW_LINK       = 25
+M.SE_LINKED_KO      = 16
 function M.playSE(songNum)
     -- NDS audio injection is non-trivial (SDAT). Server can still emit play_sound
     -- commands; the client logs them but doesn't actually play. Future work.

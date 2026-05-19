@@ -259,8 +259,23 @@ GEN3.profiles = {
             [22] = 0x086B5ADC,  -- SE_BOO
             [25] = 0x086B5BB0,  -- SE_SUCCESS (SE_SEIKAI)
             [26] = 0x086B5BE0,  -- SE_FAILURE (SE_HAZURE)
-            [95] = 0x086B6E70,  -- SE_SHINY   (SE_REAPOKE)
+            [95]  = 0x086B6E70,  -- SE_SHINY   (SE_REAPOKE)
+            -- RR-only event SE bank, all addresses verified by playing each
+            -- entry through lua/tests/test_se_audit.lua against a live RR
+            -- 4.1 ROM (test_se_audit.lua "audit slot N" → SE_SONG_HEADERS[N]).
+            [2]   = 0x086B56B0,  -- "new encounter" chime    (drives SE_NEW_LINK)
+            [79]  = 0x086B6A2C,  -- "linked pair KO" sting   (drives SE_LINKED_KO)
+            [193] = 0x086BA070,  -- "game over" jingle       (drives SE_GAME_OVER)
+            [268] = 0x086C0120,  -- "nuzlocke start" fanfare (drives SE_NUZLOCKE_START)
         },
+        -- Override default event-SE mappings so banner triggers in
+        -- lua/clients/*_client.lua play RR's dedicated audio instead of
+        -- the generic canonical SEs (SE_SHINY / SE_FAILURE / SE_SUCCESS /
+        -- SE_FAINT).
+        SE_NUZLOCKE_START          = 268,
+        SE_GAME_OVER               = 193,
+        SE_NEW_LINK                = 2,
+        SE_LINKED_KO               = 79,
         CFRU_NO_ENCRYPT            = true,
         TRAINER_OPPONENT_ADDR      = 0x020386AE,  -- gTrainerBattleOpponent_A (game uses 1-based IDs)
         -- CFRU stores a pointer to gBaseStats at ROM 0x080001BC.

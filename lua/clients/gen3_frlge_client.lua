@@ -330,7 +330,7 @@ local function dispatch_commands(cmds)
                             M.forceFaint(slot)
                             _battle_hp_cache[c.key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
                             force_fainted_keys[c.key] = true
-                            M.playSE(M.SE_FAINT)
+                            M.playSE(M.SE_LINKED_KO)
                             console.log(string.format("[SLink-FRLGE]   ↳ DISPATCHED force_faint slot=%d key=%s in_battle=%s", slot, c.key, tostring(currently_in_battle)))
                             hud_show("!! " .. nick_label(c.key) .. " force-fainted!", 255, 80, 80, 360)
                         end
@@ -402,6 +402,7 @@ local function dispatch_commands(cmds)
             console.log("[SLink-FRLGE]   ↳ unresolve_area: "..c.area_id.." (species clause reroll)")
         elseif c.cmd == "game_over" then
             game_over_flag = true
+            if M.playSE then M.playSE(M.SE_GAME_OVER) end
             HUD.set_game_over()
             console.log("[SLink-FRLGE]   ↳ GAME OVER — SOUL LINK")
         elseif c.cmd == "rebuild_start" then
@@ -936,7 +937,7 @@ local function exec_box_mon(key)
             if bi then
                 console.log(string.format("[SLink-FRLGE] ✓ box_mon: %s → box%d s%d", key:sub(1,8), bi, si))
                 sync_written_keys[key] = true
-                hud_show("v " .. nick_label(key) .. " deposited", 100, 180, 255, 200)
+                hud_show("↓ " .. nick_label(key) .. " deposited", 100, 180, 255, 200)
                 -- Cache stats on server so party_mon can restore them correctly later.
                 -- Use stats_cache (not party_to_box) to avoid triggering sync feedback loop.
                 send({event="stats_cache", key=key, stats=stats},
@@ -1008,7 +1009,7 @@ local function exec_party_mon(key, stats)
         -- Populate nick_cache from the retrieved mon's actual nickname in RAM
         local ok_n, nick = pcall(M.readNickname, ret_base)
         if ok_n and nick and nick ~= "" then nick_cache[key] = nick end
-        hud_show("^ " .. nick_label(key) .. " retrieved", 100, 255, 160, 200)
+        hud_show("↑ " .. nick_label(key) .. " retrieved", 100, 255, 160, 200)
         -- Notify server so it can update its party_keys for this player.
         send({event="sync_retrieve_done", key=key},
              "sync_retrieve_done:"..key:sub(1,8), true, true)
@@ -1053,7 +1054,7 @@ local function exec_memorialize(key)
             console.log("[SLink-FRLGE] ⚠ memorialize VERIFY FAIL: key still in party after memorialize!")
         end
 
-        hud_show("X " .. nick_label(key) .. " memorialized", 255, 140, 40, 300)
+        hud_show("† " .. nick_label(key) .. " memorialized", 255, 140, 40, 300)
         send({event="memorialize_done", key=key, box=bi}, "memorialize_done:"..key:sub(1,8), true)
         -- Rename overflow boxes (Box 12 → "DEAD 2", Box 11 → "DEAD 3", etc.)
         if bi ~= M.MEMORIAL_BOX and not memorial_overflow_renamed[bi] then
@@ -1216,7 +1217,7 @@ local function on_frame()
                         _battle_hp_cache[key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
                         force_fainted_keys[key] = true
                         pending_battle_faints[key] = nil
-                        M.playSE(M.SE_FAINT)
+                        M.playSE(M.SE_LINKED_KO)
                         console.log(string.format("[SLink-FRLGE]   ↳ DEFERRED force_faint applied slot=%d key=%s", slot, key))
                         hud_show("!! " .. nick_label(key) .. " force-fainted!", 255, 80, 80, 360)
                     end
@@ -1356,7 +1357,7 @@ local function on_frame()
                 if not resolved_areas[area] then
                     local disp = area_display(area)
                     hud_show("** NEW ENCOUNTER **  " .. disp, 255, 220, 60, 240)
-                    M.playSE(M.SE_SUCCESS)
+                    M.playSE(M.SE_NEW_LINK)
                 end
             else
                 -- Hello response hasn't arrived yet — defer HUD until resolved_areas seeds.
@@ -1474,7 +1475,7 @@ local function on_frame()
                 and not resolved_areas[battle_area_id] and not game_module.is_gift_area(battle_area_id) then
             local disp = area_display(battle_area_id)
             hud_show("** NEW ENCOUNTER **  " .. disp, 255, 220, 60, 360)
-            M.playSE(M.SE_SUCCESS)
+            M.playSE(M.SE_NEW_LINK)
         end
     end
 
@@ -2471,6 +2472,8 @@ local function on_frame()
     if not nuzlocke_active and frame_count % 15 == 0 and M.hasPokeballs() then
         nuzlocke_active = true
         console.log("[SLink-FRLGE] nuzlocke ACTIVE (pokeballs in bag)")
+        HUD.nuzlocke_start("Nuzlocke Start!")
+        if M.playSE then M.playSE(M.SE_NUZLOCKE_START) end
     end
 
     -- ── safe ─────────────────────────────────────────────────────────────────

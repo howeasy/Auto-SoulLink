@@ -234,7 +234,7 @@ local function dispatch_commands(cmds)
         if c.cmd == "force_faint" and c.key then
             if not writes_enabled then
                 console.log("[SLink]   ↳ force_faint BLOCKED (writes disabled)")
-                hud_show("⚠ force_faint blocked — save not validated", 255, 80, 80, 360)
+                hud_show("!! force_faint blocked — save not validated", 255, 80, 80, 360)
             else
                 -- Scan party for matching PID; write curHP = 0
                 local count = M.readPartyCount()
@@ -300,6 +300,7 @@ local function dispatch_commands(cmds)
             hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
         elseif c.cmd == "game_over" then
             game_over_flag = true
+            if M.playSE then M.playSE(M.SE_GAME_OVER) end
             HUD.set_game_over()
             console.log("[SLink]   ↳ GAME OVER — SOUL LINK")
         elseif c.cmd == "rebuild_start" then
@@ -361,7 +362,7 @@ local function exec_memorialize(key)
     local pc_base = M.pcStorageBase()
     if not pc_base then
         console.log("[SLink]   ↳ memorialize EXEC FAIL: PC storage unreachable")
-        hud_show("⚠ memorialize: PC storage unavailable", 255, 140, 40, 600)
+        hud_show("!! memorialize: PC storage unavailable", 255, 140, 40, 600)
         send({event="memorialize_failed", key=key, reason="pc_unavailable"},
              "memorialize_failed:"..key:sub(1,8), true, true)
         return
@@ -410,7 +411,7 @@ local function exec_memorialize(key)
                 local pid = mem_u32(addr)
                 if pid ~= 0 and fmt("%08X", pid) == pid_hex then
                     console.log(fmt("[SLink]   ↳ memorialize: %s already in Box 18 s%d", pid_hex, slot + 1))
-                    hud_show("✓ " .. nick_label(key) .. " already memorialized", 100, 255, 100, 360)
+                    hud_show("† " .. nick_label(key) .. " already memorialized", 100, 255, 100, 360)
                     send({event="memorialize_done", key=key, box=17, slot=slot},
                          "memorialize_done:"..pid_hex, true)
                     return
@@ -435,7 +436,7 @@ local function exec_memorialize(key)
     end
     if not mem_box then
         console.log("[SLink]   ↳ memorialize EXEC FAIL: ALL PC boxes full!")
-        hud_show("⚠ All PC boxes full — cannot memorialize", 255, 80, 80, 600)
+        hud_show("!! All PC boxes full — cannot memorialize", 255, 80, 80, 600)
         send({event="memorialize_failed", key=key, reason="box_full"},
              "memorialize_failed:"..key:sub(1,8), true, true)
         return
@@ -457,7 +458,7 @@ local function exec_memorialize(key)
             -- Safety: don't reduce party below 1 (game crash protection)
             if count <= 1 then
                 console.log("[SLink]   ↳ memorialize: last party mon — leaving in party")
-                hud_show("⚠ Can't memorialize last mon", 255, 200, 60, 240)
+                hud_show("!! Can't memorialize last mon", 255, 200, 60, 240)
                 return
             end
             local found_slot = nil
@@ -493,13 +494,13 @@ local function exec_memorialize(key)
         end
         console.log(fmt("[SLink]   ↳ memorialize OK: %s (%s) → Box %d slot %d",
             pid_hex, found_in, mem_box + 1, empty + 1))
-        hud_show(fmt("X %s memorialized → Box %d", nick_label(key), mem_box + 1),
+        hud_show(fmt("† %s memorialized → Box %d", nick_label(key), mem_box + 1),
             255, 140, 40, 360)
         send({event="memorialize_done", key=key, box=mem_box, slot=empty},
              "memorialize_done:"..pid_hex, true)
     else
         console.log(fmt("[SLink]   ↳ memorialize VERIFY FAIL: wrote to Box %d s%d but PID mismatch", mem_box + 1, empty + 1))
-        hud_show("⚠ memorialize verify failed!", 255, 80, 80, 600)
+        hud_show("!! memorialize verify failed!", 255, 80, 80, 600)
         send({event="memorialize_failed", key=key, reason="verify_mismatch"},
              "memorialize_failed:"..pid_hex, true, true)
     end
@@ -539,7 +540,7 @@ local function exec_box_mon(key)
     end
     if not dst_box then
         console.log("[SLink]   ↳ box_mon FAIL: all PC boxes full!")
-        hud_show("⚠ PC boxes full — can't deposit", 255, 80, 80, 600)
+        hud_show("!! PC boxes full — can't deposit", 255, 80, 80, 600)
         return
     end
     -- Read stats before depositing (for server stats_cache)
@@ -570,7 +571,7 @@ local function exec_box_mon(key)
              "stats_cache:"..key:sub(1,8), true, true)
     end
     console.log(fmt("[SLink]   ↳ box_mon OK: %s → Box %d slot %d", key:sub(1,8), dst_box + 1, dst_slot + 1))
-    hud_show(fmt("v %s deposited → Box %d", nick_label(key), dst_box + 1), 100, 180, 255, 240)
+    hud_show(fmt("↓ %s deposited → Box %d", nick_label(key), dst_box + 1), 100, 180, 255, 240)
 end
 
 local function exec_party_mon(key, stats)
@@ -1120,7 +1121,7 @@ local function on_frame()
                 console.log(fmt("[SLink]   ↳ memorialize re-queued (attempt %d/5)", cmd._retries))
             else
                 console.log("[SLink]   ↳ memorialize DROPPED: " .. (cmd.key or "?"):sub(1,8) .. " not found")
-                hud_show("⚠ memorialize: mon not found", 255, 140, 40, 600)
+                hud_show("!! memorialize: mon not found", 255, 140, 40, 600)
                 send({event="memorialize_failed", key=cmd.key, reason="not_found"},
                      "memorialize_failed:"..(cmd.key or "?"):sub(1,8), true, true)
             end
@@ -1419,6 +1420,8 @@ local function on_frame()
     if not nuzlocke_active and writes_enabled and frame_count % 15 == 0 and hasPokeballs() then
         nuzlocke_active = true
         console.log("[SLink] nuzlocke ACTIVE (pokeballs in bag)")
+        HUD.nuzlocke_start("Nuzlocke Start!")
+        if M.playSE then M.playSE(M.SE_NUZLOCKE_START) end
     end
 
     -- 12. safe — first overworld frame after battle.

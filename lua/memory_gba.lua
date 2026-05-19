@@ -58,6 +58,7 @@ local _PROFILE_RESET_KEYS = {
     "GMAIN_ADDR", "SB1_PTR_ADDR", "SB2_PTR_ADDR", "PSP_PTR_ADDR",
     "SB2_ENC_KEY_OFFSET", "SB1_BALL_POCKET_OFFSET", "SB1_BALL_POCKET_COUNT",
     "SB1_FLAGS_OFFSET", "SB1_VARS_OFFSET", "SE_SONG_HEADERS",
+    "SE_NUZLOCKE_START", "SE_GAME_OVER", "SE_NEW_LINK", "SE_LINKED_KO",
     "SPECIAL_VAR_BOX_ID_ADDR", "SPECIAL_VAR_BOX_POS_ADDR",
     "TASKS_BASE_ADDR", "TASK_STRUCT_SIZE",
     "POST_BATTLE_WRITER_TASKS",
@@ -106,6 +107,11 @@ function M.applyProfile(prof, profile_name)
     M.BOX_NAMES_OFFSET = 0x8344  -- vanilla/AP: box names offset in PokemonStorage
     M.CFRU_COMPRESSED_BOX = false
     M.CFRU_NO_ENCRYPT = false
+    -- Profile-overridable event SE choices (canonical pret/CFRU ids by default).
+    M.SE_NUZLOCKE_START = 95   -- SE_SHINY
+    M.SE_GAME_OVER      = 26   -- SE_FAILURE
+    M.SE_NEW_LINK       = 25   -- SE_SUCCESS
+    M.SE_LINKED_KO      = 16   -- SE_FAINT
 
     -- Step 2: Store profile name
     M.profile_name = profile_name or "unknown"
@@ -1691,6 +1697,15 @@ M.SE_BOO     = 22
 M.SE_SUCCESS = 25
 M.SE_FAILURE = 26
 M.SE_SHINY   = 95
+-- Higher-level "what should play when X happens" mappings. Default to the
+-- closest canonical SE for portability; RR overrides via its profile to point
+-- at custom audio slots that fit the events better (268 = nuzlocke fanfare,
+-- 193 = game-over jingle, 171 = new soul-link cue, 79 = linked-pair KO,
+-- all auditioned via lua/tests/test_se_audit.lua).
+M.SE_NUZLOCKE_START = 95   -- → SE_SHINY by default; RR profile overrides
+M.SE_GAME_OVER      = 26   -- → SE_FAILURE by default; RR profile overrides
+M.SE_NEW_LINK       = 25   -- → SE_SUCCESS by default; RR profile overrides
+M.SE_LINKED_KO      = 16   -- → SE_FAINT by default; RR profile overrides
 
 -- MusicPlayerInfo struct offsets (64 bytes, m4a_internal.h)
 local O_MPL_SONG_HDR    = 0x00

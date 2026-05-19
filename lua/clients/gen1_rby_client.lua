@@ -282,6 +282,7 @@ local function dispatch_commands(cmds)
             resolved_areas[c.area_id] = nil
             console.log("[SLink-RBY]   ↳ unresolve_area: " .. c.area_id)
         elseif c.cmd == "game_over" then
+            if M.playSE then M.playSE(M.SE_GAME_OVER) end
             HUD.set_game_over()
             console.log("[SLink-RBY]   ↳ GAME OVER — SOUL LINK")
         elseif c.cmd == "rebuild_start" then
@@ -1055,6 +1056,8 @@ local function on_frame()
     if not nuzlocke_active and M.hasPokeballs() then
         nuzlocke_active = true
         console.log("[SLink-RBY] nuzlocke ACTIVE (Pokéballs obtained)")
+        HUD.nuzlocke_start("Nuzlocke Start!")
+        if M.playSE then M.playSE(M.SE_NUZLOCKE_START) end
     end
 
     -- 9. Party diff (capture, faint, evolution, sync detection)

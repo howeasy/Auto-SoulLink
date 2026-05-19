@@ -68,7 +68,7 @@ local function render_hud()
     gui.drawBox(cfg.hud_x - 2, cfg.hud_y - 2,
                 cfg.hud_right, cfg.hud_y + cfg.font_size,
                 0xFF000000, 0xBB000000)
-    gui.drawText(cfg.hud_x, cfg.hud_y, msg.text, msg.color,
+    gui.drawText(cfg.hud_x, cfg.hud_y - 1, msg.text, msg.color,
                  nil, cfg.font_size, "Courier New", "Bold")
     hud_visible = true
     msg.frames = msg.frames - 1
@@ -120,7 +120,7 @@ local function render_game_over()
     if not game_over then return end
     local gy = cfg.gameover_y
     gui.drawBox(0, gy, cfg.screen_w, gy + 24, 0xFFBB0000, 0xDD990000)
-    gui.drawText(8, gy + 4, "GAME OVER - SOUL LINK", "#FFFFFF",
+    gui.drawText(8, gy + 4, "GAME OVER!", "#FFFFFF",
                  nil, cfg.font_size + 2, "Courier New", "Bold")
 end
 
@@ -150,10 +150,50 @@ local function render_rebuilding()
                  nil, cfg.font_size, "Courier New", "Bold")
 end
 
+-- ── Nuzlocke-start transient banner ─────────────────────────────────────────
+-- Blue celebratory banner shown the moment the player first picks up Pokéballs.
+-- Auto-dismisses; a later rebuild/game_over banner overdraws if both collide.
+local nuzlocke_start_text    = nil
+local nuzlocke_start_frames  = 0
+local nuzlocke_start_visible = false
+
+function H.nuzlocke_start(text, duration_frames)
+    nuzlocke_start_text   = text or "Nuzlocke Start!"
+    nuzlocke_start_frames = duration_frames or 180
+end
+
+function H.is_nuzlocke_start()
+    return nuzlocke_start_text ~= nil
+end
+
+local function render_nuzlocke_start()
+    -- When inactive (text cleared or game_over overdrawing): if we painted
+    -- the banner last frame, paint a transparent box over the same region
+    -- once to erase it. BizHawk's gui surface persists last-painted pixels
+    -- until something overdraws them, so without this the banner stays
+    -- on-screen until the next map transition repaints the area.
+    if not nuzlocke_start_text or game_over then
+        if nuzlocke_start_visible then
+            local ny = cfg.gameover_y
+            gui.drawBox(0, ny, cfg.screen_w, ny + 24, 0x00000000, 0x00000000)
+            nuzlocke_start_visible = false
+        end
+        return
+    end
+    local ny = cfg.gameover_y
+    gui.drawBox(0, ny, cfg.screen_w, ny + 24, 0xFF0066AA, 0xDD003388)
+    gui.drawText(8, ny + 4, nuzlocke_start_text, "#FFFFFF",
+                 nil, cfg.font_size + 2, "Courier New", "Bold")
+    nuzlocke_start_visible = true
+    nuzlocke_start_frames = nuzlocke_start_frames - 1
+    if nuzlocke_start_frames <= 0 then nuzlocke_start_text = nil end
+end
+
 -- ── Master render (call once per frame, after all game logic) ───────────────
 function H.render()
     render_prompt()
     render_hud()
+    render_nuzlocke_start()
     render_rebuilding()
     render_game_over()
 end
@@ -165,6 +205,9 @@ function H.clear()
     hud_visible = false
     prompt_visible = false
     rebuild_text = nil
+    nuzlocke_start_text = nil
+    nuzlocke_start_frames = 0
+    nuzlocke_start_visible = false
 end
 
 return H
