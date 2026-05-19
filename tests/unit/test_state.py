@@ -741,6 +741,27 @@ def test_no_catch_creates_dead_zone(tmp_path, monkeypatch):
     assert state.area_states["route_1"] == AreaStatus.DEAD_ZONE
 
 
+def test_no_catch_dead_zone_queues_hud_banner_for_both(tmp_path, monkeypatch):
+    """Dead-zone creation must queue both SE_FAILURE and a HUD banner naming the area for both players."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    cmds_b = state.handle_event("b", {"event": "no_catch", "area_id": "route_1"})
+    cmds_a = state.handle_event("a", {"event": "tick"})
+
+    def _has_dz_hud(cmds):
+        return any(
+            c.get("cmd") == "hud_show" and "dead zone" in c.get("text", "").lower()
+            for c in cmds
+        )
+    def _has_failure_se(cmds):
+        return any(c.get("cmd") == "play_sound" and c.get("sound") == 26 for c in cmds)
+
+    assert _has_failure_se(cmds_b), "Triggering player must hear SE_FAILURE"
+    assert _has_failure_se(cmds_a), "Partner must hear SE_FAILURE"
+    assert _has_dz_hud(cmds_b), "Triggering player must see dead-zone HUD banner"
+    assert _has_dz_hud(cmds_a), "Partner must see dead-zone HUD banner"
+
+
 def test_no_catch_retires_partner_pending_capture(tmp_path, monkeypatch):
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = SoulLinkState()
