@@ -1,67 +1,37 @@
 # Gen 2 Game Data (Gold/Silver/Crystal)
 
 Data files for Gen 2 Pokémon games (Game Boy / Game Boy Color).
+The directory name reflects Crystal as the reference profile; Gold and Silver
+ship as variant profiles using pret/pokegold addresses.
 
-## Status: Feature-parity with Gen 3 (Crystal + Gold + Silver — pending Phase 9-smoke live verification)
+## Status
 
-Phases 0-8 of `gen1-gen2-parity` brought Crystal up to Gen 3's feature set:
-moves+PP, stat stages, enemy moves+PP, trainer names, encounter tables, SFX
-infrastructure, and Archipelago detection (gerbiljames fork). Phase 11
-added Gold + Silver as variant profiles with pret-authoritative addresses
-from pret/pokegold (every address verified by
-[tools/verify_profile_addresses.py](../../../tools/verify_profile_addresses.py)).
+Feature-parity with Gen 3 — Crystal, Gold, and Silver supported. Every
+profile address verified by [tools/verify_profile_addresses.py](../../../tools/verify_profile_addresses.py)
+against the pret decomp .sym output. Runtime smoke-test checklist in
+[docs/gen1_gen2_runtime_checks.md](../../../docs/gen1_gen2_runtime_checks.md).
 
-## Data Files
+## Files
 
 - `area_map.json` — Route/city → area_id mapping (124 entries)
 - `species_types.json` — Species type data (251 species)
 - `gender_ratios.json` — Species gender ratio data
 - `item_names.json` — Item ID → name mapping
-- `moves.json` — 251 moves with name/type/power/accuracy/pp/split/effect_chance (Phase 3)
-- `trainers.json` — class_id → class_name + named Johto/Kanto leaders + E4 + Red/Blue (Phase 5)
-- `encounter_tables.json` — wild encounter slots by area_id with Morn/Day/Nite variants (Phase 6; partial coverage)
+- `moves.json` — 251 moves: name, type, power, accuracy, pp, split, effect_chance
+- `trainers.json` — `classes` (class_id → class name) + `named_trainers` (Johto/Kanto leaders, E4, rivals)
+- `encounter_tables.json` — Wild encounter slots by area_id with Morn/Day/Nite variants (partial coverage; extend by adding more areas)
+
+## Sources
+
+- [pret/pokecrystal](https://github.com/pret/pokecrystal) — Crystal decompilation
+- [pret/pokegold](https://github.com/pret/pokegold) — Gold/Silver decompilation
+- Archipelago: gerbiljames fork (auto-detected via seed signature)
 
 ## Notes
 
-- Mon identity: DVs + OT ID. Shiny determined by DVs (Atk DV = 2/3/6/7/10/11/14/15, others = 10).
-- Gender: Determined by Atk DV vs species threshold.
-- Platform: Game Boy Color (Gambatte core in BizHawk).
-- Memory map: Well-documented via pret/pokecrystal decomp.
-- Crystal only — Gold/Silver can be added later as variant profiles in `gen2_crystal.lua`.
-
-## Phase 1 (gen1-gen2-parity branch) — egg-gift classification
-
-Eggs in Gen 2 are flagged with `species == 0xFD` (constant `EGG` in
-pret/pokecrystal). The Crystal Lua client reads the party species byte and
-forwards `is_egg=true` on capture events. The server's existing
-`_is_gift_capture(area_id, is_egg)` then routes:
-
-- **Mystery Egg from Mr. Pokemon** (received in his house, joins party on
-  Route 30 or wherever the player is at hatch time): `is_egg=True` +
-  non-daycare area → treated as gift. Bypasses Pokéball gate, skips
-  quarantine.
-- **Daycare-bred egg / Odd Egg** (received from the Day-Care Man on
-  Route 34): `is_egg=True` + daycare area (`route_34`) → normal capture
-  flow. Player must have Pokéballs; the egg gets quarantined to the box
-  until linked with the partner.
-- **Wild capture on Route 34 grass**: `is_egg=False`, `is_gift_area=False`
-  → normal capture flow (this corrects a pre-Phase-1 bug where Route 34
-  was in `_GIFT_AREAS` and *every* capture there was misclassified as a
-  gift).
-
-## Phase 1 — memorialize routing
-
-The Crystal client now routes `memorialize` to `M.depositMemorialMon`,
-which writes dead pairs to Box 14 (the dedicated graveyard box at SRAM
-offset 0x79E0). Previously it used `depositPartyMon`, which placed dead
-mons in the *current* PC box and made the graveyard hard to find.
-
-## Phase 0 audit — address verification pending
-
-The 4 `TODO: verify` addresses in `lua/games/gen2_crystal.lua`
-(enemy_count, enemy_base, enemy_species_list, battle_flag) — plus every
-other address in the profile — have a diagnostic Lua probe at
-`lua/tests/test_gen2_profile_audit.lua`. See
-for the audit doc and
-[`docs/gen1_gen2_runtime_checks.md`](../../../docs/gen1_gen2_runtime_checks.md) for the live
-verification checklist.
+- Mon identity: composite key `DDDD:TTTT:SS` (DVs + OT ID + species byte).
+- Shiny: derived from DVs (Atk DV in {2,3,6,7,10,11,14,15}, others = 10).
+- Gender: Atk DV vs species threshold.
+- Platform: Game Boy Color — Gambatte core in BizHawk.
+- Memorial box: Box 14 (Crystal's dedicated graveyard box at SRAM offset 0x79E0).
+- Eggs: species byte `0xFD` (constant `EGG` in pret). The Mystery Egg from Mr. Pokémon is treated as a gift; daycare-bred / Odd Eggs from the Day-Care Man on Route 34 follow the normal capture flow (Pokéball required, quarantine until linked).

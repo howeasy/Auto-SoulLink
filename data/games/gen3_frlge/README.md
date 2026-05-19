@@ -1,6 +1,13 @@
-# FRLG Game Data
+# Gen 3 Game Data (FRLG + Emerald + Radical Red)
 
-Data files for Gen 3 FireRed/LeafGreen (vanilla, Archipelago, Radical Red).
+Data files for Gen 3 Pokémon games (Game Boy Advance).
+Naming convention: `gen3_frlge` covers FireRed, LeafGreen, and Emerald;
+the Radical Red CFRU hack runs on top of FireRed.
+
+## Status
+
+Stable — the reference adapter. Battle-tested across vanilla, Archipelago,
+and Radical Red 4.1 (CFRU). All other gens model their patterns on this one.
 
 ## Files
 
@@ -12,3 +19,20 @@ Data files for Gen 3 FireRed/LeafGreen (vanilla, Archipelago, Radical Red).
 - `rr_sprites.json` — RR sprite filename mappings
 - `rr_trainers.json` — RR trainer data
 - `rr_types.json` — 1328 RR species type overrides
+- `rr_encounters.json` — RR wild encounter tables (area → method → entries)
+
+## Sources
+
+- [pret/pokefirered](https://github.com/pret/pokefirered) — FRLG decompilation
+- [pret/pokeemerald](https://github.com/pret/pokeemerald) — Emerald decompilation
+- [Skeli789/Complete-Fire-Red-Upgrade](https://github.com/Skeli789/Complete-Fire-Red-Upgrade) — CFRU engine (RR base)
+- [funnotbun RR Pokédex](https://funnotbun.github.io/) — RR move/sprite data
+
+## Notes
+
+- Mon identity: `PID:OTID` (32-bit personality + 32-bit OT ID, hex format).
+- Shiny: `(otid_lo ^ otid_hi ^ pid_lo ^ pid_hi) < 8`.
+- Platform: Game Boy Advance — mGBA core in BizHawk. Memory domain: "System Bus" / "EWRAM" depending on read.
+- Variants: `firered` / `leafgreen` / `emerald` (vanilla), `firered_ap` / `leafgreen_ap` (Archipelago), `firered_rr` (Radical Red CFRU).
+- Memorial box: Box 14 (Emerald) / configurable per profile.
+- CFRU box format: compressed BoxPokemon with no encryption — distinct from vanilla's 80-byte struct.
