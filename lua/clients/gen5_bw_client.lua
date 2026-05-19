@@ -636,8 +636,11 @@ local _ip_buf = {{}, {}}
 local _ip_idx = 1
 local _ip_pool = {{}, {}}
 for _b = 1, 2 do
-    for _s = 0, 5 do _ip_pool[_b][_s] = {hp=0, maxHP=0, level=0, slot=0, species_id=0} end
+    for _s = 0, 5 do _ip_pool[_b][_s] = {hp=0, maxHP=0, level=0, slot=0, species_id=0, is_egg=false} end
 end
+
+-- is_egg cache keyed by PID — decrypt Block B only when a new key appears.
+local _egg_cache = {}
 
 local function index_party(in_battle)
     _ip_idx = (_ip_idx == 1) and 2 or 1
@@ -663,6 +666,15 @@ local function index_party(in_battle)
                 entry.level      = s.level
                 entry.slot       = i
                 entry.species_id = _mk_species[i] or 0
+                -- is_egg is stable for the lifetime of a mon's egg state;
+                -- decrypt Block B once and cache by key.
+                local is_egg = _egg_cache[k]
+                if is_egg == nil then
+                    local blk_b = M.decrypt_block_b(base)
+                    is_egg = blk_b and blk_b.is_egg or false
+                    _egg_cache[k] = is_egg
+                end
+                entry.is_egg = is_egg
                 t[k] = entry
             end
         end
@@ -683,16 +695,36 @@ local function build_party_snapshot(in_battle)
                 local species, ot_id, held_item, ability = M.decrypt_block_a_ext(base)
                 local nickname = M.readNickname(base)
                 if k and nickname then _nick_cache[k] = nickname end
+                local moves, pp, pp_bonuses, form, is_egg = nil, nil, 0, 0, false
+                local blk_b = M.decrypt_block_b(base)
+                if blk_b then
+                    moves = blk_b.moves
+                    pp    = blk_b.pp
+                    local ups = blk_b.pp_ups
+                    pp_bonuses = ((ups[1] & 0x3))
+                               | ((ups[2] & 0x3) << 2)
+                               | ((ups[3] & 0x3) << 4)
+                               | ((ups[4] & 0x3) << 6)
+                    form   = blk_b.form
+                    is_egg = blk_b.is_egg
+                end
+                local base_species = species or (_mk_species[i] or 0)
+                local display_species = GAME_MODULE.form_display_id(base_species, form)
                 snap[#snap+1] = {
                     key          = k,
                     hp           = s.hp,
                     maxHP        = s.maxHP,
                     level        = s.level,
-                    species_id   = species or (_mk_species[i] or 0),
+                    species_id   = display_species,
                     held_item_id = held_item or 0,
                     ability_id   = ability or 0,
                     nickname     = nickname or "",
                     status_cond  = s.status_cond or 0,
+                    moves        = moves,
+                    pp           = pp,
+                    pp_bonuses   = pp_bonuses,
+                    form         = form,
+                    is_egg       = is_egg,
                 }
             end
         end
@@ -1101,7 +1133,7 @@ local function on_frame()
                 all_known_keys[k]        = true
                 send({event="capture", key=k, hp=info.hp, maxHP=info.maxHP,
                       level=info.level, species_id=info.species_id or 0,
-                      area_id=evt_area},
+                      area_id=evt_area, is_egg=info.is_egg or false},
                      "capture(battle):" .. k:sub(1,8), true)
             elseif all_known_keys[k] then
                 if not pending_box_to_party[k] then
@@ -1133,7 +1165,7 @@ local function on_frame()
             local info = buf.info
             send({event="capture", key=k, hp=info.hp, maxHP=info.maxHP,
                   level=info.level, species_id=info.species_id or 0,
-                  area_id=buf.area},
+                  area_id=buf.area, is_egg=info.is_egg or false},
                  "capture(gift):" .. k:sub(1,8), true)
         end
     end
@@ -1243,8 +1275,8 @@ local function on_frame()
             area_id       = area,
             loc_name      = loc,
             in_battle     = in_battle,
-            -- TODO(NDS doubles): gBattlersCount address not yet discovered; always false.
-            is_doubles    = false,
+            -- doubleTripleFlag at BATTLE_MODE_ADDR (Gen 5 only): 1/2/3 = double/triple/rotation.
+            is_doubles    = M.isDoubleBattle(),
             badges        = M.readBadges1(),
             trainer_name  = M.readTrainerName(),
         }
@@ -1256,19 +1288,41 @@ local function on_frame()
             evt.is_trainer_battle = not M.isWildBattle()
             evt.trainer_id = M.readEnemyTrainerId()
             evt.opponent_name = M.readEnemyTrainerName()
+            local is_doubles_battle = evt.is_doubles
             local enemy_list = {}
             for ei = 0, 5 do
                 local es = M.enemyHP(ei)
                 if es then
                     local ea = M.enemyBattleAddr(ei)
                     local e_sid, e_item, e_ability = 0, 0, 0
+                    local e_moves, e_pp, e_pp_bonuses, e_form, e_is_egg = nil, nil, 0, 0, false
                     if ea then
                         local sp, _, hi, abl = M.decrypt_block_a_ext(ea)
                         e_sid = sp or 0; e_item = hi or 0; e_ability = abl or 0
+                        local blk_b = M.decrypt_block_b(ea)
+                        if blk_b then
+                            e_moves = blk_b.moves
+                            e_pp    = blk_b.pp
+                            -- Pack 4 × 2-bit PP Ups into a u8 (matches Gen 3 +0x3A pp_bonuses semantics)
+                            local ups = blk_b.pp_ups
+                            e_pp_bonuses = ((ups[1] & 0x3))
+                                         | ((ups[2] & 0x3) << 2)
+                                         | ((ups[3] & 0x3) << 4)
+                                         | ((ups[4] & 0x3) << 6)
+                            e_form  = blk_b.form
+                            e_is_egg = blk_b.is_egg
+                        end
                     end
+                    -- Active in singles = slot 0; in doubles = slots 0 and 1.
+                    local is_active = (ei == 0) or (is_doubles_battle and ei == 1)
+                    local e_display = GAME_MODULE.form_display_id(e_sid, e_form)
                     enemy_list[#enemy_list + 1] = {
-                        species_id=e_sid, level=es.level, hp=es.hp, maxHP=es.maxHP,
-                        held_item_id=e_item, ability_id=e_ability, active=(ei == 0),
+                        species_id=e_display, level=es.level, hp=es.hp, maxHP=es.maxHP,
+                        held_item_id=e_item, ability_id=e_ability,
+                        status_cond=es.status_cond or 0,
+                        moves=e_moves, pp=e_pp, pp_bonuses=e_pp_bonuses,
+                        form=e_form, is_egg=e_is_egg,
+                        active=is_active,
                     }
                 end
             end

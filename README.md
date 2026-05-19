@@ -10,9 +10,9 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 | 1 | Red, Blue, Yellow | US English | ⚠️ Experimental |
 | 2 | Crystal | GBC | ⚠️ Experimental |
 | 4 | HeartGold, SoulSilver, Platinum | Vanilla, Renegade Platinum | **✅ Feature-complete** (parity with Gen 3) |
-| 5 | Black, White, Black 2, White 2 | — | ⚠️ Experimental |
+| 5 | Black, White, Black 2, White 2 | US | 🧪 Beta — feature parity, awaiting live verification |
 
-> **Note:** Gen 3 and Gen 4 have full feature parity (moves/PP, stat stages, doubles, forms, egg detection, stream overlays). Live battle-struct addresses for Gen 4 doubles + stat stages are read-only-scannable via `lua/tests/test_gen4_battlers_count.lua` + `test_gen4_stat_stages.lua` and need a one-time live capture to populate the profile. Gen 1, 2, and 5 have unit tests and Lua clients but limited real-world testing.
+> **Note:** Gen 3 and Gen 4 have full feature parity (moves/PP, stat stages, doubles, forms, egg detection, stream overlays). Live battle-struct addresses for Gen 4 doubles + stat stages are read-only-scannable via `lua/tests/test_gen4_battlers_count.lua` + `test_gen4_stat_stages.lua` and need a one-time live capture to populate the profile. Gen 5 also has full feature parity with Gen 3 (enemy moves/PP, doubles detection, Unova form normalization, Gen 4-5 move data, hidden abilities); minimal BizHawk RAM-Watch verification remains (`lua/tests/test_gen5_block_b.lua` and `lua/tests/test_gen5_doubles.lua`). Gen 1 and 2 have unit tests and Lua clients but limited real-world testing.
 
 ## Quick Start
 
