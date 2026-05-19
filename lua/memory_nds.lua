@@ -1501,6 +1501,20 @@ function M.monKey(slotAddr)
     return fmt("%08X", r32(slotAddr))
 end
 
+-- Cached variant of monKey: keyed by slotAddr, invalidated when the
+-- underlying PID changes. Eliminates per-frame string.format churn on
+-- hot paths (party scan, box snapshot, battle enemy reads). Mirrors
+-- memory_gb.lua's and memory_gba.lua's monKeyCached pattern.
+M._mk_cache = {}
+function M.monKeyCached(slotAddr)
+    local pid = r32(slotAddr)
+    local c = M._mk_cache[slotAddr]
+    if c and c.pid == pid then return c.key end
+    local key = fmt("%08X", pid)
+    M._mk_cache[slotAddr] = { pid = pid, key = key }
+    return key
+end
+
 -- ── Debounced HP accessors (updated by M.init each frame) ────────────────────
 -- Falls back to a raw read if the cache has not yet confirmed a value
 -- (e.g. the first frame after clearDebounce or initial load).

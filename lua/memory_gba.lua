@@ -616,6 +616,21 @@ function M.monKey(base_addr)
     return fmt("%08X:%08X", p, o)
 end
 
+-- Cached variant of monKey: keyed by base_addr, invalidated when the
+-- underlying personality/OTID change. Eliminates per-frame string.format
+-- churn on hot paths (party scan, box snapshot, battle enemy reads).
+-- Mirrors memory_gb.lua's monKeyCached pattern.
+M._mk_cache = {}
+function M.monKeyCached(base_addr)
+    local p = mem_r32(base_addr + M.OFF_PERSONALITY)
+    local o = mem_r32(base_addr + M.OFF_OTID)
+    local c = M._mk_cache[base_addr]
+    if c and c.p == p and c.o == o then return c.key end
+    local key = fmt("%08X:%08X", p, o)
+    M._mk_cache[base_addr] = { p = p, o = o, key = key }
+    return key
+end
+
 function M.slotOccupied(base_addr)
     local flags = mem_r8(base_addr + M.OFF_FLAGS)
     local maxHP = mem_r16(base_addr + M.OFF_MAX_HP)
