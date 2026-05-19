@@ -28,7 +28,6 @@ def test_adapter_instantiation():
     "goldenrod_city",    # Eevee from Bill / Game Corner
     "olivine_city",      # Shuckle from Kirk
     "dragons_den",       # Dratini from Elder
-    "route_34",          # Odd Egg from Day-Care Man
     "route_35",          # Kenya the Spearow
     "mt_mortar",         # Tyrogue from Kiyo
     "cianwood_city",     # Shuckle from Kirk
@@ -49,6 +48,7 @@ def test_gift_prefix_area_2(adapter):
 
 @pytest.mark.parametrize("area_id", [
     "route_29",
+    "route_34",          # daycare area, NOT gift — wild captures here use normal flow
     "dark_cave",
     "sprout_tower",
     "ilex_forest",
@@ -56,6 +56,24 @@ def test_gift_prefix_area_2(adapter):
 ])
 def test_non_gift_areas_return_false(adapter, area_id):
     assert adapter.is_gift_area(area_id) is False
+
+
+# ── Daycare areas (Phase 1d) ────────────────────────────────────────────
+
+def test_route_34_is_daycare(adapter):
+    """Route 34 hosts the Day-Care Man — bred eggs and the Odd Egg both originate here."""
+    assert adapter.is_daycare_area("route_34") is True
+
+
+@pytest.mark.parametrize("area_id", [
+    "new_bark_town",
+    "goldenrod_city",
+    "route_30",          # Mystery Egg from Mr. Pokemon — NOT daycare (egg=gift)
+    "route_29",
+    "ilex_forest",
+])
+def test_non_daycare_areas_return_false(adapter, area_id):
+    assert adapter.is_daycare_area(area_id) is False
 
 
 # ── Key validation ───────────────────────────────────────────────────────
@@ -452,6 +470,190 @@ def test_trainer_info_returns_empty(adapter):
     assert adapter.trainer_info(999) == ("", "")
 
 
+# ── Phase 3: Move data ───────────────────────────────────────────────────
+
+def test_move_name_pound(adapter):
+    assert adapter.move_name(1) == "Pound"
+
+
+def test_move_name_thunderbolt(adapter):
+    assert adapter.move_name(85) == "Thunderbolt"
+
+
+def test_move_name_unknown(adapter):
+    assert adapter.move_name(0) == ""
+    assert adapter.move_name(9999) == ""
+
+
+def test_move_data_gen2_karate_chop_is_fighting(adapter):
+    """Gen 2 fixed Karate Chop's type from Normal (Gen 1 bug) to Fighting."""
+    m = adapter.move_data(2)
+    assert m["name"] == "Karate Chop"
+    assert m["type_name"] == "Fighting"
+    assert m["power"] == 50
+
+
+def test_move_data_gen2_bite_is_dark(adapter):
+    """Gen 2 added Dark and reclassified Bite from Normal → Dark."""
+    m = adapter.move_data(44)
+    assert m["type_name"] == "Dark"
+    assert m["split"] == 1  # Special (Dark is special-side in Gen 2)
+
+
+def test_move_data_thunderbolt(adapter):
+    m = adapter.move_data(85)
+    assert m["name"] == "Thunderbolt"
+    assert m["type_name"] == "Electric"
+    assert m["power"] == 95
+    assert m["accuracy"] == 100
+    assert m["pp"] == 15
+    assert m["split"] == 1  # Special
+    assert m["effect_chance"] == 10
+
+
+def test_move_data_status_move(adapter):
+    """Sleep Powder (id=79) is a status move."""
+    m = adapter.move_data(79)
+    assert m["split"] == 2
+    assert m["power"] == 0
+
+
+def test_move_data_unknown(adapter):
+    assert adapter.move_data(0) is None
+    assert adapter.move_data(9999) is None
+
+
+def test_move_data_struggle(adapter):
+    """Struggle is move 165 in Gen 2 (same id as Gen 1 since added Gen 2 moves come after)."""
+    m = adapter.move_data(165)
+    assert m["name"] == "Struggle"
+
+
+def test_move_data_gen2_only_move(adapter):
+    """Crunch (Gen 2 only, id=242) — special Dark move."""
+    m = adapter.move_data(242)
+    assert m["name"] == "Crunch"
+    assert m["type_name"] == "Dark"
+    assert m["power"] == 80
+
+
+def test_move_data_count(adapter):
+    """All 251 Gen 2 moves should be loaded."""
+    valid = sum(1 for i in range(1, 252) if adapter.move_data(i) is not None)
+    assert valid == 251
+
+
+# ── Phase 6: Encounter tables ────────────────────────────────────────────
+
+def test_encounter_table_route_29(adapter):
+    enc = adapter.encounter_table("route_29")
+    assert enc is not None
+    # Gen 2 has time-of-day variants
+    assert "Morn" in enc
+    assert "Day" in enc
+    assert "Nite" in enc
+
+
+def test_encounter_table_route_29_has_sentret(adapter):
+    enc = adapter.encounter_table("route_29")
+    morn = {e["name"] for e in enc["Morn"]}
+    assert "Sentret" in morn
+
+
+def test_encounter_table_nite_has_hoothoot(adapter):
+    """Hoothoot is a night-only encounter on Route 29/30/31."""
+    enc = adapter.encounter_table("route_29")
+    nite = {e["name"] for e in enc["Nite"]}
+    assert "Hoothoot" in nite
+
+
+def test_encounter_table_unknown_area(adapter):
+    assert adapter.encounter_table("nonexistent_area") is None
+
+
+def test_encounter_table_entry_schema(adapter):
+    enc = adapter.encounter_table("route_29")
+    for method, entries in enc.items():
+        for entry in entries:
+            assert "species_id" in entry
+            assert "name" in entry
+            assert "rate" in entry
+            assert "min_level" in entry
+            assert "max_level" in entry
+
+
+def test_encounter_table_coverage(adapter):
+    """Full pret-generated coverage across all Johto + Kanto routes + dungeons."""
+    from server.adapters.gen2_crystal import _GEN2_ENCOUNTERS
+    assert len(_GEN2_ENCOUNTERS) >= 70, (
+        f"Gen 2 encounter coverage shrank to {len(_GEN2_ENCOUNTERS)} areas"
+    )
+
+
+@pytest.mark.parametrize("area_id,expected_substr", [
+    ("ilex_forest",   "Caterpie"),
+    ("union_cave",    "Geodude"),
+    ("burned_tower",  "Rattata"),
+    ("ice_path",      "Swinub"),
+    ("dragons_den",   "Magikarp"),
+    ("victory_road",  "Onix"),
+    ("silver_cave",   "Onix"),         # Mt. Silver
+    ("national_park", "Caterpie"),
+    ("whirl_islands", "Krabby"),
+    ("dark_cave",     "Geodude"),
+    ("tohjo_falls",   "Slowpoke"),    # waterfall area with Slowpoke + Zubat
+    ("mt_mortar",     "Rattata"),
+])
+def test_encounter_table_endgame_coverage(adapter, area_id, expected_substr):
+    enc = adapter.encounter_table(area_id)
+    assert enc is not None, f"{area_id} should have encounter data"
+    all_entries = [e for method in enc.values() for e in method]
+    names = [e["name"] for e in all_entries]
+    assert any(expected_substr in n for n in names), (
+        f"{area_id}: expected a {expected_substr}, got {names}"
+    )
+
+
+# ── Phase 14: Full named-trainer coverage ────────────────────────────────
+
+
+def test_named_trainers_coverage():
+    """Every class+instance in pret/data/trainers/parties.asm should resolve."""
+    import json, os
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.normpath(os.path.join(here, "..", "..",
+                                          "data", "games", "gen2_crystal", "trainers.json"))
+    with open(path, encoding="utf-8") as f:
+        d = json.load(f)
+    total = sum(len(v) for v in d["named_trainers"].values())
+    assert total >= 500, f"Expected ≥500 named trainers, got {total}"
+
+
+@pytest.mark.parametrize("class_id,instance_id,expected_name", [
+    ("1",  "1", "Falkner"),    # Violet City gym leader
+    ("2",  "1", "Whitney"),    # Goldenrod gym leader
+    ("3",  "1", "Bugsy"),      # Azalea gym leader
+    ("4",  "1", "Morty"),      # Ecruteak gym leader
+    ("8",  "1", "Clair"),      # Blackthorn gym leader
+    ("16", "1", "Lance"),      # Champion
+    ("22", "1", "Joey"),       # Youngster Joey from Route 30
+    ("63", "1", "Red"),        # Mt. Silver Red
+    ("64", "1", "Blue"),       # Viridian gym Blue
+    ("67", "1", "Eusine"),     # Mysticalman class — Eusine
+])
+def test_named_trainer_lookup(class_id, instance_id, expected_name):
+    import json, os
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.normpath(os.path.join(here, "..", "..",
+                                          "data", "games", "gen2_crystal", "trainers.json"))
+    with open(path, encoding="utf-8") as f:
+        d = json.load(f)
+    actual = d["named_trainers"].get(class_id, {}).get(instance_id)
+    assert actual == expected_name, (
+        f"class {class_id} #{instance_id}: expected {expected_name!r}, got {actual!r}"
+    )
+
+
 # ── Registry ─────────────────────────────────────────────────────────────
 
 def test_adapter_registered():
@@ -612,3 +814,99 @@ def test_integration_identity_lock(tmp_path, monkeypatch):
         "has_pokeballs": True, "area_id": "route_29", "trainer_name": "SILVER"
     })
     assert any(c.get("cmd") == "hud_show" and "WRONG SAVE" in c.get("text", "") for c in cmds)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Phase 1d: Egg-gift classification (mirrors Gen 3 commit be648eb)
+# ══════════════════════════════════════════════════════════════════════════
+
+def _has_cmd(cmds, cmd_name, key=None):
+    for c in cmds:
+        if c.get("cmd") == cmd_name and (key is None or c.get("key") == key):
+            return True
+    return False
+
+
+def test_egg_capture_on_route_30_treated_as_gift(tmp_path, monkeypatch):
+    """Mystery Egg from Mr. Pokemon on Route 30: is_egg=True + non-daycare area → gift.
+    Bypasses Pokéball gate and skips quarantine."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(adapter=Gen2CrystalAdapter())
+    state.party_size = {"a": 1, "b": 0}  # A already has a starter
+
+    cmds = state.handle_event("a", {
+        "event": "capture", "key": "A5F3:1234:98",
+        "area_id": "route_30", "species_id": 175,  # Togepi (Mystery Egg hatches into Togepi)
+        "level": 1, "is_egg": True,
+    })
+    # Egg from non-daycare area is gift-like — no pokéball gate flip, no quarantine.
+    assert not state.pokeballs_obtained.get("a"), \
+        "Mystery Egg from Mr. Pokemon must not activate the Pokéball gate"
+    assert not _has_cmd(cmds, "box_mon", "A5F3:1234:98"), \
+        "Mystery Egg must not be quarantined to box"
+
+
+def test_egg_capture_on_route_34_not_treated_as_gift(tmp_path, monkeypatch):
+    """Daycare-bred egg picked up at Route 34: is_egg=True + daycare area → normal capture.
+    Pokéball gate activates and quarantine applies (player must have full progression)."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(adapter=Gen2CrystalAdapter())
+    state.party_size = {"a": 2, "b": 0}  # A has multiple mons, daycare egg goes to box
+
+    cmds = state.handle_event("a", {
+        "event": "capture", "key": "B2C1:5678:9B",
+        "area_id": "route_34", "species_id": 172,  # Pichu (common bred result)
+        "level": 1, "is_egg": True,
+    })
+    assert state.pokeballs_obtained.get("a"), \
+        "Daycare egg must activate the Pokéball gate"
+    assert _has_cmd(cmds, "box_mon", "B2C1:5678:9B"), \
+        "Daycare egg must be quarantined like a normal capture"
+
+
+def test_capture_without_is_egg_field_unchanged(tmp_path, monkeypatch):
+    """Old clients (no is_egg field) keep working — defaults to False, normal capture flow."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(adapter=Gen2CrystalAdapter())
+    state.party_size = {"a": 2, "b": 0}
+
+    cmds = state.handle_event("a", {
+        "event": "capture", "key": "C0DE:0001:0F",
+        "area_id": "route_29", "species_id": 16, "level": 5,
+        # no is_egg field
+    })
+    assert state.pokeballs_obtained.get("a")
+    assert _has_cmd(cmds, "box_mon", "C0DE:0001:0F")
+
+
+def test_wild_capture_on_route_34_no_longer_treated_as_gift(tmp_path, monkeypatch):
+    """Regression test for Phase 1d: previously route_34 was in _GIFT_AREAS which
+    treated every wild capture there as a gift. After fix, Route 34 is a daycare,
+    so wild captures (no is_egg flag) go through normal flow."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(adapter=Gen2CrystalAdapter())
+    state.party_size = {"a": 2, "b": 0}
+
+    cmds = state.handle_event("a", {
+        "event": "capture", "key": "F00D:0002:13",
+        "area_id": "route_34", "species_id": 19,  # Rattata
+        "level": 8,
+        # no is_egg — this is a wild capture in Route 34 grass
+    })
+    assert state.pokeballs_obtained.get("a"), \
+        "Wild capture on Route 34 must activate the Pokéball gate"
+    assert _has_cmd(cmds, "box_mon", "F00D:0002:13"), \
+        "Wild capture on Route 34 must be quarantined like any other route"
+
+
+# ── Memorial box ─────────────────────────────────────────────────────────
+
+
+def test_memorial_box_index_is_box_14(adapter):
+    """Gen 2 C/G/S has 14 PC boxes; memorial = last box (0-indexed 13).
+
+    Pairs with depositMemorialMon in lua/memory_gb.lua which writes to SRAM
+    CartRAM offset 0x79E0, and the Gen 2 client's build_box_snapshot which
+    emits memorial entries with box=13.
+    """
+    assert adapter.memorial_box_index == 13

@@ -74,12 +74,14 @@ package.loaded["connector"]          = nil
 package.loaded["socket"]             = nil
 package.loaded["hud"]                = nil
 package.loaded["games.gen2_crystal"] = nil
+package.loaded["games.gen2_crystal_trainers"] = nil
 package.loaded["gen2_crystal_areas"] = nil
 
 local M   = require("memory_gb")
 local C   = require("connector")
 local HUD = require("hud")
 local G   = require("games.gen2_crystal")
+local TRAINERS = require("games.gen2_crystal_trainers")
 
 -- ── Localized hot-path globals ────────────────────────────────────────────────
 local fmt    = string.format
@@ -173,8 +175,9 @@ end
 -- GBC screen: 160 × 144
 HUD.init({screen_w = 160, screen_h = 144, hud_x = 2, hud_y = 134, hud_right = 158,
           prompt_y = 36, prompt_h = 10, gameover_y = 50, font_size = 8})
-local hud_show   = HUD.show
-local hud_render = HUD.render
+local hud_show    = HUD.show
+local hud_render  = HUD.render
+local prompt_show = HUD.prompt
 
 -- ── Nick cache for HUD display ────────────────────────────────────────────────
 local nick_cache = {}
@@ -227,6 +230,14 @@ local function dispatch_commands(cmds)
             end
         elseif c.cmd == "hud_show" and c.text then
             hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+        elseif c.cmd == "gui_prompt" and c.text then
+            prompt_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+            console.log("[SLink-Crystal]   ↳ gui_prompt: " .. c.text)
+        elseif c.cmd == "play_sound" and c.sound then
+            -- Gen 3 emits m4a SE_* IDs (95=SHINY, 26=FAILURE, 25=SUCCESS, 22=BOO).
+            -- Translated to semantic event names; profile sfx_ids resolves to a
+            -- ROM-specific SFX ID. No-op until Phase 7 SFX_DISPATCH_ADDR is set.
+            M.playSfxFromGen3Id(c.sound)
         elseif c.cmd == "box_mon" and c.key then
             -- Cancel any pending party_mon for the same key
             local filtered = {}
@@ -337,6 +348,12 @@ end
 local function build_party_snapshot()
     local count = M.getPartyCount()
     local snap = {}
+    -- Gen 2 doesn't track the active party slot directly; battle struct holds the
+    -- active battler's stats. For status-page stat-stage display, mark slot 0 as
+    -- active when in battle (Gen 2 nuzlocke runs rarely shuffle party order; if
+    -- the user switches mid-battle the displayed stages will trail by 1 slot).
+    local in_b = in_battle and M.isInBattle()
+    local player_stages = in_b and M.readPlayerStatStages() or nil
     for slot = 0, count - 1 do
         local mon = M.readPartySlot(slot)
         if mon and mon.maxHP > 1 and mon.level > 0 then
@@ -353,6 +370,26 @@ local function build_party_snapshot()
             -- Gen 2: include held item if present
             if mon.held_item and mon.held_item > 0 then
                 entry.held_item = mon.held_item
+            end
+            -- Phase 3: moves + PP from party struct. Gen 2 encodes PP-Up count in top
+            -- 2 bits of each PP byte. memory_gb's readMovesAndPP() handles the unpack;
+            -- we re-encode the 4 pp_ups values into the single pp_bonuses byte the
+            -- server expects (bits 0-1 = move1, 2-3 = move2, 4-5 = move3, 6-7 = move4).
+            local party_base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
+            local mp = M.readMovesAndPP(party_base, nil)
+            if mp then
+                entry.moves = mp.moves
+                entry.pp    = mp.pp
+                local bonuses = 0
+                for i = 1, 4 do
+                    bonuses = bonuses + (mp.pp_ups[i] * (4 ^ (i - 1)))  -- 2 bits per move
+                end
+                entry.pp_bonuses = bonuses
+            end
+            -- Gen 2: tag the assumed-active slot with stat_stages when in battle.
+            if slot == 0 and player_stages then
+                entry.active = true
+                entry.stat_stages = player_stages
             end
             snap[#snap + 1] = entry
             if nick ~= "" then nick_cache[mon.key] = nick end
@@ -376,6 +413,8 @@ local function build_enemy_snapshot()
     if active.level < 1 or active.level > 100 then return enemy end
     if active.maxHP < 1 or active.maxHP > 999 then return enemy end
 
+    local enemy_stages = M.readEnemyStatStages()
+    local enemy_moves = M.readEnemyBattleMovesAndPP()
     if battle_is_wild then
         -- Wild: just the one active mon
         enemy[1] = {
@@ -385,6 +424,10 @@ local function build_enemy_snapshot()
             maxHP = active.maxHP,
             active = true,
             status_cond = active.status_cond or 0,
+            stat_stages = enemy_stages,
+            moves = enemy_moves and enemy_moves.moves or nil,
+            pp = enemy_moves and enemy_moves.pp or nil,
+            pp_bonuses = 0,
         }
     else
         -- Trainer: read species list for full team; match active by species
@@ -403,6 +446,10 @@ local function build_enemy_snapshot()
                         maxHP = active.maxHP,
                         active = true,
                         status_cond = active.status_cond or 0,
+                        stat_stages = enemy_stages,
+                        moves = enemy_moves and enemy_moves.moves or nil,
+                        pp = enemy_moves and enemy_moves.pp or nil,
+                        pp_bonuses = 0,
                     }
                     active_used = true
                 else
@@ -444,6 +491,15 @@ local function send_hello()
     if cur_in_battle then
         local ep = build_enemy_snapshot()
         if #ep > 0 then evt.enemy_party = ep end
+        if not battle_is_wild and M.TRAINER_CLASS_ADDR then
+            local class_id = M.read_u8(M.TRAINER_CLASS_ADDR)
+            local trainer_id = M.read_u8(M.TRAINER_ID_ADDR)
+            evt.trainer_class_id = class_id
+            evt.trainer_id = trainer_id
+            local class_name, trainer_name = TRAINERS.resolve(class_id, trainer_id)
+            if class_name ~= "" then evt.opponent_class = class_name end
+            if trainer_name ~= "" then evt.opponent_name = trainer_name end
+        end
     end
     local ok_b, boxes = pcall(build_box_snapshot)
     if ok_b and boxes then evt.pc_boxes = boxes end
@@ -481,6 +537,15 @@ local function send_tick()
     if in_battle then
         local ep = build_enemy_snapshot()
         if #ep > 0 then evt.enemy_party = ep end
+        if not battle_is_wild and M.TRAINER_CLASS_ADDR then
+            local class_id = M.read_u8(M.TRAINER_CLASS_ADDR)
+            local trainer_id = M.read_u8(M.TRAINER_ID_ADDR)
+            evt.trainer_class_id = class_id
+            evt.trainer_id = trainer_id
+            local class_name, trainer_name = TRAINERS.resolve(class_id, trainer_id)
+            if class_name ~= "" then evt.opponent_class = class_name end
+            if trainer_name ~= "" then evt.opponent_name = trainer_name end
+        end
     end
     -- PC box snapshot
     local ok_b, boxes = pcall(build_box_snapshot)
@@ -531,9 +596,15 @@ local function on_new_mon(mon, slot, is_gift)
     if mon.held_item and mon.held_item > 0 then
         evt.held_item = mon.held_item
     end
+    -- Gen 2: forward egg flag so server can classify Mystery-Egg-style NPC gifts (Mr. Pokemon
+    -- on Route 30) as gifts while excluding daycare-bred eggs picked up at Route 34.
+    if mon.is_egg then
+        evt.is_egg = true
+    end
 
     send(evt, "capture(" .. (is_gift and "gift" or "battle") .. "):" .. mon.key:sub(1, 9), true)
     captured_this_battle = true
+    M.playSfx(is_gift and "gift" or "capture")  -- Phase 7: no-op until profile populated
 end
 
 -- ── Box capture detection (full-party catch) ──────────────────────────────────
@@ -558,27 +629,54 @@ local function scan_current_box()
     end
 end
 
+-- Memorial box index for Gen 2: Box 14 (last of 14 boxes), 0-indexed.
+local MEMORIAL_BOX_INDEX = 13
+
 local function build_box_snapshot()
-    -- Returns pc_boxes array for tick/hello events (same format as Gen 3)
-    local ok, bcount = pcall(M.getBoxCount)
-    if not ok or not bcount or bcount > M.BOX_MAX_MONS then return {} end
+    -- Returns pc_boxes array for tick/hello events (same format as Gen 3).
+    -- Includes the currently-active box plus the memorial box (read from its
+    -- fixed SRAM offset regardless of which box is active), so the server's
+    -- memorial_box_index filter in handle_debug_raw_state picks up memorial
+    -- contents without requiring the player to switch to Box 14.
     local entries = {}
-    for i = 0, bcount - 1 do
-        local ok2, slot = pcall(M.readBoxSlot, i)
-        if ok2 and slot and slot.key and slot.species_index > 0 and slot.species_index <= 251 then
-            local nick = ""
-            local ok3, n = pcall(M.readBoxNickname, i)
-            if ok3 and n then nick = n end
-            local natdex = G.toNatDex(slot.species_index)
-            entries[#entries + 1] = {
-                box          = 0,  -- active box (Crystal has only 1 active at a time)
-                slot         = i,
-                key          = slot.key,
-                nickname     = nick,
-                species_id   = natdex,
-                held_item_id = slot.held_item or 0,
-                ability_id   = 0,  -- Gen 2 has no abilities
-            }
+    local ok, bcount = pcall(M.getBoxCount)
+    if ok and bcount and bcount <= M.BOX_MAX_MONS then
+        for i = 0, bcount - 1 do
+            local ok2, slot = pcall(M.readBoxSlot, i)
+            if ok2 and slot and slot.key and slot.species_index > 0 and slot.species_index <= 251 then
+                local nick = ""
+                local ok3, n = pcall(M.readBoxNickname, i)
+                if ok3 and n then nick = n end
+                local natdex = G.toNatDex(slot.species_index)
+                entries[#entries + 1] = {
+                    box          = 0,  -- active box (Crystal has only 1 active at a time)
+                    slot         = i,
+                    key          = slot.key,
+                    nickname     = nick,
+                    species_id   = natdex,
+                    held_item_id = slot.held_item or 0,
+                    ability_id   = 0,  -- Gen 2 has no abilities
+                }
+            end
+        end
+    end
+    -- Memorial box (Box 14, in SRAM at fixed offset 0x79E0)
+    local ok_m, mcount = pcall(M.getMemorialBoxCount)
+    if ok_m and mcount and mcount > 0 then
+        for i = 0, mcount - 1 do
+            local ok2, slot = pcall(M.readMemorialBoxSlot, i)
+            if ok2 and slot and slot.key and slot.species_index > 0 and slot.species_index <= 251 then
+                local natdex = G.toNatDex(slot.species_index)
+                entries[#entries + 1] = {
+                    box          = MEMORIAL_BOX_INDEX,
+                    slot         = i,
+                    key          = slot.key,
+                    nickname     = slot.nickname or "",
+                    species_id   = natdex,
+                    held_item_id = slot.held_item or 0,
+                    ability_id   = 0,
+                }
+            end
         end
     end
     return entries
@@ -592,6 +690,7 @@ local function on_faint(mon)
         key = mon.key,
         area_id = last_area_id,
     }, "faint:" .. mon.key:sub(1, 9), true)
+    M.playSfx("faint")  -- Phase 7: no-op until profile populated
 end
 
 -- ── Evolution detection ───────────────────────────────────────────────────────
@@ -628,6 +727,7 @@ local function check_whiteout(cur_party, count)
     -- All mons fainted
     whiteout_sent = true
     send({event = "whiteout", area_id = last_area_id}, "whiteout", true)
+    M.playSfx("whiteout")  -- Phase 7: no-op until profile populated
 end
 
 -- ── Party diff (core detection logic) ─────────────────────────────────────────
@@ -1095,7 +1195,9 @@ local function on_frame()
                 end
                 sync_written_keys[cmd.key] = true
             elseif cmd.cmd == "memorialize" then
-                -- Memorialize = deposit to box (memorial). Same as box_mon for now.
+                -- Memorialize = deposit to dedicated memorial box (Crystal: Box 14, CartRAM
+                -- offset 0x79E0). depositMemorialMon falls back to depositPartyMon if the
+                -- memorial box is full or unconfigured.
                 local pcount = M.getPartyCount()
                 local found_slot = nil
                 for i = 0, pcount - 1 do
@@ -1104,7 +1206,7 @@ local function on_frame()
                     if k == cmd.key then found_slot = i; break end
                 end
                 if found_slot then
-                    local ok, err = M.depositPartyMon(found_slot)
+                    local ok, err = M.depositMemorialMon(found_slot)
                     if ok then
                         console.log("[SLink-Crystal]   ↳ memorialize OK: deposited slot " .. found_slot)
                         hud_show("RIP " .. nick_label(cmd.key), 180, 180, 180, 300)

@@ -19,3 +19,7 @@ data/obs_config.json
 .env
 .env.*
 /dist/
+# Phase 10: pret build tool caches (RGBDS binaries, cloned pret repos,
+# intermediate .o files). data/pret_syms.json IS committed (50KB artifact
+# so contributors without RGBDS can still run pytest).
+/.cache/

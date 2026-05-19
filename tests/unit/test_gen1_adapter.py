@@ -500,3 +500,149 @@ def test_ability_name_species_id_ignored(adapter):
     """Gen 1 has no abilities; species_id must not change the empty-string result."""
     assert adapter.ability_name(1, species_id=999) == adapter.ability_name(1)
     assert adapter.ability_name(1, species_id=999) == ""
+
+
+# ── Phase 3: Move data ───────────────────────────────────────────────────
+
+def test_move_name_pound(adapter):
+    assert adapter.move_name(1) == "Pound"
+
+
+def test_move_name_thunderbolt(adapter):
+    assert adapter.move_name(85) == "Thunderbolt"
+
+
+def test_move_name_struggle(adapter):
+    assert adapter.move_name(165) == "Struggle"
+
+
+def test_move_name_unknown(adapter):
+    assert adapter.move_name(0) == ""
+    assert adapter.move_name(9999) == ""
+
+
+def test_move_data_thunderbolt(adapter):
+    m = adapter.move_data(85)
+    assert m["name"] == "Thunderbolt"
+    assert m["type_name"] == "Electric"
+    assert m["power"] == 95
+    assert m["accuracy"] == 100
+    assert m["pp"] == 15
+    assert m["split"] == 1  # Special — Electric is special in Gen 1
+
+
+def test_move_data_gen1_karate_chop_is_normal(adapter):
+    """Gen 1 mislabeled Karate Chop as Normal type (fixed to Fighting in Gen 2).
+    Adapter must preserve the Gen 1 quirk."""
+    m = adapter.move_data(2)
+    assert m["name"] == "Karate Chop"
+    assert m["type_name"] == "Normal"  # Gen 1 bug — kept for historical accuracy
+
+
+def test_move_data_gen1_bite_is_normal(adapter):
+    """Gen 1 Bite was Normal type (Gen 2 reclassified as Dark)."""
+    m = adapter.move_data(44)
+    assert m["type_name"] == "Normal"
+
+
+def test_move_data_status_move(adapter):
+    """Sleep Powder is a status move (no Physical/Special split contribution)."""
+    m = adapter.move_data(79)
+    assert m["split"] == 2  # Status
+    assert m["power"] == 0
+
+
+def test_move_data_psychic_uses_display_name(adapter):
+    """Gen 1 internal name PSYCHIC_M displays as 'Psychic'."""
+    m = adapter.move_data(94)
+    assert m["name"] == "Psychic"
+
+
+def test_move_data_unknown(adapter):
+    assert adapter.move_data(0) is None
+    assert adapter.move_data(9999) is None
+
+
+def test_move_data_count(adapter):
+    """All 165 Gen 1 moves should be loaded."""
+    valid = sum(1 for i in range(1, 166) if adapter.move_data(i) is not None)
+    assert valid == 165
+
+
+# ── Phase 6: Encounter tables ────────────────────────────────────────────
+
+def test_encounter_table_route_1(adapter):
+    enc = adapter.encounter_table("route_1")
+    assert enc is not None
+    assert "Grass" in enc
+    names = {entry["name"] for entry in enc["Grass"]}
+    assert "Pidgey" in names
+    assert "Rattata" in names
+
+
+def test_encounter_table_viridian_forest_has_pikachu(adapter):
+    enc = adapter.encounter_table("viridian_forest")
+    assert enc is not None
+    names = {e["name"] for e in enc["Grass"]}
+    assert "Pikachu" in names
+
+
+def test_encounter_table_unknown_area(adapter):
+    assert adapter.encounter_table("unknown_area_xyz") is None
+
+
+def test_encounter_table_entry_schema(adapter):
+    """Entries must include species_id, rate, min_level, max_level."""
+    enc = adapter.encounter_table("route_1")
+    for entry in enc["Grass"]:
+        assert "species_id" in entry
+        assert "rate" in entry
+        assert "min_level" in entry
+        assert "max_level" in entry
+        assert entry["min_level"] <= entry["max_level"]
+
+
+def test_encounter_table_coverage(adapter):
+    """Full pret-generated coverage across all 25 routes + dungeons + safari.
+
+    Sanity floor — if the generator regresses, this catches it.
+    """
+    import json
+    from server.adapters.gen1_rby import _GEN1_ENCOUNTERS
+    assert len(_GEN1_ENCOUNTERS) >= 35, (
+        f"Gen 1 encounter coverage shrank to {len(_GEN1_ENCOUNTERS)} areas"
+    )
+
+
+@pytest.mark.parametrize("area_id,expected_species_substr", [
+    ("cerulean_cave",      "Chansey"),      # Unknown Dungeon — endgame
+    ("victory_road",       "Onix"),         # E4 prep area
+    ("safari_zone_center", "Nidoran"),      # safari mons
+    ("safari_zone_east",   "Nidoran"),
+    ("pokemon_mansion",    "Grimer"),       # Cinnabar mansion
+    ("seafoam_islands",    "Seel"),         # ice/water cave (Seel + co)
+    ("pokemon_tower",      "Gastly"),
+])
+def test_encounter_table_endgame_coverage(adapter, area_id, expected_species_substr):
+    """Areas that weren't covered before Phase 14 must be reachable now."""
+    enc = adapter.encounter_table(area_id)
+    assert enc is not None, f"{area_id} should have encounter data"
+    # Check that at least one entry across all methods contains the expected species
+    all_entries = [e for method in enc.values() for e in method]
+    names = [e["name"] for e in all_entries]
+    assert any(expected_species_substr in n for n in names), (
+        f"{area_id}: expected a {expected_species_substr}, got {names}"
+    )
+
+
+# ── Memorial box ─────────────────────────────────────────────────────────
+
+
+def test_memorial_box_index_is_box_12(adapter):
+    """Gen 1 R/B/Y has 12 PC boxes; memorial = last box (0-indexed 11).
+
+    Pairs with depositMemorialMon in lua/memory_gb.lua which writes to SRAM
+    CartRAM offset 0x75EA, and the Gen 1 client's build_box_snapshot which
+    emits memorial entries with box=11.
+    """
+    assert adapter.memorial_box_index == 11

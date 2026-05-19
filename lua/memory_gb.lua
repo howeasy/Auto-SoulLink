@@ -140,45 +140,47 @@ function M.initProfile(game_module, variant)
     end
     M.profile = prof
     -- Copy key addresses to module level for fast access
-    M.PARTY_COUNT_ADDR    = prof.party_count_addr
-    M.PARTY_SPECIES_ADDR  = prof.party_species_addr
-    M.PARTY_BASE_ADDR     = prof.party_base_addr
-    M.PARTY_OT_NAMES_ADDR = prof.party_ot_names_addr
-    M.PARTY_NICKS_ADDR    = prof.party_nicks_addr
+    M.PARTY_COUNT_ADDR    = prof.PARTY_COUNT_ADDR
+    M.PARTY_SPECIES_ADDR  = prof.PARTY_SPECIES_ADDR
+    M.PARTY_BASE_ADDR     = prof.PARTY_BASE_ADDR
+    M.PARTY_OT_NAMES_ADDR = prof.PARTY_OT_NAMES_ADDR
+    M.PARTY_NICKS_ADDR    = prof.PARTY_NICKS_ADDR
     M.PARTY_STRUCT_SIZE   = prof.party_struct_size or 44  -- Gen 1 default
-    M.BOX_COUNT_ADDR      = prof.box_count_addr
-    M.BOX_SPECIES_ADDR    = prof.box_species_addr
-    M.BOX_BASE_ADDR       = prof.box_base_addr
-    M.BOX_OT_NAMES_ADDR   = prof.box_ot_names_addr
-    M.BOX_NICKS_ADDR      = prof.box_nicks_addr
+    M.BOX_COUNT_ADDR      = prof.BOX_COUNT_ADDR
+    M.BOX_SPECIES_ADDR    = prof.BOX_SPECIES_ADDR
+    M.BOX_BASE_ADDR       = prof.BOX_BASE_ADDR
+    M.BOX_OT_NAMES_ADDR   = prof.BOX_OT_NAMES_ADDR
+    M.BOX_NICKS_ADDR      = prof.BOX_NICKS_ADDR
     M.BOX_STRUCT_SIZE     = prof.box_struct_size or 33  -- Gen 1 default
     M.BOX_MAX_MONS        = prof.box_max_mons or 20
-    M.BAG_COUNT_ADDR      = prof.bag_count_addr
-    M.BAG_ITEMS_ADDR      = prof.bag_items_addr
+    M.BAG_COUNT_ADDR      = prof.BAG_COUNT_ADDR
+    M.BAG_ITEMS_ADDR      = prof.BAG_ITEMS_ADDR
     M.BAG_MAX_ITEMS       = prof.bag_max_items or 20
-    M.BATTLE_FLAG_ADDR    = prof.battle_flag_addr
-    M.MAP_ID_ADDR         = prof.map_id_addr
-    M.PLAYER_NAME_ADDR    = prof.player_name_addr
-    M.PLAYER_ID_ADDR      = prof.player_id_addr
+    M.BATTLE_FLAG_ADDR    = prof.BATTLE_FLAG_ADDR
+    M.MAP_ID_ADDR         = prof.MAP_ID_ADDR
+    M.PLAYER_NAME_ADDR    = prof.PLAYER_NAME_ADDR
+    M.PLAYER_ID_ADDR      = prof.PLAYER_ID_ADDR
     M.BALL_ITEM_IDS       = prof.ball_item_ids or {0x01, 0x02, 0x03, 0x04}
     -- Enemy party
-    M.ENEMY_COUNT_ADDR    = prof.enemy_count_addr
-    M.ENEMY_BASE_ADDR     = prof.enemy_base_addr
-    M.ENEMY_SPECIES_LIST_ADDR = prof.enemy_species_list_addr
+    M.ENEMY_COUNT_ADDR    = prof.ENEMY_COUNT_ADDR
+    M.ENEMY_BASE_ADDR     = prof.ENEMY_BASE_ADDR
+    M.ENEMY_SPECIES_LIST_ADDR = prof.ENEMY_SPECIES_LIST_ADDR
     -- Active battle enemy mon addresses
-    M.ENEMY_MON_SPECIES_ADDR = prof.enemy_mon_species_addr
-    M.ENEMY_MON_HP_ADDR      = prof.enemy_mon_hp_addr
-    M.ENEMY_MON_LEVEL_ADDR   = prof.enemy_mon_level_addr
-    M.ENEMY_MON_MAXHP_ADDR   = prof.enemy_mon_maxhp_addr
+    M.ENEMY_MON_SPECIES_ADDR = prof.ENEMY_MON_SPECIES_ADDR
+    M.ENEMY_MON_HP_ADDR      = prof.ENEMY_MON_HP_ADDR
+    M.ENEMY_MON_LEVEL_ADDR   = prof.ENEMY_MON_LEVEL_ADDR
+    M.ENEMY_MON_MAXHP_ADDR   = prof.ENEMY_MON_MAXHP_ADDR
     -- Badges
-    M.BADGES_ADDR            = prof.badges_addr
-    M.KANTO_BADGES_ADDR      = prof.kanto_badges_addr  -- Gen 2 only (nil for Gen 1)
+    M.BADGES_ADDR            = prof.BADGES_ADDR
+    M.KANTO_BADGES_ADDR      = prof.KANTO_BADGES_ADDR  -- Gen 2 only (nil for Gen 1)
     -- Gen 2: 2-byte map addressing (mapGroup + mapNumber)
-    M.MAP_GROUP_ADDR         = prof.map_group_addr     -- nil for Gen 1
-    M.MAP_NUMBER_ADDR        = prof.map_number_addr    -- nil for Gen 1
+    M.MAP_GROUP_ADDR         = prof.MAP_GROUP_ADDR     -- nil for Gen 1
+    M.MAP_NUMBER_ADDR        = prof.MAP_NUMBER_ADDR    -- nil for Gen 1
     M.USES_MAP_GROUP         = prof.uses_map_group or false
     -- Gen 2: held item offset (nil for Gen 1)
     M.HELD_ITEM_OFFSET       = prof.held_item_offset
+    -- Gen 2: species ID that marks a party slot as an egg (0xFD in pokecrystal). Nil for Gen 1.
+    M.IS_EGG_SPECIES         = prof.is_egg_species
     -- Generation tag for conditional logic
     M.GENERATION             = prof.generation or 1
     -- DV offsets within party struct
@@ -199,6 +201,30 @@ function M.initProfile(game_module, variant)
     -- Box in SRAM flag: if true, box addresses are in CartRAM domain (Gen 1/2 GBC)
     M.BOX_IN_SRAM         = prof.box_in_sram or false
     M.SRAM_BANK           = prof.sram_bank or 0
+    -- Stat-stage addresses + layout (Phase 2). Nil-safe — clients only call helpers when set.
+    M.PLAYER_STAT_STAGES_ADDR = prof.PLAYER_STAT_STAGES_ADDR
+    M.ENEMY_STAT_STAGES_ADDR  = prof.ENEMY_STAT_STAGES_ADDR
+    M.STAT_STAGES_COUNT       = prof.stat_stages_count or 0
+    M.STAT_STAGES_LAYOUT      = prof.stat_stages_layout or "gen1"
+    -- Moves + PP within party struct (Phase 3). pp_encoding="raw" (Gen 1, simple
+    -- byte) or "ppup_packed" (Gen 2, top 2 bits = PP-Up count, bottom 6 = current PP).
+    M.MOVES_OFFSET            = prof.moves_offset
+    M.PP_OFFSET               = prof.pp_offset
+    M.PP_ENCODING             = prof.pp_encoding or "raw"
+    -- Enemy battle struct moves + PP (Phase 4). Different from party struct in Gen 2.
+    M.ENEMY_BATTLE_MOVES_ADDR = prof.ENEMY_BATTLE_MOVES_ADDR
+    M.ENEMY_BATTLE_PP_ADDR    = prof.ENEMY_BATTLE_PP_ADDR
+    M.ENEMY_BATTLE_PP_ENCODING = prof.enemy_battle_pp_encoding or "raw"
+    -- Trainer class / index in trainer battles (Phase 5).
+    M.TRAINER_CLASS_ADDR      = prof.TRAINER_CLASS_ADDR
+    M.TRAINER_ID_ADDR         = prof.TRAINER_ID_ADDR
+    -- Sound dispatch (Phase 7). Disabled by default (addr=nil) — when a profile
+    -- declares SFX_DISPATCH_ADDR, M.playSfx(id) writes id to that address.
+    -- The profile also provides a sfx_ids table mapping semantic events
+    -- ("capture", "faint", "whiteout", "gift") to ROM SFX constants.
+    -- Without confirmed addresses, leave disabled to avoid corrupting game state.
+    M.SFX_DISPATCH_ADDR       = prof.SFX_DISPATCH_ADDR
+    M.SFX_IDS                 = prof.sfx_ids or {}
 end
 
 -- ═══ Box Memory Helpers (routes to SRAM when BOX_IN_SRAM is set) ═══
@@ -282,6 +308,10 @@ function M.readPartySlot(slot)
     if M.HELD_ITEM_OFFSET then
         result.held_item = M.read_u8(base + M.HELD_ITEM_OFFSET)
     end
+    -- Gen 2: flag eggs (species == 0xFD per pret/pokecrystal constants/pokemon_constants.asm)
+    if M.IS_EGG_SPECIES and species_idx == M.IS_EGG_SPECIES then
+        result.is_egg = true
+    end
     return result
 end
 
@@ -316,6 +346,10 @@ function M.readBoxSlot(slot)
         local held_offset = M.profile and M.profile.box_held_item_offset or M.HELD_ITEM_OFFSET
         result.held_item = M.box_read_u8(base + held_offset)
     end
+    -- Gen 2: flag eggs in boxes (eggs can be moved to PC like normal mons)
+    if M.IS_EGG_SPECIES and species_idx == M.IS_EGG_SPECIES then
+        result.is_egg = true
+    end
     return result
 end
 
@@ -337,6 +371,80 @@ function M.readBoxNickname(slot)
         return table.concat(chars)
     end
     return M.decodeString(M.BOX_NICKS_ADDR + slot * 11, 11)
+end
+
+-- ═══ Memorial Box Reading (mirrors depositMemorialMon's layout) ═══
+-- The memorial box lives at a fixed SRAM CartRAM offset (Gen 1: 0x75EA,
+-- Gen 2: 0x79E0). Layout is identical to the active box: count byte, species
+-- list (BOX_MAX_MONS + 1 with terminator), mon structs, OT names, nicknames.
+-- These reads complement depositMemorialMon so the server can display memorial
+-- contents on the status / debug pages.
+
+function M.getMemorialBoxOffset()
+    local mem_off = M.profile and M.profile.memorial_box_cartram_offset
+    if not mem_off then
+        if M.GENERATION == 1 then
+            mem_off = 0x75EA
+        elseif M.GENERATION == 2 then
+            mem_off = 0x79E0
+        end
+    end
+    return mem_off
+end
+
+function M.getMemorialBoxCount()
+    local mem_off = M.getMemorialBoxOffset()
+    if not mem_off then return 0 end
+    local count = mem_r8(mem_off, SRAM_DOMAIN)
+    if count > M.BOX_MAX_MONS then return 0 end
+    return count
+end
+
+function M.readMemorialBoxSlot(slot)
+    local mem_off = M.getMemorialBoxOffset()
+    if not mem_off then return nil end
+    if slot < 0 or slot >= M.BOX_MAX_MONS then return nil end
+
+    local structs_off = mem_off + 1 + (M.BOX_MAX_MONS + 1)
+    local ots_off     = structs_off + M.BOX_MAX_MONS * M.BOX_STRUCT_SIZE
+    local nicks_off   = ots_off + M.BOX_MAX_MONS * 11
+
+    local base = structs_off + slot * M.BOX_STRUCT_SIZE
+    local species_idx = mem_r8(base + M.SPECIES_OFFSET, SRAM_DOMAIN)
+    if species_idx == 0 or species_idx == 0xFF then
+        return nil
+    end
+
+    local dv1 = mem_r8(base + M.DV_OFFSET_1, SRAM_DOMAIN)
+    local dv2 = mem_r8(base + M.DV_OFFSET_2, SRAM_DOMAIN)
+    local otid = mem_r8(base + M.OTID_OFFSET, SRAM_DOMAIN) * 256
+               + mem_r8(base + M.OTID_OFFSET + 1, SRAM_DOMAIN)
+    local key = string.format("%02X%02X:%04X:%02X", dv1, dv2, otid, species_idx)
+
+    local nick_addr = nicks_off + slot * 11
+    local chars = {}
+    for i = 0, 10 do
+        local b = mem_r8(nick_addr + i, SRAM_DOMAIN)
+        if b == 0x50 then break end
+        local ch = M._CHARSET[b]
+        chars[#chars + 1] = ch or "?"
+    end
+    local nickname = table.concat(chars)
+
+    local result = {
+        key = key,
+        species_index = species_idx,
+        slot = slot,
+        nickname = nickname,
+    }
+    if M.HELD_ITEM_OFFSET then
+        local held_offset = M.profile and M.profile.box_held_item_offset or M.HELD_ITEM_OFFSET
+        result.held_item = mem_r8(base + held_offset, SRAM_DOMAIN)
+    end
+    if M.IS_EGG_SPECIES and species_idx == M.IS_EGG_SPECIES then
+        result.is_egg = true
+    end
+    return result
 end
 
 -- ═══ Enemy Party Reading ═══
@@ -779,6 +887,154 @@ function M.retrieveBoxMon(key)
     M.box_write_u8(M.BOX_COUNT_ADDR, new_bcount)
 
     return true
+end
+
+-- ═══ Stat Stages (Phase 2) ═══════════════════════════════════════════════
+-- Read in-battle stat-stage bytes and normalize from Gen 1/2's 1..13 (neutral=7)
+-- to the Gen 3 convention 0..12 (neutral=6), so the existing server-side
+-- _stat_stages_html renderer Just Works.
+--
+-- Returns a 7-element table {atk, def, spd, satk, sdef, acc, eva}:
+--   - Gen 2: 7 raw bytes read directly.
+--   - Gen 1: 6 raw bytes (atk, def, spd, spc, acc, eva); the unified Special
+--     stat is mirrored into both satk and sdef slots so the renderer shows
+--     it consistently for both special stats.
+-- Returns nil if the profile doesn't declare stat-stage addresses.
+
+local function _read_stat_stages(base_addr)
+    if not base_addr or M.STAT_STAGES_COUNT == 0 then return nil end
+    if M.STAT_STAGES_LAYOUT == "gen1" then
+        -- 6 raw bytes: atk, def, spd, spc, acc, eva
+        local atk = M.read_u8(base_addr + 0)
+        local def = M.read_u8(base_addr + 1)
+        local spd = M.read_u8(base_addr + 2)
+        local spc = M.read_u8(base_addr + 3)
+        local acc = M.read_u8(base_addr + 4)
+        local eva = M.read_u8(base_addr + 5)
+        -- Sanity: refuse to emit if any value is outside 1..13 (uninitialised RAM
+        -- or wrong address). Returning nil prevents the renderer from showing
+        -- garbage badges.
+        for _, v in ipairs({atk, def, spd, spc, acc, eva}) do
+            if v < 1 or v > 13 then return nil end
+        end
+        -- Convert 1..13 (neutral 7) → 0..12 (neutral 6) and mirror Spc into SpA/SpD.
+        return {atk - 1, def - 1, spd - 1, spc - 1, spc - 1, acc - 1, eva - 1}
+    end
+    -- Gen 2 layout: 7 raw bytes
+    local stages = {}
+    for i = 0, 6 do
+        local v = M.read_u8(base_addr + i)
+        if v < 1 or v > 13 then return nil end
+        stages[i + 1] = v - 1
+    end
+    return stages
+end
+
+function M.readPlayerStatStages()
+    return _read_stat_stages(M.PLAYER_STAT_STAGES_ADDR)
+end
+
+function M.readEnemyStatStages()
+    return _read_stat_stages(M.ENEMY_STAT_STAGES_ADDR)
+end
+
+-- ═══ Moves + PP (Phase 3) ═════════════════════════════════════════════════
+-- Read 4 move IDs and 4 PP bytes from a party/box struct at the given base
+-- address. Returns {moves=[id1..id4], pp=[pp1..pp4], pp_ups=[u1..u4], max_pp=[m1..m4]}
+-- or nil if the profile doesn't declare offsets.
+--   - Gen 1: pp_encoding="raw", current_pp = byte, pp_ups always 0.
+--   - Gen 2: pp_encoding="ppup_packed": current_pp = byte & 0x3F, pp_ups = byte >> 6.
+-- max_pp is computed from base PP (provided by caller via base_pp_table) + PP-Up bonus:
+--   max_pp = base_pp + (base_pp * pp_ups // 5)
+-- Caller passes nil base_pp_table if not available; max_pp will then be nil.
+
+function M.readMovesAndPP(struct_base, base_pp_table)
+    if not M.MOVES_OFFSET or not M.PP_OFFSET then return nil end
+    local result = {moves = {}, pp = {}, pp_ups = {}, max_pp = {}}
+    for i = 0, 3 do
+        local move_id = M.read_u8(struct_base + M.MOVES_OFFSET + i)
+        local pp_byte = M.read_u8(struct_base + M.PP_OFFSET + i)
+        result.moves[i + 1] = move_id
+        if M.PP_ENCODING == "ppup_packed" then
+            local cur_pp = pp_byte % 64  -- pp_byte & 0x3F
+            local pp_ups = math.floor(pp_byte / 64)  -- (pp_byte >> 6) & 0x03
+            result.pp[i + 1] = cur_pp
+            result.pp_ups[i + 1] = pp_ups
+            if base_pp_table and base_pp_table[move_id] then
+                local base = base_pp_table[move_id]
+                result.max_pp[i + 1] = base + math.floor(base * pp_ups / 5)
+            end
+        else
+            result.pp[i + 1] = pp_byte
+            result.pp_ups[i + 1] = 0
+            if base_pp_table and base_pp_table[move_id] then
+                result.max_pp[i + 1] = base_pp_table[move_id]
+            end
+        end
+    end
+    return result
+end
+
+-- ═══ Sound effects (Phase 7) ═════════════════════════════════════════════
+-- Trigger an in-game sound effect by writing its ROM SFX ID to the music/SFX
+-- dispatch register. Profile-gated: if SFX_DISPATCH_ADDR is nil, this is a
+-- no-op (safe default). Use `lua/tests/test_gen{1,2}_sfx.lua` to validate
+-- the dispatch address + SFX IDs before enabling in production profiles.
+--
+-- M.playSfx("capture") looks up profile.sfx_ids.capture and writes it to
+-- the dispatch register. Unknown event names are no-ops.
+
+function M.playSfx(event_name)
+    if not M.SFX_DISPATCH_ADDR then return false end
+    local sfx_id = M.SFX_IDS[event_name]
+    if not sfx_id then return false end
+    M.write_u8(M.SFX_DISPATCH_ADDR, sfx_id)
+    return true
+end
+
+-- Direct write (for diagnostic scripts that want to test arbitrary SFX IDs).
+function M.playSfxRaw(sfx_id)
+    if not M.SFX_DISPATCH_ADDR then return false end
+    M.write_u8(M.SFX_DISPATCH_ADDR, sfx_id)
+    return true
+end
+
+-- Maps Gen 3 (FRLG/RR) m4a SE_* sound IDs to semantic event names. The server
+-- emits play_sound commands with these numeric IDs for cross-gen events
+-- (shiny clause, bonus pair formed/rejected). Gen 1/2 profiles bind the
+-- semantic name to a ROM-specific SFX ID via the sfx_ids table (Phase 7).
+M.GEN3_SE_TO_EVENT = {
+    [95] = "shiny",    -- SE_SHINY  (shiny encountered, bonus mon)
+    [26] = "failure",  -- SE_FAILURE (rejection, error)
+    [25] = "success",  -- SE_SUCCESS (bonus pair formed)
+    [22] = "boo",      -- SE_BOO    (partner rejection)
+}
+
+function M.playSfxFromGen3Id(sound_id)
+    local event_name = M.GEN3_SE_TO_EVENT[sound_id]
+    if not event_name then return false end
+    return M.playSfx(event_name)
+end
+
+-- Read the active enemy battler's 4 moves + 4 PP bytes. Returns
+-- {moves=[id1..4], pp=[cur1..4]}, or nil if the profile doesn't declare
+-- ENEMY_BATTLE_MOVES_ADDR. Used by build_enemy_snapshot in battle. Enemy PP
+-- is treated as raw (no PP-Up encoding) regardless of party-struct encoding —
+-- the active battler's PP byte holds the live current PP and PP-Up doesn't
+-- need to be displayed for display-only enemy info.
+function M.readEnemyBattleMovesAndPP()
+    if not M.ENEMY_BATTLE_MOVES_ADDR or not M.ENEMY_BATTLE_PP_ADDR then return nil end
+    local moves, pp = {}, {}
+    for i = 0, 3 do
+        moves[i + 1] = M.read_u8(M.ENEMY_BATTLE_MOVES_ADDR + i)
+        local b = M.read_u8(M.ENEMY_BATTLE_PP_ADDR + i)
+        if M.ENEMY_BATTLE_PP_ENCODING == "ppup_packed" then
+            pp[i + 1] = b % 64  -- unpack current PP
+        else
+            pp[i + 1] = b
+        end
+    end
+    return {moves = moves, pp = pp, pp_bonuses = 0}
 end
 
 --- Deposit party slot directly to the dedicated memorial box (last box).

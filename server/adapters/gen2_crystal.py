@@ -23,17 +23,29 @@ _DATA_DIR = os.path.join(
 )
 
 # ── Gift/static encounter area_ids ──────────────────────────────────────
+# Route 34 is intentionally NOT here — it's a daycare area (see _DAYCARE_AREAS).
+# Wild captures on Route 34 grass go through the normal pokéball + quarantine
+# flow; daycare-bred eggs picked up at Route 34 are classified by is_daycare_area.
 _GIFT_AREAS = frozenset({
     "new_bark_town",     # Starter (Chikorita/Cyndaquil/Totodile)
-    "goldenrod_city",    # Eevee from Bill / Game Corner prizes / Odd Egg
+    "goldenrod_city",    # Eevee from Bill / Game Corner prizes
     "olivine_city",      # Shuckle from Kirk (temporary trade)
     "dragons_den",       # Dratini from Elder
-    "route_34",          # Odd Egg from Day-Care Man
     "route_35",          # Kenya the Spearow (guard delivery)
     "mt_mortar",         # Tyrogue from Kiyo
     "cianwood_city",     # Shuckle from Kirk
     "celadon_city",      # Eevee (if Kanto gift)
     "gift",              # Fallback for unmapped gift areas
+})
+
+# Daycare areas — eggs picked up here are bred from deposited mons, not gifts.
+# Crystal has exactly one daycare (Route 34, Day-Care Man). The Odd Egg is also
+# given here, but it's mechanically indistinguishable from a daycare-bred egg,
+# so it gets treated as a daycare pickup (not a gift) for tracker purposes.
+# Mystery Egg from Mr. Pokemon is given on Route 30 — that's a non-daycare egg
+# and correctly classified as a gift via the is_egg + !daycare path in state.py.
+_DAYCARE_AREAS = frozenset({
+    "route_34",
 })
 
 # Gift areas with a forced, identical species (no player choice).
@@ -96,6 +108,28 @@ _AREA_DISPLAY_NAMES: dict[str, str] = load_area_names_from_obj_map(
     os.path.join(_DATA_DIR, "area_map.json")
 )
 
+# ── Load Gen 2 moves data (Phase 3) ─────────────────────────────────────
+_GEN2_MOVES: dict[int, dict] = {}
+_moves_path = os.path.join(_DATA_DIR, "moves.json")
+if os.path.exists(_moves_path):
+    with open(_moves_path, "r") as _f:
+        for _entry in json.load(_f).get("moves", []):
+            _GEN2_MOVES[int(_entry["id"])] = _entry
+else:
+    log.warning("Gen 2 moves.json not found: %s", _moves_path)
+
+# ── Load Gen 2 wild encounter tables (Phase 6) ─────────────────────────
+_GEN2_ENCOUNTERS: dict[str, dict[str, list[dict]]] = {}
+_enc_path = os.path.join(_DATA_DIR, "encounter_tables.json")
+if os.path.exists(_enc_path):
+    with open(_enc_path, "r") as _f:
+        _GEN2_ENCOUNTERS = json.load(_f)
+else:
+    log.warning("Gen 2 encounter_tables.json not found: %s", _enc_path)
+
+# Move split → integer ID expected by renderer (0=Physical, 1=Special, 2=Status)
+_SPLIT_NAME_TO_ID = {"Physical": 0, "Special": 1, "Status": 2}
+
 
 class Gen2CrystalAdapter(GameAdapter):
     """Adapter for Gen 2: Pokémon Crystal.
@@ -118,6 +152,38 @@ class Gen2CrystalAdapter(GameAdapter):
 
     def is_fixed_species_gift(self, area_id: str) -> bool:
         return area_id in _FIXED_SPECIES_GIFTS
+
+    def is_daycare_area(self, area_id: str) -> bool:
+        return area_id in _DAYCARE_AREAS
+
+    # ── Move data (Phase 3) ───────────────────────────────────────────────
+
+    def move_name(self, move_id: int) -> str:
+        m = _GEN2_MOVES.get(move_id)
+        return m["name"] if m else ""
+
+    def move_data(self, move_id: int) -> dict | None:
+        m = _GEN2_MOVES.get(move_id)
+        if not m:
+            return None
+        type_name = m["type"]
+        return {
+            "name": m["name"],
+            "type_id": _TYPE_NAME_TO_ID.get(type_name, 0),
+            "type_name": type_name,
+            "power": m["power"],
+            "accuracy": m["accuracy"],
+            "pp": m["pp"],
+            "split": _SPLIT_NAME_TO_ID.get(m["split"], 2),
+            "effect_chance": m.get("effect_chance", 0),
+        }
+
+    # ── Encounter tables (Phase 6) ───────────────────────────────────────
+
+    def encounter_table(self, area_id: str) -> dict[str, list[dict]] | None:
+        """Return wild encounter data keyed by method (Morn/Day/Nite/Surf/...).
+        Partial coverage — see data/games/gen2_crystal/encounter_tables.json."""
+        return _GEN2_ENCOUNTERS.get(area_id)
 
     def evo_family(self, species_id: int) -> int:
         return base_form(species_id, False)
@@ -272,6 +338,14 @@ class Gen2CrystalAdapter(GameAdapter):
     def form_sprite_id(self, species_id: int) -> int | None:
         # No alternate forms in Gen 2 (Unown forms are cosmetic, same NatDex)
         return None
+
+    @property
+    def memorial_box_index(self) -> int:
+        # Gen 2 C/G/S: 14 boxes (0-indexed 0–13), memorial = Box 14 (index 13).
+        # Lua-side depositMemorialMon writes to SRAM CartRAM offset 0x79E0;
+        # the Gen 2 client reads it back into pc_boxes with box=13 so the
+        # server's memorial-contents filter picks it up.
+        return 13
 
     def gym_badge_slugs(self, rom_type: str) -> list[tuple[int, str]]:
         return [

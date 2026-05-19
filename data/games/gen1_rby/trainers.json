@@ -1,0 +1,111 @@
+{
+  "classes": {
+    "200": "Nobody",
+    "201": "Youngster",
+    "202": "Bug Catcher",
+    "203": "Lass",
+    "204": "Sailor",
+    "205": "Jr. Trainer ♂",
+    "206": "Jr. Trainer ♀",
+    "207": "Pokémaniac",
+    "208": "Super Nerd",
+    "209": "Hiker",
+    "210": "Biker",
+    "211": "Burglar",
+    "212": "Juggler",
+    "213": "Fisher",
+    "214": "Swimmer",
+    "215": "Cue Ball",
+    "216": "Gambler",
+    "217": "Beauty",
+    "218": "Psychic",
+    "219": "Rocker",
+    "220": "Juggler",
+    "221": "Tamer",
+    "222": "Bird Keeper",
+    "223": "Blackbelt",
+    "224": "Rival",
+    "225": "Prof. Oak",
+    "226": "Chief",
+    "227": "Scientist",
+    "228": "Giovanni",
+    "229": "Rocket Grunt",
+    "230": "Cooltrainer ♂",
+    "231": "Cooltrainer ♀",
+    "232": "Bruno",
+    "233": "Brock",
+    "234": "Misty",
+    "235": "Lt. Surge",
+    "236": "Erika",
+    "237": "Koga",
+    "238": "Blaine",
+    "239": "Sabrina",
+    "240": "Gentleman",
+    "241": "Rival",
+    "242": "Rival",
+    "243": "Lorelei",
+    "244": "Channeler",
+    "245": "Agatha",
+    "246": "Lance"
+  },
+  "named_trainers": {
+    "232": {
+      "1": "Bruno"
+    },
+    "233": {
+      "1": "Brock"
+    },
+    "234": {
+      "1": "Misty"
+    },
+    "235": {
+      "1": "Lt. Surge"
+    },
+    "236": {
+      "1": "Erika"
+    },
+    "237": {
+      "1": "Koga"
+    },
+    "238": {
+      "1": "Blaine"
+    },
+    "239": {
+      "1": "Sabrina"
+    },
+    "228": {
+      "1": "Giovanni",
+      "2": "Giovanni",
+      "3": "Giovanni"
+    },
+    "224": {
+      "1": "Blue",
+      "2": "Blue",
+      "3": "Blue"
+    },
+    "225": {
+      "1": "Prof. Oak"
+    },
+    "241": {
+      "1": "Blue",
+      "2": "Blue",
+      "3": "Blue"
+    },
+    "242": {
+      "1": "Blue",
+      "2": "Blue",
+      "3": "Blue",
+      "4": "Blue",
+      "5": "Blue"
+    },
+    "243": {
+      "1": "Lorelei"
+    },
+    "245": {
+      "1": "Agatha"
+    },
+    "246": {
+      "1": "Lance"
+    }
+  }
+}

@@ -41,6 +41,33 @@ _TYPE_IDS = {
     0x14: "Fire", 0x15: "Water", 0x16: "Grass", 0x17: "Electric",
     0x18: "Psychic", 0x19: "Ice", 0x1A: "Dragon",
 }
+_TYPE_NAME_TO_ID = {v: k for k, v in _TYPE_IDS.items()}
+
+# Move split → integer ID expected by renderer (0=Physical, 1=Special, 2=Status)
+_SPLIT_NAME_TO_ID = {"Physical": 0, "Special": 1, "Status": 2}
+
+# ── Load Gen 1 moves data (Phase 3) ─────────────────────────────────────
+_GEN1_DATA_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "data", "games", "gen1_rby",
+)
+_GEN1_MOVES: dict[int, dict] = {}
+_moves_path = os.path.join(_GEN1_DATA_DIR, "moves.json")
+if os.path.exists(_moves_path):
+    with open(_moves_path, "r") as _f:
+        for _entry in json.load(_f).get("moves", []):
+            _GEN1_MOVES[int(_entry["id"])] = _entry
+else:
+    log.warning("Gen 1 moves.json not found: %s", _moves_path)
+
+# ── Load Gen 1 wild encounter tables (Phase 6) ─────────────────────────
+_GEN1_ENCOUNTERS: dict[str, dict[str, list[dict]]] = {}
+_enc_path = os.path.join(_GEN1_DATA_DIR, "encounter_tables.json")
+if os.path.exists(_enc_path):
+    with open(_enc_path, "r") as _f:
+        _GEN1_ENCOUNTERS = json.load(_f)
+else:
+    log.warning("Gen 1 encounter_tables.json not found: %s", _enc_path)
 
 # Gen 1 item names (common items)
 _ITEM_NAMES = {
@@ -323,6 +350,34 @@ class Gen1Adapter(GameAdapter):
         # Gen 1 doesn't have a trainer table
         return ("", "")
 
+    # ── Move data (Phase 3) ───────────────────────────────────────────────
+
+    def move_name(self, move_id: int) -> str:
+        m = _GEN1_MOVES.get(move_id)
+        return m["name"] if m else ""
+
+    def move_data(self, move_id: int) -> dict | None:
+        m = _GEN1_MOVES.get(move_id)
+        if not m:
+            return None
+        type_name = m["type"]
+        return {
+            "name": m["name"],
+            "type_id": _TYPE_NAME_TO_ID.get(type_name, 0),
+            "type_name": type_name,
+            "power": m["power"],
+            "accuracy": m["accuracy"],
+            "pp": m["pp"],
+            "split": _SPLIT_NAME_TO_ID.get(m["split"], 2),
+        }
+
+    # ── Encounter tables (Phase 6) ───────────────────────────────────────
+
+    def encounter_table(self, area_id: str) -> dict[str, list[dict]] | None:
+        """Return wild encounter data for the given area, or None if unknown.
+        Partial coverage — see data/games/gen1_rby/encounter_tables.json."""
+        return _GEN1_ENCOUNTERS.get(area_id)
+
     def item_name(self, item_id: int) -> str:
         if not item_id:
             return ""
@@ -350,3 +405,11 @@ class Gen1Adapter(GameAdapter):
     def form_sprite_id(self, species_id: int) -> int | None:
         # No forms in Gen 1
         return None
+
+    @property
+    def memorial_box_index(self) -> int:
+        # Gen 1 R/B/Y: 12 boxes (0-indexed 0–11), memorial = Box 12 (index 11).
+        # Lua-side depositMemorialMon writes to SRAM CartRAM offset 0x75EA;
+        # the Gen 1 client reads it back into pc_boxes with box=11 so the
+        # server's memorial-contents filter picks it up.
+        return 11
