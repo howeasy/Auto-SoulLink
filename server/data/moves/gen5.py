@@ -1,4 +1,4 @@
-"""server/move_data_gen5.py — Move name and stats for Gen 4-5 moves (IDs 355-559).
+"""server/data/moves/gen5.py — Move name and stats for Gen 4-5 moves (IDs 355-559).
 
 Sourced from veekun/pokedex moves.csv (auto-generated; do not hand-edit).
 Used by Gen5Adapter to expose move_name and move_data for BW/BW2.
@@ -7,7 +7,7 @@ Type byte values match server.pokemon_data.TYPE_NAMES (0=Normal, with 9 = ???).
 Veekun-to-project type mapping: veekun 1-9 -> project 0-8; veekun 10+ -> same number.
 """
 
-GEN5_MOVE_NAMES: dict[int, str] = {
+MOVE_NAMES: dict[int, str] = {
     355: 'Roost',
     356: 'Gravity',
     357: 'Miracle Eye',
@@ -215,7 +215,7 @@ GEN5_MOVE_NAMES: dict[int, str] = {
     559: 'Fusion Bolt',
 }
 
-GEN5_MOVE_DATA: dict[int, dict] = {
+MOVE_DATA: dict[int, dict] = {
     355: {"type": 2, "power": 0, "accuracy": 0, "pp": 10, "split": 2},
     356: {"type": 14, "power": 0, "accuracy": 0, "pp": 5, "split": 2},
     357: {"type": 14, "power": 0, "accuracy": 0, "pp": 40, "split": 2},

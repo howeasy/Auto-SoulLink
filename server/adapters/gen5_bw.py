@@ -285,11 +285,8 @@ class Gen5Adapter(GameAdapter):
         """
         if not move_id:
             return ""
-        from server.move_data_gen5 import GEN5_MOVE_NAMES
-        if move_id in GEN5_MOVE_NAMES:
-            return GEN5_MOVE_NAMES[move_id]
-        from server.move_data import move_name as _vanilla_move_name
-        return _vanilla_move_name(move_id, is_rr=False)
+        from server.data.moves import move_name as _move_name
+        return _move_name(move_id, generation=5)
 
     def move_data(self, move_id: int) -> dict | None:
         """Return move details dict {name, type_id, type_name, power, accuracy, pp, split}.
@@ -298,9 +295,8 @@ class Gen5Adapter(GameAdapter):
         """
         if not move_id:
             return None
-        from server.move_data_gen5 import GEN5_MOVE_DATA
-        from server.move_data import move_data as _vanilla_move_data
-        raw = GEN5_MOVE_DATA.get(move_id) or _vanilla_move_data(move_id, is_rr=False)
+        from server.data.moves import move_data as _move_data
+        raw = _move_data(move_id, generation=5)
         if raw is None:
             return None
         type_id = raw.get("type", 0)

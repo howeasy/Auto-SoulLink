@@ -383,13 +383,13 @@ class Gen4Adapter(GameAdapter):
         return _GEN4_ITEM_NAMES.get(item_id, f"Item #{item_id}") if item_id else ""
 
     def move_name(self, move_id: int) -> str:
-        # Gen 4 lookup chain: GEN4_MOVE_NAMES (355–467) → VANILLA_MOVE_NAMES (1–354).
-        from server.move_data import move_name as _move_name
-        return _move_name(move_id, is_rr=False)
+        # Gen 4 lookup chain handled inside server.data.moves: gen4 → gen3_vanilla.
+        from server.data.moves import move_name as _move_name
+        return _move_name(move_id, generation=4)
 
     def move_data(self, move_id: int) -> dict | None:
-        from server.move_data import move_data as _move_data
-        raw = _move_data(move_id, is_rr=False)
+        from server.data.moves import move_data as _move_data
+        raw = _move_data(move_id, generation=4)
         if raw is None:
             return None
         type_id = raw.get("type", 0)

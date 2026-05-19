@@ -475,15 +475,16 @@ class Gen3Adapter(GameAdapter):
     # ── Move data ────────────────────────────────────────────────────────
 
     def move_name(self, move_id: int) -> str:
-        from server.move_data import move_name as _move_name
-        return _move_name(move_id, self._is_rr)
+        from server.data.moves import move_name as _move_name
+        return _move_name(move_id, generation=3, variant=("rr" if self._is_rr else "vanilla"))
 
     def move_data(self, move_id: int) -> dict | None:
-        from server.move_data import move_data as _move_data, move_name as _move_name
-        raw = _move_data(move_id, self._is_rr)
+        from server.data.moves import move_data as _move_data, move_name as _move_name
+        variant = "rr" if self._is_rr else "vanilla"
+        raw = _move_data(move_id, generation=3, variant=variant)
         if raw is None:
             return None
-        name = _move_name(move_id, self._is_rr)
+        name = _move_name(move_id, generation=3, variant=variant)
         type_id = raw.get("type", 0)
         return {
             "name": name,
