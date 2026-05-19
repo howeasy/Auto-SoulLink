@@ -322,9 +322,13 @@ local _PT_PROFILE = {
 -- citation since RP is a hack on top of pret/pokeplatinum.
 local _RP_PROFILE = {}
 for k, v in pairs(_PT_PROFILE) do _RP_PROFILE[k] = v end
--- RP-specific deltas go here once discovered. Expected to be empty for the
--- standard RP releases (Drayano keeps the save format unchanged).
--- _RP_PROFILE.SOMETHING = 0xNEW
+-- RP-specific deltas: Drayano's Renegade Platinum extends the dex with
+-- cross-gen Pokémon (Mega forms, Gen 5+ species, etc.) that occupy species
+-- IDs above vanilla Gen 4's 493 (Arceus). Without raising SPECIES_MAX, the
+-- corruption-sentinel check in lua/memory_nds.lua decrypt_block_a would
+-- silently reject any RP-added mon as junk. 1025 covers the modern dex
+-- (through Gen 9 final species) and still flags clearly random u16 reads.
+_RP_PROFILE.SPECIES_MAX = 1025
 
 M.profiles = {
     heartgold          = _HGSS_PROFILE,
