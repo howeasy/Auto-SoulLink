@@ -1,0 +1,7978 @@
+{
+  "striaton_city": {
+    "Super Rod": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Seaking",
+        "species_id": 119,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Corphish",
+        "species_id": 341,
+        "rate": 30,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 90,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Crawdaunt",
+        "species_id": 342,
+        "rate": 10,
+        "min_level": 50,
+        "max_level": 60
+      }
+    ]
+  },
+  "castelia_city": {
+    "Dark Grass": [
+      {
+        "name": "Cottonee",
+        "species_id": 546,
+        "rate": 35,
+        "min_level": 16,
+        "max_level": 18
+      },
+      {
+        "name": "Rattata",
+        "species_id": 19,
+        "rate": 30,
+        "min_level": 16,
+        "max_level": 17
+      },
+      {
+        "name": "Buneary",
+        "species_id": 427,
+        "rate": 15,
+        "min_level": 16,
+        "max_level": 17
+      },
+      {
+        "name": "Pidove",
+        "species_id": 519,
+        "rate": 15,
+        "min_level": 16,
+        "max_level": 17
+      },
+      {
+        "name": "Eevee",
+        "species_id": 133,
+        "rate": 5,
+        "min_level": 19,
+        "max_level": 19
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 90,
+        "min_level": 15,
+        "max_level": 18
+      },
+      {
+        "name": "Lopunny",
+        "species_id": 428,
+        "rate": 5,
+        "min_level": 18,
+        "max_level": 18
+      },
+      {
+        "name": "Whimsicott",
+        "species_id": 547,
+        "rate": 5,
+        "min_level": 18,
+        "max_level": 18
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Cottonee",
+        "species_id": 546,
+        "rate": 35,
+        "min_level": 15,
+        "max_level": 17
+      },
+      {
+        "name": "Rattata",
+        "species_id": 19,
+        "rate": 30,
+        "min_level": 15,
+        "max_level": 16
+      },
+      {
+        "name": "Buneary",
+        "species_id": 427,
+        "rate": 15,
+        "min_level": 15,
+        "max_level": 16
+      },
+      {
+        "name": "Pidove",
+        "species_id": 519,
+        "rate": 15,
+        "min_level": 15,
+        "max_level": 16
+      },
+      {
+        "name": "Eevee",
+        "species_id": 133,
+        "rate": 5,
+        "min_level": 18,
+        "max_level": 18
+      }
+    ],
+    "Gift": [
+      {
+        "name": "Eevee",
+        "species_id": 133,
+        "rate": 100,
+        "min_level": 10,
+        "max_level": 10
+      }
+    ]
+  },
+  "icirrus_city": {
+    "Super Rod": [
+      {
+        "name": "Barboach",
+        "species_id": 339,
+        "rate": 120,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 40,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Whiscash",
+        "species_id": 340,
+        "rate": 80,
+        "min_level": 50,
+        "max_level": 60
+      },
+      {
+        "name": "Barboach",
+        "species_id": 339,
+        "rate": 40,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 40,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 130,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 110,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Seismitoad",
+        "species_id": 537,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 60
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Palpitoad",
+        "species_id": 536,
+        "rate": 120,
+        "min_level": 54,
+        "max_level": 57
+      },
+      {
+        "name": "Shelmet",
+        "species_id": 616,
+        "rate": 60,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 60,
+        "min_level": 55,
+        "max_level": 56
+      },
+      {
+        "name": "Croagunk",
+        "species_id": 453,
+        "rate": 45,
+        "min_level": 55,
+        "max_level": 56
+      },
+      {
+        "name": "Karrablast",
+        "species_id": 588,
+        "rate": 15,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ]
+  },
+  "aspertia_city": {
+    "Super Rod": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Seaking",
+        "species_id": 119,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 100,
+        "min_level": 5,
+        "max_level": 15
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 100,
+        "min_level": 5,
+        "max_level": 15
+      }
+    ],
+    "Gift": [
+      {
+        "name": "Snivy",
+        "species_id": 495,
+        "rate": 100,
+        "min_level": 5,
+        "max_level": 5
+      },
+      {
+        "name": "Tepig",
+        "species_id": 498,
+        "rate": 100,
+        "min_level": 5,
+        "max_level": 5
+      },
+      {
+        "name": "Oshawott",
+        "species_id": 501,
+        "rate": 100,
+        "min_level": 5,
+        "max_level": 5
+      }
+    ]
+  },
+  "virbank_city": {
+    "Super Rod": [
+      {
+        "name": "Finneon",
+        "species_id": 456,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Krabby",
+        "species_id": 98,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Qwilfish",
+        "species_id": 211,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Krabby",
+        "species_id": 98,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Lumineon",
+        "species_id": 457,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Kingler",
+        "species_id": 99,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Frillish",
+        "species_id": 592,
+        "rate": 100,
+        "min_level": 5,
+        "max_level": 15
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Alomomola",
+        "species_id": 594,
+        "rate": 95,
+        "min_level": 5,
+        "max_level": 15
+      },
+      {
+        "name": "Jellicent",
+        "species_id": 593,
+        "rate": 5,
+        "min_level": 5,
+        "max_level": 15
+      }
+    ]
+  },
+  "humilau_city": {
+    "Super Rod": [
+      {
+        "name": "Luvdisc",
+        "species_id": 370,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Shellder",
+        "species_id": 90,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Shellder",
+        "species_id": 90,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Luvdisc",
+        "species_id": 370,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Cloyster",
+        "species_id": 91,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Frillish",
+        "species_id": 592,
+        "rate": 65,
+        "min_level": 30,
+        "max_level": 45
+      },
+      {
+        "name": "Staryu",
+        "species_id": 120,
+        "rate": 30,
+        "min_level": 30,
+        "max_level": 45
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 5,
+        "min_level": 35,
+        "max_level": 45
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Jellicent",
+        "species_id": 593,
+        "rate": 60,
+        "min_level": 35,
+        "max_level": 45
+      },
+      {
+        "name": "Corsola",
+        "species_id": 222,
+        "rate": 30,
+        "min_level": 35,
+        "max_level": 45
+      },
+      {
+        "name": "Starmie",
+        "species_id": 121,
+        "rate": 5,
+        "min_level": 35,
+        "max_level": 45
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 5,
+        "min_level": 35,
+        "max_level": 45
+      }
+    ]
+  },
+  "dreamyard": {
+    "Dark Grass": [
+      {
+        "name": "Raticate",
+        "species_id": 20,
+        "rate": 25,
+        "min_level": 64,
+        "max_level": 67
+      },
+      {
+        "name": "Golbat",
+        "species_id": 42,
+        "rate": 25,
+        "min_level": 64,
+        "max_level": 67
+      },
+      {
+        "name": "Watchog",
+        "species_id": 505,
+        "rate": 25,
+        "min_level": 64,
+        "max_level": 67
+      },
+      {
+        "name": "Liepard",
+        "species_id": 510,
+        "rate": 25,
+        "min_level": 64,
+        "max_level": 67
+      },
+      {
+        "name": "Munna",
+        "species_id": 517,
+        "rate": 20,
+        "min_level": 65,
+        "max_level": 66
+      },
+      {
+        "name": "Jigglypuff",
+        "species_id": 39,
+        "rate": 10,
+        "min_level": 65,
+        "max_level": 65
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 75,
+        "min_level": 56,
+        "max_level": 59
+      },
+      {
+        "name": "Dunsparce",
+        "species_id": 206,
+        "rate": 10,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Wigglytuff",
+        "species_id": 40,
+        "rate": 5,
+        "min_level": 59,
+        "max_level": 59
+      },
+      {
+        "name": "Crobat",
+        "species_id": 169,
+        "rate": 5,
+        "min_level": 59,
+        "max_level": 59
+      },
+      {
+        "name": "Musharna",
+        "species_id": 518,
+        "rate": 5,
+        "min_level": 59,
+        "max_level": 59
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Watchog",
+        "species_id": 505,
+        "rate": 25,
+        "min_level": 56,
+        "max_level": 59
+      },
+      {
+        "name": "Liepard",
+        "species_id": 510,
+        "rate": 25,
+        "min_level": 56,
+        "max_level": 59
+      },
+      {
+        "name": "Munna",
+        "species_id": 517,
+        "rate": 20,
+        "min_level": 57,
+        "max_level": 58
+      },
+      {
+        "name": "Raticate",
+        "species_id": 20,
+        "rate": 10,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Jigglypuff",
+        "species_id": 39,
+        "rate": 10,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Golbat",
+        "species_id": 42,
+        "rate": 10,
+        "min_level": 57,
+        "max_level": 58
+      }
+    ]
+  },
+  "pinwheel_forest": {
+    "Dark Grass": [
+      {
+        "name": "Cottonee",
+        "species_id": 546,
+        "rate": 45,
+        "min_level": 62,
+        "max_level": 65
+      },
+      {
+        "name": "Gurdurr",
+        "species_id": 533,
+        "rate": 40,
+        "min_level": 63,
+        "max_level": 64
+      },
+      {
+        "name": "Palpitoad",
+        "species_id": 536,
+        "rate": 25,
+        "min_level": 64,
+        "max_level": 65
+      },
+      {
+        "name": "Swadloon",
+        "species_id": 541,
+        "rate": 25,
+        "min_level": 62,
+        "max_level": 64
+      },
+      {
+        "name": "Vigoroth",
+        "species_id": 288,
+        "rate": 15,
+        "min_level": 63,
+        "max_level": 65
+      },
+      {
+        "name": "Sawk",
+        "species_id": 539,
+        "rate": 15,
+        "min_level": 63,
+        "max_level": 65
+      },
+      {
+        "name": "Whirlipede",
+        "species_id": 544,
+        "rate": 15,
+        "min_level": 63,
+        "max_level": 65
+      },
+      {
+        "name": "Yanma",
+        "species_id": 193,
+        "rate": 10,
+        "min_level": 63,
+        "max_level": 63
+      },
+      {
+        "name": "Toxicroak",
+        "species_id": 454,
+        "rate": 10,
+        "min_level": 63,
+        "max_level": 63
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 85,
+        "min_level": 54,
+        "max_level": 64
+      },
+      {
+        "name": "Pansage",
+        "species_id": 511,
+        "rate": 10,
+        "min_level": 55,
+        "max_level": 55
+      },
+      {
+        "name": "Pansear",
+        "species_id": 513,
+        "rate": 10,
+        "min_level": 55,
+        "max_level": 55
+      },
+      {
+        "name": "Panpour",
+        "species_id": 515,
+        "rate": 10,
+        "min_level": 55,
+        "max_level": 55
+      },
+      {
+        "name": "Slaking",
+        "species_id": 289,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Yanmega",
+        "species_id": 469,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Seismitoad",
+        "species_id": 537,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Throh",
+        "species_id": 538,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Scolipede",
+        "species_id": 545,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Whimsicott",
+        "species_id": 547,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Cottonee",
+        "species_id": 546,
+        "rate": 45,
+        "min_level": 54,
+        "max_level": 57
+      },
+      {
+        "name": "Gurdurr",
+        "species_id": 533,
+        "rate": 40,
+        "min_level": 54,
+        "max_level": 56
+      },
+      {
+        "name": "Palpitoad",
+        "species_id": 536,
+        "rate": 25,
+        "min_level": 54,
+        "max_level": 57
+      },
+      {
+        "name": "Swadloon",
+        "species_id": 541,
+        "rate": 25,
+        "min_level": 54,
+        "max_level": 56
+      },
+      {
+        "name": "Vigoroth",
+        "species_id": 288,
+        "rate": 15,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Sawk",
+        "species_id": 539,
+        "rate": 15,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Whirlipede",
+        "species_id": 544,
+        "rate": 15,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Yanma",
+        "species_id": 193,
+        "rate": 10,
+        "min_level": 55,
+        "max_level": 55
+      },
+      {
+        "name": "Toxicroak",
+        "species_id": 454,
+        "rate": 10,
+        "min_level": 55,
+        "max_level": 55
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 40,
+        "min_level": 35,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 35,
+        "max_level": 60
+      },
+      {
+        "name": "Seaking",
+        "species_id": 119,
+        "rate": 20,
+        "min_level": 35,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 30,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 60,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 35,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Azumarill",
+        "species_id": 184,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 60
+      }
+    ]
+  },
+  "desert_resort": {
+    "Grass": [
+      {
+        "name": "Sandile",
+        "species_id": 551,
+        "rate": 30,
+        "min_level": 18,
+        "max_level": 19
+      },
+      {
+        "name": "Darumaka",
+        "species_id": 554,
+        "rate": 30,
+        "min_level": 18,
+        "max_level": 19
+      },
+      {
+        "name": "Sandshrew",
+        "species_id": 27,
+        "rate": 15,
+        "min_level": 19,
+        "max_level": 20
+      },
+      {
+        "name": "Maractus",
+        "species_id": 556,
+        "rate": 10,
+        "min_level": 19,
+        "max_level": 19
+      },
+      {
+        "name": "Dwebble",
+        "species_id": 557,
+        "rate": 10,
+        "min_level": 19,
+        "max_level": 21
+      },
+      {
+        "name": "Scraggy",
+        "species_id": 559,
+        "rate": 10,
+        "min_level": 19,
+        "max_level": 19
+      },
+      {
+        "name": "Sigilyph",
+        "species_id": 561,
+        "rate": 10,
+        "min_level": 19,
+        "max_level": 19
+      },
+      {
+        "name": "Trapinch",
+        "species_id": 328,
+        "rate": 5,
+        "min_level": 21,
+        "max_level": 21
+      }
+    ]
+  },
+  "relic_castle": {
+    "Grass": [
+      {
+        "name": "Baltoy",
+        "species_id": 343,
+        "rate": 100,
+        "min_level": 27,
+        "max_level": 30
+      },
+      {
+        "name": "Sandile",
+        "species_id": 551,
+        "rate": 40,
+        "min_level": 18,
+        "max_level": 28
+      },
+      {
+        "name": "Yamask",
+        "species_id": 562,
+        "rate": 40,
+        "min_level": 18,
+        "max_level": 30
+      },
+      {
+        "name": "Sandshrew",
+        "species_id": 27,
+        "rate": 20,
+        "min_level": 19,
+        "max_level": 20
+      },
+      {
+        "name": "Sandslash",
+        "species_id": 28,
+        "rate": 20,
+        "min_level": 28,
+        "max_level": 29
+      },
+      {
+        "name": "Krokorok",
+        "species_id": 552,
+        "rate": 10,
+        "min_level": 29,
+        "max_level": 30
+      }
+    ]
+  },
+  "chargestone_cave": {
+    "Dust Cloud": [
+      {
+        "name": "Drilbur",
+        "species_id": 529,
+        "rate": 100,
+        "min_level": 25,
+        "max_level": 31
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Joltik",
+        "species_id": 595,
+        "rate": 39,
+        "min_level": 25,
+        "max_level": 31
+      },
+      {
+        "name": "Klink",
+        "species_id": 599,
+        "rate": 24,
+        "min_level": 26,
+        "max_level": 31
+      },
+      {
+        "name": "Ferroseed",
+        "species_id": 597,
+        "rate": 20,
+        "min_level": 26,
+        "max_level": 31
+      },
+      {
+        "name": "Nosepass",
+        "species_id": 299,
+        "rate": 10,
+        "min_level": 27,
+        "max_level": 30
+      },
+      {
+        "name": "Tynamo",
+        "species_id": 602,
+        "rate": 8,
+        "min_level": 28,
+        "max_level": 31
+      },
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 5,
+        "min_level": 25,
+        "max_level": 28
+      }
+    ]
+  },
+  "twist_mountain": {
+    "Dust Cloud": [
+      {
+        "name": "Excadrill",
+        "species_id": 530,
+        "rate": 75,
+        "min_level": 54,
+        "max_level": 57
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 20,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Steelix",
+        "species_id": 208,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 120,
+        "min_level": 54,
+        "max_level": 55
+      },
+      {
+        "name": "Gurdurr",
+        "species_id": 533,
+        "rate": 50,
+        "min_level": 55,
+        "max_level": 55
+      },
+      {
+        "name": "Beartic",
+        "species_id": 614,
+        "rate": 45,
+        "min_level": 54,
+        "max_level": 56
+      },
+      {
+        "name": "Heatmor",
+        "species_id": 631,
+        "rate": 35,
+        "min_level": 55,
+        "max_level": 56
+      },
+      {
+        "name": "Cryogonal",
+        "species_id": 615,
+        "rate": 15,
+        "min_level": 56,
+        "max_level": 57
+      },
+      {
+        "name": "Durant",
+        "species_id": 632,
+        "rate": 15,
+        "min_level": 56,
+        "max_level": 57
+      },
+      {
+        "name": "Woobat",
+        "species_id": 527,
+        "rate": 10,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ]
+  },
+  "dragonspiral_tower": {
+    "Dark Grass": [
+      {
+        "name": "Tranquill",
+        "species_id": 520,
+        "rate": 105,
+        "min_level": 63,
+        "max_level": 66
+      },
+      {
+        "name": "Sawsbuck",
+        "species_id": 586,
+        "rate": 45,
+        "min_level": 63,
+        "max_level": 66
+      },
+      {
+        "name": "Mienshao",
+        "species_id": 620,
+        "rate": 29,
+        "min_level": 64,
+        "max_level": 66
+      },
+      {
+        "name": "Vanillish",
+        "species_id": 583,
+        "rate": 25,
+        "min_level": 63,
+        "max_level": 65
+      },
+      {
+        "name": "Beartic",
+        "species_id": 614,
+        "rate": 15,
+        "min_level": 65,
+        "max_level": 66
+      },
+      {
+        "name": "Druddigon",
+        "species_id": 621,
+        "rate": 5,
+        "min_level": 66,
+        "max_level": 66
+      },
+      {
+        "name": "Mienfoo",
+        "species_id": 619,
+        "rate": 1,
+        "min_level": 66,
+        "max_level": 66
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 85,
+        "min_level": 55,
+        "max_level": 58
+      },
+      {
+        "name": "Unfezant",
+        "species_id": 521,
+        "rate": 15,
+        "min_level": 57,
+        "max_level": 58
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 56,
+        "max_level": 56
+      },
+      {
+        "name": "Vanilluxe",
+        "species_id": 584,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 58
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Tranquill",
+        "species_id": 520,
+        "rate": 105,
+        "min_level": 55,
+        "max_level": 58
+      },
+      {
+        "name": "Golurk",
+        "species_id": 623,
+        "rate": 100,
+        "min_level": 55,
+        "max_level": 58
+      },
+      {
+        "name": "Sawsbuck",
+        "species_id": 586,
+        "rate": 45,
+        "min_level": 55,
+        "max_level": 58
+      },
+      {
+        "name": "Mienshao",
+        "species_id": 620,
+        "rate": 30,
+        "min_level": 55,
+        "max_level": 58
+      },
+      {
+        "name": "Druddigon",
+        "species_id": 621,
+        "rate": 30,
+        "min_level": 56,
+        "max_level": 58
+      },
+      {
+        "name": "Vanillish",
+        "species_id": 583,
+        "rate": 25,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Beartic",
+        "species_id": 614,
+        "rate": 15,
+        "min_level": 57,
+        "max_level": 58
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Dratini",
+        "species_id": 147,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Dratini",
+        "species_id": 147,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Dragonair",
+        "species_id": 148,
+        "rate": 19,
+        "min_level": 50,
+        "max_level": 70
+      },
+      {
+        "name": "Dragonite",
+        "species_id": 149,
+        "rate": 1,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 100,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 100,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ]
+  },
+  "victory_road": {
+    "Dust Cloud": [
+      {
+        "name": "Excadrill",
+        "species_id": 530,
+        "rate": 100,
+        "min_level": 47,
+        "max_level": 50
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 100,
+        "min_level": 47,
+        "max_level": 50
+      }
+    ]
+  },
+  "victory_road_2": {
+    "Super Rod": [
+      {
+        "name": "Poliwag",
+        "species_id": 60,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Poliwhirl",
+        "species_id": 61,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Poliwrath",
+        "species_id": 62,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      },
+      {
+        "name": "Politoed",
+        "species_id": 186,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 35,
+        "max_level": 50
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 30,
+        "min_level": 35,
+        "max_level": 50
+      },
+      {
+        "name": "Buizel",
+        "species_id": 418,
+        "rate": 30,
+        "min_level": 35,
+        "max_level": 50
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 60,
+        "min_level": 35,
+        "max_level": 60
+      },
+      {
+        "name": "Buizel",
+        "species_id": 418,
+        "rate": 60,
+        "min_level": 35,
+        "max_level": 50
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 35,
+        "min_level": 35,
+        "max_level": 70
+      },
+      {
+        "name": "Floatzel",
+        "species_id": 419,
+        "rate": 10,
+        "min_level": 40,
+        "max_level": 50
+      },
+      {
+        "name": "Azumarill",
+        "species_id": 184,
+        "rate": 5,
+        "min_level": 40,
+        "max_level": 70
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Tranquill",
+        "species_id": 520,
+        "rate": 80,
+        "min_level": 47,
+        "max_level": 50
+      },
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 80,
+        "min_level": 41,
+        "max_level": 50
+      },
+      {
+        "name": "Druddigon",
+        "species_id": 621,
+        "rate": 80,
+        "min_level": 47,
+        "max_level": 50
+      },
+      {
+        "name": "Banette",
+        "species_id": 354,
+        "rate": 70,
+        "min_level": 47,
+        "max_level": 50
+      },
+      {
+        "name": "Gurdurr",
+        "species_id": 533,
+        "rate": 70,
+        "min_level": 47,
+        "max_level": 50
+      },
+      {
+        "name": "Cottonee",
+        "species_id": 546,
+        "rate": 70,
+        "min_level": 47,
+        "max_level": 50
+      },
+      {
+        "name": "Roselia",
+        "species_id": 315,
+        "rate": 30,
+        "min_level": 48,
+        "max_level": 50
+      },
+      {
+        "name": "Throh",
+        "species_id": 538,
+        "rate": 30,
+        "min_level": 48,
+        "max_level": 50
+      },
+      {
+        "name": "Golurk",
+        "species_id": 623,
+        "rate": 30,
+        "min_level": 48,
+        "max_level": 50
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 20,
+        "min_level": 43,
+        "max_level": 50
+      },
+      {
+        "name": "Altaria",
+        "species_id": 334,
+        "rate": 20,
+        "min_level": 49,
+        "max_level": 50
+      },
+      {
+        "name": "Zweilous",
+        "species_id": 634,
+        "rate": 20,
+        "min_level": 49,
+        "max_level": 50
+      }
+    ],
+    "Dark Grass": [
+      {
+        "name": "Tranquill",
+        "species_id": 520,
+        "rate": 80,
+        "min_level": 52,
+        "max_level": 55
+      },
+      {
+        "name": "Gurdurr",
+        "species_id": 533,
+        "rate": 70,
+        "min_level": 52,
+        "max_level": 55
+      },
+      {
+        "name": "Cottonee",
+        "species_id": 546,
+        "rate": 70,
+        "min_level": 52,
+        "max_level": 55
+      },
+      {
+        "name": "Roselia",
+        "species_id": 315,
+        "rate": 30,
+        "min_level": 53,
+        "max_level": 55
+      },
+      {
+        "name": "Throh",
+        "species_id": 538,
+        "rate": 30,
+        "min_level": 53,
+        "max_level": 55
+      },
+      {
+        "name": "Altaria",
+        "species_id": 334,
+        "rate": 20,
+        "min_level": 54,
+        "max_level": 55
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 95,
+        "min_level": 47,
+        "max_level": 50
+      },
+      {
+        "name": "Dunsparce",
+        "species_id": 206,
+        "rate": 10,
+        "min_level": 49,
+        "max_level": 49
+      },
+      {
+        "name": "Roserade",
+        "species_id": 407,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 50
+      },
+      {
+        "name": "Unfezant",
+        "species_id": 521,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 50
+      },
+      {
+        "name": "Sawk",
+        "species_id": 539,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 50
+      },
+      {
+        "name": "Whimsicott",
+        "species_id": 547,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 50
+      }
+    ],
+    "Dust Cloud": [
+      {
+        "name": "Excadrill",
+        "species_id": 530,
+        "rate": 80,
+        "min_level": 41,
+        "max_level": 50
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 20,
+        "min_level": 41,
+        "max_level": 47
+      }
+    ]
+  },
+  "giant_chasm": {
+    "Dark Grass": [
+      {
+        "name": "Tangela",
+        "species_id": 114,
+        "rate": 30,
+        "min_level": 49,
+        "max_level": 50
+      },
+      {
+        "name": "Piloswine",
+        "species_id": 221,
+        "rate": 30,
+        "min_level": 49,
+        "max_level": 51
+      },
+      {
+        "name": "Clefairy",
+        "species_id": 35,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 52
+      },
+      {
+        "name": "Pelipper",
+        "species_id": 279,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 50
+      },
+      {
+        "name": "Ditto",
+        "species_id": 132,
+        "rate": 15,
+        "min_level": 50,
+        "max_level": 52
+      },
+      {
+        "name": "Lunatone",
+        "species_id": 337,
+        "rate": 10,
+        "min_level": 50,
+        "max_level": 51
+      },
+      {
+        "name": "Solrock",
+        "species_id": 338,
+        "rate": 10,
+        "min_level": 51,
+        "max_level": 51
+      },
+      {
+        "name": "Metang",
+        "species_id": 375,
+        "rate": 10,
+        "min_level": 50,
+        "max_level": 52
+      },
+      {
+        "name": "Vanillish",
+        "species_id": 583,
+        "rate": 10,
+        "min_level": 50,
+        "max_level": 52
+      },
+      {
+        "name": "Delibird",
+        "species_id": 225,
+        "rate": 5,
+        "min_level": 49,
+        "max_level": 49
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 85,
+        "min_level": 44,
+        "max_level": 47
+      },
+      {
+        "name": "Clefable",
+        "species_id": 36,
+        "rate": 5,
+        "min_level": 47,
+        "max_level": 47
+      },
+      {
+        "name": "Metagross",
+        "species_id": 376,
+        "rate": 5,
+        "min_level": 47,
+        "max_level": 47
+      },
+      {
+        "name": "Tangrowth",
+        "species_id": 465,
+        "rate": 5,
+        "min_level": 47,
+        "max_level": 47
+      },
+      {
+        "name": "Mamoswine",
+        "species_id": 473,
+        "rate": 5,
+        "min_level": 47,
+        "max_level": 47
+      },
+      {
+        "name": "Vanilluxe",
+        "species_id": 584,
+        "rate": 5,
+        "min_level": 47,
+        "max_level": 47
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Tangela",
+        "species_id": 114,
+        "rate": 30,
+        "min_level": 44,
+        "max_level": 45
+      },
+      {
+        "name": "Piloswine",
+        "species_id": 221,
+        "rate": 30,
+        "min_level": 44,
+        "max_level": 46
+      },
+      {
+        "name": "Clefairy",
+        "species_id": 35,
+        "rate": 20,
+        "min_level": 44,
+        "max_level": 47
+      },
+      {
+        "name": "Sneasel",
+        "species_id": 215,
+        "rate": 20,
+        "min_level": 44,
+        "max_level": 44
+      },
+      {
+        "name": "Pelipper",
+        "species_id": 279,
+        "rate": 20,
+        "min_level": 45,
+        "max_level": 45
+      },
+      {
+        "name": "Ditto",
+        "species_id": 132,
+        "rate": 15,
+        "min_level": 45,
+        "max_level": 47
+      },
+      {
+        "name": "Vanillish",
+        "species_id": 583,
+        "rate": 15,
+        "min_level": 45,
+        "max_level": 47
+      },
+      {
+        "name": "Lunatone",
+        "species_id": 337,
+        "rate": 10,
+        "min_level": 45,
+        "max_level": 46
+      },
+      {
+        "name": "Solrock",
+        "species_id": 338,
+        "rate": 10,
+        "min_level": 46,
+        "max_level": 46
+      },
+      {
+        "name": "Metang",
+        "species_id": 375,
+        "rate": 10,
+        "min_level": 45,
+        "max_level": 47
+      },
+      {
+        "name": "Delibird",
+        "species_id": 225,
+        "rate": 5,
+        "min_level": 44,
+        "max_level": 47
+      }
+    ],
+    "Dust Cloud": [
+      {
+        "name": "Excadrill",
+        "species_id": 530,
+        "rate": 100,
+        "min_level": 44,
+        "max_level": 47
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Poliwag",
+        "species_id": 60,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Poliwhirl",
+        "species_id": 61,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Poliwrath",
+        "species_id": 62,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 35,
+        "max_level": 50
+      },
+      {
+        "name": "Seel",
+        "species_id": 86,
+        "rate": 30,
+        "min_level": 35,
+        "max_level": 50
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Seel",
+        "species_id": 86,
+        "rate": 60,
+        "min_level": 35,
+        "max_level": 50
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 30,
+        "min_level": 35,
+        "max_level": 50
+      },
+      {
+        "name": "Dewgong",
+        "species_id": 87,
+        "rate": 10,
+        "min_level": 40,
+        "max_level": 50
+      }
+    ]
+  },
+  "castelia_sewers": {
+    "Super Rod": [
+      {
+        "name": "Grimer",
+        "species_id": 88,
+        "rate": 100,
+        "min_level": 40,
+        "max_level": 70
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Grimer",
+        "species_id": 88,
+        "rate": 80,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Muk",
+        "species_id": 89,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Grimer",
+        "species_id": 88,
+        "rate": 100,
+        "min_level": 5,
+        "max_level": 15
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Grimer",
+        "species_id": 88,
+        "rate": 95,
+        "min_level": 5,
+        "max_level": 20
+      },
+      {
+        "name": "Muk",
+        "species_id": 89,
+        "rate": 5,
+        "min_level": 5,
+        "max_level": 20
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Rattata",
+        "species_id": 19,
+        "rate": 45,
+        "min_level": 14,
+        "max_level": 17
+      },
+      {
+        "name": "Zubat",
+        "species_id": 41,
+        "rate": 45,
+        "min_level": 14,
+        "max_level": 17
+      },
+      {
+        "name": "Grimer",
+        "species_id": 88,
+        "rate": 10,
+        "min_level": 15,
+        "max_level": 17
+      }
+    ]
+  },
+  "p2_laboratory": {
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 85,
+        "min_level": 56,
+        "max_level": 59
+      },
+      {
+        "name": "Magnezone",
+        "species_id": 462,
+        "rate": 5,
+        "min_level": 59,
+        "max_level": 59
+      },
+      {
+        "name": "Stoutland",
+        "species_id": 508,
+        "rate": 5,
+        "min_level": 59,
+        "max_level": 59
+      },
+      {
+        "name": "Klinklang",
+        "species_id": 601,
+        "rate": 5,
+        "min_level": 59,
+        "max_level": 59
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Horsea",
+        "species_id": 116,
+        "rate": 55,
+        "min_level": 35,
+        "max_level": 55
+      },
+      {
+        "name": "Finneon",
+        "species_id": 456,
+        "rate": 45,
+        "min_level": 35,
+        "max_level": 55
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Seadra",
+        "species_id": 117,
+        "rate": 40,
+        "min_level": 35,
+        "max_level": 60
+      },
+      {
+        "name": "Qwilfish",
+        "species_id": 211,
+        "rate": 40,
+        "min_level": 35,
+        "max_level": 60
+      },
+      {
+        "name": "Lumineon",
+        "species_id": 457,
+        "rate": 15,
+        "min_level": 35,
+        "max_level": 70
+      },
+      {
+        "name": "Kingdra",
+        "species_id": 230,
+        "rate": 5,
+        "min_level": 45,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Frillish",
+        "species_id": 592,
+        "rate": 100,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Alomomola",
+        "species_id": 594,
+        "rate": 95,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Jellicent",
+        "species_id": 593,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 60
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Watchog",
+        "species_id": 505,
+        "rate": 20,
+        "min_level": 56,
+        "max_level": 56
+      },
+      {
+        "name": "Herdier",
+        "species_id": 507,
+        "rate": 20,
+        "min_level": 56,
+        "max_level": 56
+      },
+      {
+        "name": "Magneton",
+        "species_id": 82,
+        "rate": 15,
+        "min_level": 57,
+        "max_level": 59
+      },
+      {
+        "name": "Weezing",
+        "species_id": 110,
+        "rate": 15,
+        "min_level": 57,
+        "max_level": 58
+      },
+      {
+        "name": "Scrafty",
+        "species_id": 560,
+        "rate": 15,
+        "min_level": 57,
+        "max_level": 58
+      },
+      {
+        "name": "Klang",
+        "species_id": 600,
+        "rate": 15,
+        "min_level": 57,
+        "max_level": 59
+      }
+    ]
+  },
+  "undella_bay": {
+    "Super Rod": [
+      {
+        "name": "Chinchou",
+        "species_id": 170,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Remoraid",
+        "species_id": 223,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Chinchou",
+        "species_id": 170,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Remoraid",
+        "species_id": 223,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Lanturn",
+        "species_id": 171,
+        "rate": 15,
+        "min_level": 50,
+        "max_level": 70
+      },
+      {
+        "name": "Octillery",
+        "species_id": 224,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Mantyke",
+        "species_id": 458,
+        "rate": 90,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Frillish",
+        "species_id": 592,
+        "rate": 65,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Spheal",
+        "species_id": 363,
+        "rate": 30,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Remoraid",
+        "species_id": 223,
+        "rate": 5,
+        "min_level": 30,
+        "max_level": 40
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Jellicent",
+        "species_id": 593,
+        "rate": 180,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Wailmer",
+        "species_id": 320,
+        "rate": 150,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Sealeo",
+        "species_id": 364,
+        "rate": 30,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Mantine",
+        "species_id": 226,
+        "rate": 15,
+        "min_level": 30,
+        "max_level": 40
+      },
+      {
+        "name": "Wailord",
+        "species_id": 321,
+        "rate": 5,
+        "min_level": 30,
+        "max_level": 40
+      },
+      {
+        "name": "Walrein",
+        "species_id": 365,
+        "rate": 5,
+        "min_level": 30,
+        "max_level": 40
+      }
+    ]
+  },
+  "floccesy_ranch": {
+    "Super Rod": [
+      {
+        "name": "Poliwag",
+        "species_id": 60,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Poliwhirl",
+        "species_id": 61,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Politoed",
+        "species_id": 186,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 5,
+        "max_level": 15
+      },
+      {
+        "name": "Azurill",
+        "species_id": 298,
+        "rate": 30,
+        "min_level": 5,
+        "max_level": 15
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 65,
+        "min_level": 5,
+        "max_level": 15
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 30,
+        "min_level": 5,
+        "max_level": 15
+      },
+      {
+        "name": "Azumarill",
+        "species_id": 184,
+        "rate": 5,
+        "min_level": 5,
+        "max_level": 15
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 90,
+        "min_level": 4,
+        "max_level": 7
+      },
+      {
+        "name": "Dunsparce",
+        "species_id": 206,
+        "rate": 10,
+        "min_level": 5,
+        "max_level": 5
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Lillipup",
+        "species_id": 506,
+        "rate": 40,
+        "min_level": 4,
+        "max_level": 7
+      },
+      {
+        "name": "Azurill",
+        "species_id": 298,
+        "rate": 20,
+        "min_level": 5,
+        "max_level": 5
+      },
+      {
+        "name": "Psyduck",
+        "species_id": 54,
+        "rate": 10,
+        "min_level": 5,
+        "max_level": 5
+      },
+      {
+        "name": "Mareep",
+        "species_id": 179,
+        "rate": 10,
+        "min_level": 5,
+        "max_level": 5
+      },
+      {
+        "name": "Patrat",
+        "species_id": 504,
+        "rate": 10,
+        "min_level": 5,
+        "max_level": 5
+      },
+      {
+        "name": "Riolu",
+        "species_id": 447,
+        "rate": 5,
+        "min_level": 5,
+        "max_level": 7
+      },
+      {
+        "name": "Pidove",
+        "species_id": 519,
+        "rate": 5,
+        "min_level": 7,
+        "max_level": 7
+      }
+    ]
+  },
+  "virbank_complex": {
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 100,
+        "min_level": 10,
+        "max_level": 13
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Finneon",
+        "species_id": 456,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Krabby",
+        "species_id": 98,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Qwilfish",
+        "species_id": 211,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Krabby",
+        "species_id": 98,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Lumineon",
+        "species_id": 457,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Kingler",
+        "species_id": 99,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Frillish",
+        "species_id": 592,
+        "rate": 100,
+        "min_level": 5,
+        "max_level": 15
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Alomomola",
+        "species_id": 594,
+        "rate": 95,
+        "min_level": 5,
+        "max_level": 15
+      },
+      {
+        "name": "Jellicent",
+        "species_id": 593,
+        "rate": 5,
+        "min_level": 5,
+        "max_level": 15
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Patrat",
+        "species_id": 504,
+        "rate": 35,
+        "min_level": 10,
+        "max_level": 13
+      },
+      {
+        "name": "Pidove",
+        "species_id": 519,
+        "rate": 35,
+        "min_level": 10,
+        "max_level": 13
+      },
+      {
+        "name": "Magnemite",
+        "species_id": 81,
+        "rate": 25,
+        "min_level": 10,
+        "max_level": 12
+      },
+      {
+        "name": "Magby",
+        "species_id": 240,
+        "rate": 25,
+        "min_level": 10,
+        "max_level": 12
+      },
+      {
+        "name": "Growlithe",
+        "species_id": 58,
+        "rate": 20,
+        "min_level": 11,
+        "max_level": 13
+      },
+      {
+        "name": "Koffing",
+        "species_id": 109,
+        "rate": 15,
+        "min_level": 10,
+        "max_level": 13
+      }
+    ],
+    "Dark Grass": [
+      {
+        "name": "Magnemite",
+        "species_id": 81,
+        "rate": 25,
+        "min_level": 11,
+        "max_level": 13
+      },
+      {
+        "name": "Magby",
+        "species_id": 240,
+        "rate": 25,
+        "min_level": 11,
+        "max_level": 13
+      },
+      {
+        "name": "Growlithe",
+        "species_id": 58,
+        "rate": 20,
+        "min_level": 12,
+        "max_level": 14
+      },
+      {
+        "name": "Koffing",
+        "species_id": 109,
+        "rate": 15,
+        "min_level": 11,
+        "max_level": 14
+      },
+      {
+        "name": "Patrat",
+        "species_id": 504,
+        "rate": 15,
+        "min_level": 11,
+        "max_level": 14
+      }
+    ]
+  },
+  "reversal_mountain": {
+    "Dark Grass": [
+      {
+        "name": "Grumpig",
+        "species_id": 326,
+        "rate": 30,
+        "min_level": 35,
+        "max_level": 37
+      },
+      {
+        "name": "Skorupi",
+        "species_id": 451,
+        "rate": 30,
+        "min_level": 35,
+        "max_level": 37
+      },
+      {
+        "name": "Drifblim",
+        "species_id": 426,
+        "rate": 20,
+        "min_level": 36,
+        "max_level": 37
+      },
+      {
+        "name": "Skarmory",
+        "species_id": 227,
+        "rate": 15,
+        "min_level": 36,
+        "max_level": 38
+      },
+      {
+        "name": "Vibrava",
+        "species_id": 329,
+        "rate": 5,
+        "min_level": 38,
+        "max_level": 38
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 100,
+        "min_level": 31,
+        "max_level": 34
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Woobat",
+        "species_id": 527,
+        "rate": 35,
+        "min_level": 32,
+        "max_level": 35
+      },
+      {
+        "name": "Skorupi",
+        "species_id": 451,
+        "rate": 30,
+        "min_level": 31,
+        "max_level": 35
+      },
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 25,
+        "min_level": 32,
+        "max_level": 35
+      },
+      {
+        "name": "Spoink",
+        "species_id": 325,
+        "rate": 20,
+        "min_level": 31,
+        "max_level": 31
+      },
+      {
+        "name": "Grumpig",
+        "species_id": 326,
+        "rate": 20,
+        "min_level": 33,
+        "max_level": 35
+      },
+      {
+        "name": "Drifblim",
+        "species_id": 426,
+        "rate": 20,
+        "min_level": 32,
+        "max_level": 33
+      },
+      {
+        "name": "Trapinch",
+        "species_id": 328,
+        "rate": 15,
+        "min_level": 32,
+        "max_level": 34
+      },
+      {
+        "name": "Skarmory",
+        "species_id": 227,
+        "rate": 5,
+        "min_level": 34,
+        "max_level": 34
+      }
+    ],
+    "Dust Cloud": [
+      {
+        "name": "Excadrill",
+        "species_id": 530,
+        "rate": 100,
+        "min_level": 32,
+        "max_level": 35
+      }
+    ]
+  },
+  "strange_house": {
+    "Grass": [
+      {
+        "name": "Litwick",
+        "species_id": 607,
+        "rate": 30,
+        "min_level": 31,
+        "max_level": 33
+      },
+      {
+        "name": "Gothita",
+        "species_id": 574,
+        "rate": 20,
+        "min_level": 31,
+        "max_level": 31
+      },
+      {
+        "name": "Raticate",
+        "species_id": 20,
+        "rate": 15,
+        "min_level": 32,
+        "max_level": 33
+      },
+      {
+        "name": "Golbat",
+        "species_id": 42,
+        "rate": 15,
+        "min_level": 32,
+        "max_level": 33
+      },
+      {
+        "name": "Banette",
+        "species_id": 354,
+        "rate": 15,
+        "min_level": 32,
+        "max_level": 34
+      },
+      {
+        "name": "Gothorita",
+        "species_id": 575,
+        "rate": 15,
+        "min_level": 33,
+        "max_level": 34
+      }
+    ]
+  },
+  "relic_passage": {
+    "Dust Cloud": [
+      {
+        "name": "Drilbur",
+        "species_id": 529,
+        "rate": 80,
+        "min_level": 16,
+        "max_level": 30
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 20,
+        "min_level": 16,
+        "max_level": 27
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 39,
+        "min_level": 27,
+        "max_level": 30
+      },
+      {
+        "name": "Woobat",
+        "species_id": 527,
+        "rate": 36,
+        "min_level": 16,
+        "max_level": 30
+      },
+      {
+        "name": "Roggenrola",
+        "species_id": 524,
+        "rate": 34,
+        "min_level": 16,
+        "max_level": 18
+      },
+      {
+        "name": "Timburr",
+        "species_id": 532,
+        "rate": 20,
+        "min_level": 17,
+        "max_level": 18
+      },
+      {
+        "name": "Gurdurr",
+        "species_id": 533,
+        "rate": 20,
+        "min_level": 28,
+        "max_level": 30
+      },
+      {
+        "name": "Rattata",
+        "species_id": 19,
+        "rate": 10,
+        "min_level": 17,
+        "max_level": 17
+      },
+      {
+        "name": "Raticate",
+        "species_id": 20,
+        "rate": 10,
+        "min_level": 29,
+        "max_level": 29
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 5,
+        "min_level": 18,
+        "max_level": 30
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Poliwag",
+        "species_id": 60,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Poliwhirl",
+        "species_id": 61,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Poliwrath",
+        "species_id": 62,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 10,
+        "max_level": 30
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 30,
+        "min_level": 10,
+        "max_level": 30
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 60,
+        "min_level": 10,
+        "max_level": 30
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 35,
+        "min_level": 10,
+        "max_level": 30
+      },
+      {
+        "name": "Azumarill",
+        "species_id": 184,
+        "rate": 5,
+        "min_level": 10,
+        "max_level": 30
+      }
+    ]
+  },
+  "clay_tunnel": {
+    "Dust Cloud": [
+      {
+        "name": "Excadrill",
+        "species_id": 530,
+        "rate": 75,
+        "min_level": 54,
+        "max_level": 57
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 20,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Steelix",
+        "species_id": 208,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Poliwag",
+        "species_id": 60,
+        "rate": 60,
+        "min_level": 50,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 50,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Poliwhirl",
+        "species_id": 61,
+        "rate": 55,
+        "min_level": 50,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 50,
+        "max_level": 60
+      },
+      {
+        "name": "Poliwrath",
+        "species_id": 62,
+        "rate": 5,
+        "min_level": 60,
+        "max_level": 60
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 100,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 100,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 35,
+        "min_level": 54,
+        "max_level": 56
+      },
+      {
+        "name": "Durant",
+        "species_id": 632,
+        "rate": 20,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Nosepass",
+        "species_id": 299,
+        "rate": 15,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Lairon",
+        "species_id": 305,
+        "rate": 15,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Woobat",
+        "species_id": 527,
+        "rate": 10,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ]
+  },
+  "underground_ruins": {
+    "Dust Cloud": [
+      {
+        "name": "Excadrill",
+        "species_id": 530,
+        "rate": 75,
+        "min_level": 54,
+        "max_level": 57
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 20,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Steelix",
+        "species_id": 208,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 35,
+        "min_level": 54,
+        "max_level": 56
+      },
+      {
+        "name": "Durant",
+        "species_id": 632,
+        "rate": 20,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Nosepass",
+        "species_id": 299,
+        "rate": 15,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Lairon",
+        "species_id": 305,
+        "rate": 15,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Woobat",
+        "species_id": 527,
+        "rate": 10,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ]
+  },
+  "rocky_mountain_room": {
+    "Dust Cloud": [
+      {
+        "name": "Excadrill",
+        "species_id": 530,
+        "rate": 75,
+        "min_level": 54,
+        "max_level": 57
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 20,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Steelix",
+        "species_id": 208,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 35,
+        "min_level": 54,
+        "max_level": 56
+      },
+      {
+        "name": "Durant",
+        "species_id": 632,
+        "rate": 20,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Nosepass",
+        "species_id": 299,
+        "rate": 15,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Lairon",
+        "species_id": 305,
+        "rate": 15,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Woobat",
+        "species_id": 527,
+        "rate": 10,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ]
+  },
+  "glacier_room": {
+    "Dust Cloud": [
+      {
+        "name": "Excadrill",
+        "species_id": 530,
+        "rate": 75,
+        "min_level": 54,
+        "max_level": 57
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 20,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Steelix",
+        "species_id": 208,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 35,
+        "min_level": 54,
+        "max_level": 56
+      },
+      {
+        "name": "Durant",
+        "species_id": 632,
+        "rate": 20,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Nosepass",
+        "species_id": 299,
+        "rate": 15,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Lairon",
+        "species_id": 305,
+        "rate": 15,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Woobat",
+        "species_id": 527,
+        "rate": 10,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ]
+  },
+  "iron_room": {
+    "Dust Cloud": [
+      {
+        "name": "Excadrill",
+        "species_id": 530,
+        "rate": 75,
+        "min_level": 54,
+        "max_level": 57
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 20,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Steelix",
+        "species_id": 208,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 35,
+        "min_level": 54,
+        "max_level": 56
+      },
+      {
+        "name": "Durant",
+        "species_id": 632,
+        "rate": 20,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Nosepass",
+        "species_id": 299,
+        "rate": 15,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Lairon",
+        "species_id": 305,
+        "rate": 15,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Woobat",
+        "species_id": 527,
+        "rate": 10,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ]
+  },
+  "seaside_cave": {
+    "Dust Cloud": [
+      {
+        "name": "Excadrill",
+        "species_id": 530,
+        "rate": 100,
+        "min_level": 34,
+        "max_level": 42
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Luvdisc",
+        "species_id": 370,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Shellder",
+        "species_id": 90,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Shellder",
+        "species_id": 90,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Luvdisc",
+        "species_id": 370,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Cloyster",
+        "species_id": 91,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Frillish",
+        "species_id": 592,
+        "rate": 70,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Seel",
+        "species_id": 86,
+        "rate": 30,
+        "min_level": 25,
+        "max_level": 40
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Seel",
+        "species_id": 86,
+        "rate": 60,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Jellicent",
+        "species_id": 593,
+        "rate": 30,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Dewgong",
+        "species_id": 87,
+        "rate": 10,
+        "min_level": 30,
+        "max_level": 40
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 35,
+        "min_level": 34,
+        "max_level": 40
+      },
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 35,
+        "min_level": 35,
+        "max_level": 42
+      },
+      {
+        "name": "Woobat",
+        "species_id": 527,
+        "rate": 35,
+        "min_level": 34,
+        "max_level": 41
+      },
+      {
+        "name": "Seel",
+        "species_id": 86,
+        "rate": 10,
+        "min_level": 35,
+        "max_level": 35
+      },
+      {
+        "name": "Shuckle",
+        "species_id": 213,
+        "rate": 5,
+        "min_level": 41,
+        "max_level": 41
+      },
+      {
+        "name": "Tynamo",
+        "species_id": 602,
+        "rate": 5,
+        "min_level": 37,
+        "max_level": 37
+      },
+      {
+        "name": "Eelektrik",
+        "species_id": 603,
+        "rate": 5,
+        "min_level": 42,
+        "max_level": 42
+      }
+    ]
+  },
+  "nature_sanctuary": {
+    "Dark Grass": [
+      {
+        "name": "Nuzleaf",
+        "species_id": 274,
+        "rate": 30,
+        "min_level": 64,
+        "max_level": 65
+      },
+      {
+        "name": "Altaria",
+        "species_id": 334,
+        "rate": 20,
+        "min_level": 64,
+        "max_level": 64
+      },
+      {
+        "name": "Girafarig",
+        "species_id": 203,
+        "rate": 15,
+        "min_level": 66,
+        "max_level": 67
+      },
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 10,
+        "min_level": 65,
+        "max_level": 65
+      },
+      {
+        "name": "Noctowl",
+        "species_id": 164,
+        "rate": 10,
+        "min_level": 66,
+        "max_level": 66
+      },
+      {
+        "name": "Fraxure",
+        "species_id": 611,
+        "rate": 10,
+        "min_level": 65,
+        "max_level": 67
+      },
+      {
+        "name": "Kecleon",
+        "species_id": 352,
+        "rate": 5,
+        "min_level": 65,
+        "max_level": 67
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 85,
+        "min_level": 56,
+        "max_level": 59
+      },
+      {
+        "name": "Dunsparce",
+        "species_id": 206,
+        "rate": 10,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Shiftry",
+        "species_id": 275,
+        "rate": 5,
+        "min_level": 59,
+        "max_level": 59
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Magikarp",
+        "species_id": 129,
+        "rate": 60,
+        "min_level": 1,
+        "max_level": 100
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Magikarp",
+        "species_id": 129,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Gyarados",
+        "species_id": 130,
+        "rate": 20,
+        "min_level": 1,
+        "max_level": 100
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Buizel",
+        "species_id": 418,
+        "rate": 30,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Buizel",
+        "species_id": 418,
+        "rate": 60,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 35,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Floatzel",
+        "species_id": 419,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 60
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Nuzleaf",
+        "species_id": 274,
+        "rate": 30,
+        "min_level": 56,
+        "max_level": 57
+      },
+      {
+        "name": "Altaria",
+        "species_id": 334,
+        "rate": 20,
+        "min_level": 56,
+        "max_level": 56
+      },
+      {
+        "name": "Girafarig",
+        "species_id": 203,
+        "rate": 15,
+        "min_level": 58,
+        "max_level": 59
+      },
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 10,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Noctowl",
+        "species_id": 164,
+        "rate": 10,
+        "min_level": 58,
+        "max_level": 58
+      },
+      {
+        "name": "Fraxure",
+        "species_id": 611,
+        "rate": 10,
+        "min_level": 57,
+        "max_level": 59
+      },
+      {
+        "name": "Kecleon",
+        "species_id": 352,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 59
+      }
+    ]
+  },
+  "driftveil_drawbridge": {
+    "Flying Pokemon": [
+      {
+        "name": "Ducklett",
+        "species_id": 580,
+        "rate": 100,
+        "min_level": 23,
+        "max_level": 26
+      }
+    ]
+  },
+  "village_bridge": {
+    "Dark Grass": [
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 35,
+        "min_level": 40,
+        "max_level": 42
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 35,
+        "min_level": 40,
+        "max_level": 42
+      },
+      {
+        "name": "Zangoose",
+        "species_id": 335,
+        "rate": 15,
+        "min_level": 41,
+        "max_level": 43
+      },
+      {
+        "name": "Seviper",
+        "species_id": 336,
+        "rate": 15,
+        "min_level": 41,
+        "max_level": 43
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 75,
+        "min_level": 36,
+        "max_level": 39
+      },
+      {
+        "name": "Dunsparce",
+        "species_id": 206,
+        "rate": 10,
+        "min_level": 37,
+        "max_level": 37
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 37,
+        "max_level": 37
+      },
+      {
+        "name": "Azumarill",
+        "species_id": 184,
+        "rate": 5,
+        "min_level": 39,
+        "max_level": 39
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Carvanha",
+        "species_id": 318,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Carvanha",
+        "species_id": 318,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Sharpedo",
+        "species_id": 319,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 30,
+        "min_level": 25,
+        "max_level": 40
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 60,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 30,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Lapras",
+        "species_id": 131,
+        "rate": 5,
+        "min_level": 30,
+        "max_level": 40
+      },
+      {
+        "name": "Azumarill",
+        "species_id": 184,
+        "rate": 5,
+        "min_level": 30,
+        "max_level": 40
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 35,
+        "min_level": 36,
+        "max_level": 38
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 35,
+        "min_level": 36,
+        "max_level": 38
+      },
+      {
+        "name": "Zangoose",
+        "species_id": 335,
+        "rate": 15,
+        "min_level": 37,
+        "max_level": 39
+      },
+      {
+        "name": "Seviper",
+        "species_id": 336,
+        "rate": 15,
+        "min_level": 37,
+        "max_level": 39
+      }
+    ]
+  },
+  "marvelous_bridge": {
+    "Flying Pokemon": [
+      {
+        "name": "Swanna",
+        "species_id": 581,
+        "rate": 100,
+        "min_level": 54,
+        "max_level": 57
+      }
+    ],
+    "Gift": [
+      {
+        "name": "Magikarp",
+        "species_id": 129,
+        "rate": 100,
+        "min_level": 5,
+        "max_level": 5
+      }
+    ]
+  },
+  "route_1": {
+    "Dark Grass": [
+      {
+        "name": "Watchog",
+        "species_id": 505,
+        "rate": 40,
+        "min_level": 64,
+        "max_level": 67
+      },
+      {
+        "name": "Herdier",
+        "species_id": 507,
+        "rate": 39,
+        "min_level": 64,
+        "max_level": 67
+      },
+      {
+        "name": "Scrafty",
+        "species_id": 560,
+        "rate": 11,
+        "min_level": 66,
+        "max_level": 67
+      },
+      {
+        "name": "Jigglypuff",
+        "species_id": 39,
+        "rate": 10,
+        "min_level": 65,
+        "max_level": 65
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 80,
+        "min_level": 56,
+        "max_level": 59
+      },
+      {
+        "name": "Dunsparce",
+        "species_id": 206,
+        "rate": 10,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Wigglytuff",
+        "species_id": 40,
+        "rate": 5,
+        "min_level": 59,
+        "max_level": 59
+      },
+      {
+        "name": "Stoutland",
+        "species_id": 508,
+        "rate": 5,
+        "min_level": 59,
+        "max_level": 59
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 95,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Feebas",
+        "species_id": 349,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Feebas",
+        "species_id": 349,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Milotic",
+        "species_id": 350,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 100,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 100,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Herdier",
+        "species_id": 507,
+        "rate": 50,
+        "min_level": 56,
+        "max_level": 59
+      },
+      {
+        "name": "Watchog",
+        "species_id": 505,
+        "rate": 40,
+        "min_level": 56,
+        "max_level": 59
+      },
+      {
+        "name": "Jigglypuff",
+        "species_id": 39,
+        "rate": 10,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ]
+  },
+  "route_2": {
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 75,
+        "min_level": 56,
+        "max_level": 59
+      },
+      {
+        "name": "Dunsparce",
+        "species_id": 206,
+        "rate": 10,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Wigglytuff",
+        "species_id": 40,
+        "rate": 5,
+        "min_level": 59,
+        "max_level": 59
+      },
+      {
+        "name": "Lickilicky",
+        "species_id": 463,
+        "rate": 5,
+        "min_level": 59,
+        "max_level": 59
+      },
+      {
+        "name": "Stoutland",
+        "species_id": 508,
+        "rate": 5,
+        "min_level": 59,
+        "max_level": 59
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Watchog",
+        "species_id": 505,
+        "rate": 30,
+        "min_level": 56,
+        "max_level": 59
+      },
+      {
+        "name": "Herdier",
+        "species_id": 507,
+        "rate": 30,
+        "min_level": 56,
+        "max_level": 59
+      },
+      {
+        "name": "Liepard",
+        "species_id": 510,
+        "rate": 20,
+        "min_level": 57,
+        "max_level": 58
+      },
+      {
+        "name": "Jigglypuff",
+        "species_id": 39,
+        "rate": 10,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Lickitung",
+        "species_id": 108,
+        "rate": 10,
+        "min_level": 58,
+        "max_level": 58
+      }
+    ]
+  },
+  "route_3": {
+    "Dark Grass": [
+      {
+        "name": "Tranquill",
+        "species_id": 520,
+        "rate": 30,
+        "min_level": 63,
+        "max_level": 65
+      },
+      {
+        "name": "Watchog",
+        "species_id": 505,
+        "rate": 20,
+        "min_level": 63,
+        "max_level": 63
+      },
+      {
+        "name": "Zebstrika",
+        "species_id": 523,
+        "rate": 20,
+        "min_level": 64,
+        "max_level": 66
+      },
+      {
+        "name": "Yanma",
+        "species_id": 193,
+        "rate": 10,
+        "min_level": 64,
+        "max_level": 64
+      },
+      {
+        "name": "Herdier",
+        "species_id": 507,
+        "rate": 10,
+        "min_level": 65,
+        "max_level": 65
+      },
+      {
+        "name": "Purrloin",
+        "species_id": 509,
+        "rate": 10,
+        "min_level": 65,
+        "max_level": 65
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 85,
+        "min_level": 55,
+        "max_level": 58
+      },
+      {
+        "name": "Yanmega",
+        "species_id": 469,
+        "rate": 5,
+        "min_level": 58,
+        "max_level": 58
+      },
+      {
+        "name": "Stoutland",
+        "species_id": 508,
+        "rate": 5,
+        "min_level": 58,
+        "max_level": 58
+      },
+      {
+        "name": "Unfezant",
+        "species_id": 521,
+        "rate": 5,
+        "min_level": 58,
+        "max_level": 58
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Seaking",
+        "species_id": 119,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Corphish",
+        "species_id": 341,
+        "rate": 30,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Corphish",
+        "species_id": 341,
+        "rate": 60,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 30,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Crawdaunt",
+        "species_id": 342,
+        "rate": 10,
+        "min_level": 50,
+        "max_level": 60
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Tranquill",
+        "species_id": 520,
+        "rate": 30,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Watchog",
+        "species_id": 505,
+        "rate": 20,
+        "min_level": 55,
+        "max_level": 55
+      },
+      {
+        "name": "Zebstrika",
+        "species_id": 523,
+        "rate": 20,
+        "min_level": 56,
+        "max_level": 58
+      },
+      {
+        "name": "Yanma",
+        "species_id": 193,
+        "rate": 10,
+        "min_level": 56,
+        "max_level": 56
+      },
+      {
+        "name": "Herdier",
+        "species_id": 507,
+        "rate": 10,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Purrloin",
+        "species_id": 509,
+        "rate": 10,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ]
+  },
+  "wellspring_cave": {
+    "Dust Cloud": [
+      {
+        "name": "Excadrill",
+        "species_id": 530,
+        "rate": 100,
+        "min_level": 55,
+        "max_level": 58
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Poliwag",
+        "species_id": 60,
+        "rate": 60,
+        "min_level": 50,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 50,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Poliwhirl",
+        "species_id": 61,
+        "rate": 55,
+        "min_level": 50,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 50,
+        "max_level": 60
+      },
+      {
+        "name": "Poliwrath",
+        "species_id": 62,
+        "rate": 5,
+        "min_level": 60,
+        "max_level": 60
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 100,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 100,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 50,
+        "min_level": 55,
+        "max_level": 58
+      },
+      {
+        "name": "Woobat",
+        "species_id": 527,
+        "rate": 50,
+        "min_level": 55,
+        "max_level": 58
+      }
+    ]
+  },
+  "route_4": {
+    "Super Rod": [
+      {
+        "name": "Finneon",
+        "species_id": 456,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Clamperl",
+        "species_id": 366,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Qwilfish",
+        "species_id": 211,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Qwilfish",
+        "species_id": 211,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Lumineon",
+        "species_id": 457,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Relicanth",
+        "species_id": 369,
+        "rate": 15,
+        "min_level": 50,
+        "max_level": 70
+      },
+      {
+        "name": "Huntail",
+        "species_id": 367,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Frillish",
+        "species_id": 592,
+        "rate": 100,
+        "min_level": 5,
+        "max_level": 15
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Alomomola",
+        "species_id": 594,
+        "rate": 95,
+        "min_level": 5,
+        "max_level": 20
+      },
+      {
+        "name": "Jellicent",
+        "species_id": 593,
+        "rate": 5,
+        "min_level": 5,
+        "max_level": 20
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Sandile",
+        "species_id": 551,
+        "rate": 35,
+        "min_level": 14,
+        "max_level": 17
+      },
+      {
+        "name": "Darumaka",
+        "species_id": 554,
+        "rate": 35,
+        "min_level": 14,
+        "max_level": 17
+      },
+      {
+        "name": "Trubbish",
+        "species_id": 568,
+        "rate": 25,
+        "min_level": 14,
+        "max_level": 17
+      },
+      {
+        "name": "Scraggy",
+        "species_id": 559,
+        "rate": 5,
+        "min_level": 17,
+        "max_level": 17
+      }
+    ]
+  },
+  "route_5": {
+    "Dark Grass": [
+      {
+        "name": "Minccino",
+        "species_id": 572,
+        "rate": 30,
+        "min_level": 23,
+        "max_level": 26
+      },
+      {
+        "name": "Gothita",
+        "species_id": 574,
+        "rate": 30,
+        "min_level": 23,
+        "max_level": 26
+      },
+      {
+        "name": "Liepard",
+        "species_id": 510,
+        "rate": 20,
+        "min_level": 24,
+        "max_level": 26
+      },
+      {
+        "name": "Trubbish",
+        "species_id": 568,
+        "rate": 20,
+        "min_level": 23,
+        "max_level": 25
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 85,
+        "min_level": 21,
+        "max_level": 24
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 22,
+        "max_level": 22
+      },
+      {
+        "name": "Cinccino",
+        "species_id": 573,
+        "rate": 5,
+        "min_level": 24,
+        "max_level": 24
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Minccino",
+        "species_id": 572,
+        "rate": 30,
+        "min_level": 21,
+        "max_level": 24
+      },
+      {
+        "name": "Gothita",
+        "species_id": 574,
+        "rate": 30,
+        "min_level": 21,
+        "max_level": 24
+      },
+      {
+        "name": "Liepard",
+        "species_id": 510,
+        "rate": 20,
+        "min_level": 22,
+        "max_level": 24
+      },
+      {
+        "name": "Trubbish",
+        "species_id": 568,
+        "rate": 20,
+        "min_level": 21,
+        "max_level": 23
+      }
+    ]
+  },
+  "route_6": {
+    "Dark Grass": [
+      {
+        "name": "Deerling",
+        "species_id": 585,
+        "rate": 30,
+        "min_level": 26,
+        "max_level": 28
+      },
+      {
+        "name": "Shelmet",
+        "species_id": 616,
+        "rate": 25,
+        "min_level": 26,
+        "max_level": 29
+      },
+      {
+        "name": "Tranquill",
+        "species_id": 520,
+        "rate": 15,
+        "min_level": 29,
+        "max_level": 29
+      },
+      {
+        "name": "Swadloon",
+        "species_id": 541,
+        "rate": 10,
+        "min_level": 29,
+        "max_level": 29
+      },
+      {
+        "name": "Foongus",
+        "species_id": 590,
+        "rate": 10,
+        "min_level": 29,
+        "max_level": 29
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 5,
+        "min_level": 28,
+        "max_level": 28
+      },
+      {
+        "name": "Karrablast",
+        "species_id": 588,
+        "rate": 5,
+        "min_level": 26,
+        "max_level": 26
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 50,
+        "min_level": 23,
+        "max_level": 25
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 20,
+        "min_level": 24,
+        "max_level": 25
+      },
+      {
+        "name": "Dunsparce",
+        "species_id": 206,
+        "rate": 10,
+        "min_level": 25,
+        "max_level": 25
+      },
+      {
+        "name": "Azumarill",
+        "species_id": 184,
+        "rate": 5,
+        "min_level": 26,
+        "max_level": 26
+      },
+      {
+        "name": "Castform",
+        "species_id": 351,
+        "rate": 5,
+        "min_level": 26,
+        "max_level": 26
+      },
+      {
+        "name": "Unfezant",
+        "species_id": 521,
+        "rate": 5,
+        "min_level": 26,
+        "max_level": 26
+      },
+      {
+        "name": "Leavanny",
+        "species_id": 542,
+        "rate": 5,
+        "min_level": 26,
+        "max_level": 26
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Poliwag",
+        "species_id": 60,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Poliwhirl",
+        "species_id": 61,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Politoed",
+        "species_id": 186,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 10,
+        "max_level": 25
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 30,
+        "min_level": 10,
+        "max_level": 25
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 60,
+        "min_level": 10,
+        "max_level": 30
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 35,
+        "min_level": 10,
+        "max_level": 30
+      },
+      {
+        "name": "Azumarill",
+        "species_id": 184,
+        "rate": 5,
+        "min_level": 10,
+        "max_level": 30
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Deerling",
+        "species_id": 585,
+        "rate": 30,
+        "min_level": 23,
+        "max_level": 25
+      },
+      {
+        "name": "Shelmet",
+        "species_id": 616,
+        "rate": 25,
+        "min_level": 23,
+        "max_level": 26
+      },
+      {
+        "name": "Tranquill",
+        "species_id": 520,
+        "rate": 15,
+        "min_level": 26,
+        "max_level": 26
+      },
+      {
+        "name": "Swadloon",
+        "species_id": 541,
+        "rate": 10,
+        "min_level": 26,
+        "max_level": 26
+      },
+      {
+        "name": "Foongus",
+        "species_id": 590,
+        "rate": 10,
+        "min_level": 26,
+        "max_level": 26
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 5,
+        "min_level": 25,
+        "max_level": 25
+      },
+      {
+        "name": "Karrablast",
+        "species_id": 588,
+        "rate": 5,
+        "min_level": 23,
+        "max_level": 23
+      }
+    ],
+    "Gift": [
+      {
+        "name": "Deerling",
+        "species_id": 585,
+        "rate": 100,
+        "min_level": 30,
+        "max_level": 30
+      }
+    ]
+  },
+  "mistralton_cave": {
+    "Dust Cloud": [
+      {
+        "name": "Drilbur",
+        "species_id": 529,
+        "rate": 100,
+        "min_level": 27,
+        "max_level": 30
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 30,
+        "min_level": 27,
+        "max_level": 28
+      },
+      {
+        "name": "Woobat",
+        "species_id": 527,
+        "rate": 30,
+        "min_level": 27,
+        "max_level": 28
+      },
+      {
+        "name": "Aron",
+        "species_id": 304,
+        "rate": 20,
+        "min_level": 29,
+        "max_level": 30
+      },
+      {
+        "name": "Axew",
+        "species_id": 610,
+        "rate": 20,
+        "min_level": 29,
+        "max_level": 30
+      }
+    ]
+  },
+  "guidance_chamber": {
+    "Dust Cloud": [
+      {
+        "name": "Drilbur",
+        "species_id": 529,
+        "rate": 100,
+        "min_level": 27,
+        "max_level": 30
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Boldore",
+        "species_id": 525,
+        "rate": 30,
+        "min_level": 27,
+        "max_level": 28
+      },
+      {
+        "name": "Woobat",
+        "species_id": 527,
+        "rate": 30,
+        "min_level": 27,
+        "max_level": 28
+      },
+      {
+        "name": "Aron",
+        "species_id": 304,
+        "rate": 20,
+        "min_level": 29,
+        "max_level": 30
+      },
+      {
+        "name": "Axew",
+        "species_id": 610,
+        "rate": 20,
+        "min_level": 29,
+        "max_level": 30
+      }
+    ]
+  },
+  "route_7": {
+    "Dark Grass": [
+      {
+        "name": "Tranquill",
+        "species_id": 520,
+        "rate": 100,
+        "min_level": 33,
+        "max_level": 35
+      },
+      {
+        "name": "Watchog",
+        "species_id": 505,
+        "rate": 25,
+        "min_level": 34,
+        "max_level": 36
+      },
+      {
+        "name": "Cubchoo",
+        "species_id": 613,
+        "rate": 25,
+        "min_level": 33,
+        "max_level": 36
+      },
+      {
+        "name": "Zebstrika",
+        "species_id": 523,
+        "rate": 20,
+        "min_level": 34,
+        "max_level": 36
+      },
+      {
+        "name": "Deerling",
+        "species_id": 585,
+        "rate": 20,
+        "min_level": 33,
+        "max_level": 33
+      },
+      {
+        "name": "Zangoose",
+        "species_id": 335,
+        "rate": 5,
+        "min_level": 35,
+        "max_level": 35
+      },
+      {
+        "name": "Seviper",
+        "species_id": 336,
+        "rate": 5,
+        "min_level": 35,
+        "max_level": 35
+      },
+      {
+        "name": "Foongus",
+        "species_id": 590,
+        "rate": 5,
+        "min_level": 36,
+        "max_level": 36
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 85,
+        "min_level": 30,
+        "max_level": 33
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 31,
+        "max_level": 31
+      },
+      {
+        "name": "Unfezant",
+        "species_id": 521,
+        "rate": 5,
+        "min_level": 33,
+        "max_level": 33
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Tranquill",
+        "species_id": 520,
+        "rate": 100,
+        "min_level": 30,
+        "max_level": 32
+      },
+      {
+        "name": "Watchog",
+        "species_id": 505,
+        "rate": 25,
+        "min_level": 31,
+        "max_level": 33
+      },
+      {
+        "name": "Cubchoo",
+        "species_id": 613,
+        "rate": 25,
+        "min_level": 30,
+        "max_level": 33
+      },
+      {
+        "name": "Zebstrika",
+        "species_id": 523,
+        "rate": 20,
+        "min_level": 31,
+        "max_level": 33
+      },
+      {
+        "name": "Deerling",
+        "species_id": 585,
+        "rate": 20,
+        "min_level": 30,
+        "max_level": 30
+      },
+      {
+        "name": "Zangoose",
+        "species_id": 335,
+        "rate": 5,
+        "min_level": 32,
+        "max_level": 32
+      },
+      {
+        "name": "Seviper",
+        "species_id": 336,
+        "rate": 5,
+        "min_level": 32,
+        "max_level": 32
+      },
+      {
+        "name": "Foongus",
+        "species_id": 590,
+        "rate": 5,
+        "min_level": 33,
+        "max_level": 33
+      }
+    ]
+  },
+  "celestial_tower": {
+    "Grass": [
+      {
+        "name": "Litwick",
+        "species_id": 607,
+        "rate": 100,
+        "min_level": 27,
+        "max_level": 33
+      },
+      {
+        "name": "Elgyem",
+        "species_id": 605,
+        "rate": 40,
+        "min_level": 30,
+        "max_level": 33
+      },
+      {
+        "name": "Golbat",
+        "species_id": 42,
+        "rate": 20,
+        "min_level": 31,
+        "max_level": 33
+      }
+    ]
+  },
+  "route_8": {
+    "Super Rod": [
+      {
+        "name": "Barboach",
+        "species_id": 339,
+        "rate": 120,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 40,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Whiscash",
+        "species_id": 340,
+        "rate": 80,
+        "min_level": 50,
+        "max_level": 60
+      },
+      {
+        "name": "Barboach",
+        "species_id": 339,
+        "rate": 40,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 40,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 100,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Palpitoad",
+        "species_id": 536,
+        "rate": 30,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 80,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Palpitoad",
+        "species_id": 536,
+        "rate": 30,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Seismitoad",
+        "species_id": 537,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 60
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Palpitoad",
+        "species_id": 536,
+        "rate": 120,
+        "min_level": 54,
+        "max_level": 57
+      },
+      {
+        "name": "Shelmet",
+        "species_id": 616,
+        "rate": 60,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 60,
+        "min_level": 55,
+        "max_level": 56
+      },
+      {
+        "name": "Croagunk",
+        "species_id": 453,
+        "rate": 45,
+        "min_level": 55,
+        "max_level": 56
+      },
+      {
+        "name": "Karrablast",
+        "species_id": 588,
+        "rate": 15,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ]
+  },
+  "moor_of_icirrus": {
+    "Super Rod": [
+      {
+        "name": "Barboach",
+        "species_id": 339,
+        "rate": 120,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 40,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Whiscash",
+        "species_id": 340,
+        "rate": 80,
+        "min_level": 50,
+        "max_level": 60
+      },
+      {
+        "name": "Barboach",
+        "species_id": 339,
+        "rate": 40,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 40,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 130,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 110,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Seismitoad",
+        "species_id": 537,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 60
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Palpitoad",
+        "species_id": 536,
+        "rate": 120,
+        "min_level": 54,
+        "max_level": 57
+      },
+      {
+        "name": "Shelmet",
+        "species_id": 616,
+        "rate": 60,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Stunfisk",
+        "species_id": 618,
+        "rate": 60,
+        "min_level": 55,
+        "max_level": 56
+      },
+      {
+        "name": "Croagunk",
+        "species_id": 453,
+        "rate": 45,
+        "min_level": 55,
+        "max_level": 56
+      },
+      {
+        "name": "Karrablast",
+        "species_id": 588,
+        "rate": 15,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ]
+  },
+  "route_9": {
+    "Dark Grass": [
+      {
+        "name": "Minccino",
+        "species_id": 572,
+        "rate": 30,
+        "min_level": 41,
+        "max_level": 43
+      },
+      {
+        "name": "Gothorita",
+        "species_id": 575,
+        "rate": 25,
+        "min_level": 41,
+        "max_level": 43
+      },
+      {
+        "name": "Garbodor",
+        "species_id": 569,
+        "rate": 15,
+        "min_level": 42,
+        "max_level": 44
+      },
+      {
+        "name": "Pawniard",
+        "species_id": 624,
+        "rate": 15,
+        "min_level": 42,
+        "max_level": 44
+      },
+      {
+        "name": "Liepard",
+        "species_id": 510,
+        "rate": 10,
+        "min_level": 44,
+        "max_level": 44
+      },
+      {
+        "name": "Muk",
+        "species_id": 89,
+        "rate": 5,
+        "min_level": 44,
+        "max_level": 44
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 80,
+        "min_level": 37,
+        "max_level": 40
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 38,
+        "max_level": 38
+      },
+      {
+        "name": "Cinccino",
+        "species_id": 573,
+        "rate": 5,
+        "min_level": 40,
+        "max_level": 40
+      },
+      {
+        "name": "Gothitelle",
+        "species_id": 576,
+        "rate": 5,
+        "min_level": 40,
+        "max_level": 40
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Minccino",
+        "species_id": 572,
+        "rate": 30,
+        "min_level": 37,
+        "max_level": 39
+      },
+      {
+        "name": "Gothorita",
+        "species_id": 575,
+        "rate": 25,
+        "min_level": 37,
+        "max_level": 39
+      },
+      {
+        "name": "Garbodor",
+        "species_id": 569,
+        "rate": 15,
+        "min_level": 38,
+        "max_level": 40
+      },
+      {
+        "name": "Pawniard",
+        "species_id": 624,
+        "rate": 15,
+        "min_level": 38,
+        "max_level": 40
+      },
+      {
+        "name": "Liepard",
+        "species_id": 510,
+        "rate": 10,
+        "min_level": 40,
+        "max_level": 40
+      },
+      {
+        "name": "Muk",
+        "species_id": 89,
+        "rate": 5,
+        "min_level": 40,
+        "max_level": 40
+      }
+    ]
+  },
+  "route_11": {
+    "Dark Grass": [
+      {
+        "name": "Shelmet",
+        "species_id": 616,
+        "rate": 25,
+        "min_level": 40,
+        "max_level": 43
+      },
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 20,
+        "min_level": 40,
+        "max_level": 40
+      },
+      {
+        "name": "Gligar",
+        "species_id": 207,
+        "rate": 15,
+        "min_level": 41,
+        "max_level": 43
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 10,
+        "min_level": 40,
+        "max_level": 40
+      },
+      {
+        "name": "Zangoose",
+        "species_id": 335,
+        "rate": 10,
+        "min_level": 42,
+        "max_level": 42
+      },
+      {
+        "name": "Seviper",
+        "species_id": 336,
+        "rate": 10,
+        "min_level": 42,
+        "max_level": 42
+      },
+      {
+        "name": "Karrablast",
+        "species_id": 588,
+        "rate": 5,
+        "min_level": 40,
+        "max_level": 40
+      },
+      {
+        "name": "Amoonguss",
+        "species_id": 591,
+        "rate": 5,
+        "min_level": 41,
+        "max_level": 41
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 80,
+        "min_level": 36,
+        "max_level": 39
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 37,
+        "max_level": 37
+      },
+      {
+        "name": "Azumarill",
+        "species_id": 184,
+        "rate": 5,
+        "min_level": 39,
+        "max_level": 39
+      },
+      {
+        "name": "Gliscor",
+        "species_id": 472,
+        "rate": 5,
+        "min_level": 39,
+        "max_level": 39
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 50
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Seaking",
+        "species_id": 119,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Buizel",
+        "species_id": 418,
+        "rate": 30,
+        "min_level": 25,
+        "max_level": 40
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Buizel",
+        "species_id": 418,
+        "rate": 60,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 30,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Floatzel",
+        "species_id": 419,
+        "rate": 10,
+        "min_level": 30,
+        "max_level": 40
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Shelmet",
+        "species_id": 616,
+        "rate": 25,
+        "min_level": 36,
+        "max_level": 39
+      },
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 20,
+        "min_level": 36,
+        "max_level": 36
+      },
+      {
+        "name": "Gligar",
+        "species_id": 207,
+        "rate": 15,
+        "min_level": 37,
+        "max_level": 39
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 10,
+        "min_level": 36,
+        "max_level": 36
+      },
+      {
+        "name": "Zangoose",
+        "species_id": 335,
+        "rate": 10,
+        "min_level": 38,
+        "max_level": 38
+      },
+      {
+        "name": "Seviper",
+        "species_id": 336,
+        "rate": 10,
+        "min_level": 38,
+        "max_level": 38
+      },
+      {
+        "name": "Karrablast",
+        "species_id": 588,
+        "rate": 5,
+        "min_level": 36,
+        "max_level": 36
+      },
+      {
+        "name": "Amoonguss",
+        "species_id": 591,
+        "rate": 5,
+        "min_level": 37,
+        "max_level": 37
+      }
+    ]
+  },
+  "route_12": {
+    "Dark Grass": [
+      {
+        "name": "Roselia",
+        "species_id": 315,
+        "rate": 25,
+        "min_level": 39,
+        "max_level": 41
+      },
+      {
+        "name": "Tranquill",
+        "species_id": 520,
+        "rate": 25,
+        "min_level": 40,
+        "max_level": 42
+      },
+      {
+        "name": "Combee",
+        "species_id": 415,
+        "rate": 20,
+        "min_level": 39,
+        "max_level": 39
+      },
+      {
+        "name": "Heracross",
+        "species_id": 214,
+        "rate": 15,
+        "min_level": 40,
+        "max_level": 42
+      },
+      {
+        "name": "Sewaddle",
+        "species_id": 540,
+        "rate": 15,
+        "min_level": 40,
+        "max_level": 42
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 60,
+        "min_level": 35,
+        "max_level": 37
+      },
+      {
+        "name": "Dunsparce",
+        "species_id": 206,
+        "rate": 10,
+        "min_level": 36,
+        "max_level": 36
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 36,
+        "max_level": 36
+      },
+      {
+        "name": "Roserade",
+        "species_id": 407,
+        "rate": 5,
+        "min_level": 38,
+        "max_level": 38
+      },
+      {
+        "name": "Vespiquen",
+        "species_id": 416,
+        "rate": 5,
+        "min_level": 38,
+        "max_level": 38
+      },
+      {
+        "name": "Unfezant",
+        "species_id": 521,
+        "rate": 5,
+        "min_level": 38,
+        "max_level": 38
+      },
+      {
+        "name": "Leavanny",
+        "species_id": 542,
+        "rate": 5,
+        "min_level": 38,
+        "max_level": 38
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Roselia",
+        "species_id": 315,
+        "rate": 25,
+        "min_level": 35,
+        "max_level": 37
+      },
+      {
+        "name": "Tranquill",
+        "species_id": 520,
+        "rate": 25,
+        "min_level": 36,
+        "max_level": 38
+      },
+      {
+        "name": "Combee",
+        "species_id": 415,
+        "rate": 20,
+        "min_level": 35,
+        "max_level": 35
+      },
+      {
+        "name": "Heracross",
+        "species_id": 214,
+        "rate": 15,
+        "min_level": 36,
+        "max_level": 38
+      },
+      {
+        "name": "Sewaddle",
+        "species_id": 540,
+        "rate": 15,
+        "min_level": 36,
+        "max_level": 38
+      }
+    ]
+  },
+  "route_13": {
+    "Dark Grass": [
+      {
+        "name": "Tangela",
+        "species_id": 114,
+        "rate": 25,
+        "min_level": 38,
+        "max_level": 41
+      },
+      {
+        "name": "Pelipper",
+        "species_id": 279,
+        "rate": 25,
+        "min_level": 38,
+        "max_level": 41
+      },
+      {
+        "name": "Absol",
+        "species_id": 359,
+        "rate": 15,
+        "min_level": 39,
+        "max_level": 41
+      },
+      {
+        "name": "Drifblim",
+        "species_id": 426,
+        "rate": 15,
+        "min_level": 38,
+        "max_level": 39
+      },
+      {
+        "name": "Lunatone",
+        "species_id": 337,
+        "rate": 10,
+        "min_level": 40,
+        "max_level": 40
+      },
+      {
+        "name": "Solrock",
+        "species_id": 338,
+        "rate": 10,
+        "min_level": 40,
+        "max_level": 40
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 85,
+        "min_level": 34,
+        "max_level": 37
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 35,
+        "max_level": 35
+      },
+      {
+        "name": "Tangrowth",
+        "species_id": 465,
+        "rate": 5,
+        "min_level": 37,
+        "max_level": 37
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Luvdisc",
+        "species_id": 370,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Shellder",
+        "species_id": 90,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Shellder",
+        "species_id": 90,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Luvdisc",
+        "species_id": 370,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Cloyster",
+        "species_id": 91,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Frillish",
+        "species_id": 592,
+        "rate": 65,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Staryu",
+        "species_id": 120,
+        "rate": 30,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 5,
+        "min_level": 30,
+        "max_level": 40
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Staryu",
+        "species_id": 120,
+        "rate": 60,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Jellicent",
+        "species_id": 593,
+        "rate": 30,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Starmie",
+        "species_id": 121,
+        "rate": 5,
+        "min_level": 30,
+        "max_level": 40
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 5,
+        "min_level": 30,
+        "max_level": 40
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Tangela",
+        "species_id": 114,
+        "rate": 25,
+        "min_level": 34,
+        "max_level": 37
+      },
+      {
+        "name": "Pelipper",
+        "species_id": 279,
+        "rate": 25,
+        "min_level": 34,
+        "max_level": 37
+      },
+      {
+        "name": "Absol",
+        "species_id": 359,
+        "rate": 15,
+        "min_level": 35,
+        "max_level": 37
+      },
+      {
+        "name": "Drifblim",
+        "species_id": 426,
+        "rate": 15,
+        "min_level": 34,
+        "max_level": 35
+      },
+      {
+        "name": "Lunatone",
+        "species_id": 337,
+        "rate": 10,
+        "min_level": 36,
+        "max_level": 36
+      },
+      {
+        "name": "Solrock",
+        "species_id": 338,
+        "rate": 10,
+        "min_level": 36,
+        "max_level": 36
+      }
+    ]
+  },
+  "route_14": {
+    "Dark Grass": [
+      {
+        "name": "Mienfoo",
+        "species_id": 619,
+        "rate": 30,
+        "min_level": 37,
+        "max_level": 39
+      },
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 25,
+        "min_level": 37,
+        "max_level": 39
+      },
+      {
+        "name": "Altaria",
+        "species_id": 334,
+        "rate": 15,
+        "min_level": 37,
+        "max_level": 40
+      },
+      {
+        "name": "Absol",
+        "species_id": 359,
+        "rate": 15,
+        "min_level": 38,
+        "max_level": 40
+      },
+      {
+        "name": "Drifblim",
+        "species_id": 426,
+        "rate": 15,
+        "min_level": 38,
+        "max_level": 39
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 90,
+        "min_level": 33,
+        "max_level": 36
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 34,
+        "max_level": 34
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Seaking",
+        "species_id": 119,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 15,
+        "max_level": 35
+      },
+      {
+        "name": "Buizel",
+        "species_id": 418,
+        "rate": 30,
+        "min_level": 15,
+        "max_level": 35
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Buizel",
+        "species_id": 418,
+        "rate": 60,
+        "min_level": 15,
+        "max_level": 40
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 30,
+        "min_level": 15,
+        "max_level": 40
+      },
+      {
+        "name": "Floatzel",
+        "species_id": 419,
+        "rate": 10,
+        "min_level": 25,
+        "max_level": 40
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 25,
+        "min_level": 34,
+        "max_level": 35
+      },
+      {
+        "name": "Swablu",
+        "species_id": 333,
+        "rate": 20,
+        "min_level": 33,
+        "max_level": 33
+      },
+      {
+        "name": "Mienfoo",
+        "species_id": 619,
+        "rate": 20,
+        "min_level": 33,
+        "max_level": 35
+      },
+      {
+        "name": "Absol",
+        "species_id": 359,
+        "rate": 15,
+        "min_level": 34,
+        "max_level": 36
+      },
+      {
+        "name": "Drifblim",
+        "species_id": 426,
+        "rate": 15,
+        "min_level": 34,
+        "max_level": 35
+      },
+      {
+        "name": "Altaria",
+        "species_id": 334,
+        "rate": 5,
+        "min_level": 36,
+        "max_level": 36
+      }
+    ]
+  },
+  "abundant_shrine": {
+    "Dark Grass": [
+      {
+        "name": "Cottonee",
+        "species_id": 546,
+        "rate": 35,
+        "min_level": 37,
+        "max_level": 39
+      },
+      {
+        "name": "Vulpix",
+        "species_id": 37,
+        "rate": 20,
+        "min_level": 37,
+        "max_level": 37
+      },
+      {
+        "name": "Altaria",
+        "species_id": 334,
+        "rate": 15,
+        "min_level": 38,
+        "max_level": 40
+      },
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 10,
+        "min_level": 38,
+        "max_level": 38
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 10,
+        "min_level": 38,
+        "max_level": 38
+      },
+      {
+        "name": "Bronzong",
+        "species_id": 437,
+        "rate": 10,
+        "min_level": 36,
+        "max_level": 36
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 80,
+        "min_level": 33,
+        "max_level": 36
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 34,
+        "max_level": 34
+      },
+      {
+        "name": "Ninetales",
+        "species_id": 38,
+        "rate": 5,
+        "min_level": 36,
+        "max_level": 36
+      },
+      {
+        "name": "Whimsicott",
+        "species_id": 547,
+        "rate": 5,
+        "min_level": 36,
+        "max_level": 36
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Seaking",
+        "species_id": 119,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 30,
+        "min_level": 25,
+        "max_level": 40
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 60,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 35,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Azumarill",
+        "species_id": 184,
+        "rate": 5,
+        "min_level": 30,
+        "max_level": 40
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Cottonee",
+        "species_id": 546,
+        "rate": 30,
+        "min_level": 33,
+        "max_level": 35
+      },
+      {
+        "name": "Swablu",
+        "species_id": 333,
+        "rate": 20,
+        "min_level": 33,
+        "max_level": 33
+      },
+      {
+        "name": "Bronzor",
+        "species_id": 436,
+        "rate": 15,
+        "min_level": 32,
+        "max_level": 32
+      },
+      {
+        "name": "Vulpix",
+        "species_id": 37,
+        "rate": 10,
+        "min_level": 34,
+        "max_level": 34
+      },
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 10,
+        "min_level": 34,
+        "max_level": 34
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 10,
+        "min_level": 34,
+        "max_level": 34
+      },
+      {
+        "name": "Altaria",
+        "species_id": 334,
+        "rate": 5,
+        "min_level": 36,
+        "max_level": 36
+      }
+    ]
+  },
+  "route_15": {
+    "Dark Grass": [
+      {
+        "name": "Sandslash",
+        "species_id": 28,
+        "rate": 30,
+        "min_level": 62,
+        "max_level": 64
+      },
+      {
+        "name": "Gligar",
+        "species_id": 207,
+        "rate": 25,
+        "min_level": 63,
+        "max_level": 65
+      },
+      {
+        "name": "Sawk",
+        "species_id": 539,
+        "rate": 20,
+        "min_level": 63,
+        "max_level": 65
+      },
+      {
+        "name": "Pupitar",
+        "species_id": 247,
+        "rate": 15,
+        "min_level": 63,
+        "max_level": 65
+      },
+      {
+        "name": "Scrafty",
+        "species_id": 560,
+        "rate": 10,
+        "min_level": 63,
+        "max_level": 63
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 75,
+        "min_level": 54,
+        "max_level": 57
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 55,
+        "max_level": 55
+      },
+      {
+        "name": "Tyranitar",
+        "species_id": 248,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Gliscor",
+        "species_id": 472,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Throh",
+        "species_id": 538,
+        "rate": 5,
+        "min_level": 57,
+        "max_level": 57
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Sandslash",
+        "species_id": 28,
+        "rate": 30,
+        "min_level": 54,
+        "max_level": 56
+      },
+      {
+        "name": "Gligar",
+        "species_id": 207,
+        "rate": 25,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Sawk",
+        "species_id": 539,
+        "rate": 20,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Pupitar",
+        "species_id": 247,
+        "rate": 15,
+        "min_level": 55,
+        "max_level": 57
+      },
+      {
+        "name": "Scrafty",
+        "species_id": 560,
+        "rate": 10,
+        "min_level": 55,
+        "max_level": 55
+      }
+    ]
+  },
+  "route_16": {
+    "Dark Grass": [
+      {
+        "name": "Minccino",
+        "species_id": 572,
+        "rate": 30,
+        "min_level": 23,
+        "max_level": 26
+      },
+      {
+        "name": "Gothita",
+        "species_id": 574,
+        "rate": 30,
+        "min_level": 23,
+        "max_level": 26
+      },
+      {
+        "name": "Liepard",
+        "species_id": 510,
+        "rate": 20,
+        "min_level": 24,
+        "max_level": 26
+      },
+      {
+        "name": "Trubbish",
+        "species_id": 568,
+        "rate": 20,
+        "min_level": 23,
+        "max_level": 25
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 85,
+        "min_level": 21,
+        "max_level": 24
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 22,
+        "max_level": 22
+      },
+      {
+        "name": "Cinccino",
+        "species_id": 573,
+        "rate": 5,
+        "min_level": 24,
+        "max_level": 24
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Minccino",
+        "species_id": 572,
+        "rate": 30,
+        "min_level": 21,
+        "max_level": 24
+      },
+      {
+        "name": "Gothita",
+        "species_id": 574,
+        "rate": 30,
+        "min_level": 21,
+        "max_level": 24
+      },
+      {
+        "name": "Liepard",
+        "species_id": 510,
+        "rate": 20,
+        "min_level": 22,
+        "max_level": 24
+      },
+      {
+        "name": "Trubbish",
+        "species_id": 568,
+        "rate": 20,
+        "min_level": 21,
+        "max_level": 23
+      }
+    ]
+  },
+  "lostlorn_forest": {
+    "Dark Grass": [
+      {
+        "name": "Swadloon",
+        "species_id": 541,
+        "rate": 25,
+        "min_level": 23,
+        "max_level": 26
+      },
+      {
+        "name": "Cottonee",
+        "species_id": 546,
+        "rate": 25,
+        "min_level": 23,
+        "max_level": 26
+      },
+      {
+        "name": "Whirlipede",
+        "species_id": 544,
+        "rate": 20,
+        "min_level": 23,
+        "max_level": 23
+      },
+      {
+        "name": "Roselia",
+        "species_id": 315,
+        "rate": 15,
+        "min_level": 25,
+        "max_level": 26
+      },
+      {
+        "name": "Combee",
+        "species_id": 415,
+        "rate": 10,
+        "min_level": 24,
+        "max_level": 24
+      },
+      {
+        "name": "Heracross",
+        "species_id": 214,
+        "rate": 5,
+        "min_level": 26,
+        "max_level": 26
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 40,
+        "min_level": 21,
+        "max_level": 23
+      },
+      {
+        "name": "Pansage",
+        "species_id": 511,
+        "rate": 10,
+        "min_level": 22,
+        "max_level": 22
+      },
+      {
+        "name": "Pansear",
+        "species_id": 513,
+        "rate": 10,
+        "min_level": 22,
+        "max_level": 22
+      },
+      {
+        "name": "Panpour",
+        "species_id": 515,
+        "rate": 10,
+        "min_level": 22,
+        "max_level": 22
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 22,
+        "max_level": 22
+      },
+      {
+        "name": "Roserade",
+        "species_id": 407,
+        "rate": 5,
+        "min_level": 24,
+        "max_level": 24
+      },
+      {
+        "name": "Vespiquen",
+        "species_id": 416,
+        "rate": 5,
+        "min_level": 24,
+        "max_level": 24
+      },
+      {
+        "name": "Leavanny",
+        "species_id": 542,
+        "rate": 5,
+        "min_level": 24,
+        "max_level": 24
+      },
+      {
+        "name": "Whimsicott",
+        "species_id": 547,
+        "rate": 5,
+        "min_level": 24,
+        "max_level": 24
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Poliwag",
+        "species_id": 60,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Poliwhirl",
+        "species_id": 61,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Politoed",
+        "species_id": 186,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 10,
+        "max_level": 25
+      },
+      {
+        "name": "Buizel",
+        "species_id": 418,
+        "rate": 30,
+        "min_level": 10,
+        "max_level": 25
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Buizel",
+        "species_id": 418,
+        "rate": 60,
+        "min_level": 10,
+        "max_level": 30
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 30,
+        "min_level": 10,
+        "max_level": 30
+      },
+      {
+        "name": "Floatzel",
+        "species_id": 419,
+        "rate": 10,
+        "min_level": 10,
+        "max_level": 30
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Swadloon",
+        "species_id": 541,
+        "rate": 25,
+        "min_level": 21,
+        "max_level": 24
+      },
+      {
+        "name": "Cottonee",
+        "species_id": 546,
+        "rate": 25,
+        "min_level": 21,
+        "max_level": 24
+      },
+      {
+        "name": "Venipede",
+        "species_id": 543,
+        "rate": 20,
+        "min_level": 21,
+        "max_level": 21
+      },
+      {
+        "name": "Roselia",
+        "species_id": 315,
+        "rate": 15,
+        "min_level": 23,
+        "max_level": 24
+      },
+      {
+        "name": "Combee",
+        "species_id": 415,
+        "rate": 10,
+        "min_level": 22,
+        "max_level": 22
+      },
+      {
+        "name": "Heracross",
+        "species_id": 214,
+        "rate": 5,
+        "min_level": 24,
+        "max_level": 24
+      }
+    ]
+  },
+  "route_18": {
+    "Dark Grass": [
+      {
+        "name": "Scrafty",
+        "species_id": 560,
+        "rate": 30,
+        "min_level": 65,
+        "max_level": 66
+      },
+      {
+        "name": "Sawk",
+        "species_id": 539,
+        "rate": 20,
+        "min_level": 65,
+        "max_level": 67
+      },
+      {
+        "name": "Crustle",
+        "species_id": 558,
+        "rate": 20,
+        "min_level": 65,
+        "max_level": 65
+      },
+      {
+        "name": "Tropius",
+        "species_id": 357,
+        "rate": 10,
+        "min_level": 66,
+        "max_level": 66
+      },
+      {
+        "name": "Carnivine",
+        "species_id": 455,
+        "rate": 10,
+        "min_level": 66,
+        "max_level": 66
+      },
+      {
+        "name": "Watchog",
+        "species_id": 505,
+        "rate": 10,
+        "min_level": 64,
+        "max_level": 64
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 85,
+        "min_level": 56,
+        "max_level": 59
+      },
+      {
+        "name": "Dunsparce",
+        "species_id": 206,
+        "rate": 10,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Throh",
+        "species_id": 538,
+        "rate": 5,
+        "min_level": 59,
+        "max_level": 59
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Finneon",
+        "species_id": 456,
+        "rate": 55,
+        "min_level": 50,
+        "max_level": 70
+      },
+      {
+        "name": "Horsea",
+        "species_id": 116,
+        "rate": 40,
+        "min_level": 50,
+        "max_level": 60
+      },
+      {
+        "name": "Corsola",
+        "species_id": 222,
+        "rate": 5,
+        "min_level": 60,
+        "max_level": 70
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Horsea",
+        "species_id": 116,
+        "rate": 40,
+        "min_level": 50,
+        "max_level": 60
+      },
+      {
+        "name": "Lumineon",
+        "species_id": 457,
+        "rate": 40,
+        "min_level": 50,
+        "max_level": 60
+      },
+      {
+        "name": "Seadra",
+        "species_id": 117,
+        "rate": 15,
+        "min_level": 60,
+        "max_level": 70
+      },
+      {
+        "name": "Kingdra",
+        "species_id": 230,
+        "rate": 5,
+        "min_level": 60,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Frillish",
+        "species_id": 592,
+        "rate": 100,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Alomomola",
+        "species_id": 594,
+        "rate": 95,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Jellicent",
+        "species_id": 593,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 60
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Scrafty",
+        "species_id": 560,
+        "rate": 30,
+        "min_level": 57,
+        "max_level": 58
+      },
+      {
+        "name": "Sawk",
+        "species_id": 539,
+        "rate": 20,
+        "min_level": 57,
+        "max_level": 59
+      },
+      {
+        "name": "Crustle",
+        "species_id": 558,
+        "rate": 20,
+        "min_level": 57,
+        "max_level": 57
+      },
+      {
+        "name": "Tropius",
+        "species_id": 357,
+        "rate": 10,
+        "min_level": 58,
+        "max_level": 58
+      },
+      {
+        "name": "Carnivine",
+        "species_id": 455,
+        "rate": 10,
+        "min_level": 58,
+        "max_level": 58
+      },
+      {
+        "name": "Watchog",
+        "species_id": 505,
+        "rate": 10,
+        "min_level": 56,
+        "max_level": 56
+      }
+    ]
+  },
+  "route_19": {
+    "Shaking Grass": [
+      {
+        "name": "Patrat",
+        "species_id": 504,
+        "rate": 100,
+        "min_level": 2,
+        "max_level": 4
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Poliwag",
+        "species_id": 60,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Poliwhirl",
+        "species_id": 61,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Politoed",
+        "species_id": 186,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 100,
+        "min_level": 5,
+        "max_level": 15
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 100,
+        "min_level": 5,
+        "max_level": 15
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Patrat",
+        "species_id": 504,
+        "rate": 50,
+        "min_level": 2,
+        "max_level": 4
+      },
+      {
+        "name": "Purrloin",
+        "species_id": 509,
+        "rate": 50,
+        "min_level": 2,
+        "max_level": 4
+      }
+    ]
+  },
+  "route_20": {
+    "Dark Grass": [
+      {
+        "name": "Pidove",
+        "species_id": 519,
+        "rate": 65,
+        "min_level": 9,
+        "max_level": 10
+      },
+      {
+        "name": "Sunkern",
+        "species_id": 191,
+        "rate": 38,
+        "min_level": 9,
+        "max_level": 11
+      },
+      {
+        "name": "Patrat",
+        "species_id": 504,
+        "rate": 20,
+        "min_level": 10,
+        "max_level": 10
+      },
+      {
+        "name": "Venipede",
+        "species_id": 543,
+        "rate": 20,
+        "min_level": 10,
+        "max_level": 10
+      },
+      {
+        "name": "Purrloin",
+        "species_id": 509,
+        "rate": 17,
+        "min_level": 10,
+        "max_level": 11
+      },
+      {
+        "name": "Sewaddle",
+        "species_id": 540,
+        "rate": 15,
+        "min_level": 10,
+        "max_level": 11
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 90,
+        "min_level": 2,
+        "max_level": 4
+      },
+      {
+        "name": "Dunsparce",
+        "species_id": 206,
+        "rate": 10,
+        "min_level": 3,
+        "max_level": 3
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Poliwag",
+        "species_id": 60,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Poliwhirl",
+        "species_id": 61,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Politoed",
+        "species_id": 186,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 5,
+        "max_level": 15
+      },
+      {
+        "name": "Azurill",
+        "species_id": 298,
+        "rate": 30,
+        "min_level": 5,
+        "max_level": 15
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 65,
+        "min_level": 5,
+        "max_level": 15
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 30,
+        "min_level": 5,
+        "max_level": 15
+      },
+      {
+        "name": "Azumarill",
+        "species_id": 184,
+        "rate": 5,
+        "min_level": 5,
+        "max_level": 15
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Pidove",
+        "species_id": 519,
+        "rate": 65,
+        "min_level": 2,
+        "max_level": 4
+      },
+      {
+        "name": "Sunkern",
+        "species_id": 191,
+        "rate": 38,
+        "min_level": 2,
+        "max_level": 4
+      },
+      {
+        "name": "Sewaddle",
+        "species_id": 540,
+        "rate": 35,
+        "min_level": 2,
+        "max_level": 4
+      },
+      {
+        "name": "Patrat",
+        "species_id": 504,
+        "rate": 20,
+        "min_level": 3,
+        "max_level": 3
+      },
+      {
+        "name": "Purrloin",
+        "species_id": 509,
+        "rate": 17,
+        "min_level": 3,
+        "max_level": 4
+      }
+    ]
+  },
+  "route_22": {
+    "Dark Grass": [
+      {
+        "name": "Mienfoo",
+        "species_id": 619,
+        "rate": 25,
+        "min_level": 44,
+        "max_level": 47
+      },
+      {
+        "name": "Amoonguss",
+        "species_id": 591,
+        "rate": 20,
+        "min_level": 44,
+        "max_level": 44
+      },
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 10,
+        "min_level": 45,
+        "max_level": 45
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 10,
+        "min_level": 45,
+        "max_level": 47
+      },
+      {
+        "name": "Pelipper",
+        "species_id": 279,
+        "rate": 10,
+        "min_level": 45,
+        "max_level": 45
+      },
+      {
+        "name": "Lunatone",
+        "species_id": 337,
+        "rate": 10,
+        "min_level": 46,
+        "max_level": 46
+      },
+      {
+        "name": "Solrock",
+        "species_id": 338,
+        "rate": 10,
+        "min_level": 46,
+        "max_level": 46
+      },
+      {
+        "name": "Delibird",
+        "species_id": 225,
+        "rate": 5,
+        "min_level": 44,
+        "max_level": 44
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 85,
+        "min_level": 39,
+        "max_level": 42
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 40,
+        "max_level": 40
+      },
+      {
+        "name": "Azumarill",
+        "species_id": 184,
+        "rate": 5,
+        "min_level": 42,
+        "max_level": 42
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Goldeen",
+        "species_id": 118,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Seaking",
+        "species_id": 119,
+        "rate": 20,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 15,
+        "max_level": 40
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 30,
+        "min_level": 15,
+        "max_level": 40
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 60,
+        "min_level": 15,
+        "max_level": 40
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 35,
+        "min_level": 15,
+        "max_level": 45
+      },
+      {
+        "name": "Azumarill",
+        "species_id": 184,
+        "rate": 5,
+        "min_level": 25,
+        "max_level": 45
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Mienfoo",
+        "species_id": 619,
+        "rate": 25,
+        "min_level": 39,
+        "max_level": 42
+      },
+      {
+        "name": "Amoonguss",
+        "species_id": 591,
+        "rate": 20,
+        "min_level": 39,
+        "max_level": 39
+      },
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 10,
+        "min_level": 40,
+        "max_level": 40
+      },
+      {
+        "name": "Marill",
+        "species_id": 183,
+        "rate": 10,
+        "min_level": 40,
+        "max_level": 42
+      },
+      {
+        "name": "Pelipper",
+        "species_id": 279,
+        "rate": 10,
+        "min_level": 40,
+        "max_level": 40
+      },
+      {
+        "name": "Lunatone",
+        "species_id": 337,
+        "rate": 10,
+        "min_level": 41,
+        "max_level": 41
+      },
+      {
+        "name": "Solrock",
+        "species_id": 338,
+        "rate": 10,
+        "min_level": 41,
+        "max_level": 41
+      },
+      {
+        "name": "Delibird",
+        "species_id": 225,
+        "rate": 5,
+        "min_level": 39,
+        "max_level": 39
+      }
+    ]
+  },
+  "route_23": {
+    "Dark Grass": [
+      {
+        "name": "Sawk",
+        "species_id": 539,
+        "rate": 25,
+        "min_level": 53,
+        "max_level": 54
+      },
+      {
+        "name": "Bouffalant",
+        "species_id": 626,
+        "rate": 25,
+        "min_level": 54,
+        "max_level": 56
+      },
+      {
+        "name": "Mienshao",
+        "species_id": 620,
+        "rate": 15,
+        "min_level": 53,
+        "max_level": 53
+      },
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 10,
+        "min_level": 55,
+        "max_level": 55
+      },
+      {
+        "name": "Gligar",
+        "species_id": 207,
+        "rate": 10,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Amoonguss",
+        "species_id": 591,
+        "rate": 10,
+        "min_level": 54,
+        "max_level": 54
+      },
+      {
+        "name": "Vullaby",
+        "species_id": 629,
+        "rate": 5,
+        "min_level": 52,
+        "max_level": 52
+      }
+    ],
+    "Shaking Grass": [
+      {
+        "name": "Audino",
+        "species_id": 531,
+        "rate": 80,
+        "min_level": 48,
+        "max_level": 51
+      },
+      {
+        "name": "Emolga",
+        "species_id": 587,
+        "rate": 10,
+        "min_level": 49,
+        "max_level": 49
+      },
+      {
+        "name": "Gliscor",
+        "species_id": 472,
+        "rate": 5,
+        "min_level": 51,
+        "max_level": 51
+      },
+      {
+        "name": "Throh",
+        "species_id": 538,
+        "rate": 5,
+        "min_level": 51,
+        "max_level": 51
+      }
+    ],
+    "Super Rod": [
+      {
+        "name": "Poliwag",
+        "species_id": 60,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Poliwhirl",
+        "species_id": 61,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Poliwrath",
+        "species_id": 62,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 70,
+        "min_level": 40,
+        "max_level": 55
+      },
+      {
+        "name": "Buizel",
+        "species_id": 418,
+        "rate": 30,
+        "min_level": 40,
+        "max_level": 55
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Buizel",
+        "species_id": 418,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 55
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 30,
+        "min_level": 40,
+        "max_level": 55
+      },
+      {
+        "name": "Floatzel",
+        "species_id": 419,
+        "rate": 10,
+        "min_level": 45,
+        "max_level": 55
+      }
+    ],
+    "Grass": [
+      {
+        "name": "Sawk",
+        "species_id": 539,
+        "rate": 25,
+        "min_level": 48,
+        "max_level": 49
+      },
+      {
+        "name": "Bouffalant",
+        "species_id": 626,
+        "rate": 25,
+        "min_level": 49,
+        "max_level": 51
+      },
+      {
+        "name": "Mienfoo",
+        "species_id": 619,
+        "rate": 15,
+        "min_level": 48,
+        "max_level": 48
+      },
+      {
+        "name": "Golduck",
+        "species_id": 55,
+        "rate": 10,
+        "min_level": 50,
+        "max_level": 50
+      },
+      {
+        "name": "Gligar",
+        "species_id": 207,
+        "rate": 10,
+        "min_level": 49,
+        "max_level": 49
+      },
+      {
+        "name": "Amoonguss",
+        "species_id": 591,
+        "rate": 10,
+        "min_level": 49,
+        "max_level": 49
+      },
+      {
+        "name": "Vullaby",
+        "species_id": 629,
+        "rate": 5,
+        "min_level": 47,
+        "max_level": 47
+      }
+    ]
+  },
+  "undella_town": {
+    "Super Rod": [
+      {
+        "name": "Luvdisc",
+        "species_id": 370,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Shellder",
+        "species_id": 90,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Shellder",
+        "species_id": 90,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Luvdisc",
+        "species_id": 370,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Cloyster",
+        "species_id": 91,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Frillish",
+        "species_id": 592,
+        "rate": 65,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Staryu",
+        "species_id": 120,
+        "rate": 30,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 5,
+        "min_level": 30,
+        "max_level": 40
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Staryu",
+        "species_id": 120,
+        "rate": 60,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Jellicent",
+        "species_id": 593,
+        "rate": 30,
+        "min_level": 25,
+        "max_level": 40
+      },
+      {
+        "name": "Starmie",
+        "species_id": 121,
+        "rate": 5,
+        "min_level": 30,
+        "max_level": 40
+      },
+      {
+        "name": "Basculin",
+        "species_id": 550,
+        "rate": 5,
+        "min_level": 30,
+        "max_level": 40
+      }
+    ]
+  },
+  "route_17": {
+    "Super Rod": [
+      {
+        "name": "Finneon",
+        "species_id": 456,
+        "rate": 60,
+        "min_level": 50,
+        "max_level": 70
+      },
+      {
+        "name": "Horsea",
+        "species_id": 116,
+        "rate": 40,
+        "min_level": 50,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Horsea",
+        "species_id": 116,
+        "rate": 40,
+        "min_level": 50,
+        "max_level": 60
+      },
+      {
+        "name": "Lumineon",
+        "species_id": 457,
+        "rate": 40,
+        "min_level": 50,
+        "max_level": 60
+      },
+      {
+        "name": "Seadra",
+        "species_id": 117,
+        "rate": 15,
+        "min_level": 60,
+        "max_level": 70
+      },
+      {
+        "name": "Kingdra",
+        "species_id": 230,
+        "rate": 5,
+        "min_level": 60,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Frillish",
+        "species_id": 592,
+        "rate": 100,
+        "min_level": 45,
+        "max_level": 60
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Alomomola",
+        "species_id": 594,
+        "rate": 95,
+        "min_level": 45,
+        "max_level": 60
+      },
+      {
+        "name": "Jellicent",
+        "species_id": 593,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 60
+      }
+    ]
+  },
+  "route_21": {
+    "Super Rod": [
+      {
+        "name": "Luvdisc",
+        "species_id": 370,
+        "rate": 60,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Remoraid",
+        "species_id": 223,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      }
+    ],
+    "Super Rod (Spot)": [
+      {
+        "name": "Remoraid",
+        "species_id": 223,
+        "rate": 55,
+        "min_level": 40,
+        "max_level": 70
+      },
+      {
+        "name": "Luvdisc",
+        "species_id": 370,
+        "rate": 40,
+        "min_level": 40,
+        "max_level": 60
+      },
+      {
+        "name": "Octillery",
+        "species_id": 224,
+        "rate": 5,
+        "min_level": 50,
+        "max_level": 70
+      }
+    ],
+    "Surfing": [
+      {
+        "name": "Frillish",
+        "species_id": 592,
+        "rate": 65,
+        "min_level": 30,
+        "max_level": 45
+      },
+      {
+        "name": "Mantyke",
+        "species_id": 458,
+        "rate": 30,
+        "min_level": 30,
+        "max_level": 45
+      },
+      {
+        "name": "Remoraid",
+        "species_id": 223,
+        "rate": 5,
+        "min_level": 35,
+        "max_level": 45
+      }
+    ],
+    "Surfing (Spot)": [
+      {
+        "name": "Jellicent",
+        "species_id": 593,
+        "rate": 60,
+        "min_level": 30,
+        "max_level": 45
+      },
+      {
+        "name": "Alomomola",
+        "species_id": 594,
+        "rate": 35,
+        "min_level": 30,
+        "max_level": 45
+      },
+      {
+        "name": "Mantine",
+        "species_id": 226,
+        "rate": 5,
+        "min_level": 35,
+        "max_level": 45
+      }
+    ]
+  },
+  "driftveil_city": {
+    "Gift": [
+      {
+        "name": "Zorua",
+        "species_id": 570,
+        "rate": 100,
+        "min_level": 25,
+        "max_level": 25
+      }
+    ]
+  },
+  "floccesy_town": {
+    "Gift": [
+      {
+        "name": "Gible",
+        "species_id": 443,
+        "rate": 100,
+        "min_level": 1,
+        "max_level": 1
+      }
+    ]
+  },
+  "nacrene_city": {
+    "Gift Egg": [
+      {
+        "name": "Happiny",
+        "species_id": 440,
+        "rate": 100,
+        "min_level": 1,
+        "max_level": 1
+      }
+    ]
+  }
+}

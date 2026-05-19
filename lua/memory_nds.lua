@@ -151,6 +151,16 @@ local BLOCK_A_OFF = {
     [18]=32,[19]=32,[20]=64,[21]=96,[22]=64,[23]=96,
 }
 
+-- Block B byte offset within the 128-byte data region for each of the 24 block orders.
+-- Block B holds: moves (4×u16), PP (4×u8), PP Ups (4×u8), IV32 (with IsEgg/IsNicknamed bits),
+-- Hoenn ribbons, and (Gen 5 only) Form/Gender packed byte.
+local BLOCK_B_OFF = {
+    [0]=32, [1]=32, [2]=64, [3]=96, [4]=64, [5]=96,
+    [6]=0,  [7]=0,  [8]=0,  [9]=0,  [10]=0, [11]=0,
+    [12]=64,[13]=96,[14]=32,[15]=32,[16]=96,[17]=64,
+    [18]=64,[19]=96,[20]=32,[21]=32,[22]=96,[23]=64,
+}
+
 -- Block C byte offset within the 128-byte data region for each of the 24 block orders.
 -- Block C holds: nickname (11 × u16).
 local BLOCK_C_OFF = {
@@ -182,7 +192,7 @@ local function decrypt_block_a(pkm_addr)
     s = lcrng(s)                                                 -- word 1: heldItem (skip)
     s = lcrng(s); local ot_lo   = xor16(r16(data_base + 4), s)  -- word 2: otID lo (TID)
     s = lcrng(s); local ot_hi   = xor16(r16(data_base + 6), s)  -- word 3: otID hi (SID)
-    if species == 0 or species > 493 then return nil end   -- 493 = Arceus, last Gen IV species
+    if species == 0 or species > SPECIES_MAX then return nil end
     return species, ot_lo | (ot_hi << 16)
 end
 
@@ -209,12 +219,74 @@ function M.decrypt_block_a_ext(pkm_addr)
     s = lcrng(s)  -- friendship(u8) | ability(u8) packed as u16
     local packed = xor16(r16(data_base + 12), s)
     local ability = (packed >> 8) & 0xFF
-    if species == 0 or species > 493 then return nil end
+    if species == 0 or species > SPECIES_MAX then return nil end
     return species, ot_lo | (ot_hi << 16), held_item, ability
+end
+
+-- Decrypt Block B and return a table with moves, PP, PP Ups, form, and isEgg.
+-- Block B layout (offsets within the 32-byte block; struct offsets in [brackets] for Gen 5):
+--   +0x00 [0x28] Move 1 (u16)
+--   +0x02 [0x2A] Move 2 (u16)
+--   +0x04 [0x2C] Move 3 (u16)
+--   +0x06 [0x2E] Move 4 (u16)
+--   +0x08 [0x30] Move 1-2 PP (u16 packed: lo=PP1, hi=PP2)
+--   +0x0A [0x32] Move 3-4 PP (u16 packed: lo=PP3, hi=PP4)
+--   +0x0C [0x34] Move 1-2 PP Ups (u16 packed)
+--   +0x0E [0x36] Move 3-4 PP Ups (u16 packed)
+--   +0x10 [0x38] IV32 lo word (HP/Atk/Def/Spd IVs)
+--   +0x12 [0x3A] IV32 hi word (SpA/SpD IVs + bit 30=IsEgg, bit 31=IsNicknamed)
+--   +0x14 [0x3C] Hoenn ribbon set 1 (skip)
+--   +0x16 [0x3E] Hoenn ribbon set 1 (skip)
+--   +0x18 [0x40] Misc1: lo byte = (Form << 3 | Gender << 1 | Fateful). Form = bits 3-7.
+-- Sources: kwsch/PKHeX PK5.cs (struct offsets); Bulbapedia Gen IV/V data structure
+-- (shuffle formula and block layout); reused for Gen 4 (PK4.cs offsets identical for
+-- moves/PP/IV32; AltForm location matches per PKHeX).
+--
+-- Returns: { moves={u16×4}, pp={u8×4}, pp_ups={u8×4}, form=u8, isEgg=bool } or nil.
+function M.decrypt_block_b(pkm_addr)
+    local pid = r32(pkm_addr)
+    if pid == 0 then return nil end
+    local chk       = r16(pkm_addr + 0x006)
+    local order_val = _block_order(pid)
+    local blk_off   = BLOCK_B_OFF[order_val] or 0
+    local data_base = pkm_addr + 0x008 + blk_off
+    local word_base = blk_off >> 1
+    local s = chk
+    for _ = 1, word_base do s = lcrng(s) end
+    -- Words 0-3: moves
+    s = lcrng(s); local m1 = xor16(r16(data_base + 0),  s)
+    s = lcrng(s); local m2 = xor16(r16(data_base + 2),  s)
+    s = lcrng(s); local m3 = xor16(r16(data_base + 4),  s)
+    s = lcrng(s); local m4 = xor16(r16(data_base + 6),  s)
+    -- Words 4-5: PP (4 bytes packed across 2 u16)
+    s = lcrng(s); local pp12 = xor16(r16(data_base + 8),  s)
+    s = lcrng(s); local pp34 = xor16(r16(data_base + 10), s)
+    -- Words 6-7: PP Ups (4 bytes packed across 2 u16)
+    s = lcrng(s); local up12 = xor16(r16(data_base + 12), s)
+    s = lcrng(s); local up34 = xor16(r16(data_base + 14), s)
+    -- Words 8-9: IV32 (split across two u16)
+    s = lcrng(s); local _iv_lo = xor16(r16(data_base + 16), s)
+    s = lcrng(s); local iv_hi  = xor16(r16(data_base + 18), s)
+    -- IsEgg = bit 30 of IV32 = bit 14 of iv_hi (since iv_hi = bits 16-31 of IV32)
+    local isEgg = ((iv_hi >> 14) & 1) == 1
+    -- Words 10-11: Hoenn ribbon set 1 (skip)
+    s = lcrng(s)
+    s = lcrng(s)
+    -- Word 12: Misc1 (form bits 3-7 of low byte; gender bits 1-2)
+    s = lcrng(s); local misc1 = xor16(r16(data_base + 24), s)
+    local form = (misc1 >> 3) & 0x1F
+    return {
+        moves  = {m1, m2, m3, m4},
+        pp     = {pp12 & 0xFF, (pp12 >> 8) & 0xFF, pp34 & 0xFF, (pp34 >> 8) & 0xFF},
+        pp_ups = {up12 & 0xFF, (up12 >> 8) & 0xFF, up34 & 0xFF, (up34 >> 8) & 0xFF},
+        form   = form,
+        isEgg  = isEgg,
+    }
 end
 
 -- Decrypt Block C (nickname): returns a Lua string (ASCII, up to 10 chars).
 -- Block C layout: nickname is 11 × u16 (Gen IV charcode, 0xFFFF terminated).
+-- Gen 5: same shuffle + LCRNG, but characters are UTF-16LE (printable ASCII passes through).
 function M.readNickname(pkm_addr)
     local pid = r32(pkm_addr)
     if pid == 0 then return nil end
@@ -222,23 +294,37 @@ function M.readNickname(pkm_addr)
     local blk_off   = BLOCK_C_OFF[order_val] or 0
     local data_base = pkm_addr + 0x008 + blk_off
     local chars = {}
-    -- Gen 4: always LCRNG-encrypted (no plaintext shortcut)
+    -- Both Gen 4 and Gen 5: always LCRNG-encrypted in live RAM (no plaintext shortcut)
     local chk       = r16(pkm_addr + 0x006)
     local word_base = blk_off >> 1
     local s = chk
     for _ = 1, word_base do s = lcrng(s) end
-    for i = 0, 10 do
-        s = lcrng(s)
-        local c = xor16(r16(data_base + i * 2), s)
-        if c == 0xFFFF or c == 0x0000 then break end
-        if     c >= 289 and c <= 298 then chars[#chars+1] = string.char(c - 241)
-        elseif c >= 299 and c <= 324 then chars[#chars+1] = string.char(c - 234)
-        elseif c >= 325 and c <= 350 then chars[#chars+1] = string.char(c - 228)
-        elseif c == 478 then chars[#chars+1] = " "
-        elseif c == 446 then chars[#chars+1] = "-"
-        elseif c == 435 then chars[#chars+1] = "'"
-        elseif c == 430 then chars[#chars+1] = "."
-        else chars[#chars+1] = "?"
+    if TRAINER_NAME_ENCODING == "gen5" then
+        -- Gen 5: UTF-16LE-compatible. Printable ASCII 0x0020-0x007E passes through.
+        -- Non-ASCII chars (Japanese, accented) are silently skipped.
+        for i = 0, 10 do
+            s = lcrng(s)
+            local c = xor16(r16(data_base + i * 2), s)
+            if c == 0xFFFF or c == 0x0000 then break end
+            if c >= 0x0020 and c <= 0x007E then
+                chars[#chars+1] = string.char(c)
+            end
+        end
+    else
+        -- Gen 4: custom charcode table (289-350 = digits/upper/lower)
+        for i = 0, 10 do
+            s = lcrng(s)
+            local c = xor16(r16(data_base + i * 2), s)
+            if c == 0xFFFF or c == 0x0000 then break end
+            if     c >= 289 and c <= 298 then chars[#chars+1] = string.char(c - 241)
+            elseif c >= 299 and c <= 324 then chars[#chars+1] = string.char(c - 234)
+            elseif c >= 325 and c <= 350 then chars[#chars+1] = string.char(c - 228)
+            elseif c == 478 then chars[#chars+1] = " "
+            elseif c == 446 then chars[#chars+1] = "-"
+            elseif c == 435 then chars[#chars+1] = "'"
+            elseif c == 430 then chars[#chars+1] = "."
+            else chars[#chars+1] = "?"
+            end
         end
     end
     return #chars > 0 and table.concat(chars) or nil
@@ -332,9 +418,19 @@ local PLAYER_NAME_OFF    = 0x74
 -- Source: HGSS disassembly — stable in US 1.0.
 local BATTLE_STATUS_ADDR = 0x246F48
 
+-- Battle mode (Gen 5 only): absolute RAM address, u8.
+-- Values per NDS-Ironmon-Tracker BattleHandlerGen5.lua:
+--   0 = single, 1 = double, 2 = triple, 3 = rotation
+-- Gen 4 leaves this nil; isDoubleBattle() returns false in that case.
+local BATTLE_MODE_ADDR   = nil
+
 -- Memorial box index (0-based). Box 17 = UI "Box 18" = "THE DEAD".
 -- Both HGSS and Platinum use 18-box storage; memorial is the last box.
 local MEMORIAL_BOX       = 17
+
+-- Max National Pokédex species ID accepted by Block A decryption.
+-- Gen 4 = 493 (Arceus); Gen 5 = 649 (Genesect). Set via profile.
+local SPECIES_MAX        = 493
 
 -- ── Gen 5 direct-addressing mode ─────────────────────────────────────────────
 -- Gen 5 (Black/White/Black2/White2) uses fixed absolute RAM addresses instead of
@@ -347,6 +443,7 @@ local MEMORIAL_BOX       = 17
 local DIRECT_ADDR          = false   -- true for Gen 5
 local ZONE_ID_DIRECT       = false   -- true for Gen 5 (no pointer fallback on zone==0)
 local PC_STORAGE_BASE      = nil     -- Gen 5 direct PC box[0] base addr (nil = Gen 4 method)
+local PC_STORAGE_BASE_ALT  = nil     -- Gen 5 fallback candidate (probed if primary reads zero)
 local TRAINER_NAME_ENCODING = "gen4" -- "gen4" or "gen5" (UTF-16 passthrough)
 local BOXES_COUNT          = 18      -- 18 (Gen 4) or 24 (Gen 5)
 local PC_CURRENT_BOX_OFF   = 0x12000 -- offset from pcStorageBase to currentBox u8
@@ -386,11 +483,14 @@ function M.applyProfile(p)
     if p.DIRECT_ADDR           ~= nil then DIRECT_ADDR           = p.DIRECT_ADDR           end
     if p.ZONE_ID_DIRECT        ~= nil then ZONE_ID_DIRECT        = p.ZONE_ID_DIRECT        end
     if p.PC_STORAGE_BASE       ~= nil then PC_STORAGE_BASE       = p.PC_STORAGE_BASE       end
+    if p.PC_STORAGE_BASE_ALT   ~= nil then PC_STORAGE_BASE_ALT   = p.PC_STORAGE_BASE_ALT   end
     if p.TRAINER_NAME_ENCODING ~= nil then TRAINER_NAME_ENCODING = p.TRAINER_NAME_ENCODING end
     if p.MON_SIZE              ~= nil then M.MON_SIZE            = p.MON_SIZE              end
     if p.PC_BOX_STRIDE         ~= nil then PC_BOX_STRIDE         = p.PC_BOX_STRIDE         end
     if p.BOXES_COUNT           ~= nil then BOXES_COUNT           = p.BOXES_COUNT           end
     if p.PC_CURRENT_BOX_OFF    ~= nil then PC_CURRENT_BOX_OFF    = p.PC_CURRENT_BOX_OFF    end
+    if p.SPECIES_MAX           ~= nil then SPECIES_MAX           = p.SPECIES_MAX           end
+    if p.BATTLE_MODE_ADDR      ~= nil then BATTLE_MODE_ADDR      = p.BATTLE_MODE_ADDR      end
 end
 
 -- Export read-only profile values for callers that need them.
@@ -733,6 +833,16 @@ function M.isInOverworld()
     return not M.isInBattle()
 end
 
+-- Returns true when the current battle is a double / triple / rotation battle.
+-- Reads u8 at BATTLE_MODE_ADDR (Gen 5 only). Returns false for Gen 4 (addr nil)
+-- or when not in battle. Values: 0=single, 1=double, 2=triple, 3=rotation.
+function M.isDoubleBattle()
+    if not BATTLE_MODE_ADDR then return false end
+    if not M.isInBattle() then return false end
+    local mode = r8(BATTLE_MODE_ADDR)
+    return mode == 1 or mode == 2 or mode == 3
+end
+
 -- ── Party state ───────────────────────────────────────────────────────────────
 
 -- Returns true when every occupied party slot has curHP == 0.
@@ -814,10 +924,36 @@ end
 --   saveData      = M._base   (confirmed: base = SaveData*)
 --   PC_ARRAY_HDR_OFF = 0x232AC  (saveData + 0x23014 + 41*0x10 + 8)
 -- Gen 5: PC storage is at an absolute address (PC_STORAGE_BASE); no array header needed.
+-- Probe a Gen 5 PC base candidate by checking the first 4 slots of Box 0.
+-- A valid PC base will have at least one slot whose PID is non-zero on most
+-- saves; an empty save returns 0 for all slots. We accept the address if the
+-- first 4 PIDs are all 0 OR at least one is non-zero (i.e., we reject only
+-- when we read clearly invalid garbage — but in practice empty saves are
+-- rare enough that this probe primarily distinguishes between candidates).
+local function _gen5_pc_base_looks_valid(base)
+    if not base or base == 0 then return false end
+    -- Sample 4 slots of box 0; reject if all read as 0xFFFFFFFF (uninit memory).
+    local stride = 0x88   -- PC_SLOT_STRIDE for Gen 5
+    local all_ff = true
+    for slot = 0, 3 do
+        local pid = r32(base + slot * stride)
+        if pid ~= 0xFFFFFFFF then all_ff = false; break end
+    end
+    return not all_ff
+end
+
 function M.pcStorageBase()
     if DIRECT_ADDR then
         -- Gen 5: PC_STORAGE_BASE is a direct absolute address set in the profile.
-        return PC_STORAGE_BASE   -- nil until verified and set in the game profile
+        -- If a fallback candidate is configured and the primary looks invalid
+        -- (all-0xFFFFFFFF reads), swap to the alt. Once swapped, the choice
+        -- persists for the session.
+        if PC_STORAGE_BASE and not _gen5_pc_base_looks_valid(PC_STORAGE_BASE)
+           and PC_STORAGE_BASE_ALT and _gen5_pc_base_looks_valid(PC_STORAGE_BASE_ALT) then
+            PC_STORAGE_BASE = PC_STORAGE_BASE_ALT
+            PC_STORAGE_BASE_ALT = nil
+        end
+        return PC_STORAGE_BASE
     end
     if not M._base then return nil end
     local chunk_off = r32(M._base + PC_ARRAY_HDR_OFF)

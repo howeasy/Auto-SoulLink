@@ -10,9 +10,9 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 | 1 | Red, Blue, Yellow | US English | ⚠️ Experimental |
 | 2 | Crystal | GBC | ⚠️ Experimental |
 | 4 | HeartGold, SoulSilver, Platinum | US | ⚠️ Experimental |
-| 5 | Black, White, Black 2, White 2 | — | ⚠️ Experimental |
+| 5 | Black, White, Black 2, White 2 | US | 🧪 Beta — feature parity, awaiting live verification |
 
-> **Note:** Only Gen 3 has been extensively tested in live gameplay. Gen 1, 2, 4, and 5 have unit tests and Lua clients but limited real-world testing.
+> **Note:** Only Gen 3 has been extensively tested in live gameplay. Gen 1, 2, and 4 have unit tests and Lua clients but limited real-world testing. Gen 5 now has full feature parity with Gen 3 (enemy moves/PP, doubles detection, Unova form normalization, Gen 4-5 move data, hidden abilities) and 900+ passing unit tests; only minimal BizHawk RAM-Watch verification remains (`lua/tests/test_gen5_block_b.lua` and `lua/tests/test_gen5_doubles.lua`).
 
 ## Quick Start
 

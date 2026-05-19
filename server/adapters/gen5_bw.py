@@ -18,12 +18,15 @@ from server.pokemon_data import (
     GENDER_RATIO,
     GENDER_SYMBOL,
     NATIONAL_SPECIES_NAMES,
+    SPECIES_NAMES,
+    CFRU_FORM_SPRITE_ID,
     EVO_FAMILY,
     ability_name as _ability_name,
     ability_description as _ability_description,
     species_types as _species_types,
     type_name as _type_name,
     to_cfru as _to_cfru,
+    to_national as _to_national,
     natdex_base_form as _natdex_base_form,
     _parse_pid_otid_key,
     pid_otid_shiny,
@@ -67,60 +70,24 @@ for _map_file in ("area_map_bw.json", "area_map_bw2.json"):
                 if _area_id and _name and _area_id not in _AREA_DISPLAY_NAMES:
                     _AREA_DISPLAY_NAMES[_area_id] = _name
 
-# Gen 5 (BW/BW2) item names — standard item IDs shared across all 4 variants.
-# Ball IDs are identical to Gen 4 (0x0001-0x0010).
-_GEN5_ITEM_NAMES: dict[int, str] = {
-    # Pokéballs
-    1:"Master Ball",   2:"Ultra Ball",    3:"Great Ball",    4:"Poké Ball",
-    5:"Safari Ball",   6:"Net Ball",      7:"Dive Ball",     8:"Nest Ball",
-    9:"Repeat Ball",   10:"Timer Ball",   11:"Luxury Ball",  12:"Premier Ball",
-    13:"Dusk Ball",    14:"Heal Ball",    15:"Quick Ball",   16:"Cherish Ball",
-    # Recovery items
-    17:"Potion",       18:"Antidote",     19:"Burn Heal",    20:"Ice Heal",
-    21:"Awakening",    22:"Parlyz Heal",  23:"Full Restore", 24:"Max Potion",
-    25:"Hyper Potion", 26:"Super Potion", 27:"Full Heal",    28:"Revive",
-    29:"Max Revive",   30:"Fresh Water",  31:"Soda Pop",     32:"Lemonade",
-    33:"MooMoo Milk",  34:"EnergyPowder", 35:"Energy Root",  36:"Heal Powder",
-    37:"Revival Herb", 38:"Ether",        39:"Max Ether",    40:"Elixir",
-    41:"Max Elixir",   42:"Lava Cookie",  43:"Berry Juice",  44:"Guard Spec.",
-    45:"Dire Hit",     46:"X Attack",     47:"X Defend",     48:"X Speed",
-    49:"X Accuracy",   50:"X Special",    51:"X Sp. Def",
-    # Battle items
-    55:"Red Flute",    56:"Blue Flute",   57:"Yellow Flute",
-    58:"Black Flute",  59:"White Flute",
-    65:"Super Repel",  66:"Max Repel",    67:"Escape Rope",  68:"Repel",
-    # Evolution stones
-    69:"Sun Stone",    70:"Moon Stone",   71:"Fire Stone",   72:"Thunderstone",
-    73:"Water Stone",  74:"Leaf Stone",
-    # Valuables
-    75:"TinyMushroom", 76:"Big Mushroom", 77:"Pearl",        78:"Big Pearl",
-    79:"Stardust",     80:"Star Piece",   81:"Nugget",       82:"Heart Scale",
-    # Fossils
-    88:"Root Fossil",  89:"Claw Fossil",  90:"Helix Fossil", 91:"Dome Fossil",
-    92:"Old Amber",    93:"Armor Fossil", 94:"Skull Fossil",
-    95:"Rare Bone",    96:"Shiny Stone",  97:"Dusk Stone",   98:"Dawn Stone",
-    99:"Oval Stone",   100:"Odd Keystone",
-    # Vitamins
-    103:"HP Up",    104:"Protein",   105:"Iron",      106:"Calcium",
-    107:"Zinc",     108:"Carbos",    109:"Rare Candy", 110:"PP Up",   111:"PP Max",
-    # Held items
-    133:"Lucky Egg",   134:"Exp. Share",  135:"Amulet Coin",
-    141:"Everstone",   142:"Focus Band",
-    149:"Macho Brace", 150:"Power Bracer",151:"Power Belt",  152:"Power Lens",
-    153:"Power Band",  154:"Power Anklet",155:"Power Weight",
-    203:"Leftovers",   204:"Shell Bell",
-    233:"Soothe Bell", 234:"Choice Band",
-    236:"Scope Lens",  237:"Metal Coat",
-    256:"Bright Powder",257:"White Herb", 258:"Power Herb",
-    261:"Choice Scarf",262:"Choice Specs",263:"Focus Sash",  264:"Life Orb",
-    265:"Toxic Orb",   266:"Flame Orb",
-    268:"Black Sludge", 269:"King's Rock",
-    270:"Razor Claw",  271:"Razor Fang",
-    275:"Wide Lens",   276:"Muscle Band", 277:"Wise Glasses",
-    278:"Expert Belt",
-    281:"Light Clay",  282:"Rocky Helmet",
-    289:"Silk Scarf",
-}
+# Per-version encounter tables (lazy-loaded; one JSON per ROM variant).
+# Schema: {area_id: {method_label: [{name, species_id, rate, min_level, max_level}, ...]}}
+# Source: veekun/pokedex encounters.csv (auto-generated; see commit history for the
+# generator one-liner). Multi-sub-area locations (e.g. Pinwheel Forest outside+inside)
+# use MAX rate per (method, species) across sub-areas, so totals can exceed 100% when
+# different sub-areas have different mons — that's accurate "what can spawn here at all"
+# representation rather than a per-step probability.
+_ENCOUNTER_TABLES: dict[str, dict] = {}
+for _rom in ("pokemon_black", "pokemon_white", "pokemon_black_2", "pokemon_white_2"):
+    _enc_path = os.path.join(_data_dir, f"encounters_{_rom}.json")
+    if os.path.exists(_enc_path):
+        with open(_enc_path, "r", encoding="utf-8") as _f:
+            _ENCOUNTER_TABLES[_rom] = json.load(_f)
+
+# Gen 5 (BW/BW2) item names — full 1-638 range loaded from server/gen5_items.py.
+# Source: veekun/pokedex item_names.csv (auto-generated; see tools workflow).
+# Shared across all 4 ROM variants.
+from server.gen5_items import GEN5_ITEM_NAMES as _GEN5_ITEM_NAMES
 
 
 class Gen5Adapter(GameAdapter):
@@ -198,6 +165,13 @@ class Gen5Adapter(GameAdapter):
         return pid_otid_shiny(*parsed)
 
     def species_name(self, species_id: int) -> str:
+        # CFRU form variant IDs (700+) get form-aware names like
+        # "Basculin (Blue)" or "Deerling Summer" — the Lua client passes
+        # the CFRU display ID when a non-zero form byte is decoded.
+        if species_id >= 700:
+            name = SPECIES_NAMES.get(species_id)
+            if name:
+                return name
         return NATIONAL_SPECIES_NAMES.get(species_id, f"#{species_id}")
 
     def type_name(self, type_id: int) -> str:
@@ -208,7 +182,17 @@ class Gen5Adapter(GameAdapter):
     def sprite_html(self, species_id: int) -> str:
         if not species_id or species_id < 1:
             return ""
-        url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{species_id}.png"
+        # Form variants (CFRU 700+) map to PokeAPI alt-form IDs (10001+).
+        # Falls back to base-NatDex sprite when the form has no separate PokeAPI ID.
+        form_pid = CFRU_FORM_SPRITE_ID.get(species_id)
+        if form_pid:
+            url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{form_pid}.png"
+        else:
+            # For CFRU form IDs without a dedicated PokeAPI sprite (e.g. Deerling seasons),
+            # fall back to the base-species NatDex sprite.
+            nat = _to_national(species_id) if species_id >= 700 else species_id
+            sid = nat if (nat and 1 <= nat <= 1025) else species_id
+            url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{sid}.png"
         return f'<img src="{url}" width="40" height="40" loading="lazy">'
 
     def ability_name(self, ability_id: int, species_id: int = 0) -> str:
@@ -223,19 +207,55 @@ class Gen5Adapter(GameAdapter):
     def item_name(self, item_id: int) -> str:
         return _GEN5_ITEM_NAMES.get(item_id, f"Item #{item_id}") if item_id else ""
 
+    def encounter_table(self, area_id: str) -> dict[str, list[dict]] | None:
+        """Return wild encounter data for `area_id` in the current ROM variant.
+
+        Returns `{method_label: [entries]}` or None if the area has no encounter
+        data for this ROM. Entries include name, species_id, rate (sum across
+        slots, 0-100 typical), and min/max level.
+
+        Per-ROM tables are loaded at import time from
+        `data/games/gen5_bw/encounters_<rom_type>.json`. Falls back to Black
+        (BW1) or Black 2 (BW2) if `rom_type` was not set on the adapter.
+        """
+        rom = self._rom_type
+        if rom not in _ENCOUNTER_TABLES:
+            # Pick a sensible default by detecting which gen the area_id belongs to.
+            # BW1 areas appear in encounters_pokemon_black.json; BW2-exclusive areas
+            # (aspertia_city, virbank_complex, etc.) only in BW2 tables.
+            rom = "pokemon_black"
+        table = _ENCOUNTER_TABLES.get(rom)
+        if not table:
+            return None
+        result = table.get(area_id)
+        if result is None and rom in ("pokemon_black", "pokemon_white"):
+            # Fallback: area might only exist in BW2 (e.g. user passed BW1 rom_type
+            # but the zone is BW2-exclusive). Try BW2 tables.
+            for fallback in ("pokemon_black_2", "pokemon_white_2"):
+                result = _ENCOUNTER_TABLES.get(fallback, {}).get(area_id)
+                if result: break
+        return result or None
+
     def area_display_name(self, area_id: str) -> str:
         if area_id in _AREA_DISPLAY_NAMES:
             return _AREA_DISPLAY_NAMES[area_id]
         return area_id.replace("_", " ").title()
 
     def to_national_dex(self, species_id: int) -> int:
+        # Gen 5 species IDs are already NatDex (1-649). CFRU form variants
+        # (700+) map back to their base NatDex species via CFRU_TO_NATIONAL.
+        if species_id >= 700:
+            return _to_national(species_id)
         return species_id
 
     def gender_symbol(self, gender: str) -> str:
         return GENDER_SYMBOL.get(gender, "")
 
     def form_sprite_id(self, species_id: int) -> int | None:
-        return None
+        # CFRU_FORM_SPRITE_ID maps CFRU form variant IDs (e.g. 736=Basculin Blue)
+        # to PokeAPI alt-form sprite IDs (e.g. 10016). Returns None for base
+        # forms or unknown species, mirroring Gen 3 adapter behavior.
+        return CFRU_FORM_SPRITE_ID.get(species_id)
 
     @property
     def memorial_box_index(self) -> int:
@@ -254,3 +274,41 @@ class Gen5Adapter(GameAdapter):
             (7, "Freeze Badge"),
             (8, "Legend Badge"),
         ]
+
+    # ── Move data (Gen 4-5 range 355-559) ────────────────────────────────
+
+    def move_name(self, move_id: int) -> str:
+        """Return display name for a move ID.
+
+        Falls through Gen 4-5 table (355-559) → vanilla Gen 3 table (1-354).
+        """
+        if not move_id:
+            return ""
+        from server.move_data_gen5 import GEN5_MOVE_NAMES
+        if move_id in GEN5_MOVE_NAMES:
+            return GEN5_MOVE_NAMES[move_id]
+        from server.move_data import move_name as _vanilla_move_name
+        return _vanilla_move_name(move_id, is_rr=False)
+
+    def move_data(self, move_id: int) -> dict | None:
+        """Return move details dict {name, type_id, type_name, power, accuracy, pp, split}.
+
+        Returns None if the move ID is unknown.
+        """
+        if not move_id:
+            return None
+        from server.move_data_gen5 import GEN5_MOVE_DATA
+        from server.move_data import move_data as _vanilla_move_data
+        raw = GEN5_MOVE_DATA.get(move_id) or _vanilla_move_data(move_id, is_rr=False)
+        if raw is None:
+            return None
+        type_id = raw.get("type", 0)
+        return {
+            "name": self.move_name(move_id),
+            "type_id": type_id,
+            "type_name": self.type_name(type_id),
+            "power": raw.get("power", 0),
+            "accuracy": raw.get("accuracy", 0),
+            "pp": raw.get("pp", 0),
+            "split": raw.get("split", 0),
+        }

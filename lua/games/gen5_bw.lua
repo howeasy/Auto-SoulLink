@@ -127,6 +127,7 @@ local _COMMON_GEN5 = {
     DIRECT_ADDR          = true,
     ZONE_ID_DIRECT       = true,   -- zone 0 is valid (Black City / Marine Tube)
     MON_SIZE             = 0xDC,   -- 220 bytes (PartyPokemon in Gen 5)
+    SPECIES_MAX          = 649,    -- Genesect, last Gen V species (Unova: 494-649)
     -- PC box stride: 30 slots × 0x88 + 0x10 header = 0xFA0 (confirmed from Wi-Fi-Labs RNG scripts)
     PC_BOX_STRIDE        = 0xFA0,  -- no padding (Gen 4 uses 0x1000 with padding)
     PC_SLOT_STRIDE       = 0x88,   -- BoxPokemon = 136 bytes (same as Gen 4)
@@ -150,6 +151,9 @@ local _BLACK_ADDRS = {
     PLAYER_BATTLE_OFF  = 0x26A794,  -- player battle-mon copy (PID at base)
     ENEMY_BATTLE_OFF   = 0x26B254,  -- enemy battle-mon copy
     BATTLE_STATUS_ADDR = 0x1D0798,  -- u32: non-zero = in battle
+    -- doubleTripleFlag (u8): 0=single, 1=double, 2=triple, 3=rotation.
+    -- Source: NDS-Ironmon-Tracker MemoryAddresses.lua + BattleHandlerGen5.lua.
+    BATTLE_MODE_ADDR   = 0x2A62F8,
     ZONE_ID_OFF        = 0x2592B2,  -- u16 childMapHeader zone ID (direct read)
     ZONE_ID_MAX        = 0x300,     -- BW1 has <600 zones; 0x300=768 gives headroom
     TRAINER_ID_OFF     = 0x2697BE,  -- u16 enemy trainer ID (0 = wild)
@@ -159,8 +163,15 @@ local _BLACK_ADDRS = {
     -- Source: PKHeX PlayerBag5BW.cs (Items at block+0x000) + Wi-Fi-Labs RNG scripts.
     BALLS_POCKET_OFF   = 0x233FAC,  -- Items pocket (contains all items including balls)
     BALLS_POCKET_COUNT = 50,        -- scan first 50 slots; balls (IDs 1-16) sort early
-    -- PC storage base = Box 0, Slot 0. Source: Wi-Fi-Labs BW_RNG_BizHawk_SM.lua (boxAddr)
+    -- PC storage base = Box 0, Slot 0.
+    -- Two candidates from different sources:
+    --   0x21BFAC — Wi-Fi-Labs BW_RNG_BizHawk_SM.lua (empirical, BizHawk-verified)
+    --   0x21BFD0 — ProjectPokemon BW save spec (save_base 0x221BBD0 + 0x400 boxes offset)
+    -- The 0x24 delta is likely the difference between the save FILE header (stripped on load)
+    -- and runtime RAM. We retain the empirical Wi-Fi-Labs value; M.validatePCBase() probes
+    -- both candidates at startup and self-corrects if the first slot reads zero.
     PC_STORAGE_BASE    = 0x21BFAC,
+    PC_STORAGE_BASE_ALT = 0x21BFD0,  -- fallback candidate (save_base + 0x400)
     -- Player OT name (u16[8] UTF-16LE). Source: Wi-Fi-Labs BW_RNG_BizHawk_SM.lua
     PLAYER_NAME_OFF    = 0x234FB0,
 }
@@ -173,8 +184,9 @@ do
     local delta = 0x20
     local shifted = {
         "PARTY_COUNT_OFF", "PARTY_OFF", "PLAYER_BATTLE_OFF", "ENEMY_BATTLE_OFF",
-        "BATTLE_STATUS_ADDR", "ZONE_ID_OFF", "TRAINER_ID_OFF", "BADGES_1_OFF",
-        "BALLS_POCKET_OFF", "PC_STORAGE_BASE", "PLAYER_NAME_OFF",
+        "BATTLE_STATUS_ADDR", "BATTLE_MODE_ADDR",
+        "ZONE_ID_OFF", "TRAINER_ID_OFF", "BADGES_1_OFF",
+        "BALLS_POCKET_OFF", "PC_STORAGE_BASE", "PC_STORAGE_BASE_ALT", "PLAYER_NAME_OFF",
     }
     for _, field in ipairs(shifted) do
         if _WHITE_PROFILE[field] then
@@ -192,6 +204,9 @@ local _BLACK2_ADDRS = {
     PLAYER_BATTLE_OFF  = 0x258314,
     ENEMY_BATTLE_OFF   = 0x258874,
     BATTLE_STATUS_ADDR = 0x1B5138,  -- ⚠ White2 uses 0x1B5178 (+0x40, NOT +0x80)
+    -- doubleTripleFlag (u8): 0=single, 1=double, 2=triple, 3=rotation.
+    -- Source: NDS-Ironmon-Tracker MemoryAddresses.lua (B2W2 entry).
+    BATTLE_MODE_ADDR   = 0x294DA4,
     ZONE_ID_OFF        = 0x246860,  -- u16 childMapHeader
     ZONE_ID_MAX        = 0x300,     -- BW2 has more zones but same headroom
     TRAINER_ID_OFF     = 0x257332,
@@ -215,6 +230,7 @@ do
     local delta = 0x80
     local shifted = {
         "PARTY_COUNT_OFF", "PARTY_OFF", "PLAYER_BATTLE_OFF", "ENEMY_BATTLE_OFF",
+        "BATTLE_MODE_ADDR",
         "ZONE_ID_OFF", "TRAINER_ID_OFF", "BADGES_1_OFF",
         "BALLS_POCKET_OFF",
     }
@@ -237,6 +253,47 @@ M.profiles = {
     pokemon_black_2 = _BLACK2_PROFILE,
     pokemon_white_2 = _WHITE2_PROFILE,
 }
+
+-- ── Form display ID mapping ─────────────────────────────────────────────────
+-- Maps (NatDex species, form byte) → CFRU display species ID for form variants.
+-- The CFRU display IDs (736+) are used server-side via SPECIES_NAMES and
+-- CFRU_FORM_SPRITE_ID for correct alt-form sprite + name resolution.
+--
+-- Form byte semantics from PKHeX PK5.cs Form fields:
+--   Basculin (550):     0=Red, 1=Blue
+--   Darmanitan (555):   0=Standard, 1=Zen
+--   Deerling (585):     0=Spring, 1=Summer, 2=Autumn, 3=Winter
+--   Sawsbuck (586):     0=Spring, 1=Summer, 2=Autumn, 3=Winter
+--   Tornadus (641):     0=Incarnate, 1=Therian (BW2)
+--   Thundurus (642):    0=Incarnate, 1=Therian (BW2)
+--   Landorus (645):     0=Incarnate, 1=Therian (BW2)
+--   Kyurem (646):       0=Plain, 1=White, 2=Black (BW2)
+--   Keldeo (647):       0=Ordinary, 1=Resolute
+--   Meloetta (648):     0=Aria, 1=Pirouette
+-- Genesect drives (649) and others are visually identical to base.
+M.FORM_DISPLAY_ID = {
+    [550] = {[1] = 736},
+    [555] = {[1] = 737},
+    [585] = {[1] = 738, [2] = 739, [3] = 740},
+    [586] = {[1] = 741, [2] = 742, [3] = 743},
+    [641] = {[1] = 754},
+    [642] = {[1] = 755},
+    [645] = {[1] = 756},
+    [646] = {[1] = 753, [2] = 752},
+    [647] = {[1] = 757},
+    [648] = {[1] = 746},
+}
+
+-- Resolve a (NatDex species, form_byte) pair to the display species ID used
+-- by the server's SPECIES_NAMES / CFRU_FORM_SPRITE_ID tables. Returns the
+-- input species_id when no form override applies.
+function M.form_display_id(species_id, form_byte)
+    if not species_id or species_id == 0 then return species_id end
+    if not form_byte or form_byte == 0 then return species_id end
+    local forms = M.FORM_DISPLAY_ID[species_id]
+    if not forms then return species_id end
+    return forms[form_byte] or species_id
+end
 
 -- ── Area lookup ─────────────────────────────────────────────────────────────
 -- BW1 and BW2 share the same zone ID space; a single table serves all 4 variants.
