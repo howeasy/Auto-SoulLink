@@ -318,8 +318,12 @@ class Gen3Adapter(GameAdapter):
 
     # ── GamePresentationAdapter ──────────────────────────────────────────
 
-    def sprite_html(self, species_id: int) -> str:
-        """Generate sprite <img> tag with funnotbun RR sprites + PokeAPI fallback."""
+    def sprite_html(self, species_id: int, form: int = 0) -> str:
+        """Generate sprite <img> tag with funnotbun RR sprites + PokeAPI fallback.
+
+        `form` is accepted for adapter-signature consistency but unused — Gen 3
+        only has Unown letters, which share the same sprite.
+        """
         if not species_id or species_id < 1:
             return ""
 

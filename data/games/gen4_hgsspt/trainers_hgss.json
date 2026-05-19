@@ -1,0 +1,133 @@
+{
+  "classes": {
+    "0": "Pokémon Trainer",
+    "23": "Rival",
+    "66": "Gym Leader",
+    "67": "Gym Leader",
+    "70": "Gym Leader",
+    "72": "Gym Leader",
+    "73": "Gym Leader",
+    "74": "Gym Leader",
+    "75": "Gym Leader",
+    "76": "Gym Leader",
+    "86": "Champion",
+    "87": "Elite Four",
+    "88": "Elite Four",
+    "89": "Elite Four",
+    "97": "Tower Tycoon",
+    "98": "Gym Leader",
+    "99": "Hall Matron",
+    "100": "Factory Head",
+    "101": "Arcade Star",
+    "102": "Castle Valet",
+    "103": "Gym Leader",
+    "104": "Gym Leader",
+    "105": "Gym Leader",
+    "106": "Gym Leader",
+    "107": "Gym Leader",
+    "108": "Gym Leader",
+    "109": "Pokémon Trainer",
+    "110": "Gym Leader",
+    "112": "Elite Four",
+    "114": "Rocket Executive",
+    "116": "Rocket Executive",
+    "117": "Rocket Executive",
+    "118": "Rocket Executive",
+    "123": "Dragon Master",
+    "124": "Rocket Boss"
+  },
+  "trainers": {
+    "20": {
+      "name": "Falkner",
+      "class": 66
+    },
+    "21": {
+      "name": "Bugsy",
+      "class": 67
+    },
+    "30": {
+      "name": "Whitney",
+      "class": 70
+    },
+    "31": {
+      "name": "Morty",
+      "class": 72
+    },
+    "32": {
+      "name": "Pryce",
+      "class": 73
+    },
+    "33": {
+      "name": "Jasmine",
+      "class": 74
+    },
+    "34": {
+      "name": "Chuck",
+      "class": 75
+    },
+    "35": {
+      "name": "Clair",
+      "class": 76
+    },
+    "244": {
+      "name": "Lance",
+      "class": 86
+    },
+    "245": {
+      "name": "Will",
+      "class": 87
+    },
+    "246": {
+      "name": "Karen",
+      "class": 88
+    },
+    "247": {
+      "name": "Koga",
+      "class": 89
+    },
+    "253": {
+      "name": "Brock",
+      "class": 98
+    },
+    "254": {
+      "name": "Misty",
+      "class": 103
+    },
+    "255": {
+      "name": "Lt. Surge",
+      "class": 104
+    },
+    "256": {
+      "name": "Erika",
+      "class": 105
+    },
+    "257": {
+      "name": "Janine",
+      "class": 106
+    },
+    "258": {
+      "name": "Sabrina",
+      "class": 107
+    },
+    "259": {
+      "name": "Blaine",
+      "class": 108
+    },
+    "260": {
+      "name": "Red",
+      "class": 109
+    },
+    "261": {
+      "name": "Blue",
+      "class": 110
+    },
+    "418": {
+      "name": "Bruno",
+      "class": 112
+    },
+    "700": {
+      "name": "Giovanni",
+      "class": 124
+    }
+  }
+}

@@ -297,3 +297,215 @@ def test_ability_name_species_id_does_not_inject_cfru_override(adapter):
     # (121, 50) is "Tangling Hair" in RR — Gen 4 must return the plain vanilla name instead
     name = adapter.ability_name(121, species_id=50)
     assert name != "Tangling Hair"
+
+
+# ── Phase 2-7 additions ──────────────────────────────────────────────────────
+
+class TestFormSprites:
+    """Form-aware sprite resolution (Phase 5)."""
+
+    def test_rotom_heat_form(self, adapter):
+        assert adapter.form_sprite_url(479, 1) == "479-heat"
+        assert "479-heat" in adapter.sprite_html(479, 1)
+
+    def test_giratina_origin_form(self, adapter):
+        assert adapter.form_sprite_url(487, 1) == "487-origin"
+
+    def test_shaymin_sky_form(self, adapter):
+        assert adapter.form_sprite_url(492, 1) == "492-sky"
+
+    def test_deoxys_attack_form(self, adapter):
+        assert adapter.form_sprite_url(386, 1) == "386-attack"
+
+    def test_unown_letter_b(self, adapter):
+        assert adapter.form_sprite_url(201, 1) == "201-b"
+
+    def test_arceus_fire_plate(self, adapter):
+        assert adapter.form_sprite_url(493, 9) == "493-fire"
+
+    def test_base_form_returns_none(self, adapter):
+        # form=0 is the base form for every species — no override needed
+        assert adapter.form_sprite_url(479, 0) is None
+        assert adapter.form_sprite_url(487, 0) is None
+        assert adapter.form_sprite_url(25, 0) is None  # Pikachu has no Gen 4 forms
+
+    def test_sprite_html_uses_base_for_unknown_form(self, adapter):
+        # An unmapped (species, form) pair falls back to the base species sprite.
+        html = adapter.sprite_html(25, 99)
+        assert "/25.png" in html
+
+
+class TestMoveData:
+    """Gen 4 move table (Phase 7)."""
+
+    def test_gen4_only_moves(self, adapter):
+        assert adapter.move_name(369) == "U-turn"
+        assert adapter.move_name(444) == "Stone Edge"
+        assert adapter.move_name(467) == "Shadow Force"
+
+    def test_inherits_gen3_moves(self, adapter):
+        # Move IDs 1-354 should fall through to VANILLA_MOVE_NAMES.
+        assert adapter.move_name(33) == "Tackle"
+        assert adapter.move_name(1) == "Pound"
+
+    def test_unknown_move_returns_empty(self, adapter):
+        # ID 0 is "no move" sentinel — the vanilla table has a placeholder entry there.
+        # IDs beyond the Gen 4 max (467) should return empty.
+        assert adapter.move_name(9999) == ""
+        assert adapter.move_name(468) == ""  # one past Shadow Force
+
+    def test_move_data_shape(self, adapter):
+        md = adapter.move_data(369)  # U-turn
+        assert md is not None
+        assert md["name"] == "U-turn"
+        assert md["type_id"] == 6     # Bug
+        assert md["type_name"] == "Bug"
+        assert md["power"] == 70
+        assert md["pp"] == 20
+        assert md["split"] == 0       # Physical
+
+    def test_move_data_status_split(self, adapter):
+        md = adapter.move_data(355)  # Roost
+        assert md["split"] == 2
+        assert md["type_name"] == "Flying"
+
+
+class TestEggPickupArea:
+    """Egg-pickup detection (Phase 4)."""
+
+    def test_egg_prefix_recognized(self, adapter):
+        assert adapter.is_egg_pickup_area("egg_route_30") is True
+        assert adapter.is_egg_pickup_area("egg_iron_island") is True
+
+    def test_route_30_recognized(self, adapter):
+        assert adapter.is_egg_pickup_area("route_30") is True
+
+    def test_non_egg_area_returns_false(self, adapter):
+        assert adapter.is_egg_pickup_area("new_bark_town") is False
+        assert adapter.is_egg_pickup_area("route_29") is False
+
+    def test_egg_area_also_gift_area(self, adapter):
+        # Egg pickups are treated as gifts for clause-bypass purposes.
+        assert adapter.is_gift_area("egg_route_30") is True
+
+    def test_egg_fixed_species_strips_prefix(self, adapter):
+        # "egg_route_30" should map to route_30 (Togepi, fixed species).
+        assert adapter.is_fixed_species_gift("egg_route_30") is True
+
+
+class TestDaycareArea:
+    """Daycare detection (Phase 4 addendum) — distinguishes NPC eggs from bred eggs."""
+
+    def test_hgss_daycare_route_34(self, adapter):
+        assert adapter.is_daycare_area("route_34") is True
+
+    def test_platinum_daycare_solaceon(self, adapter):
+        assert adapter.is_daycare_area("solaceon_town") is True
+        assert adapter.is_daycare_area("route_209") is True
+
+    def test_non_daycare_route_returns_false(self, adapter):
+        assert adapter.is_daycare_area("route_30") is False
+        assert adapter.is_daycare_area("eterna_city") is False
+
+    def test_daycare_egg_prefix_recognized(self, adapter):
+        # "egg_route_34" → strip prefix → route_34 → daycare.
+        assert adapter.is_daycare_area("egg_route_34") is True
+
+    def test_daycare_overrides_egg_pickup(self, adapter):
+        # Daycare-bred eggs aren't NPC pickups — clause logic gets different treatment.
+        assert adapter.is_egg_pickup_area("route_34") is False
+        assert adapter.is_egg_pickup_area("egg_route_34") is False
+        # But the route_30 (Mr. Pokémon) IS an NPC egg pickup, not daycare.
+        assert adapter.is_egg_pickup_area("route_30") is True
+        assert adapter.is_daycare_area("route_30") is False
+
+
+class TestRomTypeVariants:
+    """ROM-type-aware adapter behavior (Phase 6 + 8)."""
+
+    def test_hgss_default(self):
+        a = Gen4Adapter()  # default rom_type=heartgold
+        assert a._rom_type == "heartgold"
+
+    def test_platinum_selects_pt_trainers(self):
+        from server.adapters.gen4_hgsspt import _PT_TRAINERS
+        a = Gen4Adapter(rom_type="platinum")
+        assert a._trainers is _PT_TRAINERS
+
+    def test_renegade_platinum_shares_pt_trainers_when_no_rp_data(self):
+        # When rp_trainers.json is empty/missing, RP falls back to vanilla Pt.
+        from server.adapters.gen4_hgsspt import _PT_TRAINERS, _RP_TRAINERS
+        a = Gen4Adapter(rom_type="renegade_platinum")
+        if _RP_TRAINERS.get("trainers"):
+            # If user has populated rp_trainers.json, RP gets its own table.
+            assert a._trainers is _RP_TRAINERS
+        else:
+            # Default state: empty RP table → fall back to Pt.
+            assert a._trainers is _PT_TRAINERS
+
+    def test_hgss_uses_hgss_trainers(self):
+        from server.adapters.gen4_hgsspt import _HGSS_TRAINERS
+        a = Gen4Adapter(rom_type="heartgold")
+        assert a._trainers is _HGSS_TRAINERS
+
+    def test_trainer_info_known_ids(self):
+        # Curated seed data: HGSS gym leaders.
+        hgss = Gen4Adapter(rom_type="heartgold")
+        name, cls = hgss.trainer_info(20)  # Falkner
+        assert name == "Falkner"
+        assert cls == "Gym Leader"
+        name, cls = hgss.trainer_info(244)  # Lance
+        assert name == "Lance"
+        assert cls == "Champion"
+
+    def test_trainer_info_pt_sinnoh_leaders(self):
+        pt = Gen4Adapter(rom_type="platinum")
+        name, cls = pt.trainer_info(261)  # Roark
+        assert name == "Roark"
+        name, cls = pt.trainer_info(273)  # Cynthia
+        assert name == "Cynthia"
+        assert cls == "Champion"
+
+    def test_trainer_info_empty_for_unknown_id(self, adapter):
+        assert adapter.trainer_info(99999) == ("", "")
+        assert adapter.trainer_info(0) == ("", "")
+
+
+class TestEncounterTable:
+    """Wild encounter tables (Phase 10 — closing a Gen3 parity gap)."""
+
+    def test_hgss_route_29(self):
+        hgss = Gen4Adapter(rom_type="heartgold")
+        enc = hgss.encounter_table("route_29")
+        assert enc is not None
+        assert "Day" in enc
+        # Day grass has Pidgey at 40% rate.
+        day_pidgey = next((e for e in enc["Day"] if e["name"] == "Pidgey"), None)
+        assert day_pidgey is not None
+        assert day_pidgey["rate"] == 40
+
+    def test_pt_route_201(self):
+        pt = Gen4Adapter(rom_type="platinum")
+        enc = pt.encounter_table("route_201")
+        assert enc is not None
+        bidoof = next((e for e in enc["Day"] if e["name"] == "Bidoof"), None)
+        assert bidoof is not None
+
+    def test_unknown_area_returns_none(self, adapter):
+        assert adapter.encounter_table("nonexistent_area") is None
+
+    def test_hgss_uses_hgss_encounters(self):
+        # HGSS should have Route 29 (Johto), not Route 201 (Sinnoh).
+        hgss = Gen4Adapter(rom_type="heartgold")
+        assert hgss.encounter_table("route_29") is not None
+        assert hgss.encounter_table("route_201") is None
+
+    def test_pt_uses_pt_encounters(self):
+        pt = Gen4Adapter(rom_type="platinum")
+        assert pt.encounter_table("route_201") is not None
+        assert pt.encounter_table("route_29") is None  # not in Sinnoh
+
+    def test_rp_inherits_pt_encounters_by_default(self):
+        # Without rp_encounters.json populated, RP falls back to vanilla Pt data.
+        rp = Gen4Adapter(rom_type="renegade_platinum")
+        assert rp.encounter_table("route_201") is not None

@@ -1,0 +1,107 @@
+{
+  "classes": {
+    "1": "Gym Leader",
+    "2": "Elite Four",
+    "3": "Champion",
+    "4": "Rival",
+    "5": "Team Galactic Commander",
+    "6": "Team Galactic Boss",
+    "7": "Tower Tycoon",
+    "8": "Frontier Brain",
+    "9": "Pokémon Trainer"
+  },
+  "trainers": {
+    "261": {
+      "name": "Roark",
+      "class": 1
+    },
+    "262": {
+      "name": "Gardenia",
+      "class": 1
+    },
+    "263": {
+      "name": "Fantina",
+      "class": 1
+    },
+    "264": {
+      "name": "Maylene",
+      "class": 1
+    },
+    "265": {
+      "name": "Crasher Wake",
+      "class": 1
+    },
+    "266": {
+      "name": "Byron",
+      "class": 1
+    },
+    "267": {
+      "name": "Candice",
+      "class": 1
+    },
+    "268": {
+      "name": "Volkner",
+      "class": 1
+    },
+    "269": {
+      "name": "Aaron",
+      "class": 2
+    },
+    "270": {
+      "name": "Bertha",
+      "class": 2
+    },
+    "271": {
+      "name": "Flint",
+      "class": 2
+    },
+    "272": {
+      "name": "Lucian",
+      "class": 2
+    },
+    "273": {
+      "name": "Cynthia",
+      "class": 3
+    },
+    "338": {
+      "name": "Mars",
+      "class": 5
+    },
+    "339": {
+      "name": "Jupiter",
+      "class": 5
+    },
+    "340": {
+      "name": "Saturn",
+      "class": 5
+    },
+    "341": {
+      "name": "Cyrus",
+      "class": 6
+    },
+    "342": {
+      "name": "Charon",
+      "class": 6
+    },
+    "344": {
+      "name": "Palmer",
+      "class": 7
+    },
+    "345": {
+      "name": "Thorton",
+      "class": 8
+    },
+    "346": {
+      "name": "Argenta",
+      "class": 8
+    },
+    "347": {
+      "name": "Dahlia",
+      "class": 8
+    },
+    "348": {
+      "name": "Darach",
+      "class": 8
+    }
+  }
+}

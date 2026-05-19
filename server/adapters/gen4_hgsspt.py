@@ -54,6 +54,35 @@ _GIFT_AREAS = frozenset({
     "gift",            # Fallback for unmapped gift areas
 })
 
+# Egg-pickup areas — locations where an NPC hands the player a Pokémon egg.
+# These are fixed-species (the NPC always gives the same Pokémon's egg) and should
+# bypass species/gender clauses, since both linked players receive the same species
+# from the egg. Distinct from `_DAYCARE_AREAS` (player-bred eggs from breeding pair).
+_EGG_PICKUP_AREAS = frozenset({
+    # HGSS
+    "route_30",        # Togepi egg from Mr. Pokémon
+    "violet_city",     # alt cutscene location for Mr. Pokémon's egg
+    "mt_mortar",       # Tyrogue from Kiyo (handed at L10 in some patches)
+    # Platinum
+    "eterna_city",     # Togepi egg via Underground Man / Cynthia
+    "iron_island",     # Riolu egg from Riley
+    "route_212",       # Cynthia's alternate Togepi egg cutscene
+})
+
+# Daycare areas — eggs ORIGINATE from a breeding pair the player deposited.
+# Treated separately from egg pickups: daycare eggs hatch into a random species
+# determined by the parents' species/breeding rules, so the linked players may get
+# different species. Clause logic uses this to decide whether to skip the egg.
+# HGSS: Day-Care Couple on Route 34 (Goldenrod). Pt: Solaceon Town Day-Care.
+_DAYCARE_AREAS = frozenset({
+    # HGSS
+    "route_34",          # Pokémon Day Care (Goldenrod outskirts)
+    "goldenrod_city",    # parents handed off egg in town
+    # Platinum
+    "solaceon_town",     # Solaceon Day Care
+    "route_209",         # adjacent route to Solaceon
+})
+
 # Gift areas with a forced, identical species (no player choice).
 # Excludes starters, Odd Egg / random eggs, and variable Game Corner prizes.
 _FIXED_SPECIES_GIFTS = frozenset({
@@ -81,6 +110,47 @@ for _map_file in ("area_map_hgss.json", "area_map_platinum.json"):
             for _area_id, _entry in _raw_areas.items():
                 if isinstance(_entry, dict) and "display" in _entry:
                     _AREA_DISPLAY_NAMES[_area_id] = _entry["display"]
+
+
+def _load_trainer_table(filename: str) -> dict:
+    """Load a trainer table JSON, returning an empty dict on miss."""
+    path = os.path.join(_data_dir, filename)
+    if not os.path.exists(path):
+        return {"trainers": {}, "classes": {}}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        log.warning("Failed to load %s: %s", filename, e)
+        return {"trainers": {}, "classes": {}}
+
+
+_HGSS_TRAINERS = _load_trainer_table("trainers_hgss.json")
+_PT_TRAINERS   = _load_trainer_table("trainers_pt.json")
+
+
+def _load_encounters(filename: str) -> dict:
+    """Load encounter table JSON. Returns area_id -> method -> entries."""
+    path = os.path.join(_data_dir, filename)
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        log.warning("Failed to load %s: %s", filename, e)
+        return {}
+
+
+_HGSS_ENCOUNTERS = _load_encounters("encounters_hgss.json")
+_PT_ENCOUNTERS   = _load_encounters("encounters_pt.json")
+
+
+# Renegade Platinum overrides — empty dicts by default. To populate, drop a
+# rp_<thing>.json file matching the parent's schema and the adapter will pick it
+# up via the override chain when rom_type == "renegade_platinum".
+_RP_TRAINERS   = _load_trainer_table("rp_trainers.json")
+_RP_ENCOUNTERS = _load_encounters("rp_encounters.json")
 
 # Gen 4 item names (HGSS/Platinum item IDs — differ from Gen 3)
 _GEN4_ITEM_NAMES: dict[int, str] = {
@@ -135,6 +205,51 @@ _GEN4_ITEM_NAMES: dict[int, str] = {
 }
 
 
+# Gen 4 alternate-form sprite mapping.
+# Keys: (species_id, form_byte) tuple matching the form byte from Block B.
+# Values: PokeAPI URL slug — replaces `species_id` in the sprite filename.
+# Form-byte semantics per pret/pokeheartgold include/constants/forms.h (Bulbapedia
+# corroboration: https://bulbapedia.bulbagarden.net/wiki/Pok%C3%A9mon_with_form_differences).
+# Only non-default forms are mapped here — form 0 (the base form) falls back to
+# the plain `<species_id>.png` sprite via the None default in form_sprite_url.
+_FORM_SPRITE: dict[tuple[int, int], str] = {
+    # Unown (201): form byte = letter index (0=A, 1=B, ..., 25=Z, 26=!, 27=?).
+    # PokeAPI uses /pokemon/201-b.png .. 201-z.png plus 201-question and 201-exclamation.
+    **{(201, i): f"201-{chr(ord('a') + i)}" for i in range(1, 26)},
+    (201, 26): "201-exclamation",
+    (201, 27): "201-question",
+    # Castform (351): 0=Normal, 1=Sunny, 2=Rainy, 3=Snowy
+    (351, 1): "351-sunny", (351, 2): "351-rainy", (351, 3): "351-snowy",
+    # Deoxys (386): 0=Normal, 1=Attack, 2=Defense, 3=Speed
+    (386, 1): "386-attack", (386, 2): "386-defense", (386, 3): "386-speed",
+    # Burmy (412) cloaks: 0=Plant, 1=Sandy, 2=Trash
+    (412, 1): "412-sandy", (412, 2): "412-trash",
+    # Wormadam (413) cloaks: 0=Plant, 1=Sandy, 2=Trash
+    (413, 1): "413-sandy", (413, 2): "413-trash",
+    # Cherrim (421): 0=Overcast (sprite default), 1=Sunshine
+    (421, 1): "421-sunshine",
+    # Shellos (422) / Gastrodon (423): 0=West Sea, 1=East Sea
+    (422, 1): "422-east", (423, 1): "423-east",
+    # Rotom (479): 0=Normal, 1=Heat, 2=Wash, 3=Frost, 4=Fan, 5=Mow
+    (479, 1): "479-heat", (479, 2): "479-wash", (479, 3): "479-frost",
+    (479, 4): "479-fan",  (479, 5): "479-mow",
+    # Giratina (487): 0=Altered (sprite default), 1=Origin
+    (487, 1): "487-origin",
+    # Shaymin (492): 0=Land (sprite default), 1=Sky
+    (492, 1): "492-sky",
+    # Arceus (493): each plate sets form byte to 1..17 corresponding to type ID.
+    # PokeAPI hosts 493-<type-slug>.png; mapping by canonical Gen 4 plate order.
+    (493,  1): "493-fighting", (493,  2): "493-flying",   (493,  3): "493-poison",
+    (493,  4): "493-ground",   (493,  5): "493-rock",     (493,  6): "493-bug",
+    (493,  7): "493-ghost",    (493,  8): "493-steel",    (493,  9): "493-fire",
+    (493, 10): "493-water",    (493, 11): "493-grass",    (493, 12): "493-electric",
+    (493, 13): "493-psychic",  (493, 14): "493-ice",      (493, 15): "493-dragon",
+    (493, 16): "493-dark",
+    # Pichu (172): HGSS introduces the Spiky-eared Pichu event form (form byte 1).
+    (172, 1): "172-spiky-eared",
+}
+
+
 class Gen4Adapter(GameAdapter):
     """Adapter for Gen 4: HeartGold/SoulSilver/Platinum.
 
@@ -142,8 +257,20 @@ class Gen4Adapter(GameAdapter):
     identical to Gen 3.
     """
 
-    def __init__(self, **kwargs):
-        pass
+    def __init__(self, rom_type: str = "heartgold", **kwargs):
+        self._rom_type = (rom_type or "heartgold").lower()
+        self._is_rp = (self._rom_type == "renegade_platinum")
+        # Sinnoh trainers live in Platinum (and RP); Johto/Kanto in HGSS.
+        # RP override chain: prefer rp_*.json when populated, else fall back to vanilla Pt.
+        if self._is_rp:
+            self._trainers   = _RP_TRAINERS   if _RP_TRAINERS.get("trainers") else _PT_TRAINERS
+            self._encounters = _RP_ENCOUNTERS if _RP_ENCOUNTERS               else _PT_ENCOUNTERS
+        elif self._rom_type == "platinum":
+            self._trainers   = _PT_TRAINERS
+            self._encounters = _PT_ENCOUNTERS
+        else:
+            self._trainers   = _HGSS_TRAINERS
+            self._encounters = _HGSS_ENCOUNTERS
 
     @property
     def game_id(self) -> str:
@@ -152,10 +279,34 @@ class Gen4Adapter(GameAdapter):
     # ── GameRulesAdapter ─────────────────────────────────────────────────
 
     def is_gift_area(self, area_id: str) -> bool:
-        return area_id in _GIFT_AREAS or area_id.startswith("gift_")
+        # Also recognize the "egg_*" prefix the client emits for egg pickups.
+        if area_id in _GIFT_AREAS or area_id.startswith("gift_"):
+            return True
+        if area_id.startswith("egg_"):
+            return True
+        return False
 
     def is_fixed_species_gift(self, area_id: str) -> bool:
-        return area_id in _FIXED_SPECIES_GIFTS
+        # Strip "egg_" prefix so e.g. "egg_route_30" still matches the Togepi entry.
+        bare = area_id[4:] if area_id.startswith("egg_") else area_id
+        return bare in _FIXED_SPECIES_GIFTS
+
+    def is_egg_pickup_area(self, area_id: str) -> bool:
+        # NPC-given eggs (route_30 Togepi, iron_island Riolu, etc.). Daycare eggs
+        # use is_daycare_area instead — they aren't pickups, they're player-bred.
+        # Strip the "egg_" prefix the client emits to consult the underlying area.
+        bare = area_id[4:] if area_id.startswith("egg_") else area_id
+        # Daycare always wins over egg-pickup classification (player-bred ≠ NPC gift).
+        if bare in _DAYCARE_AREAS:
+            return False
+        if area_id.startswith("egg_"):
+            return True
+        return bare in _EGG_PICKUP_AREAS
+
+    def is_daycare_area(self, area_id: str) -> bool:
+        # Pokémon Day Care locations: Route 34 (HGSS), Solaceon Town (Platinum).
+        bare = area_id[4:] if area_id.startswith("egg_") else area_id
+        return bare in _DAYCARE_AREAS
 
     def evo_family(self, species_id: int) -> int:
         return _natdex_base_form(species_id)
@@ -201,10 +352,11 @@ class Gen4Adapter(GameAdapter):
 
     # ── GamePresentationAdapter ──────────────────────────────────────────
 
-    def sprite_html(self, species_id: int) -> str:
+    def sprite_html(self, species_id: int, form: int = 0) -> str:
         if not species_id or species_id < 1:
             return ""
-        url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{species_id}.png"
+        slug = self.form_sprite_url(species_id, form) or str(species_id)
+        url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{slug}.png"
         return f'<img src="{url}" width="40" height="40" loading="lazy">'
 
     def ability_name(self, ability_id: int, species_id: int = 0) -> str:
@@ -214,15 +366,60 @@ class Gen4Adapter(GameAdapter):
         return _ability_description(ability_id, is_rr=False)
 
     def trainer_info(self, trainer_id: int) -> tuple[str, str]:
-        return ("", "")
+        # Sparse table: returns ("", "") for any ID not yet seeded. Run
+        # tools/gen_gen4_trainers.py --pret-hgss <path> --pret-pt <path>
+        # against cloned pret decomps to populate.
+        if not self._trainers or not trainer_id:
+            return ("", "")
+        entry = self._trainers.get("trainers", {}).get(str(trainer_id))
+        if not entry:
+            return ("", "")
+        name = entry.get("name", "").strip()
+        cls_id = entry.get("class", 0)
+        cls = self._trainers.get("classes", {}).get(str(cls_id), "")
+        return (name, cls)
 
     def item_name(self, item_id: int) -> str:
         return _GEN4_ITEM_NAMES.get(item_id, f"Item #{item_id}") if item_id else ""
+
+    def move_name(self, move_id: int) -> str:
+        # Gen 4 lookup chain: GEN4_MOVE_NAMES (355–467) → VANILLA_MOVE_NAMES (1–354).
+        from server.move_data import move_name as _move_name
+        return _move_name(move_id, is_rr=False)
+
+    def move_data(self, move_id: int) -> dict | None:
+        from server.move_data import move_data as _move_data
+        raw = _move_data(move_id, is_rr=False)
+        if raw is None:
+            return None
+        type_id = raw.get("type", 0)
+        return {
+            "name":      self.move_name(move_id),
+            "type_id":   type_id,
+            "type_name": self.type_name(type_id),
+            "power":     raw.get("power", 0),
+            "accuracy":  raw.get("accuracy", 0),
+            "pp":        raw.get("pp", 0),
+            "split":     raw.get("split", 0),
+        }
 
     def area_display_name(self, area_id: str) -> str:
         if area_id in _AREA_DISPLAY_NAMES:
             return _AREA_DISPLAY_NAMES[area_id]
         return area_id.replace("_", " ").title()
+
+    def encounter_table(self, area_id: str) -> dict | None:
+        """Return wild encounter data for an area, or None if no data.
+
+        Returns a dict mapping method label (Day/Night/Grass/Surfing/Old Rod/
+        Good Rod/Super Rod/Rock Smash/Headbutt/Honey Tree) → list of entries
+        {name, species_id, rate, min_level, max_level}.
+
+        Sparse: returns None for unmapped areas (e.g. towns, dungeons we
+        haven't seeded). Run tools/gen_gen4_encounters.py --pret-* to populate
+        the full ~150 encounter zones.
+        """
+        return self._encounters.get(area_id) or None
 
     def to_national_dex(self, species_id: int) -> int:
         return species_id
@@ -232,6 +429,16 @@ class Gen4Adapter(GameAdapter):
 
     def form_sprite_id(self, species_id: int) -> int | None:
         return None
+
+    def form_sprite_url(self, species_id: int, form: int = 0) -> str | None:
+        """Return the PokeAPI URL slug for the given (species, form), or None
+        for the base form (caller uses str(species_id) as the slug).
+
+        Form byte values per pret/pokeheartgold include/constants/forms.h
+        (and Bulbapedia / PKHeX PK4 form documentation). Slugs match the
+        PokeAPI sprite repository filename convention.
+        """
+        return _FORM_SPRITE.get((species_id, form))
 
     @property
     def memorial_box_index(self) -> int:

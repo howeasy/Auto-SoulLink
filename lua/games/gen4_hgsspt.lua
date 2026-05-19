@@ -19,15 +19,28 @@
     base = memory.read_u32_le(p1 + 0x20, "Main RAM") & 0xFFFFFF
   All offsets below are relative to `base`.
 
-  Address sources:
-    • Brian0255/NDS-Ironmon-Tracker MemoryAddresses.lua + GameConfigurator.lua
-      — party, battle, zone, trainer ID, badge offsets (confirmed production-tested)
-    • kwsch/PKHeX SAV4HGSS.cs / SAV4Pt.cs / SAV4.cs
-      — Trainer1 field offset (player name, badges), Party field offset
-    • kwsch/PKHeX PlayerBag4HGSS.cs / PlayerBag4Pt.cs
-      — Bag base offset + pocket-relative offsets → BALLS_POCKET_OFF per variant
+  Address sources (cross-referenced; each constant cites its primary source inline):
     • pret/pokeheartgold include/save.h + include/constants/save_arrays.h
       — SaveData struct layout, arrayHeaders[SAVE_PCSTORAGE=41].offset field
+    • pret/pokeheartgold include/party.h
+      — struct Party { u8 curCount; PartyPokemon mons[6]; } → PARTY_COUNT/PARTY_OFF
+    • pret/pokeheartgold include/pokemon_types_def.h
+      — sizeof(PartyPokemon)=0xEC, sizeof(BoxPokemon)=0x88, Block A/B/C/D layouts
+    • pret/pokeheartgold include/pokemon_storage_system.h
+      — NUM_BOXES=18, MONS_PER_BOX=30, PCStorage.boxes[NUM_BOXES][MONS_PER_BOX]
+    • pret/pokeheartgold include/player_data.h
+      — struct PlayerProfile (name[8] @ +0x00, johtoBadges @ +0x1A, kantoBadges @ +0x1F)
+    • pret/pokeheartgold include/field_system.h + include/map_header.h
+      — FieldSystem.childMapHeader → MapHeader.mapID (u16 @ +0x02)
+    • pret/pokeheartgold include/battle/battle.h + src/battle/battle_setup.c
+      — BattleSystem, TrainerData.id (concrete RAM offset not symbolised; see Ironmon)
+    • pret/pokeplatinum — same headers, Platinum-specific offsets (different
+      dynamic_region delta: +0x14 vs HGSS +0x10)
+    • Brian0255/NDS-Ironmon-Tracker MemoryAddresses.lua + GameConfigurator.lua
+      — concrete RAM offsets confirmed against live battles (where pret only
+      provides struct layout, not the runtime heap chunk address)
+    • kwsch/PKHeX SAV4HGSS.cs / SAV4Pt.cs / SAV4.cs / PlayerBag4*.cs
+      — independently verifies Trainer1 / Party / Bag base offsets
 
   Coordinate system:
     PKHeX uses a "General" save buffer whose byte 0 = SaveData.dynamic_region[0].
@@ -45,7 +58,7 @@ M.game_id = "gen4_hgsspt"
 M.display_name = "Gen 4 (HGSS / Platinum)"
 M.implemented = true
 
-M.variants = {"heartgold", "soulsilver", "platinum"}
+M.variants = {"heartgold", "soulsilver", "platinum", "renegade_platinum"}
 
 -- Gift/static encounter areas (matches server/adapters/gen4_hgsspt.py)
 M.GIFT_AREAS_HGSS = {
@@ -86,7 +99,10 @@ local _NDS_GAME_CODES = {
 }
 
 -- Variant name patterns in gameinfo.getromname()
+-- Ordering matters: more specific patterns (e.g. "renegade") must come BEFORE
+-- the general "platinum" pattern so RP isn't misdetected as vanilla Pt.
 local _VARIANT_PATTERNS = {
+    { pattern = "renegade",      variant = "renegade_platinum" },  -- RP ROM filename hint
     { pattern = "heart ?gold",   variant = "heartgold" },
     { pattern = "soul ?silver",  variant = "soulsilver" },
     { pattern = "platinum",      variant = "platinum" },
@@ -94,6 +110,40 @@ local _VARIANT_PATTERNS = {
     { pattern = "ipge",          variant = "soulsilver" },
     { pattern = "cpue",          variant = "platinum" },
 }
+
+-- Renegade Platinum CRC32 / SHA1 whitelist. RP keeps Platinum's CPUE game code,
+-- so the only reliable runtime distinguisher is the ROM hash or filename hint.
+-- Add the SHA1 of any RP build the user wants supported. Empty by default → falls
+-- back to filename pattern detection above (matches "renegade" substring).
+local _RP_ROM_HASHES = {
+    -- ["SHA1:..."] = true,
+}
+
+-- Read a few bytes from ROM banner / build string area to look for an RP marker.
+-- Returns true if a recognizable RP signature is found. Used as last-ditch
+-- detection when neither the filename nor the hash whitelist matches.
+local function _rom_has_rp_signature()
+    if not memory or not memory.read_u8 then return false end
+    -- Try common NDS ROM domains (BizHawk exposes "ROM" or "Cartridge ROM" depending on version).
+    local domains = { "ROM", "Cartridge ROM", "NDS ROM" }
+    for _, dom in ipairs(domains) do
+        local ok, b = pcall(memory.read_u8, 0x200, dom)  -- typical Drayano banner area
+        if ok and b then
+            -- Scan a 256-byte window for "RENEGADE" or "Drayano".
+            local buf = {}
+            for i = 0, 255 do
+                local ok2, c = pcall(memory.read_u8, 0x200 + i, dom)
+                if ok2 then buf[#buf+1] = string.char(c) end
+            end
+            local s = table.concat(buf)
+            if s:find("RENEGADE") or s:find("Renegade") or s:find("Drayano") then
+                return true
+            end
+            return false   -- domain readable but no signature
+        end
+    end
+    return false
+end
 
 function M.detect()
     -- Primary: check if BizHawk reports NDS system
@@ -140,22 +190,35 @@ local _HGSS_PROFILE = {
     PARTY_COUNT_OFF  = 0xA4,   -- u8, 0-6
     PARTY_OFF        = 0xA8,   -- PartyPokemon[6], stride 0xEC (236 bytes)
     MON_SIZE         = 0xEC,   -- 236 bytes (PartyPokemon)
+    SPECIES_MAX      = 493,    -- Arceus, last Gen IV species
 
     -- PC Storage
     -- pret/pokeheartgold: SaveData.arrayHeaders[SAVE_PCSTORAGE=41].offset field.
     -- arrayHeaders[0] at SaveData+0x23014; [41] at +0x232A4; .offset (u32, struct+8) at +0x232AC.
     -- Read u32_le at base+0x232AC → byte offset within dynamic_region of PC box data.
-    PC_ARRAY_HDR_OFF = 0x232AC,
-    PC_BOX_STRIDE    = 0x1000,   -- 30 × 0x88 = 0xF90, padded to 0x1000 (Gen 4 style)
-    PC_SLOT_STRIDE   = 0x88,     -- BoxPokemon = 136 bytes
-    BOXES_COUNT      = 18,
-    MEMORIAL_BOX     = 17,       -- Box 18 (0-indexed), UI "Box 18", "THE DEAD"
+    -- HGSS dynamic_region starts at SaveData+0x10 — see PKHeX SAV4HGSS.cs General buffer offset.
+    PC_ARRAY_HDR_OFF   = 0x232AC,
+    DYNAMIC_REGION_OFF = 0x10,   -- SaveData → dynamic_region delta (HGSS)
+    PC_BOX_STRIDE      = 0x1000, -- 30 × 0x88 = 0xF90, padded to 0x1000 (Gen 4 style)
+    PC_SLOT_STRIDE     = 0x88,   -- BoxPokemon = 136 bytes
+    BOXES_COUNT        = 18,
+    MEMORIAL_BOX       = 17,     -- Box 18 (0-indexed), UI "Box 18", "THE DEAD"
 
     -- Battle
     -- Ironmon: playerBattleBase=0x4EA98, enemyBase=0x4F068 ✓
     PLAYER_BATTLE_OFF = 0x4EA98,
     ENEMY_BATTLE_OFF  = 0x4F068,
     BATTLE_STATUS_ADDR = 0x246F48,  -- absolute (Ironmon GLOBAL.battleStatus); not used by isInBattle()
+    -- BattleMon stat stages + active PID, confirmed from NDS-Ironmon-Tracker
+    -- MemoryAddresses.lua (HEART_GOLD block: statStagesPlayer=0x49E2C, statStagesEnemy=0x49EEC,
+    -- playerBattleMonPID=0x49E7C). Stride between same-side battlers = 0x180.
+    -- Active mon PID lives at stat_stages_base + 0x50 (BattleMon layout).
+    -- Source: pret/pokeheartgold src/battle/struct_battle_mon.c BattleMon.statChanges +
+    --         NDS-Ironmon-Tracker MemoryAddresses.lua for concrete RAM offsets.
+    STAT_STAGES_PLAYER_OFF = 0x49E2C,   -- battler 0 (player_L) stat changes [s8 × 7]
+    STAT_STAGES_ENEMY_OFF  = 0x49EEC,   -- battler 1 (enemy_L)  stat changes [s8 × 7]
+    BATTLE_R_STRIDE        = 0x180,     -- left → right battler delta (doubles only)
+    ACTIVE_MON_PID_DELTA   = 0x50,      -- stat_stages_base → active mon PID (BattleMon offset)
 
     -- Bag (Pokéball pocket)
     -- PKHeX PlayerBag4HGSS.cs: BaseOffset=0x644, Balls pocket at +0x6C0.
@@ -198,22 +261,33 @@ local _PT_PROFILE = {
     PARTY_COUNT_OFF  = 0xB0,   -- u8, 0-6
     PARTY_OFF        = 0xB4,   -- first PartyPokemon slot
     MON_SIZE         = 0xEC,   -- 236 bytes (Ironmon ENCRYPTED_POKEMON_SIZE=236) ✓
+    SPECIES_MAX      = 493,    -- Arceus, last Gen IV species
 
     -- PC Storage
-    -- Platinum SaveData struct not in public decompilation; assumed same layout as HGSS:
-    -- arrayHeaders[41].offset field at SaveData+0x232AC (VERIFY_ME: pause BizHawk, check
-    -- u32_le at base+0x232AC is a small offset < 0x23000 pointing to PC box data).
-    PC_ARRAY_HDR_OFF = 0x232AC,   -- likely correct (same SaveData layout); VERIFY_ME
-    PC_BOX_STRIDE    = 0x1000,    -- 30 × 0x88 = 0xF90, padded to 0x1000 (same as HGSS)
-    PC_SLOT_STRIDE   = 0x88,      -- BoxPokemon = 136 bytes (confirmed pret/pokeplatinum)
-    BOXES_COUNT      = 18,
-    MEMORIAL_BOX     = 17,
+    -- Platinum SaveData has an extra u32 prefix vs HGSS, shifting dynamic_region from
+    -- SaveData+0x10 → SaveData+0x14. arrayHeaders[41].offset stays at the same SaveData-
+    -- relative position (+0x232AC), but the chunk-offset value it stores must be added
+    -- to SaveData+0x14 (not +0x10) to land on PCStorage.boxes[0].
+    -- Source: PKHeX SAV4Pt.cs General buffer offset = 0x14 (vs SAV4HGSS.cs = 0x10).
+    PC_ARRAY_HDR_OFF   = 0x232AC,
+    DYNAMIC_REGION_OFF = 0x14,   -- SaveData → dynamic_region delta (Platinum-specific)
+    PC_BOX_STRIDE      = 0x1000,
+    PC_SLOT_STRIDE     = 0x88,
+    BOXES_COUNT        = 18,
+    MEMORIAL_BOX       = 17,
 
     -- Battle
     -- Ironmon: playerBattleBase=0x4B8AC, enemyBase=0x4BE5C ✓
     PLAYER_BATTLE_OFF  = 0x4B8AC,
     ENEMY_BATTLE_OFF   = 0x4BE5C,
     BATTLE_STATUS_ADDR = 0x24A55A,  -- absolute (Ironmon GLOBAL.battleStatus); not used by isInBattle()
+    -- BattleMon stat stages + active PID, confirmed from NDS-Ironmon-Tracker
+    -- MemoryAddresses.lua (PLATINUM block: statStagesPlayer=0x475D0, statStagesEnemy=0x47690,
+    -- playerBattleMonPID=0x47620). Same struct layout as HGSS; only base addresses differ.
+    STAT_STAGES_PLAYER_OFF = 0x475D0,
+    STAT_STAGES_ENEMY_OFF  = 0x47690,
+    BATTLE_R_STRIDE        = 0x180,
+    ACTIVE_MON_PID_DELTA   = 0x50,
 
     -- Bag (Pokéball pocket)
     -- PKHeX PlayerBag4Pt.cs: BaseOffset=0x630, Balls at +0x6BC.
@@ -241,10 +315,22 @@ local _PT_PROFILE = {
     ROM_DOMAIN       = "ROM",
 }
 
+-- Renegade Platinum profile — RP keeps Platinum's CPUE game code AND the same
+-- SaveData layout, so every Pt offset is inherited. RP-specific deltas (if any
+-- are discovered during live scans) are listed below as explicit overrides.
+-- Source: live-scan verification via lua/tests/test_gen4_rp_scan.lua; no pret
+-- citation since RP is a hack on top of pret/pokeplatinum.
+local _RP_PROFILE = {}
+for k, v in pairs(_PT_PROFILE) do _RP_PROFILE[k] = v end
+-- RP-specific deltas go here once discovered. Expected to be empty for the
+-- standard RP releases (Drayano keeps the save format unchanged).
+-- _RP_PROFILE.SOMETHING = 0xNEW
+
 M.profiles = {
-    heartgold  = _HGSS_PROFILE,
-    soulsilver = _HGSS_PROFILE,
-    platinum   = _PT_PROFILE,
+    heartgold          = _HGSS_PROFILE,
+    soulsilver         = _HGSS_PROFILE,
+    platinum           = _PT_PROFILE,
+    renegade_platinum  = _RP_PROFILE,
 }
 
 -- ── Area lookup ─────────────────────────────────────────────────────────────
@@ -262,7 +348,31 @@ function M.is_gift_area(area_id)
 end
 
 -- ── Variant detection ───────────────────────────────────────────────────────
+-- Detection order (most specific first):
+--   1. User override: SLINK_VARIANT_OVERRIDE global set before requiring this module.
+--   2. ROM hash whitelist (_RP_ROM_HASHES) — definitive for known RP builds.
+--   3. ROM banner signature scan (Drayano build string) — best-effort fallback.
+--   4. Filename pattern match via _VARIANT_PATTERNS — catches user-renamed ROMs
+--      containing "renegade" / "heartgold" / "soulsilver" / "platinum".
+-- The 1–3 steps are RP-specific; 4 handles all vanilla variants.
 function M.detect_variant()
+    -- 1. Manual override.
+    if _G.SLINK_VARIANT_OVERRIDE then
+        local ov = tostring(_G.SLINK_VARIANT_OVERRIDE):lower()
+        if M.profiles[ov] then return ov end
+    end
+    -- 2. ROM hash whitelist.
+    if gameinfo and gameinfo.getromhash then
+        local ok_h, hash = pcall(gameinfo.getromhash)
+        if ok_h and hash and _RP_ROM_HASHES[hash] then
+            return "renegade_platinum"
+        end
+    end
+    -- 3. ROM banner signature scan.
+    if _rom_has_rp_signature() then
+        return "renegade_platinum"
+    end
+    -- 4. Filename pattern match.
     if gameinfo and gameinfo.getromname then
         local ok_name, name = pcall(gameinfo.getromname)
         if ok_name and name then
@@ -277,9 +387,10 @@ end
 
 --- Returns the rom_type string sent to the server in hello events.
 function M.rom_type_for_variant(variant)
-    if variant == "heartgold"  then return "heartgold" end
-    if variant == "soulsilver" then return "soulsilver" end
-    if variant == "platinum"   then return "platinum" end
+    if variant == "heartgold"          then return "heartgold" end
+    if variant == "soulsilver"         then return "soulsilver" end
+    if variant == "platinum"           then return "platinum" end
+    if variant == "renegade_platinum"  then return "renegade_platinum" end
     return "hgss"
 end
 

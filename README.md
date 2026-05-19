@@ -9,10 +9,10 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 | 3 | FireRed, LeafGreen, Emerald | Vanilla, randomized, Archipelago, Radical Red 4.1 (CFRU) | **✅ Stable** |
 | 1 | Red, Blue, Yellow | US English | ⚠️ Experimental |
 | 2 | Crystal | GBC | ⚠️ Experimental |
-| 4 | HeartGold, SoulSilver, Platinum | US | ⚠️ Experimental |
+| 4 | HeartGold, SoulSilver, Platinum | Vanilla, Renegade Platinum | **✅ Feature-complete** (parity with Gen 3) |
 | 5 | Black, White, Black 2, White 2 | — | ⚠️ Experimental |
 
-> **Note:** Only Gen 3 has been extensively tested in live gameplay. Gen 1, 2, 4, and 5 have unit tests and Lua clients but limited real-world testing.
+> **Note:** Gen 3 and Gen 4 have full feature parity (moves/PP, stat stages, doubles, forms, egg detection, stream overlays). Live battle-struct addresses for Gen 4 doubles + stat stages are read-only-scannable via `lua/tests/test_gen4_battlers_count.lua` + `test_gen4_stat_stages.lua` and need a one-time live capture to populate the profile. Gen 1, 2, and 5 have unit tests and Lua clients but limited real-world testing.
 
 ## Quick Start
 

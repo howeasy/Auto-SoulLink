@@ -160,6 +160,28 @@ local BLOCK_C_OFF = {
     [18]=96,[19]=64,[20]=96,[21]=64,[22]=32,[23]=32,
 }
 
+-- Block B byte offset within the 128-byte data region for each of the 24 block orders.
+-- Block B holds: moves (4 × u16), PP (4 × u8), PP-Ups (4 × u8), IVs+egg flag (u32),
+-- ribbons part 1, fateful/gender/altForm packed byte, met locations (Pt-specific).
+-- Derived from the canonical permutation table — pos of B in each ordering × 32.
+-- Sanity: BLOCK_A_OFF[i] + BLOCK_B_OFF[i] + BLOCK_C_OFF[i] + BLOCK_D_OFF[i] = 192 ∀ i.
+local BLOCK_B_OFF = {
+    [0]=32, [1]=32, [2]=64, [3]=96, [4]=64, [5]=96,
+    [6]=0,  [7]=0,  [8]=0,  [9]=0,  [10]=0, [11]=0,
+    [12]=64,[13]=96,[14]=32,[15]=32,[16]=96,[17]=64,
+    [18]=64,[19]=96,[20]=32,[21]=32,[22]=96,[23]=64,
+}
+
+-- Block D byte offset within the 128-byte data region for each of the 24 block orders.
+-- Block D holds: OT name (8 × u16), egg/met dates, met location, pokeball, met level,
+-- encounter type. Derived from the canonical permutation table.
+local BLOCK_D_OFF = {
+    [0]=96, [1]=64, [2]=96, [3]=64, [4]=32, [5]=32,
+    [6]=96, [7]=64, [8]=96, [9]=64, [10]=32,[11]=32,
+    [12]=96,[13]=64,[14]=96,[15]=64,[16]=32,[17]=32,
+    [18]=0, [19]=0, [20]=0, [21]=0, [22]=0, [23]=0,
+}
+
 -- Decrypt Block A and return (species_id u16, ot_id u32).
 -- ot_id: TID = ot_id & 0xFFFF, SID = (ot_id >> 16) & 0xFFFF.
 -- Returns nil if the slot is empty or the decrypted species is out of range.
@@ -211,6 +233,146 @@ function M.decrypt_block_a_ext(pkm_addr)
     local ability = (packed >> 8) & 0xFF
     if species == 0 or species > 493 then return nil end
     return species, ot_lo | (ot_hi << 16), held_item, ability
+end
+
+-- Decrypt Block B: returns a table with moves, PP, PP-Ups, IVs, egg flag, form byte.
+-- Source: pret/pokeheartgold include/pokemon_types_def.h struct PokemonDataBlockB.
+-- Layout (32 bytes, all little-endian):
+--   +0x00..+0x07  u16 moves[4]
+--   +0x08..+0x0B  u8  movePP[4]
+--   +0x0C..+0x0F  u8  movePpUps[4]
+--   +0x10..+0x13  u32 ivEgg — bits 0-4=HP, 5-9=ATK, 10-14=DEF, 15-19=SPE, 20-24=SPA,
+--                              25-29=SPD, 30=isEgg, 31=isNicknamed
+--   +0x14..+0x17  u8  hoennRibbons[4]
+--   +0x18         u8  packed: bit 0=fatefulEncounter, bits 1-2=gender, bits 3-7=altForm
+--   +0x19         u8  hgssShinyLeaf
+--   +0x1A..+0x1B  u16 unused / padding
+--   +0x1C..+0x1F  u16[2] platinum-specific egg / met location (HGSS stores these in D)
+-- Returns nil if the slot is empty or species (in Block A) doesn't decode.
+function M.decrypt_block_b(pkm_addr)
+    local pid = r32(pkm_addr)
+    if pid == 0 then return nil end
+    local chk       = r16(pkm_addr + 0x006)
+    local order_val = _block_order(pid)
+    local blk_off   = BLOCK_B_OFF[order_val] or 32
+    local data_base = pkm_addr + 0x008 + blk_off
+    local word_base = blk_off >> 1
+    local s = chk
+    for _ = 1, word_base do s = lcrng(s) end
+    local w = {}
+    for i = 0, 15 do
+        s = lcrng(s)
+        w[i] = xor16(r16(data_base + i * 2), s)
+    end
+    local pp_lo, pp_hi   = w[4], w[5]
+    local ppu_lo, ppu_hi = w[6], w[7]
+    local iv_lo, iv_hi   = w[8], w[9]
+    local iv_packed = iv_lo | (iv_hi << 16)
+    local form_byte_packed = w[12] & 0xFF
+    return {
+        moves        = { w[0], w[1], w[2], w[3] },
+        pp           = {  pp_lo & 0xFF,  (pp_lo >> 8) & 0xFF,  pp_hi & 0xFF,  (pp_hi >> 8) & 0xFF },
+        pp_ups       = { ppu_lo & 0xFF, (ppu_lo >> 8) & 0xFF, ppu_hi & 0xFF, (ppu_hi >> 8) & 0xFF },
+        ivs          = {
+            hp  =  iv_packed        & 0x1F,
+            atk = (iv_packed >>  5) & 0x1F,
+            def = (iv_packed >> 10) & 0x1F,
+            spe = (iv_packed >> 15) & 0x1F,
+            spa = (iv_packed >> 20) & 0x1F,
+            spd = (iv_packed >> 25) & 0x1F,
+        },
+        iv_packed    = iv_packed,
+        is_egg       = ((iv_packed >> 30) & 1) == 1,
+        is_nicknamed = ((iv_packed >> 31) & 1) == 1,
+        fateful      = (form_byte_packed & 0x1) == 1,
+        gender_bits  = (form_byte_packed >> 1) & 0x3,
+        form         = (form_byte_packed >> 3) & 0x1F,
+    }
+end
+
+-- Decrypt Block D: returns a table with pokeball, met level, met terrain, met location.
+-- Source: pret/pokeheartgold include/pokemon_types_def.h struct PokemonDataBlockD.
+-- Layout (32 bytes), verified against pret pokemon_types_def.h:
+--   +0x00..+0x0F  u16 otName[8] (Gen IV charcode, EOS=0xFFFF)
+--   +0x10..+0x12  u8  eggDate[3] (year, month, day)
+--   +0x13..+0x15  u8  metDate[3] (year, month, day)
+--   +0x16..+0x17  u16 eggLocation_DP (legacy DP encounter code)
+--   +0x18..+0x19  u16 metLocation_DP (legacy DP encounter code)
+--   +0x1A         u8  pokerus
+--   +0x1B         u8  pokeball (DP-format ball ID)
+--   +0x1C         u8  metLevel (bits 0-6) | otGender (bit 7)
+--   +0x1D         u8  metTerrain (encounter type / encounter-method enum)
+--   +0x1E         u8  HGSS_pokeball (HGSS-format ball; takes precedence in HGSS)
+--   +0x1F         s8  mood
+-- Returns nil if the slot is empty.
+function M.decrypt_block_d(pkm_addr)
+    local pid = r32(pkm_addr)
+    if pid == 0 then return nil end
+    local chk       = r16(pkm_addr + 0x006)
+    local order_val = _block_order(pid)
+    local blk_off   = BLOCK_D_OFF[order_val] or 96
+    local data_base = pkm_addr + 0x008 + blk_off
+    local word_base = blk_off >> 1
+    local s = chk
+    for _ = 1, word_base do s = lcrng(s) end
+    local w = {}
+    for i = 0, 15 do
+        s = lcrng(s)
+        w[i] = xor16(r16(data_base + i * 2), s)
+    end
+    -- Word map (each u16 word spans 2 bytes; w[N] covers bytes 2N..2N+1 of the block):
+    --   w[11]  = bytes 0x16/0x17 → eggLocation_DP (u16)
+    --   w[12]  = bytes 0x18/0x19 → metLocation_DP (u16)
+    --   w[13]  = bytes 0x1A/0x1B → pokerus(lo) | pokeball_DP(hi)
+    --   w[14]  = bytes 0x1C/0x1D → (metLevel|otGender)(lo) | metTerrain(hi)
+    --   w[15]  = bytes 0x1E/0x1F → HGSS_pokeball(lo) | mood(hi)
+    local w13 = w[13]
+    local w14 = w[14]
+    local w15 = w[15]
+    local pokeball_dp = (w13 >> 8) & 0xFF
+    local pokeball_hgss = w15 & 0xFF
+    return {
+        egg_location   = w[11],
+        met_location   = w[12],
+        pokerus        = w13 & 0xFF,
+        pokeball       = (pokeball_hgss ~= 0) and pokeball_hgss or pokeball_dp,
+        pokeball_dp    = pokeball_dp,
+        pokeball_hgss  = pokeball_hgss,
+        met_level      = w14 & 0x7F,
+        ot_female      = (((w14 & 0xFF) >> 7) & 1) == 1,
+        met_terrain    = (w14 >> 8) & 0xFF,
+        mood           = w15 >> 8,   -- s8; high bit is sign — caller can normalise if needed
+    }
+end
+
+-- Returns true if the mon at pkm_addr is currently an egg.
+-- Two-way check: Block B isEgg bit AND species == SPECIES_EGG (494) sanity.
+-- Source: pret/pokeheartgold include/constants/species.h SPECIES_EGG, include/pokemon.h Pokemon_GetData(MON_DATA_IS_EGG).
+function M.isEgg(pkm_addr)
+    local pid = r32(pkm_addr)
+    if pid == 0 then return false end
+    local bb = M.decrypt_block_b(pkm_addr)
+    if bb and bb.is_egg then return true end
+    -- Fallback: some egg mons have species set to 494 (SPECIES_EGG) in Block A.
+    local species = M.decrypt_block_a(pkm_addr)
+    return species == 494
+end
+
+-- Returns the alternate-form byte (0..31) for the mon, or 0 if Block B can't decode.
+-- Used by form normalization (Rotom, Giratina, Shaymin, Deoxys, Unown, Wormadam, etc).
+function M.readFormByte(pkm_addr)
+    local bb = M.decrypt_block_b(pkm_addr)
+    return bb and bb.form or 0
+end
+
+-- Convenience: returns (moves_array, pp_array, pp_ups_array) for the mon at pkm_addr,
+-- or four nil-filled tables when Block B can't decode. Used by client party/enemy snapshots.
+function M.readMovesPP(pkm_addr)
+    local bb = M.decrypt_block_b(pkm_addr)
+    if not bb then
+        return {0,0,0,0}, {0,0,0,0}, {0,0,0,0}
+    end
+    return bb.moves, bb.pp, bb.pp_ups
 end
 
 -- Decrypt Block C (nickname): returns a Lua string (ASCII, up to 10 chars).
@@ -269,8 +431,10 @@ M.BAG = {
 }
 
 -- ── Ball item ID ranges ────────────────────────────────────────────────────────
--- 0x0001–0x0010: Master Ball → Cherish Ball (standard)
--- 0x01EC–0x01F4: Kurt / Apricorn balls (HGSS-exclusive)
+-- Source: pret/pokeheartgold include/constants/items.h
+--   ITEM_MASTER_BALL=0x0001 … ITEM_CHERISH_BALL=0x0010 (standard 16 balls)
+--   ITEM_FAST_BALL=0x01EC … ITEM_SPORT_BALL=0x01F4    (Kurt / Apricorn — HGSS only)
+-- For Platinum, only the standard range applies; Apricorn balls don't exist as items.
 M.BALL_ID_MIN  = 0x0001
 M.BALL_ID_MAX  = 0x0010
 M.BALL_APRICORN_MIN = 0x01EC
@@ -292,45 +456,106 @@ local BASE_PTR_OFF       = 0x20      -- offset within p1 to save-data base point
 -- PC storage (source: pret/pokeheartgold include/pokemon_storage_system.h, src/save.c):
 --   arrayHeaders[41] (SAVE_PCSTORAGE) at base+0x232A4
 --   arrayHeaders[41].offset field (3rd u32 in 0x10-byte header) at base+0x232AC
---   PC storage base = base + 0x10 + r32(base + PC_ARRAY_HDR_OFF)
+--   PC storage base = base + dynamic_region_off + r32(base + PC_ARRAY_HDR_OFF)
+-- where dynamic_region_off = 0x10 on HGSS and 0x14 on Platinum — see DYNAMIC_REGION_OFF.
 local PC_ARRAY_HDR_OFF   = 0x232AC   -- arrayHeaders[SAVE_PCSTORAGE].offset field
 local PC_BOX_STRIDE      = 0x1000    -- bytes per PC_BOX (30 slots + padding)
 local PC_SLOT_STRIDE     = 0x88      -- bytes per BoxPokemon slot
 
+-- SaveData → dynamic_region offset:
+--   HGSS     : SaveData + 0x10 = dynamic_region[0]
+--   Platinum : SaveData + 0x14 = dynamic_region[0]
+-- pcStorageBase() uses this + arrayHeaders[41].offset to land on PCStorage.boxes[0].
+-- Source: pret/pokeheartgold include/save.h vs pret/pokeplatinum equivalent layout
+-- (struct SaveData prefix differs by 4 bytes — Pt has an extra u32 before dynamic_region).
+local DYNAMIC_REGION_OFF = 0x10
+
 -- Party / battle copy offsets (relative to resolved base pointer)
+-- Source: pret/pokeheartgold include/party.h struct Party (curCount + mons[6]); offsets
+-- vary by game-specific SaveData layout — see _HGSS_PROFILE / _PT_PROFILE in
+-- lua/games/gen4_hgsspt.lua for the per-variant deltas.
+-- Battle copy bases: per pret/pokeheartgold src/battle/battle_setup.c the BattleSystem
+-- holds two PartyPokemon[6] buffers — player + opponent — addressed via the gBattle
+-- workspace. Concrete RAM offsets are not symbolised in pret (they live inside a
+-- dynamically-allocated heap chunk); confirmed against
+-- NDS-Ironmon-Tracker MemoryAddresses.lua (HEART_GOLD playerBattleBase / enemyBase).
 local PARTY_COUNT_OFF    = 0xA4      -- u8, party count (0-6)
 local PARTY_OFF          = 0xA8      -- PartyPokemon[0]; stride = MON_SIZE
 local PLAYER_BATTLE_OFF  = 0x4EA98   -- player battle copy slot 0; stride = MON_SIZE
 local ENEMY_BATTLE_OFF   = 0x4F068   -- enemy battle party slot 0; stride = MON_SIZE
 
 -- Bag (relative to base pointer)
+-- Source: pret/pokeheartgold include/bag.h — struct BagItem { u16 id; u16 quantity; }
+-- and BAG_POCKET_BALLS layout. Per-variant base offsets confirmed via
+-- kwsch/PKHeX PlayerBag4HGSS.cs (BaseOffset + balls-pocket offset) and PlayerBag4Pt.cs.
 local BALLS_POCKET_OFF   = 0xD14     -- ball pocket base; 24 × {u16 id, u16 qty}
 local BALLS_POCKET_COUNT = 24        -- number of item slots in ball pocket
 
 -- Zone ID pointer: base+ZONE_ID_OFF is a pointer; the u16 two bytes in = zone.
 -- Falls back to ptr+2 if direct read returns 0. Confirmed in live T3 tests.
+-- Source: pret/pokeheartgold src/field/field_system.c — childMapHeader pointer in
+-- FieldSystem holds the active map header; struct MapHeader at *childMapHeader has
+-- u16 mapID at offset +0x02 (per pret/pokeheartgold include/map_header.h).
+-- Cross-referenced against Brian0255/NDS-Ironmon-Tracker MemoryAddresses.lua childMapHeader.
 local ZONE_ID_OFF        = 0x25FE4
 local ZONE_ID_MAX        = 0x220     -- plausibility upper bound (HGSS: 540 zones, max ID 0x21B)
 
 -- Enemy trainer ID: u16 at base+TRAINER_ID_OFF (0 = wild battle).
--- Confirmed against live wild/trainer battles (NDS-Ironmon-Tracker MemoryAddresses.lua).
+-- Source: pret/pokeheartgold src/battle/battle_setup.c — TrainerData.id field of the
+-- active opponent trainer. The address lives inside the BattleSystem heap chunk and
+-- is not symbolised in pret; concrete offset confirmed against
+-- NDS-Ironmon-Tracker MemoryAddresses.lua (HEART_GOLD enemyTrainerID).
 local TRAINER_ID_OFF     = 0x440AA
 
--- Gym badge bitmasks (HGSS):
---   BADGES_1 = Johto  (bit 0=Zephyr … bit 7=Rising)
---   BADGES_2 = Kanto  (bit 0=Boulder … bit 7=Earth)
--- For Platinum: BADGES_1 = Sinnoh (bit 0=Coal … bit 7=Beacon); BADGES_2_OFF = nil.
+-- Gym badge bitmasks:
+--   HGSS:     BADGES_1 = Johto  (bit 0=Zephyr … bit 7=Rising)
+--             BADGES_2 = Kanto  (bit 0=Boulder … bit 7=Earth)
+--   Platinum: BADGES_1 = Sinnoh (bit 0=Coal … bit 7=Beacon); BADGES_2_OFF = nil.
+-- Source: pret/pokeheartgold include/player_data.h struct PlayerProfile —
+--   u8 johtoBadges at profile+0x1A, u8 kantoBadges at profile+0x1F. Add the per-variant
+--   PlayerProfile base offset (HGSS 0x64, Pt 0x68) + 0x10 (HGSS dynamic_region) or
+--   +0x14 (Pt dynamic_region) to land at the base-relative offsets below.
 local BADGES_1_OFF       = 0x8E
 local BADGES_2_OFF       = 0x93      -- nil for Platinum
 
 -- Player trainer name: u16[8] at base+PLAYER_NAME_OFF (PlayerProfile.name).
--- Source: pret/pokeheartgold include/player_data.h (johtoBadges at profile+0x1A).
--- Chars are standard Unicode; Latin letters match ASCII. EOS = 0xFFFF or 0x0000.
+-- Source: pret/pokeheartgold include/player_data.h struct PlayerProfile.name (u16[8]).
+-- Custom Gen IV 16-bit charcode (NOT standard Unicode) — see readTrainerName() below.
+-- EOS = 0xFFFF or 0x0000.
 local PLAYER_NAME_OFF    = 0x74
 
 -- Battle status: absolute RAM address (not base-relative); non-zero in any battle.
--- Source: HGSS disassembly — stable in US 1.0.
+-- Source: pret/pokeheartgold include/battle/battle.h BATTLE_STATUS_* macros.
+-- The address itself is dynamic per build (not exposed by pret as a symbol);
+-- confirmed stable in US 1.0 via NDS-Ironmon-Tracker GLOBAL.battleStatus.
 local BATTLE_STATUS_ADDR = 0x246F48
+
+-- ── Doubles + stat stages ────────────────────────────────────────────────────
+-- Per-battler BattleMon struct in gen 4 lives inside the BattleSystem heap chunk.
+-- pret defines `struct BattleMon` in src/battle/struct_battle_mon.c with:
+--   • 7 signed stat changes (atk/def/spe/spa/spd/acc/eva)
+--   • the active mon's PID
+--   • the party slot currently in field
+-- Concrete RAM offsets (verified against NDS-Ironmon-Tracker MemoryAddresses.lua,
+-- HEART_GOLD / PLATINUM blocks):
+--
+--   HGSS:  statStagesPlayer = base+0x49E2C   statStagesEnemy = base+0x49EEC
+--          playerBattleMonPID = base+0x49E7C  enemyBattleMonPID = base+0x49F3C
+--   Pt:    statStagesPlayer = base+0x475D0   statStagesEnemy = base+0x47690
+--          playerBattleMonPID = base+0x47620  enemyBattleMonPID = base+0x476E0
+--
+-- The four battlers are laid out as:
+--   battler 0 (player_L) = statStagesPlayer + 0
+--   battler 1 (enemy_L)  = statStagesEnemy  + 0       (= statStagesPlayer + 0xC0)
+--   battler 2 (player_R) = statStagesPlayer + 0x180   (doubles only)
+--   battler 3 (enemy_R)  = statStagesEnemy  + 0x180   (doubles only)
+-- The active mon PID for each battler lives at stat-stages-base + ACTIVE_MON_PID_DELTA.
+-- A non-zero PID at battler 2's slot indicates doubles is active.
+local STAT_STAGES_PLAYER_OFF = 0x49E2C   -- HGSS default; updated by applyProfile
+local STAT_STAGES_ENEMY_OFF  = 0x49EEC   -- HGSS default
+local BATTLE_R_STRIDE        = 0x180     -- delta to right-side battler in doubles
+local ACTIVE_MON_PID_DELTA   = 0x50      -- statStages → activeMonPID within BattleMon
+local STAT_STAGES_LEN        = 7         -- atk/def/spe/spa/spd/acc/eva
 
 -- Memorial box index (0-based). Box 17 = UI "Box 18" = "THE DEAD".
 -- Both HGSS and Platinum use 18-box storage; memorial is the last box.
@@ -360,6 +585,7 @@ function M.applyProfile(p)
     if p.P1_PTR_ADDR        ~= nil then P1_PTR_ADDR        = p.P1_PTR_ADDR        end
     if p.BASE_PTR_OFF        ~= nil then BASE_PTR_OFF       = p.BASE_PTR_OFF       end
     if p.PC_ARRAY_HDR_OFF    ~= nil then PC_ARRAY_HDR_OFF   = p.PC_ARRAY_HDR_OFF   end
+    if p.DYNAMIC_REGION_OFF  ~= nil then DYNAMIC_REGION_OFF = p.DYNAMIC_REGION_OFF end
     if p.PARTY_COUNT_OFF     ~= nil then PARTY_COUNT_OFF    = p.PARTY_COUNT_OFF    end
     if p.PARTY_OFF           ~= nil then PARTY_OFF          = p.PARTY_OFF          end
     if p.PLAYER_BATTLE_OFF   ~= nil then PLAYER_BATTLE_OFF  = p.PLAYER_BATTLE_OFF  end
@@ -378,6 +604,11 @@ function M.applyProfile(p)
     if rawget(p, "BADGES_2_OFF") == false then BADGES_2_OFF = nil end
     if p.PLAYER_NAME_OFF     ~= nil then PLAYER_NAME_OFF    = p.PLAYER_NAME_OFF    end
     if p.BATTLE_STATUS_ADDR  ~= nil then BATTLE_STATUS_ADDR = p.BATTLE_STATUS_ADDR end
+    -- BattleMon-derived fields (stat stages + doubles detection).
+    if p.STAT_STAGES_PLAYER_OFF    ~= nil then STAT_STAGES_PLAYER_OFF    = p.STAT_STAGES_PLAYER_OFF    end
+    if p.STAT_STAGES_ENEMY_OFF     ~= nil then STAT_STAGES_ENEMY_OFF     = p.STAT_STAGES_ENEMY_OFF     end
+    if p.BATTLE_R_STRIDE           ~= nil then BATTLE_R_STRIDE           = p.BATTLE_R_STRIDE           end
+    if p.ACTIVE_MON_PID_DELTA      ~= nil then ACTIVE_MON_PID_DELTA      = p.ACTIVE_MON_PID_DELTA      end
     if p.MEMORIAL_BOX        ~= nil then
         MEMORIAL_BOX   = p.MEMORIAL_BOX
         M.MEMORIAL_BOX = p.MEMORIAL_BOX
@@ -733,6 +964,221 @@ function M.isInOverworld()
     return not M.isInBattle()
 end
 
+-- ── Battle outcome ───────────────────────────────────────────────────────────
+-- pret/pokeheartgold include/constants/battle.h BATTLE_OUTCOME_* enum:
+--   0 = NONE         (no outcome yet — still battling)
+--   1 = WIN          (player won)
+--   2 = LOSE         (player whited out)
+--   3 = DRAW         (mutual KO / time-out)
+--   4 = MON_CAUGHT   (caught a wild Pokémon)
+--   5 = PLAYER_FLED  (player ran successfully)
+--   6 = FOE_FLED     (wild mon fled or was caught/teleported away)
+M.OUTCOME_NONE        = 0
+M.OUTCOME_WIN         = 1
+M.OUTCOME_LOSE        = 2
+M.OUTCOME_DRAW        = 3
+M.OUTCOME_MON_CAUGHT  = 4
+M.OUTCOME_PLAYER_FLED = 5
+M.OUTCOME_FOE_FLED    = 6
+
+-- Returns the current battle outcome byte (0..6) or nil if the address is unset
+-- or the byte is implausible. Read directly from BATTLE_STATUS_ADDR (Ironmon-
+-- Tracker's `battleStatus` slot, which on US 1.0 builds holds the outcome flag).
+-- Caveats:
+--   • Mid-battle the field reads 0 (NONE) — only meaningful at battle transitions.
+--   • Reading after battle end captures the terminal outcome before the engine
+--     clears the slot. Pair with the client's post_battle_frames window.
+function M.readBattleOutcome()
+    if not BATTLE_STATUS_ADDR then return nil end
+    local v = r8(BATTLE_STATUS_ADDR)
+    if v > 6 then return nil end
+    return v
+end
+
+-- Returns the absolute RAM address of a battler's stat-stage array, or nil if
+-- the battle struct hasn't been initialized.
+-- Battler indices: 0=player_L, 1=enemy_L, 2=player_R, 3=enemy_R.
+local function _stat_stages_addr(battler_idx)
+    if not M._base or not STAT_STAGES_PLAYER_OFF or not STAT_STAGES_ENEMY_OFF then return nil end
+    local side_base
+    if battler_idx == 0 or battler_idx == 2 then
+        side_base = M._base + STAT_STAGES_PLAYER_OFF
+    elseif battler_idx == 1 or battler_idx == 3 then
+        side_base = M._base + STAT_STAGES_ENEMY_OFF
+    else
+        return nil
+    end
+    if battler_idx >= 2 then
+        side_base = side_base + BATTLE_R_STRIDE
+    end
+    return side_base
+end
+
+-- Returns true when the current battle has 4 active battlers (a 2v2 trainer/wild
+-- double). Heuristic: read the player_R BattleMon active PID; if non-zero, doubles
+-- is active. Player_R's PID is at statStagesPlayer + BATTLE_R_STRIDE + ACTIVE_MON_PID_DELTA.
+-- Source: pret/pokeheartgold src/battle/battle_controllers.c MaxBattlersByMode,
+-- plus NDS-Ironmon-Tracker MemoryAddresses.lua (playerBattleMonPID).
+function M.isDoubleBattle()
+    if not M.isInBattle() then return false end
+    local right_addr = _stat_stages_addr(2)
+    if not right_addr then return false end
+    -- Active PID for battler 2 lives at stat_stages_base + 0x50.
+    local pid = r32(right_addr + ACTIVE_MON_PID_DELTA)
+    return pid ~= 0
+end
+
+-- Returns the 7-element stat-stage array for battler battler_idx
+-- (0=player_L, 1=enemy_L, 2=player_R, 3=enemy_R), or nil if unavailable.
+-- Values are unsigned 0..12 (matching Gen 3 convention; 6 = neutral).
+-- Source: pret/pokeheartgold src/battle/struct_battle_mon.c BattleMon.statChanges (s8[]).
+-- Concrete RAM addresses from NDS-Ironmon-Tracker MemoryAddresses.lua.
+function M.readStatStages(battler_idx)
+    local addr = _stat_stages_addr(battler_idx)
+    if not addr then return nil end
+    local stages = {}
+    for i = 0, STAT_STAGES_LEN - 1 do
+        local v = r8(addr + i)
+        -- Pret stores statChanges as signed 8-bit deltas (-6..+6). Convert to unsigned
+        -- 0..12 (atk +1 = 7, atk -1 = 5, neutral = 6).
+        if v >= 128 then
+            v = v - 256        -- sign-extend two's-complement
+        end
+        v = v + 6
+        if v < 0 then v = 0 end
+        if v > 12 then v = 12 end
+        stages[i + 1] = v
+    end
+    return stages
+end
+
+-- Returns the party slot index (0..5) of the mon currently in field for
+-- battler_idx, or nil if not in battle.
+--
+-- Strategy: match the active battler's live PID against the appropriate party
+-- buffer's PIDs (player party for battlers 0/2; enemy battle buffer for 1/3).
+-- This avoids needing to discover BattleMon.selectedMonIndex's exact offset
+-- inside the BattleSystem heap chunk, and is robust against swap/U-turn/etc.
+-- where the active slot changes mid-battle.
+--
+-- Source: pret/pokeheartgold src/battle/struct_battle_mon.c BattleMon.activeMonPid
+-- combined with src/battle/battle_setup.c's player/enemy party buffers.
+function M.getBattlerPartyIndex(battler_idx)
+    local active_pid = M.readBattlerActivePID(battler_idx)
+    if not active_pid or active_pid == 0 then return nil end
+    -- Player battlers consult party; enemy battlers consult enemy battle buffer.
+    local addr_fn
+    if battler_idx == 0 or battler_idx == 2 then
+        addr_fn = M.partyAddr
+    elseif battler_idx == 1 or battler_idx == 3 then
+        addr_fn = M.enemyBattleAddr
+    else
+        return nil
+    end
+    for slot = 0, 5 do
+        local slot_addr = addr_fn(slot)
+        if not slot_addr then return nil end
+        local slot_pid = r32(slot_addr)
+        if slot_pid == 0 then return nil end   -- past end of party
+        if slot_pid == active_pid then return slot end
+    end
+    return nil   -- PID not matched (shouldn't happen if battle copy is fresh)
+end
+
+-- Returns the active battler's PID, or nil if not in battle. Useful to confirm
+-- doubles activation and to cross-reference active mon vs party slot.
+function M.readBattlerActivePID(battler_idx)
+    local addr = _stat_stages_addr(battler_idx)
+    if not addr then return nil end
+    return r32(addr + ACTIVE_MON_PID_DELTA)
+end
+
+-- ── API parity stubs (gen3 has these; gen4 wiring matches the surface area) ──
+
+-- Returns (playerFaintCount, opponentFaintCount) for the current battle, or
+-- (nil, nil) if the gen 4 BattleContext.totalTimesFainted[] address hasn't been
+-- located. Pret defines `int totalTimesFainted[4]` per battler in BattleContext
+-- (src/battle/battle_system.c), but the BattleContext heap chunk RAM offset
+-- isn't symbolised — fall back to client-side HP→0 transitions.
+-- Source: pret/pokeheartgold src/battle/battle_system.c struct BattleContext.
+function M.readFaintCounters()
+    -- TODO: locate BattleContext.totalTimesFainted via a future scan. Until
+    -- then, the gen4 client tracks faints from party HP transitions, which
+    -- is sufficient for nuzlocke detection (no Sturdy/Endure near-miss bypass).
+    return nil, nil
+end
+
+-- Returns an array of party-slot PIDs from the backup-party buffer used during
+-- Battle Factory / Trainer Café rentals. Gen 4 only has rentals in Pt Battle
+-- Factory; the backup buffer offset isn't symbolised. Returns {} when no
+-- backup is detected. Client uses this to distinguish "borrowed party" battles
+-- from regular ones so memorialize and capture events aren't misattributed.
+-- Source: pret/pokeplatinum src/battle/battle_factory.c (RentalParty struct).
+function M.readBackupPartyPids()
+    -- Gen 4 Battle Factory rental flow keeps the player's real party stashed
+    -- separately. Without a live-discovered offset, gen 4 SLink falls back to
+    -- treating every battle as the "real" party. For Pt Battle Factory streamers
+    -- who want this, run a live scan during a rental match and populate the
+    -- offset in lua/games/gen4_hgsspt.lua _PT_PROFILE.BACKUP_PARTY_OFF.
+    return {}
+end
+
+-- Plays a sound effect via NDS SDAT. Currently a no-op on gen 4 — NDS audio
+-- runs on ARM7 firmware with the SDAT sequence engine, not the GBA m4a driver
+-- that gen 3 manipulates directly. A complete implementation would require
+-- locating the SoundData heap chunk and writing a SequenceCommand record.
+-- Returns false to indicate the SE wasn't played (parity with gen 3 m4a path).
+-- Source: pret/pokeheartgold src/sound.c (SoundSystem_*).
+M.SE_FAINT   = 16
+M.SE_FLEE    = 17
+M.SE_BOO     = 22
+M.SE_SUCCESS = 25
+M.SE_FAILURE = 26
+M.SE_SHINY   = 95
+function M.playSE(songNum)
+    -- NDS audio injection is non-trivial (SDAT). Server can still emit play_sound
+    -- commands; the client logs them but doesn't actually play. Future work.
+    return false
+end
+
+-- Returns the full enemy party (up to 6 mons) as an array of mon tables with
+-- {species_id, level, hp, maxHP, status_cond, ability_id, held_item_id, moves[],
+--  pp[], pp_ups[], is_egg, form, key}. Each table corresponds to one
+-- enemyBattleAddr(i) slot. Empty slots terminate the list.
+-- Only valid during a battle; outside battle the enemy buffer is stale or zero.
+function M.readEnemyParty()
+    local result = {}
+    if not M._base then return result end
+    for i = 0, 5 do
+        local addr = M.enemyBattleAddr(i)
+        if not addr then break end
+        local pid = r32(addr)
+        if pid == 0 then break end
+        local chk = r16(addr + M.PKM.CHKSUM)
+        if chk == 0 then break end
+        local lv, curHP, maxHP, status = decrypt_stats(addr + M.PKM.STATUS, pid)
+        if maxHP == 0 then break end
+        local sp, ot, hi, abl = M.decrypt_block_a_ext(addr)
+        local bb = M.decrypt_block_b(addr)
+        result[#result + 1] = {
+            key          = fmt("%08X:%08X", pid, ot or 0),
+            species_id   = sp or 0,
+            level        = lv,
+            hp           = curHP,
+            maxHP        = maxHP,
+            status_cond  = status,
+            ability_id   = abl or 0,
+            held_item_id = hi or 0,
+            moves        = bb and bb.moves or {0, 0, 0, 0},
+            pp           = bb and bb.pp or {0, 0, 0, 0},
+            pp_ups       = bb and bb.pp_ups or {0, 0, 0, 0},
+            is_egg       = bb and bb.is_egg or false,
+            form         = bb and bb.form or 0,
+        }
+    end
+    return result
+end
+
 -- ── Party state ───────────────────────────────────────────────────────────────
 
 -- Returns true when every occupied party slot has curHP == 0.
@@ -810,9 +1256,11 @@ end
 -- Returns the base address of PCStorage.boxes[0] (Box 1, Slot 0) in RAM,
 -- or nil if the save is not loaded / base pointer not resolved.
 -- Reads arrayHeaders[SAVE_PCSTORAGE=41].offset live from RAM each call.
--- Formula: saveData + 0x10 + arrayHeaders[41].offset
---   saveData      = M._base   (confirmed: base = SaveData*)
---   PC_ARRAY_HDR_OFF = 0x232AC  (saveData + 0x23014 + 41*0x10 + 8)
+-- Formula: saveData + DYNAMIC_REGION_OFF + arrayHeaders[41].offset
+--   saveData            = M._base   (confirmed: base = SaveData*)
+--   DYNAMIC_REGION_OFF  = 0x10 on HGSS, 0x14 on Platinum (struct SaveData prefix differs)
+--   PC_ARRAY_HDR_OFF    = 0x232AC  (saveData + 0x23014 + 41*0x10 + 8 — SaveData-relative,
+--                                    NOT dynamic-region-relative, so same on both games)
 -- Gen 5: PC storage is at an absolute address (PC_STORAGE_BASE); no array header needed.
 function M.pcStorageBase()
     if DIRECT_ADDR then
@@ -824,7 +1272,7 @@ function M.pcStorageBase()
     -- Valid PC chunk offset must be non-zero and within dynamic_region (0x23000 bytes).
     -- In practice it will be well above 0x100 (all 40 prior chunks precede it).
     if chunk_off < 0x100 or chunk_off >= 0x23000 then return nil end
-    return M._base + 0x10 + chunk_off
+    return M._base + DYNAMIC_REGION_OFF + chunk_off
 end
 
 -- Returns the RAM address of BoxPokemon at PC box `box` (0-based, 0=Box 1)

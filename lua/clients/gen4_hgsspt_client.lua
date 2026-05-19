@@ -5,7 +5,8 @@
   EVENTS DETECTED AUTOMATICALLY
     hello        — on TCP connect / reconnect (party snapshot)
     area_enter   — zone ID changes to a mapped encounter zone
-    capture      — new PID appears in party (battle context or gift)
+    capture      — new PID appears in party (battle / gift / egg pickup; carries is_egg flag)
+    hatch        — an egg in the party transitions to a real species (egg flag clears)
     faint        — party mon HP transitions from > 0 to 0
     whiteout     — all living party mons transition to HP = 0
     no_catch     — wild battle ends without capture (gated by nuzlocke_active)
@@ -86,57 +87,35 @@ local function mem_w16(a,v) return memory.write_u16_le (a, v, _RAM) end
 local fmt     = string.format
 
 -- ── Variant detection ─────────────────────────────────────────────────────────
-local _ROM_TYPE = "heartgold"  -- default
-do
-    -- BizHawk NDS doesn't expose ROM as a memory domain.
-    -- Use gameinfo.getromname() to identify the variant.
-    local detected = false
-    if gameinfo and gameinfo.getromname then
-        local ok_name, name = pcall(gameinfo.getromname)
-        if ok_name and name then
-            local lower = name:lower()
-            if lower:find("heart ?gold") or lower:find("ipke") then
-                _ROM_TYPE = "heartgold"
-                detected = true
-            elseif lower:find("soul ?silver") or lower:find("ipge") then
-                _ROM_TYPE = "soulsilver"
-                detected = true
-            elseif lower:find("platinum") or lower:find("cpue") then
-                _ROM_TYPE = "platinum"
-                detected = true
-            end
-        end
-    end
-    if not detected then
-        console.log("[SLink] WARNING: Could not identify ROM variant — using default HGSS profile")
-        _ROM_TYPE = "heartgold"
-    end
-    console.log(fmt("[SLink] ROM variant: %s", _ROM_TYPE))
+-- Delegate to GAME_MODULE.detect_variant() so the detection logic — including
+-- Renegade Platinum's hash/signature/filename match chain — lives in exactly
+-- one place. Falls back to "heartgold" if the module returns nil.
+local _ROM_TYPE = GAME_MODULE.detect_variant() or "heartgold"
+if not GAME_MODULE.profiles[_ROM_TYPE] then
+    console.log("[SLink] WARNING: Unknown ROM variant '" .. _ROM_TYPE .. "' — falling back to heartgold")
+    _ROM_TYPE = "heartgold"
+end
+console.log(fmt("[SLink] ROM variant: %s", _ROM_TYPE))
 
-    -- Apply game-specific memory address profile (parameterises all address constants
-    -- in memory_nds.lua via upvalue reassignment; must happen before M.init()).
-    local profile = GAME_MODULE.profiles[_ROM_TYPE]
-    if profile then
-        M.applyProfile(profile)
-    else
-        console.log("[SLink] WARNING: No memory profile for variant '" .. _ROM_TYPE .. "' — keeping HGSS defaults")
-    end
+-- Apply game-specific memory address profile (parameterises all address constants
+-- in memory_nds.lua via upvalue reassignment; must happen before M.init()).
+M.applyProfile(GAME_MODULE.profiles[_ROM_TYPE])
 
-    -- Load variant-specific area and location tables.
-    if _ROM_TYPE == "platinum" then
-        package.loaded["gen4_hgsspt_areas_pt"]     = nil
-        package.loaded["gen4_hgsspt_locations_pt"] = nil
-        local ok_a, a = pcall(require, "gen4_hgsspt_areas_pt")
-        local ok_l, l = pcall(require, "gen4_hgsspt_locations_pt")
-        if ok_a then AREAS = a else
-            console.log("[SLink] WARNING: gen4_hgsspt_areas_pt not found — area detection disabled for Platinum")
-            AREAS = {}
-        end
-        if ok_l then LOCATIONS = l else LOCATIONS = {} end
-    else
-        AREAS     = require("gen4_hgsspt_areas")
-        LOCATIONS = require("gen4_hgsspt_locations")
+-- Load variant-specific area and location tables.
+-- Platinum and Renegade Platinum share Sinnoh map structure; HGSS uses Johto/Kanto.
+if _ROM_TYPE == "platinum" or _ROM_TYPE == "renegade_platinum" then
+    package.loaded["gen4_hgsspt_areas_pt"]     = nil
+    package.loaded["gen4_hgsspt_locations_pt"] = nil
+    local ok_a, a = pcall(require, "gen4_hgsspt_areas_pt")
+    local ok_l, l = pcall(require, "gen4_hgsspt_locations_pt")
+    if ok_a then AREAS = a else
+        console.log("[SLink] WARNING: gen4_hgsspt_areas_pt not found — area detection disabled for Platinum")
+        AREAS = {}
     end
+    if ok_l then LOCATIONS = l else LOCATIONS = {} end
+else
+    AREAS     = require("gen4_hgsspt_areas")
+    LOCATIONS = require("gen4_hgsspt_locations")
 end
 
 -- ── JSON encoder ──────────────────────────────────────────────────────────────
@@ -769,6 +748,8 @@ local function build_party_snapshot(in_battle)
             if s then
                 local species, ot_id, held_item, ability = M.decrypt_block_a_ext(base)
                 local nickname = M.readNickname(base)
+                local bb = M.decrypt_block_b(base)
+                local bd = M.decrypt_block_d(base)
                 -- Cache nickname for HUD use (real nickname overrides species#N)
                 if k and nickname then
                     _nick_cache[k] = nickname
@@ -783,6 +764,15 @@ local function build_party_snapshot(in_battle)
                     ability_id   = ability or 0,
                     nickname     = nickname or "",
                     status_cond  = s.status_cond or 0,
+                    -- Block B-derived fields (Phase 2+):
+                    moves        = bb and bb.moves or {0, 0, 0, 0},
+                    pp           = bb and bb.pp or {0, 0, 0, 0},
+                    pp_ups       = bb and bb.pp_ups or {0, 0, 0, 0},
+                    is_egg       = (bb and bb.is_egg) or false,
+                    form         = bb and bb.form or 0,
+                    -- Block D-derived fields (Phase 2+):
+                    pokeball     = bd and bd.pokeball or 0,
+                    met_level    = bd and bd.met_level or 0,
                 }
             end
         end
@@ -796,9 +786,11 @@ end
 
 local function _is_ball_id(id)
     if id >= 0x0001 and id <= 0x0010 then return true end
-    -- Apricorn balls only exist in HGSS; skip range check for Platinum.
-    if _ROM_TYPE ~= "platinum" and id >= M.BALL_APRICORN_MIN and id <= M.BALL_APRICORN_MAX then
-        return true
+    -- Apricorn balls only exist in HGSS; Platinum + Renegade Platinum (Sinnoh) lack them.
+    if _ROM_TYPE == "heartgold" or _ROM_TYPE == "soulsilver" then
+        if id >= M.BALL_APRICORN_MIN and id <= M.BALL_APRICORN_MAX then
+            return true
+        end
     end
     return false
 end
@@ -826,8 +818,10 @@ end
 
 -- ── Gift area IDs (no wild encounters; only gift/starter Pokémon spawns here)
 -- Pull from game module so adding a new variant's gifts is done in one place.
-local GIFT_AREAS = (_ROM_TYPE == "platinum") and GAME_MODULE.GIFT_AREAS_PT
-                                              or  GAME_MODULE.GIFT_AREAS_HGSS
+-- Platinum + Renegade Platinum share Sinnoh gifts; HGSS uses Johto/Kanto.
+local _is_sinnoh = (_ROM_TYPE == "platinum" or _ROM_TYPE == "renegade_platinum")
+local GIFT_AREAS = _is_sinnoh and GAME_MODULE.GIFT_AREAS_PT
+                              or  GAME_MODULE.GIFT_AREAS_HGSS
 
 -- Areas with wild encounters (routes, caves, forests, etc.) — HUD prompt only fires here.
 -- Johto routes (HGSS):
@@ -869,8 +863,8 @@ local ENCOUNTER_AREAS_PT = {
     victory_road_pt=true, stark_mountain=true, snowpoint_temple=true,
     trophy_garden=true, great_marsh=true,
 }
-local ENCOUNTER_AREAS = (_ROM_TYPE == "platinum") and ENCOUNTER_AREAS_PT
-                                                   or  ENCOUNTER_AREAS_HGSS
+local ENCOUNTER_AREAS = _is_sinnoh and ENCOUNTER_AREAS_PT
+                                   or  ENCOUNTER_AREAS_HGSS
 
 -- ── Per-frame state ───────────────────────────────────────────────────────────
 local initialized    = false
@@ -903,6 +897,12 @@ local pending_safe         = false
 local battle_box_snapshot  = nil  -- {[pid_hex]=true} — snapshot of current box at battle start (party==6)
 local battle_enc_species   = 0    -- enemy species cached during battle for no_catch
 local battle_enc_level     = 0    -- enemy level cached during battle for no_catch
+-- Enemy team accumulator (mirrors gen3 battle_seen_enemies in gen3_frlge_client.lua).
+-- Tracks the full opponent roster as it's revealed via switches across the battle.
+-- Keyed by "species:level" (PID:OTID isn't always available pre-decryption for the
+-- inactive slots in the buffer). Reset at every battle start. Each entry is the
+-- live mon table from M.readEnemyParty() plus an `active=true|false` flag.
+local battle_seen_enemies  = {}
 
 -- Party change debounce
 local PARTY_DEBOUNCE_FRAMES  = 3
@@ -1155,6 +1155,7 @@ local function on_frame()
         battle_box_snapshot  = nil
         battle_enc_species   = 0
         battle_enc_level     = 0
+        battle_seen_enemies  = {}  -- reset enemy team accumulator
         M.clearDebounce()         -- clear on battle start; battle copy has fresh values
         -- If party is full (6), snapshot current PC box to detect box captures.
         local pcount = M.readPartyCount()
@@ -1262,7 +1263,8 @@ local function on_frame()
                 all_known_keys[k]        = true
                 send({event="capture", key=k, hp=info.hp, maxHP=info.maxHP,
                       level=info.level, species_id=info.species_id or 0,
-                      area_id=evt_area},
+                      area_id=evt_area, is_egg=info.is_egg or false,
+                      form=info.form or 0, pokeball=info.pokeball or 0},
                      "capture(battle):" .. k:sub(1,8), true)
             elseif all_known_keys[k] then
                 -- Previously seen key returned from PC → box_to_party (debounced)
@@ -1270,7 +1272,7 @@ local function on_frame()
                     pending_box_to_party[k] = PARTY_DEBOUNCE_FRAMES
                 end
             else
-                -- New key outside battle → buffer as potential gift/starter.
+                -- New key outside battle → buffer as potential gift/starter (or egg pickup).
                 -- Hold for GIFT_BUFFER_WINDOW frames before confirming (protects against
                 -- mass swaps / transient garbage).
                 if not gift_capture_buffer[k] then
@@ -1281,6 +1283,11 @@ local function on_frame()
                         gift_area = area
                     else
                         gift_area = "gift_zone_" .. tostring(zone_id)
+                    end
+                    -- Tag egg pickups with "egg_" prefix so the server can route them
+                    -- through is_egg_pickup_area (preserves clause semantics for eggs).
+                    if info.is_egg then
+                        gift_area = "egg_" .. gift_area
                     end
                     gift_capture_buffer[k] = {frame=frame_count, info=info, area=gift_area}
                 end
@@ -1294,14 +1301,31 @@ local function on_frame()
             -- Key vanished during buffer window → was transient/glitch; discard.
             gift_capture_buffer[k] = nil
         elseif frame_count - buf.frame >= GIFT_BUFFER_WINDOW then
-            -- Held long enough → confirm as real gift capture.
+            -- Held long enough → confirm as real gift capture (or egg pickup).
             all_known_keys[k] = true
             gift_capture_buffer[k] = nil
             local info = buf.info
             send({event="capture", key=k, hp=info.hp, maxHP=info.maxHP,
                   level=info.level, species_id=info.species_id or 0,
-                  area_id=buf.area},
+                  area_id=buf.area, is_egg=info.is_egg or false,
+                  form=info.form or 0, pokeball=info.pokeball or 0},
                  "capture(gift):" .. k:sub(1,8), true)
+        end
+    end
+
+    -- ── hatch detection ──────────────────────────────────────────────────────
+    -- An egg that hatches: prev_party[k].is_egg = true, curr_party[k].is_egg = false.
+    -- The species_id changes from the egg placeholder (494) to the actual species at
+    -- the same instant. Emit a "hatch" event so the server can update the linked record.
+    for k, prev_info in pairs(prev_party) do
+        local curr_info = curr_party[k]
+        if curr_info and prev_info.is_egg and not curr_info.is_egg then
+            send({event="hatch", key=k, species_id=curr_info.species_id or 0,
+                  area_id=area, form=curr_info.form or 0,
+                  hp=curr_info.hp, maxHP=curr_info.maxHP, level=curr_info.level},
+                 "hatch:" .. k:sub(1,8), true)
+            console.log(fmt("[SLink] hatch: %s → species %d at %s",
+                k:sub(1,8), curr_info.species_id or 0, area))
         end
     end
 
@@ -1429,29 +1453,40 @@ local function on_frame()
             evt.is_trainer_battle = not M.isWildBattle()
             evt.trainer_id = M.readEnemyTrainerId()
             evt.opponent_name = M.readEnemyTrainerName()
-            local enemy_list = {}
-            for ei = 0, 5 do
-                local es = M.enemyHP(ei)
-                if es then
-                    local ea = M.enemyBattleAddr(ei)
-                    local e_sid, e_item, e_ability = 0, 0, 0
-                    if ea then
-                        local sp, _, hi, abl = M.decrypt_block_a_ext(ea)
-                        e_sid     = sp or 0
-                        e_item    = hi or 0
-                        e_ability = abl or 0
-                    end
-                    enemy_list[#enemy_list + 1] = {
-                        species_id   = e_sid,
-                        level        = es.level,
-                        hp           = es.hp,
-                        maxHP        = es.maxHP,
-                        held_item_id = e_item,
-                        ability_id   = e_ability,
-                        active       = (ei == 0),
-                    }
+            evt.is_doubles = M.isDoubleBattle()
+            -- Read the full opponent party (moves, PP, form, abilities, items per slot)
+            -- and merge into battle_seen_enemies so the team persists across switches.
+            local fresh = M.readEnemyParty()
+            local active_l = M.getBattlerPartyIndex(1) or 0  -- enemy_L party slot
+            local active_r = evt.is_doubles and M.getBattlerPartyIndex(3) or nil
+            -- Stat stages overlay for the currently-active enemy battlers.
+            local stages_l = M.readStatStages(1)
+            local stages_r = evt.is_doubles and M.readStatStages(3) or nil
+            for ei, mon in ipairs(fresh) do
+                local key = tostring(mon.species_id) .. ":" .. tostring(mon.level)
+                mon.active = ((ei - 1) == active_l) or (active_r and (ei - 1) == active_r) or false
+                if mon.active then
+                    if (ei - 1) == active_l and stages_l then mon.stat_stages = stages_l end
+                    if active_r and (ei - 1) == active_r and stages_r then mon.stat_stages = stages_r end
                 end
+                -- Merge into accumulator. Overwrite with live HP/PP/stat_stages on each tick,
+                -- but keep the entry so switches don't lose history.
+                battle_seen_enemies[key] = mon
             end
+            -- Flatten accumulator → list for the event.
+            local enemy_list = {}
+            for _, mon in pairs(battle_seen_enemies) do
+                enemy_list[#enemy_list + 1] = mon
+            end
+            -- Stable order: actives first, then by species:level lexicographic.
+            table.sort(enemy_list, function(a, b)
+                if (a.active and 1 or 0) ~= (b.active and 1 or 0) then
+                    return (a.active and 1 or 0) > (b.active and 1 or 0)
+                end
+                local ka = tostring(a.species_id) .. ":" .. tostring(a.level)
+                local kb = tostring(b.species_id) .. ":" .. tostring(b.level)
+                return ka < kb
+            end)
             evt.enemy_party = enemy_list
         end
         -- Incremental PC box scan: scan 1 box per tick cycle.
