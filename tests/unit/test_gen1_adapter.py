@@ -602,6 +602,39 @@ def test_encounter_table_entry_schema(adapter):
         assert entry["min_level"] <= entry["max_level"]
 
 
+def test_encounter_table_coverage(adapter):
+    """Full pret-generated coverage across all 25 routes + dungeons + safari.
+
+    Sanity floor — if the generator regresses, this catches it.
+    """
+    import json
+    from server.adapters.gen1_rby import _GEN1_ENCOUNTERS
+    assert len(_GEN1_ENCOUNTERS) >= 35, (
+        f"Gen 1 encounter coverage shrank to {len(_GEN1_ENCOUNTERS)} areas"
+    )
+
+
+@pytest.mark.parametrize("area_id,expected_species_substr", [
+    ("cerulean_cave",      "Chansey"),      # Unknown Dungeon — endgame
+    ("victory_road",       "Onix"),         # E4 prep area
+    ("safari_zone_center", "Nidoran"),      # safari mons
+    ("safari_zone_east",   "Nidoran"),
+    ("pokemon_mansion",    "Grimer"),       # Cinnabar mansion
+    ("seafoam_islands",    "Seel"),         # ice/water cave (Seel + co)
+    ("pokemon_tower",      "Gastly"),
+])
+def test_encounter_table_endgame_coverage(adapter, area_id, expected_species_substr):
+    """Areas that weren't covered before Phase 14 must be reachable now."""
+    enc = adapter.encounter_table(area_id)
+    assert enc is not None, f"{area_id} should have encounter data"
+    # Check that at least one entry across all methods contains the expected species
+    all_entries = [e for method in enc.values() for e in method]
+    names = [e["name"] for e in all_entries]
+    assert any(expected_species_substr in n for n in names), (
+        f"{area_id}: expected a {expected_species_substr}, got {names}"
+    )
+
+
 # ── Memorial box ─────────────────────────────────────────────────────────
 
 

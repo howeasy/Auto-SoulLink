@@ -582,6 +582,78 @@ def test_encounter_table_entry_schema(adapter):
             assert "max_level" in entry
 
 
+def test_encounter_table_coverage(adapter):
+    """Full pret-generated coverage across all Johto + Kanto routes + dungeons."""
+    from server.adapters.gen2_crystal import _GEN2_ENCOUNTERS
+    assert len(_GEN2_ENCOUNTERS) >= 70, (
+        f"Gen 2 encounter coverage shrank to {len(_GEN2_ENCOUNTERS)} areas"
+    )
+
+
+@pytest.mark.parametrize("area_id,expected_substr", [
+    ("ilex_forest",   "Caterpie"),
+    ("union_cave",    "Geodude"),
+    ("burned_tower",  "Rattata"),
+    ("ice_path",      "Swinub"),
+    ("dragons_den",   "Magikarp"),
+    ("victory_road",  "Onix"),
+    ("silver_cave",   "Onix"),         # Mt. Silver
+    ("national_park", "Caterpie"),
+    ("whirl_islands", "Krabby"),
+    ("dark_cave",     "Geodude"),
+    ("tohjo_falls",   "Slowpoke"),    # waterfall area with Slowpoke + Zubat
+    ("mt_mortar",     "Rattata"),
+])
+def test_encounter_table_endgame_coverage(adapter, area_id, expected_substr):
+    enc = adapter.encounter_table(area_id)
+    assert enc is not None, f"{area_id} should have encounter data"
+    all_entries = [e for method in enc.values() for e in method]
+    names = [e["name"] for e in all_entries]
+    assert any(expected_substr in n for n in names), (
+        f"{area_id}: expected a {expected_substr}, got {names}"
+    )
+
+
+# ── Phase 14: Full named-trainer coverage ────────────────────────────────
+
+
+def test_named_trainers_coverage():
+    """Every class+instance in pret/data/trainers/parties.asm should resolve."""
+    import json, os
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.normpath(os.path.join(here, "..", "..",
+                                          "data", "games", "gen2_crystal", "trainers.json"))
+    with open(path, encoding="utf-8") as f:
+        d = json.load(f)
+    total = sum(len(v) for v in d["named_trainers"].values())
+    assert total >= 500, f"Expected ≥500 named trainers, got {total}"
+
+
+@pytest.mark.parametrize("class_id,instance_id,expected_name", [
+    ("1",  "1", "Falkner"),    # Violet City gym leader
+    ("2",  "1", "Whitney"),    # Goldenrod gym leader
+    ("3",  "1", "Bugsy"),      # Azalea gym leader
+    ("4",  "1", "Morty"),      # Ecruteak gym leader
+    ("8",  "1", "Clair"),      # Blackthorn gym leader
+    ("16", "1", "Lance"),      # Champion
+    ("22", "1", "Joey"),       # Youngster Joey from Route 30
+    ("63", "1", "Red"),        # Mt. Silver Red
+    ("64", "1", "Blue"),       # Viridian gym Blue
+    ("67", "1", "Eusine"),     # Mysticalman class — Eusine
+])
+def test_named_trainer_lookup(class_id, instance_id, expected_name):
+    import json, os
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.normpath(os.path.join(here, "..", "..",
+                                          "data", "games", "gen2_crystal", "trainers.json"))
+    with open(path, encoding="utf-8") as f:
+        d = json.load(f)
+    actual = d["named_trainers"].get(class_id, {}).get(instance_id)
+    assert actual == expected_name, (
+        f"class {class_id} #{instance_id}: expected {expected_name!r}, got {actual!r}"
+    )
+
+
 # ── Registry ─────────────────────────────────────────────────────────────
 
 def test_adapter_registered():
