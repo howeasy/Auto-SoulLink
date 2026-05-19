@@ -2,14 +2,18 @@
 Unit tests for stat stage icon rendering and passthrough.
 
 Tests:
-- _stat_stages_html() helper in server.py
-- _status_icon_html() helper in server.py
+- stat_stages_html() helper in server/html_render.py
+- status_icon_html() helper in server/html_render.py
 - stat_stages field flows through tick handler → party_details
 - stat_stages flows through _enrich_battle_state() for enemy party
 - Offset constant M.BATTLE_MON_STAT_STAGES_OFF = 0x19 (cannot read CFRU type3)
 """
 import pytest
-from server.server import _stat_stages_html, _STAT_STAGE_LABELS, _status_icon_html
+from server.html_render import (
+    stat_stages_html as _stat_stages_html,
+    STAT_STAGE_LABELS as _STAT_STAGE_LABELS,
+    status_icon_html as _status_icon_html,
+)
 
 
 # ── _stat_stages_html: None / empty / all-neutral ────────────────────────────

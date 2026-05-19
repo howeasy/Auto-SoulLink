@@ -152,8 +152,8 @@ Platinum lacks the Apricorn ball range.
 | Data | File | Notes |
 |---|---|---|
 | Trainer parties / names / classes | `pret/pokeheartgold data/trainers/trainer_data.h` + `data/trainers/trainer_classes.h` | Generated to `data/games/gen4_hgsspt/trainers_hgss.json` |
-| Move metadata (type/power/accuracy/PP/split) | `pret/pokeheartgold data/battle/moves.h` | Generated to `GEN4_MOVE_DATA` in `server/move_data.py` |
-| Move names (English) | `pret/pokeheartgold data/text/moves_en.s` (or equivalent string bank) | Generated to `GEN4_MOVE_NAMES` |
+| Move metadata (type/power/accuracy/PP/split) | `pret/pokeheartgold data/battle/moves.h` | Generated to `MOVE_DATA` in `server/data/moves/gen4.py` |
+| Move names (English) | `pret/pokeheartgold data/text/moves_en.s` (or equivalent string bank) | Generated to `MOVE_NAMES` in the same file |
 | Species → base abilities | `pret/pokeheartgold data/pokemon/base_stats.h struct BaseStats.abilities[2]` | Used as fallback when battle-struct ability is unavailable |
 
 Platinum equivalents live in `pret/pokeplatinum` under the same paths.
