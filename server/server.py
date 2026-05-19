@@ -2123,43 +2123,17 @@ class SLinkServer:
         return (self.connected_players.get("a", {}).get("connected", False)
                 and self.connected_players.get("b", {}).get("connected", False))
 
-    def _do_backup(self):
-        """Copy links.json (and events.json) → rolling backup slot.  Keeps up to _backup_max files."""
-        links_path = self.state._links_path
-        if not os.path.exists(links_path):
-            return
-        backup_dir = os.path.join(os.path.dirname(links_path), "backups")
-        os.makedirs(backup_dir, exist_ok=True)
-        # Rotate: delete oldest if at max, shift numbers up
-        for i in range(self._backup_max, 1, -1):
-            for stem in ("links", "events"):
-                src = os.path.join(backup_dir, f"{stem}.backup.{i - 1}.json")
-                dst = os.path.join(backup_dir, f"{stem}.backup.{i}.json")
-                if os.path.exists(src):
-                    os.replace(src, dst)
-        # Copy current as slot 1 (newest)
-        shutil.copy2(links_path, os.path.join(backup_dir, "links.backup.1.json"))
-        if os.path.exists(self._events_path):
-            shutil.copy2(self._events_path, os.path.join(backup_dir, "events.backup.1.json"))
-        log.info(f"Rolling backup saved ({backup_dir})")
-
-    async def _backup_loop(self):
-        """Background task: backup links.json every _backup_interval seconds
-        while both players are actively connected."""
-        try:
-            while True:
-                await asyncio.sleep(self._backup_interval)
-                if self._both_connected():
-                    try:
-                        self._do_backup()
-                    except Exception as e:
-                        log.warning(f"Backup failed: {e}")
-        except asyncio.CancelledError:
-            pass
-
     def start_backup_task(self):
+        """Spawn the rolling-backup task. Idempotent if already running."""
         if self._backup_task is None or self._backup_task.done():
-            self._backup_task = asyncio.ensure_future(self._backup_loop())
+            from server.backup import backup_loop
+            self._backup_task = asyncio.ensure_future(backup_loop(
+                links_path=self.state._links_path,
+                events_path=self._events_path,
+                max_slots=self._backup_max,
+                interval_s=self._backup_interval,
+                is_active=self._both_connected,
+            ))
 
     async def handle_sse(self, request):
         """GET /api/events — Server-Sent Events stream.
