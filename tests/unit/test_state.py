@@ -882,6 +882,304 @@ def test_whiteout_skips_boxed_mons(tmp_path, monkeypatch):
     assert state.links[0].status == LinkStatus.ALIVE
 
 
+# ── whiteout auto-rebuild ─────────────────────────────────────────────────────
+
+def _add_link(state, a_key, b_key, area="route_x", status=LinkStatus.ALIVE,
+              a_in_party=False, b_in_party=False):
+    """Append a LinkEntry and update party_keys. Helper for rebuild tests."""
+    entry = LinkEntry(area, MonInfo(a_key, level=10), MonInfo(b_key, level=10), status)
+    state.links.append(entry)
+    state._index_entry(entry)
+    if a_in_party:
+        state.party_keys["a"].add(a_key)
+    if b_in_party:
+        state.party_keys["b"].add(b_key)
+    return entry
+
+
+def test_whiteout_rebuilds_from_alive_boxed_pairs(tmp_path, monkeypatch):
+    """After a whiteout, the server queues party_mon for both halves of any
+    alive linked pair whose halves were both still in the PC."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.party_size = {"a": 1, "b": 0}
+
+    # A:party has its half in party; partner B:party half is in party too. This
+    # pair will die on whiteout.
+    _add_link(state, "A:party", "B:party", area="route_1",
+              a_in_party=True, b_in_party=True)
+    # Alive boxed pair — eligible for rebuild.
+    _add_link(state, "A:box", "B:box", area="route_2",
+              a_in_party=False, b_in_party=False)
+
+    cmds_a = state.handle_event("a", {"event": "whiteout"})
+
+    assert has_cmd(cmds_a, "party_mon", "A:box"), "A should get party_mon for boxed half"
+    assert has_cmd(cmds_a, "rebuild_start"), "A should get rebuild_start banner"
+    cmds_b = state.handle_event("b", {"event": "tick"})
+    assert has_cmd(cmds_b, "party_mon", "B:box"), "B should get matching party_mon"
+    rb = state.rebuild_pending["a"]
+    assert rb is not None
+    assert "A:box" in rb["queued_keys"]
+    assert "B:box" in rb["queued_partner_keys"]
+
+
+def test_whiteout_skips_rebuild_when_no_alive_mons(tmp_path, monkeypatch):
+    """With every linked pair in party, no rebuild is armed and no
+    rebuild_start command is queued."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    _add_link(state, "A:1", "B:1", area="route_1",
+              a_in_party=True, b_in_party=True)
+
+    cmds_a = state.handle_event("a", {"event": "whiteout"})
+    assert not has_cmd(cmds_a, "rebuild_start")
+    assert not has_cmd(cmds_a, "party_mon")
+    assert state.rebuild_pending["a"] is None
+
+
+def test_whiteout_rebuild_caps_at_partner_room(tmp_path, monkeypatch):
+    """If partner already has 5 mons in their party, rebuild can only restore
+    one paired pick (the partner half fits in slot 6 and stops there)."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.party_size = {"a": 1, "b": 5}
+
+    # Partner already has 5 alive non-bonus mons in their party.
+    for i in range(5):
+        _add_link(state, f"A:filler{i}", f"B:filler{i}", area=f"route_filler_{i}",
+                  a_in_party=False, b_in_party=True)
+    # A's dying pair.
+    _add_link(state, "A:dead", "B:dead", area="route_d",
+              a_in_party=True, b_in_party=False)
+    # Three boxed pairs that A could pull back — but B has only 1 slot free.
+    for i in range(3):
+        _add_link(state, f"A:box{i}", f"B:box{i}", area=f"route_box_{i}",
+                  a_in_party=False, b_in_party=False)
+
+    state.handle_event("a", {"event": "whiteout"})
+
+    rb = state.rebuild_pending["a"]
+    assert rb is not None
+    # Only one paired restore (the oldest boxed pair).
+    assert rb["queued_keys"] == ["A:box0"]
+    assert rb["queued_partner_keys"] == ["B:box0"]
+
+
+def test_whiteout_does_not_pull_pending_captures(tmp_path, monkeypatch):
+    """Pending unlinked captures must stay quarantined in the box — they are
+    NOT a rebuild source."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    # A's only linked pair is in party and will die.
+    _add_link(state, "A:dying", "B:dying", area="route_1",
+              a_in_party=True, b_in_party=True)
+    # A has a pending unlinked capture in the box.
+    state.pending_captures["route_2"] = {"a": MonInfo(key="A:pending", level=8)}
+
+    cmds_a = state.handle_event("a", {"event": "whiteout"})
+    assert not has_cmd(cmds_a, "rebuild_start")
+    assert not has_cmd(cmds_a, "party_mon", "A:pending")
+    assert state.rebuild_pending["a"] is None
+    # The pending capture is still quarantined (still in pending_captures).
+    assert "A:pending" == state.pending_captures["route_2"]["a"].key
+
+
+def test_sync_retrieve_done_clears_rebuild_pending(tmp_path, monkeypatch):
+    """When all queued rebuild keys resolve via sync_retrieve_done, the server
+    clears rebuild_pending and queues rebuild_done."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    _add_link(state, "A:dying", "B:dying", area="route_1",
+              a_in_party=True, b_in_party=True)
+    _add_link(state, "A:box", "B:box", area="route_2",
+              a_in_party=False, b_in_party=False)
+
+    state.handle_event("a", {"event": "whiteout"})
+    assert state.rebuild_pending["a"] is not None
+    # Drain the whiteout's commands from the queue.
+    state.handle_event("a", {"event": "tick"})
+
+    cmds = state.handle_event("a", {"event": "sync_retrieve_done", "key": "A:box"})
+    assert has_cmd(cmds, "rebuild_done")
+    assert state.rebuild_pending["a"] is None
+
+
+def test_sync_retrieve_failed_during_rebuild_partial(tmp_path, monkeypatch):
+    """If a sync_retrieve_failed arrives, the failed key is dropped from
+    queued_keys and rebuild_done only fires when all queued keys have
+    resolved (either confirmed or failed)."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    _add_link(state, "A:dying", "B:dying", area="route_d",
+              a_in_party=True, b_in_party=True)
+    _add_link(state, "A:box1", "B:box1", area="route_1",
+              a_in_party=False, b_in_party=False)
+    _add_link(state, "A:box2", "B:box2", area="route_2",
+              a_in_party=False, b_in_party=False)
+
+    state.handle_event("a", {"event": "whiteout"})
+    state.handle_event("a", {"event": "tick"})  # drain initial command queue
+
+    cmds = state.handle_event("a", {"event": "sync_retrieve_failed", "key": "A:box1"})
+    assert not has_cmd(cmds, "rebuild_done"), "still waiting on A:box2"
+    assert state.rebuild_pending["a"] is not None
+
+    cmds = state.handle_event("a", {"event": "sync_retrieve_done", "key": "A:box2"})
+    assert has_cmd(cmds, "rebuild_done"), "all queued keys resolved"
+    assert state.rebuild_pending["a"] is None
+
+
+def test_whiteout_rebuild_persists_across_reload(tmp_path, monkeypatch):
+    """rebuild_pending must round-trip through _save/load, and a hello after
+    reconnect should re-queue outstanding party_mon plus a fresh rebuild_start."""
+    links_path = str(tmp_path / "links.json")
+    monkeypatch.setattr("server.state.LINKS_PATH", links_path)
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.area_states["route_1"] = AreaStatus.LINKED
+    state.area_states["route_2"] = AreaStatus.LINKED
+    _add_link(state, "A:dying", "B:dying", area="route_1",
+              a_in_party=True, b_in_party=True)
+    _add_link(state, "A:box", "B:box", area="route_2",
+              a_in_party=False, b_in_party=False)
+    state.handle_event("a", {"event": "whiteout"})
+    state._save()
+
+    loaded = SoulLinkState.load()
+    assert loaded.rebuild_pending["a"] is not None
+    assert "A:box" in loaded.rebuild_pending["a"]["queued_keys"]
+
+    # Hello with empty party (A is at the PMC fresh from whiteout); rebuild
+    # should re-arm and re-queue party_mon + rebuild_start.
+    cmds = loaded.handle_event("a", {
+        "event": "hello", "rom_type": "firered", "party": [], "has_pokeballs": True,
+    })
+    assert has_cmd(cmds, "party_mon", "A:box")
+    assert has_cmd(cmds, "rebuild_start")
+
+
+def test_box_to_party_during_rebuild_does_not_abort(tmp_path, monkeypatch):
+    """Manual withdrawal of an unrelated linked mon during an active rebuild
+    must NOT abort the rebuild — rebuild_pending stays set."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.party_size = {"a": 0, "b": 0}
+    state.area_states["route_1"] = AreaStatus.LINKED
+    state.area_states["route_other"] = AreaStatus.LINKED
+    state.area_states["route_box"] = AreaStatus.LINKED
+    _add_link(state, "A:dying", "B:dying", area="route_1",
+              a_in_party=True, b_in_party=True)
+    _add_link(state, "A:box", "B:box", area="route_box",
+              a_in_party=False, b_in_party=False)
+    other = _add_link(state, "A:other", "B:other", area="route_other",
+              a_in_party=False, b_in_party=False)
+
+    state.handle_event("a", {"event": "whiteout"})
+    assert state.rebuild_pending["a"] is not None
+
+    # Withdraw a different alive linked mon manually.
+    state.handle_event("a", {"event": "box_to_party", "key": "A:other"})
+    assert state.rebuild_pending["a"] is not None, "rebuild not affected by unrelated withdrawal"
+
+
+def test_simultaneous_whiteouts_independent_rebuilds(tmp_path, monkeypatch):
+    """Both players whiting out within the same tick should each enter their
+    own rebuild_pending without crosstalk."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.party_size = {"a": 1, "b": 1}
+    # Both players have one party-side pair that dies, and each has their own
+    # alive boxed pair. (In Soul Link rules, both halves of a pair are
+    # co-located, so a boxed pair survives both whiteouts.)
+    _add_link(state, "A:die1", "B:die1", area="route_1",
+              a_in_party=True, b_in_party=True)
+    _add_link(state, "A:save", "B:save", area="route_2",
+              a_in_party=False, b_in_party=False)
+
+    state.handle_event("a", {"event": "whiteout"})
+    state.handle_event("b", {"event": "whiteout"})
+
+    # Only one alive boxed pair exists shared between both — after A whites out,
+    # A's plan picks it; after B whites out, B's plan also picks it (because
+    # both halves are STILL boxed — A's party_mon hasn't drained yet, server
+    # has only queued the command, not confirmed). Both rebuilds are armed.
+    assert state.rebuild_pending["a"] is not None
+    assert state.rebuild_pending["b"] is not None
+    assert state.rebuild_pending["a"]["queued_keys"] == ["A:save"]
+    assert state.rebuild_pending["b"]["queued_keys"] == ["B:save"]
+
+
+def test_alive_pc_mons_excludes_pairs_with_partner_in_party(tmp_path, monkeypatch):
+    """A pair where the partner's half is in the partner's party is NOT a
+    co-located boxed pair and is therefore ineligible for rebuild."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    # A's half is in box; B's half is in B's party — NOT co-located.
+    _add_link(state, "A:box", "B:in_party", area="route_split",
+              a_in_party=False, b_in_party=True)
+    eligible = state._alive_pc_mons("a")
+    assert eligible == []
+
+
+def test_whiteout_fires_game_over_when_no_rebuild_possible(tmp_path, monkeypatch):
+    """If a whiteout leaves no alive boxed pairs, fire game_over right away —
+    the player can't continue without a party, even if pending captures
+    exist."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    _add_link(state, "A:1", "B:1", area="route_1",
+              a_in_party=True, b_in_party=True)
+    # A pending capture exists — would normally keep run alive, but the
+    # whited-out player has no rebuild candidates, so game_over fires.
+    state.pending_captures["route_2"] = {"a": MonInfo(key="A:pending")}
+
+    cmds_a = state.handle_event("a", {"event": "whiteout"})
+    assert has_cmd(cmds_a, "game_over")
+    assert state.run_over is True
+    cmds_b = state.handle_event("b", {"event": "tick"})
+    assert has_cmd(cmds_b, "game_over")
+
+
+def test_whiteout_queues_party_mon_before_memorialize(tmp_path, monkeypatch):
+    """Regression: rebuild's party_mon MUST appear before memorialize in the
+    player's queue so the Lua's last-party-mon block (q_count<=1) lifts
+    automatically when the new mon lands. Without this ordering, memorialize
+    sits at the head of pending_sync_cmds and deadlocks the queue."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    _add_link(state, "A:dying", "B:dying", area="route_1",
+              a_in_party=True, b_in_party=True)
+    _add_link(state, "A:box", "B:box", area="route_2",
+              a_in_party=False, b_in_party=False)
+
+    cmds_a = state.handle_event("a", {"event": "whiteout"})
+    party_mon_idx = next(
+        (i for i, c in enumerate(cmds_a) if c.get("cmd") == "party_mon" and c.get("key") == "A:box"),
+        None,
+    )
+    memorialize_idx = next(
+        (i for i, c in enumerate(cmds_a) if c.get("cmd") == "memorialize" and c.get("key") == "A:dying"),
+        None,
+    )
+    assert party_mon_idx is not None and memorialize_idx is not None
+    assert party_mon_idx < memorialize_idx, (
+        f"party_mon must drain before memorialize "
+        f"(party_mon @ {party_mon_idx}, memorialize @ {memorialize_idx})"
+    )
+
+
 # ── duplicate-seq and noop handling ──────────────────────────────────────────
 
 def test_tick_and_unknown_events_return_noop(tmp_path, monkeypatch):

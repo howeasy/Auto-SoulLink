@@ -213,10 +213,10 @@ local hud_render = HUD.render
 
 -- ── Game-over persistent overlay ─────────────────────────────────────────────
 local game_over_flag = false
+local rebuild_active = false  -- true between rebuild_start and rebuild_done
 
 -- ── Deferred sync state ────────────────────────────────────────────────────────
 local pending_sync_cmds = {}    -- box_mon / party_mon / memorialize queue
-local _memorial_hold_frames = 0 -- countdown for periodic "go to PC" HUD reminder
 local resolved_areas    = {}    -- area_id → true (already had a catch/no-catch)
 local resolved_seeded   = false
 local pending_hud_area  = nil
@@ -323,6 +323,14 @@ local function dispatch_commands(cmds)
             game_over_flag = true
             HUD.set_game_over()
             console.log("[SLink]   ↳ GAME OVER — SOUL LINK")
+        elseif c.cmd == "rebuild_start" then
+            rebuild_active = true
+            HUD.set_rebuilding(c.text or "REBUILDING TEAM")
+            console.log("[SLink]   ↳ rebuild_start: " .. tostring(c.text))
+        elseif c.cmd == "rebuild_done" then
+            rebuild_active = false
+            HUD.clear_rebuilding()
+            console.log("[SLink]   ↳ rebuild_done")
         elseif c.cmd ~= "noop" then
             console.log("[SLink]   ↳ cmd: " .. tostring(c.cmd))
         end
@@ -1058,11 +1066,13 @@ local function on_frame()
                             blocked = true
                             console.log("[SLink] memorialize dropped (game over, last party mon): "..cmd.key:sub(1,8))
                         else
+                            -- Block the memorialize without a HUD reminder:
+                            -- the server queues party_mon ahead of memorialize
+                            -- on whiteout so the block lifts on its own; if
+                            -- rebuild is impossible the server fires
+                            -- game_over which drops the memorialize via the
+                            -- branch above.
                             blocked = true
-                            if _memorial_hold_frames <= 0 then
-                                hud_show("Go to PC! Withdraw alive mons first", 255, 200, 60, 300)
-                                _memorial_hold_frames = 300
-                            end
                         end
                         break
                     end
@@ -1117,7 +1127,6 @@ local function on_frame()
         end
         end -- not blocked
     end
-    if _memorial_hold_frames > 0 then _memorial_hold_frames = _memorial_hold_frames - 1 end
 
     -- 6. area_enter — fire on any zone ID change to a mapped area.
     -- Zone debounce ensures transient garbage during transitions is filtered.

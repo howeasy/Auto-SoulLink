@@ -198,6 +198,7 @@ end
 -- ── Command dispatcher ────────────────────────────────────────────────────────
 local resolved_areas        = {}
 local resolved_areas_seeded = false
+local rebuild_active        = false  -- true between rebuild_start and rebuild_done
 
 local function dispatch_commands(cmds)
     for _, c in ipairs(cmds) do
@@ -272,6 +273,14 @@ local function dispatch_commands(cmds)
         elseif c.cmd == "game_over" then
             HUD.set_game_over()
             console.log("[SLink-RBY]   ↳ GAME OVER — SOUL LINK")
+        elseif c.cmd == "rebuild_start" then
+            rebuild_active = true
+            HUD.set_rebuilding(c.text or "REBUILDING TEAM")
+            console.log("[SLink-RBY]   ↳ rebuild_start: " .. tostring(c.text))
+        elseif c.cmd == "rebuild_done" then
+            rebuild_active = false
+            HUD.clear_rebuilding()
+            console.log("[SLink-RBY]   ↳ rebuild_done")
         elseif c.cmd ~= "noop" then
             console.log("[SLink-RBY]   ↳ cmd: " .. tostring(c.cmd))
         end

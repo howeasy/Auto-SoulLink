@@ -124,10 +124,37 @@ local function render_game_over()
                  nil, cfg.font_size + 2, "Courier New", "Bold")
 end
 
+-- ── Rebuild (post-whiteout) persistent banner ───────────────────────────────
+-- Shown while the server is auto-restoring alive PC mons after a whiteout.
+-- Blue palette to differentiate from red game_over; game_over overdraws if both
+-- happen to be set (render order below).
+local rebuild_text = nil
+
+function H.set_rebuilding(text)
+    rebuild_text = text or "REBUILDING TEAM"
+end
+
+function H.clear_rebuilding()
+    rebuild_text = nil
+end
+
+function H.is_rebuilding()
+    return rebuild_text ~= nil
+end
+
+local function render_rebuilding()
+    if not rebuild_text or game_over then return end
+    local ry = cfg.gameover_y
+    gui.drawBox(0, ry, cfg.screen_w, ry + 14, 0xFF0066AA, 0xDD003388)
+    gui.drawText(4, ry + 2, rebuild_text, "#FFFFFF",
+                 nil, cfg.font_size, "Courier New", "Bold")
+end
+
 -- ── Master render (call once per frame, after all game logic) ───────────────
 function H.render()
     render_prompt()
     render_hud()
+    render_rebuilding()
     render_game_over()
 end
 
@@ -137,6 +164,7 @@ function H.clear()
     prompt_queue = {}
     hud_visible = false
     prompt_visible = false
+    rebuild_text = nil
 end
 
 return H

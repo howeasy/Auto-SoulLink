@@ -230,7 +230,6 @@ local memorial_overflow_renamed = {} -- overflow boxes already renamed
 
 -- ── Deferred sync state (declared before dispatch_commands uses them) ─────────
 local pending_sync_cmds = {}  -- deferred box_mon / party_mon commands
-local _memorial_hold_frames = 0 -- countdown for periodic "go to PC" HUD reminder
 local sync_written_keys = {}  -- keys written by auto-sync this frame (suppress re-fire)
 local nick_cache        = {}  -- key → display label (updated from party snapshots)
 
@@ -256,6 +255,7 @@ local hud_show     = HUD.show
 local hud_render   = HUD.render
 local prompt_show  = HUD.prompt
 local game_over_flag   = false  -- set by game_over command; persistent HUD
+local rebuild_active   = false  -- true between rebuild_start and rebuild_done
 
 local function nick_label(key)
     return nick_cache[key] or key:sub(1, 8)
@@ -404,6 +404,14 @@ local function dispatch_commands(cmds)
             game_over_flag = true
             HUD.set_game_over()
             console.log("[SLink-FRLGE]   ↳ GAME OVER — SOUL LINK")
+        elseif c.cmd == "rebuild_start" then
+            rebuild_active = true
+            HUD.set_rebuilding(c.text or "REBUILDING TEAM")
+            console.log("[SLink-FRLGE]   ↳ rebuild_start: "..tostring(c.text))
+        elseif c.cmd == "rebuild_done" then
+            rebuild_active = false
+            HUD.clear_rebuilding()
+            console.log("[SLink-FRLGE]   ↳ rebuild_done")
         elseif c.cmd ~= "noop" then
             console.log("[SLink-FRLGE]   ↳ cmd: "..tostring(c.cmd))
         end
@@ -1285,11 +1293,14 @@ local function on_frame()
                             blocked = true
                             console.log("[SLink-FRLGE] memorialize dropped (game over, last party mon): "..cmd.key:sub(1,8))
                         else
+                            -- Block the memorialize but show nothing: the
+                            -- server's auto-rebuild queues a party_mon ahead
+                            -- of every memorialize on whiteout, so the new
+                            -- mon lands first and this block lifts on its
+                            -- own. If rebuild is impossible the server
+                            -- fires game_over instead, which drops the
+                            -- memorialize cleanly via the branch above.
                             blocked = true
-                            if _memorial_hold_frames <= 0 then
-                                hud_show("Go to PC! Withdraw alive mons first", 255, 200, 60, 300)
-                                _memorial_hold_frames = 300
-                            end
                         end
                     end
                     break
@@ -1332,7 +1343,6 @@ local function on_frame()
             end
         end
     end
-    if _memorial_hold_frames > 0 then _memorial_hold_frames = _memorial_hold_frames - 1 end
 
     -- ── area_enter / loc_enter ────────────────────────────────────────────────
     -- Fire on any map change (encounter zones get area_id; towns/buildings get loc_name only).

@@ -159,6 +159,11 @@ class SoulLinkState:
         # Suppresses the duplicate gui_prompt on the subsequent no_catch event.
         # In-memory only — not persisted (tied to the current session).
         self.dupe_notified_areas: dict[str, set[str]] = {"a": set(), "b": set()}
+        # Per-player auto-rebuild context, set when a whiteout fires and the
+        # player still has alive linked pairs boxed; cleared once every queued
+        # party_mon has been confirmed via sync_retrieve_done or dropped via
+        # sync_retrieve_failed. Persisted so a mid-rebuild restart can re-arm.
+        self.rebuild_pending: dict[str, Optional[dict]] = {"a": None, "b": None}
 
     # ── public API ───────────────────────────────────────────────────────────
 
@@ -207,6 +212,10 @@ class SoulLinkState:
             key = msg.get("key", "")
             if key:
                 self.party_keys[player_id].add(key)
+                rb = self.rebuild_pending.get(player_id)
+                if rb and key in rb.get("queued_keys", []):
+                    rb["restored_keys"].add(key)
+                    self._maybe_finish_rebuild(player_id)
         elif event == "sync_retrieve_failed":
             # Retrieval failed (party full, no stats, etc.) — don't add to party_keys.
             # Since both linked mons must stay in sync, re-box the partner's mon too.
@@ -214,6 +223,13 @@ class SoulLinkState:
             if key:
                 self.party_keys[player_id].discard(key)
                 log.info(f"[{player_id}] sync_retrieve_failed for {key[:8]}")
+                rb = self.rebuild_pending.get(player_id)
+                if rb and key in rb.get("queued_keys", []):
+                    # Drop the key from the rebuild plan; corresponding partner
+                    # half stays where it is (sync handler below will reconcile
+                    # if needed) and the banner clears once everything resolves.
+                    rb["queued_keys"] = [k for k in rb["queued_keys"] if k != key]
+                    self._maybe_finish_rebuild(player_id)
                 # Find the linked partner and re-box them to maintain sync
                 entry = self._key_index.get(key)
                 if entry and entry.status == LinkStatus.ALIVE:
@@ -353,6 +369,17 @@ class SoulLinkState:
             saved_pending = data.get("pending_bonus", {})
             state.pending_bonus["a"] = deque(saved_pending.get("a", []))
             state.pending_bonus["b"] = deque(saved_pending.get("b", []))
+            # Restore in-flight auto-rebuild context.
+            saved_rebuild = data.get("rebuild_pending", {})
+            for pid in ("a", "b"):
+                rb = saved_rebuild.get(pid)
+                if rb:
+                    state.rebuild_pending[pid] = {
+                        "started_at":         rb.get("started_at", ""),
+                        "queued_keys":        list(rb.get("queued_keys", [])),
+                        "queued_partner_keys": list(rb.get("queued_partner_keys", [])),
+                        "restored_keys":      set(rb.get("restored_keys", [])),
+                    }
             log.info(f"Loaded {len(state.links)} links from {state._links_path}")
         except Exception as e:
             log.error(f"Failed to load {state._links_path}: {e}")
@@ -567,6 +594,35 @@ class SoulLinkState:
             self.queued_commands[player_id].append({
                 "cmd": "resolved_areas", "areas": []
             })
+
+        # Re-arm an in-flight rebuild: reconcile restored_keys from the fresh
+        # party snapshot (some party_mons may have executed before disconnect),
+        # then re-queue party_mon + rebuild_start for any still-outstanding
+        # keys so the auto-rebuild resumes seamlessly.
+        rb = self.rebuild_pending.get(player_id)
+        if rb:
+            queued_keys = list(rb.get("queued_keys", []))
+            restored = set(rb.get("restored_keys", set()))
+            party_now = self.party_keys[player_id]
+            for k in queued_keys:
+                if k in party_now:
+                    restored.add(k)
+            rb["restored_keys"] = restored
+            outstanding_picks: list[MonInfo] = []
+            for k in queued_keys:
+                if k in restored:
+                    continue
+                entry = self._key_index.get(k)
+                if not entry:
+                    continue
+                mon = entry.a if player_id == "a" else entry.b
+                if mon:
+                    outstanding_picks.append(mon)
+            if outstanding_picks:
+                self._queue_rebuild_commands(player_id, outstanding_picks, [])
+                log.info(f"[{player_id}] reconnect: re-armed rebuild — "
+                         f"{len(outstanding_picks)} outstanding")
+            self._maybe_finish_rebuild(player_id)
 
         # Re-send game_over if the run was already over before this reconnect
         if self.run_over:
@@ -1361,11 +1417,36 @@ class SoulLinkState:
         Force-faint all living linked partners of the whited-out player.
         Only processes mons known to be in the whited-out player's party
         (tracked via party_keys) to avoid killing boxed mons' partners.
+
+        Then either: (a) queue an auto-rebuild from alive boxed linked pairs,
+        or (b) fire game_over if no alive linked pairs remain anywhere. The
+        rebuild's party_mon commands are queued BEFORE the force-faint loop's
+        memorialize commands so the Lua deferred queue drains in the right
+        order — party_mon lands first (q_count goes 1→2), then memorialize
+        for the dying mons can proceed (PMC-heal-softlock guard releases as
+        soon as a second slot is occupied).
         """
         partner = _partner(player_id)
-        retired = []
         now = datetime.now(timezone.utc).isoformat()
 
+        # Plan rebuild against the pre-whiteout state. Dying-pair halves are
+        # still in party_keys at this point, so the co-location check inside
+        # _alive_pc_mons filters them out — only fully-boxed alive pairs
+        # survive into the picks.
+        player_picks, partner_picks = self._plan_rebuild(player_id)
+        if player_picks:
+            self.rebuild_pending[player_id] = {
+                "started_at":         now,
+                "queued_keys":        [m.key for m in player_picks],
+                "queued_partner_keys": [m.key for m in partner_picks],
+                "restored_keys":      set(),
+            }
+            self._queue_rebuild_commands(player_id, player_picks, partner_picks)
+            log.info(f"[{player_id}] whiteout rebuild armed — "
+                     f"restoring {len(player_picks)} mon(s); partner mirrors "
+                     f"{len(partner_picks)}")
+
+        retired = []
         for entry in self.links:
             if entry.status != LinkStatus.ALIVE:
                 continue
@@ -1390,6 +1471,28 @@ class SoulLinkState:
 
         if retired:
             log.info(f"[{player_id}] whiteout — force-fainting {len(retired)} partner mon(s)")
+
+        # No alive boxed pairs left after a real whiteout → run is over. With
+        # no party and no rebuild candidates, the whited-out player cannot
+        # battle or progress. Firing game_over now also drops the blocked
+        # last-party-mon memorialize cleanly in the Lua client (it checks
+        # game_over_flag and removes the command instead of waiting).
+        if retired and not player_picks:
+            self.queued_commands[player_id].append({
+                "cmd":  "hud_show",
+                "text": "X No alive mons left in PC",
+                "r": 255, "g": 80, "b": 80, "frames": 360,
+            })
+            if not self.run_over:
+                self.run_over = True
+                log.info(f"[{player_id}] whiteout — no rebuild possible, run over")
+                for pid in ("a", "b"):
+                    self.queued_commands[pid].append({"cmd": "game_over"})
+
+        if retired or player_picks:
+            # Belt-and-suspenders: also run the standard check (covers the
+            # no-whiteout-events but already-dead-pairs case, and is a no-op
+            # if run_over was just set above).
             self._check_game_over()
             self._save()
 
@@ -1449,6 +1552,19 @@ class SoulLinkState:
         """
         key = msg.get("key", "")
         if not key:
+            return
+
+        # During an active auto-rebuild, server-driven party_mon writes confirm
+        # via sync_retrieve_done — they don't normally produce a box_to_party
+        # event. If we see one whose key the rebuild is restoring (race / Lua
+        # detecting the write as a withdrawal), treat it as the rebuild path
+        # confirming: add to party_keys and let _maybe_finish_rebuild close
+        # things out. Suppresses the noisy reactive HUDs during rebuild.
+        rb = self.rebuild_pending.get(player_id)
+        if rb and key in rb.get("queued_keys", []):
+            self.party_keys[player_id].add(key)
+            rb["restored_keys"].add(key)
+            self._maybe_finish_rebuild(player_id)
             return
 
         # Quarantine enforcement: if this mon is a pending (unlinked) capture,
@@ -1542,6 +1658,137 @@ class SoulLinkState:
         """Count party keys excluding bonus (shiny clause) mons."""
         bonus = self.bonus_keys.get(player_id, set())
         return sum(1 for k in self.party_keys[player_id] if k not in bonus)
+
+    # ── auto-rebuild helpers (after whiteout) ────────────────────────────────
+
+    def _alive_pc_mons(self, player_id: str) -> list[tuple[str, str]]:
+        """Enumerate alive linked-pair halves boxed in this player's PC after a
+        whiteout, paired with their partner's boxed half. Walks self.links in
+        chronological capture order (oldest first). Bonus (shiny-clause) pairs
+        are eligible too — they are linked pairs and follow the same
+        co-location rule. Pending unlinked captures are NOT included; they
+        remain quarantined per Soul Link rules.
+
+        Returns a list of (player_key, partner_key) tuples.
+        """
+        out: list[tuple[str, str]] = []
+        partner = _partner(player_id)
+        my_party = self.party_keys.get(player_id, set())
+        partner_party = self.party_keys.get(partner, set())
+        for entry in self.links:
+            if entry.status != LinkStatus.ALIVE:
+                continue
+            my_mon = entry.a if player_id == "a" else entry.b
+            partner_mon = entry.b if player_id == "a" else entry.a
+            if not my_mon or not partner_mon:
+                continue
+            if not my_mon.key or not partner_mon.key:
+                continue
+            # Both halves must be currently boxed (Soul Link co-location).
+            if my_mon.key in my_party or partner_mon.key in partner_party:
+                continue
+            out.append((my_mon.key, partner_mon.key))
+        return out
+
+    def _plan_rebuild(self, player_id: str) -> tuple[list[MonInfo], list[MonInfo]]:
+        """Greedy pick of alive boxed pairs for auto-rebuild after a whiteout.
+        Returns (player_picks, partner_picks). A pair is included only if the
+        partner has room (logical party + already-picked partner halves < 6);
+        otherwise the pair is skipped entirely — both halves must be
+        co-located. Stops at 6 player picks or when candidates are exhausted.
+        """
+        partner = _partner(player_id)
+        partner_size_start = self._linked_party_size(partner)
+        player_picks: list[MonInfo] = []
+        partner_picks: list[MonInfo] = []
+        for my_key, _partner_key in self._alive_pc_mons(player_id):
+            if len(player_picks) >= 6:
+                break
+            if partner_size_start + len(partner_picks) >= 6:
+                # Partner has no more room. Per Soul Link co-location, both
+                # halves must move together — skip this and any further pairs.
+                break
+            entry = self._key_index.get(my_key)
+            if not entry:
+                continue
+            my_mon = entry.a if player_id == "a" else entry.b
+            partner_mon = entry.b if player_id == "a" else entry.a
+            if not my_mon or not partner_mon:
+                continue
+            player_picks.append(my_mon)
+            partner_picks.append(partner_mon)
+        return player_picks, partner_picks
+
+    def _queue_rebuild_commands(self, player_id: str,
+                                 player_picks: list[MonInfo],
+                                 partner_picks: list[MonInfo]) -> None:
+        """Queue party_mon commands for both player and partner halves of the
+        rebuild, plus a persistent REBUILDING banner for the player and a
+        soft informational HUD for the partner.
+        """
+        partner = _partner(player_id)
+
+        def _enqueue(pid: str, mon: MonInfo) -> None:
+            # Cancel any stale box_mon for this key (same idempotent pattern
+            # used in the post-link path at _handle_capture).
+            self.queued_commands[pid] = [
+                c for c in self.queued_commands[pid]
+                if not (c.get("key") == mon.key and c.get("cmd") == "box_mon")
+            ]
+            cmd: dict = {"cmd": "party_mon", "key": mon.key}
+            if mon.nickname:
+                cmd["nickname"] = mon.nickname
+            cached = self.mon_stats.get(mon.key)
+            if cached:
+                cmd["stats"] = cached
+            self.queued_commands[pid].append(cmd)
+
+        for mon in player_picks:
+            _enqueue(player_id, mon)
+        for mon in partner_picks:
+            _enqueue(partner, mon)
+
+        def _label(mon: MonInfo) -> str:
+            if mon.nickname:
+                return mon.nickname
+            if mon.species:
+                name = self.adapter.species_name(mon.species)
+                if name:
+                    return name
+            return mon.key[:6]
+
+        labels = [_label(m) for m in player_picks[:3]]
+        suffix = "" if len(player_picks) <= 3 else f" +{len(player_picks) - 3}"
+        banner_text = "REBUILDING: " + ", ".join(labels) + suffix
+        self.queued_commands[player_id].append({
+            "cmd":  "rebuild_start",
+            "text": banner_text,
+            "keys": [m.key for m in player_picks],
+        })
+        if partner_picks:
+            self.queued_commands[partner].append({
+                "cmd":    "hud_show",
+                "text":   f">> Partner rebuilding -- {len(player_picks)} mon(s) restored",
+                "r": 100, "g": 180, "b": 255,
+                "frames": 360,
+            })
+
+    def _maybe_finish_rebuild(self, player_id: str) -> None:
+        """Clear rebuild state and tell the client to dismiss the banner once
+        every queued rebuild key has either been confirmed
+        (sync_retrieve_done) or dropped (sync_retrieve_failed)."""
+        rb = self.rebuild_pending.get(player_id)
+        if not rb:
+            return
+        queued = set(rb.get("queued_keys", []))
+        restored = rb.get("restored_keys", set())
+        if queued - restored:
+            return  # still waiting on some sync events
+        self.queued_commands[player_id].append({"cmd": "rebuild_done"})
+        log.info(f"[{player_id}] rebuild complete — {len(restored)} restored, "
+                 f"{len(queued) - len(restored)} dropped")
+        self.rebuild_pending[player_id] = None
+        self._save()
 
     def _handle_key_change(self, player_id: str, msg: dict):
         """Handle a key change (nature change, NPC trade, or evolution).
@@ -1953,6 +2200,18 @@ class SoulLinkState:
             },
             "run_over": self.run_over,
             "attempts_count": self.attempts_count,
+            "rebuild_pending": {
+                pid: (
+                    {
+                        "started_at":         rb.get("started_at", ""),
+                        "queued_keys":        list(rb.get("queued_keys", [])),
+                        "queued_partner_keys": list(rb.get("queued_partner_keys", [])),
+                        "restored_keys":      list(rb.get("restored_keys", set())),
+                    }
+                    if rb else None
+                )
+                for pid, rb in self.rebuild_pending.items()
+            },
         }
         try:
             self._atomic_write_json(self._links_path, payload)
