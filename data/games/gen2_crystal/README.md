@@ -62,7 +62,6 @@ The 4 `TODO: verify` addresses in `lua/games/gen2_crystal.lua`
 (enemy_count, enemy_base, enemy_species_list, battle_flag) — plus every
 other address in the profile — have a diagnostic Lua probe at
 `lua/tests/test_gen2_profile_audit.lua`. See
-[`tests/phase0_address_audit.md`](../../../tests/phase0_address_audit.md)
 for the audit doc and
-[`tests/PHASE9_BATCH.md`](../../../tests/PHASE9_BATCH.md) for the live
+[`docs/gen1_gen2_runtime_checks.md`](../../../docs/gen1_gen2_runtime_checks.md) for the live
 verification checklist.

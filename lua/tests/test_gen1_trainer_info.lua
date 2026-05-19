@@ -27,12 +27,12 @@ local TAG = "[T5-G1]"
 
 console.clear()
 console.log(fmt("%s Phase 5 trainer info (variant=%s)", TAG, G.detect_variant() or "red"))
-console.log(fmt("%s trainer_class_addr=0x%04X  trainer_id_addr=0x%04X (BOTH TENTATIVE — verify against pret)",
-    TAG, p.trainer_class_addr, p.trainer_id_addr))
+console.log(fmt("%s TRAINER_CLASS_ADDR=0x%04X  TRAINER_ID_ADDR=0x%04X (BOTH TENTATIVE — verify against pret)",
+    TAG, p.TRAINER_CLASS_ADDR, p.TRAINER_ID_ADDR))
 
 local function dump()
-    local cls = M.read_u8(p.trainer_class_addr)
-    local tid = M.read_u8(p.trainer_id_addr)
+    local cls = M.read_u8(p.TRAINER_CLASS_ADDR)
+    local tid = M.read_u8(p.TRAINER_ID_ADDR)
     local class_name, trainer_name = TRAINERS.resolve(cls, tid)
     console.log(fmt("  class_id=%d (0x%02X)  trainer_id=%d", cls, cls, tid))
     console.log(fmt("  resolved class='%s'  name='%s'", class_name, trainer_name))

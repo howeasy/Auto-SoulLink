@@ -140,42 +140,42 @@ function M.initProfile(game_module, variant)
     end
     M.profile = prof
     -- Copy key addresses to module level for fast access
-    M.PARTY_COUNT_ADDR    = prof.party_count_addr
-    M.PARTY_SPECIES_ADDR  = prof.party_species_addr
-    M.PARTY_BASE_ADDR     = prof.party_base_addr
-    M.PARTY_OT_NAMES_ADDR = prof.party_ot_names_addr
-    M.PARTY_NICKS_ADDR    = prof.party_nicks_addr
+    M.PARTY_COUNT_ADDR    = prof.PARTY_COUNT_ADDR
+    M.PARTY_SPECIES_ADDR  = prof.PARTY_SPECIES_ADDR
+    M.PARTY_BASE_ADDR     = prof.PARTY_BASE_ADDR
+    M.PARTY_OT_NAMES_ADDR = prof.PARTY_OT_NAMES_ADDR
+    M.PARTY_NICKS_ADDR    = prof.PARTY_NICKS_ADDR
     M.PARTY_STRUCT_SIZE   = prof.party_struct_size or 44  -- Gen 1 default
-    M.BOX_COUNT_ADDR      = prof.box_count_addr
-    M.BOX_SPECIES_ADDR    = prof.box_species_addr
-    M.BOX_BASE_ADDR       = prof.box_base_addr
-    M.BOX_OT_NAMES_ADDR   = prof.box_ot_names_addr
-    M.BOX_NICKS_ADDR      = prof.box_nicks_addr
+    M.BOX_COUNT_ADDR      = prof.BOX_COUNT_ADDR
+    M.BOX_SPECIES_ADDR    = prof.BOX_SPECIES_ADDR
+    M.BOX_BASE_ADDR       = prof.BOX_BASE_ADDR
+    M.BOX_OT_NAMES_ADDR   = prof.BOX_OT_NAMES_ADDR
+    M.BOX_NICKS_ADDR      = prof.BOX_NICKS_ADDR
     M.BOX_STRUCT_SIZE     = prof.box_struct_size or 33  -- Gen 1 default
     M.BOX_MAX_MONS        = prof.box_max_mons or 20
-    M.BAG_COUNT_ADDR      = prof.bag_count_addr
-    M.BAG_ITEMS_ADDR      = prof.bag_items_addr
+    M.BAG_COUNT_ADDR      = prof.BAG_COUNT_ADDR
+    M.BAG_ITEMS_ADDR      = prof.BAG_ITEMS_ADDR
     M.BAG_MAX_ITEMS       = prof.bag_max_items or 20
-    M.BATTLE_FLAG_ADDR    = prof.battle_flag_addr
-    M.MAP_ID_ADDR         = prof.map_id_addr
-    M.PLAYER_NAME_ADDR    = prof.player_name_addr
-    M.PLAYER_ID_ADDR      = prof.player_id_addr
+    M.BATTLE_FLAG_ADDR    = prof.BATTLE_FLAG_ADDR
+    M.MAP_ID_ADDR         = prof.MAP_ID_ADDR
+    M.PLAYER_NAME_ADDR    = prof.PLAYER_NAME_ADDR
+    M.PLAYER_ID_ADDR      = prof.PLAYER_ID_ADDR
     M.BALL_ITEM_IDS       = prof.ball_item_ids or {0x01, 0x02, 0x03, 0x04}
     -- Enemy party
-    M.ENEMY_COUNT_ADDR    = prof.enemy_count_addr
-    M.ENEMY_BASE_ADDR     = prof.enemy_base_addr
-    M.ENEMY_SPECIES_LIST_ADDR = prof.enemy_species_list_addr
+    M.ENEMY_COUNT_ADDR    = prof.ENEMY_COUNT_ADDR
+    M.ENEMY_BASE_ADDR     = prof.ENEMY_BASE_ADDR
+    M.ENEMY_SPECIES_LIST_ADDR = prof.ENEMY_SPECIES_LIST_ADDR
     -- Active battle enemy mon addresses
-    M.ENEMY_MON_SPECIES_ADDR = prof.enemy_mon_species_addr
-    M.ENEMY_MON_HP_ADDR      = prof.enemy_mon_hp_addr
-    M.ENEMY_MON_LEVEL_ADDR   = prof.enemy_mon_level_addr
-    M.ENEMY_MON_MAXHP_ADDR   = prof.enemy_mon_maxhp_addr
+    M.ENEMY_MON_SPECIES_ADDR = prof.ENEMY_MON_SPECIES_ADDR
+    M.ENEMY_MON_HP_ADDR      = prof.ENEMY_MON_HP_ADDR
+    M.ENEMY_MON_LEVEL_ADDR   = prof.ENEMY_MON_LEVEL_ADDR
+    M.ENEMY_MON_MAXHP_ADDR   = prof.ENEMY_MON_MAXHP_ADDR
     -- Badges
-    M.BADGES_ADDR            = prof.badges_addr
-    M.KANTO_BADGES_ADDR      = prof.kanto_badges_addr  -- Gen 2 only (nil for Gen 1)
+    M.BADGES_ADDR            = prof.BADGES_ADDR
+    M.KANTO_BADGES_ADDR      = prof.KANTO_BADGES_ADDR  -- Gen 2 only (nil for Gen 1)
     -- Gen 2: 2-byte map addressing (mapGroup + mapNumber)
-    M.MAP_GROUP_ADDR         = prof.map_group_addr     -- nil for Gen 1
-    M.MAP_NUMBER_ADDR        = prof.map_number_addr    -- nil for Gen 1
+    M.MAP_GROUP_ADDR         = prof.MAP_GROUP_ADDR     -- nil for Gen 1
+    M.MAP_NUMBER_ADDR        = prof.MAP_NUMBER_ADDR    -- nil for Gen 1
     M.USES_MAP_GROUP         = prof.uses_map_group or false
     -- Gen 2: held item offset (nil for Gen 1)
     M.HELD_ITEM_OFFSET       = prof.held_item_offset
@@ -202,8 +202,8 @@ function M.initProfile(game_module, variant)
     M.BOX_IN_SRAM         = prof.box_in_sram or false
     M.SRAM_BANK           = prof.sram_bank or 0
     -- Stat-stage addresses + layout (Phase 2). Nil-safe — clients only call helpers when set.
-    M.PLAYER_STAT_STAGES_ADDR = prof.player_stat_stages_addr
-    M.ENEMY_STAT_STAGES_ADDR  = prof.enemy_stat_stages_addr
+    M.PLAYER_STAT_STAGES_ADDR = prof.PLAYER_STAT_STAGES_ADDR
+    M.ENEMY_STAT_STAGES_ADDR  = prof.ENEMY_STAT_STAGES_ADDR
     M.STAT_STAGES_COUNT       = prof.stat_stages_count or 0
     M.STAT_STAGES_LAYOUT      = prof.stat_stages_layout or "gen1"
     -- Moves + PP within party struct (Phase 3). pp_encoding="raw" (Gen 1, simple
@@ -212,18 +212,18 @@ function M.initProfile(game_module, variant)
     M.PP_OFFSET               = prof.pp_offset
     M.PP_ENCODING             = prof.pp_encoding or "raw"
     -- Enemy battle struct moves + PP (Phase 4). Different from party struct in Gen 2.
-    M.ENEMY_BATTLE_MOVES_ADDR = prof.enemy_battle_moves_addr
-    M.ENEMY_BATTLE_PP_ADDR    = prof.enemy_battle_pp_addr
+    M.ENEMY_BATTLE_MOVES_ADDR = prof.ENEMY_BATTLE_MOVES_ADDR
+    M.ENEMY_BATTLE_PP_ADDR    = prof.ENEMY_BATTLE_PP_ADDR
     M.ENEMY_BATTLE_PP_ENCODING = prof.enemy_battle_pp_encoding or "raw"
     -- Trainer class / index in trainer battles (Phase 5).
-    M.TRAINER_CLASS_ADDR      = prof.trainer_class_addr
-    M.TRAINER_ID_ADDR         = prof.trainer_id_addr
+    M.TRAINER_CLASS_ADDR      = prof.TRAINER_CLASS_ADDR
+    M.TRAINER_ID_ADDR         = prof.TRAINER_ID_ADDR
     -- Sound dispatch (Phase 7). Disabled by default (addr=nil) — when a profile
-    -- declares sfx_dispatch_addr, M.playSfx(id) writes id to that address.
+    -- declares SFX_DISPATCH_ADDR, M.playSfx(id) writes id to that address.
     -- The profile also provides a sfx_ids table mapping semantic events
     -- ("capture", "faint", "whiteout", "gift") to ROM SFX constants.
     -- Without confirmed addresses, leave disabled to avoid corrupting game state.
-    M.SFX_DISPATCH_ADDR       = prof.sfx_dispatch_addr
+    M.SFX_DISPATCH_ADDR       = prof.SFX_DISPATCH_ADDR
     M.SFX_IDS                 = prof.sfx_ids or {}
 end
 
@@ -977,7 +977,7 @@ end
 
 -- ═══ Sound effects (Phase 7) ═════════════════════════════════════════════
 -- Trigger an in-game sound effect by writing its ROM SFX ID to the music/SFX
--- dispatch register. Profile-gated: if sfx_dispatch_addr is nil, this is a
+-- dispatch register. Profile-gated: if SFX_DISPATCH_ADDR is nil, this is a
 -- no-op (safe default). Use `lua/tests/test_gen{1,2}_sfx.lua` to validate
 -- the dispatch address + SFX IDs before enabling in production profiles.
 --
@@ -1018,7 +1018,7 @@ end
 
 -- Read the active enemy battler's 4 moves + 4 PP bytes. Returns
 -- {moves=[id1..4], pp=[cur1..4]}, or nil if the profile doesn't declare
--- enemy_battle_moves_addr. Used by build_enemy_snapshot in battle. Enemy PP
+-- ENEMY_BATTLE_MOVES_ADDR. Used by build_enemy_snapshot in battle. Enemy PP
 -- is treated as raw (no PP-Up encoding) regardless of party-struct encoding —
 -- the active battler's PP byte holds the live current PP and PP-Up doesn't
 -- need to be displayed for display-only enemy info.

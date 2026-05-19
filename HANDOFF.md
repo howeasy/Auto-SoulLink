@@ -11,7 +11,7 @@
 - `python tools/verify_profile_addresses.py` → **156 ok / 0 fail / 0 warn / 79 skip**
 - Gen 3 regression: 207 Gen 3 adapter tests still pass
 
-**What's still required**: a 30–60 minute runtime smoke session in BizHawk — see [tests/PHASE9_BATCH.md](tests/PHASE9_BATCH.md). The original day-long Phase 0 address audit is gone (replaced by Phase 10 automation).
+**What's still required**: a 30–60 minute runtime smoke session in BizHawk — see [docs/gen1_gen2_runtime_checks.md](docs/gen1_gen2_runtime_checks.md). The original day-long Phase 0 address audit is gone (replaced by Phase 10 automation).
 
 ---
 
@@ -31,7 +31,7 @@
 | `4cde85c` | 9 | Docs handoff: REFERENCE.md + per-game READMEs |
 | `0c9291a` | 10 tools | pret .sym extraction pipeline (RGBDS v1.0.1 auto-installed; rgbasm/rgblink driven directly, no `make` / w64devkit) + pytest-gated verifier |
 | `a494317` | 10 fixes | 7 pret-authoritative address corrections (Gen 1 box_nicks, Yellow stat-stages, Crystal stat-stages, Crystal trainer addresses) |
-| `208050d` | 10 docs | PHASE9_BATCH.md trimmed to runtime-only Phase 9-smoke; phase0_address_audit.md archived |
+| `208050d` | 10 docs | gen1_gen2_runtime_checks.md trimmed to runtime-only Phase 9-smoke; phase0_address_audit.md deleted |
 | `b4a869c` | 11 | Gold + Silver support via pret/pokegold; ~45 min wall-clock thanks to Phase 10 infrastructure |
 
 ---
@@ -53,7 +53,7 @@ All share `game_id = "gen1_rby"` (R/B/Y) or `"gen2_crystal"` (C/G/S) → single 
 
 ## Files to know
 
-**For the runtime smoke check** (see `tests/PHASE9_BATCH.md` for the full protocol):
+**For the runtime smoke check** (see `docs/gen1_gen2_runtime_checks.md` for the full protocol):
 - `lua/clients/gen1_rby_client.lua` — Gen 1 client (used for R/B/Y, including AP variants)
 - `lua/clients/gen2_crystal_client.lua` — Gen 2 client (used for Crystal, Gold, Silver, and Crystal AP)
 - `lua/games/gen1_rby.lua` — Gen 1 profiles (red/blue/yellow + red_ap/blue_ap)
@@ -99,7 +99,7 @@ No other shared code (server.py, state.py, stream_overlays.py, pokemon_data.py, 
 
 ## What remains (Phase 9-smoke — for the human user)
 
-Open `tests/PHASE9_BATCH.md` and work through 6 sections (~30-60 min total):
+Open `docs/gen1_gen2_runtime_checks.md` and work through 6 sections (~30-60 min total):
 1. **Memorialize routing** — load a ROM, faint a linked mon, confirm body ends up in Box 12 (Gen 1) or Box 14 (Gen 2)
 2. **Egg-gift classification (Crystal)** — wild Route 34 capture, Mystery Egg from Mr. Pokemon, daycare-bred egg, box pickup
 3. **Status page rendering** — Moves(N) badges, stat-stage badges, trainer name header, encounter overlay

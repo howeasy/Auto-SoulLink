@@ -45,41 +45,41 @@ end
 M.PROFILES = {
     red = {
         -- Party
-        party_count_addr   = 0xD163,
-        party_species_addr = 0xD164,  -- 6 bytes + 0xFF terminator
-        party_base_addr    = 0xD16B,  -- 6 × 44 bytes
-        party_ot_names_addr = 0xD273, -- 6 × 11 bytes
-        party_nicks_addr   = 0xD2B5,  -- 6 × 11 bytes
+        PARTY_COUNT_ADDR   = 0xD163,
+        PARTY_SPECIES_ADDR = 0xD164,  -- 6 bytes + 0xFF terminator
+        PARTY_BASE_ADDR    = 0xD16B,  -- 6 × 44 bytes
+        PARTY_OT_NAMES_ADDR = 0xD273, -- 6 × 11 bytes
+        PARTY_NICKS_ADDR   = 0xD2B5,  -- 6 × 11 bytes
         party_struct_size  = 44,
         -- Enemy party
-        enemy_count_addr   = 0xD89C,
-        enemy_base_addr    = 0xD8A4,
+        ENEMY_COUNT_ADDR   = 0xD89C,
+        ENEMY_BASE_ADDR    = 0xD8A4,
         -- Current box
-        box_count_addr     = 0xDA80,
-        box_species_addr   = 0xDA81,  -- 20 bytes + 0xFF terminator
-        box_base_addr      = 0xDA96,  -- 20 × 33 bytes
-        box_ot_names_addr  = 0xDD2A,  -- 20 × 11 bytes
-        box_nicks_addr     = 0xDE06,  -- 20 × 11 bytes (pret wBoxMonNicks; Phase 10 fix from 0xDEB8)
+        BOX_COUNT_ADDR     = 0xDA80,
+        BOX_SPECIES_ADDR   = 0xDA81,  -- 20 bytes + 0xFF terminator
+        BOX_BASE_ADDR      = 0xDA96,  -- 20 × 33 bytes
+        BOX_OT_NAMES_ADDR  = 0xDD2A,  -- 20 × 11 bytes
+        BOX_NICKS_ADDR     = 0xDE06,  -- 20 × 11 bytes (pret wBoxMonNicks; Phase 10 fix from 0xDEB8)
         box_struct_size    = 33,
         box_max_mons       = 20,
         -- Bag
-        bag_count_addr     = 0xD31D,
-        bag_items_addr     = 0xD31E,  -- each item = 2 bytes (ID + quantity)
+        BAG_COUNT_ADDR     = 0xD31D,
+        BAG_ITEMS_ADDR     = 0xD31E,  -- each item = 2 bytes (ID + quantity)
         bag_max_items      = 20,
         -- Battle
-        battle_flag_addr   = 0xD057,  -- 0=overworld, 1=wild, 2=trainer
+        BATTLE_FLAG_ADDR   = 0xD057,  -- 0=overworld, 1=wild, 2=trainer
         -- Active enemy battle mon (wEnemyMon at CFE5, battle_struct layout)
-        enemy_mon_species_addr = 0xCFE5,  -- internal species index (+0x00)
-        enemy_mon_hp_addr      = 0xCFE6,  -- 2 bytes big-endian (+0x01)
-        enemy_mon_level_addr   = 0xCFF3,  -- actual level (+0x0E)
-        enemy_mon_maxhp_addr   = 0xCFF4,  -- 2 bytes big-endian (+0x0F)
+        ENEMY_MON_SPECIES_ADDR = 0xCFE5,  -- internal species index (+0x00)
+        ENEMY_MON_HP_ADDR      = 0xCFE6,  -- 2 bytes big-endian (+0x01)
+        ENEMY_MON_LEVEL_ADDR   = 0xCFF3,  -- actual level (+0x0E)
+        ENEMY_MON_MAXHP_ADDR   = 0xCFF4,  -- 2 bytes big-endian (+0x0F)
         -- Enemy species list (between count and struct): count+1 through count+6
-        enemy_species_list_addr = 0xD89D, -- 6 bytes, each = internal species index
+        ENEMY_SPECIES_LIST_ADDR = 0xD89D, -- 6 bytes, each = internal species index
         -- Map
-        map_id_addr        = 0xD35E,
+        MAP_ID_ADDR        = 0xD35E,
         -- Player
-        player_name_addr   = 0xD158,
-        player_id_addr     = 0xD359,  -- 2 bytes, big-endian
+        PLAYER_NAME_ADDR   = 0xD158,
+        PLAYER_ID_ADDR     = 0xD359,  -- 2 bytes, big-endian
         -- DV offsets within party struct
         dv_offset_1        = 0x1B,    -- Attack/Defense DVs
         dv_offset_2        = 0x1C,    -- Speed/Special DVs
@@ -94,14 +94,14 @@ M.PROFILES = {
         -- Ball item IDs
         ball_item_ids      = {0x01, 0x02, 0x03, 0x04},  -- Master, Ultra, Great, Poke
         -- Badges
-        badges_addr        = 0xD356,  -- wObtainedBadges (bitfield, 8 badges)
+        BADGES_ADDR        = 0xD356,  -- wObtainedBadges (bitfield, 8 badges)
         -- Stat stages (Phase 2 — DataCrystal RBY RAM map, pret/pokered wram.asm
         -- wPlayerMonAttackMod..wPlayerMonEvasionMod = CD1A..CD1F (6 bytes).
         -- wEnemyMonAttackMod..wEnemyMonEvasionMod   = CD2E..CD33.
         -- Raw range 1..13 (BASE_STAT_LEVEL=7 per pret); client normalizes to 0..12/6.
         -- Gen 1 has 6 stat stages — Special is unified (split into SpA/SpD only in Gen 2).
-        player_stat_stages_addr = 0xCD1A,
-        enemy_stat_stages_addr  = 0xCD2E,
+        PLAYER_STAT_STAGES_ADDR = 0xCD1A,
+        ENEMY_STAT_STAGES_ADDR  = 0xCD2E,
         stat_stages_count       = 6,
         stat_stages_layout      = "gen1",  -- {atk, def, spd, spc, acc, eva}
         -- Moves + PP within party struct (Phase 3 — pret/pokered macros, 4 bytes each).
@@ -111,45 +111,45 @@ M.PROFILES = {
         -- Enemy battle struct moves + PP (Phase 4 — wEnemyMon is a battle_struct with the
         -- same layout as party_struct in Gen 1). wEnemyMon @ 0xCFE5; moves at +0x08 = 0xCFED;
         -- PP at +0x19 = 0xCFFE (DataCrystal RBY map). PP is raw (no PP-Ups).
-        enemy_battle_moves_addr = 0xCFED,
-        enemy_battle_pp_addr    = 0xCFFE,
+        ENEMY_BATTLE_MOVES_ADDR = 0xCFED,
+        ENEMY_BATTLE_PP_ADDR    = 0xCFFE,
         enemy_battle_pp_encoding = "raw",
         -- Trainer class + index (Phase 5 — wTrainerClass holds OPP_ID_OFFSET (200)
         -- + const_id per pret/pokered. wTrainerNo is 1-based index within the class.
         -- Working hypothesis 0xD031/0xD05D; Phase 9 diagnostic confirms.
-        trainer_class_addr      = 0xD031,
-        trainer_id_addr         = 0xD05D,
+        TRAINER_CLASS_ADDR      = 0xD031,
+        TRAINER_ID_ADDR         = 0xD05D,
     },
 
     -- Yellow has shifted WRAM addresses
     yellow = {
-        party_count_addr   = 0xD162,
-        party_species_addr = 0xD163,
-        party_base_addr    = 0xD16A,
-        party_ot_names_addr = 0xD272,
-        party_nicks_addr   = 0xD2B4,
+        PARTY_COUNT_ADDR   = 0xD162,
+        PARTY_SPECIES_ADDR = 0xD163,
+        PARTY_BASE_ADDR    = 0xD16A,
+        PARTY_OT_NAMES_ADDR = 0xD272,
+        PARTY_NICKS_ADDR   = 0xD2B4,
         party_struct_size  = 44,
-        enemy_count_addr   = 0xD89B,
-        enemy_base_addr    = 0xD8A3,
-        box_count_addr     = 0xDA7F,
-        box_species_addr   = 0xDA80,
-        box_base_addr      = 0xDA95,
-        box_ot_names_addr  = 0xDD29,
-        box_nicks_addr     = 0xDE05,  -- pret wBoxMonNicks; Phase 10 fix from 0xDEB7
+        ENEMY_COUNT_ADDR   = 0xD89B,
+        ENEMY_BASE_ADDR    = 0xD8A3,
+        BOX_COUNT_ADDR     = 0xDA7F,
+        BOX_SPECIES_ADDR   = 0xDA80,
+        BOX_BASE_ADDR      = 0xDA95,
+        BOX_OT_NAMES_ADDR  = 0xDD29,
+        BOX_NICKS_ADDR     = 0xDE05,  -- pret wBoxMonNicks; Phase 10 fix from 0xDEB7
         box_struct_size    = 33,
         box_max_mons       = 20,
-        bag_count_addr     = 0xD31C,
-        bag_items_addr     = 0xD31D,
+        BAG_COUNT_ADDR     = 0xD31C,
+        BAG_ITEMS_ADDR     = 0xD31D,
         bag_max_items      = 20,
-        battle_flag_addr   = 0xD056,
-        enemy_mon_species_addr = 0xCFE4,
-        enemy_mon_hp_addr      = 0xCFE5,
-        enemy_mon_level_addr   = 0xCFF2,
-        enemy_mon_maxhp_addr   = 0xCFF3,
-        enemy_species_list_addr = 0xD89C,
-        map_id_addr        = 0xD35D,
-        player_name_addr   = 0xD157,
-        player_id_addr     = 0xD358,
+        BATTLE_FLAG_ADDR   = 0xD056,
+        ENEMY_MON_SPECIES_ADDR = 0xCFE4,
+        ENEMY_MON_HP_ADDR      = 0xCFE5,
+        ENEMY_MON_LEVEL_ADDR   = 0xCFF2,
+        ENEMY_MON_MAXHP_ADDR   = 0xCFF3,
+        ENEMY_SPECIES_LIST_ADDR = 0xD89C,
+        MAP_ID_ADDR        = 0xD35D,
+        PLAYER_NAME_ADDR   = 0xD157,
+        PLAYER_ID_ADDR     = 0xD358,
         dv_offset_1        = 0x1B,
         dv_offset_2        = 0x1C,
         otid_offset        = 0x0C,
@@ -160,13 +160,13 @@ M.PROFILES = {
         status_offset      = 0x04,    -- non-volatile status (u8)
         enemy_status_offset = 0x04,   -- same offset in active enemy battle struct
         ball_item_ids      = {0x01, 0x02, 0x03, 0x04},
-        badges_addr        = 0xD355,  -- wObtainedBadges (Yellow, shifted -1)
+        BADGES_ADDR        = 0xD355,  -- wObtainedBadges (Yellow, shifted -1)
         -- Stat stages (Phase 2, tentative -1 shift from R/B; Phase 9 diagnostic confirms)
         -- Phase 10 fix: Yellow does NOT shift these -1 from R/B (the "Main Data"
         -- section origin is fixed; the Yellow audio adds bytes earlier in WRAM
         -- but doesn't push this region). pret/pokeyellow wPlayerMonAttackMod=0xCD1A.
-        player_stat_stages_addr = 0xCD1A,
-        enemy_stat_stages_addr  = 0xCD2E,
+        PLAYER_STAT_STAGES_ADDR = 0xCD1A,
+        ENEMY_STAT_STAGES_ADDR  = 0xCD2E,
         stat_stages_count       = 6,
         stat_stages_layout      = "gen1",
         -- Moves + PP: same struct offsets as Red/Blue (no -1 shift inside the struct).
@@ -174,12 +174,12 @@ M.PROFILES = {
         pp_offset               = 0x1D,
         pp_encoding             = "raw",
         -- Yellow's wEnemyMon is shifted -1 like other battle addresses.
-        enemy_battle_moves_addr = 0xCFEC,
-        enemy_battle_pp_addr    = 0xCFFD,
+        ENEMY_BATTLE_MOVES_ADDR = 0xCFEC,
+        ENEMY_BATTLE_PP_ADDR    = 0xCFFD,
         enemy_battle_pp_encoding = "raw",
         -- Yellow shift -1
-        trainer_class_addr      = 0xD030,
-        trainer_id_addr         = 0xD05C,
+        TRAINER_CLASS_ADDR      = 0xD030,
+        TRAINER_ID_ADDR         = 0xD05C,
     },
 }
 

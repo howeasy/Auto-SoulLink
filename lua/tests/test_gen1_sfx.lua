@@ -2,11 +2,11 @@
   lua/tests/test_gen1_sfx.lua — Phase 7 SFX dispatch live discovery (Gen 1)
 
   IMPORTANT: Phase 7 ships with SFX dispatch DISABLED by default in the
-  profile (sfx_dispatch_addr=nil) because writing to a wrong address can
+  profile (SFX_DISPATCH_ADDR=nil) because writing to a wrong address can
   corrupt game state. This script is a SAFE diagnostic that:
     1. Lets you experiment with candidate dispatch addresses + SFX IDs.
     2. Reports back what triggered correctly.
-    3. Once verified, you can populate the profile sfx_dispatch_addr +
+    3. Once verified, you can populate the profile SFX_DISPATCH_ADDR +
        sfx_ids and SFX will play automatically on capture/faint/whiteout.
 
   Per pret/pokered conventions, SFX dispatch is typically via wMusicID

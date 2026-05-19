@@ -7,7 +7,7 @@ pret symbol mapping (see tools/verify_profile_addresses.py PROFILE_TO_PRET)
 is checked; mismatches surface as test failures with a clear "profile=X,
 pret=Y, delta=Z" message.
 
-This replaces the manual Phase 0 address-audit section of PHASE9_BATCH.md."""
+This replaces the manual Phase 0 address-audit section of gen1_gen2_runtime_checks.md."""
 
 from __future__ import annotations
 

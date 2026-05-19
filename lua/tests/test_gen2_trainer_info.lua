@@ -1,7 +1,7 @@
 --[[
   lua/tests/test_gen2_trainer_info.lua — Phase 5 trainer class+id verification (Crystal)
 
-  Working hypothesis: trainer_class_addr=0xD233, trainer_id_addr=0xD234. Verify
+  Working hypothesis: TRAINER_CLASS_ADDR=0xD233, TRAINER_ID_ADDR=0xD234. Verify
   by entering Falkner (class_id should be 1) or Bugsy (class_id 3), etc.
 
   Controls:
@@ -27,12 +27,12 @@ local TAG = "[T5-G2]"
 
 console.clear()
 console.log(fmt("%s Phase 5 trainer info (Crystal)", TAG))
-console.log(fmt("%s trainer_class_addr=0x%04X  trainer_id_addr=0x%04X (TENTATIVE)",
-    TAG, p.trainer_class_addr, p.trainer_id_addr))
+console.log(fmt("%s TRAINER_CLASS_ADDR=0x%04X  TRAINER_ID_ADDR=0x%04X (TENTATIVE)",
+    TAG, p.TRAINER_CLASS_ADDR, p.TRAINER_ID_ADDR))
 
 local function dump()
-    local cls = M.read_u8(p.trainer_class_addr)
-    local tid = M.read_u8(p.trainer_id_addr)
+    local cls = M.read_u8(p.TRAINER_CLASS_ADDR)
+    local tid = M.read_u8(p.TRAINER_ID_ADDR)
     local class_name, trainer_name = TRAINERS.resolve(cls, tid)
     console.log(fmt("  class_id=%d  trainer_id=%d", cls, tid))
     console.log(fmt("  resolved class='%s'  name='%s'", class_name, trainer_name))

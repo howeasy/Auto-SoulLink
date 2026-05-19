@@ -41,26 +41,26 @@ local LABELS = {"ATK", "DEF", "SPD", "SATK", "SDEF", "ACC", "EVA"}
 
 console.clear()
 console.log(fmt("%s Phase 2 stat-stages audit (Crystal)", TAG))
-console.log(fmt("%s player_stat_stages_addr=0x%04X  enemy_stat_stages_addr=0x%04X  (BOTH TENTATIVE)",
-    TAG, p.player_stat_stages_addr, p.enemy_stat_stages_addr))
+console.log(fmt("%s PLAYER_STAT_STAGES_ADDR=0x%04X  ENEMY_STAT_STAGES_ADDR=0x%04X  (BOTH TENTATIVE)",
+    TAG, p.PLAYER_STAT_STAGES_ADDR, p.ENEMY_STAT_STAGES_ADDR))
 console.log(fmt("%s Press F1 to dump + sweep; F2 for full WRAM0 scan.", TAG))
 
 local function dump()
     console.log(fmt("%s ── stat stages dump ──", TAG))
     console.log("  player:")
     for i = 0, 6 do
-        local v = M.read_u8(p.player_stat_stages_addr + i)
+        local v = M.read_u8(p.PLAYER_STAT_STAGES_ADDR + i)
         local stage = v - 7
         console.log(fmt("    %s @ 0x%04X = %d (stage %+d)  [%s]",
-            LABELS[i + 1], p.player_stat_stages_addr + i, v, stage,
+            LABELS[i + 1], p.PLAYER_STAT_STAGES_ADDR + i, v, stage,
             (v >= 1 and v <= 13) and "ok" or "OUT OF RANGE"))
     end
     console.log("  enemy:")
     for i = 0, 6 do
-        local v = M.read_u8(p.enemy_stat_stages_addr + i)
+        local v = M.read_u8(p.ENEMY_STAT_STAGES_ADDR + i)
         local stage = v - 7
         console.log(fmt("    %s @ 0x%04X = %d (stage %+d)  [%s]",
-            LABELS[i + 1], p.enemy_stat_stages_addr + i, v, stage,
+            LABELS[i + 1], p.ENEMY_STAT_STAGES_ADDR + i, v, stage,
             (v >= 1 and v <= 13) and "ok" or "OUT OF RANGE"))
     end
     local p_stages = M.readPlayerStatStages()
@@ -110,8 +110,8 @@ event.onframeend(function()
     prev_keys = k
 
     local s = ""
-    for i = 0, 6 do s = s .. fmt("%02X", M.read_u8(p.player_stat_stages_addr + i)) end
-    for i = 0, 6 do s = s .. fmt("%02X", M.read_u8(p.enemy_stat_stages_addr + i)) end
+    for i = 0, 6 do s = s .. fmt("%02X", M.read_u8(p.PLAYER_STAT_STAGES_ADDR + i)) end
+    for i = 0, 6 do s = s .. fmt("%02X", M.read_u8(p.ENEMY_STAT_STAGES_ADDR + i)) end
     if prev_state and s ~= prev_state then
         console.log(fmt("%s stages changed: player=%s enemy=%s",
             TAG, s:sub(1, 14), s:sub(15)))

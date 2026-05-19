@@ -26,8 +26,8 @@ local TAG = "[T4-G1]"
 
 console.clear()
 console.log(fmt("%s Phase 4 enemy moves+PP (variant=%s)", TAG, G.detect_variant() or "red"))
-console.log(fmt("%s enemy_battle_moves_addr=0x%04X  enemy_battle_pp_addr=0x%04X",
-    TAG, p.enemy_battle_moves_addr, p.enemy_battle_pp_addr))
+console.log(fmt("%s ENEMY_BATTLE_MOVES_ADDR=0x%04X  ENEMY_BATTLE_PP_ADDR=0x%04X",
+    TAG, p.ENEMY_BATTLE_MOVES_ADDR, p.ENEMY_BATTLE_PP_ADDR))
 
 local function dump()
     local mp = M.readEnemyBattleMovesAndPP()

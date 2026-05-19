@@ -227,7 +227,7 @@ local function dispatch_commands(cmds)
         elseif c.cmd == "play_sound" and c.sound then
             -- Gen 3 emits m4a SE_* IDs (95=SHINY, 26=FAILURE, 25=SUCCESS, 22=BOO).
             -- Translated to semantic event names; profile sfx_ids resolves to a
-            -- ROM-specific SFX ID. No-op until Phase 7 sfx_dispatch_addr is set.
+            -- ROM-specific SFX ID. No-op until Phase 7 SFX_DISPATCH_ADDR is set.
             M.playSfxFromGen3Id(c.sound)
         elseif c.cmd == "box_mon" and c.key then
             -- Cancel any pending party_mon for the same key
@@ -614,7 +614,7 @@ local function on_new_mon(mon, slot, is_gift)
 
     send(evt, "capture(" .. (is_gift and "gift" or "battle") .. "):" .. mon.key:sub(1, 9), true)
     captured_this_battle = true
-    -- Phase 7: optional SFX play. No-op until profile.sfx_dispatch_addr is set.
+    -- Phase 7: optional SFX play. No-op until profile.SFX_DISPATCH_ADDR is set.
     M.playSfx(is_gift and "gift" or "capture")
 end
 
@@ -649,7 +649,7 @@ local function on_faint(mon)
         key = mon.key,
         area_id = last_area_id,
     }, "faint:" .. mon.key:sub(1, 9), true)
-    M.playSfx("faint")  -- Phase 7: no-op until profile.sfx_dispatch_addr set
+    M.playSfx("faint")  -- Phase 7: no-op until profile.SFX_DISPATCH_ADDR set
 end
 
 -- ── Evolution detection ───────────────────────────────────────────────────────
@@ -686,7 +686,7 @@ local function check_whiteout(cur_party, count)
     -- All mons fainted
     whiteout_sent = true
     send({event = "whiteout", area_id = last_area_id}, "whiteout", true)
-    M.playSfx("whiteout")  -- Phase 7: no-op until profile.sfx_dispatch_addr set
+    M.playSfx("whiteout")  -- Phase 7: no-op until profile.SFX_DISPATCH_ADDR set
 end
 
 -- ── Party diff (core detection logic) ─────────────────────────────────────────

@@ -31,25 +31,25 @@ end
 M.PROFILES = {
     crystal = {
         -- Party (source: wram.asm wPartyCount / wPartyMons / wPartyMon1)
-        party_count_addr     = 0xDCD7,
-        party_species_addr   = 0xDCD8,  -- 6 bytes + 0xFF terminator
-        party_base_addr      = 0xDCDF,  -- 6 × 48 bytes
-        party_ot_names_addr  = 0xDDFF,  -- 6 × 11 bytes
-        party_nicks_addr     = 0xDE41,  -- 6 × 11 bytes
+        PARTY_COUNT_ADDR     = 0xDCD7,
+        PARTY_SPECIES_ADDR   = 0xDCD8,  -- 6 bytes + 0xFF terminator
+        PARTY_BASE_ADDR      = 0xDCDF,  -- 6 × 48 bytes
+        PARTY_OT_NAMES_ADDR  = 0xDDFF,  -- 6 × 11 bytes
+        PARTY_NICKS_ADDR     = 0xDE41,  -- 6 × 11 bytes
         party_struct_size    = 48,
 
         -- Enemy party (wOTPartyCount / wOTPartyMons)
-        enemy_count_addr     = 0xD280,  -- TODO: verify in BizHawk
-        enemy_base_addr      = 0xD288,  -- TODO: verify in BizHawk
+        ENEMY_COUNT_ADDR     = 0xD280,  -- TODO: verify in BizHawk
+        ENEMY_BASE_ADDR      = 0xD288,  -- TODO: verify in BizHawk
 
         -- Current active box in SRAM (wBoxCount / wBoxMons)
         -- These addresses are System Bus view (0xA000+offset). Accessed via CartRAM domain.
         -- Layout: count(1) + species(21) + mons(20*32=640) + OT_names(20*11=220) + nicks(20*11=220)
-        box_count_addr       = 0xAD10,
-        box_species_addr     = 0xAD11,                  -- ends at 0xAD25
-        box_base_addr        = 0xAD26,                  -- ends at 0xAFA5 (20*32=640 bytes)
-        box_ot_names_addr    = 0xAFA6,                  -- ends at 0xB081 (20*11=220 bytes)
-        box_nicks_addr       = 0xB082,                  -- ends at 0xB15D (20*11=220 bytes)
+        BOX_COUNT_ADDR       = 0xAD10,
+        BOX_SPECIES_ADDR     = 0xAD11,                  -- ends at 0xAD25
+        BOX_BASE_ADDR        = 0xAD26,                  -- ends at 0xAFA5 (20*32=640 bytes)
+        BOX_OT_NAMES_ADDR    = 0xAFA6,                  -- ends at 0xB081 (20*11=220 bytes)
+        BOX_NICKS_ADDR       = 0xB082,                  -- ends at 0xB15D (20*11=220 bytes)
         box_struct_size      = 32,
         box_max_mons         = 20,
         box_in_sram          = true,  -- access via CartRAM domain (not System Bus)
@@ -57,34 +57,34 @@ M.PROFILES = {
 
         -- Ball pocket (wBallsCount / wBalls in wram.asm)
         -- Crystal has a dedicated ball pocket like Gen 3.
-        bag_count_addr       = 0xD8D7,
-        bag_items_addr       = 0xD8D8,  -- each entry = 2 bytes (ID + quantity)
+        BAG_COUNT_ADDR       = 0xD8D7,
+        BAG_ITEMS_ADDR       = 0xD8D8,  -- each entry = 2 bytes (ID + quantity)
         bag_max_items        = 12,      -- ball pocket max size
 
         -- Battle (wBattleMode: 0=overworld, 1=wild, 2=trainer)
-        battle_flag_addr     = 0xD22D,  -- TODO: verify in BizHawk
+        BATTLE_FLAG_ADDR     = 0xD22D,  -- TODO: verify in BizHawk
 
         -- Active enemy battle mon (wEnemyMon / wBattleMon structure)
         -- Source: DataCrystal RAM map — battle struct is NOT the same as party struct
-        enemy_mon_species_addr = 0xD206,
-        enemy_mon_hp_addr      = 0xD216,  -- current HP (2 bytes BE)
-        enemy_mon_level_addr   = 0xD213,
-        enemy_mon_maxhp_addr   = 0xD218,  -- max HP (2 bytes BE)
+        ENEMY_MON_SPECIES_ADDR = 0xD206,
+        ENEMY_MON_HP_ADDR      = 0xD216,  -- current HP (2 bytes BE)
+        ENEMY_MON_LEVEL_ADDR   = 0xD213,
+        ENEMY_MON_MAXHP_ADDR   = 0xD218,  -- max HP (2 bytes BE)
 
         -- Enemy species list
-        enemy_species_list_addr = 0xD281, -- TODO: verify in BizHawk
+        ENEMY_SPECIES_LIST_ADDR = 0xD281, -- TODO: verify in BizHawk
 
         -- Map (2-byte group:number addressing)
-        map_group_addr       = 0xDCB5,   -- wMapGroup
-        map_number_addr      = 0xDCB6,   -- wMapNumber
+        MAP_GROUP_ADDR       = 0xDCB5,   -- wMapGroup
+        MAP_NUMBER_ADDR      = 0xDCB6,   -- wMapNumber
 
         -- Player (wPlayerID, wPlayerName)
-        player_id_addr       = 0xD47B,   -- 2 bytes big-endian
-        player_name_addr     = 0xD47D,
+        PLAYER_ID_ADDR       = 0xD47B,   -- 2 bytes big-endian
+        PLAYER_NAME_ADDR     = 0xD47D,
 
         -- Badges
-        badges_addr          = 0xD857,   -- wJohtoBadges (bitfield, 8 badges)
-        kanto_badges_addr    = 0xD858,   -- wKantoBadges (bitfield, 8 badges)
+        BADGES_ADDR          = 0xD857,   -- wJohtoBadges (bitfield, 8 badges)
+        KANTO_BADGES_ADDR    = 0xD858,   -- wKantoBadges (bitfield, 8 badges)
 
         -- Party struct offsets (48 bytes, pret/pokecrystal macros/wram.asm)
         species_offset       = 0x00,    -- species ID (sequential NatDex)
@@ -141,8 +141,8 @@ M.PROFILES = {
         -- (BASE_STAT_LEVEL EQU 7 per constants/battle_constants.asm). Client normalizes to 0..12.
         -- Phase 10: pret-authoritative wPlayerStatLevels=0xC6CC, wEnemyStatLevels=0xC6D4
         -- (was 0xC68A/0xC691 working hypothesis from SECTION analysis — corrected).
-        player_stat_stages_addr = 0xC6CC,
-        enemy_stat_stages_addr  = 0xC6D4,
+        PLAYER_STAT_STAGES_ADDR = 0xC6CC,
+        ENEMY_STAT_STAGES_ADDR  = 0xC6D4,
         stat_stages_count       = 7,
         stat_stages_layout      = "gen2",  -- {atk, def, spd, satk, sdef, acc, eva}
 
@@ -159,8 +159,8 @@ M.PROFILES = {
         -- has its own layout, NOT party_struct). Per DataCrystal Crystal RAM
         -- map: wEnemyMon @ 0xD206 (species); moves @ 0xD208 (+0x02); PP @ 0xD20E (+0x08).
         -- Enemy battle PP is raw (no PP-Up encoding — display only, not bred).
-        enemy_battle_moves_addr = 0xD208,
-        enemy_battle_pp_addr    = 0xD20E,
+        ENEMY_BATTLE_MOVES_ADDR = 0xD208,
+        ENEMY_BATTLE_PP_ADDR    = 0xD20E,
         enemy_battle_pp_encoding = "raw",
 
         -- Trainer class + index (Phase 5 — wOtherTrainerClass / wOtherTrainerID
@@ -168,8 +168,8 @@ M.PROFILES = {
         -- wOtherTrainerID=0xD231 (Phase 5 hypothesis was 0xD233/0xD234 — corrected).
         -- Class is 1-based per pret constants (FALKNER=1, BUGSY=3, BROCK=17, etc.),
         -- trainer_id is 1-based within class.
-        trainer_class_addr      = 0xD22F,
-        trainer_id_addr         = 0xD231,
+        TRAINER_CLASS_ADDR      = 0xD22F,
+        TRAINER_ID_ADDR         = 0xD231,
     },
 
     -- ═══ Pokémon Gold (Phase 11 — Gold/Silver Phase 10-style addresses) ═══
@@ -184,55 +184,55 @@ M.PROFILES = {
     -- 690 bytes EARLIER in WRAMX than the equivalent Crystal addresses.
     gold = {
         -- Party (pret/pokegold wPartyCount / wPartyMon1)
-        party_count_addr     = 0xDA22,
-        party_species_addr   = 0xDA23,  -- 6 bytes + 0xFF terminator
-        party_base_addr      = 0xDA2A,  -- 6 × 48 bytes
-        party_ot_names_addr  = 0xDB4A,
-        party_nicks_addr     = 0xDB8C,
+        PARTY_COUNT_ADDR     = 0xDA22,
+        PARTY_SPECIES_ADDR   = 0xDA23,  -- 6 bytes + 0xFF terminator
+        PARTY_BASE_ADDR      = 0xDA2A,  -- 6 × 48 bytes
+        PARTY_OT_NAMES_ADDR  = 0xDB4A,
+        PARTY_NICKS_ADDR     = 0xDB8C,
         party_struct_size    = 48,
 
         -- Enemy party (pret/pokegold wOTPartyCount / wOTPartyMons)
-        enemy_count_addr     = 0xDD55,
-        enemy_species_list_addr = 0xDD56,
-        enemy_base_addr      = 0xDD5D,
+        ENEMY_COUNT_ADDR     = 0xDD55,
+        ENEMY_SPECIES_LIST_ADDR = 0xDD56,
+        ENEMY_BASE_ADDR      = 0xDD5D,
 
         -- Current active box (SRAM bank 1)
-        box_count_addr       = 0xAD6C,  -- sBoxCount
-        box_species_addr     = 0xAD6D,  -- sBoxSpecies
-        box_base_addr        = 0xAD82,  -- sBoxMons (20 × 32 bytes)
-        box_ot_names_addr    = 0xB002,  -- sBoxMonOTs
-        box_nicks_addr       = 0xB0DE,  -- sBoxMonNicknames
+        BOX_COUNT_ADDR       = 0xAD6C,  -- sBoxCount
+        BOX_SPECIES_ADDR     = 0xAD6D,  -- sBoxSpecies
+        BOX_BASE_ADDR        = 0xAD82,  -- sBoxMons (20 × 32 bytes)
+        BOX_OT_NAMES_ADDR    = 0xB002,  -- sBoxMonOTs
+        BOX_NICKS_ADDR       = 0xB0DE,  -- sBoxMonNicknames
         box_struct_size      = 32,
         box_max_mons         = 20,
         box_in_sram          = true,
         sram_bank            = 1,
 
         -- Ball pocket (wNumBalls / wBalls)
-        bag_count_addr       = 0xD5FC,
-        bag_items_addr       = 0xD5FD,
+        BAG_COUNT_ADDR       = 0xD5FC,
+        BAG_ITEMS_ADDR       = 0xD5FD,
         bag_max_items        = 12,
 
         -- Battle (wBattleMode: 0=overworld, 1=wild, 2=trainer)
-        battle_flag_addr     = 0xD116,
+        BATTLE_FLAG_ADDR     = 0xD116,
 
         -- Active enemy battle struct (wEnemyMon @ 0xD0EF — different offsets
         -- than Crystal's 0xD206 because the Mobile-related sections aren't here)
-        enemy_mon_species_addr = 0xD0EF,
-        enemy_mon_hp_addr      = 0xD0FF,
-        enemy_mon_level_addr   = 0xD0FC,
-        enemy_mon_maxhp_addr   = 0xD101,
+        ENEMY_MON_SPECIES_ADDR = 0xD0EF,
+        ENEMY_MON_HP_ADDR      = 0xD0FF,
+        ENEMY_MON_LEVEL_ADDR   = 0xD0FC,
+        ENEMY_MON_MAXHP_ADDR   = 0xD101,
 
         -- Map (2-byte group:number addressing, same as Crystal)
-        map_group_addr       = 0xDA00,
-        map_number_addr      = 0xDA01,
+        MAP_GROUP_ADDR       = 0xDA00,
+        MAP_NUMBER_ADDR      = 0xDA01,
 
         -- Player
-        player_id_addr       = 0xD1A1,
-        player_name_addr     = 0xD1A3,
+        PLAYER_ID_ADDR       = 0xD1A1,
+        PLAYER_NAME_ADDR     = 0xD1A3,
 
         -- Badges
-        badges_addr          = 0xD57C,  -- wJohtoBadges
-        kanto_badges_addr    = 0xD57D,  -- wKantoBadges
+        BADGES_ADDR          = 0xD57C,  -- wJohtoBadges
+        KANTO_BADGES_ADDR    = 0xD57D,  -- wKantoBadges
 
         -- Party struct offsets (identical to Crystal — 48-byte party_struct
         -- macro is shared across pokegold/pokecrystal)
@@ -277,8 +277,8 @@ M.PROFILES = {
         is_egg_species = 0xFD,
 
         -- Stat stages (pret/pokegold wPlayerStatLevels / wEnemyStatLevels)
-        player_stat_stages_addr = 0xCBAA,
-        enemy_stat_stages_addr  = 0xCBB2,
+        PLAYER_STAT_STAGES_ADDR = 0xCBAA,
+        ENEMY_STAT_STAGES_ADDR  = 0xCBB2,
         stat_stages_count       = 7,
         stat_stages_layout      = "gen2",
 
@@ -288,13 +288,13 @@ M.PROFILES = {
         pp_encoding             = "ppup_packed",
 
         -- Enemy battle moves + PP (wEnemyMonMoves / wEnemyMonPP)
-        enemy_battle_moves_addr = 0xD0F1,
-        enemy_battle_pp_addr    = 0xD0F7,
+        ENEMY_BATTLE_MOVES_ADDR = 0xD0F1,
+        ENEMY_BATTLE_PP_ADDR    = 0xD0F7,
         enemy_battle_pp_encoding = "raw",
 
         -- Trainer class / id (wOtherTrainerClass / wOtherTrainerID)
-        trainer_class_addr      = 0xD118,
-        trainer_id_addr         = 0xD11B,
+        TRAINER_CLASS_ADDR      = 0xD118,
+        TRAINER_ID_ADDR         = 0xD11B,
     },
 
     -- Silver shares Gold's WRAM/SRAM layout (the _GOLD vs _SILVER pret build
@@ -302,38 +302,38 @@ M.PROFILES = {
     -- duplicated explicitly so verify_profile_addresses.py validates each
     -- address against pokegold.sym independently.
     silver = {
-        party_count_addr     = 0xDA22,
-        party_species_addr   = 0xDA23,
-        party_base_addr      = 0xDA2A,
-        party_ot_names_addr  = 0xDB4A,
-        party_nicks_addr     = 0xDB8C,
+        PARTY_COUNT_ADDR     = 0xDA22,
+        PARTY_SPECIES_ADDR   = 0xDA23,
+        PARTY_BASE_ADDR      = 0xDA2A,
+        PARTY_OT_NAMES_ADDR  = 0xDB4A,
+        PARTY_NICKS_ADDR     = 0xDB8C,
         party_struct_size    = 48,
-        enemy_count_addr     = 0xDD55,
-        enemy_species_list_addr = 0xDD56,
-        enemy_base_addr      = 0xDD5D,
-        box_count_addr       = 0xAD6C,
-        box_species_addr     = 0xAD6D,
-        box_base_addr        = 0xAD82,
-        box_ot_names_addr    = 0xB002,
-        box_nicks_addr       = 0xB0DE,
+        ENEMY_COUNT_ADDR     = 0xDD55,
+        ENEMY_SPECIES_LIST_ADDR = 0xDD56,
+        ENEMY_BASE_ADDR      = 0xDD5D,
+        BOX_COUNT_ADDR       = 0xAD6C,
+        BOX_SPECIES_ADDR     = 0xAD6D,
+        BOX_BASE_ADDR        = 0xAD82,
+        BOX_OT_NAMES_ADDR    = 0xB002,
+        BOX_NICKS_ADDR       = 0xB0DE,
         box_struct_size      = 32,
         box_max_mons         = 20,
         box_in_sram          = true,
         sram_bank            = 1,
-        bag_count_addr       = 0xD5FC,
-        bag_items_addr       = 0xD5FD,
+        BAG_COUNT_ADDR       = 0xD5FC,
+        BAG_ITEMS_ADDR       = 0xD5FD,
         bag_max_items        = 12,
-        battle_flag_addr     = 0xD116,
-        enemy_mon_species_addr = 0xD0EF,
-        enemy_mon_hp_addr      = 0xD0FF,
-        enemy_mon_level_addr   = 0xD0FC,
-        enemy_mon_maxhp_addr   = 0xD101,
-        map_group_addr       = 0xDA00,
-        map_number_addr      = 0xDA01,
-        player_id_addr       = 0xD1A1,
-        player_name_addr     = 0xD1A3,
-        badges_addr          = 0xD57C,
-        kanto_badges_addr    = 0xD57D,
+        BATTLE_FLAG_ADDR     = 0xD116,
+        ENEMY_MON_SPECIES_ADDR = 0xD0EF,
+        ENEMY_MON_HP_ADDR      = 0xD0FF,
+        ENEMY_MON_LEVEL_ADDR   = 0xD0FC,
+        ENEMY_MON_MAXHP_ADDR   = 0xD101,
+        MAP_GROUP_ADDR       = 0xDA00,
+        MAP_NUMBER_ADDR      = 0xDA01,
+        PLAYER_ID_ADDR       = 0xD1A1,
+        PLAYER_NAME_ADDR     = 0xD1A3,
+        BADGES_ADDR          = 0xD57C,
+        KANTO_BADGES_ADDR    = 0xD57D,
         species_offset       = 0x00,
         held_item_offset     = 0x01,
         otid_offset          = 0x06,
@@ -354,18 +354,18 @@ M.PROFILES = {
         generation     = 2,
         uses_map_group = true,
         is_egg_species = 0xFD,
-        player_stat_stages_addr = 0xCBAA,
-        enemy_stat_stages_addr  = 0xCBB2,
+        PLAYER_STAT_STAGES_ADDR = 0xCBAA,
+        ENEMY_STAT_STAGES_ADDR  = 0xCBB2,
         stat_stages_count       = 7,
         stat_stages_layout      = "gen2",
         moves_offset            = 0x02,
         pp_offset               = 0x17,
         pp_encoding             = "ppup_packed",
-        enemy_battle_moves_addr = 0xD0F1,
-        enemy_battle_pp_addr    = 0xD0F7,
+        ENEMY_BATTLE_MOVES_ADDR = 0xD0F1,
+        ENEMY_BATTLE_PP_ADDR    = 0xD0F7,
         enemy_battle_pp_encoding = "raw",
-        trainer_class_addr      = 0xD118,
-        trainer_id_addr         = 0xD11B,
+        TRAINER_CLASS_ADDR      = 0xD118,
+        TRAINER_ID_ADDR         = 0xD11B,
     },
 }
 

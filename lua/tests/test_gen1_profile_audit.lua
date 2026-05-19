@@ -67,47 +67,47 @@ local function check_byte(v) return v >= 0 and v <= 0xFF, "any byte" end
 -- ── Address table for the variant ─────────────────────────────────────────────
 local addrs = {
     -- Party
-    {"party_count_addr",       p.party_count_addr,       check_party_count, "wPartyCount"},
-    {"party_species_addr[0]",  p.party_species_addr,     check_species,     "wPartySpecies first byte"},
-    {"party_species_addr[1]",  p.party_species_addr + 1, check_species,     "second species"},
-    {"party_species_addr[2]",  p.party_species_addr + 2, check_species,     "third"},
-    {"party_species_addr[3]",  p.party_species_addr + 3, check_species,     "fourth"},
-    {"party_species_addr[4]",  p.party_species_addr + 4, check_species,     "fifth"},
-    {"party_species_addr[5]",  p.party_species_addr + 5, check_species,     "sixth"},
-    {"party_species_addr[6]",  p.party_species_addr + 6, check_species,     "terminator (0xFF)"},
-    {"party_base_addr[+0]",    p.party_base_addr,        check_species,     "slot0 species byte"},
+    {"PARTY_COUNT_ADDR",       p.PARTY_COUNT_ADDR,       check_party_count, "wPartyCount"},
+    {"PARTY_SPECIES_ADDR[0]",  p.PARTY_SPECIES_ADDR,     check_species,     "wPartySpecies first byte"},
+    {"PARTY_SPECIES_ADDR[1]",  p.PARTY_SPECIES_ADDR + 1, check_species,     "second species"},
+    {"PARTY_SPECIES_ADDR[2]",  p.PARTY_SPECIES_ADDR + 2, check_species,     "third"},
+    {"PARTY_SPECIES_ADDR[3]",  p.PARTY_SPECIES_ADDR + 3, check_species,     "fourth"},
+    {"PARTY_SPECIES_ADDR[4]",  p.PARTY_SPECIES_ADDR + 4, check_species,     "fifth"},
+    {"PARTY_SPECIES_ADDR[5]",  p.PARTY_SPECIES_ADDR + 5, check_species,     "sixth"},
+    {"PARTY_SPECIES_ADDR[6]",  p.PARTY_SPECIES_ADDR + 6, check_species,     "terminator (0xFF)"},
+    {"PARTY_BASE_ADDR[+0]",    p.PARTY_BASE_ADDR,        check_species,     "slot0 species byte"},
 
     -- Enemy party
-    {"enemy_count_addr",       p.enemy_count_addr,       check_party_count, "wEnemyPartyCount"},
-    {"enemy_species_list_addr",p.enemy_species_list_addr,check_species,     "wEnemyPartySpecies first"},
-    {"enemy_base_addr[+0]",    p.enemy_base_addr,        check_species,     "enemy slot0 species"},
+    {"ENEMY_COUNT_ADDR",       p.ENEMY_COUNT_ADDR,       check_party_count, "wEnemyPartyCount"},
+    {"ENEMY_SPECIES_LIST_ADDR",p.ENEMY_SPECIES_LIST_ADDR,check_species,     "wEnemyPartySpecies first"},
+    {"ENEMY_BASE_ADDR[+0]",    p.ENEMY_BASE_ADDR,        check_species,     "enemy slot0 species"},
 
     -- Box
-    {"box_count_addr",         p.box_count_addr,         check_party_count, "wBoxCount (0..20)"},
-    {"box_species_addr[0]",    p.box_species_addr,       check_species,     "wBoxSpecies first"},
-    {"box_base_addr[+0]",      p.box_base_addr,          check_species,     "box slot0 species"},
+    {"BOX_COUNT_ADDR",         p.BOX_COUNT_ADDR,         check_party_count, "wBoxCount (0..20)"},
+    {"BOX_SPECIES_ADDR[0]",    p.BOX_SPECIES_ADDR,       check_species,     "wBoxSpecies first"},
+    {"BOX_BASE_ADDR[+0]",      p.BOX_BASE_ADDR,          check_species,     "box slot0 species"},
 
     -- Bag
-    {"bag_count_addr",         p.bag_count_addr,         check_byte,        "wNumBagItems (0..20)"},
-    {"bag_items_addr[+0]",     p.bag_items_addr,         check_byte,        "first item ID"},
+    {"BAG_COUNT_ADDR",         p.BAG_COUNT_ADDR,         check_byte,        "wNumBagItems (0..20)"},
+    {"BAG_ITEMS_ADDR[+0]",     p.BAG_ITEMS_ADDR,         check_byte,        "first item ID"},
 
     -- Battle
-    {"battle_flag_addr",       p.battle_flag_addr,       check_battle_flag, "current profile choice"},
+    {"BATTLE_FLAG_ADDR",       p.BATTLE_FLAG_ADDR,       check_battle_flag, "current profile choice"},
     {"battle_flag_alt_D05A",   0xD05A,                   check_battle_flag, "DataCrystal alternative — diagnostic only"},
 
     -- Active enemy battle struct
-    {"enemy_mon_species_addr", p.enemy_mon_species_addr, check_species,     "wEnemyMon species"},
-    {"enemy_mon_hp_addr (hi)", p.enemy_mon_hp_addr,      check_byte,        "current HP high byte"},
-    {"enemy_mon_hp_addr (lo)", p.enemy_mon_hp_addr + 1,  check_byte,        "current HP low byte"},
-    {"enemy_mon_level_addr",   p.enemy_mon_level_addr,   check_byte,        "actual level (1..100)"},
-    {"enemy_mon_maxhp_addr (hi)", p.enemy_mon_maxhp_addr,    check_byte,    "max HP high byte"},
-    {"enemy_mon_maxhp_addr (lo)", p.enemy_mon_maxhp_addr + 1, check_byte,   "max HP low byte"},
+    {"ENEMY_MON_SPECIES_ADDR", p.ENEMY_MON_SPECIES_ADDR, check_species,     "wEnemyMon species"},
+    {"ENEMY_MON_HP_ADDR (hi)", p.ENEMY_MON_HP_ADDR,      check_byte,        "current HP high byte"},
+    {"ENEMY_MON_HP_ADDR (lo)", p.ENEMY_MON_HP_ADDR + 1,  check_byte,        "current HP low byte"},
+    {"ENEMY_MON_LEVEL_ADDR",   p.ENEMY_MON_LEVEL_ADDR,   check_byte,        "actual level (1..100)"},
+    {"ENEMY_MON_MAXHP_ADDR (hi)", p.ENEMY_MON_MAXHP_ADDR,    check_byte,    "max HP high byte"},
+    {"ENEMY_MON_MAXHP_ADDR (lo)", p.ENEMY_MON_MAXHP_ADDR + 1, check_byte,   "max HP low byte"},
 
     -- Map / player
-    {"map_id_addr",            p.map_id_addr,            check_map,         "wCurMap"},
-    {"player_id_addr (hi)",    p.player_id_addr,         check_byte,        "OT ID big-endian high"},
-    {"player_id_addr (lo)",    p.player_id_addr + 1,     check_byte,        "OT ID low"},
-    {"badges_addr",            p.badges_addr,            check_byte,        "wObtainedBadges (bitfield)"},
+    {"MAP_ID_ADDR",            p.MAP_ID_ADDR,            check_map,         "wCurMap"},
+    {"PLAYER_ID_ADDR (hi)",    p.PLAYER_ID_ADDR,         check_byte,        "OT ID big-endian high"},
+    {"PLAYER_ID_ADDR (lo)",    p.PLAYER_ID_ADDR + 1,     check_byte,        "OT ID low"},
+    {"BADGES_ADDR",            p.BADGES_ADDR,            check_byte,        "wObtainedBadges (bitfield)"},
 }
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
@@ -122,9 +122,9 @@ local function dump_full()
             mark, name, addr, val, val, note, hint))
     end
     -- Decoded high-level state
-    local count = M.read_u8(p.party_count_addr)
-    local map = M.read_u8(p.map_id_addr)
-    local in_battle = M.read_u8(p.battle_flag_addr)
+    local count = M.read_u8(p.PARTY_COUNT_ADDR)
+    local map = M.read_u8(p.MAP_ID_ADDR)
+    local in_battle = M.read_u8(p.BATTLE_FLAG_ADDR)
     console.log(fmt("%s decoded: party_count=%d  map=0x%02X  battle_flag=%d",
         TAG, count, map, in_battle))
 end
@@ -136,45 +136,45 @@ local function dump_battle_flag_focus()
     for addr = 0xD050, 0xD060 do
         local v = M.read_u8(addr)
         local mark = "  "
-        if addr == p.battle_flag_addr then mark = "P>" end  -- profile's address
+        if addr == p.BATTLE_FLAG_ADDR then mark = "P>" end  -- profile's address
         if addr == 0xD05A then mark = "D>" end              -- DataCrystal's address
         console.log(fmt("  %s 0x%04X = 0x%02X (%3d)", mark, addr, v, v))
     end
-    console.log("  legend: P> = profile's battle_flag_addr, D> = DataCrystal alternative")
+    console.log("  legend: P> = profile's BATTLE_FLAG_ADDR, D> = DataCrystal alternative")
     console.log("  EXPECT: in overworld both should be 0; in wild battle the correct one becomes 1; in trainer battle, 2.")
 end
 
 local function dump_party_slot0_raw()
-    console.log(fmt("%s ───── PARTY SLOT 0 RAW (44 bytes from 0x%04X) ─────", TAG, p.party_base_addr))
+    console.log(fmt("%s ───── PARTY SLOT 0 RAW (44 bytes from 0x%04X) ─────", TAG, p.PARTY_BASE_ADDR))
     for row = 0, 43, 8 do
         local parts = {}
         for i = 0, math.min(7, 43 - row) do
-            parts[#parts + 1] = fmt("%02X", M.read_u8(p.party_base_addr + row + i))
+            parts[#parts + 1] = fmt("%02X", M.read_u8(p.PARTY_BASE_ADDR + row + i))
         end
         console.log(fmt("  +0x%02X  %s", row, table.concat(parts, " ")))
     end
-    console.log(fmt("  species @+0x00 = 0x%02X", M.read_u8(p.party_base_addr + 0)))
-    console.log(fmt("  hp_hi   @+0x01 = 0x%02X", M.read_u8(p.party_base_addr + 1)))
-    console.log(fmt("  hp_lo   @+0x02 = 0x%02X", M.read_u8(p.party_base_addr + 2)))
-    console.log(fmt("  status  @+0x04 = 0x%02X", M.read_u8(p.party_base_addr + 4)))
-    console.log(fmt("  otid_hi @+0x0C = 0x%02X", M.read_u8(p.party_base_addr + 0x0C)))
-    console.log(fmt("  otid_lo @+0x0D = 0x%02X", M.read_u8(p.party_base_addr + 0x0D)))
+    console.log(fmt("  species @+0x00 = 0x%02X", M.read_u8(p.PARTY_BASE_ADDR + 0)))
+    console.log(fmt("  hp_hi   @+0x01 = 0x%02X", M.read_u8(p.PARTY_BASE_ADDR + 1)))
+    console.log(fmt("  hp_lo   @+0x02 = 0x%02X", M.read_u8(p.PARTY_BASE_ADDR + 2)))
+    console.log(fmt("  status  @+0x04 = 0x%02X", M.read_u8(p.PARTY_BASE_ADDR + 4)))
+    console.log(fmt("  otid_hi @+0x0C = 0x%02X", M.read_u8(p.PARTY_BASE_ADDR + 0x0C)))
+    console.log(fmt("  otid_lo @+0x0D = 0x%02X", M.read_u8(p.PARTY_BASE_ADDR + 0x0D)))
     console.log(fmt("  moves   @+0x08..0x0B = %02X %02X %02X %02X",
-        M.read_u8(p.party_base_addr + 0x08), M.read_u8(p.party_base_addr + 0x09),
-        M.read_u8(p.party_base_addr + 0x0A), M.read_u8(p.party_base_addr + 0x0B)))
+        M.read_u8(p.PARTY_BASE_ADDR + 0x08), M.read_u8(p.PARTY_BASE_ADDR + 0x09),
+        M.read_u8(p.PARTY_BASE_ADDR + 0x0A), M.read_u8(p.PARTY_BASE_ADDR + 0x0B)))
     console.log(fmt("  pp      @+0x1D..0x20 = %02X %02X %02X %02X",
-        M.read_u8(p.party_base_addr + 0x1D), M.read_u8(p.party_base_addr + 0x1E),
-        M.read_u8(p.party_base_addr + 0x1F), M.read_u8(p.party_base_addr + 0x20)))
+        M.read_u8(p.PARTY_BASE_ADDR + 0x1D), M.read_u8(p.PARTY_BASE_ADDR + 0x1E),
+        M.read_u8(p.PARTY_BASE_ADDR + 0x1F), M.read_u8(p.PARTY_BASE_ADDR + 0x20)))
     console.log(fmt("  dv1/dv2 @+0x1B/0x1C = 0x%02X 0x%02X",
-        M.read_u8(p.party_base_addr + 0x1B), M.read_u8(p.party_base_addr + 0x1C)))
-    console.log(fmt("  level   @+0x21 = %d", M.read_u8(p.party_base_addr + 0x21)))
-    console.log(fmt("  maxHPhi @+0x22 = 0x%02X", M.read_u8(p.party_base_addr + 0x22)))
-    console.log(fmt("  maxHPlo @+0x23 = 0x%02X", M.read_u8(p.party_base_addr + 0x23)))
+        M.read_u8(p.PARTY_BASE_ADDR + 0x1B), M.read_u8(p.PARTY_BASE_ADDR + 0x1C)))
+    console.log(fmt("  level   @+0x21 = %d", M.read_u8(p.PARTY_BASE_ADDR + 0x21)))
+    console.log(fmt("  maxHPhi @+0x22 = 0x%02X", M.read_u8(p.PARTY_BASE_ADDR + 0x22)))
+    console.log(fmt("  maxHPlo @+0x23 = 0x%02X", M.read_u8(p.PARTY_BASE_ADDR + 0x23)))
 end
 
 local function dump_enemy_struct_raw()
-    -- wEnemyMon at p.enemy_mon_species_addr (typically 0xCFE5)
-    local base = p.enemy_mon_species_addr
+    -- wEnemyMon at p.ENEMY_MON_SPECIES_ADDR (typically 0xCFE5)
+    local base = p.ENEMY_MON_SPECIES_ADDR
     console.log(fmt("%s ───── ENEMY BATTLE STRUCT RAW (60 bytes from 0x%04X) ─────", TAG, base))
     for row = 0, 59, 8 do
         local parts = {}
@@ -205,12 +205,12 @@ local function on_frame()
     prev_keys = k
 
     -- Auto-log battle transitions for both candidates
-    local profile_flag = M.read_u8(p.battle_flag_addr)
+    local profile_flag = M.read_u8(p.BATTLE_FLAG_ADDR)
     local dc_flag = M.read_u8(0xD05A)
     local in_battle = profile_flag ~= 0 or dc_flag ~= 0
     if prev_battle ~= nil and in_battle ~= prev_battle then
         console.log(fmt("%s battle transition: profile@0x%04X=%d  DC@0xD05A=%d  (player should report which transitioned with the visible battle)",
-            TAG, p.battle_flag_addr, profile_flag, dc_flag))
+            TAG, p.BATTLE_FLAG_ADDR, profile_flag, dc_flag))
     end
     prev_battle = in_battle
 end

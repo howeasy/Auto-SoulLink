@@ -65,9 +65,7 @@ _GEN1_ENCOUNTERS: dict[str, dict[str, list[dict]]] = {}
 _enc_path = os.path.join(_GEN1_DATA_DIR, "encounter_tables.json")
 if os.path.exists(_enc_path):
     with open(_enc_path, "r") as _f:
-        _raw_enc = json.load(_f).get("areas", {})
-        for _area_id, _methods in _raw_enc.items():
-            _GEN1_ENCOUNTERS[_area_id] = _methods
+        _GEN1_ENCOUNTERS = json.load(_f)
 else:
     log.warning("Gen 1 encounter_tables.json not found: %s", _enc_path)
 

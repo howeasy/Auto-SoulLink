@@ -235,7 +235,7 @@ local function dispatch_commands(cmds)
         elseif c.cmd == "play_sound" and c.sound then
             -- Gen 3 emits m4a SE_* IDs (95=SHINY, 26=FAILURE, 25=SUCCESS, 22=BOO).
             -- Translated to semantic event names; profile sfx_ids resolves to a
-            -- ROM-specific SFX ID. No-op until Phase 7 sfx_dispatch_addr is set.
+            -- ROM-specific SFX ID. No-op until Phase 7 SFX_DISPATCH_ADDR is set.
             M.playSfxFromGen3Id(c.sound)
         elseif c.cmd == "box_mon" and c.key then
             -- Cancel any pending party_mon for the same key

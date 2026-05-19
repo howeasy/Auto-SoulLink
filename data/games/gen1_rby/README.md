@@ -8,7 +8,7 @@ The gen1-gen2-parity branch brought R/B/Y up to Gen 3's tracker feature set:
 moves+PP from party, stat stages in battle, enemy moves+PP, trainer class
 + named gym leaders/E4/rivals, partial wild encounter tables, sound-effect
 infrastructure, and Archipelago Red/Blue variant detection. All addresses
-are flagged for live BizHawk verification in `tests/PHASE9_BATCH.md`.
+are flagged for live BizHawk verification in `docs/gen1_gen2_runtime_checks.md`.
 
 ## Data Files
 

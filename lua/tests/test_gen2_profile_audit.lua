@@ -6,8 +6,8 @@
     with plausibility commentary. Bypasses higher-level helpers so address
     errors reveal themselves.
 
-    The 4 TODO addresses in the profile (enemy_count_addr, enemy_base_addr,
-    enemy_species_list_addr, battle_flag_addr) are exercised specifically by
+    The 4 TODO addresses in the profile (ENEMY_COUNT_ADDR, ENEMY_BASE_ADDR,
+    ENEMY_SPECIES_LIST_ADDR, BATTLE_FLAG_ADDR) are exercised specifically by
     F5 — run that during a wild battle and a trainer battle to see which
     candidate transitions correctly.
 
@@ -65,50 +65,50 @@ local function check_level(v) return v >= 1 and v <= 100, "expect 1..100" end
 
 local addrs = {
     -- Party
-    {"party_count_addr",        p.party_count_addr,        check_party_count, "wPartyCount"},
-    {"party_species_addr[0]",   p.party_species_addr,      check_species,     "wPartySpecies first"},
-    {"party_species_addr[1]",   p.party_species_addr + 1,  check_species,     "second"},
-    {"party_species_addr[5]",   p.party_species_addr + 5,  check_species,     "sixth"},
-    {"party_species_addr[6]",   p.party_species_addr + 6,  check_species,     "terminator (0xFF)"},
-    {"party_base_addr[+0]",     p.party_base_addr,         check_species,     "slot0 species"},
-    {"party_base_addr[+0x01]",  p.party_base_addr + 0x01,  check_byte,        "slot0 held item"},
+    {"PARTY_COUNT_ADDR",        p.PARTY_COUNT_ADDR,        check_party_count, "wPartyCount"},
+    {"PARTY_SPECIES_ADDR[0]",   p.PARTY_SPECIES_ADDR,      check_species,     "wPartySpecies first"},
+    {"PARTY_SPECIES_ADDR[1]",   p.PARTY_SPECIES_ADDR + 1,  check_species,     "second"},
+    {"PARTY_SPECIES_ADDR[5]",   p.PARTY_SPECIES_ADDR + 5,  check_species,     "sixth"},
+    {"PARTY_SPECIES_ADDR[6]",   p.PARTY_SPECIES_ADDR + 6,  check_species,     "terminator (0xFF)"},
+    {"PARTY_BASE_ADDR[+0]",     p.PARTY_BASE_ADDR,         check_species,     "slot0 species"},
+    {"PARTY_BASE_ADDR[+0x01]",  p.PARTY_BASE_ADDR + 0x01,  check_byte,        "slot0 held item"},
 
     -- Enemy party (TODO addresses)
-    {"enemy_count_addr ★TODO",  p.enemy_count_addr,        check_party_count, "wOTPartyCount candidate"},
-    {"enemy_species_list ★TODO",p.enemy_species_list_addr, check_species,     "wOTPartySpecies first"},
-    {"enemy_base_addr ★TODO",   p.enemy_base_addr,         check_species,     "wOTPartyMon1 species"},
+    {"ENEMY_COUNT_ADDR ★TODO",  p.ENEMY_COUNT_ADDR,        check_party_count, "wOTPartyCount candidate"},
+    {"enemy_species_list ★TODO",p.ENEMY_SPECIES_LIST_ADDR, check_species,     "wOTPartySpecies first"},
+    {"ENEMY_BASE_ADDR ★TODO",   p.ENEMY_BASE_ADDR,         check_species,     "wOTPartyMon1 species"},
 
     -- Box (SRAM)
-    {"box_count_addr (SRAM)",   p.box_count_addr,          check_byte,        "wBoxCount in CartRAM — uses sram_read"},
+    {"BOX_COUNT_ADDR (SRAM)",   p.BOX_COUNT_ADDR,          check_byte,        "wBoxCount in CartRAM — uses sram_read"},
 
     -- Bag
-    {"bag_count_addr",          p.bag_count_addr,          check_byte,        "wNumBalls (0..12)"},
-    {"bag_items_addr[+0]",      p.bag_items_addr,          check_byte,        "first ball ID"},
-    {"bag_items_addr[+1]",      p.bag_items_addr + 1,      check_byte,        "first ball quantity"},
+    {"BAG_COUNT_ADDR",          p.BAG_COUNT_ADDR,          check_byte,        "wNumBalls (0..12)"},
+    {"BAG_ITEMS_ADDR[+0]",      p.BAG_ITEMS_ADDR,          check_byte,        "first ball ID"},
+    {"BAG_ITEMS_ADDR[+1]",      p.BAG_ITEMS_ADDR + 1,      check_byte,        "first ball quantity"},
 
     -- Battle (TODO)
-    {"battle_flag_addr ★TODO",  p.battle_flag_addr,        check_battle_flag, "current profile choice — 0xD22D"},
+    {"BATTLE_FLAG_ADDR ★TODO",  p.BATTLE_FLAG_ADDR,        check_battle_flag, "current profile choice — 0xD22D"},
 
     -- Active enemy battle struct
-    {"enemy_mon_species_addr",  p.enemy_mon_species_addr,  check_species,     "wEnemyMon species"},
-    {"enemy_mon_level_addr",    p.enemy_mon_level_addr,    check_level,       "level (1..100)"},
-    {"enemy_mon_hp_hi",         p.enemy_mon_hp_addr,       check_byte,        "current HP high byte"},
-    {"enemy_mon_hp_lo",         p.enemy_mon_hp_addr + 1,   check_byte,        "current HP low byte"},
-    {"enemy_mon_maxhp_hi",      p.enemy_mon_maxhp_addr,    check_byte,        "max HP high byte"},
-    {"enemy_mon_maxhp_lo",      p.enemy_mon_maxhp_addr + 1,check_byte,        "max HP low byte"},
+    {"ENEMY_MON_SPECIES_ADDR",  p.ENEMY_MON_SPECIES_ADDR,  check_species,     "wEnemyMon species"},
+    {"ENEMY_MON_LEVEL_ADDR",    p.ENEMY_MON_LEVEL_ADDR,    check_level,       "level (1..100)"},
+    {"enemy_mon_hp_hi",         p.ENEMY_MON_HP_ADDR,       check_byte,        "current HP high byte"},
+    {"enemy_mon_hp_lo",         p.ENEMY_MON_HP_ADDR + 1,   check_byte,        "current HP low byte"},
+    {"enemy_mon_maxhp_hi",      p.ENEMY_MON_MAXHP_ADDR,    check_byte,        "max HP high byte"},
+    {"enemy_mon_maxhp_lo",      p.ENEMY_MON_MAXHP_ADDR + 1,check_byte,        "max HP low byte"},
 
     -- Map (Gen 2 has 2-byte map group + number)
-    {"map_group_addr",          p.map_group_addr,          check_map,         "wMapGroup"},
-    {"map_number_addr",         p.map_number_addr,         check_byte,        "wMapNumber"},
+    {"MAP_GROUP_ADDR",          p.MAP_GROUP_ADDR,          check_map,         "wMapGroup"},
+    {"MAP_NUMBER_ADDR",         p.MAP_NUMBER_ADDR,         check_byte,        "wMapNumber"},
 
     -- Player
-    {"player_id_addr (hi)",     p.player_id_addr,          check_byte,        "OT ID big-endian high"},
-    {"player_id_addr (lo)",     p.player_id_addr + 1,      check_byte,        "OT ID low"},
-    {"player_name_addr[0]",     p.player_name_addr,        check_byte,        "first char of name"},
+    {"PLAYER_ID_ADDR (hi)",     p.PLAYER_ID_ADDR,          check_byte,        "OT ID big-endian high"},
+    {"PLAYER_ID_ADDR (lo)",     p.PLAYER_ID_ADDR + 1,      check_byte,        "OT ID low"},
+    {"PLAYER_NAME_ADDR[0]",     p.PLAYER_NAME_ADDR,        check_byte,        "first char of name"},
 
     -- Badges
-    {"badges_addr (Johto)",     p.badges_addr,             check_byte,        "wJohtoBadges bitfield"},
-    {"kanto_badges_addr",       p.kanto_badges_addr,       check_byte,        "wKantoBadges bitfield"},
+    {"BADGES_ADDR (Johto)",     p.BADGES_ADDR,             check_byte,        "wJohtoBadges bitfield"},
+    {"KANTO_BADGES_ADDR",       p.KANTO_BADGES_ADDR,       check_byte,        "wKantoBadges bitfield"},
 }
 
 local function dump_full()
@@ -121,10 +121,10 @@ local function dump_full()
         console.log(fmt("  %s%-30s @ 0x%04X = 0x%02X (%3d)  %s  [%s]",
             mark, name, addr, val, val, note, hint))
     end
-    local count = M.read_u8(p.party_count_addr)
-    local mg = M.read_u8(p.map_group_addr)
-    local mn = M.read_u8(p.map_number_addr)
-    local bf = M.read_u8(p.battle_flag_addr)
+    local count = M.read_u8(p.PARTY_COUNT_ADDR)
+    local mg = M.read_u8(p.MAP_GROUP_ADDR)
+    local mn = M.read_u8(p.MAP_NUMBER_ADDR)
+    local bf = M.read_u8(p.BATTLE_FLAG_ADDR)
     console.log(fmt("%s decoded: party_count=%d  map=%d:%d  battle_flag=%d",
         TAG, count, mg, mn, bf))
 end
@@ -141,36 +141,36 @@ local function dump_battle_region()
 end
 
 local function dump_party_slot0_raw()
-    console.log(fmt("%s ───── PARTY SLOT 0 RAW (48 bytes from 0x%04X) ─────", TAG, p.party_base_addr))
+    console.log(fmt("%s ───── PARTY SLOT 0 RAW (48 bytes from 0x%04X) ─────", TAG, p.PARTY_BASE_ADDR))
     for row = 0, 47, 8 do
         local parts = {}
         for i = 0, math.min(7, 47 - row) do
-            parts[#parts + 1] = fmt("%02X", M.read_u8(p.party_base_addr + row + i))
+            parts[#parts + 1] = fmt("%02X", M.read_u8(p.PARTY_BASE_ADDR + row + i))
         end
         console.log(fmt("  +0x%02X  %s", row, table.concat(parts, " ")))
     end
     console.log(fmt("  species @+0x00 = 0x%02X  %s",
-        M.read_u8(p.party_base_addr + 0x00),
-        M.read_u8(p.party_base_addr + 0x00) == 0xFD and "(EGG marker)" or ""))
-    console.log(fmt("  held_item @+0x01 = 0x%02X", M.read_u8(p.party_base_addr + 0x01)))
+        M.read_u8(p.PARTY_BASE_ADDR + 0x00),
+        M.read_u8(p.PARTY_BASE_ADDR + 0x00) == 0xFD and "(EGG marker)" or ""))
+    console.log(fmt("  held_item @+0x01 = 0x%02X", M.read_u8(p.PARTY_BASE_ADDR + 0x01)))
     console.log(fmt("  moves   @+0x02..0x05 = %02X %02X %02X %02X",
-        M.read_u8(p.party_base_addr + 0x02), M.read_u8(p.party_base_addr + 0x03),
-        M.read_u8(p.party_base_addr + 0x04), M.read_u8(p.party_base_addr + 0x05)))
+        M.read_u8(p.PARTY_BASE_ADDR + 0x02), M.read_u8(p.PARTY_BASE_ADDR + 0x03),
+        M.read_u8(p.PARTY_BASE_ADDR + 0x04), M.read_u8(p.PARTY_BASE_ADDR + 0x05)))
     console.log(fmt("  otid    @+0x06..0x07 = %02X %02X",
-        M.read_u8(p.party_base_addr + 0x06), M.read_u8(p.party_base_addr + 0x07)))
+        M.read_u8(p.PARTY_BASE_ADDR + 0x06), M.read_u8(p.PARTY_BASE_ADDR + 0x07)))
     console.log(fmt("  DVs     @+0x15..0x16 = %02X %02X",
-        M.read_u8(p.party_base_addr + 0x15), M.read_u8(p.party_base_addr + 0x16)))
+        M.read_u8(p.PARTY_BASE_ADDR + 0x15), M.read_u8(p.PARTY_BASE_ADDR + 0x16)))
     console.log(fmt("  pp      @+0x17..0x1A = %02X %02X %02X %02X (top 2 bits = PP-Up count)",
-        M.read_u8(p.party_base_addr + 0x17), M.read_u8(p.party_base_addr + 0x18),
-        M.read_u8(p.party_base_addr + 0x19), M.read_u8(p.party_base_addr + 0x1A)))
-    console.log(fmt("  level   @+0x1F = %d", M.read_u8(p.party_base_addr + 0x1F)))
-    console.log(fmt("  status  @+0x20 = 0x%02X", M.read_u8(p.party_base_addr + 0x20)))
-    console.log(fmt("  hp      @+0x22..0x23 = %02X %02X", M.read_u8(p.party_base_addr + 0x22), M.read_u8(p.party_base_addr + 0x23)))
-    console.log(fmt("  maxhp   @+0x24..0x25 = %02X %02X", M.read_u8(p.party_base_addr + 0x24), M.read_u8(p.party_base_addr + 0x25)))
+        M.read_u8(p.PARTY_BASE_ADDR + 0x17), M.read_u8(p.PARTY_BASE_ADDR + 0x18),
+        M.read_u8(p.PARTY_BASE_ADDR + 0x19), M.read_u8(p.PARTY_BASE_ADDR + 0x1A)))
+    console.log(fmt("  level   @+0x1F = %d", M.read_u8(p.PARTY_BASE_ADDR + 0x1F)))
+    console.log(fmt("  status  @+0x20 = 0x%02X", M.read_u8(p.PARTY_BASE_ADDR + 0x20)))
+    console.log(fmt("  hp      @+0x22..0x23 = %02X %02X", M.read_u8(p.PARTY_BASE_ADDR + 0x22), M.read_u8(p.PARTY_BASE_ADDR + 0x23)))
+    console.log(fmt("  maxhp   @+0x24..0x25 = %02X %02X", M.read_u8(p.PARTY_BASE_ADDR + 0x24), M.read_u8(p.PARTY_BASE_ADDR + 0x25)))
 end
 
 local function dump_enemy_struct_raw()
-    local base = p.enemy_mon_species_addr
+    local base = p.ENEMY_MON_SPECIES_ADDR
     console.log(fmt("%s ───── ENEMY BATTLE STRUCT RAW (60 bytes from 0x%04X) ─────", TAG, base))
     for row = 0, 59, 8 do
         local parts = {}
@@ -189,9 +189,9 @@ end
 
 local function dump_todo_focus()
     console.log(fmt("%s ───── TODO-ADDRESS FOCUS ─────", TAG))
-    -- enemy_count_addr (0xD280): in overworld should be 0; in trainer battle, opponent's party count (1..6); in wild battle, typically 1
-    local ec_profile = p.enemy_count_addr  -- 0xD280
-    console.log(fmt("  enemy_count_addr @0x%04X = %d  (expect 0 in overworld, 1..6 in battle)",
+    -- ENEMY_COUNT_ADDR (0xD280): in overworld should be 0; in trainer battle, opponent's party count (1..6); in wild battle, typically 1
+    local ec_profile = p.ENEMY_COUNT_ADDR  -- 0xD280
+    console.log(fmt("  ENEMY_COUNT_ADDR @0x%04X = %d  (expect 0 in overworld, 1..6 in battle)",
         ec_profile, M.read_u8(ec_profile)))
 
     -- Surrounding bytes — sometimes the right address is ±1 or ±2 from the profile
@@ -202,9 +202,9 @@ local function dump_todo_focus()
         console.log(fmt("    %s 0x%04X = 0x%02X (%d)", mark, addr, v, v))
     end
 
-    -- battle_flag_addr (0xD22D): 0=overworld, 1=wild, 2=trainer
-    local bf_profile = p.battle_flag_addr  -- 0xD22D
-    console.log(fmt("  battle_flag_addr @0x%04X = %d  (expect 0/1/2)",
+    -- BATTLE_FLAG_ADDR (0xD22D): 0=overworld, 1=wild, 2=trainer
+    local bf_profile = p.BATTLE_FLAG_ADDR  -- 0xD22D
+    console.log(fmt("  BATTLE_FLAG_ADDR @0x%04X = %d  (expect 0/1/2)",
         bf_profile, M.read_u8(bf_profile)))
     for offset = -4, 4 do
         local addr = bf_profile + offset
@@ -231,8 +231,8 @@ local function on_frame()
     if k["F5"] and not prev_keys["F5"] then dump_todo_focus() end
     prev_keys = k
 
-    local bf = M.read_u8(p.battle_flag_addr)
-    local ec = M.read_u8(p.enemy_count_addr)
+    local bf = M.read_u8(p.BATTLE_FLAG_ADDR)
+    local ec = M.read_u8(p.ENEMY_COUNT_ADDR)
     if prev_battle and bf ~= prev_battle then
         console.log(fmt("%s battle_flag transition: %d → %d  (enemy_count=%d)",
             TAG, prev_battle, bf, ec))
