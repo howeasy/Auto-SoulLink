@@ -611,7 +611,7 @@ def test_ability_name_gen5_hidden(adapter, ability_id, expected):
 
 def test_item_name_full_table_loaded(adapter):
     """The Gen 5 item table now covers all 638 BW/BW2 item IDs (was 150)."""
-    from server.gen5_items import GEN5_ITEM_NAMES
+    from server.data.items.gen5 import ITEM_NAMES as GEN5_ITEM_NAMES
     assert len(GEN5_ITEM_NAMES) >= 600, f"expected >=600 items, got {len(GEN5_ITEM_NAMES)}"
 
 

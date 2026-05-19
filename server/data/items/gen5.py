@@ -1,10 +1,10 @@
-"""server/adapters/gen5_items.py - Gen 5 (BW/BW2) item name table.
+"""server/data/items/gen5.py - Gen 5 (BW/BW2) item name table.
 
 Sourced from veekun/pokedex item_names.csv (auto-generated; do not hand-edit).
 Covers item IDs 1-638: BW1 (1-626) + BW2 additions (627-638).
 """
 
-GEN5_ITEM_NAMES: dict[int, str] = {
+ITEM_NAMES: dict[int, str] = {
     1: 'Master Ball',
     2: 'Ultra Ball',
     3: 'Great Ball',

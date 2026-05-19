@@ -84,10 +84,10 @@ for _rom in ("pokemon_black", "pokemon_white", "pokemon_black_2", "pokemon_white
         with open(_enc_path, "r", encoding="utf-8") as _f:
             _ENCOUNTER_TABLES[_rom] = json.load(_f)
 
-# Gen 5 (BW/BW2) item names — full 1-638 range loaded from server/gen5_items.py.
+# Gen 5 (BW/BW2) item names — full 1-638 range loaded from server/data/items/gen5.py.
 # Source: veekun/pokedex item_names.csv (auto-generated; see tools workflow).
 # Shared across all 4 ROM variants.
-from server.gen5_items import GEN5_ITEM_NAMES as _GEN5_ITEM_NAMES
+from server.data.items.gen5 import ITEM_NAMES as _GEN5_ITEM_NAMES
 
 
 class Gen5Adapter(GameAdapter):

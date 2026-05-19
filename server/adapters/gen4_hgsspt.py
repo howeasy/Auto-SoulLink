@@ -10,6 +10,7 @@ import logging
 import os
 
 from .base import GameAdapter
+from server.data.items.gen4 import ITEM_NAMES as _GEN4_ITEM_NAMES
 from server.pokemon_data import (
     GENDER_RATIO,
     GENDER_SYMBOL,
@@ -153,56 +154,6 @@ _RP_TRAINERS   = _load_trainer_table("rp_trainers.json")
 _RP_ENCOUNTERS = _load_encounters("rp_encounters.json")
 
 # Gen 4 item names (HGSS/Platinum item IDs — differ from Gen 3)
-_GEN4_ITEM_NAMES: dict[int, str] = {
-    1:"Master Ball",   2:"Ultra Ball",    3:"Great Ball",    4:"Poké Ball",
-    5:"Safari Ball",   6:"Net Ball",      7:"Dive Ball",     8:"Nest Ball",
-    9:"Repeat Ball",   10:"Timer Ball",   11:"Luxury Ball",  12:"Premier Ball",
-    13:"Dusk Ball",    14:"Heal Ball",    15:"Quick Ball",   16:"Cherish Ball",
-    17:"Potion",       18:"Antidote",     19:"Burn Heal",    20:"Ice Heal",
-    21:"Awakening",    22:"Parlyz Heal",  23:"Full Restore", 24:"Max Potion",
-    25:"Hyper Potion", 26:"Super Potion", 27:"Full Heal",    28:"Revive",
-    29:"Max Revive",   30:"Fresh Water",  31:"Soda Pop",     32:"Lemonade",
-    33:"MooMoo Milk",  34:"EnergyPowder", 35:"Energy Root",  36:"Heal Powder",
-    37:"Revival Herb", 38:"Ether",        39:"Max Ether",    40:"Elixir",
-    41:"Max Elixir",   42:"Lava Cookie",  43:"Old Gateau",   44:"Guard Spec.",
-    45:"Dire Hit",     46:"X Attack",     47:"X Defend",     48:"X Speed",
-    49:"X Accuracy",   50:"X Special",    51:"X Sp. Def",    52:"Poké Doll",
-    53:"Fluffy Tail",  54:"Blue Flute",   55:"Yellow Flute", 56:"Red Flute",
-    57:"Black Flute",  58:"White Flute",  59:"Shoal Salt",   60:"Shoal Shell",
-    61:"Red Shard",    62:"Blue Shard",   63:"Yellow Shard", 64:"Green Shard",
-    65:"Super Repel",  66:"Max Repel",    67:"Escape Rope",  68:"Repel",
-    69:"Sun Stone",    70:"Moon Stone",   71:"Fire Stone",   72:"Thunderstone",
-    73:"Water Stone",  74:"Leaf Stone",   75:"TinyMushroom", 76:"Big Mushroom",
-    77:"Pearl",        78:"Big Pearl",    79:"Stardust",     80:"Star Piece",
-    81:"Nugget",       82:"Heart Scale",  83:"Honey",
-    84:"Growth Mulch", 85:"Damp Mulch",   86:"Stable Mulch", 87:"Gooey Mulch",
-    88:"Root Fossil",  89:"Claw Fossil",  90:"Helix Fossil", 91:"Dome Fossil",
-    92:"Old Amber",    93:"Armor Fossil", 94:"Skull Fossil", 95:"Rare Bone",
-    96:"Shiny Stone",  97:"Dusk Stone",   98:"Dawn Stone",   99:"Oval Stone",
-    100:"Odd Keystone",
-    103:"HP Up",    104:"Protein",   105:"Iron",      106:"Calcium",
-    107:"Zinc",     108:"Carbos",    109:"Rare Candy", 110:"PP Up",    111:"PP Max",
-    112:"Old Gateau",
-    133:"Lucky Egg",   134:"Exp. Share",
-    135:"Amulet Coin", 136:"Cleanse Tag", 137:"Soul Dew",
-    138:"DeepSeaTooth",139:"DeepSeaScale",140:"Smoke Ball",
-    141:"Everstone",   142:"Focus Band",  143:"Lucky Punch", 144:"Metal Powder",
-    145:"Thick Club",  146:"Stick",
-    149:"Macho Brace", 150:"Exp. Share",
-    203:"Leftovers",   204:"Shell Bell",
-    233:"Soothe Bell", 234:"Choice Band",
-    236:"Scope Lens",  237:"Metal Coat",
-    256:"Bright Powder",257:"White Herb", 258:"Power Herb",
-    259:"Absorb Bulb", 260:"Mental Herb", 261:"Choice Scarf",
-    262:"Choice Specs", 263:"Focus Sash", 264:"Life Orb",
-    265:"Toxic Orb",   266:"Flame Orb",
-    268:"Black Sludge", 269:"King's Rock",
-    270:"Razor Claw",  271:"Razor Fang",
-    275:"Wide Lens",   276:"Muscle Band", 277:"Wise Glasses",
-    278:"Expert Belt",
-    281:"Light Clay",  282:"Rocky Helmet",
-    289:"Silk Scarf",
-}
 
 
 # Gen 4 alternate-form sprite mapping.
