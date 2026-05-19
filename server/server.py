@@ -2069,37 +2069,9 @@ class SLinkServer:
             for method, entries in enc.items()
         }
 
-    # rom_type string → adapter game_id mapping.
-    _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
-        "firered": "gen3_frlge", "leafgreen": "gen3_frlge", "emerald": "gen3_frlge",
-        "firered_ap": "gen3_frlge", "leafgreen_ap": "gen3_frlge",
-        "firered_rr": "gen3_frlge",
-        "heartgold": "gen4_hgsspt", "soulsilver": "gen4_hgsspt",
-        "platinum": "gen4_hgsspt", "hgss": "gen4_hgsspt",
-        "renegade_platinum": "gen4_hgsspt",  # Drayano60 difficulty hack on Platinum
-        "Red": "gen1_rby", "Blue": "gen1_rby", "Yellow": "gen1_rby",
-        "red": "gen1_rby", "blue": "gen1_rby", "yellow": "gen1_rby",
-        "Crystal": "gen2_crystal", "crystal": "gen2_crystal",
-        "pokemon_black": "gen5_bw",
-        "pokemon_white": "gen5_bw",
-        "pokemon_black_2": "gen5_bw",
-        "pokemon_white_2": "gen5_bw",
-    }
-
-    _VARIANT_LABEL: dict[str, str] = {
-        "firered": "FireRed", "leafgreen": "LeafGreen",
-        "firered_ap": "FireRed (AP)", "leafgreen_ap": "LeafGreen (AP)",
-        "firered_rr": "Radical Red",
-        "heartgold": "HeartGold", "soulsilver": "SoulSilver",
-        "platinum": "Platinum", "hgss": "HGSS",
-        "Red": "Red", "Blue": "Blue", "Yellow": "Yellow",
-        "red": "Red", "blue": "Blue", "yellow": "Yellow",
-        "Crystal": "Crystal", "crystal": "Crystal",
-        "pokemon_black": "Pokémon Black",
-        "pokemon_white": "Pokémon White",
-        "pokemon_black_2": "Pokémon Black 2",
-        "pokemon_white_2": "Pokémon White 2",
-    }
+    # rom_type → game_id and rom_type → variant-label maps live in
+    # server.adapters (single source of truth alongside the registry).
+    # Access via game_id_for_rom_type() and variant_label() helpers.
 
     def _page_title(self) -> str:
         """Build dynamic page title: Pokémon Soul Link Tracker — <variant> — <run name>.
@@ -2109,8 +2081,8 @@ class SLinkServer:
         """
         parts = ["Pokémon Soul Link Tracker"]
         if self.state.rom_type:
-            variant = self._VARIANT_LABEL.get(self.state.rom_type, self.state.rom_type)
-            parts.append(variant)
+            from server.adapters import variant_label
+            parts.append(variant_label(self.state.rom_type))
         if self._run_name:
             parts.append(html.escape(self._run_name))
         return " — ".join(parts)
@@ -2287,10 +2259,10 @@ class SLinkServer:
                     # detect_variant returning 'vanilla' before IWRAM is initialised).
                     rom_type = msg.get("rom_type", "")
                     if not self.state.rom_type:
-                        new_game_id = self._ROM_TYPE_TO_GAME_ID.get(rom_type)
+                        from server.adapters import game_id_for_rom_type, get_adapter
+                        new_game_id = game_id_for_rom_type(rom_type)
                         new_is_rr = rom_type.endswith("_rr")
                         if new_game_id and new_game_id != self.state.adapter.game_id:
-                            from server.adapters import get_adapter
                             self.state.adapter = get_adapter(new_game_id, is_rr=new_is_rr, rom_type=rom_type)
                             self.state.is_rr = new_is_rr
                             self.adapter = self.state.adapter

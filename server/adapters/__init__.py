@@ -32,6 +32,54 @@ def available_game_ids() -> list[str]:
     return list(_REGISTRY.keys())
 
 
+# ROM-type string (sent by the Lua client in its hello) → adapter game_id.
+# Adding a new ROM variant: add an entry here AND a `_VARIANT_LABEL` entry below.
+_ROM_TYPE_TO_GAME_ID: dict[str, str] = {
+    "firered": "gen3_frlge", "leafgreen": "gen3_frlge", "emerald": "gen3_frlge",
+    "firered_ap": "gen3_frlge", "leafgreen_ap": "gen3_frlge",
+    "firered_rr": "gen3_frlge",
+    "heartgold": "gen4_hgsspt", "soulsilver": "gen4_hgsspt",
+    "platinum": "gen4_hgsspt", "hgss": "gen4_hgsspt",
+    "renegade_platinum": "gen4_hgsspt",  # Drayano60 difficulty hack on Platinum
+    "Red": "gen1_rby", "Blue": "gen1_rby", "Yellow": "gen1_rby",
+    "red": "gen1_rby", "blue": "gen1_rby", "yellow": "gen1_rby",
+    "Crystal": "gen2_crystal", "crystal": "gen2_crystal",
+    "pokemon_black": "gen5_bw",
+    "pokemon_white": "gen5_bw",
+    "pokemon_black_2": "gen5_bw",
+    "pokemon_white_2": "gen5_bw",
+}
+
+# ROM-type string → human-readable variant label (page titles, status UI).
+_VARIANT_LABEL: dict[str, str] = {
+    "firered": "FireRed", "leafgreen": "LeafGreen",
+    "firered_ap": "FireRed (AP)", "leafgreen_ap": "LeafGreen (AP)",
+    "firered_rr": "Radical Red",
+    "heartgold": "HeartGold", "soulsilver": "SoulSilver",
+    "platinum": "Platinum", "hgss": "HGSS",
+    "Red": "Red", "Blue": "Blue", "Yellow": "Yellow",
+    "red": "Red", "blue": "Blue", "yellow": "Yellow",
+    "Crystal": "Crystal", "crystal": "Crystal",
+    "pokemon_black": "Pokémon Black",
+    "pokemon_white": "Pokémon White",
+    "pokemon_black_2": "Pokémon Black 2",
+    "pokemon_white_2": "Pokémon White 2",
+}
+
+
+def game_id_for_rom_type(rom_type: str) -> str | None:
+    """Resolve a ROM-type string (as sent by the Lua client) to an adapter game_id.
+
+    Returns None when the rom_type isn't recognized.
+    """
+    return _ROM_TYPE_TO_GAME_ID.get(rom_type)
+
+
+def variant_label(rom_type: str) -> str:
+    """Human-readable label for a ROM type. Falls back to the rom_type itself."""
+    return _VARIANT_LABEL.get(rom_type, rom_type)
+
+
 # Auto-register built-in adapters on import
 from .gen3_frlge import Gen3Adapter  # noqa: E402
 register_adapter("gen3_frlge", Gen3Adapter)

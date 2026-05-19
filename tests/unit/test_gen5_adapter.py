@@ -352,9 +352,9 @@ def test_sprite_html_zero(adapter):
     ("pokemon_white_2", "gen5_bw"),
 ])
 def test_server_rom_type_to_game_id(rom_type, expected_game_id):
-    """Server's _ROM_TYPE_TO_GAME_ID must map all Gen 5 rom_types to gen5_bw."""
-    from server.server import SLinkServer
-    assert SLinkServer._ROM_TYPE_TO_GAME_ID.get(rom_type) == expected_game_id
+    """server.adapters.game_id_for_rom_type must map all Gen 5 rom_types to gen5_bw."""
+    from server.adapters import game_id_for_rom_type
+    assert game_id_for_rom_type(rom_type) == expected_game_id
 
 
 @pytest.mark.parametrize("rom_type,expected_label", [
@@ -364,9 +364,9 @@ def test_server_rom_type_to_game_id(rom_type, expected_game_id):
     ("pokemon_white_2", "Pokémon White 2"),
 ])
 def test_server_variant_label(rom_type, expected_label):
-    """Server's _VARIANT_LABEL must have all Gen 5 variants."""
-    from server.server import SLinkServer
-    assert SLinkServer._VARIANT_LABEL.get(rom_type) == expected_label
+    """server.adapters.variant_label must have all Gen 5 variants."""
+    from server.adapters import variant_label
+    assert variant_label(rom_type) == expected_label
 
 
 # ── ability_name species_id parameter is ignored ─────────────────────────────
