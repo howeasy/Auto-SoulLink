@@ -140,6 +140,7 @@ local _HGSS_PROFILE = {
     PARTY_COUNT_OFF  = 0xA4,   -- u8, 0-6
     PARTY_OFF        = 0xA8,   -- PartyPokemon[6], stride 0xEC (236 bytes)
     MON_SIZE         = 0xEC,   -- 236 bytes (PartyPokemon)
+    SPECIES_MAX      = 493,    -- Arceus, last Gen IV species
 
     -- PC Storage
     -- pret/pokeheartgold: SaveData.arrayHeaders[SAVE_PCSTORAGE=41].offset field.
@@ -198,6 +199,7 @@ local _PT_PROFILE = {
     PARTY_COUNT_OFF  = 0xB0,   -- u8, 0-6
     PARTY_OFF        = 0xB4,   -- first PartyPokemon slot
     MON_SIZE         = 0xEC,   -- 236 bytes (Ironmon ENCRYPTED_POKEMON_SIZE=236) ✓
+    SPECIES_MAX      = 493,    -- Arceus, last Gen IV species
 
     -- PC Storage
     -- Platinum SaveData struct not in public decompilation; assumed same layout as HGSS:
