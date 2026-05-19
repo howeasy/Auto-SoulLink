@@ -1,509 +1,502 @@
 {
-  "_meta": {
-    "source": "pret/pokehgss data/encounters",
-    "note": "Run with --pret-{hgss,pt} <path> to extract full encounter tables. Sparse seed coverage of starter routes is included for default behavior.",
-    "schema_version": 1
+  "route_29": {
+    "Day": [
+      {
+        "name": "Pidgey",
+        "species_id": 16,
+        "rate": 40,
+        "min_level": 2,
+        "max_level": 4
+      },
+      {
+        "name": "Sentret",
+        "species_id": 161,
+        "rate": 30,
+        "min_level": 2,
+        "max_level": 4
+      },
+      {
+        "name": "Hoothoot",
+        "species_id": 163,
+        "rate": 10,
+        "min_level": 3,
+        "max_level": 3
+      },
+      {
+        "name": "Rattata",
+        "species_id": 19,
+        "rate": 20,
+        "min_level": 2,
+        "max_level": 4
+      }
+    ],
+    "Night": [
+      {
+        "name": "Hoothoot",
+        "species_id": 163,
+        "rate": 40,
+        "min_level": 2,
+        "max_level": 4
+      },
+      {
+        "name": "Rattata",
+        "species_id": 19,
+        "rate": 30,
+        "min_level": 2,
+        "max_level": 4
+      },
+      {
+        "name": "Sentret",
+        "species_id": 161,
+        "rate": 30,
+        "min_level": 2,
+        "max_level": 4
+      }
+    ]
   },
-  "areas": {
-    "route_29": {
-      "Day": [
-        {
-          "name": "Pidgey",
-          "species_id": 16,
-          "rate": 40,
-          "min_level": 2,
-          "max_level": 4
-        },
-        {
-          "name": "Sentret",
-          "species_id": 161,
-          "rate": 30,
-          "min_level": 2,
-          "max_level": 4
-        },
-        {
-          "name": "Hoothoot",
-          "species_id": 163,
-          "rate": 10,
-          "min_level": 3,
-          "max_level": 3
-        },
-        {
-          "name": "Rattata",
-          "species_id": 19,
-          "rate": 20,
-          "min_level": 2,
-          "max_level": 4
-        }
-      ],
-      "Night": [
-        {
-          "name": "Hoothoot",
-          "species_id": 163,
-          "rate": 40,
-          "min_level": 2,
-          "max_level": 4
-        },
-        {
-          "name": "Rattata",
-          "species_id": 19,
-          "rate": 30,
-          "min_level": 2,
-          "max_level": 4
-        },
-        {
-          "name": "Sentret",
-          "species_id": 161,
-          "rate": 30,
-          "min_level": 2,
-          "max_level": 4
-        }
-      ]
-    },
-    "route_30": {
-      "Day": [
-        {
-          "name": "Pidgey",
-          "species_id": 16,
-          "rate": 20,
-          "min_level": 3,
-          "max_level": 5
-        },
-        {
-          "name": "Caterpie",
-          "species_id": 10,
-          "rate": 20,
-          "min_level": 3,
-          "max_level": 4
-        },
-        {
-          "name": "Weedle",
-          "species_id": 13,
-          "rate": 20,
-          "min_level": 3,
-          "max_level": 4
-        },
-        {
-          "name": "Ledyba",
-          "species_id": 165,
-          "rate": 20,
-          "min_level": 4,
-          "max_level": 5
-        },
-        {
-          "name": "Hoothoot",
-          "species_id": 163,
-          "rate": 20,
-          "min_level": 4,
-          "max_level": 5
-        }
-      ],
-      "Night": [
-        {
-          "name": "Hoothoot",
-          "species_id": 163,
-          "rate": 40,
-          "min_level": 3,
-          "max_level": 5
-        },
-        {
-          "name": "Spinarak",
-          "species_id": 167,
-          "rate": 20,
-          "min_level": 4,
-          "max_level": 5
-        },
-        {
-          "name": "Caterpie",
-          "species_id": 10,
-          "rate": 10,
-          "min_level": 3,
-          "max_level": 4
-        },
-        {
-          "name": "Weedle",
-          "species_id": 13,
-          "rate": 10,
-          "min_level": 3,
-          "max_level": 4
-        },
-        {
-          "name": "Poliwag",
-          "species_id": 60,
-          "rate": 20,
-          "min_level": 4,
-          "max_level": 5
-        }
-      ]
-    },
-    "route_31": {
-      "Day": [
-        {
-          "name": "Bellsprout",
-          "species_id": 69,
-          "rate": 30,
-          "min_level": 4,
-          "max_level": 6
-        },
-        {
-          "name": "Hoothoot",
-          "species_id": 163,
-          "rate": 30,
-          "min_level": 3,
-          "max_level": 4
-        },
-        {
-          "name": "Pidgey",
-          "species_id": 16,
-          "rate": 20,
-          "min_level": 4,
-          "max_level": 6
-        },
-        {
-          "name": "Caterpie",
-          "species_id": 10,
-          "rate": 10,
-          "min_level": 4,
-          "max_level": 4
-        },
-        {
-          "name": "Weedle",
-          "species_id": 13,
-          "rate": 10,
-          "min_level": 4,
-          "max_level": 4
-        }
-      ],
-      "Night": [
-        {
-          "name": "Bellsprout",
-          "species_id": 69,
-          "rate": 30,
-          "min_level": 4,
-          "max_level": 6
-        },
-        {
-          "name": "Hoothoot",
-          "species_id": 163,
-          "rate": 30,
-          "min_level": 3,
-          "max_level": 6
-        },
-        {
-          "name": "Poliwag",
-          "species_id": 60,
-          "rate": 20,
-          "min_level": 5,
-          "max_level": 5
-        },
-        {
-          "name": "Zubat",
-          "species_id": 41,
-          "rate": 20,
-          "min_level": 4,
-          "max_level": 5
-        }
-      ]
-    },
-    "route_32": {
-      "Day": [
-        {
-          "name": "Bellsprout",
-          "species_id": 69,
-          "rate": 30,
-          "min_level": 6,
-          "max_level": 9
-        },
-        {
-          "name": "Hoppip",
-          "species_id": 187,
-          "rate": 30,
-          "min_level": 6,
-          "max_level": 7
-        },
-        {
-          "name": "Rattata",
-          "species_id": 19,
-          "rate": 20,
-          "min_level": 4,
-          "max_level": 6
-        },
-        {
-          "name": "Mareep",
-          "species_id": 179,
-          "rate": 10,
-          "min_level": 4,
-          "max_level": 5
-        },
-        {
-          "name": "Wooper",
-          "species_id": 194,
-          "rate": 10,
-          "min_level": 6,
-          "max_level": 6
-        }
-      ],
-      "Night": [
-        {
-          "name": "Ekans",
-          "species_id": 23,
-          "rate": 30,
-          "min_level": 6,
-          "max_level": 9
-        },
-        {
-          "name": "Rattata",
-          "species_id": 19,
-          "rate": 20,
-          "min_level": 4,
-          "max_level": 6
-        },
-        {
-          "name": "Zubat",
-          "species_id": 41,
-          "rate": 20,
-          "min_level": 4,
-          "max_level": 6
-        },
-        {
-          "name": "Wooper",
-          "species_id": 194,
-          "rate": 30,
-          "min_level": 6,
-          "max_level": 8
-        }
-      ]
-    },
-    "route_33": {
-      "Day": [
-        {
-          "name": "Spearow",
-          "species_id": 21,
-          "rate": 30,
-          "min_level": 5,
-          "max_level": 7
-        },
-        {
-          "name": "Rattata",
-          "species_id": 19,
-          "rate": 20,
-          "min_level": 4,
-          "max_level": 6
-        },
-        {
-          "name": "Geodude",
-          "species_id": 74,
-          "rate": 30,
-          "min_level": 4,
-          "max_level": 8
-        },
-        {
-          "name": "Ekans",
-          "species_id": 23,
-          "rate": 20,
-          "min_level": 6,
-          "max_level": 7
-        }
-      ]
-    },
-    "route_34": {
-      "Day": [
-        {
-          "name": "Rattata",
-          "species_id": 19,
-          "rate": 30,
-          "min_level": 6,
-          "max_level": 12
-        },
-        {
-          "name": "Pidgey",
-          "species_id": 16,
-          "rate": 30,
-          "min_level": 7,
-          "max_level": 13
-        },
-        {
-          "name": "Drowzee",
-          "species_id": 96,
-          "rate": 30,
-          "min_level": 8,
-          "max_level": 13
-        },
-        {
-          "name": "Abra",
-          "species_id": 63,
-          "rate": 10,
-          "min_level": 8,
-          "max_level": 12
-        }
-      ]
-    },
-    "violet_city": {
-      "Surfing": [
-        {
-          "name": "Magikarp",
-          "species_id": 129,
-          "rate": 90,
-          "min_level": 10,
-          "max_level": 25
-        },
-        {
-          "name": "Poliwag",
-          "species_id": 60,
-          "rate": 10,
-          "min_level": 15,
-          "max_level": 25
-        }
-      ]
-    },
-    "sprout_tower": {
-      "Day": [
-        {
-          "name": "Rattata",
-          "species_id": 19,
-          "rate": 90,
-          "min_level": 3,
-          "max_level": 6
-        },
-        {
-          "name": "Gastly",
-          "species_id": 92,
-          "rate": 10,
-          "min_level": 5,
-          "max_level": 6
-        }
-      ],
-      "Night": [
-        {
-          "name": "Rattata",
-          "species_id": 19,
-          "rate": 80,
-          "min_level": 3,
-          "max_level": 6
-        },
-        {
-          "name": "Gastly",
-          "species_id": 92,
-          "rate": 20,
-          "min_level": 5,
-          "max_level": 6
-        }
-      ]
-    },
-    "union_cave": {
-      "Day": [
-        {
-          "name": "Zubat",
-          "species_id": 41,
-          "rate": 30,
-          "min_level": 6,
-          "max_level": 8
-        },
-        {
-          "name": "Geodude",
-          "species_id": 74,
-          "rate": 30,
-          "min_level": 4,
-          "max_level": 8
-        },
-        {
-          "name": "Rattata",
-          "species_id": 19,
-          "rate": 30,
-          "min_level": 5,
-          "max_level": 7
-        },
-        {
-          "name": "Onix",
-          "species_id": 95,
-          "rate": 10,
-          "min_level": 7,
-          "max_level": 7
-        }
-      ]
-    },
-    "ilex_forest": {
-      "Day": [
-        {
-          "name": "Caterpie",
-          "species_id": 10,
-          "rate": 30,
-          "min_level": 5,
-          "max_level": 7
-        },
-        {
-          "name": "Metapod",
-          "species_id": 11,
-          "rate": 20,
-          "min_level": 6,
-          "max_level": 7
-        },
-        {
-          "name": "Weedle",
-          "species_id": 13,
-          "rate": 10,
-          "min_level": 5,
-          "max_level": 7
-        },
-        {
-          "name": "Kakuna",
-          "species_id": 14,
-          "rate": 10,
-          "min_level": 6,
-          "max_level": 7
-        },
-        {
-          "name": "Pidgey",
-          "species_id": 16,
-          "rate": 20,
-          "min_level": 5,
-          "max_level": 7
-        },
-        {
-          "name": "Paras",
-          "species_id": 46,
-          "rate": 10,
-          "min_level": 6,
-          "max_level": 7
-        }
-      ],
-      "Night": [
-        {
-          "name": "Caterpie",
-          "species_id": 10,
-          "rate": 20,
-          "min_level": 5,
-          "max_level": 7
-        },
-        {
-          "name": "Weedle",
-          "species_id": 13,
-          "rate": 20,
-          "min_level": 5,
-          "max_level": 7
-        },
-        {
-          "name": "Oddish",
-          "species_id": 43,
-          "rate": 30,
-          "min_level": 5,
-          "max_level": 7
-        },
-        {
-          "name": "Hoothoot",
-          "species_id": 163,
-          "rate": 20,
-          "min_level": 5,
-          "max_level": 7
-        },
-        {
-          "name": "Venonat",
-          "species_id": 48,
-          "rate": 10,
-          "min_level": 6,
-          "max_level": 7
-        }
-      ]
-    }
+  "route_30": {
+    "Day": [
+      {
+        "name": "Pidgey",
+        "species_id": 16,
+        "rate": 20,
+        "min_level": 3,
+        "max_level": 5
+      },
+      {
+        "name": "Caterpie",
+        "species_id": 10,
+        "rate": 20,
+        "min_level": 3,
+        "max_level": 4
+      },
+      {
+        "name": "Weedle",
+        "species_id": 13,
+        "rate": 20,
+        "min_level": 3,
+        "max_level": 4
+      },
+      {
+        "name": "Ledyba",
+        "species_id": 165,
+        "rate": 20,
+        "min_level": 4,
+        "max_level": 5
+      },
+      {
+        "name": "Hoothoot",
+        "species_id": 163,
+        "rate": 20,
+        "min_level": 4,
+        "max_level": 5
+      }
+    ],
+    "Night": [
+      {
+        "name": "Hoothoot",
+        "species_id": 163,
+        "rate": 40,
+        "min_level": 3,
+        "max_level": 5
+      },
+      {
+        "name": "Spinarak",
+        "species_id": 167,
+        "rate": 20,
+        "min_level": 4,
+        "max_level": 5
+      },
+      {
+        "name": "Caterpie",
+        "species_id": 10,
+        "rate": 10,
+        "min_level": 3,
+        "max_level": 4
+      },
+      {
+        "name": "Weedle",
+        "species_id": 13,
+        "rate": 10,
+        "min_level": 3,
+        "max_level": 4
+      },
+      {
+        "name": "Poliwag",
+        "species_id": 60,
+        "rate": 20,
+        "min_level": 4,
+        "max_level": 5
+      }
+    ]
+  },
+  "route_31": {
+    "Day": [
+      {
+        "name": "Bellsprout",
+        "species_id": 69,
+        "rate": 30,
+        "min_level": 4,
+        "max_level": 6
+      },
+      {
+        "name": "Hoothoot",
+        "species_id": 163,
+        "rate": 30,
+        "min_level": 3,
+        "max_level": 4
+      },
+      {
+        "name": "Pidgey",
+        "species_id": 16,
+        "rate": 20,
+        "min_level": 4,
+        "max_level": 6
+      },
+      {
+        "name": "Caterpie",
+        "species_id": 10,
+        "rate": 10,
+        "min_level": 4,
+        "max_level": 4
+      },
+      {
+        "name": "Weedle",
+        "species_id": 13,
+        "rate": 10,
+        "min_level": 4,
+        "max_level": 4
+      }
+    ],
+    "Night": [
+      {
+        "name": "Bellsprout",
+        "species_id": 69,
+        "rate": 30,
+        "min_level": 4,
+        "max_level": 6
+      },
+      {
+        "name": "Hoothoot",
+        "species_id": 163,
+        "rate": 30,
+        "min_level": 3,
+        "max_level": 6
+      },
+      {
+        "name": "Poliwag",
+        "species_id": 60,
+        "rate": 20,
+        "min_level": 5,
+        "max_level": 5
+      },
+      {
+        "name": "Zubat",
+        "species_id": 41,
+        "rate": 20,
+        "min_level": 4,
+        "max_level": 5
+      }
+    ]
+  },
+  "route_32": {
+    "Day": [
+      {
+        "name": "Bellsprout",
+        "species_id": 69,
+        "rate": 30,
+        "min_level": 6,
+        "max_level": 9
+      },
+      {
+        "name": "Hoppip",
+        "species_id": 187,
+        "rate": 30,
+        "min_level": 6,
+        "max_level": 7
+      },
+      {
+        "name": "Rattata",
+        "species_id": 19,
+        "rate": 20,
+        "min_level": 4,
+        "max_level": 6
+      },
+      {
+        "name": "Mareep",
+        "species_id": 179,
+        "rate": 10,
+        "min_level": 4,
+        "max_level": 5
+      },
+      {
+        "name": "Wooper",
+        "species_id": 194,
+        "rate": 10,
+        "min_level": 6,
+        "max_level": 6
+      }
+    ],
+    "Night": [
+      {
+        "name": "Ekans",
+        "species_id": 23,
+        "rate": 30,
+        "min_level": 6,
+        "max_level": 9
+      },
+      {
+        "name": "Rattata",
+        "species_id": 19,
+        "rate": 20,
+        "min_level": 4,
+        "max_level": 6
+      },
+      {
+        "name": "Zubat",
+        "species_id": 41,
+        "rate": 20,
+        "min_level": 4,
+        "max_level": 6
+      },
+      {
+        "name": "Wooper",
+        "species_id": 194,
+        "rate": 30,
+        "min_level": 6,
+        "max_level": 8
+      }
+    ]
+  },
+  "route_33": {
+    "Day": [
+      {
+        "name": "Spearow",
+        "species_id": 21,
+        "rate": 30,
+        "min_level": 5,
+        "max_level": 7
+      },
+      {
+        "name": "Rattata",
+        "species_id": 19,
+        "rate": 20,
+        "min_level": 4,
+        "max_level": 6
+      },
+      {
+        "name": "Geodude",
+        "species_id": 74,
+        "rate": 30,
+        "min_level": 4,
+        "max_level": 8
+      },
+      {
+        "name": "Ekans",
+        "species_id": 23,
+        "rate": 20,
+        "min_level": 6,
+        "max_level": 7
+      }
+    ]
+  },
+  "route_34": {
+    "Day": [
+      {
+        "name": "Rattata",
+        "species_id": 19,
+        "rate": 30,
+        "min_level": 6,
+        "max_level": 12
+      },
+      {
+        "name": "Pidgey",
+        "species_id": 16,
+        "rate": 30,
+        "min_level": 7,
+        "max_level": 13
+      },
+      {
+        "name": "Drowzee",
+        "species_id": 96,
+        "rate": 30,
+        "min_level": 8,
+        "max_level": 13
+      },
+      {
+        "name": "Abra",
+        "species_id": 63,
+        "rate": 10,
+        "min_level": 8,
+        "max_level": 12
+      }
+    ]
+  },
+  "violet_city": {
+    "Surfing": [
+      {
+        "name": "Magikarp",
+        "species_id": 129,
+        "rate": 90,
+        "min_level": 10,
+        "max_level": 25
+      },
+      {
+        "name": "Poliwag",
+        "species_id": 60,
+        "rate": 10,
+        "min_level": 15,
+        "max_level": 25
+      }
+    ]
+  },
+  "sprout_tower": {
+    "Day": [
+      {
+        "name": "Rattata",
+        "species_id": 19,
+        "rate": 90,
+        "min_level": 3,
+        "max_level": 6
+      },
+      {
+        "name": "Gastly",
+        "species_id": 92,
+        "rate": 10,
+        "min_level": 5,
+        "max_level": 6
+      }
+    ],
+    "Night": [
+      {
+        "name": "Rattata",
+        "species_id": 19,
+        "rate": 80,
+        "min_level": 3,
+        "max_level": 6
+      },
+      {
+        "name": "Gastly",
+        "species_id": 92,
+        "rate": 20,
+        "min_level": 5,
+        "max_level": 6
+      }
+    ]
+  },
+  "union_cave": {
+    "Day": [
+      {
+        "name": "Zubat",
+        "species_id": 41,
+        "rate": 30,
+        "min_level": 6,
+        "max_level": 8
+      },
+      {
+        "name": "Geodude",
+        "species_id": 74,
+        "rate": 30,
+        "min_level": 4,
+        "max_level": 8
+      },
+      {
+        "name": "Rattata",
+        "species_id": 19,
+        "rate": 30,
+        "min_level": 5,
+        "max_level": 7
+      },
+      {
+        "name": "Onix",
+        "species_id": 95,
+        "rate": 10,
+        "min_level": 7,
+        "max_level": 7
+      }
+    ]
+  },
+  "ilex_forest": {
+    "Day": [
+      {
+        "name": "Caterpie",
+        "species_id": 10,
+        "rate": 30,
+        "min_level": 5,
+        "max_level": 7
+      },
+      {
+        "name": "Metapod",
+        "species_id": 11,
+        "rate": 20,
+        "min_level": 6,
+        "max_level": 7
+      },
+      {
+        "name": "Weedle",
+        "species_id": 13,
+        "rate": 10,
+        "min_level": 5,
+        "max_level": 7
+      },
+      {
+        "name": "Kakuna",
+        "species_id": 14,
+        "rate": 10,
+        "min_level": 6,
+        "max_level": 7
+      },
+      {
+        "name": "Pidgey",
+        "species_id": 16,
+        "rate": 20,
+        "min_level": 5,
+        "max_level": 7
+      },
+      {
+        "name": "Paras",
+        "species_id": 46,
+        "rate": 10,
+        "min_level": 6,
+        "max_level": 7
+      }
+    ],
+    "Night": [
+      {
+        "name": "Caterpie",
+        "species_id": 10,
+        "rate": 20,
+        "min_level": 5,
+        "max_level": 7
+      },
+      {
+        "name": "Weedle",
+        "species_id": 13,
+        "rate": 20,
+        "min_level": 5,
+        "max_level": 7
+      },
+      {
+        "name": "Oddish",
+        "species_id": 43,
+        "rate": 30,
+        "min_level": 5,
+        "max_level": 7
+      },
+      {
+        "name": "Hoothoot",
+        "species_id": 163,
+        "rate": 20,
+        "min_level": 5,
+        "max_level": 7
+      },
+      {
+        "name": "Venonat",
+        "species_id": 48,
+        "rate": 10,
+        "min_level": 6,
+        "max_level": 7
+      }
+    ]
   }
 }

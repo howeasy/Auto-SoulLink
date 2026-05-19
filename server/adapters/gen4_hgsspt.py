@@ -130,15 +130,13 @@ _PT_TRAINERS   = _load_trainer_table("trainers_pt.json")
 
 
 def _load_encounters(filename: str) -> dict:
-    """Load encounter table JSON. Returns the inner 'areas' dict (or {} on miss)."""
+    """Load encounter table JSON. Returns area_id -> method -> entries."""
     path = os.path.join(_data_dir, filename)
     if not os.path.exists(path):
         return {}
     try:
         with open(path, "r", encoding="utf-8") as f:
-            raw = json.load(f)
-            # Newer schema wraps under "areas"; older flat schema is the dict itself.
-            return raw.get("areas", raw if not raw.get("_meta") else {})
+            return json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         log.warning("Failed to load %s: %s", filename, e)
         return {}

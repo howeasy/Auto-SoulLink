@@ -138,11 +138,6 @@ def build_stub(seed):
     return {
         "trainers": trainers,
         "classes":  {str(k): v for k, v in classes.items()},
-        "_meta": {
-            "note": "Stub seed data. Run gen_gen4_trainers.py with --pret-* paths "
-                    "to extract real IDs from pret trainer_data.h. Synthetic seed_* "
-                    "keys are present for documentation but never match live RAM IDs.",
-        },
     }
 
 
@@ -273,9 +268,7 @@ def main():
             print(f"Parsing {game} from {pret_arg}...")
             trainers, classes = parse_pret_trainers(Path(pret_arg))
             if trainers and classes:
-                out = {"trainers": trainers, "classes": classes,
-                       "_meta": {"source": f"pret/{Path(pret_arg).name} "
-                                           "data/trainers/trainer_data.h"}}
+                out = {"trainers": trainers, "classes": classes}
                 print(f"  → {len(trainers)} trainers, {len(classes)} classes")
         if out is None:
             print(f"Writing stub for {game} (no pret path provided).")

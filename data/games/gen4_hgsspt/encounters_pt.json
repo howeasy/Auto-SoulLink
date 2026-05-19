@@ -1,224 +1,217 @@
 {
-  "_meta": {
-    "source": "pret/pokeplatinum data/encounters",
-    "note": "Run with --pret-{hgss,pt} <path> to extract full encounter tables. Sparse seed coverage of starter routes is included for default behavior.",
-    "schema_version": 1
+  "route_201": {
+    "Day": [
+      {
+        "name": "Bidoof",
+        "species_id": 399,
+        "rate": 50,
+        "min_level": 2,
+        "max_level": 4
+      },
+      {
+        "name": "Starly",
+        "species_id": 396,
+        "rate": 50,
+        "min_level": 2,
+        "max_level": 4
+      }
+    ],
+    "Night": [
+      {
+        "name": "Bidoof",
+        "species_id": 399,
+        "rate": 50,
+        "min_level": 2,
+        "max_level": 4
+      },
+      {
+        "name": "Kricketot",
+        "species_id": 401,
+        "rate": 50,
+        "min_level": 2,
+        "max_level": 4
+      }
+    ]
   },
-  "areas": {
-    "route_201": {
-      "Day": [
-        {
-          "name": "Bidoof",
-          "species_id": 399,
-          "rate": 50,
-          "min_level": 2,
-          "max_level": 4
-        },
-        {
-          "name": "Starly",
-          "species_id": 396,
-          "rate": 50,
-          "min_level": 2,
-          "max_level": 4
-        }
-      ],
-      "Night": [
-        {
-          "name": "Bidoof",
-          "species_id": 399,
-          "rate": 50,
-          "min_level": 2,
-          "max_level": 4
-        },
-        {
-          "name": "Kricketot",
-          "species_id": 401,
-          "rate": 50,
-          "min_level": 2,
-          "max_level": 4
-        }
-      ]
-    },
-    "route_202": {
-      "Day": [
-        {
-          "name": "Starly",
-          "species_id": 396,
-          "rate": 50,
-          "min_level": 3,
-          "max_level": 5
-        },
-        {
-          "name": "Bidoof",
-          "species_id": 399,
-          "rate": 30,
-          "min_level": 3,
-          "max_level": 5
-        },
-        {
-          "name": "Shinx",
-          "species_id": 403,
-          "rate": 20,
-          "min_level": 4,
-          "max_level": 5
-        }
-      ]
-    },
-    "route_203": {
-      "Day": [
-        {
-          "name": "Starly",
-          "species_id": 396,
-          "rate": 35,
-          "min_level": 4,
-          "max_level": 6
-        },
-        {
-          "name": "Bidoof",
-          "species_id": 399,
-          "rate": 25,
-          "min_level": 4,
-          "max_level": 6
-        },
-        {
-          "name": "Shinx",
-          "species_id": 403,
-          "rate": 20,
-          "min_level": 5,
-          "max_level": 6
-        },
-        {
-          "name": "Abra",
-          "species_id": 63,
-          "rate": 10,
-          "min_level": 4,
-          "max_level": 5
-        },
-        {
-          "name": "Zubat",
-          "species_id": 41,
-          "rate": 10,
-          "min_level": 5,
-          "max_level": 6
-        }
-      ]
-    },
-    "route_204": {
-      "Day": [
-        {
-          "name": "Starly",
-          "species_id": 396,
-          "rate": 40,
-          "min_level": 4,
-          "max_level": 6
-        },
-        {
-          "name": "Bidoof",
-          "species_id": 399,
-          "rate": 20,
-          "min_level": 4,
-          "max_level": 6
-        },
-        {
-          "name": "Wurmple",
-          "species_id": 265,
-          "rate": 15,
-          "min_level": 5,
-          "max_level": 6
-        },
-        {
-          "name": "Silcoon",
-          "species_id": 266,
-          "rate": 5,
-          "min_level": 6,
-          "max_level": 6
-        },
-        {
-          "name": "Cascoon",
-          "species_id": 268,
-          "rate": 5,
-          "min_level": 6,
-          "max_level": 6
-        },
-        {
-          "name": "Shinx",
-          "species_id": 403,
-          "rate": 15,
-          "min_level": 5,
-          "max_level": 6
-        }
-      ]
-    },
-    "oreburgh_mine": {
-      "Day": [
-        {
-          "name": "Zubat",
-          "species_id": 41,
-          "rate": 50,
-          "min_level": 5,
-          "max_level": 8
-        },
-        {
-          "name": "Geodude",
-          "species_id": 74,
-          "rate": 50,
-          "min_level": 5,
-          "max_level": 8
-        }
-      ]
-    },
-    "eterna_forest": {
-      "Day": [
-        {
-          "name": "Wurmple",
-          "species_id": 265,
-          "rate": 30,
-          "min_level": 6,
-          "max_level": 8
-        },
-        {
-          "name": "Silcoon",
-          "species_id": 266,
-          "rate": 5,
-          "min_level": 8,
-          "max_level": 8
-        },
-        {
-          "name": "Cascoon",
-          "species_id": 268,
-          "rate": 5,
-          "min_level": 8,
-          "max_level": 8
-        },
-        {
-          "name": "Hoothoot",
-          "species_id": 163,
-          "rate": 20,
-          "min_level": 6,
-          "max_level": 9
-        },
-        {
-          "name": "Budew",
-          "species_id": 406,
-          "rate": 10,
-          "min_level": 7,
-          "max_level": 9
-        },
-        {
-          "name": "Buneary",
-          "species_id": 427,
-          "rate": 15,
-          "min_level": 6,
-          "max_level": 8
-        },
-        {
-          "name": "Bidoof",
-          "species_id": 399,
-          "rate": 15,
-          "min_level": 6,
-          "max_level": 9
-        }
-      ]
-    }
+  "route_202": {
+    "Day": [
+      {
+        "name": "Starly",
+        "species_id": 396,
+        "rate": 50,
+        "min_level": 3,
+        "max_level": 5
+      },
+      {
+        "name": "Bidoof",
+        "species_id": 399,
+        "rate": 30,
+        "min_level": 3,
+        "max_level": 5
+      },
+      {
+        "name": "Shinx",
+        "species_id": 403,
+        "rate": 20,
+        "min_level": 4,
+        "max_level": 5
+      }
+    ]
+  },
+  "route_203": {
+    "Day": [
+      {
+        "name": "Starly",
+        "species_id": 396,
+        "rate": 35,
+        "min_level": 4,
+        "max_level": 6
+      },
+      {
+        "name": "Bidoof",
+        "species_id": 399,
+        "rate": 25,
+        "min_level": 4,
+        "max_level": 6
+      },
+      {
+        "name": "Shinx",
+        "species_id": 403,
+        "rate": 20,
+        "min_level": 5,
+        "max_level": 6
+      },
+      {
+        "name": "Abra",
+        "species_id": 63,
+        "rate": 10,
+        "min_level": 4,
+        "max_level": 5
+      },
+      {
+        "name": "Zubat",
+        "species_id": 41,
+        "rate": 10,
+        "min_level": 5,
+        "max_level": 6
+      }
+    ]
+  },
+  "route_204": {
+    "Day": [
+      {
+        "name": "Starly",
+        "species_id": 396,
+        "rate": 40,
+        "min_level": 4,
+        "max_level": 6
+      },
+      {
+        "name": "Bidoof",
+        "species_id": 399,
+        "rate": 20,
+        "min_level": 4,
+        "max_level": 6
+      },
+      {
+        "name": "Wurmple",
+        "species_id": 265,
+        "rate": 15,
+        "min_level": 5,
+        "max_level": 6
+      },
+      {
+        "name": "Silcoon",
+        "species_id": 266,
+        "rate": 5,
+        "min_level": 6,
+        "max_level": 6
+      },
+      {
+        "name": "Cascoon",
+        "species_id": 268,
+        "rate": 5,
+        "min_level": 6,
+        "max_level": 6
+      },
+      {
+        "name": "Shinx",
+        "species_id": 403,
+        "rate": 15,
+        "min_level": 5,
+        "max_level": 6
+      }
+    ]
+  },
+  "oreburgh_mine": {
+    "Day": [
+      {
+        "name": "Zubat",
+        "species_id": 41,
+        "rate": 50,
+        "min_level": 5,
+        "max_level": 8
+      },
+      {
+        "name": "Geodude",
+        "species_id": 74,
+        "rate": 50,
+        "min_level": 5,
+        "max_level": 8
+      }
+    ]
+  },
+  "eterna_forest": {
+    "Day": [
+      {
+        "name": "Wurmple",
+        "species_id": 265,
+        "rate": 30,
+        "min_level": 6,
+        "max_level": 8
+      },
+      {
+        "name": "Silcoon",
+        "species_id": 266,
+        "rate": 5,
+        "min_level": 8,
+        "max_level": 8
+      },
+      {
+        "name": "Cascoon",
+        "species_id": 268,
+        "rate": 5,
+        "min_level": 8,
+        "max_level": 8
+      },
+      {
+        "name": "Hoothoot",
+        "species_id": 163,
+        "rate": 20,
+        "min_level": 6,
+        "max_level": 9
+      },
+      {
+        "name": "Budew",
+        "species_id": 406,
+        "rate": 10,
+        "min_level": 7,
+        "max_level": 9
+      },
+      {
+        "name": "Buneary",
+        "species_id": 427,
+        "rate": 15,
+        "min_level": 6,
+        "max_level": 8
+      },
+      {
+        "name": "Bidoof",
+        "species_id": 399,
+        "rate": 15,
+        "min_level": 6,
+        "max_level": 9
+      }
+    ]
   }
 }

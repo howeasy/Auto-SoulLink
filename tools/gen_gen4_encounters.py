@@ -262,14 +262,7 @@ def main():
             data = seed
         out_path = out_dir / fname
         with open(out_path, "w", encoding="utf-8") as f:
-            json.dump({
-                "_meta": {
-                    "source": f"pret/poke{game.lower()} data/encounters",
-                    "note": "Run with --pret-{hgss,pt} <path> to extract full encounter tables. Sparse seed coverage of starter routes is included for default behavior.",
-                    "schema_version": 1,
-                },
-                "areas": data,
-            }, f, indent=2, ensure_ascii=False)
+            json.dump(data, f, indent=2, ensure_ascii=False)
             f.write("\n")
         print(f"  Wrote {out_path}")
 

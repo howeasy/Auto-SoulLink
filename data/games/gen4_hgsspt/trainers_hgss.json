@@ -1,11 +1,6 @@
 {
-  "_meta": {
-    "source": "pret/pokeheartgold include/constants/trainers.h + trainer_class.h",
-    "note": "Trainer IDs verified against pret enum. Run tools/gen_gen4_trainers.py --pret-hgss <path> to populate the full ~800-trainer table; this file holds the key story/rival/E4/champion trainers used by stream overlays.",
-    "schema_version": 1
-  },
   "classes": {
-    "0":  "Pokémon Trainer",
+    "0": "Pokémon Trainer",
     "23": "Rival",
     "66": "Gym Leader",
     "67": "Gym Leader",
@@ -42,28 +37,97 @@
     "124": "Rocket Boss"
   },
   "trainers": {
-    "20":  {"name": "Falkner",    "class": 66},
-    "21":  {"name": "Bugsy",      "class": 67},
-    "30":  {"name": "Whitney",    "class": 70},
-    "31":  {"name": "Morty",      "class": 72},
-    "32":  {"name": "Pryce",      "class": 73},
-    "33":  {"name": "Jasmine",    "class": 74},
-    "34":  {"name": "Chuck",      "class": 75},
-    "35":  {"name": "Clair",      "class": 76},
-    "244": {"name": "Lance",      "class": 86},
-    "245": {"name": "Will",       "class": 87},
-    "246": {"name": "Karen",      "class": 88},
-    "247": {"name": "Koga",       "class": 89},
-    "253": {"name": "Brock",      "class": 98},
-    "254": {"name": "Misty",      "class": 103},
-    "255": {"name": "Lt. Surge",  "class": 104},
-    "256": {"name": "Erika",      "class": 105},
-    "257": {"name": "Janine",     "class": 106},
-    "258": {"name": "Sabrina",    "class": 107},
-    "259": {"name": "Blaine",     "class": 108},
-    "260": {"name": "Red",        "class": 109},
-    "261": {"name": "Blue",       "class": 110},
-    "418": {"name": "Bruno",      "class": 112},
-    "700": {"name": "Giovanni",   "class": 124}
+    "20": {
+      "name": "Falkner",
+      "class": 66
+    },
+    "21": {
+      "name": "Bugsy",
+      "class": 67
+    },
+    "30": {
+      "name": "Whitney",
+      "class": 70
+    },
+    "31": {
+      "name": "Morty",
+      "class": 72
+    },
+    "32": {
+      "name": "Pryce",
+      "class": 73
+    },
+    "33": {
+      "name": "Jasmine",
+      "class": 74
+    },
+    "34": {
+      "name": "Chuck",
+      "class": 75
+    },
+    "35": {
+      "name": "Clair",
+      "class": 76
+    },
+    "244": {
+      "name": "Lance",
+      "class": 86
+    },
+    "245": {
+      "name": "Will",
+      "class": 87
+    },
+    "246": {
+      "name": "Karen",
+      "class": 88
+    },
+    "247": {
+      "name": "Koga",
+      "class": 89
+    },
+    "253": {
+      "name": "Brock",
+      "class": 98
+    },
+    "254": {
+      "name": "Misty",
+      "class": 103
+    },
+    "255": {
+      "name": "Lt. Surge",
+      "class": 104
+    },
+    "256": {
+      "name": "Erika",
+      "class": 105
+    },
+    "257": {
+      "name": "Janine",
+      "class": 106
+    },
+    "258": {
+      "name": "Sabrina",
+      "class": 107
+    },
+    "259": {
+      "name": "Blaine",
+      "class": 108
+    },
+    "260": {
+      "name": "Red",
+      "class": 109
+    },
+    "261": {
+      "name": "Blue",
+      "class": 110
+    },
+    "418": {
+      "name": "Bruno",
+      "class": 112
+    },
+    "700": {
+      "name": "Giovanni",
+      "class": 124
+    }
   }
 }
