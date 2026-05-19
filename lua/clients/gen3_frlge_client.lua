@@ -116,7 +116,7 @@ end
 
 -- ── JSON encoder ──────────────────────────────────────────────────────────────
 -- Optimised: O(n) array check, pre-built format strings, minimal allocations.
-local _json_esc = {['\\']='\\\\', ['"']='\\"', ['\n']='\\n'}
+local _json_esc = {['\\']='\\\\', ['"']='\\"', ['\n']='\\n', ['\r']='\\r', ['\t']='\\t'}
 local function json_encode(val)
     local t = type(val)
     if val == nil         then return "null"
@@ -128,7 +128,7 @@ local function json_encode(val)
         end
         return tostring(val)
     elseif t == "string"  then
-        return '"' .. val:gsub('[\\"\n]', _json_esc) .. '"'
+        return '"' .. val:gsub('[\\"\n\r\t]', _json_esc) .. '"'
     elseif t == "table" then
         -- O(n) array detection: true if sequential integer keys 1..#val with no holes
         local n = #val

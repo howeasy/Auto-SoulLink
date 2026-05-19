@@ -1,4 +1,6 @@
-# Handoff — Gen 1 + Gen 2 parity work — **PHASES 0-11 COMPLETE**
+# [ARCHIVED] Handoff — Gen 1 + Gen 2 parity work
+
+> **Historical document.** This handoff covered the `gen1-gen2-parity` branch, which was merged into master in commit `9d4e37d`. Preserved for context only — no active obligations remain. For current runtime checks, see [`docs/gen1_gen2_runtime_checks.md`](../gen1_gen2_runtime_checks.md).
 
 ## Current status (as of commit b4a869c)
 

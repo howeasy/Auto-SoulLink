@@ -152,8 +152,10 @@ local BLOCK_A_OFF = {
 }
 
 -- Block B byte offset within the 128-byte data region for each of the 24 block orders.
--- Block B holds: moves (4×u16), PP (4×u8), PP Ups (4×u8), IV32 (with IsEgg/IsNicknamed bits),
--- Hoenn ribbons, and (Gen 5 only) Form/Gender packed byte.
+-- Block B holds: moves (4×u16), PP (4×u8), PP-Ups (4×u8), IV32 (with IsEgg/IsNicknamed
+-- bits), Hoenn ribbons part 1, fateful/gender/altForm packed byte, and (Pt/Gen 5) met
+-- locations. Derived from the canonical permutation table — pos of B in each ordering × 32.
+-- Sanity: BLOCK_A_OFF[i] + BLOCK_B_OFF[i] + BLOCK_C_OFF[i] + BLOCK_D_OFF[i] = 192 ∀ i.
 local BLOCK_B_OFF = {
     [0]=32, [1]=32, [2]=64, [3]=96, [4]=64, [5]=96,
     [6]=0,  [7]=0,  [8]=0,  [9]=0,  [10]=0, [11]=0,
@@ -168,18 +170,6 @@ local BLOCK_C_OFF = {
     [6]=64, [7]=96, [8]=32, [9]=32, [10]=96,[11]=64,
     [12]=0,  [13]=0, [14]=0, [15]=0, [16]=0, [17]=0,
     [18]=96,[19]=64,[20]=96,[21]=64,[22]=32,[23]=32,
-}
-
--- Block B byte offset within the 128-byte data region for each of the 24 block orders.
--- Block B holds: moves (4 × u16), PP (4 × u8), PP-Ups (4 × u8), IVs+egg flag (u32),
--- ribbons part 1, fateful/gender/altForm packed byte, met locations (Pt-specific).
--- Derived from the canonical permutation table — pos of B in each ordering × 32.
--- Sanity: BLOCK_A_OFF[i] + BLOCK_B_OFF[i] + BLOCK_C_OFF[i] + BLOCK_D_OFF[i] = 192 ∀ i.
-local BLOCK_B_OFF = {
-    [0]=32, [1]=32, [2]=64, [3]=96, [4]=64, [5]=96,
-    [6]=0,  [7]=0,  [8]=0,  [9]=0,  [10]=0, [11]=0,
-    [12]=64,[13]=96,[14]=32,[15]=32,[16]=96,[17]=64,
-    [18]=64,[19]=96,[20]=32,[21]=32,[22]=96,[23]=64,
 }
 
 -- Block D byte offset within the 128-byte data region for each of the 24 block orders.
