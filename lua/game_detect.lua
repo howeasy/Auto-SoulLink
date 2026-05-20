@@ -46,8 +46,24 @@ end)
 --- Returns a table with: module, variant, profile, game_id.
 --- Errors if no game module matches the loaded ROM.
 function game_detect.detect()
+    -- One-shot diagnostics: surface the platform/ROM the BizHawk runtime reports
+    -- and how many modules are in the registry. If the registry is empty, one or
+    -- more `require(...)` calls at the top of this file failed silently (pcall'd
+    -- on load), which is the most common cause of "no module matched" surprises.
+    local sys_ok, sys = pcall(function() return emu and emu.getsystemid and emu.getsystemid() end)
+    local rom_ok, rom = pcall(function() return gameinfo and gameinfo.getromname and gameinfo.getromname() end)
+    console.log(string.format("[game_detect] modules=%d  system=%s  rom=%s",
+        #game_modules,
+        sys_ok and tostring(sys) or ("<err: " .. tostring(sys) .. ">"),
+        rom_ok and tostring(rom) or ("<err: " .. tostring(rom) .. ">")))
+
     for _, mod in ipairs(game_modules) do
         local det_ok, detected = pcall(mod.detect)
+        console.log(string.format("[game_detect]   try %s (priority=%d): ok=%s result=%s",
+            tostring(mod.game_id or "?"),
+            mod.detect_priority or 0,
+            tostring(det_ok),
+            tostring(detected)))
         if det_ok and detected then
             local variant = mod.detect_variant()
             local profile = mod.profiles[variant]

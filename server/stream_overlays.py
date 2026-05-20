@@ -1657,7 +1657,7 @@ _STREAM_ENC_TABLE_JS = r"""
 function escHtml(s){return s?s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'):''}
 var PLAYER_ID = '%PLAYER%';
 var _speed = Math.min(3, Math.max(0.25, parseFloat(new URLSearchParams(window.location.search).get('speed')||'1')||1));
-var _METHOD_ICONS = {'Day':'\u2600','Night':'\ud83c\udf19','Surfing':'\ud83c\udf0a','Rock Smash':'\ud83e\udea8','Old Rod':'\ud83c\udfa3\u00a0Old','Good Rod':'\ud83c\udfa3\u00a0Good','Super Rod':'\ud83c\udfa3\u00a0Super'};
+var _METHOD_ICONS = {'Morn':'\ud83c\udf05','Day':'\u2600','Nite':'\ud83c\udf19','Night':'\ud83c\udf19','Surf':'\ud83c\udf0a','Surfing':'\ud83c\udf0a','Rock Smash':'\ud83e\udea8','Headbutt':'\ud83c\udf33','Old Rod':'\ud83c\udfa3\u00a0Old','Good Rod':'\ud83c\udfa3\u00a0Good','Super Rod':'\ud83c\udfa3\u00a0Super'};
 var _etKey = null;
 function render(d) {
   var p = d.players[PLAYER_ID] || {};

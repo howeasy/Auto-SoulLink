@@ -141,6 +141,23 @@ M.encrypt_stats = encrypt_stats
 -- Reference: pret/pokeheartgold include/pokemon_types_def.h,
 --            Project Pokemon Gen 4 PKM structure docs (block order formula).
 
+-- Max National Pokédex species ID accepted by Block A decryption.
+-- Gen 4 = 493 (Arceus); Gen 5 = 649 (Genesect). Set via profile (applyProfile).
+-- MUST be declared BEFORE decrypt_block_a / decrypt_block_a_ext: Lua resolves
+-- forward-referenced names as globals (nil), so reading SPECIES_MAX inside
+-- those functions would compare to nil and crash. applyProfile updates this
+-- local — the upvalue is captured at function-definition time.
+local SPECIES_MAX        = 493
+
+-- Trainer/nickname text encoding. "gen4" = HGSS/Pt custom charcode table;
+-- "gen5" = BW/B2W2 UTF-16LE passthrough (printable ASCII passes through).
+-- MUST be declared BEFORE readNickname() / readTrainerName(): same forward-
+-- reference scoping bug as SPECIES_MAX — without an earlier `local`, those
+-- functions resolve the name to a (nil) global, the gen5 branch is skipped,
+-- and gen5 mons render as a string of '?' chars (one per nickname char).
+-- applyProfile() updates this upvalue at startup.
+local TRAINER_NAME_ENCODING = "gen4" -- "gen4" or "gen5"
+
 -- Block A byte offset within the 128-byte data region for each of the 24 block orders.
 -- order_val = ((PID & 0x3E000) >> 13) % 24  (Project Pokemon spec; NOT pid%24)
 -- ABCD=0..5 → A@0, BACD=6 → A@32, BCAD=8 → A@64, BCDA=9 → A@96, …
@@ -584,10 +601,6 @@ local BATTLE_MODE_ADDR   = nil
 -- Both HGSS and Platinum use 18-box storage; memorial is the last box.
 local MEMORIAL_BOX       = 17
 
--- Max National Pokédex species ID accepted by Block A decryption.
--- Gen 4 = 493 (Arceus); Gen 5 = 649 (Genesect). Set via profile.
-local SPECIES_MAX        = 493
-
 -- ── Gen 5 direct-addressing mode ─────────────────────────────────────────────
 -- Gen 5 (Black/White/Black2/White2) uses fixed absolute RAM addresses instead of
 -- the Gen 4 two-level pointer chain. When DIRECT_ADDR = true:
@@ -600,7 +613,7 @@ local DIRECT_ADDR          = false   -- true for Gen 5
 local ZONE_ID_DIRECT       = false   -- true for Gen 5 (no pointer fallback on zone==0)
 local PC_STORAGE_BASE      = nil     -- Gen 5 direct PC box[0] base addr (nil = Gen 4 method)
 local PC_STORAGE_BASE_ALT  = nil     -- Gen 5 fallback candidate (probed if primary reads zero)
-local TRAINER_NAME_ENCODING = "gen4" -- "gen4" or "gen5" (UTF-16 passthrough)
+-- TRAINER_NAME_ENCODING is hoisted above readNickname (see top of file).
 local BOXES_COUNT          = 18      -- 18 (Gen 4) or 24 (Gen 5)
 local PC_CURRENT_BOX_OFF   = 0x12000 -- offset from pcStorageBase to currentBox u8
 

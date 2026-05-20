@@ -96,7 +96,10 @@ M.PROFILES = {
         hp_offset            = 0x22,    -- current HP (2 bytes big-endian)
         maxhp_offset         = 0x24,    -- max HP (2 bytes big-endian)
         status_offset        = 0x20,    -- non-volatile status (u8: bits 0-2 SLP, 3 PSN, 4 BRN, 5 FRZ, 6 PAR, 7 TOX)
-        enemy_status_offset  = 0x20,    -- same offset in active enemy battle struct (mirrors party struct)
+        -- wEnemyMon is a battle_struct (NOT party_struct). Offsets confirmed by the
+        -- profile's other battle-struct addresses: ENEMY_MON_LEVEL_ADDR-SPECIES = 0x0D,
+        -- ENEMY_MON_HP_ADDR-SPECIES = 0x10, MaxHP at 0x12 → Status sits at 0x0E.
+        enemy_status_offset  = 0x0E,    -- battle_struct status offset (was wrongly 0x20)
 
         -- Box struct offsets (32 bytes — truncated party struct, no stats)
         box_species_offset   = 0x00,
@@ -170,6 +173,21 @@ M.PROFILES = {
         -- trainer_id is 1-based within class.
         TRAINER_CLASS_ADDR      = 0xD22F,
         TRAINER_ID_ADDR         = 0xD231,
+        -- Phase 7: Sound-effect dispatch. wMusicID at 0xC2BD per pret/pokecrystal.
+        -- The audio engine consumes the byte on the next audio frame.
+        -- SFX IDs from constants/sfx_constants.asm.
+        SFX_DISPATCH_ADDR       = 0xC2BD,
+        sfx_ids                 = {
+            capture   = 0x44,   -- SFX_CAUGHT_MON
+            gift      = 0x44,   -- SFX_CAUGHT_MON
+            faint     = 0x46,   -- SFX_FAINT
+            whiteout  = 0x46,   -- SFX_FAINT
+            no_catch  = 0x39,   -- SFX_NO
+            success   = 0x4A,   -- SFX_GET_BADGE (link formed, nuzlocke start)
+            failure   = 0x39,   -- SFX_NO
+            boo       = 0x39,   -- SFX_NO
+            shiny     = 0xB5,   -- SFX_SHINY
+        },
     },
 
     -- ═══ Pokémon Gold (Phase 11 — Gold/Silver Phase 10-style addresses) ═══

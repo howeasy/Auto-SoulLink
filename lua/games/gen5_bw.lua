@@ -32,8 +32,9 @@
     • White = Black + 0x20 for ALL fields (party, zone, badge, items, OT name, PC).
     • White 2 = Black 2 + 0x80 for party/zone/badge/item fields, but
       + 0x40 for TrainerData (PLAYER_NAME_OFF) and PCStorage (PC_STORAGE_BASE).
-    • PC_BOX_STRIDE = 0xFA0 (30 × 0x88 + 0x10 box header; no Gen-4-style padding).
-    • PC_CURRENT_BOX_OFF = 0x17D80 (estimate: 24 × 0xFA0; VERIFY_ME via BizHawk).
+    • PC_BOX_STRIDE = 0xFF0 (30 slots × 0x88 BoxPokemon, no padding/header in Gen 5;
+      Gen 4 pads to 0x1000). Confirmed from PKHeX BoxLayout5BW.Box5BWBoxSize.
+    • PC_CURRENT_BOX_OFF = 0x17E80 (24 × 0xFF0; VERIFY_ME via BizHawk).
 --]]
 
 local M = {}
@@ -128,14 +129,18 @@ local _COMMON_GEN5 = {
     ZONE_ID_DIRECT       = true,   -- zone 0 is valid (Black City / Marine Tube)
     MON_SIZE             = 0xDC,   -- 220 bytes (PartyPokemon in Gen 5)
     SPECIES_MAX          = 649,    -- Genesect, last Gen V species (Unova: 494-649)
-    -- PC box stride: 30 slots × 0x88 + 0x10 header = 0xFA0 (confirmed from Wi-Fi-Labs RNG scripts)
-    PC_BOX_STRIDE        = 0xFA0,  -- no padding (Gen 4 uses 0x1000 with padding)
+    -- PC box stride: 30 slots × 0x88 = 0xFF0, no padding/header in Gen 5.
+    -- Source: PKHeX BoxLayout5BW.Box5BWBoxSize. Gen 4 pads each box to 0x1000;
+    -- Gen 5 packs boxes back-to-back. A previous value of 0xFA0 was a math error
+    -- and caused box-23 reads to drift ~0x5B0 bytes off the real PC layout,
+    -- surfacing unrelated RAM as "ghost" Pokémon in the memorial box.
+    PC_BOX_STRIDE        = 0xFF0,
     PC_SLOT_STRIDE       = 0x88,   -- BoxPokemon = 136 bytes (same as Gen 4)
     BOXES_COUNT          = 24,     -- Gen 5 has 24 PC boxes
     MEMORIAL_BOX         = 23,     -- Box 24, "THE DEAD" (0-indexed)
-    -- PC_CURRENT_BOX_OFF: 24 boxes × 0xFA0 = 0x17D80 bytes of box data;
+    -- PC_CURRENT_BOX_OFF: 24 boxes × 0xFF0 = 0x17E80 bytes of box data;
     -- currentBox u8 sits immediately after (VERIFY_ME — needs BizHawk RAM Watch)
-    PC_CURRENT_BOX_OFF   = 0x17D80,
+    PC_CURRENT_BOX_OFF   = 0x17E80,
     BADGES_2_OFF         = false,  -- Gen 5 has only one set of 8 Unova badges
     TRAINER_NAME_ENCODING = "gen5", -- UTF-16LE passthrough (0x0020-0x007E → ASCII)
     RAM_DOMAIN           = "Main RAM",

@@ -727,6 +727,19 @@ local function index_party(in_battle)
                 entry.level      = s.level
                 entry.slot       = i
                 entry.species_id = _mk_species[i] or 0
+                -- Capture events read this entry directly; including nickname
+                -- here matches Gen 3 client behaviour so the server's
+                -- pending_captures gets the real name immediately rather than
+                -- waiting for the next tick snapshot.
+                local cached_nick = _nick_cache[k]
+                if cached_nick == nil or cached_nick:sub(1, 8) == "species#" then
+                    local fresh = M.readNickname(base)
+                    if fresh then
+                        _nick_cache[k] = fresh
+                        cached_nick = fresh
+                    end
+                end
+                entry.nickname = cached_nick or ""
                 t[k] = entry
             end
         end
@@ -1264,6 +1277,7 @@ local function on_frame()
                 all_known_keys[k]        = true
                 send({event="capture", key=k, hp=info.hp, maxHP=info.maxHP,
                       level=info.level, species_id=info.species_id or 0,
+                      nickname=info.nickname or "",
                       area_id=evt_area, is_egg=info.is_egg or false,
                       form=info.form or 0, pokeball=info.pokeball or 0},
                      "capture(battle):" .. k:sub(1,8), true)
@@ -1308,6 +1322,7 @@ local function on_frame()
             local info = buf.info
             send({event="capture", key=k, hp=info.hp, maxHP=info.maxHP,
                   level=info.level, species_id=info.species_id or 0,
+                  nickname=info.nickname or "",
                   area_id=buf.area, is_egg=info.is_egg or false,
                   form=info.form or 0, pokeball=info.pokeball or 0},
                  "capture(gift):" .. k:sub(1,8), true)
@@ -1502,18 +1517,23 @@ local function on_frame()
                     local pid = mem_u32(addr)
                     if pid ~= 0 then
                         local sp, ot, hi, abl = M.decrypt_block_a_ext(addr)
-                        local key = ot and fmt("%08X:%08X", pid, ot) or fmt("%08X", pid)
-                        local nick = M.readNickname(addr)
-                        entries[#entries + 1] = {
-                            box=box, slot=slot, key=key, species_id=sp or 0,
-                            held_item_id=hi or 0, ability_id=abl or 0,
-                            nickname=nick or "",
-                        }
-                        -- Populate nick_label cache
-                        if nick and nick ~= "" then
-                            _nick_cache[key] = nick
-                        elseif sp and sp > 0 and not _nick_cache[key] then
-                            _nick_cache[key] = fmt("species#%d", sp)
+                        -- Skip slots whose block-A doesn't decrypt to a valid
+                        -- species. See gen5_bw_client.lua for full rationale —
+                        -- prevents garbage PIDs from rendering as ???? entries.
+                        if sp and sp >= 1 then
+                            local key = ot and fmt("%08X:%08X", pid, ot) or fmt("%08X", pid)
+                            local nick = M.readNickname(addr)
+                            entries[#entries + 1] = {
+                                box=box, slot=slot, key=key, species_id=sp,
+                                held_item_id=hi or 0, ability_id=abl or 0,
+                                nickname=nick or "",
+                            }
+                            -- Populate nick_label cache
+                            if nick and nick ~= "" then
+                                _nick_cache[key] = nick
+                            elseif not _nick_cache[key] then
+                                _nick_cache[key] = fmt("species#%d", sp)
+                            end
                         end
                     end
                 end

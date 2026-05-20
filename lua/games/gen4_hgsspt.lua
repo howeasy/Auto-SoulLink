@@ -199,7 +199,7 @@ local _HGSS_PROFILE = {
     -- HGSS dynamic_region starts at SaveData+0x10 — see PKHeX SAV4HGSS.cs General buffer offset.
     PC_ARRAY_HDR_OFF   = 0x232AC,
     DYNAMIC_REGION_OFF = 0x10,   -- SaveData → dynamic_region delta (HGSS)
-    PC_BOX_STRIDE      = 0x1000, -- 30 × 0x88 = 0xF90, padded to 0x1000 (Gen 4 style)
+    PC_BOX_STRIDE      = 0x1000, -- 30 × 0x88 = 0xFF0, padded with 0x10 to 0x1000 (Gen 4 style)
     PC_SLOT_STRIDE     = 0x88,   -- BoxPokemon = 136 bytes
     BOXES_COUNT        = 18,
     MEMORIAL_BOX       = 17,     -- Box 18 (0-indexed), UI "Box 18", "THE DEAD"

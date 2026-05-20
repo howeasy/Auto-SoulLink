@@ -624,6 +624,11 @@ local function on_new_mon(mon, slot, is_gift)
 
     send(evt, "capture(" .. (is_gift and "gift" or "battle") .. "):" .. mon.key:sub(1, 9), true)
     captured_this_battle = true
+    -- Self-terminate the battle state: wIsInBattle (0xD057) can linger at 0xFF
+    -- (IN_BATTLE_LOST) after a successful catch in some sequences. Don't trust
+    -- the RAM byte alone — the moment we see a new mon, the battle is over.
+    in_battle = false
+    battle_is_wild = false
     -- Phase 7: optional SFX play. No-op until profile.SFX_DISPATCH_ADDR is set.
     M.playSfx(is_gift and "gift" or "capture")
 end
@@ -1018,6 +1023,16 @@ local function on_frame()
         whiteout_sent = false
         console.log(fmt("[SLink-RBY] Battle START (%s) area=%s",
             battle_is_wild and "wild" or "trainer", battle_area_id))
+        -- NEW ENCOUNTER banner: wild battle in an unresolved, non-gift area.
+        -- Shortened text for GBC's 160×144 screen (~22-char HUD bar limit).
+        if battle_is_wild and nuzlocke_active and battle_area_id ~= ""
+                and not resolved_areas[battle_area_id]
+                and not G.is_gift_area(battle_area_id) then
+            local short = battle_area_id:gsub("route_", "R"):gsub("_", " ")
+                                        :gsub("(%a)([%w]*)", function(a, b) return a:upper() .. b end)
+            short = string.sub(short, 1, 8)
+            hud_show("** NEW ENC ** " .. short, 255, 220, 60, 360)
+        end
     elseif not cur_in_battle and in_battle then
         -- Battle ended
         post_battle_frames = POST_BATTLE_GRACE
