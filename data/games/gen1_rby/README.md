@@ -4,8 +4,9 @@ Data files for Gen 1 Pokémon games (Game Boy / Game Boy Color).
 
 ## Status
 
-Feature-parity with Gen 3 — Red, Blue, and Yellow supported. Every
-profile address verified by [tools/verify_profile_addresses.py](../../../tools/verify_profile_addresses.py)
+⚠️ **Experimental** — feature parity with Gen 3 (Red, Blue, Yellow), but
+limited live-play coverage. Every profile address verified by
+[tools/verify_profile_addresses.py](../../../tools/verify_profile_addresses.py)
 against the pret decomp .sym output. Runtime smoke-test checklist in
 [docs/gen1_gen2_runtime_checks.md](../../../docs/gen1_gen2_runtime_checks.md).
 

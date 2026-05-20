@@ -315,7 +315,6 @@ class Gen2CrystalAdapter(GameAdapter):
         return ""
 
     def trainer_info(self, trainer_id: int) -> tuple[str, str]:
-        # Not implemented for prototype
         return ("", "")
 
     def item_name(self, item_id: int) -> str:

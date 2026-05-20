@@ -11,7 +11,7 @@ gen<N>_<abbreviations>
 | Directory       | Games                                          |
 |-----------------|-------------------------------------------------|
 | `gen1_rby`      | Red, Blue, Yellow                               |
-| `gen2_gsc`      | Gold, Silver, Crystal                           |
+| `gen2_crystal`  | Crystal (Gold/Silver supported as variant profiles) |
 | `gen3_frlge`    | FireRed, LeafGreen, Emerald, Radical Red        |
 | `gen4_hgsspt`   | HeartGold, SoulSilver, Platinum                 |
 | `gen5_bw`       | Black, White                                    |

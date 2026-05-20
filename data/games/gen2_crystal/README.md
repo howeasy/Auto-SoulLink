@@ -6,8 +6,9 @@ ship as variant profiles using pret/pokegold addresses.
 
 ## Status
 
-Feature-parity with Gen 3 — Crystal, Gold, and Silver supported. Every
-profile address verified by [tools/verify_profile_addresses.py](../../../tools/verify_profile_addresses.py)
+⚠️ **Experimental** — feature parity with Gen 3 (Crystal, Gold, Silver), but
+limited live-play coverage. Every profile address verified by
+[tools/verify_profile_addresses.py](../../../tools/verify_profile_addresses.py)
 against the pret decomp .sym output. Runtime smoke-test checklist in
 [docs/gen1_gen2_runtime_checks.md](../../../docs/gen1_gen2_runtime_checks.md).
 

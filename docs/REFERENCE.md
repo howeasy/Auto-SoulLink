@@ -3,13 +3,13 @@
 SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a Lua client that reads game RAM every frame and sends JSON events (area entered, capture, faint, etc.) to a central Python server over TCP. The server enforces Soul Link rules — linking encounters by area, propagating faints, syncing party/box state, moving dead pairs to a memorial box — and returns commands back to the Lua clients in the same response.
 
 **Supported Games:**
-- **Gen 3** — FireRed, LeafGreen, Emerald (vanilla, randomized, Archipelago, Radical Red/CFRU) — **✅ stable**
-- **Gen 1** — Red, Blue, Yellow (US English) — feature-parity with Gen 3 ⚠️ pending Phase 9 live verification (`docs/gen1_gen2_runtime_checks.md`). Archipelago Red/Blue (Alchav) auto-detected.
-- **Gen 2** — Crystal, Gold, Silver (GB/GBC) — feature-parity with Gen 3 ⚠️ pending Phase 9 live verification. Archipelago Crystal (gerbiljames fork) auto-detected. Gold/Silver added in Phase 11 with pret-authoritative addresses via [tools/build_pret_syms.py](../tools/build_pret_syms.py).
-- **Gen 4** — HeartGold, SoulSilver, Platinum — ⚠️ experimental
-- **Gen 5** — Black, White, Black 2, White 2 — ⚠️ experimental
+- **Gen 3** — FireRed, LeafGreen, Emerald (vanilla, randomized, Archipelago, Radical Red/CFRU) — **✅ Stable**
+- **Gen 1** — Red, Blue, Yellow (US English) — ⚠️ **Experimental** — feature parity with Gen 3, pending live verification (`docs/gen1_gen2_runtime_checks.md`). Archipelago Red/Blue (Alchav) auto-detected.
+- **Gen 2** — Crystal, Gold, Silver (GB/GBC) — ⚠️ **Experimental** — feature parity with Gen 3, pending live verification. Archipelago Crystal (gerbiljames fork) auto-detected. Gold/Silver added in Phase 11 with pret-authoritative addresses via [tools/build_pret_syms.py](../tools/build_pret_syms.py).
+- **Gen 4** — HeartGold, SoulSilver, Platinum — ⚠️ **Experimental**
+- **Gen 5** — Black, White, Black 2, White 2 — ⚠️ **Experimental**
 
-> **Note:** Gen 1/2 have full feature pipelines (moves+PP, stat stages, enemy moves+PP, trainer names, encounter tables, AP detection) but their memory addresses are flagged for live BizHawk verification — see `docs/gen1_gen2_runtime_checks.md`. Until that runs, treat them as ⚠️ unverified-implementations rather than untested-stubs.
+> **Note:** Only Gen 3 has extensive live-play coverage. Gens 1, 2, 4, and 5 have full feature pipelines (moves+PP, stat stages, enemy moves+PP, trainer names, encounter tables, AP detection) and pass their unit-test suites; static profile addresses are verified by [tools/verify_profile_addresses.py](../tools/verify_profile_addresses.py) against pret decomps. Runtime smoke tests still pending — see `docs/gen1_gen2_runtime_checks.md`. Treat as ⚠️ Experimental until those runtime checks land.
 
 ---
 
@@ -682,7 +682,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 ### Unit tests (no emulator required)
 
 ```bash
-pytest tests/unit/ -v          # all 800 tests
+pytest tests/unit/ -v          # all 1056 tests
 pytest tests/unit/test_state.py -v        # 236 state machine tests
 pytest tests/unit/test_gen3_adapter.py -v  # 182 Gen 3 adapter tests
 pytest tests/unit/test_gen4_adapter.py -v  # 62 Gen 4 adapter tests

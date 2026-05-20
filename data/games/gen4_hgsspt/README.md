@@ -7,10 +7,10 @@ Platinum profile with overrides for the extended dex.
 
 ## Status
 
-Feature-complete (parity with Gen 3). Live battle-struct addresses for
-doubles + stat stages are read-only-scannable via
-`lua/tests/test_gen4_battlers_count.lua` and `test_gen4_stat_stages.lua`;
-populate the profile from a one-time live capture.
+⚠️ **Experimental** — feature parity with Gen 3, but limited live-play
+coverage. Live battle-struct addresses for doubles + stat stages are
+read-only-scannable via `lua/tests/test_gen4_battlers_count.lua` and
+`test_gen4_stat_stages.lua`; populate the profile from a one-time live capture.
 
 ## Files
 

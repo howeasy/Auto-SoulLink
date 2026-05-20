@@ -2,7 +2,7 @@
 
 Run these scripts in BizHawk's **Lua Console → Script → Open Script**.  
 Output goes to the BizHawk **console panel**.  
-Tests 1–3 are diagnostic; **Test 4 (`slink.lua` or `slink_gen3.lua`) is the alpha production script** used for actual play. Run them in order when verifying a fresh install.
+Tests 1–3 are diagnostic; **Test 4 (`slink.lua` or `slink_gen3.lua`) is the production script** used for actual play. Run them in order when verifying a fresh install.
 
 ---
 
@@ -271,7 +271,7 @@ The status page uses **flicker-free DOM morphing** (`morphDOM()`) — sprites, H
 
 ---
 
-## Alpha End-to-End (Steps 1–9)
+## End-to-End (Steps 1–9)
 
 **Script:** `lua/slink.lua` on **both** emulators.  
 Set `SLINK_PLAYER = "a"` on FireRed, `SLINK_PLAYER = "b"` on LeafGreen (via `lua/slink_gen3.lua` or the downloaded launcher).  

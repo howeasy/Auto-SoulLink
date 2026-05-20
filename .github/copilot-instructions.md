@@ -26,7 +26,7 @@ python -m server.server --reset   # wipe all state and start a fresh run
 #   --manager-port PORT  Manager HTTP port (enables back-link)
 #   --verbose            Enable structured DEBUG logging to <data-dir>/slink.log
 
-# Unit tests — no emulator or server required (236 + 182 + 62 + 78 + 127 + 63 + 42 + 6 + 4 = 800 tests)
+# Unit tests — no emulator or server required (267 + 208 + 100 + 103 + 179 + 140 + 46 + 6 + 4 + 3 = 1056 tests)
 pytest tests/unit/test_state.py -v
 pytest tests/unit/test_gen3_adapter.py -v
 pytest tests/unit/test_gen4_adapter.py -v
@@ -313,15 +313,16 @@ SLink-RR/
 - **`lua/tests/test_sound_discovery.lua`** — Diagnostic script: scans ROM for gSongTable and reports SE song header addresses for the current ROM profile.
 - **`lua/tests/test_ability_diag.lua`** — Diagnostic script: auto-detects ROM profile, validates gBaseStats address, shows party ability data per slot.
 - **`lua/tests/test_item_discovery.lua`** — ROM scanner for RR/CFRU gItems table. Uses CFRU probe scoring (IDs 52-62) and itemId field validation to find the correct table. Outputs JSON to `rr_items.json`.
-- **`tests/unit/test_state.py`** — 236 pytest unit tests for the state machine.
-- **`tests/unit/test_gen1_adapter.py`** — 78 tests for the Gen 1 adapter.
-- **`tests/unit/test_gen2_adapter.py`** — 127 tests for the Gen 2 adapter.
-- **`tests/unit/test_gen3_adapter.py`** — 182 tests for the Gen 3 adapter.
-- **`tests/unit/test_gen4_adapter.py`** — 62 tests for the Gen 4 adapter.
-- **`tests/unit/test_gen5_adapter.py`** — 63 tests for the Gen 5 adapter.
-- **`tests/unit/test_stat_stages.py`** — 42 tests for stat stage calculations.
+- **`tests/unit/test_state.py`** — 267 pytest unit tests for the state machine.
+- **`tests/unit/test_gen1_adapter.py`** — 103 tests for the Gen 1 adapter.
+- **`tests/unit/test_gen2_adapter.py`** — 179 tests for the Gen 2 adapter.
+- **`tests/unit/test_gen3_adapter.py`** — 208 tests for the Gen 3 adapter.
+- **`tests/unit/test_gen4_adapter.py`** — 100 tests for the Gen 4 adapter.
+- **`tests/unit/test_gen5_adapter.py`** — 140 tests for the Gen 5 adapter.
+- **`tests/unit/test_stat_stages.py`** — 46 tests for stat stage calculations.
 - **`tests/unit/test_obs_priority.py`** — 4 tests for OBS priority-based trigger resolution (`submit_fired` — first-match-wins, per-player independence, area filter).
 - **`tests/unit/test_phase1_comms.py`** — 6 TCP integration tests.
+- **`tests/unit/test_profile_addresses.py`** — 3 tests verifying every Gen 1/2 profile address matches the pret decomp .sym output (CI gate after `tools/build_pret_syms.py`).
 
 ---
 
@@ -616,7 +617,7 @@ A mon is shiny if: Defense DV = 10, Speed DV = 10, Special DV = 10, and Attack D
 | `dragons_den` | Dratini (elder gift) |
 | `route_34` | Odd Egg (Day Care) |
 
-### Known Limitations (Crystal Prototype)
+### Known Limitations (Gen 2 Crystal)
 
 - Some WRAM addresses (wMapGroup, wMapNumber, wBattleMode, box addresses) need BizHawk verification
 - Box storage: only active box in WRAM; memorial box support deferred
@@ -1044,16 +1045,17 @@ Below the cards:
 ### Unit tests — no emulator or server required
 
 ```bash
-pytest tests/unit/ -v   # 800 tests
-pytest tests/unit/test_state.py -v          # 236 tests
-pytest tests/unit/test_gen1_adapter.py -v   # 78 tests
-pytest tests/unit/test_gen2_adapter.py -v   # 127 tests
-pytest tests/unit/test_gen3_adapter.py -v   # 182 tests
-pytest tests/unit/test_gen4_adapter.py -v   # 62 tests
-pytest tests/unit/test_gen5_adapter.py -v   # 63 tests
-pytest tests/unit/test_stat_stages.py -v    # 42 tests
+pytest tests/unit/ -v   # 1056 tests
+pytest tests/unit/test_state.py -v          # 267 tests
+pytest tests/unit/test_gen1_adapter.py -v   # 103 tests
+pytest tests/unit/test_gen2_adapter.py -v   # 179 tests
+pytest tests/unit/test_gen3_adapter.py -v   # 208 tests
+pytest tests/unit/test_gen4_adapter.py -v   # 100 tests
+pytest tests/unit/test_gen5_adapter.py -v   # 140 tests
+pytest tests/unit/test_stat_stages.py -v    # 46 tests
 pytest tests/unit/test_phase1_comms.py -v   # 6 tests
 pytest tests/unit/test_obs_priority.py -v   # 4 tests
+pytest tests/unit/test_profile_addresses.py -v  # 3 tests (pret address verification)
 ```
 
 Feed event dicts directly to `SoulLinkState.handle_event()`. Use `monkeypatch` to redirect `LINKS_PATH` to `tmp_path`. Helper `make_state_with_link()` creates a pre-linked pair with `pokeballs_obtained = {"a": True, "b": True}`.

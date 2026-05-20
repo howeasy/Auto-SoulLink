@@ -6,9 +6,10 @@ Pokémon White 2.
 
 ## Status
 
-Feature parity with Gen 3 — enemy moves/PP, doubles detection, Unova
-form normalization, Gen 4-5 move data, hidden abilities. Minimal BizHawk
-RAM-Watch verification remains via `lua/tests/test_gen5_block_b.lua` and
+⚠️ **Experimental** — feature parity with Gen 3 (enemy moves/PP, doubles
+detection, Unova form normalization, Gen 4-5 move data, hidden abilities),
+but limited live-play coverage. Minimal BizHawk RAM-Watch verification
+remains via `lua/tests/test_gen5_block_b.lua` and
 `lua/tests/test_gen5_doubles.lua`.
 
 ## Files
