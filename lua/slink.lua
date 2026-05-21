@@ -9,6 +9,35 @@
 local _dir = debug.getinfo(1, "S").source:match([=[@(.+[/\])]=]) or ""
 package.path = _dir .. "?.lua;" .. _dir .. "?/init.lua;" .. package.path
 
+-- ── Console tee ──────────────────────────────────────────────────────────────
+-- BizHawk's Lua console scrolls and drops old lines, so when something logs
+-- a lot at startup (BizHawk's "Unable to find domain" warnings, our diagnostic
+-- output, etc.) the user can't scroll back far enough to copy it. Mirror every
+-- console.log() call to slink_lua.log in the project root for post-mortem.
+-- The log is truncated on each run so old content doesn't accumulate.
+do
+    local log_path = _dir .. "../slink_lua.log"
+    local f = io.open(log_path, "w")
+    if f then
+        f:write(string.format("=== SLink Lua boot %s ===\n", os.date()))
+        f:close()
+        local orig_log = console.log
+        console.log = function(...)
+            local fh = io.open(log_path, "a")
+            if fh then
+                local parts = {...}
+                for i = 1, select("#", ...) do
+                    parts[i] = tostring(parts[i])
+                end
+                fh:write(table.concat(parts, "\t") .. "\n")
+                fh:close()
+            end
+            orig_log(...)
+        end
+        console.log("[SLink] Console tee -> " .. log_path)
+    end
+end
+
 -- Detect which game is loaded
 package.loaded["game_detect"]       = nil
 local game_detect = require("game_detect")

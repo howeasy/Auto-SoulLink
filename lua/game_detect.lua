@@ -34,6 +34,14 @@ for _, name in ipairs(_module_names) do
     local ok, mod = pcall(require, name)
     if ok and type(mod) == "table" and mod.detect then
         game_modules[#game_modules + 1] = mod
+    else
+        -- Surface the load error so silent-drop bugs (e.g. an eager require()
+        -- inside the module hitting a path that isn't on package.path yet)
+        -- are visible in the console instead of producing a misleading
+        -- "no module matched" later. The pcall above keeps us from crashing
+        -- the entire dispatcher if one game module is broken.
+        console.log(string.format("[game_detect] require(%q) FAILED: %s",
+            name, tostring(mod)))
     end
 end
 

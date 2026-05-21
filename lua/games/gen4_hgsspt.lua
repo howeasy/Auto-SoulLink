@@ -338,11 +338,23 @@ M.profiles = {
 }
 
 -- ── Area lookup ─────────────────────────────────────────────────────────────
-local _AREAS = require("gen4_hgsspt_areas")
+-- Lazy-load the areas table on first use. game_detect.lua requires this module
+-- BEFORE the gen4 client script has added data/games/gen4_hgsspt/ to
+-- package.path, so an eager `require("gen4_hgsspt_areas")` at module-load time
+-- would error and (because game_detect wraps require in pcall) silently drop
+-- the entire Gen 4 module from the registry. Same lazy pattern as gen5_bw.lua.
+local _AREAS
+
+local function _load_areas()
+    if _AREAS then return end
+    local ok, t = pcall(require, "gen4_hgsspt_areas")
+    if ok then _AREAS = t else _AREAS = {} end
+end
 
 -- resolve_area(zone_id) — maps sequential zone ID to area_id.
 -- Backward-compatible form: resolve_area(mapGroup, mapNum) still accepts legacy composite keys.
 function M.resolve_area(mapGroup, mapNum)
+    _load_areas()
     local key = (mapNum == nil) and mapGroup or (mapGroup * 1000 + mapNum)
     return _AREAS[key] or ""
 end

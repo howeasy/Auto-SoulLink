@@ -1082,23 +1082,23 @@ end
 
 -- Returns the 7-element stat-stage array for battler battler_idx
 -- (0=player_L, 1=enemy_L, 2=player_R, 3=enemy_R), or nil if unavailable.
--- Values are unsigned 0..12 (matching Gen 3 convention; 6 = neutral).
--- Source: pret/pokeheartgold src/battle/struct_battle_mon.c BattleMon.statChanges (s8[]).
--- Concrete RAM addresses from NDS-Ironmon-Tracker MemoryAddresses.lua.
+-- Values are unsigned 0..12 (matching Gen 3 convention; 6 = neutral, 12 = +6,
+-- 0 = -6). The Gen 4 engine is heavily ported from Gen 3 and uses the same
+-- unsigned encoding in RAM — earlier versions of this function mistakenly
+-- sign-extended and shifted by +6, which made neutral-stat reads (byte 6) come
+-- out as 12 (clamped max). That's why every wild encounter looked like every
+-- battler was at +6 across the board at battle start. Cross-checked with the
+-- Gen 3 reader in memory_gba.lua:readStatStages which uses the raw byte.
 function M.readStatStages(battler_idx)
     local addr = _stat_stages_addr(battler_idx)
     if not addr then return nil end
     local stages = {}
     for i = 0, STAT_STAGES_LEN - 1 do
         local v = r8(addr + i)
-        -- Pret stores statChanges as signed 8-bit deltas (-6..+6). Convert to unsigned
-        -- 0..12 (atk +1 = 7, atk -1 = 5, neutral = 6).
-        if v >= 128 then
-            v = v - 256        -- sign-extend two's-complement
-        end
-        v = v + 6
-        if v < 0 then v = 0 end
-        if v > 12 then v = 12 end
+        -- Defensive clamp: legitimate values are 0..12. Anything outside this
+        -- range means we're reading the wrong memory; pin to neutral so the
+        -- UI doesn't render absurd +999 chips.
+        if v < 0 or v > 12 then v = 6 end
         stages[i + 1] = v
     end
     return stages
