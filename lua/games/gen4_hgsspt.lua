@@ -119,30 +119,37 @@ local _RP_ROM_HASHES = {
     -- ["SHA1:..."] = true,
 }
 
+-- Find which ROM domain BizHawk exposes for NDS (varies by BizHawk version).
+-- Uses getDomainList() so we never attempt a read against a missing domain —
+-- BizHawk prints "Unable to find domain: X, falling back to current" for every
+-- read against an unknown domain, even when the read is pcall-wrapped, because
+-- the warning is emitted before the Lua error is raised.
+local function _nds_rom_domain()
+    if not memory or not memory.getDomainList then return nil end
+    local ok, list = pcall(memory.getDomainList)
+    if not ok or type(list) ~= "table" then return nil end
+    local targets = { "ROM", "Cartridge ROM", "NDS ROM" }
+    for _, t in ipairs(targets) do
+        for _, d in ipairs(list) do
+            if d == t then return t end
+        end
+    end
+    return nil
+end
+
 -- Read a few bytes from ROM banner / build string area to look for an RP marker.
 -- Returns true if a recognizable RP signature is found. Used as last-ditch
 -- detection when neither the filename nor the hash whitelist matches.
 local function _rom_has_rp_signature()
-    if not memory or not memory.read_u8 then return false end
-    -- Try common NDS ROM domains (BizHawk exposes "ROM" or "Cartridge ROM" depending on version).
-    local domains = { "ROM", "Cartridge ROM", "NDS ROM" }
-    for _, dom in ipairs(domains) do
-        local ok, b = pcall(memory.read_u8, 0x200, dom)  -- typical Drayano banner area
-        if ok and b then
-            -- Scan a 256-byte window for "RENEGADE" or "Drayano".
-            local buf = {}
-            for i = 0, 255 do
-                local ok2, c = pcall(memory.read_u8, 0x200 + i, dom)
-                if ok2 then buf[#buf+1] = string.char(c) end
-            end
-            local s = table.concat(buf)
-            if s:find("RENEGADE") or s:find("Renegade") or s:find("Drayano") then
-                return true
-            end
-            return false   -- domain readable but no signature
-        end
+    local dom = _nds_rom_domain()
+    if not dom then return false end
+    local buf = {}
+    for i = 0, 255 do
+        local ok, c = pcall(memory.read_u8, 0x200 + i, dom)
+        if ok then buf[#buf+1] = string.char(c) end
     end
-    return false
+    local s = table.concat(buf)
+    return s:find("RENEGADE") or s:find("Renegade") or s:find("Drayano") or false
 end
 
 function M.detect()
@@ -264,13 +271,20 @@ local _PT_PROFILE = {
     SPECIES_MAX      = 493,    -- Arceus, last Gen IV species
 
     -- PC Storage
-    -- Platinum SaveData has an extra u32 prefix vs HGSS, shifting dynamic_region from
-    -- SaveData+0x10 → SaveData+0x14. arrayHeaders[41].offset stays at the same SaveData-
-    -- relative position (+0x232AC), but the chunk-offset value it stores must be added
-    -- to SaveData+0x14 (not +0x10) to land on PCStorage.boxes[0].
-    -- Source: PKHeX SAV4Pt.cs General buffer offset = 0x14 (vs SAV4HGSS.cs = 0x10).
-    PC_ARRAY_HDR_OFF   = 0x232AC,
-    DYNAMIC_REGION_OFF = 0x14,   -- SaveData → dynamic_region delta (Platinum-specific)
+    -- Platinum's SaveData is completely different from HGSS: no arrayHeaders array.
+    -- Instead, SaveData.pageInfo[37] (SAVE_TABLE_ENTRY_PC_BOXES) holds a .location
+    -- field = byte offset within body.data where PCBoxes struct starts.
+    -- Source: pret/pokeplatinum src/savedata.c SaveData_SaveTable + src/savedata/save_table.c
+    --   SaveData struct layout: 5×u32 header (0x14 bytes) + body.data[0x20000] +
+    --   u32 globalCounter + u32 blockCounters[2] + u8 blockOffsets[2] + 2-byte pad +
+    --   SavePageInfo pageInfo[38]    ← pageInfo starts at SaveData+0x20024
+    --   SavePageInfo.location is at struct+8; pageInfo[37].location = 0x20024+37×0x10+8 = 0x2027C
+    -- PCBoxes struct (pret/pokeplatinum include/pc_boxes.h):
+    --   u32 currentBoxID + BoxPokemon boxMons[18][30] + ...
+    --   PC_BOXES_DATA_OFF=4 skips currentBoxID to land on boxMons[0][0].
+    PC_ARRAY_HDR_OFF   = 0x2027C,  -- &pageInfo[37].location in RAM; verify with test_gen4_pt_scan.lua
+    PC_BOXES_DATA_OFF  = 4,        -- sizeof(PCBoxes.currentBoxID) — skip to boxMons[0][0]
+    DYNAMIC_REGION_OFF = 0x14,     -- SaveData → body.data[0] offset (Platinum-specific)
     PC_BOX_STRIDE      = 0x1000,
     PC_SLOT_STRIDE     = 0x88,
     BOXES_COUNT        = 18,
