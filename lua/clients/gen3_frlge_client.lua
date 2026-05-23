@@ -694,23 +694,40 @@ local function _pids_all_match(a, b)
 end
 
 -- Returns true if the diff between curr and stable is explainable by a normal
--- party compaction (deposit or withdrawal).  A compaction only repositions
--- existing mons — every non-zero PID in curr must already be present in stable.
--- A borrowed-party swap introduces foreign PIDs never seen in stable, so this
--- correctly separates deposits (all PIDs known) from swaps (new PIDs present).
+-- party compaction (deposit, withdrawal, or party-menu reorder).
+--
+-- Phase B: returns the set-symmetric-difference rule (added<=1 and removed<=1).
+-- Legacy rule is computed alongside for diagnostic logging — disagreements
+-- surface in the console for surveillance.  Empirically the new rule rejects
+-- mid-swap intermediate frames (added=0, removed>=3) that the legacy rule
+-- accepts, eliminating the BUG-2 baseline corruption pattern.
 local function _is_compaction_shift(curr, stable)
-    local stable_set = {}
+    local stable_set, curr_set = {}, {}
     for i = 0, 5 do
         local p = stable[i] or 0
         if p ~= 0 then stable_set[p] = true end
+        local q = curr[i] or 0
+        if q ~= 0 then curr_set[q] = true end
     end
-    for i = 0, 5 do
-        local p = curr[i] or 0
-        if p ~= 0 and not stable_set[p] then
-            return false  -- foreign PID → genuine borrowed-party swap
-        end
+    local old_result = true
+    for p in pairs(curr_set) do
+        if not stable_set[p] then old_result = false; break end
     end
-    return true
+    local added, removed = 0, 0
+    for p in pairs(curr_set) do
+        if not stable_set[p] then added = added + 1 end
+    end
+    for p in pairs(stable_set) do
+        if not curr_set[p] then removed = removed + 1 end
+    end
+    local new_result = (added <= 1 and removed <= 1)
+    if old_result ~= new_result then
+        console.log(string.format(
+            "[SLink-FRLGE] [DIAG] _is_compaction_shift reclassification: "
+            .. "old=%s new=%s added=%d removed=%d",
+            tostring(old_result), tostring(new_result), added, removed))
+    end
+    return new_result
 end
 
 -- Validate that box storage is accessible and currentBox is in range.
@@ -1357,7 +1374,7 @@ local function on_frame()
                 if not resolved_areas[area] then
                     local disp = area_display(area)
                     hud_show("** NEW ENCOUNTER **  " .. disp, 255, 220, 60, 240)
-                    M.playSE(M.SE_NEW_LINK)
+                    M.playSE(M.SE_SUCCESS)
                 end
             else
                 -- Hello response hasn't arrived yet — defer HUD until resolved_areas seeds.
@@ -1475,7 +1492,7 @@ local function on_frame()
                 and not resolved_areas[battle_area_id] and not game_module.is_gift_area(battle_area_id) then
             local disp = area_display(battle_area_id)
             hud_show("** NEW ENCOUNTER **  " .. disp, 255, 220, 60, 360)
-            M.playSE(M.SE_NEW_LINK)
+            M.playSE(M.SE_SUCCESS)
         end
     end
 
@@ -1763,6 +1780,178 @@ local function on_frame()
             pending_freeze_release = false
             freeze_release_reason  = nil
             pending_faint_debounce = {}  -- clear stale debounce state
+
+            -- ── freeze-period catch recovery ────────────────────────────────────
+            -- Catches that happened while frozen never fired their capture event
+            -- (party_diff_ok was false).  Scan party + last-deposited box slot
+            -- for unknown keys and emit recovery captures.
+            --
+            -- Party scan is gated on diff<=1 to avoid surfacing borrowed mons as
+            -- fake captures when the engine restore is incomplete.  Box scan
+            -- runs unconditionally whenever the recent outcome was CAUGHT —
+            -- readLastPCDeposit() returns a specific engine-written slot, so
+            -- false-positive risk is minimal, and this closes the case where
+            -- pre_swap_pids was corrupted before the freeze triggered.
+            do
+                local ref_pids = pre_swap_pids or _stable_party_pids
+                local recover_diff = _pids_diff_count(_curr_pids, ref_pids)
+                local pre_swap_set = {}
+                for i = 0, 5 do
+                    local p = ref_pids[i] or 0
+                    if p ~= 0 then pre_swap_set[p] = true end
+                end
+                local outcome = M.getBattleOutcome()
+                local recent_caught_battle =
+                    (outcome == M.OUTCOME_CAUGHT) and (battle_area_id ~= nil)
+                local n_recovered = 0
+
+                -- 2a — party scan (gated on diff<=1 to avoid borrowed mons)
+                if recover_diff > 1 then
+                    console.log(string.format(
+                        "[SLink-FRLGE] party scan skipped: diff=%d > 1 (party may still hold borrowed mons)",
+                        recover_diff))
+                else
+                    for k, info in pairs(curr_party) do
+                        if not all_known_keys[k] and not sync_written_keys[k] then
+                            local pid = tonumber((k:match("^(%x+):")) or "", 16)
+                            if not (pid and pre_swap_set[pid]) then
+                                local ok_ps, ps = pcall(M.readPartySlot, info.slot)
+                                local cap_nick = ok_ps and ps and ps.nickname     or ""
+                                local cap_sid  = ok_ps and ps and ps.species_id   or 0
+                                local cap_iid  = ok_ps and ps and ps.held_item_id or 0
+                                local cap_aid  = ok_ps and ps and ps.ability_id   or 0
+                                local cap_flags = mem_u8(M.PARTY_BASE + info.slot * M.MON_SIZE + M.OFF_FLAGS)
+                                local cap_is_egg = (cap_flags & 0x04) ~= 0
+                                _display_cache[k] = {nickname=cap_nick, species_id=cap_sid,
+                                                     held_item_id=cap_iid, ability_id=cap_aid}
+                                if cap_nick ~= "" or cap_sid ~= 0 then
+                                    nick_cache[k] = cap_nick ~= "" and cap_nick or ("#"..cap_sid)
+                                end
+                                local evt_area, recover_kind
+                                if recent_caught_battle then
+                                    evt_area     = battle_area_id
+                                    recover_kind = "battle"
+                                elseif in_battle then
+                                    evt_area     = battle_area_id or area
+                                    recover_kind = "battle"
+                                else
+                                    local gift_area
+                                    if not nuzlocke_active then
+                                        gift_area = "intro"
+                                    elseif area ~= "" then
+                                        gift_area = area
+                                    else
+                                        local g, n = M.getCurrentMap()
+                                        gift_area = "gift_" .. g .. "_" .. n
+                                    end
+                                    evt_area     = gift_area
+                                    recover_kind = "gift"
+                                end
+                                all_known_keys[k] = true
+                                if recover_kind == "battle" then
+                                    captured_this_battle    = true
+                                    resolved_areas[evt_area] = true
+                                end
+                                send({event="capture", key=k, hp=info.hp, maxHP=info.maxHP,
+                                      level=info.level, area_id=evt_area,
+                                      nickname=cap_nick, species_id=cap_sid,
+                                      held_item_id=cap_iid, is_egg=cap_is_egg},
+                                     "capture(recovered-"..recover_kind.."):"..k:sub(1,8), true)
+                                n_recovered = n_recovered + 1
+                            end
+                        end
+                    end
+                end  -- end party scan diff gate
+
+                -- 2b — box scan (catch went to box because party was full).
+                -- Runs unconditionally on OUTCOME_CAUGHT — readLastPCDeposit()
+                -- returns a specific engine-written slot so the pre_swap_set +
+                -- all_known_keys filters are enough to avoid false positives,
+                -- and we don't need to rely on the diff gate (which can fail
+                -- when pre_swap_pids was corrupted before the freeze fired).
+                if recent_caught_battle and not captured_this_battle then
+                    local dep_box, dep_slot = M.readLastPCDeposit()
+                    if dep_box == nil or dep_box == M.MEMORIAL_BOX then
+                        console.log("[SLink-FRLGE] recovery: box scan skipped (no PC deposit info)")
+                    else
+                        local slots_to_check
+                        if dep_slot ~= nil then
+                            slots_to_check = {dep_slot}
+                        else
+                            slots_to_check = {}
+                            for si = 0, M.MONS_PER_BOX - 1 do
+                                slots_to_check[#slots_to_check + 1] = si
+                            end
+                        end
+                        for _, si in ipairs(slots_to_check) do
+                            local baddr = M.boxMonAddr(dep_box, si)
+                            if baddr and M.boxSlotOccupied(baddr) then
+                                local k = M.monKey(baddr)
+                                if k and not all_known_keys[k] and not sync_written_keys[k] then
+                                    local pid = tonumber((k:match("^(%x+):")) or "", 16)
+                                    if not (pid and pre_swap_set[pid]) then
+                                        local bnick, bsid, biid = M.readBoxSlotDisplay(baddr, true)
+                                        if bnick ~= "" or bsid ~= 0 then
+                                            nick_cache[k] = bnick ~= "" and bnick or ("#"..bsid)
+                                        end
+                                        -- Stats from gBattleMons[1] (mirrors lines 2278-2309).
+                                        -- Sanity-check maxHP >= level so a partially-cleared
+                                        -- struct doesn't ship nonsense stats to the server.
+                                        local box_stats, box_lv, box_maxHP = nil, 0, 0
+                                        if M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
+                                            local foe_base = M.BATTLE_MONS_ADDR + 1 * M.BATTLE_MON_SIZE
+                                            local ok_lv, elv = pcall(memory.read_u8,     foe_base + 0x2A)
+                                            local ok_mh, emh = pcall(memory.read_u16_le, foe_base + 0x2C)
+                                            local ok_at, eat = pcall(memory.read_u16_le, foe_base + 0x02)
+                                            local ok_de, ede = pcall(memory.read_u16_le, foe_base + 0x04)
+                                            local ok_sp, esp = pcall(memory.read_u16_le, foe_base + 0x06)
+                                            local ok_sa, esa = pcall(memory.read_u16_le, foe_base + 0x08)
+                                            local ok_sd, esd = pcall(memory.read_u16_le, foe_base + 0x0A)
+                                            box_lv    = (ok_lv and elv and elv > 0) and elv or 0
+                                            local mhp = (ok_mh and emh and emh > 0) and emh or 0
+                                            -- gBattleMons[1] may be partly cleared post-catch;
+                                            -- only ship stats when maxHP is plausible (>= level).
+                                            if box_lv > 0 and mhp >= box_lv then
+                                                box_maxHP = mhp
+                                                box_stats = {
+                                                    level   = box_lv,
+                                                    maxHP   = mhp,
+                                                    attack  = ok_at and eat or 0,
+                                                    defense = ok_de and ede or 0,
+                                                    speed   = ok_sp and esp or 0,
+                                                    spAtk   = ok_sa and esa or 0,
+                                                    spDef   = ok_sd and esd or 0,
+                                                }
+                                            end
+                                            if bsid == 0 then
+                                                local ok_es, esid = pcall(memory.read_u16_le, foe_base + 0x00)
+                                                bsid = (ok_es and esid and esid > 0) and esid or 0
+                                            end
+                                        end
+                                        all_known_keys[k] = true
+                                        captured_this_battle     = true
+                                        resolved_areas[battle_area_id] = true
+                                        send({event="capture", key=k, area_id=battle_area_id,
+                                              in_box=true, level=box_lv, maxHP=box_maxHP,
+                                              nickname=bnick, species_id=bsid,
+                                              held_item_id=biid, stats=box_stats},
+                                             "capture(recovered-box):"..k:sub(1,8), true)
+                                        n_recovered = n_recovered + 1
+                                        break  -- one box catch per battle
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+
+                if n_recovered > 0 then
+                    console.log(string.format(
+                        "[SLink-FRLGE] recovered %d capture(s) on unfreeze (diff=%d, in_battle=%s, outcome=%d)",
+                        n_recovered, recover_diff, tostring(in_battle), outcome))
+                end
+            end
+
             -- Reset PID detector state so the next swap re-baselines cleanly.
             pre_swap_pids            = nil
             for i = 0, 5 do _stable_party_pids[i] = _curr_pids[i] end
