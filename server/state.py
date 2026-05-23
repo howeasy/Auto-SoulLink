@@ -260,6 +260,12 @@ class SoulLinkState:
                 self.party_size[player_id] = len(party)
                 if old_size != len(party):
                     log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {len(party)}  (tick/safe)")
+                # Reconcile party_keys against Lua's actual party snapshot.  Catches
+                # state drift from spurious party_to_box / missed box_to_party events
+                # in the Lua diff loop — without this, a phantom deposit propagates
+                # a real box_mon to the partner and the Soul Link party-sync rule
+                # silently breaks until something else forces correction.
+                self._reconcile_party_keys(player_id, party)
 
         cmds = self.queued_commands[player_id][:]
         self.queued_commands[player_id].clear()
@@ -1668,6 +1674,99 @@ class SoulLinkState:
         """Count party keys excluding bonus (shiny clause) mons."""
         bonus = self.bonus_keys.get(player_id, set())
         return sum(1 for k in self.party_keys[player_id] if k not in bonus)
+
+    def _has_pending_command(self, player_id: str, key: str, *cmds: str) -> bool:
+        """True if any queued command for player_id matches one of cmds and targets key."""
+        return any(
+            c.get("key") == key and c.get("cmd") in cmds
+            for c in self.queued_commands[player_id]
+        )
+
+    def _is_quarantined(self, player_id: str, key: str) -> bool:
+        """True if key is a pending (un-linked) capture for player_id."""
+        for players in self.pending_captures.values():
+            cap = players.get(player_id)
+            if cap and cap.key == key:
+                return True
+        return False
+
+    def _reconcile_party_keys(self, player_id: str, party: list) -> None:
+        """
+        Repair `party_keys[player_id]` to match Lua's actual party snapshot.
+
+        Lua sends the full party each tick.  If our tracked set has drifted (e.g.
+        a phantom party_to_box from the Lua diff loop made the server think a mon
+        was deposited when it really wasn't), this reconciles silently.
+
+        For each ghost-boxed key (in tick but not in party_keys) we also check the
+        partner: if the partner is alive and currently boxed per the server, queue
+        a party_mon to pull them back so the Soul Link party-sync rule is restored
+        in both halves at once.
+
+        Skipped:
+          - Mons with pending box_mon/party_mon/memorialize (in-flight; reconciling
+            mid-flight would race with Lua's pending_sync queue).
+          - Memorial/dead mons (must never be re-added to party_keys; if Lua sees
+            one in party that's a separate problem handled by _handle_box_to_party).
+          - Quarantined mons (pending_captures; must stay boxed until link forms).
+          - Active rebuild (rebuild_pending owns party_keys bookkeeping for its
+            duration; let it finish, then next tick reconciles cleanly).
+        """
+        if self.rebuild_pending.get(player_id):
+            return
+
+        actual_keys = {mon.get("key", "") for mon in party if mon.get("key")}
+        tracked_keys = self.party_keys[player_id]
+        partner = _partner(player_id)
+
+        # Ghost-boxed: Lua reports key in party, server thinks it's deposited.
+        for key in actual_keys - tracked_keys:
+            if self._has_pending_command(player_id, key,
+                                          "box_mon", "party_mon", "memorialize"):
+                continue
+            if self._is_quarantined(player_id, key):
+                continue
+            entry = self._key_index.get(key)
+            if entry is None:
+                # Untracked mon (e.g. unlinked, never had a partner) — server
+                # has no opinion about box vs. party for it, so just sync.
+                self.party_keys[player_id].add(key)
+                continue
+            if entry.status != LinkStatus.ALIVE:
+                # Memorial/dead mon should not be in party — server is right,
+                # Lua is wrong.  Leave party_keys alone; _handle_box_to_party
+                # already re-memorializes via the dead/memorial guard.
+                continue
+            self.party_keys[player_id].add(key)
+            log.warning(f"[{player_id}] tick reconcile: re-added {key[:8]} to party_keys "
+                        f"(ghost-boxed — Lua reports in party)")
+            # Pull partner if they're server-side boxed too — restores the rule
+            # break that the phantom deposit created.
+            partner_mon = entry.b if player_id == "a" else entry.a
+            if partner_mon and partner_mon.key not in self.party_keys[partner]:
+                if not self._has_pending_command(partner, partner_mon.key,
+                                                  "party_mon", "box_mon", "memorialize"):
+                    cmd: dict = {"cmd": "party_mon", "key": partner_mon.key}
+                    if partner_mon.nickname:
+                        cmd["nickname"] = partner_mon.nickname
+                    cached = self.mon_stats.get(partner_mon.key)
+                    if cached:
+                        cmd["stats"] = cached
+                    self.queued_commands[partner].append(cmd)
+                    log.warning(f"[{partner}] tick reconcile: queued party_mon {partner_mon.key[:8]} "
+                                f"to restore party-sync with {player_id}")
+
+        # Ghost-party: server thinks key is in party, Lua doesn't see it.  Rarer,
+        # but possible if a real party_to_box's emission was suppressed somewhere.
+        for key in tracked_keys - actual_keys:
+            if self._has_pending_command(player_id, key,
+                                          "box_mon", "party_mon", "memorialize"):
+                continue
+            if key in self.pending_memorials.get(player_id, set()):
+                continue
+            self.party_keys[player_id].discard(key)
+            log.warning(f"[{player_id}] tick reconcile: discarded {key[:8]} from party_keys "
+                        f"(ghost-party — Lua doesn't see it in party)")
 
     # ── auto-rebuild helpers (after whiteout) ────────────────────────────────
 

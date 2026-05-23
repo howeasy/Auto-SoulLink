@@ -4812,3 +4812,131 @@ def test_key_change_undo_faint_propagates_with_restored_key(tmp_path, monkeypatc
     state.handle_event("a", {"event": "faint", "key": ORIG_KEY})
     cmds = state.handle_event("b", {"event": "tick"})
     assert has_cmd(cmds, "force_faint", "BBBB:2222")
+
+
+# ── tick reconciliation of party_keys vs. Lua snapshot ───────────────────────
+
+def test_tick_reconcile_consistent_party_is_noop(tmp_path, monkeypatch):
+    """Tick where Lua's party matches party_keys leaves state unchanged and queues nothing."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+    cmds = state.handle_event("a", {"event": "tick",
+                                    "party": [{"key": "A:1"}]})
+    assert state.party_keys["a"] == {"A:1"}
+    assert noop_only(cmds)
+
+
+def test_tick_reconcile_ghost_boxed_mon_readds_and_pulls_partner(tmp_path, monkeypatch):
+    """
+    Phantom party_to_box scenario: Lua diff falsely emitted a deposit for A's mon,
+    so server discarded it from party_keys[a] and queued box_mon to B which physically
+    deposited B's partner.  When A's next tick reports the mon still in party, the
+    reconciler should re-add it AND queue party_mon for B to restore party-sync.
+    """
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+    # Simulate the phantom deposit aftermath: server believes A's mon is boxed,
+    # and B's mon got physically boxed in response.
+    state.party_keys["a"].discard("A:1")
+    state.party_keys["b"].discard("B:2")
+    state.mon_stats["B:2"] = {"level": 7, "maxHP": 22, "attack": 10, "defense": 9,
+                              "speed": 12, "spAtk": 8, "spDef": 8}
+
+    cmds_a = state.handle_event("a", {"event": "tick",
+                                      "party": [{"key": "A:1"}]})
+    assert "A:1" in state.party_keys["a"]
+    # Partner pull is queued on B's side — fetched on B's next round-trip.
+    cmds_b = state.handle_event("b", {"event": "tick", "party": []})
+    assert has_cmd(cmds_b, "party_mon", "B:2")
+    # Stats from the cache should ride along so Lua can retrieve cleanly.
+    party_mon_cmd = next(c for c in cmds_b if c.get("cmd") == "party_mon" and c.get("key") == "B:2")
+    assert party_mon_cmd.get("stats", {}).get("level") == 7
+
+
+def test_tick_reconcile_ghost_party_discards(tmp_path, monkeypatch):
+    """
+    Inverse drift: server thinks key is in party_keys but Lua's tick doesn't see it.
+    Reconciler should discard the stale entry.
+    """
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+    # Lua reports an empty party (mon really got deposited but party_to_box was lost).
+    state.handle_event("a", {"event": "tick", "party": []})
+    assert "A:1" not in state.party_keys["a"]
+
+
+def test_tick_reconcile_skips_keys_with_pending_box_mon(tmp_path, monkeypatch):
+    """
+    Don't reconcile a key with a pending box_mon — Lua hasn't executed yet but will,
+    and reconciling now would race with the in-flight command.
+    """
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+    # Server has queued a real box_mon for A's mon but Lua hasn't drained it yet.
+    state.queued_commands["a"].append({"cmd": "box_mon", "key": "A:1"})
+    # During that window Lua's tick still reports the mon in party — don't discard.
+    state.party_keys["a"].discard("A:1")  # already discarded as part of party_to_box
+    cmds = state.handle_event("a", {"event": "tick",
+                                    "party": [{"key": "A:1"}]})
+    assert "A:1" not in state.party_keys["a"], (
+        "reconciler must not re-add a key while box_mon is in-flight"
+    )
+    # No party_mon should leak to B either.
+    cmds_b = state.handle_event("b", {"event": "tick", "party": [{"key": "B:2"}]})
+    assert not has_cmd(cmds_b, "party_mon", "B:2")
+
+
+def test_tick_reconcile_skips_memorial_mons(tmp_path, monkeypatch):
+    """A memorial mon Lua transiently sees in party must not be re-added to party_keys."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link(status=LinkStatus.MEMORIAL)
+    state.party_keys["a"].discard("A:1")
+    state.handle_event("a", {"event": "tick", "party": [{"key": "A:1"}]})
+    assert "A:1" not in state.party_keys["a"]
+
+
+def test_tick_reconcile_skips_quarantined_mons(tmp_path, monkeypatch):
+    """A quarantined (pending-link) capture must stay boxed even if Lua reports party presence."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.pending_captures["route_5"] = {"a": MonInfo(key="Q:99", level=4)}
+    state.handle_event("a", {"event": "tick", "party": [{"key": "Q:99"}]})
+    assert "Q:99" not in state.party_keys["a"]
+
+
+def test_tick_reconcile_skips_during_rebuild(tmp_path, monkeypatch):
+    """rebuild_pending owns its own party_keys bookkeeping; tick must defer to it."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+    state.party_keys["a"].discard("A:1")
+    state.rebuild_pending["a"] = {"queued_keys": ["A:1"], "restored_keys": set()}
+    state.handle_event("a", {"event": "tick", "party": [{"key": "A:1"}]})
+    # Reconciler should NOT touch party_keys while a rebuild is in flight.
+    assert "A:1" not in state.party_keys["a"]
+
+
+def test_tick_reconcile_untracked_key_is_added_without_partner_pull(tmp_path, monkeypatch):
+    """Lua reports a key the server has no link entry for — just sync, don't try to pull a partner."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState()
+    state.pokeballs_obtained = {"a": True, "b": True}
+    cmds = state.handle_event("a", {"event": "tick", "party": [{"key": "ORPHAN:42"}]})
+    assert "ORPHAN:42" in state.party_keys["a"]
+    # No partner pull because there's no link entry.
+    cmds_b = state.handle_event("b", {"event": "tick", "party": []})
+    assert noop_only(cmds_b)
+
+
+def test_tick_reconcile_doesnt_double_pull_partner_already_in_party(tmp_path, monkeypatch):
+    """If the partner is already in their party_keys, don't queue a redundant party_mon."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+    # Only A's side is ghost-boxed; B's side is intact.
+    state.party_keys["a"].discard("A:1")
+    state.handle_event("a", {"event": "tick", "party": [{"key": "A:1"}]})
+    assert "A:1" in state.party_keys["a"]
+    cmds_b = state.handle_event("b", {"event": "tick", "party": [{"key": "B:2"}]})
+    assert not has_cmd(cmds_b, "party_mon", "B:2"), (
+        "partner already in their party_keys — no redundant party_mon should be queued"
+    )
