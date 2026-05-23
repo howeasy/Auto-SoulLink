@@ -134,7 +134,7 @@ SLINK_PORT   = {tcp_port}
 SLINK_PLAYER = "{player}"
 
 -- Config file lives next to this launcher and caches the project root path.
-local _launcher_dir = ((debug.getinfo(1, "S") or {{}}).source or ""):match("@(.+[\\/])") or ""
+local _launcher_dir = ((debug.getinfo(1, "S") or {{}}).source or ""):match("@(.+[\\\\/])") or ""
 local _cfg_path = _launcher_dir .. "slink_path.cfg"
 
 local function _valid_root(path)
