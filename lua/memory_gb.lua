@@ -545,7 +545,12 @@ end
 -- ═══ Battle State ═══
 
 function M.isInBattle()
-    return M.read_u8(M.BATTLE_FLAG_ADDR) ~= 0
+    -- Per pret/pokered & pret/pokecrystal, wIsInBattle has FOUR values:
+    --   0 = IN_BATTLE_NONE, 1 = IN_BATTLE_WILD, 2 = IN_BATTLE_TRAINER,
+    --   -1 (0xFF) = IN_BATTLE_LOST (set during certain post-battle cleanup paths
+    --   and can persist after a successful catch). Only treat 1/2 as in-battle.
+    local v = M.read_u8(M.BATTLE_FLAG_ADDR)
+    return v == 1 or v == 2
 end
 
 function M.isWildBattle()

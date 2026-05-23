@@ -2197,7 +2197,27 @@ class SLinkServer:
         log.info(f"Client connected: {peer}")
         player_id_for_conn: str | None = None
         try:
-            async for raw in reader:
+            while True:
+                try:
+                    raw = await reader.readuntil(b"\n")
+                except asyncio.IncompleteReadError:
+                    break  # peer closed cleanly
+                except asyncio.LimitOverrunError as e:
+                    # A single line exceeded the configured 4 MiB limit. Drain
+                    # the overrun bytes so the next readuntil starts at a fresh
+                    # line, log a warning, and keep the connection alive instead
+                    # of letting asyncio tear it down.
+                    log.warning(f"Oversized line from {peer} ({e.consumed} bytes consumed before limit) — dropping")
+                    try:
+                        # Drain until next newline so the buffer is realigned.
+                        await reader.readexactly(e.consumed)
+                        while True:
+                            chunk = await reader.read(65536)
+                            if not chunk or b"\n" in chunk:
+                                break
+                    except (asyncio.IncompleteReadError, asyncio.LimitOverrunError):
+                        break
+                    continue
                 line = raw.decode("utf-8", errors="replace").strip()
                 if not line:
                     continue
@@ -2513,8 +2533,8 @@ class SLinkServer:
                                 msg.get("area_id", ""), key)
                 detail = {
                     "level":        msg.get("level", 0),
-                    "hp":           1,
-                    "maxHP":        1,
+                    "hp":           msg.get("hp", 1),
+                    "maxHP":        msg.get("maxHP", 1),
                     "nickname":     msg.get("nickname", ""),
                     "species_id":   sid,
                     "held_item_id": msg.get("held_item_id", msg.get("held_item", 0)),
@@ -6233,8 +6253,14 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                       species_lock=species_lock, gender_lock=gender_lock,
                       type_lock=type_lock)
 
-    # TCP game server
-    tcp_server = await asyncio.start_server(srv.handle_client, host, port)
+    # TCP game server.
+    # limit=4 MiB lifts asyncio's default 64 KiB readline buffer so Gen 5's
+    # full party+box hello payload (24 boxes × 30 slots × ~150 bytes JSON ≈ 110 KiB)
+    # doesn't trip LimitOverrunError and force the connection closed each tick.
+    # Gen 4 (18 boxes) and Gen 1-3 (smaller PCs) fit under the old limit but get
+    # the bigger headroom for free.
+    tcp_server = await asyncio.start_server(srv.handle_client, host, port,
+                                            limit=4 * 1024 * 1024)
     addrs = ", ".join(str(s.getsockname()) for s in tcp_server.sockets)
     run_label = f" [{run_id}]" if run_id else ""
     log.info(f"SLink{run_label} TCP server listening on {addrs}")

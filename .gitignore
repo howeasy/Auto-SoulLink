@@ -9,9 +9,16 @@ data/runs/
 data/backups/
 *.State
 *.sav
+# ROM files — never commit these (copyright, repo size). Covers the common
+# extensions for the platforms SLink supports.
+*.gb
+*.gbc
+*.gba
+*.nds
 slink_path.cfg
 node_modules/
 .claude/
+CLAUDE.md
 tests/_tmp/
 data/twitch_bot.json
 data/obs_config.json
@@ -23,3 +30,7 @@ data/obs_config.json
 # intermediate .o files). data/pret_syms.json IS committed (50KB artifact
 # so contributors without RGBDS can still run pytest).
 /.cache/
+
+# Lua console tee (per-run debug log written by lua/slink.lua, truncated
+# each boot — not useful in version control)
+slink_lua.log

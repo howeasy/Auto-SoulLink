@@ -42,8 +42,16 @@ end
 
 -- Detection: returns true if the loaded ROM is Gen 3 (FRLG or Emerald)
 function GEN3.detect()
-    -- Read 4-byte game code from GBA ROM header at 0x080000AC
-    -- Wrapped in pcall: "System Bus" domain only exists on GBA cores.
+    -- Bail BEFORE touching memory.read_u8 on the wrong system. BizHawk prints
+    -- "Unable to find domain: System Bus, falling back to current" for every
+    -- byte read against a non-existent domain (e.g. on NDS) — pcall only
+    -- catches the failure AFTER the console line has been written, spamming
+    -- the BizHawk Lua console with one warning per byte.
+    local sys_ok, sysId = pcall(function() return emu.getsystemid() end)
+    if not sys_ok or (sysId ~= "GBA" and sysId ~= "GB" and sysId ~= "GBC") then
+        return false
+    end
+    -- Read 4-byte game code from GBA ROM header at 0x080000AC.
     local ok, code = pcall(function()
         local b = {}
         for i = 0, 3 do
@@ -488,14 +496,23 @@ GEN3.profiles.emerald = {
 
 -- Cache the ROM game code so Emerald-specific lookups can branch cheaply.
 do
-    local ok, code = pcall(function()
-        local b = {}
-        for i = 0, 3 do
-            b[i + 1] = string.char(memory.read_u8(0x080000AC + i, "System Bus"))
-        end
-        return table.concat(b)
-    end)
-    GEN3._game_code = (ok and code) or nil
+    -- Same as detect(): gate the System Bus read behind a sysId check so we
+    -- don't spam BizHawk's console with "Unable to find domain" warnings
+    -- when this module is loaded on a non-GBA core (e.g. NDS during the
+    -- game_detect dispatch loop).
+    local sys_ok, sysId = pcall(function() return emu.getsystemid() end)
+    if sys_ok and (sysId == "GBA" or sysId == "GB" or sysId == "GBC") then
+        local ok, code = pcall(function()
+            local b = {}
+            for i = 0, 3 do
+                b[i + 1] = string.char(memory.read_u8(0x080000AC + i, "System Bus"))
+            end
+            return table.concat(b)
+        end)
+        GEN3._game_code = (ok and code) or nil
+    else
+        GEN3._game_code = nil
+    end
 end
 
 local function _lookup_table(frlg_module, emerald_module)

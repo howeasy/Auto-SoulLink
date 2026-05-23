@@ -141,6 +141,23 @@ M.encrypt_stats = encrypt_stats
 -- Reference: pret/pokeheartgold include/pokemon_types_def.h,
 --            Project Pokemon Gen 4 PKM structure docs (block order formula).
 
+-- Max National Pokédex species ID accepted by Block A decryption.
+-- Gen 4 = 493 (Arceus); Gen 5 = 649 (Genesect). Set via profile (applyProfile).
+-- MUST be declared BEFORE decrypt_block_a / decrypt_block_a_ext: Lua resolves
+-- forward-referenced names as globals (nil), so reading SPECIES_MAX inside
+-- those functions would compare to nil and crash. applyProfile updates this
+-- local — the upvalue is captured at function-definition time.
+local SPECIES_MAX        = 493
+
+-- Trainer/nickname text encoding. "gen4" = HGSS/Pt custom charcode table;
+-- "gen5" = BW/B2W2 UTF-16LE passthrough (printable ASCII passes through).
+-- MUST be declared BEFORE readNickname() / readTrainerName(): same forward-
+-- reference scoping bug as SPECIES_MAX — without an earlier `local`, those
+-- functions resolve the name to a (nil) global, the gen5 branch is skipped,
+-- and gen5 mons render as a string of '?' chars (one per nickname char).
+-- applyProfile() updates this upvalue at startup.
+local TRAINER_NAME_ENCODING = "gen4" -- "gen4" or "gen5"
+
 -- Block A byte offset within the 128-byte data region for each of the 24 block orders.
 -- order_val = ((PID & 0x3E000) >> 13) % 24  (Project Pokemon spec; NOT pid%24)
 -- ABCD=0..5 → A@0, BACD=6 → A@32, BCAD=8 → A@64, BCDA=9 → A@96, …
@@ -470,21 +487,29 @@ M.BALL_APRICORN_MAX = 0x01F4
 local P1_PTR_ADDR        = 0x0BA8    -- u32_le ptr to p1; & 0xFFFFFF = p1
 local BASE_PTR_OFF       = 0x20      -- offset within p1 to save-data base pointer
 
--- PC storage (source: pret/pokeheartgold include/pokemon_storage_system.h, src/save.c):
---   arrayHeaders[41] (SAVE_PCSTORAGE) at base+0x232A4
---   arrayHeaders[41].offset field (3rd u32 in 0x10-byte header) at base+0x232AC
---   PC storage base = base + dynamic_region_off + r32(base + PC_ARRAY_HDR_OFF)
--- where dynamic_region_off = 0x10 on HGSS and 0x14 on Platinum — see DYNAMIC_REGION_OFF.
-local PC_ARRAY_HDR_OFF   = 0x232AC   -- arrayHeaders[SAVE_PCSTORAGE].offset field
+-- PC storage — HGSS (pret/pokeheartgold):
+--   SaveData has arrayHeaders[42] after the dynamic_region.
+--   arrayHeaders[41] (SAVE_PCSTORAGE) .offset field at SaveData+0x232AC.
+--   r32(base + PC_ARRAY_HDR_OFF) = byte offset within dynamic_region of PCStorage.boxes[0].
+--   PCStorage has no currentBoxID header; boxes[0][0] is at dynamic_region + chunk_off.
+-- PC storage — Platinum (pret/pokeplatinum):
+--   SaveData has SavePageInfo pageInfo[38]; no arrayHeaders.
+--   PC_BOXES is SAVE_TABLE_ENTRY_PC_BOXES = entry 37.
+--   pageInfo[37].location = byte offset within body.data of PCBoxes struct start.
+--   PCBoxes struct: u32 currentBoxID, then BoxPokemon boxMons[18][30], ...
+--   So boxes[0][0] = body.data + pageInfo[37].location + sizeof(currentBoxID).
+--   pageInfo[37].location RAM address: body at SaveData+0x14 (0x20000 bytes), then
+--     globalCounter(4) + blockCounters[2](8) + blockOffsets[2](2) + pad(2) = 16 bytes,
+--     pageInfo at SaveData+0x20024; pageInfo[37].location at +0x20024+37*0x10+8 = 0x2027C.
+--   PC_BOXES_DATA_OFF = 4 skips currentBoxID to land on boxMons[0][0].
+local PC_ARRAY_HDR_OFF   = 0x232AC   -- HGSS: arrayHeaders[41].offset; Pt: see profile
+local PC_BOXES_DATA_OFF  = 0         -- extra offset past chunk start to box[0][0] (Pt: 4)
 local PC_BOX_STRIDE      = 0x1000    -- bytes per PC_BOX (30 slots + padding)
 local PC_SLOT_STRIDE     = 0x88      -- bytes per BoxPokemon slot
 
--- SaveData → dynamic_region offset:
+-- SaveData → dynamic_region/body offset:
 --   HGSS     : SaveData + 0x10 = dynamic_region[0]
---   Platinum : SaveData + 0x14 = dynamic_region[0]
--- pcStorageBase() uses this + arrayHeaders[41].offset to land on PCStorage.boxes[0].
--- Source: pret/pokeheartgold include/save.h vs pret/pokeplatinum equivalent layout
--- (struct SaveData prefix differs by 4 bytes — Pt has an extra u32 before dynamic_region).
+--   Platinum : SaveData + 0x14 = body.data[0]
 local DYNAMIC_REGION_OFF = 0x10
 
 -- Party / battle copy offsets (relative to resolved base pointer)
@@ -584,10 +609,6 @@ local BATTLE_MODE_ADDR   = nil
 -- Both HGSS and Platinum use 18-box storage; memorial is the last box.
 local MEMORIAL_BOX       = 17
 
--- Max National Pokédex species ID accepted by Block A decryption.
--- Gen 4 = 493 (Arceus); Gen 5 = 649 (Genesect). Set via profile.
-local SPECIES_MAX        = 493
-
 -- ── Gen 5 direct-addressing mode ─────────────────────────────────────────────
 -- Gen 5 (Black/White/Black2/White2) uses fixed absolute RAM addresses instead of
 -- the Gen 4 two-level pointer chain. When DIRECT_ADDR = true:
@@ -600,7 +621,7 @@ local DIRECT_ADDR          = false   -- true for Gen 5
 local ZONE_ID_DIRECT       = false   -- true for Gen 5 (no pointer fallback on zone==0)
 local PC_STORAGE_BASE      = nil     -- Gen 5 direct PC box[0] base addr (nil = Gen 4 method)
 local PC_STORAGE_BASE_ALT  = nil     -- Gen 5 fallback candidate (probed if primary reads zero)
-local TRAINER_NAME_ENCODING = "gen4" -- "gen4" or "gen5" (UTF-16 passthrough)
+-- TRAINER_NAME_ENCODING is hoisted above readNickname (see top of file).
 local BOXES_COUNT          = 18      -- 18 (Gen 4) or 24 (Gen 5)
 local PC_CURRENT_BOX_OFF   = 0x12000 -- offset from pcStorageBase to currentBox u8
 
@@ -613,6 +634,7 @@ function M.applyProfile(p)
     if p.P1_PTR_ADDR        ~= nil then P1_PTR_ADDR        = p.P1_PTR_ADDR        end
     if p.BASE_PTR_OFF        ~= nil then BASE_PTR_OFF       = p.BASE_PTR_OFF       end
     if p.PC_ARRAY_HDR_OFF    ~= nil then PC_ARRAY_HDR_OFF   = p.PC_ARRAY_HDR_OFF   end
+    if p.PC_BOXES_DATA_OFF   ~= nil then PC_BOXES_DATA_OFF  = p.PC_BOXES_DATA_OFF  end
     if p.DYNAMIC_REGION_OFF  ~= nil then DYNAMIC_REGION_OFF = p.DYNAMIC_REGION_OFF end
     if p.PARTY_COUNT_OFF     ~= nil then PARTY_COUNT_OFF    = p.PARTY_COUNT_OFF    end
     if p.PARTY_OFF           ~= nil then PARTY_OFF          = p.PARTY_OFF          end
@@ -1069,23 +1091,23 @@ end
 
 -- Returns the 7-element stat-stage array for battler battler_idx
 -- (0=player_L, 1=enemy_L, 2=player_R, 3=enemy_R), or nil if unavailable.
--- Values are unsigned 0..12 (matching Gen 3 convention; 6 = neutral).
--- Source: pret/pokeheartgold src/battle/struct_battle_mon.c BattleMon.statChanges (s8[]).
--- Concrete RAM addresses from NDS-Ironmon-Tracker MemoryAddresses.lua.
+-- Values are unsigned 0..12 (matching Gen 3 convention; 6 = neutral, 12 = +6,
+-- 0 = -6). The Gen 4 engine is heavily ported from Gen 3 and uses the same
+-- unsigned encoding in RAM — earlier versions of this function mistakenly
+-- sign-extended and shifted by +6, which made neutral-stat reads (byte 6) come
+-- out as 12 (clamped max). That's why every wild encounter looked like every
+-- battler was at +6 across the board at battle start. Cross-checked with the
+-- Gen 3 reader in memory_gba.lua:readStatStages which uses the raw byte.
 function M.readStatStages(battler_idx)
     local addr = _stat_stages_addr(battler_idx)
     if not addr then return nil end
     local stages = {}
     for i = 0, STAT_STAGES_LEN - 1 do
         local v = r8(addr + i)
-        -- Pret stores statChanges as signed 8-bit deltas (-6..+6). Convert to unsigned
-        -- 0..12 (atk +1 = 7, atk -1 = 5, neutral = 6).
-        if v >= 128 then
-            v = v - 256        -- sign-extend two's-complement
-        end
-        v = v + 6
-        if v < 0 then v = 0 end
-        if v > 12 then v = 12 end
+        -- Defensive clamp: legitimate values are 0..12. Anything outside this
+        -- range means we're reading the wrong memory; pin to neutral so the
+        -- UI doesn't render absurd +999 chips.
+        if v < 0 or v > 12 then v = 6 end
         stages[i + 1] = v
     end
     return stages
@@ -1299,14 +1321,11 @@ end
 
 -- ── PC Storage helpers ────────────────────────────────────────────────────────
 
--- Returns the base address of PCStorage.boxes[0] (Box 1, Slot 0) in RAM,
+-- Returns the base address of boxes[0][0] (Box 1, Slot 0) in RAM,
 -- or nil if the save is not loaded / base pointer not resolved.
--- Reads arrayHeaders[SAVE_PCSTORAGE=41].offset live from RAM each call.
--- Formula: saveData + DYNAMIC_REGION_OFF + arrayHeaders[41].offset
---   saveData            = M._base   (confirmed: base = SaveData*)
---   DYNAMIC_REGION_OFF  = 0x10 on HGSS, 0x14 on Platinum (struct SaveData prefix differs)
---   PC_ARRAY_HDR_OFF    = 0x232AC  (saveData + 0x23014 + 41*0x10 + 8 — SaveData-relative,
---                                    NOT dynamic-region-relative, so same on both games)
+-- Formula: saveData + DYNAMIC_REGION_OFF + chunk_off + PC_BOXES_DATA_OFF
+--   HGSS: chunk_off = r32(base + 0x232AC) = arrayHeaders[41].offset; PC_BOXES_DATA_OFF = 0
+--   Platinum: chunk_off = r32(base + 0x2027C) = pageInfo[37].location; PC_BOXES_DATA_OFF = 4
 -- Gen 5: PC storage is at an absolute address (PC_STORAGE_BASE); no array header needed.
 -- Probe a Gen 5 PC base candidate by checking the first 4 slots of Box 0.
 -- A valid PC base will have at least one slot whose PID is non-zero on most
@@ -1341,10 +1360,8 @@ function M.pcStorageBase()
     end
     if not M._base then return nil end
     local chunk_off = r32(M._base + PC_ARRAY_HDR_OFF)
-    -- Valid PC chunk offset must be non-zero and within dynamic_region (0x23000 bytes).
-    -- In practice it will be well above 0x100 (all 40 prior chunks precede it).
     if chunk_off < 0x100 or chunk_off >= 0x23000 then return nil end
-    return M._base + DYNAMIC_REGION_OFF + chunk_off
+    return M._base + DYNAMIC_REGION_OFF + chunk_off + PC_BOXES_DATA_OFF
 end
 
 -- Returns the RAM address of BoxPokemon at PC box `box` (0-based, 0=Box 1)

@@ -115,12 +115,14 @@ local function run_scan()
             abl and string.format("%d", abl) or "nil"))
     end
 
-    -- 4. PC array header offset. Two candidates pending live verification:
-    --   0x232AC  — same SaveData-relative position as HGSS (current _PT_PROFILE assumption)
-    --   0x232B0  — 4-byte shift to match Pt's larger SaveData prefix (alt theory)
-    -- Plausibility: the resulting value should be in 0x100..0x23000 (the offset of
-    -- the PC chunk within dynamic_region, with all 40 prior chunks preceding it).
-    for _, candidate in ipairs({ 0x232AC, 0x232B0 }) do
+    -- 4. PC storage offset — Platinum uses SaveData.pageInfo[37].location, NOT arrayHeaders.
+    --   0x2027C  — &pageInfo[37].location in SaveData (SAVE_TABLE_ENTRY_PC_BOXES=37);
+    --              expected to return the offset of PCBoxes within body.data (~0x11C8 or similar)
+    --   0x232AC  — HGSS arrayHeaders[41].offset; always reads 0x0 on live Pt (past struct end)
+    --   0x232B0  — same (+4 shift theory); also reads 0x0 on live Pt
+    -- Plausibility: value should be in 0x100..0x23000.
+    -- pcStorageBase() adds PC_BOXES_DATA_OFF=4 to skip PCBoxes.currentBoxID header.
+    for _, candidate in ipairs({ 0x2027C, 0x232AC, 0x232B0 }) do
         local pc_hdr_off = r32(base + candidate)
         local ok = pc_hdr_off >= 0x100 and pc_hdr_off < 0x23000
         log(string.format("PC arrayHeaders[41].offset @ +0x%X = 0x%X  %s",

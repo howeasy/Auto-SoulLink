@@ -119,6 +119,21 @@ M.PROFILES = {
         -- Working hypothesis 0xD031/0xD05D; Phase 9 diagnostic confirms.
         TRAINER_CLASS_ADDR      = 0xD031,
         TRAINER_ID_ADDR         = 0xD05D,
+        -- Phase 7: Sound-effect dispatch. wMusicID at 0xD35B per pret/pokered;
+        -- the audio engine consumes the byte on the next audio frame. SFX IDs from
+        -- constants/music_constants.asm.
+        SFX_DISPATCH_ADDR       = 0xD35B,
+        sfx_ids                 = {
+            capture   = 0x88,   -- SFX_GET_ITEM_1
+            gift      = 0x88,   -- SFX_GET_ITEM_1
+            faint     = 0xB4,   -- SFX_FAINT_FALL
+            whiteout  = 0xB4,   -- SFX_FAINT_FALL
+            no_catch  = 0x9C,   -- SFX_DENIED
+            success   = 0x86,   -- SFX_LEVEL_UP (link formed, nuzlocke start)
+            failure   = 0x9C,   -- SFX_DENIED
+            boo       = 0x9C,   -- SFX_DENIED
+            shiny     = 0x88,   -- SFX_GET_ITEM_1 (Gen 1 has no dedicated shiny SE)
+        },
     },
 
     -- Yellow has shifted WRAM addresses
@@ -180,6 +195,19 @@ M.PROFILES = {
         -- Yellow shift -1
         TRAINER_CLASS_ADDR      = 0xD030,
         TRAINER_ID_ADDR         = 0xD05C,
+        -- Phase 7: SFX dispatch. Yellow shifts wMusicID -1 to 0xD35A.
+        SFX_DISPATCH_ADDR       = 0xD35A,
+        sfx_ids                 = {
+            capture   = 0x88,
+            gift      = 0x88,
+            faint     = 0xB4,
+            whiteout  = 0xB4,
+            no_catch  = 0x9C,
+            success   = 0x86,
+            failure   = 0x9C,
+            boo       = 0x9C,
+            shiny     = 0x88,
+        },
     },
 }
 

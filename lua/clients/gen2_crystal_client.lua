@@ -605,6 +605,11 @@ local function on_new_mon(mon, slot, is_gift)
 
     send(evt, "capture(" .. (is_gift and "gift" or "battle") .. "):" .. mon.key:sub(1, 9), true)
     captured_this_battle = true
+    -- Self-terminate the battle state: pokecrystal's wInBattle can linger at -1
+    -- (IN_BATTLE_LOST) after some catch sequences. The new-mon signal is the
+    -- authoritative "battle over" indicator.
+    in_battle = false
+    battle_is_wild = false
     M.playSfx(is_gift and "gift" or "capture")  -- Phase 7: no-op until profile populated
 end
 
@@ -1104,6 +1109,16 @@ local function on_frame()
         whiteout_sent = false
         console.log(fmt("[SLink-Crystal] Battle START (%s) area=%s",
             battle_is_wild and "wild" or "trainer", battle_area_id))
+        -- NEW ENCOUNTER banner: wild battle in an unresolved, non-gift area.
+        -- Shortened text for GBC's 160×144 screen (~22-char HUD bar limit).
+        if battle_is_wild and nuzlocke_active and battle_area_id ~= ""
+                and not resolved_areas[battle_area_id]
+                and not G.is_gift_area(battle_area_id) then
+            local short = battle_area_id:gsub("route_", "R"):gsub("_", " ")
+                                        :gsub("(%a)([%w]*)", function(a, b) return a:upper() .. b end)
+            short = string.sub(short, 1, 8)
+            hud_show("** NEW ENC ** " .. short, 255, 220, 60, 360)
+        end
     elseif in_battle and battle_off_count >= BATTLE_DEBOUNCE_FRAMES then
         -- Battle confirmed ended
         in_battle = false

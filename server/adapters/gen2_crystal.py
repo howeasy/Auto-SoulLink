@@ -306,6 +306,21 @@ class Gen2CrystalAdapter(GameAdapter):
             f'</span>'
         )
 
+    def sprite_src(self, species_id: int) -> str:
+        """Return Crystal-style sprite URL for the enc-table overlay.
+
+        Default base.py returns the modern `pokemon/{id}.png` (Gen 8+ art). For
+        a Crystal run we want the period-appropriate sprite so the enc-table
+        matches the rest of the UI; also sidesteps any CDN-level cache mishap
+        on the modern-art URL.
+        """
+        if not species_id or species_id < 1 or species_id > 251:
+            return ""
+        return (
+            "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/"
+            f"pokemon/versions/generation-ii/crystal/transparent/{species_id}.png"
+        )
+
     def ability_name(self, ability_id: int, species_id: int = 0) -> str:
         # Gen 2 has no abilities
         return ""

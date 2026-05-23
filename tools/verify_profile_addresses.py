@@ -106,6 +106,17 @@ _RED_MAP: dict[str, Optional[str]] = {
     "enemy_battle_pp_encoding": None,
     "TRAINER_CLASS_ADDR": "wTrainerClass",
     "TRAINER_ID_ADDR": "wTrainerNo",
+    # SFX dispatch — game-engine constants, not pret WRAM symbols.
+    "SFX_DISPATCH_ADDR": None,  # wMusicID (0xD35B red/blue, 0xD35A yellow)
+    "capture":   None,
+    "gift":      None,
+    "faint":     None,
+    "whiteout":  None,
+    "no_catch":  None,
+    "success":   None,
+    "failure":   None,
+    "boo":       None,
+    "shiny":     None,
 }
 _add("red", "pokered", _RED_MAP)
 _add("blue", "pokered", _RED_MAP)  # blue shares red profile in Lua
@@ -181,6 +192,17 @@ _CRYSTAL_MAP: dict[str, Optional[str]] = {
     "enemy_battle_pp_encoding": None,
     "TRAINER_CLASS_ADDR": "wOtherTrainerClass",
     "TRAINER_ID_ADDR": "wOtherTrainerID",
+    # SFX dispatch — game-engine constants (wMusicID 0xC2BD), not pret WRAM symbols.
+    "SFX_DISPATCH_ADDR": None,
+    "capture":   None,
+    "gift":      None,
+    "faint":     None,
+    "whiteout":  None,
+    "no_catch":  None,
+    "success":   None,
+    "failure":   None,
+    "boo":       None,
+    "shiny":     None,
 }
 _add("crystal", "pokecrystal", _CRYSTAL_MAP)
 
