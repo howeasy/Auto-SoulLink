@@ -93,6 +93,46 @@ def test_partner_faint_also_propagates(tmp_path, monkeypatch):
     assert has_cmd(cmds_a, "force_faint", "A:1")
 
 
+# ── explode_mode (run rule) ───────────────────────────────────────────────────
+
+def test_explode_mode_defaults_false():
+    """explode_mode must default to False so existing runs stay on the legacy force_faint path."""
+    state = SoulLinkState()
+    assert state.explode_mode is False
+
+
+def test_explode_mode_round_trips_through_save_load(tmp_path, monkeypatch):
+    """Setting explode_mode=True must persist via _save() and be restored by load()."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(data_dir=str(tmp_path), explode_mode=True)
+    state._save()
+    reloaded = SoulLinkState.load(data_dir=str(tmp_path))
+    assert reloaded.explode_mode is True
+
+
+def test_explode_mode_off_emits_force_faint(tmp_path, monkeypatch):
+    """With explode_mode=False (default), partner-faint propagation sends `force_faint`."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+    assert state.explode_mode is False
+    state.handle_event("a", {"event": "faint", "key": "A:1"})
+    cmds_b = state.handle_event("b", {"event": "tick"})
+    assert has_cmd(cmds_b, "force_faint", "B:2")
+    assert not has_cmd(cmds_b, "force_explode")
+
+
+def test_explode_mode_on_emits_force_explode(tmp_path, monkeypatch):
+    """With explode_mode=True, partner-faint propagation sends `force_explode` instead."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+    state.explode_mode = True
+    state.handle_event("a", {"event": "faint", "key": "A:1"})
+    cmds_b = state.handle_event("b", {"event": "tick"})
+    assert has_cmd(cmds_b, "force_explode", "B:2")
+    assert not has_cmd(cmds_b, "force_faint", "B:2"), \
+        "Explode Mode must NOT emit force_faint when force_explode replaces it"
+
+
 def test_faint_before_nuzlocke_active_is_ignored(tmp_path, monkeypatch):
     """Faint before pokéballs obtained must not trigger Soul Link death (e.g. starter KO)."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))

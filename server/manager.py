@@ -241,6 +241,8 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
         cmd.append("--gender-clause")
     if run.get("type_lock"):
         cmd.append("--type-clause")
+    if run.get("explode_mode"):
+        cmd.append("--explode-mode")
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.DEVNULL,
@@ -371,6 +373,7 @@ def _adopt_orphans(runs: list[dict]) -> bool:
             "species_lock": bool(rules.get("species_lock", False)),
             "gender_lock":  bool(rules.get("gender_lock", False)),
             "type_lock":    bool(rules.get("type_lock", False)),
+            "explode_mode": bool(rules.get("explode_mode", False)),
         }
         runs.append(run)
         known_ids.add(run_id)  # avoid port collision across multiple orphans
@@ -419,6 +422,8 @@ def _render_cards(runs: list[dict], host: str) -> str:
             lock_badges += '<span class="lock-badge">Gender</span>'
         if run.get("type_lock"):
             lock_badges += '<span class="lock-badge">Type</span>'
+        if run.get("explode_mode"):
+            lock_badges += '<span class="lock-badge">Explode</span>'
 
         # Read game/rom_type from the run's links.json
         game_badge = ""
@@ -617,6 +622,7 @@ class RunManager:
             "species_lock": bool(body.get("species_lock", False)),
             "gender_lock":  bool(body.get("gender_lock", False)),
             "type_lock":    bool(body.get("type_lock", False)),
+            "explode_mode": bool(body.get("explode_mode", False)),
         }
         # Create data directory immediately
         os.makedirs(os.path.join(MANAGER_DIR, run_id), exist_ok=True)

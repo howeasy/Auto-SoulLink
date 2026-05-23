@@ -55,6 +55,10 @@ local _PROFILE_RESET_KEYS = {
     "BATTLE_TYPE_ADDR", "BATTLE_OUTCOME_ADDR",
     "BATTLE_MONS_ADDR", "BATTLER_PARTY_INDEXES_ADDR", "BATTLERS_COUNT_ADDR",
     "BATTLE_MAIN_FUNC_ADDR", "RETURN_FROM_BATTLE_ADDR",
+    "LOCKED_MOVES_ADDR", "LOCK_STATUS2_VALUE",
+    "CHOSEN_MOVE_ADDRS", "BATTLE_COMM_ADDR",
+    "CHOSEN_ACTION_ADDR", "CHOSEN_MOVE_ADDR",
+    "BATTLE_STRUCT_PTR_ADDR", "BATTLE_STRUCT_MOVE_TARGET_OFF", "BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF",
     "GMAIN_ADDR", "SB1_PTR_ADDR", "SB2_PTR_ADDR", "PSP_PTR_ADDR",
     "SB2_ENC_KEY_OFFSET", "SB1_BALL_POCKET_OFFSET", "SB1_BALL_POCKET_COUNT",
     "SB1_FLAGS_OFFSET", "SB1_VARS_OFFSET", "SE_SONG_HEADERS",
@@ -398,6 +402,23 @@ M.BATTLE_MON_OTID_OFF        = 0x54        -- BattlePokemon.otId offset (u32)
 -- offset +0x18 must be skipped — it is the HP-stage placeholder in vanilla (always 6)
 -- but is the type3 byte in CFRU (third type for Fairy support) — not a stat stage.
 M.BATTLE_MON_STAT_STAGES_OFF = 0x19        -- BattlePokemon.statStages offset for ATK (profile-independent)
+M.BATTLE_MON_MOVES_OFF       = 0x0C        -- BattlePokemon.moves[4] offset (4 × u16)
+M.BATTLE_MON_PP_OFF          = 0x24        -- BattlePokemon.pp[4]    offset (4 × u8)
+M.BATTLE_MON_STATUS2_OFF     = 0x50        -- BattlePokemon.status2  offset (u32)
+
+-- status2 bitflags (pret/pokefirered include/constants/battle.h).
+-- Vanilla layout — kept for reference and for the F8 decoder in the test:
+--   bit 10        (0x00000400): STATUS2_MULTIPLETURNS  — Outrage/Petal Dance/Thrash lock
+--   bits 14-15    (0x0000C000): STATUS2_LOCK_CONFUSE   — rampage turn counter (1..3)
+-- CFRU / Radical Red repurposes bits 11-13 (vanilla WRAPPED) for its own multi-
+-- turn lock counter; vanilla MULTIPLETURNS at bit 10 is NOT used by CFRU.
+-- Therefore the *value* to OR into status2 is profile-specific — see
+-- LOCK_STATUS2_VALUE in lua/games/gen3_frlge.lua.
+M.STATUS2_MULTIPLETURNS      = 0x00000400  -- vanilla MULTIPLETURNS, bit 10
+M.STATUS2_LOCK_CONFUSE       = 0x0000C000  -- vanilla LOCK_CONFUSE counter, bits 14-15
+
+-- Move IDs used by SLink to coerce battle behaviour.
+M.MOVE_EXPLOSION             = 153         -- Vanilla + CFRU/RR — self-faint move
 
 -- gMain inBattle bit mask (used in vanilla mode)
 M.GMAIN_INBATTLE_MASK = 0x02              -- bit 1 = inBattle
@@ -1257,6 +1278,81 @@ function M.forceFaint(slot)
             memory.write_u16_le(bmon_base + M.BATTLE_MON_HP_OFF, 0)
         end
     end
+end
+
+-- Coerces a player-side battler into Exploding next turn.
+--
+-- Step 1 (always): overwrite all 4 move slots in gBattleMons[battler_idx] with
+-- Explosion (move 153, 5 PP each).  If the action-select menu opens for any
+-- reason, every slot reads "Explosion" so the player can't pick anything else.
+--
+-- Step 2 (if LOCKED_MOVES_ADDR is set in the profile): activate the engine's
+-- own multi-turn-lock path (Outrage/Petal Dance/Thrash) so the menu never opens
+-- and the player has no swap option:
+--   • gLockedMoves[battler] = MOVE_EXPLOSION  (the locked-in move ID)
+--   • gBattleMons[battler].status2 |= STATUS2_MULTIPLETURNS
+-- On the next turn the engine sees MULTIPLETURNS, skips HandleAction_ChooseAction
+-- (no menu shown), and HandleAction_UseMove reads gLockedMoves[battler] for the
+-- forced move.  Switching is blocked because CanBattlerSwitch() checks the same
+-- status2 bit.
+--
+-- Writes ONLY to gBattleMons + gLockedMoves; the party struct is untouched.
+--
+-- Caller must supply a player-side battler index (0 = primary, 2 = doubles
+-- secondary). Returns true on success, false if not in battle, no
+-- BATTLE_MONS_ADDR, or invalid battler_idx.
+function M.forceExplodeBattler(battler_idx)
+    if not M.isInBattle() then return false end
+    if not M.BATTLE_MONS_ADDR or M.BATTLE_MONS_ADDR == 0 then return false end
+    if battler_idx < 0 then return false end
+    local base = M.BATTLE_MONS_ADDR + battler_idx * M.BATTLE_MON_SIZE
+    -- Step 1: lock the FIGHT menu to Explosion.
+    for i = 0, 3 do
+        memory.write_u16_le(base + M.BATTLE_MON_MOVES_OFF + i * 2, M.MOVE_EXPLOSION)
+        memory.write_u8   (base + M.BATTLE_MON_PP_OFF    + i,     5)
+    end
+    -- Step 2: engine-level forced-move + no-swap via the multi-turn-lock path.
+    -- Only attempt when the profile supplies LOCKED_MOVES_ADDR — without it the
+    -- engine would read gLockedMoves[battler] = 0 = MOVE_NONE and behave
+    -- undefined.  The Step 1 lockdown alone still prevents picking a different
+    -- move; the user can still SWAP / BAG / RUN without Step 2.
+    if M.LOCKED_MOVES_ADDR and M.LOCK_STATUS2_VALUE then
+        memory.write_u16_le(M.LOCKED_MOVES_ADDR + battler_idx * 2, M.MOVE_EXPLOSION)
+        local status2 = memory.read_u32_le(base + M.BATTLE_MON_STATUS2_OFF)
+        memory.write_u32_le(base + M.BATTLE_MON_STATUS2_OFF, status2 | M.LOCK_STATUS2_VALUE)
+    end
+    -- Variant 3: full bypass of the rampage path.  Pre-fill the engine's
+    -- action-commit state directly at the canonical CFRU addresses (from
+    -- include/new/ram_locs_battle.h).  When all of CHOSEN_ACTION_ADDR /
+    -- CHOSEN_MOVE_ADDR / BATTLE_COMM_ADDR / BATTLE_STRUCT_PTR_ADDR are set,
+    -- the engine sees "action already committed" at action-select and skips
+    -- the FIGHT/BAG/POKEMON/RUN menu — without entering rampage state, so
+    -- no phantom turn 2 on the dead mon.
+    if M.CHOSEN_ACTION_ADDR and M.CHOSEN_MOVE_ADDR and M.BATTLE_COMM_ADDR then
+        -- gActionForBanks[battler] = B_ACTION_USE_MOVE (= 0)
+        memory.write_u8 (M.CHOSEN_ACTION_ADDR + battler_idx,     0)
+        -- gChosenMovesByBanks[battler] = MOVE_EXPLOSION (the REAL chosen-move
+        -- array at 0x02023DC4 — NOT the wrong 0x02023D90/D98/DB0 candidates).
+        memory.write_u16_le(M.CHOSEN_MOVE_ADDR + battler_idx * 2, M.MOVE_EXPLOSION)
+        -- gBattleCommunication[battler] = STATE_WAIT_ACTION_CONFIRMED_STANDBY (= 3)
+        memory.write_u8 (M.BATTLE_COMM_ADDR + battler_idx,        3)
+        -- gBattleStruct is dynamically allocated; its pointer lives at a
+        -- known EWRAM address.  Deref then write per-battler sub-fields.
+        if M.BATTLE_STRUCT_PTR_ADDR then
+            local bs = memory.read_u32_le(M.BATTLE_STRUCT_PTR_ADDR)
+            if bs ~= 0 then
+                if M.BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF then
+                    -- chosenMovePositions[battler] = 0 (move slot 0)
+                    memory.write_u8(bs + M.BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF + battler_idx, 0)
+                end
+                if M.BATTLE_STRUCT_MOVE_TARGET_OFF then
+                    -- moveTarget[battler] = 1 (foe primary battler position)
+                    memory.write_u8(bs + M.BATTLE_STRUCT_MOVE_TARGET_OFF + battler_idx, 1)
+                end
+            end
+        end
+    end
+    return true
 end
 
 -- Forces an immediate whiteout.

@@ -81,6 +81,14 @@ GEN3.profiles = {
         BATTLERS_COUNT_ADDR        = 0x02023BCC,
         BATTLE_MAIN_FUNC_ADDR      = 0x03004F84,
         RETURN_FROM_BATTLE_ADDR    = 0x08015B59,
+        -- gLockedMoves[MAX_BATTLERS_COUNT] (4 × u16): set by Outrage/Petal Dance/
+        -- Thrash; engine uses with the multi-turn-lock status2 bits to skip
+        -- action-select.  Verified via test_force_explosion.lua F6 scan.
+        LOCKED_MOVES_ADDR          = 0x02023DB8,
+        -- Engine lock disabled — see radical_red profile for rationale.
+        -- (Vanilla candidate would have been 0xC400: bit 10 MULTIPLETURNS +
+        -- bits 14-15 LOCK_CONFUSE counter=3.)
+        LOCK_STATUS2_VALUE         = nil,
         GMAIN_ADDR                 = 0x030030F0,
         SB1_PTR_ADDR               = 0x03005008,
         SB2_PTR_ADDR               = 0x0300500C,
@@ -144,6 +152,12 @@ GEN3.profiles = {
         BATTLERS_COUNT_ADDR        = 0x02023BE0,
         BATTLE_MAIN_FUNC_ADDR      = 0x03004ED4,
         RETURN_FROM_BATTLE_ADDR    = nil,  -- unknown in AP; disable battle redirect
+        -- AP shifts vanilla EWRAM globals by +0x14 (see BATTLE_OUTCOME / BATTLE_MONS).
+        -- Best-estimate gLockedMoves = vanilla 0x02023DB8 + 0x14.
+        -- TODO VERIFY before relying on the forced-move behaviour in AP.
+        LOCKED_MOVES_ADDR          = 0x02023DCC,
+        -- Engine lock disabled — see radical_red profile for rationale.
+        LOCK_STATUS2_VALUE         = nil,
         GMAIN_ADDR                 = 0x03003040,
         SB1_PTR_ADDR               = 0x03004F58,
         SB2_PTR_ADDR               = 0x03004F5C,
@@ -196,6 +210,49 @@ GEN3.profiles = {
         BATTLERS_COUNT_ADDR        = 0x02023BCC,  -- vanilla addr (CFRU preserves)
         BATTLE_MAIN_FUNC_ADDR      = 0x03004F84,  -- confirmed same as vanilla FRLG
         RETURN_FROM_BATTLE_ADDR    = 0x08015B59,  -- confirmed same as vanilla FRLG
+        -- CFRU preserves vanilla battle EWRAM globals; gLockedMoves shares the
+        -- vanilla address.  Confirmed via F6 discovery scan in
+        -- test_force_explosion.lua: single strict match at this address after a
+        -- Pokémon used Outrage.
+        LOCKED_MOVES_ADDR          = 0x02023DB8,  -- vanilla addr (CFRU preserves)
+        -- Rampage-based engine lock disabled: see commit history — caused
+        -- double-faint softlock with Explosion.  Replaced by chosen-move pre-fill
+        -- (CHOSEN_MOVE_ADDRS) which avoids the rampage state machine entirely.
+        LOCK_STATUS2_VALUE         = nil,
+        -- ── Variant 3 (active): full action-state pre-fill, no rampage ─────
+        -- Rampage-based attempts (LOCK_STATUS2_VALUE = 0x1800 / 0x1000) all
+        -- softlocked on double-faint because the engine queues a phantom turn 2
+        -- on the dead mon while rampage state lingers.  Variant 1 (RECHARGE
+        -- = 0x400000) made the engine show "must recharge" instead of firing
+        -- the locked move.
+        -- Variant 3 bypasses the rampage state machine entirely by writing
+        -- directly to the engine's action-commit state at the canonical CFRU
+        -- addresses (from include/new/ram_locs_battle.h).  The engine sees
+        -- "battler 0 already committed to USE_MOVE / Explosion" and skips the
+        -- action-select menu — without touching status2 — so no rampage state
+        -- exists to corrupt the dead mon's post-Explosion processing.
+        LOCK_STATUS2_VALUE         = nil,   -- no rampage flag
+        CHOSEN_MOVE_ADDRS          = nil,   -- the 3 candidates were wrong arrays
+        -- gActionForBanks (= gChosenActionByBattler) — per-battler action choice
+        -- (0=USE_MOVE, 2=SWITCH, 3=RUN, ...).  Writing 0 commits the battler
+        -- to a move action.
+        CHOSEN_ACTION_ADDR         = 0x02023D7C,
+        -- gChosenMovesByBanks (= gChosenMoveByBattler) — per-battler chosen
+        -- move ID.  Writing 153 commits the battler to using Explosion.
+        -- This is the REAL chosen-move array, NOT the previous wrong
+        -- candidates at 0x02023D90 / D98 / DB0 (those are gLast*Moves arrays).
+        CHOSEN_MOVE_ADDR           = 0x02023DC4,
+        -- gBattleCommunication[battler] — action-select state machine.
+        -- Values 1→2→3→4 during normal action-select.  Writing 3 (= STATE_
+        -- WAIT_ACTION_CONFIRMED_STANDBY) marks the action as committed and
+        -- the engine proceeds directly to turn execution.
+        BATTLE_COMM_ADDR           = 0x02023E82,
+        -- gBattleStruct is dynamically allocated; pointer at this EWRAM addr.
+        -- Deref to access per-battler sub-fields (chosenMovePositions,
+        -- moveTarget, etc.) that the engine reads during turn execution.
+        BATTLE_STRUCT_PTR_ADDR     = 0x02023FE8,
+        BATTLE_STRUCT_MOVE_TARGET_OFF      = 0x0C,  -- struct BattleStruct.moveTarget[4]
+        BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF  = 0x80,  -- struct BattleStruct.chosenMovePositions[4]
         GMAIN_ADDR                 = nil,
         -- IWRAM pointers
         SB1_PTR_ADDR               = 0x03003840,

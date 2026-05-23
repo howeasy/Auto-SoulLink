@@ -1482,7 +1482,7 @@ class SLinkServer:
                  run_name: str = "", tcp_port: int = 0,
                  manager_port: int = 0,
                  species_lock: bool = False, gender_lock: bool = False,
-                 type_lock: bool = False):
+                 type_lock: bool = False, explode_mode: bool = False):
         self._data_dir = data_dir  # None → use global DATA_DIR (backward compat)
         self._run_id   = run_id
         self._run_name = run_name
@@ -1492,7 +1492,8 @@ class SLinkServer:
         self.state = SoulLinkState.load(data_dir=data_dir,
                                         species_lock=species_lock,
                                         gender_lock=gender_lock,
-                                        type_lock=type_lock)
+                                        type_lock=type_lock,
+                                        explode_mode=explode_mode)
         # Game adapter — shared with state machine for consistent behavior.
         # Provides both rules and presentation methods.
         self.adapter = self.state.adapter
@@ -6442,7 +6443,8 @@ class SLinkServer:
             data_dir=self._data_dir,
             species_lock=self.state.species_lock,
             gender_lock=self.state.gender_lock,
-            type_lock=self.state.type_lock)
+            type_lock=self.state.type_lock,
+            explode_mode=self.state.explode_mode)
         self.adapter = self.state.adapter
         # Restore events.json and reload ring buffer
         if os.path.exists(backup_events):
@@ -6466,7 +6468,8 @@ class SLinkServer:
         self.state = SoulLinkState(data_dir=self._data_dir,
                                    species_lock=self.state.species_lock,
                                    gender_lock=self.state.gender_lock,
-                                   type_lock=self.state.type_lock)
+                                   type_lock=self.state.type_lock,
+                                   explode_mode=self.state.explode_mode)
         self.adapter = self.state.adapter
         self._last_seq.clear()
         self.connected_players.clear()
@@ -6877,7 +6880,7 @@ class SLinkServer:
 async def main(host: str, port: int, http_port: int, reset: bool = False,
                data_dir: str = None, run_id: str = None, run_name: str = "",
                species_lock: bool = False, gender_lock: bool = False,
-               type_lock: bool = False,
+               type_lock: bool = False, explode_mode: bool = False,
                manager_port: int = 0, verbose: bool = False):
     _configure_logging(data_dir, verbose)
     if reset:
@@ -6890,7 +6893,7 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
     srv = SLinkServer(data_dir=data_dir, run_id=run_id, run_name=run_name,
                       tcp_port=port, manager_port=manager_port,
                       species_lock=species_lock, gender_lock=gender_lock,
-                      type_lock=type_lock)
+                      type_lock=type_lock, explode_mode=explode_mode)
 
     # TCP game server.
     # limit=4 MiB lifts asyncio's default 64 KiB readline buffer so Gen 5's
@@ -7040,6 +7043,7 @@ if __name__ == "__main__":
     parser.add_argument("--species-clause", action="store_true", dest="species_lock", help="Reject links where both mons share the same evolution family")
     parser.add_argument("--gender-clause",  action="store_true", dest="gender_lock",  help="Reject links where both mons share the same gender")
     parser.add_argument("--type-clause",    action="store_true", dest="type_lock",    help="Reject links where both mons share any type")
+    parser.add_argument("--explode-mode",   action="store_true", dest="explode_mode", help="On partner death, force the linked mon to auto-Explode (RR only; menu-skip via Variant-3 memory writes)")
     parser.add_argument("--manager-port", type=int, default=0,   help="Manager HTTP port (enables 'Run Manager' link on status page)")
     parser.add_argument("--verbose",      action="store_true",   help="Enable DEBUG-level logging to file and console (default: INFO only)")
     args = parser.parse_args()
@@ -7047,5 +7051,6 @@ if __name__ == "__main__":
                      run_name=args.run_name,
                      species_lock=args.species_lock, gender_lock=args.gender_lock,
                      type_lock=args.type_lock,
+                     explode_mode=args.explode_mode,
                      manager_port=args.manager_port,
                      verbose=args.verbose))

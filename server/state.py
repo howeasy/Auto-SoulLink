@@ -90,7 +90,7 @@ def is_shiny(key: str) -> bool:
 
 
 class SoulLinkState:
-    def __init__(self, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None):
+    def __init__(self, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None):
         # When data_dir is provided (manager mode) use it; otherwise fall back to the
         # module-level globals so monkeypatch works in tests and the standalone server
         # keeps working unchanged.
@@ -137,6 +137,13 @@ class SoulLinkState:
         self.species_lock: bool = species_lock
         self.gender_lock: bool = gender_lock
         self.type_lock: bool = type_lock
+        # Explode Mode: when true, partner-faint propagation sends `force_explode`
+        # to the surviving partner instead of `force_faint`.  The client's
+        # force_explode handler runs the Variant-3 menu-skip path (auto-fires
+        # Explosion via direct gActionForBanks/gChosenMovesByBanks/gBattleStruct
+        # writes) for active battlers, or just M.forceFaint for bench mons.
+        # When false, behaves identically to before (legacy "Faint pending switch").
+        self.explode_mode: bool = explode_mode
         # Shiny Clause: always on.  Shiny captures are bonus mons outside the link system.
         # Tracked for dedup (prevent duplicate HUD/sound on replayed events).
         self.bonus_keys: dict[str, set[str]] = {"a": set(), "b": set()}
@@ -278,9 +285,9 @@ class SoulLinkState:
         return cmds if cmds else [{"cmd": "noop"}]
 
     @classmethod
-    def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None) -> "SoulLinkState":
+    def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None) -> "SoulLinkState":
         """Load persisted state from data/links.json, or return a fresh instance."""
-        state = cls(data_dir=data_dir, species_lock=species_lock, gender_lock=gender_lock, type_lock=type_lock, is_rr=is_rr, adapter=adapter)
+        state = cls(data_dir=data_dir, species_lock=species_lock, gender_lock=gender_lock, type_lock=type_lock, explode_mode=explode_mode, is_rr=is_rr, adapter=adapter)
         if not os.path.exists(state._links_path):
             return state
         try:
@@ -332,6 +339,7 @@ class SoulLinkState:
                 state.species_lock = bool(saved_rules.get("species_lock", species_lock))
                 state.gender_lock = bool(saved_rules.get("gender_lock", gender_lock))
                 state.type_lock = bool(saved_rules.get("type_lock", type_lock))
+                state.explode_mode = bool(saved_rules.get("explode_mode", explode_mode))
             state.run_over = bool(data.get("run_over", False))
             state.attempts_count = int(data.get("attempts_count", 0))
             state.rom_type = data.get("rom_type", "")
@@ -2063,15 +2071,21 @@ class SoulLinkState:
 
     def _propagate_faint(self, player_id: str, entry: LinkEntry, killer: Optional[dict] = None,
                          level: int = 0):
-        """Mark entry dead, queue force_faint for partner, queue memorialize for both."""
+        """Mark entry dead, queue force_faint (or force_explode if Explode Mode is on)
+        for partner, queue memorialize for both."""
         partner     = _partner(player_id)
         player_mon  = entry.a if player_id == "a" else entry.b
         partner_mon = entry.b if player_id == "a" else entry.a
         if partner_mon:
-            self.queued_commands[partner].append({"cmd": "force_faint", "key": partner_mon.key, "nickname": partner_mon.nickname or ""})
+            # Explode Mode: send `force_explode` so the client takes the
+            # Variant-3 menu-skip path (auto-Explosion for active battlers,
+            # immediate forceFaint for bench mons).  When off, fall back to
+            # the legacy `force_faint` deferred-faint command.
+            cmd_name = "force_explode" if self.explode_mode else "force_faint"
+            self.queued_commands[partner].append({"cmd": cmd_name, "key": partner_mon.key, "nickname": partner_mon.nickname or ""})
             self.party_keys[partner].discard(partner_mon.key)
-            log.debug(f"[PARTY] player={partner}  party_keys remove {partner_mon.key[:8]}  (force_faint from {player_id})")
-            log.info(f"[{player_id}] faint → force_faint {partner}:{partner_mon.key}")
+            log.debug(f"[PARTY] player={partner}  party_keys remove {partner_mon.key[:8]}  ({cmd_name} from {player_id})")
+            log.info(f"[{player_id}] faint → {cmd_name} {partner}:{partner_mon.key}")
         entry.status = LinkStatus.DEAD
         entry.killed_at = datetime.now(timezone.utc).isoformat()
         entry.cause = "battle"
@@ -2260,6 +2274,7 @@ class SoulLinkState:
                 "species_lock": self.species_lock,
                 "gender_lock": self.gender_lock,
                 "type_lock": self.type_lock,
+                "explode_mode": self.explode_mode,
             },
             "links": [
                 {

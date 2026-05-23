@@ -53,6 +53,10 @@
           <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-type"/></svg>
           Type
         </label>
+        <label><input type="checkbox" x-model="newOpts.explode_mode">
+          <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-explode"/></svg>
+          Explode
+        </label>
       </div>
       <button class="mgr-create-btn" @click="createRun()">
         <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-plus"/></svg>
@@ -195,6 +199,12 @@
               Type
             </span>
           </template>
+          <template x-if="current?.explode_mode">
+            <span class="mgr-badge mgr-badge-lock">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-explode"/></svg>
+              Explode
+            </span>
+          </template>
         </div>
 
         <template x-if="current?.last_event">
@@ -268,7 +278,7 @@ function runManager() {
     pinnedRunName: '',
     managerPort: window.SLINK_MANAGER_PORT,
     newRunName: '',
-    newOpts: { species_lock: false, gender_lock: false, type_lock: false },
+    newOpts: { species_lock: false, gender_lock: false, type_lock: false, explode_mode: false },
 
     get current() {
       return this.runs.find(r => r.run_id === this.active) || null;

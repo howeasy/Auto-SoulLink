@@ -271,6 +271,14 @@ local _ability_cache   = {}  -- [monKey] → ability_id (persists across battles
 -- Applied once the mon is no longer the active battler (switched out or battle ends).
 local pending_battle_faints = {}  -- [monKey] → true
 
+-- Coerced-Explosion state: keys whose battler had all 4 move slots overwritten
+-- with Explosion in response to a partner-link force_faint. Settled when the
+-- mon faints from Explosion, switches out, battle ends, or the fallback timer
+-- elapses (in which case M.forceFaint is invoked as a safety net — covers the
+-- Damp ability, type immunities that no-op the move, or player stalling).
+local EXPLOSION_FALLBACK_FRAMES = 600  -- ~10s @ 60fps
+local pending_explosions = {}          -- [monKey] → {slot, battler, start_frame}
+
 -- Keys that have been force-fainted by server command during THIS BATTLE.
 -- Prevents re-reporting the HP=0 as a new faint event back to the server.
 -- Persists for the entire battle (cleared at battle start and battle end)
@@ -296,11 +304,19 @@ local function dispatch_commands(cmds)
     for _, c in ipairs(cmds) do
         if c.cmd == "play_sound" and c.sound then
             M.playSE(c.sound)
-        elseif c.cmd == "force_faint" and c.key then
+        elseif (c.cmd == "force_faint" or c.cmd == "force_explode") and c.key then
             -- Populate nick_cache from server-provided nickname (for mons not in our party yet).
             if c.nickname and c.nickname ~= "" then
                 nick_cache[c.key] = c.nickname
             end
+            -- `force_explode` is the Explode-Mode variant (server-side run rule):
+            -- when the linked mon is the active battler, coerce it into auto-
+            -- Exploding via the Variant-3 menu-skip writes (gActionForBanks /
+            -- gChosenMovesByBanks / gBattleCommunication / gBattleStruct fields).
+            -- `force_faint` is the legacy path: defer until the mon switches out
+            -- or the battle ends, then write HP=0 silently.  Bench-mon handling
+            -- is identical for both commands (immediate M.forceFaint).
+            local is_explode = (c.cmd == "force_explode")
             if writes_enabled then
                 local currently_in_battle = M.isInBattle()
                 local count = memory.read_u8(M.PARTY_COUNT_ADDR)
@@ -318,27 +334,55 @@ local function dispatch_commands(cmds)
                                 is_active_battler = memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR + 4) == slot
                             end
                         end
-                        if is_active_battler then
-                            -- Defer: don't write HP while this mon is an active battler.
-                            -- Applied once the mon switches out or battle ends.
+                        if is_active_battler and is_explode then
+                            -- Explode Mode (RR only): coerce the linked mon into auto-
+                            -- Exploding via Variant-3 memory writes.  M.forceExplodeBattler
+                            -- pre-fills the engine's action-commit state so the FIGHT/BAG/
+                            -- POKEMON/RUN menu is skipped entirely and Explosion fires
+                            -- on the next turn.  Fall back to legacy deferred-faint if
+                            -- the helper refuses (e.g. non-RR profile, no addresses set,
+                            -- or battle teardown race).
+                            local battler = (memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR) == slot) and 0 or 2
+                            if M.forceExplodeBattler and M.forceExplodeBattler(battler) then
+                                pending_explosions[c.key] = {
+                                    slot = slot, battler = battler, start_frame = frame_count,
+                                }
+                                M.playSE(M.SE_LINKED_KO)
+                                hud_show("!! " .. nick_label(c.key) .. " — EXPLODING!", 255, 80, 80, 360)
+                                console.log(string.format(
+                                    "[SLink-FRLGE]   ↳ force_explode → menu skip coerced slot=%d battler=%d key=%s",
+                                    slot, battler, c.key))
+                            else
+                                pending_battle_faints[c.key] = true
+                                console.log(string.format(
+                                    "[SLink-FRLGE]   ↳ force_explode DEFERRED (helper refused — non-RR profile?) slot=%d key=%s",
+                                    slot, c.key))
+                                hud_show("!! " .. nick_label(c.key) .. " — faint pending switch!", 255, 80, 80, 360)
+                            end
+                        elseif is_active_battler then
+                            -- Legacy force_faint, active battler: defer HP=0 write until the
+                            -- mon switches out or the battle ends (engine continuously
+                            -- refreshes gBattleMons → direct writes race).
                             pending_battle_faints[c.key] = true
-                            console.log(string.format("[SLink-FRLGE]   ↳ force_faint DEFERRED (active battler) slot=%d key=%s", slot, c.key))
+                            console.log(string.format(
+                                "[SLink-FRLGE]   ↳ force_faint DEFERRED (active battler) slot=%d key=%s",
+                                slot, c.key))
                             hud_show("!! " .. nick_label(c.key) .. " — faint pending switch!", 255, 80, 80, 360)
                         else
-                            -- Safe to write: not in battle, or mon is on the bench.
-                            -- Write HP=0 to both party struct and gBattleMons (if on field).
+                            -- Bench mon (or out of battle): immediate HP=0 write.
+                            -- Identical handling for force_faint and force_explode.
                             M.forceFaint(slot)
                             _battle_hp_cache[c.key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
                             force_fainted_keys[c.key] = true
                             M.playSE(M.SE_LINKED_KO)
-                            console.log(string.format("[SLink-FRLGE]   ↳ DISPATCHED force_faint slot=%d key=%s in_battle=%s", slot, c.key, tostring(currently_in_battle)))
+                            console.log(string.format("[SLink-FRLGE]   ↳ DISPATCHED %s slot=%d key=%s in_battle=%s", c.cmd, slot, c.key, tostring(currently_in_battle)))
                             hud_show("!! " .. nick_label(c.key) .. " force-fainted!", 255, 80, 80, 360)
                         end
                         break
                     end
                 end
             else
-                console.log("[SLink-FRLGE]   ↳ force_faint skipped (writes off) key="..tostring(c.key))
+                console.log("[SLink-FRLGE]   ↳ "..c.cmd.." skipped (writes off) key="..tostring(c.key))
             end
         elseif c.cmd == "pending_sync" then
             console.log("[SLink-FRLGE]   ↳ ⚠ SYNC REQUIRED: "..(c.message or "check partner at PC"))
@@ -1210,6 +1254,105 @@ local function on_frame()
         sync_cooldown = sync_cooldown - 1
     end
 
+    -- 4a-bis. Settle coerced-Explosion entries.
+    --   • If the mon's gBattleMons HP has reached 0, Explosion did its job — write
+    --     party HP=0 too (idempotent), mark force_fainted_keys to suppress echo.
+    --   • If the mon switched out or the battle ended before exploding (cannot really
+    --     happen mid-turn but covers teardown races), settle via M.forceFaint.
+    --   • If the fallback timer elapsed and HP is still > 0 (Damp ability, type
+    --     immunity, player stalling), fall back to the legacy deferred-faint path.
+    if next(pending_explosions) and writes_enabled then
+        local active_slot  = -1
+        local active_slot2 = -1
+        if in_battle and M.BATTLER_PARTY_INDEXES_ADDR then
+            active_slot = memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR)
+            if M.BATTLERS_COUNT_ADDR and mem_u8(M.BATTLERS_COUNT_ADDR) >= 4 then
+                active_slot2 = memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR + 4)
+            end
+        end
+        -- Clear our lock state on the battle mon and gLockedMoves to avoid the
+        -- engine carrying stale rampage data into the post-Explosion send-out.
+        local function clear_lock_state(st)
+            if M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 and M.LOCK_STATUS2_VALUE then
+                local bmon = M.BATTLE_MONS_ADDR + st.battler * M.BATTLE_MON_SIZE
+                local s2   = memory.read_u32_le(bmon + M.BATTLE_MON_STATUS2_OFF)
+                memory.write_u32_le(bmon + M.BATTLE_MON_STATUS2_OFF, s2 & (~M.LOCK_STATUS2_VALUE))
+            end
+            if M.LOCKED_MOVES_ADDR then
+                memory.write_u16_le(M.LOCKED_MOVES_ADDR + st.battler * 2, 0)
+            end
+        end
+        for key, st in pairs(pending_explosions) do
+            local base       = M.PARTY_BASE + st.slot * M.MON_SIZE
+            local bmon_base  = M.BATTLE_MONS_ADDR + st.battler * M.BATTLE_MON_SIZE
+            local bhp, bpp0  = 0, 5
+            if in_battle and M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0 then
+                bhp  = memory.read_u16_le(bmon_base + M.BATTLE_MON_HP_OFF)
+                bpp0 = memory.read_u8   (bmon_base + M.BATTLE_MON_PP_OFF)
+            end
+            local still_active = in_battle and (st.slot == active_slot or st.slot == active_slot2)
+            local pp_dropped   = (bpp0 < 5)
+            -- Reinforce Variant-3 menu-skip writes every frame until the engine
+            -- commits (PP drops).  Engine resets gBattleCommunication[battler]
+            -- to 0/1 at turn start; we overwrite with 3 (STANDBY) ONLY if the
+            -- engine hasn't progressed past 3 already — otherwise we'd lock the
+            -- engine in state 3 and softlock the game.  We also re-write
+            -- gActionForBanks, gChosenMovesByBanks, and the gBattleStruct
+            -- sub-fields so the engine sees a coherent committed-action state.
+            if still_active and not pp_dropped and M.BATTLE_COMM_ADDR
+               and M.CHOSEN_ACTION_ADDR and M.CHOSEN_MOVE_ADDR then
+                local cur_state = memory.read_u8(M.BATTLE_COMM_ADDR + st.battler)
+                if cur_state < 3 then
+                    memory.write_u8 (M.CHOSEN_ACTION_ADDR + st.battler,     0)
+                    memory.write_u16_le(M.CHOSEN_MOVE_ADDR + st.battler * 2, M.MOVE_EXPLOSION)
+                    memory.write_u8 (M.BATTLE_COMM_ADDR + st.battler,        3)
+                    if M.BATTLE_STRUCT_PTR_ADDR then
+                        local bs = memory.read_u32_le(M.BATTLE_STRUCT_PTR_ADDR)
+                        if bs ~= 0 then
+                            if M.BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF then
+                                memory.write_u8(bs + M.BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF + st.battler, 0)
+                            end
+                            if M.BATTLE_STRUCT_MOVE_TARGET_OFF then
+                                memory.write_u8(bs + M.BATTLE_STRUCT_MOVE_TARGET_OFF + st.battler, 1)
+                            end
+                        end
+                    end
+                end
+            end
+            -- Engine committed to Explosion the moment PP[slot 0] dropped below
+            -- the 5 we wrote.  Clearing the rampage state now (during the move's
+            -- script) avoids a phantom turn 2 after the self-faint.
+            if pp_dropped and still_active and M.LOCK_STATUS2_VALUE then
+                clear_lock_state(st)
+                console.log(string.format(
+                    "[SLink-FRLGE]   ↳ EXPLOSION committed (PP dropped) — lock cleared mid-execution slot=%d battler=%d",
+                    st.slot, st.battler))
+            end
+            if (in_battle and bhp == 0) or not in_battle or not still_active then
+                -- Settle: Explosion landed, switched out, or battle ended.
+                clear_lock_state(st)
+                M.forceFaint(st.slot)
+                _battle_hp_cache[key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
+                force_fainted_keys[key] = true
+                pending_explosions[key] = nil
+                console.log(string.format(
+                    "[SLink-FRLGE]   ↳ EXPLOSION settled slot=%d battler=%d key=%s in_battle=%s",
+                    st.slot, st.battler, key, tostring(in_battle)))
+            elseif (frame_count - st.start_frame) >= EXPLOSION_FALLBACK_FRAMES then
+                -- Fallback: Explosion never connected — apply HP=0 directly.
+                clear_lock_state(st)
+                M.forceFaint(st.slot)
+                _battle_hp_cache[key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
+                force_fainted_keys[key] = true
+                pending_explosions[key] = nil
+                hud_show("!! " .. nick_label(key) .. " force-fainted (fallback)!", 255, 80, 80, 360)
+                console.log(string.format(
+                    "[SLink-FRLGE]   ↳ EXPLOSION FALLBACK fired slot=%d battler=%d key=%s",
+                    st.slot, st.battler, key))
+            end
+        end
+    end
+
     -- 4b. Flush deferred battle faints: apply force_faint to mons that are no longer
     -- the active battler (switched out) or when battle has ended.
     if next(pending_battle_faints) and writes_enabled then
@@ -1605,6 +1748,7 @@ local function on_frame()
             borrowed_battle    = false
             _battle_hp_cache   = {}  -- discard borrowed mon HP
             pending_battle_faints = {}  -- discard any deferred faints from borrowed battle
+            pending_explosions    = {}  -- discard any coerced-Explosion state
             force_fainted_keys    = {}  -- clear battle-scoped guard
             pending_faint_debounce = {}  -- clear any debounce state
             battle_start_player_faints  = nil
@@ -1616,6 +1760,7 @@ local function on_frame()
         else
         _battle_hp_cache   = {}  -- clear cache
         pending_battle_faints = {}  -- all deferred faints should be flushed by now
+        pending_explosions    = {}  -- all coerced-Explosion entries settled by now
         force_fainted_keys    = {}  -- clear battle-scoped guard
         pending_faint_debounce = {}  -- clear any debounce state
         battle_start_player_faints  = nil
@@ -2094,6 +2239,10 @@ local function on_frame()
                             pending_battle_faints[new_k] = true
                             pending_battle_faints[old_k] = nil
                         end
+                        if pending_explosions[old_k] then
+                            pending_explosions[new_k] = pending_explosions[old_k]
+                            pending_explosions[old_k] = nil
+                        end
 
                         -- Pending sync commands referencing old key
                         for _, sc in ipairs(pending_sync_cmds) do
@@ -2236,6 +2385,8 @@ local function on_frame()
                     console.log("[SLink-FRLGE]   ↳ faint suppressed (force_fainted) key="..k:sub(1,8))
                 elseif pending_battle_faints[k] then
                     console.log("[SLink-FRLGE]   ↳ faint suppressed (pending_battle_faint) key="..k:sub(1,8))
+                elseif pending_explosions[k] then
+                    console.log("[SLink-FRLGE]   ↳ faint suppressed (exploding) key="..k:sub(1,8))
                 elseif in_battle then
                     -- In-battle: start debounce instead of sending immediately.
                     -- CFRU may show transient HP=0 before abilities (Sturdy, Focus Sash)
@@ -2321,9 +2472,10 @@ local function on_frame()
                 console.log("[SLink-FRLGE]   ↳ faint debounce CANCELLED (HP recovered) key="..k:sub(1,8))
             end
             pending_faint_debounce[k] = nil
-        elseif force_fainted_keys[k] or pending_battle_faints[k] then
-            -- Server already force-fainted this mon, or faint is pending deferral
-            -- (active battler awaiting switch-out) — don't double-report.
+        elseif force_fainted_keys[k] or pending_battle_faints[k] or pending_explosions[k] then
+            -- Server already force-fainted this mon, faint is pending deferral
+            -- (active battler awaiting switch-out), or the mon was coerced into
+            -- Exploding — don't double-report.
             pending_faint_debounce[k] = nil
         elseif curr_pfc
                and (curr_pfc - battle_start_player_faints) > confirmed_real_player_faints then
