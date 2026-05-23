@@ -385,19 +385,21 @@ class TestStatusIconHtml:
 
     # ── JS statusIcon parity check ──────────────────────────────────────────
 
-    def test_js_statusicon_tox_before_psn(self):
-        """In stream_overlays.py JS, the TOX (0x80) check must come before PSN (0x08).
-        This is a source-level regression guard — if the order is swapped,
-        Toxic mons would display PSN on stream overlays."""
-        import re, pathlib
-        src = pathlib.Path("server/stream_overlays.py").read_text(encoding="utf-8")
-        tox_pos = src.find("0x80")
-        psn_pos = src.find("0x08")
-        assert tox_pos != -1, "0x80 (Toxic) check not found in stream_overlays.py"
-        assert psn_pos != -1, "0x08 (Poison) check not found in stream_overlays.py"
+    def test_status_pill_tox_before_psn(self):
+        """In the status_pill macro at server/templates/_macros.html the
+        Toxic (mask 128 / 0x80) branch must come before the regular
+        Poison (mask 8 / 0x08) branch — otherwise a mon with both bits
+        set displays as PSN instead of TOX. Source-level regression guard."""
+        import pathlib
+        src = pathlib.Path("server/templates/_macros.html").read_text(encoding="utf-8")
+        tox_pos = src.find("bitand(128)")
+        psn_pos = src.find("bitand(8)")
+        assert tox_pos != -1, "bitand(128) Toxic check not found in status_pill macro"
+        assert psn_pos != -1, "bitand(8) Poison check not found in status_pill macro"
         assert tox_pos < psn_pos, (
-            "In stream_overlays.py JS, the 0x80 (Toxic) check must come before "
-            "the 0x08 (Poison) check, otherwise Toxic displays as PSN."
+            "In _macros.html status_pill, the bitand(128) Toxic branch must "
+            "appear before the bitand(8) Poison branch, otherwise Toxic mons "
+            "render as PSN."
         )
 
 

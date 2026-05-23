@@ -36,6 +36,8 @@ From the dashboard:
 
 > Load the script **after** loading your save file. Writes are disabled until SaveBlock validation passes.
 
+> Theme + font pickers in the sidebar let you swap palette (default / Funtastic grape / jungle / fire / ice / watermelon / smoke / light / transparent) and font (Pixelify Sans / Classic monospace). Choices are persisted in `localStorage` + a `slink-theme` cookie so they survive page loads and apply on the first byte (no FOUC).
+
 ## How It Works
 
 ```
@@ -46,7 +48,7 @@ BizHawk B ─── Lua client ──┘
 
 - **Lua clients** diff RAM each frame and send JSON events only on changes (capture, faint, area change, party move)
 - **Server** returns commands in the TCP response (`force_faint`, `box_mon`, `party_mon`, `memorialize`)
-- **Status page** updates live via SSE — no refresh needed
+- **Web UI** is Jinja2 templates served by aiohttp, swapped in-place by HTMX (idiomorph) every ~2 s, with small Alpine.js widgets for the theme/font pickers
 - **State** persists to `data/links.json` after every mutation
 
 ## Soul Link Rules
@@ -75,9 +77,9 @@ Shiny bonus pairs are always on — catching a shiny gives the partner an extra 
 
 | Path | Description |
 |------|-------------|
-| `/` | Live status — parties, encounters, linked pairs, area states, enemy battle info |
-| `/memorial` | Tombstone cards for dead pairs, live-updating via SSE |
-| `/obs` | OBS scene trigger configuration — per-player WebSocket connections, draggable priority rules |
+| `/` | Live status — parties, encounters, linked pairs, area states, enemy battle info. HTMX morph swap every 2 s preserves scroll/`<details open>` state. |
+| `/memorial` | Tombstone cards for dead pairs, polled via HTMX |
+| `/obs` | OBS scene trigger configuration — per-player WebSocket connections, draggable priority rules, area-group filter (`group:routes`, `group:caves`, …) |
 | `/twitch` | Twitch bot configuration and activity log |
 | `/debug` | Manual linking, event injection, state toggles, backup rollback |
 | `/stream/` | Stream overlay index — preview and configure all overlays |
@@ -216,7 +218,7 @@ python -m server.manager --host 0.0.0.0
 ## Tests
 
 ```bash
-pytest tests/unit/ -v        # 1056 tests, no emulator needed
+pytest tests/unit/ -v        # 1072 tests, no emulator needed
 ```
 
 ## Project Structure
@@ -235,11 +237,17 @@ server/
   obs_controller.py      # OBS WebSocket scene trigger integration
   twitch_bot.py          # Twitch chat bot (twitchio 3.x)
   pokemon_data.py        # Species, abilities, types, evos
+  templates/             # Jinja2 templates (base, dashboard, manager, memorial, calc, stream/*)
+  static/                # CSS, JS, fonts, vendor bundles (htmx, alpine, idiomorph)
+    themes/              # default + 6 Funtastic palettes + light/transparent stubs
+  templating.py          # aiohttp-jinja2 setup, theme cookie resolver, no-cache middleware
+  chrome.py              # Shared sidebar/nav structure for every page
+  overlay_catalog.py     # Stream overlay registry (URLs, layouts, query params)
 data/
   games/                 # Per-game static data (area maps, items)
   obs_config.json        # OBS connection + trigger rule config
-calc/                    # Radical Red damage calculator + live bridge
-tests/                   # pytest unit tests (1056) + BizHawk test scripts
+calc/                    # Radical Red damage calculator + live bridge (rendered via Jinja shell)
+tests/                   # pytest unit tests (1072) + BizHawk test scripts
 tools/                   # Code generators (area maps, data tables)
 ```
 

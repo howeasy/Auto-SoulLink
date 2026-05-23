@@ -1,0 +1,36 @@
+/* funtastic-jungle.css — Jungle Green (N64, 1999 — bundled with DK64).
+ * Brand: #00cc66. Deep forest field with mint accents.
+ */
+
+@import url('/static/themes/_funtastic-base.css');
+
+:root {
+  --c-bg:    #04140a;
+  --c-card:  #0c2418;
+  --c-edge:  #1e7a48;
+  --c-sep:   color-mix(in srgb, #1e7a48 50%, transparent);
+  --c-txt:   #d8f8e0;
+  --c-dim:   #7ab896;
+
+  --c-alive: #7ce880;
+  --c-dead:  #ff6850;
+  --c-pend:  #ffdc60;
+  --c-gold:  #f0c850;
+
+  --c-link:  #5ad4a0;
+  --c-info:  #a0e8c8;
+
+  --c-brand: #00cc66;
+  
+
+  --c-calc-bg:           color-mix(in srgb, #0c2418 80%, #04140a);
+  --c-calc-edge:         #1e7a48;
+  --c-calc-accent:       #7ce880;
+  --c-calc-th-bg:        color-mix(in srgb, #0c2418 60%, #04140a);
+  --c-calc-th-edge:      #1e7a48;
+  --c-calc-row-edge:     color-mix(in srgb, #1e7a48 40%, transparent);
+  --c-calc-btn-bg:       #0e2018;
+  --c-calc-btn-bg-hover: #18382a;
+  --c-calc-btn-txt:      #ffdc60;
+  --c-calc-btn-edge:     #2a7048;
+}

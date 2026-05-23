@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ overlay_title }} — Soul Link{% endblock %}</title>
+
+  {#
+    Overlay constraints — these survive the templating migration verbatim
+    because they are still load-bearing in 2026.
+
+    1. NO SSE / EventSource in this page. The dashboard already holds one
+       SSE connection; Chrome's 6-connections-per-origin cap means every
+       OBS browser source that adds another SSE would starve the pool and
+       queue every other request indefinitely. Polling only.
+    2. NO CDN — OBS caches CDN assets unpredictably across versions. Every
+       JS / CSS / font asset must live under /static/.
+    3. Avoid unnecessary innerHTML rewrites. Idiomorph (loaded below as
+       the HTMX `morph` swap strategy) handles this by matching DOM nodes
+       via `id` / `data-key`, preserving <img> identity so sprites don't
+       flash.
+  #}
+
+  <link rel="stylesheet" href="/static/slink.css">
+  <link rel="stylesheet" href="/static/themes/{{ theme }}.css" id="slink-theme">
+  <script src="/static/vendor/htmx.min.js" defer></script>
+  <script src="/static/vendor/idiomorph-ext.min.js" defer></script>
+  <script src="/static/vendor/overlay-helpers.js" defer></script>
+  {% block head_extra %}{% endblock %}
+</head>
+{# `stream` opts the body out of the theme switcher and the Funtastic
+   shimmer/sparkle backdrop. Theme + layout body classes are server-rendered
+   to avoid a flash of unstyled content during the initial paint. #}
+<body class="stream theme-{{ theme }}{% if layout_class %} {{ layout_class }}{% endif %}"
+      hx-ext="morph"
+      hx-get="{{ fragment_url }}"
+      hx-trigger="every 2s"
+      hx-swap="morph:outerHTML"
+      hx-target="#root"
+      hx-select="#root"
+      hx-disinherit="*">
+  {% block root %}{% endblock %}
+</body>
+</html>

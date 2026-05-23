@@ -1,0 +1,30 @@
+{# Area Encounter overlay — current area's Soul Link state at a glance.
+   Context: { area_display, status_tone: 'alive'|'dead'|'pend'|'dim',
+              status_label, side_a, side_b }
+   side: { sprite_html, name, level, tag, tag_cls } #}
+
+<div id="root">
+  {% if not area_display %}
+    {# Blank — no current area selected. #}
+  {% else %}
+    <div class="ae-badge ae-s-{{ status_tone }}">{{ area_display }} · {{ status_label }}</div>
+    <div class="ae-pair ae-pair-{{ status_tone }}">
+      <div class="ae-side">
+        {{ side_a.sprite_html | safe }}
+        <div class="ae-info">
+          <div class="ae-name">{{ side_a.name or '—' }}</div>
+          {% if side_a.level %}<div class="ae-lv">Lv&nbsp;{{ side_a.level }}</div>{% endif %}
+          {% if side_a.tag %}<span class="ae-tag {{ side_a.tag_cls }}">{{ side_a.tag }}</span>{% endif %}
+        </div>
+      </div>
+      <div class="ae-side r">
+        {{ side_b.sprite_html | safe }}
+        <div class="ae-info">
+          <div class="ae-name">{{ side_b.name or '—' }}</div>
+          {% if side_b.level %}<div class="ae-lv">Lv&nbsp;{{ side_b.level }}</div>{% endif %}
+          {% if side_b.tag %}<span class="ae-tag {{ side_b.tag_cls }}">{{ side_b.tag }}</span>{% endif %}
+        </div>
+      </div>
+    </div>
+  {% endif %}
+</div>

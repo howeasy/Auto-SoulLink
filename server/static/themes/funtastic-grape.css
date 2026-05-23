@@ -1,0 +1,38 @@
+/* funtastic-grape.css — Atomic Purple (N64 Grape Purple, 1999).
+ * Brand: #9933cc. Derived from the GBC-inspired "Pocket" prototype at
+ * .claude/worktrees/laughing-matsumoto-fc2ec8/variants/pocket/static/theme.css
+ */
+
+@import url('/static/themes/_funtastic-base.css');
+
+:root {
+  --c-bg:    #0d0518;
+  --c-card:  #1f1535;
+  --c-edge:  #5a2a85;
+  --c-sep:   color-mix(in srgb, #5a2a85 50%, transparent);
+  --c-txt:   #ede0ff;
+  --c-dim:   #a090c8;
+
+  --c-alive: #4ae098;
+  --c-dead:  #ff5570;
+  --c-pend:  #6ad7ff;
+  --c-gold:  #ffb84a;
+
+  --c-link:  #b07cff;
+  --c-info:  #d0a4ff;
+
+  --c-brand: #9933cc;
+  
+
+  /* Calc-preview accent recoloured into the Grape palette. */
+  --c-calc-bg:           color-mix(in srgb, #1f1535 80%, #0d0518);
+  --c-calc-edge:         #5a2a85;
+  --c-calc-accent:       #b07cff;
+  --c-calc-th-bg:        color-mix(in srgb, #1f1535 60%, #0d0518);
+  --c-calc-th-edge:      #5a2a85;
+  --c-calc-row-edge:     color-mix(in srgb, #5a2a85 40%, transparent);
+  --c-calc-btn-bg:       #1a0e2a;
+  --c-calc-btn-bg-hover: #2a1d4a;
+  --c-calc-btn-txt:      #6ad7ff;
+  --c-calc-btn-edge:     #4a2a7a;
+}

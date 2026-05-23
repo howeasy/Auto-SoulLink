@@ -1,0 +1,6 @@
+{% extends "stream/_base.html" %}
+{% block title %}Focus · {{ player_id | upper }}{% endblock %}
+{# body.ov-focus opts into the focus-specific shell scaling rules in slink.css.
+   We can't override the body class from the child template without changing
+   stream/_base.html, so the handler passes layout_class="ov-focus" instead. #}
+{% block root %}{% include "stream/_focus_root.html" %}{% endblock %}

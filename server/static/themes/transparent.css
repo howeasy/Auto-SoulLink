@@ -1,0 +1,8 @@
+/* transparent.css — stub for the Transparent theme.
+ *
+ * Loaded when ?theme=transparent (OBS browser sources that need an
+ * invisible page background). The actual overrides live in slink.css
+ * under `body.theme-transparent` so the rules co-locate with the design
+ * tokens they zero out. This file exists so the theme switcher's <link>
+ * swap has a real target (no 404), matching the default.css pattern.
+ */

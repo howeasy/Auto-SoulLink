@@ -1,0 +1,22 @@
+{# SLink chrome strip above the calc body. Lives in a Jinja partial so calc/src
+   templates can stay close to upstream RadicalRedShowdown/damage-calc. Styles
+   for `.slink-header*` are in server/static/slink.css (NOT the calc's
+   toggleable dark-theme.css — that would leave the strip unstyled when a user
+   turns OFF calc dark mode). `calc_mode_label` is the "Normal Mode" / "Hardcore
+   Mode" badge text, picked by the route handler from the request path.
+
+   The link/chain SVG matches the i-link symbol used elsewhere in the SLink UI;
+   inlined here because the calc page doesn't include `_svg_icons.html` and the
+   strip needs `currentColor` flow against the active theme's `--c-brand`. #}
+<div class="slink-header">
+  <div class="slink-header-inner">
+    <span class="slink-logo" aria-hidden="true">
+      <svg viewBox="0 0 16 16" width="1em" height="1em" fill="currentColor">
+        <path d="M3 5h4v2H5v2h2v2H3a3 3 0 010-6zm6 0h4a3 3 0 010 6H9V9h2V7H9zM5 7h6v2H5z"/>
+      </svg>
+    </span>
+    <span class="slink-title">Soul Link RR &mdash; Radical Red Damage Calculator</span>
+    <span class="slink-mode-badge">{{ calc_mode_label }}</span>
+    <a class="slink-status-link" href="/">&larr; Status</a>
+  </div>
+</div>

@@ -256,6 +256,33 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Species-name normalization across the freshly-fetched payload.
+  //
+  // Server-side names (e.g. 'Wormadam (Sandy)', 'Deerling Summer', 'Nidoran♀')
+  // don't always match calc pokedex / SETDEX keys ('Wormadam-Sandy',
+  // 'Deerling', 'Nidoran-F'). Rewriting species_name once at fetch time means
+  // every downstream lookup (SETDEX matching, set-selector inject, display)
+  // already sees the canonical name.
+  // ---------------------------------------------------------------------------
+
+  function _normalizeAllSpeciesNames() {
+    if (!_data) return;
+    ['a', 'b'].forEach(function (side) {
+      var pd = _data[side];
+      if (!pd) return;
+      ['party', 'enemy', 'linked'].forEach(function (listKey) {
+        var list = pd[listKey];
+        if (!list || !list.length) return;
+        list.forEach(function (mon) {
+          if (mon && mon.species_name) {
+            mon.species_name = _normalizeSpeciesForCalc(mon.species_name);
+          }
+        });
+      });
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Enemy set enrichment — look up trainer movesets from SETDEX_SV / SETDEX_HC
   // ---------------------------------------------------------------------------
 
@@ -577,27 +604,112 @@
   // "Lycanroc (Dusk)", "Deoxys Attack"); Smogon's calc keys its pokedex on
   // hyphenated forms ("Lycanroc-Dusk", "Deoxys-Attack"). Try variants in
   // order of likelihood and return the first that hits window.pokedex.
+  //
+  // The overrides below cover irregular cases the regex transforms can't
+  // reach — different word ('Cherrim (Sun)' → 'Cherrim-Sunshine'), different
+  // separator/abbreviation ('Meowstic Female' → 'Meowstic-F'), gender symbols
+  // ('Nidoran♀' → 'Nidoran-F'), ASCII apostrophe vs Unicode (Farfetch'd), and
+  // mons whose form is cosmetic in the calc (Shellos/Gastrodon East, Deerling
+  // seasons, female-only sprite variants of non-form-split mons).
+  //
+  // Keys are the server-side display name (from server/pokemon_data.py
+  // SPECIES_NAMES); values are the calc pokedex key.
   var _SPECIES_NAME_OVERRIDES = {
-    // Explicit overrides for names the generic rules can't derive.
-    // (Populate as we find them; e.g. 'Type: Null': 'Type: Null'.)
+    // Aegislash: server emits bare 'Aegislash' for the default Shield form;
+    // calc only has the form-suffixed keys.
+    'Aegislash':            'Aegislash-Shield',
+
+    // Basculin: calc default ('Basculin') IS the Red-Striped form; the Blue
+    // form is keyed 'Basculin-Blue-Striped' (not 'Basculin-Blue').
+    'Basculin (Red)':       'Basculin',
+    'Basculin (Blue)':      'Basculin-Blue-Striped',
+
+    // Burmy cloaks: calc has only the base 'Burmy' entry (Wormadam keeps the
+    // form distinction, but pre-evo Burmy does not).
+    'Burmy (Sandy)':        'Burmy',
+    'Burmy (Trash)':        'Burmy',
+
+    // Cherrim: calc keys the Sun form as 'Cherrim-Sunshine' (not 'Cherrim-Sun').
+    'Cherrim (Sun)':        'Cherrim-Sunshine',
+
+    // Deerling / Sawsbuck: seasonal forms are cosmetic; calc only has the base.
+    'Deerling Summer':      'Deerling',
+    'Deerling Autumn':      'Deerling',
+    'Deerling Winter':      'Deerling',
+    'Sawsbuck Summer':      'Sawsbuck',
+    'Sawsbuck Autumn':      'Sawsbuck',
+    'Sawsbuck Winter':      'Sawsbuck',
+
+    // Farfetch'd: server uses ASCII apostrophe, calc uses Unicode U+2019.
+    "Farfetch'd":           'Farfetch’d',
+    "Farfetch'd-Galar":     'Farfetch’d-Galar',
+
+    // Gimmighoul: calc keys default form bare ('Gimmighoul' = Chest); Roam
+    // form is 'Gimmighoul-Roaming' (not 'Gimmighoul-Roam').
+    'Gimmighoul (Chest)':   'Gimmighoul',
+    'Gimmighoul (Roam)':    'Gimmighoul-Roaming',
+
+    // Pumpkaboo / Gourgeist size codes: server uses (Xl)/(L)/(M); calc uses
+    // Super/Large/(default = Average).
+    'Pumpkaboo (Xl)':       'Pumpkaboo-Super',
+    'Pumpkaboo (L)':        'Pumpkaboo-Large',
+    'Pumpkaboo (M)':        'Pumpkaboo',
+    'Gourgeist (Xl)':       'Gourgeist-Super',
+    'Gourgeist (L)':        'Gourgeist-Large',
+    'Gourgeist (M)':        'Gourgeist',
+
+    // Female-only variants where the calc has no separate female key.
+    'Unfezant (Female)':    'Unfezant',
+    'Frillish (Female)':    'Frillish',
+    'Jellicent (Female)':   'Jellicent',
+    'Hippopotas (Female)':  'Hippopotas',
+    'Hippowdon (Female)':   'Hippowdon',
+    'Pyroar Female':        'Pyroar',
+
+    // Female variants the calc DOES key separately, but with a different suffix.
+    'Meowstic Female':      'Meowstic-F',
+    'Oinkologne (Female)':  'Oinkologne-F',
+
+    // Nidoran gender markers: server uses ♀/♂ (U+2640 / U+2642); calc uses -F/-M.
+    'Nidoran♀':        'Nidoran-F',
+    'Nidoran♂':        'Nidoran-M',
+
+    // Shellos / Gastrodon: 'East' form is purely cosmetic in the calc.
+    'Shellos (East)':       'Shellos',
+    'Gastrodon (East)':     'Gastrodon',
+
+    // Zygarde 10 form: calc keys as 'Zygarde-10%' (with percent sign).
+    'Zygarde 10':           'Zygarde-10%',
   };
   function _normalizeSpeciesForCalc(name) {
-    if (!name || !window.pokedex) return name;
+    if (!name) return name;
+    // Explicit overrides first — applied even when pokedex hasn't loaded yet
+    // (SSE-triggered SETDEX lookups can fire before the calc finishes booting).
+    if (_SPECIES_NAME_OVERRIDES[name]) return _SPECIES_NAME_OVERRIDES[name];
+
+    if (!window.pokedex) return name;
     if (window.pokedex[name]) return name;
-    if (_SPECIES_NAME_OVERRIDES[name] && window.pokedex[_SPECIES_NAME_OVERRIDES[name]]) {
-      return _SPECIES_NAME_OVERRIDES[name];
-    }
+
     // "Species (Form)" or "Species (Form Words)" → "Species-Form" / "Species-Form-Words"
     var parens = name.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
     if (parens) {
       var candidate = parens[1] + '-' + parens[2].trim().replace(/\s+/g, '-');
       if (window.pokedex[candidate]) return candidate;
+      // Form doesn't exist in calc — collapse to the base species so the mon
+      // still loads (e.g. 'Hippopotas (Female)' → 'Hippopotas').
+      if (window.pokedex[parens[1]]) return parens[1];
     }
-    // Plain space → hyphen ("Deoxys Attack" → "Deoxys-Attack")
+
+    // Plain space → hyphen ("Deoxys Attack" → "Deoxys-Attack", "Hoopa Unbound" → "Hoopa-Unbound")
     if (name.indexOf(' ') !== -1) {
       var spaced = name.replace(/\s+/g, '-');
       if (window.pokedex[spaced]) return spaced;
+      // Hyphenated form isn't in the calc either — collapse to the first word
+      // (handles 'Deerling Summer' → 'Deerling' when no override is set).
+      var firstWord = name.split(' ')[0];
+      if (window.pokedex[firstWord]) return firstWord;
     }
+
     return name;
   }
 
@@ -765,14 +877,36 @@
     var lines = (paste || '').split('\n');
     var line1 = (lines[0] || '').trim();
 
-    // Extract species: strip nickname "(…)" then item "@ …"
-    var species = line1.replace(/\s*\([^)]*\)/, '').replace(/@.*$/, '').trim();
-    if (!species) return null;
-
-    // Extract item from first line
+    // Strip "@ Item" suffix; everything before it is species [+ form] [+ nickname].
     var item = '';
     var atIdx = line1.indexOf('@');
+    var head  = atIdx >= 0 ? line1.slice(0, atIdx).trim() : line1;
     if (atIdx >= 0) item = line1.slice(atIdx + 1).trim();
+
+    // `head` may be any of (the server writes the second form for alt-formes):
+    //   "Wormadam"                    — bare species
+    //   "Wormadam (Sandy)"            — species with form (server-generated)
+    //   "Charizard (NICKNAME)"        — Showdown-style nickname-in-parens
+    //   "Wormadam (Sandy) (NICKNAME)" — server-style species+form+nickname
+    //
+    // Try the whole string as a species first; if normalization resolves it
+    // to a known pokedex key, treat any trailing parens as the nickname.
+    // Otherwise fall back to the original behavior (strip last parens as nick).
+    var nickname = '';
+    var species  = head;
+    var resolved = _normalizeSpeciesForCalc(species);
+
+    if (!window.pokedex || !window.pokedex[resolved]) {
+      var m = head.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+      if (m) {
+        nickname = m[2].trim();
+        species  = m[1].trim();
+        resolved = _normalizeSpeciesForCalc(species);
+      }
+    }
+
+    if (!species) return null;
+    species = resolved;
 
     var ability = '', level = 0, nature = '';
     var moves = [];
@@ -794,6 +928,7 @@
 
     return {
       species_name: species,
+      nickname:     nickname,
       level:        level,
       nature:       nature,
       ability_name: ability,
@@ -1964,6 +2099,7 @@
         _fetching  = false;
         _data      = json;
         _connected = true;
+        _normalizeAllSpeciesNames();
         _enrichEnemyMons();
         // Don't repaint while the user is typing inside the panel.
         if (_isPanelInputFocused()) { _fetchPending = true; return; }

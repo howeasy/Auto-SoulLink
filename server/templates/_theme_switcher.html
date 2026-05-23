@@ -1,0 +1,186 @@
+{#
+  _theme_switcher.html — Funtastic theme picker pill row.
+
+  Renders a small <details> at the top-right of any page that includes it.
+  Click a pill → Alpine swaps:
+    * body.className for the theme-{name} class
+    * the slink-theme <link>'s href to /static/themes/{name}.css
+    * persists the selection to localStorage under "slink-theme"
+
+  Initial selection is the server-side `theme` value (already in <body class>
+  + <link>) which itself comes from ?theme=… or default. On page load, Alpine
+  reads localStorage; if it differs from the URL param, the local choice wins
+  so the user doesn't lose their preference across pages.
+
+  No page reload, no full re-render — just a class + href swap.
+#}
+
+{%- set themes = [
+  ('default',              'Default',     '#070910'),
+  ('light',                'Light',       '#eef2fc'),
+  ('funtastic-grape',      'Grape',       '#9933cc'),
+  ('funtastic-jungle',     'Jungle',      '#00cc66'),
+  ('funtastic-fire',       'Fire',        '#ff6600'),
+  ('funtastic-ice',        'Ice',         '#66ccff'),
+  ('funtastic-watermelon', 'Watermelon',  '#ff3366'),
+  ('funtastic-smoke',      'Smoke',       '#333333'),
+] -%}
+
+<div class="theme-switcher" x-data="themeSwitcher()" x-init="init('{{ theme }}')">
+  <details>
+    <summary>
+      <span class="theme-swatch" :style="`background:${swatchFor(active)}`"></span>
+      <span class="theme-name" x-text="labelFor(active)"></span>
+      <span class="theme-caret">▾</span>
+    </summary>
+    <div class="theme-pills" role="radiogroup" aria-label="Theme">
+      {% for slug, label, swatch in themes %}
+        <button type="button"
+                class="theme-pill"
+                :class="active === '{{ slug }}' ? 'active' : ''"
+                @click="select('{{ slug }}')"
+                role="radio"
+                :aria-checked="active === '{{ slug }}'"
+                title="{{ label }}">
+          <span class="theme-swatch" style="background:{{ swatch }}"></span>
+          <span class="theme-label">{{ label }}</span>
+        </button>
+      {% endfor %}
+    </div>
+  </details>
+</div>
+
+<style>
+  .theme-switcher { position: fixed; top: 12px; right: 12px; z-index: 100;
+    font-family: 'Pixelify Sans', 'Segoe UI', system-ui, sans-serif; font-size: 12px; }
+  .theme-switcher details { background: var(--c-card, #1a1a22); border: 1px solid var(--c-edge, #2a2a35);
+    border-radius: 6px; min-width: 130px; box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+  .theme-switcher summary {
+    display: flex; align-items: center; gap: 6px; padding: 6px 9px;
+    cursor: pointer; user-select: none; color: var(--c-txt, #ccc); list-style: none; }
+  .theme-switcher summary::-webkit-details-marker { display: none; }
+  .theme-switcher .theme-caret { margin-left: auto; opacity: .6; font-size: .8em; }
+  .theme-switcher details[open] .theme-caret { transform: rotate(180deg); }
+  .theme-swatch {
+    width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0;
+    border: 1px solid var(--c-edge, #2a2a35); box-shadow: 0 0 4px rgba(0,0,0,.5) inset; }
+  .theme-pills {
+    display: flex; flex-direction: column; gap: 2px; padding: 4px;
+    border-top: 1px solid var(--c-edge, #2a2a35); }
+  .theme-pill {
+    display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+    background: transparent; border: 1px solid transparent; border-radius: 4px;
+    color: var(--c-txt, #ccc); font: inherit; cursor: pointer; text-align: left; }
+  .theme-pill:hover { background: color-mix(in srgb, var(--c-edge, #2a2a35) 35%, transparent); }
+  .theme-pill.active { background: color-mix(in srgb, var(--c-brand, #f8d030) 18%, transparent);
+    border-color: var(--c-brand, #f8d030); }
+  .theme-pill .theme-label { flex: 1; }
+</style>
+
+<script>
+  // Alpine component — single source of truth for the active theme. Persists
+  // to localStorage so a choice survives navigation and hard refresh.
+  function themeSwitcher() {
+    var THEMES = {
+      'default':              { label: 'Default',    swatch: '#070910' },
+      'light':                { label: 'Light',      swatch: '#eef2fc' },
+      'transparent':          { label: 'Transparent',swatch: '#cccccc' },
+      'funtastic-grape':      { label: 'Grape',      swatch: '#9933cc' },
+      'funtastic-jungle':     { label: 'Jungle',     swatch: '#00cc66' },
+      'funtastic-fire':       { label: 'Fire',       swatch: '#ff6600' },
+      'funtastic-ice':        { label: 'Ice',        swatch: '#66ccff' },
+      'funtastic-watermelon': { label: 'Watermelon', swatch: '#ff3366' },
+      'funtastic-smoke':      { label: 'Smoke',      swatch: '#333333' },
+    };
+    return {
+      active: 'default',
+      init(serverTheme) {
+        // Defensive: if this script ever runs on a stream page (it shouldn't —
+        // base.html skips the switcher when body.stream is set) DO NOT touch
+        // localStorage. Overlays must honour their URL parameter exclusively.
+        if (document.body && document.body.classList.contains('stream')) {
+          this.active = serverTheme;
+          return;
+        }
+        // Precedence: explicit `?theme=` URL param > localStorage > server default.
+        // The URL param being present is explicit user intent (sharing a link,
+        // bookmarking, opening a themed deep-link); honour it and store it so
+        // the in-app navigation that follows keeps the same theme.
+        var urlParam = null;
+        try {
+          urlParam = new URLSearchParams(window.location.search).get('theme');
+          if (urlParam) urlParam = urlParam.trim().toLowerCase();
+        } catch (_) {}
+        if (urlParam && THEMES[urlParam]) {
+          this.active = urlParam;
+          this.apply(urlParam, /*persist=*/true);
+        } else {
+          // Otherwise localStorage wins so the picker choice survives across
+          // pages without ?theme= in every URL.
+          var stored = null;
+          try { stored = window.localStorage.getItem('slink-theme'); } catch (_) {}
+          this.active = (stored && THEMES[stored]) ? stored : serverTheme;
+          this.apply(this.active, /*persist=*/false);
+        }
+        // Re-apply after each HTMX swap. The dashboard SSE-driven morph
+        // touches only #content (theme switcher is a sibling), but other
+        // surfaces (and any future swap target) may inadvertently reset
+        // <body class> or the slink-theme <link>. Reapplying is idempotent
+        // and survives every refresh path.
+        var self = this;
+        document.body.addEventListener('htmx:afterSettle', function() {
+          self.apply(self.active, /*persist=*/false);
+        });
+        // Sync across tabs — if another tab swaps the theme, follow along.
+        window.addEventListener('storage', function(ev) {
+          if (ev.key === 'slink-theme' && ev.newValue && THEMES[ev.newValue]) {
+            self.active = ev.newValue;
+            self.apply(ev.newValue, /*persist=*/false);
+          }
+        });
+      },
+      select(name) {
+        if (!THEMES[name]) return;
+        this.active = name;
+        this.apply(name, /*persist=*/true);
+        // Close the popover on selection.
+        var details = this.$root.querySelector('details');
+        if (details) details.open = false;
+      },
+      apply(name, persist) {
+        // Short-circuit if nothing actually needs changing. The htmx:afterSettle
+        // listener fires this on every SSE ping; without this guard each ping
+        // rebuilds body.className and reassigns link.href, which can
+        // re-fetch the CSS file and cause a renderer paint storm.
+        var b = document.body;
+        var wantClass = 'theme-' + name;
+        var hasClass = b.classList.contains(wantClass);
+        var link = document.getElementById('slink-theme');
+        var wantHref = '/static/themes/' + name + '.css';
+        var hasHref = link && link.getAttribute('href') === wantHref;
+        if (!hasClass) {
+          b.className = (b.className || '').split(/\s+/).filter(c => !c.startsWith('theme-')).concat(wantClass).join(' ').trim();
+        }
+        if (link && !hasHref) {
+          link.href = wantHref;
+        }
+        if (persist) {
+          try { window.localStorage.setItem('slink-theme', name); } catch (_) {}
+        }
+        // Always mirror to cookie so server-rendered pages (calc) resolve the
+        // same theme on first paint. Without this, Alpine's init can override
+        // the server-rendered theme with localStorage on every page load, and
+        // the next server render would still see the stale cookie — out of
+        // sync. Cheap to write on every apply(), since it's the same value
+        // that's already in localStorage on persisted calls and matches the
+        // current selection on non-persisted (htmx:afterSettle) calls.
+        try {
+          document.cookie = 'slink-theme=' + encodeURIComponent(name)
+            + '; max-age=31536000; path=/; samesite=lax';
+        } catch (_) {}
+      },
+      labelFor(name)  { return (THEMES[name] || THEMES['default']).label;  },
+      swatchFor(name) { return (THEMES[name] || THEMES['default']).swatch; },
+    };
+  }
+</script>

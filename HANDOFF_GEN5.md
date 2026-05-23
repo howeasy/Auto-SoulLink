@@ -1,13 +1,12 @@
-# Gen 5 (Pokemon Black/White/BW2) Handoff
+# Gen 5 (Pokemon Black/White/BW2) — Status
 
-**Worktree:** `E:\Google Drive\SLink\.claude\worktrees\flamboyant-borg-a0cdb0`
-**Branch:** `claude/flamboyant-borg-a0cdb0`
-**Date:** 2026-05-20
-**Status:** Multiple Gen 5 fixes committed locally. Awaiting live BizHawk validation.
+**Status:** Fixes merged into master (see "Gen 1/2/4/5 bug fixes + slink_lua.log perf"). Live BizHawk validation still pending; pending-work items in sections D/E remain open.
+
+Originally written as a worktree handoff (`claude/flamboyant-borg-a0cdb0`, 2026-05-20). The worktree is gone — treat this as a Gen 5 status snapshot. The "Critical files to know" table at the bottom is still the right map of where Gen 5 code lives.
 
 ---
 
-## What has been fixed (committed to the worktree branch)
+## What has been fixed (on master)
 
 ### 1. PC boxes showed `????` for all slots → fixed
 **Root cause:** `PC_BOX_STRIDE = 0xFA0` in [lua/games/gen5_bw.lua:132](lua/games/gen5_bw.lua:132) was a fabricated number; comment math was self-contradictory (`30 × 0x88 = 0xFF0`, not `0xFA0`). Per-box drift was −0x50, accumulating to −0x730 by box 23 — that's why only late boxes surfaced garbage PIDs (the slots happened to land in periodic non-PC RAM).
@@ -50,7 +49,7 @@ The events.json from run_20260520_213541 shows `pokeballs_obtained: {"a": true, 
 
 - **Lua syntax (lupa 5.5):** all modified files parse OK.
 - **Type lookup:** Gen 4 + Gen 5 species now resolve correctly via `species_types(to_cfru(natdex_id))`.
-- **Unit tests:** `pytest tests/unit/ -q` → 1056/1056 pass.
+- **Unit tests:** `pytest tests/unit/ -q` → 1072/1072 pass.
 - **Live BizHawk Gen 5 retest:** PENDING. User needs to restart the run and verify:
   - PC boxes display real Pokemon (or are correctly empty for a fresh save) — no ghost `????` rows.
   - Party nicknames show real names ("Snivy") instead of "?????".
@@ -97,11 +96,6 @@ Server-side type lookup hits `_NATDEX_SPECIES_TYPES` by base NatDex ID. For form
 
 ---
 
-## How to enter this worktree as another agent
+## How to continue this work as another agent
 
-```
-cd "E:\Google Drive\SLink\.claude\worktrees\flamboyant-borg-a0cdb0"
-git status   # confirm branch claude/flamboyant-borg-a0cdb0
-```
-
-All Gen 5 changes from this session are already committed to that branch. The main repo at `E:\Google Drive\SLink` is on a different branch — work in the worktree, not the main checkout.
+The worktree referenced in the original handoff has been removed; everything is on `master` now. Work directly in `E:\Google Drive\SLink`. To pick up the pending items in section D/E, the entry points are the "Critical files to know" table above and the Gen 5 launchers (`lua/slink_gen5.lua` → `lua/clients/gen5_bw_client.lua`).

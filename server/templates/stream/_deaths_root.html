@@ -1,0 +1,17 @@
+{# _deaths_root.html — #root subtree for the Soul Link counter overlay.
+
+   Used by stream/deaths.html (initial paint) and the fragment endpoint
+   (HTMX poll target). Both render the same markup so idiomorph sees a
+   zero-diff swap when nothing changed.
+
+   Context: { alive_count: int, dead_count: int } #}
+
+<div id="root">
+  <div class="wtitle">SOUL LINK</div>
+  <div class="d-wrap">
+    <div class="d-grid">
+      <div class="d-box d-alive"><span class="d-num">{{ alive_count }}</span><span class="d-lbl">ALIVE</span></div>
+      <div class="d-box d-dead"><span class="d-num">{{ dead_count }}</span><span class="d-lbl">DEAD</span></div>
+    </div>
+  </div>
+</div>

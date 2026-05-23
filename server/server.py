@@ -28,28 +28,7 @@ import mimetypes
 from collections import deque
 from datetime import datetime
 
-from server.stream_overlays import (
-    _stream_overlay_page,
-    _STREAM_PARTY_JS,
-    _STREAM_ENEMY_FOCUS_JS,
-    _STREAM_ENEMY_TRAINER_JS,
-    _STREAM_LINKS_JS,
-    _STREAM_LINKED_PARTY_JS,
-    _STREAM_BOXED_LINKS_JS,
-    _STREAM_DEATHS_JS,
-    _STREAM_ATTEMPTS_JS,
-    _STREAM_AREAS_JS,
-    _STREAM_EVENTS_JS,
-    _STREAM_BADGES_JS,
-    _STREAM_ENCOUNTERS_JS,
-    _STREAM_MEMORIAL_JS,
-    _STREAM_TICKER_JS,
-    _STREAM_FOCUS_JS,
-    _STREAM_AREA_ENCOUNTER_JS,
-    _STREAM_ENC_TABLE_JS,
-    _STREAM_INDEX_HTML,
-    _MEMORIAL_HTML,
-)
+from server.overlay_catalog import build_index_context as _build_stream_index_context
 
 try:
     from aiohttp import web as aiohttp_web
@@ -71,9 +50,22 @@ except ImportError:
     )
 
 try:
-    from .obs_controller import OBSController, obs_config_path, ALL_TRIGGER_EVENTS
+    from .obs_controller import (
+        OBSController, obs_config_path, ALL_TRIGGER_EVENTS,
+        AREA_GROUPS, classify_area,
+    )
 except ImportError:
-    from server.obs_controller import OBSController, obs_config_path, ALL_TRIGGER_EVENTS
+    from server.obs_controller import (
+        OBSController, obs_config_path, ALL_TRIGGER_EVENTS,
+        AREA_GROUPS, classify_area,
+    )
+
+try:
+    from .templating import setup_templating, resolve_theme, resolve_layout
+except ImportError:
+    from server.templating import setup_templating, resolve_theme, resolve_layout
+
+import aiohttp_jinja2
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -131,6 +123,15 @@ from server.html_render import (
 _CALC_DIST_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "calc", "dist")
+# Dev-loop convenience: edits under calc/src/ go live on the next page reload
+# without running the `npm run build` step. `handle_calc_files` prefers
+# src/ when a path exists there and falls through to dist/ otherwise. The
+# HTML entry points (`/calc/normal.html`, `/calc/hardcore.html`) only exist
+# in dist/ (the src files are `*.template.html` with build placeholders), so
+# the fallback resolves them from dist automatically.
+_CALC_SRC_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "calc", "src")
 
 _NATURE_NAMES = (
     "Hardy","Lonely","Brave","Adamant","Naughty",
@@ -146,6 +147,27 @@ def _nature_from_key(key: str) -> str:
         return _NATURE_NAMES[int(key.split(":")[0], 16) % 25]
     except Exception:
         return "Hardy"
+
+
+def _format_killed_at(raw: str | None) -> str:
+    """Render an ISO-8601 killed_at timestamp via the browser-locale format
+    (matches ``new Date(raw).toLocaleString()``). Falls back to the raw
+    value on parse errors so a malformed string is still visible to
+    operators.
+    """
+    if not raw:
+        return ""
+    try:
+        # Preserve tz-aware parsing for the trailing "+00:00" form the state
+        # machine emits at server/state.py:_set_killfeed_metadata.
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone()
+    except (ValueError, TypeError):
+        return raw
+    try:
+        return dt.strftime("%-m/%-d/%Y, %-I:%M:%S %p")
+    except ValueError:
+        # Windows libc has no %- modifier; use %# instead for unpadded fields.
+        return dt.strftime("%#m/%#d/%Y, %#I:%M:%S %p")
 
 
 
@@ -359,7 +381,7 @@ window.SLinkCalc = (function () {
     if (!_calcLoaded && document.querySelector('[data-in-battle]')) _init();
   }
 
-  // Called by doRefresh() after each morphDOM
+  // Called by dashboard.js refreshClientUI() after each HTMX swap.
   window._slinkCalcRender = function () { checkAndInit(); _renderAll(); };
 
   checkAndInit();
@@ -373,543 +395,53 @@ _STATUS_HTML = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <title>{page_title}</title>
-  <style>
-    body {{ font-family: monospace; font-size: 20px; background: #111; color: #eee; padding: 1em; margin: 0 auto; max-width: 2400px; }}
-    h1 {{ color: #ff0; margin-bottom: 0.2em; }}
-    h2 {{ color: #0af; margin-top: 2em; margin-bottom: 0.5em; }}
-    h3 {{ color: #eee; margin: 0 0 0.4em 0; font-size: 1.05em; }}
-    p.sub {{ color: #888; margin: 0 0 1em 0; font-size: 0.9em; }}
-    .players-grid {{ display: flex; gap: 2em; flex-wrap: wrap; margin-bottom: 1.5em; }}
-    .player-card {{ flex: 1; min-width: 300px; background: #1a1a1a; border: 1px solid #333; padding: 1.2em 1.4em; border-radius: 4px; overflow-x: auto; }}
-    .player-card.online {{ border-color: #4f4; }}
-    .player-card.offline {{ border-color: #555; opacity: 0.75; }}
-    .card-hdr {{ display: flex; justify-content: space-between; align-items: flex-start; }}
-    .card-hdr h3 {{ margin: 0 0 0.4em 0; }}
-    .launcher-dl {{ color: #667; font-size: 0.9em; text-decoration: none; padding: 2px 4px; border-radius: 3px; }}
-    .launcher-dl:hover {{ color: #6af; background: #1a2a3a; }}
-    .badge {{ display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 0.85em; margin-left: 0.5em; }}
-    .badge-online {{ background: #1a3a1a; color: #4f4; }}
-    .badge-offline {{ background: #2a2a2a; color: #888; }}
-    .badge-active {{ background: #1a3a1a; color: #4f4; }}
-    .badge-waiting {{ background: #2a1a00; color: #fa0; }}
-    .badge-lock {{ background: #1a2a3a; color: #6af; font-size: 0.85em; padding: 2px 8px; border-radius: 10px; }}
-    .badge-bonus {{ background: #2a2000; color: #ffd700; }}
-    .dbl-chip {{ background: #663; color: #ffa; font-size: .75em; padding: 1px 5px; border-radius: 3px; font-weight: bold; margin-left: 0.4em; }}
-    .bonus-pair-row td {{ background: #1a1500; }}
-    .bonus-pair-row td:first-child {{ border-left: 3px solid #ffd700; padding-left: 5px; }}
-    .gym-badges {{ display: inline-flex; gap: 3px; margin-left: 0.7em; vertical-align: middle; }}
-    .gym-badge {{ width: 16px; height: 16px; border-radius: 50%; display: inline-block; border: 1px solid #555; opacity: 0.25; cursor: default; }}
-    .gym-badge.earned {{ opacity: 1; border-color: #fff8; box-shadow: 0 0 4px #fff4; }}
-    .lock-rules {{ margin: 0.5em 0 0.8em 0; font-size: 0.95em; color: #ccc; }}
-    .attempts-bar {{ display: inline-flex; align-items: center; gap: 0.5em; margin: 0.3em 0 0.8em 0; font-size: 0.9em; color: #888; }}
-    .attempts-num {{ color: #f8d030; font-weight: bold; }}
-    .adj-btn {{ background: #1a1c28; color: #f8d030; border: 1px solid #444; border-radius: 3px; padding: 1px 8px; cursor: pointer; font-size: 0.95em; line-height: 1.6; font-family: inherit; }}
-    .adj-btn:hover {{ background: #2a2c38; border-color: #f8d030; }}
-    .info-row {{ display: flex; gap: 2em; margin: 0.5em 0 0.35em 0; font-size: 0.9em; color: #aaa; }}
-    .info-row span b {{ color: #eee; }}
-    table {{ border-collapse: collapse; width: 100%; margin-bottom: 1em; table-layout: auto; }}
-    th {{ background: #222; color: #ff0; padding: 5px 8px; text-align: left; border-bottom: 1px solid #444; font-size: 0.8em; white-space: nowrap; }}
-    td {{ padding: 5px 8px; border-bottom: 1px solid #1e1e1e; font-size: 0.82em; }}
-    tr:hover td {{ background: #222; }}
-    .alive    {{ color: #4f4; }}
-    .dead     {{ color: #f44; }}
-    .dead_zone {{ color: #f44; }}
-    .pending_a, .pending_b, .pending_both, .pending {{ color: #fa0; }}
-    .unseen   {{ color: #666; }}
-    .yes      {{ color: #4f4; }}
-    .no       {{ color: #888; }}
-    .empty    {{ color: #666; font-style: italic; }}
-    .warn     {{ color: #fa0; }}
-    .fainted  {{ color: #f44; opacity: 0.7; }}
-    .dim      {{ color: #666; }}
-    .area     {{ color: #7cf; }}
-    .gender-male   {{ color: #6af; }}
-    .gender-female {{ color: #f9a; }}
-    .shiny-star    {{ color: #FFD700; }}
-    .killfeed-cause {{ }}
-    .kf-inline  {{ font-size: 0.84em; }}
-    .kf-battle  {{ color: #f88; }}
-    .kf-dead_zone {{ color: #f44; }}
-    .kf-whiteout  {{ color: #f80; }}
-    .kf-unknown   {{ color: #666; }}
-    .battle-panel {{ background: #1a1000; border: 1px solid #a60; border-radius: 4px; padding: 0.8em 1.1em; margin: 0.9em 0 0.9em 0; }}
-    .battle-panel h4 {{ color: #fa0; }}
-    .calc-preview {{ background: #0d1a00; border: 1px solid #6a0; border-radius: 3px; padding: 0.5em 0.8em; margin: 0.6em 0 0; }}
-    .calc-preview h5 {{ color: #8f4; margin: 0 0 0.4em; font-size: 0.9em; }}
-    .calc-preview-table {{ width: 100%; border-collapse: collapse; font-size: 0.82em; }}
-    .calc-preview-table th {{ background: #1a2a0a; color: #8f4; padding: 2px 7px; text-align: left; border-bottom: 1px solid #3a4a2a; }}
-    .calc-preview-table td {{ padding: 2px 7px; border-bottom: 1px solid #1a2a0a; }}
-    .calc-preview-table .ohko   {{ color: #f44; font-weight: bold; }}
-    .calc-preview-table .twohko {{ color: #fa0; }}
-    .calc-open-btn {{ display: inline-block; margin-top: 0.5em; padding: 2px 9px; background: #0d1020; color: #6af; border: 1px solid #48a; border-radius: 3px; text-decoration: none; font-size: 0.82em; }}
-    .calc-open-btn:hover {{ background: #1a2040; }}
-    .hp-bar-bg {{ display:inline-block; width:70px; height:7px; background:#333; border-radius:3px; vertical-align:middle; margin-right:3px; }}
-    .hp-bar    {{ height:7px; border-radius:3px; }}
-    .hp-high   {{ background:#4f4; }}
-    .hp-mid    {{ background:#fa0; }}
-    .hp-low    {{ background:#f44; }}
-    .foe-table td {{ padding: 2px 6px; border-bottom: 1px solid #1e1e1e; }}
-    .foe-table th {{ padding: 2px 6px; }}
-    .foe-moves-row > td {{ padding: 0 6px 4px 38px; border-bottom: 1px solid #1e1e1e; }}
-    .foe-moves-row .move-table {{ margin: 0; }}
-    .active-foe td:nth-child(2) {{ color: #ff0; }}
-    .active-mon td:first-child {{ color: #ff0; }}
-    .mon-sprite {{ width:48px; height:48px; image-rendering:pixelated; vertical-align:middle; margin:-2px 2px -2px 0; clip-path:inset(2px); }}
-    .held-item {{ color:#adf; font-size:0.80em; display:block; margin-top:0.1em; }}
-    .held-item::before {{ content:"ITEM: "; color:#778; font-weight:600; }}
-    .ability {{ color:#cba; font-size:0.82em; }}
-    .status-icon {{ display:inline-block; padding:1px 5px; border-radius:3px; font-size:0.75em;
-      font-weight:bold; white-space:nowrap; vertical-align:middle; margin-left:3px; }}
-    .s-slp {{ background:#7a7a7a; color:#fff; }}
-    .s-psn {{ background:#c040c0; color:#fff; }}
-    .s-brn {{ background:#d06020; color:#fff; }}
-    .s-frz {{ background:#5ab8e4; color:#fff; }}
-    .s-par {{ background:#c8a800; color:#000; }}
-    .s-tox {{ background:#6a00aa; color:#fff; }}
-    .stat-stage {{ display:inline-block; padding:1px 6px; border-radius:3px; font-size:0.75em;
-      font-weight:bold; white-space:nowrap; vertical-align:middle; margin-left:3px;
-      border:1px solid; }}
-    .ss-up {{ background:rgba(46,204,113,0.15); color:#5af09a; border-color:rgba(46,204,113,0.55); }}
-    .ss-dn {{ background:rgba(231,76,60,0.15); color:#ff7f72; border-color:rgba(231,76,60,0.55); }}
-    .sortable {{ cursor:pointer; user-select:none; position:relative; padding-right:14px !important; }}
-    .sortable:hover {{ color:#fff; }}
-    .sortable::after {{ content:"⇅"; position:absolute; right:2px; font-size:0.75em; opacity:0.4; }}
-    .sortable.sort-asc::after {{ content:"▲"; opacity:0.9; }}
-    .sortable.sort-desc::after {{ content:"▼"; opacity:0.9; }}
-    .enc-filters {{ margin: 0.4em 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }}
-    .filter-label {{ color: #888; font-size: 0.85em; margin-right: 2px; }}
-    .filter-btn {{ background: #222; color: #aaa; border: 1px solid #444; border-radius: 3px; padding: 3px 10px; font-size: 0.85em; font-family: monospace; cursor: pointer; }}
-    .filter-btn:hover {{ color: #fff; border-color: #666; }}
-    .filter-btn.active {{ background: #1a2a3a; color: #6af; border-color: #6af; }}
-    .event-type-capture {{ color: #4f4; }}
-    .event-type-faint {{ color: #f44; }}
-    .event-type-whiteout {{ color: #f80; }}
-    .event-type-no_catch {{ color: #fa0; }}
-    .event-type-area_enter {{ color: #7cf; }}
-    .event-type-hello {{ color: #aaa; }}
-    .event-type-linked {{ color: #4f4; font-weight: bold; }}
-    .event-type-dead_zone {{ color: #f44; font-weight: bold; }}
-    .event-type-force_faint {{ color: #f88; }}
-    .event-type-key_change {{ color: #c8f; }}
-    .event-type-violation {{ color: #f80; font-weight: bold; }}
-    .event-type-reroll {{ color: #8cf; }}
-    .event-type-shiny {{ color: #f8d030; font-weight: bold; }}
-    .event-type-memorialize {{ color: #aaa; opacity: .35; }}
-    .event-type-party_to_box {{ color: #60a8f8; }}
-    .event-type-box_to_party {{ color: #60a8f8; }}
-    /* ── Move table (collapsible) ───────────────────────────── */
-    .move-row td {{ padding: 0 !important; }}
-    .move-row details {{ margin: 0; padding-left: 8px; max-width: 80%; }}
-    .move-row summary {{ cursor: pointer; padding: 2px 8px; font-size: 0.9em; color: #888;
-      user-select: none; list-style: none; }}
-    .move-row summary::-webkit-details-marker {{ display: none; }}
-    .move-row summary::before {{ content: "▶ "; font-size: 0.7em; }}
-    .move-row[open] summary::before,
-    .move-row details[open] summary::before {{ content: "▼ "; font-size: 0.7em; }}
-    .move-table {{ width: 100%; border-collapse: collapse; margin: 2px 0; font-size: 0.92em; }}
-    .move-table th {{ background: #222; padding: 1px 5px; font-size: 0.88em; color: #999;
-      text-align: left; border-bottom: 1px solid #333; }}
-    .move-table td {{ padding: 1px 5px; border-bottom: 1px solid #222; }}
-    .move-table .move-name {{ font-weight: 600; white-space: nowrap; }}
-    .move-table .type-badge {{ display: inline-block; padding: 1px 5px; border-radius: 3px;
-      font-size: 0.82em; font-weight: bold; color: #fff; text-transform: uppercase;
-      text-shadow: 1px 1px rgba(0,0,0,0.5); white-space: nowrap; }}
-    .split-icon {{ height: 18px; vertical-align: middle; }}
-    .split-physical {{ filter: brightness(200%); }}
-    .split-special {{ filter: brightness(200%); }}
-    .split-status {{ filter: brightness(300%); }}
-    .move-table .pp-cell {{ white-space: nowrap; }}
-    .move-table .pp-low {{ color: #fa0; }}
-    .move-table .pp-zero {{ color: #f44; }}
-    .move-table .mv-pwr, .move-table .mv-acc {{ text-align: center; }}
-    /* ── Encounter widget ────────────────────────────────────── */
-    .enc-widget summary, .area-enc-details summary {{
-      cursor: pointer; list-style: none; user-select: none;
-      color: #667; font-size: 0.78em; padding: 1px 0; }}
-    .enc-widget summary::-webkit-details-marker,
-    .area-enc-details summary::-webkit-details-marker {{ display: none; }}
-    .enc-widget summary::before, .area-enc-details summary::before
-      {{ content: "▶ "; font-size: 0.7em; }}
-    .enc-widget[open] summary::before, .area-enc-details[open] summary::before
-      {{ content: "▼ "; font-size: 0.7em; }}
-    .enc-widget:hover summary {{ color: #99b; }}
-    .enc-widget[open] summary {{ color: #88a; }}
-    .enc-widget {{ margin: 0 0 0.9em; }}
-    .enc-methods {{ display: flex; flex-wrap: wrap; gap: 0.3em 1.2em;
-      padding: 0.3em 0.5em 0.1em; }}
-    .enc-method {{ min-width: 155px; }}
-    .enc-method-label {{ color: #999; font-size: 0.78em; font-weight: bold;
-      display: block; margin-bottom: 1px; }}
-    .enc-list {{ display: flex; flex-direction: column; gap: 0; }}
-    .enc-entry {{ display: flex; align-items: center; gap: 3px;
-      font-size: 0.78em; line-height: 1.4; }}
-    .enc-sprite {{ width: 20px; height: 20px; image-rendering: pixelated;
-      vertical-align: middle; flex-shrink: 0; }}
-    .enc-name {{ color: #ddd; flex: 1; min-width: 0;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-    .enc-rate {{ font-weight: bold; white-space: nowrap; min-width: 2.8em;
-      text-align: right; }}
-    .enc-lv {{ color: #666; font-size: 0.88em; white-space: nowrap; }}
-    .area-enc-details summary {{ color: #7af; }}
-    .card-hdr-right {{ display: flex; align-items: center; gap: 4px; }}
-  </style>
+  <link rel="stylesheet" href="/static/slink.css">
+  <link rel="stylesheet" href="/static/dashboard.css">
 </head>
 <body>
-  <h1><svg viewBox="0 0 595.3 594.1" style="width:1.3em;height:1.3em;vertical-align:-0.15em;margin-right:0.12em"><path fill="#fff" d="M297.6,380.9c-40.4,0-74.1-28.6-82.1-66.6H81.1c9.5,110.5,102.2,197.2,215.1,197.2s205.7-86.7,215.1-197.2H379.7C371.7,352.4,338,380.9,297.6,380.9z"/><path fill="#FF1C1C" d="M297.7,213.2c40.4,0,74.1,28.6,82.1,66.6h134.4C504.7,169.2,412,82.5,299,82.5S93.4,169.2,83.9,279.7h131.7C223.6,241.7,257.3,213.2,297.7,213.2z"/><path fill="#fff" d="M347.1,297c0-6.1-1.1-11.9-3.2-17.3c-7-18.8-25.1-32.1-46.3-32.1s-39.3,13.4-46.3,32.1c-2,5.4-3.1,11.2-3.1,17.3s1.1,11.9,3.1,17.3c7,18.8,25.1,32.1,46.3,32.1c21.2,0,39.3-13.4,46.3-32.1C346,309,347.1,303.1,347.1,297z"/><path d="M299,82.5c113,0,205.7,86.7,215.1,197.2H379.7c-8-38-41.7-66.6-82.1-66.6c-40.4,0-74.1,28.6-82.1,66.6H83.9C93.4,169.2,186.1,82.5,299,82.5z M343.9,279.7c2,5.4,3.1,11.2,3.1,17.3s-1.1,11.9-3.1,17.3c-7,18.8-25.1,32.1-46.3,32.1c-21.2,0-39.3-13.4-46.3-32.1c-2-5.4-3.1-11.2-3.1-17.3s1.1-11.9,3.1-17.3c7-18.8,25.1-32.1,46.3-32.1S336.9,261,343.9,279.7z M296.2,511.6c-113,0-205.7-86.7-215.1-197.2h134.4c8,38,41.7,66.6,82.1,66.6s74.1-28.6,82.1-66.6h131.7C501.9,424.8,409.2,511.6,296.2,511.6z M297.6,41.3C156.4,41.3,41.9,155.8,41.9,297s114.5,255.7,255.7,255.7S553.4,438.3,553.4,297S438.9,41.3,297.6,41.3z"/></svg>{page_title}</h1>
-  <p class="sub">Live updates via SSE &mdash; <span id="ts">{timestamp}</span></p>
-  <p class="sub">TCP port: {tcp_port} &nbsp;·&nbsp; <a href="/memorial" style="color:#f44;text-decoration:none">&#x1FAA6; Memorial Wall</a> &nbsp;·&nbsp; <a href="/stream" style="color:#6af;text-decoration:none">&#127909; Stream Overlays</a> &nbsp;·&nbsp; <a href="/twitch" style="color:#f8d030;text-decoration:none">&#129302; Twitch Bot</a> &nbsp;·&nbsp; <a href="/obs" style="color:#b8f0ff;text-decoration:none">&#128225; OBS</a> &nbsp;·&nbsp; <a href="/debug" style="color:#f90;text-decoration:none">&#128295; Debug</a> &nbsp;·&nbsp; <a href="/calc/normal.html" style="color:#fa0;text-decoration:none">&#9876;&#65039; RR Calc</a>{manager_link}</p>
-  <div id="content">
-  {body}
-  </div>
+  <script>try{{if(localStorage.getItem('slink-sidebar-collapsed')==='1')document.body.classList.add('dash-collapsed');}}catch(_){{}}</script>
+  <!-- Sidebar — collapsible left rail nav. Built by _build_sidebar_html() so
+       the same DOM ships across status, debug, twitch, and OBS pages. -->
+  {sidebar}
+  <!-- The dashboard loads HTMX + sse + idiomorph; these wire up the
+       polling refresh and SSE-driven morph for the table swap. -->
+  <main class="dash-main">
+    <!-- Global table search.  Lives outside #content so polling-morph swaps
+         can't reset the input or lose focus mid-keystroke. dashboard.js
+         binds an input listener that filters <tr> rows in any table on the
+         page whose text doesn't match the query (case-insensitive substring).
+         The cleared/empty input restores all rows. -->
+    <div class="dash-search">
+      <svg class="dash-search-ico" viewBox="0 0 16 16" aria-hidden="true">
+        <path fill="currentColor" d="M7 1a6 6 0 014.78 9.64l3.29 3.3-1.42 1.41-3.29-3.29A6 6 0 117 1zm0 2a4 4 0 100 8 4 4 0 000-8z"/>
+      </svg>
+      <input id="dash-search-input"
+             type="search"
+             placeholder="Filter tables… (species, area, move, status)"
+             autocomplete="off"
+             spellcheck="false">
+      <button class="dash-search-clear" type="button" aria-label="Clear search" tabindex="-1">×</button>
+    </div>
+    <!-- Refresh trigger: polling, NOT SSE.
+         Chrome enforces a 6-connection-per-origin cap on HTTP/1.1. SSE
+         occupies one of those slots PER OPEN TAB, so opening the dashboard
+         in 6+ tabs (or rapidly F5'ing) would exhaust the pool and stall
+         every subsequent fetch. Polling every 2s reuses normal request
+         slots that close immediately, eliminating the cap interaction
+         entirely. The /api/events SSE endpoint stays available for overlays
+         + external tooling, but the dashboard no longer holds it open. -->
+    <div id="content"
+         hx-ext="morph"
+         hx-get="/"
+         hx-trigger="every 2s"
+         hx-swap="morph:outerHTML"
+         hx-target="this"
+         hx-select="#content">
+    {body}
+    </div>
+  </main>
+  <script src="/static/dashboard.js" defer></script>
   <script>
-    (function() {{
-      var FALLBACK_INTERVAL = 10000;  // Fallback poll if SSE disconnects
-      var timer = null;
-      var refreshPaused = false;
-      var refreshInFlight = false;
-      var refreshPending = false;
-      var userInteracting = false;
-      var interactionTimer = null;
-      // Pause DOM morphing while the user is pressing a mouse button so that
-      // an SSE ping landing between mousedown and click cannot replace the
-      // element under the cursor and swallow the click event.
-      document.addEventListener("mousedown", function() {{
-        userInteracting = true;
-        if (interactionTimer) {{ clearTimeout(interactionTimer); interactionTimer = null; }}
-      }});
-      document.addEventListener("mouseup", function() {{
-        interactionTimer = setTimeout(function() {{
-          userInteracting = false;
-          interactionTimer = null;
-          if (refreshPending) {{ refreshPending = false; doRefresh(); }}
-        }}, 250);
-      }});
-      // Cache processed sprite data URLs by original src to avoid re-processing
-      var spriteCache = {{}};
-
-      // ── SSE connection ──
-      var evtSource = null;
-      function connectSSE() {{
-        if (evtSource) {{ try {{ evtSource.close(); }} catch(e) {{}} }}
-        evtSource = new EventSource("/api/events");
-        evtSource.addEventListener("ping", function() {{
-          triggerRefresh();
-        }});
-        evtSource.onerror = function() {{
-          // SSE disconnected — fall back to timer polling until reconnect.
-          // EventSource auto-reconnects (with retry: 3000 from server).
-          if (!timer) scheduleRefresh();
-        }};
-        evtSource.onopen = function() {{
-          // SSE connected — cancel fallback timer
-          if (timer) {{ clearTimeout(timer); timer = null; }}
-        }};
-      }}
-      connectSSE();
-
-      // Remove solid background from GBA-style sprite PNGs.
-      // Reads top-left pixel as bg color and sets all matching pixels transparent.
-      function removeSpriteBackground(img) {{
-        if (img.dataset.bgRemoved || !img.naturalWidth) return;
-        var src = img.src;
-        // Only process funnotbun sprites (they have solid bg; PokeAPI are already transparent)
-        if (src.indexOf('funnotbun') === -1) return;
-        if (spriteCache[src]) {{
-          img.src = spriteCache[src];
-          img.dataset.bgRemoved = '1';
-          return;
-        }}
-        var c = document.createElement('canvas');
-        c.width = img.naturalWidth;
-        c.height = img.naturalHeight;
-        var ctx = c.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        try {{
-          var data = ctx.getImageData(0, 0, c.width, c.height);
-          var px = data.data;
-          // Top-left pixel is the background color
-          var bgR = px[0], bgG = px[1], bgB = px[2];
-          for (var i = 0; i < px.length; i += 4) {{
-            if (px[i] === bgR && px[i+1] === bgG && px[i+2] === bgB) {{
-              px[i+3] = 0;  // set alpha to 0
-            }}
-          }}
-          ctx.putImageData(data, 0, 0);
-          var dataUrl = c.toDataURL();
-          spriteCache[src] = dataUrl;
-          img.src = dataUrl;
-        }} catch(e) {{
-          // CORS or security error — leave original
-        }}
-        img.dataset.bgRemoved = '1';
-      }}
-
-      // Process all current and future .mon-sprite and .enc-sprite images
-      function processAllSprites() {{
-        document.querySelectorAll('img.mon-sprite, img.enc-sprite').forEach(function(img) {{
-          if (img.dataset.bgRemoved) return;
-          // Check cache first — apply instantly without waiting for network load
-          var origSrc = img.getAttribute('src');
-          if (origSrc && spriteCache[origSrc]) {{
-            img.src = spriteCache[origSrc];
-            img.dataset.bgRemoved = '1';
-            return;
-          }}
-          if (img.complete && img.naturalWidth) {{
-            removeSpriteBackground(img);
-          }} else {{
-            img.crossOrigin = 'anonymous';
-            img.addEventListener('load', function() {{ removeSpriteBackground(img); }}, {{once: true}});
-          }}
-        }});
-      }}
-
-      function scheduleRefresh() {{
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(doRefresh, FALLBACK_INTERVAL);
-      }}
-
-      function triggerRefresh() {{
-        // Debounce: if a fetch is already in flight or the user is interacting
-        // (mouse held down), mark pending and return — flush on mouseup.
-        if (refreshInFlight || userInteracting) {{ refreshPending = true; return; }}
-        doRefresh();
-      }}
-
-      function syncAttrs(t, s) {{
-        // Copy attributes from source to target
-        for (var i = 0; i < s.attributes.length; i++) {{
-          var a = s.attributes[i];
-          // Preserve user-toggled "open" on <details> elements
-          if (a.name === "open" && t.tagName === "DETAILS") continue;
-          if (t.getAttribute(a.name) !== a.value) t.setAttribute(a.name, a.value);
-        }}
-        // Remove attributes not in source
-        for (var i = t.attributes.length - 1; i >= 0; i--) {{
-          var nm = t.attributes[i].name;
-          // Preserve user-toggled "open" on <details> elements
-          if (nm === "open" && t.tagName === "DETAILS") continue;
-          if (!s.hasAttribute(nm)) t.removeAttribute(nm);
-        }}
-      }}
-
-      function morphDOM(target, source) {{
-        if (target.isEqualNode(source)) return;
-        syncAttrs(target, source);
-        var tc = Array.from(target.childNodes);
-        var sc = Array.from(source.childNodes);
-
-        // Key-based matching for TBODY elements: match <tr> children by data-key
-        // instead of position so row insertions/removals don't shift sprites.
-        if (target.tagName === "TBODY") {{
-          var tMap = {{}};
-          tc.forEach(function(n) {{
-            if (n.nodeType === 1 && n.getAttribute) {{
-              var k = n.getAttribute("data-key");
-              if (k) tMap[k] = n;
-            }}
-          }});
-          // Reconcile children in-place without detaching (prevents sprite flicker)
-          var cursor = target.firstChild;
-          sc.forEach(function(sn) {{
-            var k = (sn.nodeType === 1 && sn.getAttribute) ? sn.getAttribute("data-key") : null;
-            var reuse = k ? tMap[k] : null;
-            if (reuse) {{
-              morphDOM(reuse, sn);
-              if (reuse !== cursor) {{
-                target.insertBefore(reuse, cursor);
-              }} else {{
-                cursor = cursor.nextSibling;
-              }}
-              delete tMap[k];
-            }} else {{
-              var newNode = document.importNode(sn, true);
-              target.insertBefore(newNode, cursor);
-            }}
-          }});
-          // Remove leftover old keyed nodes no longer in source
-          Object.keys(tMap).forEach(function(k) {{ target.removeChild(tMap[k]); }});
-          // Remove any remaining unkeyed trailing nodes
-          while (target.childNodes.length > sc.length) target.removeChild(target.lastChild);
-          return;
-        }}
-
-        // Positional matching (non-keyed containers)
-        var minLen = Math.min(tc.length, sc.length);
-        for (var i = 0; i < minLen; i++) {{
-          var tn = tc[i], sn = sc[i];
-          if (tn.nodeType !== sn.nodeType) {{
-            target.replaceChild(document.importNode(sn, true), tn);
-          }} else if (tn.nodeType === 3) {{
-            if (tn.nodeValue !== sn.nodeValue) tn.nodeValue = sn.nodeValue;
-          }} else if (tn.nodeType === 1) {{
-            if (tn.tagName !== sn.tagName) {{
-              target.replaceChild(document.importNode(sn, true), tn);
-            }} else if (tn.tagName === "IMG") {{
-              // Compare by stable data-species attribute, not live src (which onerror mutates).
-              var tSpecies = tn.getAttribute("data-species");
-              var sSpecies = sn.getAttribute("data-species");
-              if (tSpecies !== sSpecies) {{
-                target.replaceChild(document.importNode(sn, true), tn);
-              }}
-              // If same species, preserve current src (may have fallen back via onerror).
-            }} else {{
-              morphDOM(tn, sn);
-            }}
-          }}
-        }}
-        // Append extra source nodes
-        for (var i = minLen; i < sc.length; i++) {{
-          target.appendChild(document.importNode(sc[i], true));
-        }}
-        // Remove extra target nodes (from the end to avoid index shift)
-        while (target.childNodes.length > sc.length) target.removeChild(target.lastChild);
-      }}
-
-      function doRefresh() {{
-        if (refreshPaused) {{ return; }}
-        refreshInFlight = true;
-        var sx = window.scrollX, sy = window.scrollY;
-        fetch(window.location.href, {{cache: "no-store"}})
-          .then(function(r) {{ return r.text(); }})
-          .then(function(html) {{
-            var parser = new DOMParser();
-            var doc = parser.parseFromString(html, "text/html");
-            var newContent = doc.getElementById("content");
-            var newTs = doc.getElementById("ts");
-            if (newContent) {{
-              morphDOM(document.getElementById("content"), newContent);
-            }}
-            if (newTs) {{
-              document.getElementById("ts").textContent = newTs.textContent;
-            }}
-            if (window._slinkEncSort) window._slinkEncSort();
-            if (window._slinkEncFilter) window._slinkEncFilter();
-            window.scrollTo(sx, sy);
-            processAllSprites();
-            if (window._slinkCalcRender) {{ window._slinkCalcRender(); }}
-          }})
-          .catch(function() {{ /* server temporarily unreachable */ }})
-          .finally(function() {{
-            refreshInFlight = false;
-            // If another SSE ping arrived while we were fetching, do one more refresh
-            if (refreshPending) {{ refreshPending = false; doRefresh(); }}
-          }});
-      }}
-
-      processAllSprites();  // Initial page load
-
-      window.adjAttempts = function(delta) {{
-        var bar = document.getElementById('attempts-bar');
-        var cur = bar ? parseInt(bar.dataset.count, 10) : 0;
-        var next = Math.max(0, cur + delta);
-        fetch('/api/attempts', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{count:next}})}})
-          .then(function(r) {{ return r.json(); }})
-          .then(function(j) {{ if (j.ok) {{ triggerRefresh(); }} }});
-      }};
-    }})();
-
-    // ── Encounters table sort ───────────────────────────────────────────
-    (function() {{
-      // Persisted sort state across auto-refreshes
-      var sortCol = -1, sortAsc = true;
-
-      function naturalCmp(a, b) {{
-        return a.localeCompare(b, undefined, {{numeric: true, sensitivity: "base"}});
-      }}
-
-      function getSortVal(td, col) {{
-        var v = td.getAttribute("data-sort");
-        if (v !== null) return v;
-        return td.textContent.trim();
-      }}
-
-      function applySort() {{
-        var tbl = document.getElementById("enc-table");
-        if (!tbl) return;
-        var ths = tbl.querySelectorAll("thead th");
-        ths.forEach(function(th, i) {{
-          th.classList.remove("sort-asc", "sort-desc");
-          if (i === sortCol) th.classList.add(sortAsc ? "sort-asc" : "sort-desc");
-        }});
-        var tbody = tbl.querySelector("tbody");
-        if (!tbody) return;
-        var rows = Array.from(tbody.querySelectorAll("tr"));
-        rows.sort(function(ra, rb) {{
-          var a = getSortVal(ra.children[sortCol], sortCol);
-          var b = getSortVal(rb.children[sortCol], sortCol);
-          var aNum = parseFloat(a), bNum = parseFloat(b);
-          var cmp = (!isNaN(aNum) && !isNaN(bNum)) ? aNum - bNum : naturalCmp(a, b);
-          return sortAsc ? cmp : -cmp;
-        }});
-        rows.forEach(function(r) {{ tbody.appendChild(r); }});
-      }}
-
-      function bindHeaders() {{
-        var tbl = document.getElementById("enc-table");
-        if (!tbl) return;
-        tbl.querySelectorAll("thead th.sortable").forEach(function(th) {{
-          var ci = parseInt(th.getAttribute("data-col"), 10);
-          th.onclick = function() {{
-            if (sortCol === ci) {{ sortAsc = !sortAsc; }}
-            else {{ sortCol = ci; sortAsc = true; }}
-            applySort();
-          }};
-        }});
-        if (sortCol >= 0) applySort();
-      }}
-
-      // Expose so the refresh handler can call synchronously (no flicker)
-      window._slinkEncSort = bindHeaders;
-      bindHeaders();
-    }})();
-
-    // ── Encounters table filter ──────────────────────────────────────────
-    (function() {{
-      var activeFilter = "all";
-      var FILTER_GROUPS = {{
-        "linked":    ["alive", "linked"],
-        "pending":   ["pending_a", "pending_b", "pending_both"],
-        "pending_a": ["pending_a", "pending_both"],
-        "pending_b": ["pending_b", "pending_both"],
-        "dead":      ["dead", "dead_zone", "memorial"]
-      }};
-
-      function applyFilter() {{
-        var tbl = document.getElementById("enc-table");
-        if (!tbl) return;
-        var rows = tbl.querySelectorAll("tbody tr");
-        rows.forEach(function(tr) {{
-          var st = tr.getAttribute("data-status") || "";
-          if (activeFilter === "all") {{
-            tr.style.display = "";
-          }} else {{
-            var group = FILTER_GROUPS[activeFilter] || [];
-            tr.style.display = group.indexOf(st) >= 0 ? "" : "none";
-          }}
-        }});
-        var btns = document.querySelectorAll("#enc-filters .filter-btn");
-        btns.forEach(function(b) {{
-          b.classList.toggle("active", b.getAttribute("data-filter") === activeFilter);
-        }});
-      }}
-
-      function bindFilters() {{
-        var container = document.getElementById("enc-filters");
-        if (!container) return;
-        container.querySelectorAll(".filter-btn").forEach(function(btn) {{
-          btn.onclick = function() {{
-            activeFilter = btn.getAttribute("data-filter");
-            applyFilter();
-          }};
-        }});
-        applyFilter();
-      }}
-
-      window._slinkEncFilter = bindFilters;
-      bindFilters();
-    }})();
-
 {calc_js}
   </script>
 </body>
@@ -923,11 +455,28 @@ _DEBUG_HTML = """<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8">
 <title>Debug — {page_title}</title>
+<link rel="stylesheet" href="/static/slink.css">
+<link rel="stylesheet" href="/static/dashboard.css">
 <style>
-  :root { --bg:#111; --panel:#1a1a1a; --border:#333; --text:#e2e8f0; --muted:#94a3b8;
-          --green:#4ade80; --red:#f87171; --yellow:#fbbf24; --blue:#60a5fa; --orange:#f97316; }
-  * { box-sizing:border-box; margin:0; padding:0; }
-  body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; padding:1.5em; font-size:0.92em; }
+  /* Map the debug page's private design tokens to slink.css so themes flow
+   * through automatically (same pattern as the calc body theming). Anything
+   * inside this page's panels keeps its existing rules. */
+  :root {
+    --bg:     var(--c-bg);
+    --panel:  var(--c-card);
+    --border: var(--c-edge);
+    --text:   var(--c-txt);
+    --muted:  var(--c-dim);
+    --green:  var(--c-alive);
+    --red:    var(--c-dead);
+    --yellow: var(--c-gold);
+    --blue:   var(--c-link);
+    --orange: var(--c-pend);
+  }
+  * { box-sizing:border-box; }
+  /* The sidebar grid is set by dashboard.css. The debug-page body styles
+   * below apply to .dash-main where the page content lives. */
+  .dash-main { padding:1.2em 1.4em 2em; font-family:var(--font-heading); font-size:0.95em; }
   h1 { color:var(--orange); margin-bottom:0.2em; font-size:1.3em; }
   .nav { color:var(--muted); font-size:0.85em; margin-bottom:0.8em; }
   .nav a { color:var(--blue); text-decoration:none; }
@@ -985,7 +534,7 @@ _DEBUG_HTML = """<!DOCTYPE html>
   .backup-table th { text-align:left; color:var(--muted); padding:3px 6px; border-bottom:1px solid var(--border); }
   .backup-table td { padding:3px 6px; }
   .backup-table tr:hover { background:#1a1a2a; }
-  .backup-table .slot-link { color:#0af; cursor:pointer; text-decoration:underline; }
+  .backup-table .slot-link { color:var(--c-link); cursor:pointer; text-decoration:underline; }
   .backup-table .slot-link:hover { color:#4cf; }
   .ml-table { width:100%; font-size:0.85em; border-collapse:collapse; }
   .ml-table th { text-align:left; color:var(--muted); padding:3px 6px; border-bottom:1px solid var(--border); font-weight:600; }
@@ -999,8 +548,10 @@ _DEBUG_HTML = """<!DOCTYPE html>
   .ml-table .btn-revive:hover { background:#3b7; }
 </style>
 </head><body>
+<script>try{{if(localStorage.getItem('slink-sidebar-collapsed')==='1')document.body.classList.add('dash-collapsed');}}catch(_){{}}</script>
+{sidebar}
+<main class="dash-main">
 <h1>&#128295; Debug Console</h1>
-<div class="nav"><a href="/">&#8592; Status Page</a> · <a href="/memorial">&#129702; Memorial</a></div>
 
 <!-- Live status banner -->
 <div class="live-bar">
@@ -1821,10 +1372,16 @@ function renderLinksTable() {
     h += '<td>' + bLbl + '</td>';
     h += '<td class="' + stCls + '">' + lnk.status + '</td>';
     h += '<td>';
+    // data-* attributes feed a single delegated click handler on document.body
+    // (see init block). Inline onclick="" handlers used to drop the first
+    // click here whenever an SSE ping rebuilt the panel between mousedown and
+    // mouseup — the click event requires both targets to share an ancestor,
+    // and the original button had been detached. Delegation moves the
+    // listener to a stable node that no refresh ever touches.
     if (lnk.status === 'dead' || lnk.status === 'memorial') {
-      h += '<button class="btn btn-revive" onclick="doRevive(\\''+lnk.area_id+'\\','+idx+')" title="Revive this pair">&#x2764;</button> ';
+      h += '<button class="btn btn-revive" data-action="revive" data-area-id="'+lnk.area_id+'" data-link-idx="'+idx+'" title="Revive this pair">&#x2764;</button> ';
     }
-    h += '<button class="btn btn-red btn-unlink" onclick="doUnlink(\\''+lnk.area_id+'\\','+idx+')">\\u2716</button>';
+    h += '<button class="btn btn-red btn-unlink" data-action="unlink" data-area-id="'+lnk.area_id+'" data-link-idx="'+idx+'">\\u2716</button>';
     h += '</td>';
     h += '</tr>';
   });
@@ -1851,6 +1408,21 @@ async function doRevive(areaId, idx) {
 }
 
 // ── Init ────────────────────────────────────────────────────────────────
+// Delegated click handler — survives every innerHTML rebuild because it's
+// bound to document.body, which renderLinksTable / mlRefresh / loadBackups
+// never replace. Buttons inside refresh-rebuilt panels carry data-action +
+// the parameters they used to bake into inline onclick="". See
+// renderLinksTable above for the matching markup.
+document.body.addEventListener('click', function(ev) {
+  var btn = ev.target && ev.target.closest && ev.target.closest('[data-action]');
+  if (!btn) return;
+  var act  = btn.getAttribute('data-action');
+  var area = btn.getAttribute('data-area-id');
+  var idx  = parseInt(btn.getAttribute('data-link-idx'), 10);
+  if      (act === 'unlink') doUnlink(area, idx);
+  else if (act === 'revive') doRevive(area, idx);
+});
+
 initSSE();
 // Fetch initial status to populate datalists immediately
 (async function() {
@@ -1870,6 +1442,8 @@ loadBackups();
 // Fallback poll in case SSE disconnects
 setInterval(function() { if (!_sseOk) refreshAll(); }, 10000);
 </script>
+<script src="/static/dashboard.js" defer></script>
+</main>
 </body></html>"""
 
 
@@ -2042,9 +1616,18 @@ class SLinkServer:
 
         if not methods_html:
             return ""
+        # data-details-key + matching id give idiomorph a stable persistent
+        # element to preserve across each 2 s polling morph. With both:
+        #   * idiomorph keeps the same DOM node (matched by id) instead of
+        #     re-creating it — so the attribute-update phase is the only
+        #     path that touches `open`, and our beforeAttributeUpdated hook
+        #     in dashboard.js vetoes that removal.
+        #   * data-details-key drives the localStorage cross-session save
+        #     so a hard refresh still lands the widget in the right state.
+        key = f"enc:{html.escape(area_id, quote=True)}"
         return (
-            f'<details class="enc-widget">'
-            f'<summary>🎯 Encounters</summary>'
+            f'<details class="enc-widget" id="d-{key}" data-details-key="{key}">'
+            f'<summary><svg class="inline-ico" aria-hidden="true"><use href="#i-target"/></svg> Encounters</summary>'
             f'<div class="enc-methods">{methods_html}</div>'
             f'</details>'
         )
@@ -2086,6 +1669,18 @@ class SLinkServer:
         if self._run_name:
             parts.append(html.escape(self._run_name))
         return " — ".join(parts)
+
+    def _build_sidebar_html(self, active: str) -> str:
+        """Build the dashboard sidebar HTML. Delegates to server.chrome so
+        the sidebar can also be rendered by Jinja-templated pages (memorial,
+        stream gallery, calc) and the manager. The per-run server enriches
+        the call with its TCP port + manager port."""
+        from server.chrome import build_sidebar_html
+        return build_sidebar_html(
+            active,
+            tcp_port=self._tcp_port,
+            manager_port=self._manager_port,
+        )
 
     def _notify_sse(self):
         """Push an update notification to all connected SSE clients.
@@ -2174,9 +1769,20 @@ class SLinkServer:
                 return resp
 
             while True:
+                # Short heartbeat interval (3s instead of the previous 15s) so
+                # dead client connections are detected and cleaned up quickly.
+                # The earlier 15s window caused F5-spam to stack up to 6
+                # zombie SSE connections inside Chrome's per-origin pool,
+                # which then blocked any new fetches on the dashboard until
+                # the heartbeats finally noticed the disconnects.
                 try:
-                    await asyncio.wait_for(q.get(), timeout=15.0)
+                    await asyncio.wait_for(q.get(), timeout=3.0)
                 except asyncio.TimeoutError:
+                    # Proactive disconnect detection: if the transport has
+                    # already closed, exit immediately without attempting a
+                    # write. Saves up to one heartbeat cycle of latency.
+                    if request.transport is None or request.transport.is_closing():
+                        break
                     if not await _write(b": heartbeat\n\n"):
                         break
                     continue
@@ -3171,7 +2777,10 @@ class SLinkServer:
             sym_html = (f' <span class="gender-{gender}">{html.escape(sym)}</span>' if sym else "")
             shiny_html = ' <span class="shiny-star">✦</span>' if shiny else ""
             if nick and sp_name:
-                return f"{nick}{shiny_html}{sym_html} <span class='dim'>({sp_name})</span>"
+                # `.mon-species-paren` is sized + dimmed in dashboard.css so the
+                # nickname (the broadcaster's chosen name) reads as the primary
+                # identifier and the species suffix is supporting context.
+                return f"{nick}{shiny_html}{sym_html} <span class='mon-species-paren'>({sp_name})</span>"
             elif nick:
                 return f"{nick}{shiny_html}{sym_html}"
             elif sp_name:
@@ -3183,9 +2792,9 @@ class SLinkServer:
             a_state/b_state: 'caught', 'entered', or 'none'.
             na/nb: trainer display names."""
             _PSTATE_ICON = {
-                "caught":  "✓",
-                "entered": "⏳",
-                "none":    "❌",
+                "caught":  '<svg class="inline-ico" aria-hidden="true"><use href="#i-check"/></svg>',
+                "entered": '<svg class="inline-ico" aria-hidden="true"><use href="#i-hourglass"/></svg>',
+                "none":    '<svg class="inline-ico" aria-hidden="true"><use href="#i-x"/></svg>',
             }
             _PSTATE_WORD = {
                 "caught":  "caught",
@@ -3209,30 +2818,25 @@ class SLinkServer:
                 '<div style="background:#b00;color:#fff;text-align:center;padding:1em 0.5em;'
                 'font-size:1.8em;font-weight:bold;letter-spacing:0.15em;border-radius:8px;'
                 'margin-bottom:1em;text-shadow:2px 2px 4px #000">'
-                '💀 GAME OVER — SOUL LINK 💀</div>'
+                '<svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> GAME OVER — SOUL LINK <svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg></div>'
             )
 
         # ── Lock Rules banner ─────────────────────────────────────────────────
         lock_badges = []
         if s.species_lock:
-            lock_badges.append('<span class="badge badge-lock">🧬 Species Clause</span>')
+            lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-dna"/></svg> Species Clause</span>')
         if s.gender_lock:
-            lock_badges.append('<span class="badge badge-lock">⚥ Gender Clause</span>')
+            lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-gender"/></svg> Gender Clause</span>')
         if s.type_lock:
-            lock_badges.append('<span class="badge badge-lock">🔮 Type Clause</span>')
+            lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-type"/></svg> Type Clause</span>')
         if lock_badges:
             parts.append(f'<div class="lock-rules">Rules: {" ".join(lock_badges)}</div>')
 
         # ── Attempt counter ───────────────────────────────────────────────────
-        attempts = s.attempts_count
-        parts.append(
-            f'<div class="attempts-bar" id="attempts-bar" data-count="{attempts}">'
-            f'<span class="dim">Attempt:</span>'
-            f'<span class="attempts-num">#{attempts}</span>'
-            f'<button class="adj-btn" onclick="adjAttempts(-1)">&#8722;</button>'
-            f'<button class="adj-btn" onclick="adjAttempts(+1)">+</button>'
-            f'</div>'
-        )
+        # The dashboard surfaces the attempt total via the phase banner ("attempt
+        # #N"); the broadcaster-facing +/- adjustor moved to the stream-overlay
+        # launcher's per-overlay config panel so the status page stays focused
+        # on read-only state for the run.
 
         # ── Players (side-by-side cards) ─────────────────────────────────────
         parts.append('<h2>Players</h2><div class="players-grid">')
@@ -3259,9 +2863,10 @@ class SLinkServer:
             conn_badge = ('<span class="badge badge-online">&#9679; online</span>'
                           if is_online else
                           '<span class="badge badge-offline">&#9675; offline</span>')
-            nuz_badge = ('<span class="badge badge-active">Nuzlocke active</span>'
-                         if p["nuzlocke_active"] else
-                         '<span class="badge badge-waiting">Waiting for Pokéballs</span>')
+            # Per-player Nuzlocke status badges removed — the top-of-page
+            # phase banner is the single source for run lifecycle state
+            # ("Waiting for Pokéballs" / "Run in progress" / "Game over").
+            nuz_badge = ""
             pending_bonus_cnt = len(s.pending_bonus.get(pid, []))
             pending_bonus_badge = (
                 f'<span class="badge badge-bonus">&#10022; {pending_bonus_cnt} bonus pending</span>'
@@ -3358,13 +2963,13 @@ class SLinkServer:
                     if cur_area and area_st not in ("linked", "dead_zone") and not has_pending:
                         new_enc = True
                 new_enc_badge = ' <span style="color:#5f5;font-weight:bold">★ NEW ENCOUNTER</span>' if new_enc else ""
-                doubles_chip = (' <span class="dbl-chip">⚔⚔&nbsp;DOUBLES</span>'
+                doubles_chip = (' <span class="dbl-chip"><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg>&nbsp;DOUBLES</span>'
                                 if bs.get("is_doubles") else "")
                 parts.append('<div class="battle-panel">')
-                parts.append(f'<h4 style="margin:0 0 0.3em">⚔ IN BATTLE &mdash; {battle_lbl}{new_enc_badge}{doubles_chip}</h4>')
+                parts.append(f'<h4 style="margin:0 0 0.3em"><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> IN BATTLE &mdash; {battle_lbl}{new_enc_badge}{doubles_chip}</h4>')
                 enemy_party = bs.get("enemy_party", [])
                 if enemy_party:
-                    parts.append(f'<table class="foe-table"><tr><th></th><th>Foe</th><th>Lv</th><th>HP</th><th>Type</th>{"<th>Ability</th>" if has_abilities else ""}</tr>')
+                    parts.append(f'<table class="foe-table"><tr><th>Foe</th><th>Lv</th><th>HP</th><th>Type</th>{"<th>Ability</th>" if has_abilities else ""}</tr>')
                     for ei, em in enumerate(enemy_party):
                         esid   = em.get("species_id", 0)
                         elv    = em.get("level", 0)
@@ -3393,14 +2998,22 @@ class SLinkServer:
                             + (active and _stat_stages_html(em.get("stat_stages")) or "")
                         )
                         foe_cls = "fainted" if ehp == 0 else ("active-foe" if active else "")
-                        active_marker = "⚔ " if active else ""
+                        active_marker = '<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> ' if active else ""
                         foe_key = em.get("key", f"foe-{ei}")
                         abl_html = (f'<span class="ability" title="{html.escape(eadesc)}">{html.escape(eabl)}</span>'
                                     if eabl else '<span class="dim">—</span>')
+                        # Sprite + name share one cell (inline-flex) so the
+                        # name sits flush against the sprite — matches the
+                        # party table's compact layout.
+                        foe_mon_cell = (
+                            f'<div style="display:inline-flex;align-items:center;gap:4px">'
+                            + (f'<div style="flex-shrink:0">{esprite}</div>' if esprite else '')
+                            + f'<div>{active_marker}{ename}{eitem_html}</div>'
+                            + f'</div>'
+                        )
                         parts.append(
                             f'<tr class="{foe_cls}" data-key="{html.escape(foe_key)}">'
-                            f'<td>{esprite}</td>'
-                            f'<td>{active_marker}{ename}{eitem_html}</td>'
+                            f'<td>{foe_mon_cell}</td>'
                             f'<td>{elv}</td>'
                             f'<td>{hp_bar}</td>'
                             f'<td>{etype_cell}</td>'
@@ -3409,7 +3022,7 @@ class SLinkServer:
                         emove_html = _move_table_html(em.get("move_details", []),
                                                       mon_key=f"enemy:{ei}")
                         if emove_html:
-                            foe_cols = 6 if has_abilities else 5
+                            foe_cols = 5 if has_abilities else 4
                             parts.append(
                                 f'<tr class="foe-moves-row" data-key="{html.escape(foe_key)}:moves">'
                                 f'<td colspan="{foe_cols}">{emove_html}</td></tr>'
@@ -3417,7 +3030,7 @@ class SLinkServer:
                     parts.append("</table>")
                 else:
                     parts.append('<p class="empty">No foe data yet.</p>')
-                # ── Phase 3: calc preview data div (rendered by SLinkCalc JS) ──
+                # ── Calc preview data div (rendered by SLinkCalc JS) ──
                 if getattr(s, 'is_rr', False):
                     _pkeys = p.get("party_keys", [])
                     _pdetails = p.get("party_details", {})
@@ -3482,7 +3095,11 @@ class SLinkServer:
                 q = p["queued"]
                 q_str = f'<span class="warn">{q} queued</span>' if q > 0 else ""
                 abl_hdr = '<th>Ability</th>' if has_abilities else ''
-                parts.append(f'<table><thead><tr><th>Pokémon</th><th>Lv</th><th>HP</th><th>Type</th>{abl_hdr}<th>Partner</th><th>Link</th></tr></thead><tbody>')
+                # Link column dropped from the dashboard — link status is now
+                # carried by the Partner cell's tone (alive / pending / dim).
+                # Keeps the party table narrow enough to never trip a
+                # horizontal scrollbar at desktop widths.
+                parts.append(f'<table><thead><tr><th>Pokémon</th><th>Lv</th><th>HP</th><th>Type</th>{abl_hdr}<th>Partner</th></tr></thead><tbody>')
                 for key in party_keys:
                     detail      = p["party_details"].get(key, {})
                     level       = detail.get("level", 0)
@@ -3500,7 +3117,7 @@ class SLinkServer:
                     _party_entry = s._key_index.get(key)
                     _own_mi = (_party_entry.a if pid == "a" else _party_entry.b) if _party_entry else None
                     is_shiny_mon = key in s.bonus_keys.get(pid, set()) or bool(_own_mi and _own_mi.is_shiny)
-                    active_pfx  = '⚔ ' if is_active else ''
+                    active_pfx  = '<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> ' if is_active else ''
                     sprite_html = self._get_sprite_html(sid)
                     mon_str     = (
                         f'<div style="display:inline-flex;align-items:center;gap:4px">'
@@ -3574,9 +3191,12 @@ class SLinkServer:
                             link_lbl    = "—"
 
                     abl_td = f'<td>{ability_cell}</td>' if has_abilities else ''
-                    colspan = 7 if has_abilities else 6
+                    colspan = 6 if has_abilities else 5
                     move_details = detail.get("move_details", [])
                     move_html = _move_table_html(move_details, mon_key=key)
+                    # Wrap the partner cell in the link-status class so the
+                    # Partner column carries the alive / pending / dim tone
+                    # we used to put in the dropped Link column.
                     parts.append(
                         f'<tr class="{row_cls}" data-key="{html.escape(key)}">'
                         f'<td>{mon_str}</td>'
@@ -3584,8 +3204,7 @@ class SLinkServer:
                         f'<td>{hp_cell}</td>'
                         f'<td>{type_cell}</td>'
                         f'{abl_td}'
-                        f'<td>{partner_str}</td>'
-                        f'<td class="{link_cls}">{link_lbl}</td></tr>'
+                        f'<td class="{link_cls}">{partner_str}</td></tr>'
                     )
                     if move_html:
                         parts.append(
@@ -3620,7 +3239,7 @@ class SLinkServer:
             ]
             if boxes:
                 parts.append('<h3 style="margin-top:0.8em;font-size:0.95em">PC Boxes</h3>')
-                parts.append(f'<table><thead><tr><th>Box</th><th>Slot</th><th>Lv</th><th>Pokémon</th><th>Type</th>{"<th>Ability</th>" if has_abilities else ""}<th>Partner</th><th>Link</th></tr></thead><tbody>')
+                parts.append(f'<table><thead><tr><th>Box</th><th>Slot</th><th>Lv</th><th>Pokémon</th><th>Type</th>{"<th>Ability</th>" if has_abilities else ""}<th>Partner</th></tr></thead><tbody>')
                 for bentry in boxes:
                     b_sid     = bentry.get("species_id", 0)
                     b_gender  = self.adapter.gender_from_key(bentry.get("key", ""), b_sid)
@@ -3720,7 +3339,7 @@ class SLinkServer:
                             bx_link_lbl    = "—"
 
                     bx_abl_td = f'<td>{b_abl_h}</td>' if has_abilities else ''
-                    bx_colspan = 8 if has_abilities else 7
+                    bx_colspan = 7 if has_abilities else 6
                     bx_move_details = bentry.get("move_details", [])
                     bx_move_html = _move_table_html(bx_move_details, is_box=True, mon_key=bx_key)
                     parts.append(
@@ -3730,8 +3349,7 @@ class SLinkServer:
                         f'<td>{b_label}</td>'
                         f'<td>{b_types}</td>'
                         f'{bx_abl_td}'
-                        f'<td>{bx_partner_str}</td>'
-                        f'<td class="{bx_link_cls}">{bx_link_lbl}</td></tr>'
+                        f'<td class="{bx_link_cls}">{bx_partner_str}</td></tr>'
                     )
                     if bx_move_html:
                         parts.append(
@@ -3751,19 +3369,18 @@ class SLinkServer:
         kf_by_area: dict[str, dict] = {kf["area_id"]: kf for kf in killfeed}
 
         def _kf_inline_html(kf: dict) -> str:
-            """Compact cause + time line for embedding in the Status cell."""
+            """Compact cause line for embedding in the Status cell.
+
+            User asked to drop the killer-level + timestamp from this badge
+            — the death already happens contextually in a row that has the
+            area and players, and the encounters log doesn't need a clock.
+            The level + ISO time are still on the killfeed object for the
+            JSON API and the dedicated /stream/deaths overlay. """
             cause    = kf.get("cause", "")
             killer   = kf.get("killer") or {}
             initiator = kf.get("initiating_player", "")
-            killed_at = kf.get("killed_at", "")
-            try:
-                from datetime import datetime as _dt
-                time_str = _dt.fromisoformat(killed_at).strftime("%H:%M")
-            except Exception:
-                time_str = killed_at[11:16] if len(killed_at) >= 16 else ""
             if cause == "battle":
                 k_species = killer.get("species", 0)
-                k_level   = killer.get("level", 0)
                 k_trainer = killer.get("is_trainer", False)
                 k_tname   = killer.get("trainer_name", "")
                 k_tclass  = killer.get("trainer_class", "")
@@ -3776,23 +3393,22 @@ class SLinkServer:
                         prefix = "Trainer's"
                     else:
                         prefix = "Wild"
-                    cause_html = f'<span class="killfeed-cause kf-battle">⚔ {prefix} {sp_name} Lv{k_level}</span>'
+                    cause_html = f'<span class="killfeed-cause kf-battle"><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> {prefix} {sp_name}</span>'
                 else:
-                    cause_html = '<span class="killfeed-cause kf-battle">⚔ Fainted in battle</span>'
+                    cause_html = '<span class="killfeed-cause kf-battle"><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> Fainted in battle</span>'
             elif cause == "dead_zone":
                 iname = html.escape(
                     d["players"][initiator].get("trainer_name") or initiator.upper()
                 ) if initiator else "?"
-                cause_html = f'<span class="killfeed-cause kf-dead_zone">🚫 {iname} missed</span>'
+                cause_html = f'<span class="killfeed-cause kf-dead_zone"><svg class="inline-ico" aria-hidden="true"><use href="#i-ban"/></svg> {iname} missed</span>'
             elif cause == "whiteout":
                 iname = html.escape(
                     d["players"][initiator].get("trainer_name") or initiator.upper()
                 ) if initiator else "?"
-                cause_html = f'<span class="killfeed-cause kf-whiteout">💀 {iname} whited out</span>'
+                cause_html = f'<span class="killfeed-cause kf-whiteout"><svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> {iname} whited out</span>'
             else:
                 cause_html = ""
-            time_html = (f' <span class="dim">· {html.escape(time_str)}</span>' if time_str else "")
-            return f'<br><span class="kf-inline">{cause_html}{time_html}</span>'
+            return f'<br><span class="kf-inline">{cause_html}</span>'
 
         # Build a unified row set keyed by area_id.
         # Each row: {area_id, a_html, a_lv, b_html, b_lv, state_label, state_cls, sort_key}
@@ -3833,10 +3449,10 @@ class SLinkServer:
             # A dead link in a dead_zone area should display as "Dead zone"
             is_dead_zone = (status in ("dead", "dead_zone") and area_st == "dead_zone")
             STATUS_ICONS = {
-                "alive":     '<span class="alive">✓ linked</span>',
-                "dead":      f'<span class="dead_zone">☠ dead zone</span>{kf_extra}' if is_dead_zone else f'<span class="dead">☠ dead</span>{kf_extra}',
-                "memorial":  f'<span class="dead_zone">☠ dead zone</span> <span class="dim" style="font-size:0.82em">· boxed</span>{kf_extra}' if is_dead_zone else f'<span class="dead">☠ dead</span> <span class="dim" style="font-size:0.82em">· boxed</span>{kf_extra}',
-                "dead_zone": f'<span class="dead_zone">☠ dead zone</span>{kf_extra}',
+                "alive":     '<span class="alive"><svg class="inline-ico" aria-hidden="true"><use href="#i-check"/></svg> linked</span>',
+                "dead":      f'<span class="dead_zone"><svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> dead zone</span>{kf_extra}' if is_dead_zone else f'<span class="dead"><svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> dead</span>{kf_extra}',
+                "memorial":  f'<span class="dead_zone"><svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> dead zone</span> <span class="dim" style="font-size:0.82em">· boxed</span>{kf_extra}' if is_dead_zone else f'<span class="dead"><svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> dead</span> <span class="dim" style="font-size:0.82em">· boxed</span>{kf_extra}',
+                "dead_zone": f'<span class="dead_zone"><svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> dead zone</span>{kf_extra}',
             }
             status_html = STATUS_ICONS.get(status, status)
             row_cls = "dead_zone" if is_dead_zone else status
@@ -3907,9 +3523,9 @@ class SLinkServer:
             elif state_val == "dead_zone":
                 kf = kf_by_area.get(area)
                 kf_extra = _kf_inline_html(kf) if kf else ""
-                label = f'<span class="dead_zone">☠ dead zone</span>{kf_extra}'
+                label = f'<span class="dead_zone"><svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> dead zone</span>{kf_extra}'
             elif state_val == "linked":
-                label = '<span class="linked">✓ linked</span>'
+                label = '<span class="linked"><svg class="inline-ico" aria-hidden="true"><use href="#i-check"/></svg> linked</span>'
             else:
                 label = state_val
             encounter_rows.append({
@@ -3943,11 +3559,11 @@ class SLinkServer:
                 '<div id="enc-filters" class="enc-filters">'
                 '<span class="filter-label">Filter:</span>'
                 '<button class="filter-btn active" data-filter="all">All</button>'
-                f'<button class="filter-btn" data-filter="linked">✓ Linked ({n_alive})</button>'
-                f'<button class="filter-btn" data-filter="pending">⏳ Pending ({n_pend})</button>'
-                f'<button class="filter-btn" data-filter="pending_a">⏳ {name_a} ({n_pend_a})</button>'
-                f'<button class="filter-btn" data-filter="pending_b">⏳ {name_b} ({n_pend_b})</button>'
-                f'<button class="filter-btn" data-filter="dead">☠ Dead ({n_dead})</button>'
+                f'<button class="filter-btn" data-filter="linked"><svg class="inline-ico" aria-hidden="true"><use href="#i-check"/></svg> Linked ({n_alive})</button>'
+                f'<button class="filter-btn" data-filter="pending"><svg class="inline-ico" aria-hidden="true"><use href="#i-hourglass"/></svg> Pending ({n_pend})</button>'
+                f'<button class="filter-btn" data-filter="pending_a"><svg class="inline-ico" aria-hidden="true"><use href="#i-hourglass"/></svg> {name_a} ({n_pend_a})</button>'
+                f'<button class="filter-btn" data-filter="pending_b"><svg class="inline-ico" aria-hidden="true"><use href="#i-hourglass"/></svg> {name_b} ({n_pend_b})</button>'
+                f'<button class="filter-btn" data-filter="dead"><svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> Dead ({n_dead})</button>'
                 '</div>'
             )
             parts.append(
@@ -4014,26 +3630,102 @@ class SLinkServer:
         else:
             parts.append("<p class='empty'>No events yet.</p>")
 
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        mgr_link = ""
-        if self._manager_port:
-            mgr_link = (
-                f' &nbsp;·&nbsp; <a id="mgr-link" href="#" style="color:#4ade80;text-decoration:none">'
-                f'&#127968; Run Manager</a>'
-                f'<script>document.getElementById("mgr-link").href='
-                f'"//" + window.location.hostname + ":{self._manager_port}";</script>'
-            )
-        return _STATUS_HTML.format(timestamp=ts, body="\n".join(parts),
+        return _STATUS_HTML.format(body="\n".join(parts),
                                    page_title=self._page_title(),
-                                   tcp_port=self._tcp_port or "N/A",
-                                   manager_link=mgr_link,
+                                   sidebar=self._build_sidebar_html("status"),
                                    calc_js=_CALC_PREVIEW_JS)
 
     async def handle_status_html(self, request):
-        return aiohttp_web.Response(
-            text=self._build_status_html(),
-            content_type="text/html",
+        return await self._handle_dashboard_template(request)
+
+    async def _handle_dashboard_template(self, request):
+        """Templated dashboard — wraps the `_build_status_html` body in a
+        Jinja shell that adds the phase banner + HTMX SSE morph + the
+        shared theme switcher.
+
+        The dashboard's CSS / JS live in ``server/static/dashboard.{css,js}``
+        and are linked by ``_STATUS_HTML``'s ``<head>`` directly, so this
+        helper only has to slice the body and resolve phase state.
+        """
+        full = self._build_status_html()
+        # Body inner — strip everything outside <body>…</body> so the existing
+        # markup lands inside the new template's wrapper. If the body renderer
+        # ever stops emitting a single <body>, fall back to the full document.
+        body_open  = full.find("<body")
+        body_inner_start = full.find(">", body_open) + 1 if body_open != -1 else 0
+        body_inner_end   = full.rfind("</body>")
+        content_html = (full[body_inner_start:body_inner_end]
+                        if body_inner_start and body_inner_end != -1
+                        else full)
+
+        # Phase resolution — read run lifecycle signals from the state machine.
+        s = self.state
+        po = s.pokeballs_obtained or {}
+        alive = sum(1 for l in s.links if (l.status.value if hasattr(l.status, "value") else l.status) == "alive")
+        dead  = sum(1 for l in s.links if (l.status.value if hasattr(l.status, "value") else l.status) in ("dead", "memorial"))
+        if getattr(s, "run_over", False):
+            phase_slug, phase_label = "game_over", "Game over"
+        elif not (po.get("a") and po.get("b")):
+            phase_slug, phase_label = "pre", "Waiting for Pokéballs"
+        else:
+            phase_slug, phase_label = "running", "Run in progress"
+
+        # Inject the page title header + phase banner inside <main class="dash-main">
+        # so they sit above the dashboard content and stay within the right
+        # column of the sidebar grid. dashboard.html no longer renders these
+        # since it can't reach into the sliced body markup's main pane.
+        # The page title lives in the main pane (not the sidebar) so long
+        # run names like "Pokémon Soul Link" aren't truncated.
+        attempts_count = getattr(s, "attempts_count", 0) or 0
+        stats_html = ""
+        if alive or dead:
+            stats_html = (
+                f'<span class="phase-stats">'
+                f'<span class="phase-alive">{alive} alive</span> · '
+                f'<span class="phase-dead">{dead} dead</span>'
+                f'{f" · attempt #{attempts_count}" if attempts_count else ""}'
+                f'</span>'
+            )
+        # Sidebar already shows the "Soul Link" brand, so the main-pane title
+        # can drop the "Pokémon Soul Link Tracker —" prefix and just surface
+        # the variant + run name (e.g. "Radical Red — 44"). The browser tab
+        # title via _page_title() keeps the full string for clarity.
+        concise_parts = []
+        if self.state.rom_type:
+            from server.adapters import variant_label
+            concise_parts.append(variant_label(self.state.rom_type))
+        if self._run_name:
+            concise_parts.append(html.escape(self._run_name))
+        concise_title = " — ".join(concise_parts) if concise_parts else "Soul Link"
+        header_html = (
+            f'<header class="dash-page-hdr">'
+            f'<h1 class="dash-page-title">{concise_title}</h1>'
+            f'<div class="phase-banner phase-{phase_slug}">'
+            f'<span class="phase-dot"></span>'
+            f'<span class="phase-label">{phase_label}</span>'
+            f'{stats_html}'
+            f'</div>'
+            f'</header>'
         )
+        content_html = content_html.replace(
+            '<main class="dash-main">',
+            '<main class="dash-main">' + header_html,
+            1,
+        )
+
+        ctx = {
+            "page_title":      self._page_title(),
+            "theme":           resolve_theme(request),
+            "is_stream":       False,
+            "hide_chrome":     False,
+            "content_html":    content_html,
+            "phase_slug":      phase_slug,
+            "phase_label":     phase_label,
+            "alive_links":     alive,
+            "dead_links":      dead,
+            "attempts_count":  getattr(s, "attempts_count", 0) or 0,
+        }
+        return aiohttp_jinja2.render_template("dashboard.html", request, ctx)
 
     async def handle_status_json(self, request):
         return aiohttp_web.json_response(self._build_status_dict())
@@ -4044,14 +3736,63 @@ class SLinkServer:
         raise aiohttp_web.HTTPFound('/calc/normal.html')
 
     async def handle_calc_files(self, request):
-        """Serve static files from calc/dist/ with basic path-traversal protection."""
+        """Serve calc assets — `calc/src/` wins over `calc/dist/` when both have the path.
+
+        HTML entry points (`normal.html`, `hardcore.html`) are wrapped in the
+        Jinja `calc.html` template so they pick up the same theme / font /
+        sidebar chrome as the rest of the SLink UI. Everything else (CSS, JS,
+        fonts, sprites, data files) is served verbatim from disk.
+
+        Resolution: prefer `calc/src/` when the path exists there, fall back
+        to `calc/dist/` otherwise. Lets calc/src/ edits go live without
+        running the build script. The HTML entry points only exist in dist/
+        (src has `*.template.html` with build placeholders), so they resolve
+        from dist automatically.
+        """
         path = request.match_info.get('path', '')
         safe = os.path.normpath(path).lstrip('/\\')
         if '..' in safe:
             raise aiohttp_web.HTTPForbidden()
-        abs_path = os.path.join(_CALC_DIST_DIR, safe)
+        src_path  = os.path.join(_CALC_SRC_DIR, safe)
+        dist_path = os.path.join(_CALC_DIST_DIR, safe)
+        abs_path  = src_path if os.path.isfile(src_path) else dist_path
         if not os.path.isfile(abs_path):
             raise aiohttp_web.HTTPNotFound()
+        if safe.endswith('.html'):
+            with open(abs_path, 'r', encoding='utf-8') as fh:
+                full = fh.read()
+            # Slice the calc body inner. Regex-matched rather than
+            # `text.find('<body')` so HEAD comments that mention `<body>`
+            # textually don't trip the parser (the dist HTML's HEAD comment
+            # block currently does this). Same end-of-body match for symmetry.
+            # If markers can't be found, falls back to serving the full text
+            # so a malformed dist file degrades gracefully rather than 500ing.
+            body_open_match  = re.search(r'<body\b[^>]*>', full)
+            body_close_match = list(re.finditer(r'</body\s*>', full))
+            if body_open_match and body_close_match:
+                calc_body = full[body_open_match.end():body_close_match[-1].start()]
+            else:
+                calc_body = full
+            is_hardcore = 'hardcore' in safe.lower()
+            ctx = {
+                "page_title":      "Pokémon Radical Red Damage Calculator",
+                "theme":           resolve_theme(request),
+                "body_class":      "dark-theme",
+                "sidebar_html":    self._build_sidebar_html("calc"),
+                "sidebar_css":     "sidebar",
+                "calc_body_html":  calc_body,
+                "calc_mode_label": "Hardcore Mode" if is_hardcore else "Normal Mode",
+                "is_stream":       False,
+                "hide_chrome":     False,
+            }
+            resp = aiohttp_jinja2.render_template("calc.html", request, ctx)
+            # The rendered theme depends on the `slink-theme` cookie. Without
+            # this header the browser may serve a stale heuristic-cached copy
+            # after the user changes themes on another page; revalidating
+            # forces a fresh render. Same pattern as the static middleware in
+            # templating.py for `/static/*`.
+            resp.headers["Cache-Control"] = "no-cache"
+            return resp
         mime, _ = mimetypes.guess_type(abs_path)
         ct = mime or 'application/octet-stream'
         with open(abs_path, 'rb') as fh:
@@ -4140,81 +3881,503 @@ class SLinkServer:
         return aiohttp_web.json_response(result)
 
     async def handle_memorial_html(self, request):
-        return aiohttp_web.Response(
-            text=_MEMORIAL_HTML.replace("{page_title}", html.escape(self._page_title())),
-            content_type="text/html",
+        return await self._handle_memorial_template(request)
+
+    async def _handle_memorial_template(self, request):
+        """Jinja-rendered memorial wall."""
+        # Smoke-test path: render every macro against mock data so a designer
+        # can visually verify a macro in isolation without needing a live run.
+        if request.query.get("_smoke") == "1":
+            return aiohttp_jinja2.render_template(
+                "_smoke.html", request,
+                {
+                    "page_title": self._page_title(),
+                    "theme": resolve_theme(request),
+                },
+            )
+
+        # Build the killfeed slice of the status dict and reverse it so the
+        # memorial wall renders oldest-first (chronological order).
+        d = self._build_status_dict()
+        killfeed = list(reversed(d.get("killfeed", [])))
+        for entry in killfeed:
+            entry["killed_at_display"] = _format_killed_at(entry.get("killed_at"))
+
+        return aiohttp_jinja2.render_template(
+            "memorial.html", request,
+            {
+                "page_title": self._page_title(),
+                "theme": resolve_theme(request),
+                "killfeed": killfeed,
+                "sidebar_html": self._build_sidebar_html("memorial"),
+            },
         )
 
     # ── Stream overlay handlers ──────────────────────────────────────────────
 
     async def handle_stream_index(self, request):
-        return aiohttp_web.Response(text=_STREAM_INDEX_HTML, content_type="text/html")
+        ctx = _build_stream_index_context(request)
+        ctx["sidebar_html"] = self._build_sidebar_html("stream")
+        return aiohttp_jinja2.render_template("stream_index.html", request, ctx)
 
     async def handle_stream_party_a(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Player A Party",
-                                     _STREAM_PARTY_JS.replace("%PLAYER%", "a")),
-            content_type="text/html")
+        return await self._handle_stream_party_template(request, "a")
 
     async def handle_stream_party_b(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Player B Party",
-                                     _STREAM_PARTY_JS.replace("%PLAYER%", "b")),
-            content_type="text/html")
+        return await self._handle_stream_party_template(request, "b")
+
+    # ── Templated party overlay ────────────────────────────────
+
+    def _build_party_overlay_context(self, player_id: str) -> dict:
+        """Slice and reshape `_build_status_dict()` into the template context
+        the party overlay expects. One full status-dict build per HTMX poll
+        (every 2 s) — acceptable at SLink's localhost-only scale.
+        """
+        d = self._build_status_dict()
+        p = d["players"].get(player_id, {})
+        keys = p.get("party_keys", [])
+        details = p.get("party_details", {})
+
+        mons = []
+        for key in keys:
+            det = details.get(key) or {}
+            hp = det.get("hp", 0) or 0
+            max_hp = det.get("maxHP", 0) or 0
+            fainted = (hp == 0)
+            if fainted or max_hp <= 0:
+                tone = "fnt" if fainted else "bl"
+            else:
+                pct = (hp / max_hp) * 100
+                if pct > 50:
+                    tone = "bh"
+                elif pct > 20:
+                    tone = "bm"
+                else:
+                    tone = "bl"
+            mons.append({
+                "key":          key,
+                "species_id":   det.get("species_id", 0),
+                "species_name": det.get("species_name", ""),
+                "nickname":     det.get("nickname", "") or det.get("species_name", "") or key[:8],
+                "level":        det.get("level", 0),
+                "hp":           hp,
+                "maxHP":        max_hp,
+                "sprite_html":  det.get("sprite_html", ""),
+                "status_tone":  tone,
+                "fainted":      fainted,
+                "status_cond":  det.get("status_cond", 0),
+                "stat_stages":  det.get("stat_stages", []) if det.get("active") else None,
+                "active":       det.get("active", False),
+            })
+
+        return {
+            "player_id":    player_id,
+            "trainer_name": p.get("trainer_name", ""),
+            "mons":         mons,
+        }
+
+    async def _handle_stream_party_template(self, request, player_id: str):
+        """Render the templated party overlay. Two call sites:
+            * /stream/party-{a,b}         — full page (initial paint)
+            * /stream/party-{a,b}/fragment — #root only (HTMX poll target)
+        Both pull from `_build_party_overlay_context(player_id)`. The
+        fragment endpoint is wired in the router below.
+        """
+        is_fragment = request.match_info.get("fragment") == "fragment" \
+                      or request.path.endswith("/fragment")
+        ctx = self._build_party_overlay_context(player_id)
+        ctx["theme"]         = resolve_theme(request)
+        ctx["layout_class"]  = resolve_layout(request)
+        ctx["overlay_title"] = f"Party {player_id.upper()}"
+        # Fragment endpoint URL the body's hx-get points at — must preserve
+        # ?theme= / ?layout= so themed polls keep returning themed bodies.
+        query = request.url.query_string
+        ctx["fragment_url"]  = f"/stream/party-{player_id}/fragment" + (f"?{query}" if query else "")
+
+        template = "stream/_party_root.html" if is_fragment else "stream/party.html"
+        return aiohttp_jinja2.render_template(template, request, ctx)
+
+    async def handle_stream_party_a_fragment(self, request):
+        return await self._handle_stream_party_template(request, "a")
+
+    async def handle_stream_party_b_fragment(self, request):
+        return await self._handle_stream_party_template(request, "b")
 
     async def handle_stream_enemy_focus_a(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Enemy Focus A",
-                                      _STREAM_ENEMY_FOCUS_JS.replace("%PLAYER%", "a")),
-            content_type="text/html")
+        return await self._battle_overlay(request, "enemy-focus-a", "enemy_focus", "a")
 
     async def handle_stream_enemy_focus_b(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Enemy Focus B",
-                                      _STREAM_ENEMY_FOCUS_JS.replace("%PLAYER%", "b")),
-            content_type="text/html")
+        return await self._battle_overlay(request, "enemy-focus-b", "enemy_focus", "b")
+
+    async def handle_stream_enemy_focus_a_fragment(self, request):
+        return await self._battle_fragment(request, "enemy-focus-a", "enemy_focus", "a")
+
+    async def handle_stream_enemy_focus_b_fragment(self, request):
+        return await self._battle_fragment(request, "enemy-focus-b", "enemy_focus", "b")
 
     async def handle_stream_enemy_trainer_a(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Enemy Trainer A",
-                                      _STREAM_ENEMY_TRAINER_JS.replace("%PLAYER%", "a")),
-            content_type="text/html")
+        return await self._battle_overlay(request, "enemy-trainer-a", "enemy_trainer", "a")
 
     async def handle_stream_enemy_trainer_b(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Enemy Trainer B",
-                                      _STREAM_ENEMY_TRAINER_JS.replace("%PLAYER%", "b")),
-            content_type="text/html")
+        return await self._battle_overlay(request, "enemy-trainer-b", "enemy_trainer", "b")
+
+    async def handle_stream_enemy_trainer_a_fragment(self, request):
+        return await self._battle_fragment(request, "enemy-trainer-a", "enemy_trainer", "a")
+
+    async def handle_stream_enemy_trainer_b_fragment(self, request):
+        return await self._battle_fragment(request, "enemy-trainer-b", "enemy_trainer", "b")
+
+    # ── Battle overlay dispatch ──────────────────────────
+
+    async def _battle_overlay(self, request, slug: str, template_base: str,
+                              player_id: str):
+        ctx = self._build_battle_overlay_context(player_id, template_base)
+        self._apply_battle_body_class(ctx, template_base, request)
+        return await self._render_stream_overlay(
+            request, slug, ctx, template_base=template_base)
+
+    async def _battle_fragment(self, request, slug: str, template_base: str, player_id: str):
+        ctx = self._build_battle_overlay_context(player_id, template_base)
+        self._apply_battle_body_class(ctx, template_base, request)
+        return await self._render_stream_overlay(
+            request, slug, ctx, template_base=template_base, fragment=True)
+
+    @staticmethod
+    def _apply_battle_body_class(ctx: dict, template_base: str, request) -> None:
+        """Focus + enemy-focus need `body.ov-focus` for their shell scaling
+        rules to apply. The CSS extras are stitched onto `layout_class` so
+        the existing _render_stream_overlay plumbing stays untouched."""
+        if template_base not in ("focus", "enemy_focus"):
+            return
+        existing = resolve_layout(request)
+        ctx["layout_class"] = (existing + " ov-focus").strip()
+
+    def _build_battle_overlay_context(self, player_id: str, template_base: str) -> dict:
+        """Unified context builder for enemy_focus / enemy_trainer / focus.
+        Dispatches on template_base to assemble the right slice."""
+        d = self._build_status_dict()
+        p  = d.get("players", {}).get(player_id, {}) or {}
+        bs = p.get("battle_state", {}) or {}
+        ctx = {"player_id": player_id, "in_battle": bool(bs.get("in_battle"))}
+
+        if template_base == "enemy_focus":
+            return {**ctx, **self._enemy_focus_ctx(bs)}
+        if template_base == "enemy_trainer":
+            return {**ctx, **self._enemy_trainer_ctx(bs)}
+        if template_base == "focus":
+            return {**ctx, **self._focus_ctx(p, bs)}
+        return ctx
+
+    def _enemy_focus_ctx(self, bs: dict) -> dict:
+        if not bs.get("in_battle"):
+            return {"active_mons": [], "is_doubles": False, "is_trainer": False, "title": ""}
+        enemy_party = bs.get("enemy_party", []) or []
+        active = [m for m in enemy_party if m.get("active")]
+        if not active and enemy_party:
+            active = [enemy_party[0]]
+        is_doubles = bool(bs.get("is_doubles")) or len(active) > 1
+        is_trainer = bool(bs.get("is_trainer_battle"))
+        if is_trainer:
+            title = (bs.get("opponent_class") or "TRAINER")
+            if bs.get("opponent_name"):
+                title += " " + bs["opponent_name"]
+        else:
+            title = "WILD ENCOUNTER"
+        return {
+            "active_mons": [self._battle_slot(m) for m in active],
+            "is_doubles": is_doubles,
+            "is_trainer": is_trainer,
+            "title": title,
+        }
+
+    def _enemy_trainer_ctx(self, bs: dict) -> dict:
+        if not bs.get("in_battle") or not bs.get("is_trainer_battle"):
+            return {"mons": [], "trainer_label": ""}
+        team = bs.get("enemy_party", []) or []
+        label = (bs.get("opponent_class") or "Trainer")
+        if bs.get("opponent_name"):
+            label += " " + bs["opponent_name"]
+        return {
+            "mons": [self._battle_mon_card(m) for m in team],
+            "trainer_label": label,
+        }
+
+    def _focus_ctx(self, p: dict, bs: dict) -> dict:
+        keys = p.get("party_keys", []) or []
+        details = p.get("party_details", {}) or {}
+        active_slots = []
+        for k in keys:
+            det = details.get(k) or {}
+            if not det.get("active"):
+                continue
+            active_slots.append(self._battle_slot(det))
+        is_doubles = bool(bs.get("is_doubles")) or len(active_slots) > 1
+        return {
+            "active_mons": active_slots,
+            "is_doubles":  is_doubles,
+        }
+
+    def _battle_slot(self, det: dict) -> dict:
+        """Compose a {mon, moves} dict the focus/enemy-focus templates expect."""
+        return {
+            "mon":   self._battle_mon_card(det),
+            "moves": [self._battle_move(md) for md in det.get("move_details", []) or []],
+        }
+
+    def _battle_mon_card(self, det: dict) -> dict:
+        """Project a party_details / enemy_party entry into the shape mon_card expects."""
+        hp     = det.get("hp", 0) or 0
+        max_hp = det.get("maxHP", 0) or 0
+        fnt    = hp == 0
+        pct    = self._hp_pct(hp, max_hp)
+        if fnt:
+            tone = "fnt"
+        elif pct > 50:
+            tone = "bh"
+        elif pct > 20:
+            tone = "bm"
+        else:
+            tone = "bl"
+        return {
+            "species_id":   det.get("species_id", 0),
+            "species_name": det.get("species_name", ""),
+            "nickname":     det.get("nickname") or det.get("species_name") or "???",
+            "level":        det.get("level", 0),
+            "hp":           hp,
+            "maxHP":        max_hp,
+            "sprite_html":  det.get("sprite_html", ""),
+            "status_tone":  tone,
+            "fainted":      fnt,
+            "status_cond":  det.get("status_cond", 0),
+            "stat_stages":  det.get("stat_stages", []) if det.get("active") else None,
+            "active":       bool(det.get("active")),
+        }
+
+    def _battle_move(self, md: dict) -> dict:
+        """Project a move detail entry into the shape the moves-grid expects."""
+        max_pp = md.get("pp", 0) or 0
+        cur_pp = md.get("current_pp", 0) or 0
+        pct    = max(0, min(100, round(cur_pp / max_pp * 100))) if max_pp else 0
+        if pct > 50:
+            cls = "pp-h"
+        elif pct > 25:
+            cls = "pp-m"
+        else:
+            cls = "pp-l"
+        return {
+            "name":       md.get("name") or "?",
+            "type_name":  md.get("type_name") or "",
+            "current_pp": cur_pp,
+            "pp_max":     max_pp,
+            "pp_cls":     cls,
+        }
 
     async def handle_stream_links(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Linked Pairs", _STREAM_LINKS_JS),
-            content_type="text/html")
+        return await self._render_stream_overlay(
+            request, "links", self._build_links_overlay_context())
+
+    async def handle_stream_links_fragment(self, request):
+        return await self._render_stream_overlay(
+            request, "links", self._build_links_overlay_context(), fragment=True)
 
     async def handle_stream_linked_party(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Linked Party", _STREAM_LINKED_PARTY_JS),
-            content_type="text/html")
+        return await self._render_stream_overlay(
+            request, "linked-party", self._build_linked_party_overlay_context())
+
+    async def handle_stream_linked_party_fragment(self, request):
+        return await self._render_stream_overlay(
+            request, "linked-party", self._build_linked_party_overlay_context(), fragment=True)
 
     async def handle_stream_boxed_links(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Boxed Links", _STREAM_BOXED_LINKS_JS),
-            content_type="text/html")
+        return await self._render_stream_overlay(
+            request, "boxed-links", self._build_boxed_links_overlay_context())
+
+    async def handle_stream_boxed_links_fragment(self, request):
+        return await self._render_stream_overlay(
+            request, "boxed-links", self._build_boxed_links_overlay_context(), fragment=True)
+
+    # ── Links overlay context builders ───────────────────
+
+    @staticmethod
+    def _hp_class(pct: int) -> str:
+        return "hp-h" if pct > 50 else ("hp-m" if pct > 20 else "hp-l")
+
+    @staticmethod
+    def _hp_pct(hp: int, max_hp: int) -> int:
+        if max_hp <= 0 or hp <= 0:
+            return 0
+        return max(0, min(100, round(hp / max_hp * 100)))
+
+    def _build_links_overlay_context(self) -> dict:
+        """Alive + dead link cards for /stream/links."""
+        d = self._build_status_dict()
+        alive, dead = [], []
+        for lnk in d.get("links", []):
+            item = {
+                "area_display": lnk.get("area_display") or "",
+                "a": {
+                    "nickname":     lnk.get("a_nickname") or "",
+                    "species_name": lnk.get("a_species_name") or "",
+                    "sprite_html":  lnk.get("a_sprite_html") or "",
+                },
+                "b": {
+                    "nickname":     lnk.get("b_nickname") or "",
+                    "species_name": lnk.get("b_species_name") or "",
+                    "sprite_html":  lnk.get("b_sprite_html") or "",
+                },
+            }
+            (alive if lnk.get("status") == "alive" else dead).append(item)
+        return {"alive": alive, "dead": dead}
+
+    def _build_linked_party_overlay_context(self) -> dict:
+        """Linked pairs where BOTH mons are currently in party — full
+        sprite + HP card layout for /stream/linked-party."""
+        d = self._build_status_dict()
+        pa = d.get("players", {}).get("a", {}) or {}
+        pb = d.get("players", {}).get("b", {}) or {}
+        a_keys = set(pa.get("party_keys", []))
+        b_keys = set(pb.get("party_keys", []))
+        a_det  = pa.get("party_details", {}) or {}
+        b_det  = pb.get("party_details", {}) or {}
+
+        pairs = []
+        for lnk in d.get("links", []):
+            if lnk.get("status") != "alive":
+                continue
+            a_key = lnk.get("a_key")
+            b_key = lnk.get("b_key")
+            if a_key not in a_keys or b_key not in b_keys:
+                continue
+            ad = a_det.get(a_key) or {}
+            bd = b_det.get(b_key) or {}
+            a_hp, a_mx = ad.get("hp", 0) or 0, ad.get("maxHP", 0) or 0
+            b_hp, b_mx = bd.get("hp", 0) or 0, bd.get("maxHP", 0) or 0
+            a_pct = self._hp_pct(a_hp, a_mx)
+            b_pct = self._hp_pct(b_hp, b_mx)
+            a_fnt = a_hp == 0
+            b_fnt = b_hp == 0
+            pairs.append({
+                "area_display": lnk.get("area_display") or "",
+                "both_fainted": a_fnt and b_fnt,
+                "a": {
+                    "nickname":     ad.get("nickname") or lnk.get("a_nickname") or "",
+                    "species_name": lnk.get("a_species_name") or "",
+                    "sprite_html":  ad.get("sprite_html") or lnk.get("a_sprite_html") or "",
+                    "level":        ad.get("level") or lnk.get("a_level") or 0,
+                    "hp": a_hp, "max_hp": a_mx, "pct": a_pct,
+                    "hp_cls": self._hp_class(a_pct), "fainted": a_fnt,
+                },
+                "b": {
+                    "nickname":     bd.get("nickname") or lnk.get("b_nickname") or "",
+                    "species_name": lnk.get("b_species_name") or "",
+                    "sprite_html":  bd.get("sprite_html") or lnk.get("b_sprite_html") or "",
+                    "level":        bd.get("level") or lnk.get("b_level") or 0,
+                    "hp": b_hp, "max_hp": b_mx, "pct": b_pct,
+                    "hp_cls": self._hp_class(b_pct), "fainted": b_fnt,
+                },
+            })
+        return {"pairs": pairs}
+
+    def _build_boxed_links_overlay_context(self) -> dict:
+        """Alive pairs where at least one mon is in the box (not party).
+        Switches to compact grid layout above 4 pairs."""
+        d = self._build_status_dict()
+        pa = d.get("players", {}).get("a", {}) or {}
+        pb = d.get("players", {}).get("b", {}) or {}
+        a_keys = set(pa.get("party_keys", []))
+        b_keys = set(pb.get("party_keys", []))
+
+        pairs = []
+        for lnk in d.get("links", []):
+            if lnk.get("status") != "alive":
+                continue
+            a_in = lnk.get("a_key") in a_keys
+            b_in = lnk.get("b_key") in b_keys
+            if a_in and b_in:
+                continue  # both in party → belongs to linked-party overlay
+            pairs.append({
+                "area_display": lnk.get("area_display") or "",
+                "a": {
+                    "nickname":     lnk.get("a_nickname") or "",
+                    "species_name": lnk.get("a_species_name") or "",
+                    "sprite_html":  lnk.get("a_sprite_html") or "",
+                    "level":        lnk.get("a_level") or 0,
+                    "in_party":     a_in,
+                },
+                "b": {
+                    "nickname":     lnk.get("b_nickname") or "",
+                    "species_name": lnk.get("b_species_name") or "",
+                    "sprite_html":  lnk.get("b_sprite_html") or "",
+                    "level":        lnk.get("b_level") or 0,
+                    "in_party":     b_in,
+                },
+            })
+        return {"pairs": pairs, "compact": len(pairs) > 4}
 
     async def handle_stream_deaths(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Death Counter", _STREAM_DEATHS_JS),
-            content_type="text/html")
+        return await self._render_stream_overlay(
+            request, "deaths", self._build_deaths_overlay_context())
+
+    async def handle_stream_deaths_fragment(self, request):
+        return await self._render_stream_overlay(
+            request, "deaths", self._build_deaths_overlay_context(), fragment=True)
 
     async def handle_stream_attempts(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Attempts Counter", _STREAM_ATTEMPTS_JS),
-            content_type="text/html")
+        return await self._render_stream_overlay(
+            request, "attempts", self._build_attempts_overlay_context())
+
+    async def handle_stream_attempts_fragment(self, request):
+        return await self._render_stream_overlay(
+            request, "attempts", self._build_attempts_overlay_context(), fragment=True)
+
+    # ── Shared template plumbing for stream overlays ─────────────
+
+    async def _render_stream_overlay(self, request, slug: str, ctx: dict, *,
+                                     fragment: bool = False, template_base: str | None = None):
+        """Render `stream/{base}.html` (or `stream/_{base}_root.html` for the
+        HTMX fragment endpoint). Shared by every stream overlay so the
+        theme + layout + fragment-url plumbing lives in exactly one place.
+
+        ``template_base`` lets two-player overlays (e.g. /stream/focus-a +
+        /stream/focus-b) share one template — pass ``template_base='focus'``
+        for both and the per-side context tells the template which player.
+        """
+        ctx = dict(ctx)
+        ctx.setdefault("overlay_title", slug.replace("-", " ").title())
+        ctx["theme"]        = resolve_theme(request)
+        # `setdefault` (not `=`) so handlers that already stitched extras onto
+        # layout_class — e.g. `_apply_battle_body_class` adding `ov-focus` to
+        # focus / enemy-focus — survive this plumbing. Otherwise body.ov-focus
+        # is silently dropped and the doubles flex-row split layout never
+        # activates, leaving both columns stacked vertically.
+        ctx.setdefault("layout_class", resolve_layout(request))
+        query = request.url.query_string
+        ctx["fragment_url"] = f"/stream/{slug}/fragment" + (f"?{query}" if query else "")
+        base = (template_base or slug).replace("-", "_")
+        template = f"stream/_{base}_root.html" if fragment else f"stream/{base}.html"
+        return aiohttp_jinja2.render_template(template, request, ctx)
+
+    def _build_deaths_overlay_context(self) -> dict:
+        """Alive vs dead link counts for the SOUL LINK overlay."""
+        alive = dead = 0
+        for lnk in self.state.links:
+            status = lnk.status.value if hasattr(lnk.status, "value") else lnk.status
+            if status == "alive":
+                alive += 1
+            elif status in ("dead", "memorial"):
+                dead += 1
+        return {"alive_count": alive, "dead_count": dead}
+
+    def _build_attempts_overlay_context(self) -> dict:
+        return {"attempts_count": self.state.attempts_count}
 
     async def handle_stream_areas(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Area Tracker", _STREAM_AREAS_JS),
-            content_type="text/html")
+        return await self._render_stream_overlay(
+            request, "areas", self._build_areas_overlay_context())
+
+    async def handle_stream_areas_fragment(self, request):
+        return await self._render_stream_overlay(
+            request, "areas", self._build_areas_overlay_context(), fragment=True)
 
     async def handle_api_attempts(self, request):
         """POST /api/attempts — set the manual attempts counter."""
@@ -4232,63 +4395,342 @@ class SLinkServer:
         return aiohttp_web.json_response({"ok": True, "attempts_count": count})
 
     async def handle_stream_events(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Event Feed", _STREAM_EVENTS_JS),
-            content_type="text/html")
+        return await self._render_stream_overlay(
+            request, "events", self._build_events_overlay_context(request))
+
+    async def handle_stream_events_fragment(self, request):
+        return await self._render_stream_overlay(
+            request, "events", self._build_events_overlay_context(request), fragment=True)
 
     async def handle_stream_badges_a(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Gym Badges A",
-                                     _STREAM_BADGES_JS.replace("%PLAYER%", "a")),
-            content_type="text/html")
+        return await self._badges_overlay(request, "a")
 
     async def handle_stream_badges_b(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Gym Badges B",
-                                     _STREAM_BADGES_JS.replace("%PLAYER%", "b")),
-            content_type="text/html")
+        return await self._badges_overlay(request, "b")
+
+    async def handle_stream_badges_a_fragment(self, request):
+        return await self._badges_fragment(request, "a")
+
+    async def handle_stream_badges_b_fragment(self, request):
+        return await self._badges_fragment(request, "b")
+
+    async def _badges_overlay(self, request, player_id: str):
+        return await self._render_stream_overlay(
+            request, f"badges-{player_id}",
+            self._build_badges_overlay_context(player_id),
+            template_base="badges")
+
+    async def _badges_fragment(self, request, player_id: str):
+        return await self._render_stream_overlay(
+            request, f"badges-{player_id}",
+            self._build_badges_overlay_context(player_id),
+            template_base="badges", fragment=True)
 
     async def handle_stream_encounters(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Encounter Tracker", _STREAM_ENCOUNTERS_JS),
-            content_type="text/html")
+        return await self._render_stream_overlay(
+            request, "encounters", self._build_encounters_overlay_context())
+
+    async def handle_stream_encounters_fragment(self, request):
+        return await self._render_stream_overlay(
+            request, "encounters", self._build_encounters_overlay_context(), fragment=True)
 
     async def handle_stream_stream_memorial(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Memorial Scroll", _STREAM_MEMORIAL_JS),
-            content_type="text/html")
+        return await self._render_stream_overlay(
+            request, "stream-memorial", self._build_memorial_scroll_context(),
+            template_base="stream_memorial")
+
+    async def handle_stream_stream_memorial_fragment(self, request):
+        return await self._render_stream_overlay(
+            request, "stream-memorial", self._build_memorial_scroll_context(),
+            template_base="stream_memorial", fragment=True)
 
     async def handle_stream_ticker(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Event Ticker", _STREAM_TICKER_JS),
-            content_type="text/html")
+        return await self._render_stream_overlay(
+            request, "ticker", self._build_ticker_overlay_context(request))
+
+    async def handle_stream_ticker_fragment(self, request):
+        return await self._render_stream_overlay(
+            request, "ticker", self._build_ticker_overlay_context(request), fragment=True)
 
     async def handle_stream_focus_a(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Focus A",
-                                     _STREAM_FOCUS_JS.replace("%PLAYER%", "a")),
-            content_type="text/html")
+        return await self._battle_overlay(request, "focus-a", "focus", "a")
 
     async def handle_stream_focus_b(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Focus B",
-                                     _STREAM_FOCUS_JS.replace("%PLAYER%", "b")),
-            content_type="text/html")
+        return await self._battle_overlay(request, "focus-b", "focus", "b")
+
+    async def handle_stream_focus_a_fragment(self, request):
+        return await self._battle_fragment(request, "focus-a", "focus", "a")
+
+    async def handle_stream_focus_b_fragment(self, request):
+        return await self._battle_fragment(request, "focus-b", "focus", "b")
 
     async def handle_stream_area_encounter(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Area Encounter", _STREAM_AREA_ENCOUNTER_JS),
-            content_type="text/html")
+        return await self._render_stream_overlay(
+            request, "area-encounter", self._build_area_encounter_overlay_context())
+
+    async def handle_stream_area_encounter_fragment(self, request):
+        return await self._render_stream_overlay(
+            request, "area-encounter", self._build_area_encounter_overlay_context(), fragment=True)
 
     async def handle_stream_enc_table_a(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Encounter Table A", _STREAM_ENC_TABLE_JS.replace("%PLAYER%", "a")),
-            content_type="text/html")
+        return await self._enc_table_overlay(request, "a")
 
     async def handle_stream_enc_table_b(self, request):
-        return aiohttp_web.Response(
-            text=_stream_overlay_page("Encounter Table B", _STREAM_ENC_TABLE_JS.replace("%PLAYER%", "b")),
-            content_type="text/html")
+        return await self._enc_table_overlay(request, "b")
+
+    async def handle_stream_enc_table_a_fragment(self, request):
+        return await self._enc_table_fragment(request, "a")
+
+    async def handle_stream_enc_table_b_fragment(self, request):
+        return await self._enc_table_fragment(request, "b")
+
+    async def _enc_table_overlay(self, request, player_id: str):
+        return await self._render_stream_overlay(
+            request, f"enc-table-{player_id}",
+            self._build_enc_table_overlay_context(player_id),
+            template_base="enc_table")
+
+    async def _enc_table_fragment(self, request, player_id: str):
+        return await self._render_stream_overlay(
+            request, f"enc-table-{player_id}",
+            self._build_enc_table_overlay_context(player_id),
+            template_base="enc_table", fragment=True)
+
+    # ── Context builders for the remaining overlays ──
+
+    def _build_areas_overlay_context(self) -> dict:
+        linked = dead = pending = 0
+        for st in self.state.area_states.values():
+            sv = st.value if hasattr(st, "value") else str(st)
+            if sv == "linked":
+                linked += 1
+            elif sv == "dead_zone":
+                dead += 1
+            elif sv.startswith("pending"):
+                pending += 1
+        return {"linked": linked, "dead": dead, "pending": pending}
+
+    def _build_badges_overlay_context(self, player_id: str) -> dict:
+        d = self._build_status_dict()
+        p = d.get("players", {}).get(player_id, {}) or {}
+        slugs = d.get("badge_slugs", []) or []
+        primary = p.get("badges", 0) or 0
+        kanto = p.get("kanto_badges", 0) or 0
+        trainer_name = p.get("trainer_name") or f"Player {player_id.upper()}"
+        badges = []
+        for i, pair in enumerate(slugs):
+            if i < 8:
+                earned = bool((primary >> i) & 1)
+            else:
+                earned = bool((kanto >> (i - 8)) & 1)
+            badges.append({
+                "slug": pair[0] if isinstance(pair, (list, tuple)) else str(pair),
+                "name": pair[1] if isinstance(pair, (list, tuple)) and len(pair) > 1 else "",
+                "earned": earned,
+            })
+        return {
+            "player_id":    player_id,
+            "trainer_name": trainer_name,
+            "badges":       badges,
+        }
+
+    def _build_encounters_overlay_context(self) -> dict:
+        d = self._build_status_dict()
+        links = d.get("links", []) or []
+        linked = sum(1 for l in links if l.get("status") == "alive")
+        dead   = sum(1 for l in links if l.get("status") != "alive")
+        shinies = sum(1 for l in links if l.get("a_shiny") or l.get("b_shiny"))
+        bonus = d.get("bonus_keys", {}) or {}
+        shinies += len(bonus.get("a", []) or []) + len(bonus.get("b", []) or [])
+        last = links[-1] if links else None
+        last_ctx = None
+        if last:
+            last_ctx = {
+                "area_display": last.get("area_display") or "",
+                "a": {
+                    "nickname":     last.get("a_nickname") or "",
+                    "species_name": last.get("a_species_name") or "",
+                    "level":        last.get("a_level") or 0,
+                    "sprite_html":  last.get("a_sprite_html") or "",
+                    "shiny":        bool(last.get("a_shiny")),
+                },
+                "b": {
+                    "nickname":     last.get("b_nickname") or "",
+                    "species_name": last.get("b_species_name") or "",
+                    "level":        last.get("b_level") or 0,
+                    "sprite_html":  last.get("b_sprite_html") or "",
+                    "shiny":        bool(last.get("b_shiny")),
+                },
+            }
+        return {
+            "linked":  linked + dead,
+            "dead":    dead,
+            "shinies": shinies,
+            "last":    last_ctx,
+        }
+
+    def _build_memorial_scroll_context(self) -> dict:
+        """Killfeed for the streaming memorial scroll, oldest first."""
+        d = self._build_status_dict()
+        kf = sorted(d.get("killfeed", []) or [], key=lambda x: x.get("killed_at") or "")
+        entries = [{
+            "area_display": k.get("area_display") or "",
+            "a": {
+                "nickname":     k.get("a_nickname") or "",
+                "species_name": k.get("a_species_name") or "",
+                "sprite_html":  k.get("a_sprite_html") or "",
+            },
+            "b": {
+                "nickname":     k.get("b_nickname") or "",
+                "species_name": k.get("b_species_name") or "",
+                "sprite_html":  k.get("b_sprite_html") or "",
+            },
+        } for k in kf]
+        return {"entries": entries}
+
+    _EVENT_TYPE_CLASSES = {
+        "capture":      "ec", "faint":        "ef", "whiteout":   "ew",
+        "no_catch":     "en", "area_enter":   "ea", "linked":     "el",
+        "dead_zone":    "ed", "violation":    "ev", "key_change": "ek",
+        "force_faint":  "ef", "hello":        "eh", "shiny":      "es",
+        "memorialize":  "em", "party_to_box": "ep", "box_to_party": "ep",
+        "reroll":       "er",
+    }
+
+    @staticmethod
+    def _format_event_ts(raw) -> str:
+        if not raw:
+            return ""
+        try:
+            dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00")).astimezone()
+        except (ValueError, TypeError):
+            s = str(raw)
+            return s[11:16] if len(s) >= 16 else s
+        h12 = dt.hour % 12 or 12
+        return f"{h12}:{dt.minute:02d}{'p' if dt.hour >= 12 else 'a'}"
+
+    def _build_events_overlay_context(self, request) -> dict:
+        return self._build_event_feed_context(request, top_n=16, list_mode="events")
+
+    def _build_ticker_overlay_context(self, request) -> dict:
+        return self._build_event_feed_context(request, top_n=16, list_mode="ticker")
+
+    def _build_event_feed_context(self, request, top_n: int, list_mode: str) -> dict:
+        d = self._build_status_dict()
+        events = (d.get("recent_events", []) or [])[:top_n]
+        # Filter by ?filter=type1,type2 if provided
+        flt = request.query.get("filter", "").strip()
+        if flt:
+            allow = {t for t in flt.split(",") if t}
+            events = [e for e in events if e.get("type") in allow]
+        pa = d.get("players", {}).get("a", {}) or {}
+        pb = d.get("players", {}).get("b", {}) or {}
+        name_a = pa.get("trainer_name") or "A"
+        name_b = pb.get("trainer_name") or "B"
+        rows = []
+        for ev in events:
+            rows.append({
+                "ts":   self._format_event_ts(ev.get("ts")),
+                "who":  name_a if ev.get("player") == "a" else name_b,
+                "type": ev.get("type") or "",
+                "text": ev.get("text") or ev.get("type") or "",
+                "cls":  self._EVENT_TYPE_CLASSES.get(ev.get("type"), ""),
+            })
+        key = "pills" if list_mode == "ticker" else "events"
+        return {key: rows}
+
+    def _build_area_encounter_overlay_context(self) -> dict:
+        """Current most-active area: linked / dead-zone / pending."""
+        d = self._build_status_dict()
+        # Pick the area both players are in, or the first pending area.
+        area_a = self.player_area_id.get("a") or self.player_area.get("a") or ""
+        area_b = self.player_area_id.get("b") or self.player_area.get("b") or ""
+        focus  = area_a if area_a == area_b else (area_a or area_b)
+        if not focus:
+            return {
+                "area_display": "", "status_tone": "dim", "status_label": "",
+                "side_a": {"sprite_html": "", "name": "", "level": 0, "tag": "", "tag_cls": ""},
+                "side_b": {"sprite_html": "", "name": "", "level": 0, "tag": "", "tag_cls": ""},
+            }
+        state = d.get("area_states", {}).get(focus, "unseen")
+        # Find a link for this area
+        linked_entry = None
+        for l in d.get("links", []) or []:
+            if l.get("area_id") == focus:
+                linked_entry = l
+                break
+        pending = d.get("pending_captures", {}).get(focus, {}) or {}
+
+        def side(slot_id):
+            if linked_entry:
+                tag_cls = ("ae-tag-dead" if linked_entry.get("status") in ("dead", "memorial")
+                           else "ae-tag-caught")
+                tag = "DEAD" if linked_entry.get("status") in ("dead", "memorial") else "CAUGHT"
+                return {
+                    "sprite_html": linked_entry.get(f"{slot_id}_sprite_html") or "",
+                    "name":        linked_entry.get(f"{slot_id}_nickname")
+                                   or linked_entry.get(f"{slot_id}_species_name") or "",
+                    "level":       linked_entry.get(f"{slot_id}_level") or 0,
+                    "tag":         tag,
+                    "tag_cls":     tag_cls,
+                }
+            p = pending.get(slot_id) or {}
+            return {
+                "sprite_html": "",
+                "name":        p.get("nickname") or p.get("species_name") or "",
+                "level":       p.get("level") or 0,
+                "tag":         "WAITING" if p else "",
+                "tag_cls":     "ae-tag-waiting",
+            }
+
+        if state == "linked":
+            tone, label = "alive", "LINKED"
+        elif state == "dead_zone":
+            tone, label = "dead", "DEAD ZONE"
+        elif state.startswith("pending"):
+            tone, label = "pend", "PENDING"
+        else:
+            tone, label = "dim", "OPEN"
+        return {
+            "area_display": self._area_display(focus),
+            "status_tone":  tone,
+            "status_label": label,
+            "side_a":       side("a"),
+            "side_b":       side("b"),
+        }
+
+    def _build_enc_table_overlay_context(self, player_id: str) -> dict:
+        """Wild encounter rates for the player's current area, sourced
+        via _enc_table_for_status.
+
+        Source shape from `_enc_table_for_status` is `{method: [entry, ...]}`
+        directly (no `"methods"` wrapper); each entry carries `name`,
+        `species_id`, `rate`, `min_level`, `max_level`. The `level_range`
+        display string is derived here ("lvX" when min == max, else "lvX–Y")
+        to match the pre-HTMX renderer's output. """
+        area_id = self.player_area_id.get(player_id) or self.player_area.get(player_id) or ""
+        raw = self._enc_table_for_status(area_id) or {}
+        methods = []
+        for method_name, entries in raw.items():
+            mlist = []
+            for e in entries:
+                sid = e.get("species_id", 0)
+                lo, hi = e.get("min_level", 0), e.get("max_level", 0)
+                lv_range = f"lv{lo}" if lo == hi else f"lv{lo}–{hi}"
+                mlist.append({
+                    "species_id":   sid,
+                    "species_name": e.get("name") or e.get("species_name") or "?",
+                    "rate":         e.get("rate", 0),
+                    "level_range":  lv_range if lo or hi else "",
+                    "sprite_html":  self._get_sprite_html(sid) if sid else "",
+                })
+            if mlist:
+                methods.append({"name": method_name, "entries": mlist})
+        return {
+            "player_id":    player_id,
+            "area_display": self._area_display(area_id) if area_id else "",
+            "methods":      methods,
+        }
 
     # ── Launcher script download ─────────────────────────────────────────────
 
@@ -4390,12 +4832,13 @@ class SLinkServer:
 <head>
   <meta charset="utf-8">
   <title>Twitch Bot — Soul Link</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/slink.css">
+  <link rel="stylesheet" href="/static/dashboard.css">
   <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:system-ui,'Segoe UI',sans-serif;background:#0a0c14;color:#e0e0e0;padding:1.5em;min-height:100vh}
-    h1{font-family:'Press Start 2P',monospace;color:#f8d030;font-size:1em;margin-bottom:.3em}
+    *{box-sizing:border-box}
+    body{font-family:var(--font-heading);color:var(--c-txt);min-height:100vh}
+    .dash-main{padding:1.2em 1.4em 2em;font-family:var(--font-heading)}
+    h1{font-family:var(--font-heading);color:var(--c-gold);font-size:1.5em;margin-bottom:.3em;text-shadow:0 0 8px color-mix(in srgb,var(--c-brand) 50%,transparent)}
     .sub{color:#888;font-size:.85em;margin-bottom:1.5em}
     .sub a{color:#6af;text-decoration:none}
     .panel{background:#12141e;border:1px solid #2a2c3a;border-radius:8px;padding:1.2em;margin-bottom:1.2em}
@@ -4431,8 +4874,10 @@ class SLinkServer:
   </style>
 </head>
 <body>
+<script>try{{if(localStorage.getItem('slink-sidebar-collapsed')==='1')document.body.classList.add('dash-collapsed');}}catch(_){{}}</script>
+{sidebar}
+<main class="dash-main">
   <h1>&#x1F916; Twitch Bot</h1>
-  <p class="sub"><a href="/">&larr; Status Page</a> &nbsp;&middot;&nbsp; <a href="/debug">Debug</a></p>
 
   <div class="panel">
     <h2>STATUS</h2>
@@ -4560,22 +5005,27 @@ class SLinkServer:
         else if (j.status === 'disabled') { badge.className='status-badge sb-dis'; badge.textContent='Disabled'; }
         else { badge.className='status-badge sb-off'; badge.textContent='Disconnected'; }
         chan.textContent = j.channel ? '#' + j.channel : '';
+        // Inline SVG icons match the sidebar theming better than ✓/✗
+        // emojis — labels are static strings so innerHTML is safe (no
+        // user input flows through here).
+        const _icoCheck = '<svg class="inline-ico" aria-hidden="true"><use href="#i-check"/></svg>';
+        const _icoX     = '<svg class="inline-ico" aria-hidden="true"><use href="#i-x"/></svg>';
         if (tBadge) {
           if (j.access_token_set) {
             tBadge.style.cssText = 'background:#1a2a1a;color:#3de85a;border:1px solid #3de85a;margin-left:1em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
-            tBadge.textContent = '✓ Access Token set';
+            tBadge.innerHTML = _icoCheck + ' Access Token set';
           } else {
             tBadge.style.cssText = 'background:#3a1a1a;color:#f03838;border:1px solid #f03838;margin-left:1em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
-            tBadge.textContent = '✗ TWITCH_ACCESS_TOKEN not set';
+            tBadge.innerHTML = _icoX + ' TWITCH_ACCESS_TOKEN not set';
           }
         }
         if (cidBadge) {
           if (j.client_id_set) {
             cidBadge.style.cssText = 'background:#1a2a1a;color:#3de85a;border:1px solid #3de85a;margin-left:.5em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
-            cidBadge.textContent = '✓ Client ID set';
+            cidBadge.innerHTML = _icoCheck + ' Client ID set';
           } else {
             cidBadge.style.cssText = 'background:#3a1a1a;color:#f03838;border:1px solid #f03838;margin-left:.5em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block';
-            cidBadge.textContent = '✗ Client ID not set';
+            cidBadge.innerHTML = _icoX + ' Client ID not set';
           }
         }
         if (errBox) {
@@ -4633,11 +5083,17 @@ class SLinkServer:
     loadStatus();
     setInterval(loadStatus, 5000);
   </script>
+  <script src="/static/dashboard.js" defer></script>
+</main>
 </body>
 </html>"""
 
     async def handle_twitch_page(self, request):
-        return aiohttp_web.Response(text=self._TWITCH_PAGE_HTML, content_type="text/html")
+        # str.replace because the page body contains literal { } characters
+        # inside JS — str.format would misparse them. Only the sidebar is
+        # substituted (no other format placeholders).
+        text = self._TWITCH_PAGE_HTML.replace("{sidebar}", self._build_sidebar_html("twitch"))
+        return aiohttp_web.Response(text=text, content_type="text/html")
 
     # ── OBS integration page & API ────────────────────────────────────────────
 
@@ -4646,12 +5102,13 @@ class SLinkServer:
 <head>
   <meta charset="utf-8">
   <title>OBS Triggers — Soul Link</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/slink.css">
+  <link rel="stylesheet" href="/static/dashboard.css">
   <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:system-ui,'Segoe UI',sans-serif;background:#0a0c14;color:#e0e0e0;padding:1.5em;min-height:100vh}
-    h1{font-family:'Press Start 2P',monospace;color:#b8f0ff;font-size:1em;margin-bottom:.3em}
+    *{box-sizing:border-box}
+    body{font-family:var(--font-heading);color:var(--c-txt);min-height:100vh}
+    .dash-main{padding:1.2em 1.4em 2em;font-family:var(--font-heading)}
+    h1{font-family:var(--font-heading);color:var(--c-info);font-size:1.5em;margin-bottom:.3em;text-shadow:0 0 8px color-mix(in srgb,var(--c-brand) 50%,transparent)}
     .sub{color:#888;font-size:.85em;margin-bottom:1.5em}
     .sub a{color:#6af;text-decoration:none}
     .panel{background:#12141e;border:1px solid #2a2c3a;border-radius:8px;padding:1.2em;margin-bottom:1.2em}
@@ -4683,8 +5140,10 @@ class SLinkServer:
   </style>
 </head>
 <body>
+<script>try{{if(localStorage.getItem('slink-sidebar-collapsed')==='1')document.body.classList.add('dash-collapsed');}}catch(_){{}}</script>
+{sidebar}
+<main class="dash-main">
   <h1>&#128225; OBS Scene Triggers</h1>
-  <p class="sub"><a href="/">&#8592; Back to status</a></p>
   <div id="msg"></div>
 
   <div class="panel">
@@ -4790,7 +5249,9 @@ class SLinkServer:
       </div>
       <div>
         <label>Area Filter <small style="color:#666">(area_enter only)</small></label>
-        <input id="new-area" type="text" placeholder="e.g. route_1">
+        <select id="new-area">
+          <option value="">(any area)</option>
+        </select>
       </div>
       <button class="btn btn-g" onclick="addTrigger()">+ Add</button>
     </div>
@@ -4807,6 +5268,11 @@ class SLinkServer:
     var triggers = [];
     var triggersLoaded = false;
     var _dragSrcIdx = null;
+    // Area picker data, loaded once from /api/obs/areas.
+    // _areaNameById maps both literal area_ids and "group:<id>" to display labels.
+    var _areaGroups = [];   // [{id,label,count}]
+    var _areaList   = [];   // [{id,name,group}]
+    var _areaNameById = {}; // {area_id_or_group_key: friendly_label}
 
     function esc(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -4817,6 +5283,18 @@ class SLinkServer:
       el.className = isErr ? 'err' : '';
     }
 
+    function areaFilterLabel(v) {
+      if (!v) return '<span style="color:#444">—</span>';
+      if (v.indexOf('group:') === 0) {
+        var label = _areaNameById[v] || v.slice(6);
+        return '<span style="background:#1a2a3a;color:#6af;border:1px solid #2a4a6a;border-radius:3px;padding:1px 6px;font-size:.78em">☰ '
+          + esc(label) + '</span>';
+      }
+      var name = _areaNameById[v];
+      if (name) return '<code title="' + esc(v) + '">' + esc(name) + '</code>';
+      return '<code>' + esc(v) + '</code>';
+    }
+
     function renderTriggers() {
       var tbody = document.getElementById('triggers-body');
       if (!triggers.length) {
@@ -4824,7 +5302,7 @@ class SLinkServer:
         return;
       }
       tbody.innerHTML = triggers.map(function(t, i) {
-        var af = t.area_id_filter ? ('<code>' + esc(t.area_id_filter) + '</code>') : '<span style="color:#444">—</span>';
+        var af = areaFilterLabel(t.area_id_filter);
         return '<tr draggable="true" data-idx="' + i + '">' +
           '<td><span class="drag-handle" title="Drag to reorder">&#8942;&#8942;</span></td>' +
           '<td><span class="priority-badge">#' + (i+1) + '</span></td>' +
@@ -4882,7 +5360,7 @@ class SLinkServer:
         player_filter: document.getElementById('new-pf').value,
         target: document.getElementById('new-tgt').value,
         scene: scene,
-        area_id_filter: document.getElementById('new-area').value.trim()
+        area_id_filter: document.getElementById('new-area').value
       });
       document.getElementById('new-scene').value = '';
       document.getElementById('new-area').value = '';
@@ -5021,14 +5499,91 @@ class SLinkServer:
         });
     }
 
+    // Populate the area-filter <select> with grouped entries from the active game.
+    // The select has:
+    //   - "(any area)"
+    //   - <optgroup "Area Groups">   group:<id> options (e.g. group:route)
+    //   - <optgroup "<Group label>"> one per non-empty group, with the areas inside
+    // If an existing trigger's area_id_filter isn't in the loaded list (legacy
+    // free-text value), we add a "Custom" optgroup so the dropdown can still
+    // round-trip it on re-render.
+    function loadAreas() {
+      fetch('/api/obs/areas').then(function(r){return r.json();}).then(function(d){
+        _areaGroups = d.groups || [];
+        _areaList   = d.areas  || [];
+        _areaNameById = {};
+        _areaGroups.forEach(function(g){
+          _areaNameById['group:' + g.id] = 'All ' + g.label + ' (' + g.count + ')';
+        });
+        _areaList.forEach(function(a){ _areaNameById[a.id] = a.name; });
+        rebuildAreaSelect();
+        // Re-render triggers so existing area filters get pretty labels.
+        if (triggersLoaded) renderTriggers();
+      }).catch(function(){});
+    }
+
+    function rebuildAreaSelect() {
+      var sel = document.getElementById('new-area');
+      if (!sel) return;
+      var prev = sel.value;
+      sel.innerHTML = '';
+      var defaultOpt = document.createElement('option');
+      defaultOpt.value = ''; defaultOpt.textContent = '(any area)';
+      sel.appendChild(defaultOpt);
+      // Groups optgroup
+      if (_areaGroups.length) {
+        var og = document.createElement('optgroup');
+        og.label = 'Area Groups';
+        _areaGroups.forEach(function(g){
+          var o = document.createElement('option');
+          o.value = 'group:' + g.id;
+          o.textContent = 'All ' + g.label + ' (' + g.count + ')';
+          og.appendChild(o);
+        });
+        sel.appendChild(og);
+      }
+      // One optgroup per group, listing specific areas
+      _areaGroups.forEach(function(g){
+        var items = _areaList.filter(function(a){ return a.group === g.id; });
+        if (!items.length) return;
+        var og = document.createElement('optgroup');
+        og.label = g.label;
+        items.forEach(function(a){
+          var o = document.createElement('option');
+          o.value = a.id; o.textContent = a.name;
+          og.appendChild(o);
+        });
+        sel.appendChild(og);
+      });
+      // Preserve any prior selection (incl. legacy free-text values)
+      if (prev) {
+        var have = Array.prototype.some.call(sel.options, function(o){ return o.value === prev; });
+        if (!have) {
+          var og2 = document.createElement('optgroup');
+          og2.label = 'Custom';
+          var o = document.createElement('option');
+          o.value = prev; o.textContent = prev;
+          og2.appendChild(o);
+          sel.appendChild(og2);
+        }
+        sel.value = prev;
+      }
+    }
+
+    loadAreas();
     loadStatus();
     setInterval(loadStatus, 5000);
   </script>
+  <script src="/static/dashboard.js" defer></script>
+</main>
 </body>
 </html>"""
 
     async def handle_obs_page(self, request):
-        return aiohttp_web.Response(text=self._OBS_PAGE_HTML, content_type="text/html")
+        # str.replace — page body has literal { } in JS that would break
+        # str.format. Only the sidebar placeholder is substituted.
+        text = self._OBS_PAGE_HTML.replace("{sidebar}", self._build_sidebar_html("obs"))
+        return aiohttp_web.Response(text=text, content_type="text/html")
 
     async def handle_obs_status(self, request):
         """GET /api/obs/status — connection status + config (passwords omitted)."""
@@ -5144,6 +5699,87 @@ class SLinkServer:
             return aiohttp_web.json_response({"ok": False, "error": "Invalid player"}, status=400)
         await self.obs.disconnect_player(player)
         return aiohttp_web.json_response({"ok": True})
+
+    def _load_known_area_ids(self) -> list[str]:
+        """Return every area_id known to the active game's area maps, sorted.
+
+        Reads all area_map*.json files in data/games/<game_id>/, handling the
+        four formats currently in use (gen1/2 object-of-objects, gen3 flat
+        bank:map → slug, gen4 slug → {display,maps}, gen5 list of zone records).
+        Falls back to gen3_frlge if the adapter's game dir doesn't exist.
+        """
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        game_id = self.adapter.game_id if self.adapter else "gen3_frlge"
+        game_dir = os.path.join(base_dir, "data", "games", game_id)
+        if not os.path.isdir(game_dir):
+            game_dir = os.path.join(base_dir, "data", "games", "gen3_frlge")
+        area_ids: set[str] = set()
+        try:
+            entries = os.listdir(game_dir)
+        except OSError:
+            return []
+        for fname in entries:
+            if not (fname.startswith("area_map") and fname.endswith(".json")):
+                continue
+            try:
+                with open(os.path.join(game_dir, fname)) as f:
+                    data = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                continue
+            if isinstance(data, dict):
+                for k, v in data.items():
+                    if k.startswith("_"):  # _comment etc
+                        continue
+                    if isinstance(v, dict) and "area_id" in v:
+                        # gen1/gen2: {id_str: {area_id, name}}
+                        if v["area_id"]:
+                            area_ids.add(v["area_id"])
+                    elif isinstance(v, str) and v:
+                        # gen3: {bank:map: area_slug}
+                        area_ids.add(v)
+                    elif isinstance(v, dict) and "display" in v:
+                        # gen4: {area_slug: {display, maps}}
+                        area_ids.add(k)
+            elif isinstance(data, list):
+                # gen5: [{zone_id, area_id, name}, ...]
+                for entry in data:
+                    if isinstance(entry, dict) and entry.get("area_id"):
+                        area_ids.add(entry["area_id"])
+        return sorted(area_ids)
+
+    async def handle_obs_areas(self, request):
+        """GET /api/obs/areas — grouped area list for the active game.
+
+        Response shape:
+            {
+              "game_id": "gen3_frlge",
+              "groups":  [{"id": "route", "label": "Routes", "count": 25}, ...],
+              "areas":   [{"id": "route_1", "name": "Route 1", "group": "route"}, ...],
+            }
+        """
+        area_ids = self._load_known_area_ids()
+        # Bucket by group, preserving the AREA_GROUPS display order
+        grouped: dict[str, list[dict]] = {g["id"]: [] for g in AREA_GROUPS}
+        for aid in area_ids:
+            gid = classify_area(aid)
+            if gid not in grouped:
+                gid = "other"
+            name = self.adapter.area_display_name(aid) if self.adapter else aid
+            grouped[gid].append({"id": aid, "name": name, "group": gid})
+        groups_out: list[dict] = []
+        areas_out: list[dict] = []
+        for g in AREA_GROUPS:
+            items = grouped.get(g["id"], [])
+            if not items:
+                continue
+            items.sort(key=lambda a: a["name"].lower())
+            groups_out.append({"id": g["id"], "label": g["label"], "count": len(items)})
+            areas_out.extend(items)
+        return aiohttp_web.json_response({
+            "game_id": self.adapter.game_id if self.adapter else "",
+            "groups":  groups_out,
+            "areas":   areas_out,
+        })
 
     async def handle_bot_status(self, request):
         """GET /api/bot/status — returns current bot status + config + recent activity."""
@@ -5306,10 +5942,13 @@ class SLinkServer:
     # ── Debug page & API ─────────────────────────────────────────────────────
 
     async def handle_debug_html(self, request):
-        return aiohttp_web.Response(
-            text=_DEBUG_HTML.replace("{page_title}", html.escape(self._page_title())),
-            content_type="text/html",
-        )
+        # str.replace (not .format) — the debug page contains literal `{` / `}`
+        # inside its JS that would break str.format. The sidebar HTML is
+        # injected the same way to avoid escaping those braces.
+        text = (_DEBUG_HTML
+                .replace("{page_title}", html.escape(self._page_title()))
+                .replace("{sidebar}",    self._build_sidebar_html("debug")))
+        return aiohttp_web.Response(text=text, content_type="text/html")
 
     async def handle_debug_manual_link_data(self, request):
         """GET /api/debug/manual_link_data — return mon options + area data for manual linking."""
@@ -6273,6 +6912,7 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
     # HTTP status page
     if AIOHTTP_AVAILABLE:
         app = aiohttp_web.Application()
+        setup_templating(app)
         app.router.add_get("/",            srv.handle_status_html)
         app.router.add_get("/memorial",    srv.handle_memorial_html)
         app.router.add_get("/api/status",  srv.handle_status_json)
@@ -6283,30 +6923,56 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         # Stream overlay routes
         app.router.add_get("/stream",          srv.handle_stream_index)
         app.router.add_get("/stream/",         srv.handle_stream_index)
-        app.router.add_get("/stream/party-a",        srv.handle_stream_party_a)
-        app.router.add_get("/stream/party-b",        srv.handle_stream_party_b)
+        app.router.add_get("/stream/party-a",          srv.handle_stream_party_a)
+        app.router.add_get("/stream/party-b",          srv.handle_stream_party_b)
+        # HTMX poll targets for the templated party overlay — return only the
+        # #root subtree so idiomorph swaps in place without re-rendering the
+        # vendored script tags.
+        app.router.add_get("/stream/party-a/fragment", srv.handle_stream_party_a_fragment)
+        app.router.add_get("/stream/party-b/fragment", srv.handle_stream_party_b_fragment)
+        app.router.add_get("/stream/enemy-focus-a/fragment",    srv.handle_stream_enemy_focus_a_fragment)
+        app.router.add_get("/stream/enemy-focus-b/fragment",    srv.handle_stream_enemy_focus_b_fragment)
+        app.router.add_get("/stream/enemy-trainer-a/fragment",  srv.handle_stream_enemy_trainer_a_fragment)
+        app.router.add_get("/stream/enemy-trainer-b/fragment",  srv.handle_stream_enemy_trainer_b_fragment)
+        app.router.add_get("/stream/focus-a/fragment",          srv.handle_stream_focus_a_fragment)
+        app.router.add_get("/stream/focus-b/fragment",          srv.handle_stream_focus_b_fragment)
         app.router.add_get("/stream/enemy-focus-a",   srv.handle_stream_enemy_focus_a)
         app.router.add_get("/stream/enemy-focus-b",   srv.handle_stream_enemy_focus_b)
         app.router.add_get("/stream/enemy-trainer-a", srv.handle_stream_enemy_trainer_a)
         app.router.add_get("/stream/enemy-trainer-b", srv.handle_stream_enemy_trainer_b)
-        app.router.add_get("/stream/links",          srv.handle_stream_links)
-        app.router.add_get("/stream/linked-party", srv.handle_stream_linked_party)
-        app.router.add_get("/stream/boxed-links",  srv.handle_stream_boxed_links)
-        app.router.add_get("/stream/deaths",   srv.handle_stream_deaths)
-        app.router.add_get("/stream/attempts", srv.handle_stream_attempts)
+        app.router.add_get("/stream/links",                  srv.handle_stream_links)
+        app.router.add_get("/stream/links/fragment",         srv.handle_stream_links_fragment)
+        app.router.add_get("/stream/linked-party",           srv.handle_stream_linked_party)
+        app.router.add_get("/stream/linked-party/fragment",  srv.handle_stream_linked_party_fragment)
+        app.router.add_get("/stream/boxed-links",            srv.handle_stream_boxed_links)
+        app.router.add_get("/stream/boxed-links/fragment",   srv.handle_stream_boxed_links_fragment)
+        app.router.add_get("/stream/deaths",            srv.handle_stream_deaths)
+        app.router.add_get("/stream/deaths/fragment",   srv.handle_stream_deaths_fragment)
+        app.router.add_get("/stream/attempts",          srv.handle_stream_attempts)
+        app.router.add_get("/stream/attempts/fragment", srv.handle_stream_attempts_fragment)
         app.router.add_post("/api/attempts",   srv.handle_api_attempts)
-        app.router.add_get("/stream/areas",    srv.handle_stream_areas)
-        app.router.add_get("/stream/events",   srv.handle_stream_events)
-        app.router.add_get("/stream/badges-a", srv.handle_stream_badges_a)
-        app.router.add_get("/stream/badges-b", srv.handle_stream_badges_b)
-        app.router.add_get("/stream/encounters",      srv.handle_stream_encounters)
-        app.router.add_get("/stream/stream-memorial", srv.handle_stream_stream_memorial)
-        app.router.add_get("/stream/ticker",          srv.handle_stream_ticker)
+        app.router.add_get("/stream/areas",             srv.handle_stream_areas)
+        app.router.add_get("/stream/areas/fragment",    srv.handle_stream_areas_fragment)
+        app.router.add_get("/stream/events",            srv.handle_stream_events)
+        app.router.add_get("/stream/events/fragment",   srv.handle_stream_events_fragment)
+        app.router.add_get("/stream/badges-a",          srv.handle_stream_badges_a)
+        app.router.add_get("/stream/badges-a/fragment", srv.handle_stream_badges_a_fragment)
+        app.router.add_get("/stream/badges-b",          srv.handle_stream_badges_b)
+        app.router.add_get("/stream/badges-b/fragment", srv.handle_stream_badges_b_fragment)
+        app.router.add_get("/stream/encounters",            srv.handle_stream_encounters)
+        app.router.add_get("/stream/encounters/fragment",   srv.handle_stream_encounters_fragment)
+        app.router.add_get("/stream/stream-memorial",           srv.handle_stream_stream_memorial)
+        app.router.add_get("/stream/stream-memorial/fragment",  srv.handle_stream_stream_memorial_fragment)
+        app.router.add_get("/stream/ticker",            srv.handle_stream_ticker)
+        app.router.add_get("/stream/ticker/fragment",   srv.handle_stream_ticker_fragment)
         app.router.add_get("/stream/focus-a",         srv.handle_stream_focus_a)
         app.router.add_get("/stream/focus-b",         srv.handle_stream_focus_b)
-        app.router.add_get("/stream/area-encounter",  srv.handle_stream_area_encounter)
-        app.router.add_get("/stream/enc-table-a",     srv.handle_stream_enc_table_a)
-        app.router.add_get("/stream/enc-table-b",     srv.handle_stream_enc_table_b)
+        app.router.add_get("/stream/area-encounter",            srv.handle_stream_area_encounter)
+        app.router.add_get("/stream/area-encounter/fragment",   srv.handle_stream_area_encounter_fragment)
+        app.router.add_get("/stream/enc-table-a",               srv.handle_stream_enc_table_a)
+        app.router.add_get("/stream/enc-table-a/fragment",      srv.handle_stream_enc_table_a_fragment)
+        app.router.add_get("/stream/enc-table-b",               srv.handle_stream_enc_table_b)
+        app.router.add_get("/stream/enc-table-b/fragment",      srv.handle_stream_enc_table_b_fragment)
         app.router.add_get("/launcher/{player}", srv.handle_launcher)
         # Twitch bot routes
         app.router.add_get("/twitch",               srv.handle_twitch_page)
@@ -6322,6 +6988,7 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         app.router.add_post("/api/obs/config",      srv.handle_obs_config)
         app.router.add_post("/api/obs/triggers",    srv.handle_obs_triggers)
         app.router.add_get("/api/obs/scenes/{player}", srv.handle_obs_scenes)
+        app.router.add_get("/api/obs/areas",        srv.handle_obs_areas)
         app.router.add_post("/api/obs/test",        srv.handle_obs_test)
         app.router.add_post("/api/obs/connect",     srv.handle_obs_connect)
         app.router.add_post("/api/obs/disconnect",  srv.handle_obs_disconnect)

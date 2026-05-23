@@ -1,0 +1,993 @@
+/* slink.css — SLink design tokens + shared component styles
+ *
+ * Single source of truth for the dashboard, the OBS stream overlays, and
+ * the calc SLink-header strip. Per-theme overrides live in
+ * server/static/themes/{name}.css and only re-declare the :root tokens.
+ */
+
+
+/* ── @font-face — vendored Pixelify Sans ────────────────────────
+ * Used by the Funtastic theme family as the body font. Pixelify Sans is a
+ * monolinear pixel font: Google ships the same WOFF2 for weights 400/600/700,
+ * so each weight maps to the same source files. Only the latin + latin-ext
+ * subsets are vendored — Cyrillic was omitted to keep the OBS load tight.
+ * Source: server/static/fonts/, originally from fonts.gstatic.com.
+ * NEVER load this from Google Fonts at runtime — see VERSIONS.md. */
+@font-face {
+  font-family: 'Pixelify Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/pixelify-sans-latin.woff2') format('woff2'),
+       url('/static/fonts/pixelify-sans-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Pixelify Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/static/fonts/pixelify-sans-latin.woff2') format('woff2'),
+       url('/static/fonts/pixelify-sans-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Pixelify Sans';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/static/fonts/pixelify-sans-latin.woff2') format('woff2'),
+       url('/static/fonts/pixelify-sans-latin-ext.woff2') format('woff2');
+}
+
+/* ── @font-face — vendored Press Start 2P ────────────────────────
+ * The overlay pixel font (`--font-pixel`) chain has always been
+ * `'Press Start 2P','Courier New',monospace`. Pre-HTMX the font was NOT
+ * vendored, so unless the broadcaster had it installed locally the chain
+ * fell through to Courier New — that's the "monospace" look on the live
+ * overlay despite the CSS naming Press Start 2P. Loading the TTF here
+ * makes every `.wtitle`, `.d-num`, `.e-ts`, `.et-method-hdr`, etc. paint
+ * as the actual 8-bit pixel font in OBS / any client without the font
+ * pre-installed. Source: Google Fonts (SIL Open Font License). */
+@font-face {
+  font-family: 'Press Start 2P';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/press-start-2p-latin.ttf') format('truetype');
+}
+
+:root {
+  /* ── Semantic status palette (overlay defaults — also drives dashboard) ── */
+  --c-alive:    #3de85a;
+  --c-dead:     #f03838;
+  --c-pend:     #f8a020;
+  --c-gold:     #f8d030;
+  --c-txt:      #e6e6e6;
+  --c-dim:      rgba(220, 220, 220, .4);
+  --c-bg:       rgba(7, 9, 16, .90);
+  --c-card:     rgba(255, 255, 255, .038);
+  --c-edge:     rgba(255, 255, 255, .09);
+  --c-sep:      rgba(255, 255, 255, .06);
+
+  /* Brand accent (theme highlight). Default = gold; Funtastic themes
+   * override with the console's translucent-shell hex. Used by the theme
+   * switcher swatch, the SLink wordmark, and the calc header glow. */
+  --c-brand:    #f8d030;
+
+  /* ── Calc-preview accents (greens by default; Funtastic themes
+   * override these so each console color has its own damage-roll
+   * widget tint).
+   *
+   * The ohko / twohko cells deliberately reuse the semantic --c-dead
+   * and --c-pend tokens rather than calc-specific ones — they read as
+   * "danger" and "warning", which the existing status palette already
+   * speaks. */
+  --c-calc-bg:        #0d1a00;
+  --c-calc-edge:      #6a0;
+  --c-calc-accent:    #8f4;     /* h5 + th text */
+  --c-calc-th-bg:     #1a2a0a;
+  --c-calc-th-edge:   #3a4a2a;
+  --c-calc-row-edge:  #1a2a0a;
+  --c-calc-btn-bg:        #0d1020;
+  --c-calc-btn-bg-hover:  #1a2040;
+  --c-calc-btn-txt:       #6af;
+  --c-calc-btn-edge:      #48a;
+
+  /* ── HP semantic (overlays + dashboard share these names) ── */
+  --c-hp-high: #4f4;
+  --c-hp-mid:  #f0c030;
+  --c-hp-low:  #f44;
+
+  /* Hyperlink colour — cyan-blue across the dashboard, memorial subtitle,
+   * "Open in calc" button. Themes can override; default matches the existing
+   * #6af used everywhere today. */
+  --c-link:    #6af;
+
+  /* Cyan "info / area" accent. The dashboard's `.area` and the memorial's
+   * `.tomb-area` use this. Defaults to the existing #7cf hex literal. */
+  --c-info:    #7cf;
+
+  /* ── Typography ── */
+  --font-pixel: 'Press Start 2P', 'Courier New', monospace;
+  --font-body:  system-ui, 'Segoe UI', sans-serif;
+  --font-heading: 'Pixelify Sans', 'Press Start 2P', ui-monospace, monospace;
+  --font-mono:  ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  /* `--font-ui` is the active body / sidebar / chrome font. Defaults to
+   * the Pixelify-led chain (the post-rework voice). The body class
+   * `font-classic` flips this to the system-ui chain (the pre-rework
+   * voice), letting the user A/B between the two via a sidebar picker
+   * without touching every individual rule that sets a font-family. */
+  --font-ui: var(--font-heading);
+}
+
+/* Font picker — `body.font-classic` swaps in the pre-HTMX-rework body font.
+ * Pre-rework `_STATUS_HTML` used a `monospace` body (see git history for
+ * the commit at master~ — `body { font-family: monospace; font-size: 20px; }`
+ * on the dashboard). That's the "classic" voice the picker restores, not
+ * the system-ui chain that debug/twitch/OBS happened to use. Stays out of
+ * the overlays (body.stream) — those keep their pixel-art treatment. */
+body.font-classic {
+  --font-ui: var(--font-mono);
+}
+body.dark-theme.font-classic .dash-sidebar {
+  --font-ui: var(--font-mono);
+}
+
+/* ── Base body styling — paints every templated page from the active
+ * theme's tokens. Excluding `body.dark-theme` (the calc) from the font
+ * + margin rules so calc keeps its Bootstrap monospace 14px layout, but
+ * we DO paint background + colour on calc so the slink theme follows
+ * through to the calc page regardless of whether the calc's own
+ * dark-mode toggle (its independent FOIT-prevention `darkTheme`
+ * localStorage flag) is enabled. Without this, a user with calc's dark
+ * mode off would see a hard white background flash through every slink
+ * theme switch — that's the "old theme flash" reported during testing. */
+html { background: var(--c-bg); }
+body { background: var(--c-bg); color: var(--c-txt); }
+body:not(.dark-theme) {
+  font-family: var(--font-ui);
+  margin: 0;
+}
+
+/* ── Phase banner — surfaces run lifecycle at the top of the
+ * templated dashboard. Each phase paints its tone via tokens. */
+.phase-banner {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 18px;
+  background: var(--c-card);
+  border: 1px solid var(--c-edge);
+  border-radius: 6px;
+  margin: 1em 0 1.4em;
+  font-size: .92em;
+  border-left: 4px solid var(--c-dim);
+}
+.phase-banner.phase-pre       { border-left-color: var(--c-pend);  }
+.phase-banner.phase-running   { border-left-color: var(--c-alive); }
+.phase-banner.phase-whiteout  { border-left-color: var(--c-pend); }
+.phase-banner.phase-game_over { border-left-color: var(--c-dead); opacity: .85; }
+.phase-banner .phase-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--c-dim); flex-shrink: 0;
+  box-shadow: 0 0 6px currentColor;
+}
+.phase-banner.phase-pre       .phase-dot { background: var(--c-pend); }
+.phase-banner.phase-running   .phase-dot { background: var(--c-alive); }
+.phase-banner.phase-whiteout  .phase-dot { background: var(--c-pend); }
+.phase-banner.phase-game_over .phase-dot { background: var(--c-dead); }
+.phase-banner .phase-label { font-weight: 700; letter-spacing: .04em;
+                              color: var(--c-txt); text-transform: uppercase; font-size: .9em; }
+.phase-banner .phase-stats { color: var(--c-dim); font-size: .88em; }
+.phase-banner .phase-alive { color: var(--c-alive); font-weight: 600; }
+.phase-banner .phase-dead  { color: var(--c-dead);  font-weight: 600; }
+
+
+/* ── Shared chrome utilities ─────────────────────────────────
+ * `.chrome-card` is the base treatment that dashboard `.player-card` and
+ * manager `.card` both extend. Same chrome as Funtastic Funtastic-base
+ * decorations (without the shimmer overlay, which `_funtastic-base.css`
+ * opts in via `body:not(.stream):not(.theme-default):not(.theme-light)`).
+ * `.slink-logo` adds a brand-color drop-shadow on the SLink SVG mark.
+ * `.heading-glow` gives `<h1>` / `<h2>` a soft brand-tinted glow.
+ */
+.chrome-card {
+  background: var(--c-card);
+  border: 1px solid var(--c-edge);
+  border-radius: 6px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .04),
+    0 2px 8px rgba(0, 0, 0, .25);
+}
+.slink-logo {
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c-brand) 60%, transparent));
+  transition: filter .25s;
+}
+.heading-glow {
+  text-shadow: 0 0 8px color-mix(in srgb, var(--c-brand) 55%, transparent);
+}
+
+/* ── Calc page slink-header strip ────────────────────────────────
+ * The branded band above the calc body content. Lives in slink.css (not the
+ * calc's toggleable dark-theme.css) so the strip stays styled regardless of
+ * the calc's internal dark-mode toggle state.
+ *
+ * Rendered by `server/templates/_calc_slink_header.html` on the calc page.
+ * Other SLink pages have their own header treatment via dashboard.css /
+ * manager.css. */
+.slink-header {
+  background: var(--c-card);
+  border-bottom: 2px solid var(--c-brand);
+  padding: 0;
+  margin-bottom: 12px;
+}
+.slink-header-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.slink-header .slink-logo {
+  /* `color` drives the inline SVG link icon's fill (fill="currentColor" in
+   * the inlined path). Pointing at --c-brand keeps the chain in the same
+   * brand hue as the title. */
+  color: var(--c-brand);
+  font-size: 18px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+.slink-header .slink-logo svg {
+  width: 1.1em;
+  height: 1.1em;
+}
+.slink-title {
+  font-family: monospace;
+  font-size: 15px;
+  font-weight: bold;
+  color: var(--c-brand);
+  flex: 1;
+  text-shadow: 0 0 6px color-mix(in srgb, var(--c-brand) 50%, transparent);
+}
+.slink-mode-badge {
+  font-size: 11px;
+  background: color-mix(in srgb, var(--c-info) 22%, var(--c-bg));
+  color: var(--c-info);
+  border: 1px solid var(--c-info);
+  border-radius: 3px;
+  padding: 2px 8px;
+}
+.slink-status-link {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--c-dim);
+  text-decoration: none;
+  padding: 3px 8px;
+  border: 1px solid var(--c-edge);
+  border-radius: 3px;
+}
+.slink-status-link:hover {
+  color: var(--c-info);
+  border-color: var(--c-info);
+  background: color-mix(in srgb, var(--c-info) 20%, var(--c-bg));
+}
+
+
+/* ── Light theme — body class override
+ * Overrides for OBS browser sources using ?theme=light. */
+body.theme-light {
+  --c-alive: #1a9a38;
+  --c-dead:  #c82020;
+  --c-pend:  #c86010;
+  --c-gold:  #1a5fb0;
+  --c-txt:   #18182a;
+  --c-dim:   rgba(24, 24, 42, .5);
+  --c-bg:    rgba(238, 242, 252, .92);
+  --c-card:  rgba(0, 0, 0, .028);
+  --c-edge:  rgba(0, 0, 0, .10);
+  --c-sep:   rgba(0, 0, 0, .07);
+  /* Brand drops from gold to the same deep blue used for --c-gold so the
+   * SLink wordmark / theme swatch / calc header accent passes WCAG 3:1
+   * against the near-white background. */
+  --c-brand: #1a5fb0;
+  /* Link + info accents pull down to mid blue / mid cyan so they pass
+   * 4.5:1 contrast on the cream background. (Defaults #6af / #7cf are
+   * too pale for light mode.) */
+  --c-link:  #1a5fb0;
+  --c-info:  #2073a0;
+}
+
+/* ── Transparent theme — body class override
+ * Drops surface tokens so OBS browser sources composite cleanly.
+ */
+body.theme-transparent {
+  --c-bg:   transparent;
+  --c-card: transparent;
+  --c-edge: transparent;
+  --c-sep:  transparent;
+}
+body.theme-transparent #root { border: none; }
+
+/* ── Shared component styles ──────────────────────────────────────────────
+ * The catalogue of shared primitives: HP bars, status pills, the
+ * calc-preview widget, every overlay shell, and the inline-icon utility.
+ * Anything used by more than one page lives here.
+ */
+
+/* ── Sprites ────────────────────────────────────────────────────────── */
+.mon-sprite, img.mon-sprite {
+  width: clamp(38px, 6.5vmin, 58px);
+  aspect-ratio: 1;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  flex-shrink: 0;
+}
+.lk-row .mon-sprite,
+.lk-row img.mon-sprite { width: clamp(30px, 5vmin, 46px); }
+
+/* Inline icons — used inside text runs (event log lines, kill-feed cause,
+ * shiny indicators, etc.). Sized to match the surrounding em so the icon
+ * flows with the line rather than punching above/below. fill: currentColor
+ * means the icon inherits the wrapping span's `color`, so theme tokens
+ * (and per-context highlights like .shiny-star → --c-gold) just work. */
+.inline-ico {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+  flex-shrink: 0;
+  fill: currentColor;
+}
+
+/* Hide funnotbun sprites until dashboard.js / overlay-helpers.js
+ * chroma-keys their solid green/blue background away. Without this rule
+ * the raw PNG paints with its background for a frame on initial load —
+ * a visible flash on every page navigation and HTMX swap. Once the JS
+ * sets `data-bg-removed="1"` the selector no longer matches, and the
+ * sprite becomes visible (now transparent). PokeAPI sprites (no
+ * "funnotbun" in src) are already transparent and paint immediately. */
+img.mon-sprite[src*="funnotbun"]:not([data-bg-removed]),
+img.enc-sprite[src*="funnotbun"]:not([data-bg-removed]),
+img.bdg-img[src*="funnotbun"]:not([data-bg-removed]) {
+  visibility: hidden;
+}
+
+/* ── HP bar (dashboard-style, used by hp_bar macro) ────────────────── */
+.hp-bar-bg {
+  display: inline-block;
+  width: 70px;
+  height: 7px;
+  background: rgba(128, 128, 128, .18);
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-right: 3px;
+}
+.hp-bar  { display: block; height: 7px; border-radius: 3px; transition: width .4s ease; }
+.hp-high { background: var(--c-hp-high); }
+.hp-mid  { background: var(--c-hp-mid); }
+.hp-low  { background: var(--c-hp-low); box-shadow: 0 0 4px var(--c-hp-low); }
+
+/* ── Mon-card (.mc) — overlay party-card primitive used by mon_card macro
+ * The four tone modifiers (.bh / .bm / .bl / .fnt) colour the left
+ * border. */
+.mc {
+  display: flex;
+  align-items: center;
+  gap: clamp(6px, 1.1vmin, 13px);
+  padding: clamp(4px, .7vmin, 9px) clamp(7px, 1.1vmin, 13px);
+  background: var(--c-card);
+  border-radius: 4px;
+  border-left: 3px solid rgba(128, 128, 128, .18);
+  min-width: 0;
+}
+.mc.bh   { border-left-color: var(--c-alive); }
+.mc.bm   { border-left-color: var(--c-hp-mid); }
+.mc.bl,
+.mc.fnt  { border-left-color: var(--c-dead); }
+.mc.fnt  { opacity: .45; }
+.mc.fnt .mon-sprite { filter: grayscale(60%); }
+.m-info  { flex: 1; min-width: 0; }
+.m-name  { font-size: 1em; font-weight: 700; white-space: nowrap;
+           overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
+.m-name .sp { font-weight: 400; opacity: .48; font-size: .87em; }
+.fnt-tag {
+  font-size: .72em; background: var(--c-dead); color: #fff;
+  padding: 1px 6px; border-radius: 3px; margin-left: 4px;
+  vertical-align: middle;
+}
+.lv {
+  font-size: .8em; background: rgba(128, 128, 128, .15);
+  padding: 1px 5px; border-radius: 3px; flex-shrink: 0;
+  white-space: nowrap; opacity: .8;
+}
+.hp-row {
+  display: flex; align-items: center;
+  gap: clamp(3px, .55vmin, 7px);
+  margin-top: clamp(2px, .35vmin, 5px);
+}
+.hp-lbl  { font-size: .78em; color: var(--c-dim); flex-shrink: 0; }
+.hp-pct  { font-size: .83em; min-width: 3.3ch; text-align: right;
+           flex-shrink: 0; opacity: .62; }
+
+/* ── Link-row (.lk-row) — overlay link-pair primitive used by link_row macro */
+.lk-row {
+  display: flex;
+  align-items: center;
+  gap: clamp(4px, .8vmin, 10px);
+  padding: clamp(4px, .7vmin, 8px) clamp(7px, 1.1vmin, 13px);
+  background: var(--c-card);
+  border-radius: 4px;
+  border-left: 3px solid rgba(128, 128, 128, .18);
+  min-width: 0;
+}
+.lk-row.la { border-left-color: var(--c-alive); }
+.lk-row.ld { border-left-color: var(--c-dead); opacity: .45; }
+.lk-row.ld .mon-sprite { filter: grayscale(60%); }
+.lk-half {
+  flex: 1; min-width: 0; display: flex; align-items: center;
+  gap: clamp(3px, .55vmin, 7px);
+}
+.lk-half.r { flex-direction: row-reverse; }
+.lk-nm {
+  flex: 1; min-width: 0; font-size: .9em; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.lk-half.r .lk-nm { text-align: right; }
+.lk-lv { font-size: .82em; opacity: .5; flex-shrink: 0; white-space: nowrap; }
+.lk-div { flex-shrink: 0; font-size: 1.1em; opacity: .3; color: var(--c-gold); }
+
+/* ── Overlay shell ──────────────────────────────────────────
+ * OBS browser sources mount a single overlay page; everything lives inside
+ * the `#root` container. The shell paints from `--c-bg` / `--c-edge` /
+ * `--c-gold` so the active theme controls the look (including transparent
+ * for chroma-key compositing). Stream-specific decorations are scoped to
+ * `body.stream` so the same primitives can power the dashboard later. */
+
+#root {
+  width: 100%;
+  height: 100%;
+  background: var(--c-bg);
+  border: 1px solid var(--c-edge);
+  border-top: 2px solid var(--c-gold);
+  padding: clamp(8px, 1.6vmin, 18px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(4px, .8vmin, 10px);
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* Overlay page-level reset — only applies on browser-source pages so the
+ * dashboard's own padding/margins aren't disturbed.
+ *
+ * Three rules carry their weight here and were the load-bearing pieces of
+ * the pre-HTMX `_STREAM_SHARED_CSS`:
+ *
+ *   1. `html { height: 100% }` (scoped via :has so dashboard scrolling is
+ *      untouched). `body.stream { height: 100% }` is a percentage; without
+ *      an explicit height on the parent it resolves to auto and body
+ *      collapses to its content height. The OBS source then shows the
+ *      overlay as a small block in the top-left instead of filling.
+ *   2. `body.stream { font-size: clamp(14px, 4.5vmin, 22px) }`. Every
+ *      em-sized rule (`.m-name`, `.hp-pct`, `.lk-nm`, `.e-msg`, …) cascades
+ *      from this. Without it the body inherits the UA default 16px and
+ *      nothing scales when OBS resizes the browser source.
+ *   3. `* { box-sizing: border-box }` scoped to stream descendants. `#root`
+ *      sets `width: 100%; padding: clamp(8px, 1.6vmin, 18px); border:
+ *      1px solid` — under the default content-box that overflows the
+ *      viewport by ~20px on the right edge and visibly mis-centers. */
+html:has(body.stream) { height: 100%; background: transparent; }
+body.stream {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-size: clamp(14px, 4.5vmin, 22px);
+  /* Body font inherits --font-ui (Pixelify Sans) from `body:not(.dark-theme)`
+   * above — no override needed. Pre-HTMX the body chain was
+   * `system-ui, 'Segoe UI', sans-serif`; what made the overlay's overall
+   * voice "pixel" was --font-pixel (Press Start 2P) being applied to the
+   * accent elements (.wtitle, .d-num, .e-ts, .et-method-hdr, etc.). Press
+   * Start 2P is now actually vendored above, so those accents finally
+   * paint as real pixel art instead of Courier New fallback. */
+}
+body.stream, body.stream *, body.stream *::before, body.stream *::after {
+  box-sizing: border-box;
+}
+
+/* Widget title — fixed 10 px Press Start 2P, regardless of OBS
+ * browser-source dimensions. Titles must stay legible at small sizes and
+ * not eat the layout at large ones. */
+.wtitle {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: none;
+  color: var(--c-gold);
+  letter-spacing: .06em;
+  padding-bottom: clamp(4px, .7vmin, 9px);
+  border-bottom: 1px solid var(--c-sep);
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Status condition pills (sleep / poison / burn / freeze / paralyze / toxic).
+ * Renderable in the dashboard and overlays. */
+.sc {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: .72em;
+  font-weight: bold;
+  white-space: nowrap;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+.sc-slp { background: #7a7a7a; color: #fff; }
+.sc-psn { background: #c040c0; color: #fff; }
+.sc-brn { background: #d06020; color: #fff; }
+.sc-frz { background: #5ab8e4; color: #fff; }
+.sc-par { background: #c8a800; color: #000; }
+.sc-tox { background: #6a00aa; color: #fff; }
+
+/* Stat-stage chips for the active mon — green up, red down. */
+.stat-stage {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: .7em;
+  font-weight: bold;
+  white-space: nowrap;
+  margin: 1px 2px;
+  border: 1px solid;
+}
+.ss-up { background: rgba(46, 204, 113, .15); color: #5af09a; border-color: rgba(46, 204, 113, .55); }
+.ss-dn { background: rgba(231, 76, 60, .15);  color: #ff7f72; border-color: rgba(231, 76, 60, .55);  }
+.stat-stages-row { padding: 2px 0 1px 0; display: flex; flex-wrap: wrap; gap: 2px; }
+
+/* Party list flex container (.p-list) and the overlay HP-bar variant
+ * (.hp-trk + .hp-fill — distinct from the dashboard's .hp-bar-bg /
+ * .hp-bar pair, which is fixed-width for table cells). */
+.p-list {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(3px, .55vmin, 7px);
+  flex: 1;
+  overflow: hidden;
+}
+.hp-trk {
+  flex: 1;
+  min-width: clamp(24px, 4vw, 70px);
+  height: clamp(5px, .75vmin, 8px);
+  background: rgba(128, 128, 128, .18);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.hp-fill { height: 100%; border-radius: 99px; transition: width .4s ease; }
+.hp-fill.hp-h { background: var(--c-alive); }
+.hp-fill.hp-m { background: var(--c-hp-mid); }
+.hp-fill.hp-l { background: var(--c-dead); box-shadow: 0 0 4px var(--c-dead); }
+
+/* Text helpers — .dim subdues, .sp marks the species in `Nickname (Sp)`. */
+.dim { color: var(--c-dim); }
+.sp  { font-weight: 400; opacity: .48; font-size: .87em; }
+
+/* Layout variants — picked by `?layout=h|thin-h|thin-v` on stream URLs.
+ * Server sets the body class so a flash of unstyled layout is impossible. */
+body.lh  #root { flex-direction: row; gap: clamp(8px, 1.5vmin, 18px); }
+body.lh  .p-list { flex-direction: row; gap: clamp(5px, .9vmin, 11px); }
+body.lh  .mc { min-width: 0; }
+body.lth #root { padding: clamp(4px, .8vmin, 10px) clamp(8px, 1.5vmin, 16px); }
+body.lth .p-list { flex-direction: row; gap: clamp(5px, .9vmin, 12px); }
+body.lth .wtitle { display: none; }
+body.ltv #root { padding: clamp(4px, .8vmin, 10px) clamp(6px, 1.1vmin, 12px); }
+body.ltv .p-list { flex-direction: column; gap: clamp(3px, .5vmin, 6px); }
+body.ltv .wtitle { font-size: 8px; }
+
+/* ── Counter overlays — deaths / attempts / areas ────────────────────
+ * Big-number + small-label widgets shown in OBS corners. Tokenized so
+ * Funtastic themes paint each console's accent.                      */
+.d-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+.d-grid { display: flex; gap: clamp(18px, 9vw, 80px); align-items: center; }
+.d-box  { text-align: center; line-height: 1; }
+.d-num  {
+  font-family: var(--font-pixel);
+  font-size: clamp(1.8em, 8vmin, 4.5em);
+  line-height: 1;
+  display: block;
+  -webkit-font-smoothing: none;
+}
+.d-lbl {
+  font-family: var(--font-pixel);
+  font-size: clamp(8px, 1.6vmin, 14px);
+  -webkit-font-smoothing: none;
+  opacity: .5;
+  letter-spacing: .07em;
+  display: block;
+  margin-top: clamp(6px, 1.1vmin, 12px);
+}
+.d-alive    .d-num { color: var(--c-alive); text-shadow: 0 0 20px color-mix(in srgb, var(--c-alive) 45%, transparent); }
+.d-dead     .d-num { color: var(--c-dead);  text-shadow: 0 0 20px color-mix(in srgb, var(--c-dead)  45%, transparent); }
+.d-attempts .d-num { color: var(--c-gold);  text-shadow: 0 0 20px color-mix(in srgb, var(--c-gold)  45%, transparent); }
+.a-pend     .d-num { color: var(--c-pend);  text-shadow: 0 0 20px color-mix(in srgb, var(--c-pend)  45%, transparent); }
+
+
+/* ── Links family — links / linked-party / boxed-links ──────────────── */
+.lk-list { display: flex; flex-direction: column; gap: clamp(3px, .55vmin, 6px); flex: 1; overflow: hidden; }
+.lk-card {
+  background: var(--c-card);
+  border-radius: 5px;
+  border-left: 3px solid var(--c-alive);
+  padding: clamp(4px, .7vmin, 9px) clamp(6px, 1.1vmin, 13px);
+  display: flex; flex-direction: column; gap: clamp(2px, .4vmin, 5px);
+}
+.lk-area { font-size: .72em; color: var(--c-gold); opacity: .75; letter-spacing: .04em;
+           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lk-pair { display: flex; align-items: center; gap: clamp(4px, .7vmin, 8px); }
+.lk-dead-hdr {
+  font-family: var(--font-pixel);
+  font-size: clamp(7px, 1.3vmin, 10px);
+  -webkit-font-smoothing: none;
+  color: var(--c-dead);
+  opacity: .45;
+  text-align: center;
+  letter-spacing: .1em;
+  padding: clamp(2px, .4vmin, 4px) 0;
+  flex-shrink: 0;
+}
+.lk-dead-row {
+  display: flex; align-items: center;
+  gap: clamp(4px, .7vmin, 8px);
+  padding: clamp(2px, .35vmin, 3px) clamp(6px, 1vmin, 12px);
+  opacity: .35;
+  flex-shrink: 0;
+}
+.lk-dead-x   { color: var(--c-dead); flex-shrink: 0; font-size: .85em; }
+.lk-dead-nm  { flex: 1; min-width: 0; font-size: .82em; font-weight: 600;
+               white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lk-dead-nm.r { text-align: right; }
+.lk-dead-sep { opacity: .25; color: var(--c-gold); flex-shrink: 0; }
+
+
+/* Linked Party widget — both mons currently in party */
+.lp-list { display: flex; flex-direction: column; gap: clamp(4px, .8vmin, 10px); flex: 1; overflow: hidden; }
+.lp-card {
+  background: var(--c-card);
+  border-radius: 6px;
+  border-left: 3px solid var(--c-alive);
+  padding: clamp(5px, .9vmin, 11px) clamp(7px, 1.2vmin, 14px);
+  display: flex; flex-direction: column; gap: clamp(3px, .5vmin, 6px);
+}
+.lp-card.ld { border-left-color: var(--c-dead); opacity: .5; }
+.lp-area { font-size: .72em; color: var(--c-gold); opacity: .75; letter-spacing: .04em;
+           text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lp-mons { display: flex; align-items: center; gap: clamp(4px, .8vmin, 10px); }
+.lp-side { flex: 1; min-width: 0; display: flex; align-items: center; gap: clamp(4px, .7vmin, 9px); }
+.lp-info { flex: 1; min-width: 0; }
+.lp-info.lp-ir { text-align: right; }
+.lp-nm { font-size: .9em; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+         line-height: 1.2; margin-bottom: clamp(2px, .35vmin, 4px); }
+.lp-r .hp-trk { transform: scaleX(-1); }
+.lp-sep { flex-shrink: 0; font-size: 1.2em; opacity: .35; color: var(--c-gold); }
+
+
+/* Boxed Links widget — pairs where at least one mon is in the PC box */
+.bl-list { display: flex; flex-direction: column; gap: clamp(4px, .8vmin, 10px); flex: 1; overflow: hidden; }
+.bl-card {
+  background: var(--c-card);
+  border-radius: 6px;
+  border-left: 3px solid var(--c-gold);
+  padding: clamp(5px, .9vmin, 11px) clamp(7px, 1.2vmin, 14px);
+  display: flex; flex-direction: column; gap: clamp(3px, .5vmin, 6px);
+}
+.bl-area { font-size: .72em; color: var(--c-gold); opacity: .75; letter-spacing: .04em;
+           text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bl-row  { display: flex; align-items: center; gap: clamp(4px, .8vmin, 10px); }
+.bl-side { flex: 1; min-width: 0; display: flex; align-items: center; gap: clamp(4px, .7vmin, 9px); }
+.bl-side.bl-bx { opacity: .65; }
+.bl-info { flex: 1; min-width: 0; text-align: right; padding-right: clamp(4px, .7vmin, 8px); }
+.bl-info.bl-ir { text-align: left; padding-right: 0; padding-left: clamp(4px, .7vmin, 8px); }
+.bl-nm   { font-size: .9em; font-weight: 700; white-space: nowrap; overflow: hidden;
+           text-overflow: ellipsis; line-height: 1.2; }
+.bl-lv   { font-size: .7em; opacity: .65; line-height: 1.3; }
+.bl-sep  { flex-shrink: 0; font-size: 1.1em; opacity: .35; color: var(--c-gold); }
+.bl-grid {
+  display: flex; flex-wrap: wrap; gap: clamp(6px, 1vmin, 12px);
+  justify-content: center; align-content: center;
+  flex: 1; overflow: hidden;
+}
+.bl-gpair { display: flex; align-items: center; gap: clamp(3px, .5vmin, 6px); flex-shrink: 0; }
+.bl-garr  { color: var(--c-gold); opacity: .45; font-size: .8em; }
+.bl-side .mon-sprite { width: clamp(28px, 5vmin, 44px); }
+.bl-gpair .mon-sprite { width: clamp(32px, 5.5vmin, 50px); }
+.bl-bx { opacity: .65; }
+.bl-tag {
+  display: inline-block; font-family: var(--font-pixel);
+  font-size: clamp(5px, .9vmin, 8px); -webkit-font-smoothing: none;
+  color: var(--c-gold); opacity: .6; letter-spacing: .06em; line-height: 1.4;
+}
+
+
+/* ── Badges overlay ─────────────────────────────────── */
+.bdg-wrap   { display: flex; flex: 1; align-items: center; justify-content: center; }
+.bdg-player { display: flex; flex-direction: column; align-items: center; gap: clamp(4px, .8vmin, 9px); }
+.bdg-strip  { display: flex; gap: clamp(3px, .6vw, 8px); flex-wrap: wrap; justify-content: center; }
+.bdg-img    { width: clamp(24px, 4.5vmin, 42px); aspect-ratio: 1;
+              image-rendering: auto; transition: opacity .2s; }
+.bdg-img.on  { opacity: 1; filter: drop-shadow(0 0 2px rgba(0,0,0,.9)) drop-shadow(0 0 1px rgba(0,0,0,.9)); }
+.bdg-img.off { opacity: .15; filter: grayscale(100%); }
+
+
+/* ── Event feed ─────────────────────────────────────── */
+.e-list { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.e-row  {
+  display: flex; align-items: baseline; gap: clamp(5px, .9vmin, 11px);
+  padding: clamp(3px, .5vmin, 6px) 0;
+  border-bottom: 1px solid var(--c-sep);
+  overflow: hidden; flex-shrink: 0;
+}
+.e-ts  { font-family: var(--font-pixel); font-size: clamp(7px, 1.3vmin, 11px);
+         -webkit-font-smoothing: none; opacity: .36; flex-shrink: 0;
+         white-space: nowrap; padding-top: 1px; min-width: 4.5em; }
+.e-who { font-family: var(--font-pixel); font-size: clamp(7px, 1.3vmin, 11px);
+         -webkit-font-smoothing: none; font-weight: bold; flex-shrink: 0;
+         white-space: nowrap; padding-top: 1px; }
+.e-msg { flex: 1; min-width: 0; font-size: .93em; white-space: nowrap;
+         overflow: hidden; text-overflow: ellipsis; }
+.ec { color: var(--c-alive); }
+.ef { color: var(--c-dead); }
+.ew { color: #f87020; font-weight: 700; }
+.en { color: var(--c-pend); }
+.ea { color: #5ac8f8; }
+.el { color: var(--c-alive); font-weight: 700; }
+.ed { color: var(--c-dead);  font-weight: 700; }
+.ev { color: #f8a030; font-weight: 700; }
+.ek { color: #c080f8; }
+.eh { opacity: .32; }
+.es { color: var(--c-gold); font-weight: 700; }
+.em { opacity: .35; }
+.ep { color: #60a8f8; }
+.er { color: #f86820; }
+
+
+/* ── Ticker overlay ──────────────────────────────── */
+@keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.ticker-mask  { overflow: hidden; flex: 1; min-width: 0; }
+.ticker-track { display: inline-flex; gap: clamp(8px, 1.5vw, 20px);
+                animation: ticker 40s linear infinite;
+                white-space: nowrap; will-change: transform; }
+.t-pill {
+  display: inline-flex; align-items: baseline;
+  gap: clamp(4px, .8vmin, 9px);
+  padding: clamp(3px, .5vmin, 6px) clamp(7px, 1.2vmin, 14px);
+  background: var(--c-card); border-radius: 4px; flex-shrink: 0;
+}
+
+
+/* ── Memorial scroll overlay ─────────────────────── */
+@keyframes memorial-scroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+.mem-scroll-mask { overflow: hidden; flex: 1; min-height: 0; }
+
+
+/* ── Focus / Enemy Focus overlays — moves grid ────── */
+.moves-grid { display: grid; grid-template-columns: 1fr 1fr;
+              gap: clamp(3px, .6vmin, 7px); margin-top: clamp(4px, .7vmin, 9px); }
+.move-tile  { background: rgba(255,255,255,.05); border-radius: 4px;
+              padding: clamp(3px, .55vmin, 7px);
+              display: flex; flex-direction: column; gap: clamp(2px, .35vmin, 4px);
+              min-width: 0; }
+.move-name-row { display: flex; align-items: baseline;
+                 gap: clamp(3px, .6vmin, 7px); min-width: 0; }
+.move-name  { font-family: var(--font-pixel); font-size: clamp(9px, 1.5vmin, 12px);
+              -webkit-font-smoothing: none; white-space: nowrap;
+              overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+.pp-num     { font-family: var(--font-pixel); -webkit-font-smoothing: none;
+              font-size: clamp(8px, 1.3vmin, 11px); opacity: .75;
+              flex-shrink: 0; white-space: nowrap; margin-left: auto; }
+.pp-h       { color: var(--c-alive); }
+.pp-m       { color: var(--c-gold); }
+.pp-l       { color: var(--c-dead); }
+.move-type  { display: inline-block; font-family: var(--font-pixel);
+              font-size: clamp(7px, 1.1vmin, 9px); -webkit-font-smoothing: none;
+              padding: 1px 4px; border-radius: 2px; color: #fff;
+              letter-spacing: .04em; white-space: nowrap; align-self: flex-start;
+              margin-top: clamp(1px, .2vmin, 2px); }
+.mt-Normal   { background: #a8a878; color: #fff; }
+.mt-Fighting { background: #c03028; }
+.mt-Flying   { background: #a890f0; }
+.mt-Poison   { background: #a040a0; }
+.mt-Ground   { background: #e0c068; color: #111; }
+.mt-Rock     { background: #b8a038; }
+.mt-Bug      { background: #a8b820; color: #111; }
+.mt-Ghost    { background: #705898; }
+.mt-Steel    { background: #b8b8d0; color: #111; }
+.mt-Fire     { background: #f08030; }
+.mt-Water    { background: #6890f0; }
+.mt-Grass    { background: #78c850; color: #111; }
+.mt-Electric { background: #f8d030; color: #111; }
+.mt-Psychic  { background: #f85888; }
+.mt-Ice      { background: #98d8d8; color: #111; }
+.mt-Dragon   { background: #7038f8; }
+.mt-Dark     { background: #705848; }
+.mt-unknown,
+.mt-         { background: #666; }
+.focus-not-active { display: flex; flex: 1; align-items: center;
+                    justify-content: center; opacity: .3; font-size: .85em;
+                    letter-spacing: .08em; }
+.dbl-tag    { display: inline-block; background: var(--c-gold); color: #111;
+              font-size: .7em; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+              margin-left: 4px; vertical-align: middle; letter-spacing: .04em; }
+
+/* Focus-mode shell — keeps singles vertical, doubles side-by-side */
+body.ov-focus #root { padding: clamp(5px, 1vmin, 14px); gap: clamp(3px, .6vmin, 8px); }
+body.ov-focus .mc .mon-sprite { width: clamp(54px, 15vmin, 80px) !important; aspect-ratio: 1 !important; }
+body.ov-focus .moves-grid { flex: 1; min-height: 0;
+                            grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+                            grid-auto-rows: minmax(0, 1fr); margin-top: 0; overflow: hidden; }
+body.ov-focus .move-tile { justify-content: space-evenly; gap: 0; min-height: 0; min-width: 0; overflow: hidden; }
+body.ov-focus .focus-mons .focus-mon { overflow: hidden; }
+body.ov-focus .pp-num { font-size: clamp(10px, 1.4vmin, 13px); opacity: .85; }
+body.ov-focus .focus-mons { display: flex; flex-direction: column; gap: clamp(3px, .6vmin, 8px); flex: 1; min-height: 0; }
+body.ov-focus .focus-mons .focus-mon { display: flex; flex-direction: column; gap: clamp(3px, .6vmin, 8px); flex: 1; min-height: 0; min-width: 0; }
+body.ov-focus .focus-mons.doubles { flex-direction: row; gap: clamp(4px, .8vmin, 10px); }
+body.ov-focus .focus-mons.doubles .focus-mon { flex: 1 1 0; min-width: 0; font-size: .7em; }
+body.ov-focus .focus-mons.doubles .mc { flex-direction: column; align-items: center; gap: clamp(2px, .4vmin, 5px); padding: clamp(3px, .5vmin, 6px); flex-shrink: 0; }
+body.ov-focus .focus-mons.doubles .mc .mon-sprite { width: clamp(38px, 9vmin, 52px) !important; margin: 0 auto; }
+body.ov-focus .focus-mons.doubles .m-info { width: 100%; text-align: center; }
+body.ov-focus .focus-mons.doubles .m-name { justify-content: center; text-align: center; line-height: 1.2; }
+body.ov-focus .focus-mons.doubles .m-name .sp { display: none; }
+body.ov-focus .focus-mons.doubles .hp-row { flex-wrap: wrap; justify-content: center; gap: clamp(2px, .35vmin, 4px); margin-top: clamp(1px, .25vmin, 3px); }
+body.ov-focus .focus-mons.doubles .hp-lbl { display: none; }
+body.ov-focus .focus-mons.doubles .hp-trk { min-width: clamp(28px, 7vmin, 50px); height: clamp(4px, .6vmin, 6px); }
+body.ov-focus .focus-mons.doubles .stat-stages-row { padding: 1px 0 0 0; gap: 1px; justify-content: center; }
+body.ov-focus .focus-mons.doubles .moves-grid { gap: clamp(2px, .4vmin, 5px); margin-top: clamp(2px, .4vmin, 5px); }
+body.ov-focus .focus-mons.doubles .move-tile { padding: clamp(2px, .4vmin, 5px); gap: clamp(1px, .2vmin, 3px); }
+body.ov-focus .focus-mons.doubles .move-name { line-height: 1.15; }
+body.ov-focus .focus-mons.doubles .move-name-row { gap: clamp(2px, .4vmin, 5px); }
+
+
+/* ── Enemy Trainer overlay — auto-scrolling team list ─────────────── */
+.trainer-scroll-mask { overflow: hidden; flex: 1; min-height: 0; }
+.trainer-team-list   { display: flex; flex-direction: column;
+                       gap: clamp(3px, .55vmin, 7px); will-change: transform; }
+
+
+/* ── Encounters overlay ─────────────────────────── */
+.enc-last { margin-top: clamp(5px, .9vmin, 11px); display: flex; align-items: center;
+            gap: clamp(4px, .8vmin, 10px);
+            padding: clamp(4px, .7vmin, 8px) clamp(7px, 1.1vmin, 13px);
+            background: var(--c-card); border-radius: 4px;
+            border-left: 3px solid var(--c-gold); min-width: 0; }
+.enc-nms  { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.enc-nm   { font-size: .88em; font-weight: 600; white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; }
+.enc-lv   { font-size: .75em; opacity: .5; white-space: nowrap; }
+.shiny-star { color: var(--c-gold); margin-left: 3px; }
+
+
+/* ── Area Encounter overlay ─────────────────────── */
+.ae-badge   { display: inline-block; font-family: var(--font-pixel);
+              font-size: clamp(7px, 1.2vmin, 10px); -webkit-font-smoothing: none;
+              padding: clamp(2px, .4vmin, 4px) clamp(6px, 1vmin, 11px);
+              border-radius: 3px; letter-spacing: .05em;
+              margin-bottom: clamp(3px, .5vmin, 7px); flex-shrink: 0; }
+.ae-s-alive { background: color-mix(in srgb, var(--c-alive) 14%, transparent);
+              color: var(--c-alive); border: 1px solid color-mix(in srgb, var(--c-alive) 35%, transparent); }
+.ae-s-dead  { background: color-mix(in srgb, var(--c-dead)  14%, transparent);
+              color: var(--c-dead);  border: 1px solid color-mix(in srgb, var(--c-dead)  35%, transparent); }
+.ae-s-pend  { background: color-mix(in srgb, var(--c-pend)  14%, transparent);
+              color: var(--c-pend);  border: 1px solid color-mix(in srgb, var(--c-pend)  35%, transparent); }
+.ae-s-dim   { background: rgba(128,128,128,.10); color: var(--c-dim);
+              border: 1px solid rgba(128,128,128,.20); }
+.ae-pair    { display: flex; align-items: center; gap: clamp(5px, .9vmin, 11px);
+              flex: 1; min-height: 0;
+              padding: clamp(4px, .7vmin, 9px) clamp(7px, 1.2vmin, 14px);
+              background: var(--c-card); border-radius: 4px;
+              border-left: 3px solid rgba(128,128,128,.18); }
+.ae-pair.ae-pair-alive { border-left-color: var(--c-alive); }
+.ae-pair.ae-pair-dead  { border-left-color: var(--c-dead);  }
+.ae-pair.ae-pair-pend  { border-left-color: var(--c-pend);  }
+.ae-side    { flex: 1; min-width: 0; display: flex; align-items: center;
+              gap: clamp(4px, .7vmin, 9px); overflow: hidden; }
+.ae-side.r  { flex-direction: row-reverse; }
+.ae-info    { min-width: 0; display: flex; flex-direction: column;
+              gap: clamp(1px, .2vmin, 3px); }
+.ae-side.r .ae-info { text-align: right; align-items: flex-end; }
+.ae-name    { font-size: .9em; font-weight: 700; white-space: nowrap;
+              overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.ae-lv      { font-size: .75em; opacity: .55; white-space: nowrap; }
+.ae-tag     { font-family: var(--font-pixel); font-size: clamp(7px, 1.1vmin, 9px);
+              -webkit-font-smoothing: none; padding: 1px 5px; border-radius: 3px;
+              white-space: nowrap; flex-shrink: 0; }
+.ae-tag-caught  { background: color-mix(in srgb, var(--c-alive) 15%, transparent); color: var(--c-alive); }
+.ae-tag-dead    { background: color-mix(in srgb, var(--c-dead)  15%, transparent); color: var(--c-dead);  }
+.ae-tag-waiting { color: var(--c-dim); }
+
+
+/* ── Encounter table overlay ────────────────────── */
+@keyframes enc-scroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+.et-area   { font-family: var(--font-pixel); font-size: clamp(11px, 2vmin, 15px);
+             -webkit-font-smoothing: none; color: var(--c-gold); opacity: .75;
+             letter-spacing: .04em; margin-bottom: clamp(3px, .5vmin, 6px);
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+             flex-shrink: 0; }
+.et-scroll  { flex: 1; min-height: 0; overflow: hidden; }
+.et-methods { display: flex; flex-direction: column; gap: clamp(7px, 1.2vmin, 13px); }
+.et-method-hdr {
+  font-family: var(--font-pixel); font-size: clamp(11px, 2vmin, 15px);
+  -webkit-font-smoothing: none; color: var(--c-pend); letter-spacing: .05em;
+  padding-bottom: clamp(2px, .4vmin, 5px);
+  border-bottom: 1px solid var(--c-sep);
+  margin-bottom: clamp(2px, .4vmin, 5px); flex-shrink: 0;
+}
+.et-list   { display: flex; flex-direction: column; gap: 0; }
+.et-entry  { display: flex; align-items: center; gap: clamp(5px, 1vmin, 9px);
+             padding: clamp(2px, .3vmin, 4px) 0; }
+.et-sprite { width: clamp(30px, 5.5vmin, 42px); height: clamp(30px, 5.5vmin, 42px);
+             image-rendering: pixelated; image-rendering: crisp-edges;
+             flex-shrink: 0; object-fit: contain; }
+.et-name   { flex: 1; min-width: 0; font-size: clamp(13px, 2.4vmin, 18px);
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.et-rate   { font-family: var(--font-pixel); font-size: clamp(11px, 1.9vmin, 14px);
+             -webkit-font-smoothing: none; white-space: nowrap;
+             min-width: 2.8em; text-align: right; flex-shrink: 0; }
+.et-lv     { font-size: clamp(11px, 1.9vmin, 14px); opacity: .42;
+             white-space: nowrap; flex-shrink: 0; }
+
+
+/* Damage-calc preview
+ * Inline-rendered by the JS at server.py:204–359 inside .battle-panel,
+ * showing 1–3 turn damage rolls against the active enemy. */
+.calc-preview {
+  background: var(--c-calc-bg);
+  border: 1px solid var(--c-calc-edge);
+  border-radius: 3px;
+  padding: 0.5em 0.8em;
+  margin: 0.6em 0 0;
+}
+.calc-preview h5 {
+  color: var(--c-calc-accent);
+  margin: 0 0 0.4em;
+  font-size: 0.9em;
+}
+.calc-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82em;
+}
+.calc-preview-table th {
+  background: var(--c-calc-th-bg);
+  color: var(--c-calc-accent);
+  padding: 2px 7px;
+  text-align: left;
+  border-bottom: 1px solid var(--c-calc-th-edge);
+}
+.calc-preview-table td {
+  padding: 2px 7px;
+  border-bottom: 1px solid var(--c-calc-row-edge);
+}
+.calc-preview-table .ohko   { color: var(--c-dead); font-weight: bold; }
+.calc-preview-table .twohko { color: var(--c-pend); }
+
+.calc-open-btn {
+  display: inline-block;
+  margin-top: 0.5em;
+  padding: 2px 9px;
+  background: var(--c-calc-btn-bg);
+  color: var(--c-calc-btn-txt);
+  border: 1px solid var(--c-calc-btn-edge);
+  border-radius: 3px;
+  text-decoration: none;
+  font-size: 0.82em;
+}
+.calc-open-btn:hover { background: var(--c-calc-btn-bg-hover); }

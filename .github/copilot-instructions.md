@@ -26,7 +26,7 @@ python -m server.server --reset   # wipe all state and start a fresh run
 #   --manager-port PORT  Manager HTTP port (enables back-link)
 #   --verbose            Enable structured DEBUG logging to <data-dir>/slink.log
 
-# Unit tests — no emulator or server required (267 + 208 + 100 + 103 + 179 + 140 + 46 + 6 + 4 + 3 = 1056 tests)
+# Unit tests — no emulator or server required (276 + 208 + 100 + 103 + 179 + 140 + 46 + 6 + 7 + 4 + 3 = 1072 tests)
 pytest tests/unit/test_state.py -v
 pytest tests/unit/test_gen3_adapter.py -v
 pytest tests/unit/test_gen4_adapter.py -v
@@ -36,6 +36,8 @@ pytest tests/unit/test_gen5_adapter.py -v
 pytest tests/unit/test_stat_stages.py -v
 pytest tests/unit/test_phase1_comms.py -v
 pytest tests/unit/test_obs_priority.py -v
+pytest tests/unit/test_manager_launcher.py -v
+pytest tests/unit/test_profile_addresses.py -v
 
 # Single test
 pytest tests/unit/test_state.py::test_faint_queues_force_faint_for_partner -v
@@ -288,7 +290,7 @@ SLink-RR/
 
 *Server:*
 - **`server/state.py`** — `SoulLinkState` FSM: processes event dicts, queues commands for each player, persists state. Includes `_check_link_violation()` for species/gender/type clause rules.
-- **`server/server.py`** — asyncio TCP coordinator + aiohttp status page. Routes events to the FSM. Tracks per-player area, ball count, and party snapshots for the status page. Dynamic page titles via `_page_title()` method (shows "Pokémon Soul Link Tracker — \<variant\> — \<run name\>" with Pokéball SVG icon). `_resolve_level()` provides multi-source level fallback for manual links and PC box mons. Commits `rom_type` and `trainer_names` on first hello (set-once). Memorial wall page at `/memorial` (SSE live updates, tombstone cards with server-side `_sprite_img_html()` for correct CFRU→NatDex sprite conversion). Debug page at `/debug` (manual linking/unlinking, event injection, command queuing, state toggles, backup rollback, raw state — all panels live-updating via SSE). OBS page at `/obs` (per-player connection management, draggable priority trigger rules). Launcher script download at `/launcher/{player}` (host from HTTP Host header). Accepts `--manager-port` CLI arg for Run Manager back-link. Accepts `--verbose` CLI flag: enables `_configure_logging()` which adds a `RotatingFileHandler` (10 MB × 5) to `<data_dir>/slink.log` with structured DEBUG tags for every accepted event, command flush, FSM transitions, party/faint/clause/reconcile/shiny lifecycle events, and adapter init. RR item names loaded from `data/games/gen3_frlge/rr_items.json`. TCP port displayed on status page. Rolling backups of `links.json` **and `events.json`** every 5 min when both players connected (6 slots with rotation; rollback restores both files atomically). `_cache_mon_info()` backfills stale link entry nicknames from live party data. Capture events populate `mon_stats` directly (fallback from top-level `hp`/`maxHP`/`level` fields). `sprite_html` field in party_details and killfeed JSON APIs. Enemy battle type badges and held items in status page.
+- **`server/server.py`** — asyncio TCP coordinator + aiohttp status page. Routes events to the FSM. Tracks per-player area, ball count, and party snapshots for the status page. Dynamic page titles via `_page_title()` method (shows "Pokémon Soul Link Tracker — \<variant\> — \<run name\>" with Pokéball SVG icon). `_resolve_level()` provides multi-source level fallback for manual links and PC box mons. Commits `rom_type` and `trainer_names` on first hello (set-once). Memorial wall page at `/memorial` (HTMX morph-swap refresh, tombstone cards with server-side `_sprite_img_html()` for correct CFRU→NatDex sprite conversion). Debug page at `/debug` (manual linking/unlinking, event injection, command queuing, state toggles, backup rollback, raw state — all panels live-updating via HTMX polling). OBS page at `/obs` (per-player connection management, draggable priority trigger rules). Launcher script download at `/launcher/{player}` (host from HTTP Host header). Accepts `--manager-port` CLI arg for Run Manager back-link. Accepts `--verbose` CLI flag: enables `_configure_logging()` which adds a `RotatingFileHandler` (10 MB × 5) to `<data_dir>/slink.log` with structured DEBUG tags for every accepted event, command flush, FSM transitions, party/faint/clause/reconcile/shiny lifecycle events, and adapter init. RR item names loaded from `data/games/gen3_frlge/rr_items.json`. TCP port displayed on status page. Rolling backups of `links.json` **and `events.json`** every 5 min when both players connected (6 slots with rotation; rollback restores both files atomically). `_cache_mon_info()` backfills stale link entry nicknames from live party data. Capture events populate `mon_stats` directly (fallback from top-level `hp`/`maxHP`/`level` fields). `sprite_html` field in party_details and killfeed JSON APIs. Enemy battle type badges and held items in status page.
 - **`server/obs_controller.py`** — `OBSController`: per-player `simpleobsws` WebSocket connections (obs-websocket v5, port 4455), per-player coalescing `asyncio.Queue` + worker tasks, reconnect loop with exponential backoff (5 s → 60 s cap). `submit_fired(fired_list)` priority-resolves a list of `(event_name, src_player, metadata)` tuples in one pass — iterates rules in list order, first match per target player wins. Config persisted at `data/obs_config.json` (global, not per-run). Passwords never returned in GET responses.
 - **`server/pokemon_data.py`** — Shared Pokémon data module: `SPECIES_NAMES`, `GENDER_RATIO`, `gender_from_key_species()`, `EVO_FAMILY` (Gen I–IX evolution families including CFRU/RR extended IDs), `base_form()`.
 - **`server/adapters/base.py`** — GameAdapter ABC: GameRulesAdapter (10 methods) + GamePresentationAdapter (9 methods). All game-specific server logic flows through adapter interfaces.
@@ -974,11 +976,11 @@ This correctly handles: active battles (true), party menus during battle (true �
 
 The server exposes a live status page at `http://localhost:8080/` (configurable via `--http-port`). Page title is dynamic: "Pokémon Soul Link Tracker — \<Game Variant\> — \<Run Name\>" (populated from persistent `rom_type` and `--run-name` CLI arg, with Pokéball SVG icon).
 
-**Updates via Server-Sent Events (SSE).** The `/api/events` SSE endpoint pushes two named event types:
-- `event: status` — full JSON status dict (consumed directly by stream overlays)
-- `event: ping` — empty data (triggers fetch+morph on main status page)
+**Templating + refresh model.** HTML is rendered by Jinja2 (`aiohttp-jinja2`) from `server/templates/`. The page boots with full markup, then HTMX (`server/static/vendor/htmx.min.js`) polls each root fragment (`#content`, `#enc-table-root`, `#focus-root`, …) every 2 s and swaps them in via **idiomorph** (`idiomorph-ext.min.js`). A `beforeAttributeUpdated` hook preserves `<details open>`, scroll position, and table-search focus across swaps. Small UI widgets (theme picker, font picker, run filter, OBS trigger editor) are Alpine.js components. The dashboard does not subscribe to SSE.
 
-SSE uses coalescing queues (maxsize=1, latest wins) to prevent backpressure. Heartbeat comments (`: heartbeat`) are sent every 15s to detect dead clients. The browser reconnects automatically (server sends `retry: 3000`). A fallback timer polls every 10s if SSE disconnects.
+`/api/events` still exists for external consumers (the SLink calc bridge uses it). It pushes two named event types — `event: status` (full JSON) and `event: ping` (state-change signal). Coalescing queues (`maxsize=1`, latest wins) prevent backpressure; heartbeat comments every 15 s detect dead clients; the browser reconnects automatically (`retry: 3000`).
+
+**Static assets** are served from `server/static/`. A small aiohttp middleware in `server/templating.py` stamps `Cache-Control: no-cache` on every `/static/` response — combined with the existing `ETag`, browsers cache the asset but revalidate every request (matching ETag → 304, ~150 bytes). This stops the heuristic-cache staleness that used to require hard refreshes after CSS/JS edits.
 
 Endpoints:
 
@@ -1045,8 +1047,8 @@ Below the cards:
 ### Unit tests — no emulator or server required
 
 ```bash
-pytest tests/unit/ -v   # 1056 tests
-pytest tests/unit/test_state.py -v          # 267 tests
+pytest tests/unit/ -v   # 1072 tests
+pytest tests/unit/test_state.py -v          # 276 tests (incl. tick reconciliation)
 pytest tests/unit/test_gen1_adapter.py -v   # 103 tests
 pytest tests/unit/test_gen2_adapter.py -v   # 179 tests
 pytest tests/unit/test_gen3_adapter.py -v   # 208 tests
@@ -1054,7 +1056,8 @@ pytest tests/unit/test_gen4_adapter.py -v   # 100 tests
 pytest tests/unit/test_gen5_adapter.py -v   # 140 tests
 pytest tests/unit/test_stat_stages.py -v    # 46 tests
 pytest tests/unit/test_phase1_comms.py -v   # 6 tests
-pytest tests/unit/test_obs_priority.py -v   # 4 tests
+pytest tests/unit/test_obs_priority.py -v   # 7 tests (priority + area-group filters)
+pytest tests/unit/test_manager_launcher.py -v   # 4 tests (BizHawk launcher Lua syntax)
 pytest tests/unit/test_profile_addresses.py -v  # 3 tests (pret address verification)
 ```
 
@@ -1349,13 +1352,13 @@ The status page party tables now display enemy battle type badges (Wild, Trainer
 
 ## Memorial Wall
 
-`/memorial` — a dedicated solemn page showing tombstone cards for each dead linked pair. Displays greyscale Pokémon sprites, nicknames, species, levels, area of death, cause of death, and killer details (if applicable). Updates live via SSE. Data sourced from the killfeed in `/api/status`. Sprites use server-side `_sprite_img_html()` for correct CFRU→NatDex species conversion. RR sprites from funnotbun have solid backgrounds — canvas-based transparent background processing removes them client-side. `a_sprite_html` and `b_sprite_html` fields are included in the killfeed JSON API.
+`/memorial` — a dedicated solemn page showing tombstone cards for each dead linked pair. Displays greyscale Pokémon sprites, nicknames, species, levels, area of death, cause of death, and killer details (if applicable). Renders from `server/templates/memorial.html`, refreshed via HTMX (idiomorph). Data sourced from the killfeed in `/api/status`. Sprites use server-side `_sprite_img_html()` for correct CFRU→NatDex species conversion. RR sprites from funnotbun have solid backgrounds — canvas-based transparent background processing removes them client-side. `a_sprite_html` and `b_sprite_html` fields are included in the killfeed JSON API.
 
 ---
 
 ## Debug Page
 
-`/debug` — debug console for manual state manipulation during development and troubleshooting. All panels update live via SSE. Features a live status banner showing connection state, link/area counts, and queued commands. Panels:
+`/debug` — debug console for manual state manipulation during development and troubleshooting. All panels refresh in-place via HTMX (2 s poll, idiomorph swap). Features a live status banner showing connection state, link/area counts, and queued commands. Panels:
 - **Manual Link** — create links between mons, unlink existing links, or override existing links. Mon key and area ID fields use datalist autofill from live server data (fetches from `/api/debug/manual_link_data`)
 - **Inject Event** — send synthetic events (capture, faint, area_enter, etc.) through the state machine
 - **Queue Command** — manually queue commands (force_faint, box_mon, etc.) for a player

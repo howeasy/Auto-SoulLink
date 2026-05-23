@@ -1,0 +1,55 @@
+{# Pokemon Radical Red damage calculator — Jinja shell that wraps the vendored
+   calc body content from `calc/dist/{normal,hardcore}.html` in the same
+   chrome that the rest of the SLink UI uses. The calc's HTML/JS/CSS stay
+   vendored under `calc/`; this template only owns the SLink-side wiring
+   (theme, sidebar, font, slink-header strip).
+
+   The route handler (`handle_calc_files` in server.py) slices the body inner
+   of the dist HTML and passes it through `calc_body_html`. The slink-header
+   strip (`.slink-header`) is rendered from a Jinja partial here rather than
+   from the calc/src template, so calc/src can stay close to upstream
+   RadicalRedShowdown/damage-calc — only the matchMedia patch in calc/src
+   remains as a SLink-side delta. #}
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block head_extra %}
+  {# Calc's vendored CSS, served from `calc/dist/` via handle_calc_files at
+     relative paths. ORDER MATTERS: calc dark-theme.css must come AFTER the
+     calc's main.css + bootstrap so it can override their defaults when
+     calc-internal dark mode is enabled. #}
+  <link rel="stylesheet" href="/calc/js/vendor/select2/select2.css">
+  <link rel="stylesheet" href="/calc/css/main.css">
+  <link rel="stylesheet" href="/calc/css/vendor/bootstrap.css">
+  <link rel="stylesheet" href="/calc/css/dark-theme.css" id="dark-theme-styles">
+  {# Resolve calc-internal dark-theme.css disabled-state synchronously so the
+     initial paint already matches what dark-theme-toggle.js (loaded near the
+     end of the calc body) would resolve. Without this, a user with no
+     `darkTheme` localStorage entry but a system dark-mode preference gets
+     dark-theme.css disabled here, the calc paints with main.css's vanilla
+     white/Verdana Bootstrap look, then dark-theme-toggle.js fires after first
+     paint and re-enables — the user reads that re-enable as
+     "vanilla Smogon flash → themed calc". The two heuristics MUST stay in
+     sync; if you change this, update `calc/src/js/dark-theme-toggle.js` too. #}
+  <script>
+    var prefersDarkTheme = localStorage.getItem('darkTheme')
+      ? localStorage.getItem('darkTheme') === 'true'
+      : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (!prefersDarkTheme) {
+      document.getElementById('dark-theme-styles').disabled = true;
+    }
+  </script>
+{% endblock %}
+
+{% block content %}
+  {# Sidebar is rendered server-side via `_build_sidebar_html("calc")` and
+     passed through `sidebar_html`. Matches the dashboard pattern in
+     _handle_dashboard_template — sidebar HTML lives inside the content block,
+     not as a separate top-level node. #}
+  {{ sidebar_html | safe }}
+  <main class="dash-main">
+    {% include "_calc_slink_header.html" %}
+    {{ calc_body_html | safe }}
+  </main>
+{% endblock %}

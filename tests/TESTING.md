@@ -13,7 +13,7 @@ Tests 1–3 are diagnostic; **Test 4 (`slink.lua` or `slink_gen3.lua`) is the pr
 | BizHawk 2.9+ | Both instances open, each with a FireRed or LeafGreen US 1.0 save loaded (vanilla, randomized, AP-patched, or Radical Red 4.1) |
 | LuaSocket DLL | Copy `socket-windows-5-4.dll` from your Archipelago install into `lua/x64/` (see `lua/x64/README.md`) |
 | Python server | `python -m server.server --host 127.0.0.1 --port 54321` (run from project root; needed from Test 3 onward) |
-| Status page | `http://localhost:8080/` — flicker-free auto-refresh every 5 s (DOM morphing); shows player areas, gym badges, party, Pokéball counts, encounters table; battle display above party |
+| Status page | `http://localhost:8080/` — flicker-free auto-refresh every 2 s (HTMX + idiomorph morph swap); shows player areas, gym badges, party, Pokéball counts, encounters table; battle display above party |
 | Scripts in `lua/` | `memory_gba.lua`, `connector.lua`, `socket.lua`, `slink.lua`, all files in `tests/` |
 | Save states | Make a BizHawk save state before Test 2 (it writes RAM) |
 
@@ -198,7 +198,7 @@ The `nuzlocke_active` flag activates when `M.hasPokeballs()` returns true (reads
 
 ### Status Page Checks (http://localhost:8080/)
 
-The status page uses **flicker-free DOM morphing** (`morphDOM()`) — sprites, HP bars, and table structure are preserved across auto-refreshes. Only changed text/values are patched in-place via `nodeValue` updates; `<img>` elements are never recreated (only `src`/`alt` updated if changed).
+The status page uses **HTMX morph swaps** (`idiomorph-ext.min.js`) — sprites, HP bars, and table structure are preserved across the 2-second polled refresh. A `beforeAttributeUpdated` hook preserves the `open` attribute on `<details>` elements, scroll position survives, and table-search focus is reapplied via an `htmx:afterSwap` listener so the filter doesn't briefly show all rows mid-swap.
 
 | What to verify | Expected |
 |---|---|
@@ -212,7 +212,7 @@ The status page uses **flicker-free DOM morphing** (`morphDOM()`) — sprites, H
 | Encounters table | Consolidated table showing all encounters with progress icons: ✅ (linked/alive), 💀 (dead/memorial), ⏳ (pending), ☠️ (dead zone). Each row: area name, Player A's mon (sprite/nickname/species/level), status icon, Player B's mon. Dead zones show the wild mon's species + level |
 | PC Box section | Shows occupied slot counts and nicknames/species/**abilities** for all 13 active boxes, updated every ~5 s |
 | Identity error | When wrong save connected: **red error banner** in player card with OT mismatch message |
-| Auto-refresh stability | Sprites and HP bars do NOT flicker or reload on 5-second refresh — DOM morphing preserves elements |
+| Auto-refresh stability | Sprites and HP bars do NOT flicker or reload on 2-second refresh — HTMX morph swap preserves elements |
 
 ### Negative Cases (events that must NOT fire)
 
@@ -473,18 +473,23 @@ Run through the steps below **in order**. Each step depends on the previous.
 ## Unit Tests (pytest — no emulator required)
 
 ```bash
-pytest tests/unit/test_state.py -v          # 234 tests
-pytest tests/unit/test_gen3_adapter.py -v   # 77 tests
-pytest tests/unit/test_gen4_adapter.py -v   # 62 tests (incl. species/evo/gender data)
-pytest tests/unit/test_gen1_adapter.py -v   # 78 tests
-pytest tests/unit/test_gen2_adapter.py -v   # 127 tests
-pytest tests/unit/test_gen5_adapter.py -v   # 63 tests
-pytest tests/unit/test_phase1_comms.py -v   # 6 tests
+pytest tests/unit/ -v                                # all 1072 tests
+pytest tests/unit/test_state.py -v                   # 276 tests (incl. tick reconciliation)
+pytest tests/unit/test_gen3_adapter.py -v            # 208 tests
+pytest tests/unit/test_gen4_adapter.py -v            # 100 tests
+pytest tests/unit/test_gen1_adapter.py -v            # 103 tests
+pytest tests/unit/test_gen2_adapter.py -v            # 179 tests
+pytest tests/unit/test_gen5_adapter.py -v            # 140 tests
+pytest tests/unit/test_stat_stages.py -v             # 46 tests
+pytest tests/unit/test_obs_priority.py -v            # 7 tests (priority + area-group filters)
+pytest tests/unit/test_manager_launcher.py -v        # 4 tests (BizHawk launcher Lua syntax)
+pytest tests/unit/test_phase1_comms.py -v            # 6 tests
+pytest tests/unit/test_profile_addresses.py -v       # 3 tests
 ```
 
 All tests use `tmp_path` + `monkeypatch` fixtures for isolated file I/O. No server, no emulator, no network.
 
-### test_state.py — State Machine Tests (234 tests)
+### test_state.py — State Machine Tests (276 tests)
 
 Covers the core `SoulLinkState` FSM in `server/state.py`. Key helper: `make_state_with_link()` creates a pre-linked pair with `pokeballs_obtained` active and party size 2.
 

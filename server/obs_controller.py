@@ -67,6 +67,83 @@ ALL_TRIGGER_EVENTS = [
     "memorialize_done",
 ]
 
+# ── area groups ─────────────────────────────────────────────────────────────
+#
+# Areas are classified into groups by suffix/prefix heuristics so the OBS UI
+# can offer "All Routes" / "All Caves" filters that match every area in the
+# group. The area_id_filter on a trigger rule may be:
+#   ""              → no filter (match any area)
+#   "route_1"       → exact area_id match
+#   "group:route"   → matches any area whose classify_area() == "route"
+
+AREA_GROUPS: list[dict] = [
+    {"id": "route",    "label": "Routes"},
+    {"id": "city",     "label": "Cities & Towns"},
+    {"id": "cave",     "label": "Caves & Mountains"},
+    {"id": "forest",   "label": "Forests"},
+    {"id": "tower",    "label": "Towers"},
+    {"id": "building", "label": "Buildings & Indoor"},
+    {"id": "water",    "label": "Water & Bridges"},
+    {"id": "gift",     "label": "Gift / Event"},
+    {"id": "other",    "label": "Other"},
+]
+
+_CAVE_SPECIALS = frozenset({
+    "victory_road", "ice_path", "whirl_islands", "seafoam_islands",
+    "dark_cave", "tohjo_falls", "dragons_den",
+})
+
+_BUILDING_SPECIALS = frozenset({
+    "silph_co", "silph_co_7f",
+    "pokemon_league", "team_rocket_hq", "battle_frontier",
+    "indigo_plateau", "dreamyard",
+})
+
+
+def classify_area(area_id: str) -> str:
+    """Return the AREA_GROUPS id that an area_id belongs to."""
+    if not area_id:
+        return "other"
+    a = area_id.lower()
+    if a.startswith("gift_") or a.startswith("egg_") or a == "gift":
+        return "gift"
+    # Specials checked before pattern rules — e.g. "victory_road" ends in
+    # "_road" but is a cave dungeon, not a route.
+    if a in _CAVE_SPECIALS:
+        return "cave"
+    if a in _BUILDING_SPECIALS:
+        return "building"
+    if a.startswith("route_") or a.endswith("_road"):
+        return "route"
+    if (a.endswith("_cave") or a.startswith("mt_")
+            or a.endswith("_tunnel") or a.endswith("_mountain")
+            or a.endswith("_well") or a.endswith("_chasm")
+            or a.endswith("_path")):
+        return "cave"
+    if a.endswith("_forest") or a.endswith("_woods"):
+        return "forest"
+    if a.endswith("_tower"):
+        return "tower"
+    if (a.endswith("_bridge") or a.endswith("_bay")
+            or a.endswith("_lake") or a.endswith("_falls")
+            or a.startswith("lake_")):
+        return "water"
+    if (a.endswith("_city") or a.endswith("_town")
+            or a.endswith("_island") or a.endswith("_isle")):
+        return "city"
+    if (a.endswith("_mansion") or a.endswith("_lab") or a.endswith("_dojo")
+            or a.endswith("_lighthouse") or a.endswith("_castle")
+            or a.endswith("_hideout") or a.endswith("_warehouse")
+            or a.endswith("_condominiums") or a.endswith("_chamber")
+            or a.endswith("_hq") or a.endswith("_pokecenter")
+            or a.endswith("_shrine") or a.endswith("_ruins")
+            or a.endswith("_yard") or a.endswith("_resort")
+            or a.endswith("_storage") or a.endswith("_plant")
+            or a.endswith("_park")
+            or a.startswith("safari_zone") or a.startswith("ruins_")):
+        return "building"
+    return "other"
+
 
 class OBSController:
     """Manages OBS WebSocket connections and game-event-driven scene switching.
@@ -232,8 +309,13 @@ class OBSController:
                     continue
                 if pf not in ("any", src_player):
                     continue
-                if area_filter and meta.get("area_id") != area_filter:
-                    continue
+                if area_filter:
+                    target_area = meta.get("area_id", "")
+                    if area_filter.startswith("group:"):
+                        if classify_area(target_area) != area_filter[6:]:
+                            continue
+                    elif target_area != area_filter:
+                        continue
 
                 # This rule matches — resolve target players
                 if target == "own":

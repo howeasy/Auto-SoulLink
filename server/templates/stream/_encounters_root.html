@@ -1,0 +1,31 @@
+{# Encounters overlay (#root subtree) — totals + last encounter pair.
+   Context: { linked: int, dead: int, shinies: int,
+              last: {area_display, a: {nickname, species_name, level, sprite_html, shiny},
+                                   b: {...}} or None } #}
+
+<div id="root">
+  <div class="wtitle">ENCOUNTERS</div>
+  <div class="d-wrap">
+    <div class="d-grid">
+      <div class="d-box d-alive"><span class="d-num">{{ linked }}</span><span class="d-lbl">LINKED</span></div>
+      <div class="d-box d-dead"><span class="d-num">{{ dead }}</span><span class="d-lbl">DEAD</span></div>
+      <div class="d-box d-attempts"><span class="d-num">{{ shinies }}</span><span class="d-lbl">SHINIES</span></div>
+    </div>
+  </div>
+  {% if last %}
+    <div class="wtitle" style="margin-top:clamp(5px,.9vmin,11px)">LAST ENCOUNTER{% if last.area_display %} · {{ last.area_display }}{% endif %}</div>
+    <div class="enc-last">
+      {{ last.a.sprite_html | safe }}
+      <div class="enc-nms">
+        <div class="enc-nm">{{ last.a.nickname or last.a.species_name or '—' }}{% if last.a.shiny %}<svg class="shiny-star inline-ico" aria-hidden="true"><use href="#i-sparkle"/></svg>{% endif %}</div>
+        {% if last.a.level %}<div class="enc-lv">Lv&nbsp;{{ last.a.level }}</div>{% endif %}
+      </div>
+      <span class="lk-div">◈</span>
+      <div class="enc-nms" style="text-align:right">
+        <div class="enc-nm">{% if last.b.shiny %}<svg class="shiny-star inline-ico" aria-hidden="true"><use href="#i-sparkle"/></svg>{% endif %}{{ last.b.nickname or last.b.species_name or '—' }}</div>
+        {% if last.b.level %}<div class="enc-lv">Lv&nbsp;{{ last.b.level }}</div>{% endif %}
+      </div>
+      {{ last.b.sprite_html | safe }}
+    </div>
+  {% endif %}
+</div>

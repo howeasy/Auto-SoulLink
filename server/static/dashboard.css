@@ -1,0 +1,1211 @@
+/* dashboard.css — chrome that complements slink.css for the per-run dashboard.
+ *
+ * Loaded by server.py:_STATUS_HTML after slink.css, so these rules cascade
+ * on top of the design tokens. Every colour here references a token from
+ * slink.css; values like ‘.gender-female’ pink and the pure-white inner glow
+ * on earned gym badges stay literal because they read as protocol/UI
+ * constants rather than palette choices.
+ *
+ * Duplicates dropped (now owned by slink.css):
+ *   .mon-sprite, .hp-bar-bg / .hp-bar / .hp-high / .hp-mid / .hp-low,
+ *   .stat-stage, .ss-up, .ss-dn.
+ * Kept (dashboard-specific class names):
+ *   .s-slp/.s-psn/.s-brn/.s-frz/.s-par/.s-tox (the overlay equivalent uses
+ *   .sc-* — different names, both live).
+ */
+
+body {
+  /* `--font-ui` is the active body font from slink.css. Defaults to the
+   * Pixelify chain — `body.font-classic` swaps in the system-ui chain via
+   * the picker in the sidebar. Keeping it variable means the toggle hits
+   * every body-scoped text rule in one stroke. */
+  font-family: var(--font-ui);
+  font-size: 22px;
+  line-height: 1.65;
+  background: var(--c-bg);
+  color: var(--c-txt);
+  margin: 0;
+  padding: 0;
+  /* Two-column shell: fixed nav rail + scrollable content pane. The rail
+   * lives outside #content so SSE-triggered morph swaps never touch it.
+   * The .dash-main pane caps at 2400px on ultrawide so 4K monitors still
+   * read well — see .dash-main rule below. */
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  min-height: 100vh;
+}
+/* High-resolution scaling — on QHD+ monitors the default 22px feels small
+ * (user noted needing 125% zoom at 5120×2160). Bump the base size up so
+ * sprites + text grow proportionally without browser zoom. */
+@media (min-width: 2200px) {
+  body { font-size: 25px; }
+}
+@media (min-width: 2800px) {
+  body { font-size: 28px; }
+}
+@media (min-width: 3600px) {
+  body { font-size: 32px; }
+}
+@media (min-width: 4600px) {
+  body { font-size: 36px; }
+}
+/* Collapsed sidebar mode — user toggle persists in localStorage; see
+ * dashboard.js. The brand title, page port, and item labels hide, leaving
+ * a slim icon-only rail that recovers content width. The hamburger toggle
+ * also hides (logo doubles as the click target) so the logo can sit
+ * perfectly centered in the 60px column. */
+body.dash-collapsed { grid-template-columns: 60px minmax(0, 1fr); }
+body.dash-collapsed .dash-sidebar-title,
+body.dash-collapsed .dash-side-label,
+body.dash-collapsed .dash-sidebar-toggle,
+body.dash-collapsed .dash-sidebar-foot .dash-sidebar-clock { display: none; }
+body.dash-collapsed .dash-sidebar-brand {
+  padding: 14px 0 12px;
+  justify-content: center;
+  gap: 0;
+}
+body.dash-collapsed .dash-sidebar-brand .slink-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+body.dash-collapsed .dash-side-item { justify-content: center; padding: 10px 6px; }
+body.dash-collapsed .dash-sidebar-nav { padding: 8px 4px; }
+body.dash-collapsed .dash-sidebar-foot { justify-content: center; padding: 10px 6px; }
+h2 {
+  color: var(--c-info);
+  font-family: var(--font-heading);
+  margin-top: 1.1em;
+  margin-bottom: 0.5em;
+  text-shadow: 0 0 6px color-mix(in srgb, var(--c-brand) 40%, transparent);
+}
+h3 { color: var(--c-txt); margin: 0 0 0.55em 0; font-size: 1.05em; }
+
+/* ── Sidebar nav (HTMX rail) ──────────────────────────────────────────
+ * Always-visible left rail with inline SVG icons whose currentColor
+ * tracks each item's semantic accent (memorial = dead, stream = link,
+ * twitch = gold, etc.) so the theme paints them automatically. Lives
+ * outside #content so dashboard SSE morph swaps never re-render it. */
+.dash-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--c-brand) 8%, var(--c-card)),
+      var(--c-card) 35%,
+      color-mix(in srgb, var(--c-bg) 80%, var(--c-card)));
+  border-right: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+  box-shadow:
+    inset -1px 0 0 rgba(255, 255, 255, .03),
+    2px 0 10px rgba(0, 0, 0, .35);
+  z-index: 30;
+}
+.dash-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 12px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-brand) 22%, var(--c-edge));
+}
+.dash-sidebar-brand .slink-logo {
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c-brand) 55%, transparent));
+}
+.dash-sidebar-brand .slink-logo svg {
+  width: 30px; height: 30px; display: block;
+}
+.dash-sidebar-title {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.1;
+}
+.dash-sidebar-name {
+  font-family: var(--font-heading);
+  font-size: 0.92em;
+  font-weight: 700;
+  color: var(--c-gold);
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--c-brand) 55%, transparent);
+}
+.dash-sidebar-port {
+  font-family: var(--font-mono);
+  font-size: 0.6em;
+  color: var(--c-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+/* Collapse toggle — appears in the brand area, persists state to
+ * localStorage via dashboard.js. Small hamburger icon that becomes the only
+ * sidebar control when collapsed. */
+.dash-sidebar-toggle {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--c-dim);
+  width: 28px; height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 0;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.dash-sidebar-toggle:hover {
+  background: color-mix(in srgb, var(--c-brand) 18%, transparent);
+  border-color: color-mix(in srgb, var(--c-brand) 30%, var(--c-edge));
+  color: var(--c-brand);
+}
+.dash-sidebar-toggle-ico { width: 16px; height: 16px; display: block; }
+.dash-sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px;
+  overflow-y: auto;
+}
+.dash-side-item {
+  --item-accent: var(--c-link);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 5px;
+  border-left: 3px solid transparent;
+  text-decoration: none;
+  color: var(--c-txt);
+  font-family: var(--font-heading);
+  font-size: 0.62em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  transition: background .12s, border-color .12s, color .12s, transform .12s;
+}
+.dash-side-item:hover {
+  background: color-mix(in srgb, var(--item-accent) 16%, transparent);
+  border-left-color: var(--item-accent);
+  color: var(--item-accent);
+  transform: translateX(1px);
+}
+.dash-side-item[aria-current="page"] {
+  background: color-mix(in srgb, var(--item-accent) 22%, transparent);
+  border-left-color: var(--item-accent);
+  color: var(--item-accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+.dash-side-ico {
+  width: 18px; height: 18px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--item-accent) 60%, transparent));
+  color: var(--item-accent);
+}
+.dash-side-label { line-height: 1; }
+/* Sidebar nav accent palette — eight items, eight distinct token sources
+ * so no two icons share a colour AND each theme shifts the lineup
+ * differently. Previously Status+Twitch were both --c-gold and
+ * Debug+Calc were both --c-pend, which collapsed the rail into six
+ * visible hues; the swap below restores one unique colour per item.
+ *
+ * Token choices:
+ *   manager  → c-alive (green, "run is active")
+ *   status   → c-gold  (yellow, primary state)
+ *   memorial → c-dead  (red, gravestone)
+ *   stream   → c-link  (blue, video link feel)
+ *   twitch   → c-brand (theme accent — purple-ish on grape, orange on
+ *              fire, etc.; gives the most variety between themes)
+ *   obs      → c-info  (cyan, broadcaster)
+ *   calc     → c-pend  (warm, "experimental calculator")
+ *   debug    → c-txt   (light, contrasts with every theme's bg) */
+.dash-side-item.nav-manager  { --item-accent: var(--c-alive); }
+.dash-side-item.nav-status   { --item-accent: var(--c-gold); }
+.dash-side-item.nav-memorial { --item-accent: var(--c-dead); }
+.dash-side-item.nav-stream   { --item-accent: var(--c-link); }
+.dash-side-item.nav-twitch   { --item-accent: var(--c-brand); }
+.dash-side-item.nav-obs      { --item-accent: var(--c-info); }
+.dash-side-item.nav-calc     { --item-accent: var(--c-pend); }
+.dash-side-item.nav-debug    { --item-accent: var(--c-txt); }
+
+/* Theme-switcher base styling — duplicated here from _theme_switcher.html's
+ * inline <style> so the VANILLA picker (built by dashboard.js on
+ * non-Jinja pages: status / debug / twitch / OBS / calc) renders at the
+ * same 12px scale + 6px/9px summary padding as the Alpine version that
+ * ships with the Jinja partial. Without this, the vanilla picker
+ * inherited the sidebar's 28px font-size on 4K monitors and rendered
+ * comically larger than the matched theme picker on dashboard/manager.
+ *
+ * The Alpine partial's own inline <style> rules cascade on top with
+ * equal specificity on Jinja pages — same values, no conflict. */
+.theme-switcher {
+  font-family: 'Pixelify Sans', 'Segoe UI', system-ui, sans-serif;
+  font-size: 12px;
+}
+.theme-switcher details {
+  background: var(--c-card, #1a1a22);
+  border: 1px solid var(--c-edge, #2a2a35);
+  border-radius: 6px;
+  min-width: 130px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .4);
+}
+.theme-switcher summary {
+  display: flex; align-items: center; gap: 6px; padding: 6px 9px;
+  cursor: pointer; user-select: none; color: var(--c-txt, #ccc); list-style: none;
+}
+.theme-switcher summary::-webkit-details-marker { display: none; }
+.theme-switcher .theme-caret { margin-left: auto; opacity: .6; font-size: .8em; }
+.theme-switcher details[open] .theme-caret { transform: rotate(180deg); }
+.theme-switcher .theme-swatch {
+  width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0;
+  border: 1px solid var(--c-edge, #2a2a35);
+  box-shadow: 0 0 4px rgba(0, 0, 0, .5) inset;
+}
+.theme-switcher .theme-pills {
+  display: flex; flex-direction: column; gap: 2px; padding: 4px;
+  border-top: 1px solid var(--c-edge, #2a2a35);
+}
+.theme-switcher .theme-pill {
+  display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+  background: transparent; border: 1px solid transparent; border-radius: 4px;
+  color: var(--c-txt, #ccc); font: inherit; cursor: pointer; text-align: left;
+}
+.theme-switcher .theme-pill:hover {
+  background: color-mix(in srgb, var(--c-edge, #2a2a35) 35%, transparent);
+}
+.theme-switcher .theme-pill.active {
+  background: color-mix(in srgb, var(--c-brand, #f8d030) 18%, transparent);
+  border-color: var(--c-brand, #f8d030);
+}
+.theme-switcher .theme-pill .theme-label { flex: 1; }
+/* Floating top-right placement is the default; suppressed on pages that
+ * have a sidebar slot to receive the widget (see :has() rule below). */
+.theme-switcher:not(.theme-switcher--in-sidebar) {
+  position: fixed; top: 12px; right: 12px; z-index: 100;
+}
+
+/* Theme switcher slot — dashboard.js moves the floating widget here. The
+ * `.theme-switcher--in-sidebar` class overrides the fixed positioning the
+ * floating mode applies. */
+.dash-sidebar-theme {
+  padding: 8px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--c-brand) 14%, var(--c-edge));
+}
+.dash-sidebar-theme:empty { display: none; }
+/* Hide the floating widget on pages that have a sidebar slot to receive it
+ * (FOUC prevention). dashboard.js relocates the switcher into the slot on
+ * load, but during the brief moment between body parse and JS execution the
+ * widget would otherwise flash in its default fixed top-right position. */
+body:has(.dash-sidebar-theme) .theme-switcher:not(.theme-switcher--in-sidebar) {
+  visibility: hidden;
+}
+.theme-switcher--in-sidebar {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  width: 100%;
+}
+.theme-switcher--in-sidebar details {
+  background: var(--c-card);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+  border-radius: 6px;
+  width: 100%;
+  /* `_theme_switcher.html`'s inline <style> sets `min-width: 130px` for the
+   * floating top-right widget and loads after dashboard.css, so this needs
+   * !important to win the tie. Without it, the in-sidebar details overflows
+   * the collapsed 60px rail (the user saw a wide rectangle spilling into
+   * the content pane). */
+  min-width: 0 !important;
+  max-width: 100%;
+  position: relative;
+}
+.theme-switcher--in-sidebar summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  font-family: var(--font-heading);
+  /* Match the sidebar nav item label size (0.62em on a 22-32px body) so the
+   * picker reads at the same weight as the nav links it lives below. */
+  font-size: 1em;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--c-txt);
+  cursor: pointer;
+  list-style: none;
+}
+.theme-switcher--in-sidebar summary::-webkit-details-marker { display: none; }
+.theme-switcher--in-sidebar .theme-swatch {
+  width: 20px; height: 20px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--c-edge) 80%, transparent);
+  box-shadow: 0 0 4px rgba(0, 0, 0, .5) inset;
+}
+.theme-switcher--in-sidebar .theme-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.theme-switcher--in-sidebar .theme-caret { opacity: .6; font-size: .85em; }
+.theme-switcher--in-sidebar details[open] .theme-caret { transform: rotate(180deg); }
+.theme-switcher--in-sidebar .theme-pills {
+  /* Expand panel upward so it doesn't collide with the footer / hover the
+   * page content. */
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--c-card);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .55);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.theme-switcher--in-sidebar .theme-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--c-txt);
+  font: inherit;
+  font-size: 0.95em;
+  font-family: var(--font-heading);
+  cursor: pointer;
+  text-align: left;
+}
+.theme-switcher--in-sidebar .theme-pill:hover {
+  background: color-mix(in srgb, var(--c-edge) 35%, transparent);
+}
+.theme-switcher--in-sidebar .theme-pill.active {
+  background: color-mix(in srgb, var(--c-brand) 18%, transparent);
+  border-color: var(--c-brand);
+}
+.theme-switcher--in-sidebar .theme-pill .theme-label { flex: 1; }
+
+/* Collapsed sidebar: shrink the picker to a single swatch button, keep the
+ * dropdown panel accessible (escapes the 60px rail to the right). */
+body.dash-collapsed .dash-sidebar-theme { padding: 6px 4px; }
+body.dash-collapsed .theme-switcher--in-sidebar summary {
+  justify-content: center;
+  padding: 8px 6px;
+  gap: 0;
+}
+body.dash-collapsed .theme-switcher--in-sidebar .theme-name,
+body.dash-collapsed .theme-switcher--in-sidebar .theme-caret { display: none !important; }
+body.dash-collapsed .theme-switcher--in-sidebar .theme-swatch {
+  width: 22px;
+  height: 22px;
+}
+body.dash-collapsed .theme-switcher--in-sidebar .theme-pills {
+  left: calc(100% + 6px);
+  right: auto;
+  bottom: 0;
+  min-width: 180px;
+}
+
+/* ── Font picker — visually identical to the theme picker. The two pickers
+ *    stack in the sidebar (font on top, theme below) and must read at the
+ *    same scale so neither one dominates the rail. Achieved by reusing the
+ *    theme picker's exact rules; only the inner .font-sample glyph differs
+ *    from the .theme-swatch (an "Aa" preview vs. a color block).
+ *
+ *    The summary's label always renders in `--font-heading` (Pixelify) even
+ *    when the active font is classic, so the picker chrome looks stable
+ *    across choices — only the .font-sample previews the target font. */
+.dash-sidebar-font {
+  padding: 8px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--c-brand) 14%, var(--c-edge));
+}
+.dash-sidebar-font:empty { display: none; }
+/* The font picker mirrors the theme picker EXACTLY — same wrapper font-
+ * size (12px from _theme_switcher.html's inline <style>), same summary
+ * padding (6px 9px), same swatch geometry. Keeping the two pickers
+ * visually identical means they read as a single control surface in the
+ * rail rather than competing for attention. The font-switcher has no
+ * inline-template counterpart (it's built entirely from dashboard.js),
+ * so its sizing tokens live here as the source of truth. */
+.font-switcher {
+  font-size: 12px;
+  font-family: 'Pixelify Sans', 'Segoe UI', system-ui, sans-serif;
+}
+.font-switcher--in-sidebar {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  width: 100%;
+}
+.font-switcher--in-sidebar details {
+  background: var(--c-card);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+  border-radius: 6px;
+  width: 100%;
+  min-width: 0 !important;
+  max-width: 100%;
+  position: relative;
+}
+.font-switcher--in-sidebar summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--c-txt);
+  list-style: none;
+}
+.font-switcher--in-sidebar summary::-webkit-details-marker { display: none; }
+.font-switcher--in-sidebar .font-sample {
+  /* Match the theme picker's swatch dimensions exactly: 20×20 content +
+   * 1px border = 22×22 bounding box (same as .theme-switcher--in-sidebar
+   * .theme-swatch in dashboard.css). */
+  width: 20px; height: 20px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--c-edge) 80%, transparent);
+  box-shadow: 0 0 4px rgba(0, 0, 0, .5) inset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--c-bg) 60%, var(--c-card));
+  /* "Aa" preview shrunk to fit the swatch-sized box. font-family is set
+   * per-element inline (by dashboard.js refreshFontWidget) so each pill
+   * previews its target font and the summary previews the active one. */
+  font-size: 9px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.font-switcher--in-sidebar .font-caret { margin-left: auto; opacity: .6; font-size: .8em; }
+.font-switcher--in-sidebar .font-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.font-switcher--in-sidebar details[open] .font-caret { transform: rotate(180deg); }
+.font-switcher--in-sidebar .font-pills {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--c-card);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .55);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.font-switcher--in-sidebar .font-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--c-txt);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.font-switcher--in-sidebar .font-pill:hover {
+  background: color-mix(in srgb, var(--c-edge) 35%, transparent);
+}
+.font-switcher--in-sidebar .font-pill.active {
+  background: color-mix(in srgb, var(--c-brand) 18%, transparent);
+  border-color: var(--c-brand);
+}
+.font-switcher--in-sidebar .font-pill .font-label { flex: 1; }
+
+/* Collapsed sidebar: shrink to a single sample swatch — mirrors the
+ * theme picker's collapsed treatment exactly. */
+body.dash-collapsed .dash-sidebar-font { padding: 6px 4px; }
+body.dash-collapsed .font-switcher--in-sidebar summary {
+  justify-content: center;
+  padding: 8px 6px;
+  gap: 0;
+}
+body.dash-collapsed .font-switcher--in-sidebar .font-name,
+body.dash-collapsed .font-switcher--in-sidebar .font-caret { display: none !important; }
+body.dash-collapsed .font-switcher--in-sidebar .font-sample {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+}
+body.dash-collapsed .font-switcher--in-sidebar .font-pills {
+  left: calc(100% + 6px);
+  right: auto;
+  bottom: 0;
+  min-width: 180px;
+}
+
+.dash-sidebar-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px 12px;
+  border-top: 1px solid color-mix(in srgb, var(--c-brand) 22%, var(--c-edge));
+  font-family: var(--font-mono);
+  font-size: 0.5em;
+  color: var(--c-dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.dash-sidebar-pulse {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--c-alive);
+  box-shadow: 0 0 8px var(--c-alive);
+  animation: dashPulse 1.8s ease-in-out infinite;
+}
+@keyframes dashPulse {
+  0%, 100% { opacity: 0.45; transform: scale(0.85); }
+  50%      { opacity: 1;    transform: scale(1.05); }
+}
+
+.dash-main {
+  padding: 1em 1.6em 1.4em;
+  min-width: 0;
+  max-width: 2400px;
+  margin: 0 auto;
+}
+.dash-main > .phase-banner {
+  margin-bottom: 0.8em;
+}
+
+/* Global table filter — sticky strip above #content. Lives outside the
+ * morph zone so focus + caret position survive every poll swap. */
+.dash-search {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: color-mix(in srgb, var(--c-card) 92%, transparent);
+  backdrop-filter: blur(4px);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 22%, var(--c-edge));
+  border-radius: 8px;
+  padding: 6px 10px;
+  margin: 0 0 0.7em;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, .25);
+}
+.dash-search-ico {
+  width: 1.05em;
+  height: 1.05em;
+  color: color-mix(in srgb, var(--c-brand) 55%, var(--c-dim));
+  flex-shrink: 0;
+}
+#dash-search-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--c-txt);
+  font-family: var(--font-heading);
+  font-size: 0.95em;
+  padding: 6px 0;
+}
+#dash-search-input::placeholder { color: var(--c-dim); opacity: 0.75; }
+#dash-search-input::-webkit-search-cancel-button { display: none; }
+.dash-search-clear {
+  background: transparent;
+  border: 0;
+  color: var(--c-dim);
+  cursor: pointer;
+  font-size: 1.2em;
+  line-height: 1;
+  padding: 0 6px;
+  display: none;
+  font-family: inherit;
+}
+.dash-search-clear:hover { color: var(--c-txt); }
+.dash-search.has-query .dash-search-clear { display: inline-block; }
+.dash-search.has-query {
+  border-color: color-mix(in srgb, var(--c-brand) 55%, var(--c-edge));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c-brand) 35%, transparent),
+              0 2px 12px rgba(0, 0, 0, .25);
+}
+/* Rows hidden by the filter — set as utility class so the JS doesn't have
+ * to fight inline styles. */
+tr.dash-search-hide { display: none !important; }
+/* Page header — the run name + game label that used to live in the sidebar
+ * is too long to fit there (it would ellipsize "Pokémon Soul L…"). It moves
+ * into the main pane where it has room. The phase banner sits as the
+ * subhead under it for a clear "where am I + what's the run state" block. */
+.dash-page-hdr {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  margin-bottom: 0.9em;
+}
+.dash-page-title {
+  font-family: var(--font-heading);
+  font-size: 1.55em;
+  font-weight: 700;
+  color: var(--c-gold);
+  margin: 0;
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--c-brand) 55%, transparent);
+  line-height: 1.1;
+}
+.dash-page-hdr .phase-banner { margin-bottom: 0; }
+
+/* On narrow desktop widths, collapse the sidebar to an icon-only strip so
+ * the dashboard content still gets the full window. Below 700px the rail
+ * stacks above content (tablet / portrait monitor). */
+@media (max-width: 1100px) {
+  body { grid-template-columns: 56px minmax(0, 1fr); }
+  .dash-sidebar-brand { padding: 12px 8px; justify-content: center; }
+  .dash-sidebar-title,
+  .dash-sidebar-foot .dash-sidebar-clock,
+  .dash-side-label { display: none; }
+  .dash-side-item { justify-content: center; padding: 9px 6px; }
+  .dash-sidebar-nav { padding: 8px 4px; }
+  .dash-sidebar-foot { justify-content: center; padding: 10px 6px; }
+}
+@media (max-width: 700px) {
+  body { grid-template-columns: 1fr; }
+  .dash-sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+  }
+  .dash-sidebar-brand { flex: 0 0 auto; border-bottom: 0; }
+  .dash-sidebar-nav { flex: 1; flex-direction: row; flex-wrap: wrap; padding: 8px; }
+  .dash-side-item { border-left: 0; border-bottom: 3px solid transparent; }
+  .dash-side-item:hover { border-left-color: transparent; border-bottom-color: var(--item-accent); }
+  .dash-side-item[aria-current="page"] { border-left-color: transparent; border-bottom-color: var(--item-accent); }
+  .dash-sidebar-foot { width: 100%; border-top: 1px solid color-mix(in srgb, var(--c-brand) 18%, var(--c-edge)); }
+  .dash-sidebar-foot .dash-sidebar-clock { display: inline; }
+}
+
+.players-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.4em;
+  margin-bottom: 1.5em;
+}
+/* Stack the two player cards on narrow desktop widths so the inner party
+ * tables fit without overflowing. 2-col needs ~800px per card to comfortably
+ * fit the party table; sidebar (~320px) + main padding + gap eat ~200px, so
+ * 2-col cards only fit cleanly above ~1900px viewport. Keep stacked below. */
+@media (max-width: 1900px) {
+  .players-grid { grid-template-columns: 1fr; }
+}
+.player-card {
+  flex: 1 1 0;
+  min-width: 0;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--c-brand) 10%, var(--c-card)),
+      var(--c-card)) padding-box;
+  border: 1px solid color-mix(in srgb, var(--c-brand) 30%, var(--c-edge));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .05),
+    inset 3px 0 0 color-mix(in srgb, var(--c-brand) 45%, transparent),
+    0 4px 14px rgba(0, 0, 0, .35);
+  padding: 1em 1.2em 1em 1.4em;
+  border-radius: 8px;
+  overflow: hidden;
+}
+/* Party / box tables inside player cards need a bit more breathing room
+ * than the encounter table's tight rows. Sprites set the row height; the
+ * extra horizontal padding keeps text from butting against the sprite. */
+.player-card table { font-size: 0.85em; }
+.player-card td   { padding: 9px 12px; }
+.player-card th   { padding: 9px 12px; }
+/* Dashboard sprites in party / box tables scale a touch larger on QHD+
+ * (slink.css caps them at 58px which feels small at 5K). */
+@media (min-width: 2200px) {
+  .player-card .mon-sprite,
+  .player-card img.mon-sprite { width: clamp(48px, 4vmin, 72px); }
+  .foe-table .mon-sprite,
+  .foe-table img.mon-sprite { width: clamp(40px, 3.5vmin, 64px); }
+}
+@media (min-width: 3600px) {
+  .player-card .mon-sprite,
+  .player-card img.mon-sprite { width: clamp(56px, 3vmin, 96px); }
+}
+/* The mon-name + sprite cell uses inline-flex internally; force its
+ * children to stay on a single line so long species names like
+ * "Charmander" don't wrap to "Charmande/r" at narrow card widths. */
+.player-card td > div,
+.player-card td > div > div { white-space: nowrap; }
+/* Inside the card, the Partner cell may wrap ("waiting for B @ Area") —
+ * everything else stays on one line. Headers stay nowrap so "Ability"
+ * doesn't split into "Abilit/y". Pokémon names (column 1) are wrapped
+ * in nowrap to keep "Charmander" together, ellipsing if the cell is
+ * genuinely too narrow at very small windows. */
+.player-card td { white-space: nowrap; word-break: normal; overflow-wrap: normal; }
+.player-card th { white-space: nowrap !important; word-break: keep-all !important; }
+.player-card td:nth-last-child(1) { white-space: normal; }   /* Partner cell wraps */
+.player-card td:first-child { min-width: 180px; }
+.player-card td.area { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Progressive shrink at narrow viewports so party/box/foe tables fit
+ * inside the card without spilling past the right edge. (Cards stack
+ * 1-col below 1500px, so viewport width ≈ card content width here.) */
+@media (max-width: 1100px) {
+  .player-card table { font-size: 0.78em; }
+  .player-card td, .player-card th { padding: 7px 9px; }
+  .player-card td:first-child { min-width: 0; }
+}
+@media (max-width: 800px) {
+  .player-card table { font-size: 0.7em; }
+  .player-card td, .player-card th { padding: 5px 6px; }
+  .player-card .mon-sprite,
+  .player-card img.mon-sprite { width: clamp(32px, 5.5vmin, 44px); }
+}
+@media (max-width: 650px) {
+  .player-card table { font-size: 0.6em; }
+  .player-card td, .player-card th { padding: 3px 4px; }
+  .player-card .mon-sprite,
+  .player-card img.mon-sprite { width: clamp(24px, 5vmin, 36px); }
+  .player-card .held-item { display: none; }
+}
+.player-card.online  { border-color: var(--c-alive); }
+.player-card.offline { border-color: color-mix(in srgb, var(--c-brand) 22%, var(--c-edge)); opacity: 0.85; }
+.card-hdr { display: flex; justify-content: space-between; align-items: flex-start; }
+.card-hdr h3 {
+  margin: 0 0 0.25em 0;
+  color: color-mix(in srgb, var(--c-brand) 35%, var(--c-txt));
+  font-family: var(--font-heading);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.launcher-dl {
+  color: var(--c-dim);
+  font-size: 0.9em;
+  text-decoration: none;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.launcher-dl:hover {
+  color: var(--c-link);
+  background: color-mix(in srgb, var(--c-link) 18%, var(--c-card));
+}
+
+.badge { display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 0.85em; margin-left: 0.5em; }
+.badge-online  { background: color-mix(in srgb, var(--c-alive) 18%, var(--c-card)); color: var(--c-alive); }
+.badge-offline { background: color-mix(in srgb, var(--c-dim) 18%, var(--c-card));   color: var(--c-dim); }
+.badge-active  { background: color-mix(in srgb, var(--c-alive) 18%, var(--c-card)); color: var(--c-alive); }
+.badge-waiting { background: color-mix(in srgb, var(--c-pend) 18%, var(--c-card));  color: var(--c-pend); }
+.badge-lock    { background: color-mix(in srgb, var(--c-link) 18%, var(--c-card));  color: var(--c-link); font-size: 0.85em; padding: 2px 8px; border-radius: 10px; }
+.badge-bonus   { background: color-mix(in srgb, var(--c-gold) 18%, var(--c-card));  color: var(--c-gold); }
+
+.dbl-chip {
+  background: color-mix(in srgb, var(--c-gold) 30%, var(--c-card));
+  color: color-mix(in srgb, var(--c-gold) 70%, var(--c-txt));
+  font-size: .75em; padding: 1px 5px; border-radius: 3px;
+  font-weight: bold; margin-left: 0.4em;
+}
+.bonus-pair-row td { background: color-mix(in srgb, var(--c-gold) 12%, var(--c-card)); }
+.bonus-pair-row td:first-child {
+  border-left: 3px solid var(--c-gold);
+  padding-left: 5px;
+}
+
+.gym-badges { display: inline-flex; gap: 3px; margin-left: 0.7em; vertical-align: middle; }
+.gym-badge {
+  width: 16px; height: 16px; border-radius: 50%;
+  display: inline-block;
+  border: 1px solid var(--c-edge);
+  opacity: 0.25; cursor: default;
+}
+.gym-badge.earned {
+  opacity: 1;
+  border-color: rgba(255, 255, 255, .5);
+  box-shadow: 0 0 4px rgba(255, 255, 255, .25);
+}
+
+.lock-rules { margin: 0.25em 0 0.4em 0; font-size: 0.95em; color: var(--c-txt); opacity: 0.85; }
+.attempts-bar {
+  display: inline-flex; align-items: center; gap: 0.5em;
+  margin: 0.15em 0 0.4em 0; font-size: 0.9em;
+  color: var(--c-dim);
+}
+.attempts-num { color: var(--c-gold); font-weight: bold; }
+.adj-btn {
+  background: color-mix(in srgb, var(--c-edge) 35%, var(--c-card));
+  color: var(--c-gold);
+  border: 1px solid var(--c-edge);
+  border-radius: 3px;
+  padding: 1px 8px;
+  cursor: pointer;
+  font-size: 0.95em;
+  line-height: 1.6;
+  font-family: inherit;
+}
+.adj-btn:hover {
+  background: color-mix(in srgb, var(--c-edge) 60%, var(--c-card));
+  border-color: var(--c-gold);
+}
+
+.info-row { display: flex; flex-wrap: wrap; gap: 0.6em 1.2em; margin: 0.25em 0 0.2em 0; font-size: 0.9em; color: var(--c-dim); }
+.info-row span { white-space: nowrap; }
+.info-row span b { color: var(--c-txt); }
+
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  margin-bottom: 1em;
+  table-layout: auto;
+  background: color-mix(in srgb, var(--c-card) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 25%, var(--c-edge));
+  border-radius: 6px;
+  overflow: hidden;
+}
+thead {
+  /* Solid background instead of relying on backdrop-filter — the blur was
+   * causing renderer freezes when combined with multiple sticky theads, the
+   * fixed body background (Funtastic), and SSE-driven HTMX morphs. Mixing
+   * the brand tint with the page background gives the same "tinted header"
+   * read without the GPU composite cost. */
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--c-brand) 18%, var(--c-bg)),
+      color-mix(in srgb, var(--c-brand) 10%, var(--c-bg)));
+  position: sticky;
+  top: 0;
+  z-index: 4;
+}
+th {
+  background: transparent;
+  color: color-mix(in srgb, var(--c-brand) 80%, var(--c-txt));
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-brand) 55%, var(--c-edge));
+  font-size: 0.95em;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+}
+td {
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--c-sep);
+  /* Subtle vertical divider between columns so wide rows are easier to scan
+   * at a glance. Last cell drops its border so the table edge stays clean. */
+  border-right: 1px solid color-mix(in srgb, var(--c-edge) 45%, transparent);
+  font-size: 0.95em;
+  line-height: 1.5;
+  vertical-align: middle;
+}
+td:last-child { border-right: none; }
+th {
+  border-right: 1px solid color-mix(in srgb, var(--c-brand) 30%, var(--c-edge));
+}
+th:last-child { border-right: none; }
+tbody tr:nth-child(odd)  td { background: transparent; }
+tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--c-edge) 14%, transparent); }
+tbody tr:last-child td   { border-bottom: none; }
+tbody td:first-child {
+  border-left: 2px solid color-mix(in srgb, var(--c-brand) 45%, transparent);
+}
+tr:hover td {
+  background: color-mix(in srgb, var(--c-brand) 14%, transparent) !important;
+}
+/* Mon sprite cells — pin sprite to the left, name aligned with consistent
+ * column padding so multi-row tables read as a clean grid. */
+td .mon-sprite, td img.mon-sprite {
+  flex-shrink: 0;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+/* Funnotbun sprite anti-flash rule lives in slink.css now so overlays +
+ * memorial + every page that touches a sprite gets the protection. */
+
+/* Species-name parens after a nickname — "Snek (Charmander)". The species
+ * is supporting metadata; the nickname is the primary identifier the
+ * broadcaster picked. Shrink + dim so the eye reads the nickname first. */
+.mon-species-paren {
+  font-size: 0.78em;
+  color: var(--c-dim);
+  opacity: 0.85;
+  font-weight: 400;
+  margin-left: 2px;
+  letter-spacing: 0;
+}
+
+.alive       { color: var(--c-alive); }
+.dead        { color: var(--c-dead); }
+.dead_zone   { color: var(--c-dead); }
+.pending_a, .pending_b, .pending_both, .pending { color: var(--c-pend); }
+.unseen      { color: var(--c-dim); }
+.yes         { color: var(--c-alive); }
+.no          { color: var(--c-dim); }
+.empty       { color: var(--c-dim); font-style: italic; }
+.warn        { color: var(--c-pend); }
+.fainted     { color: var(--c-dead); opacity: 0.7; }
+.dim         { color: var(--c-dim); }
+.area        { color: var(--c-info); }
+.gender-male   { color: var(--c-link); }
+.gender-female { color: #f9a; }   /* Semantic gender pink — palette-independent. */
+.shiny-star    { color: var(--c-gold); }
+
+.killfeed-cause { }
+.kf-inline    { font-size: 0.84em; }
+.kf-battle    { color: color-mix(in srgb, var(--c-dead) 60%, var(--c-pend)); }
+.kf-dead_zone { color: var(--c-dead); }
+.kf-whiteout  { color: var(--c-pend); }
+.kf-unknown   { color: var(--c-dim); }
+
+.battle-panel {
+  /* Border picks up `--c-brand` for clear per-theme variance — the panel
+   * reads as "this theme is in battle" rather than the same warning-orange
+   * across all themes. A left accent strip stays in `--c-pend` to preserve
+   * the warning semantic; the right/top/bottom mix into the brand. */
+  background: color-mix(in srgb, var(--c-pend) 10%, var(--c-card));
+  border: 1px solid color-mix(in srgb, var(--c-brand) 50%, var(--c-edge));
+  border-left: 4px solid color-mix(in srgb, var(--c-pend) 70%, var(--c-brand));
+  border-radius: 4px;
+  padding: 0.8em 1.1em;
+  margin: 0.9em 0;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--c-brand) 18%, transparent);
+}
+.battle-panel h4 { color: var(--c-brand); }
+
+.foe-table td        { padding: 3px 8px; }
+.foe-table th        { padding: 3px 8px; }
+/* Foe rows inside the IN BATTLE panel get a warning-tone tint so they
+ * stand out from the friendly party table below. Active foe (the one
+ * with the ⚔ marker) gets a stronger gold highlight. */
+.foe-table tbody tr td:first-child,
+.battle-panel .foe-table td:first-child { color: var(--c-pend); }
+.foe-table .active-foe td,
+.battle-panel .active-foe td { color: var(--c-gold); font-weight: 600; }
+.foe-moves-row > td  {
+  padding: 0 6px 4px 18px;
+  border-bottom: 1px solid var(--c-sep);
+  background: color-mix(in srgb, var(--c-card) 50%, transparent) !important;
+}
+.foe-moves-row > td:first-child { border-left: 3px solid transparent !important; }
+.foe-moves-row .move-table { margin: 0; }
+.active-mon td:first-child { color: var(--c-gold); }
+
+
+.held-item {
+  color: color-mix(in srgb, var(--c-info) 70%, var(--c-txt));
+  font-size: 0.80em;
+  display: block;
+  margin-top: 0.1em;
+}
+.held-item::before { content: "ITEM: "; color: var(--c-dim); font-weight: 600; }
+.ability {
+  color: color-mix(in srgb, var(--c-txt) 80%, var(--c-pend));
+  font-size: 0.82em;
+}
+
+.status-icon {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.75em;
+  font-weight: bold;
+  white-space: nowrap;
+  vertical-align: middle;
+  margin-left: 3px;
+}
+/* Pokémon status pill colours — match in-game sprite hues. Treated as
+ * protocol constants, palette-independent. The overlay equivalent uses
+ * `.sc-*` (defined in slink.css). */
+.s-slp { background: #7a7a7a; color: #fff; }
+.s-psn { background: #c040c0; color: #fff; }
+.s-brn { background: #d06020; color: #fff; }
+.s-frz { background: #5ab8e4; color: #fff; }
+.s-par { background: #c8a800; color: #000; }
+.s-tox { background: #6a00aa; color: #fff; }
+
+.sortable {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  padding-right: 14px !important;
+}
+.sortable:hover { color: var(--c-txt); }
+.sortable::after { content: "⇅"; position: absolute; right: 2px; font-size: 0.75em; opacity: 0.4; }
+.sortable.sort-asc::after  { content: "▲"; opacity: 0.9; }
+.sortable.sort-desc::after { content: "▼"; opacity: 0.9; }
+
+.enc-filters { margin: 0.4em 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.filter-label { color: var(--c-dim); font-size: 0.85em; margin-right: 2px; }
+.filter-btn {
+  background: color-mix(in srgb, var(--c-edge) 30%, var(--c-card));
+  color: var(--c-txt); opacity: 0.78;
+  border: 1px solid var(--c-edge);
+  border-radius: 3px;
+  padding: 3px 10px;
+  font-size: 0.85em;
+  font-family: var(--font-mono);
+  cursor: pointer;
+}
+.filter-btn:hover {
+  color: var(--c-txt); opacity: 1;
+  border-color: color-mix(in srgb, var(--c-edge) 80%, var(--c-txt));
+}
+.filter-btn.active {
+  background: color-mix(in srgb, var(--c-link) 22%, var(--c-card));
+  color: var(--c-link); opacity: 1;
+  border-color: var(--c-link);
+}
+
+.event-type-capture      { color: var(--c-alive); }
+.event-type-faint        { color: var(--c-dead); }
+.event-type-whiteout     { color: var(--c-pend); }
+.event-type-no_catch     { color: var(--c-pend); }
+.event-type-area_enter   { color: var(--c-info); }
+.event-type-hello        { color: var(--c-dim); }
+.event-type-linked       { color: var(--c-alive); font-weight: bold; }
+.event-type-dead_zone    { color: var(--c-dead);  font-weight: bold; }
+.event-type-force_faint  { color: color-mix(in srgb, var(--c-dead) 60%, var(--c-pend)); }
+.event-type-key_change   { color: var(--c-link); }
+.event-type-violation    { color: var(--c-pend); font-weight: bold; }
+.event-type-reroll       { color: var(--c-link); }
+.event-type-shiny        { color: var(--c-gold); font-weight: bold; }
+.event-type-memorialize  { color: var(--c-dim); opacity: .55; }
+.event-type-party_to_box { color: var(--c-link); }
+.event-type-box_to_party { color: var(--c-link); }
+
+/* ── Move table (collapsible) ───────────────────────────── */
+/* Two row variants share the same SUMMARY toggle treatment: `.move-row` is
+ * the party / box mon move list, `.foe-moves-row` is the in-battle enemy
+ * move list. Originally only `.move-row summary` had the cursor + arrow +
+ * dim colour — the foe row's summary rendered as plain text and didn't
+ * read as clickable. Each row keeps its own outer layout (the foe row's
+ * `> td` rule above adds the indent + separator that distinguishes it
+ * from the party row); only the summary styling is shared. */
+.move-row td { padding: 0 !important; }
+.move-row details { margin: 0; padding-left: 8px; max-width: 80%; }
+.foe-moves-row details { margin: 0; max-width: 80%; }
+.move-row summary,
+.foe-moves-row summary {
+  cursor: pointer; padding: 2px 8px; font-size: 0.9em;
+  color: var(--c-dim); user-select: none; list-style: none;
+}
+.move-row summary::-webkit-details-marker,
+.foe-moves-row summary::-webkit-details-marker { display: none; }
+.move-row summary::before,
+.foe-moves-row summary::before { content: "▶ "; font-size: 0.7em; }
+.move-row[open] summary::before,
+.move-row details[open] summary::before,
+.foe-moves-row[open] summary::before,
+.foe-moves-row details[open] summary::before { content: "▼ "; font-size: 0.7em; }
+.move-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 2px 0;
+  font-size: 0.92em;
+  background: color-mix(in srgb, var(--c-card) 50%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 22%, var(--c-edge));
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: none;
+}
+.move-table thead {
+  background: color-mix(in srgb, var(--c-brand) 15%, var(--c-card));
+}
+.move-table th {
+  background: transparent;
+  padding: 2px 7px;
+  font-size: 0.88em;
+  color: color-mix(in srgb, var(--c-brand) 70%, var(--c-txt));
+  text-align: left;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-brand) 45%, var(--c-edge));
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-weight: 700;
+  text-shadow: none;
+}
+.move-table td {
+  padding: 2px 7px;
+  border-bottom: 1px solid var(--c-sep);
+  font-size: inherit;
+}
+.move-table tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--c-edge) 15%, transparent); }
+.move-table tbody tr:nth-child(odd)  td { background: transparent; }
+.move-table tbody td:first-child { border-left: none; }
+.move-table tbody tr:last-child td { border-bottom: none; }
+.move-table .move-name { font-weight: 600; white-space: nowrap; }
+.move-table .type-badge {
+  display: inline-block; padding: 1px 5px; border-radius: 3px;
+  font-size: 0.82em; font-weight: bold; color: #fff;
+  text-transform: uppercase;
+  text-shadow: 1px 1px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+}
+.split-icon     { height: 18px; vertical-align: middle; }
+.split-physical { filter: brightness(200%); }
+.split-special  { filter: brightness(200%); }
+.split-status   { filter: brightness(300%); }
+.move-table .pp-cell { white-space: nowrap; }
+.move-table .pp-low  { color: var(--c-pend); }
+.move-table .pp-zero { color: var(--c-dead); }
+.move-table .mv-pwr,
+.move-table .mv-acc  { text-align: center; }
+
+/* ── Encounter widget ────────────────────────────────────── */
+.enc-widget summary,
+.area-enc-details summary {
+  cursor: pointer; list-style: none; user-select: none;
+  color: var(--c-dim);
+  font-size: 0.78em; padding: 1px 0;
+}
+.enc-widget summary::-webkit-details-marker,
+.area-enc-details summary::-webkit-details-marker { display: none; }
+.enc-widget summary::before,
+.area-enc-details summary::before { content: "▶ "; font-size: 0.7em; }
+.enc-widget[open] summary::before,
+.area-enc-details[open] summary::before { content: "▼ "; font-size: 0.7em; }
+.enc-widget:hover summary { color: color-mix(in srgb, var(--c-link) 65%, var(--c-dim)); }
+.enc-widget[open] summary { color: color-mix(in srgb, var(--c-link) 55%, var(--c-dim)); }
+.enc-widget { margin: 0 0 0.9em; }
+.enc-methods {
+  display: flex; flex-wrap: wrap; gap: 0.3em 1.2em;
+  padding: 0.3em 0.5em 0.1em;
+}
+.enc-method { min-width: 155px; }
+.enc-method-label {
+  color: color-mix(in srgb, var(--c-txt) 70%, var(--c-dim));
+  font-size: 0.78em; font-weight: bold;
+  display: block; margin-bottom: 1px;
+}
+.enc-list { display: flex; flex-direction: column; gap: 0; }
+.enc-entry {
+  display: flex; align-items: center; gap: 3px;
+  font-size: 0.78em; line-height: 1.4;
+}
+.enc-sprite {
+  width: 20px; height: 20px;
+  image-rendering: pixelated;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.enc-name {
+  color: var(--c-txt);
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.enc-rate { font-weight: bold; white-space: nowrap; min-width: 2.8em; text-align: right; }
+.enc-lv   { color: var(--c-dim); font-size: 0.88em; white-space: nowrap; }
+.area-enc-details summary { color: var(--c-info); }
+.card-hdr-right { display: flex; align-items: center; gap: 4px; }

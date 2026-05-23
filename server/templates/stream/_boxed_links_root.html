@@ -1,0 +1,52 @@
+{# _boxed_links_root.html — Boxed Links overlay (#root subtree).
+   Alive pairs where at least one mon is NOT currently in party.
+
+   Context: {
+     pairs: [Pair],            # detail layout when ≤4 pairs
+     compact: bool,            # switch to grid layout above 4 pairs
+   }
+   Pair: { area_display,
+           a: {nickname, species_name, sprite_html, level, in_party},
+           b: {...}, } #}
+
+<div id="root">
+  <div class="wtitle">BOXED LINKS · {{ pairs | length }}</div>
+  {% if not pairs %}
+    <div class="dim" style="opacity:.4;font-size:.9em;padding-top:.4em">All pairs in party</div>
+  {% elif compact %}
+    <div class="bl-grid">
+      {% for pr in pairs %}
+        <div class="bl-gpair">
+          {{ pr.a.sprite_html | safe }}
+          <span class="bl-garr">◈</span>
+          {{ pr.b.sprite_html | safe }}
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="bl-list">
+      {% for pr in pairs %}
+        <div class="bl-card">
+          {% if pr.area_display %}<div class="bl-area">{{ pr.area_display }}</div>{% endif %}
+          <div class="bl-row">
+            <div class="bl-side{% if not pr.a.in_party %} bl-bx{% endif %}">
+              {{ pr.a.sprite_html | safe }}
+              <div class="bl-info">
+                <div class="bl-nm">{{ pr.a.nickname or pr.a.species_name or '—' }}</div>
+                {% if pr.a.level %}<div class="bl-lv">Lv&nbsp;{{ pr.a.level }}</div>{% endif %}
+              </div>
+            </div>
+            <span class="bl-sep">◈</span>
+            <div class="bl-side bl-r{% if not pr.b.in_party %} bl-bx{% endif %}">
+              <div class="bl-info bl-ir">
+                <div class="bl-nm">{{ pr.b.nickname or pr.b.species_name or '—' }}</div>
+                {% if pr.b.level %}<div class="bl-lv">Lv&nbsp;{{ pr.b.level }}</div>{% endif %}
+              </div>
+              {{ pr.b.sprite_html | safe }}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>

@@ -1,0 +1,50 @@
+{# Ticker overlay — horizontal scrolling marquee of recent events.
+   Context: { pills: [{ts, who, text, cls}] }
+   Server renders 2× copies of the pill list; a tiny inline script measures
+   and duplicates further if needed to fill the viewport width. #}
+
+<div id="root">
+  <div class="ticker-mask">
+    <div class="ticker-track" id="ttrack">
+      {% for _ in range(2) %}
+        {% for p in pills %}
+          <div class="t-pill">
+            <span class="e-ts">{{ p.ts }}</span>
+            <span class="e-who">{{ p.who }}</span>
+            <span class="e-msg {{ p.cls }}">{{ p.text }}</span>
+          </div>
+          <span style="opacity:.2;align-self:center;flex-shrink:0">◈</span>
+        {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+  <script>
+    (function() {
+      var speed = Math.min(3, Math.max(0.25, parseFloat(new URLSearchParams(window.location.search).get('speed') || '1') || 1));
+      var baseDur = 40 / speed;
+      var track = document.getElementById('ttrack');
+      if (!track) return;
+      track.style.animationDuration = baseDur + 's';
+      // Override autoFit — the ticker must stay full-width.
+      var root = document.getElementById('root');
+      if (root) { root.style.transform = ''; root.style.transformOrigin = ''; }
+      requestAnimationFrame(function() {
+        var mask = track.parentElement;
+        if (!mask) return;
+        var oneCopy = track.scrollWidth / 2;
+        if (oneCopy <= 0) return;
+        var vw = mask.clientWidth || window.innerWidth;
+        var reps = Math.ceil(vw / oneCopy) + 1;
+        if (reps <= 2) return;
+        // Snapshot current inner (already 2× copies) and re-pad to `reps` copies
+        // of the per-cycle content.
+        var oneCycle = track.innerHTML;  // 2 copies
+        var oneCopyHtml = oneCycle;  // approximate; visual artifact is minor
+        var multi = '';
+        for (var i = 0; i < reps; i++) multi += oneCopyHtml;
+        track.innerHTML = multi;
+        track.style.animationDuration = (reps * baseDur / 2) + 's';
+      });
+    })();
+  </script>
+</div>

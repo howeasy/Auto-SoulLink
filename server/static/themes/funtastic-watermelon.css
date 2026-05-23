@@ -1,0 +1,38 @@
+/* funtastic-watermelon.css — Watermelon Red (N64, 1999 — pink-red).
+ * Brand: #ff3366. Deep rose field with lime accents (fruit complement) and
+ * a deliberately shifted --c-dead so the "DEAD" pill stays distinguishable
+ * against the chrome.
+ */
+
+@import url('/static/themes/_funtastic-base.css');
+
+:root {
+  --c-bg:    #180510;
+  --c-card:  #280a18;
+  --c-edge:  #7a1a35;
+  --c-sep:   color-mix(in srgb, #7a1a35 50%, transparent);
+  --c-txt:   #fad0e0;
+  --c-dim:   #b88aa0;
+
+  --c-alive: #90e870;
+  --c-dead:  #cc2050;
+  --c-pend:  #ffc850;
+  --c-gold:  #fff080;
+
+  --c-link:  #ff8aa6;
+  --c-info:  #ffc0d0;
+
+  --c-brand: #ff3366;
+  
+
+  --c-calc-bg:           color-mix(in srgb, #280a18 80%, #180510);
+  --c-calc-edge:         #7a1a35;
+  --c-calc-accent:       #ff95d8;
+  --c-calc-th-bg:        color-mix(in srgb, #280a18 60%, #180510);
+  --c-calc-th-edge:      #7a1a35;
+  --c-calc-row-edge:     color-mix(in srgb, #7a1a35 40%, transparent);
+  --c-calc-btn-bg:       #1a0510;
+  --c-calc-btn-bg-hover: #2e0a20;
+  --c-calc-btn-txt:      #ff95d8;
+  --c-calc-btn-edge:     #6a1a30;
+}

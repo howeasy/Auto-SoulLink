@@ -1,0 +1,14 @@
+{% extends "stream/_base.html" %}
+{% from "_macros.html" import mon_card %}
+
+{# party.html — single-player party overlay (PARTY · A or PARTY · B).
+   Server renders #root server-side; HTMX polls the fragment endpoint every
+   2 s and idiomorphs the response into place. The fragment template
+   (stream/_party_root.html) emits exactly the same #root markup so the
+   morph is a no-op when nothing changed. #}
+
+{% block title %}Party {{ player_id | upper }} — Soul Link{% endblock %}
+
+{% block root %}
+  {% include "stream/_party_root.html" %}
+{% endblock %}

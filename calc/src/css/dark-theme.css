@@ -1,15 +1,22 @@
-/* Dark mode styles — SLink-RR themed */
+/* Dark mode styles — SLink-RR themed
+ *
+ * The calc's local CSS variables are aliased to slink.css design tokens so
+ * the body picks up `?theme=` just like the rest of the SLink surfaces.
+ * Each `var(--c-…, literal)` falls back to its previous literal when the
+ * calc is loaded outside the SLink server (standalone smogon bundle), so
+ * the vendored calc keeps working as a portable artifact.
+ */
 
 :root {
-    --text: #e4e4e4;
-    --background: #111;
-    --button-hover: #1a1a1a;
-    --button-selected: #1a2a3a;
-    --fieldset-color: #1a1a1a;
-    --column-1: #1a1a1a;
-    --border: #333;
-    --accent: #ff0;
-    --accent2: #0af;
+    --text:            var(--c-txt,   #e4e4e4);
+    --background:      var(--c-bg,    #111);
+    --button-hover:    color-mix(in srgb, var(--c-edge, #1a1a1a) 50%, var(--c-card, #111));
+    --button-selected: color-mix(in srgb, var(--c-link, #1a2a3a) 28%, var(--c-card, #1a1a1a));
+    --fieldset-color:  var(--c-card,  #1a1a1a);
+    --column-1:        var(--c-card,  #1a1a1a);
+    --border:          var(--c-edge,  #333);
+    --accent:          var(--c-brand, #ff0);
+    --accent2:         var(--c-info,  #0af);
 }
 
 html, body {
@@ -26,54 +33,9 @@ html, body {
     max-width: 1500px;
 }
 
-/* SLink branded header bar */
-.slink-header {
-    background: #0a0a0a;
-    border-bottom: 2px solid #ff0;
-    padding: 0;
-    margin-bottom: 12px;
-}
-.slink-header-inner {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 8px 14px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.slink-logo {
-    font-size: 18px;
-    line-height: 1;
-}
-.slink-title {
-    font-family: monospace;
-    font-size: 15px;
-    font-weight: bold;
-    color: #ff0;
-    flex: 1;
-}
-.slink-mode-badge {
-    font-size: 11px;
-    background: #1a2a3a;
-    color: #6af;
-    border: 1px solid #6af;
-    border-radius: 3px;
-    padding: 2px 8px;
-}
-.slink-status-link {
-    font-family: monospace;
-    font-size: 12px;
-    color: #888;
-    text-decoration: none;
-    padding: 3px 8px;
-    border: 1px solid #333;
-    border-radius: 3px;
-}
-.slink-status-link:hover {
-    color: #0af;
-    border-color: #0af;
-    background: #0a1a2a;
-}
+/* SLink branded header bar — styled in `server/static/slink.css` so the strip
+ * stays themed regardless of the calc's internal dark-mode toggle state.
+ * Do NOT re-add `.slink-header*` rules here. */
 
 .btn {
     background-color: var(--background);
@@ -222,9 +184,88 @@ label:not(.btn) {
 
 input.select2-input {
     color: var(--text);
-    /* 
+    /*
     * I have to use this URL because this CSS file is in the dist/css folder,
     * whereas the Select2 CSS file is right next to the select2.png file
     */
     background: url('../js/vendor/select2/select2.png') no-repeat 100% -22px, var(--background);
+}
+
+/* ── SLink theme overrides — calc body chrome ─────────────────────────────
+ * Bootstrap's defaults bake in slate-grey buttons / borders / panels. The
+ * rules below override the most prominent affordances so the calc body
+ * re-tints to the active SLink theme. Layout is preserved exactly; only
+ * fills, strokes, and accent colours change. */
+
+/* Generic buttons + Bootstrap btn-default */
+.btn, .btn-default {
+    border: 1px solid var(--border);
+}
+
+/* Active selection — used by mode radios (Normal/Hardcore), notation
+ * radios (48th/100%), gen radio, status radios. */
+.visually-hidden:checked + .btn {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 24%, var(--background));
+}
+
+/* Fieldsets + panel chrome */
+fieldset, .panel {
+    border: 1px solid var(--border) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03);
+}
+
+/* Tables — row hover and headers */
+table > tbody > tr:hover > td {
+    background: color-mix(in srgb, var(--border) 35%, transparent) !important;
+}
+table > thead > tr > th {
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+}
+
+/* Dropdowns and Select2 */
+.dropdown-menu {
+    background: var(--fieldset-color);
+    border-color: var(--border);
+}
+.dropdown-menu > li > a       { color: var(--text); }
+.dropdown-menu > li > a:hover {
+    background: color-mix(in srgb, var(--accent2) 20%, var(--background));
+    color: var(--text);
+}
+
+.select2-container .select2-choice {
+    border: 1px solid var(--border);
+}
+.select2-results .select2-highlighted {
+    background: color-mix(in srgb, var(--accent2) 22%, var(--background)) !important;
+    color: var(--text);
+}
+
+/* Damage result rows — OHKO / 2HKO read as danger / warning, matching
+ * the calc-preview widget on the dashboard. */
+.ohko, .ko-result.ohko, .result-row.ohko {
+    color: var(--c-dead, #f03838);
+}
+.twohko, .ko-result.twohko, .result-row.twohko {
+    color: var(--c-pend, #f8a020);
+}
+
+/* Form controls — inputs / selects / textareas — pick up theme chrome. */
+input[type="text"],
+input[type="number"],
+input[type="search"],
+select,
+textarea {
+    background-color: color-mix(in srgb, var(--background) 75%, var(--fieldset-color));
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+/* Title text — picks up brand glow. */
+.title-text {
+    color: var(--accent);
+    text-shadow: 0 0 6px color-mix(in srgb, var(--accent) 45%, transparent);
 }

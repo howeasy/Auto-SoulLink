@@ -1,0 +1,46 @@
+{# Memorial scroll overlay — chronological dead pairs with auto-scrolling
+   marquee when overflowing.
+   Context: { entries: [{a: {nickname, species_name, sprite_html}, b: {...},
+                         area_display}] } #}
+
+<div id="root">
+  <div class="wtitle">IN MEMORIAM · {{ entries | length }}</div>
+  {% if not entries %}
+    <div style="opacity:.4;padding-top:.5em;font-size:.9em">No losses yet</div>
+  {% else %}
+    <div class="mem-scroll-mask" id="mem-mask">
+      <div class="lk-list" id="mem-list">
+        {% for _ in range(2) %}{# Doubled for seamless marquee loop #}
+          {% for e in entries %}
+            <div class="lk-row ld">
+              {{ e.a.sprite_html | safe }}
+              <div class="lk-half"><span class="lk-nm">{{ e.a.nickname or e.a.species_name or '—' }}</span></div>
+              <svg class="lk-div inline-ico" aria-hidden="true"><use href="#i-cross"/></svg>
+              <div class="lk-half r"><span class="lk-nm">{{ e.b.nickname or e.b.species_name or '—' }}</span></div>
+              {{ e.b.sprite_html | safe }}
+              {% if e.area_display %}<span style="font-size:.65em;opacity:.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:6em">{{ e.area_display }}</span>{% endif %}
+            </div>
+          {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
+    <script>
+      (function() {
+        var speed = Math.min(3, Math.max(0.25, parseFloat(new URLSearchParams(window.location.search).get('speed') || '1') || 1));
+        var mask = document.getElementById('mem-mask');
+        var list = document.getElementById('mem-list');
+        if (!mask || !list) return;
+        // Only start the marquee when the SINGLE copy would overflow.
+        // We render two copies in the DOM unconditionally so the wrap is
+        // seamless; if the single copy fits, hold still.
+        list.style.animation = '';
+        requestAnimationFrame(function() {
+          if (list.scrollHeight > mask.clientHeight * 2) {
+            var dur = Math.max(6, {{ entries | length }} * 3) / speed;
+            list.style.animation = 'memorial-scroll ' + dur + 's linear infinite';
+          }
+        });
+      })();
+    </script>
+  {% endif %}
+</div>

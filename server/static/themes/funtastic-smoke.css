@@ -1,0 +1,41 @@
+/* funtastic-smoke.css — Smoke / Clear Black (N64, 1999 — rarest variant).
+ * Brand: #333333. Industrial monochrome: charcoal field, silver accents in
+ * place of gold (the translucent shell had no warm cast). Sparkle layer
+ * dimmed so the look stays flat and serious.
+ */
+
+@import url('/static/themes/_funtastic-base.css');
+
+:root {
+  --c-bg:    #0a0a0a;
+  --c-card:  #1a1a1a;
+  --c-edge:  #404040;
+  --c-sep:   color-mix(in srgb, #404040 50%, transparent);
+  --c-txt:   #e8e8e8;
+  --c-dim:   #a0a0a0;
+
+  --c-alive: #80e890;
+  --c-dead:  #ff6060;
+  --c-pend:  #ffc040;
+  --c-gold:  #c0c0c0;
+
+  --c-link:  #80b0d0;
+  --c-info:  #b0c8d8;
+
+  --c-brand: #333333;
+  
+
+  --c-calc-bg:           #0e0e0e;
+  --c-calc-edge:         #404040;
+  --c-calc-accent:       #c0c0c0;
+  --c-calc-th-bg:        #1a1a1a;
+  --c-calc-th-edge:      #404040;
+  --c-calc-row-edge:     color-mix(in srgb, #404040 40%, transparent);
+  --c-calc-btn-bg:       #141414;
+  --c-calc-btn-bg-hover: #2a2a2a;
+  --c-calc-btn-txt:      #c0c0c0;
+  --c-calc-btn-edge:     #404040;
+}
+
+/* Flat-mono override — drop the sparkle layer so the look stays serious. */
+body::before { opacity: .25; }

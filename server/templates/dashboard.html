@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block head_extra %}
+  {# Dashboard chrome lives in /static/dashboard.css; behaviour in
+     /static/dashboard.js. The HTMX bundle handles SSE-triggered morph
+     (sse-connect + sse:ping → idiomorph swap), preserving <details open>
+     state and <img> identity by data-species across refreshes.
+     The page_title is sent through as a cachebuster so visual iteration
+     during development never sticks on a stale CSS revision. #}
+  <link rel="stylesheet" href="/static/dashboard.css?v={{ phase_slug }}-{{ alive_links }}-{{ dead_links }}">
+  {# Load order matters: dashboard.js installs an Idiomorph veto callback
+     (Idiomorph.defaults.callbacks.beforeAttributeUpdated) that keeps
+     <details data-details-key> open/closed state across morph swaps. Defer
+     scripts run in document order BEFORE DOMContentLoaded, so if dashboard.js
+     ran first window.Idiomorph would be undefined and the install would
+     silently bail. Load idiomorph-ext.min.js (and htmx) first so the global
+     exists by the time dashboard.js's bootstrap fires. #}
+  <script src="/static/vendor/htmx.min.js" defer></script>
+  <script src="/static/vendor/htmx-ext-sse.min.js" defer></script>
+  <script src="/static/vendor/idiomorph-ext.min.js" defer></script>
+  <script src="/static/dashboard.js" defer></script>
+{% endblock %}
+
+{% block content %}
+  {# The phase banner is injected by `_handle_dashboard_template` directly
+     into the sliced `<main class="dash-main">` so it sits inside the right
+     column of the sidebar grid. Adding it here would land it in the rail
+     column (or above the grid), breaking the layout. #}
+  {# The `_build_status_html` output already wraps its body in
+     `<div id="content" hx-ext="morph,sse" ...>` — HTMX takes over refresh
+     when its runtime is loaded by `head_extra` above. Idiomorph preserves
+     sprite identity by data-species and keeps `<details open>` across
+     swaps. #}
+  {{ content_html | safe }}
+{% endblock %}
+
+{% block scripts %}
+  {# The dashboard's own client-side scripts (sort, filter, attempts +/-,
+     calc preview) ride along inside the {{ content_html }} block. #}
+{% endblock %}

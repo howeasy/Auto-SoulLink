@@ -113,7 +113,7 @@ Game module for FireRed, LeafGreen, and Emerald.
 - **Variants**: `vanilla`, `ap` (Archipelago), `radical_red` (CFRU-based), `emerald` (stub)
 - **Platform**: GBA — uses `memory_gba.lua` for party/box reads
 - **Memory domain**: System Bus (EWRAM/IWRAM addresses)
-- **Area lookup**: `mapGroup * 256 + mapNum` → area_id via `data/games/gen3_frlge/gen3_frlge_areas.lua` (175 entries)
+- **Area lookup**: `mapGroup * 256 + mapNum` → area_id via `data/games/gen3_frlge/gen3_frlge_areas.lua` (184 entries)
 - **Gift areas**: `oaks_lab`, `intro`, `gift`, `cinnabar_lab`, `celadon_condominiums`, `silph_co_7f`, `saffron_dojo`
 - **Exports**: `profiles` (vanilla/ap/radical_red address tables), `detect()`, `detect_variant()`, `rom_type_for_variant()`, `is_gift_area()`
 

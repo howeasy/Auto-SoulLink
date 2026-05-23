@@ -1,0 +1,19 @@
+{# Event feed overlay — recent events with type-color tinted rows.
+   Context: { events: [{ts, who, type, text, cls}] } #}
+
+<div id="root">
+  <div class="wtitle">EVENTS</div>
+  <div class="e-list">
+    {% if not events %}
+      <div style="opacity:.4;font-size:.9em">No events yet</div>
+    {% else %}
+      {% for ev in events %}
+        <div class="e-row">
+          <span class="e-ts">{{ ev.ts }}</span>
+          <span class="e-who">{{ ev.who }}</span>
+          <span class="e-msg {{ ev.cls }}">{{ ev.text }}</span>
+        </div>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>

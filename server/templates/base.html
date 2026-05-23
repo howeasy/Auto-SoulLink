@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ page_title }}{% endblock %}</title>
+  <link rel="stylesheet" href="/static/slink.css">
+  <link rel="stylesheet" href="/static/themes/{{ theme }}.css" id="slink-theme">
+  {# Pages that include the dashboard sidebar pull in their sidebar CSS + .js
+     so the rail / collapse toggle / theme picker all wire up. Defaults to
+     `dashboard.css` for the templated pages (status, manager, memorial,
+     stream). The calc page passes `sidebar_css: "sidebar"` to get the
+     lighter sidebar.css instead — dashboard.css's Pixelify body font + the
+     high-res font-size scaling clobber calc's em-based Bootstrap layout. #}
+  {% if sidebar_html %}
+    <link rel="stylesheet" href="/static/{{ sidebar_css|default('dashboard') }}.css">
+    <script src="/static/dashboard.js" defer></script>
+  {% endif %}
+  <script src="/static/vendor/alpine-persist.min.js" defer></script>
+  <script src="/static/vendor/alpine.min.js" defer></script>
+  {% block head_extra %}{% endblock %}
+</head>
+<body class="theme-{{ theme }}{% if body_class %} {{ body_class }}{% endif %}">
+  {# FOUC fix — apply persisted sidebar-collapsed class BEFORE any body
+     content paints. Runs synchronously, blocks the parser briefly so the
+     sidebar renders at its final width on first paint. Without this, the
+     sidebar would flash full-width while dashboard.js (defer) waits for
+     parse to complete. #}
+  <script>try{if(localStorage.getItem('slink-sidebar-collapsed')==='1')document.body.classList.add('dash-collapsed');var f=localStorage.getItem('slink-font');document.body.classList.add('font-'+(f==='classic'?'classic':'pixelify'));}catch(_){}</script>
+  {# Shared inline-SVG sprite — defines every <symbol id="i-..."/> the rest
+     of the page references via <use href="#i-..."/>. Loaded once per page
+     so dashboard / manager / memorial / overlay templates all have the
+     same icon set without duplicate inline blocks. Hidden via width/height
+     0 + absolute positioning. #}
+  {% include "_svg_icons.html" %}
+  {# Theme switcher placement:
+       * `sidebar_html` set → switcher gets relocated into the sidebar slot
+         by dashboard.js, so the floating top-right widget is suppressed.
+       * `is_stream` → overlay, no chrome at all.
+       * `hide_chrome` → explicit opt-out.
+       * Otherwise → floating top-right.
+     Overlays (`body.stream`) read-only OBS browser sources MUST NOT honour
+     localStorage themes, or two browser sources of the same overlay would
+     collapse to whichever theme was last set elsewhere. #}
+  {% if not hide_chrome and not is_stream %}
+    {% include "_theme_switcher.html" %}
+  {% endif %}
+  {% block content %}{% endblock %}
+  {% block scripts %}{% endblock %}
+</body>
+</html>

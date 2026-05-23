@@ -1,0 +1,411 @@
+{% extends "base.html" %}
+
+{% block title %}Soul Link Run Manager{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="/static/manager.css">
+  {# dashboard.js carries the font-picker IIFE that finds .mgr-rail-font
+     and builds the widget. Loaded WITHOUT dashboard.css (which would
+     clobber manager.css's body grid) — the font-switcher chrome rules
+     live in manager.css too. Other IIFEs in dashboard.js (sprite
+     chroma-key, sidebar collapse, dashboard-search) are no-ops on this
+     page — they look for elements that don't exist on the manager and
+     bail silently. #}
+  <script src="/static/dashboard.js" defer></script>
+{% endblock %}
+
+{% block content %}
+{# Server-rendered run list, injected as JSON for the master-detail UI. #}
+<script>
+  window.SLINK_RUNS = {{ runs_json | safe }};
+  window.SLINK_MANAGER_PORT = {{ manager_port }};
+</script>
+
+{# SVG sprite is loaded once via base.html → _svg_icons.html. The manager
+   formerly defined its own duplicate sprite block here; it's been removed
+   to keep the icon set in a single source of truth. #}
+
+<div class="mgr-launcher"
+     x-data="runManager()"
+     x-init="init(window.SLINK_RUNS)">
+
+  {# ── Left rail: runs grouped by status ──────────────────────────────── #}
+  <nav class="mgr-rail">
+    <h1 class="mgr-rail-head">
+      <svg class="mgr-rail-head-ico" aria-hidden="true"><use href="#i-link"/></svg>
+      Soul Link Runs
+    </h1>
+
+    <div class="mgr-new">
+      <input type="text" placeholder="New run name…"
+             x-model="newRunName"
+             @keyup.enter="createRun()">
+      <div class="mgr-new-opts">
+        <label><input type="checkbox" x-model="newOpts.species_lock">
+          <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-dna"/></svg>
+          Species
+        </label>
+        <label><input type="checkbox" x-model="newOpts.gender_lock">
+          <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-gender"/></svg>
+          Gender
+        </label>
+        <label><input type="checkbox" x-model="newOpts.type_lock">
+          <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-type"/></svg>
+          Type
+        </label>
+      </div>
+      <button class="mgr-create-btn" @click="createRun()">
+        <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-plus"/></svg>
+        Create
+      </button>
+    </div>
+
+    <template x-for="group in groupedRuns" :key="group.label">
+      <div class="mgr-rail-family">
+        <div class="mgr-rail-family-label">
+          <span x-text="group.label"></span>
+          <span class="mgr-rail-family-count" x-text="group.runs.length"></span>
+        </div>
+        <template x-for="run in group.runs" :key="run.run_id">
+          <button class="mgr-rail-item"
+                  :class="active === run.run_id ? 'active' : ''"
+                  @click="select(run.run_id)">
+            <span class="mgr-rail-item-dot" :class="'status-' + run.status"></span>
+            <span class="mgr-rail-item-name" x-text="run.name || run.run_id"></span>
+            <template x-if="pinnedRunId === run.run_id">
+              <svg class="mgr-rail-pin" aria-hidden="true"><use href="#i-pin"/></svg>
+            </template>
+          </button>
+        </template>
+      </div>
+    </template>
+
+    {# Font + theme switcher slots — dashboard.js relocates the vanilla
+       widgets (font picker + theme picker) here so they live inside the
+       rail. Font picker on top (broader voice choice), theme picker below
+       (palette), matching the sidebar layout on dashboard / memorial /
+       overlay-gallery pages. #}
+    <div class="mgr-rail-font"></div>
+    <div class="mgr-rail-theme"></div>
+  </nav>
+
+  {# ── Right pane: selected run details + actions ─────────────────────── #}
+  <main class="mgr-pane" x-show="current">
+    {# Stream pin banner — full-width strip across the top of the pane #}
+    <div class="mgr-stream-banner">
+      <svg class="mgr-stream-ico" aria-hidden="true"><use href="#i-broadcast"/></svg>
+      <strong>Stream Overlays</strong>
+      <span>port</span>
+      <span class="stream-port" x-text="managerPort"></span>
+      <a :href="'/stream'" target="_blank">
+        Open Gallery
+        <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-extlink"/></svg>
+      </a>
+      <span class="mgr-pin-status" x-show="pinnedRunName">
+        Active: <b x-text="pinnedRunName"></b>
+        <template x-if="pinnedRunId">
+          <svg class="mgr-rail-pin" aria-hidden="true"><use href="#i-pin"/></svg>
+        </template>
+      </span>
+    </div>
+
+    {# Detail header — name + status pill + divider + action toolbar, all
+       aligned left. The divider is a thin vertical rule between the pill
+       and the action buttons. #}
+    <header class="mgr-detail-hdr">
+      <h2 class="mgr-detail-name" x-text="current ? (current.name || current.run_id) : ''"></h2>
+      <span class="mgr-status-pill" :class="'status-' + (current?.status || 'stopped')"
+            x-text="current?.status || ''"></span>
+      <span class="mgr-hdr-divider" aria-hidden="true"></span>
+      <div class="mgr-actions">
+        {# Open Status is the primary action when a run is active — promoted
+           to the first slot so the eye lands on it before secondary controls
+           (Stop / Pin / Archive / Delete). Opens in the same tab (was
+           target="_blank") to match the new sidebar convention: only the
+           calc tool spawns a new tab; every other navigation swaps in place. #}
+        <a class="mgr-btn mgr-btn-view"
+           :href="statusUrl()"
+           x-show="current?.status === 'running'">
+          <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-extlink"/></svg>
+          Open Status
+        </a>
+        <button class="mgr-btn mgr-btn-start"
+                x-show="current?.status === 'stopped'"
+                @click="act('start')">
+          <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-play"/></svg>
+          Start
+        </button>
+        <button class="mgr-btn mgr-btn-stop"
+                x-show="current?.status === 'running'"
+                @click="act('stop')">
+          <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-stop"/></svg>
+          Stop
+        </button>
+        <button class="mgr-btn mgr-btn-pin"
+                x-show="current?.status === 'running'"
+                :class="pinnedRunId === current?.run_id ? 'active' : ''"
+                @click="pinRun()">
+          <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-pin"/></svg>
+          <span x-text="pinnedRunId === current?.run_id ? 'Pinned' : 'Pin'"></span>
+        </button>
+        <button class="mgr-btn mgr-btn-archive"
+                x-show="current?.status !== 'archived'"
+                @click="archiveRun()">
+          <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-archive"/></svg>
+          Archive
+        </button>
+        <button class="mgr-btn mgr-btn-delete"
+                @click="deleteRun()">
+          <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-trash"/></svg>
+          Delete
+        </button>
+      </div>
+    </header>
+
+    {# Two-column detail body — info column + live preview column. Preview
+       iframe only renders for running runs; archived/stopped get a placeholder
+       so the column doesn't visually collapse. #}
+    <div class="mgr-detail-grid">
+      <section class="mgr-detail-info">
+        <div class="mgr-detail-meta">
+          <span><b>Created</b> <span x-text="current?.created_short"></span></span>
+          <span><b>TCP</b> <span x-text="current?.tcp_port"></span></span>
+          <span><b>HTTP</b> <span x-text="current?.http_port"></span></span>
+          <template x-if="current?.game_label">
+            <span class="mgr-badge mgr-badge-game">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-game"/></svg>
+              <span x-text="current.game_label"></span>
+            </span>
+          </template>
+          <template x-if="current?.species_lock">
+            <span class="mgr-badge mgr-badge-lock">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-dna"/></svg>
+              Species
+            </span>
+          </template>
+          <template x-if="current?.gender_lock">
+            <span class="mgr-badge mgr-badge-lock">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-gender"/></svg>
+              Gender
+            </span>
+          </template>
+          <template x-if="current?.type_lock">
+            <span class="mgr-badge mgr-badge-lock">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-type"/></svg>
+              Type
+            </span>
+          </template>
+        </div>
+
+        <template x-if="current?.last_event">
+          <div class="mgr-last-event">
+            <div class="mgr-section-label">Recent activity</div>
+            <span class="mgr-ev-ts" x-text="current.last_event.ts"></span>
+            <b x-text="current.last_event.player"></b>
+            <span x-text="current.last_event.text"></span>
+          </div>
+        </template>
+
+        <template x-if="current && current.status !== 'archived'">
+          <div class="mgr-launcher-info">
+            <span class="mgr-section-label">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-script"/></svg>
+              BizHawk launchers
+            </span>
+            <div class="mgr-launcher-btns">
+              <a class="mgr-btn mgr-btn-launcher"
+                 :href="'/api/runs/' + current.run_id + '/launcher/a'"
+                 :download="'slink_' + (current.safe_name || current.run_id) + '_a.lua'">
+                <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-arrow-down"/></svg>
+                Player A
+              </a>
+              <a class="mgr-btn mgr-btn-launcher"
+                 :href="'/api/runs/' + current.run_id + '/launcher/b'"
+                 :download="'slink_' + (current.safe_name || current.run_id) + '_b.lua'">
+                <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-arrow-down"/></svg>
+                Player B
+              </a>
+            </div>
+          </div>
+        </template>
+      </section>
+
+      <aside class="mgr-detail-preview">
+        <template x-if="current?.status === 'running'">
+          <div class="mgr-preview-wrap">
+            <div class="mgr-preview-head">
+              <span class="mgr-section-label">Live status</span>
+              <a class="mgr-preview-pop" :href="statusUrl()" target="_blank" title="Pop out">
+                <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-extlink"/></svg>
+              </a>
+            </div>
+            <iframe class="mgr-preview-iframe"
+                    :src="statusUrl()"
+                    :title="(current.name || current.run_id) + ' live status'"></iframe>
+          </div>
+        </template>
+        <template x-if="current && current.status !== 'running'">
+          <div class="mgr-preview-empty">
+            <span class="mgr-section-label">Live status</span>
+            <p x-text="current.status === 'stopped' ? 'Run is stopped — start it to see live status.' : 'Run is archived — no live server attached.'"></p>
+          </div>
+        </template>
+      </aside>
+    </div>
+  </main>
+
+  <main class="mgr-pane mgr-pane-empty" x-show="!current">
+    <p>Select a run from the list, or create a new one.</p>
+  </main>
+</div>
+
+<script>
+function runManager() {
+  return {
+    runs: [],
+    active: '',
+    pinnedRunId: null,
+    pinnedRunName: '',
+    managerPort: window.SLINK_MANAGER_PORT,
+    newRunName: '',
+    newOpts: { species_lock: false, gender_lock: false, type_lock: false },
+
+    get current() {
+      return this.runs.find(r => r.run_id === this.active) || null;
+    },
+    get groupedRuns() {
+      var byStatus = { running: [], stopped: [], archived: [] };
+      this.runs.forEach(r => {
+        var s = r.status || 'stopped';
+        (byStatus[s] || byStatus.stopped).push(r);
+      });
+      var labels = { running: 'Running', stopped: 'Stopped', archived: 'Archived' };
+      return ['running', 'stopped', 'archived']
+        .filter(s => byStatus[s].length > 0)
+        .map(s => ({ label: labels[s], runs: byStatus[s] }));
+    },
+
+    init(runs) {
+      this.runs = runs;
+      if (runs.length > 0) {
+        // Prefer first running, otherwise first overall.
+        var first = runs.find(r => r.status === 'running') || runs[0];
+        this.active = first.run_id;
+      }
+      this.fetchPin();
+      // Relocate the floating theme switcher into the rail slot so the
+      // theme picker lives inside the nav (matches dashboard behaviour).
+      var slot = document.querySelector('.mgr-rail-theme');
+      var switcher = document.querySelector('.theme-switcher');
+      if (slot && switcher && switcher.parentElement !== slot) {
+        slot.appendChild(switcher);
+        switcher.classList.add('theme-switcher--in-sidebar');
+      }
+      // Soft auto-refresh once every 10s — re-fetch the run list to pick up
+      // outside changes (PID death, new runs from another tab, etc.).
+      setInterval(() => this.refreshRuns(), 10000);
+    },
+
+    select(runId) {
+      this.active = runId;
+    },
+
+    statusUrl() {
+      if (!this.current || !this.current.http_port) return '#';
+      var base = '//' + window.location.hostname + ':' + this.current.http_port;
+      // Propagate the active theme into the preview iframe + Open Status link
+      // so the per-run server (different origin → separate localStorage)
+      // paints in the same palette as the manager.
+      var theme = '';
+      try {
+        theme = new URLSearchParams(window.location.search).get('theme') || '';
+        if (!theme) {
+          theme = window.localStorage.getItem('slink-theme') || '';
+        }
+      } catch (_) {}
+      return base + (theme ? '?theme=' + encodeURIComponent(theme) : '');
+    },
+
+    async refreshRuns() {
+      try {
+        var res = await fetch('/api/runs');
+        var j = await res.json();
+        if (j && j.runs) this.runs = j.runs.map(r => this.augmentRun(r));
+      } catch (_) {}
+      this.fetchPin();
+    },
+
+    augmentRun(r) {
+      // The /api/runs endpoint returns server-side data only — synthesize
+      // the same display strings the server-rendered JSON had (so refresh
+      // and initial render look the same).
+      r.created_short = (r.created_at || '').slice(0, 16).replace('T', ' ');
+      r.safe_name = (r.name || r.run_id).replace(/[^\w-]/g, '_');
+      return r;
+    },
+
+    async fetchPin() {
+      try {
+        var r = await fetch('/api/stream/pin');
+        var j = await r.json();
+        this.pinnedRunId = j.pinned ? j.run_id : null;
+        this.pinnedRunName = j.active_run_name || '';
+      } catch (_) {}
+    },
+
+    async pinRun() {
+      if (!this.current) return;
+      var r = await fetch('/api/stream/pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ run_id: this.current.run_id })
+      });
+      var j = await r.json();
+      if (!j.ok) { alert(j.error || 'Pin failed'); return; }
+      await this.fetchPin();
+    },
+
+    async act(action) {
+      if (!this.current) return;
+      var res = await fetch('/api/runs/' + this.current.run_id + '/' + action, { method: 'POST' });
+      var j = await res.json();
+      if (!j.ok) { alert(j.error || 'Action failed'); return; }
+      await this.refreshRuns();
+    },
+
+    async archiveRun() {
+      if (!this.current) return;
+      if (!confirm('Archive run "' + (this.current.name || this.current.run_id) + '"?\n\n' +
+                   'This will stop the server. The run data is preserved.')) return;
+      await this.act('archive');
+    },
+
+    async deleteRun() {
+      if (!this.current) return;
+      if (!confirm('Delete run "' + (this.current.name || this.current.run_id) + '"?\n\n' +
+                   'This permanently deletes all run data (links, memorial, etc).')) return;
+      await this.act('delete');
+      // After delete, fall back to the next available run.
+      this.active = (this.runs[0] && this.runs[0].run_id) || '';
+    },
+
+    async createRun() {
+      var name = this.newRunName.trim();
+      if (!name) { alert('Enter a run name'); return; }
+      var res = await fetch('/api/runs/new', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.assign({ name }, this.newOpts))
+      });
+      var j = await res.json();
+      if (!j.ok) { alert(j.error || 'Create failed'); return; }
+      this.newRunName = '';
+      await this.refreshRuns();
+      // Auto-select the newly created run if present.
+      var created = this.runs.find(r => r.name === name);
+      if (created) this.active = created.run_id;
+    },
+  };
+}
+</script>
+{% endblock %}

@@ -1,0 +1,15 @@
+{# Areas overlay (#root subtree) — linked / dead / pending area counts.
+   Context: { linked: int, dead: int, pending: int } #}
+
+<div id="root">
+  <div class="wtitle">AREAS</div>
+  <div class="d-wrap">
+    <div class="d-grid">
+      <div class="d-box d-alive"><span class="d-num">{{ linked }}</span><span class="d-lbl">LINKED</span></div>
+      <div class="d-box d-dead"><span class="d-num">{{ dead }}</span><span class="d-lbl">DEAD</span></div>
+      {% if pending %}
+        <div class="d-box a-pend"><span class="d-num">{{ pending }}</span><span class="d-lbl">PENDING</span></div>
+      {% endif %}
+    </div>
+  </div>
+</div>

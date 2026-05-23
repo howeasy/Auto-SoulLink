@@ -1,0 +1,40 @@
+{% from "_macros.html" import mon_card %}
+
+{# _focus_root.html — Player active-mon hero card.
+   Shows full mon_card (sprite + HP + status + stat stages) plus a 4-move
+   grid with type chips and current/max PP next to the move name.
+   Context: { player_id, active_mons: [{mon (mon_card shape), moves: [Move]}], is_doubles } #}
+
+<div id="root">
+  {% if not active_mons %}
+    <div class="wtitle">FOCUS · {{ player_id | upper }}</div>
+    <div class="focus-not-active">No active mon</div>
+  {% else %}
+    <div class="wtitle">FOCUS · {{ player_id | upper }}{% if is_doubles %} <span class="dbl-tag">DOUBLES</span>{% endif %}</div>
+    <div class="focus-mons{% if is_doubles %} doubles{% endif %}">
+      {% for slot in active_mons %}
+        <div class="focus-mon">
+          {{ mon_card(slot.mon) }}
+          {% if slot.moves %}
+            <div class="moves-grid">
+              {% for i in range(4) %}
+                {% set md = slot.moves[i] if i < (slot.moves | length) else None %}
+                <div class="move-tile">
+                  {% if md %}
+                    <div class="move-name-row">
+                      <div class="move-name">{{ md.name }}</div>
+                      <span class="pp-num {{ md.pp_cls }}">{{ md.current_pp }}/{{ md.pp_max }}</span>
+                    </div>
+                    <span class="move-type mt-{{ md.type_name or 'unknown' }}">{{ md.type_name }}</span>
+                  {% else %}
+                    <div class="move-name" style="opacity:.25">—</div>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>

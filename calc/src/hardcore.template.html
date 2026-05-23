@@ -8,30 +8,22 @@
     <link type="text/css" rel="stylesheet" href="./css/main.css?" />
     <link type="text/css" rel="stylesheet" href="./css/vendor/bootstrap.css" />
     <link type="text/css" rel="stylesheet" href="./css/dark-theme.css" id="dark-theme-styles">
-    <!-- Immediately loads the dark theme in order to reduce FOIT -->
+    <!-- DO NOT add SLink chrome here — see normal.template.html for the full
+         rationale. SLink chrome lives in `server/templates/calc.html`. Only
+         calc-internal scripts belong here so upstream patches merge cleanly. -->
     <script>
-        /*
-        * localStorage will only store strings
-        * This means that if it has the value 'false',
-        * It will be truey and incorrectly cause the
-        * dark theme to load.
-        */
-        if (localStorage.getItem('darkTheme') !== 'true') {
+        // Calc-internal dark-mode resolution; mirrors `dark-theme-toggle.js`.
+        // See normal.template.html for the longer rationale.
+        var prefersDarkTheme = localStorage.getItem('darkTheme')
+            ? localStorage.getItem('darkTheme') === 'true'
+            : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (!prefersDarkTheme) {
             document.getElementById('dark-theme-styles').disabled = true;
         }
     </script>
 </head>
 
 <body class="dark-theme">
-
-<div class="slink-header">
-  <div class="slink-header-inner">
-    <span class="slink-logo">🔗</span>
-    <span class="slink-title">Soul Link RR &mdash; Radical Red Damage Calculator</span>
-    <span class="slink-mode-badge">Hardcore Mode</span>
-    <a class="slink-status-link" href="/">&#8592; Status</a>
-  </div>
-</div>
 <div class="wrapper">
 
     <div aria-label="Settings" role="region">

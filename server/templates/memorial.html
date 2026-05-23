@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% from "_macros.html" import tombstone %}
+
+{% block title %}Memorial Wall — {{ page_title }}{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="/static/dashboard.css">
+  <script src="/static/dashboard.js" defer></script>
+  <style>
+    /* Memorial-specific layout. Every paint uses tokens from slink.css so the
+       Funtastic theme overrides flow through. */
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; }
+    .dash-main { padding: 2em 2.5em; }
+    h1 { text-align: center; color: var(--c-dim); font-weight: 300; font-size: 1.8em;
+         letter-spacing: 0.15em; margin-bottom: 0.2em; }
+    h1 span { color: var(--c-dead); }
+    .subtitle { text-align: center; color: var(--c-dim); font-size: 0.9em; margin-bottom: 2em; }
+    .subtitle a { color: var(--c-link); text-decoration: none; }
+    .subtitle a:hover { text-decoration: underline; }
+    .empty-msg { text-align: center; color: var(--c-dim); font-size: 1.1em; margin-top: 4em;
+                 font-style: italic; }
+    .count { text-align: center; color: var(--c-dim); font-size: 0.85em; margin-bottom: 1.5em; }
+
+    .wall { display: flex; flex-wrap: wrap; gap: 1.2em; justify-content: center; }
+    .tomb { background: var(--c-card); border: 1px solid var(--c-edge); border-radius: 10px;
+            width: 300px; padding: 1.2em 1em 1em; position: relative;
+            transition: border-color 0.3s; }
+    .tomb:hover { border-color: var(--c-brand); }
+    .tomb-header { display: flex; align-items: center; gap: 0.3em; justify-content: center;
+                   margin-bottom: 0.5em; }
+    .tomb-area { color: var(--c-info); font-size: 0.82em; text-align: center; margin-bottom: 0.8em; }
+    .tomb-pair { display: flex; justify-content: space-between; gap: 0.8em; }
+    .tomb-mon { flex: 1; text-align: center; }
+    .tomb-mon img { width: 56px; height: 56px; image-rendering: pixelated;
+                    filter: grayscale(70%) brightness(0.7); }
+    .tomb-mon .nick { color: var(--c-txt); font-size: 0.95em; font-weight: 600; margin-top: 2px; }
+    .tomb-mon .species { color: var(--c-dim); font-size: 0.8em; }
+    .tomb-mon .level { color: var(--c-dim); font-size: 0.78em; opacity: .8; }
+    .tomb-mon .player-tag { font-size: 0.72em; color: var(--c-dim); margin-bottom: 2px; opacity: .7; }
+    .tomb-divider { width: 1px; background: var(--c-edge); margin: 0.5em 0; }
+    .tomb-cause { text-align: center; margin-top: 0.7em; padding-top: 0.6em;
+                  border-top: 1px solid var(--c-sep); font-size: 0.82em; }
+    .tomb-cause .cause-icon { margin-right: 0.3em; }
+    .tomb-cause .cause-battle { color: var(--c-dead); opacity: .85; }
+    .tomb-cause .cause-deadzone { color: var(--c-dead); }
+    .tomb-cause .cause-whiteout { color: var(--c-pend); }
+    .tomb-time { text-align: center; color: var(--c-dim); opacity: .55; font-size: 0.72em; margin-top: 0.4em; }
+    .tomb-num { position: absolute; top: 8px; right: 12px; color: var(--c-dim); opacity: .5; font-size: 0.7em; }
+  </style>
+{% endblock %}
+
+{% block content %}
+  {{ sidebar_html | safe }}
+  <main class="dash-main">
+    <h1>&#x1FAA6; <span>Memorial Wall</span></h1>
+    <p class="subtitle">{{ page_title }}</p>
+
+    {% if killfeed %}
+      {%- set count = killfeed | length -%}
+      <p class="count">{{ count }} fallen pair{{ '' if count == 1 else 's' }}</p>
+      <div class="wall">
+        {% for entry in killfeed %}
+          {{ tombstone(entry, loop.index) }}
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="empty-msg">No fallen pairs yet. May your links endure.</p>
+    {% endif %}
+  </main>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    // Funnotbun RR sprites have a solid background pixel that needs to be
+    // chroma-keyed out at render time. Same algorithm as the dashboard at
+    // server.py:610–645 but inline here because the memorial page doesn't
+    // import that helper yet. HTMX morph-swaps preserve image src across
+    // refreshes, so this only runs once per <img> per session.
+    (function() {
+      var cache = {};
+      function removeBg(img) {
+        var src = img.src;
+        if (!src || src.indexOf('funnotbun') === -1) return;
+        if (cache[src]) { img.src = cache[src]; return; }
+        try {
+          var c = document.createElement('canvas');
+          c.width = img.naturalWidth; c.height = img.naturalHeight;
+          var ctx = c.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+          var d = ctx.getImageData(0, 0, c.width, c.height);
+          var bg = [d.data[0], d.data[1], d.data[2]];
+          for (var i = 0; i < d.data.length; i += 4) {
+            if (Math.abs(d.data[i]-bg[0]) < 8 &&
+                Math.abs(d.data[i+1]-bg[1]) < 8 &&
+                Math.abs(d.data[i+2]-bg[2]) < 8) {
+              d.data[i+3] = 0;
+            }
+          }
+          ctx.putImageData(d, 0, 0);
+          var url = c.toDataURL();
+          cache[src] = url;
+          img.src = url;
+        } catch (e) {}
+      }
+      function processAll() {
+        document.querySelectorAll('.tomb-mon img').forEach(function(img) {
+          if (img.complete && img.naturalWidth) removeBg(img);
+          else img.addEventListener('load', function() { removeBg(img); }, {once: true});
+        });
+      }
+      processAll();
+    })();
+  </script>
+{% endblock %}

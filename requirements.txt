@@ -4,3 +4,5 @@ aiohttp
 psutil
 twitchio>=3.0
 simpleobsws>=1.4
+Jinja2>=3.1
+aiohttp-jinja2>=1.5

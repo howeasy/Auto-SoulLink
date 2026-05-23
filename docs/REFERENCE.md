@@ -44,18 +44,18 @@ The server writes state to `data/links.json` and `data/memorial.json`. Pass `--r
 
 ### 3. Open the status page
 
-Navigate to `http://localhost:8080/` in a browser. The page title dynamically shows "Pokémon Soul Link Tracker — \<Game Variant\> — \<Run Name\>" (e.g., "Pokémon Soul Link Tracker — Radical Red — MyRun") with a Pokéball favicon. Updates are pushed in near-real-time via **Server-Sent Events (SSE)** — no manual refresh needed. The page shows:
+Navigate to `http://localhost:8080/` in a browser. The page title dynamically shows "Pokémon Soul Link Tracker — \<Game Variant\> — \<Run Name\>" (e.g., "Pokémon Soul Link Tracker — Radical Red — MyRun") with a Pokéball favicon. The page is a Jinja2 template polled by **HTMX** every ~2 s; **idiomorph** swaps changed nodes in place so `<details open>`, scroll position, and table-search focus survive each refresh. SSE remains available at `/api/events` for the calc bridge and external consumers, but the page itself no longer needs it. Theme + font pickers (Alpine.js widgets in the sidebar) persist to `localStorage` + a `slink-theme` cookie so the saved palette/font apply on the first byte (no FOUC). The page shows:
 - Both players' trainer name, connection status, gym badges (8 badge icons per player), current area, Pokéball count, TCP port, and live party (with nicknames, species, levels, **ability names** with description tooltips, **held items**)
 - Battle display panel ("⚔ IN BATTLE" with enemy party table including abilities) rendered **above** each player's party table for immediate visibility
 - Consolidated Encounters table with progress icons: ✅ (linked/alive), 💀 (dead/memorial), ⏳ (pending), ☠️ (dead zone) — each row shows area, Player A's mon (sprite/nickname/species/level), status icon, Player B's mon
 - Per-player PC box summary (occupied slots with nicknames/species/abilities)
 - Per-area encounter state (waiting for &lt;trainer name&gt; / linked / dead zone)
 - Identity error banner (red) when a player connects with the wrong save file
-- Flicker-free auto-refresh via DOM morphing — sprites, HP bars, and table structure are preserved across updates; only changed text/values are patched in-place
+- Flicker-free auto-refresh via HTMX + idiomorph morph swaps — sprites, HP bars, and table structure are preserved across updates; only changed text/values are patched in-place via a `beforeAttributeUpdated` hook that explicitly preserves the `open` attribute on `<details>` elements
 
 Additional pages:
-- **Memorial wall** at `/memorial` — tombstone cards for each dead linked pair with species-accurate sprites (CFRU→NatDex conversion), RR sprite background removal, nicknames, species, cause of death. Live updates via SSE.
-- **Debug console** at `/debug` — live SSE updates, status banner (connections/areas/link counts/queued commands), link management (create/unlink/override/revive with live table), mon key autofill (datalist from party/link/pending data), area ID autofill (183+ areas annotated with state), event injection, command queuing, state toggles, live state panel (lock rules, player identity, party keys, bonus keys, pending bonus queue), backup rollback (clickable slot rows, restores both `links.json` and `events.json`).
+- **Memorial wall** at `/memorial` — tombstone cards for each dead linked pair with species-accurate sprites (CFRU→NatDex conversion), RR sprite background removal, nicknames, species, cause of death. Live updates via HTMX morph swap.
+- **Debug console** at `/debug` — HTMX-polled status banner (connections/areas/link counts/queued commands), link management (create/unlink/override/revive with live table), mon key autofill (datalist from party/link/pending data), area ID autofill (183+ areas annotated with state), event injection, command queuing, state toggles, live state panel (lock rules, player identity, party keys, bonus keys, pending bonus queue), backup rollback (clickable slot rows, restores both `links.json` and `events.json`).
 - **Stream overlays** at `/stream` — individual overlay pages for OBS (party, links, deaths, areas, events, focus cards, encounter table, and more).
 
 ### 4. Load the Lua client in each BizHawk instance
@@ -207,22 +207,23 @@ The status server (default port 8080) exposes these pages and endpoints.
 
 ### Pages
 
-All pages update live via SSE — no manual refresh needed.
+All pages refresh in-place via HTMX (2 s polling, idiomorph swaps) — no full reloads, no scroll jumps. SSE remains at `/api/events` for external consumers but is no longer used by the dashboard or overlays.
 
-**`GET /`** — Main status page showing both player cards with party, current area, ball count, linked pair table, area state table, and killfeed.
+**`GET /`** — Main status page showing both player cards with party, current area, ball count, linked pair table, area state table, and killfeed. Renders from `server/templates/dashboard.html` via `base.html`.
 
-**`GET /memorial`** — Tombstone cards for every dead linked pair with greyscale sprites, nicknames, species, level, cause of death, and killer details.
+**`GET /memorial`** — Tombstone cards for every dead linked pair with greyscale sprites, nicknames, species, level, cause of death, and killer details. Renders from `server/templates/memorial.html`.
 
 **`GET /debug`** — Full debug console with panels for manual linking, event injection, command queuing, state toggles, raw state viewer, and backup rollback. Prefer this UI over raw curl calls for one-off corrections.
 
-**`GET /stream`** — Index listing all available OBS overlays with browser source URLs.
+**`GET /stream`** — Index listing all available OBS overlays with browser source URLs, generated from `server/overlay_catalog.py`. Each overlay template lives in `server/templates/stream/`.
 
 ### Stream Overlays
 
-All overlays are designed as OBS browser sources. Each polls `/api/status` every 2 s and updates automatically. Add them in OBS via **Sources → Browser** and paste the URL.
+All overlays are designed as OBS browser sources. Each is a Jinja2 template that polls its own `_root.html` fragment via HTMX every 2 s — picked over SSE so the dashboard plus N overlays don't hit Chrome's 6-connection-per-origin cap. Add them in OBS via **Sources → Browser** and paste the URL.
 
 URL parameters supported by all overlays:
-- `?theme=dark` (default) / `?theme=light` / `?theme=transparent`
+- `?theme=<id>` — one of `default`, `funtastic-grape`, `funtastic-jungle`, `funtastic-fire`, `funtastic-ice`, `funtastic-watermelon`, `funtastic-smoke`, `light`, `transparent`. Falls back to the `slink-theme` cookie when omitted (set by the dashboard/manager picker).
+- `?font=pixelify` (default Pixelify Sans chain) / `?font=classic` (pre-rework monospace voice). Falls back to the `slink-font` localStorage value across tabs.
 - `?layout=h` / `?layout=thin-h` / `?layout=thin-v` (party overlays only)
 
 Scrolling overlays additionally accept:
@@ -301,7 +302,7 @@ Example response (abbreviated):
 
 ---
 
-**`GET /api/events`** — SSE stream. Pushes `event: ping` on every state change (triggers the status page to re-fetch) and `event: status` with the full JSON payload for direct consumers such as stream overlays and the calc bridge.
+**`GET /api/events`** — SSE stream. Pushes `event: ping` on every state change and `event: status` with the full JSON payload. The dashboard and stream overlays no longer subscribe (they HTMX-poll the page fragments directly), but the SLink calc bridge still uses it and any external consumer is welcome to.
 
 ```bash
 curl -N http://localhost:8080/api/events
@@ -595,8 +596,8 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Status page — live party HP bars (green/yellow/red) | ✅ Working |
 | Status page — Pokémon type badges (party and PC box) | ✅ Working |
 | Status page — battle display above party (in battle, Wild vs Trainer label, enemy types) | ✅ Working |
-| Status page — live updates via Server-Sent Events (SSE) with fallback polling | ✅ Working |
-| Status page — flicker-free DOM morphing (sprites/HP bars preserved across refresh) | ✅ Working |
+| Status page — live updates via HTMX 2 s polling + idiomorph morph swap | ✅ Working |
+| Status page — flicker-free morph swap (sprites/HP bars preserved across refresh) | ✅ Working |
 | Status page — human-friendly location names | ✅ Working |
 | In-game sound effects (link formed, dead zone, force faint, whiteout) | ✅ Working |
 | In-game HUD overlay (deaths, party swap events) | ✅ Working |
@@ -622,7 +623,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Paired party sync — retrieval requires both players have room | ✅ Working |
 | Lua client performance optimization (localized functions, display cache, frame-cached state) | ✅ Working |
 | Status page — Pokémon sprites (PokeAPI + RR custom forms) | ✅ Working |
-| Stream overlay — area encounter (Soul Link status for current area, SSE live updates) | ✅ Working |
+| Stream overlay — area encounter (Soul Link status for current area, 2 s HTMX poll) | ✅ Working |
 | Stream overlay — wild encounter table per player (Radical Red; autoscroll; speed control) | ✅ Working |
 | Stream overlay — correct CFRU species sprites (server-side NatDex conversion) | ✅ Working |
 | Status page — Pokémon ability names (party, PC box, enemy) | ✅ Working |
@@ -639,10 +640,10 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Dynamic page titles (Pokémon Soul Link Tracker — variant — run name) | ✅ Working |
 | PC box level resolution (multi-source fallback chain) | ✅ Working |
 | RR item name display (profile-aware, 746 items from ROM scan) | ✅ Working |
-| Memorial wall page (`/memorial` — SSE live updates, tombstone cards, CFRU→NatDex sprite fix) | ✅ Working |
+| Memorial wall page (`/memorial` — HTMX morph-swap refresh, tombstone cards, CFRU→NatDex sprite fix) | ✅ Working |
 | Dynamic URLs (external/LAN access — no hardcoded localhost) | ✅ Working |
 | Launcher script download (HTTP-served, auto-configured host/port/player) | ✅ Working |
-| Debug page (`/debug` — live SSE, link/unlink/override, mon key & area autofill, backup rollback) | ✅ Working |
+| Debug page (`/debug` — HTMX-polled, link/unlink/override, mon key & area autofill, backup rollback) | ✅ Working |
 | RR item ROM scanner (`lua/test_item_discovery.lua`) | ✅ Working |
 | Manager back-link on status page (`--manager-port`) | ✅ Working |
 | TCP port display on status page | ✅ Working |
@@ -682,20 +683,25 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 ### Unit tests (no emulator required)
 
 ```bash
-pytest tests/unit/ -v          # all 1056 tests
-pytest tests/unit/test_state.py -v        # 236 state machine tests
-pytest tests/unit/test_gen3_adapter.py -v  # 182 Gen 3 adapter tests
-pytest tests/unit/test_gen4_adapter.py -v  # 62 Gen 4 adapter tests
-pytest tests/unit/test_gen1_adapter.py -v  # 78 Gen 1 adapter tests
-pytest tests/unit/test_gen2_adapter.py -v  # 127 Gen 2 adapter tests
-pytest tests/unit/test_gen5_adapter.py -v  # 63 Gen 5 adapter tests
-pytest tests/unit/test_stat_stages.py -v   # 42 stat stage tests
-pytest tests/unit/test_obs_priority.py -v  # 4 OBS priority tests
+pytest tests/unit/ -v          # all 1072 tests
+pytest tests/unit/test_state.py -v             # 276 state machine tests (incl. tick reconciliation)
+pytest tests/unit/test_gen3_adapter.py -v      # 208 Gen 3 adapter tests
+pytest tests/unit/test_gen4_adapter.py -v      # 100 Gen 4 adapter tests
+pytest tests/unit/test_gen1_adapter.py -v      # 103 Gen 1 adapter tests
+pytest tests/unit/test_gen2_adapter.py -v      # 179 Gen 2 adapter tests
+pytest tests/unit/test_gen5_adapter.py -v      # 140 Gen 5 adapter tests
+pytest tests/unit/test_stat_stages.py -v       # 46 stat stage tests
+pytest tests/unit/test_obs_priority.py -v      # 7 OBS priority + area-group tests
+pytest tests/unit/test_manager_launcher.py -v  # 4 launcher Lua-syntax regression tests
+pytest tests/unit/test_phase1_comms.py -v      # 6 protocol tests
+pytest tests/unit/test_profile_addresses.py -v # 3 pret address verification tests
 ```
 
-236 state machine tests covering: linking, dead zones, faint propagation, whiteout, party sync (including confirmation-based `sync_retrieve_done`/`sync_retrieve_failed`, PC swap event ordering), box capture stats caching, memorial box, reconnect re-queuing, illegal captures, encounter logging, AP ROM type handling, species clause (evo families), gender clause (genderless edge cases), type clause (shared types, partial overlap, monotypes), combined clauses, violation recovery, clause rule persistence, same-save species duplicate prevention, dynamic gift areas, hello resolved_areas, gift area no_catch protection, unlinked encounter quarantine, paired party sync enforcement, dead zone quarantined mon retirement, CFRU/RR species data validation (Gen 3 ID rekey, Gen 4+ cross-gen evolutions, gender ratios), battle HP cache writeback (CFRU), double-buffer party diff, frame ordering, player identity lock (OT ID per slot — first lock, wrong OT rejection, event blocking, persistence, empty party skip, per-player independence), persistent run metadata (rom_type, trainer_names), shiny bonus pairs (pending_bonus FIFO queue, pair formation, faint propagation both directions, party sync at formation, FIFO multi-bonus, lock clause violations with retry, area unresolve, persistence, key migration, no-wildcard-exemption), nature change (key_change migration), and dupes clause partner pending capture check.
+276 state machine tests covering: linking, dead zones, faint propagation, whiteout, party sync (including confirmation-based `sync_retrieve_done`/`sync_retrieve_failed`, PC swap event ordering), box capture stats caching, memorial box, reconnect re-queuing, illegal captures, encounter logging, AP ROM type handling, species clause (evo families), gender clause (genderless edge cases), type clause (shared types, partial overlap, monotypes), combined clauses, violation recovery, clause rule persistence, same-save species duplicate prevention, dynamic gift areas, hello resolved_areas, gift area no_catch protection, unlinked encounter quarantine, paired party sync enforcement, dead zone quarantined mon retirement, CFRU/RR species data validation (Gen 3 ID rekey, Gen 4+ cross-gen evolutions, gender ratios), battle HP cache writeback (CFRU), double-buffer party diff, frame ordering, player identity lock (OT ID per slot — first lock, wrong OT rejection, event blocking, persistence, empty party skip, per-player independence), persistent run metadata (rom_type, trainer_names), shiny bonus pairs (pending_bonus FIFO queue, pair formation, faint propagation both directions, party sync at formation, FIFO multi-bonus, lock clause violations with retry, area unresolve, persistence, key migration, no-wildcard-exemption), nature change (key_change migration), dupes clause partner pending capture check, and **tick reconciliation** (server-side diff of Lua party snapshots against `party_keys[player_id]` to repair ghost-boxed and ghost-party drift, gated against in-flight box/party/memorialize commands and active whiteout rebuilds).
 
-4 OBS priority tests covering: highest-priority rule wins when multiple events fire simultaneously, lower-priority fallback when high-priority event didn't fire, independent per-player resolution, and area_id filter matching.
+7 OBS priority tests covering: highest-priority rule wins when multiple events fire simultaneously, lower-priority fallback when high-priority event didn't fire, independent per-player resolution, exact `area_id` filter matching, and **area-group** filter matching (`group:routes`, etc.) against the active adapter's classified area map.
+
+4 manager-launcher Lua-syntax tests covering: generated launcher parses cleanly under Lua 5.4 (lupa) for both player slots, path-match pattern extracts the trailing directory on both Windows (`C:\Users\foo\Downloads\`) and Unix paths, and connect params (host, port, player) are embedded as expected. Regression test for the `\/` invalid-escape bug that broke loading in BizHawk.
 
 ### Integration tests (server required)
 
@@ -918,7 +924,7 @@ Server enrichment (`_enrich_party` / `_enrich_battle_state` in `server/server.py
 max_pp = base_pp + (base_pp * pp_ups) // 5
 ```
 
-Without this multiplier, RR trainer mons with PP-Ups would show e.g. `56/35` instead of `56/56`. The formula is guarded by `if base_pp:` so unknown moves (base_pp = 0) don't divide-by-zero. The status page row uses a `data-key` so morphDOM preserves the user-toggled `<details open>` state across SSE refreshes.
+Without this multiplier, RR trainer mons with PP-Ups would show e.g. `56/35` instead of `56/56`. The formula is guarded by `if base_pp:` so unknown moves (base_pp = 0) don't divide-by-zero. The status page row uses a `data-key` so idiomorph's `beforeAttributeUpdated` hook preserves the user-toggled `<details open>` state across HTMX morph swaps.
 
 ---
 
@@ -1117,7 +1123,7 @@ Create rules on the `/obs` page. Each rule maps a game event to a scene name:
 | Player Filter | `any`, `a`, `b` | Only fire when this player triggers the event |
 | Target OBS | `own`, `a`, `b`, `both` | Which OBS instance receives the scene change |
 | Scene Name | any string | The scene to switch to (datalist populated from connected OBS) |
-| Area Filter | `area_id` string | *(area_enter only)* restrict to a specific area |
+| Area Filter | `area_id` string, or `group:<id>` | *(area_enter family)* restrict to a specific area, or to a group (`group:routes`, `group:caves`, `group:cities`, `group:forests`, `group:towers`, `group:buildings`, `group:water`, `group:gift`). Groups are derived from the active adapter's `area_map*.json` by suffix/prefix heuristics with hand-picked overrides (`victory_road` → cave, `dreamyard` → building, …). |
 
 ### Supported Events
 
@@ -1155,6 +1161,7 @@ Reorder rules by dragging the ⠿ handle. Click **💾 Save Config** after reord
 - **Reconnect loop:** exponential backoff 5 s → 60 s cap. OBS failures are fully isolated — they never affect game server operation.
 - **`submit_fired(fired_list)`** — priority resolver called once per dispatch cycle with all `(event_name, src_player, metadata)` tuples; iterates rules in list order, sets winners dict (first match per target player wins).
 - **`_emit_obs_triggers()`** in `server.py` collects all fired events for a dispatch cycle into a list and calls `obs.submit_fired(fired)` once at the end.
+- **Area-group resolution** — `area_id_filter` values starting with `group:` resolve against `_area_group_for(area_id)` (in `server/server.py`), which classifies the active adapter's areas into the 8 buckets above. The picker on `/obs` pulls the labeled buckets from `GET /api/obs/areas` and renders `<optgroup>` blocks so users don't have to remember slug names.
 
 ---
 

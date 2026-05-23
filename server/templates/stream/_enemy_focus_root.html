@@ -1,0 +1,42 @@
+{% from "_macros.html" import mon_card %}
+
+{# _enemy_focus_root.html — Active enemy mons with full stats + moves.
+   Same shape as focus but reads from battle_state.enemy_party.
+   Context: { player_id, in_battle, is_doubles, is_trainer, title,
+              active_mons: [{mon (mon_card shape), moves: [Move]}] } #}
+
+<div id="root">
+  {% if not in_battle %}
+    {# Empty: no battle in progress — overlay is blank in OBS. #}
+  {% elif not active_mons %}
+    <div class="wtitle">ENEMY</div>
+    <div class="focus-not-active">Loading…</div>
+  {% else %}
+    <div class="wtitle">{{ title }}{% if is_doubles %} <span class="dbl-tag">DOUBLES</span>{% endif %}</div>
+    <div class="focus-mons{% if is_doubles %} doubles{% endif %}">
+      {% for slot in active_mons %}
+        <div class="focus-mon">
+          {{ mon_card(slot.mon) }}
+          {% if slot.moves %}
+            <div class="moves-grid">
+              {% for i in range(4) %}
+                {% set md = slot.moves[i] if i < (slot.moves | length) else None %}
+                <div class="move-tile">
+                  {% if md %}
+                    <div class="move-name-row">
+                      <div class="move-name">{{ md.name }}</div>
+                      <span class="pp-num {{ md.pp_cls }}">{{ md.current_pp }}/{{ md.pp_max }}</span>
+                    </div>
+                    <span class="move-type mt-{{ md.type_name or 'unknown' }}">{{ md.type_name }}</span>
+                  {% else %}
+                    <div class="move-name" style="opacity:.25">—</div>
+                  {% endif %}
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>

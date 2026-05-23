@@ -1,0 +1,41 @@
+{# _links_root.html — Linked Pairs overlay (#root subtree).
+   Context: { alive: [LinkInfo], dead: [LinkInfo] }
+   LinkInfo: { area_display, a: {nickname, species_name, sprite_html}, b: {...} } #}
+
+<div id="root">
+  <div class="wtitle">SOUL LINK · {{ alive | length }} ALIVE · {{ dead | length }} DEAD</div>
+
+  {% if not alive and not dead %}
+    <div class="dim" style="opacity:.4;padding-top:.5em">No links yet</div>
+  {% else %}
+    <div class="lk-list">
+      {% for lnk in alive %}
+        <div class="lk-card">
+          {% if lnk.area_display %}<div class="lk-area">{{ lnk.area_display }}</div>{% endif %}
+          <div class="lk-pair">
+            <div class="lk-half">
+              {{ lnk.a.sprite_html | safe }}
+              <span class="lk-nm">{{ lnk.a.nickname or lnk.a.species_name or '—' }}</span>
+            </div>
+            <span class="lk-div">◈</span>
+            <div class="lk-half r">
+              <span class="lk-nm">{{ lnk.b.nickname or lnk.b.species_name or '—' }}</span>
+              {{ lnk.b.sprite_html | safe }}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+      {% if dead %}
+        <div class="lk-dead-hdr">―― {{ dead | length }} DEAD ――</div>
+        {% for lnk in dead %}
+          <div class="lk-dead-row">
+            <svg class="lk-dead-x inline-ico" aria-hidden="true"><use href="#i-x"/></svg>
+            <span class="lk-dead-nm">{{ lnk.a.nickname or lnk.a.species_name or '—' }}</span>
+            <span class="lk-dead-sep">◈</span>
+            <span class="lk-dead-nm r">{{ lnk.b.nickname or lnk.b.species_name or '—' }}</span>
+          </div>
+        {% endfor %}
+      {% endif %}
+    </div>
+  {% endif %}
+</div>

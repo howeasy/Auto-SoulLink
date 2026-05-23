@@ -1,0 +1,7 @@
+/* default.css — explicit "no override" theme.
+ *
+ * Loaded when ?theme=default (or no theme parameter). All tokens come from
+ * slink.css :root; this file exists so the theme switcher's <link> swap has
+ * a real target to point at for the default case. Adding overrides here
+ * would change the look of every page that doesn't request a theme — don't.
+ */

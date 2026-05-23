@@ -103,7 +103,20 @@ def move_table_html(move_details: list[dict], *, is_box: bool = False, mon_key: 
             f'<td class="pp-cell{pp_cls}">{pp_str}</td></tr>'
         )
     count = len(move_details)
-    key_attr = f' data-mon-key="{html.escape(mon_key)}"' if mon_key else ""
+    # data-details-key + id give idiomorph a stable persistent element so
+    # the moves-open state survives both the 2 s polling morph (id match
+    # keeps the same DOM node; dashboard.js's beforeAttributeUpdated hook
+    # vetoes the `open` removal) and the cross-session localStorage path.
+    if mon_key:
+        bx_suffix = ":box" if is_box else ""
+        details_key = f"moves:{html.escape(mon_key)}{bx_suffix}"
+        key_attr = (
+            f' id="d-{details_key}"'
+            f' data-mon-key="{html.escape(mon_key)}"'
+            f' data-details-key="{details_key}"'
+        )
+    else:
+        key_attr = ""
     return (
         f'<details{key_attr}><summary>Moves ({count})</summary>'
         f'<table class="move-table"><thead><tr>'

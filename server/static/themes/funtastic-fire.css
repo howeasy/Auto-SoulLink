@@ -1,0 +1,36 @@
+/* funtastic-fire.css — Fire Orange (N64, 1999 — "Sun Orange" in Europe).
+ * Brand: #ff6600. Deep ember field, warm cream text, lime alive contrast.
+ */
+
+@import url('/static/themes/_funtastic-base.css');
+
+:root {
+  --c-bg:    #180a02;
+  --c-card:  #281405;
+  --c-edge:  #7a3a10;
+  --c-sep:   color-mix(in srgb, #7a3a10 50%, transparent);
+  --c-txt:   #fae8d0;
+  --c-dim:   #c89878;
+
+  --c-alive: #a0e070;
+  --c-dead:  #ff4040;
+  --c-pend:  #ffa830;
+  --c-gold:  #ffd060;
+
+  --c-link:  #ff9b3a;
+  --c-info:  #ffc890;
+
+  --c-brand: #ff6600;
+  
+
+  --c-calc-bg:           color-mix(in srgb, #281405 80%, #180a02);
+  --c-calc-edge:         #7a3a10;
+  --c-calc-accent:       #ffa830;
+  --c-calc-th-bg:        color-mix(in srgb, #281405 60%, #180a02);
+  --c-calc-th-edge:      #7a3a10;
+  --c-calc-row-edge:     color-mix(in srgb, #7a3a10 40%, transparent);
+  --c-calc-btn-bg:       #1a0a02;
+  --c-calc-btn-bg-hover: #2e1808;
+  --c-calc-btn-txt:      #ffa830;
+  --c-calc-btn-edge:     #6a3010;
+}

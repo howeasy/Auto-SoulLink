@@ -40,27 +40,9 @@ except ImportError:
     print("ERROR: aiohttp required. Run: pip install aiohttp", file=sys.stderr)
     sys.exit(1)
 
-from server.stream_overlays import (
-    _stream_overlay_page,
-    _STREAM_INDEX_HTML,
-    _STREAM_PARTY_JS,
-    _STREAM_LINKS_JS,
-    _STREAM_LINKED_PARTY_JS,
-    _STREAM_BOXED_LINKS_JS,
-    _STREAM_DEATHS_JS,
-    _STREAM_ATTEMPTS_JS,
-    _STREAM_AREAS_JS,
-    _STREAM_EVENTS_JS,
-    _STREAM_BADGES_JS,
-    _STREAM_ENCOUNTERS_JS,
-    _STREAM_MEMORIAL_JS,
-    _STREAM_TICKER_JS,
-    _STREAM_FOCUS_JS,
-    _STREAM_AREA_ENCOUNTER_JS,
-    _STREAM_ENC_TABLE_JS,
-    _STREAM_ENEMY_FOCUS_JS,
-    _STREAM_ENEMY_TRAINER_JS,
-)
+from server.templating import setup_templating, resolve_theme
+from server.overlay_catalog import build_index_context as _build_stream_index_context
+import aiohttp_jinja2
 
 log = logging.getLogger("slink.manager")
 
@@ -74,36 +56,6 @@ MANAGER_HTTP_PORT = 8090
 # Port ranges for spawned runs
 TCP_PORT_BASE  = 54321
 HTTP_PORT_BASE = 8081   # 8090 reserved for manager
-
-
-# ── Stream overlay dispatch table ───────────────────────────────────────────
-# Single handler covers all overlays.
-# Each entry: overlay_path_name → (page title, JS constant, player or None)
-_OVERLAY_PAGES: dict[str, tuple[str, str, Optional[str]]] = {
-    "party-a":          ("Player A Party",    _STREAM_PARTY_JS,          "a"),
-    "party-b":          ("Player B Party",    _STREAM_PARTY_JS,          "b"),
-    "links":            ("Linked Pairs",      _STREAM_LINKS_JS,          None),
-    "linked-party":     ("Linked Party",      _STREAM_LINKED_PARTY_JS,   None),
-    "boxed-links":      ("Boxed Links",       _STREAM_BOXED_LINKS_JS,    None),
-    "deaths":           ("Death Counter",     _STREAM_DEATHS_JS,         None),
-    "attempts":         ("Attempts Counter",  _STREAM_ATTEMPTS_JS,       None),
-    "areas":            ("Area Tracker",      _STREAM_AREAS_JS,          None),
-    "events":           ("Event Feed",        _STREAM_EVENTS_JS,         None),
-    "badges-a":         ("Gym Badges A",      _STREAM_BADGES_JS,         "a"),
-    "badges-b":         ("Gym Badges B",      _STREAM_BADGES_JS,         "b"),
-    "encounters":       ("Encounter Tracker", _STREAM_ENCOUNTERS_JS,     None),
-    "stream-memorial":  ("Memorial Scroll",   _STREAM_MEMORIAL_JS,       None),
-    "ticker":           ("Event Ticker",      _STREAM_TICKER_JS,         None),
-    "focus-a":          ("Focus A",           _STREAM_FOCUS_JS,          "a"),
-    "focus-b":          ("Focus B",           _STREAM_FOCUS_JS,          "b"),
-    "area-encounter":   ("Area Encounter",    _STREAM_AREA_ENCOUNTER_JS, None),
-    "enc-table-a":      ("Encounter Table A", _STREAM_ENC_TABLE_JS,      "a"),
-    "enc-table-b":      ("Encounter Table B", _STREAM_ENC_TABLE_JS,      "b"),
-    "enemy-focus-a":    ("Enemy Focus A",     _STREAM_ENEMY_FOCUS_JS,    "a"),
-    "enemy-focus-b":    ("Enemy Focus B",     _STREAM_ENEMY_FOCUS_JS,    "b"),
-    "enemy-trainer-a":  ("Enemy Trainer A",   _STREAM_ENEMY_TRAINER_JS,  "a"),
-    "enemy-trainer-b":  ("Enemy Trainer B",   _STREAM_ENEMY_TRAINER_JS,  "b"),
-}
 
 # Schema-compatible empty /api/status returned when no run is active.
 _EMPTY_STATUS: dict = {
@@ -444,9 +396,9 @@ def _reconcile(runs: list[dict]) -> bool:
 # ── HTML UI ─────────────────────────────────────────────────────────────────
 
 _STATUS_BADGE = {
-    "running":  '<span class="badge running">🟢 running</span>',
-    "stopped":  '<span class="badge stopped">⚫ stopped</span>',
-    "archived": '<span class="badge archived">📦 archived</span>',
+    "running":  '<span class="badge running"><span class="badge-dot"></span> running</span>',
+    "stopped":  '<span class="badge stopped"><span class="badge-dot"></span> stopped</span>',
+    "archived": '<span class="badge archived"><span class="badge-dot"></span> archived</span>',
 }
 
 def _render_cards(runs: list[dict], host: str) -> str:
@@ -462,11 +414,11 @@ def _render_cards(runs: list[dict], host: str) -> str:
         status_url_js = f"'//' + window.location.hostname + ':{http}'"
         lock_badges = ""
         if run.get("species_lock"):
-            lock_badges += '<span class="lock-badge">🧬 Species</span>'
+            lock_badges += '<span class="lock-badge">Species</span>'
         if run.get("gender_lock"):
-            lock_badges += '<span class="lock-badge">⚥ Gender</span>'
+            lock_badges += '<span class="lock-badge">Gender</span>'
         if run.get("type_lock"):
-            lock_badges += '<span class="lock-badge">🔮 Type</span>'
+            lock_badges += '<span class="lock-badge">Type</span>'
 
         # Read game/rom_type from the run's links.json
         game_badge = ""
@@ -476,7 +428,7 @@ def _render_cards(runs: list[dict], host: str) -> str:
                 rom_type = json.load(f).get("rom_type", "")
             if rom_type:
                 display_game = rom_type.replace("_", " ").title()
-                game_badge = f'<span class="game-badge">🎮 {display_game}</span>'
+                game_badge = f'<span class="game-badge">{display_game}</span>'
         except (json.JSONDecodeError, OSError, FileNotFoundError):
             pass
 
@@ -500,20 +452,20 @@ def _render_cards(runs: list[dict], host: str) -> str:
         except (json.JSONDecodeError, OSError, FileNotFoundError):
             pass
 
-        btn_start   = f'<button class="btn start"   onclick="act(\'{rid}\',\'start\')">▶ Start</button>'   if status == "stopped"  else ""
-        btn_stop    = f'<button class="btn stop"    onclick="act(\'{rid}\',\'stop\')">■ Stop</button>'     if status == "running"  else ""
-        btn_archive = f'<button class="btn archive" onclick="archive_run(\'{rid}\',\'{name.replace(chr(39), chr(92)+chr(39))}\')">📦 Archive</button>' if status != "archived" else ""
-        btn_delete  = f'<button class="btn delete"  onclick="del_run(\'{rid}\',\'{name.replace(chr(39), chr(92)+chr(39))}\')">🗑️ Delete</button>'
-        btn_view    = f'<a class="btn view" href="#" onclick="window.open({status_url_js});return false" target="_blank">🔗 Status</a>'
+        btn_start   = f'<button class="btn start"   onclick="act(\'{rid}\',\'start\')">Start</button>'   if status == "stopped"  else ""
+        btn_stop    = f'<button class="btn stop"    onclick="act(\'{rid}\',\'stop\')">Stop</button>'     if status == "running"  else ""
+        btn_archive = f'<button class="btn archive" onclick="archive_run(\'{rid}\',\'{name.replace(chr(39), chr(92)+chr(39))}\')">Archive</button>' if status != "archived" else ""
+        btn_delete  = f'<button class="btn delete"  onclick="del_run(\'{rid}\',\'{name.replace(chr(39), chr(92)+chr(39))}\')">Delete</button>'
+        btn_view    = f'<a class="btn view" href="#" onclick="window.open({status_url_js});return false" target="_blank">Open Status</a>'
         btn_pin     = (f'<button class="btn pin" title="Pin as stream overlay source" '
-                       f'onclick="pinRun(\'{rid}\')">📌 Stream</button>') if status == "running" else ""
+                       f'onclick="pinRun(\'{rid}\')">Pin Stream</button>') if status == "running" else ""
 
         launcher_html = ""
         if status != "archived":
             safe_name = re.sub(r'[^\w-]', '_', name).strip('_') or rid
-            launcher_html = f'''<div class="launcher-info">📜 BizHawk scripts:
-              <a class="btn launcher" href="/api/runs/{rid}/launcher/a" download="slink_{safe_name}_a.lua">⬇ Player A</a>
-              <a class="btn launcher" href="/api/runs/{rid}/launcher/b" download="slink_{safe_name}_b.lua">⬇ Player B</a>
+            launcher_html = f'''<div class="launcher-info"><span class="launcher-label">BizHawk scripts</span>
+              <a class="btn launcher" href="/api/runs/{rid}/launcher/a" download="slink_{safe_name}_a.lua">Player A</a>
+              <a class="btn launcher" href="/api/runs/{rid}/launcher/b" download="slink_{safe_name}_b.lua">Player B</a>
             </div>'''
 
         cards += f"""
@@ -536,157 +488,6 @@ def _render_cards(runs: list[dict], host: str) -> str:
           </div>
         </div>"""
     return cards or '<p style="color:var(--muted)">No runs yet. Create one above.</p>'
-
-
-def _render_html(runs: list[dict], host: str) -> str:
-    cards = _render_cards(runs, host)
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Soul Link Run Manager</title>
-<style>
-  :root {{
-    --bg: #1a1a2e; --panel: #16213e; --border: #0f3460;
-    --green: #4ade80; --red: #f87171; --yellow: #fbbf24;
-    --text: #e2e8f0; --muted: #94a3b8;
-  }}
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{ background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; padding: 24px; }}
-  h1 {{ color: var(--green); margin-bottom: 20px; font-size: 1.6rem; }}
-  .new-run {{ background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-              padding: 16px; margin-bottom: 24px; display: flex; gap: 10px; align-items: center; }}
-  .new-run input {{ flex: 1; background: #0d1b2a; border: 1px solid var(--border);
-                    color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 0.95rem; }}
-  .new-run input:focus {{ outline: 2px solid var(--green); }}
-  .cards {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }}
-  .card {{ background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }}
-  .card.running {{ border-color: #166534; }}
-  .card.archived {{ opacity: 0.6; }}
-  .card-header {{ display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }}
-  .run-name {{ font-size: 1.05rem; font-weight: 600; }}
-  .badge {{ font-size: 0.8rem; padding: 2px 8px; border-radius: 12px; background: #1e293b; }}
-  .badge.running {{ color: var(--green); }}
-  .badge.stopped {{ color: var(--muted); }}
-  .badge.archived {{ color: var(--yellow); }}
-  .card-meta {{ font-size: 0.82rem; color: var(--muted); display: flex; gap: 14px; margin-bottom: 12px; }}
-  .launcher-info {{ font-size: 0.82rem; color: var(--muted); margin-bottom: 10px; display: flex; gap: 8px; align-items: center; }}
-  .btn.launcher {{ background: #1a2744; color: #93c5fd; padding: 4px 10px; font-size: 0.78rem; text-decoration: none; }}
-  .card-actions {{ display: flex; gap: 8px; flex-wrap: wrap; }}
-  .btn {{ padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer;
-          font-size: 0.84rem; font-weight: 500; text-decoration: none; display: inline-block; }}
-  .btn.start   {{ background: #166534; color: var(--green); }}
-  .btn.stop    {{ background: #7f1d1d; color: var(--red); }}
-  .btn.archive {{ background: #451a03; color: var(--yellow); }}
-  .btn.delete  {{ background: #4a0000; color: #ff6b6b; }}
-  .btn.view    {{ background: #1e3a5f; color: #60a5fa; }}
-  .btn:hover   {{ filter: brightness(1.2); }}
-  .btn.new     {{ background: #166534; color: var(--green); padding: 8px 18px; white-space: nowrap; }}
-  .lock-badge  {{ font-size: 0.78rem; padding: 2px 7px; border-radius: 10px; background: #1e3a5f; color: #60a5fa; }}
-  .game-badge  {{ font-size: 0.78rem; padding: 2px 7px; border-radius: 10px; background: #1e3f2f; color: #6ee7b7; }}
-  .lock-opts   {{ display: flex; gap: 14px; align-items: center; font-size: 0.9rem; color: var(--muted); }}
-  .lock-opts label {{ cursor: pointer; display: flex; align-items: center; gap: 4px; }}
-  .last-event  {{ font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
-  .last-event .ev-ts {{ color: #555; }}
-  .stream-banner {{ background: #0d1b2a; border: 1px solid #1e3a5f; border-radius: 8px; padding: 10px 16px;
-                    margin-bottom: 20px; display: flex; align-items: center; gap: 14px; font-size: 0.88rem; color: var(--muted); }}
-  .stream-banner a {{ color: #6af; font-weight: 600; text-decoration: none; }}
-  .stream-banner a:hover {{ text-decoration: underline; }}
-  .stream-banner .stream-port {{ color: #4f4; font-family: monospace; }}
-  .btn.pin     {{ background: #2a1a3e; color: #c084fc; border: 1px solid #7c3aed; }}
-  .btn.pin.active {{ background: #4c1d95; color: #e9d5ff; }}
-  footer {{ margin-top: 32px; color: var(--muted); font-size: 0.78rem; text-align: center; }}
-</style>
-</head>
-<body>
-<h1>🔗 Soul Link Run Manager</h1>
-
-<div class="stream-banner">
-  🎬 <strong>Stream Overlays</strong> — always on port <span class="stream-port">{MANAGER_HTTP_PORT}</span>:
-  &nbsp;<a href="/stream" target="_blank">Open Stream Gallery ↗</a>
-  &nbsp;·&nbsp; Point OBS browser sources to <code>http://localhost:{MANAGER_HTTP_PORT}/stream/party-a</code> etc. — port never changes.
-  <span id="stream-active" style="margin-left:auto;font-size:0.8rem"></span>
-</div>
-
-<div class="new-run">
-  <input type="text" id="rname" placeholder="Run name (e.g. Randomizer Run #1)" />
-  <div class="lock-opts">
-    <label><input type="checkbox" id="species_lock" /> 🧬 Species Clause</label>
-    <label><input type="checkbox" id="gender_lock" /> ⚥ Gender Clause</label>
-    <label><input type="checkbox" id="type_lock" /> 🔮 Type Clause</label>
-  </div>
-  <button class="btn new" onclick="newRun()">＋ New Run</button>
-</div>
-
-<div class="cards">{cards or '<p style="color:var(--muted)">No runs yet. Create one above.</p>'}</div>
-
-<footer>Auto-refreshes cards every 10 s &nbsp;·&nbsp; Manager on port {MANAGER_HTTP_PORT}</footer>
-
-<script>
-async function refreshCards() {{
-  try {{
-    const res = await fetch('/api/runs/cards');
-    if (res.ok) document.querySelector('.cards').innerHTML = await res.text();
-  }} catch (_) {{}}
-  await refreshStreamPin();
-}}
-setInterval(refreshCards, 10000);
-
-async function refreshStreamPin() {{
-  try {{
-    const r = await fetch('/api/stream/pin');
-    const j = await r.json();
-    const el = document.getElementById('stream-active');
-    if (el) el.textContent = j.active_run_name ? `▶ Active: ${{j.active_run_name}}${{j.pinned ? ' 📌' : ''}}` : '';
-  }} catch (_) {{}}
-}}
-refreshStreamPin();
-
-async function pinRun(runId) {{
-  const r = await fetch('/api/stream/pin', {{method:'POST', headers:{{'Content-Type':'application/json'}}, body:JSON.stringify({{run_id:runId}})}});
-  const j = await r.json();
-  if (!j.ok) alert(j.error || 'Error');
-  else {{ await refreshStreamPin(); location.reload(); }}
-}}
-
-async function act(runId, action) {{
-  const res = await fetch(`/api/runs/${{runId}}/${{action}}`, {{method:'POST'}});
-  const j = await res.json();
-  if (!j.ok) alert(j.error || 'Error');
-  else location.reload();
-}}
-async function archive_run(runId, name) {{
-  if (!confirm(`Archive run "${{name}}"?\\n\\nThis will stop the server. The run data will be preserved but the run cannot be restarted.`)) return;
-  const res = await fetch(`/api/runs/${{runId}}/archive`, {{method:'POST'}});
-  const j = await res.json();
-  if (!j.ok) alert(j.error || 'Error');
-  else location.reload();
-}}
-async function del_run(runId, name) {{
-  if (!confirm(`Delete run "${{name}}"?\\n\\nThis will stop the server and permanently delete all run data (links, memorial, etc).`)) return;
-  const res = await fetch(`/api/runs/${{runId}}/delete`, {{method:'POST'}});
-  const j = await res.json();
-  if (!j.ok) alert(j.error || 'Error');
-  else location.reload();
-}}
-async function newRun() {{
-  const name = document.getElementById('rname').value.trim();
-  const species_lock = document.getElementById('species_lock').checked;
-  const gender_lock = document.getElementById('gender_lock').checked;
-  const type_lock = document.getElementById('type_lock').checked;
-  if (!name) {{ alert('Enter a run name'); return; }}
-  const res = await fetch('/api/runs/new', {{
-    method: 'POST',
-    headers: {{'Content-Type': 'application/json'}},
-    body: JSON.stringify({{name, species_lock, gender_lock, type_lock}})
-  }});
-  const j = await res.json();
-  if (!j.ok) alert(j.error || 'Error');
-  else location.reload();
-}}
-</script>
-</body>
-</html>"""
 
 
 # ── Request handlers ────────────────────────────────────────────────────────
@@ -725,8 +526,58 @@ class RunManager:
 
     async def handle_index(self, request: web.Request) -> web.Response:
         runs = self._get()
-        html = _render_html(runs, self.bind_host)
-        return web.Response(text=html, content_type="text/html")
+        # Augment each run with display fields the master-detail template
+        # expects (created_short, safe_name, game_label, last_event).
+        augmented = [self._augment_for_template(r) for r in runs]
+        return aiohttp_jinja2.render_template(
+            "manager.html", request,
+            {
+                "page_title":   "Soul Link Run Manager",
+                "theme":        resolve_theme(request),
+                "is_stream":    False,
+                "hide_chrome":  False,
+                "runs_json":    json.dumps(augmented),
+                "manager_port": self.manager_port,
+            },
+        )
+
+    def _augment_for_template(self, run: dict) -> dict:
+        """Add display strings to a run dict for the master-detail template.
+
+        Avoids putting this logic in the JS so the initial page render has
+        everything it needs without an extra round-trip.
+        """
+        rid = run["run_id"]
+        r = dict(run)
+        r["created_short"] = (run.get("created_at") or "")[:16].replace("T", " ")
+        r["safe_name"] = re.sub(r"[^\w-]", "_", run.get("name") or rid).strip("_") or rid
+
+        # Read game label from the run's links.json (best effort).
+        links_path = os.path.join(MANAGER_DIR, rid, "links.json")
+        try:
+            with open(links_path) as f:
+                rom_type = json.load(f).get("rom_type", "")
+            r["game_label"] = rom_type.replace("_", " ").title() if rom_type else ""
+        except (json.JSONDecodeError, OSError, FileNotFoundError):
+            r["game_label"] = ""
+
+        # Read the most recent event (newest-first list) so the right pane
+        # can surface it without an extra API call.
+        events_path = os.path.join(MANAGER_DIR, rid, "events.json")
+        r["last_event"] = None
+        try:
+            with open(events_path) as f:
+                evts = json.load(f)
+            if evts:
+                ev = evts[0]
+                r["last_event"] = {
+                    "ts":     (ev.get("ts", "") or "")[-8:],
+                    "player": (ev.get("player", "") or "").upper(),
+                    "text":   ev.get("text", "") or "",
+                }
+        except (json.JSONDecodeError, OSError, FileNotFoundError):
+            pass
+        return r
 
     async def handle_cards(self, request: web.Request) -> web.Response:
         runs = self._get()
@@ -910,18 +761,55 @@ class RunManager:
     # ── Stream overlay pages (served at fixed manager port 8090) ───────────────
 
     async def handle_stream_index(self, request: web.Request) -> web.Response:
-        return web.Response(text=_STREAM_INDEX_HTML, content_type="text/html")
+        from server.chrome import build_sidebar_html
+        ctx = _build_stream_index_context(request)
+        # Manager itself is the host of this page — pass manager_port=None so
+        # the Manager nav item doesn't link back to itself.
+        ctx["sidebar_html"] = build_sidebar_html("stream", tcp_port=None, manager_port=None)
+        return aiohttp_jinja2.render_template("stream_index.html", request, ctx)
 
-    async def handle_stream_overlay(self, request: web.Request) -> web.Response:
-        """Single handler for all /stream/{name} overlay pages."""
+    async def handle_stream_overlay_proxy(self, request: web.Request) -> web.Response:
+        """GET /stream/{name} (and /stream/{name}/fragment) on the manager —
+        proxy through to the active run's overlay so the gallery preview iframe
+        and OBS browser sources can target a stable manager URL regardless of
+        which run is currently pinned. The fragment variant is required because
+        every overlay's `_base.html` polls `fragment_url = /stream/{slug}/fragment`
+        via HTMX every 2 s — without the fragment route, the initial paint shows
+        but the page never updates.
+
+        If no run is active, return a friendly 404 instead of 500.
+        """
         name = request.match_info["name"]
-        entry = _OVERLAY_PAGES.get(name)
-        if entry is None:
-            raise web.HTTPNotFound()
-        title, js, player = entry
-        if player:
-            js = js.replace("%PLAYER%", player)
-        return web.Response(text=_stream_overlay_page(title, js), content_type="text/html")
+        # The fragment route reuses this handler; aiohttp's match_info exposes
+        # the suffix path (empty for the page route, "/fragment" for the poll).
+        suffix = "/fragment" if request.match_info.get("suffix") else ""
+        active = self._active_stream_run()
+        if active is None:
+            return web.Response(
+                status=404,
+                content_type="text/html",
+                text=(
+                    "<!DOCTYPE html><html><body style=\"font-family:'Pixelify Sans',monospace;"
+                    "background:#070910;color:#e6e6e6;padding:2em;text-align:center\">"
+                    "<h2 style=\"color:#f8a020\">No active run</h2>"
+                    "<p>Pin a running run on <a href=\"/\" style=\"color:#6af\">the manager</a> "
+                    "to serve overlays here.</p></body></html>"
+                ),
+            )
+        # Preserve query string (?theme=…, ?layout=…, etc.) when proxying.
+        qs = request.url.query_string
+        target = (f"http://127.0.0.1:{active['http_port']}/stream/{name}{suffix}"
+                  + (f"?{qs}" if qs else ""))
+        try:
+            async with request.app["proxy_session"].get(
+                target, timeout=aiohttp.ClientTimeout(total=5)
+            ) as resp:
+                body = await resp.read()
+                ct = resp.headers.get("Content-Type", "text/html")
+                return web.Response(body=body, status=resp.status, content_type=ct.split(";")[0])
+        except Exception as e:
+            log.debug(f"Proxy /stream/{name}{suffix} → run {active['run_id']} failed: {e}")
+            return web.Response(status=502, text=f"Upstream run {active['run_id']} unreachable")
 
     # ── API proxy endpoints (relay to active run) ──────────────────────────────
 
@@ -986,6 +874,7 @@ class RunManager:
 async def main(host: str, port: int):
     manager = RunManager(bind_host=host, manager_port=port)
     app = web.Application()
+    setup_templating(app)
 
     # Run-management routes
     app.router.add_get("/",                           manager.handle_index)
@@ -1002,10 +891,16 @@ async def main(host: str, port: int):
     app.router.add_get("/api/stream/pin",  manager.handle_stream_pin_status)
     app.router.add_post("/api/stream/pin", manager.handle_stream_pin)
 
-    # Stream overlay pages — fixed at manager port 8090
-    app.router.add_get("/stream",         manager.handle_stream_index)
-    app.router.add_get("/stream/",        manager.handle_stream_index)
-    app.router.add_get("/stream/{name}",  manager.handle_stream_overlay)
+    # Stream overlay gallery — fixed at manager port 8090. The /stream/{name}
+    # proxy relays to the active run's HTTP port so OBS browser sources can
+    # bookmark a stable URL even if the pinned run changes.
+    app.router.add_get("/stream",                          manager.handle_stream_index)
+    app.router.add_get("/stream/",                         manager.handle_stream_index)
+    app.router.add_get("/stream/{name}",                   manager.handle_stream_overlay_proxy)
+    # Fragment route — the per-run overlays' HTMX bodies poll this every 2 s
+    # via `fragment_url = /stream/{slug}/fragment`. Without it the manager
+    # returns 404 on every poll, and the overlay never updates after first paint.
+    app.router.add_get("/stream/{name}/{suffix:fragment}", manager.handle_stream_overlay_proxy)
 
     # API proxy — relays to the active (pinned or latest) run
     app.router.add_get("/api/status",         manager.handle_proxy_status)

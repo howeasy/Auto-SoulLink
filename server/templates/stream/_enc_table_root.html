@@ -1,0 +1,42 @@
+{# Encounter table overlay — Radical-Red-only wild encounter rates for the
+   active area, by method. Auto-scrolls when the methods list overflows.
+   Context: { player_id, area_display,
+              methods: [{name, entries: [{species_id, species_name, rate, level_range, sprite_html}]}] }
+
+   Marquee animation is applied by overlay-helpers.js on initial paint AND on
+   every htmx:afterSettle, so the scroll survives 2-second HTMX morph swaps
+   AND waits for sprite images to load before measuring scrollHeight. The
+   server-side `data-marquee-base` carries the floored duration in seconds;
+   overlay-helpers.js divides by `?speed=` when applying the CSS animation. #}
+
+<div id="root">
+  {% if not methods %}
+    <div class="wtitle">WILD · {{ player_id | upper }}</div>
+    <div style="opacity:.4;padding-top:6px;font-size:.9em">No encounter data</div>
+  {% else %}
+    <div class="et-area">{{ area_display or 'Current Area' }}</div>
+    <div class="et-scroll" id="et-mask">
+      <div class="et-methods" id="et-list"
+           data-marquee="enc-scroll"
+           data-marquee-base="{{ [8, (methods | map(attribute='entries') | map('length') | sum) * 2] | max }}">
+        {% for _ in range(2) %}
+          {% for m in methods %}
+            <div>
+              <div class="et-method-hdr">{{ m.name }}</div>
+              <div class="et-list">
+                {% for e in m.entries %}
+                  <div class="et-entry">
+                    {{ e.sprite_html | safe }}
+                    <span class="et-name">{{ e.species_name }}</span>
+                    <span class="et-rate">{{ e.rate }}%</span>
+                    <span class="et-lv">{{ e.level_range }}</span>
+                  </div>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+</div>

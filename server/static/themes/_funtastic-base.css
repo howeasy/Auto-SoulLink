@@ -1,0 +1,92 @@
+/* _funtastic-base.css — shared decoration layer for the Funtastic theme family.
+ *
+ * Each funtastic-{color}.css @imports this file and then overrides only the
+ * palette tokens. The decorations below paint the "translucent-shell-lit-from-
+ * within" metaphor: dark gradient field with a soft holographic shimmer plus
+ * a faint sparkle layer overhead.
+ *
+ * Stream overlays (OBS browser sources) wear `body.stream` to opt out of
+ * the shimmer / sparkle — those need to stay pixel-precise against a
+ * transparent background.
+ */
+
+/* Body font flows through `--font-ui` (slink.css default = Pixelify chain;
+ * `body.font-classic` swaps in system-ui via the sidebar font picker).
+ * Excludes `body.dark-theme` (the calc) so its Bootstrap typography is
+ * left alone — the picker still controls the calc's sidebar font via a
+ * separate ``body.dark-theme.font-classic .dash-sidebar`` rule in
+ * slink.css. */
+html, body:not(.dark-theme) {
+  font-family: var(--font-ui);
+  letter-spacing: .02em;
+  image-rendering: pixelated;
+  min-height: 100%;
+}
+
+body:not(.dark-theme) {
+  /* Holographic radial highlights painted onto the document (no `fixed`
+   * attachment). Pinning the background to the viewport forced a full-
+   * viewport repaint on every scroll + on every HTMX morph swap, and that
+   * pile-up was causing renderer freezes during theme navigation. The
+   * gradients still cover the visible area at common monitor sizes;
+   * ultra-tall pages just tile the same field, which is fine for a
+   * translucent-shell metaphor.
+   *
+   * Excluding `body.dark-theme` (the calc) — its dark-theme.css sets a
+   * single solid background-color we don't want to overlay. */
+  background:
+    radial-gradient(circle at 18% 22%, color-mix(in srgb, var(--c-brand) 18%, transparent), transparent 45%),
+    radial-gradient(circle at 82% 70%, color-mix(in srgb, var(--c-edge)  16%, transparent), transparent 45%),
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--c-gold)  10%, transparent), transparent 55%),
+    radial-gradient(ellipse at top,
+      color-mix(in srgb, var(--c-card) 75%, var(--c-bg)) 0%,
+      var(--c-card) 50%,
+      var(--c-bg) 100%);
+  background-attachment: scroll;
+  color: var(--c-txt);
+}
+
+/* Faint sparkle layer — absolute (document-flow) instead of fixed so it
+ * doesn't trigger full-viewport repaints on scroll / morph. The body itself
+ * is the containing block, so `inset: 0` still spans the full document. */
+body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,.4),   transparent),
+    radial-gradient(1px 1px at 70% 15%, color-mix(in srgb, var(--c-pend)  60%, transparent), transparent),
+    radial-gradient(1px 1px at 40% 75%, color-mix(in srgb, var(--c-gold)  50%, transparent), transparent),
+    radial-gradient(1px 1px at 85% 55%, color-mix(in srgb, var(--c-brand) 50%, transparent), transparent);
+  opacity: .85;
+}
+
+/* Stream overlays opt out — the OBS browser source captures a transparent
+ * region and any backdrop pollutes the chroma key. */
+body.stream {
+  background: transparent !important;
+}
+body.stream::before { display: none; }
+
+/* Pixel-perfect glyph rendering for the Press Start 2P accents used by
+ * existing overlay widget titles. Disables subpixel AA so the pixel font
+ * stays crisp regardless of the active theme. */
+.wtitle,
+.d-num, .d-lbl,
+.kpi-value,
+.gbc-ticker {
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: none;
+}
+
+/* Sprite rendering — overlays already set image-rendering: pixelated on
+ * .mon-sprite and .enc-sprite. Reassert it globally under Funtastic so
+ * the dashboard's <img> sprites stay sharp too. */
+img.mon-sprite,
+img.enc-sprite,
+.bdg-img {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}

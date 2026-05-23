@@ -1,0 +1,46 @@
+{# _linked_party_root.html — Linked Party overlay (#root subtree).
+   Shows linked pairs where BOTH mons are currently in party.
+   Context: { pairs: [Pair] } where each Pair has:
+       area_display,
+       a: {nickname, species_name, sprite_html, level, hp, max_hp, pct, hp_cls, fainted},
+       b: {...},
+       both_fainted: bool
+   #}
+
+<div id="root">
+  <div class="wtitle">LINKED PARTY</div>
+  {% if not pairs %}
+    <div class="dim" style="opacity:.4;padding-top:.5em;font-size:.9em">No linked pairs in party</div>
+  {% else %}
+    <div class="lp-list">
+      {% for pr in pairs %}
+        <div class="lp-card{% if pr.both_fainted %} ld{% endif %}">
+          {% if pr.area_display %}<div class="lp-area">{{ pr.area_display }}</div>{% endif %}
+          <div class="lp-mons">
+            <div class="lp-side{% if pr.a.fainted %} mc fnt{% endif %}">
+              {{ pr.a.sprite_html | safe }}
+              <div class="lp-info">
+                <div class="lp-nm">{{ pr.a.nickname or pr.a.species_name or '—' }}{% if pr.a.fainted %}<span class="fnt-tag">FNT</span>{% endif %}</div>
+                <div class="hp-row">
+                  <div class="hp-trk"><div class="hp-fill {{ pr.a.hp_cls }}" style="width:{{ pr.a.pct }}%"></div></div>
+                  {% if pr.a.level %}<span class="lv">Lv&nbsp;{{ pr.a.level }}</span>{% endif %}
+                </div>
+              </div>
+            </div>
+            <span class="lp-sep">◈</span>
+            <div class="lp-side lp-r{% if pr.b.fainted %} mc fnt{% endif %}">
+              <div class="lp-info lp-ir">
+                <div class="lp-nm">{% if pr.b.fainted %}<span class="fnt-tag">FNT</span>{% endif %}{{ pr.b.nickname or pr.b.species_name or '—' }}</div>
+                <div class="hp-row">
+                  {% if pr.b.level %}<span class="lv">Lv&nbsp;{{ pr.b.level }}</span>{% endif %}
+                  <div class="hp-trk"><div class="hp-fill {{ pr.b.hp_cls }}" style="width:{{ pr.b.pct }}%"></div></div>
+                </div>
+              </div>
+              {{ pr.b.sprite_html | safe }}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>

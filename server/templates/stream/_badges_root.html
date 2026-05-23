@@ -1,0 +1,19 @@
+{# Badges overlay (#root subtree) — earned/unearned badges per player.
+   Context: { player_id, trainer_name, badges: [{slug, name, earned}] } #}
+
+<div id="root">
+  <div class="wtitle">{{ trainer_name }} BADGES</div>
+  {% if not badges %}
+    <span class="dim">No badge data</span>
+  {% else %}
+    <div class="bdg-wrap"><div class="bdg-player"><div class="bdg-strip">
+      {% for b in badges %}
+        <img class="bdg-img {% if b.earned %}on{% else %}off{% endif %}"
+             crossorigin="anonymous"
+             src="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/{{ b.slug }}.png"
+             title="{{ b.name }}" alt="{{ b.name }}"
+             onerror="this.style.display='none';">
+      {% endfor %}
+    </div></div></div>
+  {% endif %}
+</div>

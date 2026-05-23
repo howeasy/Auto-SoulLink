@@ -1,0 +1,665 @@
+{% extends "base.html" %}
+
+{% block title %}Soul Link Overlays{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="/static/dashboard.css">
+  <script src="/static/dashboard.js" defer></script>
+  <style>
+    /* Master-detail overlay launcher — entirely token-driven so
+       the broadcaster's chosen webpage theme applies here too. The right
+       pane previews the URL with its OWN ?theme= (overlay theming is
+       independent of the launcher page theme). The page lives inside the
+       dashboard sidebar grid, so the launcher itself is the contents of the
+       right column (no full-viewport sizing). */
+    .stream-shell {
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+    .launcher {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+      max-height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Left rail ────────────────────────────────────────────────── */
+    .rail {
+      border-right: 1px solid var(--c-edge);
+      background: var(--c-card);
+      overflow-y: auto;
+      padding: 1em 0 2em;
+    }
+    .rail-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: .6em .9em .7em 1.4em;
+      border-bottom: 1px solid var(--c-edge);
+    }
+    .rail h1 {
+      font-family: var(--font-pixel);
+      font-size: 11px;
+      color: var(--c-brand);
+      letter-spacing: .12em;
+      margin: 0;
+      flex: 1;
+      -webkit-font-smoothing: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .rail-toggle {
+      flex-shrink: 0;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--c-dim);
+      width: 26px; height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 0;
+    }
+    .rail-toggle svg { width: 14px; height: 14px; display: block; }
+    .rail-toggle:hover {
+      background: color-mix(in srgb, var(--c-brand) 18%, transparent);
+      border-color: color-mix(in srgb, var(--c-brand) 30%, var(--c-edge));
+      color: var(--c-brand);
+    }
+
+    /* Collapsed rail — narrow icon-only column. Family labels + item names
+     * hide, leaving just the family-section dots. The toggle stays visible
+     * so the user can re-expand. */
+    .rail.rail-collapsed { width: 56px; overflow: hidden; }
+    .rail.rail-collapsed h1 { display: none; }
+    .rail.rail-collapsed .rail-head { justify-content: center; padding: .6em 0; }
+    .rail.rail-collapsed .rail-family-label { display: none; }
+    .rail.rail-collapsed .rail-item { padding: 7px 0; justify-content: center; }
+    .rail.rail-collapsed .rail-item > :not(.rail-item-dot) { display: none; }
+    .rail.rail-collapsed .rail-item-dot { width: 8px; height: 8px; }
+    .launcher:has(.rail.rail-collapsed) { grid-template-columns: 56px 1fr; }
+    .rail-family {
+      margin-top: 1em;
+    }
+    .rail-family-label {
+      font-size: 10px;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--c-dim);
+      padding: 0 1.4em .35em;
+      font-weight: 700;
+    }
+    .rail-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 7px 1.4em;
+      border: 0;
+      background: transparent;
+      color: var(--c-txt);
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
+      border-left: 3px solid transparent;
+    }
+    .rail-item:hover { background: color-mix(in srgb, var(--c-edge) 30%, transparent); }
+    .rail-item.active {
+      background: color-mix(in srgb, var(--c-brand) 12%, transparent);
+      border-left-color: var(--c-brand);
+      color: var(--c-brand);
+    }
+    .rail-item-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--c-dim);
+      flex-shrink: 0;
+    }
+    .rail-item.active .rail-item-dot { background: var(--c-brand); box-shadow: 0 0 6px var(--c-brand); }
+
+    /* ── Right pane ───────────────────────────────────────────────── */
+    .pane {
+      overflow-y: auto;
+      padding: 1.4em 2em 3em;
+    }
+    .pane h2 {
+      font-size: 1.4em;
+      font-weight: 600;
+      color: var(--c-txt);
+      margin: 0 0 .25em;
+      letter-spacing: .02em;
+    }
+    .pane .desc {
+      color: var(--c-dim);
+      font-size: .95em;
+      max-width: 780px;
+      margin-bottom: 1.2em;
+    }
+    .obs-tip {
+      background: color-mix(in srgb, var(--c-brand) 8%, transparent);
+      border: 1px solid color-mix(in srgb, var(--c-brand) 25%, transparent);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 1.5em;
+      font-size: .85em;
+      color: var(--c-txt);
+      max-width: 780px;
+    }
+    .obs-tip b { color: var(--c-brand); }
+
+    /* Live preview iframe */
+    .preview-wrap {
+      width: 100%;
+      max-width: 780px;
+      aspect-ratio: 16 / 9;
+      background:
+        repeating-conic-gradient(
+          color-mix(in srgb, var(--c-edge) 60%, transparent) 0% 25%,
+          transparent                                       0% 50%
+        ) 50% / 16px 16px;
+      border: 1px solid var(--c-edge);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 1.4em;
+    }
+    .preview-wrap iframe {
+      width: 100%; height: 100%;
+      border: 0;
+      pointer-events: none;
+    }
+
+    /* All-Overlays overview grid — small iframe tiles, scrollable. Each
+     * tile pops out via the corner link. The grid auto-sizes to viewport. */
+    .overview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+      margin-bottom: 1.4em;
+    }
+    .overview-tile {
+      background:
+        repeating-conic-gradient(
+          color-mix(in srgb, var(--c-edge) 60%, transparent) 0% 25%,
+          transparent                                       0% 50%
+        ) 50% / 12px 12px;
+      border: 1px solid color-mix(in srgb, var(--c-brand) 25%, var(--c-edge));
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .overview-tile-hdr {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      background: color-mix(in srgb, var(--c-brand) 14%, var(--c-card));
+      border-bottom: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+      font-size: 0.78em;
+      font-weight: 600;
+      color: var(--c-txt);
+    }
+    .overview-tile-title {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .overview-tile-pop {
+      color: var(--c-link);
+      text-decoration: none;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    .overview-tile-pop:hover { background: color-mix(in srgb, var(--c-link) 18%, transparent); }
+    .overview-tile-frame {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      border: 0;
+      pointer-events: none;
+      background: transparent;
+      display: block;
+    }
+
+    /* Config rows: Theme, Layout, Speed, Filters */
+    .cfg-block { max-width: 780px; }
+    .cfg-row {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 12px;
+      padding: 8px 0;
+      align-items: start;
+      border-top: 1px solid var(--c-sep);
+    }
+    .cfg-row:first-of-type { border-top: 0; }
+    .cfg-lbl {
+      font-size: .82em;
+      color: var(--c-dim);
+      padding-top: 5px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .cfg-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+    .cpill {
+      background: var(--c-bg);
+      color: var(--c-dim);
+      border: 1px solid var(--c-edge);
+      border-radius: 4px;
+      padding: 4px 10px;
+      font-size: .82em;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .cpill:hover { color: var(--c-txt); border-color: var(--c-dim); }
+    .cpill.active {
+      color: var(--c-brand);
+      border-color: var(--c-brand);
+      background: color-mix(in srgb, var(--c-brand) 10%, transparent);
+    }
+    .cpill.factive {
+      color: var(--c-alive);
+      border-color: var(--c-alive);
+      background: color-mix(in srgb, var(--c-alive) 10%, transparent);
+    }
+    .cpill .pswatch {
+      width: 12px; height: 12px; border-radius: 2px;
+      flex-shrink: 0;
+      border: 1px solid color-mix(in srgb, var(--c-edge) 80%, transparent);
+    }
+
+    /* Size hint + URL row */
+    .size-hint {
+      font-family: var(--font-pixel);
+      font-size: 9px;
+      color: var(--c-brand);
+      opacity: .75;
+      margin: 1.2em 0 .6em;
+      -webkit-font-smoothing: none;
+      letter-spacing: .04em;
+    }
+    .url-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: .4em;
+      flex-wrap: wrap;
+    }
+    .url-box {
+      flex: 1;
+      min-width: 240px;
+      background: var(--c-bg);
+      color: var(--c-link);
+      border: 1px solid var(--c-edge);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-family: monospace;
+      font-size: .88em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      transition: color .25s;
+    }
+    .url-box.copied { color: var(--c-alive); }
+    .copy-btn, .open-btn {
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-size: .85em;
+      font-family: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      white-space: nowrap;
+      border: 1px solid;
+    }
+    .copy-btn {
+      background: color-mix(in srgb, var(--c-link) 12%, transparent);
+      color: var(--c-link);
+      border-color: var(--c-link);
+    }
+    .copy-btn:hover { background: color-mix(in srgb, var(--c-link) 22%, transparent); }
+    .open-btn {
+      background: color-mix(in srgb, var(--c-alive) 12%, transparent);
+      color: var(--c-alive);
+      border-color: var(--c-alive);
+    }
+    .open-btn:hover { background: color-mix(in srgb, var(--c-alive) 22%, transparent); }
+
+    .attempts-row {
+      display: flex; align-items: center; gap: 8px;
+      margin-top: .8em;
+    }
+    .attempts-row input {
+      width: 80px;
+      background: var(--c-bg);
+      color: var(--c-brand);
+      border: 1px solid var(--c-edge);
+      border-radius: 4px;
+      padding: 5px 8px;
+      font-family: var(--font-pixel);
+      font-size: .75em;
+      text-align: center;
+    }
+
+    @media (max-width: 800px) {
+      .launcher { grid-template-columns: 1fr; max-height: none; }
+      .rail { max-height: 240px; border-right: 0; border-bottom: 1px solid var(--c-edge); }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+{#
+  Catalog data injected via a <script> tag rather than embedded directly in
+  an x-init="" HTML attribute. JSON has lots of double quotes; cramming it
+  into a double-quoted attribute terminates the attribute on the first one
+  and breaks everything downstream. A typed module-scope var is cleaner.
+#}
+<script>
+  window.SLINK_OVERLAY_CATALOG    = {{ overlays_json           | safe }};
+  window.SLINK_LAYOUT_LABELS      = {{ layout_labels_json      | safe }};
+  window.SLINK_DEFAULT_FILTERS_ON = {{ default_filters_on_json | safe }};
+</script>
+
+{{ sidebar_html | safe }}
+<div class="launcher"
+     x-data="overlayLauncher()"
+     x-init="init(window.SLINK_OVERLAY_CATALOG)">
+
+  {# ── Left rail: families + items ────────────────────────────────── #}
+  <nav class="rail" :class="railCollapsed ? 'rail-collapsed' : ''">
+    <div class="rail-head">
+      <h1>◆ SLink Overlays</h1>
+      <button type="button" class="rail-toggle"
+              @click="railCollapsed = !railCollapsed; try { localStorage.setItem('slink-stream-rail-collapsed', railCollapsed ? '1' : '0'); } catch (_) {}"
+              :title="railCollapsed ? 'Expand overlay list' : 'Collapse overlay list'">
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path fill="currentColor" d="M2 3h12v2H2zm0 4h12v2H2zm0 4h12v2H2z"/>
+        </svg>
+      </button>
+    </div>
+    {% for fam_slug, fam_label in families %}
+      {% set fam_items = overlays | selectattr('family', 'equalto', fam_slug) | list %}
+      {% if fam_items %}
+        <div class="rail-family">
+          <div class="rail-family-label">{{ fam_label }}</div>
+          {% for ov in fam_items %}
+            <button class="rail-item"
+                    :class="active === '{{ ov.slug }}' ? 'active' : ''"
+                    @click="select('{{ ov.slug }}')">
+              <span class="rail-item-dot"></span>
+              <span>{{ ov.title }}</span>
+            </button>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endfor %}
+  </nav>
+
+  {# ── Right pane: selected overlay's config ──────────────────────── #}
+  <main class="pane">
+    <div class="obs-tip">
+      <b>OBS setup:</b> Add a Browser Source → paste the URL → set width/height per the recommended size.
+      OBS's default Browser Source Custom CSS already handles transparent backgrounds.
+      <b>Overlay themes are independent of the launcher page theme</b> — they live in the URL only.
+    </div>
+
+    <h2 x-text="current.title"></h2>
+    <p class="desc" x-text="current.desc"></p>
+
+    {# Overview mode — a grid of every other overlay in mini-preview iframes
+       so the broadcaster can see all scenes at a glance. Excludes the
+       "all" entry itself to avoid recursion. #}
+    <template x-if="current.slug === 'all'">
+      <div class="overview-grid">
+        <template x-for="ov in overlays.filter(o => o.slug !== 'all')" :key="ov.slug">
+          <div class="overview-tile">
+            <div class="overview-tile-hdr">
+              <span class="overview-tile-title" x-text="ov.title"></span>
+              <a class="overview-tile-pop" target="_blank" rel="noopener"
+                 :href="'/stream/' + ov.slug + '?theme=' + params.theme"
+                 title="Pop out">↗</a>
+            </div>
+            <iframe class="overview-tile-frame"
+                    :src="'/stream/' + ov.slug + '?theme=' + params.theme"
+                    :title="ov.title"></iframe>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <template x-if="current.slug !== 'all'">
+      <div class="preview-wrap">
+        <iframe :src="previewUrl()" :title="current.title + ' preview'"></iframe>
+      </div>
+    </template>
+
+    <div class="cfg-block">
+      {# Theme — always shown #}
+      <div class="cfg-row">
+        <span class="cfg-lbl">Theme</span>
+        <div class="cfg-pills">
+          <template x-for="t in themes" :key="t.slug">
+            <button class="cpill"
+                    :class="params.theme === t.slug ? 'active' : ''"
+                    @click="setParam('theme', t.slug)"
+                    :title="t.label">
+              <span class="pswatch" :style="`background:${t.swatch}`"></span>
+              <span x-text="t.label"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      {# Layout — shown only when the overlay supports more than one #}
+      <template x-if="current.layouts.length > 1">
+        <div class="cfg-row">
+          <span class="cfg-lbl">Layout</span>
+          <div class="cfg-pills">
+            <template x-for="lay in current.layouts" :key="lay">
+              <button class="cpill"
+                      :class="params.layout === lay ? 'active' : ''"
+                      @click="setParam('layout', lay)"
+                      x-text="layoutLabel(lay)"></button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      {# Speed — for overlays that auto-scroll #}
+      <template x-if="current.speeds">
+        <div class="cfg-row">
+          <span class="cfg-lbl">Speed</span>
+          <div class="cfg-pills">
+            <template x-for="s in current.speeds" :key="s">
+              <button class="cpill"
+                      :class="params.speed === s ? 'active' : ''"
+                      @click="setParam('speed', s)"
+                      x-text="s + '×'"></button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      {# Pause — enemy trainer auto-scroll pause between loops #}
+      <template x-if="current.pauses">
+        <div class="cfg-row">
+          <span class="cfg-lbl">Pause</span>
+          <div class="cfg-pills">
+            <template x-for="p in current.pauses" :key="p">
+              <button class="cpill"
+                      :class="params.pause === p ? 'active' : ''"
+                      @click="setParam('pause', p)"
+                      x-text="p + 's'"></button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      {# Event filters — for events + ticker #}
+      <template x-if="current.event_filters">
+        <div class="cfg-row">
+          <span class="cfg-lbl">Events</span>
+          <div class="cfg-pills">
+            <template x-for="ev in allFilters" :key="ev">
+              <button class="cpill"
+                      :class="activeFilters.has(ev) ? 'factive' : ''"
+                      @click="toggleFilter(ev)"
+                      x-text="ev"></button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <div class="size-hint" x-text="current.sizes.join('   |   ')"></div>
+
+      <div class="url-row">
+        <span class="url-box" x-text="previewUrl()" :class="{copied: justCopied}"></span>
+        <button class="copy-btn" @click="copy()">Copy</button>
+        <a class="open-btn" :href="previewUrl()" target="_blank" rel="noopener">Open ↗</a>
+      </div>
+
+      {# Attempts counter inline editor — only the /stream/attempts overlay #}
+      <template x-if="current.attempts_input">
+        <div class="attempts-row">
+          <span class="cfg-lbl" style="padding-top:6px">Set attempts</span>
+          <input type="number" min="0" x-model.number="attemptsValue">
+          <button class="copy-btn" @click="setAttempts()">Set</button>
+        </div>
+      </template>
+    </div>
+  </main>
+</div>
+
+<script>
+function overlayLauncher() {
+  return {
+    // Server-injected data
+    overlays: [],
+    catalog: {},
+    themes: [
+      { slug: 'default',              label: 'Default',     swatch: '#070910' },
+      { slug: 'light',                label: 'Light',       swatch: '#eef2fc' },
+      { slug: 'transparent',          label: 'Transparent', swatch: 'repeating-conic-gradient(#888 0% 25%, #444 0% 50%) 50%/8px 8px' },
+      { slug: 'funtastic-grape',      label: 'Grape',       swatch: '#9933cc' },
+      { slug: 'funtastic-jungle',     label: 'Jungle',      swatch: '#00cc66' },
+      { slug: 'funtastic-fire',       label: 'Fire',        swatch: '#ff6600' },
+      { slug: 'funtastic-ice',        label: 'Ice',         swatch: '#66ccff' },
+      { slug: 'funtastic-watermelon', label: 'Watermelon',  swatch: '#ff3366' },
+      { slug: 'funtastic-smoke',      label: 'Smoke',       swatch: '#333333' },
+    ],
+    layoutLabels: window.SLINK_LAYOUT_LABELS,
+    allFilters: [
+      'capture', 'shiny', 'faint', 'force_faint', 'whiteout',
+      'area_enter', 'no_catch', 'linked', 'dead_zone', 'violation',
+      'memorialize', 'key_change', 'hello', 'reroll',
+      'party_to_box', 'box_to_party',
+    ],
+    defaultFiltersOn: new Set(window.SLINK_DEFAULT_FILTERS_ON),
+
+    // Reactive state
+    active: '',
+    params: { theme: 'transparent', layout: '', speed: '1', pause: '2' },
+    activeFilters: new Set(),
+    justCopied: false,
+    attemptsValue: 0,
+    // Rail collapse state persists in localStorage so the choice survives
+    // page refresh + navigation between the manager + per-run server's
+    // copies of this gallery.
+    railCollapsed: (function() {
+      try { return localStorage.getItem('slink-stream-rail-collapsed') === '1'; }
+      catch (_) { return false; }
+    })(),
+
+    get current() {
+      return this.catalog[this.active] || { title: '', desc: '', sizes: [], layouts: [''] };
+    },
+
+    init(overlays) {
+      this.overlays = overlays;
+      overlays.forEach(o => { this.catalog[o.slug] = o; });
+      this.active = overlays[0].slug;
+      this.activeFilters = new Set(this.defaultFiltersOn);
+      this.fetchAttempts();
+    },
+
+    select(slug) {
+      this.active = slug;
+      // Reset params that don't apply to the newly-selected overlay so the
+      // URL string stays clean (e.g. layout doesn't carry over from one
+      // overlay's "horizontal" to another that only has default).
+      var cur = this.current;
+      if (!cur.layouts.includes(this.params.layout)) {
+        this.params.layout = cur.layouts.includes('') ? '' : cur.layouts[0];
+      }
+      if (!cur.speeds && this.params.speed !== '1') this.params.speed = '1';
+      if (!cur.pauses && this.params.pause !== '2') this.params.pause = '2';
+    },
+
+    setParam(name, val) {
+      this.params[name] = val;
+    },
+
+    toggleFilter(ev) {
+      // Keep at least one filter on so the overlay doesn't go blank
+      if (this.activeFilters.has(ev) && this.activeFilters.size === 1) return;
+      if (this.activeFilters.has(ev)) this.activeFilters.delete(ev);
+      else this.activeFilters.add(ev);
+    },
+
+    layoutLabel(lay) {
+      return this.layoutLabels[lay] || lay || 'Default';
+    },
+
+    previewUrl() {
+      var cur = this.current;
+      if (!cur.slug) return '';
+      var q = [];
+      if (this.params.theme) q.push('theme=' + this.params.theme);
+      if (cur.layouts.length > 1 && this.params.layout !== '') q.push('layout=' + this.params.layout);
+      if (cur.speeds && this.params.speed !== '1') q.push('speed=' + this.params.speed);
+      if (cur.pauses && this.params.pause !== '2') q.push('pause=' + this.params.pause);
+      if (cur.event_filters) {
+        var enabled = Array.from(this.activeFilters);
+        // Only emit if the user has diverged from the all-on default
+        if (enabled.length < this.allFilters.length) {
+          q.push('filter=' + enabled.join(','));
+        }
+      }
+      return '/stream/' + cur.slug + (q.length ? '?' + q.join('&') : '');
+    },
+
+    copy() {
+      var url = window.location.origin + this.previewUrl();
+      navigator.clipboard.writeText(url).then(() => {
+        this.justCopied = true;
+        setTimeout(() => { this.justCopied = false; }, 1400);
+      });
+    },
+
+    fetchAttempts() {
+      fetch('/api/status').then(r => r.json()).then(d => {
+        if (typeof d.attempts_count === 'number') this.attemptsValue = d.attempts_count;
+      }).catch(() => {});
+    },
+
+    setAttempts() {
+      var val = parseInt(this.attemptsValue, 10);
+      if (isNaN(val) || val < 0) return;
+      fetch('/api/attempts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: val }),
+      });
+    },
+  };
+}
+</script>
+{% endblock %}

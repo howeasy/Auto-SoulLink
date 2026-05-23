@@ -1,0 +1,72 @@
+{% from "_macros.html" import mon_card %}
+
+{# _enemy_trainer_root.html — full trainer team in PARTY-style rows with
+   marquee auto-scroll when content overflows.
+
+   Server emits a single copy of the team; a tiny inline script measures
+   #trn-list vs #trn-mask after settle and duplicates the list + sets up
+   the CSS animation if needed. Speed + pause are read from the URL.
+
+   Context: { player_id, in_battle, trainer_label, mons: [mon_card shape] } #}
+
+<div id="root">
+  {% if not in_battle %}
+    {# Blank — no trainer battle in progress. #}
+  {% elif not mons %}
+    <div class="wtitle">TRAINER</div>
+    <div style="opacity:.4;padding-top:6px">Loading…</div>
+  {% else %}
+    <div class="wtitle">TRAINER · {{ trainer_label }}</div>
+    <div class="trainer-scroll-mask" id="trn-mask">
+      <div class="trainer-team-list" id="trn-list">
+        {% for mon in mons %}{{ mon_card(mon) }}{% endfor %}
+      </div>
+    </div>
+    <script>
+      // Auto-scroll measurement — runs after this fragment is morphed in.
+      // Doubles the list and starts a CSS keyframe animation only when the
+      // single copy overflows its mask.
+      (function() {
+        var params = new URLSearchParams(window.location.search);
+        var speed  = Math.min(3, Math.max(0.25, parseFloat(params.get('speed') || '1') || 1));
+        var pauseSec = Math.min(10, Math.max(0, parseFloat(params.get('pause') || '2') || 0));
+        var mask = document.getElementById('trn-mask');
+        var list = document.getElementById('trn-list');
+        if (!mask || !list) return;
+        // Clear stale animation from a prior morph.
+        list.style.animation = '';
+        list.style.transform = '';
+        // Defer measurement to next frame so layout settles.
+        requestAnimationFrame(function() {
+          var singleH = list.scrollHeight;
+          var maskH   = mask.clientHeight;
+          if (singleH <= maskH || maskH <= 0) return;  // fits, no scroll needed
+          // Doubled list for seamless wrap. innerHTML duplication is safe
+          // because we're working with our own rendered output; HTMX morphs
+          // will reset us back to the single copy on the next swap.
+          list.innerHTML = list.innerHTML + list.innerHTML;
+          // Re-process funnotbun sprites on the duplicated nodes.
+          if (window.SLinkOverlay && window.SLinkOverlay.processSprites) {
+            window.SLinkOverlay.processSprites();
+          }
+          var scrollDur = Math.max(6, {{ mons | length }} * 2.5) / speed;
+          var totalDur  = scrollDur + pauseSec;
+          var scrollPct = Math.round((scrollDur / totalDur) * 100);
+          var styleEl = document.getElementById('trn-anim-style');
+          if (!styleEl) {
+            styleEl = document.createElement('style');
+            styleEl.id = 'trn-anim-style';
+            document.head.appendChild(styleEl);
+          }
+          styleEl.textContent =
+            '@keyframes trn-scroll-pause {' +
+              '0%{transform:translateY(0)}' +
+              scrollPct + '%{transform:translateY(-50%)}' +
+              '100%{transform:translateY(-50%)}' +
+            '}';
+          list.style.animation = 'trn-scroll-pause ' + totalDur + 's linear infinite';
+        });
+      })();
+    </script>
+  {% endif %}
+</div>

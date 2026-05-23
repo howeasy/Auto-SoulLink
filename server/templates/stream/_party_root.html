@@ -1,0 +1,30 @@
+{% from "_macros.html" import mon_card %}
+
+{# _party_root.html — the #root subtree for the party overlay.
+
+   Used by:
+     * stream/party.html (initial server-rendered page)
+     * handle_stream_party_fragment (HTMX poll target)
+
+   Both render the same markup so idiomorph compares like for like and
+   preserves sprite <img> identity across morphs.
+
+   Context shape: {
+       player_id: 'a' | 'b',
+       trainer_name: str,
+       mons: list of mon_card-shaped dicts (see _macros.html mon_card
+             docstring for the field set)
+   } #}
+
+<div id="root">
+  <div class="wtitle">PARTY · {{ trainer_name or (player_id | upper) }}</div>
+  {% if mons %}
+    <div class="p-list">
+      {% for mon in mons %}
+        {{ mon_card(mon) }}
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="dim" style="opacity:.4;padding-top:6px;font-size:.9em">No party data</div>
+  {% endif %}
+</div>

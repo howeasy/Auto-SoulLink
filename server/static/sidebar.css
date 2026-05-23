@@ -1,0 +1,336 @@
+/* sidebar.css — minimal SLink sidebar chrome for pages that DON'T want the
+ * full dashboard.css typography (calc body, etc.).
+ *
+ * What's in here:
+ *   - body grid layout (230px sidebar | 1fr main)
+ *   - .dash-sidebar* rules + brand + nav items + foot
+ *   - collapsed-mode rules
+ *   - .theme-switcher--in-sidebar styling
+ *
+ * What's NOT in here:
+ *   - body { font-family / font-size / line-height } — calc keeps its own
+ *   - @media font-size scaling at high resolutions — calc has fixed sizing
+ *   - table / heading / card styling — calc's Bootstrap owns those
+ *
+ * Pages that DO want the full dashboard chrome (status, debug, twitch, OBS,
+ * memorial, stream gallery) load dashboard.css instead of (or in addition
+ * to) this file. */
+
+body {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  min-height: 100vh;
+}
+body.dash-collapsed { grid-template-columns: 60px minmax(0, 1fr); }
+
+/* Calc body zoom — bump the damage-calculator content by 10%. The calc's
+ * Bootstrap layout uses em-relative + fixed-px values; CSS `zoom` is the
+ * cleanest way to scale the lot proportionally without redoing every
+ * Bootstrap rule. Scoped to `.dash-main` so the sidebar rail stays the
+ * same size it is on every other page (consistency across the navigation).
+ * `body.dark-theme` is the calc's body class — limits the rule to the
+ * calc page so dashboard/manager/etc. stay 1:1. */
+body.dark-theme .dash-main {
+  zoom: 1.1;
+}
+
+/* ── Sidebar shell ────────────────────────────────────────────────────── */
+.dash-sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--c-brand) 8%, var(--c-card)),
+      var(--c-card) 35%,
+      color-mix(in srgb, var(--c-bg) 80%, var(--c-card)));
+  border-right: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+  box-shadow:
+    inset -1px 0 0 rgba(255, 255, 255, .03),
+    2px 0 10px rgba(0, 0, 0, .35);
+  z-index: 30;
+  /* `--font-ui` flips between Pixelify and system-ui via the sidebar
+   * font picker (see slink.css). Sidebar uses its own font-size scaling
+   * (below) so the calc body keeps its 14px even when the sidebar grows. */
+  font-family: var(--font-ui);
+  /* Mirrors the dashboard's body font-size scaling so the sidebar rail
+   * matches across every page that loads it (status, manager, calc,
+   * memorial, debug). Set ON the sidebar instead of `body` so calc's
+   * Bootstrap-driven body keeps its 14px em-base while the rail still
+   * grows to match the rest of the product on QHD/4K monitors. */
+  font-size: 22px;
+  line-height: 1.4;
+  color: var(--c-txt);
+}
+@media (min-width: 2200px) { .dash-sidebar { font-size: 25px; } }
+@media (min-width: 2800px) { .dash-sidebar { font-size: 28px; } }
+@media (min-width: 3600px) { .dash-sidebar { font-size: 32px; } }
+@media (min-width: 4600px) { .dash-sidebar { font-size: 36px; } }
+.dash-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 12px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-brand) 22%, var(--c-edge));
+}
+.dash-sidebar-brand .slink-logo {
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--c-brand) 55%, transparent));
+}
+.dash-sidebar-brand .slink-logo svg { width: 30px; height: 30px; display: block; }
+.dash-sidebar-title {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  line-height: 1.1;
+}
+.dash-sidebar-name {
+  font-family: var(--font-heading);
+  /* Em-relative so the brand grows with the sidebar's scaling font-size
+   * (matches dashboard.css's value). Pre-fix this was a fixed 15px which
+   * stayed small on 4K screens while the dashboard sidebar grew. */
+  font-size: 0.92em;
+  font-weight: 700;
+  color: var(--c-gold);
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--c-brand) 55%, transparent);
+}
+.dash-sidebar-port {
+  font-family: var(--font-mono);
+  font-size: 0.6em;
+  color: var(--c-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+
+.dash-sidebar-toggle {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--c-dim);
+  width: 28px; height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  cursor: pointer;
+  padding: 0;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.dash-sidebar-toggle:hover {
+  background: color-mix(in srgb, var(--c-brand) 18%, transparent);
+  border-color: color-mix(in srgb, var(--c-brand) 30%, var(--c-edge));
+  color: var(--c-brand);
+}
+.dash-sidebar-toggle-ico { width: 16px; height: 16px; display: block; }
+
+/* ── Nav items ────────────────────────────────────────────────────────── */
+.dash-sidebar-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 8px;
+  overflow-y: auto;
+}
+.dash-side-item {
+  --item-accent: var(--c-link);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 5px;
+  border-left: 3px solid transparent;
+  text-decoration: none;
+  color: var(--c-txt);
+  font-family: var(--font-heading);
+  /* Em-relative so nav items scale with the sidebar's font-size media
+   * queries. Pre-fix this was 13px which kept items at the same size
+   * even when the sidebar grew to 36px on 4K — dashboard.css uses 0.62em
+   * for the same surface and we now match. */
+  font-size: 0.62em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  transition: background .12s, border-color .12s, color .12s, transform .12s;
+}
+.dash-side-item:hover {
+  background: color-mix(in srgb, var(--item-accent) 16%, transparent);
+  border-left-color: var(--item-accent);
+  color: var(--item-accent);
+  transform: translateX(1px);
+}
+.dash-side-item[aria-current="page"] {
+  background: color-mix(in srgb, var(--item-accent) 22%, transparent);
+  border-left-color: var(--item-accent);
+  color: var(--item-accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+.dash-side-ico {
+  width: 18px; height: 18px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--item-accent) 60%, transparent));
+  color: var(--item-accent);
+}
+.dash-side-label { line-height: 1; }
+/* Eight items, eight distinct accent tokens (see dashboard.css for the
+ * rationale). Sidebar.css duplicates the mapping so calc renders the
+ * same rail palette as the dashboard pages. */
+.dash-side-item.nav-manager  { --item-accent: var(--c-alive); }
+.dash-side-item.nav-status   { --item-accent: var(--c-gold); }
+.dash-side-item.nav-memorial { --item-accent: var(--c-dead); }
+.dash-side-item.nav-stream   { --item-accent: var(--c-link); }
+.dash-side-item.nav-twitch   { --item-accent: var(--c-brand); }
+.dash-side-item.nav-obs      { --item-accent: var(--c-info); }
+.dash-side-item.nav-calc     { --item-accent: var(--c-pend); }
+.dash-side-item.nav-debug    { --item-accent: var(--c-txt); }
+
+/* ── Font + theme picker slots ───────────────────────────────────────── */
+/* Both slots sit at the bottom of the rail, font picker above theme.
+ * dashboard.js builds + drops the widgets in here at parse time. Empty
+ * state collapses each slot so a page that never builds the widgets
+ * (e.g. before dashboard.js runs) shows no decorative border line. */
+.dash-sidebar-font,
+.dash-sidebar-theme {
+  padding: 8px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--c-brand) 14%, var(--c-edge));
+}
+.dash-sidebar-font:empty,
+.dash-sidebar-theme:empty { display: none; }
+/* Font switcher uses the same chrome treatment as the theme switcher;
+ * dashboard.css holds the full ruleset. sidebar.css only needs to
+ * acknowledge the slot exists. */
+.font-switcher--in-sidebar { width: 100%; }
+.font-switcher--in-sidebar details { width: 100%; min-width: 0 !important; max-width: 100%; }
+/* Hide floating widget on pages with a sidebar slot until dashboard.js moves
+ * it into place (FOUC prevention). */
+body:has(.dash-sidebar-theme) .theme-switcher:not(.theme-switcher--in-sidebar) {
+  visibility: hidden;
+}
+.theme-switcher--in-sidebar {
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  width: 100%;
+}
+.theme-switcher--in-sidebar details {
+  background: var(--c-card);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+  border-radius: 6px;
+  width: 100%;
+  /* Override `_theme_switcher.html`'s inline `min-width: 130px` (loaded
+   * after this stylesheet) so the picker fits inside the collapsed rail
+   * instead of overflowing into the calc content area. */
+  min-width: 0 !important;
+  max-width: 100%;
+  position: relative;
+}
+.theme-switcher--in-sidebar summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--c-txt);
+  cursor: pointer;
+  list-style: none;
+}
+.theme-switcher--in-sidebar summary::-webkit-details-marker { display: none; }
+.theme-switcher--in-sidebar .theme-swatch {
+  width: 20px; height: 20px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--c-edge) 80%, transparent);
+  box-shadow: 0 0 4px rgba(0, 0, 0, .5) inset;
+}
+.theme-switcher--in-sidebar .theme-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.theme-switcher--in-sidebar .theme-caret { opacity: .6; font-size: 12px; }
+.theme-switcher--in-sidebar details[open] .theme-caret { transform: rotate(180deg); }
+.theme-switcher--in-sidebar .theme-pills {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--c-card);
+  border: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .55);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.theme-switcher--in-sidebar .theme-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--c-txt);
+  font-family: var(--font-heading);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.theme-switcher--in-sidebar .theme-pill:hover {
+  background: color-mix(in srgb, var(--c-edge) 35%, transparent);
+}
+.theme-switcher--in-sidebar .theme-pill.active {
+  background: color-mix(in srgb, var(--c-brand) 18%, transparent);
+  border-color: var(--c-brand);
+}
+.theme-switcher--in-sidebar .theme-pill .theme-label { flex: 1; }
+
+/* ── Collapsed sidebar ────────────────────────────────────────────────── */
+body.dash-collapsed .dash-sidebar-title,
+body.dash-collapsed .dash-side-label,
+body.dash-collapsed .dash-sidebar-toggle,
+body.dash-collapsed .dash-sidebar-foot .dash-sidebar-clock { display: none; }
+body.dash-collapsed .dash-sidebar-brand {
+  padding: 14px 0 12px;
+  justify-content: center;
+  gap: 0;
+}
+body.dash-collapsed .dash-sidebar-brand .slink-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+body.dash-collapsed .dash-side-item { justify-content: center; padding: 10px 6px; }
+body.dash-collapsed .dash-sidebar-nav { padding: 8px 4px; }
+body.dash-collapsed .dash-sidebar-theme { padding: 6px 4px; }
+body.dash-collapsed .theme-switcher--in-sidebar summary {
+  justify-content: center;
+  padding: 8px 6px;
+  gap: 0;
+}
+body.dash-collapsed .theme-switcher--in-sidebar .theme-name,
+body.dash-collapsed .theme-switcher--in-sidebar .theme-caret { display: none !important; }
+body.dash-collapsed .theme-switcher--in-sidebar .theme-swatch {
+  width: 22px;
+  height: 22px;
+}
+body.dash-collapsed .theme-switcher--in-sidebar .theme-pills {
+  left: calc(100% + 6px);
+  right: auto;
+  bottom: 0;
+  min-width: 180px;
+}

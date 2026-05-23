@@ -1,0 +1,37 @@
+/* funtastic-ice.css — Ice Blue (N64, 1999 — most transparent shell).
+ * Brand: #66ccff. Deep arctic field, pale ice text, hot-pink dead contrast
+ * for visibility against the cool palette.
+ */
+
+@import url('/static/themes/_funtastic-base.css');
+
+:root {
+  --c-bg:    #04101a;
+  --c-card:  #0e2030;
+  --c-edge:  #2a6090;
+  --c-sep:   color-mix(in srgb, #2a6090 50%, transparent);
+  --c-txt:   #d8eaf8;
+  --c-dim:   #8090a8;
+
+  --c-alive: #80f0d0;
+  --c-dead:  #ff5a8a;
+  --c-pend:  #80c8ff;
+  --c-gold:  #fff080;
+
+  --c-link:  #4ab8ff;
+  --c-info:  #a0e0ff;
+
+  --c-brand: #66ccff;
+  
+
+  --c-calc-bg:           color-mix(in srgb, #0e2030 80%, #04101a);
+  --c-calc-edge:         #2a6090;
+  --c-calc-accent:       #80f0d0;
+  --c-calc-th-bg:        color-mix(in srgb, #0e2030 60%, #04101a);
+  --c-calc-th-edge:      #2a6090;
+  --c-calc-row-edge:     color-mix(in srgb, #2a6090 40%, transparent);
+  --c-calc-btn-bg:       #051624;
+  --c-calc-btn-bg-hover: #0e3050;
+  --c-calc-btn-txt:      #80c8ff;
+  --c-calc-btn-edge:     #2a5070;
+}

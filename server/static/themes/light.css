@@ -1,0 +1,8 @@
+/* light.css — stub for the Light theme.
+ *
+ * Loaded when ?theme=light. The actual overrides live in
+ * slink.css under `body.theme-light` so the rules co-locate with the
+ * design tokens they override. This file exists so the theme switcher's
+ * <link> swap has a real target (no 404), matching the default.css
+ * pattern.
+ */

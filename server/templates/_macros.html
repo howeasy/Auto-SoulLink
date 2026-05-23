@@ -1,0 +1,204 @@
+{#
+  _macros.html — shared rendering macros for the SLink dashboard and overlays.
+
+  The dashboard, memorial wall, and every stream overlay call these macros
+  with the same dict shapes the killfeed/api emit, so a single render path
+  serves both the HTMX-templated overlays and the in-page status table.
+
+  Conventions:
+    * Every macro takes a single `mon` / `link` / `slot` dict argument
+      so callers can pass the killfeed/api shape verbatim. Optional flags
+      are kwargs with sensible defaults.
+    * Macros emit HTML that mirrors the existing class names today
+      (`.mon-sprite`, `.tomb-*`, `.lk-row`, etc.) so the CSS in
+      slink.css and the page-level <style> blocks both keep working.
+    * No JavaScript here — macros are pure HTML output.
+#}
+
+
+{# ── hp_bar ────────────────────────────────────────────────────────────────
+   Compact dashboard-style HP bar: a 70x7 track with a coloured fill.
+   `cur` and `max_` are integers; colour bucket follows the same thresholds
+   the dashboard JS uses (≥50 = high, ≥20 = mid, else low).               #}
+{% macro hp_bar(cur, max_) %}
+  {%- set ratio = (cur / max_) if max_ else 0 -%}
+  {%- set pct = ((ratio * 100) | round | int) -%}
+  {%- if pct >= 50 -%}{%- set tone = 'hp-high' -%}
+  {%- elif pct >= 20 -%}{%- set tone = 'hp-mid' -%}
+  {%- else -%}{%- set tone = 'hp-low' -%}
+  {%- endif -%}
+  <span class="hp-bar-bg"><span class="hp-bar {{ tone }}" style="width:{{ pct }}%"></span></span>
+{%- endmacro %}
+
+
+{# ── status_pill ──────────────────────────────────────────────────────
+   Status-condition pill (.sc-*) — SLP/PSN/BRN/FRZ/PAR/TOX. Decodes the
+   bitfield the Lua client emits (status_cond from the party_details
+   message).                                                              #}
+{% macro status_pill(cond) -%}
+  {%- if cond -%}
+    {%- if cond | bitand(7) -%}<span class="sc sc-slp">SLP</span>
+    {%- elif cond | bitand(128) -%}<span class="sc sc-tox">TOX</span>
+    {%- elif cond | bitand(8) -%}<span class="sc sc-psn">PSN</span>
+    {%- elif cond | bitand(16) -%}<span class="sc sc-brn">BRN</span>
+    {%- elif cond | bitand(32) -%}<span class="sc sc-frz">FRZ</span>
+    {%- elif cond | bitand(64) -%}<span class="sc sc-par">PAR</span>
+    {%- endif -%}
+  {%- endif -%}
+{%- endmacro %}
+
+
+{# ── stat_stages_row ───────────────────────────────────────────────────
+   Inline ATK/DEF/SPD/SATK/SDEF/ACC/EVA chips for the active mon. `stages`
+   is the raw 7-tuple where 6 == neutral. Anything outside [-6, +6] is
+   dropped.                                                               #}
+{% macro stat_stages_row(stages) -%}
+  {%- if stages -%}
+    {%- set labels = ['ATK', 'DEF', 'SPD', 'SATK', 'SDEF', 'ACC', 'EVA'] -%}
+    {%- set ns = namespace(any=false) -%}
+    {%- for raw in stages[:7] -%}
+      {%- set s = (raw | int) - 6 -%}
+      {%- if s != 0 and s >= -6 and s <= 6 -%}
+        {%- if not ns.any %}<div class="stat-stages-row">{%- endif -%}
+        {%- set ns.any = true -%}
+        {%- set cls = 'ss-up' if s > 0 else 'ss-dn' -%}
+        {%- set sign = '+' if s > 0 else '−' -%}
+        {%- set mag = s if s > 0 else -s -%}
+        <span class="stat-stage {{ cls }}">{{ sign }}{{ mag }} {{ labels[loop.index0] }}</span>
+      {%- endif -%}
+    {%- endfor -%}
+    {%- if ns.any %}</div>{%- endif -%}
+  {%- endif -%}
+{%- endmacro %}
+
+
+{# ── mon_card ─────────────────────────────────────────────────────────────
+   Overlay-style mon card (`.mc`) — sprite + name/level/HP, left border tinted
+   by HP bucket (.bh / .bm / .bl / .fnt). Used by the party overlay and the
+   dashboard party / box tables.
+
+   `mon` shape: {
+       species_id, species_name, nickname, level,
+       hp, maxHP, sprite_html,
+       status_tone: 'bh'|'bm'|'bl'|'fnt',   # left-border colour
+       fainted: bool,
+       status_cond: int (bitfield, optional),
+       stat_stages: [7]int (optional, active mon only)
+   }                                                                      #}
+{% macro mon_card(mon, partner=None, extra_class='') %}
+  {%- set tone = mon.status_tone or 'bh' -%}
+  {%- set fainted = ' fnt' if mon.fainted else '' -%}
+  {%- set is_active = (mon.active or false) -%}
+  <div class="mc {{ tone }}{{ fainted }}{% if is_active %} active-mon{% endif %}{% if extra_class %} {{ extra_class }}{% endif %}">
+    {{ mon.sprite_html | safe }}
+    <div class="m-info">
+      <div class="m-name">{{ mon.nickname or mon.species_name or '???' }}
+        {%- if mon.species_name and mon.nickname and mon.nickname != mon.species_name %} <span class="sp">({{ mon.species_name }})</span>{%- endif %}
+        {%- if mon.fainted %} <span class="fnt-tag">FNT</span>{%- endif %}
+      </div>
+      {% if mon.maxHP %}
+        {%- set hp_val = mon.hp | default(0) | int -%}
+        {%- set max_val = mon.maxHP | int -%}
+        {%- set pct = 0 if mon.fainted or max_val <= 0 else ((hp_val / max_val * 100) | round | int) -%}
+        {%- if pct > 50 -%}{%- set hp_cls = 'hp-h' -%}
+        {%- elif pct > 20 -%}{%- set hp_cls = 'hp-m' -%}
+        {%- else -%}{%- set hp_cls = 'hp-l' -%}
+        {%- endif -%}
+        <div class="hp-row">
+          <span class="hp-lbl">HP</span>
+          <div class="hp-trk"><div class="hp-fill {{ hp_cls }}" style="width:{{ pct }}%"></div></div>
+          <span class="hp-pct">{% if mon.fainted %}—{% else %}{{ pct }}%{% endif %}</span>
+          {{ status_pill(mon.status_cond) }}
+          {% if mon.level %}<span class="lv">Lv {{ mon.level }}</span>{% endif %}
+        </div>
+      {% else %}
+        {% if mon.level %}<div class="hp-row"><span class="lv">Lv {{ mon.level }}</span></div>{% endif %}
+      {% endif %}
+      {{ stat_stages_row(mon.stat_stages) }}
+    </div>
+  </div>
+{% endmacro %}
+
+
+{# ── link_row ────────────────────────────────────────────────────────────
+   Overlay-style link row (`.lk-row`) — two mirrored halves with a divider.
+   Status tone: 'la' (alive) | 'ld' (dead). The dashboard's party-table
+   partner column uses this macro.
+
+   `link` shape: { a: {species, species_name, nickname, level, sprite_html},
+                   b: {...},
+                   status: 'alive'|'dead'|'memorial',
+                   area_display }                                          #}
+{% macro link_row(link) %}
+  {%- set is_dead = link.status in ('dead', 'memorial') -%}
+  {%- set tone = 'ld' if is_dead else 'la' -%}
+  <div class="lk-row {{ tone }}">
+    <div class="lk-half">
+      {{ (link.a.sprite_html or '') | safe }}
+      <span class="lk-nm">{{ link.a.nickname or link.a.species_name or '???' }}</span>
+      {% if link.a.level %}<span class="lk-lv">L{{ link.a.level }}</span>{% endif %}
+    </div>
+    <span class="lk-div">⇆</span>
+    <div class="lk-half r">
+      {{ (link.b.sprite_html or '') | safe }}
+      <span class="lk-nm">{{ link.b.nickname or link.b.species_name or '???' }}</span>
+      {% if link.b.level %}<span class="lk-lv">L{{ link.b.level }}</span>{% endif %}
+    </div>
+  </div>
+{% endmacro %}
+
+
+{# ── tombstone ──────────────────────────────────────────────────────────
+   Memorial-wall tombstone. `entry` is a killfeed entry as emitted by
+   _build_status_dict (server.py:3100–3127). `num` is the 1-based display
+   index (oldest first per the chronological memorial order).             #}
+{% macro tombstone(entry, num) -%}
+  {%- set cause = entry.cause or '' -%}
+  {%- set killer = entry.killer or {} -%}
+  <div class="tomb">
+    <div class="tomb-num">#{{ num }}</div>
+    <div class="tomb-area"><svg class="inline-ico" aria-hidden="true"><use href="#i-pin-loc"/></svg> {{ entry.area_display or entry.area_id or '?' }}</div>
+    <div class="tomb-pair">
+      {{ _tomb_mon(entry, 'a') }}
+      <div class="tomb-divider"></div>
+      {{ _tomb_mon(entry, 'b') }}
+    </div>
+    {% if cause %}
+      <div class="tomb-cause">
+        {%- if cause == 'battle' -%}
+          {%- set ksp = killer.species_name or ('Species #' ~ (killer.species or '?')) -%}
+          {%- set klv = (' Lv' ~ killer.level) if killer.level else '' -%}
+          {%- if killer.is_trainer and killer.trainer_name -%}
+            {%- set owner = ((killer.trainer_class ~ ' ') if killer.trainer_class else '') ~ killer.trainer_name ~ "'s " -%}
+          {%- elif killer.is_trainer -%}
+            {%- set owner = "Trainer's " -%}
+          {%- else -%}
+            {%- set owner = 'Wild ' -%}
+          {%- endif -%}
+          <span class="cause-battle"><svg class="cause-icon inline-ico" aria-hidden="true"><use href="#i-swords"/></svg>{{ owner }}{{ ksp }}{{ klv }}</span>
+        {%- elif cause == 'dead_zone' -%}
+          <span class="cause-deadzone"><svg class="cause-icon inline-ico" aria-hidden="true"><use href="#i-ban"/></svg>Missed catch</span>
+        {%- elif cause == 'whiteout' -%}
+          <span class="cause-whiteout"><svg class="cause-icon inline-ico" aria-hidden="true"><use href="#i-skull"/></svg>Whiteout</span>
+        {%- endif -%}
+      </div>
+    {% endif %}
+    {% if entry.killed_at %}<div class="tomb-time">{{ entry.killed_at_display or entry.killed_at }}</div>{% endif %}
+  </div>
+{%- endmacro %}
+
+
+{# ── _tomb_mon ─────────────────────────────────────────────────────────
+   Private helper for the tombstone macro — renders one side's mon-card
+   the way the old JS did.                                                #}
+{% macro _tomb_mon(entry, side) -%}
+  <div class="tomb-mon">
+    <div class="player-tag">{{ side | upper }}</div>
+    {{ entry[side ~ '_sprite_html'] | safe }}
+    <div class="nick">{{ entry[side ~ '_nickname'] or '???' }}</div>
+    {%- set sp_name = entry[side ~ '_species_name'] -%}
+    {%- if sp_name %}<div class="species">{{ sp_name }}</div>{%- endif -%}
+    {%- set lv = entry[side ~ '_level'] -%}
+    {%- if lv %}<div class="level">Lv {{ lv }}</div>{%- endif -%}
+  </div>
+{%- endmacro %}
