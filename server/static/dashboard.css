@@ -1897,6 +1897,216 @@ body.dash-collapsed .dash-sidebar-layout { padding: 6px 4px 0; }
   .widget-attempts .attempts-btn { width: 1.8em; height: 1.8em; font-size: 1.1em; }
 }
 
+/* ── Run Timer widget ──────────────────────────────────────────────────── */
+.run-timer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2em;
+  padding: 0.3em 0;
+}
+.run-timer-main {
+  font-family: var(--font-heading);
+  font-size: 1.8em;
+  font-weight: bold;
+  color: var(--c-gold, var(--c-brand));
+  letter-spacing: 0.04em;
+}
+.run-timer-sub { font-size: 0.9em; }
+@container (max-width: 180px) {
+  .widget-run-timer .run-timer-main { font-size: 1.3em; }
+}
+
+/* ── Shiny Counter widget ───────────────────────────────────────────────── */
+.shiny-counter {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.4em 0;
+}
+.shiny-total {
+  font-family: var(--font-heading);
+  font-size: 2em;
+  font-weight: bold;
+  color: #ffd700;
+  display: flex;
+  align-items: center;
+  gap: 0.2em;
+  text-shadow: 0 0 8px color-mix(in srgb, #ffd700 60%, transparent);
+}
+.shiny-total .shiny-star { font-size: 0.95em; }
+.shiny-split {
+  display: flex;
+  gap: 1em;
+  font-size: 0.9em;
+}
+.shiny-split b { color: var(--c-txt); margin-left: 0.2em; }
+@container (max-width: 200px) {
+  .widget-shiny-counter .shiny-total { font-size: 1.5em; }
+}
+
+/* ── Type Coverage widget ──────────────────────────────────────────────── */
+.type-cov {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.2em 0;
+}
+.type-cov-row {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 0.5em;
+  align-items: center;
+  font-size: 0.85em;
+}
+.type-cov-name {
+  font-size: 0.75em !important;
+  padding: 0.1em 0.4em !important;
+  text-align: center;
+}
+.type-cov-bar {
+  height: 8px;
+  background: color-mix(in srgb, var(--c-edge) 40%, var(--c-bg));
+  border-radius: 4px;
+  overflow: hidden;
+  display: block;
+}
+.type-cov-fill {
+  display: block;
+  height: 100%;
+  background: var(--c-brand);
+  transition: width 0.3s;
+}
+.type-cov-count {
+  font-family: var(--font-mono, monospace);
+  color: var(--c-dim);
+  text-align: right;
+  min-width: 1.5em;
+}
+
+/* ── Memorial / Killfeed widgets ───────────────────────────────────────── */
+.memorial-list, .killfeed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-top: 0.2em;
+}
+.memorial-row, .killfeed-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.2em 0.4em;
+  font-size: 0.88em;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-edge) 50%, transparent);
+}
+.memorial-row:last-child, .killfeed-row:last-child { border-bottom: none; }
+.memorial-skull { color: var(--c-dead, #f44); flex-shrink: 0; }
+.memorial-mon, .killfeed-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.memorial-area, .killfeed-area {
+  flex: 0 0 auto;
+  font-size: 0.82em;
+}
+.memorial-cause {
+  flex: 0 0 auto;
+  font-size: 0.78em;
+  font-style: italic;
+}
+.killfeed-sprite { flex: 0 0 28px; }
+.killfeed-sprite .mon-sprite { width: 28px; height: 28px; image-rendering: pixelated; }
+@container (max-width: 280px) {
+  .widget-memorial .memorial-cause { display: none; }
+}
+
+/* ── PC Box widget ─────────────────────────────────────────────────────── */
+.pc-box-list { display: flex; flex-direction: column; gap: 0.6em; }
+.pc-box-section h3 {
+  font-family: var(--font-heading);
+  font-size: 0.85em;
+  color: var(--c-info);
+  border-bottom: 1px solid color-mix(in srgb, var(--c-edge) 60%, transparent);
+  padding-bottom: 0.2em;
+}
+
+/* ── Calc Preview widget ──────────────────────────────────────────────── */
+.calc-slot {
+  border: 1px solid color-mix(in srgb, var(--c-edge) 70%, transparent);
+  border-radius: 5px;
+  padding: 0.4em 0.6em;
+  margin-bottom: 0.4em;
+}
+.calc-slot h3 {
+  font-family: var(--font-heading);
+  font-size: 0.8em;
+  color: var(--c-brand);
+}
+.calc-slot-target { min-height: 2em; }
+
+/* ── Area Encounters widget ───────────────────────────────────────────── */
+.area-enc-section { margin-bottom: 0.6em; }
+.area-enc-section h3 {
+  font-family: var(--font-heading);
+  font-size: 0.85em;
+  color: var(--c-info);
+}
+
+/* ── Stream Launcher widget ───────────────────────────────────────────── */
+.stream-launcher-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6em;
+  padding-top: 0.2em;
+}
+.sl-family {
+  border: 1px solid color-mix(in srgb, var(--c-edge) 60%, transparent);
+  border-radius: 5px;
+  padding: 0.3em 0.5em;
+}
+.sl-family-head {
+  font-family: var(--font-heading);
+  font-size: 0.72em;
+  color: var(--c-info);
+  letter-spacing: 0.05em;
+  margin-bottom: 0.3em;
+  text-transform: uppercase;
+}
+.sl-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.25em 0.5em;
+  margin: 1px 0;
+  border-radius: 4px;
+  color: var(--c-link);
+  text-decoration: none;
+  font-size: 0.85em;
+  border-left: 2px solid transparent;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.sl-link:hover {
+  background: color-mix(in srgb, var(--c-link) 14%, transparent);
+  border-left-color: var(--c-link);
+  color: var(--c-brand);
+}
+.sl-link-arrow { opacity: 0.6; font-size: 0.9em; }
+
+/* ── Enemy widget ─────────────────────────────────────────────────────── */
+.enemy-section { margin-bottom: 0.5em; }
+.enemy-section h3 {
+  font-family: var(--font-heading);
+  font-size: 0.85em;
+  color: var(--c-dead, #f44);
+  border-bottom: 1px solid color-mix(in srgb, var(--c-dead) 30%, transparent);
+  padding-bottom: 0.2em;
+}
+
 /* ── Edit-mode toolbar ────────────────────────────────────────────────────
  * Injected by dashboard.js above the grid when `body.dash-edit-layout` is
  * active. Provides the visibility checklist + reset button.

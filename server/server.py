@@ -2789,22 +2789,35 @@ class SLinkServer:
     # Middle: player cards. Below: encounters table. Bottom: boxed-links
     # + events side by side.
     _WIDGET_LAYOUT = [
-        # Top-of-page status strip (smaller widgets sharing a row)
-        ("run-status",   0, 0,   3, 4),
-        ("lock-rules",   3, 0,   3, 4),
-        ("attempts",     6, 0,   3, 4),
-        # 4th top slot reserved for future "active battle" widget — keeps the
-        # row a neat 12 col total even when only 3 widgets ship now.
-        # Player cards
-        ("player-a",     0, 4,   6, 8),
-        ("player-b",     6, 4,   6, 8),
-        # Shared linked-pair view that joins both parties into one table
-        ("linked-party", 0, 12,  12, 6),
-        # Encounters table (full width)
-        ("encounters",   0, 18,  12, 10),
-        # Boxed Links + Events side by side
-        ("boxed-links",  0, 28,  6, 6),
-        ("events",       6, 28,  6, 6),
+        # ─── Row 0-3: status strip (4 small widgets) ────────────────────
+        ("run-status",     0,  0,  3, 4),
+        ("lock-rules",     3,  0,  3, 4),
+        ("attempts",       6,  0,  3, 4),
+        ("run-timer",      9,  0,  3, 4),
+        # ─── Row 4-7: counters + active battle (3-up) ───────────────────
+        ("shiny-counter",  0,  4,  3, 4),
+        ("type-coverage",  3,  4,  3, 4),
+        ("enemy",          6,  4,  6, 4),
+        # ─── Row 8-15: player cards (side-by-side, taller) ──────────────
+        ("player-a",       0,  8,  6, 8),
+        ("player-b",       6,  8,  6, 8),
+        # ─── Row 16-21: linked party (wide band) ────────────────────────
+        ("linked-party",   0, 16, 12, 6),
+        # ─── Row 22-31: encounters table ────────────────────────────────
+        ("encounters",     0, 22, 12, 10),
+        # ─── Row 32-37: PC box (combined view) ──────────────────────────
+        ("pc-box",         0, 32, 12, 6),
+        # ─── Row 38-43: deaths section ──────────────────────────────────
+        ("memorial",       0, 38,  6, 6),
+        ("killfeed",       6, 38,  6, 6),
+        # ─── Row 44-49: communication + tools ───────────────────────────
+        ("boxed-links",    0, 44,  6, 6),
+        ("events",         6, 44,  6, 6),
+        # ─── Row 50-55: more tools ──────────────────────────────────────
+        ("area-encounters", 0, 50, 6, 6),
+        ("stream-launcher", 6, 50, 6, 6),
+        # ─── Row 56-61: calc preview ────────────────────────────────────
+        ("calc-preview",   0, 56, 12, 6),
     ]
 
     def _mon_label(self, key_val, nickname, species_id, gender="", shiny=False):
@@ -3790,6 +3803,401 @@ class SLinkServer:
             '<p class="attempts-hint dim">Drives the /stream/attempts overlay.</p>'
         )
 
+    def _build_widget_enemy_html(self) -> str:
+        """Active battle foe party for whichever player(s) are in battle."""
+        d = self._build_status_dict()
+        parts = ['<h2>Active Battle</h2>']
+        in_battle = []
+        for pid in ("a", "b"):
+            p = d.get("players", {}).get(pid, {})
+            bs = p.get("battle_state", {})
+            if bs.get("in_battle") and bs.get("enemy_party"):
+                in_battle.append((pid, p, bs))
+        if not in_battle:
+            parts.append('<p class="empty dim">No active battle.</p>')
+            return "".join(parts)
+        for pid, p, bs in in_battle:
+            is_trainer = bs.get("is_trainer_battle", False)
+            opp_name = html.escape(bs.get("opponent_name", ""))
+            opp_class = html.escape(bs.get("opponent_class", ""))
+            if is_trainer:
+                label = f"{opp_class} {opp_name}".strip() or "Trainer"
+            else:
+                label = "Wild encounter"
+            trainer = html.escape(p.get("trainer_name", "") or pid.upper())
+            parts.append(
+                f'<div class="enemy-section">'
+                f'<h3 style="margin:0.4em 0 0.3em">{trainer} vs {label}</h3>'
+                f'<div class="party-list">'
+            )
+            for em in bs.get("enemy_party", []):
+                esid = em.get("species_id", 0)
+                ename = html.escape(self.adapter.species_name(esid)) if esid else "?"
+                elv = em.get("level", 0)
+                ehp = em.get("hp", 0)
+                emax = max(em.get("maxHP", 1), 1)
+                pct = max(0, min(100, int(ehp / emax * 100)))
+                bar_cls = "hp-high" if pct > 50 else "hp-mid" if pct > 20 else "hp-low"
+                sprite = self._get_sprite_html(esid)
+                tcell = _type_badges_html(esid, adapter=self.adapter)
+                row_cls = "fainted" if ehp == 0 else ("active-mon" if em.get("active") else "")
+                parts.append(
+                    f'<div class="mon-row {row_cls}">'
+                    f'<div class="mon-cell mon-cell-sprite col-sprite">{sprite}</div>'
+                    f'<div class="mon-cell mon-cell-id col-name"><div class="mon-name">{ename}</div></div>'
+                    f'<div class="mon-cell mon-cell-lv col-lv">{elv}</div>'
+                    f'<div class="mon-cell mon-cell-hp col-hp">'
+                    f'<div class="hp-bar-bg"><div class="hp-bar {bar_cls}" style="width:{pct}%"></div></div>'
+                    f'<span class="dim">{ehp}/{emax}</span>'
+                    f'</div>'
+                    f'<div class="mon-cell mon-cell-type col-type">{tcell}</div>'
+                    f'</div>'
+                )
+            parts.append('</div></div>')
+        return "".join(parts)
+
+    def _build_widget_memorial_html(self) -> str:
+        """Dead linked pairs — sprite + name + cause."""
+        d = self._build_status_dict()
+        mon_label = self._mon_label
+        dead = [kf for kf in d.get("killfeed", [])]
+        parts = ['<h2>Memorial</h2>']
+        if not dead:
+            parts.append('<p class="empty dim">No deaths yet.</p>')
+            return "".join(parts)
+        parts.append('<div class="memorial-list">')
+        for kf in dead:
+            area = html.escape(kf.get("area_display") or kf.get("area_id", ""))
+            cause = kf.get("cause", "")
+            killer = kf.get("killer") or {}
+            initiator = kf.get("initiating_player", "")
+            # Cause line
+            if cause == "battle":
+                k_sp = killer.get("species", 0)
+                k_name = self.adapter.species_name(k_sp) if k_sp else ""
+                k_trainer = killer.get("trainer_name", "")
+                if k_trainer and k_name:
+                    cause_text = f"by {html.escape(k_trainer)}'s {html.escape(k_name)}"
+                elif k_name:
+                    cause_text = f"by wild {html.escape(k_name)}"
+                else:
+                    cause_text = "in battle"
+            elif cause == "dead_zone":
+                iname = html.escape(d.get("players", {}).get(initiator, {}).get("trainer_name") or initiator.upper())
+                cause_text = f"{iname} missed catch"
+            elif cause == "whiteout":
+                iname = html.escape(d.get("players", {}).get(initiator, {}).get("trainer_name") or initiator.upper())
+                cause_text = f"{iname} whited out"
+            else:
+                cause_text = html.escape(cause)
+            # Render mon halves
+            for side in ("a", "b"):
+                sid = kf.get(f"{side}_species", 0)
+                if not sid:
+                    continue
+                key = kf.get(f"{side}_key", "") or ""
+                nick = kf.get(f"{side}_nickname", "")
+                gender = self.adapter.gender_from_key(key, sid) if key else ""
+                label = self._get_sprite_html(sid) + mon_label(key, nick, sid, gender, shiny=False)
+                parts.append(
+                    f'<div class="memorial-row">'
+                    f'<svg class="inline-ico memorial-skull" aria-hidden="true"><use href="#i-skull"/></svg>'
+                    f'<div class="memorial-mon">{label}</div>'
+                    f'<div class="memorial-area dim">{area}</div>'
+                    f'<div class="memorial-cause dim">{cause_text}</div>'
+                    f'</div>'
+                )
+        parts.append('</div>')
+        return "".join(parts)
+
+    def _build_widget_pc_box_html(self) -> str:
+        """Combined PC box view — every boxed mon from either player."""
+        d = self._build_status_dict()
+        mon_label = self._mon_label
+        from server.state import LinkStatus as _LS
+        memorial_keys = {
+            mi.key
+            for e in self.state.links
+            if e.status in (_LS.MEMORIAL, _LS.DEAD)
+            for mi in (e.a, e.b) if mi and mi.key
+        }
+        for _pm in self.state.pending_memorials.values():
+            memorial_keys.update(_pm)
+        mem_idx_list = self._memorial_box_indices()
+
+        parts = ['<h2>PC Boxes</h2><div class="pc-box-list">']
+        any_mons = False
+        for pid in ("a", "b"):
+            p = d.get("players", {}).get(pid, {})
+            tname = html.escape(p.get("trainer_name", "") or pid.upper())
+            boxes = [
+                b for b in p.get("pc_boxes", [])
+                if b.get("key", "") not in memorial_keys
+                and b.get("box") not in mem_idx_list
+            ]
+            if not boxes:
+                continue
+            any_mons = True
+            parts.append(f'<div class="pc-box-section"><h3 style="margin:0.3em 0">{tname}</h3>')
+            parts.append('<div class="party-list">')
+            for b in boxes:
+                sid = b.get("species_id", 0)
+                key = b.get("key", "")
+                nick = b.get("nickname", "")
+                gender = self.adapter.gender_from_key(key, sid) if key else ""
+                sprite = self._get_sprite_html(sid)
+                label = mon_label(key, nick, sid, gender, shiny=False)
+                lv = b.get("level", "")
+                tcell = _type_badges_html(sid, adapter=self.adapter)
+                box_slot = f"{b.get('box', 0) + 1}.{b.get('slot', 0) + 1}"
+                parts.append(
+                    f'<div class="mon-row" data-key="{html.escape(key)}">'
+                    f'<div class="mon-cell mon-cell-sprite col-sprite">{sprite}</div>'
+                    f'<div class="mon-cell mon-cell-id col-name"><div class="mon-name">{label}</div></div>'
+                    f'<div class="mon-cell mon-cell-lv col-lv">{lv}</div>'
+                    f'<div class="mon-cell mon-cell-type col-type">{tcell}</div>'
+                    f'<div class="mon-cell mon-cell-partner col-partner dim">{box_slot}</div>'
+                    f'</div>'
+                )
+            parts.append('</div></div>')
+        if not any_mons:
+            parts.append('<p class="empty dim">No mons in box.</p>')
+        parts.append('</div>')
+        return "".join(parts)
+
+    def _build_widget_calc_preview_html(self) -> str:
+        """Damage calc preview — only meaningful for Radical Red runs."""
+        s = self.state
+        if not getattr(s, "is_rr", False):
+            return ('<h2>Damage Calc</h2>'
+                    '<p class="empty dim">Calc preview is Radical Red only. '
+                    'This ROM isn\'t flagged as RR.</p>')
+        # The live calc-preview-{pid} data divs live INSIDE the player widgets
+        # and are populated by SLinkCalc JS. We mirror them here so the data
+        # is also rendered standalone — JS in dashboard.js handles formatting.
+        d = self._build_status_dict()
+        slots = []
+        for pid in ("a", "b"):
+            p = d.get("players", {}).get(pid, {})
+            bs = p.get("battle_state", {})
+            if not bs.get("in_battle"):
+                continue
+            slots.append(
+                f'<div class="calc-slot calc-slot-{pid}" data-pid="{pid}">'
+                f'<h3 style="margin:0.3em 0">Player {pid.upper()}</h3>'
+                f'<div class="calc-slot-target" id="calc-widget-slot-{pid}">'
+                f'<p class="empty dim">Live calc loading…</p>'
+                f'</div>'
+                f'</div>'
+            )
+        parts = ['<h2>Damage Calc</h2>']
+        if not slots:
+            parts.append('<p class="empty dim">Not in battle.</p>')
+        else:
+            parts.extend(slots)
+        return "".join(parts)
+
+    def _build_widget_run_timer_html(self) -> str:
+        """Elapsed time since the first event (≈ run start)."""
+        events = list(self._recent_events)
+        if not events:
+            return '<h2>Run Timer</h2><p class="empty dim">Run not started.</p>'
+        # _recent_events is newest-first; oldest is at the END
+        oldest_ts = events[-1].get("ts", "")
+        try:
+            start = datetime.fromisoformat(oldest_ts)
+            now = datetime.now(start.tzinfo) if start.tzinfo else datetime.now()
+            delta = int((now - start).total_seconds())
+        except (ValueError, AttributeError, TypeError):
+            delta = 0
+        hours, rem = divmod(max(delta, 0), 3600)
+        mins, secs = divmod(rem, 60)
+        if hours:
+            big = f"{hours}h {mins:02d}m"
+            small = f"{secs:02d}s"
+        else:
+            big = f"{mins}m {secs:02d}s"
+            small = ""
+        return (
+            '<h2>Run Timer</h2>'
+            '<div class="run-timer">'
+            f'<div class="run-timer-main">{big}</div>'
+            f'{f"<div class=" + chr(34) + "run-timer-sub dim" + chr(34) + ">" + small + "</div>" if small else ""}'
+            '</div>'
+        )
+
+    def _build_widget_shiny_counter_html(self) -> str:
+        """Counts shinies across both players — links + bonus_keys."""
+        s = self.state
+        # Total shinies caught: any linked MonInfo with is_shiny True, plus any
+        # key in bonus_keys (which represents shiny bonus mons not yet linked).
+        a_shinies = sum(
+            1 for e in s.links
+            if e.a and e.a.is_shiny
+        ) + len(s.bonus_keys.get("a", set()))
+        b_shinies = sum(
+            1 for e in s.links
+            if e.b and e.b.is_shiny
+        ) + len(s.bonus_keys.get("b", set()))
+        total = a_shinies + b_shinies
+        return (
+            '<h2>Shiny Counter</h2>'
+            '<div class="shiny-counter">'
+            f'<div class="shiny-total"><span class="shiny-star">✦</span> {total}</div>'
+            f'<div class="shiny-split dim">'
+            f'<span>A: <b>{a_shinies}</b></span>'
+            f'<span>B: <b>{b_shinies}</b></span>'
+            f'</div>'
+            '</div>'
+        )
+
+    def _build_widget_type_coverage_html(self) -> str:
+        """Type frequencies across both players' alive party mons."""
+        d = self._build_status_dict()
+        type_counts: dict[str, int] = {}
+        for pid in ("a", "b"):
+            p = d.get("players", {}).get(pid, {})
+            for key in p.get("party_keys", []):
+                det = p.get("party_details", {}).get(key, {})
+                if det.get("hp", 1) == 0:
+                    continue
+                sid = det.get("species_id", 0)
+                if not sid:
+                    continue
+                # Use the adapter's species_types if available
+                try:
+                    types = self.adapter.species_types(sid) or []
+                except (AttributeError, TypeError):
+                    types = []
+                for t in types:
+                    # adapter.species_types returns int type IDs; convert to
+                    # name string for display + CSS class.
+                    if isinstance(t, int):
+                        try:
+                            name = self.adapter.type_name(t)
+                        except Exception:
+                            name = ""
+                    else:
+                        name = str(t)
+                    if not name:
+                        continue
+                    type_counts[name] = type_counts.get(name, 0) + 1
+        parts = ['<h2>Type Coverage</h2>']
+        if not type_counts:
+            parts.append('<p class="empty dim">No alive party mons.</p>')
+            return "".join(parts)
+        parts.append('<div class="type-cov">')
+        max_cnt = max(type_counts.values())
+        # Sort by count desc, then name
+        for t, n in sorted(type_counts.items(), key=lambda x: (-x[1], x[0])):
+            bar_pct = int(100 * n / max_cnt)
+            t_lower = t.lower()
+            parts.append(
+                f'<div class="type-cov-row">'
+                f'<span class="type-cov-name type type-{t_lower}">{html.escape(t)}</span>'
+                f'<span class="type-cov-bar"><span class="type-cov-fill type-{t_lower}-bg" style="width:{bar_pct}%"></span></span>'
+                f'<span class="type-cov-count">{n}</span>'
+                f'</div>'
+            )
+        parts.append('</div>')
+        return "".join(parts)
+
+    def _build_widget_killfeed_html(self) -> str:
+        """Compact recent-deaths ticker."""
+        d = self._build_status_dict()
+        kf = d.get("killfeed", [])
+        parts = ['<h2>Killfeed</h2>']
+        if not kf:
+            parts.append('<p class="empty dim">No deaths yet.</p>')
+            return "".join(parts)
+        parts.append('<div class="killfeed-list">')
+        for entry in kf[:10]:  # most-recent 10
+            area = html.escape(entry.get("area_display") or entry.get("area_id", ""))
+            cause = entry.get("cause", "")
+            # Show whichever mon has species data
+            sprite_html = ""
+            mon_name = ""
+            for side in ("a", "b"):
+                sid = entry.get(f"{side}_species", 0)
+                if sid:
+                    sprite_html = self._get_sprite_html(sid)
+                    mon_name = html.escape(entry.get(f"{side}_nickname", "")
+                                            or self.adapter.species_name(sid))
+                    break
+            cause_icon = ('skull' if cause in ('battle', 'whiteout', 'memorial')
+                          else 'ban' if cause == 'dead_zone' else 'skull')
+            parts.append(
+                f'<div class="killfeed-row">'
+                f'<svg class="inline-ico" aria-hidden="true"><use href="#i-{cause_icon}"/></svg>'
+                f'<span class="killfeed-sprite">{sprite_html}</span>'
+                f'<span class="killfeed-name">{mon_name}</span>'
+                f'<span class="killfeed-area dim">{area}</span>'
+                f'</div>'
+            )
+        parts.append('</div>')
+        return "".join(parts)
+
+    def _build_widget_area_encounters_html(self) -> str:
+        """Wild encounter tables for both players' current areas."""
+        parts = ['<h2>Area Encounters</h2>']
+        any_section = False
+        for pid in ("a", "b"):
+            p = self.party_details.get(pid, {})  # not what we want
+            d = self._build_status_dict()
+            player = d.get("players", {}).get(pid, {})
+            area_id = player.get("current_area_id") or player.get("current_area", "")
+            if not area_id:
+                continue
+            enc_html = self._encounter_html(area_id)
+            if not enc_html:
+                continue
+            any_section = True
+            area_disp = html.escape(self.adapter.area_display_name(area_id) or area_id)
+            tname = html.escape(player.get("trainer_name", "") or pid.upper())
+            parts.append(
+                f'<div class="area-enc-section">'
+                f'<h3 style="margin:0.3em 0">{tname} — {area_disp}</h3>'
+                f'{enc_html}'
+                f'</div>'
+            )
+        if not any_section:
+            parts.append('<p class="empty dim">No area-encounter data available.</p>')
+        return "".join(parts)
+
+    def _build_widget_stream_launcher_html(self) -> str:
+        """Quick-launch buttons for every OBS overlay in the catalog."""
+        try:
+            from server.overlay_catalog import OVERLAYS, FAMILIES
+        except ImportError:
+            return '<h2>Stream Overlays</h2><p class="empty dim">Catalog unavailable.</p>'
+        # Group by family
+        by_family: dict[str, list] = {}
+        for ov in OVERLAYS:
+            fam = ov.get("family", "misc")
+            by_family.setdefault(fam, []).append(ov)
+        parts = ['<h2>Stream Overlays</h2><div class="stream-launcher-list">']
+        for fam_slug, fam_label in FAMILIES:
+            entries = by_family.get(fam_slug, [])
+            if not entries:
+                continue
+            parts.append(f'<div class="sl-family"><div class="sl-family-head">{html.escape(fam_label)}</div>')
+            for ov in entries:
+                slug = ov.get("slug", "")
+                title = html.escape(ov.get("title", slug))
+                # Skip the synthetic "all" entry
+                if slug == "all":
+                    continue
+                url = f"/stream/{slug}"
+                parts.append(
+                    f'<a class="sl-link" href="{url}" target="_blank" rel="noopener" title="Open {title} in a new tab">'
+                    f'<span class="sl-link-title">{title}</span>'
+                    f'<span class="sl-link-arrow">↗</span>'
+                    f'</a>'
+                )
+            parts.append('</div>')
+        parts.append('</div>')
+        return "".join(parts)
+
     def _build_widget_inner(self, wid: str) -> str:
         if wid == "player-a":
             return self._build_widget_player_html("a")
@@ -3809,6 +4217,26 @@ class SLinkServer:
             return self._build_widget_linked_party_html()
         if wid == "attempts":
             return self._build_widget_attempts_html()
+        if wid == "enemy":
+            return self._build_widget_enemy_html()
+        if wid == "memorial":
+            return self._build_widget_memorial_html()
+        if wid == "pc-box":
+            return self._build_widget_pc_box_html()
+        if wid == "calc-preview":
+            return self._build_widget_calc_preview_html()
+        if wid == "run-timer":
+            return self._build_widget_run_timer_html()
+        if wid == "shiny-counter":
+            return self._build_widget_shiny_counter_html()
+        if wid == "type-coverage":
+            return self._build_widget_type_coverage_html()
+        if wid == "killfeed":
+            return self._build_widget_killfeed_html()
+        if wid == "area-encounters":
+            return self._build_widget_area_encounters_html()
+        if wid == "stream-launcher":
+            return self._build_widget_stream_launcher_html()
         return ''
 
     def _build_status_html(self) -> str:
@@ -3871,6 +4299,9 @@ class SLinkServer:
         "player-a", "player-b", "encounters", "events",
         "run-status", "lock-rules", "boxed-links",
         "linked-party", "attempts",
+        "enemy", "memorial", "pc-box", "calc-preview",
+        "run-timer", "shiny-counter", "type-coverage",
+        "killfeed", "area-encounters", "stream-launcher",
     })
 
     async def handle_widget_html(self, request):
