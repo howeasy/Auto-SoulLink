@@ -971,12 +971,22 @@ local function on_frame()
                             blocked = true
                             console.log("[SLink] memorialize dropped (game over, last party mon): "..cmd.key:sub(1,8))
                         else
-                            -- Block the memorialize without a HUD reminder:
-                            -- server queues party_mon ahead of memorialize on
-                            -- whiteout so the block lifts on its own; if
-                            -- rebuild is impossible the server fires game_over
-                            -- which drops the memorialize via the branch above.
+                            -- Block the memorialize — the party must never be
+                            -- empty (softlock). Normally party_mon arrives
+                            -- before this memorialize and lifts the block
+                            -- automatically. But when the party was full at
+                            -- whiteout, party_mon retried to the end of the
+                            -- queue. Rescue: promote the first party_mon to
+                            -- front so it runs next frame.
                             blocked = true
+                            for look = 2, #pending_sync_cmds do
+                                if pending_sync_cmds[look].cmd == "party_mon" then
+                                    local pm = table.remove(pending_sync_cmds, look)
+                                    table.insert(pending_sync_cmds, 1, pm)
+                                    console.log("[SLink] memorialize blocked: promoted party_mon to front ("..pm.key:sub(1,8)..")")
+                                    break
+                                end
+                            end
                         end
                         break
                     end

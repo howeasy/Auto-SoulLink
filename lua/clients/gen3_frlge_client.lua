@@ -1454,14 +1454,24 @@ local function on_frame()
                             blocked = true
                             console.log("[SLink-FRLGE] memorialize dropped (game over, last party mon): "..cmd.key:sub(1,8))
                         else
-                            -- Block the memorialize but show nothing: the
-                            -- server's auto-rebuild queues a party_mon ahead
-                            -- of every memorialize on whiteout, so the new
-                            -- mon lands first and this block lifts on its
-                            -- own. If rebuild is impossible the server
-                            -- fires game_over instead, which drops the
-                            -- memorialize cleanly via the branch above.
+                            -- Block the memorialize — the party must never be
+                            -- empty (Pokémon Center heal softlock). Normally
+                            -- party_mon arrives before this memorialize and
+                            -- lifts the block automatically. But when the
+                            -- party was full at whiteout, party_mon retried
+                            -- to the end of the queue past all the
+                            -- memorializes. Rescue the deadlock: find the
+                            -- first party_mon in the remaining queue and
+                            -- promote it to front so it runs next frame.
                             blocked = true
+                            for look = 2, #pending_sync_cmds do
+                                if pending_sync_cmds[look].cmd == "party_mon" then
+                                    local pm = table.remove(pending_sync_cmds, look)
+                                    table.insert(pending_sync_cmds, 1, pm)
+                                    console.log("[SLink-FRLGE] memorialize blocked: promoted party_mon to front ("..pm.key:sub(1,8)..")")
+                                    break
+                                end
+                            end
                         end
                     end
                     break
