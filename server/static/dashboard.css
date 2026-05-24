@@ -1457,26 +1457,50 @@ body.dash-collapsed .dash-sidebar-layout { padding: 6px 4px 0; }
 
 /* Height-based progressive hiding for player widgets. When the user shrinks
  * a player widget vertically, less-important sections drop first so the
- * essentials (header + active-state) stay visible. Order of importance
- * (most-essential last):
- *   1. PC Boxes section  — drop first; user can grow widget to see boxed mons
- *   2. Info row          — area / pokéball count / last event timestamp
- *   3. Gym badges        — pretty but lossless to drop
- *   4. Card header itself stays no matter what.
+ * essentials (header + active-state) stay visible. Thresholds tuned so the
+ * USER SEES A CHANGE on each ~48px shrink (1 grid row at cellHeight:48).
+ *
+ * Drop order (least-essential → most-essential):
+ *   1. PC Boxes section
+ *   2. Held items (inside table rows)
+ *   3. Info row
+ *   4. Gym badges
+ *   5. Table head (column labels)
+ *   6. Move-detail rows
+ *   7. The party table body itself (just the card header survives)
  */
-@container (max-height: 260px) {
+@container (max-height: 320px) {
   .widget-player-a .player-pc-section,
   .widget-player-b .player-pc-section { display: none; }
 }
-@container (max-height: 180px) {
+@container (max-height: 280px) {
+  .widget-player-a .held-item,
+  .widget-player-b .held-item { display: none; }
+  /* Tighten row spacing too */
+  .widget-player-a .player-card td,
+  .widget-player-a .player-card th,
+  .widget-player-b .player-card td,
+  .widget-player-b .player-card th { padding: 0.18em 0.35em; }
+}
+@container (max-height: 240px) {
   .widget-player-a .info-row,
   .widget-player-b .info-row { display: none; }
 }
-@container (max-height: 140px) {
+@container (max-height: 200px) {
   .widget-player-a .gym-badges,
   .widget-player-b .gym-badges { display: none; }
+  /* Compact header — drop the ROM label suffix at this size */
+  .widget-player-a .card-hdr h3,
+  .widget-player-b .card-hdr h3 { font-size: 0.85em; }
 }
-@container (max-height: 110px) {
+@container (max-height: 160px) {
+  /* Drop the column header — the per-row data is still legible standalone */
+  .widget-player-a .player-card > table thead,
+  .widget-player-b .player-card > table thead { display: none; }
+  .widget-player-a .move-row,
+  .widget-player-b .move-row { display: none; }
+}
+@container (max-height: 120px) {
   /* Ultra-short — drop the entire party/box body, keep just the header */
   .widget-player-a .player-card > table,
   .widget-player-b .player-card > table,
@@ -1485,17 +1509,40 @@ body.dash-collapsed .dash-sidebar-layout { padding: 6px 4px 0; }
 }
 
 /* Encounters widget: shrink-friendly hierarchy */
-@container (max-height: 220px) {
+@container (max-height: 280px) {
   .widget-encounters .enc-filters { display: none; }
 }
-@container (max-height: 140px) {
+@container (max-height: 180px) {
   .widget-encounters table thead { display: none; }
+  .widget-encounters h2 { font-size: 0.85em; margin-bottom: 0.2em; }
+}
+@container (max-height: 120px) {
+  /* At very short widths, drop status detail (keep just icon + area) */
+  .widget-encounters .col-status .pending,
+  .widget-encounters .col-status .kf-inline { display: none; }
 }
 
-/* Events widget: drop the table header at short heights — the time +
- * player + details cells are self-explanatory. */
-@container (max-height: 160px) {
+/* Events widget: scale row density */
+@container (max-height: 200px) {
   .widget-events table thead { display: none; }
+}
+@container (max-height: 140px) {
+  .widget-events h2 { font-size: 0.85em; margin-bottom: 0.2em; }
+  .widget-events td { padding: 0.1em 0.4em; font-size: 0.85em; }
+}
+
+/* Boxed Links — matches encounters shape */
+@container (max-height: 200px) {
+  .widget-boxed-links table thead { display: none; }
+  .widget-boxed-links h2 { font-size: 0.85em; }
+}
+
+/* Run Status — shed by height */
+@container (max-height: 130px) {
+  .widget-run-status .run-status-balls { display: none; }
+}
+@container (max-height: 90px) {
+  .widget-run-status .run-status-stats { display: none; }
 }
 
 /* ── Encounters widget: drop trainer cells at narrow widths ──────────── */
