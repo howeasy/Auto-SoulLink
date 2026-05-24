@@ -1449,3 +1449,71 @@ body.dash-collapsed .dash-sidebar-layout { padding: 6px 4px 0; }
 @container (max-width: 200px) {
   .widget-events .col-time { display: none; }
 }
+
+/* ── Run Status widget ────────────────────────────────────────────────── */
+.run-status-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  font-size: 0.82em;
+}
+.run-status-phase {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-weight: bold;
+}
+.run-status-phase .phase-dot {
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  border-radius: 50%;
+  background: var(--c-dim);
+}
+.run-status-phase.phase-pre .phase-dot { background: var(--c-pend, #fc0); }
+.run-status-phase.phase-running .phase-dot {
+  background: var(--c-alive, #4f4);
+  box-shadow: 0 0 6px var(--c-alive, #4f4);
+}
+.run-status-phase.phase-game_over .phase-dot { background: var(--c-dead, #f44); }
+.run-status-stats {
+  display: flex;
+  gap: 0.8em;
+  flex-wrap: wrap;
+}
+.rs-stat b { font-size: 1.15em; }
+.rs-stat-lbl { color: var(--c-dim); font-size: 0.88em; margin-left: 0.15em; }
+.rs-alive b { color: var(--c-alive, #4f4); }
+.rs-dead b { color: var(--c-dead, #f44); }
+.run-status-balls {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 0.88em;
+}
+.rs-ball {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5em;
+  height: 1.5em;
+  border-radius: 50%;
+  font-weight: bold;
+  font-size: 0.78em;
+}
+.rs-ball-yes {
+  background: color-mix(in srgb, var(--c-alive, #4f4) 22%, transparent);
+  color: var(--c-alive, #4f4);
+  border: 1px solid var(--c-alive, #4f4);
+}
+.rs-ball-no {
+  background: color-mix(in srgb, var(--c-dim) 12%, transparent);
+  color: var(--c-dim);
+  border: 1px dashed var(--c-dim);
+}
+.rs-ball-lbl { color: var(--c-dim); font-size: 0.85em; }
+
+/* Run Status widget shrinks gracefully */
+@container (max-width: 220px) {
+  .run-status-balls .rs-ball-lbl { display: none; }
+}

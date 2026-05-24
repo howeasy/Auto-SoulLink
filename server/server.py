@@ -2784,11 +2784,17 @@ class SLinkServer:
 
     # Default widget layout (gs-x, gs-y, gs-w, gs-h) on the 12-col grid.
     # The client may override per-user in localStorage; this is the seed.
+    # Top row: small status widgets (Run Status + Lock Rules) side by side.
+    # Middle: player cards. Below: encounters table. Bottom: boxed-links
+    # + events side by side.
     _WIDGET_LAYOUT = [
-        ("player-a",   0, 0,  6, 4),
-        ("player-b",   6, 0,  6, 4),
-        ("encounters", 0, 4, 12, 6),
-        ("events",     0, 10, 12, 4),
+        ("run-status",  0, 0,   4, 2),
+        ("lock-rules",  4, 0,   4, 2),
+        ("player-a",    0, 2,   6, 4),
+        ("player-b",    6, 2,   6, 4),
+        ("encounters",  0, 6,  12, 6),
+        ("boxed-links", 0, 12,  6, 4),
+        ("events",      6, 12,  6, 4),
     ]
 
     def _mon_label(self, key_val, nickname, species_id, gender="", shiny=False):
@@ -3532,7 +3538,43 @@ class SLinkServer:
         return "\n".join(parts)
 
     def _build_widget_run_status_html(self) -> str:
-        return '<h2>Run Status</h2><p class="empty dim">Widget pending Phase 4.</p>'
+        """Phase banner data: alive / dead / attempts + per-player Pokéball state."""
+        s = self.state
+        po = s.pokeballs_obtained or {}
+        alive = sum(1 for l in s.links
+                    if (l.status.value if hasattr(l.status, "value") else l.status) == "alive")
+        dead  = sum(1 for l in s.links
+                    if (l.status.value if hasattr(l.status, "value") else l.status) in ("dead", "memorial"))
+        if getattr(s, "run_over", False):
+            phase_slug, phase_label = "game_over", "Game over"
+        elif not (po.get("a") and po.get("b")):
+            phase_slug, phase_label = "pre", "Waiting for Pokéballs"
+        else:
+            phase_slug, phase_label = "running", "Run in progress"
+        attempts = getattr(s, "attempts_count", 0) or 0
+        # Per-player ball-pocket indicator: yes = has Pokéballs (nuzlocke
+        # active for that player), no = not yet obtained.
+        ball_a = "yes" if po.get("a") else "no"
+        ball_b = "yes" if po.get("b") else "no"
+        return (
+            '<h2>Run Status</h2>'
+            f'<div class="run-status-grid">'
+            f'<div class="run-status-phase phase-{phase_slug}">'
+            f'<span class="phase-dot"></span>'
+            f'<span class="phase-label">{html.escape(phase_label)}</span>'
+            f'</div>'
+            f'<div class="run-status-stats">'
+            f'<span class="rs-stat rs-alive"><b>{alive}</b> <span class="rs-stat-lbl">alive</span></span>'
+            f'<span class="rs-stat rs-dead"><b>{dead}</b> <span class="rs-stat-lbl">dead</span></span>'
+            f'{f"<span class=" + chr(34) + "rs-stat rs-attempts" + chr(34) + "><b>#" + str(attempts) + "</b> <span class=" + chr(34) + "rs-stat-lbl" + chr(34) + ">attempt</span></span>" if attempts else ""}'
+            f'</div>'
+            f'<div class="run-status-balls">'
+            f'<span class="rs-ball rs-ball-{ball_a}">A</span>'
+            f'<span class="rs-ball-lbl">Pokéballs</span>'
+            f'<span class="rs-ball rs-ball-{ball_b}">B</span>'
+            f'</div>'
+            f'</div>'
+        )
 
     def _build_widget_lock_rules_html(self) -> str:
         s = self.state
@@ -3551,7 +3593,70 @@ class SLinkServer:
         return "".join(parts)
 
     def _build_widget_boxed_links_html(self) -> str:
-        return '<h2>Boxed Links</h2><p class="empty dim">Widget pending Phase 4.</p>'
+        """Alive linked pairs where at least one mon is in the box (not party)."""
+        d = self._build_status_dict()
+        pa = d.get("players", {}).get("a", {}) or {}
+        pb = d.get("players", {}).get("b", {}) or {}
+        a_party_keys = set(pa.get("party_keys", []))
+        b_party_keys = set(pb.get("party_keys", []))
+        mon_label = self._mon_label
+
+        rows: list[str] = []
+        for lnk in d.get("links", []):
+            status = lnk.get("status")
+            if status != "alive":
+                continue
+            a_in = lnk.get("a_key") in a_party_keys
+            b_in = lnk.get("b_key") in b_party_keys
+            if a_in and b_in:
+                # Both in party — belongs to the linked-party overlay/widget,
+                # not the boxed view.
+                continue
+            a_sid = lnk.get("a_species", 0)
+            b_sid = lnk.get("b_species", 0)
+            a_key = lnk.get("a_key") or ""
+            b_key = lnk.get("b_key") or ""
+            a_gender = self.adapter.gender_from_key(a_key, a_sid) if a_key else ""
+            b_gender = self.adapter.gender_from_key(b_key, b_sid) if b_key else ""
+            a_lbl = (
+                self._get_sprite_html(a_sid)
+                + mon_label(a_key, lnk.get("a_nickname", ""), a_sid, a_gender,
+                            shiny=lnk.get("a_shiny", False))
+            )
+            b_lbl = (
+                self._get_sprite_html(b_sid)
+                + mon_label(b_key, lnk.get("b_nickname", ""), b_sid, b_gender,
+                            shiny=lnk.get("b_shiny", False))
+            )
+            area = html.escape(lnk.get("area_display") or lnk.get("area_id", ""))
+            rows.append(
+                f'<tr data-key="{html.escape(lnk.get("area_id", ""))}">'
+                f'<td class="col-area">{area}</td>'
+                f'<td class="col-player-a">{a_lbl}'
+                f'{" <span class=" + chr(34) + "dim" + chr(34) + " style=" + chr(34) + "font-size:0.78em" + chr(34) + ">(party)</span>" if a_in else ""}'
+                f'</td>'
+                f'<td class="col-player-b">{b_lbl}'
+                f'{" <span class=" + chr(34) + "dim" + chr(34) + " style=" + chr(34) + "font-size:0.78em" + chr(34) + ">(party)</span>" if b_in else ""}'
+                f'</td>'
+                f'</tr>'
+            )
+
+        parts = ['<h2>Boxed Links</h2>']
+        if not rows:
+            parts.append('<p class="empty dim">No boxed links yet.</p>')
+        else:
+            name_a = html.escape(pa.get("trainer_name") or "A")
+            name_b = html.escape(pb.get("trainer_name") or "B")
+            parts.append(
+                f'<table id="boxed-links-table"><thead><tr>'
+                f'<th class="col-area">Area</th>'
+                f'<th class="col-player-a">{name_a}</th>'
+                f'<th class="col-player-b">{name_b}</th>'
+                f'</tr></thead><tbody>'
+                + "".join(rows) +
+                '</tbody></table>'
+            )
+        return "".join(parts)
 
     def _build_widget_inner(self, wid: str) -> str:
         if wid == "player-a":
