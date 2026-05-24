@@ -2194,3 +2194,46 @@ body.hide-run-stats .run-status-stats,
 body.hide-run-balls .run-status-balls {
   display: none !important;
 }
+
+/* Per-widget show/hide — covers all 19 widgets registered in WIDGET_TOGGLES.
+ * Targets the outer `.grid-stack-item` so Gridstack reflows the layout when
+ * a widget is hidden. */
+body.hide-widget-run-status   .grid-stack-item[gs-id="run-status"],
+body.hide-widget-lock-rules   .grid-stack-item[gs-id="lock-rules"],
+body.hide-widget-attempts     .grid-stack-item[gs-id="attempts"],
+body.hide-widget-run-timer    .grid-stack-item[gs-id="run-timer"],
+body.hide-widget-shiny-counter .grid-stack-item[gs-id="shiny-counter"],
+body.hide-widget-type-coverage .grid-stack-item[gs-id="type-coverage"],
+body.hide-widget-enemy        .grid-stack-item[gs-id="enemy"],
+body.hide-widget-player-a     .grid-stack-item[gs-id="player-a"],
+body.hide-widget-player-b     .grid-stack-item[gs-id="player-b"],
+body.hide-widget-linked-party .grid-stack-item[gs-id="linked-party"],
+body.hide-widget-encounters   .grid-stack-item[gs-id="encounters"],
+body.hide-widget-pc-box       .grid-stack-item[gs-id="pc-box"],
+body.hide-widget-memorial     .grid-stack-item[gs-id="memorial"],
+body.hide-widget-killfeed     .grid-stack-item[gs-id="killfeed"],
+body.hide-widget-boxed-links  .grid-stack-item[gs-id="boxed-links"],
+body.hide-widget-events       .grid-stack-item[gs-id="events"],
+body.hide-widget-area-encounters .grid-stack-item[gs-id="area-encounters"],
+body.hide-widget-stream-launcher .grid-stack-item[gs-id="stream-launcher"],
+body.hide-widget-calc-preview .grid-stack-item[gs-id="calc-preview"] {
+  display: none !important;
+}
+
+/* Edit-mode "Widgets shown" panel uses a denser checkbox grid since it
+ * lists every widget. */
+.dash-edit-widgets summary { color: var(--c-info); }
+.dash-edit-widgets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.25em 1em;
+  padding: 0.5em 0 0.4em;
+}
+.dash-edit-widgets-grid label {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: 0.88em;
+  cursor: pointer;
+  padding: 0.1em 0;
+}

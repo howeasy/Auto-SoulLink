@@ -929,19 +929,43 @@ if (window._slinkDashInit) {
   // rules.
   var VIS_KEY = 'slink-widget-visibility';
 
-  // [hideClass, label, group]. The CSS rule for each is in dashboard.css
-  // under "/* Manual visibility toggles */".
+  // Section toggles — [hideClass, label, group]. The CSS rule for each is
+  // in dashboard.css under "/* Manual visibility toggles */".
   var VIS_TOGGLES = [
-    ['gym-badges',    'Gym badges',        'Players'],
-    ['info-row',      'Info row',          'Players'],
-    ['battle-panel',  'Battle panel',      'Players'],
-    ['pc-boxes',      'PC Boxes section',  'Players'],
+    ['gym-badges',    'Gym badges',        'Player sections'],
+    ['info-row',      'Info row',          'Player sections'],
+    ['battle-panel',  'Battle panel',      'Player sections'],
+    ['pc-boxes',      'PC Boxes section',  'Player sections'],
     ['enc-filters',   'Filter buttons',    'Encounters'],
     ['enc-player-b',  'Player B column',   'Encounters'],
     ['events-time',   'Time column',       'Events'],
     ['events-player', 'Player column',     'Events'],
     ['run-stats',     'Alive / dead counts', 'Run Status'],
     ['run-balls',     'Pokéballs indicator', 'Run Status'],
+  ];
+
+  // Per-widget show/hide. Each entry: [widgetId, label]. Adds body class
+  // `hide-widget-<id>` which the CSS hides the matching `.grid-stack-item`.
+  var WIDGET_TOGGLES = [
+    ['run-status',      'Run Status'],
+    ['lock-rules',      'Lock Rules'],
+    ['attempts',        'Attempts counter'],
+    ['run-timer',       'Run Timer'],
+    ['shiny-counter',   'Shiny Counter'],
+    ['type-coverage',   'Type Coverage'],
+    ['enemy',           'Active Battle (Enemy)'],
+    ['player-a',        'Player A card'],
+    ['player-b',        'Player B card'],
+    ['linked-party',    'Linked Party'],
+    ['encounters',      'Encounters table'],
+    ['pc-box',          'PC Boxes (combined)'],
+    ['memorial',        'Memorial'],
+    ['killfeed',        'Killfeed ticker'],
+    ['boxed-links',     'Boxed Links'],
+    ['events',          'Recent Events'],
+    ['area-encounters', 'Area Encounters'],
+    ['stream-launcher', 'Stream Overlays'],
+    ['calc-preview',    'Damage Calc'],
   ];
 
   function readVisibilityPrefs() {
@@ -964,6 +988,12 @@ if (window._slinkDashInit) {
       if (prefs[t[0]]) document.body.classList.add(cls);
       else document.body.classList.remove(cls);
     });
+    WIDGET_TOGGLES.forEach(function(t) {
+      var cls = 'hide-widget-' + t[0];
+      // Storage key is `widget-<id>` so it doesn't collide with section keys.
+      if (prefs['widget-' + t[0]]) document.body.classList.add(cls);
+      else document.body.classList.remove(cls);
+    });
   }
 
   function buildEditToolbar() {
@@ -979,7 +1009,22 @@ if (window._slinkDashInit) {
     });
 
     var prefs = readVisibilityPrefs();
-    var html = ['<details open class="dash-edit-vis"><summary>Widget visibility</summary><div class="dash-edit-grid">'];
+    var html = [];
+
+    // ── Top panel: per-widget show/hide ─────────────────────────────────
+    html.push('<details open class="dash-edit-widgets"><summary>Widgets shown</summary><div class="dash-edit-widgets-grid">');
+    WIDGET_TOGGLES.forEach(function(t) {
+      var key = 'widget-' + t[0];
+      var checked = prefs[key] ? '' : ' checked';
+      html.push(
+        '<label><input type="checkbox" data-toggle="', key, '"',
+        checked, '> ', t[1], '</label>'
+      );
+    });
+    html.push('</div></details>');
+
+    // ── Section-level toggles inside specific widgets ───────────────────
+    html.push('<details class="dash-edit-vis"><summary>Widget section visibility</summary><div class="dash-edit-grid">');
     Object.keys(groups).forEach(function(g) {
       html.push('<fieldset><legend>', g, '</legend>');
       groups[g].forEach(function(t) {
