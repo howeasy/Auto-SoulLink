@@ -1359,3 +1359,93 @@ body.dash-edit-layout .grid-stack-item-content {
 }
 body.dash-collapsed .dash-customize-btn { justify-content: center; padding: 10px 6px; }
 body.dash-collapsed .dash-sidebar-layout { padding: 6px 4px 0; }
+
+/* ── Container-query responsiveness (Phase 3) ────────────────────────────
+ * Each widget's content has `container-type: inline-size`, so @container
+ * rules below react to the widget's OWN width — not the viewport. Columns
+ * shed progressively at narrow widths, sprite sizes scale via `cqi`.
+ *
+ * Universal table cell ellipsis policy: every td truncates with ellipsis
+ * unless explicitly opted-out via `.dash-cell-wrap` (used by the events
+ * "Details" column where the full text matters more than a clean line).
+ */
+.grid-stack-item-content td:not(.dash-cell-wrap) {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grid-stack-item-content td.dash-cell-wrap {
+  white-space: normal;
+  overflow: visible;
+}
+
+/* ── Player widget: progressive column shedding ──────────────────────── */
+/* Defaults assume a small-medium widget (most users start with player at
+ * 6/12 cols). At desktop widths the @container rules below restore the
+ * extra columns. Below 280 cqi we drop to icon + level only. */
+.widget-player-a .col-ability,
+.widget-player-a .col-partner,
+.widget-player-b .col-ability,
+.widget-player-b .col-partner {
+  display: none;
+}
+@container (min-width: 360px) {
+  .widget-player-a .col-ability,
+  .widget-player-b .col-ability { display: table-cell; }
+}
+@container (min-width: 480px) {
+  .widget-player-a .col-partner,
+  .widget-player-b .col-partner { display: table-cell; }
+}
+/* Ultra-dense — sidebar-rail width. Hide Lv, Type, and the info row;
+ * keep header + name + HP + sprite. */
+@container (max-width: 240px) {
+  .widget-player-a .col-lv,
+  .widget-player-a .col-type,
+  .widget-player-a .info-row,
+  .widget-player-b .col-lv,
+  .widget-player-b .col-type,
+  .widget-player-b .info-row { display: none; }
+}
+/* Sprites scale with the widget's own width — capped at the original
+ * pixel size so they don't grow grotesquely on a maxed-out card. */
+.widget-player-a .mon-sprite,
+.widget-player-a .enc-sprite,
+.widget-player-b .mon-sprite,
+.widget-player-b .enc-sprite {
+  width: clamp(20px, 14cqi, 56px);
+  height: auto;
+}
+
+/* ── Encounters widget: drop trainer cells at narrow widths ──────────── */
+@container (max-width: 360px) {
+  .widget-encounters .col-player-b { display: none; }
+}
+@container (max-width: 240px) {
+  .widget-encounters .col-player-a { display: none; }
+}
+@container (max-width: 180px) {
+  /* At ultra-narrow widths the status cell becomes icon-only — the
+   * killfeed cause line and pending player names are clipped. */
+  .widget-encounters .col-status .kf-inline,
+  .widget-encounters .col-status .pending { display: none; }
+}
+.widget-encounters .mon-sprite {
+  width: clamp(18px, 10cqi, 40px);
+  height: auto;
+}
+
+/* ── Events widget: drop player + time at narrow widths ──────────────── */
+.widget-events .col-details {
+  /* Override universal ellipsis — events text reads best wrapped. */
+  white-space: normal;
+  max-width: none;
+  overflow: visible;
+}
+@container (max-width: 320px) {
+  .widget-events .col-player { display: none; }
+}
+@container (max-width: 200px) {
+  .widget-events .col-time { display: none; }
+}

@@ -2903,7 +2903,7 @@ class SLinkServer:
             parts.append(f'<h4 style="margin:0 0 0.3em"><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> IN BATTLE &mdash; {battle_lbl}{new_enc_badge}{doubles_chip}</h4>')
             enemy_party = bs.get("enemy_party", [])
             if enemy_party:
-                parts.append(f'<table class="foe-table"><tr><th>Foe</th><th>Lv</th><th>HP</th><th>Type</th>{"<th>Ability</th>" if has_abilities else ""}</tr>')
+                parts.append(f'<table class="foe-table"><tr><th class="col-name">Foe</th><th class="col-lv">Lv</th><th class="col-hp">HP</th><th class="col-type">Type</th>{"<th class=\'col-ability\'>Ability</th>" if has_abilities else ""}</tr>')
                 for ei, em in enumerate(enemy_party):
                     esid   = em.get("species_id", 0)
                     elv    = em.get("level", 0)
@@ -2944,11 +2944,11 @@ class SLinkServer:
                     )
                     parts.append(
                         f'<tr class="{foe_cls}" data-key="{html.escape(foe_key)}">'
-                        f'<td>{foe_mon_cell}</td>'
-                        f'<td>{elv}</td>'
-                        f'<td>{hp_bar}</td>'
-                        f'<td>{etype_cell}</td>'
-                        f'{"<td>" + abl_html + "</td>" if has_abilities else ""}</tr>'
+                        f'<td class="col-name">{foe_mon_cell}</td>'
+                        f'<td class="col-lv">{elv}</td>'
+                        f'<td class="col-hp">{hp_bar}</td>'
+                        f'<td class="col-type">{etype_cell}</td>'
+                        f'{"<td class=col-ability>" + abl_html + "</td>" if has_abilities else ""}</tr>'
                     )
                     emove_html = _move_table_html(em.get("move_details", []),
                                                   mon_key=f"enemy:{ei}")
@@ -3023,8 +3023,8 @@ class SLinkServer:
         if party_keys:
             q = p["queued"]
             q_str = f'<span class="warn">{q} queued</span>' if q > 0 else ""
-            abl_hdr = '<th>Ability</th>' if has_abilities else ''
-            parts.append(f'<table><thead><tr><th>Pokémon</th><th>Lv</th><th>HP</th><th>Type</th>{abl_hdr}<th>Partner</th></tr></thead><tbody>')
+            abl_hdr = '<th class="col-ability">Ability</th>' if has_abilities else ''
+            parts.append(f'<table><thead><tr><th class="col-name">Pokémon</th><th class="col-lv">Lv</th><th class="col-hp">HP</th><th class="col-type">Type</th>{abl_hdr}<th class="col-partner">Partner</th></tr></thead><tbody>')
             for key in party_keys:
                 detail      = p["party_details"].get(key, {})
                 level       = detail.get("level", 0)
@@ -3109,18 +3109,18 @@ class SLinkServer:
                         partner_str = '<span class="dim">unlinked</span>'
                         link_cls    = "dim"
 
-                abl_td = f'<td>{ability_cell}</td>' if has_abilities else ''
+                abl_td = f'<td class="col-ability">{ability_cell}</td>' if has_abilities else ''
                 colspan = 6 if has_abilities else 5
                 move_details = detail.get("move_details", [])
                 move_html = _move_table_html(move_details, mon_key=key)
                 parts.append(
                     f'<tr class="{row_cls}" data-key="{html.escape(key)}">'
-                    f'<td>{mon_str}</td>'
-                    f'<td>{lv_str}</td>'
-                    f'<td>{hp_cell}</td>'
-                    f'<td>{type_cell}</td>'
+                    f'<td class="col-name">{mon_str}</td>'
+                    f'<td class="col-lv">{lv_str}</td>'
+                    f'<td class="col-hp">{hp_cell}</td>'
+                    f'<td class="col-type">{type_cell}</td>'
                     f'{abl_td}'
-                    f'<td class="{link_cls}">{partner_str}</td></tr>'
+                    f'<td class="col-partner {link_cls}">{partner_str}</td></tr>'
                 )
                 if move_html:
                     parts.append(
@@ -3151,7 +3151,7 @@ class SLinkServer:
         ]
         if boxes:
             parts.append('<h3 style="margin-top:0.8em;font-size:0.95em">PC Boxes</h3>')
-            parts.append(f'<table><thead><tr><th>Box</th><th>Slot</th><th>Lv</th><th>Pokémon</th><th>Type</th>{"<th>Ability</th>" if has_abilities else ""}<th>Partner</th></tr></thead><tbody>')
+            parts.append(f'<table><thead><tr><th class="col-box">Box</th><th class="col-slot">Slot</th><th class="col-lv">Lv</th><th class="col-name">Pokémon</th><th class="col-type">Type</th>{"<th class=\'col-ability\'>Ability</th>" if has_abilities else ""}<th class="col-partner">Partner</th></tr></thead><tbody>')
             for bentry in boxes:
                 b_sid     = bentry.get("species_id", 0)
                 b_gender  = self.adapter.gender_from_key(bentry.get("key", ""), b_sid)
@@ -3239,18 +3239,18 @@ class SLinkServer:
                         bx_partner_str = '<span class="dim">—</span>'
                         bx_link_cls    = "dim"
 
-                bx_abl_td = f'<td>{b_abl_h}</td>' if has_abilities else ''
+                bx_abl_td = f'<td class="col-ability">{b_abl_h}</td>' if has_abilities else ''
                 bx_colspan = 7 if has_abilities else 6
                 bx_move_details = bentry.get("move_details", [])
                 bx_move_html = _move_table_html(bx_move_details, is_box=True, mon_key=bx_key)
                 parts.append(
-                    f'<tr data-key="{html.escape(bx_key)}"><td>{bentry.get("box",0)+1}</td>'
-                    f'<td>{bentry.get("slot",0)+1}</td>'
-                    f'<td>{bx_lv}</td>'
-                    f'<td>{b_label}</td>'
-                    f'<td>{b_types}</td>'
+                    f'<tr data-key="{html.escape(bx_key)}"><td class="col-box">{bentry.get("box",0)+1}</td>'
+                    f'<td class="col-slot">{bentry.get("slot",0)+1}</td>'
+                    f'<td class="col-lv">{bx_lv}</td>'
+                    f'<td class="col-name">{b_label}</td>'
+                    f'<td class="col-type">{b_types}</td>'
                     f'{bx_abl_td}'
-                    f'<td class="{bx_link_cls}">{bx_partner_str}</td></tr>'
+                    f'<td class="col-partner {bx_link_cls}">{bx_partner_str}</td></tr>'
                 )
                 if bx_move_html:
                     parts.append(
@@ -3467,10 +3467,10 @@ class SLinkServer:
             )
             parts.append(
                 f'<table id="enc-table"><thead><tr>'
-                f'<th class="sortable" data-col="0">Area</th>'
-                f'<th class="sortable" data-col="1">{name_a}</th>'
-                f'<th class="sortable" data-col="2">{name_b}</th>'
-                f'<th class="sortable" data-col="3">Status</th>'
+                f'<th class="sortable col-area" data-col="0">Area</th>'
+                f'<th class="sortable col-player-a" data-col="1">{name_a}</th>'
+                f'<th class="sortable col-player-b" data-col="2">{name_b}</th>'
+                f'<th class="sortable col-status" data-col="3">Status</th>'
                 f'</tr></thead><tbody>'
             )
             for r in encounter_rows:
@@ -3481,10 +3481,10 @@ class SLinkServer:
                 area_cell = area_disp
                 parts.append(
                     f'<tr{row_cls} data-status="{html.escape(r["cls"])}" data-key="{html.escape(r["area"])}">'
-                    f'<td data-sort="{html.escape(area_disp)}">{area_cell}</td>'
-                    f'<td>{r["a_html"]}</td>'
-                    f'<td>{r["b_html"]}</td>'
-                    f'<td data-sort="{st_sort}">{r["state"]}</td></tr>'
+                    f'<td class="col-area" data-sort="{html.escape(area_disp)}">{area_cell}</td>'
+                    f'<td class="col-player-a">{r["a_html"]}</td>'
+                    f'<td class="col-player-b">{r["b_html"]}</td>'
+                    f'<td class="col-status" data-sort="{st_sort}">{r["state"]}</td></tr>'
                 )
             parts.append("</tbody></table>")
         else:
@@ -3501,9 +3501,9 @@ class SLinkServer:
             parts.append('<div class="events-scroll" style="max-height:300px;overflow-y:auto;border:1px solid #333;border-radius:3px;">')
             parts.append(
                 '<table style="margin-bottom:0"><thead><tr>'
-                '<th style="position:sticky;top:0;background:#222">Time</th>'
-                '<th style="position:sticky;top:0;background:#222;text-align:left">Player</th>'
-                '<th style="position:sticky;top:0;background:#222">Details</th>'
+                '<th class="col-time" style="position:sticky;top:0;background:#222">Time</th>'
+                '<th class="col-player" style="position:sticky;top:0;background:#222;text-align:left">Player</th>'
+                '<th class="col-details" style="position:sticky;top:0;background:#222">Details</th>'
                 '</tr></thead><tbody>'
             )
             for ev in events:
@@ -3521,9 +3521,9 @@ class SLinkServer:
                     ev_ts = html.escape(_raw_ts[-8:])
                 parts.append(
                     f'<tr>'
-                    f'<td class="dim" style="white-space:nowrap">{ev_ts}</td>'
-                    f'<td style="text-align:left;white-space:nowrap"><b>{ev_player}</b></td>'
-                    f'<td class="event-type-{ev_type}">{ev_text}</td>'
+                    f'<td class="col-time dim" style="white-space:nowrap">{ev_ts}</td>'
+                    f'<td class="col-player" style="text-align:left;white-space:nowrap"><b>{ev_player}</b></td>'
+                    f'<td class="col-details event-type-{ev_type} dash-cell-wrap">{ev_text}</td>'
                     f'</tr>'
                 )
             parts.append('</tbody></table></div>')
