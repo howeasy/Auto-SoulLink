@@ -222,7 +222,7 @@
   // Same pattern dashboard.js:701 uses to preserve <details open> across
   // morph swaps. Adding `data-marquee` to additional templates extends this
   // protection without further code changes here.
-  var MARQUEE_IDS = { ttrack: 1, 'mem-list': 1, 'trn-list': 1, 'et-list': 1 };
+  var MARQUEE_IDS = { ttrack: 1, 'mem-list': 1, 'trn-list': 1, 'et-list': 1, 'bl-list': 1 };
   function installIdiomorphHook() {
     if (!window.Idiomorph || !Idiomorph.defaults || !Idiomorph.defaults.callbacks) return;
     Idiomorph.defaults.callbacks.beforeAttributeUpdated = function (attrName, node, mutationType) {

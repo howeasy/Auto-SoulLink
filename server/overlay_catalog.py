@@ -89,9 +89,11 @@ OVERLAYS: list[dict[str, Any]] = [
     {
         "slug": "boxed-links", "family": "links",
         "title": "Boxed Links",
-        "desc": "Alive linked pairs where one or both mons are currently in the PC box.",
+        "desc": "Alive linked pairs where one or both mons are currently in the PC box. Auto-scrolls when the list overflows the overlay height.",
         "sizes": ["Sidebar: 200×600", "Standard: 420×340"],
         "layouts": ["", "thin-v"],
+        "speeds": SPEED_PILLS,
+        "pauses": ["0", "1", "2", "4"],
     },
 
     # ── BATTLE ─────────────────────────────────────────────────────────

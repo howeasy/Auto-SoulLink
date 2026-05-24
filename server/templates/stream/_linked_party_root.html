@@ -27,7 +27,11 @@
                 </div>
               </div>
             </div>
-            <span class="lp-sep">◈</span>
+            <svg class="bl-chain" viewBox="0 0 36 16" aria-hidden="true"
+                 fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <path d="M 18 4 A 9 5.5 0 1 1 18 12"/>
+              <ellipse cx="12" cy="8" rx="9" ry="5.5"/>
+            </svg>
             <div class="lp-side lp-r{% if pr.b.fainted %} mc fnt{% endif %}">
               <div class="lp-info lp-ir">
                 <div class="lp-nm">{% if pr.b.fainted %}<span class="fnt-tag">FNT</span>{% endif %}{{ pr.b.nickname or pr.b.species_name or '—' }}</div>

@@ -4280,8 +4280,7 @@ class SLinkServer:
         return {"pairs": pairs}
 
     def _build_boxed_links_overlay_context(self) -> dict:
-        """Alive pairs where at least one mon is in the box (not party).
-        Switches to compact grid layout above 4 pairs."""
+        """Alive pairs where at least one mon is in the box (not party)."""
         d = self._build_status_dict()
         pa = d.get("players", {}).get("a", {}) or {}
         pb = d.get("players", {}).get("b", {}) or {}
@@ -4313,7 +4312,7 @@ class SLinkServer:
                     "in_party":     b_in,
                 },
             })
-        return {"pairs": pairs, "compact": len(pairs) > 4}
+        return {"pairs": pairs}
 
     async def handle_stream_deaths(self, request):
         return await self._render_stream_overlay(
