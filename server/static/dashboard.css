@@ -1455,6 +1455,134 @@ body.dash-collapsed .dash-sidebar-layout { padding: 6px 4px 0; }
   height: auto;
 }
 
+/* ── Flex-based party list (replaces table for player widgets) ──────────
+ * Each mon row is a flex container with named cells. Container queries
+ * hide cells one-by-one as the widget gets narrower, ending in a stacked
+ * sprite + name + HP layout at the smallest widths.
+ */
+.party-list { display: flex; flex-direction: column; gap: 1px; }
+.mon-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.25em 0.4em;
+  font-size: 0.92em;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-edge) 60%, transparent);
+  min-width: 0;
+}
+.mon-row:last-child { border-bottom: none; }
+.mon-row.fainted { opacity: 0.55; }
+.mon-row.active-mon {
+  background: color-mix(in srgb, var(--c-alive, #4f4) 8%, transparent);
+}
+
+.mon-cell { min-width: 0; }
+.mon-cell-sprite { flex: 0 0 36px; display: flex; justify-content: center; align-items: center; }
+.mon-cell-sprite .mon-sprite { width: 36px; height: 36px; image-rendering: pixelated; }
+.mon-cell-id {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mon-cell-id .mon-name { font-weight: 600; }
+.mon-cell-id .mon-species-paren { font-weight: 400; color: var(--c-dim); margin-left: 0.2em; }
+.mon-cell-lv {
+  flex: 0 0 auto;
+  font-family: var(--font-mono, monospace);
+  color: var(--c-dim);
+  min-width: 1.6em;
+  text-align: right;
+}
+.mon-cell-lv::before { content: "Lv "; opacity: 0.6; }
+.mon-cell-hp {
+  flex: 0 0 100px;
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+.mon-cell-hp .hp-bar-bg {
+  flex: 1 1 auto;
+  height: 6px;
+  background: color-mix(in srgb, var(--c-edge) 50%, var(--c-bg));
+  border-radius: 3px;
+  overflow: hidden;
+  display: block;
+}
+.mon-cell-hp .hp-bar { height: 100%; transition: width 0.3s; display: block; }
+.mon-cell-hp .dim { font-size: 0.78em; white-space: nowrap; }
+.mon-cell-type {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 0.15em;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.mon-cell-type .type-badge { font-size: 0.75em; padding: 0.05em 0.4em; }
+.mon-cell-ability {
+  flex: 0 0 90px;
+  font-size: 0.85em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mon-cell-partner {
+  flex: 0 0 110px;
+  font-size: 0.82em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Override player-widget defaults from earlier phase that targeted col-* —
+ * those rules used `display: table-cell` which is wrong for our flex cells.
+ * The new approach: each cell defaults to flex item; container queries hide
+ * them via `display: none`. */
+.widget-player-a .col-ability,
+.widget-player-a .col-partner,
+.widget-player-b .col-ability,
+.widget-player-b .col-partner {
+  display: none;
+}
+@container (min-width: 360px) {
+  .widget-player-a .mon-cell-ability,
+  .widget-player-b .mon-cell-ability { display: block; }
+}
+@container (min-width: 480px) {
+  .widget-player-a .mon-cell-partner,
+  .widget-player-b .mon-cell-partner { display: flex; align-items: center; }
+}
+@container (max-width: 280px) {
+  .widget-player-a .mon-cell-lv,
+  .widget-player-b .mon-cell-lv,
+  .widget-player-a .mon-cell-type,
+  .widget-player-b .mon-cell-type { display: none; }
+}
+@container (max-width: 200px) {
+  /* Stack: sprite top-left, name top-right, HP bar full width below */
+  .widget-player-a .mon-row,
+  .widget-player-b .mon-row { flex-wrap: wrap; }
+  .widget-player-a .mon-cell-hp,
+  .widget-player-b .mon-cell-hp { flex: 1 1 100%; }
+  .widget-player-a .mon-cell-sprite,
+  .widget-player-b .mon-cell-sprite { flex: 0 0 24px; }
+  .widget-player-a .mon-cell-sprite .mon-sprite,
+  .widget-player-b .mon-cell-sprite .mon-sprite { width: 24px; height: 24px; }
+}
+@container (max-width: 140px) {
+  /* Ultra-narrow: drop species paren, just nickname */
+  .widget-player-a .mon-species-paren,
+  .widget-player-b .mon-species-paren { display: none; }
+}
+
+/* Move-row (move-details expandable) — was a table colspan; now block */
+.move-row {
+  padding: 0.2em 0.4em 0.4em 2.4em;
+  font-size: 0.85em;
+  color: var(--c-dim);
+}
+
 /* Height-based progressive hiding for player widgets. When the user shrinks
  * a player widget vertically, less-important sections drop first so the
  * essentials (header + active-state) stay visible. Thresholds tuned so the

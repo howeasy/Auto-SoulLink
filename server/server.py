@@ -3030,8 +3030,10 @@ class SLinkServer:
         if party_keys:
             q = p["queued"]
             q_str = f'<span class="warn">{q} queued</span>' if q > 0 else ""
-            abl_hdr = '<th class="col-ability">Ability</th>' if has_abilities else ''
-            parts.append(f'<table><thead><tr><th class="col-name">Pokémon</th><th class="col-lv">Lv</th><th class="col-hp">HP</th><th class="col-type">Type</th>{abl_hdr}<th class="col-partner">Partner</th></tr></thead><tbody>')
+            # Flex-based party list — each mon is a `.mon-row` with named cells
+            # (`.mon-cell-X`). Container queries hide cells individually at
+            # narrow widths without forcing table column reflow.
+            parts.append('<div class="party-list">')
             for key in party_keys:
                 detail      = p["party_details"].get(key, {})
                 level       = detail.get("level", 0)
@@ -3116,25 +3118,34 @@ class SLinkServer:
                         partner_str = '<span class="dim">unlinked</span>'
                         link_cls    = "dim"
 
-                abl_td = f'<td class="col-ability">{ability_cell}</td>' if has_abilities else ''
-                colspan = 6 if has_abilities else 5
+                abl_cell_html = (
+                    f'<div class="mon-cell mon-cell-ability col-ability">{ability_cell}</div>'
+                    if has_abilities else ''
+                )
                 move_details = detail.get("move_details", [])
                 move_html = _move_table_html(move_details, mon_key=key)
+                # Split out the sprite from mon_str so we can place it in its
+                # own cell and let the name+meta cell flex independently.
                 parts.append(
-                    f'<tr class="{row_cls}" data-key="{html.escape(key)}">'
-                    f'<td class="col-name">{mon_str}</td>'
-                    f'<td class="col-lv">{lv_str}</td>'
-                    f'<td class="col-hp">{hp_cell}</td>'
-                    f'<td class="col-type">{type_cell}</td>'
-                    f'{abl_td}'
-                    f'<td class="col-partner {link_cls}">{partner_str}</td></tr>'
+                    f'<div class="mon-row {row_cls}" data-key="{html.escape(key)}">'
+                    f'<div class="mon-cell mon-cell-sprite col-sprite">{sprite_html}</div>'
+                    f'<div class="mon-cell mon-cell-id col-name">'
+                    f'<div class="mon-name">{active_pfx}{mon_label(key, detail.get("nickname", ""), sid, detail.get("gender", ""), shiny=is_shiny_mon)}{item_html}</div>'
+                    f'</div>'
+                    f'<div class="mon-cell mon-cell-lv col-lv">{lv_str}</div>'
+                    f'<div class="mon-cell mon-cell-hp col-hp">{hp_cell}</div>'
+                    f'<div class="mon-cell mon-cell-type col-type">{type_cell}</div>'
+                    f'{abl_cell_html}'
+                    f'<div class="mon-cell mon-cell-partner col-partner {link_cls}">{partner_str}</div>'
+                    f'</div>'
                 )
                 if move_html:
                     parts.append(
-                        f'<tr class="move-row {row_cls}" data-key="{html.escape(key)}-moves">'
-                        f'<td colspan="{colspan}">{move_html}</td></tr>'
+                        f'<div class="move-row {row_cls}" data-key="{html.escape(key)}-moves">'
+                        f'{move_html}'
+                        f'</div>'
                     )
-            parts.append("</tbody></table>")
+            parts.append("</div>")  # /.party-list
             if q_str:
                 parts.append(f'<p style="margin:0;font-size:0.85em">{q_str}</p>')
         else:
