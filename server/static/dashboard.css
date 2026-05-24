@@ -1233,37 +1233,24 @@ td .mon-sprite, td img.mon-sprite {
   margin: 0;
 }
 
-.grid-stack-item-content {
-  /* Establish container-query scope. */
-  container-type: inline-size;
+/* Gridstack's own CSS targets the long chain
+ * `.grid-stack > .grid-stack-item > .grid-stack-item-content` and ships
+ * `overflow-x: hidden; overflow-y: auto`. We need at least matching
+ * specificity to override the scroll. */
+.grid-stack > .grid-stack-item > .grid-stack-item-content {
+  /* `container-type: size` enables BOTH inline-size and block-size queries,
+   * so @container rules can react to widget HEIGHT as well as width. We
+   * progressively hide content as the widget shrinks rather than scrolling. */
+  container-type: size;
   background: var(--c-card, #1a1a1a);
   border: 1px solid var(--c-edge, #333);
   border-radius: 6px;
   padding: 0.5em 0.7em;
-  /* Hide horizontal overflow entirely (tables shed columns via container
-   * queries instead) and only show vertical scrollbar when content actually
-   * exceeds the widget. NO `scrollbar-gutter: stable` — the gutter is
-   * visually noisy on the empty state, and we accept a small reflow when a
-   * scrollbar appears mid-poll. */
+  /* Never scroll. Content that overflows after every container-query has
+   * fired and the user's manual hide-toggles have applied is clipped — the
+   * intended cue that they should resize the widget bigger. */
   overflow-x: hidden;
-  overflow-y: auto;
-}
-
-/* Slim scrollbars — the default chrome scrollbar is jarring against the
- * dark theme and clashes with the pixel font. Firefox uses
- * `scrollbar-width`; WebKit needs `::-webkit-scrollbar`. */
-.grid-stack-item-content {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--c-brand) 35%, transparent) transparent;
-}
-.grid-stack-item-content::-webkit-scrollbar { width: 6px; }
-.grid-stack-item-content::-webkit-scrollbar-track { background: transparent; }
-.grid-stack-item-content::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--c-brand) 35%, transparent);
-  border-radius: 3px;
-}
-.grid-stack-item-content::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--c-brand) 60%, transparent);
+  overflow-y: hidden;
 }
 
 /* Widget headings — slim down from the page-level h2 (which assumes lots
@@ -1468,6 +1455,49 @@ body.dash-collapsed .dash-sidebar-layout { padding: 6px 4px 0; }
   height: auto;
 }
 
+/* Height-based progressive hiding for player widgets. When the user shrinks
+ * a player widget vertically, less-important sections drop first so the
+ * essentials (header + active-state) stay visible. Order of importance
+ * (most-essential last):
+ *   1. PC Boxes section  — drop first; user can grow widget to see boxed mons
+ *   2. Info row          — area / pokéball count / last event timestamp
+ *   3. Gym badges        — pretty but lossless to drop
+ *   4. Card header itself stays no matter what.
+ */
+@container (max-height: 260px) {
+  .widget-player-a .player-pc-section,
+  .widget-player-b .player-pc-section { display: none; }
+}
+@container (max-height: 180px) {
+  .widget-player-a .info-row,
+  .widget-player-b .info-row { display: none; }
+}
+@container (max-height: 140px) {
+  .widget-player-a .gym-badges,
+  .widget-player-b .gym-badges { display: none; }
+}
+@container (max-height: 110px) {
+  /* Ultra-short — drop the entire party/box body, keep just the header */
+  .widget-player-a .player-card > table,
+  .widget-player-b .player-card > table,
+  .widget-player-a .battle-panel,
+  .widget-player-b .battle-panel { display: none; }
+}
+
+/* Encounters widget: shrink-friendly hierarchy */
+@container (max-height: 220px) {
+  .widget-encounters .enc-filters { display: none; }
+}
+@container (max-height: 140px) {
+  .widget-encounters table thead { display: none; }
+}
+
+/* Events widget: drop the table header at short heights — the time +
+ * player + details cells are self-explanatory. */
+@container (max-height: 160px) {
+  .widget-events table thead { display: none; }
+}
+
 /* ── Encounters widget: drop trainer cells at narrow widths ──────────── */
 @container (max-width: 360px) {
   .widget-encounters .col-player-b { display: none; }
@@ -1566,4 +1596,92 @@ body.dash-collapsed .dash-sidebar-layout { padding: 6px 4px 0; }
 /* Run Status widget shrinks gracefully */
 @container (max-width: 220px) {
   .run-status-balls .rs-ball-lbl { display: none; }
+}
+
+/* ── Edit-mode toolbar ────────────────────────────────────────────────────
+ * Injected by dashboard.js above the grid when `body.dash-edit-layout` is
+ * active. Provides the visibility checklist + reset button.
+ */
+.dash-edit-toolbar {
+  display: none;
+  background: color-mix(in srgb, var(--c-card) 90%, var(--c-brand));
+  border: 1px solid color-mix(in srgb, var(--c-brand) 40%, var(--c-edge));
+  border-radius: 6px;
+  padding: 0.6em 0.9em;
+  margin-bottom: 0.8em;
+  font-size: 0.85em;
+}
+body.dash-edit-layout .dash-edit-toolbar { display: block; }
+.dash-edit-toolbar summary {
+  cursor: pointer;
+  font-weight: bold;
+  color: var(--c-brand);
+  padding: 0.2em 0;
+  user-select: none;
+}
+.dash-edit-toolbar .dash-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.6em;
+  padding-top: 0.6em;
+}
+.dash-edit-toolbar fieldset {
+  border: 1px solid color-mix(in srgb, var(--c-brand) 25%, var(--c-edge));
+  border-radius: 4px;
+  padding: 0.3em 0.6em 0.5em;
+  margin: 0;
+}
+.dash-edit-toolbar legend {
+  padding: 0 0.4em;
+  color: var(--c-info);
+  font-weight: bold;
+  font-size: 0.9em;
+}
+.dash-edit-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.15em 0;
+  font-size: 0.92em;
+  cursor: pointer;
+}
+.dash-edit-toolbar input[type="checkbox"] {
+  margin: 0;
+  accent-color: var(--c-brand);
+}
+.dash-edit-actions {
+  margin-top: 0.6em;
+  display: flex;
+  gap: 0.6em;
+  justify-content: flex-end;
+}
+.dash-edit-actions button {
+  background: transparent;
+  border: 1px solid var(--c-dead, #f44);
+  color: var(--c-dead, #f44);
+  border-radius: 4px;
+  padding: 0.3em 0.8em;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.9em;
+}
+.dash-edit-actions button:hover {
+  background: color-mix(in srgb, var(--c-dead, #f44) 18%, transparent);
+}
+
+/* ── Manual visibility toggles ────────────────────────────────────────────
+ * Apply `display: none !important` so these win against container-query
+ * @container rules that would otherwise reveal the section.
+ */
+body.hide-gym-badges .gym-badges,
+body.hide-info-row .info-row,
+body.hide-battle-panel .battle-panel,
+body.hide-pc-boxes .player-pc-section,
+body.hide-enc-filters .enc-filters,
+body.hide-enc-player-b .widget-encounters .col-player-b,
+body.hide-events-time .widget-events .col-time,
+body.hide-events-player .widget-events .col-player,
+body.hide-run-stats .run-status-stats,
+body.hide-run-balls .run-status-balls {
+  display: none !important;
 }

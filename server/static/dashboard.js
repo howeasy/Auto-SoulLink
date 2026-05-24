@@ -909,6 +909,117 @@ if (window._slinkDashInit) {
     grid.on('dragstop', saveLayout);
   }
 
+  // ── Widget visibility (user toggles) ─────────────────────────────────────
+  // Manual hide/show of individual sections within widgets. Stored as
+  // `localStorage["slink-widget-visibility"]` = { hideKey: true, ... }.
+  // Applied via body classes (`body.hide-<key>`) so the CSS rules can use
+  // `display: none !important` to win against the container-query auto-show
+  // rules.
+  var VIS_KEY = 'slink-widget-visibility';
+
+  // [hideClass, label, group]. The CSS rule for each is in dashboard.css
+  // under "/* Manual visibility toggles */".
+  var VIS_TOGGLES = [
+    ['gym-badges',    'Gym badges',        'Players'],
+    ['info-row',      'Info row',          'Players'],
+    ['battle-panel',  'Battle panel',      'Players'],
+    ['pc-boxes',      'PC Boxes section',  'Players'],
+    ['enc-filters',   'Filter buttons',    'Encounters'],
+    ['enc-player-b',  'Player B column',   'Encounters'],
+    ['events-time',   'Time column',       'Events'],
+    ['events-player', 'Player column',     'Events'],
+    ['run-stats',     'Alive / dead counts', 'Run Status'],
+    ['run-balls',     'Pokéballs indicator', 'Run Status'],
+  ];
+
+  function readVisibilityPrefs() {
+    try {
+      var raw = window.localStorage.getItem(VIS_KEY);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) { return {}; }
+  }
+
+  function writeVisibilityPrefs(prefs) {
+    try {
+      window.localStorage.setItem(VIS_KEY, JSON.stringify(prefs));
+    } catch (e) { /* shrug */ }
+  }
+
+  function applyVisibilityPrefs() {
+    var prefs = readVisibilityPrefs();
+    VIS_TOGGLES.forEach(function(t) {
+      var cls = 'hide-' + t[0];
+      if (prefs[t[0]]) document.body.classList.add(cls);
+      else document.body.classList.remove(cls);
+    });
+  }
+
+  function buildEditToolbar() {
+    if (document.getElementById('dash-edit-toolbar')) return;
+    var grid = document.getElementById('dash-grid');
+    if (!grid) return;
+
+    // Group toggles by widget category so the panel reads as
+    // "What to show in <category>: [checklist]".
+    var groups = {};
+    VIS_TOGGLES.forEach(function(t) {
+      (groups[t[2]] = groups[t[2]] || []).push(t);
+    });
+
+    var prefs = readVisibilityPrefs();
+    var html = ['<details open class="dash-edit-vis"><summary>Widget visibility</summary><div class="dash-edit-grid">'];
+    Object.keys(groups).forEach(function(g) {
+      html.push('<fieldset><legend>', g, '</legend>');
+      groups[g].forEach(function(t) {
+        var key = t[0];
+        var checked = prefs[key] ? '' : ' checked';
+        html.push(
+          '<label><input type="checkbox" data-toggle="', key, '"',
+          checked, '> ', t[1], '</label>'
+        );
+      });
+      html.push('</fieldset>');
+    });
+    html.push(
+      '</div></details>',
+      '<div class="dash-edit-actions">',
+      '<button type="button" data-action="reset-layout">Reset layout + visibility</button>',
+      '</div>'
+    );
+
+    var toolbar = document.createElement('aside');
+    toolbar.id = 'dash-edit-toolbar';
+    toolbar.className = 'dash-edit-toolbar';
+    toolbar.innerHTML = html.join('');
+    grid.parentElement.insertBefore(toolbar, grid);
+
+    // Wire up checkboxes
+    toolbar.querySelectorAll('input[type=checkbox][data-toggle]').forEach(function(cb) {
+      cb.addEventListener('change', function() {
+        var key = cb.dataset.toggle;
+        var hide = !cb.checked;
+        var p = readVisibilityPrefs();
+        if (hide) p[key] = true;
+        else delete p[key];
+        writeVisibilityPrefs(p);
+        applyVisibilityPrefs();
+      });
+    });
+
+    // Reset action
+    var resetBtn = toolbar.querySelector('[data-action="reset-layout"]');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function() {
+        if (!window.confirm('Reset widget layout AND visibility to defaults?')) return;
+        try {
+          window.localStorage.removeItem(STORAGE_KEY);
+          window.localStorage.removeItem(VIS_KEY);
+        } catch (_) {}
+        window.location.reload();
+      });
+    }
+  }
+
   // Public API used by the sidebar Customize button + reset shortcut.
   window.SLinkDash = window.SLinkDash || {};
   window.SLinkDash.toggleEditLayout = function() {
@@ -916,8 +1027,14 @@ if (window._slinkDashInit) {
   };
   window.SLinkDash.resetLayout = resetLayout;
 
-  if (document.readyState !== 'loading') initGrid();
-  else document.addEventListener('DOMContentLoaded', initGrid);
+  function bootstrap() {
+    applyVisibilityPrefs();   // before grid init so hidden sections never flash
+    initGrid();
+    buildEditToolbar();
+  }
+
+  if (document.readyState !== 'loading') bootstrap();
+  else document.addEventListener('DOMContentLoaded', bootstrap);
 })();
 
 }  // close `if (window._slinkDashInit)` sentinel

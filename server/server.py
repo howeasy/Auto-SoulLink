@@ -3157,6 +3157,11 @@ class SLinkServer:
             and (_mem_idx < 0 or b.get("box") not in self._memorial_box_indices())
         ]
         if boxes:
+            # Wrap the PC-boxes block in a stable section class so the
+            # container-query hide rule (`@container (max-height: 260px)`) and
+            # the user-toggle (`body.hide-pc-boxes`) can target just this part
+            # without affecting the party table above.
+            parts.append('<div class="player-pc-section">')
             parts.append('<h3 style="margin-top:0.8em;font-size:0.95em">PC Boxes</h3>')
             parts.append(f'<table><thead><tr><th class="col-box">Box</th><th class="col-slot">Slot</th><th class="col-lv">Lv</th><th class="col-name">Pokémon</th><th class="col-type">Type</th>{"<th class=\'col-ability\'>Ability</th>" if has_abilities else ""}<th class="col-partner">Partner</th></tr></thead><tbody>')
             for bentry in boxes:
@@ -3265,8 +3270,9 @@ class SLinkServer:
                         f'<td colspan="{bx_colspan}">{bx_move_html}</td></tr>'
                     )
             parts.append("</tbody></table>")
+            parts.append("</div>")  # /.player-pc-section
 
-        parts.append("</div>")
+        parts.append("</div>")  # /.player-card
         return "\n".join(parts)
 
     def _build_widget_encounters_html(self) -> str:
@@ -3505,7 +3511,11 @@ class SLinkServer:
         parts.append('<h2>Recent Events</h2>')
         events = list(self._recent_events)
         if events:
-            parts.append('<div class="events-scroll" style="max-height:300px;overflow-y:auto;border:1px solid #333;border-radius:3px;">')
+            # No inline `max-height + overflow-y` here — the widget itself
+            # owns the clipping via `.grid-stack-item-content { overflow:
+            # hidden }`. If a user wants more events visible they grow the
+            # widget vertically.
+            parts.append('<div class="events-scroll">')
             parts.append(
                 '<table style="margin-bottom:0"><thead><tr>'
                 '<th class="col-time" style="position:sticky;top:0;background:#222">Time</th>'
