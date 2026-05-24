@@ -2783,18 +2783,19 @@ class SLinkServer:
     ]
 
     # Default widget layout (gs-x, gs-y, gs-w, gs-h) on the 12-col grid.
-    # The client may override per-user in localStorage; this is the seed.
+    # Heights are in 48px units (see dashboard.js `cellHeight`). The client
+    # may override per-user in localStorage; this is the seed.
     # Top row: small status widgets (Run Status + Lock Rules) side by side.
     # Middle: player cards. Below: encounters table. Bottom: boxed-links
     # + events side by side.
     _WIDGET_LAYOUT = [
-        ("run-status",  0, 0,   4, 2),
-        ("lock-rules",  4, 0,   4, 2),
-        ("player-a",    0, 2,   6, 4),
-        ("player-b",    6, 2,   6, 4),
-        ("encounters",  0, 6,  12, 6),
-        ("boxed-links", 0, 12,  6, 4),
-        ("events",      6, 12,  6, 4),
+        ("run-status",   0, 0,  4, 4),    # ~192px — phase + counts + balls
+        ("lock-rules",   4, 0,  4, 4),    # ~192px — heading + clause badges
+        ("player-a",     0, 4,  6, 8),    # ~384px — header + party of 6
+        ("player-b",     6, 4,  6, 8),
+        ("encounters",   0, 12, 12, 10),  # ~480px — filters + ~8 rows
+        ("boxed-links",  0, 22, 6, 6),    # ~288px
+        ("events",       6, 22, 6, 6),
     ]
 
     def _mon_label(self, key_val, nickname, species_id, gender="", shiny=False):

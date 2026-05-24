@@ -873,7 +873,10 @@ if (window._slinkDashInit) {
 
     var grid = GridStack.init({
       column: 12,
-      cellHeight: 60,
+      // 48px per row gives finer-grained resizing than the original 60px
+      // (a "tall" widget at gs-h=6 is 288px instead of 360px), which makes
+      // empty-state widgets less cavernous.
+      cellHeight: 48,
       margin: 6,
       float: false,
       acceptWidgets: false,

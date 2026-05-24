@@ -580,7 +580,15 @@ body.dash-collapsed .font-switcher--in-sidebar .font-pills {
   padding: 1em 1.6em 1.4em;
   min-width: 0;
   max-width: 2400px;
-  margin: 0 auto;
+  /* Load-bearing: every widget's `.grid-stack-item-content` declares
+   * `container-type: inline-size`, which removes them from ancestor
+   * intrinsic-size calculation. Without an explicit `width: 100%` here,
+   * <main> collapses to shrink-to-fit (the widest unbreakable token) —
+   * leaving the widget grid orphaned in a ~380px column even on a 1480px
+   * viewport. The `justify-self: center` keeps centering behaviour on
+   * ultrawide displays where the max-width clamp leaves free space. */
+  width: 100%;
+  justify-self: center;
 }
 .dash-main > .phase-banner {
   margin-bottom: 0.8em;
@@ -1228,17 +1236,44 @@ td .mon-sprite, td img.mon-sprite {
 .grid-stack-item-content {
   /* Establish container-query scope. */
   container-type: inline-size;
-  /* Override Gridstack's default `inset: 0` so the visible cell has a small
-   * inner gutter inside the gridstack-managed wrapper. */
-  inset: 4px !important;
   background: var(--c-card, #1a1a1a);
   border: 1px solid var(--c-edge, #333);
   border-radius: 6px;
-  padding: 0.6em 0.8em;
-  overflow: auto;
+  padding: 0.5em 0.7em;
+  /* Hide horizontal overflow entirely (tables shed columns via container
+   * queries instead) and only show vertical scrollbar when content actually
+   * exceeds the widget. NO `scrollbar-gutter: stable` — the gutter is
+   * visually noisy on the empty state, and we accept a small reflow when a
+   * scrollbar appears mid-poll. */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
-.grid-stack-item-content > h2,
+/* Slim scrollbars — the default chrome scrollbar is jarring against the
+ * dark theme and clashes with the pixel font. Firefox uses
+ * `scrollbar-width`; WebKit needs `::-webkit-scrollbar`. */
+.grid-stack-item-content {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--c-brand) 35%, transparent) transparent;
+}
+.grid-stack-item-content::-webkit-scrollbar { width: 6px; }
+.grid-stack-item-content::-webkit-scrollbar-track { background: transparent; }
+.grid-stack-item-content::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--c-brand) 35%, transparent);
+  border-radius: 3px;
+}
+.grid-stack-item-content::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--c-brand) 60%, transparent);
+}
+
+/* Widget headings — slim down from the page-level h2 (which assumes lots
+ * of breathing room) so each widget's title doesn't eat ~70px of its
+ * vertical budget. */
+.grid-stack-item-content > h2 {
+  margin: 0 0 0.4em 0;
+  font-size: 0.95em;
+  letter-spacing: 0.02em;
+}
 .grid-stack-item-content > h3 {
   margin-top: 0;
 }
