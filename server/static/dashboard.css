@@ -1209,3 +1209,47 @@ td .mon-sprite, td img.mon-sprite {
 .enc-lv   { color: var(--c-dim); font-size: 0.88em; white-space: nowrap; }
 .area-enc-details summary { color: var(--c-info); }
 .card-hdr-right { display: flex; align-items: center; gap: 4px; }
+
+/* ── Gridstack dashboard layout ──────────────────────────────────────────
+ * `.grid-stack` is the gridstack host living directly inside
+ * `<main class="dash-main">`. Each `.grid-stack-item` is a draggable widget
+ * (Phase 2+); its `.grid-stack-item-content` holds the server-rendered
+ * inner HTML and is the morph target for the per-widget HTMX poll.
+ *
+ * Container-query scope lives on `.grid-stack-item-content` so each widget
+ * scales responsively to its own width rather than the viewport — tables
+ * shed columns, sprites shrink with `cqi`, etc. (Phase 3.)
+ */
+.grid-stack {
+  width: 100%;
+  margin: 0;
+}
+
+.grid-stack-item-content {
+  /* Establish container-query scope. */
+  container-type: inline-size;
+  /* Override Gridstack's default `inset: 0` so the visible cell has a small
+   * inner gutter inside the gridstack-managed wrapper. */
+  inset: 4px !important;
+  background: var(--c-card, #1a1a1a);
+  border: 1px solid var(--c-edge, #333);
+  border-radius: 6px;
+  padding: 0.6em 0.8em;
+  overflow: auto;
+}
+
+.grid-stack-item-content > h2,
+.grid-stack-item-content > h3 {
+  margin-top: 0;
+}
+
+/* Player widgets host a `.player-card` that already carries the alive /
+ * offline gradient + left-edge accent; flush it to the widget edge so the
+ * gradient occupies the whole cell. */
+.widget-player-a, .widget-player-b {
+  /* Reserved for future per-card-type styling. */
+}
+.widget-player-a > .player-card,
+.widget-player-b > .player-card {
+  margin: 0;
+}

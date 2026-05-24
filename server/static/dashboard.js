@@ -791,4 +791,31 @@ if (window._slinkDashInit) {
   else document.addEventListener('DOMContentLoaded', restoreAll);
 })();
 
+// ── Gridstack engine ─────────────────────────────────────────────────────
+// Phase 1: static grid. Server-rendered `gs-x/y/w/h` attributes on each
+// `.grid-stack-item` are adopted by Gridstack; widgets do not move yet.
+// Per-widget HTMX polling targets `.grid-stack-item-content > *` via
+// `hx-swap="morph:innerHTML"`, so the wrapper Gridstack owns is never
+// touched by the morph — no veto callbacks needed. Drag/resize/persistence
+// land in Phase 2.
+(function() {
+  function initGrid() {
+    if (!window.GridStack) return;
+    var host = document.getElementById('dash-grid');
+    if (!host) return;
+    if (host.gridstack) return;  // idempotent
+    window._slinkGrid = GridStack.init({
+      column: 12,
+      cellHeight: 60,
+      margin: 6,
+      float: false,
+      staticGrid: true,        // Phase 1: layout is read-only
+      disableResize: true,
+      disableDrag: true,
+    }, host);
+  }
+  if (document.readyState !== 'loading') initGrid();
+  else document.addEventListener('DOMContentLoaded', initGrid);
+})();
+
 }  // close `if (window._slinkDashInit)` sentinel

@@ -13,6 +13,8 @@ Source: https://unpkg.com/{name}@{version}/dist/{file}
 | `idiomorph-ext.min.js` | [idiomorph](https://github.com/bigskysoftware/idiomorph) | 0.7.3 | HTMX swap strategy that morphs DOM by `id`, preserving sprites |
 | `alpine.min.js` | [Alpine.js](https://alpinejs.dev/) | 3.14.1 | Reactive sprinkles (mouse-pause, theme switcher, sort persistence) |
 | `alpine-persist.min.js` | [@alpinejs/persist](https://alpinejs.dev/plugins/persist) | 3.14.1 | `$persist()` magic — backs Alpine state with `localStorage` |
+| `gridstack-all.js` | [Gridstack.js](https://gridstackjs.com/) | 11.5.1 | Draggable/resizable widget grid for the status dashboard |
+| `gridstack.min.css` | [Gridstack.js](https://gridstackjs.com/) | 11.5.1 | Gridstack default chrome (handles, grippers); we override sizing/colors in `dashboard.css` |
 | `overlay-helpers.js` | First-party | — | Post-swap utilities for templated stream overlays: sprite chroma-key, badge alpha-fringe trim, `#root` autoFit |
 
 To update: refetch from unpkg with the new version pinned, then bump the version cells above.

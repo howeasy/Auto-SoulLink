@@ -406,8 +406,8 @@ _STATUS_HTML = """<!DOCTYPE html>
   <!-- The dashboard loads HTMX + sse + idiomorph; these wire up the
        polling refresh and SSE-driven morph for the table swap. -->
   <main class="dash-main">
-    <!-- Global table search.  Lives outside #content so polling-morph swaps
-         can't reset the input or lose focus mid-keystroke. dashboard.js
+    <!-- Global table search.  Lives outside the widget grid so polling-morph
+         swaps can't reset the input or lose focus mid-keystroke. dashboard.js
          binds an input listener that filters <tr> rows in any table on the
          page whose text doesn't match the query (case-insensitive substring).
          The cleared/empty input restores all rows. -->
@@ -422,23 +422,11 @@ _STATUS_HTML = """<!DOCTYPE html>
              spellcheck="false">
       <button class="dash-search-clear" type="button" aria-label="Clear search" tabindex="-1">×</button>
     </div>
-    <!-- Refresh trigger: polling, NOT SSE.
-         Chrome enforces a 6-connection-per-origin cap on HTTP/1.1. SSE
-         occupies one of those slots PER OPEN TAB, so opening the dashboard
-         in 6+ tabs (or rapidly F5'ing) would exhaust the pool and stall
-         every subsequent fetch. Polling every 2s reuses normal request
-         slots that close immediately, eliminating the cap interaction
-         entirely. The /api/events SSE endpoint stays available for overlays
-         + external tooling, but the dashboard no longer holds it open. -->
-    <div id="content"
-         hx-ext="morph"
-         hx-get="/"
-         hx-trigger="every 2s"
-         hx-swap="morph:outerHTML"
-         hx-target="this"
-         hx-select="#content">
+    <!-- Widget grid. Each `.grid-stack-item-content` polls `/widgets/<id>`
+         every 2s with hx-swap="morph:innerHTML", so the gridstack-owned
+         wrapper DOM (positions, drag handles) is never touched by the
+         morph. No more page-level polling div. -->
     {body}
-    </div>
   </main>
   <script src="/static/dashboard.js" defer></script>
   <script>
@@ -2766,98 +2754,63 @@ class SLinkServer:
             "badge_slugs": self.adapter.gym_badge_slugs(s.rom_type or ""),
         }
 
-    def _build_status_html(self) -> str:
+    # ── Widget content builders ──────────────────────────────────────────────
+    # Each `_build_widget_*` returns the INNER HTML of one dashboard widget
+    # (no outer `.grid-stack-item` wrapper). Used by both `_build_status_html`
+    # (assembled into the page on first paint) and by per-widget HTMX
+    # endpoints `/widgets/<id>` (polled every 2s to refresh just that widget's
+    # content slot, without touching the gridstack-owned wrapper DOM).
+
+    _ROM_LABEL = {
+        "firered": "FireRed", "leafgreen": "LeafGreen",
+        "firered_ap": "FireRed (AP)", "leafgreen_ap": "LeafGreen (AP)",
+        "firered_rr": "FireRed (Radical Red)", "leafgreen_rr": "LeafGreen (Radical Red)",
+        "heartgold": "HeartGold", "soulsilver": "SoulSilver",
+        "platinum": "Platinum", "hgss": "HGSS",
+        "red": "Red", "blue": "Blue", "yellow": "Yellow",
+        "Red": "Red", "Blue": "Blue", "Yellow": "Yellow",
+    }
+
+    _GYM_BADGE_DEFS = [
+        ("#a0a0a0", "Boulder Badge"),
+        ("#4488ff", "Cascade Badge"),
+        ("#ffcc00", "Thunder Badge"),
+        ("#44cc44", "Rainbow Badge"),
+        ("#cc44cc", "Soul Badge"),
+        ("#ff6688", "Marsh Badge"),
+        ("#ff4400", "Volcano Badge"),
+        ("#88cc44", "Earth Badge"),
+    ]
+
+    def _mon_label(self, key_val, nickname, species_id, gender="", shiny=False):
+        """Compose a Pokémon label: `Nickname ✦ ♂ (Species)`."""
+        nick = html.escape(nickname) if nickname else ""
+        sp_name = html.escape(self.adapter.species_name(species_id)) if species_id else ""
+        sym = _GENDER_SYMBOL.get(gender, "")
+        sym_html = (f' <span class="gender-{gender}">{html.escape(sym)}</span>' if sym else "")
+        shiny_html = ' <span class="shiny-star">✦</span>' if shiny else ""
+        if nick and sp_name:
+            # `.mon-species-paren` is sized + dimmed in dashboard.css so the
+            # nickname (the broadcaster's chosen name) reads as the primary
+            # identifier and the species suffix is supporting context.
+            return f"{nick}{shiny_html}{sym_html} <span class='mon-species-paren'>({sp_name})</span>"
+        elif nick:
+            return f"{nick}{shiny_html}{sym_html}"
+        elif sp_name:
+            return f"{sp_name}{shiny_html}{sym_html}"
+        return html.escape(key_val[:8]) + "…"
+
+    def _build_widget_player_html(self, pid: str) -> str:
+        """Inner HTML for one player widget: header, info row, battle, party, PC boxes."""
         d = self._build_status_dict()
-        parts = []
         s = self.state
-
-        def mon_label(key_val, nickname, species_id, gender="", shiny=False):
-            nick = html.escape(nickname) if nickname else ""
-            sp_name = html.escape(self.adapter.species_name(species_id)) if species_id else ""
-            sym = _GENDER_SYMBOL.get(gender, "")
-            sym_html = (f' <span class="gender-{gender}">{html.escape(sym)}</span>' if sym else "")
-            shiny_html = ' <span class="shiny-star">✦</span>' if shiny else ""
-            if nick and sp_name:
-                # `.mon-species-paren` is sized + dimmed in dashboard.css so the
-                # nickname (the broadcaster's chosen name) reads as the primary
-                # identifier and the species suffix is supporting context.
-                return f"{nick}{shiny_html}{sym_html} <span class='mon-species-paren'>({sp_name})</span>"
-            elif nick:
-                return f"{nick}{shiny_html}{sym_html}"
-            elif sp_name:
-                return f"{sp_name}{shiny_html}{sym_html}"
-            return html.escape(key_val[:8]) + "…"
-
-        def _enc_status(a_state: str, b_state: str, na: str, nb: str) -> str:
-            """Build a text status cell for pending encounters, matching the linked/dead style.
-            a_state/b_state: 'caught', 'entered', or 'none'.
-            na/nb: trainer display names."""
-            _PSTATE_ICON = {
-                "caught":  '<svg class="inline-ico" aria-hidden="true"><use href="#i-check"/></svg>',
-                "entered": '<svg class="inline-ico" aria-hidden="true"><use href="#i-hourglass"/></svg>',
-                "none":    '<svg class="inline-ico" aria-hidden="true"><use href="#i-x"/></svg>',
-            }
-            _PSTATE_WORD = {
-                "caught":  "caught",
-                "entered": "pending capture",
-                "none":    "not visited",
-            }
-            a_icon = _PSTATE_ICON[a_state]
-            b_icon = _PSTATE_ICON[b_state]
-            a_word = _PSTATE_WORD[a_state]
-            b_word = _PSTATE_WORD[b_state]
-            return (
-                f'<span class="pending">'
-                f'{html.escape(na)}: {a_icon} {a_word}<br>'
-                f'{html.escape(nb)}: {b_icon} {b_word}'
-                f'</span>'
-            )
-
-        # ── GAME OVER banner ──────────────────────────────────────────────────
-        if d.get("run_over"):
-            parts.append(
-                '<div style="background:#b00;color:#fff;text-align:center;padding:1em 0.5em;'
-                'font-size:1.8em;font-weight:bold;letter-spacing:0.15em;border-radius:8px;'
-                'margin-bottom:1em;text-shadow:2px 2px 4px #000">'
-                '<svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> GAME OVER — SOUL LINK <svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg></div>'
-            )
-
-        # ── Lock Rules banner ─────────────────────────────────────────────────
-        lock_badges = []
-        if s.species_lock:
-            lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-dna"/></svg> Species Clause</span>')
-        if s.gender_lock:
-            lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-gender"/></svg> Gender Clause</span>')
-        if s.type_lock:
-            lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-type"/></svg> Type Clause</span>')
-        if lock_badges:
-            parts.append(f'<div class="lock-rules">Rules: {" ".join(lock_badges)}</div>')
-
-        # ── Attempt counter ───────────────────────────────────────────────────
-        # The dashboard surfaces the attempt total via the phase banner ("attempt
-        # #N"); the broadcaster-facing +/- adjustor moved to the stream-overlay
-        # launcher's per-overlay config panel so the status page stays focused
-        # on read-only state for the run.
-
-        # ── Players (side-by-side cards) ─────────────────────────────────────
-        parts.append('<h2>Players</h2><div class="players-grid">')
-        ROM_LABEL = {
-            "firered": "FireRed",
-            "leafgreen": "LeafGreen",
-            "firered_ap": "FireRed (AP)",
-            "leafgreen_ap": "LeafGreen (AP)",
-            "firered_rr": "FireRed (Radical Red)",
-            "leafgreen_rr": "LeafGreen (Radical Red)",
-            "heartgold": "HeartGold",
-            "soulsilver": "SoulSilver",
-            "platinum": "Platinum",
-            "hgss": "HGSS",
-            "red": "Red", "blue": "Blue", "yellow": "Yellow",
-            "Red": "Red", "Blue": "Blue", "Yellow": "Yellow",
-        }
-        # Gen 1 has no abilities — hide that column
+        if pid not in d["players"]:
+            return f'<p class="empty">Unknown player: {html.escape(pid)}</p>'
+        p = d["players"][pid]
+        # Gen 1/2 have no abilities — hide that column
         has_abilities = not (self.adapter and self.adapter.game_id in ("gen1_rby", "gen2_crystal"))
-        for pid in ["a", "b"]:
+        mon_label = self._mon_label
+        parts: list[str] = []
             p = d["players"][pid]
             is_online = p["connected"]
             card_cls  = "online" if is_online else "offline"
@@ -3638,6 +3591,22 @@ class SLinkServer:
 
     async def handle_status_html(self, request):
         return await self._handle_dashboard_template(request)
+
+    _WIDGET_IDS = frozenset({
+        "player-a", "player-b", "encounters", "events",
+        "run-status", "lock-rules", "boxed-links",
+    })
+
+    async def handle_widget_html(self, request):
+        """Per-widget HTMX poll target — returns just the inner HTML so
+        idiomorph swaps into `.grid-stack-item-content` without touching the
+        Gridstack-owned wrapper element."""
+        wid = request.match_info.get("wid", "")
+        if wid not in self._WIDGET_IDS:
+            raise aiohttp_web.HTTPNotFound(text=f"unknown widget: {wid}")
+        body = self._build_widget_inner(wid)
+        return aiohttp_web.Response(text=body, content_type="text/html",
+                                     charset="utf-8")
 
     async def _handle_dashboard_template(self, request):
         """Templated dashboard — wraps the `_build_status_html` body in a
@@ -6916,6 +6885,7 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         app = aiohttp_web.Application()
         setup_templating(app)
         app.router.add_get("/",            srv.handle_status_html)
+        app.router.add_get("/widgets/{wid}", srv.handle_widget_html)
         app.router.add_get("/memorial",    srv.handle_memorial_html)
         app.router.add_get("/api/status",  srv.handle_status_json)
         app.router.add_get("/api/events",  srv.handle_sse)
