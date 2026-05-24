@@ -116,6 +116,25 @@ def build_sidebar_html(
             f'"//" + window.location.hostname + ":{manager_port}";</script>'
         )
     port_label = f"TCP {tcp_port}" if tcp_port else "Tracker"
+    # Customize-layout button only appears on the status page (the only page
+    # with a draggable widget grid). dashboard.js wires the click to toggle
+    # `body.dash-edit-layout` and flip Gridstack between locked/unlocked.
+    customize_html = ""
+    if active == "status":
+        customize_html = (
+            '<div class="dash-sidebar-layout">'
+            '<button id="dash-customize-btn" class="dash-customize-btn" type="button"'
+            ' aria-pressed="false"'
+            ' aria-label="Customize layout"'
+            ' onclick="window.SLinkDash &amp;&amp; window.SLinkDash.toggleEditLayout()">'
+            '<svg class="dash-customize-ico" viewBox="0 0 16 16" aria-hidden="true">'
+            # Four-square grid icon — matches the widget-grid metaphor.
+            '<path fill="currentColor" d="M1 1h6v6H1zm8 0h6v6H9zM1 9h6v6H1zm8 0h6v6H9z"/>'
+            '</svg>'
+            '<span class="dash-side-label">Customize layout</span>'
+            '</button>'
+            '</div>'
+        )
     return (
         '<aside class="dash-sidebar" hx-boost="false">'
         '<header class="dash-sidebar-brand">'
@@ -133,6 +152,7 @@ def build_sidebar_html(
         '<nav class="dash-sidebar-nav" aria-label="Primary">'
         + ''.join(nav_parts) +
         '</nav>'
+        + customize_html +
         # Font picker sits ABOVE the theme picker — dashboard.js builds the
         # widget and drops it into the .dash-sidebar-font slot at parse
         # time. Stacked so the user reads "font then theme" top-to-bottom,

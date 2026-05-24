@@ -792,28 +792,123 @@ if (window._slinkDashInit) {
 })();
 
 // ── Gridstack engine ─────────────────────────────────────────────────────
-// Phase 1: static grid. Server-rendered `gs-x/y/w/h` attributes on each
-// `.grid-stack-item` are adopted by Gridstack; widgets do not move yet.
-// Per-widget HTMX polling targets `.grid-stack-item-content > *` via
+// Initialise Gridstack on `.grid-stack` host. Server-rendered `gs-x/y/w/h`
+// attributes on each `.grid-stack-item` are adopted automatically. Per-widget
+// HTMX polling targets `.grid-stack-item-content > *` via
 // `hx-swap="morph:innerHTML"`, so the wrapper Gridstack owns is never
-// touched by the morph — no veto callbacks needed. Drag/resize/persistence
-// land in Phase 2.
+// touched by the morph — no veto callbacks needed.
+//
+// Layout state persists in `localStorage["slink-gridstack-status"]` as
+// `{ version, items: [{id, x, y, w, h}] }`. The grid starts LOCKED (drag +
+// resize disabled). The sidebar's "Customize layout" button toggles
+// `body.dash-edit-layout`, which enables interaction.
 (function() {
+  var STORAGE_KEY = 'slink-gridstack-status';
+  var LAYOUT_VERSION = 1;
+
+  function saveLayout() {
+    if (!window._slinkGrid) return;
+    try {
+      // grid.save(false) → array of {id, x, y, w, h} — no DOM, just geometry.
+      var items = window._slinkGrid.save(false);
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        version: LAYOUT_VERSION,
+        items: items,
+      }));
+    } catch (e) { /* localStorage full or unavailable — accept defeat */ }
+  }
+
+  function loadLayoutInto(grid) {
+    try {
+      var raw = window.localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      var obj = JSON.parse(raw);
+      if (!obj || obj.version !== LAYOUT_VERSION || !Array.isArray(obj.items)) {
+        window.localStorage.removeItem(STORAGE_KEY);
+        return;
+      }
+      // Use update() per-item so we only move widgets the server emitted.
+      // grid.load() would attempt to ADD widgets for unknown ids — we don't
+      // want stale localStorage to resurrect a widget the server removed.
+      var existing = new Set((grid.engine.nodes || []).map(function(n) { return n.id; }));
+      obj.items.forEach(function(it) {
+        if (!it || !existing.has(it.id)) return;
+        var el = document.querySelector('.grid-stack-item[gs-id="' + CSS.escape(it.id) + '"]');
+        if (el) grid.update(el, { x: it.x, y: it.y, w: it.w, h: it.h });
+      });
+    } catch (e) {
+      try { window.localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    }
+  }
+
+  function resetLayout() {
+    try { window.localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+    window.location.reload();
+  }
+
+  function setEditMode(on) {
+    var btn = document.getElementById('dash-customize-btn');
+    if (on) {
+      document.body.classList.add('dash-edit-layout');
+      if (btn) btn.setAttribute('aria-pressed', 'true');
+      if (window._slinkGrid) {
+        window._slinkGrid.enableMove(true);
+        window._slinkGrid.enableResize(true);
+      }
+    } else {
+      document.body.classList.remove('dash-edit-layout');
+      if (btn) btn.setAttribute('aria-pressed', 'false');
+      if (window._slinkGrid) {
+        window._slinkGrid.enableMove(false);
+        window._slinkGrid.enableResize(false);
+      }
+    }
+  }
+
   function initGrid() {
     if (!window.GridStack) return;
     var host = document.getElementById('dash-grid');
     if (!host) return;
     if (host.gridstack) return;  // idempotent
-    window._slinkGrid = GridStack.init({
+
+    var grid = GridStack.init({
       column: 12,
       cellHeight: 60,
       margin: 6,
       float: false,
-      staticGrid: true,        // Phase 1: layout is read-only
-      disableResize: true,
+      acceptWidgets: false,
+      // Bottom-right gripper only — keeps the resize affordance unambiguous
+      // and avoids hijacking the top edge (where the drag handle lives).
+      resizable: { handles: 'se' },
+      // Drag from the dedicated handle button only. Without this, clicking
+      // any text inside a widget would initiate a drag — annoying for
+      // selecting cell text in the encounters table.
+      draggable: { handle: '.widget-drag-handle' },
+      // Start LOCKED. The sidebar's Customize button flips this.
       disableDrag: true,
+      disableResize: true,
     }, host);
+    window._slinkGrid = grid;
+
+    // Apply persisted layout (if any) — uses update() per widget so unknown
+    // ids in storage don't accidentally re-add removed widgets.
+    loadLayoutInto(grid);
+
+    // Persist on every geometry change. dragstop + resizestop alone would
+    // miss the case where Gridstack reflows items on drop; 'change' is the
+    // catch-all that fires for any node mutation.
+    grid.on('change', saveLayout);
+    grid.on('resizestop', saveLayout);
+    grid.on('dragstop', saveLayout);
   }
+
+  // Public API used by the sidebar Customize button + reset shortcut.
+  window.SLinkDash = window.SLinkDash || {};
+  window.SLinkDash.toggleEditLayout = function() {
+    setEditMode(!document.body.classList.contains('dash-edit-layout'));
+  };
+  window.SLinkDash.resetLayout = resetLayout;
+
   if (document.readyState !== 'loading') initGrid();
   else document.addEventListener('DOMContentLoaded', initGrid);
 })();

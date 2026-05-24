@@ -3593,8 +3593,20 @@ class SLinkServer:
         parts.append('<div class="grid-stack" id="dash-grid">')
         for wid, x, y, w, h in self._WIDGET_LAYOUT:
             inner = self._build_widget_inner(wid)
+            # Drag handle is a SIBLING of the morph target. Idiomorph only
+            # touches `.grid-stack-item-content > *`, so the handle survives
+            # every refresh without needing a veto. Hidden via CSS outside
+            # of `body.dash-edit-layout`.
             parts.append(
                 f'<div class="grid-stack-item" gs-id="{wid}" gs-x="{x}" gs-y="{y}" gs-w="{w}" gs-h="{h}">'
+                f'<button class="widget-drag-handle" type="button"'
+                f' tabindex="-1" aria-label="Drag widget {wid}"'
+                f' title="Drag to move">'
+                f'<svg viewBox="0 0 16 16" aria-hidden="true">'
+                f'<circle cx="5" cy="4" r="1.3"/><circle cx="11" cy="4" r="1.3"/>'
+                f'<circle cx="5" cy="8" r="1.3"/><circle cx="11" cy="8" r="1.3"/>'
+                f'<circle cx="5" cy="12" r="1.3"/><circle cx="11" cy="12" r="1.3"/>'
+                f'</svg></button>'
                 f'<div class="grid-stack-item-content widget widget-{wid}"'
                 f' hx-ext="morph"'
                 f' hx-get="/widgets/{wid}"'

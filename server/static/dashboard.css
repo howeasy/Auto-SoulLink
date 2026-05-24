@@ -1246,10 +1246,116 @@ td .mon-sprite, td img.mon-sprite {
 /* Player widgets host a `.player-card` that already carries the alive /
  * offline gradient + left-edge accent; flush it to the widget edge so the
  * gradient occupies the whole cell. */
-.widget-player-a, .widget-player-b {
-  /* Reserved for future per-card-type styling. */
-}
 .widget-player-a > .player-card,
 .widget-player-b > .player-card {
   margin: 0;
 }
+
+/* ── Drag handle ─────────────────────────────────────────────────────────
+ * A button sibling of `.grid-stack-item-content` so it lives outside the
+ * morph target. Hidden by default; revealed when the user enters edit mode
+ * (`body.dash-edit-layout`). The Gridstack draggable.handle selector
+ * (`.widget-drag-handle`) picks this element up.
+ */
+.widget-drag-handle {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  z-index: 5;
+  width: 26px;
+  height: 26px;
+  padding: 2px;
+  border: 1px solid color-mix(in srgb, var(--c-brand) 30%, var(--c-edge));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--c-card) 80%, var(--c-bg));
+  color: var(--c-brand);
+  cursor: grab;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s, background 0.12s, transform 0.12s;
+}
+.widget-drag-handle svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+.widget-drag-handle:active { cursor: grabbing; }
+
+body.dash-edit-layout .widget-drag-handle {
+  opacity: 1;
+  pointer-events: auto;
+}
+body.dash-edit-layout .widget-drag-handle:hover {
+  background: color-mix(in srgb, var(--c-brand) 22%, var(--c-card));
+  transform: scale(1.04);
+}
+
+/* Gridstack draws a resize gripper (`.ui-resizable-se`) in the bottom-right
+ * of each item. Mirror the drag handle visibility — hidden by default,
+ * shown in edit mode so the affordance is consistent. */
+.grid-stack-item > .ui-resizable-se {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s;
+}
+body.dash-edit-layout .grid-stack-item > .ui-resizable-se {
+  opacity: 0.7;
+  pointer-events: auto;
+}
+body.dash-edit-layout .grid-stack-item > .ui-resizable-se:hover { opacity: 1; }
+
+/* Edit-mode visual affordance: tint every widget border with the accent so
+ * the user immediately sees the page is in customize mode. */
+body.dash-edit-layout .grid-stack-item-content {
+  border-color: color-mix(in srgb, var(--c-brand) 60%, var(--c-edge));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-brand) 18%, transparent);
+}
+
+/* Sidebar Customize-Layout button. Mirrors `.dash-side-item` styling so it
+ * lines up with the nav, but uses a button element (it toggles state instead
+ * of navigating). Active state shows the same accent treatment as the
+ * `[aria-current="page"]` selected nav item. */
+.dash-sidebar-layout {
+  padding: 6px 8px 0;
+}
+.dash-customize-btn {
+  --item-accent: var(--c-info, var(--c-brand));
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: var(--c-txt);
+  font-family: var(--font-heading);
+  font-size: 0.62em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.dash-customize-btn:hover {
+  background: color-mix(in srgb, var(--item-accent) 16%, transparent);
+  border-left-color: var(--item-accent);
+  color: var(--item-accent);
+}
+.dash-customize-btn[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--item-accent) 22%, transparent);
+  border-left-color: var(--item-accent);
+  color: var(--item-accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+.dash-customize-ico {
+  width: 18px; height: 18px;
+  flex-shrink: 0;
+  color: var(--item-accent);
+}
+body.dash-collapsed .dash-customize-btn { justify-content: center; padding: 10px 6px; }
+body.dash-collapsed .dash-sidebar-layout { padding: 6px 4px 0; }
