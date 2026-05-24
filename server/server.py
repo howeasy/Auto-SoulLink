@@ -422,23 +422,11 @@ _STATUS_HTML = """<!DOCTYPE html>
              spellcheck="false">
       <button class="dash-search-clear" type="button" aria-label="Clear search" tabindex="-1">×</button>
     </div>
-    <!-- Refresh trigger: polling, NOT SSE.
-         Chrome enforces a 6-connection-per-origin cap on HTTP/1.1. SSE
-         occupies one of those slots PER OPEN TAB, so opening the dashboard
-         in 6+ tabs (or rapidly F5'ing) would exhaust the pool and stall
-         every subsequent fetch. Polling every 2s reuses normal request
-         slots that close immediately, eliminating the cap interaction
-         entirely. The /api/events SSE endpoint stays available for overlays
-         + external tooling, but the dashboard no longer holds it open. -->
-    <div id="content"
-         hx-ext="morph"
-         hx-get="/"
-         hx-trigger="every 2s"
-         hx-swap="morph:outerHTML"
-         hx-target="this"
-         hx-select="#content">
+    <!-- Widget grid. Each `.grid-stack-item-content` polls `/widgets/<id>`
+         every 2s with hx-swap="morph:innerHTML", so the gridstack-owned
+         wrapper DOM (positions, drag handles) is never touched by the
+         morph. No more page-level polling div. -->
     {body}
-    </div>
   </main>
   <script src="/static/dashboard.js" defer></script>
   <script>
@@ -2766,603 +2754,519 @@ class SLinkServer:
             "badge_slugs": self.adapter.gym_badge_slugs(s.rom_type or ""),
         }
 
-    def _build_status_html(self) -> str:
+    # ── Widget content builders ──────────────────────────────────────────────
+    # Each `_build_widget_*` returns the INNER HTML of one dashboard widget
+    # (no outer `.grid-stack-item` wrapper). Used by both `_build_status_html`
+    # (assembled into the page on first paint) and by per-widget HTMX
+    # endpoints `/widgets/<id>` (polled every 2s to refresh just that widget's
+    # content slot, without touching the gridstack-owned wrapper DOM).
+
+    _ROM_LABEL = {
+        "firered": "FireRed", "leafgreen": "LeafGreen",
+        "firered_ap": "FireRed (AP)", "leafgreen_ap": "LeafGreen (AP)",
+        "firered_rr": "FireRed (Radical Red)", "leafgreen_rr": "LeafGreen (Radical Red)",
+        "heartgold": "HeartGold", "soulsilver": "SoulSilver",
+        "platinum": "Platinum", "hgss": "HGSS",
+        "red": "Red", "blue": "Blue", "yellow": "Yellow",
+        "Red": "Red", "Blue": "Blue", "Yellow": "Yellow",
+    }
+
+    _GYM_BADGE_DEFS = [
+        ("#a0a0a0", "Boulder Badge"),
+        ("#4488ff", "Cascade Badge"),
+        ("#ffcc00", "Thunder Badge"),
+        ("#44cc44", "Rainbow Badge"),
+        ("#cc44cc", "Soul Badge"),
+        ("#ff6688", "Marsh Badge"),
+        ("#ff4400", "Volcano Badge"),
+        ("#88cc44", "Earth Badge"),
+    ]
+
+    # Default widget layout (gs-x, gs-y, gs-w, gs-h) on the 12-col grid.
+    # The client may override per-user in localStorage; this is the seed.
+    _WIDGET_LAYOUT = [
+        ("player-a",   0, 0,  6, 4),
+        ("player-b",   6, 0,  6, 4),
+        ("encounters", 0, 4, 12, 6),
+        ("events",     0, 10, 12, 4),
+    ]
+
+    def _mon_label(self, key_val, nickname, species_id, gender="", shiny=False):
+        """Compose a Pokémon label: `Nickname ✦ ♂ (Species)`."""
+        nick = html.escape(nickname) if nickname else ""
+        sp_name = html.escape(self.adapter.species_name(species_id)) if species_id else ""
+        sym = _GENDER_SYMBOL.get(gender, "")
+        sym_html = (f' <span class="gender-{gender}">{html.escape(sym)}</span>' if sym else "")
+        shiny_html = ' <span class="shiny-star">✦</span>' if shiny else ""
+        if nick and sp_name:
+            return f"{nick}{shiny_html}{sym_html} <span class='mon-species-paren'>({sp_name})</span>"
+        elif nick:
+            return f"{nick}{shiny_html}{sym_html}"
+        elif sp_name:
+            return f"{sp_name}{shiny_html}{sym_html}"
+        return html.escape(key_val[:8]) + "…"
+
+    def _build_widget_player_html(self, pid: str) -> str:
+        """Inner HTML for one player widget: header, info row, battle, party, PC boxes."""
         d = self._build_status_dict()
-        parts = []
         s = self.state
-
-        def mon_label(key_val, nickname, species_id, gender="", shiny=False):
-            nick = html.escape(nickname) if nickname else ""
-            sp_name = html.escape(self.adapter.species_name(species_id)) if species_id else ""
-            sym = _GENDER_SYMBOL.get(gender, "")
-            sym_html = (f' <span class="gender-{gender}">{html.escape(sym)}</span>' if sym else "")
-            shiny_html = ' <span class="shiny-star">✦</span>' if shiny else ""
-            if nick and sp_name:
-                # `.mon-species-paren` is sized + dimmed in dashboard.css so the
-                # nickname (the broadcaster's chosen name) reads as the primary
-                # identifier and the species suffix is supporting context.
-                return f"{nick}{shiny_html}{sym_html} <span class='mon-species-paren'>({sp_name})</span>"
-            elif nick:
-                return f"{nick}{shiny_html}{sym_html}"
-            elif sp_name:
-                return f"{sp_name}{shiny_html}{sym_html}"
-            return html.escape(key_val[:8]) + "…"
-
-        def _enc_status(a_state: str, b_state: str, na: str, nb: str) -> str:
-            """Build a text status cell for pending encounters, matching the linked/dead style.
-            a_state/b_state: 'caught', 'entered', or 'none'.
-            na/nb: trainer display names."""
-            _PSTATE_ICON = {
-                "caught":  '<svg class="inline-ico" aria-hidden="true"><use href="#i-check"/></svg>',
-                "entered": '<svg class="inline-ico" aria-hidden="true"><use href="#i-hourglass"/></svg>',
-                "none":    '<svg class="inline-ico" aria-hidden="true"><use href="#i-x"/></svg>',
-            }
-            _PSTATE_WORD = {
-                "caught":  "caught",
-                "entered": "pending capture",
-                "none":    "not visited",
-            }
-            a_icon = _PSTATE_ICON[a_state]
-            b_icon = _PSTATE_ICON[b_state]
-            a_word = _PSTATE_WORD[a_state]
-            b_word = _PSTATE_WORD[b_state]
-            return (
-                f'<span class="pending">'
-                f'{html.escape(na)}: {a_icon} {a_word}<br>'
-                f'{html.escape(nb)}: {b_icon} {b_word}'
-                f'</span>'
-            )
-
-        # ── GAME OVER banner ──────────────────────────────────────────────────
-        if d.get("run_over"):
-            parts.append(
-                '<div style="background:#b00;color:#fff;text-align:center;padding:1em 0.5em;'
-                'font-size:1.8em;font-weight:bold;letter-spacing:0.15em;border-radius:8px;'
-                'margin-bottom:1em;text-shadow:2px 2px 4px #000">'
-                '<svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> GAME OVER — SOUL LINK <svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg></div>'
-            )
-
-        # ── Lock Rules banner ─────────────────────────────────────────────────
-        lock_badges = []
-        if s.species_lock:
-            lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-dna"/></svg> Species Clause</span>')
-        if s.gender_lock:
-            lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-gender"/></svg> Gender Clause</span>')
-        if s.type_lock:
-            lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-type"/></svg> Type Clause</span>')
-        if lock_badges:
-            parts.append(f'<div class="lock-rules">Rules: {" ".join(lock_badges)}</div>')
-
-        # ── Attempt counter ───────────────────────────────────────────────────
-        # The dashboard surfaces the attempt total via the phase banner ("attempt
-        # #N"); the broadcaster-facing +/- adjustor moved to the stream-overlay
-        # launcher's per-overlay config panel so the status page stays focused
-        # on read-only state for the run.
-
-        # ── Players (side-by-side cards) ─────────────────────────────────────
-        parts.append('<h2>Players</h2><div class="players-grid">')
-        ROM_LABEL = {
-            "firered": "FireRed",
-            "leafgreen": "LeafGreen",
-            "firered_ap": "FireRed (AP)",
-            "leafgreen_ap": "LeafGreen (AP)",
-            "firered_rr": "FireRed (Radical Red)",
-            "leafgreen_rr": "LeafGreen (Radical Red)",
-            "heartgold": "HeartGold",
-            "soulsilver": "SoulSilver",
-            "platinum": "Platinum",
-            "hgss": "HGSS",
-            "red": "Red", "blue": "Blue", "yellow": "Yellow",
-            "Red": "Red", "Blue": "Blue", "Yellow": "Yellow",
-        }
-        # Gen 1 has no abilities — hide that column
+        if pid not in d.get("players", {}):
+            return f'<p class="empty">Unknown player: {html.escape(pid)}</p>'
+        p = d["players"][pid]
         has_abilities = not (self.adapter and self.adapter.game_id in ("gen1_rby", "gen2_crystal"))
-        for pid in ["a", "b"]:
-            p = d["players"][pid]
-            is_online = p["connected"]
-            card_cls  = "online" if is_online else "offline"
-            conn_badge = ('<span class="badge badge-online">&#9679; online</span>'
-                          if is_online else
-                          '<span class="badge badge-offline">&#9675; offline</span>')
-            # Per-player Nuzlocke status badges removed — the top-of-page
-            # phase banner is the single source for run lifecycle state
-            # ("Waiting for Pokéballs" / "Run in progress" / "Game over").
-            nuz_badge = ""
-            pending_bonus_cnt = len(s.pending_bonus.get(pid, []))
-            pending_bonus_badge = (
-                f'<span class="badge badge-bonus">&#10022; {pending_bonus_cnt} bonus pending</span>'
-                if pending_bonus_cnt > 0 else ""
-            )
-            # Gym badge icons — 8 colored circles, earned ones are bright
-            # badges is a bitmask: bit 0 = Boulder, bit 1 = Cascade, etc.
-            badge_mask = p.get("badges", 0)
-            GYM_BADGES = [
-                ("#a0a0a0", "Boulder Badge"),   # bit 0 - Brock (gray/stone)
-                ("#4488ff", "Cascade Badge"),    # bit 1 - Misty (blue/water)
-                ("#ffcc00", "Thunder Badge"),    # bit 2 - Lt. Surge (yellow/electric)
-                ("#44cc44", "Rainbow Badge"),    # bit 3 - Erika (green/grass)
-                ("#cc44cc", "Soul Badge"),       # bit 4 - Koga (purple/poison)
-                ("#ff6688", "Marsh Badge"),      # bit 5 - Sabrina (pink/psychic)
-                ("#ff4400", "Volcano Badge"),    # bit 6 - Blaine (red/fire)
-                ("#88cc44", "Earth Badge"),      # bit 7 - Giovanni (olive/ground)
-            ]
-            gym_html = '<span class="gym-badges">'
-            for i, (color, name) in enumerate(GYM_BADGES):
-                earned = "earned" if (badge_mask & (1 << i)) else ""
-                gym_html += f'<span class="gym-badge {earned}" style="background:{color}" title="{name}"></span>'
-            gym_html += '</span>'
-            rom_lbl   = ROM_LABEL.get(p["rom_type"], p["rom_type"])
-            area_disp = self.adapter.area_display_name(p.get("current_area_id") or p["current_area"]) or '<span class="dim">unknown</span>'
-            balls     = p["ball_count"]
-            balls_cls = "yes" if balls > 0 else "warn"
-            trainer   = html.escape(p.get("trainer_name", ""))
-            trainer_str = f'<span style="color:#ff0">{trainer}</span> &mdash; ' if trainer else ""
+        mon_label = self._mon_label
+        parts: list[str] = []
 
-            parts.append(f'<div class="player-card {card_cls}">')
-            _safe_run = re.sub(r'[^\w-]', '_', self._run_name or self._run_id or "SLink").strip('_') or "SLink"
-            dl_icon = (
-                f'<a class="launcher-dl" href="/launcher/{pid}" download="slink_{_safe_run}_{pid}.lua" '
-                f'title="Download BizHawk launcher script for Player {pid.upper()}">'
-                f'&#11015;</a>'
-            )
-            enc_html = self._encounter_html(p.get("current_area_id") or "")
+        is_online = p["connected"]
+        card_cls  = "online" if is_online else "offline"
+        conn_badge = ('<span class="badge badge-online">&#9679; online</span>'
+                      if is_online else
+                      '<span class="badge badge-offline">&#9675; offline</span>')
+        nuz_badge = ""
+        pending_bonus_cnt = len(s.pending_bonus.get(pid, []))
+        pending_bonus_badge = (
+            f'<span class="badge badge-bonus">&#10022; {pending_bonus_cnt} bonus pending</span>'
+            if pending_bonus_cnt > 0 else ""
+        )
+        badge_mask = p.get("badges", 0)
+        gym_html = '<span class="gym-badges">'
+        for i, (color, name) in enumerate(self._GYM_BADGE_DEFS):
+            earned = "earned" if (badge_mask & (1 << i)) else ""
+            gym_html += f'<span class="gym-badge {earned}" style="background:{color}" title="{name}"></span>'
+        gym_html += '</span>'
+        rom_lbl   = self._ROM_LABEL.get(p["rom_type"], p["rom_type"])
+        area_disp = self.adapter.area_display_name(p.get("current_area_id") or p["current_area"]) or '<span class="dim">unknown</span>'
+        balls     = p["ball_count"]
+        balls_cls = "yes" if balls > 0 else "warn"
+        trainer   = html.escape(p.get("trainer_name", ""))
+        trainer_str = f'<span style="color:#ff0">{trainer}</span> &mdash; ' if trainer else ""
+
+        parts.append(f'<div class="player-card {card_cls}">')
+        _safe_run = re.sub(r'[^\w-]', '_', self._run_name or self._run_id or "SLink").strip('_') or "SLink"
+        dl_icon = (
+            f'<a class="launcher-dl" href="/launcher/{pid}" download="slink_{_safe_run}_{pid}.lua" '
+            f'title="Download BizHawk launcher script for Player {pid.upper()}">'
+            f'&#11015;</a>'
+        )
+        enc_html = self._encounter_html(p.get("current_area_id") or "")
+        parts.append(
+            f'<div class="card-hdr">'
+            f'<h3>{trainer_str}Player {pid.upper()} &mdash; {rom_lbl}{conn_badge}{nuz_badge}{pending_bonus_badge}{gym_html}</h3>'
+            f'<div class="card-hdr-right">{dl_icon}</div></div>'
+        )
+        parts.append(
+            f'<div class="info-row">'
+            f'<span>&#128205; <b class="area">{area_disp}</b></span>'
+            f'<span>&#9702; Pokéballs: <b class="{balls_cls}">{balls}</b></span>'
+            f'<span>Last: <b>{p["last_event"]}</b> @ {p["last_seen"]}</span>'
+            f'</div>'
+        )
+        if enc_html:
+            parts.append(enc_html)
+        id_err = p.get("identity_error", "")
+        if id_err:
             parts.append(
-                f'<div class="card-hdr">'
-                f'<h3>{trainer_str}Player {pid.upper()} &mdash; {rom_lbl}{conn_badge}{nuz_badge}{pending_bonus_badge}{gym_html}</h3>'
-                f'<div class="card-hdr-right">{dl_icon}</div></div>'
-            )
-            parts.append(
-                f'<div class="info-row">'
-                f'<span>&#128205; <b class="area">{area_disp}</b></span>'
-                f'<span>&#9702; Pokéballs: <b class="{balls_cls}">{balls}</b></span>'
-                f'<span>Last: <b>{p["last_event"]}</b> @ {p["last_seen"]}</span>'
+                f'<div style="background:#600;color:#fcc;padding:0.5em 0.8em;'
+                f'border:1px solid #f44;border-radius:4px;margin:0.4em 0;'
+                f'font-weight:bold;">'
+                f'&#9888; {html.escape(id_err)}'
                 f'</div>'
             )
-            if enc_html:
-                parts.append(enc_html)
-            # Identity error banner
-            id_err = p.get("identity_error", "")
-            if id_err:
-                parts.append(
-                    f'<div style="background:#600;color:#fcc;padding:0.5em 0.8em;'
-                    f'border:1px solid #f44;border-radius:4px;margin:0.4em 0;'
-                    f'font-weight:bold;">'
-                    f'&#9888; {html.escape(id_err)}'
-                    f'</div>'
-                )
 
-            # Build reverse lookup: key → (area_id, waiting_for_partner_id)
-            # so unlinked mons can show which area they're pending in.
-            pending_key_area: dict[str, str] = {}
-            for pc_area, pc_players in d["pending_captures"].items():
-                for pc_pid, pc_info in pc_players.items():
-                    if pc_pid == pid:
-                        pending_key_area[pc_info["key"]] = pc_area
+        pending_key_area: dict[str, str] = {}
+        for pc_area, pc_players in d["pending_captures"].items():
+            for pc_pid, pc_info in pc_players.items():
+                if pc_pid == pid:
+                    pending_key_area[pc_info["key"]] = pc_area
 
-            # Party table
-            # Battle state (shown above party)
-            bs = p.get("battle_state", {})
-            if bs.get("in_battle"):
-                is_trainer = bs.get("is_trainer_battle", False)
-                battle_lbl = "Trainer Battle" if is_trainer else "Wild Battle"
-                opp_name = html.escape(bs.get("opponent_name", "")) if is_trainer else ""
-                opp_class = html.escape(bs.get("opponent_class", "")) if is_trainer else ""
-                if opp_name:
-                    if opp_class:
-                        battle_lbl = f"vs {opp_class} {opp_name}"
-                    else:
-                        battle_lbl = f"vs {opp_name}"
-                elif opp_class:
-                    battle_lbl = f"vs {opp_class}"
-                # Check if this is a new encounter (wild battle in an unresolved area)
-                # Only show for nuzlocke-active players — pre-nuzlocke battles are not encounters.
-                new_enc = False
-                if not is_trainer and p.get("nuzlocke_active", False):
-                    cur_area = p.get("current_area_id", "")
-                    area_st = d["area_states"].get(cur_area, "unseen")
-                    has_pending = cur_area in d.get("pending_captures", {}) and pid in d["pending_captures"][cur_area]
-                    if cur_area and area_st not in ("linked", "dead_zone") and not has_pending:
-                        new_enc = True
-                new_enc_badge = ' <span style="color:#5f5;font-weight:bold">★ NEW ENCOUNTER</span>' if new_enc else ""
-                doubles_chip = (' <span class="dbl-chip"><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg>&nbsp;DOUBLES</span>'
-                                if bs.get("is_doubles") else "")
-                parts.append('<div class="battle-panel">')
-                parts.append(f'<h4 style="margin:0 0 0.3em"><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> IN BATTLE &mdash; {battle_lbl}{new_enc_badge}{doubles_chip}</h4>')
-                enemy_party = bs.get("enemy_party", [])
-                if enemy_party:
-                    parts.append(f'<table class="foe-table"><tr><th>Foe</th><th>Lv</th><th>HP</th><th>Type</th>{"<th>Ability</th>" if has_abilities else ""}</tr>')
-                    for ei, em in enumerate(enemy_party):
-                        esid   = em.get("species_id", 0)
-                        elv    = em.get("level", 0)
-                        ehp    = em.get("hp", 0)
-                        emaxHP = em.get("maxHP", 1)
-                        active = em.get("active", False)
-                        eaid   = em.get("ability_id", 0)
-                        eiid   = em.get("held_item_id", 0)
-                        esc    = em.get("status_cond", 0)
-                        ename  = html.escape(self.adapter.species_name(esid)) if esid else "?"
-                        eabl   = self.adapter.ability_name(eaid, esid) if eaid else ""
-                        eadesc = self.adapter.ability_description(eaid) if eaid else ""
-                        eitem  = self.adapter.item_name(eiid) if eiid else ""
-                        eitem_html = (f'<span class="held-item">{html.escape(eitem)}</span>'
-                                      if eitem else "")
-                        esprite = self._get_sprite_html(esid)
-                        etype_cell = _type_badges_html(esid, adapter=self.adapter)
-                        pct    = max(0, min(100, int(ehp / emaxHP * 100))) if emaxHP else 0
-                        bar_cls = "hp-high" if pct > 50 else ("hp-mid" if pct > 20 else "hp-low")
-                        hp_bar = (
-                            f'<div class="hp-bar-bg">'
-                            f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
-                            f'</div>'
-                            f'<span class="dim">{ehp}/{emaxHP}</span>'
-                            + _status_icon_html(esc)
-                            + (active and _stat_stages_html(em.get("stat_stages")) or "")
-                        )
-                        foe_cls = "fainted" if ehp == 0 else ("active-foe" if active else "")
-                        active_marker = '<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> ' if active else ""
-                        foe_key = em.get("key", f"foe-{ei}")
-                        abl_html = (f'<span class="ability" title="{html.escape(eadesc)}">{html.escape(eabl)}</span>'
-                                    if eabl else '<span class="dim">—</span>')
-                        # Sprite + name share one cell (inline-flex) so the
-                        # name sits flush against the sprite — matches the
-                        # party table's compact layout.
-                        foe_mon_cell = (
-                            f'<div style="display:inline-flex;align-items:center;gap:4px">'
-                            + (f'<div style="flex-shrink:0">{esprite}</div>' if esprite else '')
-                            + f'<div>{active_marker}{ename}{eitem_html}</div>'
-                            + f'</div>'
-                        )
-                        parts.append(
-                            f'<tr class="{foe_cls}" data-key="{html.escape(foe_key)}">'
-                            f'<td>{foe_mon_cell}</td>'
-                            f'<td>{elv}</td>'
-                            f'<td>{hp_bar}</td>'
-                            f'<td>{etype_cell}</td>'
-                            f'{"<td>" + abl_html + "</td>" if has_abilities else ""}</tr>'
-                        )
-                        emove_html = _move_table_html(em.get("move_details", []),
-                                                      mon_key=f"enemy:{ei}")
-                        if emove_html:
-                            foe_cols = 5 if has_abilities else 4
-                            parts.append(
-                                f'<tr class="foe-moves-row" data-key="{html.escape(foe_key)}:moves">'
-                                f'<td colspan="{foe_cols}">{emove_html}</td></tr>'
-                            )
-                    parts.append("</table>")
-                else:
-                    parts.append('<p class="empty">No foe data yet.</p>')
-                # ── Calc preview data div (rendered by SLinkCalc JS) ──
-                if getattr(s, 'is_rr', False):
-                    _pkeys = p.get("party_keys", [])
-                    _pdetails = p.get("party_details", {})
-                    _atk = None
-                    _atk_key = None
-                    for _pk in _pkeys:
-                        _d = _pdetails.get(_pk, {})
-                        if _d.get("active") and _d.get("hp", 0) > 0:
-                            _atk = _d
-                            _atk_key = _pk
-                            break
-                    if not _atk:
-                        for _pk in _pkeys:
-                            _d = _pdetails.get(_pk, {})
-                            if _d.get("hp", 0) > 0:
-                                _atk = _d
-                                _atk_key = _pk
-                                break
-                    _def = next(
-                        (em for em in enemy_party if em.get("active")),
-                        next((em for em in enemy_party if em.get("hp", 0) > 0), None))
-                    if _atk and _def and _atk_key:
-                        _asid = _atk.get("species_id", 0)
-                        _esid = _def.get("species_id", 0)
-                        _aname = html.escape(self.adapter.species_name(_asid)) if _asid else ""
-                        _ename = html.escape(self.adapter.species_name(_esid)) if _esid else ""
-                        _amoves = [m for m in (_atk.get("moves") or []) if m][:4]
-                        _amoves_json = html.escape(json.dumps(_amoves))
-                        _ehp  = _def.get("hp", 0)
-                        _emhp = max(_def.get("maxHP", 1), 1)
-                        _ehp_pct = max(0, min(100, int(_ehp / _emhp * 100)))
-                        _tkey = ""
-                        _istr = "0"
-                        if is_trainer and bs.get("opponent_class") and bs.get("opponent_name"):
-                            _tkey = html.escape(
-                                f"{bs['opponent_class']} {bs['opponent_name']}")
-                            _istr = "1"
-                        _abl = html.escape(_atk.get("ability_name", ""))
-                        _itm = html.escape(
-                            self.adapter.item_name(_atk.get("held_item_id", 0)))
-                        parts.append(
-                            f'<div id="calc-preview-{pid}" class="calc-preview"'
-                            f' data-in-battle="1"'
-                            f' data-trainer-key="{_tkey}"'
-                            f' data-is-trainer="{_istr}"'
-                            f' data-player-species="{_aname}"'
-                            f' data-player-level="{_atk.get("level", 0)}"'
-                            f' data-player-nature="{html.escape(_nature_from_key(_atk_key))}"'
-                            f' data-player-ability="{_abl}"'
-                            f' data-player-item="{_itm}"'
-                            f' data-player-moves="{_amoves_json}"'
-                            f' data-enemy-species="{_ename}"'
-                            f' data-enemy-level="{_def.get("level", 0)}"'
-                            f' data-enemy-hp-pct="{_ehp_pct}"'
-                            f' style="display:none"></div>'
-                        )
-                parts.append('</div>')
-
-            # Party
-            party_keys = p["party_keys"]
-            if party_keys:
-                q = p["queued"]
-                q_str = f'<span class="warn">{q} queued</span>' if q > 0 else ""
-                abl_hdr = '<th>Ability</th>' if has_abilities else ''
-                # Link column dropped from the dashboard — link status is now
-                # carried by the Partner cell's tone (alive / pending / dim).
-                # Keeps the party table narrow enough to never trip a
-                # horizontal scrollbar at desktop widths.
-                parts.append(f'<table><thead><tr><th>Pokémon</th><th>Lv</th><th>HP</th><th>Type</th>{abl_hdr}<th>Partner</th></tr></thead><tbody>')
-                for key in party_keys:
-                    detail      = p["party_details"].get(key, {})
-                    level       = detail.get("level", 0)
-                    hp          = detail.get("hp", 1)
-                    maxhp       = detail.get("maxHP", 1)
-                    sid         = detail.get("species_id", 0)
-                    item_id     = detail.get("held_item_id", 0)
-                    is_active   = detail.get("active", False)
-                    row_cls     = "fainted" if hp == 0 else ("active-mon" if is_active else "")
-                    lv_str      = str(level) if level else '<span class="dim">?</span>'
-                    item_str    = self.adapter.item_name(item_id)
-                    item_html   = (f'<span class="held-item">{html.escape(item_str)}</span>'
-                                   if item_str else "")
-                    # Shiny: unlinked shiny (still in bonus_keys) or linked MonInfo.is_shiny
-                    _party_entry = s._key_index.get(key)
-                    _own_mi = (_party_entry.a if pid == "a" else _party_entry.b) if _party_entry else None
-                    is_shiny_mon = key in s.bonus_keys.get(pid, set()) or bool(_own_mi and _own_mi.is_shiny)
-                    active_pfx  = '<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> ' if is_active else ''
-                    sprite_html = self._get_sprite_html(sid)
-                    mon_str     = (
-                        f'<div style="display:inline-flex;align-items:center;gap:4px">'
-                        + (f'<div style="flex-shrink:0">{sprite_html}</div>' if sprite_html else '')
-                        + f'<div>{active_pfx}{mon_label(key, detail.get("nickname", ""), sid, detail.get("gender", ""), shiny=is_shiny_mon)}{item_html}</div>'
-                        + f'</div>'
-                    )
-                    pct     = max(0, min(100, int(hp / maxhp * 100))) if maxhp else 0
+        bs = p.get("battle_state", {})
+        if bs.get("in_battle"):
+            is_trainer = bs.get("is_trainer_battle", False)
+            battle_lbl = "Trainer Battle" if is_trainer else "Wild Battle"
+            opp_name = html.escape(bs.get("opponent_name", "")) if is_trainer else ""
+            opp_class = html.escape(bs.get("opponent_class", "")) if is_trainer else ""
+            if opp_name:
+                battle_lbl = f"vs {opp_class} {opp_name}" if opp_class else f"vs {opp_name}"
+            elif opp_class:
+                battle_lbl = f"vs {opp_class}"
+            new_enc = False
+            if not is_trainer and p.get("nuzlocke_active", False):
+                cur_area = p.get("current_area_id", "")
+                area_st = d["area_states"].get(cur_area, "unseen")
+                has_pending = cur_area in d.get("pending_captures", {}) and pid in d["pending_captures"][cur_area]
+                if cur_area and area_st not in ("linked", "dead_zone") and not has_pending:
+                    new_enc = True
+            new_enc_badge = ' <span style="color:#5f5;font-weight:bold">★ NEW ENCOUNTER</span>' if new_enc else ""
+            doubles_chip = (' <span class="dbl-chip"><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg>&nbsp;DOUBLES</span>'
+                            if bs.get("is_doubles") else "")
+            parts.append('<div class="battle-panel">')
+            parts.append(f'<h4 style="margin:0 0 0.3em"><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> IN BATTLE &mdash; {battle_lbl}{new_enc_badge}{doubles_chip}</h4>')
+            enemy_party = bs.get("enemy_party", [])
+            if enemy_party:
+                parts.append(f'<table class="foe-table"><tr><th>Foe</th><th>Lv</th><th>HP</th><th>Type</th>{"<th>Ability</th>" if has_abilities else ""}</tr>')
+                for ei, em in enumerate(enemy_party):
+                    esid   = em.get("species_id", 0)
+                    elv    = em.get("level", 0)
+                    ehp    = em.get("hp", 0)
+                    emaxHP = em.get("maxHP", 1)
+                    active = em.get("active", False)
+                    eaid   = em.get("ability_id", 0)
+                    eiid   = em.get("held_item_id", 0)
+                    esc    = em.get("status_cond", 0)
+                    ename  = html.escape(self.adapter.species_name(esid)) if esid else "?"
+                    eabl   = self.adapter.ability_name(eaid, esid) if eaid else ""
+                    eadesc = self.adapter.ability_description(eaid) if eaid else ""
+                    eitem  = self.adapter.item_name(eiid) if eiid else ""
+                    eitem_html = (f'<span class="held-item">{html.escape(eitem)}</span>'
+                                  if eitem else "")
+                    esprite = self._get_sprite_html(esid)
+                    etype_cell = _type_badges_html(esid, adapter=self.adapter)
+                    pct    = max(0, min(100, int(ehp / emaxHP * 100))) if emaxHP else 0
                     bar_cls = "hp-high" if pct > 50 else ("hp-mid" if pct > 20 else "hp-low")
-                    status_cond = detail.get("status_cond", 0)
-                    is_active   = detail.get("active", False)
-                    hp_cell = (
+                    hp_bar = (
                         f'<div class="hp-bar-bg">'
                         f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
                         f'</div>'
-                        f'<span class="dim">{hp}/{maxhp}</span>'
-                        + _status_icon_html(status_cond)
-                        + (is_active and _stat_stages_html(detail.get("stat_stages")) or "")
+                        f'<span class="dim">{ehp}/{emaxHP}</span>'
+                        + _status_icon_html(esc)
+                        + (active and _stat_stages_html(em.get("stat_stages")) or "")
                     )
-                    type_cell = _type_badges_html(sid, adapter=self.adapter)
-                    abl_name = detail.get("ability_name", "")
-                    abl_id = detail.get("ability_id", 0)
-                    abl_desc = self.adapter.ability_description(abl_id) if abl_id else ""
-                    ability_cell = (f'<span class="ability" title="{html.escape(abl_desc)}">{html.escape(abl_name)}</span>'
-                                   if abl_name else '<span class="dim">—</span>')
-
-                    entry = s._key_index.get(key)
-                    if entry:
-                        p_mon = entry.b if pid == "a" else entry.a
-                        if p_mon:
-                            p_pid = "b" if pid == "a" else "a"
-                            p_gender = self.adapter.gender_from_key(p_mon.key, p_mon.species)
-                            # Prefer live nickname from partner's party/box data
-                            p_nick = p_mon.nickname
-                            p_det = self.party_details.get(p_pid, {}).get(p_mon.key)
-                            if p_det and p_det.get("nickname"):
-                                p_nick = p_det["nickname"]
-                            else:
-                                for bx_e in self.pc_boxes.get(p_pid, []):
-                                    if bx_e.get("key") == p_mon.key and bx_e.get("nickname"):
-                                        p_nick = bx_e["nickname"]
-                                        break
-                            partner_str = mon_label(p_mon.key, p_nick, p_mon.species, p_gender,
-                                                    shiny=p_mon.is_shiny)
-                        else:
-                            partner_str = '<span class="dim">—</span>'
-                        link_cls = entry.status.value
-                        link_lbl = entry.status.value
-                    else:
-                        pend_area = pending_key_area.get(key)
-                        if pend_area:
-                            partner_id = "b" if pid == "a" else "a"
-                            partner_name = html.escape(
-                                d["players"][partner_id].get("trainer_name") or partner_id.upper()
-                            )
-                            area_lbl = html.escape(self.adapter.area_display_name(pend_area))
-                            partner_str = (
-                                f'<span class="pending_b" style="font-size:0.85em">'
-                                f'waiting for <b>{partner_name}</b> @ {area_lbl}'
-                                f'</span>'
-                            )
-                            link_cls = "pending_b"
-                            link_lbl = "pending"
-                        elif key in d.get("bonus_keys", {}).get(pid, []):
-                            partner_str = '<span style="color:#ffd700">★ Shiny Clause</span>'
-                            link_cls    = "alive"
-                            link_lbl    = "★ bonus"
-                        else:
-                            partner_str = '<span class="dim">unlinked</span>'
-                            link_cls    = "dim"
-                            link_lbl    = "—"
-
-                    abl_td = f'<td>{ability_cell}</td>' if has_abilities else ''
-                    colspan = 6 if has_abilities else 5
-                    move_details = detail.get("move_details", [])
-                    move_html = _move_table_html(move_details, mon_key=key)
-                    # Wrap the partner cell in the link-status class so the
-                    # Partner column carries the alive / pending / dim tone
-                    # we used to put in the dropped Link column.
-                    parts.append(
-                        f'<tr class="{row_cls}" data-key="{html.escape(key)}">'
-                        f'<td>{mon_str}</td>'
-                        f'<td>{lv_str}</td>'
-                        f'<td>{hp_cell}</td>'
-                        f'<td>{type_cell}</td>'
-                        f'{abl_td}'
-                        f'<td class="{link_cls}">{partner_str}</td></tr>'
-                    )
-                    if move_html:
-                        parts.append(
-                            f'<tr class="move-row {row_cls}" data-key="{html.escape(key)}-moves">'
-                            f'<td colspan="{colspan}">{move_html}</td></tr>'
-                        )
-                parts.append("</tbody></table>")
-                if q_str:
-                    parts.append(f'<p style="margin:0;font-size:0.85em">{q_str}</p>')
-            else:
-                parts.append('<p class="empty">No party mons.</p>')
-
-            # PC boxes
-            boxes = p.get("pc_boxes", [])
-            # Build set of memorial mon keys from the link table (covers overflow boxes too)
-            from server.state import LinkStatus as _LS
-            _memorial_keys: set[str] = {
-                mi.key
-                for e in s.links
-                if e.status in (_LS.MEMORIAL, _LS.DEAD)
-                for mi in (e.a, e.b) if mi and mi.key
-            }
-            # Also exclude pending memorials (awaiting Lua confirmation)
-            for _pm_keys in s.pending_memorials.values():
-                _memorial_keys.update(_pm_keys)
-            # Also exclude the dedicated memorial box and overflow boxes by physical index
-            _mem_idx = self.adapter.memorial_box_index if self.adapter else -1
-            boxes = [
-                b for b in boxes
-                if b.get("key", "") not in _memorial_keys
-                and (_mem_idx < 0 or b.get("box") not in self._memorial_box_indices())
-            ]
-            if boxes:
-                parts.append('<h3 style="margin-top:0.8em;font-size:0.95em">PC Boxes</h3>')
-                parts.append(f'<table><thead><tr><th>Box</th><th>Slot</th><th>Lv</th><th>Pokémon</th><th>Type</th>{"<th>Ability</th>" if has_abilities else ""}<th>Partner</th></tr></thead><tbody>')
-                for bentry in boxes:
-                    b_sid     = bentry.get("species_id", 0)
-                    b_gender  = self.adapter.gender_from_key(bentry.get("key", ""), b_sid)
-                    b_item_id = bentry.get("held_item_id", 0)
-                    b_item_s  = self.adapter.item_name(b_item_id)
-                    b_item_h  = (f'<span class="held-item">{html.escape(b_item_s)}</span>'
-                                 if b_item_s else "")
-                    # Shiny: unlinked shiny or linked MonInfo.is_shiny
-                    _bx_key_tmp = bentry.get("key", "")
-                    _bx_entry_tmp = s._key_index.get(_bx_key_tmp)
-                    _bx_own_mi = (_bx_entry_tmp.a if pid == "a" else _bx_entry_tmp.b) if _bx_entry_tmp else None
-                    _bx_is_shiny = _bx_key_tmp in s.bonus_keys.get(pid, set()) or bool(_bx_own_mi and _bx_own_mi.is_shiny)
-                    b_sprite_html = self._get_sprite_html(b_sid)
-                    b_label   = (
+                    foe_cls = "fainted" if ehp == 0 else ("active-foe" if active else "")
+                    active_marker = '<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> ' if active else ""
+                    foe_key = em.get("key", f"foe-{ei}")
+                    abl_html = (f'<span class="ability" title="{html.escape(eadesc)}">{html.escape(eabl)}</span>'
+                                if eabl else '<span class="dim">—</span>')
+                    foe_mon_cell = (
                         f'<div style="display:inline-flex;align-items:center;gap:4px">'
-                        + (f'<div style="flex-shrink:0">{b_sprite_html}</div>' if b_sprite_html else '')
-                        + f'<div>{mon_label(bentry.get("key", ""), bentry.get("nickname", ""), b_sid, b_gender, shiny=_bx_is_shiny)}{b_item_h}</div>'
+                        + (f'<div style="flex-shrink:0">{esprite}</div>' if esprite else '')
+                        + f'<div>{active_marker}{ename}{eitem_html}</div>'
                         + f'</div>'
                     )
-                    b_types   = _type_badges_html(b_sid, adapter=self.adapter)
-                    b_aid     = bentry.get("ability_id", 0)
-                    b_abl     = self.adapter.ability_name(b_aid, b_sid) if b_aid else ""
-                    b_adesc   = self.adapter.ability_description(b_aid) if b_aid else ""
-                    b_abl_h   = (f'<span class="ability" title="{html.escape(b_adesc)}">{html.escape(b_abl)}</span>'
-                                 if b_abl else '<span class="dim">—</span>')
-
-                    # Level: check mon_stats cache, then link entry
-                    bx_key = bentry.get("key", "")
-                    bx_lv = ""
-                    cached_stats = s.mon_stats.get(bx_key)
-                    if cached_stats and cached_stats.get("level"):
-                        bx_lv = str(cached_stats["level"])
-                    else:
-                        bx_entry_lv = s._key_index.get(bx_key)
-                        if bx_entry_lv:
-                            mi = bx_entry_lv.a if bx_entry_lv.a and bx_entry_lv.a.key == bx_key else bx_entry_lv.b
-                            if mi and mi.level:
-                                bx_lv = str(mi.level)
-                    # Fallback: check party_details from any player (mon may
-                    # be in the other client's party during solo-test setups).
-                    if not bx_lv:
-                        for _pid2 in ("a", "b"):
-                            pdet = self.party_details.get(_pid2, {}).get(bx_key)
-                            if pdet and pdet.get("level"):
-                                bx_lv = str(pdet["level"])
-                                break
-                    # Fallback: check _mon_cache (populated from party sightings)
-                    if not bx_lv:
-                        mc = self._mon_cache.get(bx_key)
-                        if mc and mc.get("level"):
-                            bx_lv = str(mc["level"])
-
-                    bx_entry = s._key_index.get(bx_key) if bx_key else None
-                    if bx_entry:
-                        bx_p_mon = bx_entry.b if pid == "a" else bx_entry.a
-                        if bx_p_mon:
-                            bx_p_pid = "b" if pid == "a" else "a"
-                            bx_p_gender = self.adapter.gender_from_key(bx_p_mon.key, bx_p_mon.species)
-                            # Prefer live nickname from partner's party/box data
-                            bx_p_nick = bx_p_mon.nickname
-                            bx_p_det = self.party_details.get(bx_p_pid, {}).get(bx_p_mon.key)
-                            if bx_p_det and bx_p_det.get("nickname"):
-                                bx_p_nick = bx_p_det["nickname"]
-                            else:
-                                for bx_e2 in self.pc_boxes.get(bx_p_pid, []):
-                                    if bx_e2.get("key") == bx_p_mon.key and bx_e2.get("nickname"):
-                                        bx_p_nick = bx_e2["nickname"]
-                                        break
-                            bx_partner_str = mon_label(bx_p_mon.key, bx_p_nick, bx_p_mon.species, bx_p_gender,
-                                                        shiny=bx_p_mon.is_shiny)
-                        else:
-                            bx_partner_str = '<span class="dim">—</span>'
-                        bx_link_cls = bx_entry.status.value
-                        bx_link_lbl = bx_entry.status.value
-                    else:
-                        bx_pend_area = pending_key_area.get(bx_key)
-                        if bx_pend_area:
-                            bx_partner_id = "b" if pid == "a" else "a"
-                            bx_partner_name = html.escape(
-                                d["players"][bx_partner_id].get("trainer_name") or bx_partner_id.upper()
-                            )
-                            bx_area_lbl = html.escape(self.adapter.area_display_name(bx_pend_area))
-                            bx_partner_str = (
-                                f'<span class="pending_b" style="font-size:0.85em">'
-                                f'waiting for <b>{bx_partner_name}</b> @ {bx_area_lbl}'
-                                f'</span>'
-                            )
-                            bx_link_cls = "pending_b"
-                            bx_link_lbl = "pending"
-                        elif bx_key in d.get("bonus_keys", {}).get(pid, []):
-                            bx_partner_str = '<span style="color:#ffd700">★ Shiny Clause</span>'
-                            bx_link_cls    = "alive"
-                            bx_link_lbl    = "★ bonus"
-                        else:
-                            bx_partner_str = '<span class="dim">—</span>'
-                            bx_link_cls    = "dim"
-                            bx_link_lbl    = "—"
-
-                    bx_abl_td = f'<td>{b_abl_h}</td>' if has_abilities else ''
-                    bx_colspan = 7 if has_abilities else 6
-                    bx_move_details = bentry.get("move_details", [])
-                    bx_move_html = _move_table_html(bx_move_details, is_box=True, mon_key=bx_key)
                     parts.append(
-                        f'<tr data-key="{html.escape(bx_key)}"><td>{bentry.get("box",0)+1}</td>'
-                        f'<td>{bentry.get("slot",0)+1}</td>'
-                        f'<td>{bx_lv}</td>'
-                        f'<td>{b_label}</td>'
-                        f'<td>{b_types}</td>'
-                        f'{bx_abl_td}'
-                        f'<td class="{bx_link_cls}">{bx_partner_str}</td></tr>'
+                        f'<tr class="{foe_cls}" data-key="{html.escape(foe_key)}">'
+                        f'<td>{foe_mon_cell}</td>'
+                        f'<td>{elv}</td>'
+                        f'<td>{hp_bar}</td>'
+                        f'<td>{etype_cell}</td>'
+                        f'{"<td>" + abl_html + "</td>" if has_abilities else ""}</tr>'
                     )
-                    if bx_move_html:
+                    emove_html = _move_table_html(em.get("move_details", []),
+                                                  mon_key=f"enemy:{ei}")
+                    if emove_html:
+                        foe_cols = 5 if has_abilities else 4
                         parts.append(
-                            f'<tr class="move-row" data-key="{html.escape(bx_key)}-moves">'
-                            f'<td colspan="{bx_colspan}">{bx_move_html}</td></tr>'
+                            f'<tr class="foe-moves-row" data-key="{html.escape(foe_key)}:moves">'
+                            f'<td colspan="{foe_cols}">{emove_html}</td></tr>'
                         )
-                parts.append("</tbody></table>")
+                parts.append("</table>")
+            else:
+                parts.append('<p class="empty">No foe data yet.</p>')
+            if getattr(s, 'is_rr', False):
+                _pkeys = p.get("party_keys", [])
+                _pdetails = p.get("party_details", {})
+                _atk = None
+                _atk_key = None
+                for _pk in _pkeys:
+                    _d = _pdetails.get(_pk, {})
+                    if _d.get("active") and _d.get("hp", 0) > 0:
+                        _atk = _d
+                        _atk_key = _pk
+                        break
+                if not _atk:
+                    for _pk in _pkeys:
+                        _d = _pdetails.get(_pk, {})
+                        if _d.get("hp", 0) > 0:
+                            _atk = _d
+                            _atk_key = _pk
+                            break
+                _def = next(
+                    (em for em in enemy_party if em.get("active")),
+                    next((em for em in enemy_party if em.get("hp", 0) > 0), None))
+                if _atk and _def and _atk_key:
+                    _asid = _atk.get("species_id", 0)
+                    _esid = _def.get("species_id", 0)
+                    _aname = html.escape(self.adapter.species_name(_asid)) if _asid else ""
+                    _ename = html.escape(self.adapter.species_name(_esid)) if _esid else ""
+                    _amoves = [m for m in (_atk.get("moves") or []) if m][:4]
+                    _amoves_json = html.escape(json.dumps(_amoves))
+                    _ehp  = _def.get("hp", 0)
+                    _emhp = max(_def.get("maxHP", 1), 1)
+                    _ehp_pct = max(0, min(100, int(_ehp / _emhp * 100)))
+                    _tkey = ""
+                    _istr = "0"
+                    if is_trainer and bs.get("opponent_class") and bs.get("opponent_name"):
+                        _tkey = html.escape(
+                            f"{bs['opponent_class']} {bs['opponent_name']}")
+                        _istr = "1"
+                    _abl = html.escape(_atk.get("ability_name", ""))
+                    _itm = html.escape(
+                        self.adapter.item_name(_atk.get("held_item_id", 0)))
+                    parts.append(
+                        f'<div id="calc-preview-{pid}" class="calc-preview"'
+                        f' data-in-battle="1"'
+                        f' data-trainer-key="{_tkey}"'
+                        f' data-is-trainer="{_istr}"'
+                        f' data-player-species="{_aname}"'
+                        f' data-player-level="{_atk.get("level", 0)}"'
+                        f' data-player-nature="{html.escape(_nature_from_key(_atk_key))}"'
+                        f' data-player-ability="{_abl}"'
+                        f' data-player-item="{_itm}"'
+                        f' data-player-moves="{_amoves_json}"'
+                        f' data-enemy-species="{_ename}"'
+                        f' data-enemy-level="{_def.get("level", 0)}"'
+                        f' data-enemy-hp-pct="{_ehp_pct}"'
+                        f' style="display:none"></div>'
+                    )
+            parts.append('</div>')
 
-            parts.append("</div>")  # player-card
-        parts.append("</div>")  # players-grid
+        party_keys = p["party_keys"]
+        if party_keys:
+            q = p["queued"]
+            q_str = f'<span class="warn">{q} queued</span>' if q > 0 else ""
+            abl_hdr = '<th>Ability</th>' if has_abilities else ''
+            parts.append(f'<table><thead><tr><th>Pokémon</th><th>Lv</th><th>HP</th><th>Type</th>{abl_hdr}<th>Partner</th></tr></thead><tbody>')
+            for key in party_keys:
+                detail      = p["party_details"].get(key, {})
+                level       = detail.get("level", 0)
+                hp          = detail.get("hp", 1)
+                maxhp       = detail.get("maxHP", 1)
+                sid         = detail.get("species_id", 0)
+                item_id     = detail.get("held_item_id", 0)
+                is_active   = detail.get("active", False)
+                row_cls     = "fainted" if hp == 0 else ("active-mon" if is_active else "")
+                lv_str      = str(level) if level else '<span class="dim">?</span>'
+                item_str    = self.adapter.item_name(item_id)
+                item_html   = (f'<span class="held-item">{html.escape(item_str)}</span>'
+                               if item_str else "")
+                _party_entry = s._key_index.get(key)
+                _own_mi = (_party_entry.a if pid == "a" else _party_entry.b) if _party_entry else None
+                is_shiny_mon = key in s.bonus_keys.get(pid, set()) or bool(_own_mi and _own_mi.is_shiny)
+                active_pfx  = '<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> ' if is_active else ''
+                sprite_html = self._get_sprite_html(sid)
+                mon_str     = (
+                    f'<div style="display:inline-flex;align-items:center;gap:4px">'
+                    + (f'<div style="flex-shrink:0">{sprite_html}</div>' if sprite_html else '')
+                    + f'<div>{active_pfx}{mon_label(key, detail.get("nickname", ""), sid, detail.get("gender", ""), shiny=is_shiny_mon)}{item_html}</div>'
+                    + f'</div>'
+                )
+                pct     = max(0, min(100, int(hp / maxhp * 100))) if maxhp else 0
+                bar_cls = "hp-high" if pct > 50 else ("hp-mid" if pct > 20 else "hp-low")
+                status_cond = detail.get("status_cond", 0)
+                is_active   = detail.get("active", False)
+                hp_cell = (
+                    f'<div class="hp-bar-bg">'
+                    f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
+                    f'</div>'
+                    f'<span class="dim">{hp}/{maxhp}</span>'
+                    + _status_icon_html(status_cond)
+                    + (is_active and _stat_stages_html(detail.get("stat_stages")) or "")
+                )
+                type_cell = _type_badges_html(sid, adapter=self.adapter)
+                abl_name = detail.get("ability_name", "")
+                abl_id = detail.get("ability_id", 0)
+                abl_desc = self.adapter.ability_description(abl_id) if abl_id else ""
+                ability_cell = (f'<span class="ability" title="{html.escape(abl_desc)}">{html.escape(abl_name)}</span>'
+                               if abl_name else '<span class="dim">—</span>')
 
-        # ── Encounters (consolidated: links + pending + area states) ────────
+                entry = s._key_index.get(key)
+                if entry:
+                    p_mon = entry.b if pid == "a" else entry.a
+                    if p_mon:
+                        p_pid = "b" if pid == "a" else "a"
+                        p_gender = self.adapter.gender_from_key(p_mon.key, p_mon.species)
+                        p_nick = p_mon.nickname
+                        p_det = self.party_details.get(p_pid, {}).get(p_mon.key)
+                        if p_det and p_det.get("nickname"):
+                            p_nick = p_det["nickname"]
+                        else:
+                            for bx_e in self.pc_boxes.get(p_pid, []):
+                                if bx_e.get("key") == p_mon.key and bx_e.get("nickname"):
+                                    p_nick = bx_e["nickname"]
+                                    break
+                        partner_str = mon_label(p_mon.key, p_nick, p_mon.species, p_gender,
+                                                shiny=p_mon.is_shiny)
+                    else:
+                        partner_str = '<span class="dim">—</span>'
+                    link_cls = entry.status.value
+                else:
+                    pend_area = pending_key_area.get(key)
+                    if pend_area:
+                        partner_id = "b" if pid == "a" else "a"
+                        partner_name = html.escape(
+                            d["players"][partner_id].get("trainer_name") or partner_id.upper()
+                        )
+                        area_lbl = html.escape(self.adapter.area_display_name(pend_area))
+                        partner_str = (
+                            f'<span class="pending_b" style="font-size:0.85em">'
+                            f'waiting for <b>{partner_name}</b> @ {area_lbl}'
+                            f'</span>'
+                        )
+                        link_cls = "pending_b"
+                    elif key in d.get("bonus_keys", {}).get(pid, []):
+                        partner_str = '<span style="color:#ffd700">★ Shiny Clause</span>'
+                        link_cls    = "alive"
+                    else:
+                        partner_str = '<span class="dim">unlinked</span>'
+                        link_cls    = "dim"
+
+                abl_td = f'<td>{ability_cell}</td>' if has_abilities else ''
+                colspan = 6 if has_abilities else 5
+                move_details = detail.get("move_details", [])
+                move_html = _move_table_html(move_details, mon_key=key)
+                parts.append(
+                    f'<tr class="{row_cls}" data-key="{html.escape(key)}">'
+                    f'<td>{mon_str}</td>'
+                    f'<td>{lv_str}</td>'
+                    f'<td>{hp_cell}</td>'
+                    f'<td>{type_cell}</td>'
+                    f'{abl_td}'
+                    f'<td class="{link_cls}">{partner_str}</td></tr>'
+                )
+                if move_html:
+                    parts.append(
+                        f'<tr class="move-row {row_cls}" data-key="{html.escape(key)}-moves">'
+                        f'<td colspan="{colspan}">{move_html}</td></tr>'
+                    )
+            parts.append("</tbody></table>")
+            if q_str:
+                parts.append(f'<p style="margin:0;font-size:0.85em">{q_str}</p>')
+        else:
+            parts.append('<p class="empty">No party mons.</p>')
+
+        boxes = p.get("pc_boxes", [])
+        from server.state import LinkStatus as _LS
+        _memorial_keys: set[str] = {
+            mi.key
+            for e in s.links
+            if e.status in (_LS.MEMORIAL, _LS.DEAD)
+            for mi in (e.a, e.b) if mi and mi.key
+        }
+        for _pm_keys in s.pending_memorials.values():
+            _memorial_keys.update(_pm_keys)
+        _mem_idx = self.adapter.memorial_box_index if self.adapter else -1
+        boxes = [
+            b for b in boxes
+            if b.get("key", "") not in _memorial_keys
+            and (_mem_idx < 0 or b.get("box") not in self._memorial_box_indices())
+        ]
+        if boxes:
+            parts.append('<h3 style="margin-top:0.8em;font-size:0.95em">PC Boxes</h3>')
+            parts.append(f'<table><thead><tr><th>Box</th><th>Slot</th><th>Lv</th><th>Pokémon</th><th>Type</th>{"<th>Ability</th>" if has_abilities else ""}<th>Partner</th></tr></thead><tbody>')
+            for bentry in boxes:
+                b_sid     = bentry.get("species_id", 0)
+                b_gender  = self.adapter.gender_from_key(bentry.get("key", ""), b_sid)
+                b_item_id = bentry.get("held_item_id", 0)
+                b_item_s  = self.adapter.item_name(b_item_id)
+                b_item_h  = (f'<span class="held-item">{html.escape(b_item_s)}</span>'
+                             if b_item_s else "")
+                _bx_key_tmp = bentry.get("key", "")
+                _bx_entry_tmp = s._key_index.get(_bx_key_tmp)
+                _bx_own_mi = (_bx_entry_tmp.a if pid == "a" else _bx_entry_tmp.b) if _bx_entry_tmp else None
+                _bx_is_shiny = _bx_key_tmp in s.bonus_keys.get(pid, set()) or bool(_bx_own_mi and _bx_own_mi.is_shiny)
+                b_sprite_html = self._get_sprite_html(b_sid)
+                b_label   = (
+                    f'<div style="display:inline-flex;align-items:center;gap:4px">'
+                    + (f'<div style="flex-shrink:0">{b_sprite_html}</div>' if b_sprite_html else '')
+                    + f'<div>{mon_label(bentry.get("key", ""), bentry.get("nickname", ""), b_sid, b_gender, shiny=_bx_is_shiny)}{b_item_h}</div>'
+                    + f'</div>'
+                )
+                b_types   = _type_badges_html(b_sid, adapter=self.adapter)
+                b_aid     = bentry.get("ability_id", 0)
+                b_abl     = self.adapter.ability_name(b_aid, b_sid) if b_aid else ""
+                b_adesc   = self.adapter.ability_description(b_aid) if b_aid else ""
+                b_abl_h   = (f'<span class="ability" title="{html.escape(b_adesc)}">{html.escape(b_abl)}</span>'
+                             if b_abl else '<span class="dim">—</span>')
+                bx_key = bentry.get("key", "")
+                bx_lv = ""
+                cached_stats = s.mon_stats.get(bx_key)
+                if cached_stats and cached_stats.get("level"):
+                    bx_lv = str(cached_stats["level"])
+                else:
+                    bx_entry_lv = s._key_index.get(bx_key)
+                    if bx_entry_lv:
+                        mi = bx_entry_lv.a if bx_entry_lv.a and bx_entry_lv.a.key == bx_key else bx_entry_lv.b
+                        if mi and mi.level:
+                            bx_lv = str(mi.level)
+                if not bx_lv:
+                    for _pid2 in ("a", "b"):
+                        pdet = self.party_details.get(_pid2, {}).get(bx_key)
+                        if pdet and pdet.get("level"):
+                            bx_lv = str(pdet["level"])
+                            break
+                if not bx_lv:
+                    mc = self._mon_cache.get(bx_key)
+                    if mc and mc.get("level"):
+                        bx_lv = str(mc["level"])
+
+                bx_entry = s._key_index.get(bx_key) if bx_key else None
+                if bx_entry:
+                    bx_p_mon = bx_entry.b if pid == "a" else bx_entry.a
+                    if bx_p_mon:
+                        bx_p_pid = "b" if pid == "a" else "a"
+                        bx_p_gender = self.adapter.gender_from_key(bx_p_mon.key, bx_p_mon.species)
+                        bx_p_nick = bx_p_mon.nickname
+                        bx_p_det = self.party_details.get(bx_p_pid, {}).get(bx_p_mon.key)
+                        if bx_p_det and bx_p_det.get("nickname"):
+                            bx_p_nick = bx_p_det["nickname"]
+                        else:
+                            for bx_e2 in self.pc_boxes.get(bx_p_pid, []):
+                                if bx_e2.get("key") == bx_p_mon.key and bx_e2.get("nickname"):
+                                    bx_p_nick = bx_e2["nickname"]
+                                    break
+                        bx_partner_str = mon_label(bx_p_mon.key, bx_p_nick, bx_p_mon.species, bx_p_gender,
+                                                    shiny=bx_p_mon.is_shiny)
+                    else:
+                        bx_partner_str = '<span class="dim">—</span>'
+                    bx_link_cls = bx_entry.status.value
+                else:
+                    bx_pend_area = pending_key_area.get(bx_key)
+                    if bx_pend_area:
+                        bx_partner_id = "b" if pid == "a" else "a"
+                        bx_partner_name = html.escape(
+                            d["players"][bx_partner_id].get("trainer_name") or bx_partner_id.upper()
+                        )
+                        bx_area_lbl = html.escape(self.adapter.area_display_name(bx_pend_area))
+                        bx_partner_str = (
+                            f'<span class="pending_b" style="font-size:0.85em">'
+                            f'waiting for <b>{bx_partner_name}</b> @ {bx_area_lbl}'
+                            f'</span>'
+                        )
+                        bx_link_cls = "pending_b"
+                    elif bx_key in d.get("bonus_keys", {}).get(pid, []):
+                        bx_partner_str = '<span style="color:#ffd700">★ Shiny Clause</span>'
+                        bx_link_cls    = "alive"
+                    else:
+                        bx_partner_str = '<span class="dim">—</span>'
+                        bx_link_cls    = "dim"
+
+                bx_abl_td = f'<td>{b_abl_h}</td>' if has_abilities else ''
+                bx_colspan = 7 if has_abilities else 6
+                bx_move_details = bentry.get("move_details", [])
+                bx_move_html = _move_table_html(bx_move_details, is_box=True, mon_key=bx_key)
+                parts.append(
+                    f'<tr data-key="{html.escape(bx_key)}"><td>{bentry.get("box",0)+1}</td>'
+                    f'<td>{bentry.get("slot",0)+1}</td>'
+                    f'<td>{bx_lv}</td>'
+                    f'<td>{b_label}</td>'
+                    f'<td>{b_types}</td>'
+                    f'{bx_abl_td}'
+                    f'<td class="{bx_link_cls}">{bx_partner_str}</td></tr>'
+                )
+                if bx_move_html:
+                    parts.append(
+                        f'<tr class="move-row" data-key="{html.escape(bx_key)}-moves">'
+                        f'<td colspan="{bx_colspan}">{bx_move_html}</td></tr>'
+                    )
+            parts.append("</tbody></table>")
+
+        parts.append("</div>")
+        return "\n".join(parts)
+
+    def _build_widget_encounters_html(self) -> str:
+        """Inner HTML for the Encounters widget."""
+        d = self._build_status_dict()
+        mon_label = self._mon_label
+        parts: list[str] = []
         name_a = html.escape(d["players"]["a"].get("trainer_name") or "A")
         name_b = html.escape(d["players"]["b"].get("trainer_name") or "B")
 
@@ -3370,13 +3274,6 @@ class SLinkServer:
         kf_by_area: dict[str, dict] = {kf["area_id"]: kf for kf in killfeed}
 
         def _kf_inline_html(kf: dict) -> str:
-            """Compact cause line for embedding in the Status cell.
-
-            User asked to drop the killer-level + timestamp from this badge
-            — the death already happens contextually in a row that has the
-            area and players, and the encounters log doesn't need a clock.
-            The level + ISO time are still on the killfeed object for the
-            JSON API and the dedicated /stream/deaths overlay. """
             cause    = kf.get("cause", "")
             killer   = kf.get("killer") or {}
             initiator = kf.get("initiating_player", "")
@@ -3411,11 +3308,21 @@ class SLinkServer:
                 cause_html = ""
             return f'<br><span class="kf-inline">{cause_html}</span>'
 
-        # Build a unified row set keyed by area_id.
-        # Each row: {area_id, a_html, a_lv, b_html, b_lv, state_label, state_cls, sort_key}
-        encounter_rows: list[dict] = []
+        def _enc_status(a_state: str, b_state: str, na: str, nb: str) -> str:
+            _PSTATE_ICON = {
+                "caught":  '<svg class="inline-ico" aria-hidden="true"><use href="#i-check"/></svg>',
+                "entered": '<svg class="inline-ico" aria-hidden="true"><use href="#i-hourglass"/></svg>',
+                "none":    '<svg class="inline-ico" aria-hidden="true"><use href="#i-x"/></svg>',
+            }
+            _PSTATE_WORD = {"caught": "caught", "entered": "pending capture", "none": "not visited"}
+            return (
+                f'<span class="pending">'
+                f'{html.escape(na)}: {_PSTATE_ICON[a_state]} {_PSTATE_WORD[a_state]}<br>'
+                f'{html.escape(nb)}: {_PSTATE_ICON[b_state]} {_PSTATE_WORD[b_state]}'
+                f'</span>'
+            )
 
-        # 1) Rows from links (linked / dead / memorial)
+        encounter_rows: list[dict] = []
         for lnk in d["links"]:
             a_key = lnk.get("a_key")
             b_key = lnk.get("b_key")
@@ -3447,7 +3354,6 @@ class SLinkServer:
             kf = kf_by_area.get(lnk["area_id"])
             kf_extra = _kf_inline_html(kf) if kf else ""
             area_st = d["area_states"].get(lnk["area_id"], "")
-            # A dead link in a dead_zone area should display as "Dead zone"
             is_dead_zone = (status in ("dead", "dead_zone") and area_st == "dead_zone")
             STATUS_ICONS = {
                 "alive":     '<span class="alive"><svg class="inline-ico" aria-hidden="true"><use href="#i-check"/></svg> linked</span>',
@@ -3465,10 +3371,8 @@ class SLinkServer:
                 "sort": 0 if status == "alive" else 1,
             })
 
-        # Collect areas already covered by links
         linked_areas = {r["area"] for r in encounter_rows}
 
-        # 2) Rows from pending captures (areas not yet linked)
         for area, players in sorted(d["pending_captures"].items()):
             if area in linked_areas:
                 continue
@@ -3493,9 +3397,6 @@ class SLinkServer:
                 b_lbl = f'<span class="dim">waiting…</span>'
                 b_lv = "—"
             state_val = d["area_states"].get(area, "unseen")
-            # Determine per-player state for progress bar:
-            # "caught" if they have a pending capture, "entered" if the area state
-            # implies they've been there, "none" otherwise.
             a_st = "caught" if a_info else ("entered" if state_val in ("pending_b", "pending_both") else "none")
             b_st = "caught" if b_info else ("entered" if state_val in ("pending_a", "pending_both") else "none")
             label = _enc_status(a_st, b_st, name_a, name_b)
@@ -3504,17 +3405,15 @@ class SLinkServer:
                 "a_html": a_lbl, "a_lv": a_lv,
                 "b_html": b_lbl, "b_lv": b_lv,
                 "state": label, "cls": state_val,
-                "sort": -1,  # pending at top
+                "sort": -1,
             })
             linked_areas.add(area)
 
-        # 3) Rows from area_states not covered above (pending_both with no captures, etc.)
         for area, state_val in sorted(d["area_states"].items()):
             if area in linked_areas:
                 continue
             if state_val in ("unseen",):
-                continue  # skip unseen — nothing to show
-            # No pending captures → "entered only"
+                continue
             if state_val == "pending_b":
                 label = _enc_status("entered", "none", name_a, name_b)
             elif state_val == "pending_a":
@@ -3537,7 +3436,6 @@ class SLinkServer:
                 "sort": -1 if "pending" in state_val else 2,
             })
 
-        # Sort: pending first, alive, then dead/memorial
         encounter_rows.sort(key=lambda r: (r["sort"], r["area"]))
 
         _STATUS_SORT_VAL = {
@@ -3592,13 +3490,15 @@ class SLinkServer:
         else:
             parts.append("<p class='empty'>No encounters yet.</p>")
 
-        parts.append('')
+        return "\n".join(parts)
 
-        # Recent events panel
+    def _build_widget_events_html(self) -> str:
+        """Inner HTML for the Recent Events widget."""
+        parts: list[str] = []
         parts.append('<h2>Recent Events</h2>')
         events = list(self._recent_events)
         if events:
-            parts.append('<div style="max-height:300px;overflow-y:auto;border:1px solid #333;border-radius:3px;">')
+            parts.append('<div class="events-scroll" style="max-height:300px;overflow-y:auto;border:1px solid #333;border-radius:3px;">')
             parts.append(
                 '<table style="margin-bottom:0"><thead><tr>'
                 '<th style="position:sticky;top:0;background:#222">Time</th>'
@@ -3613,7 +3513,6 @@ class SLinkServer:
                     self.trainer_name.get(_pid, "") or _pid.upper()
                 )
                 ev_text   = html.escape(ev.get("text", ""))
-                # Convert ISO timestamp to 12H format (e.g. "8:26 PM")
                 _raw_ts = ev.get("ts", "")
                 try:
                     _dt = datetime.fromisoformat(_raw_ts)
@@ -3630,6 +3529,82 @@ class SLinkServer:
             parts.append('</tbody></table></div>')
         else:
             parts.append("<p class='empty'>No events yet.</p>")
+        return "\n".join(parts)
+
+    def _build_widget_run_status_html(self) -> str:
+        return '<h2>Run Status</h2><p class="empty dim">Widget pending Phase 4.</p>'
+
+    def _build_widget_lock_rules_html(self) -> str:
+        s = self.state
+        badges: list[str] = []
+        if s.species_lock:
+            badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-dna"/></svg> Species Clause</span>')
+        if s.gender_lock:
+            badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-gender"/></svg> Gender Clause</span>')
+        if s.type_lock:
+            badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-type"/></svg> Type Clause</span>')
+        parts = ['<h2>Lock Rules</h2>']
+        if badges:
+            parts.append(f'<div class="lock-rules">{" ".join(badges)}</div>')
+        else:
+            parts.append('<p class="empty dim">No clauses active.</p>')
+        return "".join(parts)
+
+    def _build_widget_boxed_links_html(self) -> str:
+        return '<h2>Boxed Links</h2><p class="empty dim">Widget pending Phase 4.</p>'
+
+    def _build_widget_inner(self, wid: str) -> str:
+        if wid == "player-a":
+            return self._build_widget_player_html("a")
+        if wid == "player-b":
+            return self._build_widget_player_html("b")
+        if wid == "encounters":
+            return self._build_widget_encounters_html()
+        if wid == "events":
+            return self._build_widget_events_html()
+        if wid == "run-status":
+            return self._build_widget_run_status_html()
+        if wid == "lock-rules":
+            return self._build_widget_lock_rules_html()
+        if wid == "boxed-links":
+            return self._build_widget_boxed_links_html()
+        return ''
+
+    def _build_status_html(self) -> str:
+        """Compose the full status page — game-over banner + gridstack of widgets.
+
+        The page emits widgets with default `gs-x/y/w/h` attributes; client-side
+        Gridstack adopts them and applies any user-saved layout from
+        localStorage. Each widget's `.grid-stack-item-content` polls
+        `/widgets/<id>` every 2s with HTMX morph:innerHTML, so the gridstack-
+        owned wrapper DOM (handles, position) is never touched by the morph.
+        """
+        d = self._build_status_dict()
+        parts: list[str] = []
+
+        if d.get("run_over"):
+            parts.append(
+                '<div style="background:#b00;color:#fff;text-align:center;padding:1em 0.5em;'
+                'font-size:1.8em;font-weight:bold;letter-spacing:0.15em;border-radius:8px;'
+                'margin-bottom:1em;text-shadow:2px 2px 4px #000">'
+                '<svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> GAME OVER — SOUL LINK <svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg></div>'
+            )
+
+        parts.append('<div class="grid-stack" id="dash-grid">')
+        for wid, x, y, w, h in self._WIDGET_LAYOUT:
+            inner = self._build_widget_inner(wid)
+            parts.append(
+                f'<div class="grid-stack-item" gs-id="{wid}" gs-x="{x}" gs-y="{y}" gs-w="{w}" gs-h="{h}">'
+                f'<div class="grid-stack-item-content widget widget-{wid}"'
+                f' hx-ext="morph"'
+                f' hx-get="/widgets/{wid}"'
+                f' hx-trigger="every 2s"'
+                f' hx-swap="morph:innerHTML">'
+                f'{inner}'
+                f'</div>'
+                f'</div>'
+            )
+        parts.append('</div>')
 
         return _STATUS_HTML.format(body="\n".join(parts),
                                    page_title=self._page_title(),
@@ -3638,6 +3613,22 @@ class SLinkServer:
 
     async def handle_status_html(self, request):
         return await self._handle_dashboard_template(request)
+
+    _WIDGET_IDS = frozenset({
+        "player-a", "player-b", "encounters", "events",
+        "run-status", "lock-rules", "boxed-links",
+    })
+
+    async def handle_widget_html(self, request):
+        """Per-widget HTMX poll target — returns just the inner HTML so
+        idiomorph swaps into `.grid-stack-item-content` without touching the
+        Gridstack-owned wrapper element."""
+        wid = request.match_info.get("wid", "")
+        if wid not in self._WIDGET_IDS:
+            raise aiohttp_web.HTTPNotFound(text=f"unknown widget: {wid}")
+        body = self._build_widget_inner(wid)
+        return aiohttp_web.Response(text=body, content_type="text/html",
+                                     charset="utf-8")
 
     async def _handle_dashboard_template(self, request):
         """Templated dashboard — wraps the `_build_status_html` body in a
@@ -6916,6 +6907,7 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         app = aiohttp_web.Application()
         setup_templating(app)
         app.router.add_get("/",            srv.handle_status_html)
+        app.router.add_get("/widgets/{wid}", srv.handle_widget_html)
         app.router.add_get("/memorial",    srv.handle_memorial_html)
         app.router.add_get("/api/status",  srv.handle_status_json)
         app.router.add_get("/api/events",  srv.handle_sse)
