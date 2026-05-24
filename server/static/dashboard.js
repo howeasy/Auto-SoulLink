@@ -161,8 +161,20 @@ if (window._slinkDashInit) {
     })
       .then(function(r) { return r.json(); })
       .then(function(j) {
-        if (j.ok && window.htmx) {
-          window.htmx.trigger(document.body, 'sse:ping');
+        if (!j.ok) return;
+        // Optimistic local update — feels snappy without waiting for poll.
+        if (bar) {
+          bar.dataset.count = next;
+          bar.textContent = '#' + next;
+        }
+        // Refresh the attempts widget immediately too (don't wait for the
+        // 2s poll).
+        var w = document.querySelector('.widget-attempts');
+        if (w && window.htmx) {
+          window.htmx.ajax('GET', '/widgets/attempts', {
+            target: w,
+            swap: 'morph:innerHTML',
+          });
         }
       });
   };

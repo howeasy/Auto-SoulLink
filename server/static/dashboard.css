@@ -1773,6 +1773,130 @@ body.dash-collapsed .dash-sidebar-layout { padding: 6px 4px 0; }
   .run-status-balls .rs-ball-lbl { display: none; }
 }
 
+/* ── Linked Party widget ───────────────────────────────────────────────── */
+.linked-party-list { display: flex; flex-direction: column; gap: 1px; }
+.linked-party-head {
+  display: flex;
+  align-items: center;
+  font-family: var(--font-heading);
+  font-size: 0.75em;
+  letter-spacing: 0.04em;
+  color: var(--c-info);
+  padding: 0.2em 0.4em 0.3em;
+  border-bottom: 1px solid var(--c-edge);
+  margin-bottom: 0.2em;
+}
+.lp-head-name { flex: 1; }
+.lp-head-name:last-child { text-align: right; }
+.lp-head-sep { flex: 0 0 32px; text-align: center; opacity: 0.5; }
+.linked-pair-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.25em 0.4em;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-edge) 50%, transparent);
+}
+.linked-pair-row:last-child { border-bottom: none; }
+.lp-half {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+.lp-half:last-child { flex-direction: row-reverse; text-align: right; }
+.lp-half:last-child .lp-id { text-align: right; }
+.lp-sprite { flex: 0 0 32px; }
+.lp-sprite .mon-sprite { width: 32px; height: 32px; image-rendering: pixelated; }
+.lp-id { flex: 1 1 0; min-width: 0; }
+.lp-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.9em;
+}
+.lp-id .hp-bar-bg {
+  height: 5px;
+  background: color-mix(in srgb, var(--c-edge) 50%, var(--c-bg));
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 2px;
+}
+.lp-id .hp-bar { height: 100%; }
+.lp-sep {
+  flex: 0 0 24px;
+  text-align: center;
+  font-size: 1.1em;
+  color: var(--c-dim);
+}
+.lp-loc {
+  font-size: 0.7em;
+  padding: 0.05em 0.4em;
+  border: 1px solid var(--c-edge);
+  border-radius: 3px;
+  margin-left: 0.3em;
+}
+
+@container (max-width: 360px) {
+  .linked-pair-row { flex-direction: column; align-items: stretch; }
+  .lp-half:last-child { flex-direction: row; text-align: left; }
+  .lp-half:last-child .lp-id { text-align: left; }
+  .lp-sep { font-size: 0.85em; padding: 0.1em 0; }
+}
+
+/* ── Attempts widget ───────────────────────────────────────────────────── */
+.attempts-widget {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6em;
+  padding: 0.4em 0;
+}
+.attempts-btn {
+  width: 2.2em;
+  height: 2.2em;
+  border-radius: 50%;
+  border: 2px solid var(--c-brand);
+  background: color-mix(in srgb, var(--c-card) 70%, var(--c-bg));
+  color: var(--c-brand);
+  font-family: var(--font-heading);
+  font-size: 1.4em;
+  font-weight: bold;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, transform 0.08s;
+}
+.attempts-btn:hover {
+  background: color-mix(in srgb, var(--c-brand) 25%, var(--c-card));
+  transform: scale(1.05);
+}
+.attempts-btn:active { transform: scale(0.95); }
+.attempts-count {
+  font-family: var(--font-heading);
+  font-size: 1.9em;
+  font-weight: bold;
+  color: var(--c-gold, var(--c-brand));
+  min-width: 3em;
+  text-align: center;
+  letter-spacing: 0.05em;
+}
+.attempts-hint {
+  font-size: 0.75em;
+  text-align: center;
+  margin: 0.3em 0 0 0;
+}
+
+@container (max-height: 130px) {
+  .widget-attempts .attempts-hint { display: none; }
+}
+@container (max-width: 180px) {
+  .widget-attempts .attempts-count { font-size: 1.4em; min-width: 2em; }
+  .widget-attempts .attempts-btn { width: 1.8em; height: 1.8em; font-size: 1.1em; }
+}
+
 /* ── Edit-mode toolbar ────────────────────────────────────────────────────
  * Injected by dashboard.js above the grid when `body.dash-edit-layout` is
  * active. Provides the visibility checklist + reset button.

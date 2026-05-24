@@ -2789,13 +2789,22 @@ class SLinkServer:
     # Middle: player cards. Below: encounters table. Bottom: boxed-links
     # + events side by side.
     _WIDGET_LAYOUT = [
-        ("run-status",   0, 0,  4, 4),    # ~192px — phase + counts + balls
-        ("lock-rules",   4, 0,  4, 4),    # ~192px — heading + clause badges
-        ("player-a",     0, 4,  6, 8),    # ~384px — header + party of 6
-        ("player-b",     6, 4,  6, 8),
-        ("encounters",   0, 12, 12, 10),  # ~480px — filters + ~8 rows
-        ("boxed-links",  0, 22, 6, 6),    # ~288px
-        ("events",       6, 22, 6, 6),
+        # Top-of-page status strip (smaller widgets sharing a row)
+        ("run-status",   0, 0,   3, 4),
+        ("lock-rules",   3, 0,   3, 4),
+        ("attempts",     6, 0,   3, 4),
+        # 4th top slot reserved for future "active battle" widget — keeps the
+        # row a neat 12 col total even when only 3 widgets ship now.
+        # Player cards
+        ("player-a",     0, 4,   6, 8),
+        ("player-b",     6, 4,   6, 8),
+        # Shared linked-pair view that joins both parties into one table
+        ("linked-party", 0, 12,  12, 6),
+        # Encounters table (full width)
+        ("encounters",   0, 18,  12, 10),
+        # Boxed Links + Events side by side
+        ("boxed-links",  0, 28,  6, 6),
+        ("events",       6, 28,  6, 6),
     ]
 
     def _mon_label(self, key_val, nickname, species_id, gender="", shiny=False):
@@ -3680,6 +3689,107 @@ class SLinkServer:
             )
         return "".join(parts)
 
+    def _build_widget_linked_party_html(self) -> str:
+        """Combined view of linked pairs across both players. Each row pairs
+        the two halves of an alive link with sprite + name + HP bar."""
+        d = self._build_status_dict()
+        mon_label = self._mon_label
+        pa = d.get("players", {}).get("a", {})
+        pb = d.get("players", {}).get("b", {})
+        a_party = set(pa.get("party_keys", []))
+        b_party = set(pb.get("party_keys", []))
+        a_details = pa.get("party_details", {})
+        b_details = pb.get("party_details", {})
+
+        pairs: list[tuple] = []
+        for lnk in d.get("links", []):
+            if lnk.get("status") != "alive":
+                continue
+            a_key = lnk.get("a_key") or ""
+            b_key = lnk.get("b_key") or ""
+            if not (a_key and b_key):
+                continue
+            a_in = a_key in a_party
+            b_in = b_key in b_party
+            # Sort party-pairs first, then half-party-half-box, then both-box
+            sort_key = 0 if (a_in and b_in) else 1 if (a_in or b_in) else 2
+            pairs.append((sort_key, lnk, a_in, b_in))
+        pairs.sort(key=lambda t: t[0])
+
+        parts = ['<h2>Linked Party</h2>']
+        if not pairs:
+            parts.append('<p class="empty dim">No linked pairs yet.</p>')
+            return "".join(parts)
+
+        name_a = html.escape(pa.get("trainer_name") or "A")
+        name_b = html.escape(pb.get("trainer_name") or "B")
+        parts.append(
+            '<div class="linked-party-list">'
+            f'<div class="linked-party-head">'
+            f'<div class="lp-head-name">{name_a}</div>'
+            f'<div class="lp-head-sep"></div>'
+            f'<div class="lp-head-name">{name_b}</div>'
+            f'</div>'
+        )
+
+        def _half(mi_key, sid, nick, gender, shiny, in_party, details):
+            det = details.get(mi_key, {}) if mi_key else {}
+            hp = det.get("hp", det.get("maxHP", 0))
+            mx = max(det.get("maxHP", 1), 1)
+            pct = max(0, min(100, int(hp / mx * 100))) if mx else 0
+            bar_cls = "hp-high" if pct > 50 else ("hp-mid" if pct > 20 else "hp-low")
+            sprite = self._get_sprite_html(sid)
+            label = mon_label(mi_key, nick, sid, gender, shiny=shiny)
+            box_pill = (' <span class="lp-loc dim" title="In box">box</span>'
+                        if not in_party else '')
+            return (
+                f'<div class="lp-half">'
+                f'<div class="lp-sprite">{sprite}</div>'
+                f'<div class="lp-id">'
+                f'<div class="lp-name">{label}{box_pill}</div>'
+                f'<div class="hp-bar-bg"><div class="hp-bar {bar_cls}" style="width:{pct}%"></div></div>'
+                f'</div>'
+                f'</div>'
+            )
+
+        for _sort, lnk, a_in, b_in in pairs:
+            a_sid = lnk.get("a_species", 0)
+            b_sid = lnk.get("b_species", 0)
+            a_key = lnk.get("a_key", "")
+            b_key = lnk.get("b_key", "")
+            a_g = self.adapter.gender_from_key(a_key, a_sid) if a_key else ""
+            b_g = self.adapter.gender_from_key(b_key, b_sid) if b_key else ""
+            a_half = _half(a_key, a_sid, lnk.get("a_nickname", ""), a_g,
+                           lnk.get("a_shiny", False), a_in, a_details)
+            b_half = _half(b_key, b_sid, lnk.get("b_nickname", ""), b_g,
+                           lnk.get("b_shiny", False), b_in, b_details)
+            parts.append(
+                f'<div class="linked-pair-row" data-key="{html.escape(lnk.get("area_id", ""))}">'
+                f'{a_half}'
+                f'<div class="lp-sep">⇄</div>'
+                f'{b_half}'
+                f'</div>'
+            )
+        parts.append('</div>')
+        return "".join(parts)
+
+    def _build_widget_attempts_html(self) -> str:
+        """Stream-overlay attempt counter with inline +/- controls."""
+        count = getattr(self.state, "attempts_count", 0) or 0
+        return (
+            '<h2>Attempts</h2>'
+            '<div class="attempts-widget">'
+            '<button class="attempts-btn attempts-dec" type="button"'
+            ' aria-label="Decrement attempt counter"'
+            ' onclick="window.adjAttempts &amp;&amp; window.adjAttempts(-1)">−</button>'
+            f'<div class="attempts-count" id="attempts-bar" data-count="{count}">#{count}</div>'
+            '<button class="attempts-btn attempts-inc" type="button"'
+            ' aria-label="Increment attempt counter"'
+            ' onclick="window.adjAttempts &amp;&amp; window.adjAttempts(1)">+</button>'
+            '</div>'
+            '<p class="attempts-hint dim">Drives the /stream/attempts overlay.</p>'
+        )
+
     def _build_widget_inner(self, wid: str) -> str:
         if wid == "player-a":
             return self._build_widget_player_html("a")
@@ -3695,6 +3805,10 @@ class SLinkServer:
             return self._build_widget_lock_rules_html()
         if wid == "boxed-links":
             return self._build_widget_boxed_links_html()
+        if wid == "linked-party":
+            return self._build_widget_linked_party_html()
+        if wid == "attempts":
+            return self._build_widget_attempts_html()
         return ''
 
     def _build_status_html(self) -> str:
@@ -3756,6 +3870,7 @@ class SLinkServer:
     _WIDGET_IDS = frozenset({
         "player-a", "player-b", "encounters", "events",
         "run-status", "lock-rules", "boxed-links",
+        "linked-party", "attempts",
     })
 
     async def handle_widget_html(self, request):
