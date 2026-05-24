@@ -883,13 +883,17 @@ if (window._slinkDashInit) {
       // Bottom-right gripper only — keeps the resize affordance unambiguous
       // and avoids hijacking the top edge (where the drag handle lives).
       resizable: { handles: 'se' },
-      // Drag from the dedicated handle button only. Without this, clicking
-      // any text inside a widget would initiate a drag — annoying for
-      // selecting cell text in the encounters table.
-      draggable: { handle: '.widget-drag-handle' },
-      // Start LOCKED. The sidebar's Customize button flips this.
-      disableDrag: true,
-      disableResize: true,
+      // The dedicated `.widget-drag-handle` sibling of `.grid-stack-item-
+      // content` proved invisible to Gridstack v11's DD binder — it looks
+      // for the handle inside `.grid-stack-item-content`, not as a sibling.
+      // Solution: make the whole content draggable, exclude interactive
+      // descendants so clicks on tables/links/inputs/etc. don't drag.
+      draggable: {
+        cancel: 'table, table *, a, button, input, select, textarea, ' +
+                'details, summary, [contenteditable], .ui-resizable-handle',
+      },
+      // Gridstack stays interactive at all times; edit-mode visibility is a
+      // pure CSS concern (see setEditMode comment).
     }, host);
     window._slinkGrid = grid;
 

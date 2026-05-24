@@ -1286,11 +1286,12 @@ td .mon-sprite, td img.mon-sprite {
   margin: 0;
 }
 
-/* ── Drag handle ─────────────────────────────────────────────────────────
- * A button sibling of `.grid-stack-item-content` so it lives outside the
- * morph target. Hidden by default; revealed when the user enters edit mode
- * (`body.dash-edit-layout`). The Gridstack draggable.handle selector
- * (`.widget-drag-handle`) picks this element up.
+/* ── Drag handle (visual cue) ────────────────────────────────────────────
+ * Visible only in edit mode as a hint that the widget is draggable. The
+ * actual drag binding is on the whole `.grid-stack-item-content` (Gridstack
+ * v11's DD binder ignored a sibling-positioned handle), so the button is
+ * decorative — `pointer-events: none` lets the drag pass through to the
+ * underlying content.
  */
 .widget-drag-handle {
   position: absolute;
@@ -1304,28 +1305,42 @@ td .mon-sprite, td img.mon-sprite {
   border-radius: 4px;
   background: color-mix(in srgb, var(--c-card) 80%, var(--c-bg));
   color: var(--c-brand);
-  cursor: grab;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.18s, background 0.12s, transform 0.12s;
+  pointer-events: none;     /* always — visual cue only */
+  transition: opacity 0.18s;
 }
 .widget-drag-handle svg {
   width: 16px;
   height: 16px;
   fill: currentColor;
 }
-.widget-drag-handle:active { cursor: grabbing; }
 
 body.dash-edit-layout .widget-drag-handle {
   opacity: 1;
-  pointer-events: auto;
 }
-body.dash-edit-layout .widget-drag-handle:hover {
-  background: color-mix(in srgb, var(--c-brand) 22%, var(--c-card));
-  transform: scale(1.04);
+
+/* Cursor + outline affordance on the whole content area in edit mode.
+ * Tables, links, buttons, etc. opt out via `:not(input):not(...)` would be
+ * verbose — instead we set grab on the content and reset to the default on
+ * known interactive descendants. */
+body.dash-edit-layout .grid-stack-item-content {
+  cursor: grab;
+}
+body.dash-edit-layout .grid-stack-item-content table,
+body.dash-edit-layout .grid-stack-item-content a,
+body.dash-edit-layout .grid-stack-item-content button,
+body.dash-edit-layout .grid-stack-item-content input,
+body.dash-edit-layout .grid-stack-item-content select,
+body.dash-edit-layout .grid-stack-item-content textarea,
+body.dash-edit-layout .grid-stack-item-content details,
+body.dash-edit-layout .grid-stack-item-content summary {
+  cursor: auto;
+}
+body.dash-edit-layout .grid-stack-item.ui-draggable-dragging .grid-stack-item-content {
+  cursor: grabbing;
 }
 
 /* Gridstack draws a resize gripper (`.ui-resizable-se`) in the bottom-right
