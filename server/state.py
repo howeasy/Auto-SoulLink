@@ -90,7 +90,7 @@ def is_shiny(key: str) -> bool:
 
 
 class SoulLinkState:
-    def __init__(self, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None):
+    def __init__(self, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False):
         # When data_dir is provided (manager mode) use it; otherwise fall back to the
         # module-level globals so monkeypatch works in tests and the standalone server
         # keeps working unchanged.
@@ -171,6 +171,19 @@ class SoulLinkState:
         # party_mon has been confirmed via sync_retrieve_done or dropped via
         # sync_retrieve_failed. Persisted so a mid-rebuild restart can re-arm.
         self.rebuild_pending: dict[str, Optional[dict]] = {"a": None, "b": None}
+        # Partner team blobs for the Rival Team Swap feature (Gen3/RR only,
+        # adapter-gated).  Cached per player as a list of {slot, species_id,
+        # level, key, blob} where blob is the raw 100-byte party-mon struct.
+        # Sent by Lua on hello and whenever the local party signature changes
+        # (composition or level deltas).  In-memory only; not persisted —
+        # blobs are re-sent on every reconnect.
+        self.partner_blobs: dict[str, list[dict]] = {"a": [], "b": []}
+        # Rival Team Swap auto-trigger.  Set once at run creation via the
+        # `--rival-team-swap` CLI flag (mirrors --explode-mode).  When True,
+        # the server auto-issues replace_rival_team on trainer_battle_start
+        # whenever the trainer ID is in the adapter's rival set AND the
+        # partner has cached blobs.  Per-run rule, never flipped at runtime.
+        self.rival_team_swap: bool = rival_team_swap
 
     # ── public API ───────────────────────────────────────────────────────────
 
@@ -255,6 +268,10 @@ class SoulLinkState:
             self._handle_memorialize_done(player_id, msg)
         elif event == "memorialize_failed":
             self._handle_memorialize_failed(player_id, msg)
+        elif event == "trainer_battle_start":
+            self._handle_trainer_battle_start(player_id, msg)
+        elif event == "rival_team_replaced":
+            self._handle_rival_team_replaced(player_id, msg)
         elif event in ("safe", "tick"):
             # Accept pokéballs activation update from tick events so the server learns
             # the nuzlocke became active mid-session (between hello events).
@@ -267,6 +284,9 @@ class SoulLinkState:
                 self.party_size[player_id] = len(party)
                 if old_size != len(party):
                     log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {len(party)}  (tick/safe)")
+                # Rival Team Swap: refresh the per-player blob cache from the
+                # same snapshot.  See _ingest_party_blobs for the shape.
+                self._ingest_party_blobs(player_id, party)
                 # Reconcile party_keys against Lua's actual party snapshot.  Catches
                 # state drift from spurious party_to_box / missed box_to_party events
                 # in the Lua diff loop — without this, a phantom deposit propagates
@@ -285,9 +305,9 @@ class SoulLinkState:
         return cmds if cmds else [{"cmd": "noop"}]
 
     @classmethod
-    def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None) -> "SoulLinkState":
+    def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False) -> "SoulLinkState":
         """Load persisted state from data/links.json, or return a fresh instance."""
-        state = cls(data_dir=data_dir, species_lock=species_lock, gender_lock=gender_lock, type_lock=type_lock, explode_mode=explode_mode, is_rr=is_rr, adapter=adapter)
+        state = cls(data_dir=data_dir, species_lock=species_lock, gender_lock=gender_lock, type_lock=type_lock, explode_mode=explode_mode, is_rr=is_rr, adapter=adapter, rival_team_swap=rival_team_swap)
         if not os.path.exists(state._links_path):
             return state
         try:
@@ -425,6 +445,10 @@ class SoulLinkState:
         old_size = self.party_size.get(player_id, 0)
         self.party_size[player_id] = len(party)
         log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {len(party)}  (hello)")
+        # Rival Team Swap: refresh the per-player blob cache from the same
+        # snapshot.  Each party entry carries blob_hex (200 chars) from
+        # build_party_snapshot — see lua/clients/gen3_frlge_client.lua.
+        self._ingest_party_blobs(player_id, party)
 
         # ── Identity lock ──
         # Extract OT ID from first party mon's key via the adapter.
@@ -2183,6 +2207,136 @@ class SoulLinkState:
             log.info(f"pair in {entry.area_id} marked memorial (with failed memorialization)")
             self._write_memorial(entry)
         self._save()
+
+    def _ingest_party_blobs(self, player_id: str, party: list) -> None:
+        """
+        Extract per-slot 100-byte mon blobs from a party snapshot (carried on
+        every hello / tick / safe) and cache them in `self.partner_blobs`.
+
+        Whole-party snapshot every call — no incremental diff.  The Lua side
+        already gates these snapshots to TICK_INTERVAL (~0.5 s), so traffic
+        is bounded.  Empty input clears the cache (treated as "partner went
+        offline" by downstream gates).
+
+        Each entry in `party` is the existing snapshot dict shape from
+        `build_party_snapshot`, with one new field `blob_hex` (200 chars).
+        Entries missing or malforming `blob_hex` are silently dropped —
+        callers (capture/faint/sync handlers) still get the rest of the
+        snapshot via the existing pathways, this is best-effort caching.
+        """
+        if not isinstance(party, list):
+            return
+        accepted: list[dict] = []
+        for s in party:
+            if not isinstance(s, dict):
+                continue
+            blob_hex = s.get("blob_hex", "")
+            if not isinstance(blob_hex, str) or len(blob_hex) != 200:
+                continue
+            try:
+                blob = bytes.fromhex(blob_hex)
+            except ValueError:
+                continue
+            if len(blob) != 100:
+                continue
+            accepted.append({
+                "slot": int(s.get("slot", len(accepted))),
+                "species_id": int(s.get("species_id", 0) or 0),
+                "level": int(s.get("level", 0) or 0),
+                "key": str(s.get("key", "") or ""),
+                "blob": blob,
+            })
+        self.partner_blobs[player_id] = accepted
+
+    # ── Rival Team Swap: trainer-battle detection + injection ───────────────
+
+    def queue_rival_team_swap(self, target_player: str, trainer_id: int,
+                              source: str = "auto") -> tuple[bool, str]:
+        """Queue a `replace_rival_team` command for `target_player`.
+
+        Used by:
+        - Phase 2 manual inject (source='manual') — fires from dashboard button.
+        - Phase 3 auto-trigger (source='auto') — fires from trainer_battle_start.
+
+        Returns (ok, reason). When ok=False the caller can surface `reason`
+        to the user (dashboard button needs that to explain why nothing fired).
+
+        Gates checked in order:
+        - partner has cached blobs at all (i.e. they're connected and Lua sent
+          at least one party_blob_sync).
+        Caller is responsible for additional gates such as the rival-ID
+        membership check (which uses the adapter) and feature-flag/toggle
+        state (Phase 3) — keeping THIS function strictly about queueing.
+        """
+        partner = _partner(target_player)
+        blobs = self.partner_blobs.get(partner, [])
+        if not blobs:
+            return False, f"partner {partner!r} has no cached party blobs"
+        self.queued_commands[target_player].append({
+            "cmd": "replace_rival_team",
+            "trainer_id": int(trainer_id) if trainer_id is not None else 0,
+            "n": len(blobs),
+            "blobs_hex": [b["blob"].hex() for b in blobs],
+            "source": source,
+        })
+        log.info(
+            f"[{target_player}] queued replace_rival_team "
+            f"(trainer_id={trainer_id}, n={len(blobs)}, source={source})"
+        )
+        return True, "queued"
+
+    def _handle_trainer_battle_start(self, player_id: str, msg: dict):
+        """
+        Detect rival fights and auto-fire replace_rival_team when the per-run
+        rival_team_swap flag is on AND the trainer is in the adapter's rival
+        set AND the partner has cached blobs.
+
+        Gates checked in order:
+        1. Valid trainer_id (positive int).
+        2. Trainer ID is in adapter.rival_trainer_ids() (RR-only for MVP;
+           vanilla/AP/Emerald adapters return empty set → no-op).
+        3. Per-run rival_team_swap flag (set at run creation; not a live toggle).
+        4. Partner has cached blobs (queue_rival_team_swap final gate).
+        """
+        trainer_id = msg.get("trainer_id")
+        if not isinstance(trainer_id, int) or trainer_id <= 0:
+            return
+        rival_ids = self.adapter.rival_trainer_ids() if self.adapter else set()
+        is_rival = trainer_id in rival_ids
+        log.info(
+            f"[{player_id}] trainer_battle_start trainer_id={trainer_id} "
+            f"is_rival={is_rival}"
+        )
+        if not is_rival:
+            return
+        if not self.rival_team_swap:
+            log.info(
+                f"[{player_id}] rival team swap auto-trigger DISABLED "
+                f"(trainer_id={trainer_id})"
+            )
+            return
+        ok, reason = self.queue_rival_team_swap(
+            player_id, trainer_id=trainer_id, source="auto")
+        if not ok:
+            log.info(
+                f"[{player_id}] rival team swap auto-trigger skipped: {reason}"
+            )
+
+    def _handle_rival_team_replaced(self, player_id: str, msg: dict):
+        """Readback ack from the Lua write — log mismatch loudly so the
+        dashboard banner can surface a CFRU/RR drift.
+
+        msg = {trainer_id: int, species_ids: list[int]}
+        """
+        trainer_id = msg.get("trainer_id", 0)
+        species = msg.get("species_ids") or []
+        if not isinstance(species, list):
+            log.warning(f"[{player_id}] rival_team_replaced: species_ids not a list")
+            return
+        log.info(
+            f"[{player_id}] rival_team_replaced ack trainer_id={trainer_id} "
+            f"species={species}"
+        )
 
     def _write_memorial(self, entry: LinkEntry):
         """Append the retired pair to memorial.json via atomic rewrite."""

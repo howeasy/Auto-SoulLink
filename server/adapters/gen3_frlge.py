@@ -65,6 +65,20 @@ if os.path.exists(_rr_trainers_path):
         _raw_tr = json.load(_f)
         _RR_TRAINERS = {int(k): v for k, v in _raw_tr.get("trainers", {}).items()}
 
+# Rival trainer ID set for Radical Red (used by Rival Team Swap feature).
+# Built at import time by scanning _RR_TRAINERS for entries whose name is
+# "Terry" (RR's default rival name) and whose class is one of the rival
+# classes (81/89/90 — Rival Early/Mid/Late).  Spot-check: 27 entries in
+# RR4.1 spanning IDs 325-440 and 738-740 (post-game).  Class 98 (also
+# labeled "Rival" in _RR_TRAINER_CLASS) is NOT used by Terry in the
+# canonical table; filtering on Terry-by-name avoids false positives.
+_RR_RIVAL_CLASSES = frozenset({81, 89, 90})
+_RR_RIVAL_TRAINER_IDS: frozenset[int] = frozenset(
+    tid for tid, tr in _RR_TRAINERS.items()
+    if (tr.get("name") or "").strip() == "Terry"
+    and tr.get("class") in _RR_RIVAL_CLASSES
+)
+
 # RR trainer class ID → display name
 _RR_TRAINER_CLASS: dict[int, str] = {
     1: "Pokémon Trainer", 2: "Team Rocket", 3: "Team Rocket Boss",
@@ -245,6 +259,17 @@ class Gen3Adapter(GameAdapter):
 
     def type_name(self, type_id: int) -> str:
         return _type_name(type_id)
+
+    def rival_trainer_ids(self) -> set[int]:
+        """Return the rival trainer IDs for the Rival Team Swap feature.
+
+        Radical Red (CFRU): returns the precomputed Terry-by-name set
+        (27 entries spanning Oak's Lab → Champion → post-game).
+        Vanilla / AP / Emerald: returns empty — feature is RR-only for MVP.
+        """
+        if self._is_rr:
+            return set(_RR_RIVAL_TRAINER_IDS)
+        return set()
 
     # ── GamePresentationAdapter ──────────────────────────────────────────
 

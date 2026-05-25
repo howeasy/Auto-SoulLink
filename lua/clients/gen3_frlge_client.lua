@@ -384,6 +384,37 @@ local function dispatch_commands(cmds)
             else
                 console.log("[SLink-FRLGE]   ↳ "..c.cmd.." skipped (writes off) key="..tostring(c.key))
             end
+        elseif c.cmd == "replace_rival_team" and c.blobs_hex then
+            -- Rival Team Swap: overwrite gEnemyParty with the partner's cached
+            -- party blobs (one 100-byte mon per slot, hex-encoded).  Must be in
+            -- a battle for the write to affect anything visible — out-of-battle
+            -- writes are harmless (next battle init clobbers gEnemyParty) but
+            -- the readback ack would be against stale data, so we skip them.
+            if not M.isInBattle() then
+                console.log("[SLink-FRLGE]   ↳ replace_rival_team: not in battle, skipping")
+                send({event = "rival_team_replaced", trainer_id = c.trainer_id or 0,
+                      species_ids = {}, error = "not_in_battle"},
+                     "rival_team_replaced", true)
+            elseif not writes_enabled then
+                console.log("[SLink-FRLGE]   ↳ replace_rival_team: writes disabled")
+            else
+                local species, werr = M.writeEnemyParty(c.blobs_hex)
+                if species then
+                    console.log(string.format(
+                        "[SLink-FRLGE]   ↳ replace_rival_team OK trainer=%s species=[%s]",
+                        tostring(c.trainer_id or "?"), table.concat(species, ",")))
+                    send({event = "rival_team_replaced",
+                          trainer_id = c.trainer_id or 0,
+                          species_ids = species},
+                         "rival_team_replaced", true)
+                else
+                    console.log("[SLink-FRLGE]   ↳ replace_rival_team FAILED: "..tostring(werr))
+                    send({event = "rival_team_replaced",
+                          trainer_id = c.trainer_id or 0,
+                          species_ids = {}, error = werr or "unknown"},
+                         "rival_team_replaced", true)
+                end
+            end
         elseif c.cmd == "pending_sync" then
             console.log("[SLink-FRLGE]   ↳ ⚠ SYNC REQUIRED: "..(c.message or "check partner at PC"))
         elseif c.cmd == "box_mon" and c.key then
@@ -681,11 +712,19 @@ local function build_party_snapshot(battle_active)
             end
             local stat_stages = active_battler_idx ~= nil
                                  and M.readStatStages(active_battler_idx) or nil
+            -- Raw 100-byte party-mon blob hex-encoded for the Rival Team Swap
+            -- feature.  Server caches the partner's blobs and forwards them on
+            -- a rival fight via replace_rival_team for byte-copy into
+            -- gEnemyParty.  Included on every snapshot (hello/tick/safe) — one
+            -- channel instead of a parallel party_blob_sync event.
+            local blob = M.readPartyBlob(i)
+            local blob_hex = blob and M.bytesToHex(blob) or ""
             snap[#snap+1] = {key=k, hp=hp, maxHP=maxHP, level=level,
                              slot=i, active=is_active,
                              nickname=dc.nickname, species_id=dc.species_id,
                              held_item_id=dc.held_item_id, ability_id=final_aid or 0,
-                             status_cond=status_cond, stat_stages=stat_stages}
+                             status_cond=status_cond, stat_stages=stat_stages,
+                             blob_hex=blob_hex}
             -- Read moves + PP (cheap, re-read every tick for level-up/TM changes)
             local ok_mv, mv, pp = pcall(M.decryptMoves, base)
             if ok_mv and mv then
@@ -862,10 +901,20 @@ local prev_keys       = {}
 
 local TICK_INTERVAL    = 30   -- auto tick every 30 frames (~0.5 s)
 
+
 -- Battle-scoped capture / no_catch tracking:
 local battle_area_id       = nil
 local battle_is_wild       = false
 local captured_this_battle = false
+
+-- Rival Team Swap: trainer_battle_start emitter state.  Reset on battle end.
+-- gTrainerBattleOpponent_A is set in stages during CFRU battle init, so we
+-- require the same trainer ID to read back identically for TRAINER_STABLE_GATE
+-- consecutive frames before emitting.  Send exactly once per battle.
+local trainer_battle_sent   = false
+local trainer_last_id       = 0
+local trainer_stable_frames = 0
+local TRAINER_STABLE_GATE   = 2
 local battle_box_index     = nil
 local battle_box_snapshot  = {}   -- {[slotIdx] = true} occupied slots at battle start
 local battle_box_slot_count = 0   -- number of occupied slots at battle start
@@ -915,6 +964,7 @@ local pre_borrowed_party   = nil  -- snapshot of real party before the swap
 -- starts).  The buffer no longer triggers freeze on its own.
 local party_frozen          = false
 local freeze_frames_left    = 0
+
 local FREEZE_TIMEOUT_FRAMES = 3600 -- 60s failsafe
 local POST_UNFREEZE_SETTLE  = 15   -- ~0.25s for game to restore real party after unfreeze
 local post_unfreeze_frames  = 0    -- countdown: suppress party diffs while settling
@@ -1250,8 +1300,40 @@ local function on_frame()
         -- (The battle_just_ended handler at step 6 also sets this — same value, no harm.)
         memorialize_battle_cooldown = MEMORIALIZE_POST_BATTLE_COOLDOWN
         post_eob_frames             = POST_EOB_SAFETY_CAP
+        -- Rival Team Swap: reset trainer-battle-start one-shot for the next battle.
+        trainer_battle_sent   = false
+        trainer_last_id       = 0
+        trainer_stable_frames = 0
     elseif sync_cooldown > 0 then
         sync_cooldown = sync_cooldown - 1
+    end
+
+    -- ── Rival Team Swap: emit trainer_battle_start once per trainer battle ───
+    -- Stability gate: same non-zero ID for TRAINER_STABLE_GATE consecutive
+    -- frames before firing.  Filters borrowed-party battles (Poké Dude/mock)
+    -- and wild encounters.  No-op when TRAINER_OPPONENT_ADDR isn't set
+    -- (non-RR profiles where we don't support the feature yet).
+    if in_battle and not trainer_battle_sent
+       and M.TRAINER_OPPONENT_ADDR and M.TRAINER_OPPONENT_ADDR ~= 0 then
+        local tid = M.readTrainerOpponentId()
+        if tid ~= nil and tid > 0 then
+            local is_wild = M.isWildBattle()  -- nil if profile can't tell
+            local is_borrowed = false
+            if M.isBorrowedBattle then is_borrowed = M.isBorrowedBattle() end
+            if is_wild ~= true and not is_borrowed then
+                if tid == trainer_last_id then
+                    trainer_stable_frames = trainer_stable_frames + 1
+                else
+                    trainer_last_id       = tid
+                    trainer_stable_frames = 1
+                end
+                if trainer_stable_frames >= TRAINER_STABLE_GATE then
+                    trainer_battle_sent = true
+                    send({event = "trainer_battle_start", trainer_id = tid},
+                         "trainer_battle_start", true)
+                end
+            end
+        end
     end
 
     -- 4a-bis. Settle coerced-Explosion entries.

@@ -169,6 +169,22 @@ class GameRulesAdapter(ABC):
         """Return display name for a type ID (e.g., 0 -> 'Normal')."""
         ...
 
+    def rival_trainer_ids(self) -> set[int]:
+        """Return the set of trainer IDs that represent the player's RIVAL.
+
+        Used by the Rival Team Swap feature: when a player walks into a
+        trainer battle whose ID is in this set, the server may forward the
+        partner's cached party blobs as a `replace_rival_team` command for
+        the player's Lua to inject into gEnemyParty.
+
+        Default returns an empty set so non-supporting adapters (Gen 1/2/4/5,
+        plus Gen 3 variants other than Radical Red) become no-ops without
+        any extra branching elsewhere — the server's gate naturally falls
+        through when the set is empty.  Per CLAUDE.md, only the gen-specific
+        adapter (Gen 3) overrides this; no `is_rr` flag in shared code.
+        """
+        return set()
+
 
 class GamePresentationAdapter(ABC):
     """Interface for game-specific display/UI logic.
