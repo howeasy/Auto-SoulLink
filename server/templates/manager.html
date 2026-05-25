@@ -40,23 +40,35 @@
       <input type="text" placeholder="New run name…"
              x-model="newRunName"
              @keyup.enter="createRun()">
-      <div class="mgr-new-opts">
-        <label><input type="checkbox" x-model="newOpts.species_lock">
-          <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-dna"/></svg>
-          Species
-        </label>
-        <label><input type="checkbox" x-model="newOpts.gender_lock">
-          <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-gender"/></svg>
-          Gender
-        </label>
-        <label><input type="checkbox" x-model="newOpts.type_lock">
-          <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-type"/></svg>
-          Type
-        </label>
-        <label><input type="checkbox" x-model="newOpts.explode_mode">
-          <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-explode"/></svg>
-          Explode
-        </label>
+      <div class="mgr-new-opts-section">
+        <div class="mgr-new-opts-label">Link Clauses</div>
+        <div class="mgr-new-opts">
+          <label><input type="checkbox" x-model="newOpts.species_lock">
+            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-dna"/></svg>
+            Species Clause
+          </label>
+          <label><input type="checkbox" x-model="newOpts.gender_lock">
+            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-gender"/></svg>
+            Gender Clause
+          </label>
+          <label><input type="checkbox" x-model="newOpts.type_lock">
+            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-type"/></svg>
+            Type Clause
+          </label>
+        </div>
+      </div>
+      <div class="mgr-new-opts-section">
+        <div class="mgr-new-opts-label">Run Augmentations</div>
+        <div class="mgr-new-opts">
+          <label><input type="checkbox" x-model="newOpts.explode_mode">
+            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-explode"/></svg>
+            Explode Mode
+          </label>
+          <label><input type="checkbox" x-model="newOpts.rival_team_swap">
+            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-rival-swap"/></svg>
+            Rival Swap
+          </label>
+        </div>
       </div>
       <button class="mgr-create-btn" @click="createRun()">
         <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-plus"/></svg>
@@ -205,6 +217,12 @@
               Explode
             </span>
           </template>
+          <template x-if="current?.rival_team_swap">
+            <span class="mgr-badge mgr-badge-lock">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-rival-swap"/></svg>
+              Rival Swap
+            </span>
+          </template>
         </div>
 
         <template x-if="current?.last_event">
@@ -245,13 +263,104 @@
           <div class="mgr-preview-wrap">
             <div class="mgr-preview-head">
               <span class="mgr-section-label">Live status</span>
-              <a class="mgr-preview-pop" :href="statusUrl()" target="_blank" title="Pop out">
+              <a class="mgr-preview-pop" :href="statusUrl()" target="_blank" title="Open full dashboard">
                 <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-extlink"/></svg>
               </a>
             </div>
-            <iframe class="mgr-preview-iframe"
-                    :src="statusUrl()"
-                    :title="(current.name || current.run_id) + ' live status'"></iframe>
+            <div class="mgr-live-status">
+              <template x-if="!liveStatus">
+                <p class="mgr-live-empty" x-text="liveStatusError || 'Connecting…'"></p>
+              </template>
+              <template x-if="liveStatus">
+                <div>
+                  <template x-if="liveStatus.run_over">
+                    <div class="mgr-live-gameover">Game Over</div>
+                  </template>
+                  <div class="mgr-live-players">
+                    <template x-for="pid in ['a','b']" :key="pid">
+                      <div class="mgr-live-player"
+                           :class="liveStatus.players[pid].connected ? 'is-online' : 'is-offline'">
+                        <div class="mgr-live-player-head">
+                          <span class="mgr-live-dot"></span>
+                          <span class="mgr-live-name" x-text="liveStatus.players[pid].trainer_name || pid.toUpperCase()"></span>
+                          <span class="mgr-live-conn" x-text="liveStatus.players[pid].connected ? 'online' : 'offline'"></span>
+                        </div>
+                        <div class="mgr-live-row">
+                          <span class="mgr-live-area" x-text="liveStatus.players[pid].current_area_display || liveStatus.players[pid].current_area || '—'"></span>
+                        </div>
+                        <div class="mgr-live-row mgr-live-stats">
+                          <span title="Party — alive / total">
+                            <span class="mgr-live-stat-label">party</span>
+                            <span x-text="livePartyAlive(pid) + '/' + livePartySize(pid)"></span>
+                          </span>
+                          <span title="Pokéballs in bag">
+                            <span class="mgr-live-stat-label">balls</span>
+                            <span x-text="liveStatus.players[pid].ball_count"></span>
+                          </span>
+                          <span title="Badges earned">
+                            <span class="mgr-live-stat-label">badges</span>
+                            <span x-text="livePopCount(liveStatus.players[pid].badges)"></span>
+                          </span>
+                        </div>
+                        <div class="mgr-live-party" x-show="livePartyList(pid).length">
+                          <template x-for="mon in livePartyList(pid)" :key="mon.key">
+                            <div class="mgr-live-mon"
+                                 :class="{
+                                   'is-fainted': (mon.hp || 0) <= 0,
+                                   'is-active': mon.active
+                                 }">
+                              <span class="mgr-live-mon-name" x-text="mon.nickname || mon.species_name || '?'"></span>
+                              <span class="mgr-live-mon-lv" x-text="'L' + (mon.level || '?')"></span>
+                              <span class="mgr-live-mon-hpbar" :title="(mon.hp || 0) + '/' + (mon.maxHP || 0)">
+                                <span class="mgr-live-mon-hpfill"
+                                      :class="liveHpClass(mon)"
+                                      :style="'width:' + liveHpPct(mon) + '%'"></span>
+                              </span>
+                            </div>
+                          </template>
+                        </div>
+                        <template x-if="liveBattleActive(pid)">
+                          <div class="mgr-live-battle"
+                               :class="liveBattle(pid).is_trainer_battle ? 'is-trainer' : 'is-wild'">
+                            <div class="mgr-live-battle-head">
+                              <span class="mgr-live-battle-label">in battle</span>
+                              <span class="mgr-live-battle-opp" x-text="liveBattleOpponent(pid)"></span>
+                            </div>
+                            <template x-for="foe in liveBattleEnemies(pid)" :key="foe.species_id + '-' + foe.level">
+                              <div class="mgr-live-mon is-enemy">
+                                <span class="mgr-live-mon-name" x-text="foe.species_name || ('#' + foe.species_id)"></span>
+                                <span class="mgr-live-mon-lv" x-text="'L' + (foe.level || '?')"></span>
+                                <span class="mgr-live-mon-hpbar" :title="(foe.hp || 0) + '/' + (foe.maxHP || 0)">
+                                  <span class="mgr-live-mon-hpfill"
+                                        :class="liveHpClass(foe)"
+                                        :style="'width:' + liveHpPct(foe) + '%'"></span>
+                                </span>
+                              </div>
+                            </template>
+                          </div>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                  <div class="mgr-live-links">
+                    <span class="mgr-live-link-pill mgr-live-pill-alive"
+                          x-text="liveLinkCount('alive') + ' alive'"></span>
+                    <span class="mgr-live-link-pill mgr-live-pill-dead"
+                          x-text="liveLinkCount('dead') + ' dead'"></span>
+                    <span class="mgr-live-link-pill mgr-live-pill-mem"
+                          x-text="liveLinkCount('memorial') + ' memorial'"></span>
+                    <span class="mgr-live-link-pill mgr-live-pill-attempts"
+                          x-text="'#' + (liveStatus.attempts_count || 0)"></span>
+                  </div>
+                  <template x-if="liveLastEvent()">
+                    <div class="mgr-live-last">
+                      <span class="mgr-live-last-time" x-text="liveLastEventTime()"></span>
+                      <span class="mgr-live-last-text" x-text="liveLastEvent()"></span>
+                    </div>
+                  </template>
+                </div>
+              </template>
+            </div>
           </div>
         </template>
         <template x-if="current && current.status !== 'running'">
@@ -278,10 +387,21 @@ function runManager() {
     pinnedRunName: '',
     managerPort: window.SLINK_MANAGER_PORT,
     newRunName: '',
-    newOpts: { species_lock: false, gender_lock: false, type_lock: false, explode_mode: false },
+    newOpts: { species_lock: false, gender_lock: false, type_lock: false, explode_mode: false, rival_team_swap: false },
+    liveStatus: null,
+    liveStatusError: '',
+    _liveStatusInterval: null,
+    _liveStatusFetching: false,
+    _liveStatusForRun: null,
 
     get current() {
       return this.runs.find(r => r.run_id === this.active) || null;
+    },
+    get _liveStatusKey() {
+      // Stable identity for the live-status poll watcher.  Just (run_id|status)
+      // — refreshRuns() can replace runs[] freely without re-triggering.
+      var c = this.current;
+      return c ? (c.run_id + '|' + (c.status || '')) : '';
     },
     get groupedRuns() {
       var byStatus = { running: [], stopped: [], archived: [] };
@@ -314,10 +434,192 @@ function runManager() {
       // Soft auto-refresh once every 10s — re-fetch the run list to pick up
       // outside changes (PID death, new runs from another tab, etc.).
       setInterval(() => this.refreshRuns(), 10000);
+      // Live-status poll: drives the compact summary panel for the selected
+      // running run.  Watch a stable composite key so the periodic 10s
+      // refreshRuns() (which replaces runs[] with fresh object references)
+      // does NOT count as "current changed" and re-mount the panel.
+      this.$watch('_liveStatusKey', () => this._resetLiveStatus());
+      this._resetLiveStatus();
     },
 
     select(runId) {
       this.active = runId;
+    },
+
+    // ── Live status (compact summary, replaces full-page iframe) ──
+    _resetLiveStatus() {
+      // Idempotent: if the target run + status haven't actually changed,
+      // bail without tearing down the existing poll or clearing the cached
+      // data.  Alpine's $watch fires on dependency changes (e.g. the 10s
+      // refreshRuns() replacing runs[]), not strict value-equality, so
+      // _liveStatusKey evaluates to the same string but the watcher still
+      // ticks.  Without this guard, every refreshRuns() would null out
+      // liveStatus and re-mount the panel — the visible flicker.
+      var nextRun = this.current && this.current.status === 'running'
+        ? this.current.run_id : null;
+      if (nextRun === this._liveStatusForRun && this._liveStatusInterval) {
+        return;
+      }
+      this._liveStatusForRun = nextRun;
+      this.liveStatus = null;
+      this.liveStatusError = '';
+      if (this._liveStatusInterval) {
+        clearInterval(this._liveStatusInterval);
+        this._liveStatusInterval = null;
+      }
+      if (this._liveStatusForRun) {
+        this._fetchLiveStatus();
+        this._liveStatusInterval = setInterval(() => this._fetchLiveStatus(), 2500);
+      }
+    },
+    async _fetchLiveStatus() {
+      if (this._liveStatusFetching) return;
+      var runId = this._liveStatusForRun;
+      if (!runId || !this.current || this.current.run_id !== runId) return;
+      this._liveStatusFetching = true;
+      try {
+        // Same-origin proxy via the manager — avoids CORS against the run's
+        // dedicated HTTP port.  See server/manager.py:handle_run_live.
+        var url = '/api/runs/' + encodeURIComponent(runId) + '/live';
+        var res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        var json = await res.json();
+        // Drop stale responses if user switched runs mid-fetch.
+        if (this.current && this.current.run_id === runId) {
+          this._mergeLiveStatus(json);
+          this.liveStatusError = '';
+        }
+      } catch (e) {
+        this.liveStatusError = 'Could not reach run — ' + (e.message || e);
+      } finally {
+        this._liveStatusFetching = false;
+      }
+    },
+    _mergeLiveStatus(json) {
+      // Deep-merge new data into the existing reactive object instead of
+      // wholesale replacing it.  Replacement (even at one level) creates
+      // brand-new Alpine Proxies for every nested object, which re-runs
+      // every binding and forces x-for/x-if to tear down and re-mount
+      // their subtrees — that's the visible flicker.
+      // Per-property primitive writes only invalidate bindings that
+      // actually observe the changed value, so the DOM stays stable.
+      if (!this.liveStatus) {
+        this.liveStatus = json;
+        return;
+      }
+      this._deepMerge(this.liveStatus, json);
+    },
+    _deepMerge(target, source) {
+      // Primitives + arrays: overwrite (arrays via overwrite is fine; the
+      // x-for templates use :key for DOM reuse).
+      // Plain objects with the same key shape on both sides: recurse to
+      // preserve nested object identity.
+      // Also delete keys from target that are no longer in source — keeps
+      // stale entries (e.g. a vanished link) from sticking around.
+      for (var k in target) {
+        if (!(k in source)) delete target[k];
+      }
+      for (var k in source) {
+        var sv = source[k];
+        var tv = target[k];
+        var sObj = sv && typeof sv === 'object' && !Array.isArray(sv);
+        var tObj = tv && typeof tv === 'object' && !Array.isArray(tv);
+        if (sObj && tObj) {
+          this._deepMerge(tv, sv);
+        } else {
+          target[k] = sv;
+        }
+      }
+    },
+    livePartySize(pid) {
+      if (!this.liveStatus) return 0;
+      var det = this.liveStatus.players[pid].party_details || {};
+      return Object.keys(det).length;
+    },
+    livePartyAlive(pid) {
+      if (!this.liveStatus) return 0;
+      var det = this.liveStatus.players[pid].party_details || {};
+      var n = 0;
+      for (var k in det) { if ((det[k].hp || 0) > 0) n++; }
+      return n;
+    },
+    livePartyList(pid) {
+      // Ordered list of party mons.  party_keys preserves slot order; fall
+      // back to Object.keys iteration if the server didn't emit it.
+      if (!this.liveStatus) return [];
+      var p = this.liveStatus.players[pid] || {};
+      var det = p.party_details || {};
+      var order = p.party_keys && p.party_keys.length ? p.party_keys : Object.keys(det);
+      var out = [];
+      for (var i = 0; i < order.length; i++) {
+        var k = order[i];
+        if (det[k]) out.push(Object.assign({ key: k }, det[k]));
+      }
+      return out;
+    },
+    liveHpPct(mon) {
+      var max = mon.maxHP || 0;
+      if (max <= 0) return 0;
+      var hp = mon.hp || 0;
+      return Math.max(0, Math.min(100, Math.round(100 * hp / max)));
+    },
+    liveHpClass(mon) {
+      var p = this.liveHpPct(mon);
+      if (p <= 0)  return 'is-dead';
+      if (p <= 20) return 'is-low';
+      if (p <= 50) return 'is-mid';
+      return 'is-ok';
+    },
+    liveBattle(pid) {
+      if (!this.liveStatus) return null;
+      return (this.liveStatus.players[pid] || {}).battle_state || null;
+    },
+    liveBattleActive(pid) {
+      var b = this.liveBattle(pid);
+      return !!(b && b.in_battle);
+    },
+    liveBattleOpponent(pid) {
+      var b = this.liveBattle(pid);
+      if (!b) return '';
+      if (b.is_trainer_battle) {
+        var who = b.opponent_name || b.trainer_name || '';
+        var cls = b.opponent_class || '';
+        if (who && cls) return cls + ' ' + who;
+        return who || cls || ('trainer #' + (b.trainer_id || '?'));
+      }
+      return 'wild encounter';
+    },
+    liveBattleEnemies(pid) {
+      var b = this.liveBattle(pid);
+      if (!b || !Array.isArray(b.enemy_party)) return [];
+      // Compact view: just the lead (or both in doubles).
+      return b.enemy_party.slice(0, b.is_doubles ? 2 : 1);
+    },
+    livePopCount(bm) {
+      // Count set bits in a small bitmask (badges packed as bits).
+      var n = 0, x = bm | 0;
+      while (x) { n += x & 1; x >>>= 1; }
+      return n;
+    },
+    liveLinkCount(status) {
+      if (!this.liveStatus) return 0;
+      return (this.liveStatus.links || []).filter(l => l.status === status).length;
+    },
+    liveLastEvent() {
+      if (!this.liveStatus || !this.liveStatus.recent_events || !this.liveStatus.recent_events.length) return '';
+      var ev = this.liveStatus.recent_events[0];
+      return (ev.text || ev.type || '').slice(0, 80);
+    },
+    liveLastEventTime() {
+      if (!this.liveStatus || !this.liveStatus.recent_events || !this.liveStatus.recent_events.length) return '';
+      var ts = this.liveStatus.recent_events[0].ts || '';
+      try {
+        var d = new Date(ts);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+        }
+      } catch (_) {}
+      return ts.slice(-8);
     },
 
     statusUrl() {

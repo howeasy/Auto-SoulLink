@@ -77,10 +77,31 @@ body {
   font-family: inherit;
 }
 .mgr-new input[type="text"]:focus { outline: 2px solid var(--c-brand); }
+/* Stack of titled option groups under the new-run input.  Each section's
+   header reuses the rail-family-label visual treatment (uppercase, dim,
+   letter-spaced) so the sidebar's vertical typography stays consistent. */
+.mgr-new-opts-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mgr-new-opts-section + .mgr-new-opts-section { margin-top: 4px; }
+.mgr-new-opts-label {
+  font-size: 0.66em;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--c-dim);
+  font-weight: 700;
+  padding: 2px 0 1px;
+}
+/* Single-column option list inside each section.  Two-column at this
+   sidebar width forces every label (e.g. "Species Clause", "Explode Mode")
+   to wrap to a second line, which is taller and less readable than one
+   row per option. */
 .mgr-new-opts {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 2px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
   font-size: 0.8em;
   color: var(--c-dim);
 }
@@ -420,6 +441,253 @@ body {
   border: 0;
   background: var(--c-bg);
   display: block;
+}
+
+/* Compact live status panel — replaces the full-page iframe.  Reads the
+   run's /api/status every ~2.5s and renders just the connection +
+   high-level run metrics.  Full dashboard is one click away via the
+   pop-out link in the header. */
+.mgr-live-status {
+  padding: 14px 14px 12px;
+  background: var(--c-bg);
+  font-size: 0.92em;
+  color: var(--c-txt);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 140px;
+}
+.mgr-live-empty {
+  margin: 0;
+  color: var(--c-dim);
+  font-style: italic;
+  text-align: center;
+  padding: 24px 8px;
+}
+.mgr-live-gameover {
+  background: color-mix(in srgb, var(--c-dead) 30%, var(--c-bg));
+  color: var(--c-dead);
+  border: 1px solid color-mix(in srgb, var(--c-dead) 60%, var(--c-edge));
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.92em;
+}
+.mgr-live-players {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.mgr-live-player {
+  background: var(--c-card);
+  border: 1px solid var(--c-edge);
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mgr-live-player.is-online {
+  border-color: color-mix(in srgb, var(--c-alive) 55%, var(--c-edge));
+}
+.mgr-live-player.is-offline {
+  opacity: 0.75;
+}
+.mgr-live-player-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.mgr-live-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--c-dim);
+  flex-shrink: 0;
+}
+.mgr-live-player.is-online .mgr-live-dot {
+  background: var(--c-alive);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--c-alive) 70%, transparent);
+}
+.mgr-live-name {
+  font-weight: 700;
+  color: var(--c-txt);
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mgr-live-conn {
+  font-size: 0.78em;
+  color: var(--c-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.mgr-live-row {
+  font-size: 0.86em;
+  color: var(--c-dim);
+}
+.mgr-live-area {
+  color: var(--c-txt);
+}
+.mgr-live-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.mgr-live-stats > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.mgr-live-stat-label {
+  font-size: 0.78em;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--c-dim);
+}
+
+/* Per-player party list inside the live status panel.  One row per mon,
+   compact: nickname / level / HP bar.  Sprites omitted to keep the panel
+   short — the full dashboard (pop-out link) shows them. */
+.mgr-live-party {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--c-edge);
+}
+.mgr-live-mon {
+  display: grid;
+  grid-template-columns: 1fr auto 60px;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82em;
+  line-height: 1.1;
+}
+.mgr-live-mon.is-fainted {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.mgr-live-mon.is-active .mgr-live-mon-name {
+  font-weight: 700;
+  color: var(--c-brand);
+}
+.mgr-live-mon-name {
+  color: var(--c-txt);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mgr-live-mon-lv {
+  color: var(--c-dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.92em;
+}
+.mgr-live-mon-hpbar {
+  display: block;
+  height: 6px;
+  background: var(--c-edge);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.mgr-live-mon-hpfill {
+  display: block;
+  height: 100%;
+  transition: width 0.25s ease-out, background-color 0.25s ease-out;
+}
+.mgr-live-mon-hpfill.is-ok   { background: var(--c-alive); }
+.mgr-live-mon-hpfill.is-mid  { background: var(--c-warn, #d6a93b); }
+.mgr-live-mon-hpfill.is-low  { background: var(--c-dead); }
+.mgr-live-mon-hpfill.is-dead { background: var(--c-edge); }
+
+/* In-battle banner: opponent label + enemy mon strip in the player's card. */
+.mgr-live-battle {
+  margin-top: 4px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--c-brand) 35%, var(--c-edge));
+  background: color-mix(in srgb, var(--c-brand) 8%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.mgr-live-battle.is-trainer {
+  border-color: color-mix(in srgb, var(--c-dead) 45%, var(--c-edge));
+  background: color-mix(in srgb, var(--c-dead) 8%, transparent);
+}
+.mgr-live-battle-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.82em;
+}
+.mgr-live-battle-label {
+  font-size: 0.72em;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--c-dim);
+}
+.mgr-live-battle-opp {
+  color: var(--c-txt);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mgr-live-mon.is-enemy .mgr-live-mon-name {
+  color: var(--c-dead);
+}
+.mgr-live-links {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 0.86em;
+}
+.mgr-live-link-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--c-edge);
+  background: var(--c-card);
+  color: var(--c-dim);
+}
+.mgr-live-pill-alive {
+  color: var(--c-alive);
+  border-color: color-mix(in srgb, var(--c-alive) 55%, var(--c-edge));
+}
+.mgr-live-pill-dead {
+  color: var(--c-dead);
+  border-color: color-mix(in srgb, var(--c-dead) 55%, var(--c-edge));
+}
+.mgr-live-pill-mem {
+  color: var(--c-dim);
+}
+.mgr-live-pill-attempts {
+  margin-left: auto;
+  color: var(--c-brand);
+  border-color: color-mix(in srgb, var(--c-brand) 45%, var(--c-edge));
+}
+.mgr-live-last {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 0.84em;
+  color: var(--c-dim);
+  border-top: 1px solid var(--c-edge);
+  padding-top: 8px;
+}
+.mgr-live-last-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--c-txt);
+  flex-shrink: 0;
+}
+.mgr-live-last-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mgr-preview-empty {

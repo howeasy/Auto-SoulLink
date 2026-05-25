@@ -243,6 +243,8 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
         cmd.append("--type-clause")
     if run.get("explode_mode"):
         cmd.append("--explode-mode")
+    if run.get("rival_team_swap"):
+        cmd.append("--rival-team-swap")
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.DEVNULL,
@@ -374,6 +376,7 @@ def _adopt_orphans(runs: list[dict]) -> bool:
             "gender_lock":  bool(rules.get("gender_lock", False)),
             "type_lock":    bool(rules.get("type_lock", False)),
             "explode_mode": bool(rules.get("explode_mode", False)),
+            "rival_team_swap": bool(rules.get("rival_team_swap", False)),
         }
         runs.append(run)
         known_ids.add(run_id)  # avoid port collision across multiple orphans
@@ -424,6 +427,8 @@ def _render_cards(runs: list[dict], host: str) -> str:
             lock_badges += '<span class="lock-badge">Type</span>'
         if run.get("explode_mode"):
             lock_badges += '<span class="lock-badge">Explode</span>'
+        if run.get("rival_team_swap"):
+            lock_badges += '<span class="lock-badge">Rival Swap</span>'
 
         # Read game/rom_type from the run's links.json
         game_badge = ""
@@ -623,6 +628,7 @@ class RunManager:
             "gender_lock":  bool(body.get("gender_lock", False)),
             "type_lock":    bool(body.get("type_lock", False)),
             "explode_mode": bool(body.get("explode_mode", False)),
+            "rival_team_swap": bool(body.get("rival_team_swap", False)),
         }
         # Create data directory immediately
         os.makedirs(os.path.join(MANAGER_DIR, run_id), exist_ok=True)
@@ -835,6 +841,29 @@ class RunManager:
             log.debug(f"Proxy /api/status → run {active['run_id']} failed: {e}")
             return web.json_response(_EMPTY_STATUS)
 
+    async def handle_run_live(self, request: web.Request) -> web.Response:
+        """GET /api/runs/{run_id}/live — same-origin proxy to a specific run's
+        /api/status JSON.  Used by the manager detail-pane's compact live-status
+        panel so the browser doesn't hit cross-origin CORS against the run's
+        port.  Returns 404 if the run is unknown/stopped, 504 on timeout."""
+        run_id = request.match_info.get("run_id", "")
+        runs = _load_registry()
+        run = next((r for r in runs if r["run_id"] == run_id), None)
+        if run is None or run.get("status") != "running" or not run.get("http_port"):
+            return web.json_response({"error": "run not running"}, status=404)
+        url = f"http://127.0.0.1:{run['http_port']}/api/status"
+        try:
+            async with request.app["proxy_session"].get(
+                url, timeout=aiohttp.ClientTimeout(total=3)
+            ) as resp:
+                data = await resp.json(content_type=None)
+                return web.json_response(data)
+        except asyncio.TimeoutError:
+            return web.json_response({"error": "timeout"}, status=504)
+        except Exception as e:
+            log.debug(f"Proxy /api/runs/{run_id}/live failed: {e}")
+            return web.json_response({"error": str(e)}, status=502)
+
     async def handle_proxy_events(self, request: web.Request) -> web.StreamResponse:
         """GET /api/events — SSE ping stream that triggers overlay re-renders."""
         response = web.StreamResponse(headers={
@@ -892,6 +921,7 @@ async def main(host: str, port: int):
     app.router.add_post("/api/runs/{run_id}/archive", manager.handle_archive)
     app.router.add_post("/api/runs/{run_id}/delete",  manager.handle_delete)
     app.router.add_get("/api/runs/{run_id}/launcher/{player}", manager.handle_launcher)
+    app.router.add_get("/api/runs/{run_id}/live",     manager.handle_run_live)
 
     # Stream pin API
     app.router.add_get("/api/stream/pin",  manager.handle_stream_pin_status)
