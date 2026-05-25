@@ -17,7 +17,11 @@
               {{ lnk.a.sprite_html | safe }}
               <span class="lk-nm">{{ lnk.a.nickname or lnk.a.species_name or '—' }}</span>
             </div>
-            <span class="lk-div">◈</span>
+            <svg class="bl-chain" viewBox="0 0 36 16" aria-hidden="true"
+                 fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <path d="M 18 4 A 9 5.5 0 1 1 18 12"/>
+              <ellipse cx="12" cy="8" rx="9" ry="5.5"/>
+            </svg>
             <div class="lk-half r">
               <span class="lk-nm">{{ lnk.b.nickname or lnk.b.species_name or '—' }}</span>
               {{ lnk.b.sprite_html | safe }}

@@ -433,6 +433,7 @@ img.bdg-img[src*="funnotbun"]:not([data-bg-removed]) {
 .lk-half.r .lk-nm { text-align: right; }
 .lk-lv { font-size: .82em; opacity: .5; flex-shrink: 0; white-space: nowrap; }
 .lk-div { flex-shrink: 0; font-size: 1.1em; opacity: .3; color: var(--c-gold); }
+.lk-row .bl-chain { width: clamp(16px, 1.8vmin, 22px); opacity: .45; }
 
 /* ── Overlay shell ──────────────────────────────────────────
  * OBS browser sources mount a single overlay page; everything lives inside

@@ -20,7 +20,11 @@
         <div class="enc-nm">{{ last.a.nickname or last.a.species_name or '—' }}{% if last.a.shiny %}<svg class="shiny-star inline-ico" aria-hidden="true"><use href="#i-sparkle"/></svg>{% endif %}</div>
         {% if last.a.level %}<div class="enc-lv">Lv&nbsp;{{ last.a.level }}</div>{% endif %}
       </div>
-      <span class="lk-div">◈</span>
+      <svg class="bl-chain" viewBox="0 0 36 16" aria-hidden="true"
+           fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+        <path d="M 18 4 A 9 5.5 0 1 1 18 12"/>
+        <ellipse cx="12" cy="8" rx="9" ry="5.5"/>
+      </svg>
       <div class="enc-nms" style="text-align:right">
         <div class="enc-nm">{% if last.b.shiny %}<svg class="shiny-star inline-ico" aria-hidden="true"><use href="#i-sparkle"/></svg>{% endif %}{{ last.b.nickname or last.b.species_name or '—' }}</div>
         {% if last.b.level %}<div class="enc-lv">Lv&nbsp;{{ last.b.level }}</div>{% endif %}

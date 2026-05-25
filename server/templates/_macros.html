@@ -138,7 +138,11 @@
       <span class="lk-nm">{{ link.a.nickname or link.a.species_name or '???' }}</span>
       {% if link.a.level %}<span class="lk-lv">L{{ link.a.level }}</span>{% endif %}
     </div>
-    <span class="lk-div">⇆</span>
+    <svg class="lk-div bl-chain" viewBox="0 0 36 16" aria-hidden="true"
+         fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+      <path d="M 18 4 A 9 5.5 0 1 1 18 12"/>
+      <ellipse cx="12" cy="8" rx="9" ry="5.5"/>
+    </svg>
     <div class="lk-half r">
       {{ (link.b.sprite_html or '') | safe }}
       <span class="lk-nm">{{ link.b.nickname or link.b.species_name or '???' }}</span>
