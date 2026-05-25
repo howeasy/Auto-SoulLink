@@ -7,6 +7,7 @@ data/memorial.json
 data/events.json
 data/runs/
 data/backups/
+data/*.log
 *.State
 *.sav
 # ROM files — never commit these (copyright, repo size). Covers the common
