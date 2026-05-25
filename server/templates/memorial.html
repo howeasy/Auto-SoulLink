@@ -24,16 +24,16 @@
 
     .wall { display: flex; flex-wrap: wrap; gap: 1.2em; justify-content: center; }
     .tomb { background: var(--c-card); border: 1px solid var(--c-edge); border-radius: 10px;
-            width: 300px; padding: 1.2em 1em 1em; position: relative;
-            transition: border-color 0.3s; }
+            width: var(--size-tomb); padding: var(--space-4) var(--space-3) var(--space-3);
+            position: relative; transition: border-color 0.3s; }
     .tomb:hover { border-color: var(--c-brand); }
     .tomb-header { display: flex; align-items: center; gap: 0.3em; justify-content: center;
                    margin-bottom: 0.5em; }
     .tomb-area { color: var(--c-info); font-size: 0.82em; text-align: center; margin-bottom: 0.8em; }
     .tomb-pair { display: flex; justify-content: space-between; gap: 0.8em; }
     .tomb-mon { flex: 1; text-align: center; }
-    .tomb-mon img { width: 56px; height: 56px; image-rendering: pixelated;
-                    filter: grayscale(70%) brightness(0.7); }
+    .tomb-mon img { width: calc(var(--scale-step) * 2.4); height: calc(var(--scale-step) * 2.4);
+                    image-rendering: pixelated; filter: grayscale(70%) brightness(0.7); }
     .tomb-mon .nick { color: var(--c-txt); font-size: 0.95em; font-weight: 600; margin-top: 2px; }
     .tomb-mon .species { color: var(--c-dim); font-size: 0.8em; }
     .tomb-mon .level { color: var(--c-dim); font-size: 0.78em; opacity: .8; }

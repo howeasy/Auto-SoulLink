@@ -11,20 +11,20 @@ body {
    * picker (see slink.css). The trailing fallback chain stays as a guard
    * for browsers that ignore the variable. */
   font-family: var(--font-ui), 'Segoe UI', system-ui, sans-serif;
-  /* Bumped from browser default (16px) — the rail + detail panes felt
-   * cramped, particularly the rail-item names and meta rows. Mirrors the
-   * dashboard's same-shell-of-text-everywhere principle so the manager
-   * doesn't look like a different product. */
-  font-size: 18px;
+  /* Body font flows from --scale-step (slink.css), same primitive the
+   * dashboard + sidebar use. Replaces the prior 2200/2800/3600px step
+   * @media jumps with smooth growth across the viewport range. */
+  font-size: var(--scale-step);
   line-height: 1.5;
 }
-@media (min-width: 2200px) { body { font-size: 21px; } }
-@media (min-width: 2800px) { body { font-size: 24px; } }
-@media (min-width: 3600px) { body { font-size: 28px; } }
 
 .mgr-launcher {
   display: grid;
-  grid-template-columns: 292px minmax(0, 1fr);
+  /* Manager rail is a hair wider than the dashboard sidebar so long run
+   * names fit comfortably. Scoped override of --size-rail keeps the
+   * naming consistent (one token shape, page-specific multiplier). */
+  --size-rail-mgr: calc(var(--scale-step) * 13);
+  grid-template-columns: var(--size-rail-mgr) minmax(0, 1fr);
   min-height: 100vh;
   max-height: 100vh;
   overflow: hidden;
@@ -412,14 +412,14 @@ body {
 }
 .mgr-preview-iframe {
   width: 100%;
-  height: 540px;
-  min-height: 420px;
+  /* Height scales with viewport via --scale-step. At step=22px (≈1920px
+   * viewport) ≈ 484px; at step=36px (≈4600px+) ≈ 792px. The min-height
+   * keeps it usable on narrow desktops without needing a @media rule. */
+  height: calc(var(--scale-step) * 22);
+  min-height: var(--size-iframe-min);
   border: 0;
   background: var(--c-bg);
   display: block;
-}
-@media (max-width: 1280px) {
-  .mgr-preview-iframe { height: 480px; }
 }
 
 .mgr-preview-empty {

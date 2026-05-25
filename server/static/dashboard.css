@@ -20,41 +20,31 @@ body {
    * the picker in the sidebar. Keeping it variable means the toggle hits
    * every body-scoped text rule in one stroke. */
   font-family: var(--font-ui);
-  font-size: 22px;
+  /* Body font + rail width both flow from --scale-step (slink.css :root).
+   * The token is `clamp(1rem, .52vw + .64rem, 2.25rem)` — equivalent to
+   * the prior literal `clamp(22px, .52vw + 12px, 36px)` but now shared
+   * across dashboard / sidebar / manager / memorial so every page reads
+   * at the same size at any viewport. */
+  font-size: var(--scale-step);
   line-height: 1.65;
   background: var(--c-bg);
   color: var(--c-txt);
   margin: 0;
   padding: 0;
-  /* Two-column shell: fixed nav rail + scrollable content pane. The rail
+  /* Two-column shell: nav rail + scrollable content pane. The rail
    * lives outside #content so SSE-triggered morph swaps never touch it.
-   * The .dash-main pane caps at 2400px on ultrawide so 4K monitors still
-   * read well — see .dash-main rule below. */
+   * Both rail width and content cap derive from --scale-step so they
+   * scale smoothly with the viewport. */
   display: grid;
-  grid-template-columns: 230px minmax(0, 1fr);
+  grid-template-columns: var(--size-rail) minmax(0, 1fr);
   min-height: 100vh;
-}
-/* High-resolution scaling — on QHD+ monitors the default 22px feels small
- * (user noted needing 125% zoom at 5120×2160). Bump the base size up so
- * sprites + text grow proportionally without browser zoom. */
-@media (min-width: 2200px) {
-  body { font-size: 25px; }
-}
-@media (min-width: 2800px) {
-  body { font-size: 28px; }
-}
-@media (min-width: 3600px) {
-  body { font-size: 32px; }
-}
-@media (min-width: 4600px) {
-  body { font-size: 36px; }
 }
 /* Collapsed sidebar mode — user toggle persists in localStorage; see
  * dashboard.js. The brand title, page port, and item labels hide, leaving
  * a slim icon-only rail that recovers content width. The hamburger toggle
  * also hides (logo doubles as the click target) so the logo can sit
- * perfectly centered in the 60px column. */
-body.dash-collapsed { grid-template-columns: 60px minmax(0, 1fr); }
+ * perfectly centered in the collapsed column. */
+body.dash-collapsed { grid-template-columns: var(--size-rail-collapsed) minmax(0, 1fr); }
 body.dash-collapsed .dash-sidebar-title,
 body.dash-collapsed .dash-side-label,
 body.dash-collapsed .dash-sidebar-toggle,
@@ -577,10 +567,12 @@ body.dash-collapsed .font-switcher--in-sidebar .font-pills {
 }
 
 .dash-main {
-  padding: 1em 1.6em 1.4em;
+  padding: var(--space-4) var(--space-5) var(--space-5);
   min-width: 0;
-  max-width: 2400px;
+  width: 100%;
+  max-width: var(--size-content-cap);
   margin: 0 auto;
+  box-sizing: border-box;
 }
 .dash-main > .phase-banner {
   margin-bottom: 0.8em;
@@ -668,16 +660,6 @@ tr.dash-search-hide { display: none !important; }
 /* On narrow desktop widths, collapse the sidebar to an icon-only strip so
  * the dashboard content still gets the full window. Below 700px the rail
  * stacks above content (tablet / portrait monitor). */
-@media (max-width: 1100px) {
-  body { grid-template-columns: 56px minmax(0, 1fr); }
-  .dash-sidebar-brand { padding: 12px 8px; justify-content: center; }
-  .dash-sidebar-title,
-  .dash-sidebar-foot .dash-sidebar-clock,
-  .dash-side-label { display: none; }
-  .dash-side-item { justify-content: center; padding: 9px 6px; }
-  .dash-sidebar-nav { padding: 8px 4px; }
-  .dash-sidebar-foot { justify-content: center; padding: 10px 6px; }
-}
 @media (max-width: 700px) {
   body { grid-template-columns: 1fr; }
   .dash-sidebar {
@@ -695,20 +677,244 @@ tr.dash-search-hide { display: none !important; }
   .dash-side-item[aria-current="page"] { border-left-color: transparent; border-bottom-color: var(--item-accent); }
   .dash-sidebar-foot { width: 100%; border-top: 1px solid color-mix(in srgb, var(--c-brand) 18%, var(--c-edge)); }
   .dash-sidebar-foot .dash-sidebar-clock { display: inline; }
+  /* At true mobile widths the held-item line is information density that
+   * crowds the Pokémon cell — drop it. (Moved from the deleted 650px
+   * @media block during the scaling-system refactor.) */
+  .player-card .held-item { display: none; }
 }
 
+/* ── Players-section header + combined-view toggle ───────────────────── */
+.players-hdr {
+  display: flex;
+  align-items: center;
+  gap: 0.8em;
+  margin-bottom: 0.5em;
+}
+.players-hdr h2 { margin: 0; }
+/* Segmented toggle (Split | Combined) — both options always visible, the
+ * active one is brand-highlighted. Matches the dashboard's themed
+ * encounter-filter pill aesthetic. Active state is driven by body.lp-view
+ * so the buttons update in lockstep with the actual view. */
+.lp-toggle-group {
+  display: inline-flex;
+  border: 1px solid color-mix(in srgb, var(--c-brand) 35%, var(--c-edge));
+  border-radius: 6px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--c-brand) 4%, var(--c-card));
+}
+.lp-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  font-family: inherit;
+  font-size: 0.78em;
+  font-weight: 600;
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  color: var(--c-dim);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  letter-spacing: 0.03em;
+}
+.lp-toggle-btn + .lp-toggle-btn {
+  border-left: 1px solid color-mix(in srgb, var(--c-brand) 30%, var(--c-edge));
+}
+.lp-toggle-btn:hover { color: var(--c-brand); }
+/* Active state — split is active by default; flips when body.lp-view set. */
+.lp-tog-split-btn {
+  color: var(--c-brand);
+  background: color-mix(in srgb, var(--c-brand) 18%, var(--c-card));
+}
+body.lp-view .lp-tog-split-btn {
+  color: var(--c-dim);
+  background: transparent;
+}
+body.lp-view .lp-tog-combined-btn {
+  color: var(--c-brand);
+  background: color-mix(in srgb, var(--c-brand) 18%, var(--c-card));
+}
+
+/* ── Linked-party combined widget ───────────────────────────────────── */
+/* body.lp-view toggled by SLinkDash.setLpView/toggleLpView, persisted in
+ * localStorage, immune to HTMX morph resets (body is outside #content). */
+.lp-widget { display: none; margin-bottom: 1.5em; }
+body.lp-view .lp-widget { display: block; }
+body.lp-view .players-grid { display: none; }
+/* Dual-side card header — trainer A | chain mid | trainer B (mirrored).
+ * The 3-col grid keeps the chain perfectly centered regardless of name lengths. */
+.lp-card-hdr {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 1em;
+  margin-bottom: 0.8em;
+  padding-bottom: 0.6em;
+  border-bottom: 1px solid color-mix(in srgb, var(--c-edge) 55%, transparent);
+}
+.lp-hdr-side { min-width: 0; }
+.lp-hdr-side-a { text-align: left; }
+.lp-hdr-side-b { text-align: right; }
+.lp-player-name {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  color: var(--c-brand);
+  font-weight: 600;
+  font-size: 1em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lp-hdr-side-b .lp-player-name { justify-content: flex-end; }
+.lp-hdr-meta {
+  font-size: 0.78em;
+  color: var(--c-txt);
+  opacity: 0.9;
+  margin-top: 0.15em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lp-hdr-mid {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  color: var(--c-brand);
+  flex-shrink: 0;
+}
+.lp-hdr-mid .bl-chain { width: clamp(20px, 1.5vmin, 28px); opacity: .65; }
+.lp-hdr-label {
+  font-size: 0.75em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--c-brand);
+}
+
+/* Comprehensive symmetric LP table — 5 columns: Mon | HP | Area | HP | Mon.
+ * Mon cells stack 3 lines: nickname / Lv + held item / type chips + ability.
+ * That folds the Type+Ability column into the Mon cell where it visually
+ * belongs and frees up width for long nicknames. Area column is narrow —
+ * still thematic (chain + label) but condensed to save horizontal space. */
+/* LP table KEEPS table-layout:fixed — the symmetric mirror needs the
+ * chain column to sit at the exact horizontal center regardless of
+ * which side has longer nicknames. The pinned hp / center widths below
+ * make the two Mon columns balance. */
+.lp-table { table-layout: fixed; }
+.lp-table tr.lp-row.lp-fnt { opacity: 0.45; }
+.lp-table tbody tr {
+  border-bottom: 1px solid color-mix(in srgb, var(--c-edge) 28%, transparent);
+}
+.lp-table tbody tr:last-child { border-bottom: none; }
+.lp-table th, .lp-table td { padding: 8px 10px; vertical-align: middle; }
+.lp-table th { font-size: 0.78em; color: var(--c-dim); font-weight: 600; }
+/* Column-width pins (fixed layout) — content-box widths. */
+.lp-table th.lp-hp-h  { width: calc(var(--scale-step) * 4.5); }
+.lp-table th.lp-ctr-h { width: calc(var(--scale-step) * 3); text-align: center; }
+.lp-table th.lp-th-r  { text-align: right; }
+
+/* Center column — chain + area condensed. Still thematic but narrow. */
+.lp-table td.lp-ctr { padding: 4px 2px; }
+.lp-center-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1em;
+  color: var(--c-brand);
+}
+.lp-center-cell .bl-chain { width: clamp(16px, 1.2vmin, 22px); }
+.lp-area {
+  font-size: 0.68em;
+  color: var(--c-dim);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  line-height: 1.2;
+}
+
+/* Mon cell — sprite + stacked text:
+ *   line 1: nickname (mon_label with shiny/gender + active icon)
+ *   line 2: Lv + type chips (compact dim sub-line)
+ *   line 3: ITEM:  {held item}     (display:block via .held-item)
+ *   line 4: ABILITY: {ability}     (display:block via .lp-mon-abl, parallel)
+ * B-side mirrors via row-reverse so sprites bracket the chain center. */
+.lp-mon-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.lp-mc-b { flex-direction: row-reverse; text-align: right; }
+.lp-mon-spr { flex-shrink: 0; }
+.lp-mon-txt { min-width: 0; flex: 1; overflow: hidden; }
+.lp-mon-cell .lp-nick {
+  font-size: 0.92em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.25;
+}
+.lp-mon-cell .lp-mon-sub {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 0.76em;
+  color: var(--c-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+  margin-top: 1px;
+}
+.lp-mc-b .lp-mon-sub { justify-content: flex-end; }
+.lp-mon-cell .lp-lv-inline {
+  color: var(--c-txt);
+  font-weight: 600;
+}
+.lp-mon-cell .lp-sep {
+  color: var(--c-dim);
+  opacity: 0.55;
+  font-weight: 600;
+}
+/* Compact type chips inside the sub-line so they sit alongside Lv. */
+.lp-mon-sub .type-chip { font-size: 0.92em; padding: 1px 5px; }
+
+/* ABILITY: line — visually parallel to .held-item (which gets ITEM:
+ * prefix via the global dashboard rule). Same block treatment + dim
+ * label so users read item/ability as a metadata pair. */
+.lp-mon-abl {
+  color: color-mix(in srgb, var(--c-txt) 80%, var(--c-pend));
+  font-size: 0.80em;
+  display: block;
+  margin-top: 0.1em;
+}
+.lp-mon-abl::before {
+  content: "ABILITY: ";
+  color: var(--c-dim);
+  font-weight: 600;
+}
+
+
+/* B-side cells right-align so the table reads as a mirror. */
+.lp-table td.lp-mon-b { text-align: right; }
+.lp-table td.lp-hp-b  { text-align: right; }
+
+/* Shared hp-num token used in compact contexts (kept for legacy callers). */
+.hp-num { font-size: 0.78em; color: var(--c-dim); white-space: nowrap; flex-shrink: 0; }
+
+/* Auto-fit grid replaces the prior 1900px @media breakpoint. Each card
+ * needs roughly `--scale-step * 36` to read comfortably (the party
+ * table inside wants ~720-800px at body=22px). Below that, the grid
+ * collapses to 1 column automatically; above, it lays out side-by-side.
+ * Smooth at every viewport, no snap-jump. */
 .players-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1.4em;
-  margin-bottom: 1.5em;
-}
-/* Stack the two player cards on narrow desktop widths so the inner party
- * tables fit without overflowing. 2-col needs ~800px per card to comfortably
- * fit the party table; sidebar (~320px) + main padding + gap eat ~200px, so
- * 2-col cards only fit cleanly above ~1900px viewport. Keep stacked below. */
-@media (max-width: 1900px) {
-  .players-grid { grid-template-columns: 1fr; }
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--scale-step) * 36)), 1fr));
+  gap: var(--space-5);
+  margin-bottom: var(--space-5);
 }
 .player-card {
   flex: 1 1 0;
@@ -728,22 +934,67 @@ tr.dash-search-hide { display: none !important; }
 }
 /* Party / box tables inside player cards need a bit more breathing room
  * than the encounter table's tight rows. Sprites set the row height; the
- * extra horizontal padding keeps text from butting against the sprite. */
-.player-card table { font-size: 0.85em; }
-.player-card td   { padding: 9px 12px; }
+ * extra horizontal padding keeps text from butting against the sprite.
+ *
+ * table-layout: auto (default) lets each column shrink to its content so
+ * "Lv" doesn't reserve 80px to display "27" while Pokémon clips. The
+ * `table { width: 100%; max-width: 100%; }` cap keeps the table inside
+ * the card; the long flex cells (Pokémon, Partner, Ability) get
+ * text-overflow: ellipsis so they truncate cleanly when room is tight
+ * instead of forcing the table wider than its container. */
+.player-card table { font-size: 0.85em; width: 100%; max-width: 100%; }
+.player-card td   { padding: 9px 12px; overflow: hidden; text-overflow: ellipsis; }
 .player-card th   { padding: 9px 12px; }
+.player-card td > div { max-width: 100%; overflow: hidden; }
+/* Stacked HP cell — value + status on top line, bar full-width underneath.
+ * Used in party / foe / LP tables wherever an HP cell is rendered. The
+ * shared .hp-bar-bg from slink.css is inline-block 70px by default; here
+ * we promote it to a block element filling the column so the bar reads
+ * as a unit under its value. */
+.hp-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.hp-stack-val {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.85em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hp-stack .hp-bar-bg {
+  display: block;
+  width: 100%;
+  max-width: calc(var(--scale-step) * 6);
+}
+
+/* Light column hints for split-view tables under auto layout. The Lv
+ * column gets center-alignment so "27" reads as a label; the Ability
+ * column gets a max-width to prevent long names like "WaterCompaction"
+ * from monopolizing the table. Everything else is pure content-sized. */
+.party-table .col-lv,
+.foe-table   .col-lv,
+.box-table   .col-lv   { text-align: center; }
+.party-table .col-abl,
+.foe-table   .col-abl,
+.box-table   .col-abl  { max-width: 12em; }
+/* Allow stat-stage chips to wrap within the HP cell so many simultaneous
+ * boosts don't force the column (and thus the whole table) wider. */
+.player-card .stat-stages-row { white-space: normal; flex-wrap: wrap; }
 /* Dashboard sprites in party / box tables scale a touch larger on QHD+
  * (slink.css caps them at 58px which feels small at 5K). */
-@media (min-width: 2200px) {
-  .player-card .mon-sprite,
-  .player-card img.mon-sprite { width: clamp(48px, 4vmin, 72px); }
-  .foe-table .mon-sprite,
-  .foe-table img.mon-sprite { width: clamp(40px, 3.5vmin, 64px); }
-}
-@media (min-width: 3600px) {
-  .player-card .mon-sprite,
-  .player-card img.mon-sprite { width: clamp(56px, 3vmin, 96px); }
-}
+/* Sprite sizes flow from --size-sprite-table (slink.css). The token's
+ * clamp covers 40-72px across the viewport range, replacing the prior
+ * 2200/3600px step @media blocks with smooth growth. Foe sprites stay
+ * a touch smaller (85% scale) so the foe table reads as secondary. */
+.player-card .mon-sprite,
+.player-card img.mon-sprite { width: var(--size-sprite-table); }
+.foe-table .mon-sprite,
+.foe-table img.mon-sprite { width: calc(var(--size-sprite-table) * 0.85); }
 /* The mon-name + sprite cell uses inline-flex internally; force its
  * children to stay on a single line so long species names like
  * "Charmander" don't wrap to "Charmande/r" at narrow card widths. */
@@ -757,29 +1008,11 @@ tr.dash-search-hide { display: none !important; }
 .player-card td { white-space: nowrap; word-break: normal; overflow-wrap: normal; }
 .player-card th { white-space: nowrap !important; word-break: keep-all !important; }
 .player-card td:nth-last-child(1) { white-space: normal; }   /* Partner cell wraps */
-.player-card td:first-child { min-width: 180px; }
+.player-card td:first-child { /* min-width removed — table-layout: fixed gives ~30% of card width */ }
 .player-card td.area { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Progressive shrink at narrow viewports so party/box/foe tables fit
  * inside the card without spilling past the right edge. (Cards stack
  * 1-col below 1500px, so viewport width ≈ card content width here.) */
-@media (max-width: 1100px) {
-  .player-card table { font-size: 0.78em; }
-  .player-card td, .player-card th { padding: 7px 9px; }
-  .player-card td:first-child { min-width: 0; }
-}
-@media (max-width: 800px) {
-  .player-card table { font-size: 0.7em; }
-  .player-card td, .player-card th { padding: 5px 6px; }
-  .player-card .mon-sprite,
-  .player-card img.mon-sprite { width: clamp(32px, 5.5vmin, 44px); }
-}
-@media (max-width: 650px) {
-  .player-card table { font-size: 0.6em; }
-  .player-card td, .player-card th { padding: 3px 4px; }
-  .player-card .mon-sprite,
-  .player-card img.mon-sprite { width: clamp(24px, 5vmin, 36px); }
-  .player-card .held-item { display: none; }
-}
 .player-card.online  { border-color: var(--c-alive); }
 .player-card.offline { border-color: color-mix(in srgb, var(--c-brand) 22%, var(--c-edge)); opacity: 0.85; }
 .card-hdr { display: flex; justify-content: space-between; align-items: flex-start; }

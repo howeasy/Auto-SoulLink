@@ -20,21 +20,19 @@ body {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: 230px minmax(0, 1fr);
+  /* Rail width sourced from slink.css --size-rail so calc / status /
+   * manager all share the same rail size at any viewport. */
+  grid-template-columns: var(--size-rail) minmax(0, 1fr);
   min-height: 100vh;
 }
-body.dash-collapsed { grid-template-columns: 60px minmax(0, 1fr); }
+body.dash-collapsed { grid-template-columns: var(--size-rail-collapsed) minmax(0, 1fr); }
 
-/* Calc body zoom — bump the damage-calculator content by 10%. The calc's
- * Bootstrap layout uses em-relative + fixed-px values; CSS `zoom` is the
- * cleanest way to scale the lot proportionally without redoing every
- * Bootstrap rule. Scoped to `.dash-main` so the sidebar rail stays the
- * same size it is on every other page (consistency across the navigation).
- * `body.dark-theme` is the calc's body class — limits the rule to the
- * calc page so dashboard/manager/etc. stay 1:1. */
-body.dark-theme .dash-main {
-  zoom: 1.1;
-}
+/* Calc opts out of the viewport-driven --scale-step ramp by pinning the
+ * token to Bootstrap's native 14px (declared in slink.css under the
+ * `body.dark-theme` selector). Calc's sidebar still scales smoothly
+ * because slink.css re-asserts --scale-step inside .dash-sidebar on the
+ * calc page. The prior `zoom: 1.1` hack lived here — removed now that
+ * the token system gives us a cleaner opt-out. */
 
 /* ── Sidebar shell ────────────────────────────────────────────────────── */
 .dash-sidebar {
@@ -55,22 +53,16 @@ body.dark-theme .dash-main {
     2px 0 10px rgba(0, 0, 0, .35);
   z-index: 30;
   /* `--font-ui` flips between Pixelify and system-ui via the sidebar
-   * font picker (see slink.css). Sidebar uses its own font-size scaling
-   * (below) so the calc body keeps its 14px even when the sidebar grows. */
+   * font picker (see slink.css). Font size sourced from --scale-step so
+   * the sidebar matches the dashboard at every viewport. On the calc
+   * page (body.dark-theme) slink.css re-asserts --scale-step inside the
+   * sidebar specifically so calc's body keeps its native Bootstrap size
+   * while the rail still grows to match the rest of the product. */
   font-family: var(--font-ui);
-  /* Mirrors the dashboard's body font-size scaling so the sidebar rail
-   * matches across every page that loads it (status, manager, calc,
-   * memorial, debug). Set ON the sidebar instead of `body` so calc's
-   * Bootstrap-driven body keeps its 14px em-base while the rail still
-   * grows to match the rest of the product on QHD/4K monitors. */
-  font-size: 22px;
+  font-size: var(--scale-step);
   line-height: 1.4;
   color: var(--c-txt);
 }
-@media (min-width: 2200px) { .dash-sidebar { font-size: 25px; } }
-@media (min-width: 2800px) { .dash-sidebar { font-size: 28px; } }
-@media (min-width: 3600px) { .dash-sidebar { font-size: 32px; } }
-@media (min-width: 4600px) { .dash-sidebar { font-size: 36px; } }
 .dash-sidebar-brand {
   display: flex;
   align-items: center;

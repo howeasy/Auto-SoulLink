@@ -220,6 +220,15 @@ if (window._slinkDashInit) {
 
   window._slinkEncSort = bindHeaders;
   bindHeaders();
+  // Idiomorph reorders rows to match the server's default ordering on every
+  // 2 s poll. refreshClientUI re-sorts on htmx:afterSettle, but settle fires
+  // ~20 ms after swap — long enough for the browser to paint the unsorted
+  // state, which reads as a flicker while a sort is active. Re-apply
+  // synchronously in afterSwap (same task as the morph, before paint), same
+  // pattern as the search filter above.
+  document.body.addEventListener('htmx:afterSwap', function() {
+    if (sortCol >= 0) applySort();
+  });
 })();
 
 
@@ -692,6 +701,43 @@ if (window._slinkDashInit) {
   apply(read());
   window.SLinkDash = Object.assign(window.SLinkDash || {}, {
     toggleSidebar: toggle,
+  });
+})();
+
+
+// ── Linked-party combined view toggle ────────────────────────────────────
+// Same body-class pattern as the sidebar — immune to HTMX morph resets.
+(function() {
+  var KEY = 'slink-lp-view';
+  function apply(on) {
+    document.body.classList.toggle('lp-view', on);
+  }
+  function read() {
+    try { return window.localStorage.getItem(KEY) === '1'; }
+    catch (_) { return false; }
+  }
+  function write(v) {
+    try { window.localStorage.setItem(KEY, v ? '1' : '0'); }
+    catch (_) {}
+  }
+  function toggle() {
+    var next = !document.body.classList.contains('lp-view');
+    apply(next);
+    write(next);
+  }
+  function setView(on) {
+    var v = !!on;
+    apply(v);
+    write(v);
+  }
+  document.body.addEventListener('htmx:afterSettle', function() { apply(read()); });
+  window.addEventListener('storage', function(ev) {
+    if (ev.key === KEY) apply(ev.newValue === '1');
+  });
+  apply(read());
+  window.SLinkDash = Object.assign(window.SLinkDash || {}, {
+    toggleLpView: toggle,
+    setLpView: setView,
   });
 })();
 
