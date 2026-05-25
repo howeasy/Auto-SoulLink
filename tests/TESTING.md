@@ -473,7 +473,7 @@ Run through the steps below **in order**. Each step depends on the previous.
 ## Unit Tests (pytest — no emulator required)
 
 ```bash
-pytest tests/unit/ -v                                # all 1072 tests
+pytest tests/unit/ -v                                # all 1115 tests
 pytest tests/unit/test_state.py -v                   # 276 tests (incl. tick reconciliation)
 pytest tests/unit/test_gen3_adapter.py -v            # 208 tests
 pytest tests/unit/test_gen4_adapter.py -v            # 100 tests
@@ -632,6 +632,48 @@ A comprehensive audit of the Gen 3 sync codebase verified that all high-risk des
 | Press F9 with any mon in party slot 0 | `✓ memorialize: <key> → box13 s0` in console |
 | Party slot 0 is cleared and compacted | Slot removed; party count decremented |
 | Box 13 slot 0 contains the moved mon | Verify in BizHawk RAM watch |
+
+---
+
+## Test 5 — Rival Team Swap (Radical Red only, RAM Write)
+
+**Scripts:** `lua/tests/test_rival_team_swap_inject.lua` (single-instance isolation harness)  
+**Emulators:** **One** is enough for Phase 0. **⚠ Writes to RAM — save a BizHawk state first.** Writes only touch `gEnemyParty` (transient EWRAM), so no save corruption — but you'll lose your current battle state if you reset.
+
+### Phase 0 — Isolation harness (no server, no partner)
+
+Load `test_rival_team_swap_inject.lua` from the BizHawk Lua console with Radical Red running.
+
+| Key | Action |
+|---|---|
+| F5 | Snapshot `gPlayerParty` → write hex blobs to `lua/tests/output/last_party_snapshot.json` |
+| F6 | Inject the last F5 snapshot (or live party) into `gEnemyParty` — use in any battle |
+| F7 | Inject a hardcoded 6-mon synthetic team (Charizard L50, Blastoise L50, Venusaur L50, Pikachu L50, Snorlax L50, Mewtwo L50) |
+| F8 | Readback diff — compares `M.readEnemyParty` against the most recent injection |
+
+**Pass criteria:**
+1. F5 in the overworld writes `last_party_snapshot.json` with one entry per occupied slot; each `blob_hex` is exactly 200 characters.
+2. F7 in a wild Rattata/Pidgey battle visibly switches the enemy's sprite/level to Charizard L50 within one frame.
+3. F8 prints `[T-RS] readback PASS (species=[6,9,3,25,143,150])` after F7.
+4. F6/F7 outside battle log `not in battle — write skipped` (no crash, no save corruption).
+5. F6/F7 in a Poké Dude tutorial / borrowed-party battle log `borrowed-party battle — write skipped`.
+
+**FAIL:** F7 visual swap doesn't fire → wrong `ENEMY_BASE` for the current profile. Confirm console line `profile: PARTY_BASE=0x... ENEMY_BASE=0x... CFRU_NO_ENCRYPT=true` shows on script load.  
+**FAIL:** F8 reports `readback FAIL` → CFRU_NO_ENCRYPT not true OR substruct order rotated by PID. Confirm RR ROM, not vanilla.
+
+### Phases 1-3 — End-to-end with server + partner
+
+Once Phase 0 passes, the full pipeline is testable through Test 4 (`lua/slink.lua` on both BizHawks) with `python -m server.server` running. Steps:
+
+1. **Phase 1 — Plumbing.** Both clients connected, both with a non-empty party. Dashboard at http://localhost:8080/ shows a `<details>` panel "Rival Team Swap — partner team cache & auto-trigger" listing each player's cached blob count and species chips. Cache repopulates within ~0.5 s of any party-composition change (level up, mon swap, deposit/withdraw).
+2. **Phase 2 — Manual inject.** Click "Inject [partner]'s team into [self]'s battle" while in any battle. Rival's lead Pokémon visibly switches within ~1 frame. Lua console: `↳ replace_rival_team OK trainer=... species=[...]`.
+3. **Phase 3 — Auto-trigger.** Toggle "Auto-trigger on rival battles" ON (default). Walk into any Rival fight on either player (Oak's Lab onward — 27 IDs total spanning early/mid/late game). The rival's team auto-replaces with the partner's current party without any click. Lua console: `trainer_battle_start trainer_id=... is_rival=true` then `replace_rival_team OK ...`. Server `data/slink.log` confirms: `[a] trainer_battle_start trainer_id=325 is_rival=True` / `queued replace_rival_team (..., source=auto)`. Toggle OFF → original rival team appears.
+
+**Negative paths to verify:**
+- Partner offline (B disconnected) → A walks into a Rival fight → no swap; A fights the original rival. Server log: `auto-trigger skipped: partner 'b' has no cached party blobs`.
+- Non-rival trainer (e.g. Bug Catcher) → no swap.
+- Vanilla / AP ROM loaded → adapter returns empty rival set → never fires (Lua still emits the event; server logs `is_rival=False`).
+- BizHawk reset mid-battle after a swap → next battle init clobbers `gEnemyParty`; no save corruption.
 
 ---
 

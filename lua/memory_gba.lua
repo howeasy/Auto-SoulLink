@@ -1584,6 +1584,212 @@ function M.readEnemyParty()
     return result
 end
 
+-- ── Rival-team-swap helpers (Phase 0 isolation harness + Phase 1+ runtime) ────
+
+-- Reads a party slot's raw 100-byte struct as an array {[1..100] = u8}.
+-- Returns nil if the slot is empty (no hasSpecies flag).
+function M.readPartyBlob(slot)
+    local base = M.PARTY_BASE + slot * M.MON_SIZE
+    if not M.slotOccupied(base) then return nil end
+    local bytes = {}
+    for i = 0, M.MON_SIZE - 1 do
+        bytes[i + 1] = mem_r8(base + i)
+    end
+    return bytes
+end
+
+-- Hex-encode a u8 array (1-indexed). Lowercase, no separators.
+function M.bytesToHex(bytes)
+    local parts = {}
+    for i = 1, #bytes do parts[i] = fmt("%02x", bytes[i]) end
+    return table.concat(parts)
+end
+
+-- Decode a hex string to a u8 array (1-indexed). Returns nil, errMsg on bad input.
+function M.hexToBytes(s)
+    if type(s) ~= "string" then return nil, "not a string" end
+    if (#s % 2) ~= 0 then return nil, "odd-length hex" end
+    local bytes = {}
+    for i = 1, #s, 2 do
+        local b = tonumber(s:sub(i, i + 1), 16)
+        if not b then return nil, "non-hex character at " .. tostring(i) end
+        bytes[#bytes + 1] = b
+    end
+    return bytes
+end
+
+-- Repopulates gBattleMons[battler_idx] from gEnemyParty[party_slot].
+-- The engine caches species, ability, types, stats, moves, IVs, hp, level,
+-- maxHP, item, status, personality, and OTID per-battler when a mon is sent
+-- out — these are read DIRECTLY from gBattleMons during the turn, NOT
+-- re-fetched from gEnemyParty.  After writeEnemyParty changes the underlying
+-- party slot, the active foe's battle-mon cache is stale; this function
+-- mirrors what SendOutPokemon does, copying the fields that drive ability
+-- text, type effectiveness, damage calc, and HP bar.
+--
+-- Stat stages are reset to neutral (6) because they're tied to the original
+-- mon's turns on the field; a fresh team should not inherit them.
+local function _refreshBattleMonFromPartyAddr(battler_idx, pbase)
+    if not M.BATTLE_MONS_ADDR or M.BATTLE_MONS_ADDR == 0 then return end
+    if pbase == nil then return end
+    local bbase = M.BATTLE_MONS_ADDR + battler_idx * M.BATTLE_MON_SIZE
+
+    -- Species (substruct 0/Growth handles CFRU encryption transparently).
+    local ok_s, species = pcall(M.decryptSpecies, pbase)
+    if not ok_s or not species or species == 0 then return end
+
+    -- Held item from Growth substruct.
+    local held_item = 0
+    do local ok, v = pcall(M.decryptHeldItem, pbase); if ok and v then held_item = v end end
+
+    -- Moves + PP from Attacks substruct.
+    local moves, pp = {0,0,0,0}, {0,0,0,0}
+    do local ok, m, p = pcall(M.decryptMoves, pbase); if ok and m then moves, pp = m, (p or pp) end end
+
+    -- ppBonuses from Growth substruct.
+    local ppb = 0
+    do local ok, v = pcall(M.decryptPpBonuses, pbase); if ok and v then ppb = v end end
+
+    -- Ability via existing gBaseStats lookup (handles CFRU's hiddenAbility bit).
+    local ability = 0
+    do local ok, v = pcall(M.getAbilityId, pbase); if ok and v then ability = v end end
+
+    -- Types: gBaseStats[species].type1/type2 at +0x06/+0x07.
+    local type1, type2 = 0, 0
+    if M.BASESTATS_ADDR then
+        local entry = M.BASESTATS_ADDR + species * M.BASESTATS_ENTRY_SIZE
+        type1 = mem_r8(entry + 0x06)
+        type2 = mem_r8(entry + 0x07)
+    end
+
+    -- Species + stats (atk/def/spd/spA/spD at battle +0x02..+0x0B from party +0x5A..+0x63).
+    memory.write_u16_le(bbase + 0x00, species)
+    memory.write_u16_le(bbase + 0x02, mem_r16(pbase + 0x5A))
+    memory.write_u16_le(bbase + 0x04, mem_r16(pbase + 0x5C))
+    memory.write_u16_le(bbase + 0x06, mem_r16(pbase + 0x5E))
+    memory.write_u16_le(bbase + 0x08, mem_r16(pbase + 0x60))
+    memory.write_u16_le(bbase + 0x0A, mem_r16(pbase + 0x62))
+    -- Moves
+    for i = 1, 4 do
+        memory.write_u16_le(bbase + 0x0C + (i - 1) * 2, moves[i] or 0)
+    end
+    -- IVs+abilityHidden dword (Misc substruct +4).
+    memory.write_u32_le(bbase + 0x14, mem_r32(pbase + M.OFF_SUBSTRUCT + 3 * 12 + 4))
+    -- Reset stat stages to neutral (6 = NORMAL) across all 7 slots.
+    for i = 0, 6 do
+        mem_w8(bbase + 0x18 + i, 6)
+    end
+    -- Ability (SLink-verified offset +0x20 for RR/CFRU; same as the reader at
+    -- gen3_frlge_client.lua tick code that pulls foe_ability from this byte).
+    mem_w8(bbase + 0x20, ability)
+    mem_w8(bbase + 0x21, type1)
+    mem_w8(bbase + 0x22, type2)
+    -- PP
+    for i = 1, 4 do
+        mem_w8(bbase + 0x24 + (i - 1), pp[i] or 0)
+    end
+    -- HP / level / maxHP / item — engine reads these from gBattleMons for HUD,
+    -- damage formula's maxHP cap, and item-effect triggers (Sitrus Berry etc).
+    memory.write_u16_le(bbase + 0x28, mem_r16(pbase + M.OFF_HP))
+    mem_w8           (bbase + 0x2A, mem_r8(pbase + M.OFF_LEVEL))
+    memory.write_u16_le(bbase + 0x2C, mem_r16(pbase + M.OFF_MAX_HP))
+    memory.write_u16_le(bbase + 0x2E, held_item)
+    -- ppBonuses (used by PP-Up display + max-PP recalc on Ether/etc).
+    mem_w8(bbase + 0x3A, ppb)
+    -- Status1 (sleep/poison/etc).
+    memory.write_u32_le(bbase + M.BATTLE_MON_STATUS_OFF, mem_r32(pbase + M.OFF_STATUS))
+    -- Personality + OTID (gender display, shiny check, ability roll for Trace etc).
+    memory.write_u32_le(bbase + M.BATTLE_MON_PERS_OFF, mem_r32(pbase + M.OFF_PERSONALITY))
+    memory.write_u32_le(bbase + M.BATTLE_MON_OTID_OFF, mem_r32(pbase + M.OFF_OTID))
+end
+
+-- Refreshes gBattleMons for every currently active ENEMY battler (battler 1
+-- in singles; 1 + 3 in doubles).  Looks up gBattlerPartyIndexes to find which
+-- gEnemyParty slot each battler points at, then mirrors that slot's fields
+-- into the battle-mon cache.  Safe to call when not in a battle (no-op).
+function M.refreshActiveEnemyBattlers()
+    if not M.isInBattle() then return end
+    if not M.BATTLER_PARTY_INDEXES_ADDR or M.BATTLER_PARTY_INDEXES_ADDR == 0 then return end
+    if not M.ENEMY_BASE or M.ENEMY_BASE == 0 then return end
+    local idx1 = memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR + 2)  -- battler 1 = enemy lead
+    if idx1 < 6 then
+        _refreshBattleMonFromPartyAddr(1, M.ENEMY_BASE + idx1 * M.MON_SIZE)
+    end
+    if M.BATTLERS_COUNT_ADDR and mem_r8(M.BATTLERS_COUNT_ADDR) >= 4 then
+        local idx3 = memory.read_u16_le(M.BATTLER_PARTY_INDEXES_ADDR + 6)  -- battler 3 = enemy partner
+        if idx3 < 6 then
+            _refreshBattleMonFromPartyAddr(3, M.ENEMY_BASE + idx3 * M.MON_SIZE)
+        end
+    end
+end
+
+-- Overwrites gEnemyParty with the provided list of 100-byte mon blobs.
+-- Accepts either a list of u8-arrays or a list of hex strings (auto-decoded).
+-- For RR/CFRU the party-mon layout is byte-for-byte identical to enemy-mon
+-- layout (CFRU_NO_ENCRYPT true), so a raw memcpy is sufficient — no substruct
+-- math, no PID rotation, no stat recompute, no AI re-init.  Unused slots beyond
+-- #blobs have maxHP zeroed (CFRU sometimes doesn't update gEnemyPartyCount, so
+-- the engine scans until maxHP==0 per the comment at readEnemyParty above).
+-- ENEMY_COUNT_ADDR is also updated for engines that do read it.
+-- Returns species_id list (read back after write) on success, or nil, errMsg.
+-- Caller is expected to have already verified isInBattle() — writing outside
+-- of a battle is harmless (the next battle init clobbers gEnemyParty) but is
+-- never the intended use.
+function M.writeEnemyParty(blobs)
+    if not M.ENEMY_BASE or M.ENEMY_BASE == 0 then
+        return nil, "no ENEMY_BASE for current profile"
+    end
+    if type(blobs) ~= "table" or #blobs == 0 then
+        return nil, "empty blobs list"
+    end
+    if #blobs > 6 then return nil, "max 6 mons" end
+    -- Normalize: accept hex strings or u8 arrays.
+    local norm = {}
+    for i, blob in ipairs(blobs) do
+        if type(blob) == "string" then
+            local arr, err = M.hexToBytes(blob)
+            if not arr then return nil, fmt("blob %d: %s", i, err) end
+            blob = arr
+        end
+        if type(blob) ~= "table" or #blob ~= M.MON_SIZE then
+            return nil, fmt("blob %d: expected %d bytes, got %s",
+                i, M.MON_SIZE, type(blob) == "table" and tostring(#blob) or type(blob))
+        end
+        norm[i] = blob
+    end
+    -- Write each blob to gEnemyParty[i-1].
+    for i, blob in ipairs(norm) do
+        local base = M.ENEMY_BASE + (i - 1) * M.MON_SIZE
+        for j = 1, M.MON_SIZE do
+            mem_w8(base + j - 1, blob[j])
+        end
+    end
+    -- Zero maxHP on remaining slots so CFRU's scan-until-maxHP==0 terminates.
+    for slot = #norm, 5 do
+        local base = M.ENEMY_BASE + slot * M.MON_SIZE
+        mem_w8(base + M.OFF_MAX_HP,     0)
+        mem_w8(base + M.OFF_MAX_HP + 1, 0)
+    end
+    -- Update gEnemyPartyCount for engines that do read it.
+    if M.ENEMY_COUNT_ADDR and M.ENEMY_COUNT_ADDR ~= 0 then
+        mem_w8(M.ENEMY_COUNT_ADDR, #norm)
+    end
+    -- The engine caches species, ability, types, stats, moves, IVs, hp, level,
+    -- maxHP, item, status, PID, OTID in gBattleMons per-battler.  Without this
+    -- refresh, the active foe keeps the original rival's ability/moves/stats
+    -- even though gEnemyParty now holds the partner's mon — the sprite swaps
+    -- but combat reads the stale cache.  Mirrors what SendOutPokemon does.
+    pcall(M.refreshActiveEnemyBattlers)
+    -- Readback: collect species IDs so the caller can ack/verify.
+    local species = {}
+    for i = 1, #norm do
+        local base = M.ENEMY_BASE + (i - 1) * M.MON_SIZE
+        local ok, sid = pcall(M.decryptSpecies, base)
+        species[i] = (ok and sid) or 0
+    end
+    return species
+end
+
 -- ── Party ↔ Box sync helpers ──────────────────────────────────────────────────
 
 -- Returns the party-only stat fields for slot (needed to restore after box retrieval).
