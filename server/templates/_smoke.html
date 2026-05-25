@@ -30,7 +30,8 @@
     /* Memorial component CSS — duplicated from memorial.html so the
        tombstone macro renders correctly under /memorial?_smoke=1. */
     .tomb { background: var(--c-card); border: 1px solid var(--c-edge); border-radius: 10px;
-            width: 300px; padding: 1.2em 1em 1em; position: relative; }
+            width: var(--size-tomb); padding: var(--space-4) var(--space-3) var(--space-3);
+            position: relative; }
     .tomb-area { color: var(--c-info); font-size: 0.82em; text-align: center; margin-bottom: 0.8em; }
     .tomb-pair { display: flex; justify-content: space-between; gap: 0.8em; }
     .tomb-mon { flex: 1; text-align: center; }

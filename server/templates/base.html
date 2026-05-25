@@ -26,7 +26,7 @@
      sidebar renders at its final width on first paint. Without this, the
      sidebar would flash full-width while dashboard.js (defer) waits for
      parse to complete. #}
-  <script>try{if(localStorage.getItem('slink-sidebar-collapsed')==='1')document.body.classList.add('dash-collapsed');var f=localStorage.getItem('slink-font');document.body.classList.add('font-'+(f==='classic'?'classic':'pixelify'));}catch(_){}</script>
+  <script>try{if(localStorage.getItem('slink-sidebar-collapsed')==='1')document.body.classList.add('dash-collapsed');if(localStorage.getItem('slink-lp-view')==='1')document.body.classList.add('lp-view');var f=localStorage.getItem('slink-font');document.body.classList.add('font-'+(f==='classic'?'classic':'pixelify'));}catch(_){}</script>
   {# Shared inline-SVG sprite — defines every <symbol id="i-..."/> the rest
      of the page references via <use href="#i-..."/>. Loaded once per page
      so dashboard / manager / memorial / overlay templates all have the

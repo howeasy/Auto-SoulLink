@@ -2839,8 +2839,28 @@ class SLinkServer:
         # launcher's per-overlay config panel so the status page stays focused
         # on read-only state for the run.
 
-        # ── Players (side-by-side cards) ─────────────────────────────────────
-        parts.append('<h2>Players</h2><div class="players-grid">')
+        # ── Players (side-by-side cards or combined linked-party view) ─────────
+        # body.lp-view is toggled by SLinkDash.setLpView(on) in dashboard.js,
+        # persisted in localStorage, immune to HTMX morph resets. The
+        # segmented control shows both options at once so the alternative
+        # view is always discoverable; the active one is brand-highlighted.
+        _lp_toggle = (
+            '<div class="lp-toggle-group" role="tablist" aria-label="Player view mode">'
+            '<button type="button" class="lp-toggle-btn lp-tog-split-btn"'
+            ' onclick="window.SLinkDash&&window.SLinkDash.setLpView(false)"'
+            ' title="Show each player in their own card">Split</button>'
+            '<button type="button" class="lp-toggle-btn lp-tog-combined-btn"'
+            ' onclick="window.SLinkDash&&window.SLinkDash.setLpView(true)"'
+            ' title="Show both parties unified in one linked-party table">'
+            '<svg class="inline-ico" aria-hidden="true"><use href="#i-link"/></svg>'
+            ' Combined</button>'
+            '</div>'
+        )
+        parts.append(
+            '<div class="players-section">'
+            f'<div class="players-hdr"><h2>Players</h2>{_lp_toggle}</div>'
+            '<div class="players-grid">'
+        )
         ROM_LABEL = {
             "firered": "FireRed",
             "leafgreen": "LeafGreen",
@@ -2970,7 +2990,7 @@ class SLinkServer:
                 parts.append(f'<h4 style="margin:0 0 0.3em"><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> IN BATTLE &mdash; {battle_lbl}{new_enc_badge}{doubles_chip}</h4>')
                 enemy_party = bs.get("enemy_party", [])
                 if enemy_party:
-                    parts.append(f'<table class="foe-table"><tr><th>Foe</th><th>Lv</th><th>HP</th><th>Type</th>{"<th>Ability</th>" if has_abilities else ""}</tr>')
+                    parts.append(f'<table class="foe-table"><tr><th>Foe</th><th class="col-lv">Lv</th><th class="col-hp">HP</th><th class="col-type">Type</th>{"<th class=\"col-abl\">Ability</th>" if has_abilities else ""}</tr>')
                     for ei, em in enumerate(enemy_party):
                         esid   = em.get("species_id", 0)
                         elv    = em.get("level", 0)
@@ -2991,12 +3011,16 @@ class SLinkServer:
                         pct    = max(0, min(100, int(ehp / emaxHP * 100))) if emaxHP else 0
                         bar_cls = "hp-high" if pct > 50 else ("hp-mid" if pct > 20 else "hp-low")
                         hp_bar = (
-                            f'<div class="hp-bar-bg">'
-                            f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
-                            f'</div>'
+                            f'<div class="hp-stack">'
+                            f'<div class="hp-stack-val">'
                             f'<span class="dim">{ehp}/{emaxHP}</span>'
                             + _status_icon_html(esc)
                             + (active and _stat_stages_html(em.get("stat_stages")) or "")
+                            + f'</div>'
+                            f'<div class="hp-bar-bg">'
+                            f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
+                            f'</div>'
+                            f'</div>'
                         )
                         foe_cls = "fainted" if ehp == 0 else ("active-foe" if active else "")
                         active_marker = '<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> ' if active else ""
@@ -3095,12 +3119,12 @@ class SLinkServer:
             if party_keys:
                 q = p["queued"]
                 q_str = f'<span class="warn">{q} queued</span>' if q > 0 else ""
-                abl_hdr = '<th>Ability</th>' if has_abilities else ''
+                abl_hdr = '<th class="col-abl">Ability</th>' if has_abilities else ''
                 # Link column dropped from the dashboard — link status is now
                 # carried by the Partner cell's tone (alive / pending / dim).
                 # Keeps the party table narrow enough to never trip a
                 # horizontal scrollbar at desktop widths.
-                parts.append(f'<table><thead><tr><th>Pokémon</th><th>Lv</th><th>HP</th><th>Type</th>{abl_hdr}<th>Partner</th></tr></thead><tbody>')
+                parts.append(f'<table class="party-table"><thead><tr><th>Pokémon</th><th class="col-lv">Lv</th><th class="col-hp">HP</th><th class="col-type">Type</th>{abl_hdr}<th>Partner</th></tr></thead><tbody>')
                 for key in party_keys:
                     detail      = p["party_details"].get(key, {})
                     level       = detail.get("level", 0)
@@ -3131,12 +3155,16 @@ class SLinkServer:
                     status_cond = detail.get("status_cond", 0)
                     is_active   = detail.get("active", False)
                     hp_cell = (
-                        f'<div class="hp-bar-bg">'
-                        f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
-                        f'</div>'
+                        f'<div class="hp-stack">'
+                        f'<div class="hp-stack-val">'
                         f'<span class="dim">{hp}/{maxhp}</span>'
                         + _status_icon_html(status_cond)
                         + (is_active and _stat_stages_html(detail.get("stat_stages")) or "")
+                        + f'</div>'
+                        f'<div class="hp-bar-bg">'
+                        f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
+                        f'</div>'
+                        f'</div>'
                     )
                     type_cell = _type_badges_html(sid, adapter=self.adapter)
                     abl_name = detail.get("ability_name", "")
@@ -3240,7 +3268,7 @@ class SLinkServer:
             ]
             if boxes:
                 parts.append('<h3 style="margin-top:0.8em;font-size:0.95em">PC Boxes</h3>')
-                parts.append(f'<table><thead><tr><th>Box</th><th>Slot</th><th>Lv</th><th>Pokémon</th><th>Type</th>{"<th>Ability</th>" if has_abilities else ""}<th>Partner</th></tr></thead><tbody>')
+                parts.append(f'<table class="box-table"><thead><tr><th>Box</th><th>Slot</th><th class="col-lv">Lv</th><th>Pokémon</th><th class="col-type">Type</th>{"<th class=\"col-abl\">Ability</th>" if has_abilities else ""}<th>Partner</th></tr></thead><tbody>')
                 for bentry in boxes:
                     b_sid     = bentry.get("species_id", 0)
                     b_gender  = self.adapter.gender_from_key(bentry.get("key", ""), b_sid)
@@ -3361,6 +3389,214 @@ class SLinkServer:
 
             parts.append("</div>")  # player-card
         parts.append("</div>")  # players-grid
+
+        # ── Linked-party combined widget ─────────────────────────────────────
+        # Comprehensive table that unifies both parties into ONE card.
+        # Each row = one alive linked pair where both mons are in party.
+        # Symmetric mirror: A info | chain+area center | B info reversed.
+        _CHAIN = (
+            '<svg class="bl-chain" viewBox="0 0 36 16" aria-hidden="true"'
+            ' fill="none" stroke="currentColor" stroke-width="2.2"'
+            ' stroke-linecap="round">'
+            '<path d="M 18 4 A 9 5.5 0 1 1 18 12"/>'
+            '<ellipse cx="12" cy="8" rx="9" ry="5.5"/>'
+            '</svg>'
+        )
+        a_party_keys = set(d["players"]["a"].get("party_keys", []))
+        b_party_keys = set(d["players"]["b"].get("party_keys", []))
+        a_det = d["players"]["a"].get("party_details", {}) or {}
+        b_det = d["players"]["b"].get("party_details", {}) or {}
+        def _lp_mon_cell(det: dict, lnk: dict, side: str, key: str) -> str:
+            """Sprite + stacked text:
+                line 1: nickname (with active/shiny/gender)
+                line 2: Lv + type chips (compact)
+                line 3: ITEM: {held item} (block, dashboard-style prefix)
+                line 4: ABILITY: {ability name} (block, parallel to ITEM)
+            B-side mirrors via row-reverse on the parent. Ability gets the
+            same label-prefix treatment as held items so the two read as a
+            consistent metadata pair."""
+            nick = det.get("nickname") or lnk.get(f"{side}_nickname") or "???"
+            sid  = det.get("species_id") or lnk.get(f"{side}_species_id") or 0
+            gender = det.get("gender") or self.adapter.gender_from_key(key, sid)
+            sprite_html = det.get("sprite_html") or lnk.get(f"{side}_sprite_html") or ""
+            is_active = det.get("active", False)
+            active_pfx = ('<svg class="inline-ico" aria-hidden="true">'
+                          '<use href="#i-swords"/></svg> ' if is_active else '')
+            entry_x = s._key_index.get(key)
+            mi = (entry_x.a if side == "a" else entry_x.b) if entry_x else None
+            is_shiny = key in s.bonus_keys.get(side, set()) or bool(mi and mi.is_shiny)
+            name_html = mon_label(key, nick, sid, gender, shiny=is_shiny)
+
+            # Sub-line: Lv · type chips (· divider matches dashboard convention)
+            lv = det.get("level") or lnk.get(f"{side}_level") or 0
+            lv_html = f'<span class="lp-lv-inline">Lv {lv}</span>' if lv else ''
+            types_html = _type_badges_html(sid, adapter=self.adapter)
+            sep_html = '<span class="lp-sep">&middot;</span>' if (lv_html and types_html) else ''
+            sub_line = (f'<div class="lp-mon-sub">{lv_html}{sep_html}{types_html}</div>'
+                        if (lv_html or types_html) else "")
+
+            # Block lines — each on its own row, dashboard-style label prefix
+            item_id = det.get("held_item_id", 0)
+            item_str = self.adapter.item_name(item_id)
+            item_html = (f'<span class="held-item">{html.escape(item_str)}</span>'
+                         if item_str else "")
+            if has_abilities:
+                abl_name = det.get("ability_name", "")
+                abl_id = det.get("ability_id", 0)
+                abl_desc = self.adapter.ability_description(abl_id) if abl_id else ""
+                abl_html = (f'<span class="lp-mon-abl" title="{html.escape(abl_desc)}">{html.escape(abl_name)}</span>'
+                            if abl_name else '')
+            else:
+                abl_html = ''
+
+            return (
+                f'<div class="lp-mon-cell lp-mc-{side}">'
+                + (f'<div class="lp-mon-spr">{sprite_html}</div>' if sprite_html else '')
+                + f'<div class="lp-mon-txt">'
+                + f'<div class="lp-nick">{active_pfx}{name_html}</div>'
+                + sub_line
+                + item_html
+                + abl_html
+                + f'</div>'
+                + f'</div>'
+            )
+
+
+        def _lp_hp_cell(det: dict) -> str:
+            hp = int(det.get("hp", 0) or 0)
+            mx = int(det.get("maxHP", 0) or 0)
+            pct = max(0, min(100, int(hp / mx * 100))) if mx else 0
+            bar_cls = "hp-high" if pct > 50 else ("hp-mid" if pct > 20 else "hp-low")
+            sc = det.get("status_cond", 0)
+            return (
+                f'<div class="hp-stack">'
+                f'<div class="hp-stack-val">'
+                f'<span class="dim">{hp}/{mx}</span>'
+                + _status_icon_html(sc)
+                + f'</div>'
+                f'<div class="hp-bar-bg">'
+                f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
+                f'</div>'
+                f'</div>'
+            )
+
+
+        lp_rows: list[str] = []
+        for _lnk in d.get("links", []):
+            # Include alive AND dead pairs (dead = fainted but not yet
+            # memorialized — still in party). The party-key check below
+            # excludes memorialized pairs (those leave the party slot).
+            if _lnk.get("status") == "memorial":
+                continue
+            _ak = _lnk.get("a_key", "")
+            _bk = _lnk.get("b_key", "")
+            if _ak not in a_party_keys or _bk not in b_party_keys:
+                continue
+            _ad = a_det.get(_ak) or {}
+            _bd = b_det.get(_bk) or {}
+            _a_fnt = int(_ad.get("hp", 1) or 0) == 0
+            _b_fnt = int(_bd.get("hp", 1) or 0) == 0
+            _row_cls = " lp-fnt" if (_a_fnt and _b_fnt) else ""
+
+            _a_mon  = _lp_mon_cell(_ad, _lnk, "a", _ak)
+            _b_mon  = _lp_mon_cell(_bd, _lnk, "b", _bk)
+            _a_hp   = _lp_hp_cell(_ad)
+            _b_hp   = _lp_hp_cell(_bd)
+            _area = html.escape(_lnk.get("area_display") or _lnk.get("area_id") or "")
+            _center = (
+                f'<div class="lp-center-cell">'
+                f'{_CHAIN}'
+                f'<span class="lp-area">{_area}</span>'
+                f'</div>'
+            )
+
+            lp_rows.append(
+                f'<tr class="lp-row{_row_cls}">'
+                f'<td class="lp-mon lp-mon-a">{_a_mon}</td>'
+                f'<td class="lp-hp">{_a_hp}</td>'
+                f'<td class="lp-ctr">{_center}</td>'
+                f'<td class="lp-hp lp-hp-b">{_b_hp}</td>'
+                f'<td class="lp-mon lp-mon-b">{_b_mon}</td>'
+                f'</tr>'
+            )
+
+        # Dual header — trainer / game / area / pokéballs on each side
+        _name_a = html.escape(d["players"]["a"].get("trainer_name") or "Player A")
+        _name_b = html.escape(d["players"]["b"].get("trainer_name") or "Player B")
+        _rom_a = ROM_LABEL.get(d["players"]["a"].get("rom_type", ""),
+                               d["players"]["a"].get("rom_type", ""))
+        _rom_b = ROM_LABEL.get(d["players"]["b"].get("rom_type", ""),
+                               d["players"]["b"].get("rom_type", ""))
+        _area_a_lbl = self.adapter.area_display_name(
+            d["players"]["a"].get("current_area_id") or
+            d["players"]["a"].get("current_area")) or '—'
+        _area_b_lbl = self.adapter.area_display_name(
+            d["players"]["b"].get("current_area_id") or
+            d["players"]["b"].get("current_area")) or '—'
+        _balls_a = d["players"]["a"].get("ball_count", 0)
+        _balls_b = d["players"]["b"].get("ball_count", 0)
+        _a_online = d["players"]["a"].get("connected", False)
+        _b_online = d["players"]["b"].get("connected", False)
+        _a_conn = ('<span class="badge badge-online">&#9679; online</span>'
+                   if _a_online else
+                   '<span class="badge badge-offline">&#9675; offline</span>')
+        _b_conn = ('<span class="badge badge-online">&#9679; online</span>'
+                   if _b_online else
+                   '<span class="badge badge-offline">&#9675; offline</span>')
+        _bclass_a = "yes" if _balls_a > 0 else "warn"
+        _bclass_b = "yes" if _balls_b > 0 else "warn"
+        _lp_hdr = (
+            '<div class="lp-card-hdr">'
+            '<div class="lp-hdr-side lp-hdr-side-a">'
+            f'<div class="lp-player-name">{_name_a} {_a_conn}</div>'
+            '<div class="lp-hdr-meta">'
+            f'<span class="dim">{_rom_a}</span>'
+            f' &middot; &#128205; <b class="area">{html.escape(_area_a_lbl)}</b>'
+            f' &middot; &#9702; <b class="{_bclass_a}">{_balls_a}</b>'
+            '</div></div>'
+            '<div class="lp-hdr-mid">'
+            f'{_CHAIN}'
+            '<span class="lp-hdr-label">Linked Party</span>'
+            f'{_CHAIN}'
+            '</div>'
+            '<div class="lp-hdr-side lp-hdr-side-b">'
+            f'<div class="lp-player-name">{_b_conn} {_name_b}</div>'
+            '<div class="lp-hdr-meta">'
+            f'<b class="{_bclass_b}">{_balls_b}</b> &#9702;'
+            f' &middot; <b class="area">{html.escape(_area_b_lbl)}</b> &#128205;'
+            f' &middot; <span class="dim">{_rom_b}</span>'
+            '</div></div>'
+            '</div>'
+        )
+
+        if lp_rows:
+            _lp_body = (
+                '<table class="lp-table"><thead><tr>'
+                '<th>Pokémon</th>'
+                '<th class="lp-hp-h">HP</th>'
+                '<th class="lp-ctr-h">Area</th>'
+                '<th class="lp-hp-h lp-th-r">HP</th>'
+                '<th class="lp-th-r">Pokémon</th>'
+                '</tr></thead><tbody>'
+                + "".join(lp_rows)
+                + '</tbody></table>'
+            )
+        else:
+            _lp_body = (
+                '<div class="dim" style="text-align:center;padding:1.5em 0">'
+                'No linked party pairs yet — both partners need to be in party.'
+                '</div>'
+            )
+
+        parts.append(
+            '<div class="lp-widget">'
+            '<div class="lp-card player-card">'
+            + _lp_hdr
+            + _lp_body
+            + '</div>'   # lp-card
+            + '</div>'   # lp-widget
+            + '</div>'   # players-section
+        )
 
         # ── Encounters (consolidated: links + pending + area states) ────────
         name_a = html.escape(d["players"]["a"].get("trainer_name") or "A")

@@ -696,6 +696,43 @@ if (window._slinkDashInit) {
 })();
 
 
+// ── Linked-party combined view toggle ────────────────────────────────────
+// Same body-class pattern as the sidebar — immune to HTMX morph resets.
+(function() {
+  var KEY = 'slink-lp-view';
+  function apply(on) {
+    document.body.classList.toggle('lp-view', on);
+  }
+  function read() {
+    try { return window.localStorage.getItem(KEY) === '1'; }
+    catch (_) { return false; }
+  }
+  function write(v) {
+    try { window.localStorage.setItem(KEY, v ? '1' : '0'); }
+    catch (_) {}
+  }
+  function toggle() {
+    var next = !document.body.classList.contains('lp-view');
+    apply(next);
+    write(next);
+  }
+  function setView(on) {
+    var v = !!on;
+    apply(v);
+    write(v);
+  }
+  document.body.addEventListener('htmx:afterSettle', function() { apply(read()); });
+  window.addEventListener('storage', function(ev) {
+    if (ev.key === KEY) apply(ev.newValue === '1');
+  });
+  apply(read());
+  window.SLinkDash = Object.assign(window.SLinkDash || {}, {
+    toggleLpView: toggle,
+    setLpView: setView,
+  });
+})();
+
+
 // ── <details> open-state persistence across morph swaps ──────────────────
 // idiomorph syncs ALL attributes between the new server HTML and the
 // existing DOM. When the server response doesn't carry `open` (the server
