@@ -17,18 +17,10 @@
           {{ mon_card(slot.mon) }}
           {% if slot.moves %}
             <div class="moves-grid">
-              {% for i in range(4) %}
-                {% set md = slot.moves[i] if i < (slot.moves | length) else None %}
-                <div class="move-tile">
-                  {% if md %}
-                    <div class="move-name-row">
-                      <div class="move-name">{{ md.name }}</div>
-                      <span class="pp-num {{ md.pp_cls }}">{{ md.current_pp }}/{{ md.pp_max }}</span>
-                    </div>
-                    <span class="move-type mt-{{ md.type_name or 'unknown' }}">{{ md.type_name }}</span>
-                  {% else %}
-                    <div class="move-name" style="opacity:.25">—</div>
-                  {% endif %}
+              {% for md in slot.moves %}
+                <div class="move-tile mt-{{ md.type_name or 'unknown' }}" title="{{ md.type_name }}">
+                  <div class="move-name">{{ md.name }}</div>
+                  <span class="pp-num {{ md.pp_cls }}">{{ md.current_pp }}/{{ md.pp_max }}</span>
                 </div>
               {% endfor %}
             </div>

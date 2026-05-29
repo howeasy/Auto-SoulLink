@@ -835,47 +835,50 @@ body.ltv .wtitle { font-size: 8px; }
 
 
 /* ── Focus / Enemy Focus overlays — moves grid ────── */
-.moves-grid { display: grid; grid-template-columns: 1fr 1fr;
+.moves-grid { display: grid; grid-template-columns: 1fr;
               gap: clamp(3px, .6vmin, 7px); margin-top: clamp(4px, .7vmin, 9px); }
-.move-tile  { background: rgba(255,255,255,.05); border-radius: 4px;
-              padding: clamp(3px, .55vmin, 7px);
-              display: flex; flex-direction: column; gap: clamp(2px, .35vmin, 4px);
-              min-width: 0; }
-.move-name-row { display: flex; align-items: baseline;
-                 gap: clamp(3px, .6vmin, 7px); min-width: 0; }
+.move-tile  { display: flex; flex-direction: row; align-items: center;
+              gap: clamp(4px, .8vmin, 9px); border-radius: 4px;
+              padding: clamp(3px, .55vmin, 7px) clamp(6px, 1vmin, 11px);
+              min-width: 0; overflow: hidden;
+              background: linear-gradient(90deg,
+                          rgba(var(--mt, 145,145,145), 1) 0%,
+                          rgba(var(--mt, 145,145,145), .92) 42%,
+                          rgba(var(--mt, 145,145,145), .42) 76%,
+                          rgba(255,255,255,.05) 100%); }
 .move-name  { font-family: var(--font-pixel); font-size: clamp(9px, 1.5vmin, 12px);
-              -webkit-font-smoothing: none; white-space: nowrap;
-              overflow: hidden; text-overflow: ellipsis; flex: 1; min-width: 0; }
+              -webkit-font-smoothing: none; line-height: 1.1;
+              display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+              overflow: hidden; overflow-wrap: anywhere; flex: 1; min-width: 0;
+              text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000,
+                           -1px -1px 0 #000, 0 0 5px rgba(0,0,0,.7); }
 .pp-num     { font-family: var(--font-pixel); -webkit-font-smoothing: none;
-              font-size: clamp(8px, 1.3vmin, 11px); opacity: .75;
-              flex-shrink: 0; white-space: nowrap; margin-left: auto; }
+              font-size: clamp(8px, 1.3vmin, 11px); opacity: .9;
+              flex-shrink: 0; white-space: nowrap; margin-left: auto;
+              text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000,
+                           -1px -1px 0 #000, 0 0 4px rgba(0,0,0,.6); }
 .pp-h       { color: var(--c-alive); }
 .pp-m       { color: var(--c-gold); }
 .pp-l       { color: var(--c-dead); }
-.move-type  { display: inline-block; font-family: var(--font-pixel);
-              font-size: clamp(7px, 1.1vmin, 9px); -webkit-font-smoothing: none;
-              padding: 1px 4px; border-radius: 2px; color: #fff;
-              letter-spacing: .04em; white-space: nowrap; align-self: flex-start;
-              margin-top: clamp(1px, .2vmin, 2px); }
-.mt-Normal   { background: #a8a878; color: #fff; }
-.mt-Fighting { background: #c03028; }
-.mt-Flying   { background: #a890f0; }
-.mt-Poison   { background: #a040a0; }
-.mt-Ground   { background: #e0c068; color: #111; }
-.mt-Rock     { background: #b8a038; }
-.mt-Bug      { background: #a8b820; color: #111; }
-.mt-Ghost    { background: #705898; }
-.mt-Steel    { background: #b8b8d0; color: #111; }
-.mt-Fire     { background: #f08030; }
-.mt-Water    { background: #6890f0; }
-.mt-Grass    { background: #78c850; color: #111; }
-.mt-Electric { background: #f8d030; color: #111; }
-.mt-Psychic  { background: #f85888; }
-.mt-Ice      { background: #98d8d8; color: #111; }
-.mt-Dragon   { background: #7038f8; }
-.mt-Dark     { background: #705848; }
+.mt-Normal   { --mt: 205,200,165; }
+.mt-Fighting { --mt: 235,62,52; }
+.mt-Flying   { --mt: 148,162,252; }
+.mt-Poison   { --mt: 202,72,206; }
+.mt-Ground   { --mt: 232,190,88; }
+.mt-Rock     { --mt: 206,178,66; }
+.mt-Bug      { --mt: 172,214,46; }
+.mt-Ghost    { --mt: 142,102,214; }
+.mt-Steel    { --mt: 142,172,206; }
+.mt-Fire     { --mt: 255,118,36; }
+.mt-Water    { --mt: 50,138,252; }
+.mt-Grass    { --mt: 92,214,70; }
+.mt-Electric { --mt: 252,212,36; }
+.mt-Psychic  { --mt: 255,86,150; }
+.mt-Ice      { --mt: 96,220,230; }
+.mt-Dragon   { --mt: 120,76,253; }
+.mt-Dark     { --mt: 126,100,114; }
 .mt-unknown,
-.mt-         { background: #666; }
+.mt-         { --mt: 145,145,145; }
 .focus-not-active { display: flex; flex: 1; align-items: center;
                     justify-content: center; opacity: .3; font-size: .85em;
                     letter-spacing: .08em; }
@@ -886,12 +889,17 @@ body.ltv .wtitle { font-size: 8px; }
 /* Focus-mode shell — keeps singles vertical, doubles side-by-side */
 body.ov-focus #root { padding: clamp(5px, 1vmin, 14px); gap: clamp(3px, .6vmin, 8px); }
 body.ov-focus .mc .mon-sprite { width: clamp(54px, 15vmin, 80px) !important; aspect-ratio: 1 !important; }
-body.ov-focus .moves-grid { flex: 1; min-height: 0;
-                            grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
-                            grid-auto-rows: minmax(0, 1fr); margin-top: 0; overflow: hidden; }
-body.ov-focus .move-tile { justify-content: space-evenly; gap: 0; min-height: 0; min-width: 0; overflow: hidden; }
+body.ov-focus .moves-grid { display: flex; flex-direction: column; justify-content: flex-start;
+                            flex: 1; min-height: 0; margin-top: 0; overflow: hidden; }
+body.ov-focus .move-tile { flex: 1 1 0; container-type: size;
+                           min-height: 0; min-width: 0; overflow: hidden; }
 body.ov-focus .focus-mons .focus-mon { overflow: hidden; }
-body.ov-focus .pp-num { font-size: clamp(10px, 1.4vmin, 13px); opacity: .85; }
+/* Move text scales with each row's height (cqh) so stretched rows get bigger
+   text; vmin line is the fallback for engines without container queries. */
+body.ov-focus .move-name { font-size: clamp(11px, 2.4vmin, 16px);
+                           font-size: clamp(12px, 16cqh, 28px); }
+body.ov-focus .pp-num { font-size: clamp(10px, 1.8vmin, 13px);
+                        font-size: clamp(11px, 13cqh, 22px); opacity: .85; }
 body.ov-focus .focus-mons { display: flex; flex-direction: column; gap: clamp(3px, .6vmin, 8px); flex: 1; min-height: 0; }
 body.ov-focus .focus-mons .focus-mon { display: flex; flex-direction: column; gap: clamp(3px, .6vmin, 8px); flex: 1; min-height: 0; min-width: 0; }
 body.ov-focus .focus-mons.doubles { flex-direction: row; gap: clamp(4px, .8vmin, 10px); }
@@ -908,7 +916,6 @@ body.ov-focus .focus-mons.doubles .stat-stages-row { padding: 1px 0 0 0; gap: 1p
 body.ov-focus .focus-mons.doubles .moves-grid { gap: clamp(2px, .4vmin, 5px); margin-top: clamp(2px, .4vmin, 5px); }
 body.ov-focus .focus-mons.doubles .move-tile { padding: clamp(2px, .4vmin, 5px); gap: clamp(1px, .2vmin, 3px); }
 body.ov-focus .focus-mons.doubles .move-name { line-height: 1.15; }
-body.ov-focus .focus-mons.doubles .move-name-row { gap: clamp(2px, .4vmin, 5px); }
 
 
 /* ── Enemy Trainer overlay — auto-scrolling team list ─────────────── */
