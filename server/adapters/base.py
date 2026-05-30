@@ -92,6 +92,22 @@ class GameRulesAdapter(ABC):
         """
         return False
 
+    def gift_link_area(self, area_id: str) -> str:
+        """Area_id under which a gift/egg capture should be linked.
+
+        A gift received in a real (non-gift) encounter area must NOT consume or
+        lock that area's single wild-encounter slot. Map it into the gift
+        namespace so it forms a standalone gift pair instead. Gifts already in a
+        gift area (or daycare-bred eggs) keep their area_id unchanged.
+
+        The "gift_" prefix is recognized by every adapter's is_gift_area, so the
+        remapped id is treated as a gift area downstream (no quarantine, no
+        no_catch dead-zone, rendered as a gift).
+        """
+        if self.is_gift_area(area_id) or self.is_daycare_area(area_id):
+            return area_id
+        return f"gift_{area_id}"
+
     def is_egg_pickup_area(self, area_id: str) -> bool:
         """Return True if the area is an NPC egg-pickup location.
 
@@ -276,6 +292,37 @@ class GamePresentationAdapter(ABC):
         Only available for RR runs in Gen3Adapter; other adapters return None.
         """
         return None
+
+    def trainers_for_area(self, area_id: str) -> list[int]:
+        """Return runtime trainer IDs that appear in the given area, or [] if none.
+
+        Used by the dashboard's Upcoming Trainers panel. Only populated for RR
+        runs in Gen3Adapter; other adapters return [].
+        """
+        return []
+
+    def trainer_party(self, trainer_id: int) -> list[dict]:
+        """Return the curated party list for a trainer ID, or [] if unknown.
+
+        Each entry has at minimum: species_id (int), level (int). Optional keys:
+        species (str), ability (str), item (str), nature (str), moves (list[str]).
+        Only populated for RR runs in Gen3Adapter.
+        """
+        return []
+
+    def trainer_brief(self, trainer_id: int) -> dict | None:
+        """Return {name, class, party, area?} for a curated trainer, or None.
+
+        Convenience for callers that want display info + roster in one call.
+        Default fallback synthesizes name/class via `trainer_info` and party
+        via `trainer_party`; adapters with richer per-trainer metadata
+        (e.g. RR's priority roster) may override.
+        """
+        party = self.trainer_party(trainer_id)
+        if not party:
+            return None
+        name, cls = self.trainer_info(trainer_id)
+        return {"name": name, "class": cls, "party": party, "area": ""}
 
     def sprite_src(self, species_id: int) -> str:
         """Return just the sprite image URL for a species (no HTML wrapping).

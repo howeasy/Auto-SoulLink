@@ -489,6 +489,16 @@ if (window._slinkDashInit) {
     Array.prototype.forEach.call(d.querySelectorAll('.theme-pill'), function(btn) {
       btn.addEventListener('click', function() {
         applyTheme(btn.getAttribute('data-theme'));
+        // Strip ?theme= from the URL — see the matching cleanup in
+        // _theme_switcher.html's select(). Without it, refreshing a page
+        // loaded with ?theme=X reverts the user's picker choice every time.
+        try {
+          var u = new URL(window.location.href);
+          if (u.searchParams.has('theme')) {
+            u.searchParams.delete('theme');
+            window.history.replaceState(null, '', u.toString());
+          }
+        } catch (_) {}
         var details = d.querySelector('details');
         if (details) details.open = false;
       });
@@ -835,6 +845,37 @@ if (window._slinkDashInit) {
   document.body.addEventListener('htmx:afterSettle', restoreAll);
   if (document.readyState !== 'loading') restoreAll();
   else document.addEventListener('DOMContentLoaded', restoreAll);
+})();
+
+// ── Upcoming Trainers Calc button (delegated) ─────────────────────
+// Click on a trainer row's ⚔ Calc button pushes the trainer's calc set
+// name into localStorage under `slink_prep_trainer` — the key the calc's
+// SLink bridge panel watches for its Prep tab. Then we open the calc with
+// window.open(url, 'rrCalc'). The named target reuses any existing calc
+// tab instead of spawning duplicates; the calc's storage-event listener
+// (slink_bridge.js) refreshes its Prep tab when the key changes, so an
+// already-open calc tab updates without a manual reload.
+//
+// stopPropagation prevents the click from also toggling the parent
+// <summary>, which would collapse/expand the trainer row.
+(function () {
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target && ev.target.closest && ev.target.closest('.tr-calc-btn');
+    if (!btn) return;
+    ev.preventDefault(); ev.stopPropagation();
+    var calcLabel = btn.dataset.calcLabel || '';
+    if (calcLabel) {
+      try {
+        localStorage.setItem('slink_prep_trainer', calcLabel);
+        // Reset encounter index — calc lands on the first encounter.
+        localStorage.setItem('slink_prep_encounter', '');
+      } catch (_) { /* private mode, etc. */ }
+    }
+    var calcWin = window.open('/calc/normal.html', 'rrCalc');
+    if (calcWin && !calcWin.closed) {
+      try { calcWin.focus(); } catch (_) { /* cross-origin focus blocked */ }
+    }
+  });
 })();
 
 }  // close `if (window._slinkDashInit)` sentinel

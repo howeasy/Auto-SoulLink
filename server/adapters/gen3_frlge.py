@@ -8,6 +8,7 @@ maintaining 100% backward compatibility with the current FRLG implementation.
 import logging
 import os
 import json
+import re
 
 from .base import GameAdapter
 from server.data.items.gen3_vanilla import ITEM_NAMES as _FRLG_ITEM_NAMES
@@ -64,6 +65,34 @@ if os.path.exists(_rr_trainers_path):
     with open(_rr_trainers_path, "r") as _f:
         _raw_tr = json.load(_f)
         _RR_TRAINERS = {int(k): v for k, v in _raw_tr.get("trainers", {}).items()}
+
+# RR priority trainer roster: 1-based runtime trainer ID → {name, class, party, area?}.
+# Source: tools/gen_rr_priority_trainers.py merges the RR damage-calc
+# normal.js sets (canonical party data) with the community boss spreadsheet
+# (area mapping). Keys are stringified ints; values keep the same shape used
+# by the dashboard's Upcoming Trainers widget.
+_RR_PRIORITY_PARTIES: dict[int, dict] = {}
+_RR_PRIORITY_BY_AREA: dict[str, list[int]] = {}
+# Main-tab level-cap milestone progression. Used by the dashboard to flag
+# Past / Current / Future fight variants relative to the player's highest
+# party level — see Gen3Adapter.milestone_cap_for_label() below.
+_RR_PRIORITY_MILESTONES_ORDER: list[dict] = []   # [{name, cap}, ...] in story order
+_RR_PRIORITY_PRE_CAPS:  dict[str, int] = {}      # "Lt. Surge" → 34
+_RR_PRIORITY_POST_CAPS: dict[str, int] = {}      # "Lt. Surge" → 44 (next pre cap)
+_rr_priority_path = os.path.join(_DATA_DIR, "rr_priority_trainers.json")
+if os.path.exists(_rr_priority_path):
+    with open(_rr_priority_path, "r", encoding="utf-8") as _f:
+        _raw_pt = json.load(_f)
+        _RR_PRIORITY_PARTIES = {
+            int(k): v for k, v in (_raw_pt.get("parties") or {}).items()
+        }
+        _RR_PRIORITY_BY_AREA = {
+            k: list(v) for k, v in (_raw_pt.get("trainers_by_area") or {}).items()
+        }
+        _ms = _raw_pt.get("milestones") or {}
+        _RR_PRIORITY_MILESTONES_ORDER = list(_ms.get("order") or [])
+        _RR_PRIORITY_PRE_CAPS  = {k: int(v) for k, v in (_ms.get("pre")  or {}).items()}
+        _RR_PRIORITY_POST_CAPS = {k: int(v) for k, v in (_ms.get("post") or {}).items()}
 
 # Rival trainer ID set for Radical Red (used by Rival Team Swap feature).
 # Built at import time by scanning _RR_TRAINERS for entries whose name is
@@ -385,6 +414,93 @@ class Gen3Adapter(GameAdapter):
             return ("", cls_name)
         return (tr.get("name", "").strip(), cls_name)
 
+    def trainers_for_area(self, area_id: str) -> list[int]:
+        """Return runtime trainer IDs that appear in the given area.
+
+        Source: data/games/gen3_frlge/rr_priority_trainers.json. Only populated
+        for RR runs — vanilla FRLG/Emerald variants return []. The returned
+        IDs are 1-based runtime IDs (the same shape used by `trainer_info`
+        and reported by the Lua client's TRAINER_OPPONENT_ADDR read).
+        """
+        if not self._is_rr or not area_id:
+            return []
+        return list(_RR_PRIORITY_BY_AREA.get(area_id, []))
+
+    def trainer_party(self, trainer_id: int) -> list[dict]:
+        """Return the curated party for a trainer ID, or [] if unknown.
+
+        Each entry has: species (str), level (int), and optionally nature,
+        ability, item, moves (list[str]), evs (dict), ivs (dict). The
+        species string is the calc-format name (e.g. "Geodude-Alola",
+        "Charizard-Mega-Y") — callers needing a species_id should resolve
+        it via the species table.
+        """
+        if not self._is_rr:
+            return []
+        entry = _RR_PRIORITY_PARTIES.get(trainer_id)
+        if not entry:
+            return []
+        return list(entry.get("party") or [])
+
+    def milestone_cap_for_fight_label(self, fight_label: str) -> int | None:
+        """Resolve a "Pre X" / "Post X" fight_label into a story-progression
+        level cap, using the Main-tab milestone list.
+
+        "Pre Lt. Surge"  → 34 (the cap when approaching that fight)
+        "Post Lt. Surge" → 44 (the cap AFTER clearing it — next pre milestone)
+
+        Returns None when the label doesn't match a known milestone (or the
+        adapter is not in RR mode). Used by the dashboard's Upcoming Trainers
+        widget to mark each fight variant as Past / Current / Future against
+        the player's highest party mon level.
+        """
+        if not self._is_rr or not fight_label:
+            return None
+        s = fight_label.strip()
+        # Match "Pre X" / "Post X" — milestone names may have spaces, dots,
+        # or punctuation, so anchor on the leading "Pre"/"Post" keyword.
+        m = re.match(r"(Pre|Post)[\s-]+(.+)", s, re.I)
+        if not m:
+            return None
+        kind = m.group(1).lower()
+        name = m.group(2).strip()
+        table = _RR_PRIORITY_PRE_CAPS if kind == "pre" else _RR_PRIORITY_POST_CAPS
+        # Lenient lookup: exact match first, then case-insensitive contains.
+        if name in table:
+            return table[name]
+        n_lower = name.lower()
+        for k, v in table.items():
+            if k.lower() == n_lower or n_lower in k.lower():
+                return v
+        return None
+
+    def trainer_brief(self, trainer_id: int) -> dict | None:
+        """Return {name, class, party, area?, level_cap?} for a priority trainer.
+
+        Convenience helper used by the dashboard's Upcoming Trainers widget:
+        combines name/class lookup with party data in one call. Returns None
+        when the trainer is not in the priority roster.
+        """
+        if not self._is_rr:
+            return None
+        entry = _RR_PRIORITY_PARTIES.get(trainer_id)
+        if not entry:
+            return None
+        out = {
+            "name":  entry.get("name", "") or "",
+            "class": entry.get("class", "") or "",
+            "party": list(entry.get("party") or []),
+            "area":  entry.get("area", "") or "",
+        }
+        lc = entry.get("level_cap")
+        if isinstance(lc, int):
+            out["level_cap"] = lc
+        for k in ("calc_label", "fight_label", "sprite_url"):
+            v = entry.get(k)
+            if v:
+                out[k] = v
+        return out
+
     def item_name(self, item_id: int) -> str:
         if not item_id:
             return ""
@@ -404,10 +520,15 @@ class Gen3Adapter(GameAdapter):
         # Dynamic gift area: "gift_<group>_<num>" → "Gift – <ROM map name>"
         if area_id.startswith("gift_"):
             parts = area_id[5:].split("_", 1)  # "10_11" → ["10", "11"]
-            if len(parts) == 2:
+            if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
                 entry = _ROM_MAP_NAMES.get(f"{parts[0]}:{parts[1]}")
                 if entry and entry.get("name"):
                     return f"Gift \u2013 {entry['name']}"
+                return "Gift"
+            # Synthetic "gift_<area_id>" (e.g. gift_vermilion_city) -> name the host area.
+            bare = area_id[5:]
+            if bare and not bare.startswith("gift_") and not bare.isdigit():
+                return f"Gift \u2013 {self.area_display_name(bare)}"
             return "Gift"
         # Fallback: humanize the area_id
         return area_id.replace("_", " ").title()

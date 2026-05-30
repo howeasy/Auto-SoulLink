@@ -90,6 +90,31 @@
   var _trainerIndex  = { nm: {}, hc: {} };  // baseName → { encounters, encounterOrder }
   var _trainerNames  = [];                  // sorted union of trainer names for datalist
 
+  // ── Cross-tab sync: dashboard's Calc button writes to localStorage to
+  // load a trainer into the Prep tab. Listen for storage events so an
+  // already-open calc tab refreshes its selection without a manual reload.
+  // (StorageEvent only fires in OTHER tabs/windows, never the writer's own,
+  // which is exactly what we want here.)
+  window.addEventListener('storage', function (ev) {
+    if (!ev || ev.key == null) return;
+    if (ev.key === 'slink_prep_trainer') {
+      _prepTrainer = ev.newValue || '';
+      // Reset the encounter pointer when the trainer changes so the
+      // Prep tab always lands on the first encounter of the new fight.
+      _prepEncounter = '';
+      _activeTab = 'prep';
+      if (typeof refreshPanel === 'function') {
+        try { refreshPanel(); } catch (_) {}
+      }
+      try { window.focus(); } catch (_) { /* cross-origin focus blocked */ }
+    } else if (ev.key === 'slink_prep_encounter') {
+      _prepEncounter = ev.newValue || '';
+      if (typeof refreshPanel === 'function') {
+        try { refreshPanel(); } catch (_) {}
+      }
+    }
+  });
+
   // ---------------------------------------------------------------------------
   // SETDEX_HC loading trick
   //

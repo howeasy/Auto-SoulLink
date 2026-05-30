@@ -897,6 +897,122 @@ body.lp-view .players-grid { display: none; }
   font-weight: 600;
 }
 
+/* Partner sub-line inside the split-view lp-mon-cell. Carries the link
+ * status colour (alive / pending_b / dim / dead etc.) on the wrapping
+ * div so the chain icon + partner label read together as one chip.
+ * Combined view doesn't render this — the symmetric mirror with the
+ * chain center column already conveys the linkage. */
+.lp-partner-sub {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  font-size: 0.80em;
+  line-height: 1.3;
+  margin-top: 0.15em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lp-partner-sub .lp-partner-ico {
+  width: 0.95em;
+  height: 0.95em;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+/* Inherit link-status colour from the wrapping div (.alive / .pending_b /
+ * .dim / .dead_zone classes are already styled in slink.css). */
+.lp-partner-sub.dim { color: var(--c-dim); }
+.lp-partner-sub.alive { color: color-mix(in srgb, var(--c-brand) 70%, var(--c-txt)); }
+.lp-partner-sub.pending_b { color: var(--c-pend); }
+.lp-partner-sub.dead, .lp-partner-sub.dead_zone { color: var(--c-dead); opacity: 0.7; }
+
+
+/* Moves dropdown inside the lp-mon-cell — slightly smaller than the
+ * in-battle foe-moves table so the cell stays compact. B-side aligns to
+ * the right edge so the affordance bracket mirrors the sprite/name.
+ *
+ * max-width + overflow-x:auto stops the move-table inside from growing
+ * the Pokémon column wider than the card allows (its <table> would
+ * otherwise win the auto-layout fight and squeeze the Partner column
+ * off the right edge at narrow widths). */
+.lp-moves { margin-top: 4px; max-width: 100%; overflow-x: auto; }
+.lp-moves details { margin: 0; max-width: 100%; }
+.lp-moves summary {
+  cursor: pointer; padding: 1px 0; font-size: 0.82em;
+  color: var(--c-dim); user-select: none; list-style: none;
+}
+.lp-moves summary::-webkit-details-marker { display: none; }
+.lp-moves summary::before { content: "▶ "; font-size: 0.7em; }
+.lp-moves details[open] summary::before { content: "▼ "; font-size: 0.7em; }
+.lp-moves .move-table { font-size: 0.78em; margin-top: 2px; }
+/* B-side mirrors the dropdown affordance and right-aligns the table. */
+.lp-mc-b .lp-moves summary { text-align: right; }
+.lp-mc-b .lp-moves .move-table { margin-left: auto; }
+
+/* PC boxes location chip used in place of HP for stored mons. */
+.lp-loc {
+  font-size: 0.78em;
+  color: var(--c-txt);
+  line-height: 1.25;
+  text-align: center;
+}
+.lp-loc .dim { opacity: 0.75; }
+.lp-loc b { color: var(--c-brand); }
+
+/* Split player-card variant of lp-mon-cell — slightly tighter gap because
+ * the surrounding party-table cell already has its own padding. */
+.player-card .lp-mon-cell { gap: 6px; }
+
+/* Combined-view battle card — sits between the linked-party card and the
+ * PC boxes card, only when at least one player is in battle. Uses the
+ * lp-card chrome so it reads as a sibling of the other combined widgets;
+ * left accent strip flips to the warning tone like .battle-panel. */
+.lp-battle-card {
+  border-color: color-mix(in srgb, var(--c-pend) 50%, var(--c-edge));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .05),
+    inset 3px 0 0 var(--c-pend),
+    0 4px 14px rgba(0, 0, 0, .35);
+  margin-top: 1em;
+}
+.lp-battle-card .lp-hdr-mid { color: var(--c-pend); }
+.lp-battle-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1em;
+  align-items: start;
+}
+/* Each side wraps the existing .battle-panel — keep the panel's own
+ * border but let the parent grid handle spacing so the two read as a
+ * matched pair rather than two stacked banners. */
+.lp-battle-side > .battle-panel {
+  margin: 0;
+}
+.lp-battle-empty {
+  border: 1px dashed color-mix(in srgb, var(--c-edge) 80%, transparent);
+  border-radius: 6px;
+  padding: 1.5em 0.8em;
+  text-align: center;
+  font-style: italic;
+}
+/* Stack the two sides when the lp-card itself gets narrow. Container
+ * queries let us key off the card's own width (the better signal —
+ * sidebar collapse + content cap mean viewport width isn't reliable).
+ * Falls back to a viewport @media at ~800px for older browsers that
+ * don't support container queries yet. */
+.lp-battle-card { container-type: inline-size; }
+@container (max-width: 720px) {
+  .lp-battle-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 800px) {
+  .lp-battle-grid { grid-template-columns: 1fr; }
+}
+
+/* PC boxes card — same chrome as lp-card, slightly less prominent so the
+ * primary linked-party card stays the eye anchor. */
+.lp-box-card { margin-top: 1em; }
+.lp-box-card .lp-hdr-label { color: var(--c-dim); }
+.lp-box-row .lp-mon-cell { opacity: 0.92; }
 
 /* B-side cells right-align so the table reads as a mirror. */
 .lp-table td.lp-mon-b { text-align: right; }
@@ -905,14 +1021,16 @@ body.lp-view .players-grid { display: none; }
 /* Shared hp-num token used in compact contexts (kept for legacy callers). */
 .hp-num { font-size: 0.78em; color: var(--c-dim); white-space: nowrap; flex-shrink: 0; }
 
-/* Auto-fit grid replaces the prior 1900px @media breakpoint. Each card
- * needs roughly `--scale-step * 36` to read comfortably (the party
- * table inside wants ~720-800px at body=22px). Below that, the grid
- * collapses to 1 column automatically; above, it lays out side-by-side.
- * Smooth at every viewport, no snap-jump. */
+/* Auto-fit grid replaces the prior 1900px @media breakpoint. After the
+ * Lv/Type/Item/Moves fold (those live stacked inside the Pokémon cell,
+ * with Partner now an inline sub-line and Ability promoted back to its
+ * own scannable column), the party table is Pokémon | Ability | HP.
+ * Each card reads comfortably at ~`--scale-step * 24` — drops the
+ * one→two-column threshold from ~1800px to ~1366px, so 1366×768 and
+ * 1440×900 laptops still land two columns. */
 .players-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--scale-step) * 36)), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--scale-step) * 24)), 1fr));
   gap: var(--space-5);
   margin-bottom: var(--space-5);
 }
@@ -936,13 +1054,59 @@ body.lp-view .players-grid { display: none; }
  * than the encounter table's tight rows. Sprites set the row height; the
  * extra horizontal padding keeps text from butting against the sprite.
  *
- * table-layout: auto (default) lets each column shrink to its content so
- * "Lv" doesn't reserve 80px to display "27" while Pokémon clips. The
- * `table { width: 100%; max-width: 100%; }` cap keeps the table inside
- * the card; the long flex cells (Pokémon, Partner, Ability) get
- * text-overflow: ellipsis so they truncate cleanly when room is tight
- * instead of forcing the table wider than its container. */
+ * `table { width: 100%; max-width: 100%; }` caps the table at the card.
+ * Long flex cells (Pokémon, Partner) get text-overflow: ellipsis so they
+ * truncate cleanly when room is tight. */
 .player-card table { font-size: 0.85em; width: 100%; max-width: 100%; }
+/* Fixed layout pins each column to a percentage of the table width so
+ * the inner move-table (via the opt-in Moves <details>) can't grow the
+ * Pokémon column past its share — it scrolls horizontally inside its
+ * cell instead (via .lp-moves overflow-x:auto).
+ *
+ * Hybrid layout: Pokémon (with inline ⛓ Partner) | Type | Ability | HP.
+ * Type column stacks dual-type badges vertically so it stays narrow.
+ * Gen 1/2 omit the Ability column — :has() lets the same selector list
+ * adapt to both layouts without server-side class wiring. */
+.party-table { table-layout: fixed; }
+.party-table th:nth-child(1), .party-table td:nth-child(1) { width: 48%; }
+.party-table th.col-type, .party-table td.col-type { width: 13%; }
+.party-table th.col-abl  { width: 19%; }
+.party-table th.col-hp,  .party-table tr > td:last-child { width: 20%; }
+/* Gen 1/2: no Ability column → Pokémon picks up the freed 19%. */
+.party-table:not(:has(.col-abl)) th:nth-child(1),
+.party-table:not(:has(.col-abl)) td:nth-child(1) { width: 65%; }
+
+/* Box table: Box | Slot | Pokémon | Type | (Ability). Box/Slot narrow. */
+.box-table { table-layout: fixed; }
+.box-table th:nth-child(1), .box-table td:nth-child(1) { width: 9%; }
+.box-table th:nth-child(2), .box-table td:nth-child(2) { width: 9%; }
+.box-table th:nth-child(3), .box-table td:nth-child(3) { width: 48%; }
+.box-table th.col-type, .box-table td.col-type { width: 13%; }
+.box-table th.col-abl { width: 21%; }
+/* Gen 1/2 box: no Ability column → Pokémon picks up the freed 21%. */
+.box-table:not(:has(.col-abl)) th:nth-child(3),
+.box-table:not(:has(.col-abl)) td:nth-child(3) { width: 69%; }
+
+/* Stacked dual-type badges inside col-type — "Normal" stacks above
+ * "Flying" so the column stays narrow. type_badges_html() inlines
+ * `style="display:inline-block; ..."` on each <span>, so !important is
+ * needed to flip them to block. Cell also waives the table's default
+ * overflow:hidden so the second badge isn't clipped. */
+.party-table td.col-type, .box-table td.col-type {
+  text-align: center;
+  vertical-align: middle;
+  line-height: 1.15;
+  font-size: 0.85em;
+  overflow: visible;
+  white-space: normal;
+}
+.party-table td.col-type > span,
+.box-table td.col-type > span {
+  display: block !important;
+  margin: 2px auto !important;
+  width: max-content;
+  max-width: 100%;
+}
 .player-card td   { padding: 9px 12px; overflow: hidden; text-overflow: ellipsis; }
 .player-card th   { padding: 9px 12px; }
 .player-card td > div { max-width: 100%; overflow: hidden; }
@@ -1378,7 +1542,16 @@ td .mon-sprite, td img.mon-sprite {
 .move-table tbody tr:nth-child(odd)  td { background: transparent; }
 .move-table tbody td:first-child { border-left: none; }
 .move-table tbody tr:last-child td { border-bottom: none; }
-.move-table .move-name { font-weight: 600; white-space: nowrap; }
+/* Move name column gets a readable sans-serif. slink.css has an unscoped
+ * `.move-name { font-family: var(--font-pixel) }` rule (Press Start 2P)
+ * for the streamer overlay — same 0,1,0 specificity. The .move-table
+ * scope here makes ours 0,2,0 and wins. Only the name is changed; the
+ * other columns inherit their original look. */
+.move-table .move-name {
+  font-weight: 600; white-space: nowrap;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
 .move-table .type-badge {
   display: inline-block; padding: 1px 5px; border-radius: 3px;
   font-size: 0.82em; font-weight: bold; color: #fff;
@@ -1442,3 +1615,168 @@ td .mon-sprite, td img.mon-sprite {
 .enc-lv   { color: var(--c-dim); font-size: 0.88em; white-space: nowrap; }
 .area-enc-details summary { color: var(--c-info); }
 .card-hdr-right { display: flex; align-items: center; gap: 4px; }
+
+/* ── Upcoming Trainers widget ───────────────────────────────────── */
+.trainer-widget summary {
+  cursor: pointer; list-style: none; user-select: none;
+  color: var(--c-dim);
+  font-size: 0.78em; padding: 1px 0;
+}
+.trainer-widget summary::-webkit-details-marker { display: none; }
+.trainer-widget summary::before { content: "▶ "; font-size: 0.7em; }
+.trainer-widget[open] summary::before { content: "▼ "; font-size: 0.7em; }
+.trainer-widget:hover summary { color: color-mix(in srgb, var(--c-link) 65%, var(--c-dim)); }
+.trainer-widget[open] summary { color: color-mix(in srgb, var(--c-link) 55%, var(--c-dim)); }
+.trainer-widget { margin: 0 0 0.9em; }
+.trainer-list {
+  display: flex; flex-direction: column; gap: 1px;
+  padding: 0.3em 0.5em 0.1em;
+}
+.trainer-row {
+  border-left: 2px solid color-mix(in srgb, var(--c-link) 35%, transparent);
+  padding: 1px 0 1px 0.4em;
+  margin-bottom: 2px;
+}
+.trainer-row > summary {
+  display: flex; align-items: center; gap: 0.4em;
+  font-size: 0.82em; line-height: 1.45;
+  padding: 1px 0;
+}
+.trainer-row > summary::-webkit-details-marker { display: none; }
+.trainer-row > summary::before { content: "▶ "; font-size: 0.65em; color: var(--c-dim); }
+.trainer-row[open] > summary::before { content: "▼ "; font-size: 0.65em; color: var(--c-dim); }
+.tr-class {
+  color: var(--c-dim);
+  font-size: 0.85em; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.tr-name {
+  color: var(--c-txt); font-weight: bold;
+}
+.tr-size { font-size: 0.82em; flex-shrink: 0; }
+.tr-sprite {
+  width: 32px; height: 32px;
+  image-rendering: pixelated;
+  vertical-align: middle;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+.tr-party {
+  padding: 0.25em 0 0.25em 1.1em;
+  display: flex; flex-direction: column; gap: 0.25em;
+}
+.tr-party-row {
+  font-size: 0.78em; line-height: 1.4;
+  padding: 2px 0 2px 0;
+  border-top: 1px dashed color-mix(in srgb, var(--c-dim) 30%, transparent);
+}
+.tr-party-row:first-child { border-top: 0; }
+.tr-mon-hdr {
+  display: flex; align-items: baseline; gap: 0.4em;
+}
+.tr-species { font-weight: bold; color: var(--c-txt); }
+.tr-lv { color: var(--c-dim); font-size: 0.92em; }
+.tr-lv-rule {
+  color: color-mix(in srgb, var(--c-info) 80%, var(--c-dim));
+  font-size: 0.85em;
+  margin-left: 1px;
+}
+.tr-mon-meta {
+  color: color-mix(in srgb, var(--c-txt) 75%, var(--c-dim));
+  font-size: 0.92em;
+  margin-top: 1px;
+}
+.tr-ability { color: var(--c-link); }
+.tr-item    { color: var(--c-warn); }
+.tr-nature  { font-style: italic; }
+.tr-moves {
+  display: flex; flex-wrap: wrap; gap: 3px;
+  margin-top: 2px;
+}
+.tr-move {
+  background: color-mix(in srgb, var(--c-dim) 18%, transparent);
+  color: color-mix(in srgb, var(--c-txt) 90%, var(--c-dim));
+  border-radius: 3px;
+  padding: 0 5px;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+.tr-variants {
+  display: flex; flex-direction: column; gap: 0.5em;
+}
+.tr-variant {
+  border-left: 2px solid color-mix(in srgb, var(--c-warn) 50%, transparent);
+  padding-left: 0.5em;
+}
+.tr-variant-hdr {
+  display: flex; align-items: baseline; gap: 0.5em;
+  margin-bottom: 0.2em;
+}
+.tr-variant-label {
+  color: var(--c-warn); font-size: 0.85em; font-weight: bold;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.tr-variant-lead { font-size: 0.8em; }
+.tr-variant-count {
+  background: color-mix(in srgb, var(--c-warn) 25%, transparent);
+  color: var(--c-warn);
+  border-radius: 3px;
+  padding: 0 5px;
+  font-size: 0.78em;
+  margin-left: 0.3em;
+  white-space: nowrap;
+}
+.tr-cap { font-size: 0.78em; }
+.tr-fight-label {
+  background: color-mix(in srgb, var(--c-info) 22%, transparent);
+  color: var(--c-info);
+  border-radius: 3px;
+  padding: 0 5px;
+  font-size: 0.78em;
+  margin-left: 0.3em;
+  white-space: nowrap;
+}
+/* Past fights are visually de-emphasised so the current/upcoming pop.
+   ("Past" only shows up when the sequential-fight filter explicitly kept
+   it — the typical filter drops past variants entirely.) */
+.trainer-row.tr-state-past > summary { opacity: 0.55; }
+.trainer-row.tr-state-past > summary:hover { opacity: 0.85; }
+.trainer-row.tr-state-current {
+  border-left-color: var(--c-good, #6c6);
+}
+.tr-calc-btn {
+  margin-left: auto;
+  background: color-mix(in srgb, var(--c-warn) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-warn) 35%, transparent);
+  color: var(--c-warn);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 0.9em;
+  cursor: pointer;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.tr-calc-btn:hover {
+  background: color-mix(in srgb, var(--c-warn) 35%, transparent);
+}
+.tr-variant-calc {
+  margin-left: auto;
+  font-size: 0.85em;
+  padding: 0 5px;
+}
+
+/* ── Area Briefing card (combined view) ──────────────────────────── */
+.lp-area-card { padding: 0.6em 0.8em; }
+.lp-area-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6em 1.2em;
+  padding: 0.4em 0.2em 0.2em;
+}
+.lp-area-side {
+  min-width: 0;   /* allow contents to wrap inside grid cells */
+}
+.lp-area-empty {
+  text-align: center; padding: 0.8em 0; font-style: italic;
+}
+.lp-hdr-meta .area { color: var(--c-txt); }

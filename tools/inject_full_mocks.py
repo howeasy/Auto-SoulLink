@@ -102,9 +102,11 @@ async def main() -> None:
         print(f"  reset failed: {e}")
 
     print("Sending hellos + initial tick...")
+    # Use Radical Red ROM types so the Upcoming Trainers widget activates
+    # (the trainers_for_area / encounter_table adapter methods are RR-gated).
     await send_tcp([
-        {"event": "hello", "player": "a", "rom_type": "firered",   "trainer_name": "Alice", "has_pokeballs": True},
-        {"event": "hello", "player": "b", "rom_type": "leafgreen", "trainer_name": "Bob",   "has_pokeballs": True},
+        {"event": "hello", "player": "a", "rom_type": "firered_rr",  "trainer_name": "Alice", "has_pokeballs": True},
+        {"event": "hello", "player": "b", "rom_type": "leafgreen_rr", "trainer_name": "Bob",   "has_pokeballs": True},
         # Tick events with party of 1 dummy so size > 0 and quarantine logic kicks in.
         # We'll set proper parties after all captures.
         {"event": "tick", "player": "a", "has_pokeballs": True, "party": [{"key": "BOOT0001"}], "current_area_id": "starter"},
@@ -161,6 +163,14 @@ async def main() -> None:
         "area_id": PAIRS[2][0],
     })
 
+    # Final area positions — drive each player into a real RR area that has
+    # entries in rr_priority_trainers.json so the Upcoming Trainers widget
+    # renders. A → Pewter Museum (Falkner), B → Route 25 (Bugsy). Different
+    # areas exercise the split-view trainer column per player AND keep both
+    # populated in the combined view's Area Briefing card.
+    events.append({"event": "area_enter", "player": "a", "area_id": "pewter_museum"})
+    events.append({"event": "area_enter", "player": "b", "area_id": "route_25"})
+
     # Send party tick with all 6 alive Alice mons (so widget shows party of 6).
     # Held items + moves propagate so the held-item, move-dropdown, and LP
     # widget rendering paths all paint.
@@ -187,15 +197,18 @@ async def main() -> None:
     # level of the tick message. See server.py handle_event tick branch.
     events.append({
         "event": "tick", "player": "a", "has_pokeballs": True,
-        "party": alice_party, "current_area_id": "route6",
+        # Real RR area_id so the Upcoming Trainers widget renders (Falkner @ Pewter Museum).
+        "party": alice_party, "current_area_id": "pewter_museum",
         "ball_count": 12, "badges": 0b00000011,  # 2 badges
         "in_battle": False, "enemy_party": [],
     })
     # Bob in active battle vs wild Caterpie — populates Enemy widget,
     # Calc preview, and the "NEW ENCOUNTER" badge when nuzlocke-active.
+    # Different area (route_25 = Bugsy) so split view shows distinct trainer
+    # cards per side, and combined view's Area Briefing shows two sides.
     events.append({
         "event": "tick", "player": "b", "has_pokeballs": True,
-        "party": bob_party, "current_area_id": "route6",
+        "party": bob_party, "current_area_id": "route_25",
         "ball_count": 7, "badges": 0b00000001,  # 1 badge
         "in_battle": True, "is_trainer_battle": False,
         "opponent_name": "", "opponent_class": "",

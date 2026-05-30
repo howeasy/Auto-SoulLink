@@ -1571,10 +1571,16 @@ class SLinkServer:
         "Super Rod":  "🎣 Super",
     }
 
-    def _encounter_html(self, area_id: str) -> str:
+    def _encounter_html(self, area_id: str, player_id: str = "",
+                        key_prefix: str = "") -> str:
         """Return collapsible encounter widget HTML for an area, or '' if none.
 
         Only populated for RR runs (adapter.encounter_table returns non-None).
+        ``player_id`` namespaces the DOM id + localStorage key so two cards in
+        the same area don't share one collapsed/expanded state.
+        ``key_prefix`` lets callers further namespace the keys when the same
+        widget is rendered in multiple views simultaneously (e.g. combined
+        view passes "lp:" so its IDs don't collide with the split view's).
         """
         enc = self.adapter.encounter_table(area_id)
         if not enc:
@@ -1627,11 +1633,349 @@ class SLinkServer:
         #     in dashboard.js vetoes that removal.
         #   * data-details-key drives the localStorage cross-session save
         #     so a hard refresh still lands the widget in the right state.
-        key = f"enc:{html.escape(area_id, quote=True)}"
+        pid_seg = f"{player_id}:" if player_id else ""
+        key = f"{key_prefix}enc:{pid_seg}{html.escape(area_id, quote=True)}"
         return (
             f'<details class="enc-widget" id="d-{key}" data-details-key="{key}">'
             f'<summary><svg class="inline-ico" aria-hidden="true"><use href="#i-target"/></svg> Encounters</summary>'
             f'<div class="enc-methods">{methods_html}</div>'
+            f'</details>'
+        )
+
+    def _trainer_panel_html(self, area_id: str, player_id: str = "",
+                            key_prefix: str = "",
+                            highest_party_level: int = 0) -> str:
+        """Return collapsible Upcoming Trainers widget HTML for an area, or ''.
+
+        Each area row expands to show the trainer's full curated party
+        (species, level, ability, item, moves).
+
+        ``key_prefix`` is prepended to the data-details-key/id so the same
+        widget can be rendered in both the split AND combined views without
+        DOM-id collisions (both views live in the DOM simultaneously and are
+        toggled via body.lp-view). Pass "lp:" from combined-view callers.
+
+        ``highest_party_level`` is the level of the player's strongest
+        owned mon at the moment of rendering. The spreadsheet expresses
+        many trainer mon levels as "Max Level - N" / "Highest Lv -N",
+        which the game resolves at fight time as
+        ``max(1, highest_party_level + level_offset)`` (offset <= 0). Pass
+        0 to fall back to the static `level` value baked into the JSON.
+
+        Mirrors `_encounter_html`'s structure exactly so idiomorph morph
+        behaviour, `data-details-key` localStorage persistence, and the
+        existing CSS variable palette all work without new infrastructure.
+        """
+        if not area_id:
+            return ""
+        try:
+            trainer_ids = self.adapter.trainers_for_area(area_id)
+        except Exception:
+            trainer_ids = []
+        if not trainer_ids:
+            return ""
+
+        # Resolve briefs.
+        briefs: list[tuple[int, dict]] = []
+        for rt_id in trainer_ids:
+            brief = self.adapter.trainer_brief(rt_id)
+            if brief:
+                briefs.append((rt_id, brief))
+
+        # Bucket by (name, cap_bucket) — candidates for grouping. Then
+        # decide row-vs-variant based on whether fight_labels are DISTINCT.
+        # Distinct labels = true starter-variants ("If Rival Has X/Y/Z"
+        # for one rival encounter) → render as ONE row with sub-blocks.
+        # Identical or missing labels = separate encounters (Left/Right
+        # Rocket Guards both labeled "Rocket Hide.") → render as
+        # individual rows. Sequential same-name fights at different caps
+        # land in different cap buckets and get progress-filtered.
+        _CAP_BUCKET = 10
+        groups: list[list[tuple[int, dict]]] = []
+        candidates: dict[tuple[str, int], list[tuple[int, dict]]] = {}
+        order: list[tuple[str, int]] = []
+        for rt_id, brief in briefs:
+            nm_key = brief.get("name", "").title() or f"#{rt_id}"
+            cap = None
+            fl = brief.get("fight_label") or ""
+            if hasattr(self.adapter, "milestone_cap_for_fight_label"):
+                cap = self.adapter.milestone_cap_for_fight_label(fl)
+            if cap is None:
+                cap = brief.get("level_cap") or 0
+            cap_bucket = (cap or 0) // _CAP_BUCKET
+            key = (nm_key, cap_bucket)
+            if key not in candidates:
+                candidates[key] = []
+                order.append(key)
+            candidates[key].append((rt_id, brief))
+        # Promote each candidate bucket into one or more groups: a single
+        # group when fight_labels are all distinct (true variants), one
+        # group per entry otherwise.
+        for key in order:
+            bucket = candidates[key]
+            labels = [b.get("fight_label") or "" for _, b in bucket]
+            distinct_nonempty = (
+                len(bucket) > 1
+                and all(labels)
+                and len(set(labels)) == len(labels)
+            )
+            if distinct_nonempty:
+                groups.append(bucket)
+            else:
+                for entry in bucket:
+                    groups.append([entry])
+
+        # Sequential-fight filter: when the SAME trainer name has multiple
+        # cap buckets at the same area (i.e. they're different fights at
+        # different points in the story), hide groups not currently relevant
+        # to the player's progress. For each name with >1 bucket:
+        #   • Skip "past" buckets (cap + window < highest)
+        #   • Keep the FIRST upcoming bucket only (lowest cap above highest)
+        #   • If the player is past all buckets, keep the latest bucket only.
+        def _bucket_cap(group_list: list[tuple[int, dict]]) -> int:
+            # All entries in a bucket share approximately the same cap.
+            _, b = group_list[0]
+            fl = b.get("fight_label") or ""
+            c = None
+            if hasattr(self.adapter, "milestone_cap_for_fight_label"):
+                c = self.adapter.milestone_cap_for_fight_label(fl)
+            return c if c is not None else (b.get("level_cap") or 0)
+
+        if highest_party_level > 0:
+            # Re-bucket groups by trainer name so we can pick the most
+            # progress-relevant fight per trainer. `groups` was flattened
+            # above; we need name-level visibility for the filter.
+            by_name: dict[str, list[list[tuple[int, dict]]]] = {}
+            for g in groups:
+                if not g:
+                    continue
+                nm = (g[0][1].get("name") or "").title() or "?"
+                by_name.setdefault(nm, []).append(g)
+            for nm, buckets in by_name.items():
+                if len(buckets) < 2:
+                    continue
+                ordered = sorted(buckets, key=_bucket_cap)
+                # Sequential filtering only applies when the buckets cover
+                # genuinely different progress milestones (e.g. Pre-Surge vs
+                # Post-Surge Bugsy). When all buckets share roughly the
+                # same cap (Left Guard + Right Guard at the same hideout),
+                # they're simultaneous encounters in the same playthrough
+                # and ALL should remain visible.
+                caps = [_bucket_cap(g) for g in ordered]
+                if (max(caps) - min(caps)) < _CAP_BUCKET:
+                    continue
+                keep = None
+                for g in ordered:
+                    if _bucket_cap(g) >= highest_party_level - _CAP_BUCKET:
+                        keep = g
+                        break
+                if keep is None:
+                    keep = ordered[-1]
+                for g in ordered:
+                    if g is not keep:
+                        for entry in g:
+                            entry[1]["_filtered_out"] = True
+
+        # Helper: classify a fight against the player's current progress.
+        # Returns ("past" | "current" | "future" | "unknown", css_class).
+        # "Pre X" milestone cap → fight happens BEFORE that cap; "Post X" →
+        # fight happens AFTER. A fight with cap=C against highest_party_level
+        # h is:
+        #   • past    when h is well past C (we've moved on to later content)
+        #   • future  when h is far below C (we haven't earned the right to be
+        #             there yet — adjacent fights show up in the panel anyway,
+        #             but visually de-emphasised so the *current* one pops)
+        #   • current otherwise (within +/-CURRENT_WINDOW of C)
+        _CURRENT_WINDOW = 10
+        def _classify_fight(fight_brief: dict) -> tuple[str, int | None]:
+            fl = fight_brief.get("fight_label") or ""
+            cap = self.adapter.milestone_cap_for_fight_label(fl) \
+                  if hasattr(self.adapter, "milestone_cap_for_fight_label") else None
+            if cap is None or highest_party_level <= 0:
+                return ("unknown", cap)
+            if highest_party_level >= cap + _CURRENT_WINDOW:
+                return ("past", cap)
+            if highest_party_level <= cap - _CURRENT_WINDOW:
+                return ("future", cap)
+            return ("current", cap)
+
+        rows_html = ""
+        for group in groups:
+            variants = group  # list[(rt_id, brief)]
+            # Skip groups the sequential-fight filter marked as not relevant
+            # to the player's current progress (handled above).
+            if any(b.get("_filtered_out") for _, b in variants):
+                continue
+            primary_id, primary_brief = variants[0]
+            # The first variant's brief drives the summary; remaining variants
+            # are surfaced as selectable tabs inside the expanded body.
+            rt_id = primary_id
+            brief = primary_brief
+            cls_raw  = brief.get("class", "") or ""
+            name_raw = brief.get("name", "") or f"Trainer #{rt_id}"
+            # Collapse "Team Rocket Grunt" + name "Grunt" → just the class;
+            # avoids "TEAM ROCKET GRUNT Grunt" duplication.
+            if name_raw.strip().lower() in cls_raw.strip().lower().split():
+                name_raw = ""
+            cls   = html.escape(cls_raw)
+            name  = html.escape(name_raw)
+            party = brief.get("party") or []
+            party_count = len(party)
+            n_variants = len(variants)
+            state, _ms_cap = _classify_fight(brief)
+            def _render_party(mons: list[dict]) -> str:
+                """Render a single variant's party as a stack of mon rows.
+
+                Levels are resolved at render time: when a mon has a
+                level_offset (relative "Max Level - N" entry from the
+                spreadsheet) AND the caller passed a non-zero
+                highest_party_level, we recompute the level dynamically.
+                Otherwise the static fallback baked into the JSON is used.
+                A small "rel" hint appears next to dynamically-computed
+                levels so the user knows the number reflects their team.
+                """
+                out = ""
+                for mon in mons:
+                    species = html.escape(str(mon.get("species") or "?"))
+                    level    = mon.get("level") or 0
+                    offset   = mon.get("level_offset")
+                    dynamic  = False
+                    if (isinstance(offset, int) and highest_party_level > 0):
+                        level = max(1, highest_party_level + offset)
+                        dynamic = True
+                    ability = html.escape(str(mon.get("ability") or ""))
+                    item    = html.escape(str(mon.get("item") or ""))
+                    nature  = html.escape(str(mon.get("nature") or ""))
+                    moves   = mon.get("moves") or []
+                    moves_html = ""
+                    if moves:
+                        move_chips = "".join(
+                            f'<span class="tr-move">{html.escape(str(m))}</span>'
+                            for m in moves if m and m != "-"
+                        )
+                        moves_html = f'<div class="tr-moves">{move_chips}</div>'
+                    if isinstance(level, int) and level > 0:
+                        lv_text = f"Lv{level}"
+                        if dynamic:
+                            # Show the rule that produced this number so the
+                            # player understands why it scales with their team.
+                            if offset == 0:
+                                lv_text += ' <span class="tr-lv-rule">(Max Lv)</span>'
+                            else:
+                                lv_text += (f' <span class="tr-lv-rule">'
+                                            f'(Max Lv {offset:+d})</span>')
+                    else:
+                        lv_text = "Lv?"
+                    meta_bits = []
+                    if ability: meta_bits.append(f'<span class="tr-ability">{ability}</span>')
+                    if item:    meta_bits.append(f'<span class="tr-item">@ {item}</span>')
+                    if nature:  meta_bits.append(f'<span class="tr-nature dim">{nature}</span>')
+                    meta_html = (' · '.join(meta_bits)) if meta_bits else ''
+                    out += (
+                        f'<div class="tr-party-row">'
+                        f'<div class="tr-mon-hdr">'
+                        f'<span class="tr-species">{species}</span>'
+                        f'<span class="tr-lv">{lv_text}</span>'
+                        f'</div>'
+                        f'{f"<div class=\"tr-mon-meta\">{meta_html}</div>" if meta_html else ""}'
+                        f'{moves_html}'
+                        f'</div>'
+                    )
+                return out
+
+            if n_variants == 1:
+                mons_html = _render_party(party)
+            else:
+                # Render each variant in a sub-block. Header text comes from
+                # the variant's own fight_label ("If Rival Has Squirtle",
+                # "Pre Lt. Surge", "Team Two", …) when present — this is the
+                # spreadsheet author's stated trigger condition. Falls back
+                # to "Variant N" when no label is available. Each variant
+                # also gets its own Calc button so the user can load the
+                # specific matchup into the Prep tab.
+                blocks = []
+                for vi, (v_rt_id, v_brief) in enumerate(variants, start=1):
+                    v_party = v_brief.get("party") or []
+                    lead_species = v_party[0].get("species", "?") if v_party else "?"
+                    v_label = v_brief.get("fight_label") or f"Variant {vi}"
+                    v_calc_label = v_brief.get("calc_label", "") or ""
+                    blocks.append(
+                        f'<div class="tr-variant">'
+                        f'<div class="tr-variant-hdr">'
+                        f'<span class="tr-variant-label">{html.escape(v_label)}</span>'
+                        f'<span class="tr-variant-lead dim">lead: '
+                        f'{html.escape(str(lead_species))}</span>'
+                        f'<button type="button" class="tr-calc-btn tr-variant-calc" '
+                        f'data-pid="{html.escape(player_id, quote=True)}" '
+                        f'data-tid="{v_rt_id}" '
+                        f'data-calc-label="{html.escape(v_calc_label, quote=True)}" '
+                        f'title="Open this variant in RR Calc Prep tab">'
+                        f'&#9876;</button>'
+                        f'</div>'
+                        f'{_render_party(v_party)}'
+                        f'</div>'
+                    )
+                mons_html = '<div class="tr-variants">' + ''.join(blocks) + '</div>'
+            pid_seg = f"{player_id}:" if player_id else ""
+            row_key = f"{key_prefix}tr:{pid_seg}{html.escape(area_id, quote=True)}:{rt_id}"
+            # Summary metadata: party size + level cap + fight condition +
+            # variant count. The fight_label is the "WHEN you fight him"
+            # condition pulled from the xlsx ("If Lv ≥ 27", "If Lv ≥ 44", …).
+            meta_chunks = [f'<span class="tr-size dim">· {party_count} mons</span>']
+            lc = brief.get("level_cap")
+            if isinstance(lc, int) and lc > 0:
+                meta_chunks.append(
+                    f'<span class="tr-cap dim">· Lv≤{lc}</span>')
+            fight_label = brief.get("fight_label") or ""
+            if fight_label:
+                meta_chunks.append(
+                    f'<span class="tr-fight-label">· '
+                    f'{html.escape(fight_label)}</span>')
+            if n_variants > 1:
+                meta_chunks.append(
+                    f'<span class="tr-variant-count">{n_variants} variants</span>')
+            meta_html = "".join(meta_chunks)
+            sprite_url = brief.get("sprite_url") or ""
+            sprite_html = ""
+            if sprite_url:
+                sprite_html = (
+                    f'<img class="tr-sprite" loading="lazy" '
+                    f'src="{html.escape(sprite_url, quote=True)}" '
+                    f'alt="" referrerpolicy="no-referrer" '
+                    f'onerror="this.style.display=\'none\'">'
+                )
+            # The widget header already declares these are "Upcoming
+            # Trainers"; a per-row "upcoming"/"current"/"past" chip would be
+            # redundant noise. The progress state class still drives subtle
+            # styling (faded past fights, accented border for current) and
+            # the sequential-fight filter above hides genuinely-past variants
+            # so only the relevant ones reach this loop.
+            rows_html += (
+                f'<details class="trainer-row tr-state-{state}" id="d-{row_key}" '
+                f'data-details-key="{row_key}">'
+                f'<summary>'
+                f'{sprite_html}'
+                f'<span class="tr-class">{cls}</span> '
+                f'<span class="tr-name">{name}</span>'
+                f'{meta_html}'
+                f'<button type="button" class="tr-calc-btn" '
+                f'data-pid="{html.escape(player_id, quote=True)}" '
+                f'data-tid="{rt_id}" '
+                f'data-calc-label="{html.escape(brief.get("calc_label", "") or "", quote=True)}" '
+                f'title="Open in RR Calc Prep tab (reuses calc tab if open)">&#9876;</button>'
+                f'</summary>'
+                f'<div class="tr-party">{mons_html}</div>'
+                f'</details>'
+            )
+        if not rows_html:
+            return ""
+        pid_seg = f"{player_id}:" if player_id else ""
+        key = f"{key_prefix}tr:{pid_seg}{html.escape(area_id, quote=True)}"
+        return (
+            f'<details class="trainer-widget" id="d-{key}" data-details-key="{key}">'
+            f'<summary><svg class="inline-ico" aria-hidden="true">'
+            f'<use href="#i-swords"/></svg> Upcoming Key Trainers</summary>'
+            f'<div class="trainer-list">{rows_html}</div>'
             f'</details>'
         )
 
@@ -2420,8 +2764,15 @@ class SLinkServer:
             _new_key = msg.get("new_key", "")
             _migrated = self.party_details[player_id].get(_new_key, {})
             _nick = _migrated.get("nickname", "") or msg.get("old_key", "")[:8]
+            _reason = msg.get("reason", "")
+            if msg.get("new_species") is not None:
+                _what = "evolved"
+            elif _reason == "trade_undo":
+                _what = "trade reverted"
+            else:
+                _what = "nature/ability changed"
             self._log_event(player_id, "key_change",
-                            f"🔄 {_nick or _new_key[:8]} nature changed", "", _new_key)
+                            f"🔄 {_nick or _new_key[:8]} {_what}", "", _new_key)
 
         # Log clause violations (capture rejected) and dupes rerolls (no_catch suppressed).
         # gui_prompt commands are only queued for these scenarios, so they're a reliable signal.
@@ -2879,6 +3230,337 @@ class SLinkServer:
         }
         # Gen 1 has no abilities — hide that column
         has_abilities = not (self.adapter and self.adapter.game_id in ("gen1_rby", "gen2_crystal"))
+
+        # ── Shared mon-cell helpers ────────────────────────────────────────
+        # _lp_mon_cell renders the stacked "sprite + nickname / Lv · types /
+        # ITEM: / ABILITY: / Moves▶" layout used by both the split player-card
+        # party table (mirror_b=False, no lnk fallbacks needed) and the
+        # combined linked-party table (mirror_b=True on the B side to drive
+        # row-reverse via .lp-mc-b). Lifted out of the combined-view block so
+        # the split party + box tables can reuse the same compact widget.
+        def _lp_mon_cell(det: dict, lnk: dict | None, side: str,
+                         key: str, *, mirror_b: bool = False,
+                         is_box: bool = False,
+                         key_prefix: str = "",
+                         partner_html: str = "",
+                         show_ability: bool = True,
+                         show_types: bool = True) -> str:
+            """``key_prefix`` is prepended to the move-dropdown mon_key so the
+            same mon rendered in both the split view AND the combined view
+            (both kept in the DOM, switched via body.lp-view) gets unique
+            DOM ids — duplicate ``id`` attrs are invalid HTML and break the
+            morph-veto + localStorage restore (the user would open one and
+            both would open). Pass "lp:" from the combined-view callers.
+
+            ``partner_html`` is an optional pre-built sub-line (chain icon +
+            partner label) rendered between the Lv·types line and ITEM.
+            Used by the split view since it no longer has a Partner column.
+            Combined view leaves it empty (partner is implied by the
+            symmetric mirror layout).
+
+            ``show_ability`` controls whether the ABILITY: line renders in
+            the cell. Split view passes False because it puts Ability in
+            its own scannable column; combined view leaves it True so the
+            ability stays consolidated.
+
+            ``show_types`` controls whether the type chips render in the
+            Lv·types sub-line. Split view passes False because it puts
+            types in their own (vertically stacked) column."""
+            lnk = lnk or {}
+            nick = det.get("nickname") or lnk.get(f"{side}_nickname") or "???"
+            sid  = det.get("species_id") or lnk.get(f"{side}_species_id") or 0
+            gender = det.get("gender") or self.adapter.gender_from_key(key, sid)
+            sprite_html = (det.get("sprite_html")
+                           or lnk.get(f"{side}_sprite_html")
+                           or self._get_sprite_html(sid))
+            is_active = det.get("active", False)
+            active_pfx = ('<svg class="inline-ico" aria-hidden="true">'
+                          '<use href="#i-swords"/></svg> ' if is_active else '')
+            entry_x = s._key_index.get(key)
+            mi = (entry_x.a if side == "a" else entry_x.b) if entry_x else None
+            is_shiny = key in s.bonus_keys.get(side, set()) or bool(mi and mi.is_shiny)
+            name_html = mon_label(key, nick, sid, gender, shiny=is_shiny)
+
+            # Sub-line: Lv · type chips (· divider matches dashboard convention).
+            # show_types=False suppresses the chips here (split view renders
+            # them in a dedicated stacked Type column).
+            lv = det.get("level") or lnk.get(f"{side}_level") or 0
+            lv_html = f'<span class="lp-lv-inline">Lv {lv}</span>' if lv else ''
+            types_html = _type_badges_html(sid, adapter=self.adapter) if show_types else ''
+            sep_html = '<span class="lp-sep">&middot;</span>' if (lv_html and types_html) else ''
+            sub_line = (f'<div class="lp-mon-sub">{lv_html}{sep_html}{types_html}</div>'
+                        if (lv_html or types_html) else "")
+
+            # Block lines — each on its own row, dashboard-style label prefix
+            item_id = det.get("held_item_id", 0)
+            item_str = self.adapter.item_name(item_id)
+            item_html = (f'<span class="held-item">{html.escape(item_str)}</span>'
+                         if item_str else "")
+            if has_abilities and show_ability:
+                abl_name = det.get("ability_name", "")
+                abl_id = det.get("ability_id", 0)
+                abl_desc = self.adapter.ability_description(abl_id) if abl_id else ""
+                abl_html = (f'<span class="lp-mon-abl" title="{html.escape(abl_desc)}">{html.escape(abl_name)}</span>'
+                            if abl_name else '')
+            else:
+                abl_html = ''
+
+            # Moves dropdown — uses move_table_html's built-in keyed details
+            # so cross-morph + localStorage persistence work without extra JS.
+            move_details = det.get("move_details", [])
+            move_html = _move_table_html(move_details,
+                                         mon_key=f"{key_prefix}{key}",
+                                         is_box=is_box)
+            moves_block = f'<div class="lp-moves">{move_html}</div>' if move_html else ''
+
+            cls_mc = "lp-mc-b" if mirror_b else "lp-mc-a"
+            return (
+                f'<div class="lp-mon-cell {cls_mc}">'
+                + (f'<div class="lp-mon-spr">{sprite_html}</div>' if sprite_html else '')
+                + f'<div class="lp-mon-txt">'
+                + f'<div class="lp-nick">{active_pfx}{name_html}</div>'
+                + sub_line
+                + partner_html
+                + item_html
+                + abl_html
+                + moves_block
+                + f'</div>'
+                + f'</div>'
+            )
+
+        def _resolve_box_level(bentry: dict) -> int:
+            """Box snapshots don't always carry level — walk the same fallback
+            chain as the split-view box table (mon_stats → link entry →
+            party_details on either client → _mon_cache). Returns 0 if none
+            found, in which case the sub-line just omits the "Lv N" chip."""
+            if bentry.get("level"):
+                return bentry["level"]
+            k = bentry.get("key", "")
+            if not k:
+                return 0
+            cs = s.mon_stats.get(k)
+            if cs and cs.get("level"):
+                return cs["level"]
+            ent = s._key_index.get(k)
+            if ent:
+                mi = ent.a if ent.a and ent.a.key == k else ent.b
+                if mi and mi.level:
+                    return mi.level
+            for _pid2 in ("a", "b"):
+                pd = self.party_details.get(_pid2, {}).get(k)
+                if pd and pd.get("level"):
+                    return pd["level"]
+            mc = self._mon_cache.get(k)
+            if mc and mc.get("level"):
+                return mc["level"]
+            return 0
+
+        def _lp_hp_cell(det: dict) -> str:
+            hp = int(det.get("hp", 0) or 0)
+            mx = int(det.get("maxHP", 0) or 0)
+            pct = max(0, min(100, int(hp / mx * 100))) if mx else 0
+            bar_cls = "hp-high" if pct > 50 else ("hp-mid" if pct > 20 else "hp-low")
+            sc = det.get("status_cond", 0)
+            # Stat-stage chips only render for the active mon and only when
+            # there's at least one non-zero stage — _stat_stages_html returns
+            # "" otherwise, so this is safe to include unconditionally.
+            stages_html = (_stat_stages_html(det.get("stat_stages"))
+                           if det.get("active") else "")
+            return (
+                f'<div class="hp-stack">'
+                f'<div class="hp-stack-val">'
+                f'<span class="dim">{hp}/{mx}</span>'
+                + _status_icon_html(sc)
+                + stages_html
+                + f'</div>'
+                f'<div class="hp-bar-bg">'
+                f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
+                f'</div>'
+                f'</div>'
+            )
+
+        def _battle_panel_html(pid: str, p: dict, *,
+                               suppress_calc: bool = False,
+                               key_prefix: str = "") -> str:
+            """Render the full <div class="battle-panel">...</div> block for one
+            player. Empty string when ``p["battle_state"]["in_battle"]`` is
+            False. Lifted out of the player-card loop so the combined-view
+            lp-battle-widget can reuse the exact same rendering.
+
+            ``suppress_calc=True`` skips the calc-preview data div — needed
+            when the same battle panel is rendered twice in the same DOM
+            (split view + combined view) to avoid duplicate ``id`` attrs.
+
+            ``key_prefix`` is prepended to the foe move-dropdown mon_key so
+            the same foe rendered in two views (split + combined) gets
+            independent collapsible state and a unique DOM id."""
+            bs = p.get("battle_state", {})
+            if not bs.get("in_battle"):
+                return ""
+            is_trainer = bs.get("is_trainer_battle", False)
+            battle_lbl = "Trainer Battle" if is_trainer else "Wild Battle"
+            opp_name = html.escape(bs.get("opponent_name", "")) if is_trainer else ""
+            opp_class = html.escape(bs.get("opponent_class", "")) if is_trainer else ""
+            if opp_name:
+                battle_lbl = f"vs {opp_class} {opp_name}" if opp_class else f"vs {opp_name}"
+            elif opp_class:
+                battle_lbl = f"vs {opp_class}"
+            new_enc = False
+            if not is_trainer and p.get("nuzlocke_active", False):
+                cur_area = p.get("current_area_id", "")
+                area_st = d["area_states"].get(cur_area, "unseen")
+                has_pending = (cur_area in d.get("pending_captures", {})
+                               and pid in d["pending_captures"][cur_area])
+                if cur_area and area_st not in ("linked", "dead_zone") and not has_pending:
+                    new_enc = True
+            new_enc_badge = (' <span style="color:#5f5;font-weight:bold">'
+                             '★ NEW ENCOUNTER</span>' if new_enc else "")
+            doubles_chip = (' <span class="dbl-chip">'
+                            '<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg>'
+                            '<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg>'
+                            '&nbsp;DOUBLES</span>'
+                            if bs.get("is_doubles") else "")
+            chunks = ['<div class="battle-panel">']
+            chunks.append(
+                f'<h4 style="margin:0 0 0.3em">'
+                f'<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg>'
+                f' IN BATTLE &mdash; {battle_lbl}{new_enc_badge}{doubles_chip}</h4>'
+            )
+            enemy_party = bs.get("enemy_party", [])
+            if enemy_party:
+                chunks.append(
+                    f'<table class="foe-table"><tr><th>Foe</th>'
+                    f'<th class="col-lv">Lv</th><th class="col-hp">HP</th>'
+                    f'<th class="col-type">Type</th>'
+                    f'{"<th class=\"col-abl\">Ability</th>" if has_abilities else ""}</tr>'
+                )
+                for ei, em in enumerate(enemy_party):
+                    esid   = em.get("species_id", 0)
+                    elv    = em.get("level", 0)
+                    ehp    = em.get("hp", 0)
+                    emaxHP = em.get("maxHP", 1)
+                    active = em.get("active", False)
+                    eaid   = em.get("ability_id", 0)
+                    eiid   = em.get("held_item_id", 0)
+                    esc    = em.get("status_cond", 0)
+                    ename  = html.escape(self.adapter.species_name(esid)) if esid else "?"
+                    eabl   = self.adapter.ability_name(eaid, esid) if eaid else ""
+                    eadesc = self.adapter.ability_description(eaid) if eaid else ""
+                    eitem  = self.adapter.item_name(eiid) if eiid else ""
+                    eitem_html = (f'<span class="held-item">{html.escape(eitem)}</span>'
+                                  if eitem else "")
+                    esprite = self._get_sprite_html(esid)
+                    etype_cell = _type_badges_html(esid, adapter=self.adapter)
+                    pct    = max(0, min(100, int(ehp / emaxHP * 100))) if emaxHP else 0
+                    bar_cls = "hp-high" if pct > 50 else ("hp-mid" if pct > 20 else "hp-low")
+                    hp_bar = (
+                        f'<div class="hp-stack">'
+                        f'<div class="hp-stack-val">'
+                        f'<span class="dim">{ehp}/{emaxHP}</span>'
+                        + _status_icon_html(esc)
+                        + (active and _stat_stages_html(em.get("stat_stages")) or "")
+                        + f'</div>'
+                        f'<div class="hp-bar-bg">'
+                        f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
+                        f'</div>'
+                        f'</div>'
+                    )
+                    foe_cls = "fainted" if ehp == 0 else ("active-foe" if active else "")
+                    active_marker = ('<svg class="inline-ico" aria-hidden="true">'
+                                     '<use href="#i-swords"/></svg> ' if active else "")
+                    foe_key = em.get("key", f"foe-{ei}")
+                    abl_html = (f'<span class="ability" title="{html.escape(eadesc)}">{html.escape(eabl)}</span>'
+                                if eabl else '<span class="dim">—</span>')
+                    foe_mon_cell = (
+                        f'<div style="display:inline-flex;align-items:center;gap:4px">'
+                        + (f'<div style="flex-shrink:0">{esprite}</div>' if esprite else '')
+                        + f'<div>{active_marker}{ename}{eitem_html}</div>'
+                        + f'</div>'
+                    )
+                    chunks.append(
+                        f'<tr class="{foe_cls}" data-key="{html.escape(foe_key)}">'
+                        f'<td>{foe_mon_cell}</td>'
+                        f'<td>{elv}</td>'
+                        f'<td>{hp_bar}</td>'
+                        f'<td>{etype_cell}</td>'
+                        f'{"<td>" + abl_html + "</td>" if has_abilities else ""}</tr>'
+                    )
+                    # Per-pid mon_key suffix keeps A-side and B-side foe-move
+                    # dropdowns independent. key_prefix lets the combined view
+                    # render a separate DOM id from the split view.
+                    emove_html = _move_table_html(em.get("move_details", []),
+                                                  mon_key=f"{key_prefix}enemy:{pid}:{ei}")
+                    if emove_html:
+                        foe_cols = 5 if has_abilities else 4
+                        chunks.append(
+                            f'<tr class="foe-moves-row" data-key="{html.escape(foe_key)}:moves">'
+                            f'<td colspan="{foe_cols}">{emove_html}</td></tr>'
+                        )
+                chunks.append("</table>")
+            else:
+                chunks.append('<p class="empty">No foe data yet.</p>')
+            # Calc preview data div (rendered by SLinkCalc JS) — RR only.
+            # Skipped in suppress_calc mode (combined-view battle card) to
+            # avoid a duplicate calc-preview-{pid} id elsewhere in the DOM.
+            if getattr(s, 'is_rr', False) and not suppress_calc:
+                _pkeys = p.get("party_keys", [])
+                _pdetails = p.get("party_details", {})
+                _atk = None
+                _atk_key = None
+                for _pk in _pkeys:
+                    _d2 = _pdetails.get(_pk, {})
+                    if _d2.get("active") and _d2.get("hp", 0) > 0:
+                        _atk = _d2
+                        _atk_key = _pk
+                        break
+                if not _atk:
+                    for _pk in _pkeys:
+                        _d2 = _pdetails.get(_pk, {})
+                        if _d2.get("hp", 0) > 0:
+                            _atk = _d2
+                            _atk_key = _pk
+                            break
+                _def = next(
+                    (em for em in enemy_party if em.get("active")),
+                    next((em for em in enemy_party if em.get("hp", 0) > 0), None))
+                if _atk and _def and _atk_key:
+                    _asid = _atk.get("species_id", 0)
+                    _esid = _def.get("species_id", 0)
+                    _aname = html.escape(self.adapter.species_name(_asid)) if _asid else ""
+                    _ename = html.escape(self.adapter.species_name(_esid)) if _esid else ""
+                    _amoves = [m for m in (_atk.get("moves") or []) if m][:4]
+                    _amoves_json = html.escape(json.dumps(_amoves))
+                    _ehp  = _def.get("hp", 0)
+                    _emhp = max(_def.get("maxHP", 1), 1)
+                    _ehp_pct = max(0, min(100, int(_ehp / _emhp * 100)))
+                    _tkey = ""
+                    _istr = "0"
+                    if is_trainer and bs.get("opponent_class") and bs.get("opponent_name"):
+                        _tkey = html.escape(
+                            f"{bs['opponent_class']} {bs['opponent_name']}")
+                        _istr = "1"
+                    _abl = html.escape(_atk.get("ability_name", ""))
+                    _itm = html.escape(
+                        self.adapter.item_name(_atk.get("held_item_id", 0)))
+                    chunks.append(
+                        f'<div id="calc-preview-{pid}" class="calc-preview"'
+                        f' data-in-battle="1"'
+                        f' data-trainer-key="{_tkey}"'
+                        f' data-is-trainer="{_istr}"'
+                        f' data-player-species="{_aname}"'
+                        f' data-player-level="{_atk.get("level", 0)}"'
+                        f' data-player-nature="{html.escape(_nature_from_key(_atk_key))}"'
+                        f' data-player-ability="{_abl}"'
+                        f' data-player-item="{_itm}"'
+                        f' data-player-moves="{_amoves_json}"'
+                        f' data-enemy-species="{_ename}"'
+                        f' data-enemy-level="{_def.get("level", 0)}"'
+                        f' data-enemy-hp-pct="{_ehp_pct}"'
+                        f' style="display:none"></div>'
+                    )
+            chunks.append('</div>')
+            return "".join(chunks)
+
         for pid in ["a", "b"]:
             p = d["players"][pid]
             is_online = p["connected"]
@@ -2927,7 +3609,18 @@ class SLinkServer:
                 f'title="Download BizHawk launcher script for Player {pid.upper()}">'
                 f'&#11015;</a>'
             )
-            enc_html = self._encounter_html(p.get("current_area_id") or "")
+            enc_html = self._encounter_html(p.get("current_area_id") or "", pid)
+            # Highest party level drives dynamic "Max Level - N" resolution
+            # in the trainer panel — see _trainer_panel_html docstring.
+            _hi_lv = 0
+            for _k in p.get("party_keys", []):
+                _det = p.get("party_details", {}).get(_k, {})
+                _lv = _det.get("level", 0) or 0
+                if isinstance(_lv, int) and _lv > _hi_lv:
+                    _hi_lv = _lv
+            trn_html = self._trainer_panel_html(
+                p.get("current_area_id") or "", pid,
+                highest_party_level=_hi_lv)
             parts.append(
                 f'<div class="card-hdr">'
                 f'<h3>{trainer_str}Player {pid.upper()} &mdash; {rom_lbl}{conn_badge}{nuz_badge}{pending_bonus_badge}{gym_html}</h3>'
@@ -2942,6 +3635,8 @@ class SLinkServer:
             )
             if enc_html:
                 parts.append(enc_html)
+            if trn_html:
+                parts.append(trn_html)
             # Identity error banner
             id_err = p.get("identity_error", "")
             if id_err:
@@ -2961,220 +3656,35 @@ class SLinkServer:
                     if pc_pid == pid:
                         pending_key_area[pc_info["key"]] = pc_area
 
-            # Party table
-            # Battle state (shown above party)
-            bs = p.get("battle_state", {})
-            if bs.get("in_battle"):
-                is_trainer = bs.get("is_trainer_battle", False)
-                battle_lbl = "Trainer Battle" if is_trainer else "Wild Battle"
-                opp_name = html.escape(bs.get("opponent_name", "")) if is_trainer else ""
-                opp_class = html.escape(bs.get("opponent_class", "")) if is_trainer else ""
-                if opp_name:
-                    if opp_class:
-                        battle_lbl = f"vs {opp_class} {opp_name}"
-                    else:
-                        battle_lbl = f"vs {opp_name}"
-                elif opp_class:
-                    battle_lbl = f"vs {opp_class}"
-                # Check if this is a new encounter (wild battle in an unresolved area)
-                # Only show for nuzlocke-active players — pre-nuzlocke battles are not encounters.
-                new_enc = False
-                if not is_trainer and p.get("nuzlocke_active", False):
-                    cur_area = p.get("current_area_id", "")
-                    area_st = d["area_states"].get(cur_area, "unseen")
-                    has_pending = cur_area in d.get("pending_captures", {}) and pid in d["pending_captures"][cur_area]
-                    if cur_area and area_st not in ("linked", "dead_zone") and not has_pending:
-                        new_enc = True
-                new_enc_badge = ' <span style="color:#5f5;font-weight:bold">★ NEW ENCOUNTER</span>' if new_enc else ""
-                doubles_chip = (' <span class="dbl-chip"><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg>&nbsp;DOUBLES</span>'
-                                if bs.get("is_doubles") else "")
-                parts.append('<div class="battle-panel">')
-                parts.append(f'<h4 style="margin:0 0 0.3em"><svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> IN BATTLE &mdash; {battle_lbl}{new_enc_badge}{doubles_chip}</h4>')
-                enemy_party = bs.get("enemy_party", [])
-                if enemy_party:
-                    parts.append(f'<table class="foe-table"><tr><th>Foe</th><th class="col-lv">Lv</th><th class="col-hp">HP</th><th class="col-type">Type</th>{"<th class=\"col-abl\">Ability</th>" if has_abilities else ""}</tr>')
-                    for ei, em in enumerate(enemy_party):
-                        esid   = em.get("species_id", 0)
-                        elv    = em.get("level", 0)
-                        ehp    = em.get("hp", 0)
-                        emaxHP = em.get("maxHP", 1)
-                        active = em.get("active", False)
-                        eaid   = em.get("ability_id", 0)
-                        eiid   = em.get("held_item_id", 0)
-                        esc    = em.get("status_cond", 0)
-                        ename  = html.escape(self.adapter.species_name(esid)) if esid else "?"
-                        eabl   = self.adapter.ability_name(eaid, esid) if eaid else ""
-                        eadesc = self.adapter.ability_description(eaid) if eaid else ""
-                        eitem  = self.adapter.item_name(eiid) if eiid else ""
-                        eitem_html = (f'<span class="held-item">{html.escape(eitem)}</span>'
-                                      if eitem else "")
-                        esprite = self._get_sprite_html(esid)
-                        etype_cell = _type_badges_html(esid, adapter=self.adapter)
-                        pct    = max(0, min(100, int(ehp / emaxHP * 100))) if emaxHP else 0
-                        bar_cls = "hp-high" if pct > 50 else ("hp-mid" if pct > 20 else "hp-low")
-                        hp_bar = (
-                            f'<div class="hp-stack">'
-                            f'<div class="hp-stack-val">'
-                            f'<span class="dim">{ehp}/{emaxHP}</span>'
-                            + _status_icon_html(esc)
-                            + (active and _stat_stages_html(em.get("stat_stages")) or "")
-                            + f'</div>'
-                            f'<div class="hp-bar-bg">'
-                            f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
-                            f'</div>'
-                            f'</div>'
-                        )
-                        foe_cls = "fainted" if ehp == 0 else ("active-foe" if active else "")
-                        active_marker = '<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> ' if active else ""
-                        foe_key = em.get("key", f"foe-{ei}")
-                        abl_html = (f'<span class="ability" title="{html.escape(eadesc)}">{html.escape(eabl)}</span>'
-                                    if eabl else '<span class="dim">—</span>')
-                        # Sprite + name share one cell (inline-flex) so the
-                        # name sits flush against the sprite — matches the
-                        # party table's compact layout.
-                        foe_mon_cell = (
-                            f'<div style="display:inline-flex;align-items:center;gap:4px">'
-                            + (f'<div style="flex-shrink:0">{esprite}</div>' if esprite else '')
-                            + f'<div>{active_marker}{ename}{eitem_html}</div>'
-                            + f'</div>'
-                        )
-                        parts.append(
-                            f'<tr class="{foe_cls}" data-key="{html.escape(foe_key)}">'
-                            f'<td>{foe_mon_cell}</td>'
-                            f'<td>{elv}</td>'
-                            f'<td>{hp_bar}</td>'
-                            f'<td>{etype_cell}</td>'
-                            f'{"<td>" + abl_html + "</td>" if has_abilities else ""}</tr>'
-                        )
-                        emove_html = _move_table_html(em.get("move_details", []),
-                                                      mon_key=f"enemy:{ei}")
-                        if emove_html:
-                            foe_cols = 5 if has_abilities else 4
-                            parts.append(
-                                f'<tr class="foe-moves-row" data-key="{html.escape(foe_key)}:moves">'
-                                f'<td colspan="{foe_cols}">{emove_html}</td></tr>'
-                            )
-                    parts.append("</table>")
-                else:
-                    parts.append('<p class="empty">No foe data yet.</p>')
-                # ── Calc preview data div (rendered by SLinkCalc JS) ──
-                if getattr(s, 'is_rr', False):
-                    _pkeys = p.get("party_keys", [])
-                    _pdetails = p.get("party_details", {})
-                    _atk = None
-                    _atk_key = None
-                    for _pk in _pkeys:
-                        _d = _pdetails.get(_pk, {})
-                        if _d.get("active") and _d.get("hp", 0) > 0:
-                            _atk = _d
-                            _atk_key = _pk
-                            break
-                    if not _atk:
-                        for _pk in _pkeys:
-                            _d = _pdetails.get(_pk, {})
-                            if _d.get("hp", 0) > 0:
-                                _atk = _d
-                                _atk_key = _pk
-                                break
-                    _def = next(
-                        (em for em in enemy_party if em.get("active")),
-                        next((em for em in enemy_party if em.get("hp", 0) > 0), None))
-                    if _atk and _def and _atk_key:
-                        _asid = _atk.get("species_id", 0)
-                        _esid = _def.get("species_id", 0)
-                        _aname = html.escape(self.adapter.species_name(_asid)) if _asid else ""
-                        _ename = html.escape(self.adapter.species_name(_esid)) if _esid else ""
-                        _amoves = [m for m in (_atk.get("moves") or []) if m][:4]
-                        _amoves_json = html.escape(json.dumps(_amoves))
-                        _ehp  = _def.get("hp", 0)
-                        _emhp = max(_def.get("maxHP", 1), 1)
-                        _ehp_pct = max(0, min(100, int(_ehp / _emhp * 100)))
-                        _tkey = ""
-                        _istr = "0"
-                        if is_trainer and bs.get("opponent_class") and bs.get("opponent_name"):
-                            _tkey = html.escape(
-                                f"{bs['opponent_class']} {bs['opponent_name']}")
-                            _istr = "1"
-                        _abl = html.escape(_atk.get("ability_name", ""))
-                        _itm = html.escape(
-                            self.adapter.item_name(_atk.get("held_item_id", 0)))
-                        parts.append(
-                            f'<div id="calc-preview-{pid}" class="calc-preview"'
-                            f' data-in-battle="1"'
-                            f' data-trainer-key="{_tkey}"'
-                            f' data-is-trainer="{_istr}"'
-                            f' data-player-species="{_aname}"'
-                            f' data-player-level="{_atk.get("level", 0)}"'
-                            f' data-player-nature="{html.escape(_nature_from_key(_atk_key))}"'
-                            f' data-player-ability="{_abl}"'
-                            f' data-player-item="{_itm}"'
-                            f' data-player-moves="{_amoves_json}"'
-                            f' data-enemy-species="{_ename}"'
-                            f' data-enemy-level="{_def.get("level", 0)}"'
-                            f' data-enemy-hp-pct="{_ehp_pct}"'
-                            f' style="display:none"></div>'
-                        )
-                parts.append('</div>')
+            # Battle panel (shown above party when player is in battle)
+            _bp_html = _battle_panel_html(pid, p)
+            if _bp_html:
+                parts.append(_bp_html)
 
             # Party
             party_keys = p["party_keys"]
             if party_keys:
                 q = p["queued"]
                 q_str = f'<span class="warn">{q} queued</span>' if q > 0 else ""
+                # Hybrid layout: Pokémon | Type | Ability | HP. Pokémon
+                # cell stacks name / Lv / ⛓ Partner / ITEM / Moves; Type
+                # column stacks dual-type badges vertically to stay narrow;
+                # Ability column is scannable for matchup planning. Gen 1/2
+                # hide the Ability column (no ability data).
                 abl_hdr = '<th class="col-abl">Ability</th>' if has_abilities else ''
-                # Link column dropped from the dashboard — link status is now
-                # carried by the Partner cell's tone (alive / pending / dim).
-                # Keeps the party table narrow enough to never trip a
-                # horizontal scrollbar at desktop widths.
-                parts.append(f'<table class="party-table"><thead><tr><th>Pokémon</th><th class="col-lv">Lv</th><th class="col-hp">HP</th><th class="col-type">Type</th>{abl_hdr}<th>Partner</th></tr></thead><tbody>')
+                parts.append('<table class="party-table"><thead><tr>'
+                             '<th>Pokémon</th>'
+                             '<th class="col-type">Type</th>'
+                             f'{abl_hdr}'
+                             '<th class="col-hp">HP</th>'
+                             '</tr></thead><tbody>')
                 for key in party_keys:
                     detail      = p["party_details"].get(key, {})
-                    level       = detail.get("level", 0)
                     hp          = detail.get("hp", 1)
-                    maxhp       = detail.get("maxHP", 1)
-                    sid         = detail.get("species_id", 0)
-                    item_id     = detail.get("held_item_id", 0)
                     is_active   = detail.get("active", False)
                     row_cls     = "fainted" if hp == 0 else ("active-mon" if is_active else "")
-                    lv_str      = str(level) if level else '<span class="dim">?</span>'
-                    item_str    = self.adapter.item_name(item_id)
-                    item_html   = (f'<span class="held-item">{html.escape(item_str)}</span>'
-                                   if item_str else "")
-                    # Shiny: unlinked shiny (still in bonus_keys) or linked MonInfo.is_shiny
-                    _party_entry = s._key_index.get(key)
-                    _own_mi = (_party_entry.a if pid == "a" else _party_entry.b) if _party_entry else None
-                    is_shiny_mon = key in s.bonus_keys.get(pid, set()) or bool(_own_mi and _own_mi.is_shiny)
-                    active_pfx  = '<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg> ' if is_active else ''
-                    sprite_html = self._get_sprite_html(sid)
-                    mon_str     = (
-                        f'<div style="display:inline-flex;align-items:center;gap:4px">'
-                        + (f'<div style="flex-shrink:0">{sprite_html}</div>' if sprite_html else '')
-                        + f'<div>{active_pfx}{mon_label(key, detail.get("nickname", ""), sid, detail.get("gender", ""), shiny=is_shiny_mon)}{item_html}</div>'
-                        + f'</div>'
-                    )
-                    pct     = max(0, min(100, int(hp / maxhp * 100))) if maxhp else 0
-                    bar_cls = "hp-high" if pct > 50 else ("hp-mid" if pct > 20 else "hp-low")
-                    status_cond = detail.get("status_cond", 0)
-                    is_active   = detail.get("active", False)
-                    hp_cell = (
-                        f'<div class="hp-stack">'
-                        f'<div class="hp-stack-val">'
-                        f'<span class="dim">{hp}/{maxhp}</span>'
-                        + _status_icon_html(status_cond)
-                        + (is_active and _stat_stages_html(detail.get("stat_stages")) or "")
-                        + f'</div>'
-                        f'<div class="hp-bar-bg">'
-                        f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
-                        f'</div>'
-                        f'</div>'
-                    )
-                    type_cell = _type_badges_html(sid, adapter=self.adapter)
-                    abl_name = detail.get("ability_name", "")
-                    abl_id = detail.get("ability_id", 0)
-                    abl_desc = self.adapter.ability_description(abl_id) if abl_id else ""
-                    ability_cell = (f'<span class="ability" title="{html.escape(abl_desc)}">{html.escape(abl_name)}</span>'
-                                   if abl_name else '<span class="dim">—</span>')
 
+                    # Resolve partner display + link status
                     entry = s._key_index.get(key)
                     if entry:
                         p_mon = entry.b if pid == "a" else entry.a
@@ -3196,7 +3706,6 @@ class SLinkServer:
                         else:
                             partner_str = '<span class="dim">—</span>'
                         link_cls = entry.status.value
-                        link_lbl = entry.status.value
                     else:
                         pend_area = pending_key_area.get(key)
                         if pend_area:
@@ -3206,42 +3715,49 @@ class SLinkServer:
                             )
                             area_lbl = html.escape(self.adapter.area_display_name(pend_area))
                             partner_str = (
-                                f'<span class="pending_b" style="font-size:0.85em">'
                                 f'waiting for <b>{partner_name}</b> @ {area_lbl}'
-                                f'</span>'
                             )
                             link_cls = "pending_b"
-                            link_lbl = "pending"
                         elif key in d.get("bonus_keys", {}).get(pid, []):
                             partner_str = '<span style="color:#ffd700">★ Shiny Clause</span>'
                             link_cls    = "alive"
-                            link_lbl    = "★ bonus"
                         else:
                             partner_str = '<span class="dim">unlinked</span>'
                             link_cls    = "dim"
-                            link_lbl    = "—"
 
-                    abl_td = f'<td>{ability_cell}</td>' if has_abilities else ''
-                    colspan = 6 if has_abilities else 5
-                    move_details = detail.get("move_details", [])
-                    move_html = _move_table_html(move_details, mon_key=key)
-                    # Wrap the partner cell in the link-status class so the
-                    # Partner column carries the alive / pending / dim tone
-                    # we used to put in the dropped Link column.
+                    partner_inline = (
+                        f'<div class="lp-partner-sub {link_cls}">'
+                        f'<svg class="inline-ico lp-partner-ico" aria-hidden="true">'
+                        f'<use href="#i-link"/></svg> {partner_str}'
+                        f'</div>'
+                    )
+                    mon_str = _lp_mon_cell(detail, None, pid, key,
+                                           partner_html=partner_inline,
+                                           show_ability=False,
+                                           show_types=False)
+                    hp_cell = _lp_hp_cell(detail)
+                    type_cell = _type_badges_html(detail.get("species_id", 0),
+                                                  adapter=self.adapter)
+
+                    # Ability column (independent of the cell so it's
+                    # scannable down the table for matchup planning).
+                    if has_abilities:
+                        abl_name = detail.get("ability_name", "")
+                        abl_id = detail.get("ability_id", 0)
+                        abl_desc = self.adapter.ability_description(abl_id) if abl_id else ""
+                        ability_cell = (f'<span class="ability" title="{html.escape(abl_desc)}">{html.escape(abl_name)}</span>'
+                                       if abl_name else '<span class="dim">—</span>')
+                        abl_td = f'<td>{ability_cell}</td>'
+                    else:
+                        abl_td = ''
+
                     parts.append(
                         f'<tr class="{row_cls}" data-key="{html.escape(key)}">'
                         f'<td>{mon_str}</td>'
-                        f'<td>{lv_str}</td>'
-                        f'<td>{hp_cell}</td>'
-                        f'<td>{type_cell}</td>'
+                        f'<td class="col-type">{type_cell}</td>'
                         f'{abl_td}'
-                        f'<td class="{link_cls}">{partner_str}</td></tr>'
+                        f'<td>{hp_cell}</td></tr>'
                     )
-                    if move_html:
-                        parts.append(
-                            f'<tr class="move-row {row_cls}" data-key="{html.escape(key)}-moves">'
-                            f'<td colspan="{colspan}">{move_html}</td></tr>'
-                        )
                 parts.append("</tbody></table>")
                 if q_str:
                     parts.append(f'<p style="margin:0;font-size:0.85em">{q_str}</p>')
@@ -3270,58 +3786,21 @@ class SLinkServer:
             ]
             if boxes:
                 parts.append('<h3 style="margin-top:0.8em;font-size:0.95em">PC Boxes</h3>')
-                parts.append(f'<table class="box-table"><thead><tr><th>Box</th><th>Slot</th><th class="col-lv">Lv</th><th>Pokémon</th><th class="col-type">Type</th>{"<th class=\"col-abl\">Ability</th>" if has_abilities else ""}<th>Partner</th></tr></thead><tbody>')
+                # Same hybrid layout as the party table — Pokémon cell with
+                # inline partner sub-line + dedicated Type + Ability columns.
+                # Box and Slot stay as their own columns since they carry
+                # physical location info.
+                bx_abl_hdr = '<th class="col-abl">Ability</th>' if has_abilities else ''
+                parts.append('<table class="box-table"><thead><tr>'
+                             '<th>Box</th><th>Slot</th>'
+                             '<th>Pokémon</th>'
+                             '<th class="col-type">Type</th>'
+                             f'{bx_abl_hdr}'
+                             '</tr></thead><tbody>')
                 for bentry in boxes:
-                    b_sid     = bentry.get("species_id", 0)
-                    b_gender  = self.adapter.gender_from_key(bentry.get("key", ""), b_sid)
-                    b_item_id = bentry.get("held_item_id", 0)
-                    b_item_s  = self.adapter.item_name(b_item_id)
-                    b_item_h  = (f'<span class="held-item">{html.escape(b_item_s)}</span>'
-                                 if b_item_s else "")
-                    # Shiny: unlinked shiny or linked MonInfo.is_shiny
-                    _bx_key_tmp = bentry.get("key", "")
-                    _bx_entry_tmp = s._key_index.get(_bx_key_tmp)
-                    _bx_own_mi = (_bx_entry_tmp.a if pid == "a" else _bx_entry_tmp.b) if _bx_entry_tmp else None
-                    _bx_is_shiny = _bx_key_tmp in s.bonus_keys.get(pid, set()) or bool(_bx_own_mi and _bx_own_mi.is_shiny)
-                    b_sprite_html = self._get_sprite_html(b_sid)
-                    b_label   = (
-                        f'<div style="display:inline-flex;align-items:center;gap:4px">'
-                        + (f'<div style="flex-shrink:0">{b_sprite_html}</div>' if b_sprite_html else '')
-                        + f'<div>{mon_label(bentry.get("key", ""), bentry.get("nickname", ""), b_sid, b_gender, shiny=_bx_is_shiny)}{b_item_h}</div>'
-                        + f'</div>'
-                    )
-                    b_types   = _type_badges_html(b_sid, adapter=self.adapter)
-                    b_aid     = bentry.get("ability_id", 0)
-                    b_abl     = self.adapter.ability_name(b_aid, b_sid) if b_aid else ""
-                    b_adesc   = self.adapter.ability_description(b_aid) if b_aid else ""
-                    b_abl_h   = (f'<span class="ability" title="{html.escape(b_adesc)}">{html.escape(b_abl)}</span>'
-                                 if b_abl else '<span class="dim">—</span>')
-
-                    # Level: check mon_stats cache, then link entry
                     bx_key = bentry.get("key", "")
-                    bx_lv = ""
-                    cached_stats = s.mon_stats.get(bx_key)
-                    if cached_stats and cached_stats.get("level"):
-                        bx_lv = str(cached_stats["level"])
-                    else:
-                        bx_entry_lv = s._key_index.get(bx_key)
-                        if bx_entry_lv:
-                            mi = bx_entry_lv.a if bx_entry_lv.a and bx_entry_lv.a.key == bx_key else bx_entry_lv.b
-                            if mi and mi.level:
-                                bx_lv = str(mi.level)
-                    # Fallback: check party_details from any player (mon may
-                    # be in the other client's party during solo-test setups).
-                    if not bx_lv:
-                        for _pid2 in ("a", "b"):
-                            pdet = self.party_details.get(_pid2, {}).get(bx_key)
-                            if pdet and pdet.get("level"):
-                                bx_lv = str(pdet["level"])
-                                break
-                    # Fallback: check _mon_cache (populated from party sightings)
-                    if not bx_lv:
-                        mc = self._mon_cache.get(bx_key)
-                        if mc and mc.get("level"):
-                            bx_lv = str(mc["level"])
+                    bx_det = dict(bentry)
+                    bx_det["level"] = _resolve_box_level(bentry)
 
                     bx_entry = s._key_index.get(bx_key) if bx_key else None
                     if bx_entry:
@@ -3344,7 +3823,6 @@ class SLinkServer:
                         else:
                             bx_partner_str = '<span class="dim">—</span>'
                         bx_link_cls = bx_entry.status.value
-                        bx_link_lbl = bx_entry.status.value
                     else:
                         bx_pend_area = pending_key_area.get(bx_key)
                         if bx_pend_area:
@@ -3354,39 +3832,47 @@ class SLinkServer:
                             )
                             bx_area_lbl = html.escape(self.adapter.area_display_name(bx_pend_area))
                             bx_partner_str = (
-                                f'<span class="pending_b" style="font-size:0.85em">'
                                 f'waiting for <b>{bx_partner_name}</b> @ {bx_area_lbl}'
-                                f'</span>'
                             )
                             bx_link_cls = "pending_b"
-                            bx_link_lbl = "pending"
                         elif bx_key in d.get("bonus_keys", {}).get(pid, []):
                             bx_partner_str = '<span style="color:#ffd700">★ Shiny Clause</span>'
                             bx_link_cls    = "alive"
-                            bx_link_lbl    = "★ bonus"
                         else:
                             bx_partner_str = '<span class="dim">—</span>'
                             bx_link_cls    = "dim"
-                            bx_link_lbl    = "—"
 
-                    bx_abl_td = f'<td>{b_abl_h}</td>' if has_abilities else ''
-                    bx_colspan = 7 if has_abilities else 6
-                    bx_move_details = bentry.get("move_details", [])
-                    bx_move_html = _move_table_html(bx_move_details, is_box=True, mon_key=bx_key)
-                    parts.append(
-                        f'<tr data-key="{html.escape(bx_key)}"><td>{bentry.get("box",0)+1}</td>'
-                        f'<td>{bentry.get("slot",0)+1}</td>'
-                        f'<td>{bx_lv}</td>'
-                        f'<td>{b_label}</td>'
-                        f'<td>{b_types}</td>'
-                        f'{bx_abl_td}'
-                        f'<td class="{bx_link_cls}">{bx_partner_str}</td></tr>'
+                    bx_partner_inline = (
+                        f'<div class="lp-partner-sub {bx_link_cls}">'
+                        f'<svg class="inline-ico lp-partner-ico" aria-hidden="true">'
+                        f'<use href="#i-link"/></svg> {bx_partner_str}'
+                        f'</div>'
                     )
-                    if bx_move_html:
-                        parts.append(
-                            f'<tr class="move-row" data-key="{html.escape(bx_key)}-moves">'
-                            f'<td colspan="{bx_colspan}">{bx_move_html}</td></tr>'
-                        )
+                    b_label = _lp_mon_cell(bx_det, None, pid, bx_key, is_box=True,
+                                           partner_html=bx_partner_inline,
+                                           show_ability=False,
+                                           show_types=False)
+                    bx_type_cell = _type_badges_html(bentry.get("species_id", 0),
+                                                     adapter=self.adapter)
+
+                    if has_abilities:
+                        b_aid = bentry.get("ability_id", 0)
+                        b_abl = self.adapter.ability_name(b_aid, bentry.get("species_id", 0)) if b_aid else ""
+                        b_adesc = self.adapter.ability_description(b_aid) if b_aid else ""
+                        b_abl_h = (f'<span class="ability" title="{html.escape(b_adesc)}">{html.escape(b_abl)}</span>'
+                                   if b_abl else '<span class="dim">—</span>')
+                        bx_abl_td = f'<td>{b_abl_h}</td>'
+                    else:
+                        bx_abl_td = ''
+
+                    parts.append(
+                        f'<tr data-key="{html.escape(bx_key)}">'
+                        f'<td>{bentry.get("box",0)+1}</td>'
+                        f'<td>{bentry.get("slot",0)+1}</td>'
+                        f'<td>{b_label}</td>'
+                        f'<td class="col-type">{bx_type_cell}</td>'
+                        f'{bx_abl_td}</tr>'
+                    )
                 parts.append("</tbody></table>")
 
             parts.append("</div>")  # player-card
@@ -3408,80 +3894,8 @@ class SLinkServer:
         b_party_keys = set(d["players"]["b"].get("party_keys", []))
         a_det = d["players"]["a"].get("party_details", {}) or {}
         b_det = d["players"]["b"].get("party_details", {}) or {}
-        def _lp_mon_cell(det: dict, lnk: dict, side: str, key: str) -> str:
-            """Sprite + stacked text:
-                line 1: nickname (with active/shiny/gender)
-                line 2: Lv + type chips (compact)
-                line 3: ITEM: {held item} (block, dashboard-style prefix)
-                line 4: ABILITY: {ability name} (block, parallel to ITEM)
-            B-side mirrors via row-reverse on the parent. Ability gets the
-            same label-prefix treatment as held items so the two read as a
-            consistent metadata pair."""
-            nick = det.get("nickname") or lnk.get(f"{side}_nickname") or "???"
-            sid  = det.get("species_id") or lnk.get(f"{side}_species_id") or 0
-            gender = det.get("gender") or self.adapter.gender_from_key(key, sid)
-            sprite_html = det.get("sprite_html") or lnk.get(f"{side}_sprite_html") or ""
-            is_active = det.get("active", False)
-            active_pfx = ('<svg class="inline-ico" aria-hidden="true">'
-                          '<use href="#i-swords"/></svg> ' if is_active else '')
-            entry_x = s._key_index.get(key)
-            mi = (entry_x.a if side == "a" else entry_x.b) if entry_x else None
-            is_shiny = key in s.bonus_keys.get(side, set()) or bool(mi and mi.is_shiny)
-            name_html = mon_label(key, nick, sid, gender, shiny=is_shiny)
-
-            # Sub-line: Lv · type chips (· divider matches dashboard convention)
-            lv = det.get("level") or lnk.get(f"{side}_level") or 0
-            lv_html = f'<span class="lp-lv-inline">Lv {lv}</span>' if lv else ''
-            types_html = _type_badges_html(sid, adapter=self.adapter)
-            sep_html = '<span class="lp-sep">&middot;</span>' if (lv_html and types_html) else ''
-            sub_line = (f'<div class="lp-mon-sub">{lv_html}{sep_html}{types_html}</div>'
-                        if (lv_html or types_html) else "")
-
-            # Block lines — each on its own row, dashboard-style label prefix
-            item_id = det.get("held_item_id", 0)
-            item_str = self.adapter.item_name(item_id)
-            item_html = (f'<span class="held-item">{html.escape(item_str)}</span>'
-                         if item_str else "")
-            if has_abilities:
-                abl_name = det.get("ability_name", "")
-                abl_id = det.get("ability_id", 0)
-                abl_desc = self.adapter.ability_description(abl_id) if abl_id else ""
-                abl_html = (f'<span class="lp-mon-abl" title="{html.escape(abl_desc)}">{html.escape(abl_name)}</span>'
-                            if abl_name else '')
-            else:
-                abl_html = ''
-
-            return (
-                f'<div class="lp-mon-cell lp-mc-{side}">'
-                + (f'<div class="lp-mon-spr">{sprite_html}</div>' if sprite_html else '')
-                + f'<div class="lp-mon-txt">'
-                + f'<div class="lp-nick">{active_pfx}{name_html}</div>'
-                + sub_line
-                + item_html
-                + abl_html
-                + f'</div>'
-                + f'</div>'
-            )
-
-
-        def _lp_hp_cell(det: dict) -> str:
-            hp = int(det.get("hp", 0) or 0)
-            mx = int(det.get("maxHP", 0) or 0)
-            pct = max(0, min(100, int(hp / mx * 100))) if mx else 0
-            bar_cls = "hp-high" if pct > 50 else ("hp-mid" if pct > 20 else "hp-low")
-            sc = det.get("status_cond", 0)
-            return (
-                f'<div class="hp-stack">'
-                f'<div class="hp-stack-val">'
-                f'<span class="dim">{hp}/{mx}</span>'
-                + _status_icon_html(sc)
-                + f'</div>'
-                f'<div class="hp-bar-bg">'
-                f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
-                f'</div>'
-                f'</div>'
-            )
-
+        # _lp_mon_cell / _lp_hp_cell are now defined above the player-card
+        # loop so the split player cards can reuse them.
 
         lp_rows: list[str] = []
         for _lnk in d.get("links", []):
@@ -3500,8 +3914,8 @@ class SLinkServer:
             _b_fnt = int(_bd.get("hp", 1) or 0) == 0
             _row_cls = " lp-fnt" if (_a_fnt and _b_fnt) else ""
 
-            _a_mon  = _lp_mon_cell(_ad, _lnk, "a", _ak)
-            _b_mon  = _lp_mon_cell(_bd, _lnk, "b", _bk)
+            _a_mon  = _lp_mon_cell(_ad, _lnk, "a", _ak, key_prefix="lp:")
+            _b_mon  = _lp_mon_cell(_bd, _lnk, "b", _bk, mirror_b=True, key_prefix="lp:")
             _a_hp   = _lp_hp_cell(_ad)
             _b_hp   = _lp_hp_cell(_bd)
             _area = html.escape(_lnk.get("area_display") or _lnk.get("area_id") or "")
@@ -3518,6 +3932,107 @@ class SLinkServer:
                 f'<td class="lp-hp">{_a_hp}</td>'
                 f'<td class="lp-ctr">{_center}</td>'
                 f'<td class="lp-hp lp-hp-b">{_b_hp}</td>'
+                f'<td class="lp-mon lp-mon-b">{_b_mon}</td>'
+                f'</tr>'
+            )
+
+        # ── PC Boxes (combined view) ─────────────────────────────────────
+        # Same 5-col layout as the lp-table; the HP column shows Box/Slot
+        # location for any side that's stored rather than active. Includes:
+        #   - both in box (the canonical case)
+        #   - mixed (one in party, one in box) — visible only here since
+        #     lp-table skips pairs where either side isn't in party.
+        # Memorialized pairs are filtered out (they live on /memorial).
+        # Box mons from the dedicated memorial box are also excluded to
+        # keep the table focused on live storage.
+        from server.state import LinkStatus as _LS_box
+        _memorial_keys_lp: set[str] = {
+            mi.key
+            for e in s.links
+            if e.status in (_LS_box.MEMORIAL, _LS_box.DEAD)
+            for mi in (e.a, e.b) if mi and mi.key
+        }
+        for _pm_keys in s.pending_memorials.values():
+            _memorial_keys_lp.update(_pm_keys)
+        _mem_indices = self._memorial_box_indices()
+
+        def _box_map(pid_: str) -> dict[str, dict]:
+            return {
+                bx.get("key"): bx
+                for bx in d["players"][pid_].get("pc_boxes", [])
+                if bx.get("key")
+                and bx.get("key") not in _memorial_keys_lp
+                and bx.get("box") not in _mem_indices
+            }
+        a_box_map = _box_map("a")
+        b_box_map = _box_map("b")
+
+        def _lp_loc_cell(bx: dict) -> str:
+            """Box X / #N label used in place of HP for boxed mons."""
+            if not bx:
+                return '<div class="lp-loc dim">—</div>'
+            return (f'<div class="lp-loc">'
+                    f'<span class="dim">Box</span> <b>{bx.get("box", 0)+1}</b>'
+                    f'<br><span class="dim">slot</span> <b>{bx.get("slot", 0)+1}</b>'
+                    f'</div>')
+
+        lp_box_rows: list[str] = []
+        for _lnk in d.get("links", []):
+            if _lnk.get("status") == "memorial":
+                continue
+            _ak = _lnk.get("a_key", "")
+            _bk = _lnk.get("b_key", "")
+            a_in_party = _ak in a_party_keys
+            b_in_party = _bk in b_party_keys
+            if a_in_party and b_in_party:
+                continue  # Already in lp-table
+
+            a_bx = a_box_map.get(_ak)
+            b_bx = b_box_map.get(_bk)
+            if not (a_in_party or a_bx) and not (b_in_party or b_bx):
+                continue  # Both sides absent — nothing to show
+
+            # A side
+            if a_in_party:
+                _ad = a_det.get(_ak) or {}
+                _a_mon = _lp_mon_cell(_ad, _lnk, "a", _ak, key_prefix="lpbx:")
+                _a_loc = _lp_hp_cell(_ad)
+            elif a_bx:
+                _ad = dict(a_bx)
+                _ad["level"] = _resolve_box_level(a_bx)
+                _a_mon = _lp_mon_cell(_ad, _lnk, "a", _ak, is_box=True, key_prefix="lpbx:")
+                _a_loc = _lp_loc_cell(a_bx)
+            else:
+                _a_mon = '<div class="lp-mon-cell lp-mc-a"><div class="lp-mon-txt dim">— not on roster</div></div>'
+                _a_loc = '<div class="lp-loc dim">—</div>'
+
+            # B side (mirror_b drives row-reverse layout)
+            if b_in_party:
+                _bd = b_det.get(_bk) or {}
+                _b_mon = _lp_mon_cell(_bd, _lnk, "b", _bk, mirror_b=True, key_prefix="lpbx:")
+                _b_loc = _lp_hp_cell(_bd)
+            elif b_bx:
+                _bd = dict(b_bx)
+                _bd["level"] = _resolve_box_level(b_bx)
+                _b_mon = _lp_mon_cell(_bd, _lnk, "b", _bk, mirror_b=True, is_box=True, key_prefix="lpbx:")
+                _b_loc = _lp_loc_cell(b_bx)
+            else:
+                _b_mon = '<div class="lp-mon-cell lp-mc-b"><div class="lp-mon-txt dim">— not on roster</div></div>'
+                _b_loc = '<div class="lp-loc dim">—</div>'
+
+            _area = html.escape(_lnk.get("area_display") or _lnk.get("area_id") or "")
+            _center = (
+                f'<div class="lp-center-cell">'
+                f'{_CHAIN}'
+                f'<span class="lp-area">{_area}</span>'
+                f'</div>'
+            )
+            lp_box_rows.append(
+                f'<tr class="lp-row lp-box-row">'
+                f'<td class="lp-mon lp-mon-a">{_a_mon}</td>'
+                f'<td class="lp-hp">{_a_loc}</td>'
+                f'<td class="lp-ctr">{_center}</td>'
+                f'<td class="lp-hp lp-hp-b">{_b_loc}</td>'
                 f'<td class="lp-mon lp-mon-b">{_b_mon}</td>'
                 f'</tr>'
             )
@@ -3590,12 +4105,162 @@ class SLinkServer:
                 '</div>'
             )
 
+        # Battle card — third card inside the lp-widget, only rendered when
+        # at least one player is in battle. Uses _battle_panel_html for each
+        # side so styling stays in sync with the split view's inline panel;
+        # suppress_calc + key_prefix avoid duplicate DOM ids (the split view
+        # is still in the DOM, just hidden by .players-grid display:none).
+        _a_in_battle_lp = d["players"]["a"].get("battle_state", {}).get("in_battle", False)
+        _b_in_battle_lp = d["players"]["b"].get("battle_state", {}).get("in_battle", False)
+        if _a_in_battle_lp or _b_in_battle_lp:
+            _a_bp = (_battle_panel_html("a", d["players"]["a"],
+                                        suppress_calc=True, key_prefix="lp:")
+                     if _a_in_battle_lp else
+                     '<div class="lp-battle-empty dim">— Not in battle —</div>')
+            _b_bp = (_battle_panel_html("b", d["players"]["b"],
+                                        suppress_calc=True, key_prefix="lp:")
+                     if _b_in_battle_lp else
+                     '<div class="lp-battle-empty dim">— Not in battle —</div>')
+            _lp_battle_hdr = (
+                '<div class="lp-card-hdr">'
+                '<div class="lp-hdr-side lp-hdr-side-a">'
+                f'<div class="lp-player-name">{_name_a}</div>'
+                '</div>'
+                '<div class="lp-hdr-mid">'
+                '<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg>'
+                '<span class="lp-hdr-label">In Battle</span>'
+                '<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg>'
+                '</div>'
+                '<div class="lp-hdr-side lp-hdr-side-b">'
+                f'<div class="lp-player-name">{_name_b}</div>'
+                '</div>'
+                '</div>'
+            )
+            _lp_battle_body = (
+                '<div class="lp-battle-grid">'
+                f'<div class="lp-battle-side lp-battle-side-a">{_a_bp}</div>'
+                f'<div class="lp-battle-side lp-battle-side-b">{_b_bp}</div>'
+                '</div>'
+            )
+            _lp_battle_card = (
+                '<div class="lp-card lp-battle-card player-card">'
+                + _lp_battle_hdr
+                + _lp_battle_body
+                + '</div>'
+            )
+        else:
+            _lp_battle_card = ''
+
+        # PC Boxes card — second card inside the lp-widget, same shape as the
+        # main lp-card. Only rendered when there's at least one boxed pair.
+        if lp_box_rows:
+            _lp_box_hdr = (
+                '<div class="lp-card-hdr">'
+                '<div class="lp-hdr-side lp-hdr-side-a">'
+                f'<div class="lp-player-name">{_name_a}</div>'
+                '</div>'
+                '<div class="lp-hdr-mid">'
+                f'{_CHAIN}'
+                '<span class="lp-hdr-label">PC Boxes</span>'
+                f'{_CHAIN}'
+                '</div>'
+                '<div class="lp-hdr-side lp-hdr-side-b">'
+                f'<div class="lp-player-name">{_name_b}</div>'
+                '</div>'
+                '</div>'
+            )
+            _lp_box_body = (
+                '<table class="lp-table lp-box-table"><thead><tr>'
+                '<th>Pokémon</th>'
+                '<th class="lp-hp-h">Location</th>'
+                '<th class="lp-ctr-h">Area</th>'
+                '<th class="lp-hp-h lp-th-r">Location</th>'
+                '<th class="lp-th-r">Pokémon</th>'
+                '</tr></thead><tbody>'
+                + "".join(lp_box_rows)
+                + '</tbody></table>'
+            )
+            _lp_box_card = (
+                '<div class="lp-card lp-box-card player-card">'
+                + _lp_box_hdr
+                + _lp_box_body
+                + '</div>'
+            )
+        else:
+            _lp_box_card = ''
+
+        # ── Area Briefing card (combined view) ──────────────────────────────
+        # Side-by-side encounters + upcoming trainers, one column per player.
+        # Empty/no-data sides render placeholders so the card stays balanced.
+        # Uses the same lp-card-hdr two-side header pattern as the linked-party
+        # card. The key_prefix="lp:" namespaces inner widget IDs so they don't
+        # collide with the split-view copies of the same encounter/trainer
+        # widgets (both views live in the DOM simultaneously, toggled via
+        # body.lp-view).
+        _area_a_id = d["players"]["a"].get("current_area_id") or ""
+        _area_b_id = d["players"]["b"].get("current_area_id") or ""
+        _enc_a = self._encounter_html(_area_a_id, "a", key_prefix="lp:")
+        _enc_b = self._encounter_html(_area_b_id, "b", key_prefix="lp:")
+        def _highest_lv(pid_: str) -> int:
+            pp = d["players"][pid_]
+            hi = 0
+            for k_ in pp.get("party_keys", []):
+                lv_ = (pp.get("party_details", {}).get(k_, {}) or {}).get("level", 0) or 0
+                if isinstance(lv_, int) and lv_ > hi:
+                    hi = lv_
+            return hi
+        _trn_a = self._trainer_panel_html(_area_a_id, "a", key_prefix="lp:",
+                                           highest_party_level=_highest_lv("a"))
+        _trn_b = self._trainer_panel_html(_area_b_id, "b", key_prefix="lp:",
+                                           highest_party_level=_highest_lv("b"))
+        _lp_area_card = ''
+        if (_enc_a or _enc_b or _trn_a or _trn_b):
+            _empty_side = '<div class="lp-area-empty dim">— no data for this route —</div>'
+            _side_a = (_enc_a + _trn_a) or _empty_side
+            _side_b = (_enc_b + _trn_b) or _empty_side
+            _lp_area_hdr = (
+                '<div class="lp-card-hdr">'
+                '<div class="lp-hdr-side lp-hdr-side-a">'
+                f'<div class="lp-player-name">{_name_a}</div>'
+                f'<div class="lp-hdr-meta">&#128205; '
+                f'<b class="area">{html.escape(_area_a_lbl)}</b></div>'
+                '</div>'
+                '<div class="lp-hdr-mid">'
+                '<svg class="inline-ico" aria-hidden="true">'
+                '<use href="#i-swords"/></svg>'
+                '<span class="lp-hdr-label">Area Briefing</span>'
+                '<svg class="inline-ico" aria-hidden="true">'
+                '<use href="#i-target"/></svg>'
+                '</div>'
+                '<div class="lp-hdr-side lp-hdr-side-b">'
+                f'<div class="lp-player-name">{_name_b}</div>'
+                f'<div class="lp-hdr-meta">&#128205; '
+                f'<b class="area">{html.escape(_area_b_lbl)}</b></div>'
+                '</div>'
+                '</div>'
+            )
+            _lp_area_body = (
+                '<div class="lp-area-grid">'
+                f'<div class="lp-area-side lp-area-side-a">{_side_a}</div>'
+                f'<div class="lp-area-side lp-area-side-b">{_side_b}</div>'
+                '</div>'
+            )
+            _lp_area_card = (
+                '<div class="lp-card lp-area-card player-card">'
+                + _lp_area_hdr
+                + _lp_area_body
+                + '</div>'
+            )
+
         parts.append(
             '<div class="lp-widget">'
             '<div class="lp-card player-card">'
             + _lp_hdr
             + _lp_body
             + '</div>'   # lp-card
+            + _lp_battle_card
+            + _lp_box_card
+            + _lp_area_card
             + '</div>'   # lp-widget
             + '</div>'   # players-section
         )
