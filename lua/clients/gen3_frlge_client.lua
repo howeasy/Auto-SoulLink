@@ -359,7 +359,7 @@ local function dispatch_commands(cmds)
                                     slot = slot, battler = battler, start_frame = frame_count,
                                 }
                                 M.playSE(M.SE_LINKED_KO)
-                                hud_show("!! " .. nick_label(c.key) .. " — EXPLODING!", 255, 80, 80, 360)
+                                hud_show("!! " .. nick_label(c.key) .. " BOOM!", 255, 80, 80, 360)
                                 console.log(string.format(
                                     "[SLink-FRLGE]   ↳ force_explode → menu skip coerced slot=%d battler=%d key=%s",
                                     slot, battler, c.key))
@@ -368,7 +368,7 @@ local function dispatch_commands(cmds)
                                 console.log(string.format(
                                     "[SLink-FRLGE]   ↳ force_explode DEFERRED (helper refused — non-RR profile?) slot=%d key=%s",
                                     slot, c.key))
-                                hud_show("!! " .. nick_label(c.key) .. " — faint pending switch!", 255, 80, 80, 360)
+                                hud_show("!! " .. nick_label(c.key) .. " KO pending", 255, 80, 80, 360)
                             end
                         elseif is_active_battler then
                             -- Legacy force_faint, active battler: defer HP=0 write until the
@@ -378,7 +378,7 @@ local function dispatch_commands(cmds)
                             console.log(string.format(
                                 "[SLink-FRLGE]   ↳ force_faint DEFERRED (active battler) slot=%d key=%s",
                                 slot, c.key))
-                            hud_show("!! " .. nick_label(c.key) .. " — faint pending switch!", 255, 80, 80, 360)
+                            hud_show("!! " .. nick_label(c.key) .. " KO pending", 255, 80, 80, 360)
                         else
                             -- Bench mon (or out of battle): immediate HP=0 write.
                             -- Identical handling for force_faint and force_explode.
@@ -387,7 +387,7 @@ local function dispatch_commands(cmds)
                             force_fainted_keys[c.key] = true
                             M.playSE(M.SE_LINKED_KO)
                             console.log(string.format("[SLink-FRLGE]   ↳ DISPATCHED %s slot=%d key=%s in_battle=%s", c.cmd, slot, c.key, tostring(currently_in_battle)))
-                            hud_show("!! " .. nick_label(c.key) .. " force-fainted!", 255, 80, 80, 360)
+                            hud_show("!! " .. nick_label(c.key) .. " KO'd", 255, 80, 80, 360)
                         end
                         break
                     end
@@ -1046,7 +1046,7 @@ local function exec_box_mon(key)
     -- Never deposit the last party mon — game crashes with 0 party mons.
     if count <= 1 then
         console.log("[SLink-FRLGE] ✗ box_mon skipped: " .. key:sub(1,8) .. " (last mon in party)")
-        hud_show("! Can't deposit -- only mon!", 255, 200, 60, 240)
+        hud_show("! Only mon!", 255, 200, 60, 240)
         return
     end
     for slot = 0, count - 1 do
@@ -1073,14 +1073,14 @@ local function exec_box_mon(key)
             if bi then
                 console.log(string.format("[SLink-FRLGE] ✓ box_mon: %s → box%d s%d", key:sub(1,8), bi, si))
                 sync_written_keys[key] = true
-                hud_show("↓ " .. nick_label(key) .. " deposited", 100, 180, 255, 200)
+                hud_show("↓ " .. nick_label(key) .. " boxed", 100, 180, 255, 200)
                 -- Cache stats on server so party_mon can restore them correctly later.
                 -- Use stats_cache (not party_to_box) to avoid triggering sync feedback loop.
                 send({event="stats_cache", key=key, stats=stats},
                      "stats_cache:"..key:sub(1,8), true, true)
             else
                 console.log("[SLink-FRLGE] ✗ box_mon failed: "..(err or "?").."  key="..key:sub(1,8))
-                hud_show("X Deposit failed: " .. nick_label(key), 255, 80, 80, 240)
+                hud_show("X Box fail: " .. nick_label(key), 255, 80, 80, 240)
             end
             return
         end
@@ -1113,7 +1113,7 @@ local function exec_party_mon(key, stats)
     if not stats or not stats.level or stats.level <= 0
        or not stats.maxHP or stats.maxHP <= 0 then
         console.log("[SLink-FRLGE] ✗ party_mon: no valid stats for "..key:sub(1,8).." — manual retrieval needed")
-        hud_show("! Retrieve " .. nick_label(key) .. " from PC", 255, 200, 60, 600)
+        hud_show("! Unbox " .. nick_label(key), 255, 200, 60, 600)
         send({event="sync_retrieve_failed", key=key},
              "sync_retrieve_failed:"..key:sub(1,8), true, true)
         return
@@ -1132,7 +1132,7 @@ local function exec_party_mon(key, stats)
         end
         -- Exhausted retries — genuine full party, notify server.
         console.log("[SLink-FRLGE] ✗ party_mon: party still full after 3 retries for "..key:sub(1,8))
-        hud_show("! Make room & retrieve " .. nick_label(key), 255, 200, 60, 600)
+        hud_show("! Unbox " .. nick_label(key), 255, 200, 60, 600)
         send({event="sync_retrieve_failed", key=key},
              "sync_retrieve_failed:"..key:sub(1,8), true, true)
         return
@@ -1145,13 +1145,13 @@ local function exec_party_mon(key, stats)
         -- Populate nick_cache from the retrieved mon's actual nickname in RAM
         local ok_n, nick = pcall(M.readNickname, ret_base)
         if ok_n and nick and nick ~= "" then nick_cache[key] = nick end
-        hud_show("↑ " .. nick_label(key) .. " retrieved", 100, 255, 160, 200)
+        hud_show("↑ " .. nick_label(key) .. " unboxed", 100, 255, 160, 200)
         -- Notify server so it can update its party_keys for this player.
         send({event="sync_retrieve_done", key=key},
              "sync_retrieve_done:"..key:sub(1,8), true, true)
     else
         console.log("[SLink-FRLGE] ✗ party_mon failed: "..(err or "?").."  key="..key:sub(1,8))
-        hud_show("! Retrieve " .. nick_label(key) .. " from PC", 255, 200, 60, 600)
+        hud_show("! Unbox " .. nick_label(key), 255, 200, 60, 600)
         send({event="sync_retrieve_failed", key=key},
              "sync_retrieve_failed:"..key:sub(1,8), true, true)
     end
@@ -1190,7 +1190,7 @@ local function exec_memorialize(key)
             console.log("[SLink-FRLGE] ⚠ memorialize VERIFY FAIL: key still in party after memorialize!")
         end
 
-        hud_show("† " .. nick_label(key) .. " memorialized", 255, 140, 40, 300)
+        hud_show("† " .. nick_label(key) .. " buried", 255, 140, 40, 300)
         send({event="memorialize_done", key=key, box=bi}, "memorialize_done:"..key:sub(1,8), true)
         -- Rename overflow boxes (Box 12 → "DEAD 2", Box 11 → "DEAD 3", etc.)
         if bi ~= M.MEMORIAL_BOX and not memorial_overflow_renamed[bi] then
@@ -1201,7 +1201,7 @@ local function exec_memorialize(key)
         end
     else
         console.log("[SLink-FRLGE] ✗ memorialize failed: "..tostring(si).."  key="..key:sub(1,8))
-        hud_show("X Memorial failed: " .. nick_label(key), 255, 80, 80, 300)
+        hud_show("X Mem fail: " .. nick_label(key), 255, 80, 80, 300)
         send({event="memorialize_failed", key=key, reason=si},
              "memorialize_failed:"..key:sub(1,8), true)
     end
@@ -1464,7 +1464,7 @@ local function on_frame()
                 _battle_hp_cache[key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
                 force_fainted_keys[key] = true
                 pending_explosions[key] = nil
-                hud_show("!! " .. nick_label(key) .. " force-fainted (fallback)!", 255, 80, 80, 360)
+                hud_show("!! " .. nick_label(key) .. " KO'd (fb)", 255, 80, 80, 360)
                 console.log(string.format(
                     "[SLink-FRLGE]   ↳ EXPLOSION FALLBACK fired slot=%d battler=%d key=%s",
                     st.slot, st.battler, key))
@@ -1498,7 +1498,7 @@ local function on_frame()
                         pending_battle_faints[key] = nil
                         M.playSE(M.SE_LINKED_KO)
                         console.log(string.format("[SLink-FRLGE]   ↳ DEFERRED force_faint applied slot=%d key=%s", slot, key))
-                        hud_show("!! " .. nick_label(key) .. " force-fainted!", 255, 80, 80, 360)
+                        hud_show("!! " .. nick_label(key) .. " KO'd", 255, 80, 80, 360)
                     end
                     break
                 end
@@ -1628,7 +1628,7 @@ local function on_frame()
                     console.log(string.format("[SLink-FRLGE]   ↳ re-queued (attempt %d/3)", cmd._retries))
                 else
                     console.log("[SLink-FRLGE]   ↳ DROPPED after 3 retries")
-                    hud_show("X " .. cmd.cmd .. " failed for " .. nick_label(cmd.key or ""), 255, 80, 80, 600)
+                    hud_show("X " .. cmd.cmd .. " fail: " .. nick_label(cmd.key or ""), 255, 80, 80, 600)
                 end
             end
         end

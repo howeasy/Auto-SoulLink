@@ -174,7 +174,7 @@ end
 -- ── HUD overlay ───────────────────────────────────────────────────────────────
 -- GBC screen: 160 × 144
 HUD.init({screen_w = 160, screen_h = 144, hud_x = 2, hud_y = 134, hud_right = 158,
-          prompt_y = 36, prompt_h = 10, gameover_y = 50, font_size = 8})
+          prompt_y = 36, prompt_h = 10, gameover_y = 50, font_size = 8, char_width = 7})
 local hud_show    = HUD.show
 local hud_render  = HUD.render
 local prompt_show = HUD.prompt
@@ -1143,7 +1143,7 @@ local function on_frame()
         if nuzlocke_active and not G.is_gift_area(cur_area_id) then
             if resolved_areas_seeded and not resolved_areas[cur_area_id] then
                 local disp = cur_area_id:gsub("_", " "):gsub("(%a)([%w]*)", function(a, b) return a:upper() .. b end)
-                hud_show("★ " .. disp, 80, 255, 120, 180)
+                hud_show(">> " .. disp, 80, 255, 120, 180)
             end
         end
     elseif not in_battle and (cur_group ~= last_map_group or cur_number ~= last_map_number) then
@@ -1191,14 +1191,14 @@ local function on_frame()
                         -- Verify: read back the box count
                         local new_count = M.getBoxCount()
                         console.log(fmt("[SLink-Crystal]   ↳ box_mon OK: deposited slot %d, new box_count=%d", found_slot, new_count))
-                        hud_show("Deposited " .. nick_label(cmd.key) .. " to PC", 100, 255, 100, 180)
+                        hud_show(nick_label(cmd.key) .. " boxed", 100, 255, 100, 180)
                     else
                         console.log("[SLink-Crystal]   ↳ box_mon FAIL: " .. (err or "?"))
-                        hud_show("! Deposit failed: " .. (err or "?"), 255, 100, 100, 300)
+                        hud_show("! Box fail: " .. (err or "?"), 255, 100, 100, 300)
                     end
                 else
                     console.log("[SLink-Crystal]   ↳ box_mon: key not in party " .. cmd.key:sub(1,8))
-                    hud_show("! " .. nick_label(cmd.key) .. " not in party", 255, 200, 60, 240)
+                    hud_show("! " .. nick_label(cmd.key) .. " missing", 255, 200, 60, 240)
                 end
                 sync_written_keys[cmd.key] = true
             elseif cmd.cmd == "party_mon" then
@@ -1206,10 +1206,10 @@ local function on_frame()
                 local ok, err = M.retrieveBoxMon(cmd.key)
                 if ok then
                     console.log("[SLink-Crystal]   ↳ party_mon OK: retrieved " .. cmd.key:sub(1,8))
-                    hud_show("Retrieved " .. nick_label(cmd.key) .. " from PC", 100, 255, 100, 180)
+                    hud_show(nick_label(cmd.key) .. " unboxed", 100, 255, 100, 180)
                 else
                     console.log("[SLink-Crystal]   ↳ party_mon FAIL: " .. (err or "?"))
-                    hud_show("! Retrieve failed: " .. (err or "?"), 255, 100, 100, 300)
+                    hud_show("! Unbox fail: " .. (err or "?"), 255, 100, 100, 300)
                 end
                 sync_written_keys[cmd.key] = true
             elseif cmd.cmd == "memorialize" then
@@ -1230,7 +1230,7 @@ local function on_frame()
                         hud_show("RIP " .. nick_label(cmd.key), 180, 180, 180, 300)
                     else
                         console.log("[SLink-Crystal]   ↳ memorialize FAIL: " .. (err or "?"))
-                        hud_show("! Memorial failed: " .. (err or "?"), 255, 100, 100, 300)
+                        hud_show("! Mem fail: " .. (err or "?"), 255, 100, 100, 300)
                     end
                 else
                     -- Try box scan — might already be in box
@@ -1239,7 +1239,7 @@ local function on_frame()
                         console.log("[SLink-Crystal]   ↳ memorialize: already in box slot " .. box_slot)
                     else
                         console.log("[SLink-Crystal]   ↳ memorialize: key not found " .. cmd.key:sub(1,8))
-                        hud_show("! " .. nick_label(cmd.key) .. " not found", 255, 200, 60, 240)
+                        hud_show("! " .. nick_label(cmd.key) .. " missing", 255, 200, 60, 240)
                     end
                 end
                 sync_written_keys[cmd.key] = true
@@ -1248,7 +1248,7 @@ local function on_frame()
         table.remove(pending_sync_cmds, 1)
         if not exec_ok then
             console.log("[SLink-Crystal]   ↳ sync cmd ERROR: " .. tostring(exec_err))
-            hud_show("! Box op failed (see log)", 255, 100, 100, 300)
+            hud_show("! Box op fail", 255, 100, 100, 300)
             sync_written_keys[cmd.key] = true
         end
     end

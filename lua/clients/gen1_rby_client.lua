@@ -169,7 +169,7 @@ end
 -- ── HUD overlay ───────────────────────────────────────────────────────────────
 -- GB screen: 160 × 144
 HUD.init({screen_w = 160, screen_h = 144, hud_x = 2, hud_y = 134, hud_right = 158,
-          prompt_y = 36, prompt_h = 10, gameover_y = 50, font_size = 8})
+          prompt_y = 36, prompt_h = 10, gameover_y = 50, font_size = 8, char_width = 7})
 local hud_show    = HUD.show
 local hud_render  = HUD.render
 local prompt_show = HUD.prompt
@@ -1056,7 +1056,7 @@ local function on_frame()
         if nuzlocke_active and not G.is_gift_area(cur_area_id) then
             if resolved_areas_seeded and not resolved_areas[cur_area_id] then
                 local disp = cur_area_id:gsub("_", " "):gsub("(%a)([%w]*)", function(a, b) return a:upper() .. b end)
-                hud_show("★ " .. disp, 80, 255, 120, 180)
+                hud_show(">> " .. disp, 80, 255, 120, 180)
             end
         end
     elseif not in_battle and cur_map ~= last_map_id then
@@ -1098,13 +1098,13 @@ local function on_frame()
                 sync_written_keys[cmd.key] = true
             elseif count <= 1 then
                 console.log("[SLink-RBY]   ↳ box_mon skipped: last mon in party")
-                hud_show("! Can't deposit -- only mon!", 255, 200, 60, 240)
+                hud_show("! Only mon!", 255, 200, 60, 240)
             else
                 ok, err = M.depositPartyMon(found_slot)
                 if ok then
                     sync_written_keys[cmd.key] = true
                     console.log("[SLink-RBY]   ↳ box_mon OK: " .. cmd.key:sub(1, 8))
-                    hud_show("v " .. nick_label(cmd.key) .. " deposited", 100, 180, 255, 200)
+                    hud_show("v " .. nick_label(cmd.key) .. " boxed", 100, 180, 255, 200)
                 else
                     console.log("[SLink-RBY]   ↳ box_mon FAIL: " .. (err or "?"))
                     hud_show("X Deposit failed!", 255, 80, 80, 240)
@@ -1134,7 +1134,7 @@ local function on_frame()
                     console.log(fmt("[SLink-RBY]   ↳ party_mon re-queued (attempt %d/3)", retries + 1))
                 else
                     console.log("[SLink-RBY]   ↳ party_mon DROPPED: party full after 3 retries")
-                    hud_show("! Make room & get " .. nick_label(cmd.key), 255, 200, 60, 600)
+                    hud_show("! Unbox " .. nick_label(cmd.key), 255, 200, 60, 600)
                     send({event = "sync_retrieve_failed", key = cmd.key},
                          "sync_retrieve_failed:" .. cmd.key:sub(1, 8), true)
                 end
@@ -1144,12 +1144,12 @@ local function on_frame()
                     sync_written_keys[cmd.key] = true
                     all_known_keys[cmd.key] = true
                     console.log("[SLink-RBY]   ↳ party_mon OK: " .. cmd.key:sub(1, 8))
-                    hud_show("^ " .. nick_label(cmd.key) .. " retrieved", 100, 255, 160, 200)
+                    hud_show("^ " .. nick_label(cmd.key) .. " unboxed", 100, 255, 160, 200)
                     send({event = "sync_retrieve_done", key = cmd.key},
                          "sync_retrieve_done:" .. cmd.key:sub(1, 8), true)
                 else
                     console.log("[SLink-RBY]   ↳ party_mon FAIL: " .. (err or "?"))
-                    hud_show("! Retrieve " .. nick_label(cmd.key) .. " from PC", 255, 200, 60, 600)
+                    hud_show("! Unbox " .. nick_label(cmd.key), 255, 200, 60, 600)
                     send({event = "sync_retrieve_failed", key = cmd.key},
                          "sync_retrieve_failed:" .. cmd.key:sub(1, 8), true)
                 end
@@ -1174,7 +1174,7 @@ local function on_frame()
             elseif count <= 1 then
                 -- Can't deposit last mon — report failure
                 console.log("[SLink-RBY]   ↳ memorialize skipped: last mon in party")
-                hud_show("! Can't memorialize -- only mon!", 255, 200, 60, 240)
+                hud_show("! Only mon!", 255, 200, 60, 240)
                 send({event = "memorialize_failed", key = cmd.key, reason = "last_mon"},
                      "memorialize_failed:" .. cmd.key:sub(1, 8), true)
             else
@@ -1185,7 +1185,7 @@ local function on_frame()
                 if ok then
                     sync_written_keys[cmd.key] = true
                     console.log("[SLink-RBY]   ↳ memorialize OK: " .. cmd.key:sub(1, 8))
-                    hud_show("X " .. nick_label(cmd.key) .. " memorialized", 255, 140, 40, 300)
+                    hud_show("+ " .. nick_label(cmd.key) .. " buried", 255, 140, 40, 300)
                     send({event = "memorialize_done", key = cmd.key},
                          "memorialize_done:" .. cmd.key:sub(1, 8), true)
                 else

@@ -234,7 +234,7 @@ local function dispatch_commands(cmds)
         if c.cmd == "force_faint" and c.key then
             if not writes_enabled then
                 console.log("[SLink]   ↳ force_faint BLOCKED (writes disabled)")
-                hud_show("!! force_faint blocked — save not validated", 255, 80, 80, 360)
+                hud_show("!! force_faint: save invalid", 255, 80, 80, 360)
             else
                 -- Scan party for matching PID; write curHP = 0
                 local count = M.readPartyCount()
@@ -247,7 +247,7 @@ local function dispatch_commands(cmds)
                         if pid ~= 0 and fmt("%08X", pid) == short_key then
                             M.forceFaint(slot)
                             console.log(fmt("[SLink]   ↳ force_faint slot=%d key=%s", slot, c.key))
-                            hud_show("!! " .. nick_label(c.key) .. " force-fainted!", 255, 80, 80, 360)
+                            hud_show("!! " .. nick_label(c.key) .. " KO'd", 255, 80, 80, 360)
                             found = true
                             break
                         end
@@ -362,7 +362,7 @@ local function exec_memorialize(key)
     local pc_base = M.pcStorageBase()
     if not pc_base then
         console.log("[SLink]   ↳ memorialize EXEC FAIL: PC storage unreachable")
-        hud_show("!! memorialize: PC storage unavailable", 255, 140, 40, 600)
+        hud_show("!! mem: PC unavailable", 255, 140, 40, 600)
         send({event="memorialize_failed", key=key, reason="pc_unavailable"},
              "memorialize_failed:"..key:sub(1,8), true, true)
         return
@@ -411,7 +411,7 @@ local function exec_memorialize(key)
                 local pid = mem_u32(addr)
                 if pid ~= 0 and fmt("%08X", pid) == pid_hex then
                     console.log(fmt("[SLink]   ↳ memorialize: %s already in Box 18 s%d", pid_hex, slot + 1))
-                    hud_show("† " .. nick_label(key) .. " already memorialized", 100, 255, 100, 360)
+                    hud_show("+ " .. nick_label(key) .. " in grave", 100, 255, 100, 360)
                     send({event="memorialize_done", key=key, box=17, slot=slot},
                          "memorialize_done:"..pid_hex, true)
                     return
@@ -436,7 +436,7 @@ local function exec_memorialize(key)
     end
     if not mem_box then
         console.log("[SLink]   ↳ memorialize EXEC FAIL: ALL PC boxes full!")
-        hud_show("!! All PC boxes full — cannot memorialize", 255, 80, 80, 600)
+        hud_show("!! All boxes full", 255, 80, 80, 600)
         send({event="memorialize_failed", key=key, reason="box_full"},
              "memorialize_failed:"..key:sub(1,8), true, true)
         return
@@ -458,7 +458,7 @@ local function exec_memorialize(key)
             -- Safety: don't reduce party below 1 (game crash protection)
             if count <= 1 then
                 console.log("[SLink]   ↳ memorialize: last party mon — leaving in party")
-                hud_show("!! Can't memorialize last mon", 255, 200, 60, 240)
+                hud_show("!! Only mon!", 255, 200, 60, 240)
                 return
             end
             local found_slot = nil
@@ -494,13 +494,13 @@ local function exec_memorialize(key)
         end
         console.log(fmt("[SLink]   ↳ memorialize OK: %s (%s) → Box %d slot %d",
             pid_hex, found_in, mem_box + 1, empty + 1))
-        hud_show(fmt("† %s memorialized → Box %d", nick_label(key), mem_box + 1),
+        hud_show(fmt("+ %s buried -> Box %d", nick_label(key), mem_box + 1),
             255, 140, 40, 360)
         send({event="memorialize_done", key=key, box=mem_box, slot=empty},
              "memorialize_done:"..pid_hex, true)
     else
         console.log(fmt("[SLink]   ↳ memorialize VERIFY FAIL: wrote to Box %d s%d but PID mismatch", mem_box + 1, empty + 1))
-        hud_show("!! memorialize verify failed!", 255, 80, 80, 600)
+        hud_show("!! mem verify failed", 255, 80, 80, 600)
         send({event="memorialize_failed", key=key, reason="verify_mismatch"},
              "memorialize_failed:"..pid_hex, true, true)
     end
@@ -511,7 +511,7 @@ local function exec_box_mon(key)
     local count = M.readPartyCount()
     if count <= 1 then
         console.log("[SLink]   ↳ box_mon skipped: " .. key:sub(1,8) .. " (last mon in party)")
-        hud_show("! Can't deposit — only mon!", 255, 200, 60, 240)
+        hud_show("! Only mon!", 255, 200, 60, 240)
         return
     end
     local found_slot = nil
@@ -540,7 +540,7 @@ local function exec_box_mon(key)
     end
     if not dst_box then
         console.log("[SLink]   ↳ box_mon FAIL: all PC boxes full!")
-        hud_show("!! PC boxes full — can't deposit", 255, 80, 80, 600)
+        hud_show("!! Boxes full", 255, 80, 80, 600)
         return
     end
     -- Read stats before depositing (for server stats_cache)
@@ -571,7 +571,7 @@ local function exec_box_mon(key)
              "stats_cache:"..key:sub(1,8), true, true)
     end
     console.log(fmt("[SLink]   ↳ box_mon OK: %s → Box %d slot %d", key:sub(1,8), dst_box + 1, dst_slot + 1))
-    hud_show(fmt("↓ %s deposited → Box %d", nick_label(key), dst_box + 1), 100, 180, 255, 240)
+    hud_show(fmt("v %s boxed -> Box %d", nick_label(key), dst_box + 1), 100, 180, 255, 240)
 end
 
 local function exec_party_mon(key, stats)
@@ -591,7 +591,7 @@ local function exec_party_mon(key, stats)
     end
     if count >= 6 then
         console.log("[SLink]   ↳ party_mon: party full for " .. key:sub(1,8))
-        hud_show("! Make room & retrieve " .. nick_label(key), 255, 200, 60, 600)
+        hud_show("! Unbox " .. nick_label(key), 255, 200, 60, 600)
         return false  -- signal retry
     end
     -- Scan PC boxes 0-17 for the key
@@ -611,7 +611,7 @@ local function exec_party_mon(key, stats)
     end
     if not src_box then
         console.log("[SLink]   ↳ party_mon: " .. key:sub(1,8) .. " not found in any PC box")
-        hud_show("! Retrieve " .. nick_label(key) .. " from PC", 255, 200, 60, 600)
+        hud_show("! Unbox " .. nick_label(key), 255, 200, 60, 600)
         send({event="sync_retrieve_failed", key=key},
              "sync_retrieve_failed:"..key:sub(1,8), true, true)
         return
@@ -650,7 +650,7 @@ local function exec_party_mon(key, stats)
     all_known_keys[key]    = true
     console.log(fmt("[SLink]   ↳ party_mon OK: %s ← Box %d slot %d → party[%d]",
         key:sub(1,8), src_box + 1, src_slot + 1, count))
-    hud_show(fmt("^ %s retrieved from Box %d", nick_label(key), src_box + 1), 100, 255, 160, 240)
+    hud_show(fmt("^ %s unboxed Box %d", nick_label(key), src_box + 1), 100, 255, 160, 240)
     send({event="sync_retrieve_done", key=key},
          "sync_retrieve_done:"..key:sub(1,8), true, true)
 end
@@ -1121,7 +1121,7 @@ local function on_frame()
                 console.log(fmt("[SLink]   ↳ re-queued (attempt %d/3)", cmd._retries))
             else
                 console.log("[SLink]   ↳ DROPPED after 3 retries")
-                hud_show("X " .. cmd.cmd .. " failed for " .. nick_label(cmd.key or ""), 255, 80, 80, 600)
+                hud_show("X " .. cmd.cmd .. " fail: " .. nick_label(cmd.key or ""), 255, 80, 80, 600)
             end
         elseif cmd.cmd == "party_mon" and exec_result == false then
             -- exec_party_mon returns false to signal retry (party full)
@@ -1131,7 +1131,7 @@ local function on_frame()
                 console.log(fmt("[SLink]   ↳ party_mon re-queued (attempt %d/3)", cmd._retries))
             else
                 console.log("[SLink]   ↳ party_mon DROPPED after 3 retries: " .. (cmd.key or "?"):sub(1,8))
-                hud_show("! Make room & retrieve " .. nick_label(cmd.key or ""), 255, 200, 60, 600)
+                hud_show("! Unbox " .. nick_label(cmd.key or ""), 255, 200, 60, 600)
                 send({event="sync_retrieve_failed", key=cmd.key},
                      "sync_retrieve_failed:"..(cmd.key or "?"):sub(1,8), true, true)
             end
@@ -1143,7 +1143,7 @@ local function on_frame()
                 console.log(fmt("[SLink]   ↳ memorialize re-queued (attempt %d/5)", cmd._retries))
             else
                 console.log("[SLink]   ↳ memorialize DROPPED: " .. (cmd.key or "?"):sub(1,8) .. " not found")
-                hud_show("!! memorialize: mon not found", 255, 140, 40, 600)
+                hud_show("!! mem: not found", 255, 140, 40, 600)
                 send({event="memorialize_failed", key=cmd.key, reason="not_found"},
                      "memorialize_failed:"..(cmd.key or "?"):sub(1,8), true, true)
             end
@@ -1161,7 +1161,7 @@ local function on_frame()
                 if resolved_seeded then
                     if not resolved_areas[area] then
                         local disp = area:gsub("_", " "):gsub("(%a)([%w]*)", function(a, b) return a:upper()..b end)
-                        hud_show("★ NEW ENCOUNTER ★  " .. disp, 255, 220, 60, 240)
+                        hud_show(">> NEW ENCOUNTER <<  " .. disp, 255, 220, 60, 240)
                     end
                 else
                     pending_hud_area = area
@@ -1193,7 +1193,7 @@ local function on_frame()
                 and not resolved_areas[battle_area_id]
                 and not GIFT_AREAS[battle_area_id] then
             local disp = battle_area_id:gsub("_", " "):gsub("(%a)([%w]*)", function(a, b) return a:upper()..b end)
-            hud_show("★ NEW ENCOUNTER ★  " .. disp, 255, 220, 60, 360)
+            hud_show(">> NEW ENCOUNTER <<  " .. disp, 255, 220, 60, 360)
         end
     end
 

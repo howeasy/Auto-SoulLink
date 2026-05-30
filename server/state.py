@@ -260,7 +260,7 @@ class SoulLinkState:
                         self.party_keys[partner].discard(partner_mon.key)
                         self.queued_commands[partner].append({
                             "cmd": "hud_show",
-                            "text": "! Partner can't fit -- " + (partner_mon.nickname or self.adapter.species_name(partner_mon.species) or partner_mon.key[:8]) + " re-deposited",
+                            "text": "[!] " + (partner_mon.nickname or self.adapter.species_name(partner_mon.species) or partner_mon.key[:8]) + ": re-boxed",
                             "r": 255, "g": 200, "b": 60
                         })
                         log.info(f"[{partner}] re-boxing {partner_mon.key[:8]} — partner's retrieve failed")
@@ -360,6 +360,7 @@ class SoulLinkState:
                 state.gender_lock = bool(saved_rules.get("gender_lock", gender_lock))
                 state.type_lock = bool(saved_rules.get("type_lock", type_lock))
                 state.explode_mode = bool(saved_rules.get("explode_mode", explode_mode))
+                state.rival_team_swap = bool(saved_rules.get("rival_team_swap", rival_team_swap))
             state.run_over = bool(data.get("run_over", False))
             state.attempts_count = int(data.get("attempts_count", 0))
             state.rom_type = data.get("rom_type", "")
@@ -473,7 +474,7 @@ class SoulLinkState:
                     # Queue rejection commands — disconnect HUD + refuse processing
                     self.queued_commands[player_id].append({
                         "cmd": "hud_show",
-                        "text": f"WRONG SAVE! Slot {player_id.upper()} is locked to {existing['trainer_name']}",
+                        "text": f"[x] WRONG SAVE: slot {player_id.upper()}",
                         "color": [255, 0, 0],
                         "duration": 600,
                     })
@@ -585,7 +586,7 @@ class SoulLinkState:
                     self.queued_commands[player_id].append({"cmd": "memorialize", "key": key})
                     self.queued_commands[player_id].append({
                         "cmd": "hud_show",
-                        "text": "X Dead mon in party -- returning to memorial",
+                        "text": "[x] Dead in party -> grave",
                         "r": 255, "g": 80, "b": 80
                     })
                     log.warning(f"[{player_id}] hello: {key[:8]} is dead/memorial but in party — re-memorializing")
@@ -733,7 +734,7 @@ class SoulLinkState:
             self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 95})  # SE_SHINY
             self.queued_commands[player_id].append({
                 "cmd": "gui_prompt",
-                "text": f"* Shiny {sname}! Shiny Clause -- bonus mon!",
+                "text": f"*~ SHINY {sname} ~*",
                 "r": 255, "g": 215, "b": 0,
                 "frames": 600,
             })
@@ -741,7 +742,7 @@ class SoulLinkState:
             self.queued_commands[partner].append({"cmd": "play_sound", "sound": 95})  # SE_SHINY
             self.queued_commands[partner].append({
                 "cmd": "gui_prompt",
-                "text": f"★ Partner caught a shiny {sname}! Catch anything as your bonus pair!",
+                "text": f"*~ Partner shiny {sname} ~*",
                 "r": 255, "g": 215, "b": 0,
                 "frames": 480,
             })
@@ -814,7 +815,7 @@ class SoulLinkState:
                 self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 26})   # SE_FAILURE
                 self.queued_commands[player_id].append({
                     "cmd": "gui_prompt",
-                    "text": f"{violation} -- bonus pair rejected, catch again!",
+                    "text": f"[x] {violation} - retry",
                     "r": 255, "g": 200, "b": 60,
                     "frames": 360,
                 })
@@ -881,7 +882,7 @@ class SoulLinkState:
             # Notify both players
             cap_sname = self.adapter.species_name(cap_species_local) if cap_species_local else "Pokémon"
             shiny_sname = self.adapter.species_name(shiny_species) if shiny_species else "Pokémon"
-            link_text = f"★ Bonus Pair: {shiny_sname} <> {cap_sname}!"
+            link_text = f"*~ {shiny_sname}+{cap_sname} ~*"
             log.info(f"[{player_id}] ★ BONUS PAIR: {shiny_key[:8]} ↔ {key[:8]} in {bonus_area_id}")
             log.debug(f"[SHINY] player={player_id}  key={key[:8]}  action=formed  shiny_key={shiny_key[:8]}  area={bonus_area_id}  shiny_species={shiny_sname}  cap_species={cap_sname}")
             self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 25})   # SE_SUCCESS
@@ -919,7 +920,7 @@ class SoulLinkState:
             self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 26})  # SE_FAILURE
             self.queued_commands[player_id].append({
                 "cmd": "hud_show",
-                "text": f"Dead zone \u2014 {label} retired!",
+                "text": f"[x] DZ: {label}",
                 "r": 255, "g": 80, "b": 80, "frames": 360,
             })
             self._save()
@@ -940,7 +941,7 @@ class SoulLinkState:
             self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 26})  # SE_FAILURE
             self.queued_commands[player_id].append({
                 "cmd": "hud_show",
-                "text": f"Already linked here \u2014 {label} retired!",
+                "text": f"[x] Linked: {label}",
                 "r": 255, "g": 80, "b": 80, "frames": 360,
             })
             self._save()
@@ -965,7 +966,7 @@ class SoulLinkState:
             self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 26})  # SE_FAILURE
             self.queued_commands[player_id].append({
                 "cmd": "hud_show",
-                "text": f"2nd catch! {label} retired (already have {existing_label})",
+                "text": f"[x] 2nd: {label}",
                 "r": 255, "g": 80, "b": 80, "frames": 360,
             })
             self._save()
@@ -1019,7 +1020,7 @@ class SoulLinkState:
                 self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 26})   # SE_FAILURE
                 self.queued_commands[player_id].append({
                     "cmd": "gui_prompt",
-                    "text": f"Species clause: already have {dup_name} -- catch again!",
+                    "text": f"[x] Dup {dup_name}",
                     "r": 255, "g": 200, "b": 60,
                     "frames": 360,
                 })
@@ -1102,7 +1103,7 @@ class SoulLinkState:
                     player=reject_pid, reason="clause_violation_retry")
                 self.queued_commands[reject_pid].append({
                     "cmd": "gui_prompt",
-                    "text": violation + " -- catch again!",
+                    "text": "[x] " + violation,
                     "r": 255, "g": 200, "b": 60,
                     "frames": 360,
                 })
@@ -1126,7 +1127,7 @@ class SoulLinkState:
             # Notify both players with success sound + link info HUD
             a_label = a_mon.nickname or self.adapter.species_name(a_mon.species) or a_mon.key[:8]
             b_label = b_mon.nickname or self.adapter.species_name(b_mon.species) or b_mon.key[:8]
-            link_text = f"Linked: {a_label} <> {b_label}"
+            link_text = f"*~ {a_label}+{b_label} ~*"
             self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 25})   # SE_SUCCESS
             self.queued_commands[partner].append({"cmd": "play_sound", "sound": 25})
             self.queued_commands[player_id].append({
@@ -1177,7 +1178,7 @@ class SoulLinkState:
             label = nick or disp
             self.queued_commands[partner].append({
                 "cmd": "hud_show",
-                "text": f">> Partner caught {label} at {disp}",
+                "text": f">> Got {label}",
                 "r": 100, "g": 180, "b": 255,
                 "frames": 300,
             })
@@ -1426,7 +1427,7 @@ class SoulLinkState:
         log.info(f"[DEAD ZONE] {area_id}  reason=no_catch  triggered_by={player_id}  partner_had_capture={partner_cap is not None}")
         # Notify both players with a failure sound + HUD banner naming the dead area.
         area_disp = self.adapter.area_display_name(area_id) or area_id
-        dz_text = f"!! Dead zone -- {area_disp}!"
+        dz_text = f"!! DZ: {area_disp}"
         self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 26})   # SE_FAILURE
         self.queued_commands[player_id].append({
             "cmd": "hud_show", "text": dz_text,
@@ -1540,7 +1541,7 @@ class SoulLinkState:
         if retired and not player_picks:
             self.queued_commands[player_id].append({
                 "cmd":  "hud_show",
-                "text": "X No alive mons left in PC",
+                "text": "[x] PC empty",
                 "r": 255, "g": 80, "b": 80, "frames": 360,
             })
             if not self.run_over:
@@ -1636,7 +1637,7 @@ class SoulLinkState:
                 log.warning(f"[{player_id}] box_to_party blocked: {key[:8]} is quarantined (pending in {area_id})")
                 self.queued_commands[player_id].append({
                     "cmd": "hud_show",
-                    "text": "! " + (cap.nickname or self.adapter.species_name(cap.species) or key[:8]) + " is unlinked -- must stay in box",
+                    "text": "[!] " + (cap.nickname or self.adapter.species_name(cap.species) or key[:8]) + ": unlinked",
                     "r": 255, "g": 200, "b": 60
                 })
                 return
@@ -1653,7 +1654,7 @@ class SoulLinkState:
             self.queued_commands[player_id].append({"cmd": "memorialize", "key": key})
             self.queued_commands[player_id].append({
                 "cmd": "hud_show",
-                "text": "X " + nick + " is dead -- back to memorial box",
+                "text": "[x] " + nick + ": dead -> grave",
                 "r": 255, "g": 80, "b": 80
             })
             log.warning(f"[{player_id}] box_to_party blocked: {key[:8]} is dead/memorial — re-memorializing")
@@ -1686,7 +1687,7 @@ class SoulLinkState:
                 nick = my_mon.nickname or self.adapter.species_name(my_mon.species) or msg.get("nickname") or key[:8]
                 self.queued_commands[player_id].append({
                     "cmd": "hud_show",
-                    "text": "! Partner's party full -- " + nick + " re-deposited",
+                    "text": "[!] " + nick + ": re-boxed",
                     "r": 255, "g": 200, "b": 60
                 })
                 log.info(f"[{player_id}] box_to_party blocked: {key[:8]} — partner {partner} party logically full ({logical_size}/6)")
@@ -1921,7 +1922,7 @@ class SoulLinkState:
         if partner_picks:
             self.queued_commands[partner].append({
                 "cmd":    "hud_show",
-                "text":   f">> Partner rebuilding -- {len(player_picks)} mon(s) restored",
+                "text":   f">> Rebuilt {len(player_picks)}",
                 "r": 100, "g": 180, "b": 255,
                 "frames": 360,
             })
@@ -2441,6 +2442,7 @@ class SoulLinkState:
                 "gender_lock": self.gender_lock,
                 "type_lock": self.type_lock,
                 "explode_mode": self.explode_mode,
+                "rival_team_swap": self.rival_team_swap,
             },
             "links": [
                 {

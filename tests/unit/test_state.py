@@ -790,8 +790,9 @@ def test_no_catch_dead_zone_queues_hud_banner_for_both(tmp_path, monkeypatch):
     cmds_a = state.handle_event("a", {"event": "tick"})
 
     def _has_dz_hud(cmds):
+        # HUD text shortened to "!! DZ: <area>" (was "Dead zone -- <area>!")
         return any(
-            c.get("cmd") == "hud_show" and "dead zone" in c.get("text", "").lower()
+            c.get("cmd") == "hud_show" and "DZ:" in c.get("text", "")
             for c in cmds
         )
     def _has_failure_se(cmds):
@@ -3423,7 +3424,7 @@ def test_shiny_capture_in_dead_zone_is_kept(tmp_path, monkeypatch):
     assert not has_cmd(cmds, "force_faint", SHINY_KEY)
     assert not has_cmd(cmds, "memorialize", SHINY_KEY)
     # Capturing player gets gui_prompt + shiny sound
-    assert any("Shiny" in c.get("text", "") for c in cmds if c.get("cmd") == "gui_prompt")
+    assert any("SHINY" in c.get("text", "") for c in cmds if c.get("cmd") == "gui_prompt")
     assert has_cmd(cmds, "play_sound")
 
 
