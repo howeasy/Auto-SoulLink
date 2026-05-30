@@ -3076,6 +3076,8 @@ class SLinkServer:
                 "species_lock": s.species_lock,
                 "gender_lock": s.gender_lock,
                 "type_lock": s.type_lock,
+                "explode_mode": s.explode_mode,
+                "rival_team_swap": s.rival_team_swap,
             },
             "recent_events": list(self._recent_events),
             "killfeed": sorted(
@@ -3183,6 +3185,10 @@ class SLinkServer:
             lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-gender"/></svg> Gender Clause</span>')
         if s.type_lock:
             lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-type"/></svg> Type Clause</span>')
+        if s.explode_mode:
+            lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-explode"/></svg> Explode Mode</span>')
+        if s.rival_team_swap:
+            lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-rival-swap"/></svg> Rival Team Swap</span>')
         if lock_badges:
             parts.append(f'<div class="lock-rules">Rules: {" ".join(lock_badges)}</div>')
 
