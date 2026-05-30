@@ -87,8 +87,13 @@ local cfg = {
     font_size  = 10,    -- text font size
     -- Empirical Courier New Bold advance per font size, used by the safety-net
     -- truncate in H.show / H.prompt to prevent text from bleeding past the dark
-    -- backdrop. GBC clients override to 7 (font_size=8); GBA/NDS default 8.
-    char_width = 8,
+    -- backdrop. Numbers are intentionally GENEROUS — the truncate is a last-
+    -- resort net for runaway strings, not a tight fit. Real GDI+ Courier Bold
+    -- at 10pt advances ~6px; at 8pt ~5px. Budgets at these widths:
+    --   GBC (font_size=8,  char_width=5): 156 / 5 = 31 chars
+    --   GBA (font_size=10, char_width=6): 234 / 6 = 39 chars
+    --   NDS (font_size=10, char_width=6): 250 / 6 = 41 chars
+    char_width = 6,
 }
 
 -- Truncate `text` so it fits within the bottom HUD bar at the current font.

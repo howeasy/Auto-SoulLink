@@ -174,7 +174,7 @@ end
 -- ── HUD overlay ───────────────────────────────────────────────────────────────
 -- GBC screen: 160 × 144
 HUD.init({screen_w = 160, screen_h = 144, hud_x = 2, hud_y = 134, hud_right = 158,
-          prompt_y = 36, prompt_h = 10, gameover_y = 50, font_size = 8, char_width = 7})
+          prompt_y = 36, prompt_h = 10, gameover_y = 50, font_size = 8, char_width = 5})
 local hud_show    = HUD.show
 local hud_render  = HUD.render
 local prompt_show = HUD.prompt
