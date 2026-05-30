@@ -515,6 +515,10 @@ end
 
 -- ── Per-frame helpers ─────────────────────────────────────────────────────────
 
+-- Party-struct FLAGS byte (OFF_FLAGS) bits used by this client.
+local FLAG_OCCUPIED = 0x02   -- slot holds a real mon (paired with maxHP > 0)
+local FLAG_EGG      = 0x04   -- mon is an egg (NPC gifts + daycare)
+
 -- Merged map lookup: one SB1 dereference for both area_id and loc_name.
 local function current_area_loc()
     local g, n = M.getCurrentMap()
@@ -561,7 +565,7 @@ local function index_party(battle_active)
         local base  = M.PARTY_BASE + i * M.MON_SIZE
         local flags = mem_u8(base + M.OFF_FLAGS)
         local maxHP = mem_u16(base + M.OFF_MAX_HP)
-        if (flags & 0x02) ~= 0 and maxHP > 0 then
+        if (flags & FLAG_OCCUPIED) ~= 0 and maxHP > 0 then
             local k  = cachedMonKey(i)
             local lv = mem_u8(base + M.OFF_LEVEL)
             local hp = mem_u16(base + M.OFF_HP)
@@ -1193,6 +1197,23 @@ local function exec_memorialize(key)
 end
 
 -- ── Main frame handler ────────────────────────────────────────────────────────
+-- Seed all_known_keys from every non-memorial PC box, so mons withdrawn while
+-- the client was offline are recognized as box_to_party rather than false gift
+-- captures. Memorial/overflow boxes are skipped — dead mons must never block a
+-- future same-PID capture. Shared by the connect handler and the startup seed.
+local function seed_known_keys_from_boxes()
+    for boxIdx = 0, (M.BOXES_PER_STORE or 14) - 1 do
+        if boxIdx ~= M.MEMORIAL_BOX and not memorial_overflow_renamed[boxIdx] then
+            for slotIdx = 0, M.MONS_PER_BOX - 1 do
+                local bk = M.boxMonKey(boxIdx, slotIdx)
+                if bk and bk ~= "0:0" then
+                    all_known_keys[bk] = true
+                end
+            end
+        end
+    end
+end
+
 local function on_frame()
     frame_count = frame_count + 1
 
@@ -1240,19 +1261,9 @@ local function on_frame()
             local snap = (save_loaded and not borrowed_battle) and build_party_snapshot(false) or {}
             -- Seed all_known_keys from current party on connect
             for k in pairs(prev_party) do all_known_keys[k] = true end
-            -- Seed all_known_keys from PC boxes so withdrawn mons
-            -- are recognized as box_to_party, not false gift captures.
-            -- Skip memorial box: dead mons must not block future same-PID captures.
-            for boxIdx = 0, (M.BOXES_PER_STORE or 14) - 1 do
-                if boxIdx ~= M.MEMORIAL_BOX and not memorial_overflow_renamed[boxIdx] then
-                    for slotIdx = 0, 29 do
-                        local bk = M.boxMonKey(boxIdx, slotIdx)
-                        if bk and bk ~= "0:0" then
-                            all_known_keys[bk] = true
-                        end
-                    end
-                end
-            end
+            -- Seed all_known_keys from PC boxes so withdrawn mons are recognized
+            -- as box_to_party, not false gift captures.
+            seed_known_keys_from_boxes()
             local h_area, h_loc = current_area_loc()
             send({event="hello", area_id=h_area, loc_name=h_loc,
                   rom_type=rom_type,
@@ -1295,7 +1306,12 @@ local function on_frame()
     -- Within a single on_frame() callback the GBA CPU is frozen, so these
     -- values cannot change between uses.  Read BEFORE sync flush so the
     -- cached overworld state gates writes correctly.
-    local area, loc    = current_area_loc()
+    -- Capture the raw (group, num) too — what current_area_loc() discards — so
+    -- the cold gift-fallback branches below can rebuild "gift_<g>_<n>" without a
+    -- second getCurrentMap() read on the same frozen frame.
+    local frame_map_g, frame_map_n = M.getCurrentMap()
+    local area = game_module.resolve_area(frame_map_g, frame_map_n)
+    local loc  = game_module.resolve_location(frame_map_g, frame_map_n)
     local in_battle    = M.isInBattle()
     local is_overworld = M.isInOverworld()
 
@@ -2068,7 +2084,7 @@ local function on_frame()
                                 local cap_iid  = ok_ps and ps and ps.held_item_id or 0
                                 local cap_aid  = ok_ps and ps and ps.ability_id   or 0
                                 local cap_flags = mem_u8(M.PARTY_BASE + info.slot * M.MON_SIZE + M.OFF_FLAGS)
-                                local cap_is_egg = (cap_flags & 0x04) ~= 0
+                                local cap_is_egg = (cap_flags & FLAG_EGG) ~= 0
                                 _display_cache[k] = {nickname=cap_nick, species_id=cap_sid,
                                                      held_item_id=cap_iid, ability_id=cap_aid}
                                 if cap_nick ~= "" or cap_sid ~= 0 then
@@ -2088,8 +2104,7 @@ local function on_frame()
                                     elseif area ~= "" then
                                         gift_area = area
                                     else
-                                        local g, n = M.getCurrentMap()
-                                        gift_area = "gift_" .. g .. "_" .. n
+                                        gift_area = "gift_" .. frame_map_g .. "_" .. frame_map_n
                                     end
                                     evt_area     = gift_area
                                     recover_kind = "gift"
@@ -2373,12 +2388,6 @@ local function on_frame()
 
     -- ── capture (party, battle-scoped or gift/box) ────────────────────────────
     for k, info in pairs(curr_party) do
-        -- DEBUG: log when a key appears as "new" during battle but gets blocked by sync_written
-        if not prev_party[k] and (in_battle or post_battle_frames > 0) then
-            if sync_written_keys[k] then
-                console.log(string.format("[SLink-FRLGE] [DIAG] capture BLOCKED by sync_written: %s", k:sub(1,8)))
-            end
-        end
         if not prev_party[k] and not sync_written_keys[k] and not key_migrated[k] then
             -- Read display data for this party slot (pcall-guarded).
             local ok_ps, ps = pcall(M.readPartySlot, info.slot)
@@ -2388,7 +2397,7 @@ local function on_frame()
             local cap_aid  = ok_ps and ps and ps.ability_id    or 0
             -- isEgg = FLAGS bit 2 — definitive egg detection (NPC gifts + daycare).
             local cap_flags  = mem_u8(M.PARTY_BASE + info.slot * M.MON_SIZE + M.OFF_FLAGS)
-            local cap_is_egg = (cap_flags & 0x04) ~= 0
+            local cap_is_egg = (cap_flags & FLAG_EGG) ~= 0
             -- Populate display + nick caches so snapshot/HUD use fresh data.
             _display_cache[k] = {nickname=cap_nick, species_id=cap_sid,
                                  held_item_id=cap_iid, ability_id=cap_aid}
@@ -2406,11 +2415,6 @@ local function on_frame()
                       is_egg=cap_is_egg},
                      "capture(battle):"..k:sub(1,8), true)
             elseif all_known_keys[k] then
-                -- DEBUG: log when a "new" party key is blocked by all_known_keys during battle
-                if in_battle or post_battle_frames > 0 then
-                    console.log(string.format("[SLink-FRLGE] [DIAG] capture BLOCKED by all_known_keys: %s slot=%d battle=%s grace=%d",
-                        k:sub(1,8), info.slot, tostring(in_battle), post_battle_frames))
-                end
                 -- Previously seen key reappeared → buffer for confirmation.
                 -- Cross-cancel any pending party_to_box for this key (flicker protection).
                 for pi = #party_to_box_buffer, 1, -1 do
@@ -2442,8 +2446,7 @@ local function on_frame()
                     if area ~= "" then
                         gift_area = area
                     else
-                        local g, n = M.getCurrentMap()
-                        gift_area = "gift_" .. g .. "_" .. n
+                        gift_area = "gift_" .. frame_map_g .. "_" .. frame_map_n
                     end
                 end
                 -- Don't set all_known_keys yet — deferred to buffer flush so we
@@ -2883,10 +2886,6 @@ local function on_frame()
 
         if post_battle_frames == 0 then
             local outcome_caught = (M.getBattleOutcome() == M.OUTCOME_CAUGHT)
-            -- DEBUG: log why no_catch was suppressed
-            if not captured_this_battle and outcome_caught then
-                console.log("[SLink-FRLGE] [DIAG] no_catch suppressed: outcome=CAUGHT but captured_this_battle=false (capture detection missed!)")
-            end
             if nuzlocke_active and battle_is_wild and not captured_this_battle and not outcome_caught
                     and battle_area_id and battle_area_id ~= ""
                     and not resolved_areas[battle_area_id]
@@ -3322,19 +3321,9 @@ do
             (function() local n=0; for _ in pairs(memorial_overflow_renamed) do n=n+1 end; return n end)()))
     end
 end
--- Seed all_known_keys from PC boxes to prevent false gift captures
--- when withdrawing mons after a script reload.
--- Skip memorial + overflow boxes: dead mons must not block future same-PID captures.
-for boxIdx = 0, (M.BOXES_PER_STORE or 14) - 1 do
-    if boxIdx ~= M.MEMORIAL_BOX and not memorial_overflow_renamed[boxIdx] then
-        for slotIdx = 0, 29 do
-            local bk = M.boxMonKey(boxIdx, slotIdx)
-            if bk and bk ~= "0:0" then
-                all_known_keys[bk] = true
-            end
-        end
-    end
-end
+-- Seed all_known_keys from PC boxes to prevent false gift captures when
+-- withdrawing mons after a script reload (memorial/overflow boxes skipped).
+seed_known_keys_from_boxes()
 
 event.onframeend(on_frame_safe, "t4_events")
 console.log("[SLink-FRLGE] Running — play normally to trigger events…")
