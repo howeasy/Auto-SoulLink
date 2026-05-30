@@ -12,8 +12,9 @@ against the pret decomp .sym output. Runtime smoke-test checklist in
 
 ## Files
 
-- `gen1_rby_areas.lua` — Map ID → encounter area_id mapping (all three games share IDs)
-- `gen1_rby_locations.lua` — Map ID → display name mapping
+- `area_map.json` — Map ID → `{area_id, display name}` source (86 entries; all three games share IDs). Generates the `.lua` lookup tables.
+- `gen1_rby_areas.lua` — Generated Map ID → encounter area_id lookup (from `area_map.json`)
+- `gen1_rby_locations.lua` — Generated Map ID → display name lookup
 - `moves.json` — 165 moves: name, type, power, accuracy, pp, split
 - `trainers.json` — `classes` (class_id → class name) + `named_trainers` (gym leaders, E4, rivals)
 - `encounter_tables.json` — Wild encounter slots by area_id (partial coverage; extend by adding more areas)

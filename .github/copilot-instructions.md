@@ -23,10 +23,13 @@ python -m server.server --reset   # wipe all state and start a fresh run
 #   --species-clause       Reject same-evo-family links
 #   --gender-clause        Reject same-gender links
 #   --type-clause          Reject shared-type links
+#   --explode-mode         (RR only) partner death → force_explode (coerced Explosion) instead of force_faint
+#   --rival-team-swap      (RR only) rival battles → replace rival team with the partner's party (replace_rival_team)
 #   --manager-port PORT  Manager HTTP port (enables back-link)
 #   --verbose            Enable structured DEBUG logging to <data-dir>/slink.log
 
-# Unit tests — no emulator or server required (276 + 208 + 100 + 103 + 179 + 140 + 46 + 6 + 7 + 4 + 3 = 1072 tests)
+# Unit tests — no emulator or server required
+# (287 + 216 + 100 + 103 + 179 + 140 + 46 + 6 + 7 + 4 + 3 + 14 + 15 + 10 + 8 + 4 = 1142 tests)
 pytest tests/unit/test_state.py -v
 pytest tests/unit/test_gen3_adapter.py -v
 pytest tests/unit/test_gen4_adapter.py -v
@@ -38,6 +41,12 @@ pytest tests/unit/test_phase1_comms.py -v
 pytest tests/unit/test_obs_priority.py -v
 pytest tests/unit/test_manager_launcher.py -v
 pytest tests/unit/test_profile_addresses.py -v
+# 0.2.6 — Rival Team Swap / Explode Mode / Upcoming Key Trainers:
+pytest tests/unit/test_trainer_panel.py -v
+pytest tests/unit/test_state_rival_battle_start.py -v
+pytest tests/unit/test_state_party_blob_cache.py -v
+pytest tests/unit/test_gen3_adapter_rival_ids.py -v
+pytest tests/unit/test_cli_rival_team_swap.py -v
 
 # Single test
 pytest tests/unit/test_state.py::test_faint_queues_force_faint_for_partner -v
@@ -50,6 +59,16 @@ python tools/gen_gen2_area_map.py
 
 # Regenerate Gen 5 BW area maps and location tables
 python tools/gen_gen5_area_map.py    # Gen 5 BW
+
+# Regenerate the RR priority/key-trainer roster (Upcoming Key Trainers panel + calc setdex)
+python tools/gen_rr_priority_trainers.py
+
+# Lint (dev only: pip install -r requirements-dev.txt; config ruff.toml)
+ruff check .
+ruff check . --fix
+
+# Syntax-check all Lua with lupa (Lua 5.5) — catches goto/bitwise errors luac 5.1 misreports
+python tools/lua_syntax_check.py
 ```
 
 ## Project Overview
@@ -293,16 +312,16 @@ SLink-RR/
 - **`server/server.py`** — asyncio TCP coordinator + aiohttp status page. Routes events to the FSM. Tracks per-player area, ball count, and party snapshots for the status page. Dynamic page titles via `_page_title()` method (shows "Pokémon Soul Link Tracker — \<variant\> — \<run name\>" with Pokéball SVG icon). `_resolve_level()` provides multi-source level fallback for manual links and PC box mons. Commits `rom_type` and `trainer_names` on first hello (set-once). Memorial wall page at `/memorial` (HTMX morph-swap refresh, tombstone cards with server-side `_sprite_img_html()` for correct CFRU→NatDex sprite conversion). Debug page at `/debug` (manual linking/unlinking, event injection, command queuing, state toggles, backup rollback, raw state — all panels live-updating via HTMX polling). OBS page at `/obs` (per-player connection management, draggable priority trigger rules). Launcher script download at `/launcher/{player}` (host from HTTP Host header). Accepts `--manager-port` CLI arg for Run Manager back-link. Accepts `--verbose` CLI flag: enables `_configure_logging()` which adds a `RotatingFileHandler` (10 MB × 5) to `<data_dir>/slink.log` with structured DEBUG tags for every accepted event, command flush, FSM transitions, party/faint/clause/reconcile/shiny lifecycle events, and adapter init. RR item names loaded from `data/games/gen3_frlge/rr_items.json`. TCP port displayed on status page. Rolling backups of `links.json` **and `events.json`** every 5 min when both players connected (6 slots with rotation; rollback restores both files atomically). `_cache_mon_info()` backfills stale link entry nicknames from live party data. Capture events populate `mon_stats` directly (fallback from top-level `hp`/`maxHP`/`level` fields). `sprite_html` field in party_details and killfeed JSON APIs. Enemy battle type badges and held items in status page.
 - **`server/obs_controller.py`** — `OBSController`: per-player `simpleobsws` WebSocket connections (obs-websocket v5, port 4455), per-player coalescing `asyncio.Queue` + worker tasks, reconnect loop with exponential backoff (5 s → 60 s cap). `submit_fired(fired_list)` priority-resolves a list of `(event_name, src_player, metadata)` tuples in one pass — iterates rules in list order, first match per target player wins. Config persisted at `data/obs_config.json` (global, not per-run). Passwords never returned in GET responses.
 - **`server/pokemon_data.py`** — Shared Pokémon data module: `SPECIES_NAMES`, `GENDER_RATIO`, `gender_from_key_species()`, `EVO_FAMILY` (Gen I–IX evolution families including CFRU/RR extended IDs), `base_form()`.
-- **`server/adapters/base.py`** — GameAdapter ABC: GameRulesAdapter (10 methods) + GamePresentationAdapter (9 methods). All game-specific server logic flows through adapter interfaces.
-- **`server/adapters/gen3_frlge.py`** — Gen 3 adapter: GBA PID:OTID key format, FRLG+Emerald gift areas, Gen 1-3 species data, RR variant support.
+- **`server/adapters/base.py`** — GameAdapter ABC: GameRulesAdapter + GamePresentationAdapter. All game-specific server logic flows through adapter interfaces. 0.2.6 added `gift_link_area`, `rival_trainer_ids` (rules) and `trainers_for_area` / `trainer_party` / `trainer_brief` (presentation) as inert-default stubs.
+- **`server/adapters/gen3_frlge.py`** — Gen 3 adapter: GBA PID:OTID key format, FRLG+Emerald gift areas, Gen 1-3 species data, RR variant support. RR overrides `rival_trainer_ids()` (27 "Terry" IDs), the Upcoming-Key-Trainers methods (`trainers_for_area` / `trainer_party` / `trainer_brief` / `milestone_cap_for_fight_label`) from `rr_priority_trainers.json`, and `gift_link_area`.
 - **`server/adapters/gen2_crystal.py`** — Gen 2 adapter: DV-based gender/shiny, 251 sequential species (NatDex 1-251), 17 types (Dark+Steel added), Crystal item names, PokeAPI sprites. Data from `data/games/gen2_crystal/`.
 - **`server/adapters/gen4_hgsspt.py`** — Gen 4 adapter: PID:OTID key format, HGSS gift areas, Gen 1-4 species (NatDex 1-493).
 - **`server/adapters/gen5_bw.py`** — Gen 5 adapter: PID:OTID key format, BW/BW2 gift areas, Gen 1-5 species (NatDex 1-649).
 - **`server/adapters/__init__.py`** — Adapter registry: get_adapter(game_id) with backward-compat aliases.
-- **`server/manager.py`** — Run Manager (port 8090): creates/starts/stops/archives named runs, each a `server.py` subprocess. Supports per-run lock rule configuration. Passes `--run-name` from run registry to spawned subprocess. Dynamic launcher script endpoints (`GET /api/runs/<id>/launcher/<player>`). Passes `--manager-port` when spawning subprocesses. Verbose Logging checkbox in New Run form; `--verbose` forwarded to spawned subprocess; badge shown on run card.
+- **`server/manager.py`** — Run Manager (port 8090): creates/starts/stops/archives named runs, each a `server.py` subprocess. Supports per-run lock rule configuration. Passes `--run-name` from run registry to spawned subprocess. Dynamic launcher script endpoints (`GET /api/runs/<id>/launcher/<player>`). Passes `--manager-port` when spawning subprocesses. Verbose Logging checkbox in New Run form; `--verbose` forwarded to spawned subprocess; badge shown on run card. Per-run augmentations (`--explode-mode`, `--rival-team-swap`) persisted in the run registry and forwarded on launch. Simplified per-run Live Status panel via the same-origin `GET /api/runs/<id>/live` proxy.
 
 *Data:*
-- **`data/links.json`** — Link table + area states + pokeballs_obtained flags + lock rules, written on every state change.
+- **`data/links.json`** — Link table + area states + pokeballs_obtained flags + lock rules (species/gender/type + `explode_mode`), written on every state change. (`rival_team_swap` is supplied per-launch from the Manager run registry, not persisted here.)
 - **`data/obs_config.json`** — OBS WebSocket config (host, port, password per player, enabled flag, trigger rules list). Written by `OBSController.save_config()`. Not per-run — shared across all server instances. Passwords stored in plaintext locally; never returned in HTTP responses.
 - **`data/games/gen3_frlge/rr_items.json`** — 746 RR item ID → name mappings (generated by `lua/tests/test_item_discovery.lua`). Loaded at server startup; used when `_is_rr` is True.
 - **`tools/gen_area_map.py`** — Generates `data/games/gen3_frlge/gen3_frlge_areas.lua` and `data/games/gen3_frlge/gen3_frlge_locations.lua` from `data/games/gen3_frlge/area_map.json`.
@@ -315,16 +334,21 @@ SLink-RR/
 - **`lua/tests/test_sound_discovery.lua`** — Diagnostic script: scans ROM for gSongTable and reports SE song header addresses for the current ROM profile.
 - **`lua/tests/test_ability_diag.lua`** — Diagnostic script: auto-detects ROM profile, validates gBaseStats address, shows party ability data per slot.
 - **`lua/tests/test_item_discovery.lua`** — ROM scanner for RR/CFRU gItems table. Uses CFRU probe scoring (IDs 52-62) and itemId field validation to find the correct table. Outputs JSON to `rr_items.json`.
-- **`tests/unit/test_state.py`** — 267 pytest unit tests for the state machine.
+- **`tests/unit/test_state.py`** — 287 pytest unit tests for the state machine.
 - **`tests/unit/test_gen1_adapter.py`** — 103 tests for the Gen 1 adapter.
 - **`tests/unit/test_gen2_adapter.py`** — 179 tests for the Gen 2 adapter.
-- **`tests/unit/test_gen3_adapter.py`** — 208 tests for the Gen 3 adapter.
+- **`tests/unit/test_gen3_adapter.py`** — 216 tests for the Gen 3 adapter.
 - **`tests/unit/test_gen4_adapter.py`** — 100 tests for the Gen 4 adapter.
 - **`tests/unit/test_gen5_adapter.py`** — 140 tests for the Gen 5 adapter.
 - **`tests/unit/test_stat_stages.py`** — 46 tests for stat stage calculations.
-- **`tests/unit/test_obs_priority.py`** — 4 tests for OBS priority-based trigger resolution (`submit_fired` — first-match-wins, per-player independence, area filter).
+- **`tests/unit/test_obs_priority.py`** — 7 tests for OBS priority-based trigger resolution (`submit_fired` — first-match-wins, per-player independence, exact area + area-group filters).
 - **`tests/unit/test_phase1_comms.py`** — 6 TCP integration tests.
 - **`tests/unit/test_profile_addresses.py`** — 3 tests verifying every Gen 1/2 profile address matches the pret decomp .sym output (CI gate after `tools/build_pret_syms.py`).
+- **`tests/unit/test_trainer_panel.py`** — 14 tests for the Upcoming Key Trainers panel (`trainers_for_area` / `trainer_party` / `trainer_brief`, base no-op defaults).
+- **`tests/unit/test_state_rival_battle_start.py`** — 15 tests for the Rival Team Swap auto-trigger (adapter gate, toggle matrix, `queue_rival_team_swap`, `rival_team_replaced` ack).
+- **`tests/unit/test_state_party_blob_cache.py`** — 10 tests for the `blob_hex` party-blob cache (ingest, length/hex validation, per-player isolation).
+- **`tests/unit/test_gen3_adapter_rival_ids.py`** — 8 tests for `rival_trainer_ids()` (set size 27, known-ID anchors, vanilla empty, mutation safety).
+- **`tests/unit/test_cli_rival_team_swap.py`** — 4 tests for the `--rival-team-swap` CLI flag (help, store_true, default false, explicit true).
 
 ---
 
@@ -332,8 +356,8 @@ SLink-RR/
 
 The server uses a pluggable adapter pattern for game-specific behavior. All game-specific logic flows through adapter interfaces defined in `server/adapters/base.py`:
 
-- **`GameRulesAdapter`** (10 methods) — key format parsing, gift area definitions, species/evo/gender/type data, mon key extraction from events.
-- **`GamePresentationAdapter`** (9 methods) — sprite HTML generation, species names, ability names/descriptions, item names, area display names, trainer info, type names.
+- **`GameRulesAdapter`** — key format parsing, gift/egg area policy (incl. `gift_link_area` → `gift_<area>` namespace), species/evo/gender/type data, mon-key extraction from events, and `rival_trainer_ids()` (Rival Team Swap gate).
+- **`GamePresentationAdapter`** — sprite HTML generation, species/ability/item/move/area names, trainer info, type names, and the Upcoming-Key-Trainers methods (`trainers_for_area` / `trainer_party` / `trainer_brief`).
 
 Each game family has its own adapter module:
 - **`server/adapters/gen1_rby.py`** — Gen 1 (Red, Blue, Yellow)
@@ -352,11 +376,11 @@ The state machine (`state.py`) calls adapter methods instead of hardcoded game l
 
 ### The Problem
 
-`server.py` has **legacy Gen 3 coupling** that causes regressions when modifying shared code:
+`server.py` **used to** carry Gen 3 coupling that caused regressions when modifying shared code — all since eliminated (see [Completed Refactoring](#completed-refactoring)). The rules below exist to keep it from creeping back. The original offenders were:
 - 61+ uses of `self._is_rr` (Gen 3-specific state in shared server code)
-- 4 standalone functions that duplicate adapter methods (`_item_name`, `_sprite_img_html`, `_type_badges_html`, `_area_display_name`)
+- 4 standalone functions that duplicated adapter methods (`_item_name`, `_sprite_img_html`, `_type_badges_html`, `_area_display_name`)
 - 6 Gen 3-specific JSON data files loaded at module level in server.py
-- `_get_sprite_html()` has a hardcoded `game_id != "gen3_frlge"` check
+- `_get_sprite_html()` with a hardcoded `game_id != "gen3_frlge"` check
 
 ### Rules for ALL Future Changes
 
@@ -415,6 +439,11 @@ No legacy patterns remain.
 | ✅ Unused imports | Removed `species_types`, `TYPE_NAMES` + 7 dead imports |
 | ✅ `_RR_TRAINERS` / `_RR_TRAINER_CLASS` | Moved to gen3 adapter with `trainer_info()` method |
 | ✅ Trainer call site | Simplified to `self.adapter.trainer_info(tid)` |
+| ✅ 0.2.6 ruff lint | `ruff.toml` (E/F/W/I/UP/B/C4/SIM, ignore E501) + `requirements-dev.txt` pinning ruff 0.15.15 |
+| ✅ 0.2.6 sprite URL dedup | `_funnotbun_url` / `_pokeapi_url` / `_frlg_url` helpers; named `_MAX_NATDEX` (1025) / `_GEN3_DEX_CAP` (386) / `_SPECIES_EGG` |
+| ✅ 0.2.6 gift namespace | `gift_link_area()` → `gift_<area>` standalone-pair namespace (rules adapter, no `game_id` branch) |
+| ✅ 0.2.6 Rival Team Swap / Explode Mode | `rival_trainer_ids()` adapter gate + `partner_blobs` cache; `force_explode` / `replace_rival_team` route through the adapter |
+| ✅ 0.2.6 Upcoming Key Trainers | `trainers_for_area` / `trainer_party` / `trainer_brief` adapter methods feed `_trainer_panel_html`; `milestone_cap_for_fight_label` called via `hasattr` guard |
 
 ---
 
@@ -844,6 +873,36 @@ end
 
 Do not zero the entire slot during battle. Deferred memorialization happens post-battle.
 
+### Explode Mode (RR/CFRU only — optional per-run rule)
+
+When `--explode-mode` is active, a linked partner's death sends `force_explode` instead of `force_faint`. For the **active battler**, the Lua client coerces an Explosion by pre-filling the engine's committed-action state at canonical CFRU addresses (from CFRU `include/new/ram_locs_battle.h`), bypassing `HandleTurnActionSelectionState` — so the dead mon never queues a phantom turn-2 (the softlock failure mode of earlier MULTIPLETURNS/RECHARGE attempts). Bench (non-active) mons fall back to an immediate `M.forceFaint(slot)`.
+
+| Symbol | Address | Write | Meaning |
+|---|---|---|---|
+| `gActionForBanks[battler]` | `0x02023D7C` (+battler) | `B_ACTION_USE_MOVE` (=0x02) | action = use a move |
+| `gChosenMovesByBanks[battler]` | `0x02023DC4` (+battler*2) | `MOVE_EXPLOSION` | chosen move |
+| `gBattleCommunication[battler]` | `0x02023E82` (+battler) | `3` (STANDBY) | action confirmed |
+| `gBattleStruct->chosenMovePositions[battler]` | `*(0x02023FE8)+0x80` (+battler) | `0` | move slot 0 |
+| `gBattleStruct->moveTarget[battler]` | `*(0x02023FE8)+0x0C` (+battler) | `1` | foe primary position |
+
+`gBattleStruct` is heap-allocated — dereference the pointer at `0x02023FE8` first, then write the per-battler sub-fields. These addresses live only in the RR profile (`lua/games/gen3_frlge.lua`); `M.forceExplodeBattler()` returns false on vanilla/AP, where `force_explode` degrades to a deferred `force_faint`. **Per-frame reinforcement** (`gen3_frlge_client.lua`): the engine resets `gBattleCommunication[battler]` at turn start, so the client re-writes the committed-action state every frame **only while `gBattleCommunication[battler] < 3`** (writing 3 unconditionally would lock the engine in state 3 and softlock the game). Files: `lua/memory_gba.lua` (`M.forceExplodeBattler`), `lua/games/gen3_frlge.lua` (addresses), `lua/clients/gen3_frlge_client.lua` (dispatch + reinforcement), `server/state.py` (`force_explode` vs `force_faint` in `_propagate_faint`), `server/server.py` (`--explode-mode`).
+
+### Rival Team Swap (RR/CFRU only — optional per-run rule)
+
+When `--rival-team-swap` is active, walking into a rival battle makes the server replace the rival's team with the *partner's current party*, mirrored across the link. EWRAM-only; never touches the SaveBlock.
+
+**New `memory_gba.lua` primitives:**
+- `M.readPartyBlob(slot)` — raw 100-byte party-mon struct as a u8 array.
+- `M.bytesToHex(bytes)` / `M.hexToBytes(s)` — blob ↔ hex transport (200 hex chars per mon).
+- `M.writeEnemyParty(blobs)` — byte-copies each blob into `gEnemyParty[i]`, zeroes `maxHP` on unused trailing slots (CFRU scans until `maxHP == 0` as the team terminator), writes `ENEMY_COUNT_ADDR`, returns a species readback for the ack.
+- `M.refreshActiveEnemyBattlers()` — re-populates `gBattleMons[1]` (and `[3]` in doubles) from the freshly-written `gEnemyParty`; without it the engine keeps cached ability/type/HP from the original rival mon.
+
+**Blob transport (server):** every `hello` / `tick` / safe snapshot carries a per-slot `blob_hex` field (200 chars), folded into `build_party_snapshot`. The server caches them in `partner_blobs[player_id]` via `_ingest_party_blobs`, which validates length (==200) and hex-decodability and drops malformed entries.
+
+**Trigger pipeline (`server/state.py`):** `_handle_trainer_battle_start` fires `queue_rival_team_swap(target, trainer_id)` when **all** hold — trainer ID ∈ `adapter.rival_trainer_ids()`, the `rival_team_swap` toggle is on, and the partner has cached blobs. The server emits a `replace_rival_team` command (blobs in hex); Lua applies it via `writeEnemyParty` + `refreshActiveEnemyBattlers` and replies with a `rival_team_replaced` event carrying the species readback, which `_handle_rival_team_replaced` logs.
+
+**Rival ID detection:** base `rival_trainer_ids()` returns `set()`. Gen 3 RR builds `_RR_RIVAL_TRAINER_IDS` at import by scanning `rr_trainers.json` for trainers named **"Terry"** (RR's default rival name) in classes `{81, 89, 90}` (Rival Early/Mid/Late) — 27 IDs. Filtering by name avoids false positives from the generic "Rival" class. New events: `trainer_battle_start`, `rival_team_replaced`. New command: `replace_rival_team`.
+
 ### Area Normalization
 
 Raw `mapGroup:mapNum` maps to a canonical `area_id` via a lookup table in `data/games/gen3_frlge/gen3_frlge_areas.lua`. **184 entries** generated from `data/games/gen3_frlge/area_map.json` by `python tools/gen_area_map.py`. Key decisions:
@@ -867,6 +926,8 @@ Raw `mapGroup:mapNum` maps to a canonical `area_id` via a lookup table in `data/
 | `saffron_dojo` | Hitmonlee / Hitmonchan |
 
 Captures in these areas do NOT activate `pokeballs_obtained` on the server. Faints here (before the nuzlocke is active) are also ignored. The `gift` fallback is used when `area_id` is empty (unmapped location) and a new mon appears outside battle — this ensures AP starters link correctly regardless of randomized starting location.
+
+**Gift/egg `gift_<area>` namespace remap (`gift_link_area`).** A gift or egg received in a *real* (non-gift) encounter area must not consume or lock that area's single wild-encounter slot. The adapter remaps such captures into the **`gift_<area>`** namespace (`gift_link_area` in `adapters/base.py`): gifts already in a gift area, and daycare-bred eggs, keep their `area_id`; everything else becomes `gift_<area_id>`. The `gift_` prefix is recognized by `is_gift_area` downstream, so a remapped capture forms a **standalone gift pair** that bypasses the dead-zone / linked-wild quarantine guards, skips quarantine, and **never satisfies the Pokéball gate**. The Lua client tags these captures with `gift=true`. (The Gen 3 client also re-reads each party **and box** mon's ability every tick — RR's Ability Patch can flip the hidden-ability bit without a `key_change`, so re-reading keeps the displayed ability correct.)
 
 ---
 
@@ -909,7 +970,7 @@ The server (`server/state.py`) tracks per-area and per-mon state.
 | Event | Detection condition |
 |---|---|
 | `area_enter` | `area_id` changes between frames (only when `nuzlocke_active` OR gift area) |
-| `capture` | New monKey appears in party OR in current box after a `CAUGHT` battle outcome |
+| `capture` | New monKey appears in party OR in current box after a `CAUGHT` battle outcome. Carries `gift=true` for gift/egg catches (routes the pair into the `gift_<area>` namespace) |
 | `faint` | Known monKey HP drops from > 0 to 0 (detected via double-buffer party diff with per-buffer entry pools) |
 | `no_catch` | Wild battle ends (15-frame grace), no new capture detected; suppressed if `!nuzlocke_active` |
 | `whiteout` | All living party mons reach HP=0 simultaneously |
@@ -917,6 +978,8 @@ The server (`server/state.py`) tracks per-area and per-mon state.
 | `box_to_party` | Known monKey reappears in party from box |
 | `tick` | Every 30 frames (~0.5 s) — flushes queued commands; includes `ball_count` |
 | `key_change` | Nature Changer NPC modified personality — old_key → new_key migration (see Nature Change Detection) |
+| `trainer_battle_start` | Trainer battle began (carries the trainer opponent ID). Gates the Rival Team Swap match (`rival_trainer_ids()`); also an OBS trigger event |
+| `rival_team_replaced` | Ack of a `replace_rival_team` command, with a species readback of the team written into `gEnemyParty` |
 
 **`nuzlocke_active` gate (Lua-side only):** set to `true` when `M.hasPokeballs()` returns true (reads `SaveBlock1.bagPocket_PokeBalls` at profile-dependent offset: `+0x0430` vanilla, `+0x0680` AP). Until then, `no_catch` events and `resolved_areas` tracking are suppressed in Lua. The server does **not** duplicate this gate.
 
@@ -927,9 +990,11 @@ For **static/gift encounters** (Starter, Lapras, Eevee, fossils), a new monKey a
 | Command | Lua action |
 |---|---|
 | `force_faint` | Find party slot with matching monKey; write HP=0 via `M.forceFaint(slot)` |
+| `force_explode` | **RR, `--explode-mode`.** Active battler → coerce Explosion via the Variant-3 memory writes (`M.forceExplodeBattler`); bench mon or non-RR → falls back to `M.forceFaint(slot)` |
 | `box_mon` | Deposit the named mon from party to the first available PC box slot |
 | `party_mon` | Retrieve the named mon from a PC box to the first available party slot; writes stats from server cache |
 | `memorialize` | Move dead mon from party/box to Box 13 ("THE DEAD"); deferred to safe state |
+| `replace_rival_team` | **RR, `--rival-team-swap`.** Byte-copy the partner's party blobs into `gEnemyParty` (`M.writeEnemyParty`), then `M.refreshActiveEnemyBattlers()`; ack with `rival_team_replaced` |
 | `hud_show` | Display a text message on the BizHawk HUD overlay with custom RGB color and duration |
 | `noop` | No action; returned when there is nothing to do |
 
@@ -1047,11 +1112,11 @@ Below the cards:
 ### Unit tests — no emulator or server required
 
 ```bash
-pytest tests/unit/ -v   # 1072 tests
-pytest tests/unit/test_state.py -v          # 276 tests (incl. tick reconciliation)
+pytest tests/unit/ -v   # 1142 tests
+pytest tests/unit/test_state.py -v          # 287 tests (incl. tick reconciliation + Explode Mode)
 pytest tests/unit/test_gen1_adapter.py -v   # 103 tests
 pytest tests/unit/test_gen2_adapter.py -v   # 179 tests
-pytest tests/unit/test_gen3_adapter.py -v   # 208 tests
+pytest tests/unit/test_gen3_adapter.py -v   # 216 tests
 pytest tests/unit/test_gen4_adapter.py -v   # 100 tests
 pytest tests/unit/test_gen5_adapter.py -v   # 140 tests
 pytest tests/unit/test_stat_stages.py -v    # 46 tests
@@ -1059,6 +1124,12 @@ pytest tests/unit/test_phase1_comms.py -v   # 6 tests
 pytest tests/unit/test_obs_priority.py -v   # 7 tests (priority + area-group filters)
 pytest tests/unit/test_manager_launcher.py -v   # 4 tests (BizHawk launcher Lua syntax)
 pytest tests/unit/test_profile_addresses.py -v  # 3 tests (pret address verification)
+# 0.2.6 — Rival Team Swap / Upcoming Key Trainers:
+pytest tests/unit/test_trainer_panel.py -v             # 14 tests (Upcoming Key Trainers panel)
+pytest tests/unit/test_state_rival_battle_start.py -v  # 15 tests (rival-swap auto-trigger)
+pytest tests/unit/test_state_party_blob_cache.py -v    # 10 tests (blob_hex cache)
+pytest tests/unit/test_gen3_adapter_rival_ids.py -v    # 8 tests (rival trainer IDs)
+pytest tests/unit/test_cli_rival_team_swap.py -v       # 4 tests (--rival-team-swap CLI)
 ```
 
 Feed event dicts directly to `SoulLinkState.handle_event()`. Use `monkeypatch` to redirect `LINKS_PATH` to `tmp_path`. Helper `make_state_with_link()` creates a pre-linked pair with `pokeballs_obtained = {"a": True, "b": True}`.
@@ -1214,6 +1285,7 @@ Radical Red has battles that replace the player's party (Poké Dude tutorial, mo
 1. **Primary**: `memory.lua` decrypts species ID + ability bit from substruct data, looks up `gBaseStats[species].ability1/ability2`
 2. **Fallback**: `_ability_cache` in `client.lua` — keyed by monKey, populated from `gBattleMons[battler].ability` (offset `+0x20`) during battle. Used when substruct decryption returns 0.
 3. **Server**: `pokemon_data.py` `ability_name(ability_id, is_rr)` and `ability_description(ability_id, is_rr)` — 255-entry RR table + 165-entry vanilla table. Vanilla uses `_VANILLA_ABILITY_NAMES` and `_VANILLA_ABILITY_DESCRIPTIONS` (complete Gen III–V). RR descriptions from funnotbun's Radical Red Dex.
+4. **Per-tick refresh (RR)**: the Gen 3 client re-reads each party **and box** mon's ability every tick. RR's Ability Patch can flip the hidden-ability bit without changing personality/otId (so no `key_change` fires); re-reading every tick keeps the displayed ability correct.
 
 ### gBaseStats addresses by profile
 

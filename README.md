@@ -47,7 +47,7 @@ BizHawk B ─── Lua client ──┘
 ```
 
 - **Lua clients** diff RAM each frame and send JSON events only on changes (capture, faint, area change, party move)
-- **Server** returns commands in the TCP response (`force_faint`, `box_mon`, `party_mon`, `memorialize`)
+- **Server** returns commands in the TCP response (`force_faint`, `box_mon`, `party_mon`, `memorialize`; plus `force_explode` / `replace_rival_team` for the RR run augmentations)
 - **Web UI** is Jinja2 templates served by aiohttp, swapped in-place by HTMX (idiomorph) every ~2 s, with small Alpine.js widgets for the theme/font pickers
 - **State** persists to `data/links.json` after every mutation
 
@@ -73,11 +73,20 @@ BizHawk B ─── Lua client ──┘
 
 Shiny bonus pairs are always on — catching a shiny gives the partner an extra Soul Link slot.
 
+### Optional Run Augmentations (Radical Red)
+
+Opt-in per-run rules — passed as CLI flags (or toggled in the Run Manager's new-run form) and **only active on Radical Red**; vanilla / Archipelago / Emerald fall back to default behavior.
+
+| Flag | Effect |
+|------|--------|
+| `--explode-mode` | On a linked partner's death, the surviving mon is coerced into using **Explosion** mid-battle (server emits a `force_explode` command) instead of a silent force-faint |
+| `--rival-team-swap` | On a rival battle, the rival's team is replaced live with the **partner run's current party** (server emits `replace_rival_team`) |
+
 ## Web Pages
 
 | Path | Description |
 |------|-------------|
-| `/` | Live status — parties, encounters, linked pairs, area states, enemy battle info. HTMX morph swap every 2 s preserves scroll/`<details open>` state. |
+| `/` | Live status — parties (split or combined linked-pair view), encounters, linked pairs, area states, enemy battle info, and an **Upcoming Key Trainers** panel (RR: next gym leaders/rivals vs party level, with an "Open in Calc" button). HTMX morph swap every 2 s preserves scroll/`<details open>` state. |
 | `/memorial` | Tombstone cards for dead pairs, polled via HTMX |
 | `/obs` | OBS scene trigger configuration — per-player WebSocket connections, draggable priority rules, area-group filter (`group:routes`, `group:caves`, …) |
 | `/twitch` | Twitch bot configuration and activity log |
@@ -218,7 +227,7 @@ python -m server.manager --host 0.0.0.0
 ## Tests
 
 ```bash
-pytest tests/unit/ -v        # 1072 tests, no emulator needed
+pytest tests/unit/ -v        # 1142 tests, no emulator needed
 ```
 
 ## Project Structure
@@ -247,7 +256,7 @@ data/
   games/                 # Per-game static data (area maps, items)
   obs_config.json        # OBS connection + trigger rule config
 calc/                    # Radical Red damage calculator + live bridge (rendered via Jinja shell)
-tests/                   # pytest unit tests (1072) + BizHawk test scripts
+tests/                   # pytest unit tests (1142) + BizHawk test scripts
 tools/                   # Code generators (area maps, data tables)
 ```
 

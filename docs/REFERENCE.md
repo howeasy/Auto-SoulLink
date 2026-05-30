@@ -49,6 +49,8 @@ Navigate to `http://localhost:8080/` in a browser. The page title dynamically sh
 - Battle display panel ("⚔ IN BATTLE" with enemy party table including abilities) rendered **above** each player's party table for immediate visibility
 - Consolidated Encounters table with progress icons: ✅ (linked/alive), 💀 (dead/memorial), ⏳ (pending), ☠️ (dead zone) — each row shows area, Player A's mon (sprite/nickname/species/level), status icon, Player B's mon
 - Per-player PC box summary (occupied slots with nicknames/species/abilities)
+- **Upcoming Key Trainers** panel (Radical Red) — the next gym leaders / rivals / mini-bosses for each player's area, ranked Past / Current / Future against current party level, with sprites and an "Open in Calc" button that hands the trainer to the calc Prep tab
+- Linked-party view toggle — a `[Split | Combined]` segmented control beside the Players header; Combined renders a 5-column symmetric table (Mon · HP · Area · HP · Mon) of both players' linked pairs. Choice persists in `localStorage`.
 - Per-area encounter state (waiting for &lt;trainer name&gt; / linked / dead zone)
 - Identity error banner (red) when a player connects with the wrong save file
 - Flicker-free auto-refresh via HTMX + idiomorph morph swaps — sprites, HP bars, and table structure are preserved across updates; only changed text/values are patched in-place via a `beforeAttributeUpdated` hook that explicitly preserves the `open` attribute on `<details>` elements
@@ -128,9 +130,43 @@ Alternatively, load `lua/slink.lua` directly — it auto-detects the game but us
 **Communication model:**
 - Lua clients read RAM every frame but only send a JSON event when state changes (area, capture, faint, party move, etc.)
 - The server returns commands in the TCP response: `{"commands": [{"cmd": "force_faint", "key": "..."}]}`
-- Lua dispatches commands immediately (for `force_faint`, `play_sound`) or defers to the next overworld safe state (for `box_mon`, `party_mon`, `memorialize`). Safe-state checks use a fresh `isInOverworld()` call at execution time to avoid stale cached values.
+- Lua dispatches commands immediately (for `force_faint`, `force_explode`, `replace_rival_team`, `play_sound`) or defers to the next overworld safe state (for `box_mon`, `party_mon`, `memorialize`). Safe-state checks use a fresh `isInOverworld()` call at execution time to avoid stale cached values.
 - A `tick` event is sent every ~60 frames as a heartbeat to flush queued cross-player commands and update the status page with current party data. During the intro (before save data is valid), ticks omit party/box/enemy data to prevent garbage on the status page.
 - **TCP connector** uses fully non-blocking connect (`settimeout(0)`) — zero emulator stutter when the server is down. Pending connects are probed via zero-byte send. Reconnect uses **exponential backoff**: 2s → 4s → 8s → 16s → 30s cap, resetting on success.
+
+---
+
+## TCP Protocol
+
+Lua clients and the server speak newline-delimited JSON over one persistent TCP connection per player. A client sends an **event** only when state changes; the server replies on the same round-trip with a `commands` array: `{"commands": [{"cmd": "force_faint", "key": "..."}]}`.
+
+### Events (Lua → server)
+
+| Event | Notes |
+|---|---|
+| `hello` | Handshake — `rom_type`, trainer name, party. Locks player identity; the reply carries `resolved_areas`. |
+| `area_enter` | Player entered a new area (`area_id`). |
+| `capture` | A mon was caught — `key`, `area_id`, `level`. Carries `gift=true` for gift/egg catches (routes the pair into the `gift_<area>` namespace). |
+| `faint` | A party mon hit 0 HP — drives faint propagation to the partner. |
+| `no_catch` | Player failed to catch in an area (run / KO / flee) → dead-zone candidate. |
+| `tick` | ~60-frame heartbeat; flushes queued cross-player commands and refreshes status-page party data. Occupied party slots carry `blob_hex` when `--rival-team-swap` is active. |
+| `trainer_battle_start` | A trainer battle began, with the trainer opponent ID. Gates the rival-team-swap match (`rival_trainer_ids()`); also an OBS trigger event. |
+| `rival_team_replaced` | Ack of a `replace_rival_team` command, with a species readback of the team written into `gEnemyParty`. |
+| `sync_retrieve_done` / `sync_retrieve_failed` | Confirms a `party_mon` retrieval succeeded / failed (paired party-room check). |
+
+### Commands (server → Lua)
+
+| Command | Notes |
+|---|---|
+| `force_faint` | Zero a mon's HP immediately (linked-death propagation, illegal capture, whiteout). |
+| `force_explode` | **RR-only, `--explode-mode`.** Replaces `force_faint` when a linked partner dies mid-battle — coerces the survivor's active mon into Explosion. Falls back to `force_faint` on vanilla/AP/Emerald and for bench mons. |
+| `replace_rival_team` | **RR-only, `--rival-team-swap`.** Byte-copies the partner run's party blobs (per-slot `blob_hex`) over the rival/Terry team in EWRAM, then refreshes the active battlers. Acked by `rival_team_replaced`. |
+| `box_mon` / `party_mon` | Deposit / retrieve a mon — **deferred** to the next overworld safe state. |
+| `memorialize` | Move a dead pair to Box 13 ("Box 14" in-game) — deferred to safe state. |
+| `play_sound` / `hud_show` | Play an in-game SE / show a HUD overlay message (`message`, `color`, `duration`). |
+| `resolved_areas` | Sent in the `hello` reply — area states to treat as already resolved on reconnect. |
+
+> The OBS-trigger event names in [OBS Scene Trigger Integration](#obs-scene-trigger-integration) are a *separate* concept (derived signals for scene switching) even where names overlap (e.g. `trainer_battle_start`).
 
 ---
 
@@ -228,7 +264,7 @@ URL parameters supported by all overlays:
 
 Scrolling overlays additionally accept:
 - `?speed=1` (default) — multiplier from `0.25`–`3.0`. Values on the index page's speed pill buttons update the URL automatically.
-- `?pause=2` (default, in seconds) — pause-after-loop on `enemy-trainer-{a,b}` when the doubled list overflows its mask. Range `0`–`10`. Values on the index page's pause pill buttons update the URL automatically.
+- `?pause=2` (default, in seconds) — pause-after-loop on auto-scrolling overlays (`enemy-trainer-{a,b}`, `boxed-links`) when the doubled list overflows its mask. Range `0`–`10`. Values on the index page's pause pill buttons update the URL automatically.
 
 | Overlay | URL | Use |
 |---|---|---|
@@ -236,7 +272,7 @@ Scrolling overlays additionally accept:
 | Player B party | `/stream/party-b` | Player B's live party |
 | Linked pairs | `/stream/links` | All linked pairs and their status |
 | Linked party | `/stream/linked-party` | Both players' linked party mons side-by-side |
-| Boxed links | `/stream/boxed-links` | Linked pairs currently in the PC box |
+| Boxed links | `/stream/boxed-links` | Linked pairs currently in the PC box, as a seamless auto-scrolling marquee. Honors `?speed=` (0.25–3, default 1) and `?pause=` (0–10 s, default 2). |
 | Death feed | `/stream/deaths` | Scrolling log of deaths with cause and killer |
 | Attempts counter | `/stream/attempts` | Current run attempt count (set via `POST /api/attempts`) |
 | Area states | `/stream/areas` | All encounter areas and their current state |
@@ -299,6 +335,8 @@ Example response (abbreviated):
   "pokeballs_obtained": { "a": true, "b": true }
 }
 ```
+
+> When `--rival-team-swap` is active, each occupied party slot also carries a `blob_hex` field (the raw 100-byte mon struct as hex) — used to ship a player's party to the partner for the rival-team-swap write.
 
 ---
 
@@ -553,11 +591,13 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Party/box sync | If A's linked mon is in the party, B's partner must also be in the party — automatic deposit/retrieval. Paired sync enforcement: retrieval requires both players to have party room; otherwise both stay boxed |
 | Memorial box | Both mons from a dead pair are moved to Box 13 ("Box 14" in-game) after the battle ends |
 | Nuzlocke gate | Dead zone and faint propagation are inactive until the player obtains Pokéballs |
-| Gift capture detection | Captures classified as gifts when (a) the area is a configured gift area (`is_gift_area()`) or (b) the captured mon is an egg in a non-daycare encounter area (NPC egg-gifts like Route 5 Togepi). The Lua client reads `is_egg` from `OFF_FLAGS` bit 2 and forwards it; `_is_gift_capture(area_id, is_egg)` in `server/state.py` combines this with `is_daycare_area()` so daycare-bred eggs (Route 5/Four Island day cares in Gen 3) remain normal captures. Gifts bypass the Pokéball gate and aren't subject to wild-catch quarantine. |
+| Gift capture detection | Captures classified as gifts when (a) the area is a configured gift area (`is_gift_area()`) or (b) the captured mon is an egg in a non-daycare encounter area (NPC egg-gifts like Route 5 Togepi). The Lua client reads `is_egg` from `OFF_FLAGS` bit 2 and forwards it; `_is_gift_capture(area_id, is_egg)` in `server/state.py` combines this with `is_daycare_area()` so daycare-bred eggs (Route 5/Four Island day cares in Gen 3) remain normal captures. Gifts/eggs link under a dedicated **`gift_<area>`** namespace (adapter `gift_link_area()`): they form standalone gift pairs that bypass the dead-zone / linked-wild-slot guards, skip the unlinked-capture quarantine, and never satisfy the Pokéball gate — a gift received in a real encounter area no longer locks that area. The Lua client tags these captures with `gift=true`. |
 | Whiteout | All of A's party mons faint → all of B's linked party mons are force-fainted |
 | Species clause (opt-in) | `--species-clause` — rejects links where both mons share the same evolution family (e.g. Charmander ↔ Charmeleon). Also rejects captures where the **same player** already has an alive linked mon of the same evo family (same-save duplicate prevention). Dead/memorial pairs don't block. The violating capture is force-fainted; the area stays pending for retry |
 | Gender clause (opt-in) | `--gender-clause` — rejects links where both mons are the same gender (♂+♂ or ♀+♀). Genderless mons are exempt. The violating capture is force-fainted; the area stays pending for retry |
 | Type clause (opt-in) | `--type-clause` — rejects links where both mons share any type (e.g. Charizard Fire/Flying ↔ Pidgey Normal/Flying — shared Flying). Uses RR type data when available; falls back to vanilla Gen I–III types. The violating capture is force-fainted; the area stays pending for retry |
+| Explode mode (opt-in) | `--explode-mode` — **Radical Red only.** When a linked mon dies mid-battle, its partner receives a `force_explode` command instead of the deferred `force_faint`, coercing the partner's active Pokémon into using Explosion. Bench mons and vanilla/AP/Emerald fall back to `force_faint`. Persisted in `links.json` under `rules.explode_mode`. |
+| Rival team swap (opt-in) | `--rival-team-swap` — **Radical Red only.** On a `trainer_battle_start` against a configured rival ID (`adapter.rival_trainer_ids()`), the server sends `replace_rival_team` carrying the *partner's* live party blobs; the client byte-copies them into `gEnemyParty` (EWRAM-only) and acks with `rival_team_replaced`. Supplied per-launch from the Manager run registry. |
 | Shiny Clause (always on) | When a player catches a shiny, their partner's **next encounter** becomes the shiny's Soul Link partner (a bonus pair). The bonus pair goes through all normal Soul Link rules — lock clauses apply, faint propagation is enforced, party sync is required. The area that triggered the shiny is not consumed. If multiple shinies are caught before bonuses are claimed, bonuses queue up (FIFO). Gen 1 is naturally excluded (`is_shiny()` always returns `False`). The catching player receives a shiny sound effect and GUI prompt; the partner is notified that a bonus encounter is pending. |
 
 ---
@@ -607,6 +647,13 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Gender clause (opt-in `--gender-clause`) | ✅ Working |
 | Type clause (opt-in `--type-clause`) | ✅ Working |
 | Shiny Clause (always on — bonus pairs) | ✅ Working |
+| Explode mode (opt-in `--explode-mode`, RR-only `force_explode`) | ✅ Working |
+| Rival team swap (opt-in `--rival-team-swap`, RR-only `replace_rival_team`) | ✅ Working |
+| Gift/egg `gift_<area>` namespace (standalone pairs, gate + quarantine bypass) | ✅ Working |
+| Status page — Upcoming Key Trainers panel (RR priority-trainer pipeline) | ✅ Working |
+| Status page — linked-party Split/Combined view toggle (localStorage) | ✅ Working |
+| Run Manager — simplified per-run Live Status panel (`/api/runs/<id>/live` proxy) | ✅ Working |
+| Stream overlays — interlocked-chain SVG separator + boxed-links marquee + focus gradient rows | ✅ Working |
 | State persistence (`links.json`) | ✅ Working |
 | Reconnect resilience (seq dedup + re-queue) | ✅ Working |
 | Status page — pending captures with trainer names/sprites | ✅ Working |
@@ -683,9 +730,9 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 ### Unit tests (no emulator required)
 
 ```bash
-pytest tests/unit/ -v          # all 1072 tests
-pytest tests/unit/test_state.py -v             # 276 state machine tests (incl. tick reconciliation)
-pytest tests/unit/test_gen3_adapter.py -v      # 208 Gen 3 adapter tests
+pytest tests/unit/ -v          # all 1142 tests
+pytest tests/unit/test_state.py -v             # 287 state machine tests (incl. tick reconciliation)
+pytest tests/unit/test_gen3_adapter.py -v      # 216 Gen 3 adapter tests
 pytest tests/unit/test_gen4_adapter.py -v      # 100 Gen 4 adapter tests
 pytest tests/unit/test_gen1_adapter.py -v      # 103 Gen 1 adapter tests
 pytest tests/unit/test_gen2_adapter.py -v      # 179 Gen 2 adapter tests
@@ -695,9 +742,15 @@ pytest tests/unit/test_obs_priority.py -v      # 7 OBS priority + area-group tes
 pytest tests/unit/test_manager_launcher.py -v  # 4 launcher Lua-syntax regression tests
 pytest tests/unit/test_phase1_comms.py -v      # 6 protocol tests
 pytest tests/unit/test_profile_addresses.py -v # 3 pret address verification tests
+# Rival Team Swap + Explode Mode + Upcoming Key Trainers (0.2.6):
+pytest tests/unit/test_trainer_panel.py -v             # 14 Upcoming Key Trainers panel tests
+pytest tests/unit/test_state_rival_battle_start.py -v  # 15 rival-team-swap trigger tests
+pytest tests/unit/test_state_party_blob_cache.py -v    # 10 party blob_hex cache tests
+pytest tests/unit/test_gen3_adapter_rival_ids.py -v    # 8 rival trainer-ID tests
+pytest tests/unit/test_cli_rival_team_swap.py -v       # 4 --rival-team-swap CLI tests
 ```
 
-276 state machine tests covering: linking, dead zones, faint propagation, whiteout, party sync (including confirmation-based `sync_retrieve_done`/`sync_retrieve_failed`, PC swap event ordering), box capture stats caching, memorial box, reconnect re-queuing, illegal captures, encounter logging, AP ROM type handling, species clause (evo families), gender clause (genderless edge cases), type clause (shared types, partial overlap, monotypes), combined clauses, violation recovery, clause rule persistence, same-save species duplicate prevention, dynamic gift areas, hello resolved_areas, gift area no_catch protection, unlinked encounter quarantine, paired party sync enforcement, dead zone quarantined mon retirement, CFRU/RR species data validation (Gen 3 ID rekey, Gen 4+ cross-gen evolutions, gender ratios), battle HP cache writeback (CFRU), double-buffer party diff, frame ordering, player identity lock (OT ID per slot — first lock, wrong OT rejection, event blocking, persistence, empty party skip, per-player independence), persistent run metadata (rom_type, trainer_names), shiny bonus pairs (pending_bonus FIFO queue, pair formation, faint propagation both directions, party sync at formation, FIFO multi-bonus, lock clause violations with retry, area unresolve, persistence, key migration, no-wildcard-exemption), nature change (key_change migration), dupes clause partner pending capture check, and **tick reconciliation** (server-side diff of Lua party snapshots against `party_keys[player_id]` to repair ghost-boxed and ghost-party drift, gated against in-flight box/party/memorialize commands and active whiteout rebuilds).
+287 state machine tests covering: linking, dead zones, faint propagation, whiteout, party sync (including confirmation-based `sync_retrieve_done`/`sync_retrieve_failed`, PC swap event ordering), box capture stats caching, memorial box, reconnect re-queuing, illegal captures, encounter logging, AP ROM type handling, species clause (evo families), gender clause (genderless edge cases), type clause (shared types, partial overlap, monotypes), combined clauses, violation recovery, clause rule persistence, same-save species duplicate prevention, dynamic gift areas, hello resolved_areas, gift area no_catch protection, unlinked encounter quarantine, paired party sync enforcement, dead zone quarantined mon retirement, CFRU/RR species data validation (Gen 3 ID rekey, Gen 4+ cross-gen evolutions, gender ratios), battle HP cache writeback (CFRU), double-buffer party diff, frame ordering, player identity lock (OT ID per slot — first lock, wrong OT rejection, event blocking, persistence, empty party skip, per-player independence), persistent run metadata (rom_type, trainer_names), shiny bonus pairs (pending_bonus FIFO queue, pair formation, faint propagation both directions, party sync at formation, FIFO multi-bonus, lock clause violations with retry, area unresolve, persistence, key migration, no-wildcard-exemption), nature change (key_change migration), dupes clause partner pending capture check, and **tick reconciliation** (server-side diff of Lua party snapshots against `party_keys[player_id]` to repair ghost-boxed and ghost-party drift, gated against in-flight box/party/memorialize commands and active whiteout rebuilds), and **Explode Mode** (default-off, save/load round-trip, off → `force_faint` vs on → `force_explode`). Rival Team Swap state coverage lives in `test_state_rival_battle_start.py` (auto-trigger matrix, `queue_rival_team_swap`, `rival_team_replaced` ack) and `test_state_party_blob_cache.py` (`blob_hex` ingest, length/hex validation, per-player isolation).
 
 7 OBS priority tests covering: highest-priority rule wins when multiple events fire simultaneously, lower-priority fallback when high-priority event didn't fire, independent per-player resolution, exact `area_id` filter matching, and **area-group** filter matching (`group:routes`, etc.) against the active adapter's classified area map.
 
@@ -748,6 +801,7 @@ See `tests/TESTING.md` for the full 9-step end-to-end test procedure. Load `lua/
 | `server/adapters/base.py` | Adapter ABC — GameRulesAdapter + GamePresentationAdapter interfaces |
 | `data/games/gen1_rby/` | Gen 1 game data — area/location mappings |
 | `data/games/gen3_frlge/` | Gen 3 game data — area maps, RR items/sprites/types/species/trainers |
+| `data/games/gen3_frlge/rr_priority_trainers.json` | Generated RR priority/key-trainer roster (areas → trainers, parties, level caps) feeding the Upcoming Key Trainers panel + calc Prep tab |
 | `data/games/gen4_hgsspt/` | Gen 4 game data — HGSS area map |
 | `data/games/gen5_bw/` | Gen 5 game data — BW/BW2 area maps and location tables |
 | `data/links.json` | Persisted link table — written after every state change |
@@ -757,6 +811,10 @@ See `tests/TESTING.md` for the full 9-step end-to-end test procedure. Load `lua/
 | `server/twitch_bot.py` | Twitch chat bot — twitchio 3.x EventSub, command handling, activity log |
 | `lua/tests/` | BizHawk test scripts (memory, force-faint, server comms, ability diag, etc.) |
 | `tools/` | Generator scripts — ability descriptions, ability names, form data, species data, RR data, sprites, types |
+| `tools/gen_rr_priority_trainers.py` | Generator for `rr_priority_trainers.json` + the calc `slink_priority.js` setdex (RR priority/key trainers) |
+| `tools/lua_syntax_check.py` | Syntax-checks `lua/**/*.lua` with lupa (Lua 5.5) — catches `goto`/bitwise errors the system luac 5.1 rejects |
+| `tools/inject_full_mocks.py` | Injects full mock state (6 linked pairs, dead-zone, boxed pair, memorial, enemy battle w/ held items) into a running server for UI testing |
+| `ruff.toml` / `requirements-dev.txt` | Ruff lint config + pinned dev dependency (`pip install -r requirements-dev.txt`; `ruff check .`) |
 | `tests/TESTING.md` | Live BizHawk test guide |
 | **Damage Calculator** | |
 | `calc/src/normal.template.html` | Normal-difficulty calc page template (compiled → `dist/normal.html`) |
@@ -766,6 +824,7 @@ See `tests/TESTING.md` for the full 9-step end-to-end test procedure. Load `lua/
 | `calc/src/js/shared_controls.js` | Core calc UI logic — set/move dropdowns, search (substring matching + match highlighting), trainer set matching |
 | `calc/src/js/index_randoms_controls.js` | Mode switching (Normal/Hardcore), trainer set matching bridge |
 | `calc/src/js/data/sets/normal.js` | Normal-mode trainer sets data (SETDEX_SV for all RR trainers) |
+| `calc/src/js/data/sets/slink_priority.js` | Generated SLink priority-trainer setdex (RR key trainers) — target of the dashboard "Open in Calc" handoff |
 | `calc/src/js/data/sets/hardcore.js` | Hardcore-mode trainer sets data |
 | `calc/calc/src/desc.ts` | Result description string builder — EV display suppressed (always assumed max, not shown) |
 | `calc/build` | Build script — compiles TypeScript, copies assets, hashes HTML; runs `node build` (full) or `node build view` (HTML-only) |
@@ -942,8 +1001,6 @@ For full address tables, see the [AP Support](#archipelago-ap-support) and [RR S
 
 ---
 
----
-
 ## Sync Timing Architecture
 
 Sync commands (`box_mon`, `party_mon`, `memorialize`) are **deferred to safe state** to avoid corrupting party/box data during battle or transition animations.
@@ -994,9 +1051,9 @@ python -m server.server --help
 # --species-clause      reject links where both mons share the same evolution family
 # --gender-clause       reject links where both mons share the same gender
 # --type-clause         reject links where both mons share any type
+# --explode-mode        (RR only) on partner death, force the linked mon to auto-Explode (force_explode instead of force_faint)
+# --rival-team-swap     (RR only) on rival battles, replace the rival's team with the partner's current party (replace_rival_team)
 ```
-
----
 
 ---
 
@@ -1175,9 +1232,10 @@ python -m server.manager --host 0.0.0.0
 
 **Features:**
 - Create, start, stop, and archive named runs — each run is a separate `server.py` subprocess with its own TCP port, HTTP port, and data directory
-- Per-run clause rule configuration (species clause, gender clause, type clause) via UI checkboxes
+- Per-run rule configuration via UI checkboxes, in two sections — **Link Clauses** (species / gender / type) and **Run Augmentations** (Explode Mode / Rival Swap, RR-only)
 - Launcher script downloads — generates pre-configured `slink_<player>.lua` files with the correct host IP, TCP port, and player ID based on the URL used to access the manager
 - Direct links to each run's status page
+- Simplified per-run **Live Status** panel — connection, current area, party levels + HP, badges, in-battle banner, and link counts, pulled via the same-origin `/api/runs/<id>/live` proxy (no cross-port request, flicker-free reactive merge)
 
 **Endpoints:**
 
@@ -1192,6 +1250,7 @@ python -m server.manager --host 0.0.0.0
 | `POST /api/runs/<id>/archive` | Archive a run |
 | `POST /api/runs/<id>/delete` | Delete a run |
 | `GET /api/runs/<id>/launcher/<player>` | Download launcher script (`player` = `"a"` or `"b"`) |
+| `GET /api/runs/<id>/live` | Same-origin proxy of a run's `/api/status` (feeds the manager's simplified Live Status panel without a cross-port request) |
 
 **Examples:**
 
@@ -1247,6 +1306,8 @@ A floating, draggable panel injected by `calc/src/js/slink_bridge.js` connects t
 - **One-click import** — clicking any row loads that mon's full Showdown paste into the calc attacker (`p1`) or defender (`p2`) slot automatically
 
 The panel saves its position, collapsed state, and Prep tab selections (mode, trainer, encounter) in `localStorage`. It reconnects automatically via SSE on disconnect (3-second retry). Pings arriving while the user is interacting with the panel are deferred until `mouseup` to prevent DOM rebuilds mid-interaction.
+
+**Dashboard → Calc handoff (RR).** The status page's Upcoming Key Trainers panel has an "Open in Calc" button that writes the chosen trainer to `localStorage`; `slink_bridge.js` listens for the `storage` event and loads the Prep tab onto that trainer. The generated set source is `calc/src/js/data/sets/slink_priority.js` (the SLink priority setdex, built by `tools/gen_rr_priority_trainers.py`).
 
 **Server endpoint:** `GET /api/calc/mons` — returns per-player party, linked pairs, and enemy battle data in calc-friendly JSON format including `showdown_paste`, `sprite_html`, `hp_pct`, `ability_name`, `item_name`, and matched `moves`. See [JSON API](#json-api) for the full response shape.
 
@@ -1313,6 +1374,19 @@ The adapter pattern (`server/adapters/`) isolates game-specific logic. **All dis
 4. Test ALL active games after changing `server.py`, `state.py`, or `adapters/base.py`
 
 See `.github/copilot-instructions.md` → "Adapter Isolation Rules" for the full interface contract.
+
+### Adapter methods added in 0.2.6
+
+All are gated to the supporting game (currently Gen 3 Radical Red); the base `GameRulesAdapter` / `GamePresentationAdapter` ships inert defaults so other gens inherit the no-op — never branch on `game_id` in shared code.
+
+| Method | Returns / does | Base default |
+|---|---|---|
+| `rival_trainer_ids()` | Trainer IDs treated as the rival for `--rival-team-swap` (Gen 3 RR: 27 "Terry" IDs in classes 81/89/90, built at import from `rr_trainers.json`). | `set()` |
+| `gift_link_area(area_id)` | Maps a gift/egg capture into the `gift_<area>` namespace for standalone gift pairs. | `gift_<area>` remap |
+| `trainers_for_area(area_id)` | Key/priority trainer IDs appearing in an area (Upcoming Key Trainers panel). | `[]` |
+| `trainer_party(trainer_id)` | A trainer's curated party for the panel + calc handoff. | `[]` |
+| `trainer_brief(trainer_id)` | Short trainer descriptor (name/class/party/area) for the panel. | synthesized from `trainer_info` |
+| `milestone_cap_for_fight_label(label)` | Level cap for a key-fight label. **Gen 3 RR only** — `server.py` calls it via a `hasattr` guard; it is *not* defined on the base class. | — |
 
 ### Adding a New Game
 

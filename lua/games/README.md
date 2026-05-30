@@ -114,8 +114,10 @@ Game module for FireRed, LeafGreen, and Emerald.
 - **Platform**: GBA — uses `memory_gba.lua` for party/box reads
 - **Memory domain**: System Bus (EWRAM/IWRAM addresses)
 - **Area lookup**: `mapGroup * 256 + mapNum` → area_id via `data/games/gen3_frlge/gen3_frlge_areas.lua` (184 entries)
-- **Gift areas**: `oaks_lab`, `intro`, `gift`, `cinnabar_lab`, `celadon_condominiums`, `silph_co_7f`, `saffron_dojo`
+- **Gift areas**: `oaks_lab`, `intro`, `gift`, `cinnabar_lab`, `celadon_condominiums`, `silph_co_7f`, `saffron_dojo` (gift/egg captures emit `gift=true` → server files them under the `gift_<area>` namespace)
+- **Commands**: `force_faint`, `force_explode` (RR — auto-Explode on partner death), `box_mon`, `party_mon`, `memorialize`, `replace_rival_team` (RR — swap the rival's team for the partner's party), `hud_show`, `resolved_areas`, `unresolve_area`, `game_over`
 - **Exports**: `profiles` (vanilla/ap/radical_red address tables), `detect()`, `detect_variant()`, `rom_type_for_variant()`, `is_gift_area()`
+- **Rival-team-swap helpers** (`memory_gba.lua`, RR only): `readPartyBlob(slot)`, `writeEnemyParty(blobs)`, `refreshActiveEnemyBattlers()`, `bytesToHex()` / `hexToBytes()` — read the partner's 100-byte party-mon blobs and byte-copy them into `gEnemyParty` (EWRAM-only) for the `replace_rival_team` command. `forceExplodeBattler(idx)` backs `force_explode`.
 
 ### Gen 4 — `gen4_hgsspt.lua`
 

@@ -28,7 +28,7 @@ gen<N>_<abbreviations>
 
 - **`area_map.json` / `area_map_<game>.json`** — Source-of-truth area definitions consumed by `tools/gen_area_map.py` and Lua area generators. Each entry maps raw map IDs to a canonical `area_id`.
 - **`rom_map_names.json` / `rom_mapsec_names.json`** — Human-readable map and mapsec names extracted from ROM data.
-- **`rr_*.json`** — Radical Red–specific data (items, species, sprites, trainers, types). Only loaded at runtime when `rom_type` indicates Radical Red.
+- **`rr_*.json`** — Radical Red–specific data (items, species, sprites, trainers, types, priority/key-trainer rosters). Only loaded at runtime when `rom_type` indicates Radical Red.
 
 ## Adding a new game generation
 

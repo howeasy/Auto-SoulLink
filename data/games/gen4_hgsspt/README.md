@@ -14,7 +14,7 @@ read-only-scannable via `lua/tests/test_gen4_battlers_count.lua` and
 
 ## Files
 
-- `area_map_hgss.json` — HGSS zone ID → area_id mapping (98 areas, 195 zone IDs)
+- `area_map_hgss.json` — HGSS zone ID → area_id mapping (101 areas, 532 map entries)
 - `area_map_platinum.json` — Platinum zone ID → area_id mapping (78 areas, 530 zone IDs)
 - `gen4_hgsspt_areas.lua` / `gen4_hgsspt_areas_pt.lua` — Generated zone lookup tables (Lua, runtime)
 - `gen4_hgsspt_locations.lua` / `gen4_hgsspt_locations_pt.lua` — Area display name lookups

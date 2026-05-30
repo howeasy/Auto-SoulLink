@@ -266,7 +266,7 @@ The status page uses **HTMX morph swaps** (`idiomorph-ext.min.js`) — sprites, 
 **FAIL:** `Writes: OFF` → ROM validation failed; load a save first.  
 **FAIL:** `no_catch` fires before Pokéballs obtained → `nuzlocke_active` gate bug in `gen3_frlge_client.lua`.  
 **FAIL:** `party_mon failed: party full` loops endlessly → `exec_party_mon` retry bug.  
-**FAIL:** Ability shows "Unknown" or 0 → check `BASESTATS_ADDR` in the ROM profile; run `lua/test_ability_diag.lua` to diagnose.  
+**FAIL:** Ability shows "Unknown" or 0 → check `BASESTATS_ADDR` in the ROM profile; run `lua/tests/test_ability_diag.lua` to diagnose.  
 **FAIL:** Wrong-save connection modifies state → identity lock bug in `server/state.py`.
 
 ---
@@ -405,7 +405,7 @@ Run through the steps below **in order**. Each step depends on the previous.
 | A captures on a route (mon quarantined). B sends `no_catch` for the same route (dead zone forms) | A's quarantined mon is force-fainted and memorialized directly from the box |
 | `memorializeMon` searches both party and boxes 0-12 to find the mon | ✓ |
 
-**Species lock — same-save duplicate test (requires `--species-lock`):**
+**Species clause — same-save duplicate test (requires `--species-clause`):**
 
 | Action | Expected |
 |---|---|
@@ -467,73 +467,6 @@ Run through the steps below **in order**. Each step depends on the previous.
 |---|---|
 | A console: `AUTO party_to_box:<key8> → ...` | Server received deposit |
 | B console: `↳ box_mon queued: <key8>` then `✓ box_mon: <key8> → box0 s0` | B's linked partner auto-deposited |
-
----
-
-## Unit Tests (pytest — no emulator required)
-
-```bash
-pytest tests/unit/ -v                                # all 1115 tests
-pytest tests/unit/test_state.py -v                   # 276 tests (incl. tick reconciliation)
-pytest tests/unit/test_gen3_adapter.py -v            # 208 tests
-pytest tests/unit/test_gen4_adapter.py -v            # 100 tests
-pytest tests/unit/test_gen1_adapter.py -v            # 103 tests
-pytest tests/unit/test_gen2_adapter.py -v            # 179 tests
-pytest tests/unit/test_gen5_adapter.py -v            # 140 tests
-pytest tests/unit/test_stat_stages.py -v             # 46 tests
-pytest tests/unit/test_obs_priority.py -v            # 7 tests (priority + area-group filters)
-pytest tests/unit/test_manager_launcher.py -v        # 4 tests (BizHawk launcher Lua syntax)
-pytest tests/unit/test_phase1_comms.py -v            # 6 tests
-pytest tests/unit/test_profile_addresses.py -v       # 3 tests
-```
-
-All tests use `tmp_path` + `monkeypatch` fixtures for isolated file I/O. No server, no emulator, no network.
-
-### test_state.py — State Machine Tests (276 tests)
-
-Covers the core `SoulLinkState` FSM in `server/state.py`. Key helper: `make_state_with_link()` creates a pre-linked pair with `pokeballs_obtained` active and party size 2.
-
-| Category | Count | What's covered |
-|---|---|---|
-| Faint propagation | ~20 | Linked faint → partner force_faint, pre-nuzlocke immunity, whiteout |
-| Encounter linking | ~25 | Area state transitions (UNSEEN→PENDING→LINKED), dead zones, gift areas |
-| Party sync | ~20 | party_to_box → box_mon, box_to_party → party_mon, quarantine, paired sync |
-| Link clause rules | ~30 | Species clause (evo families), gender clause (genderless edge cases), type clause, combined clauses |
-| Player identity lock | ~15 | OT ID lock, wrong-save rejection, per-player independence |
-| Shiny bonus pairs | ~15 | pending_bonus FIFO, pair formation, faint propagation, clause violations |
-| Nature change (key_change) | ~10 | Key migration across links, pending captures, party keys, commands |
-| Hello reconciliation | ~15 | Reconnect with hp=0, re-quarantine, re-queue memorials, resolved_areas |
-| Save/load round-trip | ~5 | Persistence of all state fields through links.json |
-| PC movement races | 4 | Triple swap, stale party_size, simultaneous deposits, queue depth |
-| Reconnect half-complete | 4 | Mid-swap disconnect, pending memorials, party_keys reconciliation |
-| Faint timing conflicts | 4 | Faint during box_mon/party_mon, simultaneous faints, post-retrieve faint |
-| Party size accounting | 3 | Adjusted size with pending box_mons, tick updates, full-party block |
-| Memorial done/failed | 3 | DEAD→MEMORIAL transition, failure handling, save/load round-trip |
-| Bonus pair edge cases | 3 | Shiny faint before pairing, FIFO ordering, clause violation retry |
-| Command queue ordering | 3 | Deposit→withdraw cancellation, mixed sync+HUD delivery |
-
-### Desync Audit Findings (Gen 3)
-
-A comprehensive audit of the Gen 3 sync codebase verified that all high-risk desync scenarios are mitigated. Summary of findings:
-
-#### Confirmed Mitigations (no action needed)
-
-| Risk | Mitigation |
-|---|---|
-| **HP resurrection during battle** | 5-layer defense: `force_fainted_keys` set, `pending_battle_faints` queue, `verify_party_fields` guard, battle HP cache writeback skip, battle-end clear |
-| **Double-buffer identity confusion** | Independent `_ip_entry_pool` per buffer in `index_party()` — slots are never shared across buffers |
-| **CFRU substruct corruption** | Snapshot-before + verify-after cycle with 8-frame retry window in `decryptSubstruct()` |
-| **`party_size` lag causing false full-party** | `_linked_party_size()` subtracts pending `box_mon` commands (`adjusted_party_size`); reactive `sync_retrieve_failed` catches remaining edge cases |
-| **Command loss on crash/disconnect** | Hello reconciliation re-queues memorials, re-quarantines pending captures, and re-propagates hp=0 faints from the party snapshot |
-| **Borrowed-party battle pollution** | Two-layer detection: `isBorrowedBattle()` flag check + rolling gift capture buffer (3+ gifts in 45 frames triggers freeze); all party events gated on `not party_frozen` |
-| **Nature change key split** | `otId+species+level+nickname` signature matching in Lua; server-side `_handle_key_change()` migrates key across all 7 state containers |
-
-#### Known Residual Risks (extremely rare, accepted)
-
-| Risk | Likelihood | Impact |
-|---|---|---|
-| Nature change signature collision (two mons with identical otId:species:level:nickname) | Near-zero (requires same OT, same species, same level, same nickname in party simultaneously) | No migration occurs — old key orphaned, new key treated as unknown. Manual fix via debug page. |
-| `party_size` 1-tick stale window after a box action | Every box action (~1s window) | `sync_retrieve_failed` callback catches this reactively — partner's mon re-boxed if retrieval couldn't execute. No permanent desync. |
 | B console: `party_to_box(stats_cache)` sent (silent) | B's stats cached on server for retrieval |
 | Both mons absent from in-game party (verify in party menu) | ✓ |
 | Status page party tables: both mons removed from party display | ✓ |
@@ -674,6 +607,116 @@ Once Phase 0 passes, the full pipeline is testable through Test 4 (`lua/slink.lu
 - Non-rival trainer (e.g. Bug Catcher) → no swap.
 - Vanilla / AP ROM loaded → adapter returns empty rival set → never fires (Lua still emits the event; server logs `is_rival=False`).
 - BizHawk reset mid-battle after a swap → next battle init clobbers `gEnemyParty`; no save corruption.
+
+---
+
+## Test 6 — Explode Mode (Radical Red only, RAM Write)
+
+**Script:** `lua/tests/test_force_explosion.lua` (single-instance isolation harness)  
+**Emulators:** **One** is enough for Phase 0. **⚠ Writes to RAM — save a BizHawk state first.** Writes only overwrite the active battler's move slots in `gBattleMons` (transient EWRAM), so no save corruption.
+
+When `--explode-mode` is active, a linked partner's death sends `force_explode` instead of `force_faint`: the surviving mon's active battler is coerced into using Explosion (`M.forceExplodeBattler`) rather than being silently zeroed. Vanilla / AP / Emerald and bench (non-active) mons fall back to `force_faint`.
+
+### Phase 0 — Isolation harness (no server, no partner)
+
+Load `test_force_explosion.lua` from the BizHawk Lua console with Radical Red running, then enter any battle.
+
+| Key | Action |
+|---|---|
+| F1 | Coerce battler 0 (player primary) to Explosion — overwrites all 4 move slots with Explosion (move 153, 5 PP) |
+| F2 | Coerce battler 2 (player secondary, doubles only) |
+| F3 | Restore battler 0/2's original moves + PP from party data |
+| F4 | Dump current `gBattleMons` moves + PP for all battlers |
+| F5 | Instant fallback: faint slot 0 immediately (simulates the timeout firing after a Damp / type-immunity stall) |
+
+**Pass criteria:**
+1. **Golden path** — F4 shows legitimate moves; F1 → HUD `moves=[153,153,153,153] pp=[5,5,5,5]`; FIGHT shows Explosion in all 4 slots; picking any slot Explodes and self-faints with no crash.
+2. **Abort / restore** — after F1, F3 returns the FIGHT menu to the original moves.
+3. **Damp / no-effect** — vs a Damp mon (Poliwag/Wooper), Explosion "But it failed!"; F5 then zeros slot 0 HP via the fallback path.
+4. **Doubles** — F2 changes only battler 2's move row; battler 0 untouched.
+5. **Out of battle** — F1 in the overworld logs `(not in battle — refused)`; no writes, no crash.
+
+**FAIL:** `M.forceExplodeBattler` returns false in battle → check `M.BATTLE_MONS_ADDR` for the active profile.  
+**FAIL:** writes succeed but FIGHT still shows old moves → menu cached; reopen FIGHT or check `BATTLE_MON_MOVES_OFF`.
+
+### Phase 1 — End-to-end with server + partner
+
+Run `python -m server.server --explode-mode` with both BizHawks connected (Test 4 setup) on Radical Red. Mid-battle, let one linked mon faint. Its partner's **active** battler is coerced into Explosion on the same TCP round-trip (Lua console: `force_explode` dispatched). A boxed/benched partner instead receives a plain `force_faint`. Omit `--explode-mode` → partner death falls back to the deferred `force_faint`.
+
+---
+
+## Unit Tests (pytest — no emulator required)
+
+```bash
+pytest tests/unit/ -v                                 # all 1142 tests
+pytest tests/unit/test_state.py -v                    # 287 tests (incl. tick reconciliation + Explode Mode)
+pytest tests/unit/test_gen3_adapter.py -v             # 216 tests
+pytest tests/unit/test_gen4_adapter.py -v             # 100 tests
+pytest tests/unit/test_gen1_adapter.py -v             # 103 tests
+pytest tests/unit/test_gen2_adapter.py -v             # 179 tests
+pytest tests/unit/test_gen5_adapter.py -v             # 140 tests
+pytest tests/unit/test_stat_stages.py -v              # 46 tests
+pytest tests/unit/test_obs_priority.py -v             # 7 tests (priority + area-group filters)
+pytest tests/unit/test_manager_launcher.py -v         # 4 tests (BizHawk launcher Lua syntax)
+pytest tests/unit/test_phase1_comms.py -v             # 6 tests
+pytest tests/unit/test_profile_addresses.py -v        # 3 tests
+pytest tests/unit/test_trainer_panel.py -v            # 14 tests (Upcoming Key Trainers panel)
+pytest tests/unit/test_state_rival_battle_start.py -v # 15 tests (rival-swap auto-trigger)
+pytest tests/unit/test_state_party_blob_cache.py -v   # 10 tests (blob_hex cache)
+pytest tests/unit/test_gen3_adapter_rival_ids.py -v   # 8 tests (rival trainer IDs)
+pytest tests/unit/test_cli_rival_team_swap.py -v      # 4 tests (--rival-team-swap CLI)
+```
+
+All tests use `tmp_path` + `monkeypatch` fixtures for isolated file I/O. No server, no emulator, no network.
+
+### test_state.py — State Machine Tests (287 tests)
+
+Covers the core `SoulLinkState` FSM in `server/state.py`. Key helper: `make_state_with_link()` creates a pre-linked pair with `pokeballs_obtained` active and party size 2.
+
+| Category | Count | What's covered |
+|---|---|---|
+| Faint propagation | ~20 | Linked faint → partner force_faint, pre-nuzlocke immunity, whiteout |
+| Encounter linking | ~25 | Area state transitions (UNSEEN→PENDING→LINKED), dead zones, gift areas |
+| Party sync | ~20 | party_to_box → box_mon, box_to_party → party_mon, quarantine, paired sync |
+| Link clause rules | ~30 | Species clause (evo families), gender clause (genderless edge cases), type clause, combined clauses |
+| Player identity lock | ~15 | OT ID lock, wrong-save rejection, per-player independence |
+| Shiny bonus pairs | ~15 | pending_bonus FIFO, pair formation, faint propagation, clause violations |
+| Nature change (key_change) | ~10 | Key migration across links, pending captures, party keys, commands |
+| Hello reconciliation | ~15 | Reconnect with hp=0, re-quarantine, re-queue memorials, resolved_areas |
+| Save/load round-trip | ~5 | Persistence of all state fields through links.json |
+| Explode Mode | 4 | Default-off, save/load round-trip, off → force_faint, on → force_explode |
+| PC movement races | 4 | Triple swap, stale party_size, simultaneous deposits, queue depth |
+| Reconnect half-complete | 4 | Mid-swap disconnect, pending memorials, party_keys reconciliation |
+| Faint timing conflicts | 4 | Faint during box_mon/party_mon, simultaneous faints, post-retrieve faint |
+| Party size accounting | 3 | Adjusted size with pending box_mons, tick updates, full-party block |
+| Memorial done/failed | 3 | DEAD→MEMORIAL transition, failure handling, save/load round-trip |
+| Bonus pair edge cases | 3 | Shiny faint before pairing, FIFO ordering, clause violation retry |
+| Command queue ordering | 3 | Deposit→withdraw cancellation, mixed sync+HUD delivery |
+
+> Rival Team Swap state coverage lives in `test_state_rival_battle_start.py` (auto-trigger matrix, `queue_rival_team_swap`, `rival_team_replaced` ack) and `test_state_party_blob_cache.py` (`blob_hex` ingest + validation).
+
+### Desync Audit Findings (Gen 3)
+
+A comprehensive audit of the Gen 3 sync codebase verified that all high-risk desync scenarios are mitigated. Summary of findings:
+
+#### Confirmed Mitigations (no action needed)
+
+| Risk | Mitigation |
+|---|---|
+| **HP resurrection during battle** | 5-layer defense: `force_fainted_keys` set, `pending_battle_faints` queue, `verify_party_fields` guard, battle HP cache writeback skip, battle-end clear |
+| **Double-buffer identity confusion** | Independent `_ip_entry_pool` per buffer in `index_party()` — slots are never shared across buffers |
+| **CFRU substruct corruption** | Snapshot-before + verify-after cycle with 8-frame retry window in `decryptSubstruct()` |
+| **`party_size` lag causing false full-party** | `_linked_party_size()` subtracts pending `box_mon` commands (`adjusted_party_size`); reactive `sync_retrieve_failed` catches remaining edge cases |
+| **Command loss on crash/disconnect** | Hello reconciliation re-queues memorials, re-quarantines pending captures, and re-propagates hp=0 faints from the party snapshot |
+| **Borrowed-party battle pollution** | Two-layer detection: `isBorrowedBattle()` flag check + rolling gift capture buffer (3+ gifts in 45 frames triggers freeze); all party events gated on `not party_frozen` |
+| **Nature change key split** | `otId+species+level+nickname` signature matching in Lua; server-side `_handle_key_change()` migrates key across all 7 state containers |
+
+#### Known Residual Risks (extremely rare, accepted)
+
+| Risk | Likelihood | Impact |
+|---|---|---|
+| Nature change signature collision (two mons with identical otId:species:level:nickname) | Near-zero (requires same OT, same species, same level, same nickname in party simultaneously) | No migration occurs — old key orphaned, new key treated as unknown. Manual fix via debug page. |
+| `party_size` 1-tick stale window after a box action | Every box action (~1s window) | `sync_retrieve_failed` callback catches this reactively — partner's mon re-boxed if retrieval couldn't execute. No permanent desync. |
 
 ---
 
