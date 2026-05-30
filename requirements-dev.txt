@@ -1,0 +1,5 @@
+# Development-only dependencies (NOT required to run the server).
+# Install with:  pip install -r requirements-dev.txt
+#
+# ruff — Python linter/formatter. Config lives in ruff.toml.
+ruff==0.15.15

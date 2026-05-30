@@ -1,0 +1,23 @@
+# Repo-wide Ruff config, introduced by the Gen 3 lint sweep.
+# This round only *fixes* Gen 3 files; other generations simply surface as a
+# future worklist when you run `ruff check .`.
+target-version = "py311"
+line-length = 100
+
+# Generated move tables — never hand-edit; regenerate via tools/gen_move_data.py.
+extend-exclude = [
+    "server/data/moves/gen3_vanilla.py",
+    "server/data/moves/gen3_rr.py",
+]
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+# E501 (line-too-long) is not auto-fixable and the codebase has intentional
+# long HTML f-strings; lint everything else and don't mass-wrap this round.
+# line-length above is kept as documented intent.
+ignore = ["E501"]
+
+[lint.per-file-ignores]
+# Hand-aligned 4-column item table — preserve its layout, but still catch
+# real F/E9 bugs (only import-sort/one-line-import noise is silenced here).
+"server/data/items/gen3_vanilla.py" = ["I001", "E401"]
