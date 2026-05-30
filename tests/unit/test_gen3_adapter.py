@@ -11,7 +11,7 @@ import pytest
 
 from server.adapters import available_game_ids, get_adapter
 from server.adapters.base import GameAdapter
-from server.adapters.gen3_frlge import Gen3Adapter
+from server.adapters.gen3_frlge import _RR_SPRITE_FILE, Gen3Adapter
 
 # ── Registry tests ────────────────────────────────────────────────────────────
 
@@ -1220,6 +1220,84 @@ class TestSpriteHtmlVariants:
         # FRLG URL is primary, PokeAPI generic is in onerror attribute
         html = vanilla.sprite_html(1)
         assert "raw.githubusercontent.com/PokeAPI" in html
+
+
+class TestSpriteOutputPinned:
+    """Exact-output characterization for sprite_html()/sprite_src().
+
+    Pins the full <img> string — including the onerror fallback chain — and the
+    sprite_src() URL, so any drift in the (refactored) URL builders is caught.
+    Funnotbun filenames are derived from _RR_SPRITE_FILE so these track the data,
+    not a hardcoded sprite name.
+    """
+
+    PA = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon"
+    FB = ("https://raw.githubusercontent.com/funnotbun/funnotbun.github.io"
+          "/main/data/species/frontspr")
+
+    @pytest.fixture
+    def vanilla(self):
+        return Gen3Adapter(is_rr=False)
+
+    @pytest.fixture
+    def rr(self):
+        return Gen3Adapter(is_rr=True)
+
+    def test_vanilla_sprite_src_national(self, vanilla):
+        assert vanilla.sprite_src(1) == f"{self.PA}/1.png"
+
+    def test_vanilla_sprite_html_frlg_with_national_fallback(self, vanilla):
+        nat = f"{self.PA}/1.png"
+        frlg = f"{self.PA}/versions/generation-iii/firered-leafgreen/1.png"
+        assert vanilla.sprite_html(1) == (
+            f'<img class="mon-sprite" data-species="1" src="{frlg}" '
+            f'onerror="if(this.src!==\'{nat}\'){{this.src=\'{nat}\';}}else{{this.style.display=\'none\';}}" '
+            f'alt="">'
+        )
+
+    def test_vanilla_sprite_html_egg(self, vanilla):
+        assert vanilla.sprite_html(412) == (
+            '<img class="mon-sprite" data-species="412" '
+            'src="https://play.pokemonshowdown.com/sprites/gen5/egg.png" '
+            'onerror="this.style.display=\'none\';" alt="Egg">'
+        )
+
+    def test_vanilla_sprite_html_form_pid_single_src(self, vanilla):
+        # CFRU 603 → form_pid 550 → single-src img, display:none on error (no chain)
+        assert vanilla.sprite_html(603) == (
+            f'<img class="mon-sprite" data-species="603" src="{self.PA}/550.png" '
+            f'onerror="this.style.display=\'none\';" alt="">'
+        )
+
+    def test_rr_sprite_src_funnotbun(self, rr):
+        fname = _RR_SPRITE_FILE[1]
+        assert rr.sprite_src(1) == f"{self.FB}/{fname}.png"
+
+    def test_rr_sprite_html_funnotbun_with_national_fallback(self, rr):
+        fname = _RR_SPRITE_FILE[1]
+        nat = f"{self.PA}/1.png"
+        assert rr.sprite_html(1) == (
+            f'<img class="mon-sprite" crossorigin="anonymous" data-species="1" src="{self.FB}/{fname}.png" '
+            f'onerror="if(this.src!==\'{nat}\'){{this.src=\'{nat}\';}}else{{this.style.display=\'none\';}}" '
+            f'alt="">'
+        )
+
+    def test_rr_tiled_blocklist_falls_back_to_frlg(self, rr):
+        # 385 Castform is tiled → skip funnotbun; CFRU 385 → NatDex 351 ≤ 386 → FRLG primary
+        nat = f"{self.PA}/351.png"
+        frlg = f"{self.PA}/versions/generation-iii/firered-leafgreen/351.png"
+        assert rr.sprite_html(385) == (
+            f'<img class="mon-sprite" data-species="351" src="{frlg}" '
+            f'onerror="if(this.src!==\'{nat}\'){{this.src=\'{nat}\';}}else{{this.style.display=\'none\';}}" '
+            f'alt="">'
+        )
+        assert rr.sprite_src(385) == nat
+
+    def test_out_of_range_returns_empty(self, vanilla, rr):
+        assert vanilla.sprite_html(99999) == ""
+        assert vanilla.sprite_src(99999) == ""
+        assert rr.sprite_html(99999) == ""
+        assert rr.sprite_src(99999) == ""
 
 
 # ── item_name() known values ──────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 """
-server/adapters/gen3_rsefrlg.py — Game adapter for Gen 3 (RSE + FRLG + AP + Radical Red).
+server/adapters/gen3_frlge.py — Game adapter for Gen 3 (FRLG + Emerald + AP + Radical Red).
 
 This is the reference adapter that wraps the existing pokemon_data.py module,
 maintaining 100% backward compatibility with the current FRLG implementation.
@@ -232,6 +232,29 @@ if os.path.exists(_rr_sprites_path):
 # Species whose funnotbun sprites are tiled spritesheets — skip RR sprite.
 _TILED_SPRITE_BLOCKLIST = frozenset({385})  # Castform (4-form sheet)
 
+# National-dex bounds used for sprite URL resolution.
+_MAX_NATDEX = 1025      # PokeAPI national-dex sprite coverage ceiling
+_GEN3_DEX_CAP = 386     # last Gen III dex no. (Deoxys) — has dedicated FRLG sprites
+_SPECIES_EGG = 412      # CFRU SPECIES_EGG
+
+
+def _funnotbun_url(rr_file: str) -> str:
+    """funnotbun RR front-sprite URL for a sprite filename (no extension)."""
+    return (f"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io"
+            f"/main/data/species/frontspr/{rr_file}.png")
+
+
+def _pokeapi_url(dex: int) -> str:
+    """PokeAPI front-sprite URL for a national-dex (or form-pid) number."""
+    return (f"https://raw.githubusercontent.com/PokeAPI/sprites/master"
+            f"/sprites/pokemon/{dex}.png")
+
+
+def _frlg_url(nat: int) -> str:
+    """PokeAPI FireRed/LeafGreen front-sprite URL for a Gen III dex number."""
+    return (f"https://raw.githubusercontent.com/PokeAPI/sprites/master"
+            f"/sprites/pokemon/versions/generation-iii/firered-leafgreen/{nat}.png")
+
 
 class Gen3Adapter(GameAdapter):
     """Adapter for Gen 3: FireRed/LeafGreen, Emerald, Archipelago, and Radical Red.
@@ -310,28 +333,25 @@ class Gen3Adapter(GameAdapter):
         if not species_id or species_id < 1:
             return ""
 
-        # Egg (CFRU SPECIES_EGG = 412) — use Showdown egg sprite
-        if species_id == 412:
+        # Egg — use Showdown egg sprite
+        if species_id == _SPECIES_EGG:
             return ('<img class="mon-sprite" data-species="412" '
                     'src="https://play.pokemonshowdown.com/sprites/gen5/egg.png" '
                     'onerror="this.style.display=\'none\';" alt="Egg">')
 
-        # Primary: funnotbun RR sprite (covers all 1322 RR species + forms)
+        # Primary: funnotbun RR sprite (covers all RR species + forms)
         if self._is_rr:
             rr_file = _RR_SPRITE_FILE.get(species_id)
             if rr_file and species_id not in _TILED_SPRITE_BLOCKLIST:
-                rr_url = (f"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io"
-                          f"/main/data/species/frontspr/{rr_file}.png")
+                rr_url = _funnotbun_url(rr_file)
                 fallback_url = None
                 form_pid = CFRU_FORM_SPRITE_ID.get(species_id)
                 if form_pid:
-                    fallback_url = (f"https://raw.githubusercontent.com/PokeAPI/sprites/master"
-                                    f"/sprites/pokemon/{form_pid}.png")
+                    fallback_url = _pokeapi_url(form_pid)
                 else:
                     nat = _to_national(species_id)
-                    if nat and 1 <= nat <= 1025:
-                        fallback_url = (f"https://raw.githubusercontent.com/PokeAPI/sprites/master"
-                                        f"/sprites/pokemon/{nat}.png")
+                    if nat and 1 <= nat <= _MAX_NATDEX:
+                        fallback_url = _pokeapi_url(nat)
                 if fallback_url:
                     return (f'<img class="mon-sprite" crossorigin="anonymous" data-species="{species_id}" src="{rr_url}" '
                             f'onerror="if(this.src!==\'{fallback_url}\'){{this.src=\'{fallback_url}\';}}else{{this.style.display=\'none\';}}" '
@@ -342,18 +362,15 @@ class Gen3Adapter(GameAdapter):
         # PokeAPI fallback: convert CFRU → NatDex for the URL
         form_pid = CFRU_FORM_SPRITE_ID.get(species_id)
         if form_pid:
-            gen_url = (f"https://raw.githubusercontent.com/PokeAPI/sprites/master"
-                       f"/sprites/pokemon/{form_pid}.png")
+            gen_url = _pokeapi_url(form_pid)
             return (f'<img class="mon-sprite" data-species="{species_id}" src="{gen_url}" '
                     f'onerror="this.style.display=\'none\';" alt="">')
         nat = _to_national(species_id)
-        if not nat or nat < 1 or nat > 1025:
+        if not nat or nat < 1 or nat > _MAX_NATDEX:
             return ""
-        gen_url = (f"https://raw.githubusercontent.com/PokeAPI/sprites/master"
-                   f"/sprites/pokemon/{nat}.png")
-        if nat <= 386:
-            frlg_url = (f"https://raw.githubusercontent.com/PokeAPI/sprites/master"
-                        f"/sprites/pokemon/versions/generation-iii/firered-leafgreen/{nat}.png")
+        gen_url = _pokeapi_url(nat)
+        if nat <= _GEN3_DEX_CAP:
+            frlg_url = _frlg_url(nat)
             return (f'<img class="mon-sprite" data-species="{nat}" src="{frlg_url}" '
                     f'onerror="if(this.src!==\'{gen_url}\'){{this.src=\'{gen_url}\';}}else{{this.style.display=\'none\';}}" '
                     f'alt="">')
@@ -381,16 +398,13 @@ class Gen3Adapter(GameAdapter):
         if self._is_rr:
             rr_file = _RR_SPRITE_FILE.get(species_id)
             if rr_file and species_id not in _TILED_SPRITE_BLOCKLIST:
-                return (f"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io"
-                        f"/main/data/species/frontspr/{rr_file}.png")
+                return _funnotbun_url(rr_file)
         form_pid = CFRU_FORM_SPRITE_ID.get(species_id)
         if form_pid:
-            return (f"https://raw.githubusercontent.com/PokeAPI/sprites/master"
-                    f"/sprites/pokemon/{form_pid}.png")
+            return _pokeapi_url(form_pid)
         nat = _to_national(species_id)
-        if nat and 1 <= nat <= 1025:
-            return (f"https://raw.githubusercontent.com/PokeAPI/sprites/master"
-                    f"/sprites/pokemon/{nat}.png")
+        if nat and 1 <= nat <= _MAX_NATDEX:
+            return _pokeapi_url(nat)
         return ""
 
     def ability_name(self, ability_id: int, species_id: int = 0) -> str:
