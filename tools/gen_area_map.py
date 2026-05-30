@@ -22,7 +22,9 @@ Notes on randomizer compatibility:
   All ids here are valid for any FireRed/LeafGreen US 1.0 ROM, vanilla or randomized.
 """
 
-import json, os, re
+import json
+import os
+import re
 
 
 def to_snake(name):
@@ -502,10 +504,10 @@ with open("data/games/gen3_frlge/gen3_frlge_locations.lua", "w", newline="\n", e
     f.write("\n".join(loc_lua_lines) + "\n")
 
 print(f"Generated {len(area_map)} area entries")
-print(f"  → data/games/gen3_frlge/area_map.json")
-print(f"  → data/games/gen3_frlge/gen3_frlge_areas.lua")
+print("  → data/games/gen3_frlge/area_map.json")
+print("  → data/games/gen3_frlge/gen3_frlge_areas.lua")
 print(f"Generated {len(location_map)} location entries")
-print(f"  → data/games/gen3_frlge/gen3_frlge_locations.lua")
+print("  → data/games/gen3_frlge/gen3_frlge_locations.lua")
 print("Spot-checks (areas):")
 for key in ["3:19", "1:1", "1:3", "1:81", "1:82", "1:72", "1:39", "1:63"]:
     print(f"  {key}: area={area_map.get(key)}  loc={location_map.get(key)}")

@@ -26,3 +26,6 @@ combine-as-imports = true
 # Hand-aligned 4-column item table — preserve its layout, but still catch
 # real F/E9 bugs (only import-sort/one-line-import noise is silenced here).
 "server/data/items/gen3_vanilla.py" = ["I001", "E401"]
+# Intentional column-aligned rate ladder mirroring returnRarity() in the JS
+# source — the aligned `if cond: return N` form is more readable as a table.
+"tools/gen_rr_encounters.py" = ["E701"]

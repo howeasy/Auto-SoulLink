@@ -34,7 +34,6 @@ Trainer Order sheet provides the recommended in-game progression
 
 import argparse
 import json
-import os
 import re
 import sys
 from collections import defaultdict
@@ -601,7 +600,6 @@ _AREA_OVERRIDES = {
     "ROCKET HIDE.":            "rocket_hideout",
     "ROCKET HIDE":             "rocket_hideout",
     "CERULEA. CAVE":           "cerulean_cave",
-    "CERULEAN CAVE":           "cerulean_cave",
     "CHAMPION":             "indigo_plateau",
     "ELITE FOUR":           "indigo_plateau",
     # RR has multiple "Route 22" encounters (early + late game). Both map
@@ -769,7 +767,7 @@ def parse_main_milestones(ws) -> tuple[list[tuple[str, int]], dict[str, int], di
                 if m2 and not any(n == "Post Game" for n, _ in order):
                     order.append(("Post Game", int(m2.group(1))))
                 break
-    pre  = {name: cap for name, cap in order}
+    pre  = dict(order)
     post: dict[str, int] = {}
     for i, (name, _cap) in enumerate(order):
         post[name] = order[i + 1][1] if i + 1 < len(order) else 100
@@ -1311,7 +1309,7 @@ def main() -> int:
           f"{sum(len(v) for v in supp.values())} sets)")
     print(f"Wrote {_CALC_SUPP_DIST_PATH}")
     if unmatched[:10]:
-        print(f"  first 10 unmatched:")
+        print("  first 10 unmatched:")
         for u in unmatched[:10]:
             print(f"    - {u}")
     return 0
