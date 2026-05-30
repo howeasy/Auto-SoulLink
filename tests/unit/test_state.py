@@ -11,6 +11,7 @@ import pytest
 from server.state import (
     SoulLinkState, LinkEntry, MonInfo, LinkStatus, AreaStatus, _partner, is_shiny
 )
+from server.adapters.gen3_frlge import Gen3Adapter
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -4980,3 +4981,159 @@ def test_tick_reconcile_doesnt_double_pull_partner_already_in_party(tmp_path, mo
     assert not has_cmd(cmds_b, "party_mon", "B:2"), (
         "partner already in their party_keys — no redundant party_mon should be queued"
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Gift / egg received in a real encounter area must NOT lock that area's wild
+# slot. Regression for the Vermilion City egg + Amaura/Anorith free-mon bugs:
+# the gift is filed under a synthetic gift_<area> namespace instead.
+# ══════════════════════════════════════════════════════════════════════════
+
+# Four non-shiny Gen 3 keys (PID:OTID). The shiny test XORs the four 16-bit
+# halves, which is order-independent, so all four are non-shiny. _EGG_A is the
+# exact key test_gen3_adapter asserts non-shiny.
+_EGG_A,  _EGG_B  = "12345678:87654321", "2468ACE0:1234ABCD"
+_WILD_A, _WILD_B = "12345679:87654321", "2468ACE1:1234ABCD"
+
+
+def _rr_state(tmp_path, monkeypatch):
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(adapter=Gen3Adapter(is_rr=True))
+    state.pokeballs_obtained = {"a": True, "b": True}
+    state.party_size = {"a": 1, "b": 1}
+    return state
+
+
+def test_gift_link_area_remaps_real_area_only():
+    """gift_link_area maps real areas into the gift namespace, leaves gift/daycare alone."""
+    adapter = Gen3Adapter(is_rr=True)
+    assert adapter.gift_link_area("vermilion_city") == "gift_vermilion_city"
+    assert adapter.gift_link_area("oaks_lab") == "oaks_lab"          # already a gift area
+    assert adapter.gift_link_area("gift_7_2") == "gift_7_2"          # already gift-namespaced
+    assert adapter.gift_link_area("route5_pokemon_day_care") == "route5_pokemon_day_care"  # daycare
+
+
+def test_area_display_name_synthetic_gift():
+    """Synthetic gift_<area> renders as 'Gift – <host area>'; numeric gift ids unaffected."""
+    adapter = Gen3Adapter(is_rr=True)
+    host = adapter.area_display_name("vermilion_city")
+    assert adapter.area_display_name("gift_vermilion_city") == f"Gift – {host}"
+    assert adapter.area_display_name("gift_99_99").startswith("Gift")
+
+
+def test_egg_in_real_area_does_not_lock_area(tmp_path, monkeypatch):
+    """An egg caught by both players in Vermilion City forms a gift link and leaves
+    the real area open for its actual wild encounter."""
+    state = _rr_state(tmp_path, monkeypatch)
+
+    state.handle_event("a", {"event": "capture", "key": _EGG_A,
+                             "area_id": "vermilion_city", "species_id": 313,
+                             "level": 1, "is_egg": True})
+    state.handle_event("b", {"event": "capture", "key": _EGG_B,
+                             "area_id": "vermilion_city", "species_id": 213,
+                             "level": 1, "is_egg": True})
+
+    # The egg did NOT lock vermilion_city ...
+    assert state.area_states.get("vermilion_city") != AreaStatus.LINKED
+    # ... and formed a standalone gift link under the gift namespace.
+    gift_links = [l for l in state.links
+                  if l.area_id == "gift_vermilion_city" and l.status == LinkStatus.ALIVE]
+    assert len(gift_links) == 1
+
+    # The real Vermilion wild encounter still links normally afterwards.
+    state.handle_event("a", {"event": "area_enter", "area_id": "vermilion_city"})
+    state.handle_event("b", {"event": "area_enter", "area_id": "vermilion_city"})
+    state.handle_event("a", {"event": "capture", "key": _WILD_A,
+                             "area_id": "vermilion_city", "species_id": 645, "level": 28})
+    state.handle_event("b", {"event": "capture", "key": _WILD_B,
+                             "area_id": "vermilion_city", "species_id": 984, "level": 28})
+    assert state.area_states.get("vermilion_city") == AreaStatus.LINKED
+    wild = next((l for l in state.links if l.area_id == "vermilion_city"), None)
+    assert wild is not None and wild.status == LinkStatus.ALIVE
+
+
+def test_gift_flag_in_real_area_does_not_lock_area(tmp_path, monkeypatch):
+    """Amaura/Anorith case: a non-egg gift (Lua gift=true — same shape the freeze-
+    recovery path emits) in a real area forms a gift link, not the area link."""
+    state = _rr_state(tmp_path, monkeypatch)
+
+    state.handle_event("a", {"event": "capture", "key": _EGG_A,
+                             "area_id": "vermilion_city", "species_id": 806,  # Amaura
+                             "level": 25, "gift": True})
+    cmds_b = state.handle_event("b", {"event": "capture", "key": _EGG_B,
+                                      "area_id": "vermilion_city", "species_id": 390,  # Anorith
+                                      "level": 25, "gift": True})
+
+    assert state.area_states.get("vermilion_city") != AreaStatus.LINKED
+    assert any(l.area_id == "gift_vermilion_city" and l.status == LinkStatus.ALIVE
+               for l in state.links)
+    # Gift is not quarantined to the box.
+    assert not has_cmd(cmds_b, "box_mon", _EGG_B)
+
+
+def test_gift_flag_does_not_flip_pokeball_gate(tmp_path, monkeypatch):
+    """A gift=true catch must not satisfy the Pokéball gate (it isn't a wild catch)."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(adapter=Gen3Adapter(is_rr=True))
+    state.pokeballs_obtained = {"a": False, "b": False}
+    state.party_size = {"a": 1, "b": 0}
+
+    cmds = state.handle_event("a", {"event": "capture", "key": _EGG_A,
+                                    "area_id": "vermilion_city", "species_id": 806,
+                                    "level": 25, "gift": True})
+    assert state.pokeballs_obtained["a"] is False
+    assert not has_cmd(cmds, "box_mon", _EGG_A)
+
+
+def test_gift_links_even_when_real_area_already_linked(tmp_path, monkeypatch):
+    """A gift received in an area already LINKED by a wild encounter must still link
+    (under the gift namespace), not be retired as an extra/already-linked capture."""
+    state = _rr_state(tmp_path, monkeypatch)
+    state.party_size = {"a": 2, "b": 2}
+
+    # Wild encounter links vermilion_city first.
+    state.handle_event("a", {"event": "area_enter", "area_id": "vermilion_city"})
+    state.handle_event("b", {"event": "area_enter", "area_id": "vermilion_city"})
+    state.handle_event("a", {"event": "capture", "key": _WILD_A,
+                             "area_id": "vermilion_city", "species_id": 645, "level": 28})
+    state.handle_event("b", {"event": "capture", "key": _WILD_B,
+                             "area_id": "vermilion_city", "species_id": 984, "level": 28})
+    assert state.area_states.get("vermilion_city") == AreaStatus.LINKED
+
+    # Gift arrives in the now-linked area — must NOT be force-fainted.
+    cmds_a = state.handle_event("a", {"event": "capture", "key": _EGG_A,
+                                      "area_id": "vermilion_city", "species_id": 806,
+                                      "level": 25, "gift": True})
+    state.handle_event("b", {"event": "capture", "key": _EGG_B,
+                             "area_id": "vermilion_city", "species_id": 390,
+                             "level": 25, "gift": True})
+    assert not has_cmd(cmds_a, "force_faint", _EGG_A)
+    gift_link = next((l for l in state.links if l.area_id == "gift_vermilion_city"), None)
+    assert gift_link is not None and gift_link.status == LinkStatus.ALIVE
+
+
+def test_multiple_gifts_in_same_area_each_link(tmp_path, monkeypatch):
+    """Two separate gifts received in the same real area (e.g. an egg then a free
+    mon in Vermilion City) must BOTH link under the gift namespace — a gift area is
+    not a one-shot wild slot, and a later gift is never retired as 'already linked'."""
+    state = _rr_state(tmp_path, monkeypatch)
+
+    # Gift #1 (egg) — both players.
+    state.handle_event("a", {"event": "capture", "key": _EGG_A,
+                             "area_id": "vermilion_city", "species_id": 313, "level": 1, "is_egg": True})
+    state.handle_event("b", {"event": "capture", "key": _EGG_B,
+                             "area_id": "vermilion_city", "species_id": 213, "level": 1, "is_egg": True})
+    # Gift #2 (free mon, gift flag) — both players, SAME real area.
+    cmds_a = state.handle_event("a", {"event": "capture", "key": _WILD_A,
+                                      "area_id": "vermilion_city", "species_id": 806, "level": 25, "gift": True})
+    state.handle_event("b", {"event": "capture", "key": _WILD_B,
+                             "area_id": "vermilion_city", "species_id": 390, "level": 25, "gift": True})
+
+    # The second gift must NOT be retired/force-fainted.
+    assert not has_cmd(cmds_a, "force_faint", _WILD_A)
+    # Both gift pairs link under the gift namespace.
+    gift_links = [l for l in state.links
+                  if l.area_id == "gift_vermilion_city" and l.status == LinkStatus.ALIVE]
+    assert len(gift_links) == 2
+    # The real area was never locked by either gift.
+    assert state.area_states.get("vermilion_city") != AreaStatus.LINKED

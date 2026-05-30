@@ -706,9 +706,13 @@ class SoulLinkState:
         if not area_id or not key:
             return
         is_egg  = bool(msg.get("is_egg", False))
+        # `gift=true` is the Lua's authoritative signal for any new mon received
+        # outside battle (gifts, starters, fossils, eggs) — independent of whether
+        # the current area is a known gift area.
+        gift_capture = bool(msg.get("gift", False)) or self._is_gift_capture(area_id, is_egg)
 
         # A catch in any non-gift area confirms Pokéballs are available.
-        if not self._is_gift_capture(area_id, is_egg):
+        if not gift_capture:
             self.pokeballs_obtained[player_id] = True
 
         # ── Shiny Clause (always on) ──────────────────────────────────────────
@@ -893,9 +897,15 @@ class SoulLinkState:
             self._save()
             return
 
+        # Gifts/eggs link under the gift namespace so they form a standalone gift
+        # pair and never lock a real area's wild-encounter slot — and so they link
+        # even if that real area is already LINKED/DEAD_ZONE.
+        if gift_capture:
+            area_id = self.adapter.gift_link_area(area_id)
+
         status = self.area_states.get(area_id, AreaStatus.UNSEEN)
 
-        if status == AreaStatus.DEAD_ZONE:
+        if status == AreaStatus.DEAD_ZONE and not gift_capture:
             # Area is dead — retire this mon immediately without altering the display entry,
             # so the original "no catch" record is preserved in the Linked Pairs table.
             log.warning(
@@ -915,8 +925,10 @@ class SoulLinkState:
             self._save()
             return
 
-        if status == AreaStatus.LINKED:
+        if status == AreaStatus.LINKED and not gift_capture:
             # Extra capture in an already-linked area — illegal, retire immediately.
+            # (Gifts/eggs bypass this — they are not wild encounters, so several may
+            # arrive in the same area; each pairs in turn under the gift namespace.)
             log.warning(
                 f"[{player_id}] extra capture in already-linked area={area_id} key={key} — retiring immediately"
             )
@@ -1037,11 +1049,11 @@ class SoulLinkState:
         # when party_size hasn't been reported yet — prevents quarantining the
         # starter before the first hello sets the actual count.
         party_count = self.party_size.get(player_id, 0)
-        if not in_box and party_count >= 1 and not self._is_gift_capture(area_id, is_egg):
+        if not in_box and party_count >= 1 and not gift_capture:
             self.queued_commands[player_id].append({"cmd": "box_mon", "key": key})
             log.info(f"[{player_id}] quarantine: {key[:8]} → box (pending link)")
-        elif not in_box and self._is_gift_capture(area_id, is_egg):
-            log.info(f"[{player_id}] skip quarantine: {key[:8]} (gift area {area_id}{', egg' if is_egg else ''})")
+        elif not in_box and gift_capture:
+            log.info(f"[{player_id}] skip quarantine: {key[:8]} (gift {area_id}{', egg' if is_egg else ''})")
         elif not in_box:
             log.info(f"[{player_id}] skip quarantine: {key[:8]} (only mon in party)")
         # Cache stats from capture event so party_mon can restore them later.

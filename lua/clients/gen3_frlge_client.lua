@@ -610,9 +610,11 @@ local function index_party(battle_active)
     return t, count
 end
 
--- Per-monKey display data cache: species/held_item/ability only change on
--- capture, evolution, or item give/take — no need to decrypt every tick.
--- Nickname and held_item are re-read each tick (cheap unencrypted reads).
+-- Per-monKey display data cache: full decrypt on first sight, then cheap
+-- per-tick re-reads for fields that can change without a key_change:
+-- species (evolution), nickname (Name Rater), held_item (give/take), and
+-- ability (RR Ability Patch flips the hidden-ability bit in the encrypted
+-- Misc substruct without touching personality).
 local _display_cache = {}  -- key → {nickname, species_id, held_item_id, ability_id}
 
 local function build_party_snapshot(battle_active)
@@ -678,6 +680,10 @@ local function build_party_snapshot(battle_active)
                 -- when the player uses the Name Rater or nicknames on capture.
                 local ok_n, nick = pcall(M.readNickname, base)
                 if ok_n and nick ~= "" then dc.nickname = nick end
+                -- Re-read ability: RR's Ability Patch flips the hidden-ability
+                -- bit without changing personality, so key_change never fires.
+                local ok_a, aid = pcall(M.getAbilityId, base)
+                if ok_a and aid and aid > 0 then dc.ability_id = aid end
             end
             -- Resolve ability: prefer gBaseStats, fall back to gBattleMons cache
             local final_aid = dc.ability_id
@@ -867,6 +873,10 @@ local function scan_next_boxes()
                     if ok_i then dc.held_item_id = iid end
                     local ok_n, nick = pcall(M.readNickname, addr)
                     if ok_n and nick ~= "" then dc.nickname = nick end
+                    -- Re-read ability: RR's Ability Patch flips the hidden-
+                    -- ability bit without changing personality.
+                    local ok_a, aid = pcall(M.getBoxAbilityId, addr)
+                    if ok_a and aid and aid > 0 then dc.ability_id = aid end
                 end
                 local box_aid = dc.ability_id
                 if (not box_aid or box_aid == 0) and _ability_cache[k] then
@@ -2092,7 +2102,8 @@ local function on_frame()
                                 send({event="capture", key=k, hp=info.hp, maxHP=info.maxHP,
                                       level=info.level, area_id=evt_area,
                                       nickname=cap_nick, species_id=cap_sid,
-                                      held_item_id=cap_iid, is_egg=cap_is_egg},
+                                      held_item_id=cap_iid, is_egg=cap_is_egg,
+                                      gift=(recover_kind == "gift")},
                                      "capture(recovered-"..recover_kind.."):"..k:sub(1,8), true)
                                 n_recovered = n_recovered + 1
                             end
@@ -2657,7 +2668,7 @@ local function on_frame()
                 send({event="capture", key=buf.key, hp=buf.hp, maxHP=buf.maxHP,
                       level=buf.level, area_id=buf.area,
                       nickname=buf.nickname, species_id=buf.species_id,
-                      held_item_id=buf.held_item_id, is_egg=buf.is_egg},
+                      held_item_id=buf.held_item_id, is_egg=buf.is_egg, gift=true},
                      "capture(gift):"..buf.key:sub(1,8), true)
                 table.remove(gift_capture_buffer, i)
             else
