@@ -194,11 +194,22 @@ local function parse_command_list(raw)
                 areas[#areas + 1] = a
             end
         end
+        -- replace_rival_team fields
+        local trainer_id = tonumber(obj:match('"trainer_id"%s*:%s*(%-?%d+)'))
+        local blobs_hex = nil
+        local bh_raw = obj:match('"blobs_hex"%s*:%s*(%b[])')
+        if bh_raw then
+            blobs_hex = {}
+            for s in bh_raw:gmatch('"([^"]+)"') do
+                blobs_hex[#blobs_hex + 1] = s
+            end
+        end
         if cmd then
             cmds[#cmds+1] = {
                 cmd=cmd, key=key, message=msg, stats=stats,
                 text=text, r=r, g=g, b=b, frames=frames,
                 sound=sound, area_id=area_id, areas=areas,
+                trainer_id=trainer_id, blobs_hex=blobs_hex,
             }
         end
     end
