@@ -11,7 +11,7 @@ Run:
     pytest tests/unit/test_gen3_adapter_rival_ids.py -v
 """
 
-from server.adapters.gen3_frlge import Gen3Adapter, _RR_RIVAL_TRAINER_IDS
+from server.adapters.gen3_frlge import _RR_RIVAL_TRAINER_IDS, Gen3Adapter
 
 
 def test_rr_rival_set_has_expected_size():

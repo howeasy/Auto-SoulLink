@@ -8,10 +8,10 @@ Run:
 """
 
 import pytest
-from server.adapters import get_adapter, available_game_ids, register_adapter
-from server.adapters.base import GameAdapter, GameRulesAdapter, GamePresentationAdapter
-from server.adapters.gen3_frlge import Gen3Adapter
 
+from server.adapters import available_game_ids, get_adapter
+from server.adapters.base import GameAdapter
+from server.adapters.gen3_frlge import Gen3Adapter
 
 # ── Registry tests ────────────────────────────────────────────────────────────
 
@@ -353,7 +353,7 @@ class TestAdapterIntegration:
         state = SoulLinkState()
         state.pokeballs_obtained["a"] = True
         # personality=0, otId=0 is shiny (XOR = 0 < 8)
-        cmds = state.handle_event("a", {
+        state.handle_event("a", {
             "event": "capture", "key": "00000000:00000000",
             "area_id": "route_1", "species_id": 25,
         })
@@ -632,7 +632,8 @@ class TestCFRUBoxHandling:
     def test_contamination_dead_mon_in_box_13_is_allowed(self, tracker, caplog):
         """A properly dead/memorialized mon in box 13 must not produce a warning."""
         import logging
-        from server.state import LinkEntry, MonInfo, LinkStatus
+
+        from server.state import LinkEntry, LinkStatus, MonInfo
         entry = LinkEntry(
             area_id="route_1",
             a=MonInfo(key="DEAD:0001"),
@@ -650,7 +651,8 @@ class TestCFRUBoxHandling:
     def test_contamination_only_checks_player_own_dead_keys(self, tracker, caplog):
         """A mon in box 13 that is dead on the OTHER player's side still triggers warning."""
         import logging
-        from server.state import LinkEntry, MonInfo, LinkStatus
+
+        from server.state import LinkEntry, LinkStatus, MonInfo
         # Key "DEAD:0002" is player B's dead mon; checking player A's boxes
         entry = LinkEntry(
             area_id="route_2",
@@ -907,11 +909,11 @@ class TestToNationalDex:
         assert to_cfru(252) == 277
 
     def test_round_trip_cfru_to_national_to_cfru(self):
-        from server.pokemon_data import to_national, to_cfru
+        from server.pokemon_data import to_cfru, to_national
         assert to_cfru(to_national(277)) == 277
 
     def test_round_trip_national_to_cfru_to_national(self):
-        from server.pokemon_data import to_national, to_cfru
+        from server.pokemon_data import to_cfru, to_national
         assert to_national(to_cfru(252)) == 252
 
     def test_unknown_cfru_id_passthrough(self):
@@ -973,12 +975,12 @@ class TestBaseFormGen3:
         assert base_form(197) == 133
 
     def test_cfru_leafeon_maps_to_eevee(self):
-        from server.pokemon_data import base_form, EVO_FAMILY
+        from server.pokemon_data import EVO_FAMILY, base_form
         if 523 in EVO_FAMILY:
             assert base_form(523) == 133
 
     def test_cfru_glaceon_maps_to_eevee(self):
-        from server.pokemon_data import base_form, EVO_FAMILY
+        from server.pokemon_data import EVO_FAMILY, base_form
         if 524 in EVO_FAMILY:
             assert base_form(524) == 133
 
@@ -1071,7 +1073,7 @@ class TestSpeciesTypesFallback:
         assert result == (13, 10)
 
     def test_rr_path_used_when_is_rr_true(self):
-        from server.pokemon_data import species_types, _RR_TYPES
+        from server.pokemon_data import _RR_TYPES, species_types
         if not _RR_TYPES:
             pytest.skip("RR types not loaded")
         # Any species in _RR_TYPES should return a valid type tuple when is_rr=True
@@ -1081,7 +1083,7 @@ class TestSpeciesTypesFallback:
         assert isinstance(result, tuple) and len(result) == 2
 
     def test_is_rr_false_skips_rr_table(self):
-        from server.pokemon_data import species_types, _RR_TYPES, _NATDEX_SPECIES_TYPES, to_national
+        from server.pokemon_data import _NATDEX_SPECIES_TYPES, _RR_TYPES, species_types, to_national
         if not _RR_TYPES:
             pytest.skip("RR types not loaded")
         # Find a species where RR types differ from NatDex fallback
@@ -1340,8 +1342,8 @@ class TestCFRUAbilityNameOverrides:
         any overlap means the MANUAL entry is dead code that should be removed.
         MANUAL entries with a DIFFERENT display name are allowed (intentional override)."""
         from server.pokemon_data import (
-            CFRU_ABILITY_NAME_OVERRIDES_MANUAL as MANUAL,
             CFRU_ABILITY_NAME_OVERRIDES_GENERATED as GEN,
+            CFRU_ABILITY_NAME_OVERRIDES_MANUAL as MANUAL,
         )
         redundant = {k for k in MANUAL if k in GEN and MANUAL[k] == GEN[k]}
         assert not redundant, (

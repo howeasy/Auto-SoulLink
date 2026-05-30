@@ -5,29 +5,28 @@ This is the reference adapter that wraps the existing pokemon_data.py module,
 maintaining 100% backward compatibility with the current FRLG implementation.
 """
 
+import json
 import logging
 import os
-import json
 import re
 
-from .base import GameAdapter
 from server.data.items.gen3_vanilla import ITEM_NAMES as _FRLG_ITEM_NAMES
 from server.pokemon_data import (
+    CFRU_FORM_SPRITE_ID,
+    GENDER_SYMBOL,
+    _parse_pid_otid_key,
+    ability_description as _ability_description,
+    ability_name as _ability_name,
     base_form,
     gender_from_key_species,
+    pid_otid_shiny,
     species_name as _species_name,
     species_types as _species_types,
-    type_name as _type_name,
-    ability_name as _ability_name,
-    ability_description as _ability_description,
     to_national as _to_national,
-    _parse_pid_otid_key,
-    pid_otid_shiny,
-    SPECIES_NAMES,
-    GENDER_SYMBOL,
-    CFRU_FORM_SPRITE_ID,
-    TYPE_NAMES,
+    type_name as _type_name,
 )
+
+from .base import GameAdapter
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +61,7 @@ _DAYCARE_AREAS = frozenset({
 _RR_TRAINERS: dict[int, dict] = {}
 _rr_trainers_path = os.path.join(_DATA_DIR, "rr_trainers.json")
 if os.path.exists(_rr_trainers_path):
-    with open(_rr_trainers_path, "r") as _f:
+    with open(_rr_trainers_path) as _f:
         _raw_tr = json.load(_f)
         _RR_TRAINERS = {int(k): v for k, v in _raw_tr.get("trainers", {}).items()}
 
@@ -81,7 +80,7 @@ _RR_PRIORITY_PRE_CAPS:  dict[str, int] = {}      # "Lt. Surge" → 34
 _RR_PRIORITY_POST_CAPS: dict[str, int] = {}      # "Lt. Surge" → 44 (next pre cap)
 _rr_priority_path = os.path.join(_DATA_DIR, "rr_priority_trainers.json")
 if os.path.exists(_rr_priority_path):
-    with open(_rr_priority_path, "r", encoding="utf-8") as _f:
+    with open(_rr_priority_path, encoding="utf-8") as _f:
         _raw_pt = json.load(_f)
         _RR_PRIORITY_PARTIES = {
             int(k): v for k, v in (_raw_pt.get("parties") or {}).items()
@@ -142,7 +141,7 @@ _RR_TRAINER_CLASS: dict[int, str] = {
 _ROM_MAP_NAMES: dict[str, dict] = {}
 _rom_map_names_path = os.path.join(_DATA_DIR, "rom_map_names.json")
 if os.path.exists(_rom_map_names_path):
-    with open(_rom_map_names_path, "r") as _f:
+    with open(_rom_map_names_path) as _f:
         _ROM_MAP_NAMES = json.load(_f)
 
 # Manual overrides for special characters (apostrophes, accents, abbreviations)
@@ -205,7 +204,7 @@ _AREA_DISPLAY_RR_OVERRIDES: dict[str, str] = {
 _RR_ITEMS: dict[int, str] = {}
 _rr_items_path = os.path.join(_DATA_DIR, "rr_items.json")
 if os.path.exists(_rr_items_path):
-    with open(_rr_items_path, "r") as _f:
+    with open(_rr_items_path) as _f:
         _raw_items = json.load(_f)
         # Support both nested {"items": {...}} and flat {id: name} formats
         _items_dict = _raw_items.get("items", _raw_items) if isinstance(_raw_items, dict) else {}
@@ -216,14 +215,14 @@ if os.path.exists(_rr_items_path):
 _RR_ENCOUNTERS: dict[str, dict[str, list[dict]]] = {}
 _rr_encounters_path = os.path.join(_DATA_DIR, "rr_encounters.json")
 if os.path.exists(_rr_encounters_path):
-    with open(_rr_encounters_path, "r", encoding="utf-8") as _f:
+    with open(_rr_encounters_path, encoding="utf-8") as _f:
         _RR_ENCOUNTERS = json.load(_f)
 
 # RR sprite filename mapping (RR internal ID -> funnotbun sprite filename).
 _RR_SPRITE_FILE: dict[int, str] = {}
 _rr_sprites_path = os.path.join(_DATA_DIR, "rr_sprites.json")
 if os.path.exists(_rr_sprites_path):
-    with open(_rr_sprites_path, "r") as _f:
+    with open(_rr_sprites_path) as _f:
         _raw_sprites = json.load(_f)
         _RR_SPRITE_FILE = {int(k): v for k, v in _raw_sprites.items()}
 
