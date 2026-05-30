@@ -143,6 +143,18 @@
         if (!THEMES[name]) return;
         this.active = name;
         this.apply(name, /*persist=*/true);
+        // Strip ?theme= from the URL. The manager's status link appends it for
+        // cross-origin handoff, and it wins over cookie/localStorage in
+        // resolve_theme + this widget's init. Without this cleanup, refreshing
+        // a page that was loaded with ?theme=X reverts the user's later picker
+        // selection back to X — the stale param outranks the fresh cookie.
+        try {
+          var u = new URL(window.location.href);
+          if (u.searchParams.has('theme')) {
+            u.searchParams.delete('theme');
+            window.history.replaceState(null, '', u.toString());
+          }
+        } catch (_) {}
         // Close the popover on selection.
         var details = this.$root.querySelector('details');
         if (details) details.open = false;
