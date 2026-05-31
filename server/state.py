@@ -90,6 +90,11 @@ class PeerPos:
     imgs: int = 0  # sprite.images (ROM ptr to the trainer's frame images)
     anim: int = 0  # sprite.anims  (ROM ptr to the trainer's anim table)
     pal: int = 0   # palette ROM data ptr (resolved by the sender from its palTag)
+    # AUTHORITATIVE trainer palette: 64 hex chars = the sender's live 16 OBJ colours
+    # (untinted).  Preferred over `pal` on the receiver because RR loads custom-trainer
+    # palettes dynamically, so the tag-resolved `pal` ptr is wrong for non-default
+    # skins.  "" = unavailable → receiver keeps the local-player palette.  Opaque str.
+    pcol: str = ""
     ts: float = 0.0  # server wall-clock receive time (time.time()); used for staleness
 
 
@@ -2424,6 +2429,9 @@ class SoulLinkState:
             imgs = int(msg.get("imgs", 0))
             anim = int(msg.get("anim", 0))
             pal  = int(msg.get("pal", 0))
+            # Authoritative live trainer palette (opaque hex string); cap length so a
+            # malformed sender can't bloat memory.  64 chars = 16 BGR555 colours.
+            pcol = str(msg.get("pcol", ""))[:64]
         except (TypeError, ValueError):
             # Malformed payload — drop silently; sender will resend in 6 frames.
             return
@@ -2438,7 +2446,8 @@ class SoulLinkState:
 
         self.peer_pos[player_id] = PeerPos(
             mg=mg, mn=mn, x=x, y=y, f=f, mv=(1 if mv else 0), an=an,
-            bt=(1 if bt else 0), imgs=imgs, anim=anim, pal=pal, ts=time.time())
+            bt=(1 if bt else 0), imgs=imgs, anim=anim, pal=pal, pcol=pcol,
+            ts=time.time())
         if player_id not in self._ghost_rx_logged:
             self._ghost_rx_logged.add(player_id)
             log.info(f"[ghost] first ghost_pos from {player_id}: "
@@ -2494,6 +2503,7 @@ class SoulLinkState:
                 "f":  peer.f,  "mv": peer.mv,
                 "an": peer.an, "bt": peer.bt,
                 "imgs": peer.imgs, "anim": peer.anim, "pal": peer.pal,
+                "pcol": peer.pcol,
                 "name": self.trainer_names.get(partner, ""),
                 "ts": peer.ts,
             })

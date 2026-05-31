@@ -58,6 +58,9 @@ _LUA_ROOT = [
     "connector.lua",
     "game_detect.lua",
     "hud.lua",
+    # Peer-ghost overworld renderer — required by gen3_frlge_client.lua
+    # (`require("peer_ghost")`); the client errors at load without it.
+    "peer_ghost.lua",
     "memory_gb.lua",
     "memory_gba.lua",
     "memory_nds.lua",

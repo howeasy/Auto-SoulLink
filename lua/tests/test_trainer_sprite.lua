@@ -394,44 +394,69 @@ local function onFrame()
 end
 
 -- ── F9: find sSpritePaletteTags (the OBJ palette SLOT manager) ──────────────────────
--- 16 u16, one per OBJ palette slot, holding the TAG occupying each slot (free = 0xFFFF
--- or 0).  The engine reuses a slot whose tag is free.  Our injected ghost shares the
--- player's slot and desyncs the ref-count → the engine reuses slot 0 → player+ghost
--- corrupt.  With this address we can RESERVE a dedicated slot (set its tag) so the
--- ghost gets its own protected palette and never touches the player's.
--- Find it: sSpritePaletteTags[playerSlot] == the player's GI paletteTag.
+-- 16 u16, one per OBJ palette slot, holding the TAG occupying it (free = 0xFFFF).  The
+-- engine reuses any 0xFFFF slot.  RESERVING our slot here (set its tag) makes the ghost
+-- bulletproof (engine never reuses it).  STRUCTURAL fingerprint (no tag-value guesses,
+-- which is why the old GI-palTag match failed): every slot USED by an active sprite is
+-- non-0xFFFF, and several free slots are 0xFFFF — and the used-slot positions are at
+-- SPECIFIC indices (from live oam.paletteNum), which makes the match unique.
+local pal_tag_candidates = nil   -- persists across presses; intersected each time
+
 local function findPaletteTags()
-    local sid = r8(OBJ_BASE + OFF_SPR_ID)
-    if sid >= 64 then con("[F9] player sprite invalid."); return end
-    local gi = gi_ptr(r8(OBJ_BASE + OFF_GFX_ID))
-    if not gi then con("[F9] no player GI."); return end
-    local palTag = r16(gi + GI_PALTAG)
-    local pslot  = (r16(GSPR_BASE + sid*GSPR_STRIDE + SPR_OAM2) >> 12) & 0x0F
-    log(""); log(fmt("[F9] sSpritePaletteTags search: player palTag=0x%04X slot=%d", palTag, pslot))
-    con(fmt("[F9] Scanning EWRAM for sSpritePaletteTags (palTag=0x%04X @ slot %d)... please wait.", palTag, pslot))
-    local function score_tags(A)  -- how many of the 16 entries look like real tags?
-        local ok = 0
-        for i = 0, 15 do
-            local t = r16(A + i*2)
-            if t == 0xFFFF or t == 0x0000 or (t >= 0x1000 and t <= 0x1FFF) then ok = ok + 1 end
-        end
-        return ok
+    local used = {}
+    for s = 0, 63 do
+        local sa = GSPR_BASE + s*GSPR_STRIDE
+        if (r8(sa + SPR_BYTE3E) & 0x01) ~= 0 then used[(r16(sa + SPR_OAM2) >> 12) & 0x0F] = true end
     end
-    local best, best_score = nil, -1
-    for A = 0x02000000, 0x0203FFE0, 2 do
-        if r16(A + pslot*2) == palTag then
-            local s = score_tags(A)
-            if s > best_score then best, best_score = A, s end
+    local nused, ulist = 0, {}
+    for slot = 0, 15 do if used[slot] then nused = nused + 1; ulist[#ulist+1] = slot end end
+    if nused < 2 then con("[F9] need >=2 OBJ palette slots in use — go to a town with NPCs."); return end
+    -- A candidate must have every USED slot occupied (non-0xFFFF) and >=3 free (0xFFFF)
+    -- slots.  Per press this matches lots of noise; the REAL table is the only address
+    -- that keeps matching as the used-slot set changes — so we intersect across presses.
+    -- STRONG match: every USED slot is occupied (non-0xFFFF) AND every NON-used slot
+    -- is FREE (0xFFFF) — with a small tolerance for a palette loaded without an active
+    -- sprite.  The used/free PARTITION shifts area to area, so only the real table
+    -- keeps satisfying it (a densely-non-FFFF noise region fails the free-slot half).
+    local function matches(A)
+        local free_ffff, extra_nonfree = 0, 0
+        for slot = 0, 15 do
+            local t = r16(A + slot*2)
+            if used[slot] then
+                if t == 0xFFFF then return false end          -- used slot must be occupied
+            elseif t == 0xFFFF then
+                free_ffff = free_ffff + 1
+            else
+                extra_nonfree = extra_nonfree + 1             -- unused-but-occupied (loaded, no sprite)
+            end
         end
+        return free_ffff >= 3 and extra_nonfree <= 2
     end
-    if best and best_score >= 13 then
-        log(fmt("  ✓ sSpritePaletteTags = %s  (slot-0 base; %d/16 tag-like)", hex(best - pslot*2), best_score))
-        local line = "    tags:"; for i = 0, 15 do line = line .. fmt(" %04X", r16(best - pslot*2 + i*2)) end
-        log(line)
-        con(fmt("[F9] ✓ sSpritePaletteTags = %s (%d/16 tag-like). See log for the 16 tags.", hex(best - pslot*2), best_score))
+    log(""); log(fmt("[F9] used OBJ slots: %s", table.concat(ulist, ",")))
+    if not pal_tag_candidates then
+        con(fmt("[F9] First pass: collecting candidates (%d used slots)... please wait.", nused))
+        pal_tag_candidates = {}
+        for A = 0x02000000, 0x0203FFE0, 2 do
+            if matches(A) then pal_tag_candidates[#pal_tag_candidates+1] = A end
+        end
     else
-        log(fmt("  ✗ no strong match (best %s score %d).", best and hex(best) or "nil", best_score))
-        con("[F9] ✗ not found — see log.")
+        local kept = {}
+        for _, A in ipairs(pal_tag_candidates) do if matches(A) then kept[#kept+1] = A end end
+        pal_tag_candidates = kept
+    end
+    local n = #pal_tag_candidates
+    log(fmt("  %d candidate(s) remain after this pass.", n))
+    if n == 0 then
+        con("[F9] 0 candidates — reload to reset and retry from a town."); pal_tag_candidates = nil
+    elseif n <= 4 then
+        for _, A in ipairs(pal_tag_candidates) do
+            local line = fmt("    %s  tags:", hex(A)); for i = 0, 15 do line = line .. fmt(" %04X", r16(A + i*2)) end
+            log(line)
+        end
+        con(fmt("[F9] %d candidate(s) left — see log. %s", n,
+            n == 1 and "← that's sSpritePaletteTags." or "Walk to a DIFFERENT area + press F9 again to narrow."))
+    else
+        con(fmt("[F9] %d candidates — walk to a DIFFERENT area (different NPCs) + press F9 again to narrow.", n))
     end
     flush()
 end

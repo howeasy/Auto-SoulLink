@@ -18,14 +18,14 @@ from server.state import SoulLinkState
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 def _gp(player: str, mg: int, mn: int, x: int, y: int, f: int = 1, mv: int = 0,
-        imgs: int = 0, anim: int = 0, pal: int = 0) -> dict:
+        imgs: int = 0, anim: int = 0, pal: int = 0, pcol: str = "") -> dict:
     return {
         "event": "ghost_pos",
         "player": player,
         "mg": mg, "mn": mn,
         "x": x, "y": y,
         "f": f, "mv": mv,
-        "imgs": imgs, "anim": anim, "pal": pal,
+        "imgs": imgs, "anim": anim, "pal": pal, "pcol": pcol,
     }
 
 
@@ -81,12 +81,16 @@ def test_chosen_trainer_graphics_relay_to_partner():
     the ghost can render their actual trainer, not a clone of the viewer."""
     state = SoulLinkState()
     state.handle_event("b", _gp("b", mg=3, mn=5, x=20, y=20))
+    _pcol = "073F00002A1F3C5E0000111122223333444455556666777788889999"
     state.handle_event("a", _gp("a", mg=3, mn=5, x=14, y=9,
-                                imgs=0x0915B6F0, anim=0x0915B0F4, pal=0x092FB8CC))
+                                imgs=0x0915B6F0, anim=0x0915B0F4, pal=0x092FB8CC,
+                                pcol=_pcol))
     g = _cmds_of(state.handle_event("b", {"event": "tick"}), "ghost_pos")[0]
     assert g["imgs"] == 0x0915B6F0
     assert g["anim"] == 0x0915B0F4
     assert g["pal"] == 0x092FB8CC
+    # authoritative live trainer palette (the actual colour fix for dynamic skins)
+    assert g["pcol"] == _pcol
 
 
 def test_no_ghost_until_recipient_reports_own_position():

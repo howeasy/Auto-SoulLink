@@ -220,6 +220,10 @@ local function parse_command_list(raw)
         local gimgs = tonumber(obj:match('"imgs"%s*:%s*(%d+)'))
         local ganim = tonumber(obj:match('"anim"%s*:%s*(%d+)'))
         local gpal  = tonumber(obj:match('"pal"%s*:%s*(%d+)'))
+        -- partner's AUTHORITATIVE live trainer palette (64 hex chars = 16 BGR555
+        -- colours); preferred over the tag-resolved `pal` ROM ptr which is wrong
+        -- for RR's dynamically-loaded non-default trainer skins.
+        local gpcol = obj:match('"pcol"%s*:%s*"([0-9A-Fa-f]*)"')
         if cmd then
             cmds[#cmds+1] = {
                 cmd=cmd, key=key, message=msg, stats=stats,
@@ -227,7 +231,7 @@ local function parse_command_list(raw)
                 sound=sound, area_id=area_id, areas=areas,
                 trainer_id=trainer_id, blobs_hex=blobs_hex,
                 mg=mg, mn=mn, x=gx, y=gy, f=gf, mv=gmv, an=gan, bt=gbt,
-                imgs=gimgs, anim=ganim, pal=gpal,
+                imgs=gimgs, anim=ganim, pal=gpal, pcol=gpcol,
             }
         end
     end
@@ -313,6 +317,12 @@ local pg_idle_frames = 0
 -- Sub-pixel world-position tracking: aligned tile + coordOffset at last idle.
 local pg_align_tx, pg_align_ty = nil, nil
 local pg_coff_ax, pg_coff_ay   = nil, nil
+-- Last broadcast world pixels — the "moving" flag is derived from whether this
+-- ACTUALLY changed, not the object's idle bit.  During a forced/scripted sequence
+-- (event dialogue, cutscene) the engine holds the player object "not finished"
+-- though it isn't translating, so the idle-bit said moving → the ghost walked in
+-- place.  Real position delta is the authoritative motion signal.
+local pg_prev_wx, pg_prev_wy = nil, nil
 -- Last overworld ghost payload we broadcast, replayed with bt=1 while WE are in a
 -- battle so the partner's ghost freezes-in-place (with a battle indicator) instead
 -- of going stale and vanishing.  nil until we've sent at least one overworld pos.
@@ -338,8 +348,13 @@ local PG_FIELD_RESUME_FRAMES = 12
 -- ROM ptrs (identical on both ROMs); the palette ROM data ptr is resolved from the
 -- GI's palTag via the OW sprite-palette table.  Cached by gfx — recomputed only when
 -- the player picks a different trainer.
+-- Last GOOD (standard 16x32) trainer broadcast.  Cached so that transient
+-- non-standard player sprites (fishing/bike/surf/cutscene) NEVER replace it.
 local pg_tr_gfx = -1
 local pg_tr_imgs, pg_tr_anim, pg_tr_pal = 0, 0, 0
+local pg_tr_pcol = ""   -- last good trainer palette (64 hex chars), cached alongside
+local pg_tr_rej_gfx = -2  -- last non-standard gfx logged by [PG-SIZE] (one-shot)
+local STD_TRAINER_FRAME_BYTES = 0x100   -- 16x32 = 8 tiles = the receiver's ghost-tile reservation
 local function pg_in_rom(p) return p >= 0x08000000 and p < 0x0A000000 end
 local function pg_resolve_palette(palTag)
     local base = M.TRAINER_PAL_TABLE_ADDR
@@ -353,22 +368,71 @@ local function pg_resolve_palette(palTag)
     end
     return 0
 end
--- images, anims, pal ROM ptrs for the player's current trainer (0,0,0 if unavailable
--- → receiver clones the local player as before).
+
+-- AUTHORITATIVE trainer palette: the partner's ghost should wear the sender's
+-- ACTUAL trainer colours.  RR loads custom-trainer palettes DYNAMICALLY, so the
+-- palTag→sObjectEventSpritePalettes resolve (pg_tr_pal) returns a valid-but-WRONG
+-- ROM palette for any non-default skin → "correct shape, wrong colours" on the
+-- partner's screen.  The ground truth is the trainer's LIVE 16 colours sitting in
+-- the UNFADED OBJ shadow buffer at the player's own palette slot (unfaded = the
+-- untinted master the engine tints each frame for day/night).  Send those exactly
+-- as we already send the live sprite.images instead of the GI stub.  Returns a
+-- 64-char hex string ("" if unavailable → receiver keeps the local-player palette).
+local function pg_trainer_palette_hex(sid)
+    local ub = M.PLTT_UNFADED_OBJ_ADDR
+    if not (ub and sid and sid < 64) then return "" end
+    local sa = M.GSPRITES_BASE + sid * (M.SPRITE_STRIDE or 0x44)
+    local pslot = (memory.read_u16_le(sa + 0x04) >> 12) & 0x0F
+    local parts = {}
+    for i = 0, 15 do
+        parts[i + 1] = string.format("%04X", memory.read_u16_le(ub + pslot * 0x20 + i * 2))
+    end
+    return table.concat(parts)
+end
+
+-- images, anims, palette ROM ptr + live palette hex for the player's current trainer
+-- (0/"" if unavailable → receiver clones the local player as before).
+-- ROBUSTNESS: a sprite is ADOPTED as "the trainer" only if its frame is the standard
+-- 16x32 (0x100 bytes) that FITS the receiver's 8-tile ghost reservation.  Fishing /
+-- bike / surf / cutscene swap the player to a sprite whose frame may be LARGER;
+-- broadcasting it overflowed the receiver's frame-DMA into neighbouring VRAM →
+-- corrupted the ghost AND any real sprite that walked onto those tiles (observed
+-- while fishing).  Non-standard sprites are IGNORED → we keep broadcasting the last
+-- good trainer, so the ghost simply freezes its real look (no corruption, no vanish).
 local function pg_trainer_fields(ob, sid)
-    if not (M.TRAINER_GI_TABLE_ADDR and sid and sid < 64) then return 0, 0, 0 end
+    if not (M.TRAINER_GI_TABLE_ADDR and sid and sid < 64) then
+        return pg_tr_imgs, pg_tr_anim, pg_tr_pal, pg_tr_pcol
+    end
     local gfx = memory.read_u8(ob + 0x05)
     if gfx ~= pg_tr_gfx then
-        pg_tr_gfx = gfx
         local sa = M.GSPRITES_BASE + sid * (M.SPRITE_STRIDE or 0x44)
-        pg_tr_imgs = memory.read_u32_le(sa + 0x0C)
-        pg_tr_anim = memory.read_u32_le(sa + 0x08)
-        local gi = memory.read_u32_le(M.TRAINER_GI_TABLE_ADDR + gfx * 4)
-        local palTag = pg_in_rom(gi) and memory.read_u16_le(gi + 0x02) or 0
-        pg_tr_pal = pg_resolve_palette(palTag)
+        local imgs = memory.read_u32_le(sa + 0x0C)
+        -- Only adopt a STANDARD-SIZED trainer sprite; leave the cache untouched for
+        -- anything else (fishing/bike/surf) so the last good trainer keeps broadcasting.
+        if pg_in_rom(imgs) and memory.read_u16_le(imgs + 4) == STD_TRAINER_FRAME_BYTES then
+            pg_tr_gfx  = gfx
+            pg_tr_imgs = imgs
+            pg_tr_anim = memory.read_u32_le(sa + 0x08)
+            local gi = memory.read_u32_le(M.TRAINER_GI_TABLE_ADDR + gfx * 4)
+            local palTag = pg_in_rom(gi) and memory.read_u16_le(gi + 0x02) or 0
+            pg_tr_pal  = pg_resolve_palette(palTag)
+            pg_tr_pcol = pg_trainer_palette_hex(sid)
+        elseif gfx ~= pg_tr_rej_gfx then
+            -- DIAGNOSTIC: a non-standard player sprite (fishing/bike/surf/cutscene)
+            -- we currently DON'T broadcast (would overflow the 8-tile ghost).  Log its
+            -- frame size + OAM shape/size so we can scope rendering it properly.
+            -- attr0 bits14-15 = shape (0=square,1=wide,2=tall); attr1 bits14-15 = size.
+            pg_tr_rej_gfx = gfx
+            local fb = pg_in_rom(imgs) and memory.read_u16_le(imgs + 4) or 0
+            console.log(string.format(
+                "[PG-SIZE] non-standard sprite gfx=%d imgs=%08X frame0=0x%X (%d tiles) shape=%d size=%d (attr0=%04X attr1=%04X)",
+                gfx, imgs, fb, fb // 32,
+                (memory.read_u16_le(sa + 0x00) >> 14) & 0x03,
+                (memory.read_u16_le(sa + 0x02) >> 14) & 0x03,
+                memory.read_u16_le(sa + 0x00), memory.read_u16_le(sa + 0x02)))
+        end
     end
-    if pg_in_rom(pg_tr_imgs) then return pg_tr_imgs, pg_tr_anim, pg_tr_pal end
-    return 0, 0, 0
+    return pg_tr_imgs, pg_tr_anim, pg_tr_pal, pg_tr_pcol
 end
 
 -- ── Deferred sync state (declared before dispatch_commands uses them) ─────────
@@ -1505,22 +1569,30 @@ local function on_frame()
             local wy = pg_align_ty * 16 + (pg_coff_ay - coffy)
             local gf  = memory.read_u8(ob + 0x18) & 0x0F
             if gf < 1 or gf > 4 then gf = 1 end
-            local gmv = (pg_idle_frames < 4) and 1 or 0
+            -- "Moving" = our world pixels actually changed since the last broadcast.
+            -- This is robust where the idle bit lies: in a forced/scripted dialogue
+            -- the object reads "not finished" (idle bit clear) while standing still,
+            -- which made the ghost walk in place.  Position delta = ground truth, and
+            -- it also naturally reports idle the instant a step settles.  (The idle
+            -- bit is still used above to calibrate the alignment baseline.)
+            local moved = (pg_prev_wx == nil) or (wx ~= pg_prev_wx) or (wy ~= pg_prev_wy)
+            local gmv = moved and 1 or 0
+            pg_prev_wx, pg_prev_wy = wx, wy
             -- live animNum from the player's sprite (walk/run/etc.).
             local sid = memory.read_u8(ob + 0x04)
             local gan = (sid < 64)
                 and memory.read_u8(M.GSPRITES_BASE + sid * (M.SPRITE_STRIDE or 0x44) + 0x2A)
                 or 0
-            local timgs, tanim, tpal = pg_trainer_fields(ob, sid)
+            local timgs, tanim, tpal, tpcol = pg_trainer_fields(ob, sid)
             do  -- always send (no idle-dedup) so the ghost stays alive when idle.
                 -- x,y are now WORLD PIXELS (sub-pixel precise), not tiles.
                 send({event = "ghost_pos", mg = frame_map_g, mn = frame_map_n,
                       x = wx, y = wy, f = gf, mv = gmv, an = gan,
-                      imgs = timgs, anim = tanim, pal = tpal}, "ghost_pos", true, true)
+                      imgs = timgs, anim = tanim, pal = tpal, pcol = tpcol}, "ghost_pos", true, true)
                 -- Cache the last overworld pos + trainer so we can keep the partner's
                 -- ghost alive (frozen, correct trainer) during OUR battle (bt=1 below).
                 pg_last_world = {mg = frame_map_g, mn = frame_map_n, x = wx, y = wy, f = gf,
-                                 imgs = timgs, anim = tanim, pal = tpal}
+                                 imgs = timgs, anim = tanim, pal = tpal, pcol = tpcol}
                 pg_tx_count = pg_tx_count + 1
                 if not pg_first_tx_logged then
                     pg_first_tx_logged = true
@@ -1549,7 +1621,8 @@ local function on_frame()
         local w = pg_last_world
         send({event = "ghost_pos", mg = w.mg, mn = w.mn, x = w.x, y = w.y,
               f = w.f, mv = 0, an = 0, bt = 1,
-              imgs = w.imgs or 0, anim = w.anim or 0, pal = w.pal or 0}, "ghost_pos", true, true)
+              imgs = w.imgs or 0, anim = w.anim or 0, pal = w.pal or 0,
+              pcol = w.pcol or ""}, "ghost_pos", true, true)
         if not pg_bt_logged then
             pg_bt_logged = true
             console.log("[SLink-FRLGE] Peer-ghost: in-battle keepalive (bt=1) — partner's ghost will freeze, not vanish.")
@@ -3625,6 +3698,13 @@ event.onframeend(on_frame_safe, "t4_events")
 -- Re-armed every frame by PG.on_frame at frame end → collision stays intact otherwise.
 if peer_ghost_enabled then
     event.onframestart(function()
+        -- ONLY in the overworld field.  This guard writes gObjectEvents; running it
+        -- during a battle/transition (suspend() clears our slots only at frame END,
+        -- so the ghost still reads as spawned on the battle's first onframestart) was
+        -- writing into state the battle engine had repurposed → softlock entering a
+        -- trainer battle (A held while the facing check hit).
+        local ok_o, in_ow = pcall(M.isInOverworld)
+        if not (ok_o and in_ow) then return end
         local ok, pad = pcall(joypad.get)
         local a = ok and pad and (pad.A or pad["A"]) and true or false
         PG.guard_interaction(a)

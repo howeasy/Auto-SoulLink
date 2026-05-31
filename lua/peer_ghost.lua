@@ -36,6 +36,7 @@ local PG = {}
 -- BizHawk memory shorthands
 local r8   = memory.read_u8
 local r16  = memory.read_u16_le
+local r32  = memory.read_u32_le
 local rs16 = memory.read_s16_le
 local w8   = memory.write_u8
 local w16  = memory.write_u16_le
@@ -69,6 +70,9 @@ local base_cx, base_cy = nil, nil
 
 local GHOST_TILE_COUNT = 8          -- 16x32 overworld sprite = 8 tiles
 local TOTAL_OBJ_TILES  = 1024
+local GHOST_PAL_SLOT   = 15         -- the ghost's OWN OBJ palette slot (high → rarely
+                                    -- contested; never the player's slot, so the engine's
+                                    -- palette ref-count for the player stays balanced)
 
 -- Tunables.  Positions over the wire are now WORLD PIXELS (sub-pixel precise),
 -- so interpolation works in pixels.
@@ -254,45 +258,47 @@ local function pltt_trusted()
     return r16(cfg.pltt_faded_obj) == r16(cfg.obj_pltt)
 end
 
--- Free OBJ palette slot (not referenced by any active sprite), high-first.
-local function claim_palette_slot()
-    local used = {}
-    for s = 0, 63 do
-        local sa = cfg.gsprites + s * cfg.spr_stride
-        if (r8(sa + cfg.spr_byte3e) & 0x01) ~= 0 then
-            used[(r16(sa + 0x04) >> 12) & 0x0F] = true
-        end
-    end
-    for slot = 15, 0, -1 do if not used[slot] then return slot end end
-    return 15
-end
+-- Re-enabled: the palette corruption is fixed by giving the ghost its OWN palette
+-- slot (GHOST_PAL_SLOT, see render) instead of a "free" slot that clobbered engine
+-- palettes.  The partner-trainer palette loads into that SAME slot, per-frame, in
+-- render — so it self-heals and never touches an engine-owned slot.
+local TRAINER_RENDER_ENABLED = true
 
--- DISABLED pending a fix: showing the partner's chosen trainer regressed VRAM —
--- both player/ghost AND battle sprites corrupt when a player leaves the area.  The
--- shared-state suspects are the palette write into gPlttBuffer (a wrongly-"free"
--- slot clobbers other sprites' colours, incl. battle, since the OBJ palette buffer
--- spans overworld+battle) and the foreign images/anims override (a mis-sized frame
--- DMA can spill into neighbouring VRAM).  Flag off → ghost clones the local player
--- (the known-good behaviour).  Re-enable per-piece once the palette slot is made
--- provably free + the frame size is bounded.
-local TRAINER_RENDER_ENABLED = false
-
+-- Override the cloned ghost sprite with the partner's chosen-trainer GRAPHICS only:
+-- images/anims are ROM ptrs identical on both ROMs.  The PALETTE is loaded per-frame
+-- in render into GHOST_PAL_SLOT (the ghost's own slot).  No-op when the partner sent
+-- no trainer info → keeps cloning the local player (graceful fallback).
 local function apply_trainer(naddr)
     if not TRAINER_RENDER_ENABLED then return end
     if not (ghost and ghost.imgs and ghost.imgs ~= 0 and cfg.spr_images) then return end
+    -- One-shot diagnostic on each NEW foreign trainer: log the partner's ROM ptrs,
+    -- the frame-0 byte SIZE the engine will DMA into our reserved tiles vs the local
+    -- player's frame size + our reservation, and the palette source — to pinpoint
+    -- whether the asymmetric "one player's ghost corrupts" is a tile-DMA OVERFLOW
+    -- (foreign frame bigger than our 8-tile block) or a bad resolved palette.
+    if ghost.imgs ~= applied_imgs then
+        local function cls(a)
+            if     a >= 0x08000000 and a < 0x0A000000 then return "ROM"
+            elseif a >= 0x02000000 and a < 0x02040000 then return "EWRAM"
+            elseif a >= 0x03000000 and a < 0x03008000 then return "IWRAM"
+            elseif a >= 0x06000000 and a < 0x06018000 then return "VRAM"
+            elseif a == 0 then return "0" else return "?" end
+        end
+        local p_sid = r8(cfg.obj_base + cfg.off_sprite_id)
+        local p_imgs = (p_sid < 64) and r32(cfg.gsprites + p_sid * cfg.spr_stride + cfg.spr_images) or 0
+        local g_sz = r16(ghost.imgs + 4)                       -- SpriteFrameImage.size (bytes)
+        local p_sz = (p_imgs ~= 0) and r16(p_imgs + 4) or 0
+        local gpal = ghost.pal or 0
+        console.log(string.format(
+            "[PG-TRAIN] foreign trainer: imgs=%08X(%s) anim=%08X(%s) | frame0 size ghost=0x%X local=0x%X (reserved=%d tiles) | pcol=%s | pcol[0..2]=%04X,%04X,%04X | pal(legacy)=%08X(%s)",
+            ghost.imgs, cls(ghost.imgs), ghost.anim or 0, cls(ghost.anim or 0),
+            g_sz, p_sz, GHOST_TILE_COUNT,
+            ghost.pcols and "yes(live)" or "no(clone fallback)",
+            ghost.pcols and ghost.pcols[0] or 0, ghost.pcols and ghost.pcols[1] or 0,
+            ghost.pcols and ghost.pcols[2] or 0, gpal, cls(gpal)))
+    end
     w32(naddr + cfg.spr_images, ghost.imgs)
     if ghost.anim and ghost.anim ~= 0 and cfg.spr_anims then w32(naddr + cfg.spr_anims, ghost.anim) end
-    if ghost.pal and ghost.pal ~= 0 and pltt_trusted() then
-        local slot = claim_palette_slot()
-        for i = 0, 15 do
-            local c = r16(ghost.pal + i * 2)
-            w16(cfg.pltt_unfaded_obj + slot * 0x20 + i * 2, c)   -- source (survives the day/night recompute)
-            w16(cfg.pltt_faded_obj   + slot * 0x20 + i * 2, c)   -- transferred → palette RAM
-            w16(cfg.obj_pltt         + slot * 0x20 + i * 2, c)   -- immediate (this frame)
-        end
-        local a2 = r16(naddr + 0x04)
-        w16(naddr + 0x04, (a2 & 0x0FFF) | ((slot & 0x0F) << 12))   -- oam.paletteNum = slot
-    end
     w8(naddr + cfg.spr_byte3f, r8(naddr + cfg.spr_byte3f) | 0x04)   -- animBeginning → re-DMA frame0
     last_anim = nil
     applied_imgs = ghost.imgs
@@ -424,6 +430,17 @@ function PG.on_ghost_pos(cmd)
         -- unknown → clone the local player (graceful fallback).
         imgs = cmd.imgs, anim = cmd.anim, pal = cmd.pal,
     }
+    -- Decode the partner's AUTHORITATIVE live trainer palette (64 hex chars → 16
+    -- BGR555 colours) ONCE per update.  This is the correct fix for RR's dynamically
+    -- loaded custom-trainer skins, where the tag-resolved `pal` ROM ptr is wrong.
+    -- nil = no palette sent → render keeps the local-player palette (clone).
+    if cmd.pcol and #cmd.pcol >= 64 then
+        local cols = {}
+        for i = 0, 15 do
+            cols[i] = tonumber(cmd.pcol:sub(i * 4 + 1, i * 4 + 4), 16) or 0
+        end
+        g.pcols = cols
+    end
     -- Snap the interpolation target on first sight or a big jump (warp/fly).
     if not ghost or ghost.mg ~= g.mg or ghost.mn ~= g.mn
        or not disp_x
@@ -663,19 +680,59 @@ function PG.on_frame()
     -- NPC ever reusing slot 15, but that table isn't located; a high slot is rarely
     -- contested.)  When a partner-trainer palette is loaded (applied_imgs ~= nil) we
     -- keep that instead of copying the player's.
-    local GHOST_PAL_SLOT = 15
+    -- Load the ghost's palette into its OWN slot (GHOST_PAL_SLOT) every frame so it
+    -- never shares/desyncs the player's engine-managed slot AND self-heals if an NPC
+    -- briefly reuses our high slot.  Source, in priority order:
+    --   1. the partner's AUTHORITATIVE live trainer palette (ghost.pcols — the 16
+    --      colours actually loaded for their chosen skin; correct for ALL skins incl.
+    --      RR's dynamic custom trainers, where the old tag-resolved ROM ptr was wrong);
+    --   2. else a copy of the LOCAL player's live palette (clone fallback — no trainer
+    --      info sent, or older sender).
+    -- All three buffers (Unfaded + Faded + live PLTT) so the day/night tint isn't doubled.
     local pal_bits
-    if applied_imgs == nil and pltt_trusted() then
-        local psrc = (r16(cfg.gsprites + p_sid * cfg.spr_stride + 0x04) >> 12) & 0x0F
-        for i = 0, 15 do
-            local off = i * 2
-            w16(cfg.pltt_unfaded_obj + GHOST_PAL_SLOT*0x20 + off, r16(cfg.pltt_unfaded_obj + psrc*0x20 + off))
-            w16(cfg.pltt_faded_obj   + GHOST_PAL_SLOT*0x20 + off, r16(cfg.pltt_faded_obj   + psrc*0x20 + off))
-            w16(cfg.obj_pltt         + GHOST_PAL_SLOT*0x20 + off, r16(cfg.obj_pltt         + psrc*0x20 + off))
+    if pltt_trusted() then
+        if applied_imgs ~= nil and ghost.pcols then
+            -- The partner sent UNTINTED colours (the unfaded master).  Writing them
+            -- raw into the FADED/PLTT buffers left the ghost untinted → too-bright /
+            -- wrong colours at dusk/night/in caves (the clone path below tints because
+            -- it copies the player's already-tinted FADED buffer).  Derive the engine's
+            -- current per-channel day/night tint from the PLAYER's own slot (the tint
+            -- is a uniform multiplier across the whole OBJ palette this frame: faded =
+            -- tint·unfaded) and apply it to pcol so the ghost tints like every other
+            -- sprite.  At neutral tint (daytime) the ratio is ~1 → colours unchanged.
+            local psrc = (r16(cfg.gsprites + p_sid * cfg.spr_stride + 0x04) >> 12) & 0x0F
+            local rn, gn, bn, rd, gd, bd = 0, 0, 0, 0, 0, 0
+            for i = 0, 15 do
+                local uf = r16(cfg.pltt_unfaded_obj + psrc*0x20 + i*2)
+                local fd = r16(cfg.pltt_faded_obj   + psrc*0x20 + i*2)
+                rd = rd + (uf & 0x1F);          rn = rn + (fd & 0x1F)
+                gd = gd + ((uf >> 5) & 0x1F);   gn = gn + ((fd >> 5) & 0x1F)
+                bd = bd + ((uf >> 10) & 0x1F);  bn = bn + ((fd >> 10) & 0x1F)
+            end
+            for i = 0, 15 do
+                local off = i * 2
+                local c = ghost.pcols[i]
+                local r, g, b = (c & 0x1F), ((c >> 5) & 0x1F), ((c >> 10) & 0x1F)
+                if rd > 0 then r = math.floor(r * rn / rd + 0.5); if r > 31 then r = 31 end end
+                if gd > 0 then g = math.floor(g * gn / gd + 0.5); if g > 31 then g = 31 end end
+                if bd > 0 then b = math.floor(b * bn / bd + 0.5); if b > 31 then b = 31 end end
+                local tc = r | (g << 5) | (b << 10)
+                w16(cfg.pltt_unfaded_obj + GHOST_PAL_SLOT*0x20 + off, c)    -- untinted master
+                w16(cfg.pltt_faded_obj   + GHOST_PAL_SLOT*0x20 + off, tc)   -- engine-matched tint (shown)
+                w16(cfg.obj_pltt         + GHOST_PAL_SLOT*0x20 + off, tc)
+            end
+        else
+            local psrc = (r16(cfg.gsprites + p_sid * cfg.spr_stride + 0x04) >> 12) & 0x0F
+            for i = 0, 15 do
+                local off = i * 2
+                w16(cfg.pltt_unfaded_obj + GHOST_PAL_SLOT*0x20 + off, r16(cfg.pltt_unfaded_obj + psrc*0x20 + off))
+                w16(cfg.pltt_faded_obj   + GHOST_PAL_SLOT*0x20 + off, r16(cfg.pltt_faded_obj   + psrc*0x20 + off))
+                w16(cfg.obj_pltt         + GHOST_PAL_SLOT*0x20 + off, r16(cfg.obj_pltt         + psrc*0x20 + off))
+            end
         end
         pal_bits = GHOST_PAL_SLOT << 12
     else
-        pal_bits = r16(nsa + 0x04) & 0xF000   -- trainer palette already loaded, or untrusted addr
+        pal_bits = r16(nsa + 0x04) & 0xF000   -- untrusted palette addr → keep current
     end
     local attr2 = r16(nsa + 0x04)
     w16(nsa + 0x04, pal_bits | (attr2 & 0x0C00) | ((ghost_tile or cfg.ghost_tile) & 0x03FF))
@@ -744,6 +801,21 @@ function PG.on_frame()
         -- reuses the same animNum writes we already do safely.
         spin_tick = spin_tick + 1
         want = (spin_tick // SPIN_FRAMES) % 4
+        -- DIAGNOSTIC (issue 2): capture the ghost's palette state DURING the spin so
+        -- we can see if the engine is overriding our slot-15 colours / paletteNum as
+        -- the frequent animBeginning re-asserts the backing object-event's graphics
+        -- palette.  Only meaningful with DIFFERENT trainers on each side.
+        if dbg_frames % 30 == 0 then
+            local pltt = cfg.obj_pltt or 0x05000200
+            local gslot = (r16(nsa + 0x04) >> 12) & 0x0F
+            console.log(string.format(
+                "[PG-BATPAL] spin: ghost palSlot=%d slot15 c0,1,2=%04X,%04X,%04X | applied=%s pcols=%s c0,1,2=%04X,%04X,%04X",
+                gslot,
+                r16(pltt + GHOST_PAL_SLOT*0x20), r16(pltt + GHOST_PAL_SLOT*0x20 + 2), r16(pltt + GHOST_PAL_SLOT*0x20 + 4),
+                applied_imgs and "trainer" or "clone", ghost.pcols and "yes" or "no",
+                ghost.pcols and ghost.pcols[0] or 0, ghost.pcols and ghost.pcols[1] or 0,
+                ghost.pcols and ghost.pcols[2] or 0))
+        end
     elseif ghost.mv == 1 then
         want = ghost.an or walk_anim(ghost.f)
     else
