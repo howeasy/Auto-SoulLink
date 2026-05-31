@@ -43,7 +43,9 @@ def _make_parser():
 def test_ghost_pos_fields_survive_lua_parser():
     lua, parse = _make_parser()
     resp = ('{"commands": [{"cmd": "ghost_pos", "mg": 6, "mn": 5, "x": 14, '
-            '"y": 13, "f": 2, "mv": 1, "an": 4, "bt": 1, "name": "ALICE", "ts": 1780168465.46}]}')
+            '"y": 13, "f": 2, "mv": 1, "an": 4, "bt": 1, '
+            '"imgs": 152332016, "anim": 152330484, "pal": 153784012, '
+            '"name": "ALICE", "ts": 1780168465.46}]}')
     cmds = parse(resp)
     assert lua.eval("function(t) return #t end")(cmds) == 1
     c = cmds[1]
@@ -53,6 +55,10 @@ def test_ghost_pos_fields_survive_lua_parser():
     assert c.f == 2 and c.mv == 1, "facing/moving dropped by the Lua parser"
     assert c.an == 4, "animNum (run fidelity) dropped by the Lua parser"
     assert c.bt == 1, "battle flag dropped by the Lua parser"
+    # chosen-trainer graphics pointers (ROM addrs as large ints)
+    assert c.imgs == 152332016, "trainer images ptr dropped by the Lua parser"
+    assert c.anim == 152330484, "trainer anims ptr dropped by the Lua parser"
+    assert c.pal == 153784012, "trainer palette ptr dropped by the Lua parser"
 
 
 def test_ghost_pos_negative_coords_parse():

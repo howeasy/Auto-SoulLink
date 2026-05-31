@@ -215,6 +215,11 @@ local function parse_command_list(raw)
         local gmv = tonumber(obj:match('"mv"%s*:%s*(%-?%d+)'))
         local gan = tonumber(obj:match('"an"%s*:%s*(%-?%d+)'))
         local gbt = tonumber(obj:match('"bt"%s*:%s*(%-?%d+)'))
+        -- partner's chosen-trainer graphics (ROM ptrs + palette ROM ptr); 0/absent
+        -- => fall back to cloning the local player's sprite.
+        local gimgs = tonumber(obj:match('"imgs"%s*:%s*(%d+)'))
+        local ganim = tonumber(obj:match('"anim"%s*:%s*(%d+)'))
+        local gpal  = tonumber(obj:match('"pal"%s*:%s*(%d+)'))
         if cmd then
             cmds[#cmds+1] = {
                 cmd=cmd, key=key, message=msg, stats=stats,
@@ -222,6 +227,7 @@ local function parse_command_list(raw)
                 sound=sound, area_id=area_id, areas=areas,
                 trainer_id=trainer_id, blobs_hex=blobs_hex,
                 mg=mg, mn=mn, x=gx, y=gy, f=gf, mv=gmv, an=gan, bt=gbt,
+                imgs=gimgs, anim=ganim, pal=gpal,
             }
         end
     end
@@ -273,12 +279,20 @@ if peer_ghost_enabled then
         off_mov_type   = 0x06,  off_local_id  = 0x08, off_map_num     = 0x09,
         off_map_group  = 0x0A,  off_curr_x    = 0x10, off_curr_y      = 0x12,
         off_prev_x     = 0x14,  off_prev_y    = 0x16, off_facing      = 0x18,
+        off_elevation  = 0x0B,  -- currentElevation:4 | previousElevation:4 (collision needs a match)
         -- gSprites array
         gsprites       = M.GSPRITES_BASE,
         spr_stride     = M.SPRITE_STRIDE or 0x44,
         spr_x          = 0x20,  spr_y      = 0x22, spr_anim   = 0x2A,
         spr_byte2c     = 0x2C,  spr_data0  = 0x2E, spr_byte3e = 0x3E, spr_byte3f = 0x3F,
+        spr_anims      = 0x08,  spr_images = 0x0C,   -- ROM ptrs (override for partner's trainer)
         ghost_tile     = M.GHOST_SPRITE_TILE or 0x300,
+        -- Partner-trainer palette: write into the EWRAM shadow buffers (the engine
+        -- DMAs gPlttBufferFaded → OBJ palette RAM every frame for day/night tint, so
+        -- a direct palette-RAM write is overwritten).  nil → keep the cloned palette.
+        pltt_faded_obj   = M.PLTT_FADED_OBJ_ADDR,
+        pltt_unfaded_obj = M.PLTT_UNFADED_OBJ_ADDR,
+        obj_pltt         = 0x05000200,   -- OBJ palette RAM (slot 0)
         -- gSpriteTileAllocBitmap: reserve our claimed tiles so the engine never
         -- reallocates them (nil → reservation disabled, collision self-heal only).
         tile_alloc_bitmap = M.TILE_ALLOC_BITMAP_ADDR,
@@ -312,6 +326,50 @@ local pg_first_tx_logged, pg_first_rx_logged = false, false
 -- state, for suspending the ghost during menus/transitions (see gate below).
 local pg_field_cb2 = nil
 local pg_field_active_prev = nil
+-- Settle delay after the field becomes active again (closing a full-screen submenu
+-- like the party screen back to the START menu): the engine is still REBUILDING the
+-- field sprites, so re-acquiring immediately drops the ghost into a half-restored
+-- gSprites and it vanishes until an area change.  Wait a few frames first.
+local pg_field_resume_cd = 0
+local PG_FIELD_RESUME_FRAMES = 12
+
+-- Chosen-trainer broadcast: the partner's ghost should show THEIR trainer (RR has
+-- several selectable avatars), not a clone of the viewer.  sprite.images/anims are
+-- ROM ptrs (identical on both ROMs); the palette ROM data ptr is resolved from the
+-- GI's palTag via the OW sprite-palette table.  Cached by gfx — recomputed only when
+-- the player picks a different trainer.
+local pg_tr_gfx = -1
+local pg_tr_imgs, pg_tr_anim, pg_tr_pal = 0, 0, 0
+local function pg_in_rom(p) return p >= 0x08000000 and p < 0x0A000000 end
+local function pg_resolve_palette(palTag)
+    local base = M.TRAINER_PAL_TABLE_ADDR
+    if not base or palTag == 0 then return 0 end
+    for i = 0, 1023 do
+        local e = base + i * 8
+        if memory.read_u16_le(e + 4) == palTag then
+            local d = memory.read_u32_le(e)
+            if pg_in_rom(d) then return d end
+        end
+    end
+    return 0
+end
+-- images, anims, pal ROM ptrs for the player's current trainer (0,0,0 if unavailable
+-- → receiver clones the local player as before).
+local function pg_trainer_fields(ob, sid)
+    if not (M.TRAINER_GI_TABLE_ADDR and sid and sid < 64) then return 0, 0, 0 end
+    local gfx = memory.read_u8(ob + 0x05)
+    if gfx ~= pg_tr_gfx then
+        pg_tr_gfx = gfx
+        local sa = M.GSPRITES_BASE + sid * (M.SPRITE_STRIDE or 0x44)
+        pg_tr_imgs = memory.read_u32_le(sa + 0x0C)
+        pg_tr_anim = memory.read_u32_le(sa + 0x08)
+        local gi = memory.read_u32_le(M.TRAINER_GI_TABLE_ADDR + gfx * 4)
+        local palTag = pg_in_rom(gi) and memory.read_u16_le(gi + 0x02) or 0
+        pg_tr_pal = pg_resolve_palette(palTag)
+    end
+    if pg_in_rom(pg_tr_imgs) then return pg_tr_imgs, pg_tr_anim, pg_tr_pal end
+    return 0, 0, 0
+end
 
 -- ── Deferred sync state (declared before dispatch_commands uses them) ─────────
 local pending_sync_cmds = {}  -- deferred box_mon / party_mon commands
@@ -1453,13 +1511,16 @@ local function on_frame()
             local gan = (sid < 64)
                 and memory.read_u8(M.GSPRITES_BASE + sid * (M.SPRITE_STRIDE or 0x44) + 0x2A)
                 or 0
+            local timgs, tanim, tpal = pg_trainer_fields(ob, sid)
             do  -- always send (no idle-dedup) so the ghost stays alive when idle.
                 -- x,y are now WORLD PIXELS (sub-pixel precise), not tiles.
                 send({event = "ghost_pos", mg = frame_map_g, mn = frame_map_n,
-                      x = wx, y = wy, f = gf, mv = gmv, an = gan}, "ghost_pos", true, true)
-                -- Cache the last overworld pos so we can keep the partner's ghost
-                -- alive (frozen) during OUR battle (replayed with bt=1 below).
-                pg_last_world = {mg = frame_map_g, mn = frame_map_n, x = wx, y = wy, f = gf}
+                      x = wx, y = wy, f = gf, mv = gmv, an = gan,
+                      imgs = timgs, anim = tanim, pal = tpal}, "ghost_pos", true, true)
+                -- Cache the last overworld pos + trainer so we can keep the partner's
+                -- ghost alive (frozen, correct trainer) during OUR battle (bt=1 below).
+                pg_last_world = {mg = frame_map_g, mn = frame_map_n, x = wx, y = wy, f = gf,
+                                 imgs = timgs, anim = tanim, pal = tpal}
                 pg_tx_count = pg_tx_count + 1
                 if not pg_first_tx_logged then
                     pg_first_tx_logged = true
@@ -1487,7 +1548,8 @@ local function on_frame()
         -- the thing that crashed the round-6 attempt is independently gated out.
         local w = pg_last_world
         send({event = "ghost_pos", mg = w.mg, mn = w.mn, x = w.x, y = w.y,
-              f = w.f, mv = 0, an = 0, bt = 1}, "ghost_pos", true, true)
+              f = w.f, mv = 0, an = 0, bt = 1,
+              imgs = w.imgs or 0, anim = w.anim or 0, pal = w.pal or 0}, "ghost_pos", true, true)
         if not pg_bt_logged then
             pg_bt_logged = true
             console.log("[SLink-FRLGE] Peer-ghost: in-battle keepalive (bt=1) — partner's ghost will freeze, not vanish.")
@@ -3466,15 +3528,21 @@ local function on_frame()
             end
             if pg_field_cb2 ~= nil then field_active = (cb2 == pg_field_cb2) end
             if field_active ~= pg_field_active_prev then
+                -- On RETURN to the field/menu-overlay (false→true), give the engine
+                -- time to rebuild the field sprites before we re-acquire (fixes the
+                -- ghost vanishing when going party screen → START menu).
+                if field_active then pg_field_resume_cd = PG_FIELD_RESUME_FRAMES end
                 pg_field_active_prev = field_active
                 console.log(string.format(
                     "[SLink-FRLGE] Peer-ghost field_active=%s (cb2=0x%08X field=0x%08X)",
                     tostring(field_active), cb2, pg_field_cb2 or 0))
             end
+            if pg_field_resume_cd > 0 then pg_field_resume_cd = pg_field_resume_cd - 1 end
         end
 
         local pg_settled = is_overworld
             and field_active
+            and pg_field_resume_cd == 0
             and post_battle_frames == 0
             and sync_cooldown == 0
             and (post_eob_frames == 0 or M.isPostBattleSettled())
@@ -3550,4 +3618,17 @@ end
 seed_known_keys_from_boxes()
 
 event.onframeend(on_frame_safe, "t4_events")
+
+-- Peer-ghost interaction guard (runs BEFORE the engine processes the frame's input):
+-- suppress the ghost's collision object-event on the exact frame the player presses A
+-- while facing it, so the engine can't fire the null-template garbage script (softlock).
+-- Re-armed every frame by PG.on_frame at frame end → collision stays intact otherwise.
+if peer_ghost_enabled then
+    event.onframestart(function()
+        local ok, pad = pcall(joypad.get)
+        local a = ok and pad and (pad.A or pad["A"]) and true or false
+        PG.guard_interaction(a)
+    end, "t4_pg_guard")
+end
+
 console.log("[SLink-FRLGE] Running — play normally to trigger events…")

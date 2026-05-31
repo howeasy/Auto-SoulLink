@@ -68,6 +68,7 @@ local OBJ_STRIDE = 0x24
 local OBJ_COUNT  = 16
 local OFF_FLAGS, OFF_SPR_ID, OFF_GFX_ID = 0x00, 0x04, 0x05
 local OFF_MOV_TYPE, OFF_LOCAL_ID, OFF_MAP_N, OFF_MAP_G = 0x06, 0x08, 0x09, 0x0A
+local OFF_INIT_X, OFF_INIT_Y = 0x0C, 0x0E   -- initialCoords (= template x/y)
 local OFF_CURX, OFF_CURY, OFF_PREVX, OFF_PREVY = 0x10, 0x12, 0x14, 0x16
 local OFF_FACING = 0x18
 
@@ -431,6 +432,98 @@ local function crossingToggle()
     flush()
 end
 
+-- ── (C) FIND the current-map object-event TEMPLATE array (for the dialogue) ───────
+-- When you press A facing an NPC, the engine looks up its interaction script via
+-- GetObjectEventTemplateByLocalIdAndMap(localId, ...) → gSaveBlock1Ptr->
+-- objectEventTemplates for the current map.  Our ghost (localId 0xFD) has no entry
+-- → null-template deref → garbage script → SOFTLOCK.  To give it a real dialogue we
+-- must inject a template here.  Find the array by correlating ACTIVE NPCs: a real
+-- NPC's template has the same localId and (x,y) = its initialCoords minus a constant
+-- map offset.  We scan SaveBlock1 for an array (try strides 0x18/0x1C/0x20) where
+-- ≥2 NPCs match with a CONSISTENT coord delta, then dump a matched entry so we can
+-- read the script-pointer offset.
+local function findTemplates()
+    local sb1 = r32(SB1_PTR)
+    if not in_ewram(sb1) then con("[F7] SaveBlock1 ptr bad."); return end
+    local anchors = {}
+    for slot = 1, OBJ_COUNT - 1 do
+        local oa = OBJ_BASE + slot * OBJ_STRIDE
+        if (r8(oa + OFF_FLAGS) & 0x01) ~= 0 then
+            local lid = r8(oa + OFF_LOCAL_ID)
+            if lid ~= 0xFF and lid ~= 0xFD then
+                anchors[#anchors+1] = { lid = lid, ix = rs16(oa+OFF_INIT_X), iy = rs16(oa+OFF_INIT_Y) }
+            end
+        end
+    end
+    log(""); log(fmt("[F7] template-array search: %d NPC anchors, SaveBlock1=%s", #anchors, hex(sb1)))
+    if #anchors < 2 then con("[F7] need >=2 real NPCs — go to a town."); flush(); return end
+    con(fmt("[F7] Scanning SaveBlock1 for objectEventTemplates (%d anchors)... please wait.", #anchors))
+
+    local STRIDES = { 0x18, 0x1C, 0x20, 0x10, 0x14 }
+    local best = nil   -- {base, stride, votes, dx, dy}
+    local function entry_match(addr, a, dx, dy)
+        return r8(addr) == a.lid
+           and rs16(addr+4) == a.ix - dx and rs16(addr+6) == a.iy - dy
+    end
+    for _, S in ipairs(STRIDES) do
+        for base = sb1, sb1 + 0x8000 - S*64, 4 do
+            -- find anchor[1] at some entry k, establishing the coord delta
+            for k = 0, 63 do
+                local e = base + k*S
+                if r8(e) == anchors[1].lid then
+                    local dx = anchors[1].ix - rs16(e+4)
+                    local dy = anchors[1].iy - rs16(e+6)
+                    if dx >= 0 and dx <= 16 and dy >= 0 and dy <= 16 then
+                        -- verify other anchors with the SAME delta somewhere in 0..63
+                        local votes = 1
+                        for i = 2, #anchors do
+                            for k2 = 0, 63 do
+                                if entry_match(base + k2*S, anchors[i], dx, dy) then votes = votes + 1; break end
+                            end
+                        end
+                        if votes >= 2 and (not best or votes > best.votes) then
+                            best = { base = base, stride = S, votes = votes, dx = dx, dy = dy }
+                        end
+                    end
+                end
+            end
+            if best and best.votes >= #anchors then break end
+        end
+        if best and best.votes >= #anchors then break end
+    end
+
+    if best then
+        log(fmt("  ✓ objectEventTemplates = %s  stride=0x%02X  coordOffset=(%d,%d)  %d/%d NPCs matched",
+            hex(best.base), best.stride, best.dx, best.dy, best.votes, #anchors))
+        log(fmt("    (= SaveBlock1 + 0x%X)", best.base - sb1))
+        -- dump a matched entry's bytes + candidate script pointers (look for a ROM ptr)
+        local e = base_of_first_match(best, anchors) or best.base
+        log("    matched-entry dump (offset: byte / u16 / u32):")
+        for off = 0x00, best.stride - 1, 4 do
+            log(fmt("      +0x%02X : %02X %02X %02X %02X   u32=%s%s",
+                off, r8(e+off), r8(e+off+1), r8(e+off+2), r8(e+off+3),
+                hex(r32(e+off)), in_rom(r32(e+off)) and "  <ROM ptr (script?)" or ""))
+        end
+        con(fmt("[F7] ✓ templates=%s stride=0x%02X off=(%d,%d) — see log for script-ptr offset.",
+            hex(best.base), best.stride, best.dx, best.dy))
+    else
+        log("  ✗ template array not found (stride/offset differ, or templates in ROM not SB1).")
+        con("[F7] ✗ not found — see log.")
+    end
+    flush()
+end
+-- locate the address of the first matched anchor entry (for the dump)
+function base_of_first_match(best, anchors)
+    for k = 0, 63 do
+        local e = best.base + k*best.stride
+        if r8(e) == anchors[1].lid
+           and rs16(e+4) == anchors[1].ix - best.dx and rs16(e+6) == anchors[1].iy - best.dy then
+            return e
+        end
+    end
+    return nil
+end
+
 -- per-frame work for F3 (drive the mon below the player) + F4 (log the crossing)
 local function onFramePhase2()
     if _mon_active and _mon_spr then
@@ -496,6 +589,7 @@ event.onframeend(function()
     if k["F4"] and not _prev["F4"] then crossingToggle() end
     if k["F5"] and not _prev["F5"] then TARGET_GFX = math.max(0, TARGET_GFX-1); con(fmt("[F5] TARGET_GFX=%d", TARGET_GFX)) end
     if k["F6"] and not _prev["F6"] then TARGET_GFX = TARGET_GFX+1; con(fmt("[F6] TARGET_GFX=%d", TARGET_GFX)) end
+    if k["F7"] and not _prev["F7"] then findTemplates() end
     onFramePhase2()
     _prev = k
 end, "ghost_phase2_keys")
@@ -509,6 +603,7 @@ con("  SLINK PEER-GHOST — PHASE 2 discovery (mon graphics + route crossing)")
 con("    F1: find gObjectEventGraphicsInfoPointers   F2: SURVEY table (find mon block)")
 con("    F5/F6: TARGET_GFX − / +     F3: spawn-render TARGET_GFX below you")
 con("    F4: route-crossing tracker (toggle, then walk across a route border)")
+con("    F7: find objectEventTemplates array (in a TOWN with NPCs) -> enables the dialogue")
 con(fmt("  Output: %s", OUT_PATH or "(file write failed)"))
 con("════════════════════════════════════════════════════════════════")
 con("")

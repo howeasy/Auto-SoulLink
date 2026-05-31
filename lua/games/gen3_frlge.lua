@@ -409,6 +409,16 @@ GEN3.profiles = {
         -- wrong value on an unverified profile self-disables (falls back to the
         -- collision self-heal) rather than corrupting EWRAM.
         TILE_ALLOC_BITMAP_ADDR     = 0x02017D9C,
+        -- Trainer-sprite feature: render the PARTNER's CHOSEN trainer (RR has several
+        -- selectable avatars).  RR loads custom trainers DYNAMICALLY, so the graphics-
+        -- info entry is a stub — but the player sprite's live images/anims ptrs are
+        -- ROM (shared by both ROMs), so the sender broadcasts those + the palette ROM
+        -- ptr and the receiver renders the trainer from its own ROM.  Validated via
+        -- test_trainer_sprite.lua (F1/F2/F8/F7).
+        TRAINER_GI_TABLE_ADDR      = 0x0934FCB8,  -- gObjectEventGraphicsInfoPointers (palTag@+0x02)
+        TRAINER_PAL_TABLE_ADDR     = 0x0835CCC8,  -- sObjectEventSpritePalettes ({u32 data, u16 tag} ×8)
+        PLTT_FADED_OBJ_ADDR        = 0x020377F8,  -- gPlttBufferFaded OBJ slot-0 (EWRAM; DMA'd → palette RAM)
+        PLTT_UNFADED_OBJ_ADDR      = 0x020373F8,  -- gPlttBufferUnfaded OBJ slot-0 (survives day/night recompute)
         -- Camera scroll offsets (CFRU BPRE.ld): used to recover the local
         -- player's SMOOTH sub-tile position so the ghost doesn't lurch with the
         -- player's discrete tile.  s16 each.

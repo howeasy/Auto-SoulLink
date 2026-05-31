@@ -17,13 +17,15 @@ from server.state import SoulLinkState
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-def _gp(player: str, mg: int, mn: int, x: int, y: int, f: int = 1, mv: int = 0) -> dict:
+def _gp(player: str, mg: int, mn: int, x: int, y: int, f: int = 1, mv: int = 0,
+        imgs: int = 0, anim: int = 0, pal: int = 0) -> dict:
     return {
         "event": "ghost_pos",
         "player": player,
         "mg": mg, "mn": mn,
         "x": x, "y": y,
         "f": f, "mv": mv,
+        "imgs": imgs, "anim": anim, "pal": pal,
     }
 
 
@@ -72,6 +74,19 @@ def test_queues_partner_command_when_same_map():
     g = ghosts[0]
     assert (g["mg"], g["mn"], g["x"], g["y"], g["f"], g["mv"]) == (3, 5, 14, 9, 2, 1)
     assert g["name"] == "ALICE"
+
+
+def test_chosen_trainer_graphics_relay_to_partner():
+    """The partner's chosen-trainer pointers (images/anims/palette) relay verbatim so
+    the ghost can render their actual trainer, not a clone of the viewer."""
+    state = SoulLinkState()
+    state.handle_event("b", _gp("b", mg=3, mn=5, x=20, y=20))
+    state.handle_event("a", _gp("a", mg=3, mn=5, x=14, y=9,
+                                imgs=0x0915B6F0, anim=0x0915B0F4, pal=0x092FB8CC))
+    g = _cmds_of(state.handle_event("b", {"event": "tick"}), "ghost_pos")[0]
+    assert g["imgs"] == 0x0915B6F0
+    assert g["anim"] == 0x0915B0F4
+    assert g["pal"] == 0x092FB8CC
 
 
 def test_no_ghost_until_recipient_reports_own_position():

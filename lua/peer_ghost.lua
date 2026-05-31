@@ -39,6 +39,7 @@ local r16  = memory.read_u16_le
 local rs16 = memory.read_s16_le
 local w8   = memory.write_u8
 local w16  = memory.write_u16_le
+local w32  = memory.write_u32_le
 local ws16 = memory.write_s16_le
 
 -- ── config + state ────────────────────────────────────────────────────────────
@@ -55,6 +56,7 @@ local cooldown   = 0
 local last_anim  = nil
 local ghost_tile = nil              -- dynamically-claimed free OBJ-VRAM tile base
 local reserved_tile = nil           -- tile base currently RESERVED in the alloc bitmap (nil = none)
+local applied_imgs  = nil           -- partner-trainer images ptr currently applied (nil = cloned local look)
 local dbg_frames = 0   -- throttle for the [PG-DBG] diagnostic log
 local spin_tick  = 0   -- drives the "partner in battle" spin-in-place indicator
 -- A sprite slot left behind by suspend() (menu/battle): we can't clear its inUse
@@ -187,9 +189,15 @@ local function bitmap_set_range(tile, count, set)
     end
 end
 
+-- Re-enabled: the corruption was PALETTE, not tiles (disabling reservation didn't
+-- help), so the reservation stays on for proactive tile protection.  The leak it had
+-- on connection crossings is fixed (free_reserved on map change, below).
+local TILE_RESERVE_ENABLED = true
+
 -- Reserve `newtile`'s block (freeing any previously-reserved block first).  No-op
--- if the bitmap address isn't trustworthy this frame.
+-- if reservation is disabled or the bitmap address isn't trustworthy this frame.
 local function reserve_tiles(newtile)
+    if not TILE_RESERVE_ENABLED then return end
     if not bitmap_trusted() then reserved_tile = nil; return end
     if reserved_tile and reserved_tile ~= newtile then
         bitmap_set_range(reserved_tile, GHOST_TILE_COUNT, false)
@@ -230,6 +238,66 @@ local function ghost_tiles_collide()
     return false
 end
 
+-- ── partner's chosen trainer (override the cloned local-player look) ──────────────
+-- RR custom trainers load dynamically, so we can't rebuild one from a graphicsId —
+-- but the partner broadcasts its live sprite.images/anims ROM ptrs (identical on
+-- both ROMs) + the palette ROM ptr.  We override the cloned ghost sprite with those:
+-- images/anims directly, and the palette into a fresh OBJ slot via the EWRAM shadow
+-- buffers (a direct palette-RAM write is overwritten each frame by the engine's
+-- day/night transfer).  No-op when the partner sent no trainer info → keeps cloning
+-- the local player (graceful fallback).
+
+-- The shadow-buffer Faded OBJ slot-0 mirrors live OBJ palette RAM; validate that
+-- before trusting the baked address (a wrong addr self-disables, no EWRAM scribbling).
+local function pltt_trusted()
+    if not (cfg.pltt_faded_obj and cfg.obj_pltt) then return false end
+    return r16(cfg.pltt_faded_obj) == r16(cfg.obj_pltt)
+end
+
+-- Free OBJ palette slot (not referenced by any active sprite), high-first.
+local function claim_palette_slot()
+    local used = {}
+    for s = 0, 63 do
+        local sa = cfg.gsprites + s * cfg.spr_stride
+        if (r8(sa + cfg.spr_byte3e) & 0x01) ~= 0 then
+            used[(r16(sa + 0x04) >> 12) & 0x0F] = true
+        end
+    end
+    for slot = 15, 0, -1 do if not used[slot] then return slot end end
+    return 15
+end
+
+-- DISABLED pending a fix: showing the partner's chosen trainer regressed VRAM —
+-- both player/ghost AND battle sprites corrupt when a player leaves the area.  The
+-- shared-state suspects are the palette write into gPlttBuffer (a wrongly-"free"
+-- slot clobbers other sprites' colours, incl. battle, since the OBJ palette buffer
+-- spans overworld+battle) and the foreign images/anims override (a mis-sized frame
+-- DMA can spill into neighbouring VRAM).  Flag off → ghost clones the local player
+-- (the known-good behaviour).  Re-enable per-piece once the palette slot is made
+-- provably free + the frame size is bounded.
+local TRAINER_RENDER_ENABLED = false
+
+local function apply_trainer(naddr)
+    if not TRAINER_RENDER_ENABLED then return end
+    if not (ghost and ghost.imgs and ghost.imgs ~= 0 and cfg.spr_images) then return end
+    w32(naddr + cfg.spr_images, ghost.imgs)
+    if ghost.anim and ghost.anim ~= 0 and cfg.spr_anims then w32(naddr + cfg.spr_anims, ghost.anim) end
+    if ghost.pal and ghost.pal ~= 0 and pltt_trusted() then
+        local slot = claim_palette_slot()
+        for i = 0, 15 do
+            local c = r16(ghost.pal + i * 2)
+            w16(cfg.pltt_unfaded_obj + slot * 0x20 + i * 2, c)   -- source (survives the day/night recompute)
+            w16(cfg.pltt_faded_obj   + slot * 0x20 + i * 2, c)   -- transferred → palette RAM
+            w16(cfg.obj_pltt         + slot * 0x20 + i * 2, c)   -- immediate (this frame)
+        end
+        local a2 = r16(naddr + 0x04)
+        w16(naddr + 0x04, (a2 & 0x0FFF) | ((slot & 0x0F) << 12))   -- oam.paletteNum = slot
+    end
+    w8(naddr + cfg.spr_byte3f, r8(naddr + cfg.spr_byte3f) | 0x04)   -- animBeginning → re-DMA frame0
+    last_anim = nil
+    applied_imgs = ghost.imgs
+end
+
 -- ── spawn / despawn ───────────────────────────────────────────────────────────
 
 -- Clone the player's trainer sprite into free slots; pin near the partner tile.
@@ -267,6 +335,8 @@ local function acquire()
     ws16(naddr + cfg.spr_data0, fo)                                 -- data[0] = our objevent
     w8(naddr + cfg.spr_byte3f, r8(naddr + cfg.spr_byte3f) | 0x04)   -- animBeginning
     w8(naddr + cfg.spr_byte2c, r8(naddr + cfg.spr_byte2c) & 0xBF)   -- animPaused = 0
+    applied_imgs = nil
+    apply_trainer(naddr)   -- show the PARTNER's chosen trainer (no-op if not sent)
 
     -- backing object-event: pinned later each frame; init at the partner tile.
     local nobj = cfg.obj_base + fo * cfg.obj_stride
@@ -298,8 +368,18 @@ local function despawn(safe)
             w8(b, r8(b) & 0xFE)   -- clear inUse
         end
         free_reserved()           -- give our OBJ-VRAM tiles back to the allocator
+        applied_imgs = nil
     else
-        reserved_tile = nil       -- map change: engine reset the bitmap; just drop the ref
+        -- Map change.  FREE our reserved bits rather than abandoning them: a WARP
+        -- already cleared them (suspend() ran during the fade → reserved_tile nil →
+        -- no-op here), but a SEAMLESS CONNECTION CROSSING does NOT reset the alloc
+        -- bitmap, so abandoning the ref LEAKS one 8-tile reservation per crossing.
+        -- Those leaks accumulate until AllocSpriteTiles can't find a free run and a
+        -- real sprite lands on garbage tiles (the "corrupts after several area
+        -- transitions").  Our tiles are HIGH and new-map sprites allocate LOW, so
+        -- clearing high bits never un-reserves a freshly-spawned sprite.
+        free_reserved()
+        applied_imgs = nil
     end
     objslot, sprslot = nil, nil
     last_anim = nil
@@ -325,6 +405,7 @@ function PG.init(c)
     last_map_g, last_map_n = -1, -1
     cooldown, last_anim = 0, nil
     ghost_tile, reserved_tile = nil, nil
+    applied_imgs = nil
     spin_tick = 0
 end
 
@@ -338,7 +419,10 @@ function PG.on_ghost_pos(cmd)
         -- partner's live animNum (walk/run) for 1:1 motion; only trusted while
         -- moving and within the on-foot anim range (else fall back to walk).
         an = (cmd.an and cmd.an >= 0 and cmd.an <= 23) and cmd.an or nil,
-        bt = cmd.bt == 1 and 1 or 0,   -- partner is in a battle → freeze + blink
+        bt = cmd.bt == 1 and 1 or 0,   -- partner is in a battle → freeze + spin
+        -- partner's chosen-trainer graphics (ROM ptrs + palette ROM ptr); nil/0 =
+        -- unknown → clone the local player (graceful fallback).
+        imgs = cmd.imgs, anim = cmd.anim, pal = cmd.pal,
     }
     -- Snap the interpolation target on first sight or a big jump (warp/fly).
     if not ghost or ghost.mg ~= g.mg or ghost.mn ~= g.mn
@@ -393,6 +477,31 @@ function PG.suspend()
     base_cx, base_cy = nil, nil   -- re-calibrate the camera baseline on return
 end
 
+-- Called at FRAME START (before the engine processes this frame's input).  With
+-- the backing object-event sitting on the partner's tile for collision, pressing A
+-- while facing it triggers the engine's interaction → a localId-0xFD lookup hits a
+-- null map template → garbage script → SOFTLOCK.  Until we give it a real script
+-- (the conversation dialogue), suppress it: if the player is facing the ghost's
+-- tile AND A is pressed this frame, deactivate our object-event so the engine finds
+-- nothing to interact with.  on_frame re-activates it at frame end, so collision is
+-- intact every frame except the one where A is pressed (A doesn't move you → no
+-- clip).  a_pressed is the emulated A-button state for the upcoming frame.
+function PG.guard_interaction(a_pressed)
+    if not cfg or not a_pressed or not ghost then return end
+    if not spawned() or not slot_valid() then return end
+    local px, py = player_tile()
+    local f = r8(cfg.obj_base + cfg.off_facing) & 0x0F   -- 1=down 2=up 3=left 4=right
+    local fx, fy = px, py
+    if     f == 1 then fy = py + 1
+    elseif f == 2 then fy = py - 1
+    elseif f == 3 then fx = px - 1
+    elseif f == 4 then fx = px + 1 end
+    if fx == round(ghost.x / cfg.tile_px) and fy == round(ghost.y / cfg.tile_px) then
+        local oa = cfg.obj_base + objslot * cfg.obj_stride
+        w8(oa + cfg.off_flags, r8(oa + cfg.off_flags) & 0xFE)   -- deactivate for this frame
+    end
+end
+
 function PG.on_frame()
     if not cfg then return end
 
@@ -427,7 +536,14 @@ function PG.on_frame()
             end
         end
         objslot, sprslot = nil, nil
-        reserved_tile = nil       -- engine reset the bitmap on map load; drop ref, don't clear
+        -- FREE our reserved tile bits (don't abandon them): a warp already cleared
+        -- them (suspend ran → no-op), but a seamless connection crossing does NOT
+        -- reset the alloc bitmap, so abandoning leaks one reservation per crossing →
+        -- the bitmap fills → AllocSpriteTiles fails → real sprites get garbage tiles
+        -- (the corruption after several area transitions).  High bits, new sprites
+        -- are low → safe to clear.
+        free_reserved()
+        applied_imgs = nil
         last_anim = nil
         base_cx, base_cy = nil, nil
         cooldown = RESPAWN_COOLDOWN
@@ -481,19 +597,29 @@ function PG.on_frame()
     local nsa  = cfg.gsprites + sprslot * cfg.spr_stride
     local nobj = cfg.obj_base + objslot * cfg.obj_stride
 
-    -- Pin the backing object-event to the LOCAL PLAYER's tile (NOT the partner's).
-    -- Fixes two distinct bugs:
-    --   • Off-screen cull: RemoveObjectEventIfOutsideView frees an object-event by
-    --     its currentCoords; pinning it to the player keeps it permanently in view,
-    --     so the engine never reclaims our slot when the partner walks off-screen.
-    --   • Talk-to-ghost warp: an object-event sitting on the player's OWN tile is
-    --     never the tile the player faces, so pressing A can't target the ghost and
-    --     fire a garbage interaction script (which teleported to a corrupted map).
-    -- The sprite still renders at the partner's location because we overwrite the
-    -- sprite's pos1 below, AFTER the engine's per-frame object-event update.
+    -- Re-apply the partner's trainer graphics if it changed since we last applied
+    -- (they picked a different avatar mid-session) — acquire() applies on first spawn.
+    if ghost.imgs ~= applied_imgs then apply_trainer(nsa) end
+
+    -- Backing object-event placement = COLLISION tile.
+    --   • On-screen: put it on the PARTNER's actual tile so you physically BUMP into
+    --     each other (the ghost IS the other player).  Match the player's elevation
+    --     so the engine registers the collision (mismatched elevations pass through).
+    --   • Off-screen: pin to the LOCAL PLAYER's tile so RemoveObjectEventIfOutsideView
+    --     never culls our slot (nothing to collide with off-screen anyway, and the
+    --     sprite is hidden below).
+    -- The sprite renders at the partner's position via pos1 below regardless.
+    -- NOTE: with the object-event on the partner's faced tile, pressing A toward the
+    -- ghost now triggers the engine's interaction (localId 0xFD, zeroed script).  We
+    -- are TESTING whether that's a safe no-op; if it warps/crashes we neutralize it.
+    local gtx = round(ghost.x / cfg.tile_px)
+    local gty = round(ghost.y / cfg.tile_px)
+    local ctx, cty = px, py
+    if not off_screen then ctx, cty = gtx, gty end
     w8(nobj + cfg.off_flags, r8(nobj + cfg.off_flags) | 0x01)
-    ws16(nobj + cfg.off_curr_x, px); ws16(nobj + cfg.off_curr_y, py)
-    ws16(nobj + cfg.off_prev_x, px); ws16(nobj + cfg.off_prev_y, py)
+    w8(nobj + cfg.off_elevation, r8(cfg.obj_base + cfg.off_elevation))  -- match player elevation
+    ws16(nobj + cfg.off_curr_x, ctx); ws16(nobj + cfg.off_curr_y, cty)
+    ws16(nobj + cfg.off_prev_x, ctx); ws16(nobj + cfg.off_prev_y, cty)
 
     -- inUse + coordOffset on; hide the sprite when off-screen.  Rendering a sprite
     -- far outside the viewport risks OAM coordinate wrap-around (9-bit X / 8-bit Y)
@@ -519,8 +645,40 @@ function PG.on_frame()
         w8(nsa + cfg.spr_byte3f, r8(nsa + cfg.spr_byte3f) | 0x04)   -- animBeginning → re-DMA
         last_anim = nil
     end
+    -- Keep our claimed tiles, AND re-sync the OBJ palette slot every frame.  The
+    -- ghost cloned the player's oam.paletteNum once, but the engine reassigns OBJ
+    -- palette slots as NPCs come and go and doesn't know our injected ghost is using
+    -- one — so the cloned slot goes stale and the ghost renders an NPC's colours
+    -- ("correct sprite, wrong colours").  The PLAYER's slot is engine-protected
+    -- (always active), so following it each frame keeps the ghost's colours correct.
+    -- (Only while we're NOT painting a partner-trainer palette — applied_imgs nil.)
+    -- Give the ghost its OWN OBJ palette slot (a per-frame copy of the player's
+    -- palette) instead of SHARING the player's slot.  Sharing slot 0 desynced the
+    -- engine's palette ref-counting → it freed/reused slot 0 → BOTH player and ghost
+    -- corrupted ("NPC colours", confirmed: gPal==pPal==slot0 with changing data).  On
+    -- our own high slot the engine never frees the player's slot because of us → the
+    -- player stays correct, and we keep the ghost correct by copying the player's
+    -- palette (all three buffers, so no double day/night tint) into our slot each
+    -- frame.  (A RESERVED slot via the engine's palette-tag table would also stop an
+    -- NPC ever reusing slot 15, but that table isn't located; a high slot is rarely
+    -- contested.)  When a partner-trainer palette is loaded (applied_imgs ~= nil) we
+    -- keep that instead of copying the player's.
+    local GHOST_PAL_SLOT = 15
+    local pal_bits
+    if applied_imgs == nil and pltt_trusted() then
+        local psrc = (r16(cfg.gsprites + p_sid * cfg.spr_stride + 0x04) >> 12) & 0x0F
+        for i = 0, 15 do
+            local off = i * 2
+            w16(cfg.pltt_unfaded_obj + GHOST_PAL_SLOT*0x20 + off, r16(cfg.pltt_unfaded_obj + psrc*0x20 + off))
+            w16(cfg.pltt_faded_obj   + GHOST_PAL_SLOT*0x20 + off, r16(cfg.pltt_faded_obj   + psrc*0x20 + off))
+            w16(cfg.obj_pltt         + GHOST_PAL_SLOT*0x20 + off, r16(cfg.obj_pltt         + psrc*0x20 + off))
+        end
+        pal_bits = GHOST_PAL_SLOT << 12
+    else
+        pal_bits = r16(nsa + 0x04) & 0xF000   -- trainer palette already loaded, or untrusted addr
+    end
     local attr2 = r16(nsa + 0x04)
-    w16(nsa + 0x04, (attr2 & 0xFC00) | ((ghost_tile or cfg.ghost_tile) & 0x03FF))  -- keep our claimed tiles
+    w16(nsa + 0x04, pal_bits | (attr2 & 0x0C00) | ((ghost_tile or cfg.ghost_tile) & 0x03FF))
 
     -- Position: MAP-FIXED, exactly like the engine renders a real NPC.
     -- DATA-CONFIRMED relationship: playerSprite.pos1 + gSpriteCoordOffset =
@@ -557,13 +715,21 @@ function PG.on_frame()
         -- Read back our ghost's ACTUAL oam.tileNum: if it differs from what we
         -- claimed (ghost_tile), the engine reallocated our tiles → corruption.
         local actual_gtile = (r16(nsa + 0x04) & 0x03FF)
+        -- Palette: ghost vs player slot + each slot's colour 1 (colour 0 is usually
+        -- transparent).  If gPal slot == pPal slot but colours differ, something is
+        -- wrong with the read; if the colours are an NPC's, the slot data was clobbered.
+        local g_palslot = (r16(nsa + 0x04) >> 12) & 0x0F
+        local p_palslot = (p_sid_dbg < 64) and ((r16(cfg.gsprites + p_sid_dbg * cfg.spr_stride + 0x04) >> 12) & 0x0F) or -1
+        local pltt = cfg.obj_pltt or 0x05000200
+        local g_c1 = r16(pltt + g_palslot * 0x20 + 2)
+        local p_c1 = (p_palslot >= 0) and r16(pltt + p_palslot * 0x20 + 2) or 0
         console.log(string.format(
-            "[PG-DBG] playerTile=(%d,%d) spr=(%d,%d) pTileNum=%d | partnerPx=(%d,%d) disp=(%.0f,%.0f) | ghost pos1=(%d,%d) screen=(%d,%d) C=(%d,%d) slot=%d claimedTile=%d actualTile=%d coff=(%d,%d)",
+            "[PG-DBG] playerTile=(%d,%d) spr=(%d,%d) pTileNum=%d | partnerPx=(%d,%d) disp=(%.0f,%.0f) | ghost pos1=(%d,%d) screen=(%d,%d) C=(%d,%d) slot=%d claimedTile=%d actualTile=%d coff=(%d,%d) | gPal=%d:%04X pPal=%d:%04X",
             px, py, psx, psy, p_tile,
             ghost.x, ghost.y, disp_x, disp_y,
             gx_pos1, gy_pos1, gx_pos1 + coffx, gy_pos1 + coffy,
             base_cx or 0, base_cy or 0, sprslot or -1, ghost_tile or -1, actual_gtile,
-            coffx, coffy))
+            coffx, coffy, g_palslot, g_c1, p_palslot, p_c1))
     end
 
     -- Animation: while moving, mirror the partner's live animNum (walk/run 1:1);

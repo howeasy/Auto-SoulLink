@@ -84,7 +84,13 @@ class PeerPos:
              # walk vs run 1:1 since both players share the on-foot graphic)
     bt: int  # 1 = sender is in a battle (ghost should freeze at this position +
              # show a battle indicator instead of vanishing); 0 = normal overworld
-    ts: float  # server wall-clock receive time (time.time()); used for staleness
+    # Sender's CHOSEN-TRAINER graphics so the ghost shows the partner's actual
+    # trainer (not a clone of the viewer's).  ROM pointers — same on both ROMs.
+    # 0 = unknown → receiver clones the local player.  Opaque to the server.
+    imgs: int = 0  # sprite.images (ROM ptr to the trainer's frame images)
+    anim: int = 0  # sprite.anims  (ROM ptr to the trainer's anim table)
+    pal: int = 0   # palette ROM data ptr (resolved by the sender from its palTag)
+    ts: float = 0.0  # server wall-clock receive time (time.time()); used for staleness
 
 
 @dataclass
@@ -2415,6 +2421,9 @@ class SoulLinkState:
             mv = int(msg.get("mv", 0))
             an = int(msg.get("an", 0))
             bt = int(msg.get("bt", 0))
+            imgs = int(msg.get("imgs", 0))
+            anim = int(msg.get("anim", 0))
+            pal  = int(msg.get("pal", 0))
         except (TypeError, ValueError):
             # Malformed payload — drop silently; sender will resend in 6 frames.
             return
@@ -2429,7 +2438,7 @@ class SoulLinkState:
 
         self.peer_pos[player_id] = PeerPos(
             mg=mg, mn=mn, x=x, y=y, f=f, mv=(1 if mv else 0), an=an,
-            bt=(1 if bt else 0), ts=time.time())
+            bt=(1 if bt else 0), imgs=imgs, anim=anim, pal=pal, ts=time.time())
         if player_id not in self._ghost_rx_logged:
             self._ghost_rx_logged.add(player_id)
             log.info(f"[ghost] first ghost_pos from {player_id}: "
@@ -2484,6 +2493,7 @@ class SoulLinkState:
                 "x":  peer.x,  "y":  peer.y,
                 "f":  peer.f,  "mv": peer.mv,
                 "an": peer.an, "bt": peer.bt,
+                "imgs": peer.imgs, "anim": peer.anim, "pal": peer.pal,
                 "name": self.trainer_names.get(partner, ""),
                 "ts": peer.ts,
             })
