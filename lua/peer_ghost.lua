@@ -56,6 +56,7 @@ local last_anim  = nil
 local ghost_tile = nil              -- dynamically-claimed free OBJ-VRAM tile base
 local reserved_tile = nil           -- tile base currently RESERVED in the alloc bitmap (nil = none)
 local dbg_frames = 0   -- throttle for the [PG-DBG] diagnostic log
+local spin_tick  = 0   -- drives the "partner in battle" spin-in-place indicator
 -- A sprite slot left behind by suspend() (menu/battle): we can't clear its inUse
 -- while the engine has gSprites repurposed, so we remember it and clear it on the
 -- next field frame (safe) — otherwise it lingers as an orphan ghost after a menu.
@@ -85,6 +86,7 @@ local RESPAWN_COOLDOWN = 10    -- small debounce after a map change before respa
 -- facing convention 1=down 2=up 3=left 4=right.
 local function idle_anim(f) return f - 1 end
 local function walk_anim(f) return f + 3 end
+local SPIN_FRAMES = 6   -- frames per facing while spinning the in-battle ghost (~0.4s/rotation)
 
 -- ── small helpers ───────────────────────────────────────────────────────────
 local function round(n) return math.floor(n + 0.5) end
@@ -323,6 +325,7 @@ function PG.init(c)
     last_map_g, last_map_n = -1, -1
     cooldown, last_anim = 0, nil
     ghost_tile, reserved_tile = nil, nil
+    spin_tick = 0
 end
 
 function PG.on_ghost_pos(cmd)
@@ -406,27 +409,17 @@ function PG.on_frame()
 
     local mg, mn = cfg.get_map()
 
-    -- Map change: the engine rebuilt gObjectEvents/gSprites; our slot indices now
-    -- belong to NEW-map objects.  Forget refs WITHOUT writing (deactivating would
-    -- corrupt real new-map NPCs), then wait for the map to settle.
+    -- Map change: the engine may have rebuilt gObjectEvents/gSprites, and even a
+    -- seamless connection crossing clobbers the VRAM tiles our kept sprite points
+    -- at.  ALWAYS tear down + re-acquire on the new map (keeping the slot across a
+    -- crossing rendered the player AND ghost as garbage — reverted).  Forget refs
+    -- WITHOUT writing the object-event into a reused low slot (guard by 0xFD).
     if mg ~= last_map_g or mn ~= last_map_n then
         last_map_g, last_map_n = mg, mn
-        -- Clear our SPRITE slot's inUse before forgetting it.  We allocate sprite
-        -- slots top-down (high indices) and the engine allocates low-first, so the
-        -- new map won't have reused our slot in this frame — making this write
-        -- safe.  Skipping it leaks a stale sprite (our old tiles + pos1) that the
-        -- new map renders as garbage = the "corruption when leaving the area".
-        -- We still must NOT write the object-event (low index, already rebuilt
-        -- into a real new-map NPC).
         if sprslot then
             local b = cfg.gsprites + sprslot * cfg.spr_stride + cfg.spr_byte3e
             w8(b, r8(b) & 0xFE)
         end
-        -- Clear our backing object-event too, or it leaves a phantom collision on
-        -- the tile we warped from (it was pinned to the player's tile each frame).
-        -- GUARD with our localId marker (0xFD): only deactivate if the slot is
-        -- STILL our ghost — if the new map already reused this low slot for a real
-        -- NPC its localId won't be 0xFD, so we never clobber a real NPC.
         if objslot then
             local oa = cfg.obj_base + objslot * cfg.obj_stride
             if r8(oa + cfg.off_local_id) == 0xFD then
@@ -578,7 +571,13 @@ function PG.on_frame()
     -- a single-frame face anim so the ghost stands.
     local want
     if in_battle then
-        want = idle_anim(ghost.f)            -- frozen, standing, while in battle
+        -- IN-BATTLE INDICATOR: spin the trainer in place — cycle the facing every
+        -- SPIN_FRAMES frames through the four face anims (0..3 = S/N/W/E).  A
+        -- stationary trainer rotating in place is an unmistakable, in-engine
+        -- "they're busy / in a battle" cue — no overlay, no second sprite, and it
+        -- reuses the same animNum writes we already do safely.
+        spin_tick = spin_tick + 1
+        want = (spin_tick // SPIN_FRAMES) % 4
     elseif ghost.mv == 1 then
         want = ghost.an or walk_anim(ghost.f)
     else
