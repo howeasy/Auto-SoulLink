@@ -388,6 +388,39 @@ GEN3.profiles = {
         -- gPlayerParty by ≥3 PIDs, a borrowed-party swap is active and
         -- this address is the authoritative real-party reference.
         REAL_PARTY_BACKUP_ADDR           = 0x02025564,
+        -- ── Peer-ghost overworld rendering (Phase 0-confirmed on RR 4.1) ──────
+        -- Render the SoulLink partner as a live overworld NPC.  gObjectEvents +
+        -- gSprites are vanilla FireRed (BPRE.ld) symbols that CFRU preserves;
+        -- confirmed live via lua/tests/test_overworld_discovery.lua (F1/F5/F9).
+        -- Struct field offsets are fixed pret ObjectEvent/Sprite layout and live
+        -- in the gen-3 client's peer-ghost cfg (clients/gen3_frlge_client.lua).
+        OBJ_EVENTS_BASE_ADDR       = 0x02036E38,  -- gObjectEvents; slot 0 = player
+        OBJ_EVENT_STRIDE           = 0x24,
+        OBJ_EVENT_COUNT            = 16,
+        GSPRITES_BASE              = 0x0202063C,  -- gSprites (CFRU BPRE.ld)
+        SPRITE_STRIDE              = 0x44,
+        GHOST_SPRITE_TILE          = 0x300,       -- fallback free OBJ-VRAM tile (peer_ghost claims dynamically)
+        -- gSpriteTileAllocBitmap: bit b == 1 ⟺ OBJ-VRAM tile b is allocated.
+        -- peer_ghost RESERVES its claimed tiles here so AllocSpriteTiles never
+        -- hands them to a real sprite (eliminates intermittent VRAM corruption).
+        -- Discovered via test_overworld_discovery.lua F12 (coverage + high-tiles-
+        -- free + aligned; density tracked live tile count across two maps).
+        -- peer_ghost re-validates the address each frame before writing, so a
+        -- wrong value on an unverified profile self-disables (falls back to the
+        -- collision self-heal) rather than corrupting EWRAM.
+        TILE_ALLOC_BITMAP_ADDR     = 0x02017D9C,
+        -- Camera scroll offsets (CFRU BPRE.ld): used to recover the local
+        -- player's SMOOTH sub-tile position so the ghost doesn't lurch with the
+        -- player's discrete tile.  s16 each.
+        COORD_OFFSET_X_ADDR        = 0x02021BC8,  -- gSpriteCoordOffsetX
+        COORD_OFFSET_Y_ADDR        = 0x02021BCA,  -- gSpriteCoordOffsetY
+        -- gMain.callback2 (BPRE.ld gMain 0x030030F0 + GMAIN_CB2_OFFSET 0x04).
+        -- The active-screen pointer: equals the overworld field callback only
+        -- when the field is running.  Used to suspend the peer-ghost during
+        -- menus (bag/Start/party) + transitions, which `is_overworld` (=not in
+        -- battle) cannot detect.  We AUTO-CALIBRATE the field value while the
+        -- player walks (can't walk in a menu), so we needn't hardcode it.
+        GMAIN_CALLBACK2_ADDR       = 0x030030F4,
     },
     -- Emerald US 1.0 — stub profile (addresses TBD, requires research)
     -- Game code: BPEE. Same Gen 3 Pokemon struct (100 bytes, encrypted substructs).

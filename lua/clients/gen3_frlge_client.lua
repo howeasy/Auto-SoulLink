@@ -93,10 +93,12 @@ package.loaded["game_detect"]      = nil
 package.loaded["games.gen3_frlge"] = nil
 package.loaded["gen3_frlge_locations"] = nil
 package.loaded["hud"]               = nil
+package.loaded["peer_ghost"]        = nil
 
 local M     = require("memory_gba")
 local C     = require("connector")
 local HUD   = require("hud")
+local PG    = require("peer_ghost")
 
 -- Game module detection — provides game-specific area/gift classification
 -- and profile data for memory.lua initialization
@@ -204,12 +206,22 @@ local function parse_command_list(raw)
                 blobs_hex[#blobs_hex + 1] = s
             end
         end
+        -- ghost_pos fields (peer-ghost overworld position; coords may be negative s16)
+        local mg = tonumber(obj:match('"mg"%s*:%s*(%-?%d+)'))
+        local mn = tonumber(obj:match('"mn"%s*:%s*(%-?%d+)'))
+        local gx = tonumber(obj:match('"x"%s*:%s*(%-?%d+)'))
+        local gy = tonumber(obj:match('"y"%s*:%s*(%-?%d+)'))
+        local gf = tonumber(obj:match('"f"%s*:%s*(%-?%d+)'))
+        local gmv = tonumber(obj:match('"mv"%s*:%s*(%-?%d+)'))
+        local gan = tonumber(obj:match('"an"%s*:%s*(%-?%d+)'))
+        local gbt = tonumber(obj:match('"bt"%s*:%s*(%-?%d+)'))
         if cmd then
             cmds[#cmds+1] = {
                 cmd=cmd, key=key, message=msg, stats=stats,
                 text=text, r=r, g=g, b=b, frames=frames,
                 sound=sound, area_id=area_id, areas=areas,
                 trainer_id=trainer_id, blobs_hex=blobs_hex,
+                mg=mg, mn=mn, x=gx, y=gy, f=gf, mv=gmv, an=gan, bt=gbt,
             }
         end
     end
@@ -238,6 +250,68 @@ local writes_enabled  = val_ok
 -- Re-validated each frame when false (save may not be loaded at script start).
 local memorial_box_renamed = false  -- one-shot: rename Box 13 to "THE DEAD"
 local memorial_overflow_renamed = {} -- overflow boxes already renamed
+
+-- ── Peer-ghost overworld rendering ────────────────────────────────────────────
+-- Enabled only on profiles that supply the object-event / sprite addresses
+-- (currently radical_red).  Struct field offsets are the fixed pret
+-- ObjectEvent / Sprite layout, confirmed via test_overworld_discovery.lua.
+local peer_ghost_enabled = M.OBJ_EVENTS_BASE_ADDR ~= nil and M.GSPRITES_BASE ~= nil
+if not peer_ghost_enabled then
+    console.log(string.format(
+        "[SLink-FRLGE] Peer-ghost DISABLED — OBJ_EVENTS_BASE_ADDR=%s GSPRITES_BASE=%s (profile=%s)",
+        tostring(M.OBJ_EVENTS_BASE_ADDR), tostring(M.GSPRITES_BASE), tostring(M.profile_name)))
+end
+if peer_ghost_enabled then
+    PG.init({
+        get_map        = function() return M.getCurrentMap() end,
+        tile_px        = 16,
+        -- object-event array
+        obj_base       = M.OBJ_EVENTS_BASE_ADDR,
+        obj_stride     = M.OBJ_EVENT_STRIDE or 0x24,
+        obj_count      = M.OBJ_EVENT_COUNT or 16,
+        off_flags      = 0x00,  off_sprite_id = 0x04, off_graphics_id = 0x05,
+        off_mov_type   = 0x06,  off_local_id  = 0x08, off_map_num     = 0x09,
+        off_map_group  = 0x0A,  off_curr_x    = 0x10, off_curr_y      = 0x12,
+        off_prev_x     = 0x14,  off_prev_y    = 0x16, off_facing      = 0x18,
+        -- gSprites array
+        gsprites       = M.GSPRITES_BASE,
+        spr_stride     = M.SPRITE_STRIDE or 0x44,
+        spr_x          = 0x20,  spr_y      = 0x22, spr_anim   = 0x2A,
+        spr_byte2c     = 0x2C,  spr_data0  = 0x2E, spr_byte3e = 0x3E, spr_byte3f = 0x3F,
+        ghost_tile     = M.GHOST_SPRITE_TILE or 0x300,
+        -- gSpriteTileAllocBitmap: reserve our claimed tiles so the engine never
+        -- reallocates them (nil → reservation disabled, collision self-heal only).
+        tile_alloc_bitmap = M.TILE_ALLOC_BITMAP_ADDR,
+        -- camera scroll offsets (s16) for smooth sub-tile compensation
+        coff_x         = M.COORD_OFFSET_X_ADDR,
+        coff_y         = M.COORD_OFFSET_Y_ADDR,
+    })
+    console.log(string.format(
+        "[SLink-FRLGE] Peer-ghost ENABLED (gObjectEvents=0x%X gSprites=0x%X). "
+        .. "Renders when BOTH players are connected on the SAME map.",
+        M.OBJ_EVENTS_BASE_ADDR, M.GSPRITES_BASE))
+end
+-- Last ghost_pos signature sent, to suppress redundant idle sends.
+local last_ghost_sig = nil
+-- Consecutive frames the player has been "finished" (idle); debounces the
+-- moving bit so per-tile blips don't flicker the partner's ghost to idle.
+local pg_idle_frames = 0
+-- Sub-pixel world-position tracking: aligned tile + coordOffset at last idle.
+local pg_align_tx, pg_align_ty = nil, nil
+local pg_coff_ax, pg_coff_ay   = nil, nil
+-- Last overworld ghost payload we broadcast, replayed with bt=1 while WE are in a
+-- battle so the partner's ghost freezes-in-place (with a battle indicator) instead
+-- of going stale and vanishing.  nil until we've sent at least one overworld pos.
+local pg_last_world = nil
+local pg_bt_logged  = false
+-- Diagnostics: count ghost_pos sent / received so a heartbeat can confirm the
+-- networked pipeline is live without needing to see the emulator.
+local pg_tx_count, pg_rx_count = 0, 0
+local pg_first_tx_logged, pg_first_rx_logged = false, false
+-- Auto-calibrated overworld field callback (gMain.callback2) + last field-active
+-- state, for suspending the ghost during menus/transitions (see gate below).
+local pg_field_cb2 = nil
+local pg_field_active_prev = nil
 
 -- ── Deferred sync state (declared before dispatch_commands uses them) ─────────
 local pending_sync_cmds = {}  -- deferred box_mon / party_mon commands
@@ -499,6 +573,21 @@ local function dispatch_commands(cmds)
             rebuild_active = false
             HUD.clear_rebuilding()
             console.log("[SLink-FRLGE]   ↳ rebuild_done")
+        elseif c.cmd == "ghost_pos" then
+            -- Partner's live overworld position (same map as us); render the ghost.
+            if peer_ghost_enabled then
+                PG.on_ghost_pos(c)
+                pg_rx_count = pg_rx_count + 1
+                if not pg_first_rx_logged then
+                    pg_first_rx_logged = true
+                    console.log(string.format(
+                        "[SLink-FRLGE] Peer-ghost: first ghost_pos RECEIVED (partner @ map %s:%s tile %s,%s) — rendering.",
+                        tostring(c.mg), tostring(c.mn), tostring(c.x), tostring(c.y)))
+                end
+            end
+        elseif c.cmd == "ghost_clear" then
+            -- Partner left our map / went stale; remove the ghost.
+            if peer_ghost_enabled then PG.on_ghost_clear() end
         elseif c.cmd ~= "noop" then
             console.log("[SLink-FRLGE]   ↳ cmd: "..tostring(c.cmd))
         end
@@ -1325,6 +1414,87 @@ local function on_frame()
     local loc  = game_module.resolve_location(frame_map_g, frame_map_n)
     local in_battle    = M.isInBattle()
     local is_overworld = M.isInOverworld()
+
+    -- ── Peer-ghost: broadcast our overworld position (AGGRESSIVE ~20 Hz) ──────
+    -- Read straight from gObjectEvents[0] (the player): currentCoords, facing
+    -- (low nibble of +0x18), the moving bit (heldMovementFinished = flags bit7
+    -- clear), and the live sprite animNum (walk vs run 1:1).  We send on a fixed
+    -- cadence WITHOUT idle-dedup so the partner's ghost never goes stale and
+    -- vanishes when we stop — the server keeps relaying our last position.
+    if peer_ghost_enabled and is_overworld and (frame_map_g ~= 0 or frame_map_n ~= 0) then
+        local ob = M.OBJ_EVENTS_BASE_ADDR
+        -- per-frame debounce: count consecutive "finished" (idle) frames.
+        local idle_bit = (memory.read_u8(ob + 0x00) & 0x80) ~= 0
+        if idle_bit then pg_idle_frames = pg_idle_frames + 1 else pg_idle_frames = 0 end
+
+        -- Sub-pixel world position: currentCoords jumps to the DESTINATION tile
+        -- at step start, so we can't read sub-tile from it.  Instead, calibrate
+        -- (alignedTile, coordOffset) while idle (tile-aligned); the coordOffset
+        -- delta since then is the player's exact smooth pixel displacement.
+        -- worldPx = alignedTile*16 + (coffAtAlign - coffNow).  (coordOffset
+        -- confirmed valid on RR: player.pos1 + coff = screen-centre.)
+        local ctx = memory.read_s16_le(ob + 0x10)
+        local cty = memory.read_s16_le(ob + 0x12)
+        local coffx = M.COORD_OFFSET_X_ADDR and memory.read_s16_le(M.COORD_OFFSET_X_ADDR) or 0
+        local coffy = M.COORD_OFFSET_Y_ADDR and memory.read_s16_le(M.COORD_OFFSET_Y_ADDR) or 0
+        if idle_bit or pg_align_tx == nil then
+            pg_align_tx, pg_align_ty = ctx, cty
+            pg_coff_ax, pg_coff_ay = coffx, coffy
+        end
+
+        if frame_count % 3 == 0 then   -- ~20 Hz; aggressive enough for smooth sync
+            local wx = pg_align_tx * 16 + (pg_coff_ax - coffx)   -- smooth world pixels
+            local wy = pg_align_ty * 16 + (pg_coff_ay - coffy)
+            local gf  = memory.read_u8(ob + 0x18) & 0x0F
+            if gf < 1 or gf > 4 then gf = 1 end
+            local gmv = (pg_idle_frames < 4) and 1 or 0
+            -- live animNum from the player's sprite (walk/run/etc.).
+            local sid = memory.read_u8(ob + 0x04)
+            local gan = (sid < 64)
+                and memory.read_u8(M.GSPRITES_BASE + sid * (M.SPRITE_STRIDE or 0x44) + 0x2A)
+                or 0
+            do  -- always send (no idle-dedup) so the ghost stays alive when idle.
+                -- x,y are now WORLD PIXELS (sub-pixel precise), not tiles.
+                send({event = "ghost_pos", mg = frame_map_g, mn = frame_map_n,
+                      x = wx, y = wy, f = gf, mv = gmv, an = gan}, "ghost_pos", true, true)
+                -- Cache the last overworld pos so we can keep the partner's ghost
+                -- alive (frozen) during OUR battle (replayed with bt=1 below).
+                pg_last_world = {mg = frame_map_g, mn = frame_map_n, x = wx, y = wy, f = gf}
+                pg_tx_count = pg_tx_count + 1
+                if not pg_first_tx_logged then
+                    pg_first_tx_logged = true
+                    console.log(string.format(
+                        "[SLink-FRLGE] Peer-ghost: first ghost_pos SENT (map %d:%d worldpx %d,%d).",
+                        frame_map_g, frame_map_n, wx, wy))
+                end
+            end
+        end
+        -- Heartbeat every ~5 s: confirms the pipeline without seeing the emulator.
+        if frame_count % 300 == 0 then
+            console.log(string.format(
+                "[SLink-FRLGE] Peer-ghost heartbeat: sent=%d received=%d (map %d:%d)",
+                pg_tx_count, pg_rx_count, frame_map_g, frame_map_n))
+        end
+    elseif peer_ghost_enabled and in_battle and pg_last_world and frame_count % 6 == 0 then
+        pg_idle_frames = 6   -- treat as idle while not in the overworld
+        -- IN-BATTLE KEEPALIVE: replay our last overworld position with bt=1 every
+        -- ~6 frames so the partner's ghost FREEZES in place (with a battle "wink"
+        -- indicator on their side) instead of going stale → ghost_clear → vanish.
+        -- We do NOT read gObjectEvents here (it's repurposed during battle) — we
+        -- only re-broadcast the cached overworld pos.  Safe to re-enable now that
+        -- the RECEIVER cleanly suspends during the watcher's OWN transitions (the
+        -- gMain.callback2 field gate + isPostBattleSettled gate, rounds 9 & 8) —
+        -- the thing that crashed the round-6 attempt is independently gated out.
+        local w = pg_last_world
+        send({event = "ghost_pos", mg = w.mg, mn = w.mn, x = w.x, y = w.y,
+              f = w.f, mv = 0, an = 0, bt = 1}, "ghost_pos", true, true)
+        if not pg_bt_logged then
+            pg_bt_logged = true
+            console.log("[SLink-FRLGE] Peer-ghost: in-battle keepalive (bt=1) — partner's ghost will freeze, not vanish.")
+        end
+    else
+        pg_idle_frames = 6   -- treat as idle while not in the overworld
+    end
 
     -- 4a. Update sync_cooldown BEFORE sync flush to prevent executing sync
     -- commands on the battle-end transition frame.  The game is still doing
@@ -3267,6 +3437,49 @@ local function on_frame()
     prev_keys = keys
 
     -- (sync_cooldown is now updated at step 4a, before the sync flush)
+
+    -- ── Peer-ghost: maintain/render the partner sprite (before HUD so the HUD
+    -- bar draws on top, consistent with other overlays).  ONLY operate in the
+    -- overworld — during battles/menus the engine reuses gObjectEvents/gSprites
+    -- for battle sprites, so writing to our injected slots there corrupts battle
+    -- state and crashes.  When not in the overworld, suspend (clear our slot). ──
+    if peer_ghost_enabled then
+        -- Render ONLY in a FULLY-SETTLED overworld.  Use the SAME post-battle
+        -- gate the deferred-sync uses (the task-scheduler check), not just a fixed
+        -- frame timer: a fixed timer expired before the battle-EXIT (Run) teardown
+        -- finished rebuilding sprites, so the ghost re-acquired into gSprites mid-
+        -- rebuild → glitching.  `post_eob_frames == 0 or isPostBattleSettled()`
+        -- short-circuits in normal overworld (isPostBattleSettled NOT called, so
+        -- it never wrongly blocks a pre-battle overworld) and only consults gTasks/
+        -- the EOB signal AFTER a battle — exactly when we must wait.
+        -- Field-active gate via gMain.callback2 — covers MENUS (bag/Start/party)
+        -- and transitions, which `is_overworld` (=not in battle) cannot see and
+        -- which froze the game when we wrote into the bag's repurposed sprites.
+        -- Auto-calibrate the field callback while the player is WALKING (you can't
+        -- walk in a menu, so that frame is definitely the field).  Suspend whenever
+        -- the live callback2 differs from the calibrated field value.
+        local field_active = true
+        if M.GMAIN_CALLBACK2_ADDR then
+            local cb2 = memory.read_u32_le(M.GMAIN_CALLBACK2_ADDR)
+            if is_overworld and pg_idle_frames == 0 and cb2 ~= 0 then
+                pg_field_cb2 = cb2          -- ground-truth: player is walking the field
+            end
+            if pg_field_cb2 ~= nil then field_active = (cb2 == pg_field_cb2) end
+            if field_active ~= pg_field_active_prev then
+                pg_field_active_prev = field_active
+                console.log(string.format(
+                    "[SLink-FRLGE] Peer-ghost field_active=%s (cb2=0x%08X field=0x%08X)",
+                    tostring(field_active), cb2, pg_field_cb2 or 0))
+            end
+        end
+
+        local pg_settled = is_overworld
+            and field_active
+            and post_battle_frames == 0
+            and sync_cooldown == 0
+            and (post_eob_frames == 0 or M.isPostBattleSettled())
+        if pg_settled then PG.on_frame() else PG.suspend() end
+    end
 
     -- ── HUD overlay (draw last so it appears on top) ──────────────────────────
     hud_render()

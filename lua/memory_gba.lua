@@ -72,6 +72,12 @@ local _PROFILE_RESET_KEYS = {
     "CB2_EVOLUTION_LOAD_ADDR", "CB2_EVOLUTION_BEGIN_ADDR",
     "CB2_EVOLUTION_UPDATE_ADDR", "CB2_TRADE_EVOLUTION_UPDATE_ADDR",
     "GMAIN_CB2_OFFSET",
+    -- Peer-ghost overworld rendering (radical_red only; nil on other variants
+    -- so the feature stays disabled where addresses are unverified).
+    "OBJ_EVENTS_BASE_ADDR", "OBJ_EVENT_STRIDE", "OBJ_EVENT_COUNT",
+    "GSPRITES_BASE", "SPRITE_STRIDE", "GHOST_SPRITE_TILE",
+    "COORD_OFFSET_X_ADDR", "COORD_OFFSET_Y_ADDR", "GMAIN_CALLBACK2_ADDR",
+    "TILE_ALLOC_BITMAP_ADDR",
     "_overworld_mode", "supports_battle_redirect",
 }
 

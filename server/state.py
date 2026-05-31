@@ -19,6 +19,7 @@ this to give each run its own isolated data directory.
 import json
 import logging
 import os
+import time
 from collections import deque
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
@@ -33,6 +34,12 @@ log = logging.getLogger(__name__)
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 LINKS_PATH    = os.path.join(DATA_DIR, "links.json")
 MEMORIAL_PATH = os.path.join(DATA_DIR, "memorial.json")
+
+# Peer-ghost staleness: drop a partner's last-known position if older than this
+# many seconds (and emit a single ghost_clear to the recipient).  The client
+# now sends at ~20 Hz with no idle-dedup, so a healthy partner refreshes every
+# ~50 ms; this margin only fires on a real stall/disconnect, not on idle.
+GHOST_STALENESS_SECONDS = 5.0
 
 class AreaStatus(str, Enum):
     UNSEEN      = "unseen"
@@ -56,6 +63,28 @@ class MonInfo:
     species: int = 0
     nickname: str = ""
     is_shiny: bool = False
+
+
+@dataclass
+class PeerPos:
+    """A player's last-known overworld position.
+
+    Ephemeral — populated from the Lua ghost_pos event (~10 Hz) and read when
+    queueing peer-ghost commands for the partner. NEVER persisted to links.json:
+    positions are stale on restart, would bloat the file, and replay from a
+    saved file would render ghosts at long-gone tiles.
+    """
+    mg: int  # mapGroup
+    mn: int  # mapNum
+    x: int   # world tile x (s16)
+    y: int   # world tile y (s16)
+    f: int   # facing (1=down, 2=up, 3=left, 4=right per pret convention)
+    mv: int  # moving bit (0 stationary / 1 mid-step)
+    an: int  # the player's live sprite animNum (opaque; lets the ghost mirror
+             # walk vs run 1:1 since both players share the on-foot graphic)
+    bt: int  # 1 = sender is in a battle (ghost should freeze at this position +
+             # show a battle indicator instead of vanishing); 0 = normal overworld
+    ts: float  # server wall-clock receive time (time.time()); used for staleness
 
 
 @dataclass
@@ -184,6 +213,19 @@ class SoulLinkState:
         # whenever the trainer ID is in the adapter's rival set AND the
         # partner has cached blobs.  Per-run rule, never flipped at runtime.
         self.rival_team_swap: bool = rival_team_swap
+        # Peer-ghost overworld presence (Phase 1+ of the player-ghost feature).
+        # peer_pos[player_id] is the last PeerPos we received from that player
+        # via a ghost_pos event.  In-memory only — NEVER persisted (see PeerPos
+        # docstring for the rationale).  Stale on restart, repopulated on first
+        # ghost_pos from each client.
+        self.peer_pos: dict[str, Optional[PeerPos]] = {"a": None, "b": None}
+        # One-time per-player log flag so we can confirm (in the server console)
+        # that THIS code version received a ghost_pos with coords.
+        self._ghost_rx_logged: set[str] = set()
+        # Per-recipient "is a ghost currently visible to them" flag.  Used to
+        # debounce ghost_clear emission to exactly one per visible→hidden
+        # transition (no spammed clears once partner is already gone).
+        self._ghost_visible_to: dict[str, bool] = {"a": False, "b": False}
 
     # ── public API ───────────────────────────────────────────────────────────
 
@@ -272,6 +314,8 @@ class SoulLinkState:
             self._handle_trainer_battle_start(player_id, msg)
         elif event == "rival_team_replaced":
             self._handle_rival_team_replaced(player_id, msg)
+        elif event == "ghost_pos":
+            self._handle_ghost_pos(player_id, msg)
         elif event in ("safe", "tick"):
             # Accept pokéballs activation update from tick events so the server learns
             # the nuzlocke became active mid-session (between hello events).
@@ -294,8 +338,25 @@ class SoulLinkState:
                 # silently breaks until something else forces correction.
                 self._reconcile_party_keys(player_id, party)
 
+        # Peer-ghost: re-evaluate what this recipient should see right now so
+        # staleness fires on the regular tick path even when the partner has
+        # gone silent (no ghost_pos events to trigger _handle_ghost_pos).
+        self._refresh_peer_ghost_for(player_id)
+
         cmds = self.queued_commands[player_id][:]
         self.queued_commands[player_id].clear()
+        # Reconcile ghost-visibility flag at FLUSH time (not queue-push time):
+        # the recipient's belief about whether a ghost is on screen only changes
+        # when the corresponding ghost_pos / ghost_clear is actually delivered.
+        # Doing this here instead of inside _refresh_peer_ghost_for keeps the
+        # debounce honest when a clear is queued but a subsequent refresh
+        # (driven by the partner) coalesces over the same queue position.
+        for _c in cmds:
+            _ck = _c.get("cmd")
+            if _ck == "ghost_pos":
+                self._ghost_visible_to[player_id] = True
+            elif _ck == "ghost_clear":
+                self._ghost_visible_to[player_id] = False
         if cmds:
             _summary = ", ".join(
                 c.get("cmd", "?") + (":" + c["key"][:8] if "key" in c else "")
@@ -2334,6 +2395,105 @@ class SoulLinkState:
             log.info(
                 f"[{player_id}] rival team swap auto-trigger skipped: {reason}"
             )
+
+    def _handle_ghost_pos(self, player_id: str, msg: dict):
+        """Cache the sender's overworld position and refresh the partner's
+        peer-ghost command.
+
+        msg = {event:"ghost_pos", player, seq, mg, mn, x, y, f, mv}
+
+        Game-agnostic: coordinates are opaque ints; the gen3 adapter is not
+        consulted.  This will work as-is for any future generation whose Lua
+        client emits the same `ghost_pos` envelope.
+        """
+        try:
+            mg = int(msg.get("mg"))
+            mn = int(msg.get("mn"))
+            x  = int(msg.get("x"))
+            y  = int(msg.get("y"))
+            f  = int(msg.get("f", 1))
+            mv = int(msg.get("mv", 0))
+            an = int(msg.get("an", 0))
+            bt = int(msg.get("bt", 0))
+        except (TypeError, ValueError):
+            # Malformed payload — drop silently; sender will resend in 6 frames.
+            return
+
+        # Plausibility — Gen 3 overworld coords are well inside s16 range and
+        # mapGroup/mapNum are tiny.  Reject obviously broken values rather
+        # than caching garbage that would point the ghost at random tiles.
+        if not (0 <= mg <= 255 and 0 <= mn <= 255):
+            return
+        if not (-32768 <= x <= 32767 and -32768 <= y <= 32767):
+            return
+
+        self.peer_pos[player_id] = PeerPos(
+            mg=mg, mn=mn, x=x, y=y, f=f, mv=(1 if mv else 0), an=an,
+            bt=(1 if bt else 0), ts=time.time())
+        if player_id not in self._ghost_rx_logged:
+            self._ghost_rx_logged.add(player_id)
+            log.info(f"[ghost] first ghost_pos from {player_id}: "
+                     f"map={mg}:{mn} tile=({x},{y}) f={f} mv={mv} an={an} "
+                     f"— peer-ghost relay ACTIVE in this server build")
+
+        # Refresh the partner immediately so they see the freshest position
+        # on their next round-trip (instead of waiting for their own tick to
+        # trigger _refresh_peer_ghost_for via handle_event's tail).
+        partner = _partner(player_id)
+        self._refresh_peer_ghost_for(partner)
+
+    def _refresh_peer_ghost_for(self, recipient: str):
+        """Ensure recipient's queued_commands carries exactly the right
+        ghost_pos / ghost_clear given current peer_pos state.
+
+        Rules:
+        - No own position cached → can't decide same-map → ensure cleared.
+        - No partner position cached → ensure cleared.
+        - Partner position stale (>GHOST_STALENESS_SECONDS) → ensure cleared.
+        - Different map → ensure cleared.
+        - Same map, fresh → ensure a ghost_pos (coalesced — latest wins).
+
+        Coalescing: any existing ghost_pos / ghost_clear already in the
+        recipient's queue is removed before appending the new one, so a slow
+        recipient never accumulates a backlog.
+        """
+        partner = _partner(recipient)
+        own = self.peer_pos.get(recipient)
+        peer = self.peer_pos.get(partner)
+        now = time.time()
+
+        same_map = (
+            own is not None
+            and peer is not None
+            and (now - peer.ts) <= GHOST_STALENESS_SECONDS
+            and own.mg == peer.mg
+            and own.mn == peer.mn
+        )
+
+        # Strip any existing ghost_* commands from the queue (coalesce).
+        q = self.queued_commands[recipient]
+        if q:
+            self.queued_commands[recipient] = [
+                c for c in q if c.get("cmd") not in ("ghost_pos", "ghost_clear")
+            ]
+
+        if same_map:
+            self.queued_commands[recipient].append({
+                "cmd": "ghost_pos",
+                "mg": peer.mg, "mn": peer.mn,
+                "x":  peer.x,  "y":  peer.y,
+                "f":  peer.f,  "mv": peer.mv,
+                "an": peer.an, "bt": peer.bt,
+                "name": self.trainer_names.get(partner, ""),
+                "ts": peer.ts,
+            })
+            # NB: _ghost_visible_to flipped at flush time (handle_event tail).
+        else:
+            # Only emit a clear on the visible→hidden transition; once the
+            # recipient has been told the ghost is gone, stay silent until
+            # the partner becomes visible again.
+            if self._ghost_visible_to.get(recipient, False):
+                self.queued_commands[recipient].append({"cmd": "ghost_clear"})
 
     def _handle_rival_team_replaced(self, player_id: str, msg: dict):
         """Readback ack from the Lua write — log mismatch loudly so the
