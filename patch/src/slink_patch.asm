@@ -26,6 +26,7 @@
 .definelabel gChosenMovesByBanks,0x02023DC4
 .definelabel gBattleCommunication,0x02023E82
 .definelabel gBattleStruct,      0x02023FE8
+.definelabel gBattleExecBuffer,  0x02023BC8   ; gBattleControllerExecFlags (u32)
 
 ; ---------------------------------------------------------------- injected code
 .org CODE_BASE
@@ -62,6 +63,10 @@ OpForceFaint:
     b    SlinkOk
 
 ; --- opcode 3: FORCE_MOVE  args[0]=battler [1]=target [2]=move_pos [4..5]=move_id(u16) ---
+; Commits the action-select state (validated). NOTE: source RE proved this commit alone
+; does NOT execute a move from the menu — the engine reads gBattleBufferB[battler][1] and
+; re-emits ChooseMove. Robust live execution needs a controller hook (EmitMoveChosen +
+; PlayerBufferExecCompleted @0x802E33C). See patch/src/ADDRESSES.md "FORCE_MOVE finding".
 OpForceMove:
     ldrb r1, [r0, #16]         ; battler
     ldr  r2, =gChosenActionByBank
@@ -85,6 +90,15 @@ OpForceMove:
     add  r2, #0x0C
     ldrb r3, [r0, #17]         ; target
     strb r3, [r2, r1]          ; bs->moveTarget[battler]
+    ; clear gBattleControllerExecFlags bit (1<<battler) so the engine, at
+    ; STATE_WAIT_ACTION_CHOSEN, sees the controller "done" and reads our action
+    ; (without this the menu waits forever). r1 = battler (clobbered after).
+    mov  r2, #1
+    lsl  r2, r1               ; mask = 1 << battler
+    ldr  r3, =gBattleExecBuffer
+    ldr  r1, [r3]             ; flags
+    bic  r1, r2               ; flags &= ~mask
+    str  r1, [r3]
     b    SlinkOk
 
 ; --- shared ack tails ---

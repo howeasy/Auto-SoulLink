@@ -70,7 +70,25 @@ is a valid map for the base engine here.
 > **Cross-validation caught an error:** an RE pass claimed `chosenMovePositions @ +0x90`; the
 > battle-tested SLink profile (`gen3_frlge.lua`) and shipping Explode-mode prove it is **+0x80**.
 >
-> FORCE_MOVE replicates SLink's production "Variant-3" commit natively. **Live-engine
-> validation (the move actually executing in a real battle) is gated on an in-battle RR
-> savestate** we don't yet have; the dispatcher's writes are runtime-validated via
-> `lua/tests/test_mailbox_battle.lua` (injects a fake battle state, confirms every global).
+> FORCE_MOVE replicates SLink's production "Variant-3" commit natively. The dispatcher's
+> writes are runtime-validated via `lua/tests/test_mailbox_battle.lua` (fake battle state,
+> every global confirmed) and FORCE_FAINT zeroes the live battler HP correctly.
+
+### FORCE_MOVE live-execution finding (source-confirmed — pokefirered `battle_main.c`)
+Live testing on a real in-battle savestate proved the Variant-3 RAM commit **does not, by
+itself, execute a move** from the action menu. `HandleTurnActionSelectionState` at
+`STATE_WAIT_ACTION_CHOSEN`:
+1. gates on a **multi-nibble** exec mask — `bit | bit<<4 | bit<<8 | bit<<12 | 0xF0000000`,
+   not just `1<<battler` (`gBattleControllerExecFlags`/`gBattleExecBuffer` = `0x02023BC8`);
+2. reads the action from **`gBattleBufferB[battler][1]`** (`gBattleBufferB = 0x20233C4`,
+   stride 0x200), **not** `gChosenActionByBank`;
+3. on USE_MOVE it **re-emits ChooseMove** (the move submenu) — so committing the action
+   only loops back to move-select.
+**Conclusion (validates the report thesis):** a generic, robust live FORCE_MOVE cannot be
+done by external RAM-poke; it needs a **controller hook** that calls the engine's
+`BtlController_EmitMoveChosen` + `PlayerBufferExecCompleted` (`0x0802E33C`). That is the
+C-toolchain approach — deferred. SLink's Lua Explode "works" only because it *also* rewrites
+all 4 move slots to Explosion, so whatever the menu path picks is the forced move.
+**FORCE_MOVE here is therefore a validated *commit* primitive; live execution is gated on
+the controller hook.** (Diagnostics that established this: input reaches the core; the
+savestate is a valid singles action-menu; mashing A executes a move → rig is sound.)
