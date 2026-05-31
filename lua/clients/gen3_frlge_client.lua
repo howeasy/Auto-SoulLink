@@ -271,7 +271,28 @@ if not peer_ghost_enabled then
         "[SLink-FRLGE] Peer-ghost DISABLED — OBJ_EVENTS_BASE_ADDR=%s GSPRITES_BASE=%s (profile=%s)",
         tostring(M.OBJ_EVENTS_BASE_ADDR), tostring(M.GSPRITES_BASE), tostring(M.profile_name)))
 end
+-- Locate an inert "no-op" sprite callback — a thumb `bx lr` (0x4770), functionally
+-- identical to SpriteCallbackDummy.  Writing this into the cloned ghost sprite's
+-- callback slot makes it a PURE PUPPET: without it, the clone keeps the player
+-- sprite's MOVEMENT callback, which the engine runs every frame as
+-- UpdateObjectEventCurrentMovement(&gObjectEvents[data0], ...) — re-deriving palette
+-- (PALSLOT_PLAYER reflection/PatchObjectPalette), reflection, and visibility from the
+-- backing OE's graphicsId (= the LOCAL player's) and corrupting the real player's
+-- shared palette/tiles (confirmed against pret/CFRU src/event_object_movement.c).
+-- Bounded scan of ROM start for the first aligned 0x4770; nil → fall back (no-op).
+local function pg_find_noop_callback()
+    local base = 0x08000000
+    for off = 0, 0xFFFF, 2 do
+        if memory.read_u16_le(base + off) == 0x4770 then
+            return (base + off) | 1   -- thumb bit set so the CPU executes it as thumb
+        end
+    end
+    return nil
+end
+local pg_noop_cb = peer_ghost_enabled and pg_find_noop_callback() or nil
 if peer_ghost_enabled then
+    console.log(string.format("[SLink-FRLGE] Peer-ghost no-op callback = %s",
+        pg_noop_cb and string.format("0x%08X", pg_noop_cb) or "NOT FOUND (callback not neutralized)"))
     PG.init({
         get_map        = function() return M.getCurrentMap() end,
         tile_px        = 16,
@@ -290,6 +311,8 @@ if peer_ghost_enabled then
         spr_x          = 0x20,  spr_y      = 0x22, spr_anim   = 0x2A,
         spr_byte2c     = 0x2C,  spr_data0  = 0x2E, spr_byte3e = 0x3E, spr_byte3f = 0x3F,
         spr_anims      = 0x08,  spr_images = 0x0C,   -- ROM ptrs (override for partner's trainer)
+        spr_callback   = 0x1C,                       -- SpriteCallback ptr; neutralized on clone
+        noop_callback  = pg_noop_cb,                 -- inert `bx lr` (SpriteCallbackDummy-equiv)
         ghost_tile     = M.GHOST_SPRITE_TILE or 0x300,
         -- Partner-trainer palette: write into the EWRAM shadow buffers (the engine
         -- DMAs gPlttBufferFaded → OBJ palette RAM every frame for day/night tint, so
@@ -506,6 +529,13 @@ local pending_faint_debounce = {}  -- [monKey] → frames_remaining
 local battle_start_player_faints  = nil  -- gBattleResults snapshot at battle start
 local confirmed_real_player_faints = 0   -- count we've already credited via counter
 
+-- Forward declaration: `send` is defined further below (line ~746) but the command
+-- dispatcher references it (e.g. the replace_rival_team ack).  Without this forward
+-- `local`, those calls bind to a nil GLOBAL `send` and throw at runtime during a
+-- trainer battle ("attempt to call a nil value (global 'send')").  Declaring it here
+-- makes every reference resolve to the one upvalue, assigned when its body runs at load.
+local send
+
 -- ── Command dispatcher ────────────────────────────────────────────────────────
 local function dispatch_commands(cmds)
     for _, c in ipairs(cmds) do
@@ -720,7 +750,9 @@ end
 local seq            = 0
 local pending_labels = {}
 
-local function send(evt, label, is_auto, is_silent)
+-- NOTE: assigns the forward-declared `send` upvalue (declared above dispatch_commands)
+-- — do NOT add `local` here or the dispatcher's references revert to the nil global.
+function send(evt, label, is_auto, is_silent)
     if not C.connected() then
         console.log("[SLink-FRLGE] NOT CONNECTED — dropped: "..(label or evt.event))
         return

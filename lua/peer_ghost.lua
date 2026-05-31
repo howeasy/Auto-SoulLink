@@ -129,8 +129,15 @@ local function find_free_sprite()
     return nil
 end
 
+-- Claim a free object-event slot scanning HIGH→LOW.  The map's own NPC templates
+-- occupy LOW indices (template order); a trainer/NPC that hasn't spawned yet (off
+-- screen) leaves its low slot reading "free", so grabbing it low means the engine
+-- later spawns that NPC into OUR slot — then our per-frame coord writes land on the
+-- real NPC, teleporting it to the ghost + firing its script (observed: "Youngster
+-- Calvin teleported to the ghost and battled").  Taking the HIGHEST free slot keeps
+-- us above the template range, exactly like find_free_sprite / claim_free_tile.
 local function find_free_obj()
-    for slot = 1, cfg.obj_count - 1 do
+    for slot = cfg.obj_count - 1, 1, -1 do
         if (r8(cfg.obj_base + slot * cfg.obj_stride + cfg.off_flags) & 0x01) == 0 then
             return slot
         end
@@ -254,14 +261,23 @@ end
 -- The shadow-buffer Faded OBJ slot-0 mirrors live OBJ palette RAM; validate that
 -- before trusting the baked address (a wrong addr self-disables, no EWRAM scribbling).
 local function pltt_trusted()
-    if not (cfg.pltt_faded_obj and cfg.obj_pltt) then return false end
-    return r16(cfg.pltt_faded_obj) == r16(cfg.obj_pltt)
+    -- Validate the shadow-buffer address WITHOUT depending on time of day.  Compare the
+    -- two EWRAM shadow buffers (Faded vs Unfaded) — both are UNTINTED, so they match in
+    -- steady state regardless of day/night (they diverge only briefly during a screen
+    -- FADE).  The previous check compared Faded to palette RAM (obj_pltt); RR's day/night
+    -- system tints palette RAM DIRECTLY, so at night obj_pltt != faded → the check
+    -- false-negatived → the whole slot-15 palette path disabled → the ghost fell back to
+    -- the cloned PLAYER palette (slot 0) = "ghost uses the player's colours at night,
+    -- broken with a non-standard trainer".
+    if not (cfg.pltt_faded_obj and cfg.pltt_unfaded_obj) then return false end
+    return r16(cfg.pltt_faded_obj) == r16(cfg.pltt_unfaded_obj)
 end
 
--- Re-enabled: the palette corruption is fixed by giving the ghost its OWN palette
--- slot (GHOST_PAL_SLOT, see render) instead of a "free" slot that clobbered engine
--- palettes.  The partner-trainer palette loads into that SAME slot, per-frame, in
--- render — so it self-heals and never touches an engine-owned slot.
+-- Re-enabled now that the ROOT CAUSE is fixed: the cloned sprite's MOVEMENT callback
+-- (which ran the engine's per-frame object-event palette/reflection management on our
+-- ghost, keyed to the backing OE's player graphicsId, and corrupted the real player)
+-- is now NEUTRALIZED to a no-op in acquire() — so the foreign images/anims/palette
+-- override no longer fights the engine.  (Set FALSE to fall back to the clone look.)
 local TRAINER_RENDER_ENABLED = true
 
 -- Override the cloned ghost sprite with the partner's chosen-trainer GRAPHICS only:
@@ -329,6 +345,18 @@ local function acquire()
     local paddr = cfg.gsprites + p_sid * cfg.spr_stride
     local naddr = cfg.gsprites + fs * cfg.spr_stride
     for i = 0, cfg.spr_stride - 1 do w8(naddr + i, r8(paddr + i)) end
+    -- NEUTRALIZE the cloned callback → PURE PUPPET (the corruption root cause).
+    -- The clone copied the player sprite's MOVEMENT callback (offset 0x1C); the engine
+    -- runs it every frame as UpdateObjectEventCurrentMovement(&gObjectEvents[data0],…),
+    -- which re-derives palette (PALSLOT_PLAYER reflection / PatchObjectPalette),
+    -- reflection, and visibility from the backing OE's graphicsId (= the LOCAL player's)
+    -- — corrupting the real player's shared palette/tiles, and fighting our foreign
+    -- images/anims override.  A no-op `bx lr` callback stops ALL of it; the sprite still
+    -- animates (AnimateSprite is callback-independent) and still collides (the OE stays
+    -- active for the coord scan).  We drive pos/anim/visibility explicitly each frame.
+    if cfg.noop_callback and cfg.spr_callback then
+        w32(naddr + cfg.spr_callback, cfg.noop_callback)
+    end
     -- own VRAM tiles: claim a free high block so the engine never hands our
     -- tiles to a real sprite (the after-area-change corruption). oam.tileNum =
     -- low 10 bits of OAM attr2 (u16 @ sprite+0x04).
@@ -368,7 +396,12 @@ end
 -- safe=false → just forget refs WITHOUT writing (map changed; indices reused)
 local function despawn(safe)
     if safe then
-        if objslot then w8(cfg.obj_base + objslot * cfg.obj_stride + cfg.off_flags, 0x00) end
+        -- Only deactivate the OE if it's STILL ours (localId 0xFD).  If a real NPC
+        -- has taken the slot, clearing its flags would deactivate that NPC.
+        if objslot then
+            local oa = cfg.obj_base + objslot * cfg.obj_stride
+            if r8(oa + cfg.off_local_id) == 0xFD then w8(oa + cfg.off_flags, 0x00) end
+        end
         if sprslot then
             local b = cfg.gsprites + sprslot * cfg.spr_stride + cfg.spr_byte3e
             w8(b, r8(b) & 0xFE)   -- clear inUse
@@ -397,8 +430,11 @@ local function slot_valid()
     if not spawned() then return false end
     local nsa  = cfg.gsprites + sprslot * cfg.spr_stride
     local nobj = cfg.obj_base + objslot * cfg.obj_stride
+    -- The OE must still be OURS (localId 0xFD): if the engine reused the slot for a
+    -- real NPC, bail so on_frame re-acquires a fresh high slot instead of stomping it.
     return (r8(nsa + cfg.spr_byte3e) & 0x01) ~= 0
        and (r8(nobj + cfg.off_flags) & 0x01) ~= 0
+       and r8(nobj + cfg.off_local_id) == 0xFD
 end
 
 -- ── public API ────────────────────────────────────────────────────────────────
@@ -484,10 +520,21 @@ function PG.suspend()
     if objslot then
         w8(cfg.obj_base + objslot * cfg.obj_stride + cfg.off_flags, 0x00)
     end
-    -- Remember our sprite slot so we can clear its inUse once the field is active
-    -- again (clearing it now is unsafe — gSprites is repurposed for the menu/
-    -- battle).  Without this it lingers as an orphan ghost after closing a menu.
-    if sprslot then stale_sprslot = sprslot end
+    -- Clear our ghost SPRITE slot — but ONLY if it's still OURS (its oam.tileNum still
+    -- equals our reserved block).  On the battle-ENTRY frame the slot is still the ghost
+    -- (the battle hasn't allocated its own sprites yet), so clearing inUse here removes
+    -- the leftover ghost that otherwise lingers and draws over the battle (the stray
+    -- trainer-coloured fragment in the battle screen).  If the engine has already
+    -- REPURPOSED the slot for a battle sprite (tileNum changed), we must NOT touch it
+    -- (that write crashed the game before) — defer to the next field frame instead.
+    if sprslot then
+        local sa = cfg.gsprites + sprslot * cfg.spr_stride
+        if (r16(sa + 0x04) & 0x03FF) == (ghost_tile or -1) then
+            w8(sa + cfg.spr_byte3e, r8(sa + cfg.spr_byte3e) & 0xFE)   -- still ours → clear now
+        else
+            stale_sprslot = sprslot                                   -- repurposed → clear later
+        end
+    end
     free_reserved()               -- release our OBJ-VRAM tiles (safe: clears only our bits)
     objslot, sprslot = nil, nil
     last_anim = nil
@@ -563,6 +610,11 @@ function PG.on_frame()
         applied_imgs = nil
         last_anim = nil
         base_cx, base_cy = nil, nil
+        -- Drop the interpolation position too, so the ghost SNAPS to the partner's
+        -- spot on the new map instead of lerping across the screen from its stale
+        -- pre-transition position ("ghost briefly at the wrong location when exiting a
+        -- building").  on_ghost_pos re-snaps disp on the next update.
+        disp_x, disp_y = nil, nil
         cooldown = RESPAWN_COOLDOWN
         return
     end
@@ -601,6 +653,9 @@ function PG.on_frame()
     -- smooth sub-pixel position.  The target is already smooth (sender derives
     -- it from coordOffset), so a light ease tracks it closely with no stutter;
     -- snap on a big gap (warp/fly/resync).
+    -- Snap (don't lerp) if disp was just cleared (first sight / post-transition) so we
+    -- never interpolate from a nil/stale position across the screen.
+    if not disp_x or not disp_y then disp_x, disp_y = ghost.x, ghost.y end
     local function approach(cur, tgt)
         if math.abs(tgt - cur) >= SNAP_PX then return tgt end
         return cur + (tgt - cur) * GHOST_LERP
@@ -648,8 +703,18 @@ function PG.on_frame()
     -- mon sprite walking in front, is a separate exploration.)  ghost.bt is still
     -- carried end-to-end and freezes the ghost; only the blink is gone.
     local in_battle = (ghost.bt == 1)                              -- freeze (idle anim) below
+    -- HIDE the ghost while a SCREEN FADE is in progress.  pltt_trusted() compares the
+    -- two shadow buffers, which diverge only during an active fade (warp / battle
+    -- transition); during that window the slot-15 palette path can't run, so without
+    -- this the ghost briefly draws with the PLAYER's slot-0 palette at its half-settled
+    -- transition position ("ghost at the wrong location/colour for a moment when exiting
+    -- a building").  The screen is mid-fade anyway, so simply not drawing it is clean.
+    -- Hide during an active screen FADE (warp/battle transition): pltt_trusted() is
+    -- false only while the two shadow buffers diverge, i.e. mid-fade.  The precise
+    -- on-screen cull happens below once pos1 is known.
+    local trusted = pltt_trusted()
     local b3e = r8(nsa + cfg.spr_byte3e) | 0x01 | 0x02             -- inUse + coordOffset
-    local hide = off_screen
+    local hide = off_screen or (not trusted)
     if hide then b3e = b3e | 0x04 else b3e = b3e & 0xFB end         -- 0x04 = invisible
     w8(nsa + cfg.spr_byte3e, b3e)
 
@@ -690,21 +755,23 @@ function PG.on_frame()
     --      info sent, or older sender).
     -- All three buffers (Unfaded + Faded + live PLTT) so the day/night tint isn't doubled.
     local pal_bits
-    if pltt_trusted() then
+    if trusted then   -- pltt_trusted(), computed once above for the hide decision
         if applied_imgs ~= nil and ghost.pcols then
             -- The partner sent UNTINTED colours (the unfaded master).  Writing them
-            -- raw into the FADED/PLTT buffers left the ghost untinted → too-bright /
-            -- wrong colours at dusk/night/in caves (the clone path below tints because
-            -- it copies the player's already-tinted FADED buffer).  Derive the engine's
-            -- current per-channel day/night tint from the PLAYER's own slot (the tint
-            -- is a uniform multiplier across the whole OBJ palette this frame: faded =
-            -- tint·unfaded) and apply it to pcol so the ghost tints like every other
-            -- sprite.  At neutral tint (daytime) the ratio is ~1 → colours unchanged.
+            -- raw left the ghost untinted at night, because RR's day/night tint lives
+            -- in the DISPLAYED palette RAM (obj_pltt), NOT the faded buffer — in steady
+            -- state faded == unfaded (it only diverges during a screen FADE), so a
+            -- faded/unfaded ratio was ~1 = no tint.  Derive the engine's current
+            -- per-channel tint from the PLAYER's own slot as pltt/unfaded (palette RAM
+            -- is where the time-of-day tint actually shows), then apply it to pcol so
+            -- the ghost tints like every other sprite.  The engine does NOT re-tint our
+            -- unregistered slot 15, so we must bake the tint in ourselves.  Daytime
+            -- ratio ≈ 1 → colours unchanged.
             local psrc = (r16(cfg.gsprites + p_sid * cfg.spr_stride + 0x04) >> 12) & 0x0F
             local rn, gn, bn, rd, gd, bd = 0, 0, 0, 0, 0, 0
             for i = 0, 15 do
                 local uf = r16(cfg.pltt_unfaded_obj + psrc*0x20 + i*2)
-                local fd = r16(cfg.pltt_faded_obj   + psrc*0x20 + i*2)
+                local fd = r16(cfg.obj_pltt          + psrc*0x20 + i*2)   -- tinted palette RAM
                 rd = rd + (uf & 0x1F);          rn = rn + (fd & 0x1F)
                 gd = gd + ((uf >> 5) & 0x1F);   gn = gn + ((fd >> 5) & 0x1F)
                 bd = bd + ((uf >> 10) & 0x1F);  bn = bn + ((fd >> 10) & 0x1F)
@@ -760,6 +827,19 @@ function PG.on_frame()
     local gy_pos1 = round(disp_y + base_cy)
     ws16(nsa + cfg.spr_x, gx_pos1)
     ws16(nsa + cfg.spr_y, gy_pos1)
+
+    -- Cull when the ghost is far off-screen, so its OAM coordinate doesn't WRAP and
+    -- draw garbage at the opposite edge (the door-exit wrong-location case, screen y far
+    -- negative).  Loose bounds: a sprite right at an edge still shows (it may show a
+    -- brief edge sliver when the partner is parked just off the top — accepted for now).
+    local scoffx = cfg.coff_x and rs16(cfg.coff_x) or 0
+    local scoffy = cfg.coff_y and rs16(cfg.coff_y) or 0
+    local ssx, ssy = gx_pos1 + scoffx, gy_pos1 + scoffy
+    if ssx < -16 or ssx > 240 or ssy < -16 or ssy > 160 then
+        local vb = nsa + cfg.spr_byte3e
+        w8(vb, r8(vb) | 0x04)   -- invisible
+    end
+
 
     -- Throttled diagnostic so we debug with real numbers, not guesses.
     dbg_frames = dbg_frames + 1
