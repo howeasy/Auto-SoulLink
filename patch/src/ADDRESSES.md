@@ -50,3 +50,27 @@ is a valid map for the base engine here.
 | 14 | u16 | reason | fail reason code |
 | 16 | u8[32] | args | opcode arguments |
 | 48 | u8[?] | result | opcode result bytes |
+
+### Opcodes
+| op | name | args | effect |
+|---|---|---|---|
+| 1 | PING | — | ack ok (presence/round-trip check) |
+| 2 | FORCE_FAINT | `[0]`=battler | `gBattleMons[battler].hp = 0` |
+| 3 | FORCE_MOVE | `[0]`=battler `[1]`=target `[2]`=move_pos `[4..5]`=move_id(u16) | commits a forced move (see below) |
+
+## Phase-1 battle globals (triple-validated: SLink RR profile ↔ BPRE.ld ↔ binary)
+| symbol | address | notes |
+|---|---|---|
+| `gBattleMons` | `0x02023BE4` | stride `0x58`, hp(u16) @+0x28, maxHP @+0x2C |
+| `gChosenActionByBank` | `0x02023D7C` | u8[4]; USE_MOVE=0 |
+| `gChosenMovesByBanks` | `0x02023DC4` | u16[4]; move id |
+| `gBattleCommunication` | `0x02023E82` | u8[8]; 3 = confirmed-standby (skips menu) |
+| `gBattleStruct` | `0x02023FE8` | pointer; `chosenMovePositions[]` @+0x80, `moveTarget[]` @+0x0C |
+
+> **Cross-validation caught an error:** an RE pass claimed `chosenMovePositions @ +0x90`; the
+> battle-tested SLink profile (`gen3_frlge.lua`) and shipping Explode-mode prove it is **+0x80**.
+>
+> FORCE_MOVE replicates SLink's production "Variant-3" commit natively. **Live-engine
+> validation (the move actually executing in a real battle) is gated on an in-battle RR
+> savestate** we don't yet have; the dispatcher's writes are runtime-validated via
+> `lua/tests/test_mailbox_battle.lua` (injects a fake battle state, confirms every global).

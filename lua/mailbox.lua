@@ -18,9 +18,16 @@ MB.ABI  = 1
 local O_SIG, O_ABI, O_OPCODE, O_SEQ, O_STATUS, O_ACKSEQ, O_REASON, O_ARGS, O_RESULT =
       0, 4, 6, 8, 10, 12, 14, 16, 48
 
-MB.OP_PING = 1
+MB.OP_PING        = 1
+MB.OP_FORCE_FAINT = 2   -- args: {battler}
+MB.OP_FORCE_MOVE  = 3   -- args: {battler, target, move_pos, 0, move_lo, move_hi}
 
 MB.ST_IDLE, MB.ST_BUSY, MB.ST_OK, MB.ST_FAIL = 0, 1, 2, 3
+
+-- Helper: build the FORCE_MOVE arg array (move_id is u16 at aligned args offset 4).
+function MB.force_move_args(battler, target, move_pos, move_id)
+    return {battler, target, move_pos, 0, move_id % 256, math.floor(move_id / 256)}
+end
 
 local seq = 0
 
