@@ -1,0 +1,8 @@
+# SLink companion patch — never commit toolchains, reference repos, ROMs, or build scratch.
+vendor/
+build/
+*.gba
+*.elf
+*.o
+*.sym
+# the small generated patches ARE versioned (dist/), so do not ignore dist/
