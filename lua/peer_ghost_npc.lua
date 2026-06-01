@@ -60,7 +60,8 @@ function PG.init(cfg)
   if cfg then for k, v in pairs(cfg) do C[k] = v end end
   S = { oeId = nil, sprId = nil, pending = nil, ghost = nil, dx = nil, dy = nil, pmap = nil,
         base_cx = nil, base_cy = nil, last_anim = nil, neutralized = false, armed = false, pi_last = 0,
-        interact_pending = false, cur_gfx = nil, applied_imgs = nil }
+        interact_pending = false, cur_gfx = nil, applied_imgs = nil,
+        spawn_cd = 0, spawn_fail_logged = false }
 end
 
 function PG.present() return MB ~= nil and MB.present() end
@@ -101,6 +102,7 @@ local function despawn()
   if S.oeId then dbg("despawn oeId=" .. tostring(S.oeId)); MB.send(MB.OP_DESPAWN_PEER_NPC, { S.oeId }) end
   S.oeId, S.sprId, S.pending, S.dx, S.dy = nil, nil, nil, nil, nil
   S.base_cx, S.base_cy, S.last_anim, S.neutralized, S.applied_imgs = nil, nil, nil, false, nil
+  S.spawn_cd, S.spawn_fail_logged = 0, false   -- fresh map -> retry the spawn immediately
 end
 
 -- partner state update { mg, mn, x, y, f, mv, an, gfx } (x,y are WORLD PIXELS)
@@ -135,23 +137,33 @@ function PG.on_frame()
 
   if not same_map then if S.oeId then despawn() end; return end
 
-  -- spawn (async): request once, then adopt the returned object-event id
+  -- spawn (async): request once, then adopt the returned object-event id. The engine has only
+  -- 16 object-event slots; on an NPC-dense map all 16 are used and the spawn returns 16 (no slot).
+  -- Back off rather than hammering the mailbox every frame — slots free as NPCs scroll off-view.
   if not S.oeId then
+    if S.spawn_cd > 0 then S.spawn_cd = S.spawn_cd - 1; return end
     if not S.pending then
       local gfx = g.gfx or p_gfx()
       local seq = MB.send(MB.OP_SPAWN_PEER_NPC,
         MB.spawn_npc_args(gfx, LOCALID, p_tile_x() + 1, p_tile_y(), 0))
       S.pending, S.cur_gfx = seq, gfx
-      dbg(string.format("spawn requested seq=%s gfx=%d at tile(%d,%d)", tostring(seq), gfx,
-        p_tile_x() + 1, p_tile_y()))
     else
       local stp = MB.poll(S.pending)
       if stp then
         local id = MB.read_result_u8(0)
         S.pending = nil
-        if id < 16 then S.oeId = id; S.sprId = memory.read_u8(oe(id, OE_SPRID))
+        if id < 16 then
+          S.oeId, S.sprId = id, memory.read_u8(oe(id, OE_SPRID))
+          S.spawn_fail_logged = false
           dbg(string.format("spawned oeId=%d sprId=%d gfx=%d", S.oeId, S.sprId, S.cur_gfx or -1))
-        else dbg("spawn FAILED (result id=" .. tostring(id) .. ") — retrying"); return end
+        else
+          if not S.spawn_fail_logged then
+            S.spawn_fail_logged = true
+            dbg("no free object-event slot (map at 16/16 NPCs) — backing off; ghost appears when one frees")
+          end
+          S.spawn_cd = 60   -- ~1s; retry then
+          return
+        end
       end
     end
     if not S.oeId then return end
