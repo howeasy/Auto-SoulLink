@@ -103,6 +103,7 @@ local HUD   = require("hud")
 local ok_mb, MB = pcall(require, "mailbox")
 if not ok_mb then MB = nil end
 local function patch_present() return MB ~= nil and MB.present() end
+local patch_logged = false   -- latch: log patch presence/absence once (beacon appears ~frame 13)
 -- Engine-NPC peer ghost (companion-patch path; no-ops without the patch).
 local ok_pg, PG = pcall(require, "peer_ghost_npc")
 if ok_pg then PG.init() else PG = nil end
@@ -1345,6 +1346,19 @@ local function on_frame()
     end
 
     if not initialized then return end
+
+    -- One-shot companion-patch detection log (RR only — the patch is RR-specific). The
+    -- native beacon at 0x0203F800 appears a few frames after boot, so latch on the first
+    -- positive detection; if still absent after a grace window, announce fallback once.
+    if IS_RR and not patch_logged then
+        if patch_present() then
+            console.log("[SLink-FRLGE] companion patch: PRESENT — native features enabled")
+            patch_logged = true
+        elseif frame_count > 180 then
+            console.log("[SLink-FRLGE] companion patch: absent — RAM-poke fallback (unpatched ROM)")
+            patch_logged = true
+        end
+    end
 
     -- 4. Read current state — cache battle/overworld state once per frame.
     -- Within a single on_frame() callback the GBA CPU is frozen, so these
