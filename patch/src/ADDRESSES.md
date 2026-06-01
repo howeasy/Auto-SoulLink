@@ -78,9 +78,17 @@ EWRAM state `SlinkState @ 0x0203F8D0` {enforce_rules, pi_armed, pi_oe, pi_count}
 - **ARM_PEER_INTERACT** (talk-to-ghost): each frame, if A is newly pressed (`gMain`(0x030030F0)+0x2E &
   0x0001) and the tile in front of the player (object-event facing@0x18: 1=down/2=up/3=left/4=right)
   equals the ghost object-event's tile, bump `pi_count` (the client polls it to notify the server/
-  partner) and show the pre-set native message (`SLINK_TEXT_BUF`). Live: A-press facing the ghost ->
-  counter++, native box shown, **no softlock** (a real engine-spawned NPC handles A-press cleanly,
-  unlike the old hand-clone).
+  partner) and run a NAVIGABLE dialogue. Live: A-press facing the ghost -> counter++, native box
+  shown, **no softlock** (a real engine-spawned NPC handles A-press cleanly, unlike the old hand-clone).
+- **Dismissable dialogue (not bare ShowFieldMessage).** `ShowFieldMessage` only draws a box; the
+  close (wait-for-A -> hide -> unlock) is script-driven, so on its own it sticks open. Instead the
+  handler builds a 9-byte field script in EWRAM `SLINK_SCRIPT_BUF=0x0203F8E0`:
+  `loadword 0, 0x0203F900` (`0F 00 00 F9 03 02`) ; `callstd MSGBOX_SIGN` (`09 03`) ; `end` (`02`),
+  and runs it via `ScriptContext1_SetupScript = 0x08069AE4` (Thumb). `gStdScripts = 0x8160450` (10
+  entries; **MSGBOX_SIGN = callstd index 3** = lockall/message/waitmessage/waitbuttonpress/releaseall
+  — a real A-to-advance/dismiss conversation). Guard: skip if `sScriptContext2Enabled`(`0x03000F9C`)
+  != 0 (a dialogue is already up) so mashing A mid-conversation doesn't re-trigger. Live-validated
+  (`test_live_peerinteract` on rebuilt ROM: counter++, message shown, no softlock).
 
 ## Phase-5 (linked battle rules) — primitives validated
 New gameplay only a patch enables. `gBattleMons` hp@0x28, maxHP@0x2C, status1@0x4C (stride 0x58).

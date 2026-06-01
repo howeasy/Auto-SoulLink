@@ -104,7 +104,15 @@ typedef u8 (*ShowMsg_t)(const u8 *str);
 #define ShowFieldMessage ((ShowMsg_t)0x0806943Du)
 typedef void (*PlayFanfare_t)(u16 songId);
 #define PlayFanfare ((PlayFanfare_t)0x08071C61u)
-#define SLINK_TEXT_BUF 0x0203F900u   /* Lua writes FR-encoded text here before SHOW_MESSAGE */
+/* void ScriptContext1_SetupScript(const u8 *ptr) @0x08069AE4 — queues a field script the
+ * overworld runs NATIVELY: lockall -> message -> waitmessage -> waitbuttonpress -> releaseall.
+ * Unlike a bare ShowFieldMessage (draws a box nothing ever closes), this is a real, navigable,
+ * A-to-dismiss conversation. We hand it a tiny EWRAM script that points at our text buffer. */
+typedef void (*SetupScript_t)(const u8 *ptr);
+#define ScriptContext1_SetupScript ((SetupScript_t)0x08069AE5u)
+#define sScriptContext2Enabled 0x03000F9Cu   /* u8 != 0 while a field script/dialogue is active */
+#define SLINK_TEXT_BUF   0x0203F900u   /* Lua writes FR-encoded text here before SHOW_MESSAGE */
+#define SLINK_SCRIPT_BUF 0x0203F8E0u   /* 9-byte EWRAM scratch: our "msgbox sign" bytecode */
 #define gObjectEvents 0x02036E38u   /* stride 0x24 */
 #define OE_STRIDE     0x24u
 #define gSprites      0x0202063Cu   /* stride 0x44 */
@@ -172,6 +180,7 @@ static void enforce_rules(void)
 static void check_peer_interact(void)
 {
     if (!SS->pi_armed) return;
+    if (R8(sScriptContext2Enabled)) return;              /* a dialogue/script is already up */
     if (!(R16(gMain + 0x2E) & KEY_A)) return;            /* A newly pressed this frame? */
     u32 g = gObjectEvents + (u32)SS->pi_oe * OE_STRIDE;
     if (!(R8(g) & 1)) return;                             /* ghost active? */
@@ -184,7 +193,15 @@ static void check_peer_interact(void)
     else if (f == 4) px++;       /* right */
     if (px == (s16)R16(g + 0x10) && py == (s16)R16(g + 0x12)) {
         SS->pi_count++;
-        ShowFieldMessage((const u8 *)SLINK_TEXT_BUF);    /* native interaction message */
+        /* Build "loadword 0, SLINK_TEXT_BUF ; callstd MSGBOX_SIGN(3) ; end" and run it as a
+         * native, dismissable dialogue (the std sign msgbox lockall/waits-for-A/releaseall). */
+        volatile u8 *s = (volatile u8 *)SLINK_SCRIPT_BUF;
+        s[0] = 0x0F; s[1] = 0x00;                         /* loadword dest 0, <text ptr> */
+        s[2] = (u8)(SLINK_TEXT_BUF);        s[3] = (u8)(SLINK_TEXT_BUF >> 8);
+        s[4] = (u8)(SLINK_TEXT_BUF >> 16);  s[5] = (u8)(SLINK_TEXT_BUF >> 24);
+        s[6] = 0x09; s[7] = 0x03;                         /* callstd MSGBOX_SIGN */
+        s[8] = 0x02;                                      /* end */
+        ScriptContext1_SetupScript((const u8 *)SLINK_SCRIPT_BUF);
     }
 }
 

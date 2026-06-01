@@ -58,7 +58,7 @@ function PG.init(cfg)
   if cfg then for k, v in pairs(cfg) do C[k] = v end end
   S = { oeId = nil, sprId = nil, pending = nil, ghost = nil, dx = nil, dy = nil, pmap = nil,
         base_cx = nil, base_cy = nil, last_anim = nil, neutralized = false, armed = false, pi_last = 0,
-        interact_pending = false }
+        interact_pending = false, cur_gfx = nil }
 end
 
 function PG.present() return MB ~= nil and MB.present() end
@@ -139,7 +139,7 @@ function PG.on_frame()
       local gfx = g.gfx or p_gfx()
       local seq = MB.send(MB.OP_SPAWN_PEER_NPC,
         MB.spawn_npc_args(gfx, LOCALID, p_tile_x() + 1, p_tile_y(), 0))
-      S.pending = seq
+      S.pending, S.cur_gfx = seq, gfx
       dbg(string.format("spawn requested seq=%s gfx=%d at tile(%d,%d)", tostring(seq), gfx,
         p_tile_x() + 1, p_tile_y()))
     else
@@ -148,7 +148,7 @@ function PG.on_frame()
         local id = MB.read_result_u8(0)
         S.pending = nil
         if id < 16 then S.oeId = id; S.sprId = memory.read_u8(oe(id, OE_SPRID))
-          dbg(string.format("spawned oeId=%d sprId=%d", S.oeId, S.sprId))
+          dbg(string.format("spawned oeId=%d sprId=%d gfx=%d", S.oeId, S.sprId, S.cur_gfx or -1))
         else dbg("spawn FAILED (result id=" .. tostring(id) .. ") — retrying"); return end
       end
     end
@@ -157,6 +157,14 @@ function PG.on_frame()
 
   -- the engine may recycle the slot (battle, warp); bail if our sprite went away
   if spr_inuse(S.sprId) == 0 then dbg("sprite recycled — re-spawning"); S.oeId, S.sprId = nil, nil; return end
+
+  -- The partner changed graphics (walk<->run share a gfx, but bike/surf/fish are DIFFERENT
+  -- graphicsIds with their own sprites + anim tables). Re-spawn so the engine loads the right
+  -- sprite/anims/palette for the new mode — the ghost then bikes/surfs/fishes natively.
+  if g.gfx and g.gfx ~= S.cur_gfx then
+    dbg(string.format("partner gfx %d -> %d; re-spawning", S.cur_gfx or -1, g.gfx))
+    despawn(); return
+  end
 
   -- One-time per spawn: neutralize the OE sprite callback so the engine stops re-asserting
   -- idle facing / palette over our puppet drive (sprite still animates via AnimateSprite).
@@ -200,11 +208,13 @@ function PG.on_frame()
   memory.write_u16_le(oe(S.oeId, OE_PX), gtx & 0xFFFF); memory.write_u16_le(oe(S.oeId, OE_PY), gty & 0xFFFF)
   memory.write_u8(oe(S.oeId, OE_ELEV), p_elev())
 
-  -- Animation: while moving, mirror the partner's live animNum (walk/run); else a directional
-  -- walk; idle -> a single-frame face anim. Re-assert animBeginning so frame 0 re-DMAs.
+  -- Animation: while moving, mirror the partner's LIVE animNum (walk/run/bike/surf/fish — the
+  -- ghost shares the partner's gfx after the re-spawn above, so any animNum is valid here); fall
+  -- back to a directional walk if none sent. Idle -> a single-frame face anim. Re-assert
+  -- animBeginning so frame 0 re-DMAs.
   local f = (g.f and g.f >= 1 and g.f <= 4) and g.f or 1
   local want
-  if g.mv == 1 then want = (g.an and g.an >= 0 and g.an <= 23) and g.an or walk_anim(f)
+  if g.mv == 1 then want = (g.an and g.an > 0) and g.an or walk_anim(f)
   else want = idle_anim(f) end
   if want ~= S.last_anim then
     memory.write_u8(spr(S.sprId, SP_ANIM), want & 0xFF)
