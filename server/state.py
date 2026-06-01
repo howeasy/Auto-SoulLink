@@ -732,17 +732,18 @@ class SoulLinkState:
             log.debug(f"[SHINY] player={player_id}  key={key[:8]}  action=detected  species={sname}  area={area_id}")
             # Capturing player: shiny sound + prominent GUI prompt
             self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 95})  # SE_SHINY
+            # Momentous: native message box when patched+overworld, else the center prompt.
             self.queued_commands[player_id].append({
-                "cmd": "gui_prompt",
-                "text": f"*~ SHINY {sname} ~*",
+                "cmd": "msgbox", "fb": "prompt",
+                "text": f"Shiny {sname} found!",
                 "r": 255, "g": 215, "b": 0,
                 "frames": 600,
             })
-            # Partner: shiny sound + GUI prompt notification
+            # Partner: shiny sound + notification
             self.queued_commands[partner].append({"cmd": "play_sound", "sound": 95})  # SE_SHINY
             self.queued_commands[partner].append({
-                "cmd": "gui_prompt",
-                "text": f"*~ Partner shiny {sname} ~*",
+                "cmd": "msgbox", "fb": "prompt",
+                "text": f"Partner found a shiny {sname}!",
                 "r": 255, "g": 215, "b": 0,
                 "frames": 480,
             })
@@ -882,17 +883,17 @@ class SoulLinkState:
             # Notify both players
             cap_sname = self.adapter.species_name(cap_species_local) if cap_species_local else "Pokémon"
             shiny_sname = self.adapter.species_name(shiny_species) if shiny_species else "Pokémon"
-            link_text = f"*~ {shiny_sname}+{cap_sname} ~*"
+            box_text = f"{shiny_sname} and {cap_sname} linked!"
             log.info(f"[{player_id}] ★ BONUS PAIR: {shiny_key[:8]} ↔ {key[:8]} in {bonus_area_id}")
             log.debug(f"[SHINY] player={player_id}  key={key[:8]}  action=formed  shiny_key={shiny_key[:8]}  area={bonus_area_id}  shiny_species={shiny_sname}  cap_species={cap_sname}")
             self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 25})   # SE_SUCCESS
             self.queued_commands[partner].append({"cmd": "play_sound", "sound": 25})
             self.queued_commands[player_id].append({
-                "cmd": "hud_show", "text": link_text,
+                "cmd": "msgbox", "text": box_text,
                 "r": 255, "g": 215, "b": 0, "frames": 480,
             })
             self.queued_commands[partner].append({
-                "cmd": "hud_show", "text": link_text,
+                "cmd": "msgbox", "text": box_text,
                 "r": 255, "g": 215, "b": 0, "frames": 480,
             })
             self._save()

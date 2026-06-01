@@ -179,8 +179,9 @@ local function parse_command_list(raw)
                 spDef   = tonumber(sj:match('"spDef"%s*:%s*(%d+)')),
             }
         end
-        -- hud_show fields
+        -- hud_show / msgbox fields
         local text    = obj:match('"text"%s*:%s*"([^"]*)"')
+        local fb      = obj:match('"fb"%s*:%s*"([^"]*)"')   -- msgbox fallback style: "prompt" or hud
         local r       = tonumber(obj:match('"r"%s*:%s*(%d+)'))
         local g       = tonumber(obj:match('"g"%s*:%s*(%d+)'))
         local b       = tonumber(obj:match('"b"%s*:%s*(%d+)'))
@@ -211,7 +212,7 @@ local function parse_command_list(raw)
         if cmd then
             cmds[#cmds+1] = {
                 cmd=cmd, key=key, message=msg, stats=stats,
-                text=text, r=r, g=g, b=b, frames=frames,
+                text=text, fb=fb, r=r, g=g, b=b, frames=frames,
                 sound=sound, area_id=area_id, areas=areas,
                 trainer_id=trainer_id, blobs_hex=blobs_hex,
             }
@@ -479,6 +480,8 @@ local function dispatch_commands(cmds)
                 MB.write_message(c.text)
                 MB.send(MB.OP_SHOW_MESSAGE, {})
                 console.log("[SLink-FRLGE]   ↳ msgbox (native): " .. c.text)
+            elseif c.fb == "prompt" then
+                prompt_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
             else
                 hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
             end

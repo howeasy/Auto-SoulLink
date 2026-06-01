@@ -3423,8 +3423,8 @@ def test_shiny_capture_in_dead_zone_is_kept(tmp_path, monkeypatch):
     # Should NOT force_faint — shiny clause keeps it
     assert not has_cmd(cmds, "force_faint", SHINY_KEY)
     assert not has_cmd(cmds, "memorialize", SHINY_KEY)
-    # Capturing player gets gui_prompt + shiny sound
-    assert any("SHINY" in c.get("text", "") for c in cmds if c.get("cmd") == "gui_prompt")
+    # Capturing player gets a shiny message (msgbox; native box or prompt fallback) + sound
+    assert any("Shiny" in c.get("text", "") for c in cmds if c.get("cmd") == "msgbox")
     assert has_cmd(cmds, "play_sound")
 
 
@@ -3528,9 +3528,9 @@ def test_shiny_partner_gets_sound_and_gui_prompt(tmp_path, monkeypatch):
     # Partner gets shiny sound (SE_SHINY = 95)
     assert any(c.get("cmd") == "play_sound" and c.get("sound") == 95 for c in cmds_b), \
         "Partner should hear SE_SHINY"
-    # Partner gets a GUI prompt (center-screen notification)
-    assert any(c.get("cmd") == "gui_prompt" and "shiny" in c.get("text", "").lower() for c in cmds_b), \
-        "Partner should see a GUI prompt about the shiny"
+    # Partner gets a shiny notification (msgbox; native box when patched, else center prompt)
+    assert any(c.get("cmd") == "msgbox" and "shiny" in c.get("text", "").lower() for c in cmds_b), \
+        "Partner should see a shiny notification"
 
 
 def test_shiny_activates_pokeballs_obtained(tmp_path, monkeypatch):
