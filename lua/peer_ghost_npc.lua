@@ -213,8 +213,22 @@ function PG.on_frame()
     S.base_cx = psx - p_tile_x() * 16
     S.base_cy = psy - p_tile_y() * 16
   end
-  memory.write_u16_le(spr(S.sprId, SP_X), round(S.dx + S.base_cx) & 0xFFFF)
-  memory.write_u16_le(spr(S.sprId, SP_Y), round(S.dy + S.base_cy) & 0xFFFF)
+  local gx, gy = round(S.dx + S.base_cx), round(S.dy + S.base_cy)
+  memory.write_u16_le(spr(S.sprId, SP_X), gx & 0xFFFF)
+  memory.write_u16_le(spr(S.sprId, SP_Y), gy & 0xFFFF)
+
+  -- Visibility (invisible bit 0x04 of byte3e; engine callback is neutralized so this sticks):
+  --  • CULL off-screen — a sprite far outside the viewport has its OAM coord WRAP (9-bit X /
+  --    8-bit Y) and draws as garbage at a random on-screen spot. Screen pos = pos1 + coordOffset.
+  --  • HIDE until the partner's real sprite is applied — avoids the 1-frame spawn-gfx (= the LOCAL
+  --    player) flash at spawn / door-transition re-spawn. (No gate if the partner sends no imgs.)
+  local ssx = gx + memory.read_s16_le(C.COFF_X)
+  local ssy = gy + memory.read_s16_le(C.COFF_Y)
+  local onscreen = ssx > -16 and ssx < 256 and ssy > -16 and ssy < 176
+  local sprite_ready = (not (g.imgs and in_rom(g.imgs))) or (S.applied_imgs ~= nil)
+  local b3e = memory.read_u8(spr(S.sprId, SP_B3E))
+  if onscreen and sprite_ready then b3e = b3e & 0xFB else b3e = b3e | 0x04 end
+  memory.write_u8(spr(S.sprId, SP_B3E), b3e)
 
   -- Backing OE tile = the partner's ACTUAL tile (not the lerped display) so collision +
   -- interaction land under the ghost. Solid: match the player's elevation.

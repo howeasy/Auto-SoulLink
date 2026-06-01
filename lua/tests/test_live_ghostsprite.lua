@@ -38,5 +38,17 @@ check("ghost adopted broadcast images", spr_imgs(d.sprId) == TEST_IMGS,
       string.format("%08X (want %08X)", spr_imgs(d.sprId), TEST_IMGS))
 check("ghost adopted broadcast anims", spr_anms(d.sprId) == TEST_ANMS,
       string.format("%08X (want %08X)", spr_anms(d.sprId), TEST_ANMS))
+
+local function invis(s) return (memory.read_u8(GS + s*GST + 0x3E) & 0x04) ~= 0 end
+-- On-screen (2 tiles east): visible.
+check("on-screen ghost visible (invisible bit clear)", not invis(d.sprId))
+-- Far off-screen (30 tiles east): culled (invisible) so its OAM coord can't wrap to garbage.
+PG.on_ghost_pos({ mg=m9, mn=mA, x=(px+30)*16, y=py*16, f=4, mv=0, imgs=TEST_IMGS, anm=TEST_ANMS })
+run(10)
+check("off-screen ghost culled (invisible bit set)", invis(d.sprId))
+-- Back on-screen: visible again.
+PG.on_ghost_pos({ mg=m9, mn=mA, x=(px+2)*16, y=py*16, f=4, mv=0, imgs=TEST_IMGS, anm=TEST_ANMS })
+run(10)
+check("on-screen again -> visible", not invis(d.sprId))
 PG.on_ghost_clear()
 finish()
