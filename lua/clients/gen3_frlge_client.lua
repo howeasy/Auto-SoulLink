@@ -104,6 +104,7 @@ local ok_mb, MB = pcall(require, "mailbox")
 if not ok_mb then MB = nil end
 local function patch_present() return MB ~= nil and MB.present() end
 local patch_logged = false   -- latch: log patch presence/absence once (beacon appears ~frame 13)
+local pg_send_logged = false -- one-shot: confirm we're broadcasting our overworld position
 -- Engine-NPC peer ghost (companion-patch path; no-ops without the patch).
 local ok_pg, PG = pcall(require, "peer_ghost_npc")
 if ok_pg then
@@ -1401,6 +1402,12 @@ local function on_frame()
                    f  = f, mv = (moving and 1 or 0),
                    run = (anim >= 8 and 1 or 0),     -- GO_FAST+ (running/biking) -> ghost runs to keep up
                    gfx = memory.read_u8(OE + 0x05) }, "ghost_pos", true, true)
+            if not pg_send_logged then
+                pg_send_logged = true
+                console.log(string.format("[peer-ghost] broadcasting our position: map(%d,%d) tile(%d,%d)",
+                    memory.read_u8(OE + 0x0A), memory.read_u8(OE + 0x09),
+                    memory.read_s16_le(OE + 0x10), memory.read_s16_le(OE + 0x12)))
+            end
         end
         if PG then
             PG.on_frame()

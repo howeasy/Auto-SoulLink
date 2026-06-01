@@ -46,6 +46,14 @@ function PG.on_frame()
   local g = S.ghost
   local same_map = g and g.mg == pmg and g.mn == pmn
 
+  -- one-shot: confirm the partner's position is reaching us + whether we're on the same map
+  if g and not S.first_logged then
+    S.first_logged = true
+    console.log(string.format("[peer-ghost] partner pos received: theirs=map(%s,%s)@tile(%s,%s) "
+      .. "mine=map(%d,%d) same_map=%s", tostring(g.mg), tostring(g.mn), tostring(g.x), tostring(g.y),
+      pmg, pmn, tostring(same_map)))
+  end
+
   if not same_map then
     if S.spawned then MB.ghost_clear(); S.spawned = false end
     return
@@ -59,6 +67,12 @@ function PG.on_frame()
 
   -- post the partner's target each tick; the patch walks the ghost there natively
   MB.ghost_set_target(g.x, g.y, g.f, g.run, g.gfx)
+
+  -- one-shot: confirm the patch actually spawned the engine ghost
+  if not S.spawn_logged and MB.ghost_oe() < 16 then
+    S.spawn_logged = true
+    console.log("[peer-ghost] ghost spawned (engine oeId=" .. MB.ghost_oe() .. ")")
+  end
 
   -- surface talk-to-ghost interactions (patch bumps pi_count + shows a dismissable box)
   local cnt = MB.peer_interact_count()
