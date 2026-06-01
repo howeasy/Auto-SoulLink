@@ -27,8 +27,25 @@ typedef struct {
 } Mailbox;
 #define MB ((Mailbox*)MAILBOX_ADDR)
 
-enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4 };
-enum { ST_OK = 2, ST_FAIL = 3 };
+enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
+       OP_FORCE_MOVE_SLOT = 5 };
+enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
+
+/* Armed forced-move state (controller-swap driver), EWRAM scratch past the mailbox. */
+typedef struct {
+    volatile u8  armed, battler, move_pos, target;
+    volatile u16 seq, frames;
+} ArmedMove;
+#define AM ((ArmedMove *)0x0203F8C0u)
+
+/* ---- battle-controller plumbing (RR build-specific, runtime-discovered) ---- */
+#define gBattlerControllerFuncs 0x03004FE0u   /* u32[4] */
+/* action-select controller cycles HandleChooseActionAfterDma3 -> HandleInputChooseAction;
+ * MOVE thunk = HandleInputChooseMove slot. Discovered by reading gBattlerControllerFuncs
+ * at the live menus (see patch/src/ADDRESSES.md). */
+#define ACTION_CTRL_A           0x0802E439u
+#define ACTION_CTRL_B           0x0802E3B5u
+#define MOVE_CTRL_THUNK         0x0802EA11u
 
 /* ---- engine globals (validated: SLink RR profile <-> BPRE.ld <-> binary) ---- */
 #define gBattleMons          0x02023BE4u
@@ -37,6 +54,7 @@ enum { ST_OK = 2, ST_FAIL = 3 };
 #define gChosenMovesByBanks  0x02023DC4u
 #define gBattleCommunication 0x02023E82u
 #define gBattleStruct        0x02023FE8u   /* pointer */
+#define gBattleExecBuffer    0x02023BC8u   /* gBattleControllerExecFlags */
 #define gPlayerParty         0x02024284u
 #define gEnemyParty          0x0202402Cu
 #define gEnemyPartyCount     0x0202402Au
@@ -61,11 +79,54 @@ static void ack(u16 st, u16 reason)
     MB->opcode  = 0;        /* consumed */
 }
 
+/* Runs in place of the menu controller (we swapped gBattlerControllerFuncs[b] to here),
+ * so it's the authoritative writer at the right point in the frame. It sets the
+ * chosen-move state the action+move menus would have produced and jumps straight to
+ * STATE_WAIT_ACTION_CONFIRMED_STANDBY (4) — the engine then executes the forced move.
+ * The two-stage menu emit was abandoned: the buffer-transfer round-trip never completed
+ * under repeated calls, and CFRU's move buffer carries a Z-move byte (a stale value made
+ * Scratch fire as "Breakneck Blitz"). Jumping to CONFIRMED sidesteps both. */
+static void slink_force_controller(void)
+{
+    if (!AM->armed) return;       /* fire once; later calls (same turn) are no-ops */
+    u8 b = AM->battler;
+    u16 move = R16(gBattleMons + (u32)b * BATTLE_MON_SIZE + 0x0C + (u32)AM->move_pos * 2);
+    R8 (gChosenActionByBank  + b)     = 0;            /* USE_MOVE */
+    R16(gChosenMovesByBanks  + b * 2) = move;
+    u32 bs = R32(gBattleStruct);
+    if (bs) { R8(bs + 0x80 + b) = AM->move_pos; R8(bs + 0x0C + b) = AM->target; }
+    R8(gBattleCommunication + b) = 4;                /* CONFIRMED_STANDBY */
+    u32 mask = (1u << b) | (1u << (b + 4)) | (1u << (b + 8)) | (1u << (b + 12)) | 0xF0000000u;
+    R32(gBattleExecBuffer) &= ~mask;
+    AM->armed = 0;
+    MB->status = ST_OK; MB->reason = 0; MB->ack_seq = AM->seq; MB->opcode = 0;
+}
+
+/* Every frame while armed: when the player's action/move menu is up, swap its
+ * controller pointer to ours so the engine drives our forced choice natively. */
+static void drive_force_move(void)
+{
+    if (!AM->armed) return;
+    u32 b = AM->battler;
+    volatile u32 *cf = (volatile u32 *)(gBattlerControllerFuncs + b * 4);
+    u8 comm = R8(gBattleCommunication + b);
+    if ((comm == 2 && (*cf == ACTION_CTRL_A || *cf == ACTION_CTRL_B)) ||
+        (comm == 3 && *cf == MOVE_CTRL_THUNK)) {
+        *cf = ((u32)&slink_force_controller) | 1u;   /* Thumb */
+    }
+    if (++AM->frames > 600) {
+        AM->armed = 0;
+        MB->status = ST_FAIL; MB->reason = 10; MB->ack_seq = AM->seq; MB->opcode = 0;
+    }
+}
+
 __attribute__((section(".text.entry"), used))
 void slink_hook(void)
 {
     MB->signature   = SLNK_SIG;   /* presence beacon, every frame */
     MB->abi_version = ABI_VER;
+
+    drive_force_move();           /* runs the armed controller-swap each frame */
 
     u16 op = MB->opcode;
     if (op == 0) return;          /* idle */
@@ -105,6 +166,17 @@ void slink_hook(void)
                   /*otIdType*/0, /*otId*/0);
         break;
     }
+
+    case OP_FORCE_MOVE_SLOT:      /* args: [0]=battler [1]=target [2]=move_pos */
+        AM->battler  = MB->args[0];
+        AM->target   = MB->args[1];
+        AM->move_pos = MB->args[2];
+        AM->seq      = MB->seq;
+        AM->frames   = 0;
+        AM->armed    = 1;
+        MB->status   = ST_BUSY;   /* the controller acks when the move fires */
+        MB->opcode   = 0;
+        return;
 
     default:
         ack(ST_FAIL, 1);          /* unknown opcode */

@@ -28,6 +28,11 @@ function MB.create_mon_args(slot, species, level, party)
     return {slot, party or 0, species % 256, math.floor(species / 256), level}
 end
 
+MB.OP_FORCE_MOVE_SLOT = 5   -- args: {battler, target, move_pos} — controller-swap driver
+function MB.force_move_slot_args(battler, target, move_pos)
+    return {battler, target, move_pos}
+end
+
 MB.ST_IDLE, MB.ST_BUSY, MB.ST_OK, MB.ST_FAIL = 0, 1, 2, 3
 
 -- Helper: build the FORCE_MOVE arg array (move_id is u16 at aligned args offset 4).

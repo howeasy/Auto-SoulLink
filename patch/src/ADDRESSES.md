@@ -58,6 +58,7 @@ is a valid map for the base engine here.
 | 2 | FORCE_FAINT | `[0]`=battler | `gBattleMons[battler].hp = 0` |
 | 3 | FORCE_MOVE | `[0]`=battler `[1]`=target `[2]`=move_pos `[4..5]`=move_id(u16) | commits a forced move (see below) |
 | 4 | CREATE_MON | `[0]`=slot `[1]`=party(0=player,1=enemy) `[2..3]`=species(u16) `[4]`=level | engine `CreateMon` into player/enemy party[slot] |
+| 5 | FORCE_MOVE_SLOT | `[0]`=battler `[1]`=target `[2]`=move_pos | **live** forced move via controller-swap (see below) |
 
 ## Phase-2 (CREATE_MON) — validated
 `gPlayerParty = 0x02024284` (BPRE.ld ↔ SLink RR profile), MON_SIZE 100; party struct
@@ -116,19 +117,28 @@ BEFORE_ACTION_CHOSEN=1 → WAIT_ACTION_CHOSEN=2 → WAIT_ACTION_CASE_CHOSEN=3 �
   `chosenMovePositions=[2]`, `gChosenMoveByBattler=moves[[2]]`, `moveTarget=[3]`, comm→4 (executes).
 Move emit (`battle_controller_player.c:342`): `EmitTwoReturnValues(1, 10, cursor | (target<<8))`.
 
-**Prototype result (Lua, on the battle save):** a frame-hook 2-stage driver
-(comm2→write action+clear exec; comm3→write `[1]=10 [2]=pos [3]=target`+clear exec) **successfully
-drives the state machine 1→2→3→4 to "confirmed"** — the controller IS driven natively. BUT the
-move executed is the **default slot 0, not the forced slot**: our CallCallbacks hook runs *before*
-the battle controllers each frame, so at comm 3 the move-menu controller overwrites
-`gBattleBufferB[2]` after our write but before the main func reads it. **Robust fix: hook the
-move-controller function itself** (`HandleInputChooseMove`, a CFRU function — needs its address
-in the RR build via RE/pattern-scan) so our code *is* the controller and emits the chosen move,
-**or** relocate the dispatcher hook to run after the controllers. Addresses in hand:
-`gBattleBufferB=0x20233C4` (stride 0x200), `gBattleExecBuffer=0x02023BC8`, exec mask
-`bit|bit<<4|bit<<8|bit<<12|0xF0000000`, `PlayerBufferExecCompleted=0x0802E33C`, `gLockedMoves=0x2023DB8`.
-**FORCE_MOVE remains a validated *commit* primitive; live slot-accurate execution is the one open
-item — the approach is proven viable, only the hook-ordering/controller-intercept remains.**
+### SOLVED — FORCE_MOVE_SLOT (opcode 5), live-validated
+A pre-callback2 hook can't win the buffer race (the controller/DMA overwrites it during
+callback2). The fix is a **controller-pointer swap**: when armed and the player's menu is up,
+the frame hook repoints `gBattlerControllerFuncs[battler]` (0x3004FE0) to our own routine, which
+therefore runs *as* the controller (authoritative). That routine sets `gChosenActionByBank=USE_MOVE`,
+`gChosenMovesByBanks[b]=gBattleMons[b].moves[move_pos]`, `gBattleStruct->chosenMovePositions[b]`/
+`moveTarget[b]`, and **jumps comm straight to STATE_WAIT_ACTION_CONFIRMED_STANDBY (4)** + clears the
+exec mask, then disarms (fires once via an `armed` guard; the engine reassigns the controller at the
+next menu). Jumping to CONFIRMED sidesteps both the buffer-transfer round-trip *and* CFRU's Z-move
+byte (a stale value made Scratch fire as "Breakneck Blitz").
+
+**Live-validated** (`test_live_forcemove.lua`): forcing slot 1 (Growl) on the lead → slot-1 PP drops,
+fires once, no corruption, no Z-move. Comm enum confirmed: 1 BEFORE → 2 WAIT_ACTION → 3 CASE_CHOSEN
+→ 4 CONFIRMED_STANDBY. The exec mask is `bit|bit<<4|bit<<8|bit<<12|0xF0000000` on `gBattleExecBuffer
+=0x02023BC8`.
+
+**RR-build-specific addresses (runtime-discovered — re-discover per RR version):**
+action-menu controllers `0x0802E439`/`0x0802E3B5`, move-menu controller thunk `0x0802EA11`
+(→ real `HandleInputChooseMove` 0x090AB8B8). Also found (used by the abandoned emit approach,
+kept for reference): `EmitTwoReturnValues=0x0800E848`, `EmitMoveChosen=0x090AA73C`,
+`PlayerBufferExecCompleted=0x0802E33C`, `gBattleBufferB=0x20233C4` (stride 0x200, CFRU format
+`[0]=0x21 [1]=10/action [2]=move_pos [3]=target [4]=mega [5]=ultra [6]=zMove [7]=dynamax`).
 
 **This empirically validates the report's core thesis:** pure external RAM-poke is
 fundamentally limited; robust battle control needs in-ROM (controller-hook) code.
