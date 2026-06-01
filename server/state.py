@@ -315,10 +315,9 @@ class SoulLinkState:
         cmd = {
             "cmd": "ghost_pos",
             "mg": int(msg.get("mg", 0)), "mn": int(msg.get("mn", 0)),
-            "x": int(msg.get("x", 0)),   "y": int(msg.get("y", 0)),
+            "x": int(msg.get("x", 0)),   "y": int(msg.get("y", 0)),   # TILE coords
             "f": int(msg.get("f", 1)),   "gfx": int(msg.get("gfx", 0)),
-            "mv": int(msg.get("mv", 0)), "an": int(msg.get("an", 0)),
-            "imgs": int(msg.get("imgs", 0)), "anm": int(msg.get("anm", 0)),
+            "mv": int(msg.get("mv", 0)), "run": int(msg.get("run", 0)),
         }
         q = self.queued_commands[partner]
         # coalesce: keep only the latest ghost_pos so the queue can't grow unbounded

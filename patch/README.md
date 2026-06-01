@@ -19,7 +19,7 @@ build-specific). Re-pin and rebuild for a different build: `python patch/tools/b
 ## Apply the patch
 
 Apply `patch/dist/SLink-RR.ups` to your clean RR ROM with any UPS patcher
-(Flips, NUPS, RomPatcher.js, …). Result md5 should be `c0e7fdd32806594e841613086218cdf4`.
+(Flips, NUPS, RomPatcher.js, …). Result md5 should be `b977abb4ce85cfa3c91e38fc5eeaab2a`.
 (`SLink-RR.ips` is also provided.) Then load the patched ROM in BizHawk as usual.
 
 ## Verify the patch loaded

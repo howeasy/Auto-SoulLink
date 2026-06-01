@@ -1,325 +1,72 @@
--- peer_ghost_npc.lua — engine-NPC peer ghost (Gen 3 Radical Red, companion-patch path).
+-- peer_ghost_npc.lua — engine-driven peer ghost (Gen 3 Radical Red, companion-patch path).
 --
--- Renders the partner as a REAL engine object-event spawned by the SLink companion patch
--- (SPAWN_PEER_NPC). The engine allocates the sprite / VRAM tiles / palette slot and applies
--- day/night tint (so tint is correct for free — the clone's hardest-won fix). We then drive
--- the sprite as a PUPPET: neutralize its movement callback so the engine stops fighting us,
--- and each frame set its sub-pixel position, walk/idle animation, and backing-OE tile.
+-- The partner is shown as a REAL engine object-event. The companion patch's frame hook
+-- (drive_ghost in handlers.c) spawns it once and WALKS it toward a target tile each frame using the
+-- engine's native held-movement API — so the engine owns animation, sub-pixel motion, palette,
+-- day/night tint, off-screen culling, and collision. We no longer puppet sprite memory from Lua.
 --
--- Techniques ported from the proven clone (zealous-mccarthy-84307d/lua/peer_ghost.lua):
---  • sub-pixel smoothness: sender broadcasts coordOffset-derived WORLD PIXELS; we position via
---    a baseline C = playerSprite.pos1 - playerTile*16 CACHED WHILE THE PLAYER IS IDLE, so the
---    ghost never lurches when the player's tile snaps mid-step. ghost.pos1 = round(disp + C).
---  • animation: want = moving and walk_anim(f) or idle_anim(f) (idle=f-1, walk=f+3), with the
---    partner's live animNum preferred while moving. Set animNum + animBeginning each change.
---  • collision + interaction: keep the backing OE solid (matched elevation) and its currentCoords
---    UNDER the ghost, so you bump into your partner where you see them (no phantom/"invisible"
---    collision), and pressing A toward it fires the patch's ARM_PEER_INTERACT detection.
+-- This receiver's whole job: when the partner is on the SAME map as the local player, request the
+-- ghost once and post the partner's target tile + facing + gfx into the shared GhostState each tick;
+-- when they're not, clear it. The patch owns the spawn/despawn/map-change/gfx-change lifecycle.
 --
--- Receiver only: feed partner state via on_ghost_pos{mg,mn,x,y,f,mv,an,gfx}. Requires the patch.
+-- Feed it the partner's state via on_ghost_pos{mg,mn,x,y,f,mv,run,gfx} where x,y are TILE coords
+-- (object-event currentCoords space). Requires the patch (mailbox); no-ops gracefully without.
 
 local ok_mb, MB = pcall(require, "mailbox")
 if not ok_mb then MB = nil end
 
 local PG = {}
+local OE = 0x02036E38          -- gObjectEvents[0] = the local player
+local interact_text = "Your partner is here!"   -- shown when YOU press A on the ghost
+local S
 
-local LOCALID = 0xF0          -- unique localId for the ghost object-event
-local SNAP_PX = 48            -- jump (don't lerp) if the target is farther than this (3 tiles)
-local LERP    = 0.35
-
--- RR addresses (patch is RR-only, md5 8529f3a4). cfg may override.
-local C = {
-  OE = 0x02036E38, OE_STRIDE = 0x24,   -- gObjectEvents (slot 0 = player)
-  GS = 0x0202063C, GS_STRIDE = 0x44,   -- gSprites
-  COFF_X = 0x02021BC8, COFF_Y = 0x02021BCA,  -- gSpriteCoordOffsetX/Y (s16)
-}
-
--- OE field offsets
-local OE_FLAGS, OE_SPRID, OE_GFX, OE_LOCALID = 0x00, 0x04, 0x05, 0x08
-local OE_MAPNUM, OE_MAPGRP, OE_ELEV = 0x09, 0x0A, 0x0B
-local OE_CX, OE_CY, OE_PX, OE_PY, OE_FACE = 0x10, 0x12, 0x14, 0x16, 0x18
--- sprite field offsets
-local SP_ANIMS, SP_IMAGES = 0x08, 0x0C   -- ROM ptrs: anim-cmd table + frame images
-local SP_CALLBACK, SP_X, SP_Y, SP_ANIM = 0x1C, 0x20, 0x22, 0x2A
-local SP_B2C, SP_B3E, SP_B3F = 0x2C, 0x3E, 0x3F
-local function in_rom(a) return a and a >= 0x08000000 and a < 0x0A000000 end
-
--- pret ANIM_STD: face S/N/W/E = 0/1/2/3 ; go (walk) = 4/5/6/7. facing 1=down 2=up 3=left 4=right.
-local function idle_anim(f) return f - 1 end
-local function walk_anim(f) return f + 3 end
-
-local S         -- live state
-local noop_cb   -- inert `bx lr` ROM addr (found lazily), thumb bit set
-local interact_text = "Your partner is here!"   -- native box on A-press (set via PG.set_interact_text)
-
-local DBG = true
-local fcount = 0
-local function dbg(s) if DBG then console.log("[peer-ghost] " .. s) end end
-
-function PG.init(cfg)
-  if cfg then for k, v in pairs(cfg) do C[k] = v end end
-  S = { oeId = nil, sprId = nil, pending = nil, ghost = nil, dx = nil, dy = nil, pmap = nil,
-        base_cx = nil, base_cy = nil, last_anim = nil, neutralized = false, armed = false, pi_last = 0,
-        interact_pending = false, cur_gfx = nil, applied_imgs = nil,
-        spawn_cd = 0, spawn_fail_logged = false, last_visible = nil, last_b3e = nil }
-end
-
+function PG.init() S = { ghost = nil, spawned = false, pi_last = 0, interact_pending = false } end
 function PG.present() return MB ~= nil and MB.present() end
 function PG.set_interact_text(s) if s and s ~= "" then interact_text = s end end
 
--- ---- helpers ----
-local function oe(i, off) return C.OE + i * C.OE_STRIDE + off end
-local function spr(i, off) return C.GS + i * C.GS_STRIDE + off end
-local function p_spriteId() return memory.read_u8(oe(0, OE_SPRID)) end
--- Coords/positions are SIGNED 16-bit and go negative near a map's origin. Reading them unsigned
--- wraps -50 -> 65486, which threw the ghost's computed screen pos to ~65000 ("off-screen") and
--- hid it while the partner was right next to you. (The sender already reads these signed.)
-local function p_tile_x()   return memory.read_s16_le(oe(0, OE_CX)) end
-local function p_tile_y()   return memory.read_s16_le(oe(0, OE_CY)) end
-local function p_map()      return memory.read_u8(oe(0, OE_MAPNUM)), memory.read_u8(oe(0, OE_MAPGRP)) end
-local function p_gfx()      return memory.read_u8(oe(0, OE_GFX)) end
-local function p_idle()     return (memory.read_u8(oe(0, OE_FLAGS)) & 0x80) ~= 0 end  -- heldMovementFinished
-local function p_elev()     return memory.read_u8(oe(0, OE_ELEV)) end
-local function spr_inuse(i) return memory.read_u8(spr(i, SP_B3E)) & 1 end
-local function spr_pos_x(i) return memory.read_s16_le(spr(i, SP_X)) end
-local function spr_pos_y(i) return memory.read_s16_le(spr(i, SP_Y)) end
-local function round(n)     return math.floor(n + 0.5) end
+-- partner state update; x,y are TILE coords (not world pixels — the engine interpolates now)
+function PG.on_ghost_pos(t) if S then S.ghost = t end end
 
--- Find an inert `bx lr` (Thumb 0x4770) in low ROM to use as a no-op sprite callback.
-local function find_noop_cb()
-  if noop_cb ~= nil then return noop_cb end
-  for off = 0, 0xFFFF, 2 do
-    if memory.read_u16_le(0x08000000 + off) == 0x4770 then noop_cb = (0x08000000 + off) | 1; return noop_cb end
-  end
-  noop_cb = false   -- not found; skip neutralize rather than write a bad pointer
-  return noop_cb
+function PG.on_ghost_clear()
+  if not S then return end
+  S.ghost = nil
+  if S.spawned and MB then MB.ghost_clear() end
+  S.spawned = false
 end
 
-local function disarm()
-  if S.armed and MB then MB.send(MB.OP_ARM_PEER_INTERACT, { 0, 0 }) end
-  S.armed = false
-end
-
--- Forget our ghost WITHOUT touching the engine. Use when the slot is already gone or reassigned
--- (warp tears down OEs; off-screen cull frees it): sending DESPAWN/ARM for a stale id would hit a
--- REAL NPC now living in that slot (the Oak's-lab corruption). Re-spawn happens on a later frame.
-local function drop()
-  S.oeId, S.sprId, S.pending, S.dx, S.dy = nil, nil, nil, nil, nil
-  S.base_cx, S.base_cy, S.last_anim, S.neutralized, S.applied_imgs = nil, nil, nil, false, nil
-  S.spawn_cd, S.spawn_fail_logged, S.armed = 0, false, false
-end
-
--- Actively remove our (still-valid) ghost + disarm, then forget it.
-local function despawn()
-  disarm()
-  if S.oeId then dbg("despawn oeId=" .. tostring(S.oeId)); MB.send(MB.OP_DESPAWN_PEER_NPC, { S.oeId }) end
-  drop()
-end
-
--- partner state update { mg, mn, x, y, f, mv, an, gfx } (x,y are WORLD PIXELS)
-function PG.on_ghost_pos(t) S.ghost = t end
-function PG.on_ghost_clear() S.ghost = nil; despawn() end
-function PG.reset() despawn(); S.ghost = nil end
-
--- True once per detected talk-to-ghost (the client emits a peer_interact event).
+-- True once per detected talk-to-ghost (the client emits a peer_interact event to the server).
 function PG.consume_interact()
   if S and S.interact_pending then S.interact_pending = false; return true end
   return false
 end
 
 function PG.on_frame()
-  if not PG.present() then return end          -- no patch -> no-op (graceful)
-  fcount = fcount + 1
-  local pmg, pmn = p_map()
-
-  -- map change -> the warp tears down + rebuilds object events, so our ghost OE is already gone
-  -- and its old id now belongs to one of the NEW map's NPCs. FORGET it (drop, don't DESPAWN by a
-  -- stale id — that deletes/corrupts a real NPC, the Oak's-lab bug). Re-spawn on the new map.
-  if S.pmap and (S.pmap[1] ~= pmg or S.pmap[2] ~= pmn) then drop() end
-  S.pmap = { pmg, pmn }
-
+  if not PG.present() then return end
+  local pmg, pmn = memory.read_u8(OE + 0x0A), memory.read_u8(OE + 0x09)   -- local player map
   local g = S.ghost
   local same_map = g and g.mg == pmg and g.mn == pmn
 
-  if DBG and fcount % 120 == 0 then
-    dbg(string.format("state oeId=%s pending=%s same_map=%s g=%s my_map=(%d,%d)%s",
-      tostring(S.oeId), tostring(S.pending), tostring(same_map),
-      g and string.format("(%d,%d)", g.mg, g.mn) or "nil", pmg, pmn,
-      g and "" or "  [no partner pos yet]"))
+  if not same_map then
+    if S.spawned then MB.ghost_clear(); S.spawned = false end
+    return
   end
 
-  if not same_map then if S.oeId then despawn() end; return end
-
-  -- spawn (async): request once, then adopt the returned object-event id. The engine has only
-  -- 16 object-event slots; on an NPC-dense map all 16 are used and the spawn returns 16 (no slot).
-  -- Back off rather than hammering the mailbox every frame — slots free as NPCs scroll off-view.
-  if not S.oeId then
-    if S.spawn_cd > 0 then S.spawn_cd = S.spawn_cd - 1; return end
-    if not S.pending then
-      local gfx = g.gfx or p_gfx()
-      local seq = MB.send(MB.OP_SPAWN_PEER_NPC,
-        MB.spawn_npc_args(gfx, LOCALID, p_tile_x() + 1, p_tile_y(), 0))
-      S.pending, S.cur_gfx = seq, gfx
-    else
-      local stp = MB.poll(S.pending)
-      if stp then
-        local id = MB.read_result_u8(0)
-        S.pending = nil
-        if id < 16 then
-          S.oeId, S.sprId = id, memory.read_u8(oe(id, OE_SPRID))
-          S.spawn_fail_logged = false
-          dbg(string.format("spawned oeId=%d sprId=%d gfx=%d", S.oeId, S.sprId, S.cur_gfx or -1))
-        else
-          if not S.spawn_fail_logged then
-            S.spawn_fail_logged = true
-            dbg("no free object-event slot (map at 16/16 NPCs) — backing off; ghost appears when one frees")
-          end
-          S.spawn_cd = 60   -- ~1s; retry then
-          return
-        end
-      end
-    end
-    if not S.oeId then return end
+  if not S.spawned then
+    MB.write_message(interact_text)     -- pre-set the talk-to-ghost message (patch shows it)
+    MB.ghost_spawn(g.gfx or 0)          -- patch spawns + drives from here
+    S.spawned, S.pi_last = true, MB.peer_interact_count()
   end
 
-  -- The engine may recycle/reassign our slot (warp, off-screen cull). If the sprite was freed OR
-  -- the object-event's localId is no longer OURS, forget it (drop, don't drive a reassigned slot —
-  -- that writes the partner's sprite onto whatever real NPC now owns it) and re-spawn.
-  if spr_inuse(S.sprId) == 0 or memory.read_u8(oe(S.oeId, OE_LOCALID)) ~= LOCALID then
-    dbg("slot freed/reassigned — re-spawning"); drop(); return
-  end
+  -- post the partner's target each tick; the patch walks the ghost there natively
+  MB.ghost_set_target(g.x, g.y, g.f, g.run, g.gfx)
 
-  -- The partner changed graphics (walk<->run share a gfx, but bike/surf/fish are DIFFERENT
-  -- graphicsIds with their own sprites + anim tables). Re-spawn so the engine loads the right
-  -- sprite/anims/palette for the new mode — the ghost then bikes/surfs/fishes natively.
-  if g.gfx and g.gfx ~= S.cur_gfx then
-    dbg(string.format("partner gfx %d -> %d; re-spawning", S.cur_gfx or -1, g.gfx))
-    despawn(); return
-  end
-
-  -- One-time per spawn: neutralize the OE sprite callback so the engine stops re-asserting
-  -- idle facing / palette over our puppet drive (sprite still animates via AnimateSprite).
-  -- Then ARM the patch's talk-to-ghost detection on this object-event.
-  if not S.neutralized then
-    local cb = find_noop_cb()
-    if cb then memory.write_u32_le(spr(S.sprId, SP_CALLBACK), cb & 0xFFFFFFFF) end
-    -- ensure coordOffset on, animPaused off, visible
-    memory.write_u8(spr(S.sprId, SP_B3E), (memory.read_u8(spr(S.sprId, SP_B3E)) | 0x01 | 0x02) & 0xFB)
-    memory.write_u8(spr(S.sprId, SP_B2C), memory.read_u8(spr(S.sprId, SP_B2C)) & 0xBF)
-    MB.write_message(interact_text)
-    MB.send(MB.OP_ARM_PEER_INTERACT, { S.oeId, 1 })
-    S.armed, S.pi_last, S.neutralized = true, MB.peer_interact_count(), true
-    dbg(string.format("neutralized cb=%s + armed interact on oeId=%d", cb and "yes" or "NO", S.oeId))
-  end
-
-  -- Keep the sprite callback neutralized + coordOffset on EVERY frame. The engine re-points the
-  -- OE sprite's callback on some events (door scroll, step transitions); if it runs even once it
-  -- re-manages the sprite's visibility from the OE's own (off-screen) state and hides our ghost —
-  -- the "randomly disappears on the same map" symptom. Re-asserting is cheap and idempotent.
-  if noop_cb then memory.write_u32_le(spr(S.sprId, SP_CALLBACK), noop_cb & 0xFFFFFFFF) end
-  memory.write_u8(spr(S.sprId, SP_B3E), memory.read_u8(spr(S.sprId, SP_B3E)) | 0x02)  -- coordOffset on
-
-  -- Show the PARTNER's exact sprite (RR avatars are dynamic — the spawn gfx renders the LOCAL
-  -- player, not them). images/anims are ROM ptrs identical on both copies of this RR build, so
-  -- adopting the partner's live ones gives their exact look + exact anim table (so run/bike/surf/
-  -- fish animNums map correctly). Same gfx => same frame size => fits the engine-allocated VRAM.
-  -- Callback is neutralized, so the override isn't re-derived away.
-  if g.imgs and in_rom(g.imgs) and g.imgs ~= S.applied_imgs then
-    memory.write_u32_le(spr(S.sprId, SP_IMAGES), g.imgs & 0xFFFFFFFF)
-    if in_rom(g.anm) then memory.write_u32_le(spr(S.sprId, SP_ANIMS), g.anm & 0xFFFFFFFF) end
-    memory.write_u8(spr(S.sprId, SP_B3F), memory.read_u8(spr(S.sprId, SP_B3F)) | 0x04)  -- animBeginning
-    S.applied_imgs, S.last_anim = g.imgs, nil
-    dbg(string.format("applied partner sprite images=%08X anims=%08X", g.imgs, g.anm or 0))
-  end
-
-  -- interpolate display world-pixel toward the target for smoothness
-  if not S.dx or math.abs(g.x - S.dx) > SNAP_PX or math.abs(g.y - S.dy) > SNAP_PX then
-    S.dx, S.dy = g.x, g.y
-  else
-    S.dx = S.dx + (g.x - S.dx) * LERP
-    S.dy = S.dy + (g.y - S.dy) * LERP
-  end
-
-  -- Sub-pixel position: baseline C = playerSprite.pos1 - playerTile*16, cached WHILE THE
-  -- PLAYER IS IDLE (then playerTile*16 is exact); ghost.pos1 = round(disp + C). Avoids the
-  -- lurch from reading the player's tile mid-step (it snaps to the destination tile).
-  local psid = p_spriteId()
-  local psx, psy = spr_pos_x(psid), spr_pos_y(psid)
-  if p_idle() or S.base_cx == nil then
-    S.base_cx = psx - p_tile_x() * 16
-    S.base_cy = psy - p_tile_y() * 16
-  end
-  local gx, gy = round(S.dx + S.base_cx), round(S.dy + S.base_cy)
-  memory.write_u16_le(spr(S.sprId, SP_X), gx & 0xFFFF)
-  memory.write_u16_le(spr(S.sprId, SP_Y), gy & 0xFFFF)
-
-  -- Is the ghost on-screen? screen pos = pos1 + gSpriteCoordOffset.
-  local ssx = gx + memory.read_s16_le(C.COFF_X)
-  local ssy = gy + memory.read_s16_le(C.COFF_Y)
-  local onscreen = ssx > -16 and ssx < 256 and ssy > -16 and ssy < 176
-
-  -- Backing OE tile (also the collision/interaction tile):
-  --  • ON-SCREEN  -> the partner's ACTUAL tile, so you bump into / talk to them where you see them.
-  --  • OFF-SCREEN -> pin to the PLAYER's tile so RemoveObjectEventIfOutsideView never culls our
-  --    slot. Otherwise the engine frees it the instant the partner scrolls off, we re-spawn, it's
-  --    still off-screen, and we thrash spawn/cull/spawn forever. (Sprite is hidden off-screen.)
-  local otx, oty
-  if onscreen then otx, oty = round(g.x / 16), round(g.y / 16)
-  else            otx, oty = p_tile_x(), p_tile_y() end
-  memory.write_u16_le(oe(S.oeId, OE_CX), otx & 0xFFFF); memory.write_u16_le(oe(S.oeId, OE_CY), oty & 0xFFFF)
-  memory.write_u16_le(oe(S.oeId, OE_PX), otx & 0xFFFF); memory.write_u16_le(oe(S.oeId, OE_PY), oty & 0xFFFF)
-  memory.write_u8(oe(S.oeId, OE_ELEV), p_elev())
-
-  -- Visibility (invisible bit 0x04 of byte3e; engine callback is neutralized so this sticks):
-  --  • CULL off-screen — a sprite far outside the viewport has its OAM coord WRAP (9-bit X /
-  --    8-bit Y) and draws as garbage at a random on-screen spot.
-  --  • HIDE until the partner's real sprite has been applied — the spawn gfx is gfx 0 = the LOCAL
-  --    player (RR avatars are dynamic), so showing it = the "wrong sprite" (your own look). Only
-  --    reveal once we've stamped the partner's broadcast images at least once.
-  local sprite_ready = (S.applied_imgs ~= nil)
-  local show = onscreen and sprite_ready
-  local cur_b3e = memory.read_u8(spr(S.sprId, SP_B3E))
-  -- Did something flip our invisible bit since we last set it? (engine fighting us)
-  if DBG and S.last_b3e and (cur_b3e & 0x04) ~= (S.last_b3e & 0x04) then
-    dbg(string.format("invisible bit changed under us: 0x%02X -> 0x%02X (we want show=%s)",
-      S.last_b3e, cur_b3e, tostring(show)))
-  end
-  local b3e = show and (cur_b3e & 0xFB) or (cur_b3e | 0x04)
-  memory.write_u8(spr(S.sprId, SP_B3E), b3e)
-  S.last_b3e = b3e
-  if DBG and show ~= S.last_visible then
-    S.last_visible = show
-    dbg(string.format("%s onscreen=%s ready=%s screen=(%d,%d) partnerTile=(%d,%d) playerTile=(%d,%d) inuse=%d",
-      show and "VISIBLE" or "HIDDEN", tostring(onscreen), tostring(sprite_ready), ssx, ssy,
-      round(g.x / 16), round(g.y / 16), p_tile_x(), p_tile_y(), spr_inuse(S.sprId)))
-  end
-
-  -- Animation: while moving, mirror the partner's LIVE animNum (walk/run/bike/surf/fish — the
-  -- ghost shares the partner's gfx after the re-spawn above, so any animNum is valid here); fall
-  -- back to a directional walk if none sent. Idle -> a single-frame face anim. Re-assert
-  -- animBeginning so frame 0 re-DMAs.
-  local f = (g.f and g.f >= 1 and g.f <= 4) and g.f or 1
-  local want
-  if g.mv == 1 then want = (g.an and g.an > 0) and g.an or walk_anim(f)
-  else want = idle_anim(f) end
-  if want ~= S.last_anim then
-    memory.write_u8(spr(S.sprId, SP_ANIM), want & 0xFF)
-    memory.write_u8(spr(S.sprId, SP_B3F), memory.read_u8(spr(S.sprId, SP_B3F)) | 0x04)  -- animBeginning
-    memory.write_u8(spr(S.sprId, SP_B2C), memory.read_u8(spr(S.sprId, SP_B2C)) & 0xBF)  -- animPaused = 0
-    S.last_anim = want
-  end
-
-  -- Poll the patch's talk-to-ghost counter; surface each new interaction to the client.
-  if S.armed then
-    local cnt = MB.peer_interact_count()
-    if cnt ~= S.pi_last then
-      S.interact_pending = true
-      dbg(string.format("interact detected (count %d -> %d)", S.pi_last, cnt))
-      S.pi_last = cnt
-    end
-  end
+  -- surface talk-to-ghost interactions (patch bumps pi_count + shows a dismissable box)
+  local cnt = MB.peer_interact_count()
+  if cnt ~= S.pi_last then S.interact_pending = true; S.pi_last = cnt end
 end
 
-function PG.debug() return S and { oeId = S.oeId, sprId = S.sprId, pending = S.pending, armed = S.armed } or {} end
+function PG.debug()
+  return S and { oeId = (MB and S.spawned) and MB.ghost_oe() or nil, spawned = S.spawned } or {}
+end
 
 return PG

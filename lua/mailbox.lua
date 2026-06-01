@@ -80,10 +80,35 @@ function MB.apply_damage_args(battler, amount)
 end
 
 MB.OP_SET_RULES = 12          -- ROM-enforced nuzlocke: args {enforce}
-MB.OP_ARM_PEER_INTERACT = 13  -- talk-to-ghost: args {ghost_oeId, armed}
+MB.OP_ARM_PEER_INTERACT = 13  -- talk-to-ghost: args {ghost_oeId, armed} (legacy; ghost auto-arms now)
+MB.OP_GHOST_SPAWN = 14        -- engine-driven peer ghost: args {gfxId, localId}; hook spawns+drives
+MB.OP_GHOST_CLEAR = 15        -- hook cleanly removes the ghost
 -- SlinkState struct @ 0x0203F8D0: enforce_rules, pi_armed, pi_oe, pi_count
 MB.PI_COUNT = 0x0203F8D3
 function MB.peer_interact_count() return memory.read_u8(MB.PI_COUNT) end
+
+-- GhostState @ 0x0203F850 (shared with the patch's drive_ghost). Lua writes target/gfx each tick;
+-- the frame hook walks a real object-event toward it natively. Offsets match handlers.c.
+MB.GH        = 0x0203F850
+MB.GH_OEID   = MB.GH + 1   -- u8: hook-owned object-event id (0xFF = not spawned)
+MB.GH_GFX    = MB.GH + 2   -- u8: graphicsId Lua wants (change => re-spawn for bike/surf/fish)
+MB.GH_TX     = MB.GH + 6   -- s16: target tile x
+MB.GH_TY     = MB.GH + 8   -- s16: target tile y
+MB.GH_TFACE  = MB.GH + 10  -- u8: target facing 1=S 2=N 3=W 4=E
+MB.GH_RUN    = MB.GH + 11  -- u8: 1 = partner dashing -> ghost runs to keep up
+MB.LOCALID   = 0xF0
+-- Request the engine-driven ghost (idempotent; safe to call once).
+function MB.ghost_spawn(gfx) return MB.send(MB.OP_GHOST_SPAWN, {gfx or 0, MB.LOCALID}) end
+function MB.ghost_clear() return MB.send(MB.OP_GHOST_CLEAR, {}) end
+function MB.ghost_oe() return memory.read_u8(MB.GH_OEID) end   -- 0xFF until spawned
+-- Per-tick target update (plain EWRAM writes; no opcode/ack churn). face 1-4, run 0/1.
+function MB.ghost_set_target(tx, ty, face, run, gfx)
+    memory.write_s16_le(MB.GH_TX, tx)
+    memory.write_s16_le(MB.GH_TY, ty)
+    memory.write_u8(MB.GH_TFACE, (face and face >= 1 and face <= 4) and face or 1)
+    memory.write_u8(MB.GH_RUN, run and 1 or 0)
+    if gfx then memory.write_u8(MB.GH_GFX, gfx) end
+end
 
 MB.ST_IDLE, MB.ST_BUSY, MB.ST_OK, MB.ST_FAIL = 0, 1, 2, 3
 

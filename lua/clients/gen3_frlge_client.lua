@@ -104,10 +104,6 @@ local ok_mb, MB = pcall(require, "mailbox")
 if not ok_mb then MB = nil end
 local function patch_present() return MB ~= nil and MB.present() end
 local patch_logged = false   -- latch: log patch presence/absence once (beacon appears ~frame 13)
--- Peer-ghost sub-pixel sender calibration (coordOffset-derived world pixels).
-local pg_align_tx, pg_align_ty, pg_coff_ax, pg_coff_ay
-local pg_prev_wx, pg_prev_wy
-local pg_anim_logged = false   -- one-shot: confirm the sender sees run/bike/surf animNums
 -- Engine-NPC peer ghost (companion-patch path; no-ops without the patch).
 local ok_pg, PG = pcall(require, "peer_ghost_npc")
 if ok_pg then
@@ -197,7 +193,7 @@ local function parse_command_list(raw)
         -- hud_show / msgbox fields
         local text    = obj:match('"text"%s*:%s*"([^"]*)"')
         local fb      = obj:match('"fb"%s*:%s*"([^"]*)"')   -- msgbox fallback style: "prompt" or hud
-        -- ghost_pos (peer ghost) fields
+        -- ghost_pos (peer ghost) fields — x,y are TILE coords now; the patch interpolates.
         local gmg  = tonumber(obj:match('"mg"%s*:%s*(%-?%d+)'))
         local gmn  = tonumber(obj:match('"mn"%s*:%s*(%-?%d+)'))
         local ggx  = tonumber(obj:match('"x"%s*:%s*(%-?%d+)'))
@@ -205,9 +201,7 @@ local function parse_command_list(raw)
         local ggf  = tonumber(obj:match('"f"%s*:%s*(%-?%d+)'))
         local ggfx = tonumber(obj:match('"gfx"%s*:%s*(%-?%d+)'))
         local gmv  = tonumber(obj:match('"mv"%s*:%s*(%-?%d+)'))
-        local gan  = tonumber(obj:match('"an"%s*:%s*(%-?%d+)'))
-        local gimgs = tonumber(obj:match('"imgs"%s*:%s*(%-?%d+)'))
-        local ganm  = tonumber(obj:match('"anm"%s*:%s*(%-?%d+)'))
+        local grun = tonumber(obj:match('"run"%s*:%s*(%-?%d+)'))
         local r       = tonumber(obj:match('"r"%s*:%s*(%d+)'))
         local g       = tonumber(obj:match('"g"%s*:%s*(%d+)'))
         local b       = tonumber(obj:match('"b"%s*:%s*(%d+)'))
@@ -239,8 +233,7 @@ local function parse_command_list(raw)
             cmds[#cmds+1] = {
                 cmd=cmd, key=key, message=msg, stats=stats,
                 text=text, fb=fb, r=r, g=g, b=b, frames=frames,
-                gmg=gmg, gmn=gmn, ggx=ggx, ggy=ggy, ggf=ggf, ggfx=ggfx, gmv=gmv, gan=gan,
-                gimgs=gimgs, ganm=ganm,
+                gmg=gmg, gmn=gmn, ggx=ggx, ggy=ggy, ggf=ggf, ggfx=ggfx, gmv=gmv, grun=grun,
                 sound=sound, area_id=area_id, areas=areas,
                 trainer_id=trainer_id, blobs_hex=blobs_hex,
             }
@@ -519,7 +512,7 @@ local function dispatch_commands(cmds)
             end
         elseif c.cmd == "ghost_pos" then
             if PG then PG.on_ghost_pos({ mg=c.gmg, mn=c.gmn, x=c.ggx, y=c.ggy, f=c.ggf,
-                                         gfx=c.ggfx, mv=c.gmv, an=c.gan, imgs=c.gimgs, anm=c.ganm }) end
+                                         gfx=c.ggfx, mv=c.gmv, run=c.grun }) end
         elseif c.cmd == "hud_show" and c.text then
             hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
         elseif c.cmd == "gui_prompt" and c.text then
@@ -1391,50 +1384,23 @@ local function on_frame()
     local in_battle    = M.isInBattle()
     local is_overworld = M.isInOverworld()
 
-    -- Peer ghost (RR + companion patch): broadcast our overworld position ~20 Hz and drive
-    -- the engine-NPC ghost of the partner. Both are no-ops without the patch / off-overworld.
+    -- Peer ghost (RR + companion patch): broadcast our overworld TILE + facing + gfx ~20 Hz; the
+    -- partner's patch walks an engine NPC there natively. No sub-pixel/anim/sprite data needed — the
+    -- engine interpolates and animates. No-ops without the patch / off-overworld.
     if IS_RR and is_overworld then
-        local OE = 0x02036E38   -- gObjectEvents[0] = player
-        -- Sub-pixel world position: currentCoords (OE+0x10/0x12) JUMPS to the destination
-        -- tile at step start, so we can't read sub-tile from it. Instead calibrate
-        -- (alignedTile, coordOffset) while idle (tile-aligned); the coordOffset delta since
-        -- then is the exact smooth pixel displacement. worldPx = alignTile*16 + (coffAlign - coffNow).
-        local ctx  = memory.read_s16_le(OE + 0x10)
-        local cty  = memory.read_s16_le(OE + 0x12)
-        local coffx = memory.read_s16_le(0x02021BC8)   -- gSpriteCoordOffsetX
-        local coffy = memory.read_s16_le(0x02021BCA)   -- gSpriteCoordOffsetY
-        local idle_bit = (memory.read_u8(OE + 0x00) & 0x80) ~= 0   -- heldMovementFinished
-        if idle_bit or pg_align_tx == nil then
-            pg_align_tx, pg_align_ty = ctx, cty
-            pg_coff_ax, pg_coff_ay   = coffx, coffy
-        end
         if frame_count % 3 == 0 then
-            local wx = pg_align_tx * 16 + (pg_coff_ax - coffx)   -- smooth world pixels
-            local wy = pg_align_ty * 16 + (pg_coff_ay - coffy)
-            local gf = memory.read_u8(OE + 0x18) & 0x0F
-            if gf < 1 or gf > 4 then gf = 1 end
-            -- "Moving" = world pixels actually changed (robust where the idle bit lies during
-            -- scripted dialogue). Drives the partner's walk-vs-idle animation.
-            local moved = (pg_prev_wx == nil) or (wx ~= pg_prev_wx) or (wy ~= pg_prev_wy)
-            pg_prev_wx, pg_prev_wy = wx, wy
-            -- Live animNum (walk/run/bike/surf/fish 1:1) + the partner's live sprite ROM
-            -- pointers. images/anims are ROM addresses identical on both copies of the same RR
-            -- build, so the receiver can render the partner's EXACT avatar/mode (not gfx 0 = the
-            -- local player) and gets the exact anim table (so the partner's animNum always maps).
+            local OE = 0x02036E38   -- gObjectEvents[0] = player
+            local f = memory.read_u8(OE + 0x18) & 0x0F
+            if f < 1 or f > 4 then f = 1 end
             local sid  = memory.read_u8(OE + 0x04)
-            local sbase = 0x0202063C + sid * 0x44
-            local gan   = (sid < 64) and memory.read_u8(sbase + 0x2A) or 0
-            local gimgs = (sid < 64) and memory.read_u32_le(sbase + 0x0C) or 0
-            local ganm  = (sid < 64) and memory.read_u32_le(sbase + 0x08) or 0
-            -- mg/mn are the object-event map bytes at 0x09/0x0A; the receiver keys on this order.
+            local anim = (sid < 64) and memory.read_u8(0x0202063C + sid * 0x44 + 0x2A) or 0
+            local moving = (memory.read_u8(OE + 0x00) & 0x80) == 0   -- heldMovementFinished clear
             send({ event = "ghost_pos",
-                   mg = memory.read_u8(OE + 0x09), mn = memory.read_u8(OE + 0x0A),
-                   x = wx, y = wy, f = gf, mv = (moved and 1 or 0), an = gan,
-                   gfx = memory.read_u8(OE + 0x05), imgs = gimgs, anm = ganm }, "ghost_pos", true, true)
-            if gan > 7 and not pg_anim_logged then
-                pg_anim_logged = true
-                console.log(string.format("[SLink-FRLGE] peer-ghost: non-walk animNum=%d seen (run/bike/surf/fish)", gan))
-            end
+                   mg = memory.read_u8(OE + 0x0A), mn = memory.read_u8(OE + 0x09),  -- group, num
+                   x  = memory.read_s16_le(OE + 0x10), y = memory.read_s16_le(OE + 0x12),  -- TILE coords
+                   f  = f, mv = (moving and 1 or 0),
+                   run = (anim >= 8 and 1 or 0),     -- GO_FAST+ (running/biking) -> ghost runs to keep up
+                   gfx = memory.read_u8(OE + 0x05) }, "ghost_pos", true, true)
         end
         if PG then
             PG.on_frame()

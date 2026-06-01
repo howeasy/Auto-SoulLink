@@ -66,7 +66,13 @@ is a valid map for the base engine here.
 | 10 | APPLY_DAMAGE | `[0]`=battler `[1..2]`=amount → `result[0..1]`=new hp | linked HP / chip: `gBattleMons[b].hp -= amount` (clamp 0) |
 | 11 | CURE_STATUS | `[0]`=battler | link-cured status: clear `gBattleMons[b].status1` |
 | 12 | SET_RULES | `[0]`=enforce | ROM-enforced nuzlocke: persistently keep battle style on SET |
-| 13 | ARM_PEER_INTERACT | `[0]`=ghost oeId `[1]`=armed | talk-to-ghost detection (A-press facing it) |
+| 13 | ARM_PEER_INTERACT | `[0]`=ghost oeId `[1]`=armed | talk-to-ghost detection (legacy; ghost auto-arms now) |
+| 14 | GHOST_SPAWN | `[0]`=gfxId `[1]`=localId | engine-driven peer ghost: hook spawns+walks it via held movements (GhostState@0x0203F850) |
+| 15 | GHOST_CLEAR | — | hook cleanly removes the ghost (RemoveEventObject) |
+
+**SHOW_MESSAGE (8) is now DISMISSABLE** — it routes through the same `run_sign_msgbox()` script path
+as talk-to-ghost (ScriptContext1_SetupScript + MSGBOX_SIGN), not bare ShowFieldMessage, so the
+"partner waved at you" box closes on A.
 
 ## Phase-5 (peer interaction + ROM-enforced settings) — validated
 EWRAM state `SlinkState @ 0x0203F8D0` {enforce_rules, pi_armed, pi_oe, pi_count}. The frame hook runs
@@ -210,3 +216,28 @@ kept for reference): `EmitTwoReturnValues=0x0800E848`, `EmitMoveChosen=0x090AA73
 
 **This empirically validates the report's core thesis:** pure external RAM-poke is
 fundamentally limited; robust battle control needs in-ROM (controller-hook) code.
+
+## Peer-ghost re-architecture (engine-driven NPC via held movements)
+
+Cross-validated BPRE.ld(CFRU) ↔ capstone on RR (md5 8529f3a4): each lands on a sane Thumb
+prologue (`push {..,lr}`). CFRU uses the "EventObject" naming = pokefirered "ObjectEvent".
+
+| Function | RR addr (Thumb \|1) | prologue | purpose |
+|---|---|---|---|
+| `EventObjectSetHeldMovement` | 0x8063CA4 | push {r4,r5,lr} | queue a 1-tile held movement on an OE |
+| `EventObjectClearHeldMovementIfActive` | 0x8063D1C | push {lr} | stop active held movement |
+| `EventObjectClearHeldMovementIfFinished` | 0x8063D7C | push {r4,r5,lr} | poll: 0=finished 16=not-active else=busy; clears if done |
+| `GetFaceDirectionMovementAction` | 0x8063EB8 | push {r4,lr} | dir→FACE action (0x0-0x3, idle facing) |
+| `GetWalkNormalMovementAction` | 0x8063F2C | push {r4,lr} | dir→WALK_NORMAL action (0x10-0x13) |
+| `GetWalkFastMovementAction` | 0x8063FB0 | push {r4,lr} | dir→WALK_FAST/run action (0x1D-0x20) |
+| `RemoveEventObject` | 0x805E4B4 | push {lr} | clean remove: destroys sprite + deactivates OE |
+| `MoveEventObjectToMapCoords` | 0x805F724 | push {r4-r7,lr} | hard re-place an OE at map coords (snap) |
+| `EventObjectTurn` | 0x805F218 | push {r4-r6,lr} | face a direction without moving |
+| `PatchObjectPalette` | 0x805F538 | push {r4,lr} | load+tint an OBJ palette into a slot (fallback) |
+| `GetEventObjectGraphicsInfoOriginal` | 0x805F2C8 | ldr r1,[pc] | gfxId→graphics info (paletteSlot/Tag) (fallback) |
+
+Directions: DIR_SOUTH=1 NORTH=2 WEST=3 EAST=4. Model = CFRU `follow_me.c`: spawn OE with
+MOVEMENT_TYPE_NONE, then each step `EventObjectSetHeldMovement(oe, GetWalk*Action(dir))` and poll
+`EventObjectClearHeldMovementIfFinished`. The engine animates/positions/palettes/collides natively.
+`SpawnSpecialObjectEventParameterized`=0x805E831 and `ScriptContext1_SetupScript`=0x08069AE5 already
+validated above.
