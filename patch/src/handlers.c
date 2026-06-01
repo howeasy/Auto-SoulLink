@@ -351,6 +351,14 @@ static void drive_ghost(void)
     u8 action = (GH->run || (adx + ady) > 1) ? GetWalkFastMovementAction(dir)
                                              : GetWalkNormalMovementAction(dir);
     EventObjectSetHeldMovement((void *)g, action);
+    /* Restart the leg-cycle each step: consecutive steps in the same direction reuse the same
+     * animNum, and obj_anim_image_start skips the restart when animNum is unchanged, so the walk
+     * anim freezes on one frame. Force animBeginning + clear animPaused so it cycles (0->1->...). */
+    {
+        u32 sa = gSprites + (u32)R8(g + 0x04) * SPR_STRIDE;
+        R8(sa + 0x3F) |= 0x04;     /* animBeginning */
+        R8(sa + 0x2C) &= (u8)~0x40;/* animPaused = 0 */
+    }
 }
 
 __attribute__((section(".text.entry"), used))
