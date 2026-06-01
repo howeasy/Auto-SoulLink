@@ -95,11 +95,30 @@ itself, execute a move** from the action menu. `HandleTurnActionSelectionState` 
    stride 0x200), **not** `gChosenActionByBank`;
 3. on USE_MOVE it **re-emits ChooseMove** (the move submenu) — so committing the action
    only loops back to move-select.
-**Conclusion (validates the report thesis):** a generic, robust live FORCE_MOVE cannot be
-done by external RAM-poke; it needs a **controller hook** that calls the engine's
-`BtlController_EmitMoveChosen` + `PlayerBufferExecCompleted` (`0x0802E33C`). That is the
-C-toolchain approach — deferred. SLink's Lua Explode "works" only because it *also* rewrites
-all 4 move slots to Explosion, so whatever the menu path picks is the forced move.
-**FORCE_MOVE here is therefore a validated *commit* primitive; live execution is gated on
-the controller hook.** (Diagnostics that established this: input reaches the core; the
-savestate is a valid singles action-menu; mashing A executes a move → rig is sound.)
+**Both pure-RAM paths are now ruled out (source + empirical):**
+- *Variant-3 action commit* (gChosenAction/comm/bs) — insufficient: state-2 reads
+  `gBattleBufferB[battler][1]`, not `gChosenActionByBank`, and re-emits ChooseMove.
+- *MULTIPLETURNS rampage lock* — SLink already tried `LOCK_STATUS2_VALUE = 0x1000 / 0x1800`
+  (the correct CFRU bit) and it failed/softlocked (see `gen3_frlge.lua` RR profile comment,
+  `LOCK_STATUS2_VALUE = nil`). Dead end.
+
+**The action→move protocol (pokefirered `battle_main.c` HandleTurnActionSelectionState):**
+at `STATE_WAIT_ACTION_CHOSEN`, when the multi-nibble exec mask clears, the engine reads
+`gBattleBufferB[battler][1]`; `B_ACTION_USE_MOVE` (0) → `BtlController_EmitChooseMove` +
+`MarkBattlerForControllerExec` (the move submenu), staying in WAIT_ACTION_CHOSEN. So it's a
+**two-stage** controller handshake (choose action, then choose move), each gated by the exec
+mask and read from `gBattleBufferB`.
+
+**Recommended next-session implementation (C):** a frame-hook 2-stage driver, armed via the
+mailbox, with an EWRAM stage flag: (A) write `gBattleBufferB[b][1]=USE_MOVE`, clear the full
+exec mask; (B) once the move submenu is up, write the move-choice response into
+`gBattleBufferB[b]` (format = the move controller's emit — still to RE from `HandleInputChooseMove`)
++ `chosenMovePositions`/`moveTarget`, clear the mask. Alternatively call the engine emit funcs
+directly. Addresses in hand: `gBattleBufferB=0x20233C4` (stride 0x200), `gBattleExecBuffer=0x02023BC8`,
+exec mask `bit|bit<<4|bit<<8|bit<<12|0xF0000000`, `PlayerBufferExecCompleted=0x0802E33C`,
+`gLockedMoves=0x2023DB8`. Rig is proven (input reaches core; valid singles action-menu savestate;
+mashing A executes a move). **FORCE_MOVE here remains a validated *commit* primitive; live
+execution is the one open item, now fully scoped.**
+
+**This empirically validates the report's core thesis:** pure external RAM-poke is
+fundamentally limited; robust battle control needs in-ROM (controller-hook) code.
