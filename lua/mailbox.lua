@@ -21,6 +21,11 @@ local O_SIG, O_ABI, O_OPCODE, O_SEQ, O_STATUS, O_ACKSEQ, O_REASON, O_ARGS, O_RES
 MB.OP_PING        = 1
 MB.OP_FORCE_FAINT = 2   -- args: {battler}
 MB.OP_FORCE_MOVE  = 3   -- args: {battler, target, move_pos, 0, move_lo, move_hi}
+MB.OP_CREATE_MON  = 4   -- args: {slot, 0, species_lo, species_hi, level}
+
+function MB.create_mon_args(slot, species, level)
+    return {slot, 0, species % 256, math.floor(species / 256), level}
+end
 
 MB.ST_IDLE, MB.ST_BUSY, MB.ST_OK, MB.ST_FAIL = 0, 1, 2, 3
 

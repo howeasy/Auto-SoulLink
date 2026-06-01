@@ -57,6 +57,17 @@ is a valid map for the base engine here.
 | 1 | PING | — | ack ok (presence/round-trip check) |
 | 2 | FORCE_FAINT | `[0]`=battler | `gBattleMons[battler].hp = 0` |
 | 3 | FORCE_MOVE | `[0]`=battler `[1]`=target `[2]`=move_pos `[4..5]`=move_id(u16) | commits a forced move (see below) |
+| 4 | CREATE_MON | `[0]`=slot `[2..3]`=species(u16) `[4]`=level | calls engine `CreateMon` into `gPlayerParty[slot]` |
+
+## Phase-2 (CREATE_MON) — validated
+`gPlayerParty = 0x02024284` (BPRE.ld ↔ SLink RR profile), MON_SIZE 100; party struct
+level@0x54, hp@0x56, maxHP@0x58 (plaintext, outside the encrypted substruct). `CreateMon`
+@ `0x0803DA54` called via fixed-address function pointer from injected C. **Live-validated**
+(`test_live_createmon.lua`, overworld save): Bulbasaur L50 → maxHP 105 (exact base-45 calc),
+Snorlax L50 → maxHP 220; Snorlax ≫ Bulbasaur proves species-specific base stats → fixes the
+"Mewtwo with Pidgey stats" bug. **The handlers are now compiled C (`handlers.c` + `slink.ld`,
+linked at CODE_BASE); `build.py` uses arm-none-eabi-gcc. The earlier hand-asm dispatcher
+(slink_patch.asm) is retired — the C build passes the same PING + battle-logic tests.**
 
 ## Phase-1 battle globals (triple-validated: SLink RR profile ↔ BPRE.ld ↔ binary)
 | symbol | address | notes |
