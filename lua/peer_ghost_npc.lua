@@ -35,7 +35,7 @@ local C = {
 }
 
 -- OE field offsets
-local OE_FLAGS, OE_SPRID, OE_GFX = 0x00, 0x04, 0x05
+local OE_FLAGS, OE_SPRID, OE_GFX, OE_LOCALID = 0x00, 0x04, 0x05, 0x08
 local OE_MAPNUM, OE_MAPGRP, OE_ELEV = 0x09, 0x0A, 0x0B
 local OE_CX, OE_CY, OE_PX, OE_PY, OE_FACE = 0x10, 0x12, 0x14, 0x16, 0x18
 -- sprite field offsets
@@ -97,12 +97,20 @@ local function disarm()
   S.armed = false
 end
 
+-- Forget our ghost WITHOUT touching the engine. Use when the slot is already gone or reassigned
+-- (warp tears down OEs; off-screen cull frees it): sending DESPAWN/ARM for a stale id would hit a
+-- REAL NPC now living in that slot (the Oak's-lab corruption). Re-spawn happens on a later frame.
+local function drop()
+  S.oeId, S.sprId, S.pending, S.dx, S.dy = nil, nil, nil, nil, nil
+  S.base_cx, S.base_cy, S.last_anim, S.neutralized, S.applied_imgs = nil, nil, nil, false, nil
+  S.spawn_cd, S.spawn_fail_logged, S.armed = 0, false, false
+end
+
+-- Actively remove our (still-valid) ghost + disarm, then forget it.
 local function despawn()
   disarm()
   if S.oeId then dbg("despawn oeId=" .. tostring(S.oeId)); MB.send(MB.OP_DESPAWN_PEER_NPC, { S.oeId }) end
-  S.oeId, S.sprId, S.pending, S.dx, S.dy = nil, nil, nil, nil, nil
-  S.base_cx, S.base_cy, S.last_anim, S.neutralized, S.applied_imgs = nil, nil, nil, false, nil
-  S.spawn_cd, S.spawn_fail_logged = 0, false   -- fresh map -> retry the spawn immediately
+  drop()
 end
 
 -- partner state update { mg, mn, x, y, f, mv, an, gfx } (x,y are WORLD PIXELS)
@@ -121,8 +129,10 @@ function PG.on_frame()
   fcount = fcount + 1
   local pmg, pmn = p_map()
 
-  -- map change -> drop the ghost (indices/world differ on the new map)
-  if S.pmap and (S.pmap[1] ~= pmg or S.pmap[2] ~= pmn) then despawn() end
+  -- map change -> the warp tears down + rebuilds object events, so our ghost OE is already gone
+  -- and its old id now belongs to one of the NEW map's NPCs. FORGET it (drop, don't DESPAWN by a
+  -- stale id — that deletes/corrupts a real NPC, the Oak's-lab bug). Re-spawn on the new map.
+  if S.pmap and (S.pmap[1] ~= pmg or S.pmap[2] ~= pmn) then drop() end
   S.pmap = { pmg, pmn }
 
   local g = S.ghost
@@ -169,8 +179,12 @@ function PG.on_frame()
     if not S.oeId then return end
   end
 
-  -- the engine may recycle the slot (battle, warp); bail if our sprite went away
-  if spr_inuse(S.sprId) == 0 then dbg("sprite recycled — re-spawning"); S.oeId, S.sprId = nil, nil; return end
+  -- The engine may recycle/reassign our slot (warp, off-screen cull). If the sprite was freed OR
+  -- the object-event's localId is no longer OURS, forget it (drop, don't drive a reassigned slot —
+  -- that writes the partner's sprite onto whatever real NPC now owns it) and re-spawn.
+  if spr_inuse(S.sprId) == 0 or memory.read_u8(oe(S.oeId, OE_LOCALID)) ~= LOCALID then
+    dbg("slot freed/reassigned — re-spawning"); drop(); return
+  end
 
   -- The partner changed graphics (walk<->run share a gfx, but bike/surf/fish are DIFFERENT
   -- graphicsIds with their own sprites + anim tables). Re-spawn so the engine loads the right
@@ -229,25 +243,32 @@ function PG.on_frame()
   memory.write_u16_le(spr(S.sprId, SP_X), gx & 0xFFFF)
   memory.write_u16_le(spr(S.sprId, SP_Y), gy & 0xFFFF)
 
-  -- Visibility (invisible bit 0x04 of byte3e; engine callback is neutralized so this sticks):
-  --  • CULL off-screen — a sprite far outside the viewport has its OAM coord WRAP (9-bit X /
-  --    8-bit Y) and draws as garbage at a random on-screen spot. Screen pos = pos1 + coordOffset.
-  --  • HIDE until the partner's real sprite is applied — avoids the 1-frame spawn-gfx (= the LOCAL
-  --    player) flash at spawn / door-transition re-spawn. (No gate if the partner sends no imgs.)
+  -- Is the ghost on-screen? screen pos = pos1 + gSpriteCoordOffset.
   local ssx = gx + memory.read_s16_le(C.COFF_X)
   local ssy = gy + memory.read_s16_le(C.COFF_Y)
   local onscreen = ssx > -16 and ssx < 256 and ssy > -16 and ssy < 176
+
+  -- Backing OE tile (also the collision/interaction tile):
+  --  • ON-SCREEN  -> the partner's ACTUAL tile, so you bump into / talk to them where you see them.
+  --  • OFF-SCREEN -> pin to the PLAYER's tile so RemoveObjectEventIfOutsideView never culls our
+  --    slot. Otherwise the engine frees it the instant the partner scrolls off, we re-spawn, it's
+  --    still off-screen, and we thrash spawn/cull/spawn forever. (Sprite is hidden off-screen.)
+  local otx, oty
+  if onscreen then otx, oty = round(g.x / 16), round(g.y / 16)
+  else            otx, oty = p_tile_x(), p_tile_y() end
+  memory.write_u16_le(oe(S.oeId, OE_CX), otx & 0xFFFF); memory.write_u16_le(oe(S.oeId, OE_CY), oty & 0xFFFF)
+  memory.write_u16_le(oe(S.oeId, OE_PX), otx & 0xFFFF); memory.write_u16_le(oe(S.oeId, OE_PY), oty & 0xFFFF)
+  memory.write_u8(oe(S.oeId, OE_ELEV), p_elev())
+
+  -- Visibility (invisible bit 0x04 of byte3e; engine callback is neutralized so this sticks):
+  --  • CULL off-screen — a sprite far outside the viewport has its OAM coord WRAP (9-bit X /
+  --    8-bit Y) and draws as garbage at a random on-screen spot.
+  --  • HIDE until the partner's real sprite is applied — avoids the 1-frame spawn-gfx (= the LOCAL
+  --    player) flash at spawn / door-transition re-spawn. (No gate if the partner sends no imgs.)
   local sprite_ready = (not (g.imgs and in_rom(g.imgs))) or (S.applied_imgs ~= nil)
   local b3e = memory.read_u8(spr(S.sprId, SP_B3E))
   if onscreen and sprite_ready then b3e = b3e & 0xFB else b3e = b3e | 0x04 end
   memory.write_u8(spr(S.sprId, SP_B3E), b3e)
-
-  -- Backing OE tile = the partner's ACTUAL tile (not the lerped display) so collision +
-  -- interaction land under the ghost. Solid: match the player's elevation.
-  local gtx, gty = round(g.x / 16), round(g.y / 16)
-  memory.write_u16_le(oe(S.oeId, OE_CX), gtx & 0xFFFF); memory.write_u16_le(oe(S.oeId, OE_CY), gty & 0xFFFF)
-  memory.write_u16_le(oe(S.oeId, OE_PX), gtx & 0xFFFF); memory.write_u16_le(oe(S.oeId, OE_PY), gty & 0xFFFF)
-  memory.write_u8(oe(S.oeId, OE_ELEV), p_elev())
 
   -- Animation: while moving, mirror the partner's LIVE animNum (walk/run/bike/surf/fish — the
   -- ghost shares the partner's gfx after the re-spawn above, so any animNum is valid here); fall
