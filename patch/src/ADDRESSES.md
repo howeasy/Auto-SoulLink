@@ -65,6 +65,22 @@ is a valid map for the base engine here.
 | 9 | PLAY_FANFARE | `[0..1]`=songId | `PlayFanfare(songId)` |
 | 10 | APPLY_DAMAGE | `[0]`=battler `[1..2]`=amount → `result[0..1]`=new hp | linked HP / chip: `gBattleMons[b].hp -= amount` (clamp 0) |
 | 11 | CURE_STATUS | `[0]`=battler | link-cured status: clear `gBattleMons[b].status1` |
+| 12 | SET_RULES | `[0]`=enforce | ROM-enforced nuzlocke: persistently keep battle style on SET |
+| 13 | ARM_PEER_INTERACT | `[0]`=ghost oeId `[1]`=armed | talk-to-ghost detection (A-press facing it) |
+
+## Phase-5 (peer interaction + ROM-enforced settings) — validated
+EWRAM state `SlinkState @ 0x0203F8D0` {enforce_rules, pi_armed, pi_oe, pi_count}. The frame hook runs
+`enforce_rules()` + `check_peer_interact()` every frame (no-op until armed).
+- **SET_RULES** (ROM-enforced nuzlocke): while enforced, each frame sets `optionsBattleStyle` = SET
+  (bit 9 / mask 0x0200 of the options u16 at `*gSaveBlock2Ptr`(0x0300500C)+0x14) — so "no free switch
+  after a KO" can't be turned off in the options menu. Live: SHIFT→SET, re-enforced after a change
+  attempt, releasable. Extensible to text-speed/scene/etc.
+- **ARM_PEER_INTERACT** (talk-to-ghost): each frame, if A is newly pressed (`gMain`(0x030030F0)+0x2E &
+  0x0001) and the tile in front of the player (object-event facing@0x18: 1=down/2=up/3=left/4=right)
+  equals the ghost object-event's tile, bump `pi_count` (the client polls it to notify the server/
+  partner) and show the pre-set native message (`SLINK_TEXT_BUF`). Live: A-press facing the ghost ->
+  counter++, native box shown, **no softlock** (a real engine-spawned NPC handles A-press cleanly,
+  unlike the old hand-clone).
 
 ## Phase-5 (linked battle rules) — primitives validated
 New gameplay only a patch enables. `gBattleMons` hp@0x28, maxHP@0x2C, status1@0x4C (stride 0x58).

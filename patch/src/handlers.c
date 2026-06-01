@@ -31,7 +31,8 @@ typedef struct {
 enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
        OP_FORCE_MOVE_SLOT = 5, OP_SPAWN_PEER_NPC = 6, OP_DESPAWN_PEER_NPC = 7,
        OP_SHOW_MESSAGE = 8, OP_PLAY_FANFARE = 9,
-       OP_APPLY_DAMAGE = 10, OP_CURE_STATUS = 11 };
+       OP_APPLY_DAMAGE = 10, OP_CURE_STATUS = 11,
+       OP_SET_RULES = 12, OP_ARM_PEER_INTERACT = 13 };
 enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
 
 /* Armed forced-move state (controller-swap driver), EWRAM scratch past the mailbox. */
@@ -40,6 +41,20 @@ typedef struct {
     volatile u16 seq, frames;
 } ArmedMove;
 #define AM ((ArmedMove *)0x0203F8C0u)
+
+/* Persistent companion-patch state (nuzlocke enforcement + peer interaction). */
+typedef struct {
+    volatile u8 enforce_rules;   /* re-assert battle-style SET every frame */
+    volatile u8 pi_armed;        /* peer-interaction detection on */
+    volatile u8 pi_oe;           /* ghost object-event id to watch */
+    volatile u8 pi_count;        /* ++ on each interact (Lua polls); also shows the box */
+} SlinkState;
+#define SS ((SlinkState *)0x0203F8D0u)
+
+#define gSaveBlock2Ptr 0x0300500Cu
+#define gMain          0x030030F0u   /* newKeys @ +0x2E (A = 0x0001) */
+#define KEY_A          0x0001u
+#define OPT_BATTLE_STYLE_SET 0x0200u /* bit 9 of options u16 @ SaveBlock2+0x14 */
 
 /* ---- battle-controller plumbing (RR build-specific, runtime-discovered) ---- */
 #define gBattlerControllerFuncs 0x03004FE0u   /* u32[4] */
@@ -144,6 +159,35 @@ static void drive_force_move(void)
     }
 }
 
+/* ROM-enforced nuzlocke: keep battle style on SET so the player can't free-switch after a KO. */
+static void enforce_rules(void)
+{
+    if (!SS->enforce_rules) return;
+    u32 sb2 = R32(gSaveBlock2Ptr);
+    if (sb2) R16(sb2 + 0x14) |= OPT_BATTLE_STYLE_SET;
+}
+
+/* Peer interaction: when the player presses A facing the ghost NPC, show the pre-set message
+ * (native box) and bump a counter the Lua client polls (to notify the server / partner). */
+static void check_peer_interact(void)
+{
+    if (!SS->pi_armed) return;
+    if (!(R16(gMain + 0x2E) & KEY_A)) return;            /* A newly pressed this frame? */
+    u32 g = gObjectEvents + (u32)SS->pi_oe * OE_STRIDE;
+    if (!(R8(g) & 1)) return;                             /* ghost active? */
+    u32 p = gObjectEvents;                                /* player = object-event slot 0 */
+    int px = (s16)R16(p + 0x10), py = (s16)R16(p + 0x12);
+    u8  f  = R8(p + 0x18) & 0x0F;
+    if      (f == 1) py++;       /* down */
+    else if (f == 2) py--;       /* up */
+    else if (f == 3) px--;       /* left */
+    else if (f == 4) px++;       /* right */
+    if (px == (s16)R16(g + 0x10) && py == (s16)R16(g + 0x12)) {
+        SS->pi_count++;
+        ShowFieldMessage((const u8 *)SLINK_TEXT_BUF);    /* native interaction message */
+    }
+}
+
 __attribute__((section(".text.entry"), used))
 void slink_hook(void)
 {
@@ -151,6 +195,8 @@ void slink_hook(void)
     MB->abi_version = ABI_VER;
 
     drive_force_move();           /* runs the armed controller-swap each frame */
+    enforce_rules();              /* persistent nuzlocke option enforcement */
+    check_peer_interact();        /* talk-to-ghost detection */
 
     u16 op = MB->opcode;
     if (op == 0) return;          /* idle */
@@ -235,6 +281,16 @@ void slink_hook(void)
         *(volatile u32 *)(gBattleMons + (u32)b * BATTLE_MON_SIZE + 0x4C) = 0;
         break;
     }
+
+    case OP_SET_RULES:            /* ROM-enforced nuzlocke: args [0]=enforce (1=on) */
+        SS->enforce_rules = MB->args[0];
+        break;
+
+    case OP_ARM_PEER_INTERACT:    /* talk-to-ghost: args [0]=ghost oeId [1]=armed (1=on) */
+        SS->pi_oe = MB->args[0];
+        SS->pi_armed = MB->args[1];
+        if (MB->args[1]) SS->pi_count = 0;
+        break;
 
     case OP_DESPAWN_PEER_NPC: {   /* args: [0]=objectEventId */
         u8 oe = MB->args[0];

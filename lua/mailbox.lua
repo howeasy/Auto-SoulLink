@@ -79,6 +79,12 @@ function MB.apply_damage_args(battler, amount)
     return {battler, amount % 256, math.floor(amount / 256) % 256}
 end
 
+MB.OP_SET_RULES = 12          -- ROM-enforced nuzlocke: args {enforce}
+MB.OP_ARM_PEER_INTERACT = 13  -- talk-to-ghost: args {ghost_oeId, armed}
+-- SlinkState struct @ 0x0203F8D0: enforce_rules, pi_armed, pi_oe, pi_count
+MB.PI_COUNT = 0x0203F8D3
+function MB.peer_interact_count() return memory.read_u8(MB.PI_COUNT) end
+
 MB.ST_IDLE, MB.ST_BUSY, MB.ST_OK, MB.ST_FAIL = 0, 1, 2, 3
 
 -- Helper: build the FORCE_MOVE arg array (move_id is u16 at aligned args offset 4).
