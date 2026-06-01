@@ -61,6 +61,19 @@ is a valid map for the base engine here.
 | 5 | FORCE_MOVE_SLOT | `[0]`=battler `[1]`=target `[2]`=move_pos | **live** forced move via controller-swap (see below) |
 | 6 | SPAWN_PEER_NPC | `[0]`=gfxId `[1]`=localId `[2..3]`=x `[4..5]`=y `[6]`=movement → `result[0]`=objEventId | spawn a real engine object-event NPC |
 | 7 | DESPAWN_PEER_NPC | `[0]`=objEventId | DestroySprite + clear object-event (clean removal) |
+| 8 | SHOW_MESSAGE | text pre-written (FR-encoded) to `0x0203F900` → `result[0]`=shown | native field message box (`ShowFieldMessage`) |
+| 9 | PLAY_FANFARE | `[0..1]`=songId | `PlayFanfare(songId)` |
+
+## Phase-4 (native UI) — validated
+`ShowFieldMessage = 0x0806943C` `(const u8 *str)` — copies `str` (FR-charmap, 0xFF-terminated) into
+`gStringVar4` (0x02021D18), starts the text printer, and creates a task the overworld's RunTasks
+drives → a transient native message box. Returns FALSE if a box is already up. Lua writes the
+FR-encoded text to `0x0203F900` (via `MB.write_message`/`MB.fr_encode`: space=0x00, 0-9=0xA1, A-Z=0xBB,
+a-z=0xD5, EOS=0xFF) then sends SHOW_MESSAGE. `PlayFanfare = 0x08071C60`. **Live-validated**
+(`test_live_message.lua`): SHOW returns shown→busy, gStringVar4 holds the text, no crash; fanfare acks.
+**Deferred:** a *persistent* shared status bar (badge/area/HP) — high-effort persistent-UI that fights
+the field window system and duplicates the existing dashboard/OBS overlays; the message box is the
+high-value native-UI win.
 
 ## Phase-3 (peer NPC) — validated
 Spawn a **real engine object-event** so the engine owns its sprite/palette/VRAM/callback —

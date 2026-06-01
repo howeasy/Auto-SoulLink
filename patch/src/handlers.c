@@ -29,7 +29,8 @@ typedef struct {
 #define MB ((Mailbox*)MAILBOX_ADDR)
 
 enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
-       OP_FORCE_MOVE_SLOT = 5, OP_SPAWN_PEER_NPC = 6, OP_DESPAWN_PEER_NPC = 7 };
+       OP_FORCE_MOVE_SLOT = 5, OP_SPAWN_PEER_NPC = 6, OP_DESPAWN_PEER_NPC = 7,
+       OP_SHOW_MESSAGE = 8, OP_PLAY_FANFARE = 9 };
 enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
 
 /* Armed forced-move state (controller-swap driver), EWRAM scratch past the mailbox. */
@@ -80,6 +81,14 @@ typedef int (*SpawnNpc_t)(u8 gfxId, u8 movement, u8 localId, s16 x, s16 y, u8 el
 #define SpawnSpecialObjectEventParameterized ((SpawnNpc_t)0x0805E831u)
 typedef void (*DestroySprite_t)(void *sprite);
 #define DestroySprite ((DestroySprite_t)0x08007281u)
+/* bool8 ShowFieldMessage(const u8 *str) @0x0806943C — native field message box.
+ * Copies str (FR-charmap, 0xFF-terminated) to gStringVar4, starts the printer, and
+ * creates a task the overworld's RunTasks drives. Returns FALSE if a box is already up. */
+typedef u8 (*ShowMsg_t)(const u8 *str);
+#define ShowFieldMessage ((ShowMsg_t)0x0806943Du)
+typedef void (*PlayFanfare_t)(u16 songId);
+#define PlayFanfare ((PlayFanfare_t)0x08071C61u)
+#define SLINK_TEXT_BUF 0x0203F900u   /* Lua writes FR-encoded text here before SHOW_MESSAGE */
 #define gObjectEvents 0x02036E38u   /* stride 0x24 */
 #define OE_STRIDE     0x24u
 #define gSprites      0x0202063Cu   /* stride 0x44 */
@@ -194,6 +203,17 @@ void slink_hook(void)
         u8  movement = MB->args[6];
         int oe = SpawnSpecialObjectEventParameterized(gfx, movement, localId, x, y, /*elev*/3);
         MB->result[0] = (u8)oe;   /* object-event id (>=16 = failed) */
+        break;
+    }
+
+    case OP_SHOW_MESSAGE: {       /* text (FR-encoded, 0xFF-term) already in SLINK_TEXT_BUF */
+        u8 shown = ShowFieldMessage((const u8 *)SLINK_TEXT_BUF);
+        MB->result[0] = shown;    /* 1 = box shown, 0 = a box was already up */
+        break;
+    }
+
+    case OP_PLAY_FANFARE: {       /* args: [0..1] = songId */
+        PlayFanfare((u16)(MB->args[0] | (MB->args[1] << 8)));
         break;
     }
 

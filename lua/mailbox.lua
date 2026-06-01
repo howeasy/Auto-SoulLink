@@ -40,6 +40,38 @@ function MB.spawn_npc_args(gfx, localId, x, y, movement)
 end
 
 MB.OP_DESPAWN_PEER_NPC = 7  -- args: {objectEventId}
+MB.OP_SHOW_MESSAGE  = 8     -- text pre-written to the text buffer (see MB.write_message)
+MB.OP_PLAY_FANFARE  = 9     -- args: {song_lo, song_hi}
+
+MB.TEXT_BUF = 0x0203F900    -- patch reads FR-encoded text from here for SHOW_MESSAGE
+
+-- ASCII -> FireRed charmap (letters, digits, space, common punctuation), 0xFF-terminated.
+function MB.fr_encode(s)
+    local out = {}
+    for i = 1, #s do
+        local c = s:sub(i, i); local b = c:byte(); local v
+        if c == " " then v = 0x00
+        elseif b >= 48 and b <= 57 then v = 0xA1 + (b - 48)   -- 0-9
+        elseif b >= 65 and b <= 90 then v = 0xBB + (b - 65)   -- A-Z
+        elseif b >= 97 and b <= 122 then v = 0xD5 + (b - 97)  -- a-z
+        elseif c == "!" then v = 0xAB elseif c == "?" then v = 0xAC
+        elseif c == "." then v = 0xAD elseif c == "-" then v = 0xAE
+        elseif c == "," then v = 0xB8 elseif c == "/" then v = 0xBA
+        elseif c == ":" then v = 0xF0
+        else v = 0x00 end
+        out[#out + 1] = v
+    end
+    out[#out + 1] = 0xFF
+    return out
+end
+
+-- write FR-encoded text into the patch's text buffer (call before sending SHOW_MESSAGE)
+function MB.write_message(text)
+    local bytes = MB.fr_encode(text)
+    for i = 1, #bytes do memory.write_u8(MB.TEXT_BUF + (i - 1), bytes[i]) end
+end
+
+function MB.fanfare_args(song) return {song % 256, math.floor(song / 256) % 256} end
 
 MB.ST_IDLE, MB.ST_BUSY, MB.ST_OK, MB.ST_FAIL = 0, 1, 2, 3
 
