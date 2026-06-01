@@ -335,6 +335,12 @@ local pending_force_moves = {}         -- [monKey] → {slot, battler, seq, star
 -- force-explode requests and arm them one at a time, only while no force-move is in flight.
 local mb_explode_queue = {}            -- FIFO of {key, slot, battler}
 
+-- Frame counter — declared here (not lower down) so dispatch_commands, which records
+-- start_frame for the pending_* tables, captures the SAME upvalue the on_frame settle
+-- loops read. (Previously declared after dispatch_commands, so its start_frame writes
+-- silently referenced a nil global → the fallback-timeout arithmetic could fault.)
+local frame_count     = 0
+
 -- Keys that have been force-fainted by server command during THIS BATTLE.
 -- Prevents re-reporting the HP=0 as a new faint event back to the server.
 -- Persists for the entire battle (cleared at battle start and battle end)
@@ -358,6 +364,20 @@ local confirmed_real_player_faints = 0   -- count we've already credited via cou
 -- Forward declaration: dispatch_commands (below) sends rival_team_replaced before send() is
 -- defined further down; without this the calls hit a nil global and crash the handler.
 local send
+
+-- Arm a native auto-Explode on an active battler: write Explosion into its battle-mon move
+-- slot 0 (PP>0 required) and trigger OP_FORCE_MOVE_SLOT. The patch's controller swap reads
+-- moves[move_pos] at fire time, so the just-written move is what executes. Records the
+-- in-flight entry for the §4a-ter poll. Caller MUST ensure no force-move is already in flight
+-- (single ArmedMove struct in the patch). Returns the mailbox seq.
+local function arm_native_explode(slot, battler, key)
+    local bmon = M.BATTLE_MONS_ADDR + battler * M.BATTLE_MON_SIZE
+    memory.write_u16_le(bmon + M.BATTLE_MON_MOVES_OFF, M.MOVE_EXPLOSION)
+    memory.write_u8   (bmon + M.BATTLE_MON_PP_OFF,    5)   -- PP>0 or the move is rejected
+    local seq = MB.send(MB.OP_FORCE_MOVE_SLOT, MB.force_move_slot_args(battler, 1, 0))
+    pending_force_moves[key] = {slot = slot, battler = battler, seq = seq, start_frame = frame_count}
+    return seq
+end
 -- ── Command dispatcher ────────────────────────────────────────────────────────
 local function dispatch_commands(cmds)
     for _, c in ipairs(cmds) do
@@ -397,25 +417,27 @@ local function dispatch_commands(cmds)
                             -- Explode Mode (RR only): the active linked mon auto-Explodes.
                             local battler = M.getBattlerForPartySlot(slot)
                             if patch_present() and currently_in_battle and battler >= 0 then
-                                -- NATIVE (companion patch): write Explosion into the battle
-                                -- mon's move slot 0, then arm OP_FORCE_MOVE_SLOT.  The patch's
-                                -- controller-swap driver reads moves[move_pos] at fire time
-                                -- (handlers.c slink_force_controller), so the just-written move
-                                -- is used; the engine then executes Explosion natively (real
-                                -- animation + damage + self-faint).  Settled by the
-                                -- pending_force_moves poll below — no Variant-3 menu-skip hack.
-                                local bmon = M.BATTLE_MONS_ADDR + battler * M.BATTLE_MON_SIZE
-                                memory.write_u16_le(bmon + M.BATTLE_MON_MOVES_OFF, M.MOVE_EXPLOSION)
-                                memory.write_u8   (bmon + M.BATTLE_MON_PP_OFF,    5)   -- PP>0 or the move is rejected
-                                local seq = MB.send(MB.OP_FORCE_MOVE_SLOT, MB.force_move_slot_args(battler, 1, 0))
-                                pending_force_moves[c.key] = {
-                                    slot = slot, battler = battler, seq = seq, start_frame = frame_count,
-                                }
+                                -- NATIVE (companion patch): write Explosion into the battle mon's
+                                -- move slot 0, then arm OP_FORCE_MOVE_SLOT.  The controller-swap
+                                -- driver reads moves[move_pos] at fire time (handlers.c
+                                -- slink_force_controller), so the just-written move is used and
+                                -- the engine executes Explosion natively (real animation + damage
+                                -- + self-faint).  Serialized: only one force-move may be armed at
+                                -- a time (single ArmedMove struct) — if one is already in flight
+                                -- (e.g. a doubles whiteout), queue this one for the on_frame drain.
+                                if next(pending_force_moves) == nil then
+                                    local seq = arm_native_explode(slot, battler, c.key)
+                                    console.log(string.format(
+                                        "[SLink-FRLGE]   ↳ force_explode → native FORCE_MOVE_SLOT armed slot=%d battler=%d seq=%d key=%s",
+                                        slot, battler, seq, c.key))
+                                else
+                                    mb_explode_queue[#mb_explode_queue + 1] = {key = c.key, slot = slot, battler = battler}
+                                    console.log(string.format(
+                                        "[SLink-FRLGE]   ↳ force_explode → native FORCE_MOVE_SLOT QUEUED (one in flight) slot=%d battler=%d key=%s",
+                                        slot, battler, c.key))
+                                end
                                 M.playSE(M.SE_LINKED_KO)
                                 hud_show("!! " .. nick_label(c.key) .. " BOOM!", 255, 80, 80, 360)
-                                console.log(string.format(
-                                    "[SLink-FRLGE]   ↳ force_explode → native FORCE_MOVE_SLOT armed slot=%d battler=%d seq=%d key=%s",
-                                    slot, battler, seq, c.key))
                             elseif M.forceExplodeBattler and battler >= 0 and M.forceExplodeBattler(battler) then
                                 -- FALLBACK (unpatched ROM): Variant-3 menu-skip RAM writes
                                 -- pre-fill the engine's action-commit state so the FIGHT/BAG/
@@ -439,13 +461,17 @@ local function dispatch_commands(cmds)
                             -- force_faint, active battler.
                             local battler = M.getBattlerForPartySlot(slot)
                             if patch_present() and currently_in_battle and battler >= 0 then
-                                -- NATIVE (companion patch): OP_FORCE_FAINT zeroes gBattleMons
-                                -- HP inside the frame hook (no Lua/engine refresh race), so we
-                                -- can faint the active battler immediately instead of deferring
-                                -- until it switches out.  Still call M.forceFaint(slot) to zero
-                                -- the server-visible party-struct HP — the opcode only touches
-                                -- the battle mon.
-                                MB.send(MB.OP_FORCE_FAINT, {battler})
+                                -- NATIVE (companion patch): OP_FORCE_FAINT zeroes gBattleMons HP
+                                -- inside the frame hook, so we can faint the active battler
+                                -- immediately instead of deferring until it switches out.
+                                -- M.forceFaint(slot) is the AUTHORITATIVE faint (zeros both party
+                                -- and battle HP; the Lua battle-HP write is race-free — gBattleMons
+                                -- is not refreshed per-frame), so the opcode is a belt-and-braces
+                                -- native confirmation.  Skip the opcode while a force-move is in
+                                -- flight so its single-slot send can't clobber the armed FORCE_MOVE_SLOT.
+                                if next(pending_force_moves) == nil then
+                                    MB.send(MB.OP_FORCE_FAINT, {battler})
+                                end
                                 M.forceFaint(slot)
                                 _battle_hp_cache[c.key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
                                 force_fainted_keys[c.key] = true
@@ -1021,7 +1047,6 @@ local was_connected   = false
 local prev_area, prev_loc = current_area_loc()
 local prev_party      = index_party()
 local prev_in_battle  = M.isInBattle()
-local frame_count     = 0
 local prev_keys       = {}
 
 local TICK_INTERVAL    = 30   -- auto tick every 30 frames (~0.5 s)
@@ -1617,24 +1642,54 @@ local function on_frame()
         end
     end
 
-    -- 4a-ter. Settle native FORCE_MOVE_SLOT entries (Explode Mode on a patched ROM).
-    --   • ST_OK  → the controller-swap driver fired Explosion; the mon self-faints.
-    --     Zero the party HP (the opcode only touched gBattleMons) and mark it fainted.
-    --   • ST_FAIL (the patch's own 600-frame timeout) OR our FORCE_MOVE_TIMEOUT safety
-    --     net (covers a lost ack) → the move never connected (Damp, type immunity,
-    --     player ran): hand off to the legacy Variant-3 path via pending_explosions,
-    --     or deferred faint if the helper refuses.
+    -- Drain the serialized native-explode queue: arm at most ONE OP_FORCE_MOVE_SLOT at a
+    -- time (the patch has a single ArmedMove struct).  Re-resolve the mon's CURRENT active
+    -- battler — the battle may have moved on since the command was queued.
+    if next(mb_explode_queue) and next(pending_force_moves) == nil
+       and writes_enabled and patch_present() and in_battle then
+        local req   = table.remove(mb_explode_queue, 1)
+        local count = memory.read_u8(M.PARTY_COUNT_ADDR)
+        local cur_slot = -1
+        for slot = 0, count - 1 do
+            if M.monKey(M.PARTY_BASE + slot * M.MON_SIZE) == req.key then cur_slot = slot; break end
+        end
+        local cur_battler = (cur_slot >= 0) and M.getBattlerForPartySlot(cur_slot) or -1
+        if cur_battler >= 0 then
+            local seq = arm_native_explode(cur_slot, cur_battler, req.key)
+            console.log(string.format(
+                "[SLink-FRLGE]   ↳ force_explode (queued) → native FORCE_MOVE_SLOT armed slot=%d battler=%d seq=%d key=%s",
+                cur_slot, cur_battler, seq, req.key))
+        elseif cur_slot >= 0 then
+            -- No longer an active battler (switched/fainted) → plain faint.
+            local b = M.PARTY_BASE + cur_slot * M.MON_SIZE
+            M.forceFaint(cur_slot)
+            _battle_hp_cache[req.key] = {hp = 0, maxHP = mem_u16(b + M.OFF_MAX_HP), level = mem_u8(b + M.OFF_LEVEL)}
+            force_fainted_keys[req.key] = true
+            console.log(string.format(
+                "[SLink-FRLGE]   ↳ force_explode (queued) → no active battler, plain faint slot=%d key=%s",
+                cur_slot, req.key))
+        else
+            console.log("[SLink-FRLGE]   ↳ force_explode (queued) → key gone from party key="..req.key:sub(1,8))
+        end
+    end
+
+    -- 4a-ter. Poll native FORCE_MOVE_SLOT entries (Explode Mode on a patched ROM).
+    --   • ST_OK  → the move COMMITTED.  Do NOT zero HP here — that would faint the mon
+    --     before the Explosion script runs (cutting the animation, the point of Explode
+    --     Mode).  Hand off to the pending_explosions settle (§4a-bis): pp has already
+    --     dropped so its Variant-3 re-write is skipped; it waits for the battle mon's HP
+    --     to hit 0 (Explosion landed) before zeroing party HP, with its own fallback
+    --     timer if the move is canceled (Damp) and the mon never faints.
+    --   • ST_FAIL (patch's own 600f deadline) OR FORCE_MOVE_TIMEOUT (720f, lost-ack
+    --     dead-man's-switch) → never connected: fall back to Variant-3, or deferred faint.
     if next(pending_force_moves) and writes_enabled then
         for key, st in pairs(pending_force_moves) do
-            local base   = M.PARTY_BASE + st.slot * M.MON_SIZE
             local status = MB.poll(st.seq)
             if status == MB.ST_OK then
-                M.forceFaint(st.slot)
-                _battle_hp_cache[key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
-                force_fainted_keys[key] = true
+                pending_explosions[key] = {slot = st.slot, battler = st.battler, start_frame = frame_count}
                 pending_force_moves[key] = nil
                 console.log(string.format(
-                    "[SLink-FRLGE]   ↳ FORCE_MOVE_SLOT settled (Explosion fired) slot=%d battler=%d key=%s",
+                    "[SLink-FRLGE]   ↳ FORCE_MOVE_SLOT committed (native) — Explosion executing slot=%d battler=%d key=%s",
                     st.slot, st.battler, key))
             elseif status == MB.ST_FAIL or (frame_count - st.start_frame) >= FORCE_MOVE_TIMEOUT then
                 pending_force_moves[key] = nil
@@ -2060,6 +2115,7 @@ local function on_frame()
             pending_battle_faints = {}  -- discard any deferred faints from borrowed battle
             pending_explosions    = {}  -- discard any coerced-Explosion state
             pending_force_moves   = {}  -- discard any native forced-move state
+            mb_explode_queue      = {}  -- discard queued native explodes
             force_fainted_keys    = {}  -- clear battle-scoped guard
             pending_faint_debounce = {}  -- clear any debounce state
             battle_start_player_faints  = nil
@@ -2073,6 +2129,7 @@ local function on_frame()
         pending_battle_faints = {}  -- all deferred faints should be flushed by now
         pending_explosions    = {}  -- all coerced-Explosion entries settled by now
         pending_force_moves   = {}  -- all native forced-move entries settled by now
+        mb_explode_queue      = {}  -- queued native explodes drained/voided
         force_fainted_keys    = {}  -- clear battle-scoped guard
         pending_faint_debounce = {}  -- clear any debounce state
         battle_start_player_faints  = nil
@@ -2558,6 +2615,9 @@ local function on_frame()
                         if pending_force_moves[old_k] then
                             pending_force_moves[new_k] = pending_force_moves[old_k]
                             pending_force_moves[old_k] = nil
+                        end
+                        for _, q in ipairs(mb_explode_queue) do
+                            if q.key == old_k then q.key = new_k end
                         end
 
                         -- Pending sync commands referencing old key
