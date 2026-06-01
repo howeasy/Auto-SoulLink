@@ -170,7 +170,7 @@ typedef void (*OeTurn_t)(void *oe, u8 dir);
 #define DIR_NORTH 2u
 #define DIR_WEST  3u
 #define DIR_EAST  4u
-#define GHOST_SNAP_TILES 4   /* >this many tiles off -> snap instead of walking there */
+#define GHOST_SNAP_TILES 10  /* >this many tiles off -> snap instead of walking there */
 
 static void ack(u16 st, u16 reason)
 {
