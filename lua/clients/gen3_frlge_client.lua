@@ -344,6 +344,9 @@ local pending_faint_debounce = {}  -- [monKey] → frames_remaining
 local battle_start_player_faints  = nil  -- gBattleResults snapshot at battle start
 local confirmed_real_player_faints = 0   -- count we've already credited via counter
 
+-- Forward declaration: dispatch_commands (below) sends rival_team_replaced before send() is
+-- defined further down; without this the calls hit a nil global and crash the handler.
+local send
 -- ── Command dispatcher ────────────────────────────────────────────────────────
 local function dispatch_commands(cmds)
     for _, c in ipairs(cmds) do
@@ -558,7 +561,7 @@ end
 local seq            = 0
 local pending_labels = {}
 
-local function send(evt, label, is_auto, is_silent)
+send = function(evt, label, is_auto, is_silent)
     if not C.connected() then
         console.log("[SLink-FRLGE] NOT CONNECTED — dropped: "..(label or evt.event))
         return
