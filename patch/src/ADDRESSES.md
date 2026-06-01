@@ -109,16 +109,26 @@ at `STATE_WAIT_ACTION_CHOSEN`, when the multi-nibble exec mask clears, the engin
 **two-stage** controller handshake (choose action, then choose move), each gated by the exec
 mask and read from `gBattleBufferB`.
 
-**Recommended next-session implementation (C):** a frame-hook 2-stage driver, armed via the
-mailbox, with an EWRAM stage flag: (A) write `gBattleBufferB[b][1]=USE_MOVE`, clear the full
-exec mask; (B) once the move submenu is up, write the move-choice response into
-`gBattleBufferB[b]` (format = the move controller's emit — still to RE from `HandleInputChooseMove`)
-+ `chosenMovePositions`/`moveTarget`, clear the mask. Alternatively call the engine emit funcs
-directly. Addresses in hand: `gBattleBufferB=0x20233C4` (stride 0x200), `gBattleExecBuffer=0x02023BC8`,
-exec mask `bit|bit<<4|bit<<8|bit<<12|0xF0000000`, `PlayerBufferExecCompleted=0x0802E33C`,
-`gLockedMoves=0x2023DB8`. Rig is proven (input reaches core; valid singles action-menu savestate;
-mashing A executes a move). **FORCE_MOVE here remains a validated *commit* primitive; live
-execution is the one open item, now fully scoped.**
+**Full 3-state protocol RE'd** (`battle_main.c`, comm enum confirmed by live probe):
+BEFORE_ACTION_CHOSEN=1 → WAIT_ACTION_CHOSEN=2 → WAIT_ACTION_CASE_CHOSEN=3 → CONFIRMED_STANDBY=4.
+- comm 2: engine reads `gBattleBufferB[b][1]` (action); USE_MOVE(0) → emits ChooseMove, comm→3.
+- comm 3: reads `gBattleBufferB[b][1]==10` + `[2]`=move_pos + `[3]`=target → sets
+  `chosenMovePositions=[2]`, `gChosenMoveByBattler=moves[[2]]`, `moveTarget=[3]`, comm→4 (executes).
+Move emit (`battle_controller_player.c:342`): `EmitTwoReturnValues(1, 10, cursor | (target<<8))`.
+
+**Prototype result (Lua, on the battle save):** a frame-hook 2-stage driver
+(comm2→write action+clear exec; comm3→write `[1]=10 [2]=pos [3]=target`+clear exec) **successfully
+drives the state machine 1→2→3→4 to "confirmed"** — the controller IS driven natively. BUT the
+move executed is the **default slot 0, not the forced slot**: our CallCallbacks hook runs *before*
+the battle controllers each frame, so at comm 3 the move-menu controller overwrites
+`gBattleBufferB[2]` after our write but before the main func reads it. **Robust fix: hook the
+move-controller function itself** (`HandleInputChooseMove`, a CFRU function — needs its address
+in the RR build via RE/pattern-scan) so our code *is* the controller and emits the chosen move,
+**or** relocate the dispatcher hook to run after the controllers. Addresses in hand:
+`gBattleBufferB=0x20233C4` (stride 0x200), `gBattleExecBuffer=0x02023BC8`, exec mask
+`bit|bit<<4|bit<<8|bit<<12|0xF0000000`, `PlayerBufferExecCompleted=0x0802E33C`, `gLockedMoves=0x2023DB8`.
+**FORCE_MOVE remains a validated *commit* primitive; live slot-accurate execution is the one open
+item — the approach is proven viable, only the hook-ordering/controller-intercept remains.**
 
 **This empirically validates the report's core thesis:** pure external RAM-poke is
 fundamentally limited; robust battle control needs in-ROM (controller-hook) code.
