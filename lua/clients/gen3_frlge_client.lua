@@ -320,11 +320,20 @@ local pending_explosions = {}          -- [monKey] → {slot, battler, start_fra
 
 -- Native-patch forced-move state (RR companion patch only).  Keys whose active
 -- battler was sent OP_FORCE_MOVE_SLOT to auto-Explode.  The controller-swap driver
--- acks ST_OK once the move fires (self-faint); ST_FAIL or our own timeout means it
--- never connected → we hand off to the legacy Variant-3 RAM-poke path.  Polled in
--- on_frame (section 4a-ter).
-local FORCE_MOVE_TIMEOUT = 360         -- Lua safety net (the patch's own ST_FAIL fires at 600f)
+-- acks ST_OK once the move COMMITS; we then hand the entry to pending_explosions so
+-- the Explosion animation plays out and the self-faint settles there.  ST_FAIL or a
+-- timeout means it never connected → we hand off to the legacy Variant-3 path.
+-- The Lua timeout MUST exceed the patch's own 600-frame deadline (handlers.c) so the
+-- patch's ST_FAIL is the normal fallback trigger; this Lua net only catches a truly
+-- lost ack (mailbox never answered) and must never fire while the patch is still armed.
+local FORCE_MOVE_TIMEOUT = 720         -- > patch's 600f deadline (dead-man's-switch only)
 local pending_force_moves = {}         -- [monKey] → {slot, battler, seq, start_frame}
+
+-- Companion-patch opcodes are a SINGLE-SLOT request channel (the frame hook consumes one
+-- opcode/frame) and OP_FORCE_MOVE_SLOT arms a single ArmedMove struct — so two native
+-- explodes in one Lua frame (e.g. a doubles whiteout) would clobber each other.  Queue
+-- force-explode requests and arm them one at a time, only while no force-move is in flight.
+local mb_explode_queue = {}            -- FIFO of {key, slot, battler}
 
 -- Keys that have been force-fainted by server command during THIS BATTLE.
 -- Prevents re-reporting the HP=0 as a new faint event back to the server.

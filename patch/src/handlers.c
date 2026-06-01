@@ -62,7 +62,7 @@ typedef struct {
     volatile u8  gfxId;      /* 2  graphicsId Lua wants (changes => re-spawn: bike/surf/fish) */
     volatile u8  curGfx;     /* 3  graphicsId currently spawned */
     volatile u8  localId;    /* 4  sentinel localId (0xF0) */
-    volatile u8  _pad0;      /* 5  (align tx to offset 6) */
+    volatile u8  catchup;    /* 5  hysteresis: 1 = running to catch up (set >=3 behind, clear <=1) */
     volatile s16 tx;         /* 6  target tile x (object-event currentCoords space) */
     volatile s16 ty;         /* 8  target tile y */
     volatile u8  tface;      /* 10 target facing 1=S 2=N 3=W 4=E (idle facing on arrival) */
@@ -286,6 +286,7 @@ static void ghost_remove(void)
             RemoveEventObject((void *)g);
         GH->oeId = 0xFF;
     }
+    GH->catchup = 0;
     SS->pi_armed = 0;
 }
 
@@ -341,24 +342,26 @@ static void drive_ghost(void)
     }
     /* (g) arrived -> idle facing the partner's facing. */
     if (dx == 0 && dy == 0) {
+        GH->catchup = 0;
         EventObjectSetHeldMovement((void *)g, GetFaceDirectionMovementAction(GH->tface));
         return;
     }
-    /* (h) step toward the target on the larger-gap axis (4-dir; X on tie). Run when dashing or >1
-     *     tile behind so the ghost catches up; else walk. */
+    /* (h) step toward the target on the larger-gap axis (4-dir; X on tie). Speed: MATCH the partner's
+     *     gait (run iff the partner is dashing) so the pace is even — a constant ~1-tile follow lag
+     *     looks natural. Only break gait to RUN-catch-up when we've genuinely fallen behind (>=3
+     *     tiles, e.g. a dropped packet), and keep running until back within 1 tile. The hysteresis
+     *     (GH->catchup) stops the walk/run flicker that the old ">1 tile -> run" rule caused. */
+    u32 gap = (u32)(adx + ady);
+    if (gap >= 3) GH->catchup = 1; else if (gap <= 1) GH->catchup = 0;
     u32 dir = (adx >= ady) ? (dx > 0 ? DIR_EAST : DIR_WEST)
                            : (dy > 0 ? DIR_SOUTH : DIR_NORTH);
-    u8 action = (GH->run || (adx + ady) > 1) ? GetWalkFastMovementAction(dir)
-                                             : GetWalkNormalMovementAction(dir);
+    u8 action = (GH->run || GH->catchup) ? GetWalkFastMovementAction(dir)
+                                         : GetWalkNormalMovementAction(dir);
+    /* We only get here once the previous step FINISHED (ClearHeldMovementIfFinished cleared it), so a
+     * plain SetHeldMovement starts the next step cleanly — no manual clear (that interrupted the slide
+     * and stalled travel) and no forced animBeginning (that marched on one lead foot). The engine's
+     * movement-action Step0 restarts + alternates the leg animation natively. */
     EventObjectSetHeldMovement((void *)g, action);
-    /* Restart the leg-cycle each step: consecutive steps in the same direction reuse the same
-     * animNum, and obj_anim_image_start skips the restart when animNum is unchanged, so the walk
-     * anim freezes on one frame. Force animBeginning + clear animPaused so it cycles (0->1->...). */
-    {
-        u32 sa = gSprites + (u32)R8(g + 0x04) * SPR_STRIDE;
-        R8(sa + 0x3F) |= 0x04;     /* animBeginning */
-        R8(sa + 0x2C) &= (u8)~0x40;/* animPaused = 0 */
-    }
 }
 
 __attribute__((section(".text.entry"), used))
@@ -482,6 +485,7 @@ void slink_hook(void)
         GH->localId = MB->args[1];/* target tile/facing/gfx into GhostState each tick. */
         GH->oeId   = 0xFF;
         GH->curGfx = 0xFF;        /* force a spawn next frame */
+        GH->catchup = 0;
         GH->pmapGroup = R8(player_oe() + 0x0A);     /* seed map so frame 1 doesn't false-trigger */
         GH->pmapNum   = R8(player_oe() + 0x09);
         GH->active = 1;
