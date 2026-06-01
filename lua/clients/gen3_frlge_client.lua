@@ -93,6 +93,8 @@ package.loaded["game_detect"]      = nil
 package.loaded["games.gen3_frlge"] = nil
 package.loaded["gen3_frlge_locations"] = nil
 package.loaded["hud"]               = nil
+package.loaded["mailbox"]           = nil
+package.loaded["peer_ghost_npc"]    = nil
 
 local M     = require("memory_gba")
 local C     = require("connector")
@@ -101,6 +103,9 @@ local HUD   = require("hud")
 local ok_mb, MB = pcall(require, "mailbox")
 if not ok_mb then MB = nil end
 local function patch_present() return MB ~= nil and MB.present() end
+-- Engine-NPC peer ghost (companion-patch path; no-ops without the patch).
+local ok_pg, PG = pcall(require, "peer_ghost_npc")
+if ok_pg then PG.init() else PG = nil end
 
 -- Game module detection — provides game-specific area/gift classification
 -- and profile data for memory.lua initialization
@@ -182,6 +187,13 @@ local function parse_command_list(raw)
         -- hud_show / msgbox fields
         local text    = obj:match('"text"%s*:%s*"([^"]*)"')
         local fb      = obj:match('"fb"%s*:%s*"([^"]*)"')   -- msgbox fallback style: "prompt" or hud
+        -- ghost_pos (peer ghost) fields
+        local gmg  = tonumber(obj:match('"mg"%s*:%s*(%-?%d+)'))
+        local gmn  = tonumber(obj:match('"mn"%s*:%s*(%-?%d+)'))
+        local ggx  = tonumber(obj:match('"x"%s*:%s*(%-?%d+)'))
+        local ggy  = tonumber(obj:match('"y"%s*:%s*(%-?%d+)'))
+        local ggf  = tonumber(obj:match('"f"%s*:%s*(%-?%d+)'))
+        local ggfx = tonumber(obj:match('"gfx"%s*:%s*(%-?%d+)'))
         local r       = tonumber(obj:match('"r"%s*:%s*(%d+)'))
         local g       = tonumber(obj:match('"g"%s*:%s*(%d+)'))
         local b       = tonumber(obj:match('"b"%s*:%s*(%d+)'))
@@ -213,6 +225,7 @@ local function parse_command_list(raw)
             cmds[#cmds+1] = {
                 cmd=cmd, key=key, message=msg, stats=stats,
                 text=text, fb=fb, r=r, g=g, b=b, frames=frames,
+                gmg=gmg, gmn=gmn, ggx=ggx, ggy=ggy, ggf=ggf, ggfx=ggfx,
                 sound=sound, area_id=area_id, areas=areas,
                 trainer_id=trainer_id, blobs_hex=blobs_hex,
             }
@@ -238,6 +251,7 @@ end
 -- ── ROM profile detection and validation ─────────────────────────────────────
 M.applyProfile(detected.profile, detected.variant)
 local rom_type        = detected.module.rom_type_for_variant(detected.variant)
+local IS_RR           = (detected.variant == "radical_red")  -- peer ghost is RR-only
 local val_ok, val_err = M.validateROM()
 local writes_enabled  = val_ok
 -- Re-validated each frame when false (save may not be loaded at script start).
@@ -485,6 +499,8 @@ local function dispatch_commands(cmds)
             else
                 hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
             end
+        elseif c.cmd == "ghost_pos" then
+            if PG then PG.on_ghost_pos({ mg=c.gmg, mn=c.gmn, x=c.ggx, y=c.ggy, f=c.ggf, gfx=c.ggfx }) end
         elseif c.cmd == "hud_show" and c.text then
             hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
         elseif c.cmd == "gui_prompt" and c.text then
@@ -1342,6 +1358,21 @@ local function on_frame()
     local loc  = game_module.resolve_location(frame_map_g, frame_map_n)
     local in_battle    = M.isInBattle()
     local is_overworld = M.isInOverworld()
+
+    -- Peer ghost (RR + companion patch): broadcast our overworld position ~20 Hz and drive
+    -- the engine-NPC ghost of the partner. Both are no-ops without the patch / off-overworld.
+    if IS_RR and is_overworld then
+        if frame_count % 3 == 0 then
+            local OE = 0x02036E38   -- gObjectEvents[0] = player
+            send({ event = "ghost_pos",
+                   mg  = memory.read_u8(OE + 0x0A), mn = memory.read_u8(OE + 0x09),
+                   x   = memory.read_u16_le(OE + 0x10) * 16,
+                   y   = memory.read_u16_le(OE + 0x12) * 16,
+                   f   = memory.read_u8(OE + 0x18) & 0x0F,
+                   gfx = memory.read_u8(OE + 0x05) }, "ghost_pos", true, true)
+        end
+        if PG then PG.on_frame() end
+    end
 
     -- 4a. Update sync_cooldown BEFORE sync flush to prevent executing sync
     -- commands on the battle-end transition frame.  The game is still doing

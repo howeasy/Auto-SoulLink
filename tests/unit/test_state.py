@@ -94,6 +94,54 @@ def test_partner_faint_also_propagates(tmp_path, monkeypatch):
     assert has_cmd(cmds_a, "force_faint", "A:1")
 
 
+# ── ghost_pos relay (engine-NPC peer ghost) ───────────────────────────────────
+
+def _ghost_cmds(cmds):
+    return [c for c in cmds if c.get("cmd") == "ghost_pos"]
+
+
+def test_ghost_pos_relays_to_partner(tmp_path, monkeypatch):
+    """A's overworld position relays to B (and only B) as a ghost_pos command."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+
+    cmds_a = state.handle_event("a", {"event": "ghost_pos",
+                                      "mg": 3, "mn": 5, "x": 352, "y": 160, "f": 4, "gfx": 7})
+    # The sender doesn't get their own ghost back.
+    assert not _ghost_cmds(cmds_a)
+
+    cmds_b = state.handle_event("b", {"event": "tick"})
+    gb = _ghost_cmds(cmds_b)
+    assert len(gb) == 1
+    g = gb[0]
+    assert (g["mg"], g["mn"], g["x"], g["y"], g["f"], g["gfx"]) == (3, 5, 352, 160, 4, 7)
+
+
+def test_ghost_pos_coalesces(tmp_path, monkeypatch):
+    """Many ghost_pos before the partner drains keep only the latest (queue can't grow)."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+
+    for x in (16, 160, 352):
+        state.handle_event("a", {"event": "ghost_pos",
+                                 "mg": 1, "mn": 1, "x": x, "y": 0, "f": 1, "gfx": 0})
+    # Exactly one ghost_pos queued for B, carrying the most recent position.
+    q = state.queued_commands["b"]
+    assert len(_ghost_cmds(q)) == 1
+    assert _ghost_cmds(q)[0]["x"] == 352
+
+
+def test_ghost_pos_not_persisted(tmp_path, monkeypatch):
+    """Ephemeral: a ghost_pos must never be written to the links file."""
+    links = tmp_path / "links.json"
+    monkeypatch.setattr("server.state.LINKS_PATH", str(links))
+    state = make_state_with_link()
+    state.handle_event("a", {"event": "ghost_pos",
+                             "mg": 1, "mn": 1, "x": 99, "y": 0, "f": 1, "gfx": 0})
+    if links.exists():
+        assert "ghost_pos" not in links.read_text()
+
+
 # ── explode_mode (run rule) ───────────────────────────────────────────────────
 
 def test_explode_mode_defaults_false():

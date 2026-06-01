@@ -11,8 +11,9 @@
 --   ghost.pos1 = playerSprite.pos1 + (ghost_worldPx - playerTile*16)
 -- which places the ghost offset from the (always-centered) player by the world delta.
 
-local MB = dofile((SLINK_ROOT or
-  "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6") .. "/lua/mailbox.lua")
+-- The companion-patch mailbox (loaded the same way the client loads its modules).
+local ok_mb, MB = pcall(require, "mailbox")
+if not ok_mb then MB = nil end
 
 local PG = {}
 
@@ -34,7 +35,7 @@ function PG.init(cfg)
   S = { oeId = nil, sprId = nil, pending = nil, ghost = nil, dx = nil, dy = nil, pmap = nil }
 end
 
-function PG.present() return MB.present() end
+function PG.present() return MB ~= nil and MB.present() end
 
 -- ---- object-event / sprite field helpers ----
 local function oe(i, off) return C.OE + i * C.OE_STRIDE + off end
@@ -63,7 +64,7 @@ function PG.reset() despawn(); S.ghost = nil end
 
 -- to be called every overworld frame
 function PG.on_frame()
-  if not MB.present() then return end          -- no patch -> no-op (graceful)
+  if not PG.present() then return end          -- no patch -> no-op (graceful)
   local pmg, pmn = p_map()
 
   -- map change -> drop the ghost (indices/world differ on the new map)

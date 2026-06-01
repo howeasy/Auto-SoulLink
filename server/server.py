@@ -2653,6 +2653,11 @@ class SLinkServer:
             if tick_area_id:
                 self.player_area_id[player_id] = tick_area_id
             log.debug(f"[{player_id}] tick")
+        elif event == "ghost_pos":
+            # High-frequency (~20Hz) overworld peer-position relay; handled in
+            # state.handle_event (_handle_ghost_pos). No server-side enrichment or
+            # per-frame logging (would flood at this rate).
+            pass
         else:
             log.debug(f"[{player_id}] unknown event '{event}' seq={msg.get('seq','?')}")
 

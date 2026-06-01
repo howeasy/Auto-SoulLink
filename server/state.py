@@ -199,6 +199,8 @@ class SoulLinkState:
             self._handle_hello(player_id, msg)
         elif event == "area_enter":
             self._handle_area_enter(player_id, msg)
+        elif event == "ghost_pos":
+            self._handle_ghost_pos(player_id, msg)
         elif event == "capture":
             self._handle_capture(player_id, msg)
         elif event == "faint":
@@ -303,6 +305,24 @@ class SoulLinkState:
             )
             log.debug(f"[CMD QUEUE→{player_id}] flushing {len(cmds)} cmd(s): {_summary}")
         return cmds if cmds else [{"cmd": "noop"}]
+
+    def _handle_ghost_pos(self, player_id: str, msg: dict):
+        """Relay a player's overworld position to the partner as an (ephemeral) ghost_pos
+        command for the engine-NPC peer ghost. High-frequency; never persisted."""
+        partner = _partner(player_id)
+        cmd = {
+            "cmd": "ghost_pos",
+            "mg": int(msg.get("mg", 0)), "mn": int(msg.get("mn", 0)),
+            "x": int(msg.get("x", 0)),   "y": int(msg.get("y", 0)),
+            "f": int(msg.get("f", 1)),   "gfx": int(msg.get("gfx", 0)),
+        }
+        q = self.queued_commands[partner]
+        # coalesce: keep only the latest ghost_pos so the queue can't grow unbounded
+        if q and q[-1].get("cmd") == "ghost_pos":
+            q[-1] = cmd
+        else:
+            self.queued_commands[partner] = [c for c in q if c.get("cmd") != "ghost_pos"]
+            self.queued_commands[partner].append(cmd)
 
     @classmethod
     def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False) -> "SoulLinkState":

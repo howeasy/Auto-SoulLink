@@ -5,7 +5,8 @@
 
 local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
 local OUT = WT .. "/patch/build/peerghost_result.txt"
-local PG = dofile(WT .. "/lua/peer_ghost_npc.lua")
+package.path = WT .. "/lua/?.lua;" .. package.path   -- so peer_ghost_npc can require("mailbox")
+local PG = require("peer_ghost_npc")
 
 local OE, GS, OST, GST = 0x02036E38, 0x0202063C, 0x24, 0x44
 local function p_spr()    return memory.read_u8(OE + 0x04) end
