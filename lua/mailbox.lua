@@ -28,6 +28,31 @@ function MB.create_mon_args(slot, species, level, party, bump)
     return {slot, party or 0, species % 256, math.floor(species / 256), level, bump or 0}
 end
 
+-- Rival Team Swap (Phase 2). Faithful enemy-party replacement: stage the partner's raw 100-byte
+-- party-mon blobs in SLINK_BLOB_BUF, then OP_SET_ENEMY_PARTY tells the patch to byte-copy them into
+-- gEnemyParty + set the count. Unlike CREATE_MON this preserves the partner's EXACT mons
+-- (moves/IVs/EVs/PID/item). Args: {count}. The active-foe gBattleMons refresh stays in Lua
+-- (M.refreshActiveEnemyBattlers) — see the client's pending_enemy_party settle.
+MB.OP_SET_ENEMY_PARTY = 16
+MB.BLOB_BUF = 0x0203FA00     -- patch reads count*100 raw party-mon bytes from here (matches handlers.c)
+
+-- Stage decoded blobs (a list of 100-byte arrays) into the patch's blob buffer.
+function MB.write_enemy_blobs(byte_rows)
+    for i = 1, #byte_rows do
+        local row, off = byte_rows[i], MB.BLOB_BUF + (i - 1) * 100
+        for j = 1, 100 do memory.write_u8(off + (j - 1), row[j]) end
+    end
+end
+
+-- Stage blobs + dispatch OP_SET_ENEMY_PARTY. `byte_rows` = decoded 100-byte arrays (decode hex with
+-- M.hexToBytes). Returns the seq to poll, or nil if the list is empty/oversized.
+function MB.set_enemy_party(byte_rows)
+    local n = #byte_rows
+    if n == 0 or n > 6 then return nil end
+    MB.write_enemy_blobs(byte_rows)
+    return MB.send(MB.OP_SET_ENEMY_PARTY, {n})
+end
+
 MB.OP_FORCE_MOVE_SLOT = 5   -- args: {battler, target, move_pos} — controller-swap driver
 function MB.force_move_slot_args(battler, target, move_pos)
     return {battler, target, move_pos}

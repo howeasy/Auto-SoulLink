@@ -1790,6 +1790,21 @@ function M.writeEnemyParty(blobs)
     return species
 end
 
+-- Post-step for the companion-patch path: when OP_SET_ENEMY_PARTY has natively byte-copied the
+-- blobs into gEnemyParty (the patch does the write + count; see handlers.c), the active foe's
+-- gBattleMons cache is still stale — refresh it exactly as writeEnemyParty's tail does, then read
+-- back the species list for the ack. `count` = number of mons the patch wrote.
+function M.refreshEnemyPartyNative(count)
+    pcall(M.refreshActiveEnemyBattlers)
+    local species = {}
+    for i = 1, (count or 0) do
+        local base = M.ENEMY_BASE + (i - 1) * M.MON_SIZE
+        local ok, sid = pcall(M.decryptSpecies, base)
+        species[i] = (ok and sid) or 0
+    end
+    return species
+end
+
 -- ── Party ↔ Box sync helpers ──────────────────────────────────────────────────
 
 -- Returns the party-only stat fields for slot (needed to restore after box retrieval).

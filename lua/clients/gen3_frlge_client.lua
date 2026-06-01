@@ -329,6 +329,15 @@ local pending_explosions = {}          -- [monKey] → {slot, battler, start_fra
 local FORCE_MOVE_TIMEOUT = 720         -- > patch's 600f deadline (dead-man's-switch only)
 local pending_force_moves = {}         -- [monKey] → {slot, battler, seq, start_frame}
 
+-- Native-patch Rival-Team-Swap state (RR companion patch only).  When the patch is present we
+-- dispatch OP_SET_ENEMY_PARTY (faithful blob copy) instead of the raw writeEnemyParty RAM-poke,
+-- then settle the ack here: ST_OK → refresh the active foe's gBattleMons in Lua + ack the server;
+-- ST_FAIL/timeout (e.g. an older patch without op16) → fall back to writeEnemyParty so the swap is
+-- never stranded.  The patch handler is synchronous (one-frame memcpy), so a short timeout suffices.
+local ENEMY_PARTY_TIMEOUT = 120        -- frames before assuming the opcode was dropped → fallback
+local pending_enemy_party = nil        -- {seq, trainer_id, blobs_hex, start_frame} (one in flight)
+-- apply_rival_team_fallback is defined below the `local send` forward-declaration (it calls send()).
+
 -- Companion-patch opcodes are a SINGLE-SLOT request channel (the frame hook consumes one
 -- opcode/frame) and OP_FORCE_MOVE_SLOT arms a single ArmedMove struct — so two native
 -- explodes in one Lua frame (e.g. a doubles whiteout) would clobber each other.  Queue
@@ -377,6 +386,25 @@ local function arm_native_explode(slot, battler, key)
     local seq = MB.send(MB.OP_FORCE_MOVE_SLOT, MB.force_move_slot_args(battler, 1, 0))
     pending_force_moves[key] = {slot = slot, battler = battler, seq = seq, start_frame = frame_count}
     return seq
+end
+
+-- Raw-RAM-poke Rival Team Swap (used when the patch is absent, or as the settle-time fallback if the
+-- native OP_SET_ENEMY_PARTY fails/times out).  Writes the partner blobs into gEnemyParty + refreshes
+-- the active foe (M.writeEnemyParty), then acks the server with the readback species either way.
+-- Declared here (after `local send`) because it calls send().
+local function apply_rival_team_fallback(blobs_hex, trainer_id)
+    local species, werr = M.writeEnemyParty(blobs_hex)
+    if species then
+        console.log(string.format(
+            "[SLink-FRLGE]   ↳ replace_rival_team OK (RAM-poke) trainer=%s species=[%s]",
+            tostring(trainer_id or "?"), table.concat(species, ",")))
+        send({event = "rival_team_replaced", trainer_id = trainer_id or 0,
+              species_ids = species}, "rival_team_replaced", true)
+    else
+        console.log("[SLink-FRLGE]   ↳ replace_rival_team FAILED: "..tostring(werr))
+        send({event = "rival_team_replaced", trainer_id = trainer_id or 0,
+              species_ids = {}, error = werr or "unknown"}, "rival_team_replaced", true)
+    end
 end
 -- ── Command dispatcher ────────────────────────────────────────────────────────
 local function dispatch_commands(cmds)
@@ -519,23 +547,31 @@ local function dispatch_commands(cmds)
                      "rival_team_replaced", true)
             elseif not writes_enabled then
                 console.log("[SLink-FRLGE]   ↳ replace_rival_team: writes disabled")
-            else
-                local species, werr = M.writeEnemyParty(c.blobs_hex)
-                if species then
-                    console.log(string.format(
-                        "[SLink-FRLGE]   ↳ replace_rival_team OK trainer=%s species=[%s]",
-                        tostring(c.trainer_id or "?"), table.concat(species, ",")))
-                    send({event = "rival_team_replaced",
-                          trainer_id = c.trainer_id or 0,
-                          species_ids = species},
-                         "rival_team_replaced", true)
-                else
-                    console.log("[SLink-FRLGE]   ↳ replace_rival_team FAILED: "..tostring(werr))
-                    send({event = "rival_team_replaced",
-                          trainer_id = c.trainer_id or 0,
-                          species_ids = {}, error = werr or "unknown"},
-                         "rival_team_replaced", true)
+            elseif patch_present() then
+                -- NATIVE (companion patch): byte-copy the partner's EXACT team into gEnemyParty via
+                -- OP_SET_ENEMY_PARTY (preserves moves/IVs/EVs/item — CreateMon would lose them), then
+                -- settle the ack in on_frame (§4a-quater).  Decode hex here; bail to the RAM-poke path
+                -- on any decode/stage failure so a malformed blob never strands the swap.
+                local rows, derr = {}, nil
+                for i = 1, #c.blobs_hex do
+                    local arr, e = M.hexToBytes(c.blobs_hex[i])
+                    if not arr then derr = e or "decode"; break end
+                    rows[i] = arr
                 end
+                local seq = (not derr) and MB.set_enemy_party(rows) or nil
+                if seq then
+                    pending_enemy_party = {seq = seq, trainer_id = c.trainer_id,
+                                           blobs_hex = c.blobs_hex, start_frame = frame_count}
+                    console.log(string.format(
+                        "[SLink-FRLGE]   ↳ replace_rival_team → native OP_SET_ENEMY_PARTY armed n=%d trainer=%s seq=%d",
+                        #rows, tostring(c.trainer_id or "?"), seq))
+                else
+                    console.log("[SLink-FRLGE]   ↳ replace_rival_team native stage failed ("
+                        .. tostring(derr or "send") .. ") → RAM-poke")
+                    apply_rival_team_fallback(c.blobs_hex, c.trainer_id)
+                end
+            else
+                apply_rival_team_fallback(c.blobs_hex, c.trainer_id)
             end
         elseif c.cmd == "pending_sync" then
             console.log("[SLink-FRLGE]   ↳ ⚠ SYNC REQUIRED: "..(c.message or "check partner at PC"))
@@ -1705,6 +1741,30 @@ local function on_frame()
                         st.slot, key))
                 end
             end
+        end
+    end
+
+    -- 4a-quater. Settle the native Rival Team Swap (OP_SET_ENEMY_PARTY).  The patch's blob copy is
+    -- synchronous (one-frame memcpy), so this normally acks ST_OK within a couple frames: on ST_OK we
+    -- do the Lua-side active-foe gBattleMons refresh (no clean engine fn) + ack the server; on ST_FAIL
+    -- or timeout (e.g. an older patch that lacks op16 → default ST_FAIL) we fall back to the RAM-poke
+    -- path so the swap is never stranded.
+    if pending_enemy_party then
+        local ep = pending_enemy_party
+        local status = MB.poll(ep.seq)
+        if status == MB.ST_OK then
+            pending_enemy_party = nil
+            local species = M.refreshEnemyPartyNative(#ep.blobs_hex)
+            console.log(string.format(
+                "[SLink-FRLGE]   ↳ replace_rival_team OK (native) trainer=%s species=[%s]",
+                tostring(ep.trainer_id or "?"), table.concat(species, ",")))
+            send({event = "rival_team_replaced", trainer_id = ep.trainer_id or 0,
+                  species_ids = species}, "rival_team_replaced", true)
+        elseif status == MB.ST_FAIL or (frame_count - ep.start_frame) >= ENEMY_PARTY_TIMEOUT then
+            pending_enemy_party = nil
+            console.log("[SLink-FRLGE]   ↳ native OP_SET_ENEMY_PARTY "
+                .. (status == MB.ST_FAIL and "FAILED" or "timed out") .. " → RAM-poke fallback")
+            apply_rival_team_fallback(ep.blobs_hex, ep.trainer_id)
         end
     end
 

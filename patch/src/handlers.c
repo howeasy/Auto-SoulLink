@@ -33,7 +33,8 @@ enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
        OP_SHOW_MESSAGE = 8, OP_PLAY_FANFARE = 9,
        OP_APPLY_DAMAGE = 10, OP_CURE_STATUS = 11,
        OP_SET_RULES = 12, OP_ARM_PEER_INTERACT = 13,
-       OP_GHOST_SPAWN = 14, OP_GHOST_CLEAR = 15 };
+       OP_GHOST_SPAWN = 14, OP_GHOST_CLEAR = 15,
+       OP_SET_ENEMY_PARTY = 16 };
 enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
 
 /* Armed forced-move state (controller-swap driver), EWRAM scratch past the mailbox. */
@@ -134,6 +135,10 @@ typedef void (*SetupScript_t)(const u8 *ptr);
 #define sScriptContext2Enabled 0x03000F9Cu   /* u8 != 0 while a field script/dialogue is active */
 #define SLINK_TEXT_BUF   0x0203F900u   /* Lua writes FR-encoded text here before SHOW_MESSAGE */
 #define SLINK_SCRIPT_BUF 0x0203F8E0u   /* 9-byte EWRAM scratch: our "msgbox sign" bytecode */
+#define SLINK_BLOB_BUF   0x0203FA00u   /* 600 bytes (6x100): Lua stages the partner's raw party-mon
+                                          blobs here before OP_SET_ENEMY_PARTY (Rival Team Swap).
+                                          Above SLINK_TEXT_BUF (short field text) and below EWRAM
+                                          end 0x0203FFFF (leaves >=0x100 for text, ends 0x0203FC58). */
 #define gObjectEvents 0x02036E38u   /* stride 0x24 */
 #define OE_STRIDE     0x24u
 #define gSprites      0x0202063Cu   /* stride 0x44 */
@@ -416,6 +421,27 @@ void slink_hook(void)
             u32 cnt_addr = party ? gEnemyPartyCount : gPlayerPartyCount;
             if (R8(cnt_addr) < slot + 1) R8(cnt_addr) = slot + 1;
         }
+        break;
+    }
+
+    case OP_SET_ENEMY_PARTY: {   /* args: [0]=count. Lua staged count*100 raw party-mon bytes in
+                                    SLINK_BLOB_BUF. Faithful byte-copy into gEnemyParty (preserves the
+                                    partner's EXACT mons: moves/IVs/EVs/PID/item) — NOT CreateMon, which
+                                    would lose all of that. The active-foe gBattleMons refresh stays in
+                                    Lua (refreshActiveEnemyBattlers): CFRU substruct decrypt has no clean
+                                    engine fn. RR/CFRU party-mon layout == enemy-mon layout (NO_ENCRYPT),
+                                    so a raw memcpy is sufficient — same basis as M.writeEnemyParty. */
+        u8 count = MB->args[0];
+        if (count == 0 || count > 6) { ack(ST_FAIL, 2); return; }
+        for (u8 i = 0; i < count; i++) {
+            volatile u8 *src = (volatile u8 *)(SLINK_BLOB_BUF + (u32)i * MON_SIZE);
+            volatile u8 *dst = (volatile u8 *)(gEnemyParty   + (u32)i * MON_SIZE);
+            for (u32 j = 0; j < MON_SIZE; j++) dst[j] = src[j];
+        }
+        /* Zero maxHP (+0x58) on unused slots so CFRU's scan-until-maxHP==0 terminates. */
+        for (u8 s = count; s < 6; s++)
+            R16(gEnemyParty + (u32)s * MON_SIZE + 0x58) = 0;
+        R8(gEnemyPartyCount) = count;
         break;
     }
 
