@@ -201,6 +201,8 @@ class SoulLinkState:
             self._handle_area_enter(player_id, msg)
         elif event == "ghost_pos":
             self._handle_ghost_pos(player_id, msg)
+        elif event == "peer_interact":
+            self._handle_peer_interact(player_id, msg)
         elif event == "capture":
             self._handle_capture(player_id, msg)
         elif event == "faint":
@@ -315,6 +317,7 @@ class SoulLinkState:
             "mg": int(msg.get("mg", 0)), "mn": int(msg.get("mn", 0)),
             "x": int(msg.get("x", 0)),   "y": int(msg.get("y", 0)),
             "f": int(msg.get("f", 1)),   "gfx": int(msg.get("gfx", 0)),
+            "mv": int(msg.get("mv", 0)), "an": int(msg.get("an", 0)),
         }
         q = self.queued_commands[partner]
         # coalesce: keep only the latest ghost_pos so the queue can't grow unbounded
@@ -323,6 +326,18 @@ class SoulLinkState:
         else:
             self.queued_commands[partner] = [c for c in q if c.get("cmd") != "ghost_pos"]
             self.queued_commands[partner].append(cmd)
+
+    def _handle_peer_interact(self, player_id: str, msg: dict):
+        """A player talked to their partner's ghost (pressed A toward the engine-NPC). The
+        patch already showed a native box on the initiator's side; notify the PARTNER so they
+        know they were 'waved at'. Testing stub for the richer trade/ready-check flows."""
+        partner = _partner(player_id)
+        self.queued_commands[partner].append({
+            "cmd": "msgbox",
+            "text": "Your partner waved at you!",
+            "fb": "prompt",
+        })
+        log.info(f"[{player_id}] peer_interact → notifying {partner}")
 
     @classmethod
     def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False) -> "SoulLinkState":

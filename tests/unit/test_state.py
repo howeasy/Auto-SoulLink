@@ -131,6 +131,26 @@ def test_ghost_pos_coalesces(tmp_path, monkeypatch):
     assert _ghost_cmds(q)[0]["x"] == 352
 
 
+def test_ghost_pos_relays_mv_and_an(tmp_path, monkeypatch):
+    """The animation fields (mv/an) ride the relay so the partner can walk-animate the ghost."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+    state.handle_event("a", {"event": "ghost_pos", "mg": 1, "mn": 1,
+                             "x": 16, "y": 0, "f": 4, "mv": 1, "an": 7, "gfx": 5})
+    g = _ghost_cmds(state.handle_event("b", {"event": "tick"}))[0]
+    assert (g["mv"], g["an"]) == (1, 7)
+
+
+def test_peer_interact_notifies_partner(tmp_path, monkeypatch):
+    """Talk-to-ghost notifies the OTHER player (not the initiator)."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+    cmds_a = state.handle_event("a", {"event": "peer_interact"})
+    assert not has_cmd(cmds_a, "msgbox")          # initiator gets nothing back
+    cmds_b = state.handle_event("b", {"event": "tick"})
+    assert has_cmd(cmds_b, "msgbox")              # partner is notified
+
+
 def test_ghost_pos_not_persisted(tmp_path, monkeypatch):
     """Ephemeral: a ghost_pos must never be written to the links file."""
     links = tmp_path / "links.json"

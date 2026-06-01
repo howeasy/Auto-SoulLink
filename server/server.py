@@ -2658,6 +2658,10 @@ class SLinkServer:
             # state.handle_event (_handle_ghost_pos). No server-side enrichment or
             # per-frame logging (would flood at this rate).
             pass
+        elif event == "peer_interact":
+            # Talk-to-ghost: handled in state.handle_event (_handle_peer_interact),
+            # which notifies the partner. Low-frequency; no enrichment needed here.
+            pass
         else:
             log.debug(f"[{player_id}] unknown event '{event}' seq={msg.get('seq','?')}")
 
