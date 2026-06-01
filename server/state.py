@@ -318,6 +318,7 @@ class SoulLinkState:
             "x": int(msg.get("x", 0)),   "y": int(msg.get("y", 0)),
             "f": int(msg.get("f", 1)),   "gfx": int(msg.get("gfx", 0)),
             "mv": int(msg.get("mv", 0)), "an": int(msg.get("an", 0)),
+            "imgs": int(msg.get("imgs", 0)), "anm": int(msg.get("anm", 0)),
         }
         q = self.queued_commands[partner]
         # coalesce: keep only the latest ghost_pos so the queue can't grow unbounded

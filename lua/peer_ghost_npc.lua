@@ -39,8 +39,10 @@ local OE_FLAGS, OE_SPRID, OE_GFX = 0x00, 0x04, 0x05
 local OE_MAPNUM, OE_MAPGRP, OE_ELEV = 0x09, 0x0A, 0x0B
 local OE_CX, OE_CY, OE_PX, OE_PY, OE_FACE = 0x10, 0x12, 0x14, 0x16, 0x18
 -- sprite field offsets
+local SP_ANIMS, SP_IMAGES = 0x08, 0x0C   -- ROM ptrs: anim-cmd table + frame images
 local SP_CALLBACK, SP_X, SP_Y, SP_ANIM = 0x1C, 0x20, 0x22, 0x2A
 local SP_B2C, SP_B3E, SP_B3F = 0x2C, 0x3E, 0x3F
+local function in_rom(a) return a and a >= 0x08000000 and a < 0x0A000000 end
 
 -- pret ANIM_STD: face S/N/W/E = 0/1/2/3 ; go (walk) = 4/5/6/7. facing 1=down 2=up 3=left 4=right.
 local function idle_anim(f) return f - 1 end
@@ -58,7 +60,7 @@ function PG.init(cfg)
   if cfg then for k, v in pairs(cfg) do C[k] = v end end
   S = { oeId = nil, sprId = nil, pending = nil, ghost = nil, dx = nil, dy = nil, pmap = nil,
         base_cx = nil, base_cy = nil, last_anim = nil, neutralized = false, armed = false, pi_last = 0,
-        interact_pending = false, cur_gfx = nil }
+        interact_pending = false, cur_gfx = nil, applied_imgs = nil }
 end
 
 function PG.present() return MB ~= nil and MB.present() end
@@ -98,7 +100,7 @@ local function despawn()
   disarm()
   if S.oeId then dbg("despawn oeId=" .. tostring(S.oeId)); MB.send(MB.OP_DESPAWN_PEER_NPC, { S.oeId }) end
   S.oeId, S.sprId, S.pending, S.dx, S.dy = nil, nil, nil, nil, nil
-  S.base_cx, S.base_cy, S.last_anim, S.neutralized = nil, nil, nil, false
+  S.base_cx, S.base_cy, S.last_anim, S.neutralized, S.applied_imgs = nil, nil, nil, false, nil
 end
 
 -- partner state update { mg, mn, x, y, f, mv, an, gfx } (x,y are WORLD PIXELS)
@@ -179,6 +181,19 @@ function PG.on_frame()
     MB.send(MB.OP_ARM_PEER_INTERACT, { S.oeId, 1 })
     S.armed, S.pi_last, S.neutralized = true, MB.peer_interact_count(), true
     dbg(string.format("neutralized cb=%s + armed interact on oeId=%d", cb and "yes" or "NO", S.oeId))
+  end
+
+  -- Show the PARTNER's exact sprite (RR avatars are dynamic — the spawn gfx renders the LOCAL
+  -- player, not them). images/anims are ROM ptrs identical on both copies of this RR build, so
+  -- adopting the partner's live ones gives their exact look + exact anim table (so run/bike/surf/
+  -- fish animNums map correctly). Same gfx => same frame size => fits the engine-allocated VRAM.
+  -- Callback is neutralized, so the override isn't re-derived away.
+  if g.imgs and in_rom(g.imgs) and g.imgs ~= S.applied_imgs then
+    memory.write_u32_le(spr(S.sprId, SP_IMAGES), g.imgs & 0xFFFFFFFF)
+    if in_rom(g.anm) then memory.write_u32_le(spr(S.sprId, SP_ANIMS), g.anm & 0xFFFFFFFF) end
+    memory.write_u8(spr(S.sprId, SP_B3F), memory.read_u8(spr(S.sprId, SP_B3F)) | 0x04)  -- animBeginning
+    S.applied_imgs, S.last_anim = g.imgs, nil
+    dbg(string.format("applied partner sprite images=%08X anims=%08X", g.imgs, g.anm or 0))
   end
 
   -- interpolate display world-pixel toward the target for smoothness

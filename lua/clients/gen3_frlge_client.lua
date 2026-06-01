@@ -107,6 +107,7 @@ local patch_logged = false   -- latch: log patch presence/absence once (beacon a
 -- Peer-ghost sub-pixel sender calibration (coordOffset-derived world pixels).
 local pg_align_tx, pg_align_ty, pg_coff_ax, pg_coff_ay
 local pg_prev_wx, pg_prev_wy
+local pg_anim_logged = false   -- one-shot: confirm the sender sees run/bike/surf animNums
 -- Engine-NPC peer ghost (companion-patch path; no-ops without the patch).
 local ok_pg, PG = pcall(require, "peer_ghost_npc")
 if ok_pg then
@@ -205,6 +206,8 @@ local function parse_command_list(raw)
         local ggfx = tonumber(obj:match('"gfx"%s*:%s*(%-?%d+)'))
         local gmv  = tonumber(obj:match('"mv"%s*:%s*(%-?%d+)'))
         local gan  = tonumber(obj:match('"an"%s*:%s*(%-?%d+)'))
+        local gimgs = tonumber(obj:match('"imgs"%s*:%s*(%-?%d+)'))
+        local ganm  = tonumber(obj:match('"anm"%s*:%s*(%-?%d+)'))
         local r       = tonumber(obj:match('"r"%s*:%s*(%d+)'))
         local g       = tonumber(obj:match('"g"%s*:%s*(%d+)'))
         local b       = tonumber(obj:match('"b"%s*:%s*(%d+)'))
@@ -237,6 +240,7 @@ local function parse_command_list(raw)
                 cmd=cmd, key=key, message=msg, stats=stats,
                 text=text, fb=fb, r=r, g=g, b=b, frames=frames,
                 gmg=gmg, gmn=gmn, ggx=ggx, ggy=ggy, ggf=ggf, ggfx=ggfx, gmv=gmv, gan=gan,
+                gimgs=gimgs, ganm=ganm,
                 sound=sound, area_id=area_id, areas=areas,
                 trainer_id=trainer_id, blobs_hex=blobs_hex,
             }
@@ -512,7 +516,7 @@ local function dispatch_commands(cmds)
             end
         elseif c.cmd == "ghost_pos" then
             if PG then PG.on_ghost_pos({ mg=c.gmg, mn=c.gmn, x=c.ggx, y=c.ggy, f=c.ggf,
-                                         gfx=c.ggfx, mv=c.gmv, an=c.gan }) end
+                                         gfx=c.ggfx, mv=c.gmv, an=c.gan, imgs=c.gimgs, anm=c.ganm }) end
         elseif c.cmd == "hud_show" and c.text then
             hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
         elseif c.cmd == "gui_prompt" and c.text then
@@ -1410,14 +1414,24 @@ local function on_frame()
             -- scripted dialogue). Drives the partner's walk-vs-idle animation.
             local moved = (pg_prev_wx == nil) or (wx ~= pg_prev_wx) or (wy ~= pg_prev_wy)
             pg_prev_wx, pg_prev_wy = wx, wy
-            -- Live animNum (walk/run 1:1) from the player's sprite.
-            local sid = memory.read_u8(OE + 0x04)
-            local gan = (sid < 64) and memory.read_u8(0x0202063C + sid * 0x44 + 0x2A) or 0
+            -- Live animNum (walk/run/bike/surf/fish 1:1) + the partner's live sprite ROM
+            -- pointers. images/anims are ROM addresses identical on both copies of the same RR
+            -- build, so the receiver can render the partner's EXACT avatar/mode (not gfx 0 = the
+            -- local player) and gets the exact anim table (so the partner's animNum always maps).
+            local sid  = memory.read_u8(OE + 0x04)
+            local sbase = 0x0202063C + sid * 0x44
+            local gan   = (sid < 64) and memory.read_u8(sbase + 0x2A) or 0
+            local gimgs = (sid < 64) and memory.read_u32_le(sbase + 0x0C) or 0
+            local ganm  = (sid < 64) and memory.read_u32_le(sbase + 0x08) or 0
             -- mg/mn are the object-event map bytes at 0x09/0x0A; the receiver keys on this order.
             send({ event = "ghost_pos",
                    mg = memory.read_u8(OE + 0x09), mn = memory.read_u8(OE + 0x0A),
                    x = wx, y = wy, f = gf, mv = (moved and 1 or 0), an = gan,
-                   gfx = memory.read_u8(OE + 0x05) }, "ghost_pos", true, true)
+                   gfx = memory.read_u8(OE + 0x05), imgs = gimgs, anm = ganm }, "ghost_pos", true, true)
+            if gan > 7 and not pg_anim_logged then
+                pg_anim_logged = true
+                console.log(string.format("[SLink-FRLGE] peer-ghost: non-walk animNum=%d seen (run/bike/surf/fish)", gan))
+            end
         end
         if PG then
             PG.on_frame()

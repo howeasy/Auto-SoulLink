@@ -141,6 +141,16 @@ def test_ghost_pos_relays_mv_and_an(tmp_path, monkeypatch):
     assert (g["mv"], g["an"]) == (1, 7)
 
 
+def test_ghost_pos_relays_sprite_pointers(tmp_path, monkeypatch):
+    """images/anims ROM pointers ride the relay so the partner shows the real avatar."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+    state.handle_event("a", {"event": "ghost_pos", "mg": 1, "mn": 1, "x": 0, "y": 0,
+                             "imgs": 0x08EB3810, "anm": 0x083A3470})
+    g = _ghost_cmds(state.handle_event("b", {"event": "tick"}))[0]
+    assert (g["imgs"], g["anm"]) == (0x08EB3810, 0x083A3470)
+
+
 def test_peer_interact_notifies_partner(tmp_path, monkeypatch):
     """Talk-to-ghost notifies the OTHER player (not the initiator)."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
