@@ -1127,15 +1127,19 @@ class SoulLinkState:
             # Notify both players with success sound + link info HUD
             a_label = a_mon.nickname or self.adapter.species_name(a_mon.species) or a_mon.key[:8]
             b_label = b_mon.nickname or self.adapter.species_name(b_mon.species) or b_mon.key[:8]
-            link_text = f"*~ {a_label}+{b_label} ~*"
+            # "msgbox" = a momentous event: the client shows it in the native in-game
+            # message box when the companion patch is present + overworld, else falls back
+            # to the HUD overlay (so unpatched clients are unaffected). Text is kept clean
+            # ASCII for the FR-charmap message box; r/g/b/frames style the HUD fallback.
+            box_text = f"{a_label} and {b_label} linked!"
             self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 25})   # SE_SUCCESS
             self.queued_commands[partner].append({"cmd": "play_sound", "sound": 25})
             self.queued_commands[player_id].append({
-                "cmd": "hud_show", "text": link_text,
+                "cmd": "msgbox", "text": box_text,
                 "r": 100, "g": 255, "b": 160, "frames": 300,
             })
             self.queued_commands[partner].append({
-                "cmd": "hud_show", "text": link_text,
+                "cmd": "msgbox", "text": box_text,
                 "r": 100, "g": 255, "b": 160, "frames": 300,
             })
             # Un-quarantine: both mons were boxed while pending — retrieve to party

@@ -97,6 +97,10 @@ package.loaded["hud"]               = nil
 local M     = require("memory_gba")
 local C     = require("connector")
 local HUD   = require("hud")
+-- Optional companion-patch mailbox (native in-game UI etc.). Absent on unpatched ROMs.
+local ok_mb, MB = pcall(require, "mailbox")
+if not ok_mb then MB = nil end
+local function patch_present() return MB ~= nil and MB.present() end
 
 -- Game module detection — provides game-specific area/gift classification
 -- and profile data for memory.lua initialization
@@ -467,6 +471,16 @@ local function dispatch_commands(cmds)
                 console.log("[SLink-FRLGE]   ↳ memorialize queued: "..c.key:sub(1,8))
             else
                 console.log("[SLink-FRLGE]   ↳ memorialize deduped: "..c.key:sub(1,8))
+            end
+        elseif c.cmd == "msgbox" and c.text then
+            -- Momentous event: native field message box when the patch is present and we're
+            -- in the overworld (it's a field box); otherwise fall back to the HUD overlay.
+            if patch_present() and M.isInOverworld() then
+                MB.write_message(c.text)
+                MB.send(MB.OP_SHOW_MESSAGE, {})
+                console.log("[SLink-FRLGE]   ↳ msgbox (native): " .. c.text)
+            else
+                hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
             end
         elseif c.cmd == "hud_show" and c.text then
             hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
