@@ -57,7 +57,7 @@ is a valid map for the base engine here.
 | 1 | PING | — | ack ok (presence/round-trip check) |
 | 2 | FORCE_FAINT | `[0]`=battler | `gBattleMons[battler].hp = 0` |
 | 3 | FORCE_MOVE | `[0]`=battler `[1]`=target `[2]`=move_pos `[4..5]`=move_id(u16) | commits a forced move (see below) |
-| 4 | CREATE_MON | `[0]`=slot `[1]`=party(0=player,1=enemy) `[2..3]`=species(u16) `[4]`=level | engine `CreateMon` into player/enemy party[slot] |
+| 4 | CREATE_MON | `[0]`=slot `[1]`=party(0=player,1=enemy) `[2..3]`=species(u16) `[4]`=level `[5]`=bump_count | engine `CreateMon` into party[slot]; `bump`=GIVE_MON (sets party count → usable member) |
 | 5 | FORCE_MOVE_SLOT | `[0]`=battler `[1]`=target `[2]`=move_pos | **live** forced move via controller-swap (see below) |
 
 ## Phase-2 (CREATE_MON) — validated

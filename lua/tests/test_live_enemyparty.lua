@@ -23,10 +23,12 @@ pcall(savestate.load, STATE); emu.frameadvance(); pcall(memory.usememorydomain,"
 if not MB.present() then log("FAIL: beacon absent"); finish(); return end
 log("beacon up; enemy slot0 (active) maxhp="..maxhp(0))
 
+local gEnemyCount = 0x0202402A
 local LV = 40
 local MONS = { {slot=1, name="Snorlax", id=143}, {slot=2, name="Diglett", id=50} }
 for _, m in ipairs(MONS) do
-    local st = MB.send(MB.OP_CREATE_MON, MB.create_mon_args(m.slot, m.id, LV, 1)) -- party=1 enemy
+    -- party=1 (enemy), bump=1 (set gEnemyPartyCount) — the full Rival-Team-Swap build
+    local st = MB.send(MB.OP_CREATE_MON, MB.create_mon_args(m.slot, m.id, LV, 1, 1))
     local ok=false; for _=1,30 do emu.frameadvance(); if MB.poll(st) then ok=true; break end end
     m.lv, m.pid, m.hp = level(m.slot), pid(m.slot), maxhp(m.slot)
     log(string.format("  enemy %s (id=%d) -> acked=%s lv=%d pid=0x%08X maxhp=%d", m.name, m.id, tostring(ok), m.lv, m.pid, m.hp))
@@ -36,4 +38,6 @@ for _, m in ipairs(MONS) do
 end
 check("Snorlax maxhp > Diglett maxhp (species-specific base stats, enemy side)",
       MONS[1].hp > MONS[2].hp, string.format("snorlax=%d diglett=%d", MONS[1].hp, MONS[2].hp))
+check("gEnemyPartyCount bumped to 3", memory.read_u8(gEnemyCount) == 3,
+      "count=" .. memory.read_u8(gEnemyCount))
 finish()

@@ -56,6 +56,7 @@ typedef struct {
 #define gBattleStruct        0x02023FE8u   /* pointer */
 #define gBattleExecBuffer    0x02023BC8u   /* gBattleControllerExecFlags */
 #define gPlayerParty         0x02024284u
+#define gPlayerPartyCount    0x02024029u
 #define gEnemyParty          0x0202402Cu
 #define gEnemyPartyCount     0x0202402Au
 #define MON_SIZE             100u
@@ -154,16 +155,21 @@ void slink_hook(void)
         break;
     }
 
-    case OP_CREATE_MON: {        /* args: [0]=slot [1]=party(0=player,1=enemy) [2..3]=species [4]=level */
+    case OP_CREATE_MON: {        /* args: [0]=slot [1]=party(0=player,1=enemy) [2..3]=species [4]=level [5]=bump_count */
         u8  slot    = MB->args[0];
         u8  party   = MB->args[1];
         u16 species = (u16)(MB->args[2] | (MB->args[3] << 8));
         u8  level   = MB->args[4];
+        u8  bump    = MB->args[5];
         if (slot > 5) { ack(ST_FAIL, 2); return; }
         u32 base = party ? gEnemyParty : gPlayerParty;
         CreateMon((void *)(base + slot * MON_SIZE), species, level,
                   /*fixedIV*/0, /*hasFixedPers*/0, /*fixedPers*/0,
                   /*otIdType*/0, /*otId*/0);
+        if (bump) {                          /* GIVE_MON: make it a real party member */
+            u32 cnt_addr = party ? gEnemyPartyCount : gPlayerPartyCount;
+            if (R8(cnt_addr) < slot + 1) R8(cnt_addr) = slot + 1;
+        }
         break;
     }
 

@@ -23,9 +23,9 @@ MB.OP_FORCE_FAINT = 2   -- args: {battler}
 MB.OP_FORCE_MOVE  = 3   -- args: {battler, target, move_pos, 0, move_lo, move_hi}
 MB.OP_CREATE_MON  = 4   -- args: {slot, party, species_lo, species_hi, level}
 
--- party: 0 = player party, 1 = enemy party
-function MB.create_mon_args(slot, species, level, party)
-    return {slot, party or 0, species % 256, math.floor(species / 256), level}
+-- party: 0 = player party, 1 = enemy party; bump: 1 = make it a real party member (GIVE_MON)
+function MB.create_mon_args(slot, species, level, party, bump)
+    return {slot, party or 0, species % 256, math.floor(species / 256), level, bump or 0}
 end
 
 MB.OP_FORCE_MOVE_SLOT = 5   -- args: {battler, target, move_pos} — controller-swap driver
