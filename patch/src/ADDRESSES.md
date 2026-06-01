@@ -59,6 +59,24 @@ is a valid map for the base engine here.
 | 3 | FORCE_MOVE | `[0]`=battler `[1]`=target `[2]`=move_pos `[4..5]`=move_id(u16) | commits a forced move (see below) |
 | 4 | CREATE_MON | `[0]`=slot `[1]`=party(0=player,1=enemy) `[2..3]`=species(u16) `[4]`=level `[5]`=bump_count | engine `CreateMon` into party[slot]; `bump`=GIVE_MON (sets party count → usable member) |
 | 5 | FORCE_MOVE_SLOT | `[0]`=battler `[1]`=target `[2]`=move_pos | **live** forced move via controller-swap (see below) |
+| 6 | SPAWN_PEER_NPC | `[0]`=gfxId `[1]`=localId `[2..3]`=x `[4..5]`=y `[6]`=movement → `result[0]`=objEventId | spawn a real engine object-event NPC |
+| 7 | DESPAWN_PEER_NPC | `[0]`=objEventId | DestroySprite + clear object-event (clean removal) |
+
+## Phase-3 (peer NPC) — validated
+Spawn a **real engine object-event** so the engine owns its sprite/palette/VRAM/callback —
+retiring the 24-round Lua peer-ghost saga (whose corruption was all about a hand-cloned sprite's
+engine-managed resources). `SpawnSpecialObjectEventParameterized = 0x0805E830` (vanilla-FR fn, RR
+preserves it) `(gfxId, movementBehavior, localId, s16 x, s16 y, u8 elevation)` — **takes
+camera-offset coords and subtracts MAP_OFFSET (7)**, so pass `gObjectEvents` `currentCoords`-style
+coordinates. Returns the object-event id (≥16 = failed). `DestroySprite = 0x08007280`.
+`gObjectEvents = 0x02036E38` (stride 0x24: flags@0, spriteId@4, gfx@5, movementType@6, localId@8,
+currentCoords x@0x10/y@0x12, facing@0x18); `gSprites = 0x0202063C` (stride 0x44; inUse = byte@0x3E bit0).
+
+**Live-validated** (`test_live_spawnnpc.lua`): SPAWN creates an active object-event + allocated
+sprite at the target tile; DESPAWN clears it and frees the sprite. **Per-frame position/facing
+driving stays in Lua** (the existing `peer_ghost.lua` smooth-tracking logic, now driving the
+engine-spawned sprite — no clone, so no callback/palette/VRAM corruption). The NPC is spawned with
+`movementType=NONE` so its engine callback won't fight the Lua-driven position.
 
 ## Phase-2 (CREATE_MON) — validated
 `gPlayerParty = 0x02024284` (BPRE.ld ↔ SLink RR profile), MON_SIZE 100; party struct

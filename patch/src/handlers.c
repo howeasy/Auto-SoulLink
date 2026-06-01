@@ -9,6 +9,7 @@
  */
 #include <stdint.h>
 typedef uint8_t u8; typedef uint16_t u16; typedef uint32_t u32;
+typedef int16_t s16;
 
 #define MAILBOX_ADDR 0x0203F800u
 #define SLNK_SIG     0x4B4E4C53u   /* 'SLNK' */
@@ -28,7 +29,7 @@ typedef struct {
 #define MB ((Mailbox*)MAILBOX_ADDR)
 
 enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
-       OP_FORCE_MOVE_SLOT = 5 };
+       OP_FORCE_MOVE_SLOT = 5, OP_SPAWN_PEER_NPC = 6, OP_DESPAWN_PEER_NPC = 7 };
 enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
 
 /* Armed forced-move state (controller-swap driver), EWRAM scratch past the mailbox. */
@@ -71,6 +72,18 @@ typedef void (*CreateMon_t)(void *mon, u16 species, u8 level, u8 fixedIV,
                             u8 hasFixedPersonality, u32 fixedPersonality,
                             u8 otIdType, u32 otId);
 #define CreateMon ((CreateMon_t)0x0803DA55u)
+
+/* int SpawnSpecialObjectEventParameterized(u8 gfxId, u8 movementBehavior, u8 localId,
+ *      s16 x, s16 y, u8 elevation)  @ 0x0805E830 — spawns a real overworld NPC
+ *      (engine owns its sprite/palette/VRAM/callback). x,y are camera-offset coords. */
+typedef int (*SpawnNpc_t)(u8 gfxId, u8 movement, u8 localId, s16 x, s16 y, u8 elevation);
+#define SpawnSpecialObjectEventParameterized ((SpawnNpc_t)0x0805E831u)
+typedef void (*DestroySprite_t)(void *sprite);
+#define DestroySprite ((DestroySprite_t)0x08007281u)
+#define gObjectEvents 0x02036E38u   /* stride 0x24 */
+#define OE_STRIDE     0x24u
+#define gSprites      0x0202063Cu   /* stride 0x44 */
+#define SPR_STRIDE    0x44u
 
 static void ack(u16 st, u16 reason)
 {
@@ -170,6 +183,27 @@ void slink_hook(void)
             u32 cnt_addr = party ? gEnemyPartyCount : gPlayerPartyCount;
             if (R8(cnt_addr) < slot + 1) R8(cnt_addr) = slot + 1;
         }
+        break;
+    }
+
+    case OP_SPAWN_PEER_NPC: {     /* args: [0]=gfxId [1]=localId [2..3]=x [4..5]=y [6]=movement */
+        u8  gfx     = MB->args[0];
+        u8  localId = MB->args[1];
+        s16 x       = (s16)(MB->args[2] | (MB->args[3] << 8));
+        s16 y       = (s16)(MB->args[4] | (MB->args[5] << 8));
+        u8  movement = MB->args[6];
+        int oe = SpawnSpecialObjectEventParameterized(gfx, movement, localId, x, y, /*elev*/3);
+        MB->result[0] = (u8)oe;   /* object-event id (>=16 = failed) */
+        break;
+    }
+
+    case OP_DESPAWN_PEER_NPC: {   /* args: [0]=objectEventId */
+        u8 oe = MB->args[0];
+        if (oe >= 16) { ack(ST_FAIL, 2); return; }
+        u32 oebase = gObjectEvents + (u32)oe * OE_STRIDE;
+        u8 spriteId = R8(oebase + 0x04);
+        DestroySprite((void *)(gSprites + (u32)spriteId * SPR_STRIDE));
+        R8(oebase + 0x00) = 0;    /* clear active flag (RemoveObjectEventInternal) */
         break;
     }
 

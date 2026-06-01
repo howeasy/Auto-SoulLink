@@ -33,6 +33,14 @@ function MB.force_move_slot_args(battler, target, move_pos)
     return {battler, target, move_pos}
 end
 
+MB.OP_SPAWN_PEER_NPC = 6    -- args: {gfxId, localId, x_lo, x_hi, y_lo, y_hi, movement}
+function MB.spawn_npc_args(gfx, localId, x, y, movement)
+    return {gfx, localId, x % 256, math.floor(x/256) % 256,
+            y % 256, math.floor(y/256) % 256, movement or 0}
+end
+
+MB.OP_DESPAWN_PEER_NPC = 7  -- args: {objectEventId}
+
 MB.ST_IDLE, MB.ST_BUSY, MB.ST_OK, MB.ST_FAIL = 0, 1, 2, 3
 
 -- Helper: build the FORCE_MOVE arg array (move_id is u16 at aligned args offset 4).
