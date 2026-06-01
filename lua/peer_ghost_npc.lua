@@ -61,7 +61,7 @@ function PG.init(cfg)
   S = { oeId = nil, sprId = nil, pending = nil, ghost = nil, dx = nil, dy = nil, pmap = nil,
         base_cx = nil, base_cy = nil, last_anim = nil, neutralized = false, armed = false, pi_last = 0,
         interact_pending = false, cur_gfx = nil, applied_imgs = nil,
-        spawn_cd = 0, spawn_fail_logged = false }
+        spawn_cd = 0, spawn_fail_logged = false, last_visible = nil, last_b3e = nil }
 end
 
 function PG.present() return MB ~= nil and MB.present() end
@@ -209,6 +209,13 @@ function PG.on_frame()
     dbg(string.format("neutralized cb=%s + armed interact on oeId=%d", cb and "yes" or "NO", S.oeId))
   end
 
+  -- Keep the sprite callback neutralized + coordOffset on EVERY frame. The engine re-points the
+  -- OE sprite's callback on some events (door scroll, step transitions); if it runs even once it
+  -- re-manages the sprite's visibility from the OE's own (off-screen) state and hides our ghost —
+  -- the "randomly disappears on the same map" symptom. Re-asserting is cheap and idempotent.
+  if noop_cb then memory.write_u32_le(spr(S.sprId, SP_CALLBACK), noop_cb & 0xFFFFFFFF) end
+  memory.write_u8(spr(S.sprId, SP_B3E), memory.read_u8(spr(S.sprId, SP_B3E)) | 0x02)  -- coordOffset on
+
   -- Show the PARTNER's exact sprite (RR avatars are dynamic — the spawn gfx renders the LOCAL
   -- player, not them). images/anims are ROM ptrs identical on both copies of this RR build, so
   -- adopting the partner's live ones gives their exact look + exact anim table (so run/bike/surf/
@@ -266,9 +273,22 @@ function PG.on_frame()
   --  • HIDE until the partner's real sprite is applied — avoids the 1-frame spawn-gfx (= the LOCAL
   --    player) flash at spawn / door-transition re-spawn. (No gate if the partner sends no imgs.)
   local sprite_ready = (not (g.imgs and in_rom(g.imgs))) or (S.applied_imgs ~= nil)
-  local b3e = memory.read_u8(spr(S.sprId, SP_B3E))
-  if onscreen and sprite_ready then b3e = b3e & 0xFB else b3e = b3e | 0x04 end
+  local show = onscreen and sprite_ready
+  local cur_b3e = memory.read_u8(spr(S.sprId, SP_B3E))
+  -- Did something flip our invisible bit since we last set it? (engine fighting us)
+  if DBG and S.last_b3e and (cur_b3e & 0x04) ~= (S.last_b3e & 0x04) then
+    dbg(string.format("invisible bit changed under us: 0x%02X -> 0x%02X (we want show=%s)",
+      S.last_b3e, cur_b3e, tostring(show)))
+  end
+  local b3e = show and (cur_b3e & 0xFB) or (cur_b3e | 0x04)
   memory.write_u8(spr(S.sprId, SP_B3E), b3e)
+  S.last_b3e = b3e
+  if DBG and show ~= S.last_visible then
+    S.last_visible = show
+    dbg(string.format("%s onscreen=%s ready=%s screen=(%d,%d) partnerTile=(%d,%d) playerTile=(%d,%d) inuse=%d",
+      show and "VISIBLE" or "HIDDEN", tostring(onscreen), tostring(sprite_ready), ssx, ssy,
+      round(g.x / 16), round(g.y / 16), p_tile_x(), p_tile_y(), spr_inuse(S.sprId)))
+  end
 
   -- Animation: while moving, mirror the partner's LIVE animNum (walk/run/bike/surf/fish — the
   -- ghost shares the partner's gfx after the re-spawn above, so any animNum is valid here); fall
