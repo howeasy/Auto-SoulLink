@@ -34,7 +34,12 @@ in EmuHawk → it reports `RESULT: PASS`.
 - **Native message box** for momentous *overworld* events — a link forms, a shiny is found,
   a bonus pair links, an area becomes a dead zone. The client routes these to the native box
   when patched + in the overworld, else to the HUD/center-prompt (so unpatched/in-battle is
-  unchanged). This is the one feature you'll see during normal play.
+  unchanged).
+- **Peer ghost** — your partner appears as a real engine object-event (NPC) walking your
+  overworld in real time. The client broadcasts its player position ~20 Hz; the server relays
+  it (ephemeral, coalesced) to the partner, whose patch spawns/drives the ghost via
+  `SPAWN_PEER_NPC` (engine owns the sprite/palette/VRAM, so no corruption). RR + patch only;
+  silently absent otherwise. Needs both players patched to see each other.
 
 ## Validated but NOT yet wired into the server-driven client
 
@@ -44,7 +49,7 @@ production client doesn't invoke them yet — each needs its own server/client i
 
 - Battle: `FORCE_FAINT`, `FORCE_MOVE_SLOT`, `APPLY_DAMAGE` (linked HP/chip), `CURE_STATUS`
 - Mon: `CREATE_MON`, `GIVE_MON`, `SET_ENEMY_PARTY` (rival-team-swap with correct stats)
-- Overworld: `SPAWN/DESPAWN_PEER_NPC` (+ `lua/peer_ghost_npc.lua` receiver), `ARM_PEER_INTERACT`
+- Overworld: `ARM_PEER_INTERACT` (talk-to-ghost; `SPAWN/DESPAWN_PEER_NPC` is now wired — see above)
 - Rules/UI: `SET_RULES` (nuzlocke battle-style), `PLAY_FANFARE`
 
 Opcode/address reference: `patch/src/ADDRESSES.md`. Build pipeline: `patch/tools/build.py`
