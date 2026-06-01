@@ -30,7 +30,7 @@ if not PG.present() then log("FAIL: beacon absent"); finish(); return end
 
 local m9, mA = p_m9(), p_mA()
 -- seed the ghost 2 tiles east, spawn it
-PG.on_ghost_pos({ mg=m9, mn=mA, x=(p_tx()+2)*16, y=p_ty()*16, f=4, mv=0 })
+PG.on_ghost_pos({ mg=m9, mn=mA, x=(p_tx()+2)*16, y=p_ty()*16, f=4, mv=0, imgs=0x083A3470, anm=0x083A3470 })
 for _=1,40 do PG.on_frame(); emu.frameadvance() end
 local d = PG.debug()
 log("spawned oeId="..tostring(d.oeId).." sprId="..tostring(d.sprId).." cb=0x"..(d.sprId and string.format("%08X",spr_cb(d.sprId)) or "?"))
@@ -46,7 +46,7 @@ for n=1,400 do
   local dir = dirs[((n // 16) % 4) + 1]   -- change direction every 16 frames to roam
   joypad.set({ [dir]=true })
   -- keep the ghost 2 tiles east of wherever the player now is
-  PG.on_ghost_pos({ mg=p_m9(), mn=p_mA(), x=(p_tx()+2)*16, y=p_ty()*16, f=4, mv=1 })
+  PG.on_ghost_pos({ mg=p_m9(), mn=p_mA(), x=(p_tx()+2)*16, y=p_ty()*16, f=4, mv=1, imgs=0x083A3470, anm=0x083A3470 })
   PG.on_frame()
   emu.frameadvance()
   if PG.debug().oeId == nil then log("note: ghost dropped/re-spawning at frame "..n);

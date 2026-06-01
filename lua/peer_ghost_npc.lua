@@ -71,15 +71,18 @@ function PG.set_interact_text(s) if s and s ~= "" then interact_text = s end end
 local function oe(i, off) return C.OE + i * C.OE_STRIDE + off end
 local function spr(i, off) return C.GS + i * C.GS_STRIDE + off end
 local function p_spriteId() return memory.read_u8(oe(0, OE_SPRID)) end
-local function p_tile_x()   return memory.read_u16_le(oe(0, OE_CX)) end
-local function p_tile_y()   return memory.read_u16_le(oe(0, OE_CY)) end
+-- Coords/positions are SIGNED 16-bit and go negative near a map's origin. Reading them unsigned
+-- wraps -50 -> 65486, which threw the ghost's computed screen pos to ~65000 ("off-screen") and
+-- hid it while the partner was right next to you. (The sender already reads these signed.)
+local function p_tile_x()   return memory.read_s16_le(oe(0, OE_CX)) end
+local function p_tile_y()   return memory.read_s16_le(oe(0, OE_CY)) end
 local function p_map()      return memory.read_u8(oe(0, OE_MAPNUM)), memory.read_u8(oe(0, OE_MAPGRP)) end
 local function p_gfx()      return memory.read_u8(oe(0, OE_GFX)) end
 local function p_idle()     return (memory.read_u8(oe(0, OE_FLAGS)) & 0x80) ~= 0 end  -- heldMovementFinished
 local function p_elev()     return memory.read_u8(oe(0, OE_ELEV)) end
 local function spr_inuse(i) return memory.read_u8(spr(i, SP_B3E)) & 1 end
-local function spr_pos_x(i) return memory.read_u16_le(spr(i, SP_X)) end
-local function spr_pos_y(i) return memory.read_u16_le(spr(i, SP_Y)) end
+local function spr_pos_x(i) return memory.read_s16_le(spr(i, SP_X)) end
+local function spr_pos_y(i) return memory.read_s16_le(spr(i, SP_Y)) end
 local function round(n)     return math.floor(n + 0.5) end
 
 -- Find an inert `bx lr` (Thumb 0x4770) in low ROM to use as a no-op sprite callback.
@@ -270,9 +273,10 @@ function PG.on_frame()
   -- Visibility (invisible bit 0x04 of byte3e; engine callback is neutralized so this sticks):
   --  • CULL off-screen — a sprite far outside the viewport has its OAM coord WRAP (9-bit X /
   --    8-bit Y) and draws as garbage at a random on-screen spot.
-  --  • HIDE until the partner's real sprite is applied — avoids the 1-frame spawn-gfx (= the LOCAL
-  --    player) flash at spawn / door-transition re-spawn. (No gate if the partner sends no imgs.)
-  local sprite_ready = (not (g.imgs and in_rom(g.imgs))) or (S.applied_imgs ~= nil)
+  --  • HIDE until the partner's real sprite has been applied — the spawn gfx is gfx 0 = the LOCAL
+  --    player (RR avatars are dynamic), so showing it = the "wrong sprite" (your own look). Only
+  --    reveal once we've stamped the partner's broadcast images at least once.
+  local sprite_ready = (S.applied_imgs ~= nil)
   local show = onscreen and sprite_ready
   local cur_b3e = memory.read_u8(spr(S.sprId, SP_B3E))
   -- Did something flip our invisible bit since we last set it? (engine fighting us)
