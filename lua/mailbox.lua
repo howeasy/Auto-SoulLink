@@ -73,6 +73,12 @@ end
 
 function MB.fanfare_args(song) return {song % 256, math.floor(song / 256) % 256} end
 
+MB.OP_APPLY_DAMAGE = 10     -- linked HP / chip: args {battler, amt_lo, amt_hi}; result[0..1]=new hp
+MB.OP_CURE_STATUS  = 11     -- link-cured status: args {battler}
+function MB.apply_damage_args(battler, amount)
+    return {battler, amount % 256, math.floor(amount / 256) % 256}
+end
+
 MB.ST_IDLE, MB.ST_BUSY, MB.ST_OK, MB.ST_FAIL = 0, 1, 2, 3
 
 -- Helper: build the FORCE_MOVE arg array (move_id is u16 at aligned args offset 4).

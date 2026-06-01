@@ -30,7 +30,8 @@ typedef struct {
 
 enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
        OP_FORCE_MOVE_SLOT = 5, OP_SPAWN_PEER_NPC = 6, OP_DESPAWN_PEER_NPC = 7,
-       OP_SHOW_MESSAGE = 8, OP_PLAY_FANFARE = 9 };
+       OP_SHOW_MESSAGE = 8, OP_PLAY_FANFARE = 9,
+       OP_APPLY_DAMAGE = 10, OP_CURE_STATUS = 11 };
 enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
 
 /* Armed forced-move state (controller-swap driver), EWRAM scratch past the mailbox. */
@@ -214,6 +215,24 @@ void slink_hook(void)
 
     case OP_PLAY_FANFARE: {       /* args: [0..1] = songId */
         PlayFanfare((u16)(MB->args[0] | (MB->args[1] << 8)));
+        break;
+    }
+
+    case OP_APPLY_DAMAGE: {       /* linked HP / chip: args [0]=battler [1..2]=amount(u16) */
+        u8  b   = MB->args[0];
+        u16 amt = (u16)(MB->args[1] | (MB->args[2] << 8));
+        u32 hpaddr = gBattleMons + (u32)b * BATTLE_MON_SIZE + 0x28;
+        u16 hp = R16(hpaddr);
+        hp = (hp > amt) ? (u16)(hp - amt) : 0;
+        R16(hpaddr) = hp;         /* engine refreshes the health box on its next touch */
+        MB->result[0] = (u8)hp;   /* result[0..1] = new hp (0 => mon will faint) */
+        MB->result[1] = (u8)(hp >> 8);
+        break;
+    }
+
+    case OP_CURE_STATUS: {        /* link-cured status: args [0]=battler — clear status1 */
+        u8 b = MB->args[0];
+        *(volatile u32 *)(gBattleMons + (u32)b * BATTLE_MON_SIZE + 0x4C) = 0;
         break;
     }
 

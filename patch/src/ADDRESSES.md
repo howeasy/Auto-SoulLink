@@ -63,6 +63,19 @@ is a valid map for the base engine here.
 | 7 | DESPAWN_PEER_NPC | `[0]`=objEventId | DestroySprite + clear object-event (clean removal) |
 | 8 | SHOW_MESSAGE | text pre-written (FR-encoded) to `0x0203F900` → `result[0]`=shown | native field message box (`ShowFieldMessage`) |
 | 9 | PLAY_FANFARE | `[0..1]`=songId | `PlayFanfare(songId)` |
+| 10 | APPLY_DAMAGE | `[0]`=battler `[1..2]`=amount → `result[0..1]`=new hp | linked HP / chip: `gBattleMons[b].hp -= amount` (clamp 0) |
+| 11 | CURE_STATUS | `[0]`=battler | link-cured status: clear `gBattleMons[b].status1` |
+
+## Phase-5 (linked battle rules) — primitives validated
+New gameplay only a patch enables. `gBattleMons` hp@0x28, maxHP@0x2C, status1@0x4C (stride 0x58).
+- **APPLY_DAMAGE** = shared-fate chip: reduce a battler's battle HP by `amount` (clamped to 0 = a
+  linked KO). The engine refreshes the health box on its next touch; at battle end CFRU copies
+  gBattleMons.hp back to the party, so the chip persists. Returns the new HP.
+- **CURE_STATUS** = link-cured: zero a battler's non-volatile status (poison/burn/etc.).
+**Live-validated** (`test_live_linkdamage.lua`, in-battle save): chip 30→25→15, lethal→0, poison→cured.
+**Orchestration (the cross-game relay) is server/client integration** — the client detects an HP delta
+in battle and reports it; the server relays a fraction to the partner, whose client sends APPLY_DAMAGE
+(same pattern as force_faint propagation). That wiring + a run-rule flag is the remaining feature work.
 
 ## Phase-4 (native UI) — validated
 `ShowFieldMessage = 0x0806943C` `(const u8 *str)` — copies `str` (FR-charmap, 0xFF-terminated) into
