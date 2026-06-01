@@ -42,7 +42,8 @@ end
 
 function PG.on_frame()
   if not PG.present() then return end
-  local pmg, pmn = memory.read_u8(OE + 0x0A), memory.read_u8(OE + 0x09)   -- local player map
+  local poe = MB.player_oe()                                              -- player's actual slot
+  local pmg, pmn = memory.read_u8(poe + 0x0A), memory.read_u8(poe + 0x09) -- local player map
   local g = S.ghost
   local same_map = g and g.mg == pmg and g.mn == pmn
 

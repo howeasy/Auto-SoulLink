@@ -1390,7 +1390,7 @@ local function on_frame()
     -- engine interpolates and animates. No-ops without the patch / off-overworld.
     if IS_RR and is_overworld then
         if frame_count % 3 == 0 then
-            local OE = 0x02036E38   -- gObjectEvents[0] = player
+            local OE = MB.player_oe()   -- the player's ACTUAL object-event (not always slot 0)
             local f = memory.read_u8(OE + 0x18) & 0x0F
             if f < 1 or f > 4 then f = 1 end
             local sid  = memory.read_u8(OE + 0x04)

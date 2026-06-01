@@ -97,6 +97,13 @@ MB.GH_TY     = MB.GH + 8   -- s16: target tile y
 MB.GH_TFACE  = MB.GH + 10  -- u8: target facing 1=S 2=N 3=W 4=E
 MB.GH_RUN    = MB.GH + 11  -- u8: 1 = partner dashing -> ghost runs to keep up
 MB.LOCALID   = 0xF0
+-- The player is NOT always object-event slot 0; its slot is gPlayerAvatar.objectEventId.
+MB.GPLAYER_AVATAR = 0x02037078   -- CFRU; objectEventId @ +0x05
+function MB.player_oe()
+    local id = memory.read_u8(MB.GPLAYER_AVATAR + 0x05)
+    if id >= 16 then id = 0 end
+    return 0x02036E38 + id * 0x24
+end
 -- Request the engine-driven ghost (idempotent; safe to call once).
 function MB.ghost_spawn(gfx) return MB.send(MB.OP_GHOST_SPAWN, {gfx or 0, MB.LOCALID}) end
 function MB.ghost_clear() return MB.send(MB.OP_GHOST_CLEAR, {}) end

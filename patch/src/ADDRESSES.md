@@ -236,6 +236,13 @@ prologue (`push {..,lr}`). CFRU uses the "EventObject" naming = pokefirered "Obj
 | `PatchObjectPalette` | 0x805F538 | push {r4,lr} | load+tint an OBJ palette into a slot (fallback) |
 | `GetEventObjectGraphicsInfoOriginal` | 0x805F2C8 | ldr r1,[pc] | gfxId→graphics info (paletteSlot/Tag) (fallback) |
 
+**`gPlayerAvatar = 0x02037078`** (CFRU; = gObjectEvents + 16*0x24). `objectEventId` @ +0x05 = the
+player's gObjectEvents slot — the player is NOT always slot 0 (it lives elsewhere in some maps; the
+spawn then grabs the free slot 0 and slot-0 reads point at the wrong thing). Validated: on the
+overworld savestate it reads 0 (player IS slot 0), so player_oe() == slot 0 there and the driver tests
+pass; the fix is reading this slot instead of a hardcoded 0, both in the patch (player_oe()) and Lua
+(MB.player_oe()).
+
 Directions: DIR_SOUTH=1 NORTH=2 WEST=3 EAST=4. Model = CFRU `follow_me.c`: spawn OE with
 MOVEMENT_TYPE_NONE, then each step `EventObjectSetHeldMovement(oe, GetWalk*Action(dir))` and poll
 `EventObjectClearHeldMovementIfFinished`. The engine animates/positions/palettes/collides natively.

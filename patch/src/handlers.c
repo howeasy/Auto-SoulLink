@@ -138,6 +138,16 @@ typedef void (*SetupScript_t)(const u8 *ptr);
 #define OE_STRIDE     0x24u
 #define gSprites      0x0202063Cu   /* stride 0x44 */
 #define SPR_STRIDE    0x44u
+#define gPlayerAvatar 0x02037078u   /* CFRU; objectEventId @ +0x05 (the player's gObjectEvents slot) */
+
+/* The player is NOT always object-event slot 0 — its slot is gPlayerAvatar.objectEventId. Reading
+ * slot 0 blindly broke spawning when the player lived elsewhere (the spawn grabbed the free slot 0). */
+static u32 player_oe(void)
+{
+    u8 id = R8(gPlayerAvatar + 0x05);
+    if (id >= 16) id = 0;
+    return gObjectEvents + (u32)id * OE_STRIDE;
+}
 
 /* ---- engine object-event movement API (CFRU follower model; see ADDRESSES.md). The "EventObject"
  * names are CFRU's; identical to pokefirered "ObjectEvent". All take a struct EventObject *. ---- */
@@ -244,7 +254,7 @@ static void check_peer_interact(void)
     if (!(R16(gMain + 0x2E) & KEY_A)) return;            /* A newly pressed this frame? */
     u32 g = gObjectEvents + (u32)SS->pi_oe * OE_STRIDE;
     if (!(R8(g) & 1)) return;                             /* ghost active? */
-    u32 p = gObjectEvents;                                /* player = object-event slot 0 */
+    u32 p = player_oe();                                  /* the player's actual object-event */
     int px = (s16)R16(p + 0x10), py = (s16)R16(p + 0x12);
     u8  f  = R8(p + 0x18) & 0x0F;
     if      (f == 1) py++;       /* down */
@@ -286,7 +296,7 @@ static void drive_ghost(void)
 {
     if (!GH->active) { if (GH->oeId != 0xFF) ghost_remove(); return; }
 
-    u32 player = gObjectEvents;                  /* slot 0 */
+    u32 player = player_oe();                     /* the player's ACTUAL slot (not always 0) */
     u8 pg = R8(player + 0x0A), pn = R8(player + 0x09);
 
     /* (a) map change -> the warp rebuilt all OE slots; clean-remove ours and re-spawn on the new map. */
@@ -464,8 +474,8 @@ void slink_hook(void)
         GH->localId = MB->args[1];/* target tile/facing/gfx into GhostState each tick. */
         GH->oeId   = 0xFF;
         GH->curGfx = 0xFF;        /* force a spawn next frame */
-        GH->pmapGroup = R8(gObjectEvents + 0x0A);   /* seed map so frame 1 doesn't false-trigger */
-        GH->pmapNum   = R8(gObjectEvents + 0x09);
+        GH->pmapGroup = R8(player_oe() + 0x0A);     /* seed map so frame 1 doesn't false-trigger */
+        GH->pmapNum   = R8(player_oe() + 0x09);
         GH->active = 1;
         break;
 
