@@ -790,9 +790,10 @@ def test_no_catch_dead_zone_queues_hud_banner_for_both(tmp_path, monkeypatch):
     cmds_a = state.handle_event("a", {"event": "tick"})
 
     def _has_dz_hud(cmds):
-        # HUD text shortened to "!! DZ: <area>" (was "Dead zone -- <area>!")
+        # Dead-zone is a momentous overworld event -> msgbox (native box when patched,
+        # else HUD overlay). Text names the area as a dead zone.
         return any(
-            c.get("cmd") == "hud_show" and "DZ:" in c.get("text", "")
+            c.get("cmd") == "msgbox" and "dead zone" in c.get("text", "").lower()
             for c in cmds
         )
     def _has_failure_se(cmds):

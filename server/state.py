@@ -1432,16 +1432,16 @@ class SoulLinkState:
         log.info(f"[DEAD ZONE] {area_id}  reason=no_catch  triggered_by={player_id}  partner_had_capture={partner_cap is not None}")
         # Notify both players with a failure sound + HUD banner naming the dead area.
         area_disp = self.adapter.area_display_name(area_id) or area_id
-        dz_text = f"!! DZ: {area_disp}"
+        dz_text = f"{area_disp} is a dead zone!"
         self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 26})   # SE_FAILURE
         self.queued_commands[player_id].append({
-            "cmd": "hud_show", "text": dz_text,
+            "cmd": "msgbox", "text": dz_text,
             "r": 255, "g": 80, "b": 80, "frames": 480,
         })
         partner     = _partner(player_id)
         self.queued_commands[partner].append({"cmd": "play_sound", "sound": 26})
         self.queued_commands[partner].append({
-            "cmd": "hud_show", "text": dz_text,
+            "cmd": "msgbox", "text": dz_text,
             "r": 255, "g": 80, "b": 80, "frames": 480,
         })
         partner_cap = self.pending_captures.get(area_id, {}).get(partner)
