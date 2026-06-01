@@ -38,6 +38,8 @@ enum { ST_OK = 2, ST_FAIL = 3 };
 #define gBattleCommunication 0x02023E82u
 #define gBattleStruct        0x02023FE8u   /* pointer */
 #define gPlayerParty         0x02024284u
+#define gEnemyParty          0x0202402Cu
+#define gEnemyPartyCount     0x0202402Au
 #define MON_SIZE             100u
 
 #define R8(a)   (*(volatile u8 *)(a))
@@ -91,14 +93,16 @@ void slink_hook(void)
         break;
     }
 
-    case OP_CREATE_MON: {        /* args: [0]=slot [2..3]=species(u16) [4]=level */
+    case OP_CREATE_MON: {        /* args: [0]=slot [1]=party(0=player,1=enemy) [2..3]=species [4]=level */
         u8  slot    = MB->args[0];
+        u8  party   = MB->args[1];
         u16 species = (u16)(MB->args[2] | (MB->args[3] << 8));
         u8  level   = MB->args[4];
         if (slot > 5) { ack(ST_FAIL, 2); return; }
-        void *mon = (void *)(gPlayerParty + slot * MON_SIZE);
-        CreateMon(mon, species, level, /*fixedIV*/0, /*hasFixedPers*/0,
-                  /*fixedPers*/0, /*otIdType*/0, /*otId*/0);
+        u32 base = party ? gEnemyParty : gPlayerParty;
+        CreateMon((void *)(base + slot * MON_SIZE), species, level,
+                  /*fixedIV*/0, /*hasFixedPers*/0, /*fixedPers*/0,
+                  /*otIdType*/0, /*otId*/0);
         break;
     }
 
