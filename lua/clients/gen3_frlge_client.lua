@@ -106,7 +106,12 @@ local function patch_present() return MB ~= nil and MB.present() end
 local patch_logged = false   -- latch: log patch presence/absence once (beacon appears ~frame 13)
 -- Engine-NPC peer ghost (companion-patch path; no-ops without the patch).
 local ok_pg, PG = pcall(require, "peer_ghost_npc")
-if ok_pg then PG.init() else PG = nil end
+if ok_pg then
+    PG.init()
+else
+    console.log("[SLink-FRLGE] peer-ghost receiver FAILED to load: " .. tostring(PG))
+    PG = nil
+end
 
 -- Game module detection — provides game-specific area/gift classification
 -- and profile data for memory.lua initialization
@@ -1378,8 +1383,11 @@ local function on_frame()
     if IS_RR and is_overworld then
         if frame_count % 3 == 0 then
             local OE = 0x02036E38   -- gObjectEvents[0] = player
+            -- mg/mn are the object-event map bytes at 0x09/0x0A. The receiver
+            -- (peer_ghost_npc.p_map) and the live test both key on mg=0x09, mn=0x0A;
+            -- the sender MUST match that order or same_map never holds (no spawn).
             send({ event = "ghost_pos",
-                   mg  = memory.read_u8(OE + 0x0A), mn = memory.read_u8(OE + 0x09),
+                   mg  = memory.read_u8(OE + 0x09), mn = memory.read_u8(OE + 0x0A),
                    x   = memory.read_u16_le(OE + 0x10) * 16,
                    y   = memory.read_u16_le(OE + 0x12) * 16,
                    f   = memory.read_u8(OE + 0x18) & 0x0F,

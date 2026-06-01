@@ -30,6 +30,10 @@ local C = {
 
 local S  -- live state
 
+local DBG = true            -- log spawn lifecycle + throttled state (set false to silence)
+local fcount = 0
+local function dbg(s) if DBG then console.log("[peer-ghost] " .. s) end end
+
 function PG.init(cfg)
   if cfg then for k, v in pairs(cfg) do C[k] = v end end
   S = { oeId = nil, sprId = nil, pending = nil, ghost = nil, dx = nil, dy = nil, pmap = nil }
@@ -50,7 +54,7 @@ local function spr_pos_x(i) return memory.read_u16_le(spr(i, 0x20)) end
 local function spr_pos_y(i) return memory.read_u16_le(spr(i, 0x22)) end
 
 local function despawn()
-  if S.oeId then MB.send(MB.OP_DESPAWN_PEER_NPC, { S.oeId }) end
+  if S.oeId then dbg("despawn oeId=" .. tostring(S.oeId)); MB.send(MB.OP_DESPAWN_PEER_NPC, { S.oeId }) end
   S.oeId, S.sprId, S.pending, S.dx, S.dy = nil, nil, nil, nil, nil
 end
 
@@ -65,6 +69,7 @@ function PG.reset() despawn(); S.ghost = nil end
 -- to be called every overworld frame
 function PG.on_frame()
   if not PG.present() then return end          -- no patch -> no-op (graceful)
+  fcount = fcount + 1
   local pmg, pmn = p_map()
 
   -- map change -> drop the ghost (indices/world differ on the new map)
@@ -73,6 +78,15 @@ function PG.on_frame()
 
   local g = S.ghost
   local same_map = g and g.mg == pmg and g.mn == pmn
+
+  -- throttled state line so the engine-NPC path isn't a black box during testing
+  if DBG and fcount % 120 == 0 then
+    dbg(string.format("state oeId=%s pending=%s same_map=%s g=%s my_map=(%d,%d)%s",
+      tostring(S.oeId), tostring(S.pending), tostring(same_map),
+      g and string.format("(%d,%d)", g.mg, g.mn) or "nil", pmg, pmn,
+      g and "" or "  [no partner pos yet]"))
+  end
+
   if not same_map then if S.oeId then despawn() end; return end
 
   -- spawn (async): request once, then adopt the returned object-event id
@@ -83,20 +97,23 @@ function PG.on_frame()
       local seq = MB.send(MB.OP_SPAWN_PEER_NPC,
         MB.spawn_npc_args(gfx, LOCALID, p_tile_x() + 1, p_tile_y(), 0))
       S.pending = seq
+      dbg(string.format("spawn requested seq=%s gfx=%d at tile(%d,%d)", tostring(seq), gfx,
+        p_tile_x() + 1, p_tile_y()))
     else
       local stp = MB.poll(S.pending)
       if stp then
         local id = MB.read_result_u8(0)
         S.pending = nil
         if id < 16 then S.oeId = id; S.sprId = memory.read_u8(oe(id, 0x04))
-        else return end   -- spawn failed; retry next frame
+          dbg(string.format("spawned oeId=%d sprId=%d", S.oeId, S.sprId))
+        else dbg("spawn FAILED (result id=" .. tostring(id) .. ") — retrying"); return end
       end
     end
     if not S.oeId then return end
   end
 
   -- the engine may recycle the slot (battle, warp); bail if our sprite went away
-  if spr_inuse(S.sprId) == 0 then S.oeId, S.sprId = nil, nil; return end
+  if spr_inuse(S.sprId) == 0 then dbg("sprite recycled — re-spawning"); S.oeId, S.sprId = nil, nil; return end
 
   -- interpolate display world-pixel toward the target for smoothness
   if not S.dx or math.abs(g.x - S.dx) > SNAP_PX or math.abs(g.y - S.dy) > SNAP_PX then
