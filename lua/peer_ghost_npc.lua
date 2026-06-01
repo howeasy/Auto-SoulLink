@@ -60,14 +60,20 @@ function PG.on_frame()
     return
   end
 
+  -- The ghost ALWAYS uses the LOCAL player's graphicsId so it shares the player palette slot
+  -- correctly (same gfx => same colours => no PALSLOT_PLAYER collision). Showing the partner's own
+  -- chosen avatar is a KNOWN ISSUE (it collides on the palette slot); deferred. The ghost mirrors
+  -- the partner's POSITION/movement, just with your trainer look (incl. your bike/surf via gfx change).
+  local mygfx = memory.read_u8(poe + 0x05)
+
   if not S.spawned then
     MB.write_message(interact_text)     -- pre-set the talk-to-ghost message (patch shows it)
-    MB.ghost_spawn(g.gfx or 0)          -- patch spawns + drives from here
+    MB.ghost_spawn(mygfx)               -- patch spawns + drives from here
     S.spawned, S.pi_last = true, MB.peer_interact_count()
   end
 
   -- post the partner's target each tick; the patch walks the ghost there natively
-  MB.ghost_set_target(g.x, g.y, g.f, g.run, g.gfx)
+  MB.ghost_set_target(g.x, g.y, g.f, g.run, mygfx)
 
   -- one-shot: confirm the patch actually spawned the engine ghost
   if not S.spawn_logged and MB.ghost_oe() < 16 then

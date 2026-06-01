@@ -36,10 +36,15 @@ in EmuHawk → it reports `RESULT: PASS`.
   when patched + in the overworld, else to the HUD/center-prompt (so unpatched/in-battle is
   unchanged).
 - **Peer ghost** — your partner appears as a real engine object-event (NPC) walking your
-  overworld in real time. The client broadcasts its player position ~20 Hz; the server relays
-  it (ephemeral, coalesced) to the partner, whose patch spawns/drives the ghost via
-  `SPAWN_PEER_NPC` (engine owns the sprite/palette/VRAM, so no corruption). RR + patch only;
-  silently absent otherwise. Needs both players patched to see each other.
+  overworld in real time. The client broadcasts its player TILE ~20 Hz (server relays it
+  ephemeral+coalesced); the partner's patch spawns a real NPC and WALKS it toward that tile via
+  the engine's native held-movement API (`GHOST_SPAWN`/`GHOST_CLEAR` + GhostState), so the engine
+  owns animation, sub-pixel motion, palette, day/night tint, culling, and collision. Talk to the
+  ghost (face it + A) for a dismissable message. RR + patch only; both players must be patched.
+  - **Known issue:** the ghost uses *your own* trainer sprite, not the partner's chosen RR
+    avatar. Rendering the partner's avatar collides on the shared player palette slot
+    (`PALSLOT_PLAYER`) and corrupts colours; until that's solved with a dedicated palette slot,
+    the ghost matches your sprite (palette-safe). It mirrors the partner's *position/movement*.
 
 ## Validated but NOT yet wired into the server-driven client
 
