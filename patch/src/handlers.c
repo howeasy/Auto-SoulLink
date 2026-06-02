@@ -378,7 +378,11 @@ static void drive_ghost(void)
     if (GH->oeId == 0xFF) {
         if (R8(sScriptContext2Enabled)) return;  /* not mid-dialogue/warp fade */
         s16 px = (s16)R16(player + 0x10), py = (s16)R16(player + 0x12);
-        u8  elev = R8(player + 0x0B) & 0x0F;
+        /* Spawn the stand-in at a MISMATCHED elevation -> PASS-THROUGH, so the spawn tile (one south of
+         * the player) never leaves an invisible wall before the ghost starts tracking. The drive loop
+         * makes it solid (matching the player's elevation) only once it's on-screen + actually following. */
+        u8  pelev = R8(player + 0x0B) & 0x0F;
+        u8  elev  = (u8)(pelev == 0x0F ? 0x0E : 0x0F);
         int oe = SpawnSpecialObjectEventParameterized(GH->gfxId, /*MOVEMENT_TYPE_NONE*/0,
                                                       GH->localId, px, (s16)(py + 1), elev);
         if (oe >= 16) return;                    /* no free slot on this map; retry next frame */
