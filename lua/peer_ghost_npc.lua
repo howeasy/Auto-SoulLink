@@ -21,6 +21,9 @@ if not ok_mb then MB = nil end
 
 local PG = {}
 local OE = 0x02036E38          -- gObjectEvents[0] = the local player
+-- engine's elevation->base subpriority table (event_object_movement.c sElevationToSubpriority)
+local ELEV2SUB = {[0]=115,[1]=115,[2]=83,[3]=115,[4]=83,[5]=115,[6]=83,[7]=115,
+                  [8]=83,[9]=115,[10]=83,[11]=115,[12]=83,[13]=0,[14]=0,[15]=115}
 local interact_text = "Your partner is here!"   -- shown when YOU press A on the ghost
 local SNAP_PX = 48             -- world-px jump beyond this in one update -> snap, don't slide
 local S
@@ -130,12 +133,35 @@ function PG.on_frame()
         local attr2 = memory.read_u16_le(sa + 0x04)
         memory.write_u16_le(sa + 0x04, (attr2 & 0x0FFF) | (15 << 12))   -- OBJ palette slot 15
         if S.pcols then
+          -- TINT: paint the partner's TRUE colours into the Unfaded slot, and the DAY/NIGHT-tinted
+          -- colours into the Faded slot (the engine DMAs Faded -> palette RAM). The tint ratio is the
+          -- player's own slot Faded/Unfaded, so the ghost darkens/colours with the world like everyone.
+          local psid2 = memory.read_u8(poe + 0x04)
+          local ps = (psid2 < 64) and ((memory.read_u16_le(0x0202063C + psid2*0x44 + 0x04) >> 12) & 0x0F) or 0
+          local rn,gn,bn,rd,gd,bd = 0,0,0,0,0,0
+          for i = 0, 15 do
+            local uf = memory.read_u16_le(0x020373F8 + ps*0x20 + i*2)
+            local fd = memory.read_u16_le(0x020377F8 + ps*0x20 + i*2)
+            rd=rd+(uf&0x1F); gd=gd+((uf>>5)&0x1F); bd=bd+((uf>>10)&0x1F)
+            rn=rn+(fd&0x1F); gn=gn+((fd>>5)&0x1F); bn=bn+((fd>>10)&0x1F)
+          end
           for i = 0, 15 do
             local c = S.pcols[i] or 0
-            memory.write_u16_le(0x020373F8 + 15*0x20 + i*2, c)          -- unfaded slot 15
-            memory.write_u16_le(0x020377F8 + 15*0x20 + i*2, c)          -- faded slot 15
+            local r,g,b = c&0x1F, (c>>5)&0x1F, (c>>10)&0x1F
+            local tr = (rd>0) and math.min(31, math.floor(r*rn/rd + 0.5)) or r
+            local tg = (gd>0) and math.min(31, math.floor(g*gn/gd + 0.5)) or g
+            local tb = (bd>0) and math.min(31, math.floor(b*bn/bd + 0.5)) or b
+            memory.write_u16_le(0x020373F8 + 15*0x20 + i*2, c)                       -- unfaded = true
+            memory.write_u16_le(0x020377F8 + 15*0x20 + i*2, tr | (tg<<5) | (tb<<10)) -- faded = tinted
           end
         end
+        -- LAYERING: replicate the engine's per-frame OE subpriority (sElevationToSubpriority[elev] +
+        -- screen-Y term + 1) so the ghost sorts in front/behind the player by depth, not always on top.
+        local pelev = memory.read_u8(poe + 0x0B) & 0x0F
+        local ccy = memory.read_s8(sa + 0x29)                       -- centerToCornerVecY
+        local yy = (memory.read_s16_le(sa + 0x22) - ccy + memory.read_s16_le(0x02021BCA) + 8) & 0xFF
+        yy = (16 - (yy >> 4)) << 1
+        memory.write_u8(sa + 0x43, ((ELEV2SUB[pelev] or 115) + yy + 1) & 0xFF)
         if gsid ~= S.last_gsid then                                     -- respawn -> re-DMA new tiles now
           memory.write_u8(sa + 0x3F, memory.read_u8(sa + 0x3F) | 0x04)  -- animBeginning
           memory.write_u8(sa + 0x2C, memory.read_u8(sa + 0x2C) & 0xBF)  -- animPaused = 0
