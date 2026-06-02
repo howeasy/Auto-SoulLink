@@ -132,13 +132,28 @@ def test_ghost_pos_coalesces(tmp_path, monkeypatch):
 
 
 def test_ghost_pos_relays_mv_run_gfx(tmp_path, monkeypatch):
-    """The engine-driven ghost rides on tile coords + mv/run/gfx; the patch animates natively."""
+    """The engine-driven ghost rides on world-pixel coords + mv/run/gfx; the patch LERPs + animates."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = make_state_with_link()
     state.handle_event("a", {"event": "ghost_pos", "mg": 1, "mn": 1,
                              "x": 16, "y": 9, "f": 4, "mv": 1, "run": 1, "gfx": 5})
     g = _ghost_cmds(state.handle_event("b", {"event": "tick"}))[0]
     assert (g["x"], g["y"], g["f"], g["mv"], g["run"], g["gfx"]) == (16, 9, 4, 1, 1, 5)
+
+
+def test_ghost_pos_relays_avatar_and_anim(tmp_path, monkeypatch):
+    """The partner's avatar (live sprite images/anims ROM ptrs + true palette) and live animNum
+    must relay so the ghost renders as THEMSELVES, animating exactly as they move."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+    pcol = "".join(f"{(0x0421 * (i + 1)) & 0x7FFF:04X}" for i in range(16))
+    state.handle_event("a", {"event": "ghost_pos", "mg": 1, "mn": 1,
+                             "x": 32, "y": 16, "f": 2, "mv": 1, "an": 10,
+                             "imgs": 0x08EB3810, "anim": 0x083A3470, "pcol": pcol})
+    g = _ghost_cmds(state.handle_event("b", {"event": "tick"}))[0]
+    assert g["an"] == 10
+    assert g["imgs"] == 0x08EB3810 and g["anim"] == 0x083A3470
+    assert g["pcol"] == pcol
 
 
 def test_peer_interact_notifies_partner(tmp_path, monkeypatch):

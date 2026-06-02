@@ -105,6 +105,8 @@ if not ok_mb then MB = nil end
 local function patch_present() return MB ~= nil and MB.present() end
 local patch_logged = false   -- latch: log patch presence/absence once (beacon appears ~frame 13)
 local pg_send_logged = false -- one-shot: confirm we're broadcasting our overworld position
+-- world-pixel calibration (sub-pixel position via the coordOffset delta, captured while idle)
+local pg_align_tx, pg_align_ty, pg_coff_ax, pg_coff_ay = nil, nil, 0, 0
 -- Engine-NPC peer ghost (companion-patch path; no-ops without the patch).
 local ok_pg, PG = pcall(require, "peer_ghost_npc")
 if ok_pg then
@@ -203,6 +205,11 @@ local function parse_command_list(raw)
         local ggfx = tonumber(obj:match('"gfx"%s*:%s*(%-?%d+)'))
         local gmv  = tonumber(obj:match('"mv"%s*:%s*(%-?%d+)'))
         local grun = tonumber(obj:match('"run"%s*:%s*(%-?%d+)'))
+        local gan  = tonumber(obj:match('"an"%s*:%s*(%-?%d+)'))   -- partner live animNum
+        -- partner avatar: live sprite images/anims ROM ptrs (u32) + true 16-colour palette (64 hex)
+        local gimgs = tonumber(obj:match('"imgs"%s*:%s*(%-?%d+)'))
+        local ganim = tonumber(obj:match('"anim"%s*:%s*(%-?%d+)'))
+        local gpcol = obj:match('"pcol"%s*:%s*"([0-9A-Fa-f]*)"')
         local r       = tonumber(obj:match('"r"%s*:%s*(%d+)'))
         local g       = tonumber(obj:match('"g"%s*:%s*(%d+)'))
         local b       = tonumber(obj:match('"b"%s*:%s*(%d+)'))
@@ -234,7 +241,8 @@ local function parse_command_list(raw)
             cmds[#cmds+1] = {
                 cmd=cmd, key=key, message=msg, stats=stats,
                 text=text, fb=fb, r=r, g=g, b=b, frames=frames,
-                gmg=gmg, gmn=gmn, ggx=ggx, ggy=ggy, ggf=ggf, ggfx=ggfx, gmv=gmv, grun=grun,
+                gmg=gmg, gmn=gmn, ggx=ggx, ggy=ggy, ggf=ggf, ggfx=ggfx, gmv=gmv, grun=grun, gan=gan,
+                gimgs=gimgs, ganim=ganim, gpcol=gpcol,
                 sound=sound, area_id=area_id, areas=areas,
                 trainer_id=trainer_id, blobs_hex=blobs_hex,
             }
@@ -629,7 +637,8 @@ local function dispatch_commands(cmds)
             end
         elseif c.cmd == "ghost_pos" then
             if PG then PG.on_ghost_pos({ mg=c.gmg, mn=c.gmn, x=c.ggx, y=c.ggy, f=c.ggf,
-                                         gfx=c.ggfx, mv=c.gmv, run=c.grun }) end
+                                         gfx=c.ggfx, mv=c.gmv, run=c.grun, an=c.gan,
+                                         imgs=c.gimgs, anim=c.ganim, pcol=c.gpcol }) end
         elseif c.cmd == "hud_show" and c.text then
             hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
         elseif c.cmd == "gui_prompt" and c.text then
@@ -1500,28 +1509,54 @@ local function on_frame()
     local in_battle    = M.isInBattle()
     local is_overworld = M.isInOverworld()
 
-    -- Peer ghost (RR + companion patch): broadcast our overworld TILE + facing + gfx ~20 Hz; the
-    -- partner's patch walks an engine NPC there natively. No sub-pixel/anim/sprite data needed — the
-    -- engine interpolates and animates. No-ops without the patch / off-overworld.
+    -- Peer ghost (RR + companion patch): broadcast our overworld WORLD-PIXEL position (sub-pixel) +
+    -- facing + moving + live animNum ~20 Hz, plus our AVATAR (live sprite images/anims ROM ptrs +
+    -- true 16-colour palette) so the partner sees US as ourselves, moving exactly as we move. The
+    -- partner's patch LERPs the ghost to our position + plays our animation. No-ops without the patch.
     if IS_RR and is_overworld then
+        local OE = MB.player_oe()   -- the player's ACTUAL object-event (not always slot 0)
+        -- Calibrate sub-pixel: while the player is tile-aligned (idle), snapshot (tile, coordOffset);
+        -- world-px = alignTile*16 + (coffAtAlign - coffNow) tracks the smooth scroll between tiles.
+        local coffx = memory.read_s16_le(0x02021BC8)
+        local coffy = memory.read_s16_le(0x02021BCA)
+        local idle  = (memory.read_u8(OE + 0x00) & 0x80) ~= 0   -- heldMovementFinished set
+        if idle or pg_align_tx == nil then
+            pg_align_tx = memory.read_s16_le(OE + 0x10); pg_align_ty = memory.read_s16_le(OE + 0x12)
+            pg_coff_ax = coffx; pg_coff_ay = coffy
+        end
         if frame_count % 3 == 0 then
-            local OE = MB.player_oe()   -- the player's ACTUAL object-event (not always slot 0)
             local f = memory.read_u8(OE + 0x18) & 0x0F
             if f < 1 or f > 4 then f = 1 end
             local sid  = memory.read_u8(OE + 0x04)
             local anim = (sid < 64) and memory.read_u8(0x0202063C + sid * 0x44 + 0x2A) or 0
-            local moving = (memory.read_u8(OE + 0x00) & 0x80) == 0   -- heldMovementFinished clear
+            local moving = not idle
+            local wx = pg_align_tx * 16 + (pg_coff_ax - coffx)   -- sub-pixel world position
+            local wy = pg_align_ty * 16 + (pg_coff_ay - coffy)
+            -- Our avatar: live sprite images(+0x0C)/anims(+0x08) ROM ptrs + the true (untinted) 16
+            -- colours from the player's OBJ palette slot in the Unfaded shadow buffer.
+            local imgs, anim_ptr, pcol = 0, 0, nil
+            if sid < 64 then
+                local sa = 0x0202063C + sid * 0x44
+                imgs     = memory.read_u32_le(sa + 0x0C)
+                anim_ptr = memory.read_u32_le(sa + 0x08)
+                local pslot = (memory.read_u16_le(sa + 0x04) >> 12) & 0x0F
+                local base = 0x020373F8 + pslot * 0x20   -- gPlttBufferUnfaded OBJ slot
+                local t = {}
+                for i = 0, 15 do t[#t + 1] = string.format("%04X", memory.read_u16_le(base + i * 2)) end
+                pcol = table.concat(t)
+            end
             send({ event = "ghost_pos",
                    mg = memory.read_u8(OE + 0x0A), mn = memory.read_u8(OE + 0x09),  -- group, num
-                   x  = memory.read_s16_le(OE + 0x10), y = memory.read_s16_le(OE + 0x12),  -- TILE coords
+                   x  = wx, y = wy,                  -- WORLD PIXELS (sub-pixel)
                    f  = f, mv = (moving and 1 or 0),
-                   run = (anim >= 8 and 1 or 0),     -- GO_FAST+ (running/biking) -> ghost runs to keep up
-                   gfx = memory.read_u8(OE + 0x05) }, "ghost_pos", true, true)
+                   an = anim,                        -- live animNum (exact animation)
+                   run = (anim >= 8 and 1 or 0),
+                   gfx = memory.read_u8(OE + 0x05),
+                   imgs = imgs, anim = anim_ptr, pcol = pcol }, "ghost_pos", true, true)
             if not pg_send_logged then
                 pg_send_logged = true
-                console.log(string.format("[peer-ghost] broadcasting our position: map(%d,%d) tile(%d,%d)",
-                    memory.read_u8(OE + 0x0A), memory.read_u8(OE + 0x09),
-                    memory.read_s16_le(OE + 0x10), memory.read_s16_le(OE + 0x12)))
+                console.log(string.format("[peer-ghost] broadcasting our position: map(%d,%d) worldpx(%d,%d)",
+                    memory.read_u8(OE + 0x0A), memory.read_u8(OE + 0x09), wx, wy))
             end
         end
         if PG then
@@ -1624,7 +1659,11 @@ local function on_frame()
             -- engine in state 3 and softlock the game.  We also re-write
             -- gActionForBanks, gChosenMovesByBanks, and the gBattleStruct
             -- sub-fields so the engine sees a coherent committed-action state.
-            if still_active and not pp_dropped and M.BATTLE_COMM_ADDR
+            -- Native (FORCE_MOVE_SLOT-migrated) entries are ALREADY robustly
+            -- committed by the patch's controller swap → skip the reinforce
+            -- (re-writing comm mid-execution could disrupt the committed action);
+            -- they only need the HP-watch settle + fallback below.
+            if not st.native and still_active and not pp_dropped and M.BATTLE_COMM_ADDR
                and M.CHOSEN_ACTION_ADDR and M.CHOSEN_MOVE_ADDR then
                 local cur_state = memory.read_u8(M.BATTLE_COMM_ADDR + st.battler)
                 if cur_state < 3 then
@@ -1722,7 +1761,9 @@ local function on_frame()
         for key, st in pairs(pending_force_moves) do
             local status = MB.poll(st.seq)
             if status == MB.ST_OK then
-                pending_explosions[key] = {slot = st.slot, battler = st.battler, start_frame = frame_count}
+                -- native=true → the §4a-bis settle watches HP only and skips the
+                -- Variant-3 reinforce (the controller swap already committed the move).
+                pending_explosions[key] = {slot = st.slot, battler = st.battler, start_frame = frame_count, native = true}
                 pending_force_moves[key] = nil
                 console.log(string.format(
                     "[SLink-FRLGE]   ↳ FORCE_MOVE_SLOT committed (native) — Explosion executing slot=%d battler=%d key=%s",

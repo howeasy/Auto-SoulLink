@@ -9,7 +9,7 @@
  */
 #include <stdint.h>
 typedef uint8_t u8; typedef uint16_t u16; typedef uint32_t u32;
-typedef int16_t s16;
+typedef int16_t s16; typedef int32_t s32;
 
 #define MAILBOX_ADDR 0x0203F800u
 #define SLNK_SIG     0x4B4E4C53u   /* 'SLNK' */
@@ -53,25 +53,47 @@ typedef struct {
 } SlinkState;
 #define SS ((SlinkState *)0x0203F8D0u)
 
-/* Engine-driven peer ghost. Lua writes the target (tile + facing + gfx) into this shared block;
- * the frame hook (drive_ghost) walks a real object-event toward it via the engine's held-movement
- * API — the engine owns animation/sub-pixel/palette/tint/culling/collision. Placed in the free
- * EWRAM gap between the mailbox (ends 0x0203F840) and AM (0x0203F8C0). 14 bytes; tx/ty 2-aligned. */
+/* Engine-driven peer ghost. The peer is ANOTHER real player; we reproduce THEIR avatar + THEIR
+ * exact sub-pixel motion + animation. This is the proven Lua-"clone" model ported into the patch
+ * (the engine spawns a real object-event for the sprite slot / collision / palette slot; we then
+ * NEUTRALIZE its sprite callback and drive pos1 / animNum / palette ourselves each frame). The
+ * partner broadcasts a WORLD-PIXEL position (sub-pixel, derived from currentCoords*16 + coordOffset
+ * delta) at ~20 Hz; we LERP toward it so the ghost slides continuously and SPEED-AGNOSTICALLY (no
+ * tile-quantized "walk-stop-walk-stop"). Placed in the free EWRAM gap between the mailbox (ends
+ * 0x0203F840) and AM (0x0203F8C0); u32/s32 fields 4-aligned. */
+#define GHOST_LERP_NUM   128           /* 0.5 follow gain toward the sampled target (128/256) */
+#define GHOST_SNAP_PX    48            /* >this many px off -> snap (warp/desync), don't slide */
 typedef struct {
     volatile u8  active;     /* 0  1 = ghost should exist + be driven */
     volatile u8  oeId;       /* 1  object-event id the hook owns (0xFF = not spawned) */
-    volatile u8  gfxId;      /* 2  graphicsId Lua wants (changes => re-spawn: bike/surf/fish) */
+    volatile u8  gfxId;      /* 2  graphicsId to spawn (stand-in; avatar overridden after) */
     volatile u8  curGfx;     /* 3  graphicsId currently spawned */
     volatile u8  localId;    /* 4  sentinel localId (0xF0) */
-    volatile u8  catchup;    /* 5  hysteresis: 1 = running to catch up (set >=3 behind, clear <=1) */
-    volatile s16 tx;         /* 6  target tile x (object-event currentCoords space) */
-    volatile s16 ty;         /* 8  target tile y */
-    volatile u8  tface;      /* 10 target facing 1=S 2=N 3=W 4=E (idle facing on arrival) */
-    volatile u8  run;        /* 11 speed hint: 1 = partner dashing -> run to keep up */
+    volatile u8  flags;      /* 5  bit0 = have C baseline, bit1 = have disp (else snap on first use) */
+    volatile s16 wx;         /* 6  partner world-pixel x (sub-pixel target) */
+    volatile s16 wy;         /* 8  partner world-pixel y */
+    volatile u8  face;       /* 10 partner facing 1=S 2=N 3=W 4=E */
+    volatile u8  mv;         /* 11 partner moving (1=walk/run anim, 0=idle) */
     volatile u8  pmapGroup;  /* 12 player's last map group the hook recorded */
     volatile u8  pmapNum;    /* 13 player's last map num */
+    volatile u8  snap;       /* 14 Lua sets -> jump disp straight to the target (first/warp/desync) */
+    volatile u8  an;         /* 15 partner's live animNum (exact animation) */
+    volatile u8  _pad0;      /* 16 */
+    volatile u8  avatarDirty;/* 17 Lua sets when imgs/anims/palette changed; C applies + clears */
+    volatile u8  _pad1[2];   /* 18..19 align the u32 ptrs */
+    volatile u32 imgs;       /* 20 partner's live gSprites[sid].images ROM ptr (avatar override) */
+    volatile u32 anims;      /* 24 partner's live gSprites[sid].anims  ROM ptr */
+    volatile s32 dispx;      /* 28 interpolated x, fixed-point (px << 8) */
+    volatile s32 dispy;      /* 32 interpolated y, fixed-point (px << 8) */
+    volatile s16 cx;         /* 36 cached C baseline x (playerSprite.pos1 - playerTile*16) */
+    volatile s16 cy;         /* 38 cached C baseline y */
 } GhostState;
 #define GH ((GhostState *)0x0203F850u)
+#define GH_F_HAVE_C    0x01u
+#define GH_F_HAVE_DISP 0x02u
+/* Partner's live 16-colour OBJ palette (BGR555), decoded by Lua from the `pcol` wire field. Above
+ * SLINK_BLOB_BUF (ends 0x0203FC58), below EWRAM end 0x0203FFFF; 2-aligned for u16 colour writes. */
+#define GHOST_PAL_BUF 0x0203FC60u
 
 #define gSaveBlock2Ptr 0x0300500Cu
 #define gMain          0x030030F0u   /* newKeys @ +0x2E (A = 0x0001) */
@@ -144,6 +166,12 @@ typedef void (*SetupScript_t)(const u8 *ptr);
 #define gSprites      0x0202063Cu   /* stride 0x44 */
 #define SPR_STRIDE    0x44u
 #define gPlayerAvatar 0x02037078u   /* CFRU; objectEventId @ +0x05 (the player's gObjectEvents slot) */
+/* OBJ palette EWRAM shadow buffers (the engine DMAs Faded -> OBJ palette RAM 0x05000200 each frame).
+ * Slot 0 base; per-slot = base + slot*0x20. Cross-validated vs the clone's radical_red profile. */
+#define gPlttBufferUnfaded_OBJ 0x020373F8u
+#define gPlttBufferFaded_OBJ   0x020377F8u
+#define gSpriteCoordOffsetX    0x02021BC8u   /* s16; screen = sprite.pos1 + coordOffset */
+#define gSpriteCoordOffsetY    0x02021BCAu
 
 /* The player is NOT always object-event slot 0 — its slot is gPlayerAvatar.objectEventId. Reading
  * slot 0 blindly broke spawning when the player lived elsewhere (the spawn grabbed the free slot 0). */
@@ -272,15 +300,6 @@ static void check_peer_interact(void)
     }
 }
 
-/* Reassign the ghost's OBJ palette slot if the spawned gfx uses PALSLOT_PLAYER (slot 0), which would
- * collide with the real player and corrupt the ghost's colours. STUB for now — first build verifies
- * (via the ghostpalette test) whether the broadcast gfx actually collides before adding the reassign;
- * non-player trainer gfx already get their own ref-counted slot and are correct natively. */
-static void fixup_palette(u8 oe)
-{
-    (void)oe;
-}
-
 /* Remove our ghost cleanly (sprite + object-event) IF the slot is still ours, then disarm interact.
  * Never RemoveEventObject a slot a real NPC now owns (post-warp the slot is reused). */
 static void ghost_remove(void)
@@ -291,13 +310,57 @@ static void ghost_remove(void)
             RemoveEventObject((void *)g);
         GH->oeId = 0xFF;
     }
-    GH->catchup = 0;
+    GH->flags = 0;
     SS->pi_armed = 0;
 }
 
-/* Engine-driven peer ghost: spawn a real NPC once, then each frame queue a held movement toward the
- * Lua-provided target tile and let the engine animate/position/palette/cull/collide it. Owns the
- * map-change and gfx-change lifecycle the Lua side cannot time. */
+/* Inert sprite callback: we neutralize the ghost OE's movement callback so the engine never moves it
+ * (we own pos1). AnimateSprite still advances animation frames independently of the callback. */
+static void ghost_cb(void *s) { (void)s; }
+
+/* Make the ghost look like the PARTNER (another real player), not the local player. The OE is
+ * spawned with the local player's gfx purely as a guaranteed-16x32 stand-in; we then repoint the
+ * sprite at the partner's live images/anims ROM ptrs (identical across copies of the same RR build)
+ * and move the sprite to a DEDICATED OBJ palette slot (15) painted with the partner's true colours —
+ * so it never touches the player's slot 0 (no corruption) and never contends a live NPC slot. images/
+ * anims/paletteNum are set on change; the slot-15 colours are re-stamped each frame so the engine's
+ * tint/fade pass can't drop them (v1 shows the partner's true colours — day/night tint on the avatar
+ * is a documented follow-up). The partner's on-foot frame is 16x32, matching the stand-in's tiles. */
+#define GHOST_PAL_SLOT 15u
+static void apply_avatar(u32 g)
+{
+    if (!GH->imgs) return;                         /* no partner avatar received yet */
+    u8 sid = R8(g + 0x04);
+    if (sid >= 64) return;
+    u32 spr = gSprites + (u32)sid * SPR_STRIDE;
+    R32(spr + 0x0C) = GH->imgs;                    /* sprite.images — re-assert every frame */
+    if (GH->anims) R32(spr + 0x08) = GH->anims;    /* sprite.anims */
+    if (GH->avatarDirty) {
+        R8(spr + 0x3F) |= 0x04;                    /* animBeginning -> re-DMA frame0 from new imgs */
+        GH->avatarDirty = 0;
+    }
+    /* keep the sprite on our dedicated palette slot every frame (engine sets paletteNum only at
+     * SetGraphicsId, but re-assert defensively against reflection/ground-effect repaints). */
+    u16 attr2 = R16(spr + 0x04);
+    R16(spr + 0x04) = (u16)((attr2 & (u16)~0xF000u) | (GHOST_PAL_SLOT << 12));
+    u32 uf = gPlttBufferUnfaded_OBJ + GHOST_PAL_SLOT * 0x20;
+    u32 fd = gPlttBufferFaded_OBJ   + GHOST_PAL_SLOT * 0x20;
+    for (u32 i = 0; i < 16; i++) {
+        u16 c = R16(GHOST_PAL_BUF + i * 2);
+        R16(uf + i * 2) = c;
+        R16(fd + i * 2) = c;
+    }
+}
+
+/* idle/walk animNum from facing (pret ANIM_STD: idle face = f-1 (0..3 S/N/W/E); walk = f+3 (4..7)). */
+static u8 idle_anim(u8 f) { return (f >= 1 && f <= 4) ? (u8)(f - 1) : 0; }
+static u8 walk_anim(u8 f) { return (f >= 1 && f <= 4) ? (u8)(f + 3) : 4; }
+
+/* Engine-driven peer ghost (proven Lua-clone model, in C): spawn a real OE for the sprite slot /
+ * collision / palette, NEUTRALIZE its callback, then each frame drive pos1 (sub-pixel LERP toward
+ * the partner's broadcast world-pixel position) + animNum + the partner's avatar. The engine still
+ * adds gSpriteCoordOffset (so the ghost scrolls with the map) and runs AnimateSprite (so the walk
+ * cycle plays). Speed-agnostic + continuous => no tile-quantized stutter. Owns map/gfx lifecycle. */
 static void drive_ghost(void)
 {
     if (!GH->active) { if (GH->oeId != 0xFF) ghost_remove(); return; }
@@ -312,7 +375,7 @@ static void drive_ghost(void)
     /* (b) gfx change (partner mounted bike / surfed / fished) -> re-spawn with the new sprite. */
     if (GH->oeId != 0xFF && GH->gfxId != GH->curGfx) ghost_remove();
 
-    /* (c) spawn once, adjacent to the player. */
+    /* (c) spawn once, adjacent to the player; neutralize the callback so we own pos1. */
     if (GH->oeId == 0xFF) {
         if (R8(sScriptContext2Enabled)) return;  /* not mid-dialogue/warp fade */
         s16 px = (s16)R16(player + 0x10), py = (s16)R16(player + 0x12);
@@ -321,7 +384,15 @@ static void drive_ghost(void)
                                                       GH->localId, px, (s16)(py + 1), elev);
         if (oe >= 16) return;                    /* no free slot on this map; retry next frame */
         GH->oeId = (u8)oe; GH->curGfx = GH->gfxId;
-        fixup_palette((u8)oe);
+        u8 sid = R8(gObjectEvents + (u32)oe * OE_STRIDE + 0x04);
+        if (sid < 64) {
+            u32 spr = gSprites + (u32)sid * SPR_STRIDE;
+            R32(spr + 0x1C) = ((u32)&ghost_cb) | 1u;   /* neutralize the movement callback */
+            R8(spr + 0x3E) |= 0x02;                    /* coordOffset-enabled (scroll with the map) */
+        }
+        GH->flags = 0;                           /* recompute C + disp (snap) on first drive */
+        GH->snap = 1;
+        GH->avatarDirty = 1;                     /* re-stamp the avatar onto the fresh sprite slot */
         SS->pi_oe = (u8)oe; SS->pi_armed = 1;    /* auto-arm talk-to-ghost on the live slot */
         return;
     }
@@ -330,43 +401,86 @@ static void drive_ghost(void)
 
     /* (d) slot freed/reassigned under us -> forget, respawn next frame. */
     if (!(R8(g) & 1) || R8(g + 0x08) != GH->localId) { GH->oeId = 0xFF; return; }
+    u8 gsid = R8(g + 0x04);
+    if (gsid >= 64) { GH->oeId = 0xFF; return; }
+    u32 gspr = gSprites + (u32)gsid * SPR_STRIDE;
 
-    /* (e) only issue a new movement once the previous step finished (let the engine animate it). */
-    u8 st = EventObjectClearHeldMovementIfFinished((void *)g);
-    if (st != 0 && st != 16) return;
+    /* render the PARTNER's avatar (their sprite ptrs + true colours), not the local player's. */
+    apply_avatar(g);
 
-    s16 gx = (s16)R16(g + 0x10), gy = (s16)R16(g + 0x12);
-    int dx = GH->tx - gx, dy = GH->ty - gy;
-    int adx = dx < 0 ? -dx : dx, ady = dy < 0 ? -dy : dy;
-
-    /* (f) too far (teleport/desync) -> hard re-place rather than walking dozens of tiles. */
-    if (adx > GHOST_SNAP_TILES || ady > GHOST_SNAP_TILES) {
-        MoveEventObjectToMapCoords((void *)g, GH->tx, GH->ty);
-        EventObjectTurn((void *)g, GH->tface);
-        return;
+    /* (C baseline) screen = sprite.pos1 + coordOffset; a sprite at world-px W has pos1 = W + C where
+     * C = playerSprite.pos1 - playerTile*16. Cache C while the player is tile-aligned (idle) — the
+     * mid-step player carries a sub-tile offset that would skew it. */
+    u8 psid = R8(player + 0x04);
+    if (psid < 64 && (R8(player) & 0x80)) {       /* player heldMovementFinished => tile-aligned */
+        u32 pspr = gSprites + (u32)psid * SPR_STRIDE;
+        GH->cx = (s16)((s16)R16(pspr + 0x20) - (s16)(R16(player + 0x10) * 16));
+        GH->cy = (s16)((s16)R16(pspr + 0x22) - (s16)(R16(player + 0x12) * 16));
+        GH->flags |= GH_F_HAVE_C;
     }
-    /* (g) arrived -> idle facing the partner's facing. */
-    if (dx == 0 && dy == 0) {
-        GH->catchup = 0;
-        EventObjectSetHeldMovement((void *)g, GetFaceDirectionMovementAction(GH->tface));
-        return;
+    if (!(GH->flags & GH_F_HAVE_C)) return;       /* need a baseline before we can place the ghost */
+
+    /* (disp) LERP the interpolated world-px toward the partner's broadcast position (snap on first
+     * frame / warp / big desync) so motion is continuous + speed-agnostic. Fixed-point px<<8. */
+    s32 tx = (s32)GH->wx << 8, ty = (s32)GH->wy << 8;
+    if (GH->snap) {                               /* explicit snap: jump straight to the target */
+        GH->dispx = tx; GH->dispy = ty; GH->snap = 0; GH->flags |= GH_F_HAVE_DISP;
+    } else {
+        if (!(GH->flags & GH_F_HAVE_DISP)) {      /* first time: start from the ghost's current pos */
+            GH->dispx = (s32)((s16)R16(gspr + 0x20) - GH->cx) << 8;
+            GH->dispy = (s32)((s16)R16(gspr + 0x22) - GH->cy) << 8;
+            GH->flags |= GH_F_HAVE_DISP;
+        }
+        s32 ex = (tx - GH->dispx), ey = (ty - GH->dispy);
+        s32 ax = ex < 0 ? -ex : ex, ay = ey < 0 ? -ey : ey;
+        if (ax > (GHOST_SNAP_PX << 8) || ay > (GHOST_SNAP_PX << 8)) { GH->dispx = tx; GH->dispy = ty; }
+        else {
+            /* follow toward the sampled position; a constant-velocity FLOOR (>=1px while there's a
+             * meaningful gap) avoids the ease-out crawl between 20 Hz samples so the pace matches the
+             * player's constant walk speed rather than decelerating. */
+            s32 mx = (ex * GHOST_LERP_NUM) >> 8, my = (ey * GHOST_LERP_NUM) >> 8;
+            if (ex >  0x100 && mx <  0x100) mx =  0x100; else if (ex < -0x100 && mx > -0x100) mx = -0x100;
+            if (ey >  0x100 && my <  0x100) my =  0x100; else if (ey < -0x100 && my > -0x100) my = -0x100;
+            GH->dispx += mx; GH->dispy += my;
+        }
     }
-    /* (h) step toward the target on the larger-gap axis (4-dir; X on tie). Speed: MATCH the partner's
-     *     gait (run iff the partner is dashing) so the pace is even — a constant ~1-tile follow lag
-     *     looks natural. Only break gait to RUN-catch-up when we've genuinely fallen behind (>=3
-     *     tiles, e.g. a dropped packet), and keep running until back within 1 tile. The hysteresis
-     *     (GH->catchup) stops the walk/run flicker that the old ">1 tile -> run" rule caused. */
-    u32 gap = (u32)(adx + ady);
-    if (gap >= 3) GH->catchup = 1; else if (gap <= 1) GH->catchup = 0;
-    u32 dir = (adx >= ady) ? (dx > 0 ? DIR_EAST : DIR_WEST)
-                           : (dy > 0 ? DIR_SOUTH : DIR_NORTH);
-    u8 action = (GH->run || GH->catchup) ? GetWalkFastMovementAction(dir)
-                                         : GetWalkNormalMovementAction(dir);
-    /* We only get here once the previous step FINISHED (ClearHeldMovementIfFinished cleared it), so a
-     * plain SetHeldMovement starts the next step cleanly — no manual clear (that interrupted the slide
-     * and stalled travel) and no forced animBeginning (that marched on one lead foot). The engine's
-     * movement-action Step0 restarts + alternates the leg animation natively. */
-    EventObjectSetHeldMovement((void *)g, action);
+    s16 wpx = (s16)(GH->dispx >> 8), wpy = (s16)(GH->dispy >> 8);
+
+    /* place the sprite (map-relative pos1; the engine adds coordOffset) + keep coordOffset enabled. */
+    R16(gspr + 0x20) = (u16)(wpx + GH->cx);
+    R16(gspr + 0x22) = (u16)(wpy + GH->cy);
+    R8(gspr + 0x3E) |= 0x02;
+
+    /* animation: exact partner anim while moving (their live animNum), else idle facing. */
+    u8 want = GH->mv ? ((GH->an <= 23) ? GH->an : walk_anim(GH->face)) : idle_anim(GH->face);
+    if (R8(gspr + 0x2A) != want) {
+        R8(gspr + 0x2A) = want;          /* animNum */
+        R8(gspr + 0x3F) |= 0x04;         /* animBeginning */
+        R8(gspr + 0x2C) &= (u8)~0x40u;   /* animPaused = 0 (auto-advance frames) */
+    }
+
+    /* Collision + visibility. ON-SCREEN: the ghost is SOLID at exactly the tile it's drawn on
+     * (matching the player's elevation) so you bump it and can talk to it (menu/interaction) — and
+     * the collision is never "invisible" because it sits under the visible sprite. OFF-SCREEN: hide
+     * the sprite (its OAM coord would wrap + paint garbage) AND park the collision tile on the player
+     * with a MISMATCHED elevation so it is NOT culled (RemoveObjectEventIfOutsideView culls by
+     * currentCoords) yet creates NO phantom wall around the player. The instant it's back on-screen
+     * it becomes solid at its own tile again. */
+    s16 sx = (s16)(wpx + GH->cx + (s16)R16(gSpriteCoordOffsetX));
+    s16 sy = (s16)(wpy + GH->cy + (s16)R16(gSpriteCoordOffsetY));
+    int onscreen = (sx >= -16 && sx <= 256 && sy >= -16 && sy <= 176);
+    u8 pelev = (u8)(R8(player + 0x0B) & 0x0F);
+    if (onscreen) {
+        R8(gspr + 0x3E) &= (u8)~0x04u;                /* visible */
+        s16 gtx = (s16)((wpx + 8) >> 4), gty = (s16)((wpy + 8) >> 4);
+        R16(g + 0x10) = (u16)gtx; R16(g + 0x12) = (u16)gty;   /* collision/interact tile = drawn tile */
+        R8(g + 0x0B) = (u8)(pelev | (pelev << 4));    /* match player elevation -> SOLID */
+    } else {
+        u8 ge = (u8)(pelev == 0x0F ? 0x0E : 0x0F);    /* mismatched, nonzero -> pass-through */
+        R8(gspr + 0x3E) |= 0x04;                      /* invisible */
+        R16(g + 0x10) = R16(player + 0x10); R16(g + 0x12) = R16(player + 0x12);  /* park (avoid cull) */
+        R8(g + 0x0B) = (u8)(ge | (ge << 4));          /* no phantom wall while off-screen */
+    }
 }
 
 __attribute__((section(".text.entry"), used))
@@ -507,11 +621,13 @@ void slink_hook(void)
     }
 
     case OP_GHOST_SPAWN:          /* engine-driven ghost: args [0]=gfxId [1]=localId. The frame */
-        GH->gfxId  = MB->args[0]; /* hook (drive_ghost) spawns + drives it; Lua then writes the */
-        GH->localId = MB->args[1];/* target tile/facing/gfx into GhostState each tick. */
+        GH->gfxId  = MB->args[0]; /* hook (drive_ghost) spawns + drives it; Lua then posts the */
+        GH->localId = MB->args[1];/* partner's world-px position + avatar into GhostState. */
         GH->oeId   = 0xFF;
         GH->curGfx = 0xFF;        /* force a spawn next frame */
-        GH->catchup = 0;
+        GH->flags = 0;            /* recompute C + disp on first drive */
+        GH->snap = 0;             /* the spawn branch arms the first snap once the OE exists */
+        GH->avatarDirty = 0; GH->imgs = 0; GH->anims = 0;  /* no partner avatar until Lua posts one */
         GH->pmapGroup = R8(player_oe() + 0x0A);     /* seed map so frame 1 doesn't false-trigger */
         GH->pmapNum   = R8(player_oe() + 0x09);
         GH->active = 1;

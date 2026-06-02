@@ -26,7 +26,7 @@ if not MB.present() then log("FAIL: beacon absent"); finish(); return end
 
 local px, py = p_tx(), p_ty()
 MB.write_message("Hi from your partner!")
-MB.ghost_set_target(px + 1, py, 3, 0, p_gfx())   -- 1 tile EAST, facing west (toward player)
+MB.ghost_set_pos((px + 1) * 16, py * 16, 3, 0, 0)   -- 1 tile EAST (world px); collision tile pinned there
 MB.ghost_spawn(p_gfx())
 local oe = 16
 for _=1,150 do emu.frameadvance(); oe = MB.ghost_oe()

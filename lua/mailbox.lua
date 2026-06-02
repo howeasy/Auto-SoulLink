@@ -116,11 +116,17 @@ function MB.peer_interact_count() return memory.read_u8(MB.PI_COUNT) end
 -- the frame hook walks a real object-event toward it natively. Offsets match handlers.c.
 MB.GH        = 0x0203F850
 MB.GH_OEID   = MB.GH + 1   -- u8: hook-owned object-event id (0xFF = not spawned)
-MB.GH_GFX    = MB.GH + 2   -- u8: graphicsId Lua wants (change => re-spawn for bike/surf/fish)
-MB.GH_TX     = MB.GH + 6   -- s16: target tile x
-MB.GH_TY     = MB.GH + 8   -- s16: target tile y
-MB.GH_TFACE  = MB.GH + 10  -- u8: target facing 1=S 2=N 3=W 4=E
-MB.GH_RUN    = MB.GH + 11  -- u8: 1 = partner dashing -> ghost runs to keep up
+MB.GH_GFX    = MB.GH + 2   -- u8: stand-in graphicsId (avatar overridden after spawn)
+MB.GH_WX     = MB.GH + 6   -- s16: partner WORLD-PIXEL x (sub-pixel target; patch LERPs to it)
+MB.GH_WY     = MB.GH + 8   -- s16: partner WORLD-PIXEL y
+MB.GH_FACE   = MB.GH + 10  -- u8: partner facing 1=S 2=N 3=W 4=E (idle anim)
+MB.GH_MV     = MB.GH + 11  -- u8: 1 = partner moving (play walk/run anim), 0 = idle
+MB.GH_SNAP   = MB.GH + 14  -- u8: Lua sets 1 -> patch jumps the ghost straight to (wx,wy)
+MB.GH_AN     = MB.GH + 15  -- u8: partner's live animNum (exact animation)
+MB.GH_AVATARDIRTY = MB.GH + 17  -- u8: Lua sets when imgs/anims/palette changed; patch applies
+MB.GH_IMGS   = MB.GH + 20  -- u32: partner's live gSprites[sid].images ROM ptr
+MB.GH_ANIMS  = MB.GH + 24  -- u32: partner's live gSprites[sid].anims  ROM ptr
+MB.GHOST_PAL_BUF   = 0x0203FC60  -- u16[16] BGR555: partner's true OBJ palette (decoded from pcol)
 MB.LOCALID   = 0xF0
 -- The player is NOT always object-event slot 0; its slot is gPlayerAvatar.objectEventId.
 MB.GPLAYER_AVATAR = 0x02037078   -- CFRU; objectEventId @ +0x05
@@ -133,13 +139,35 @@ end
 function MB.ghost_spawn(gfx) return MB.send(MB.OP_GHOST_SPAWN, {gfx or 0, MB.LOCALID}) end
 function MB.ghost_clear() return MB.send(MB.OP_GHOST_CLEAR, {}) end
 function MB.ghost_oe() return memory.read_u8(MB.GH_OEID) end   -- 0xFF until spawned
--- Per-tick target update (plain EWRAM writes; no opcode/ack churn). face 1-4, run 0/1.
-function MB.ghost_set_target(tx, ty, face, run, gfx)
-    memory.write_s16_le(MB.GH_TX, tx)
-    memory.write_s16_le(MB.GH_TY, ty)
-    memory.write_u8(MB.GH_TFACE, (face and face >= 1 and face <= 4) and face or 1)
-    memory.write_u8(MB.GH_RUN, run and 1 or 0)
-    if gfx then memory.write_u8(MB.GH_GFX, gfx) end
+-- Per-tick update: post the partner's WORLD-PIXEL position + facing + moving + live animNum. The
+-- patch LERPs the ghost sprite toward (wx,wy) so motion is continuous + sub-pixel. Plain EWRAM
+-- writes; no opcode/ack churn. face 1-4, mv 0/1, an = partner's animNum.
+function MB.ghost_set_pos(wx, wy, face, mv, an)
+    memory.write_s16_le(MB.GH_WX, wx)
+    memory.write_s16_le(MB.GH_WY, wy)
+    memory.write_u8(MB.GH_FACE, (face and face >= 1 and face <= 4) and face or 1)
+    memory.write_u8(MB.GH_MV, mv and 1 or 0)
+    memory.write_u8(MB.GH_AN, an and (an & 0xFF) or 0)
+end
+
+-- Jump the ghost straight to the currently-posted (wx,wy) — first frame on a map / warp / big
+-- desync. Post the position with ghost_set_pos first, then call this.
+function MB.ghost_snap() memory.write_u8(MB.GH_SNAP, 1) end
+
+-- Set the partner's avatar: their live sprite images/anims ROM ptrs (valid on this copy of the same
+-- RR build) + their true 16-colour OBJ palette (pcol_hex = 64 hex chars = 16 BGR555 LE u16). The
+-- patch points the ghost sprite at these ptrs and stamps the colours into the ghost's own slot.
+function MB.ghost_set_avatar(imgs, anims, pcol_hex)
+    memory.write_u32_le(MB.GH_IMGS, imgs or 0)
+    memory.write_u32_le(MB.GH_ANIMS, anims or 0)
+    if pcol_hex and #pcol_hex >= 64 then
+        -- pcol = 16 colours, each the BGR555 u16 as 4 hex chars ("%04X"); parse straight back.
+        for i = 0, 15 do
+            local v = tonumber(pcol_hex:sub(i * 4 + 1, i * 4 + 4), 16) or 0
+            memory.write_u16_le(MB.GHOST_PAL_BUF + i * 2, v & 0xFFFF)
+        end
+    end
+    memory.write_u8(MB.GH_AVATARDIRTY, 1)
 end
 
 MB.ST_IDLE, MB.ST_BUSY, MB.ST_OK, MB.ST_FAIL = 0, 1, 2, 3

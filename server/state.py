@@ -318,6 +318,11 @@ class SoulLinkState:
             "x": int(msg.get("x", 0)),   "y": int(msg.get("y", 0)),   # TILE coords
             "f": int(msg.get("f", 1)),   "gfx": int(msg.get("gfx", 0)),
             "mv": int(msg.get("mv", 0)), "run": int(msg.get("run", 0)),
+            "an": int(msg.get("an", 0)),   # partner's live animNum (exact animation)
+            # partner avatar (so they render as THEMSELVES): live sprite images/anims ROM ptrs +
+            # true 16-colour palette (64 hex). Pass-through only; identical across the same RR build.
+            "imgs": int(msg.get("imgs", 0)), "anim": int(msg.get("anim", 0)),
+            "pcol": str(msg.get("pcol", "") or "")[:64],
         }
         q = self.queued_commands[partner]
         # coalesce: keep only the latest ghost_pos so the queue can't grow unbounded

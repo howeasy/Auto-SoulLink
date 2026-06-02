@@ -3,7 +3,38 @@
 Branch: `feat/rom-patch-companion` (worktree `condescending-bassi-9175e6`). Companion patch for
 Radical Red. The peer ghost shows your soul-link partner as a walking NPC in your RR overworld.
 
-## TL;DR for the next agent
+## ✅ RESOLVED (2026-06-01) — read this first; the rest is historical
+
+The two real defects are fixed (patched md5 `b73022dbda3f467ccce4a3ea155b1b4c` — re-apply the UPS):
+
+1. **Uneven/unnatural movement — FIXED by abandoning held movements for the clone's sub-pixel-LERP
+   model, ported into C.** The held-movement (tile-quantized) driver could not match a sampled feed
+   (it oscillated walk→catchup-run→empty→freeze; a `test_live_ghoststutter` repro showed a 10-frame
+   freeze at every tile boundary). The patch now spawns the OE only for its sprite slot / collision /
+   palette, **neutralizes its sprite callback**, and each frame **LERPs `pos1` toward the partner's
+   broadcast sub-pixel WORLD-PIXEL position** (continuous + speed-agnostic) + plays the partner's
+   live `animNum`. `test_live_ghoststutter` now slides ~1px/frame, longest frozen run = **1** (was 10).
+
+2. **Ghost showed YOU, not the partner — FIXED.** The partner is another real player; the ghost now
+   renders **their** avatar: the sender broadcasts their live sprite `images`/`anims` ROM ptrs +
+   their true 16-colour palette (`pcol`); the patch points the ghost sprite at those ptrs and paints
+   the colours into a **dedicated OBJ palette slot (15)**, so the player's own slot 0 is never
+   touched (no corruption). `test_live_ghostavatar` verifies the override + slot isolation.
+
+Wire (per ~20 Hz): `{mg,mn, x,y=WORLD-PIXELS, f, mv, an=animNum, run, gfx, imgs, anim, pcol}`. C
+driver = `drive_ghost()` (LERP) + `apply_avatar()` in `handlers.c`. GhostState is now LERP-shaped
+(wx/wy/face/mv/an/snap/dispx/dispy/cx/cy/imgs/anims; no step ring). Lua: `MB.ghost_set_pos/snap/
+set_avatar` (`mailbox.lua`); `peer_ghost_npc.lua` forwards world-px + avatar. Live tests green:
+`ghoststutter, ghostavatar, ghostreceiver, ghostwarp, peerinteract, msgboxdismiss`. The old
+tile-walk tests (`ghostdrive/ghostslide/ghostanim/ghostmove`) were retired (driver replaced).
+
+**Deferred:** bike/surf/fishing avatar variants (size-matched re-spawn + bigger VRAM tiles);
+day/night tint on the avatar palette (true colours show, un-tinted at night). **Final gate = the
+two-instance visual run** (two BizHawk, different avatars each side).
+
+---
+
+## (HISTORICAL) TL;DR for the next agent — pre-fix
 
 The architecture (engine-driven held-movement NPC) is sound and all the lifecycle bugs are fixed
 (spawns, palette-safe, survives warps, dismissable talk). **The one REMAINING, UNSOLVED problem is

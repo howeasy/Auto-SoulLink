@@ -26,10 +26,10 @@ emu.frameadvance(); pcall(memory.usememorydomain,"System Bus")
 PG.init()
 check("receiver reports patch present", PG.present()); if not PG.present() then finish(); return end
 
--- Partner on the SAME map (mg/mn = local player's map bytes), 2 tiles east, facing west.
+-- Partner on the SAME map (mg/mn = local player's map bytes), 2 tiles east. x,y are WORLD PIXELS.
 local grp, num, px, py = p_grp(), p_num(), p_tx(), p_ty()
 log(string.format("local map=(grp%d,num%d) tile=(%d,%d) gfx=%d", grp, num, px, py, p_gfx()))
-PG.on_ghost_pos({ mg = grp, mn = num, x = px + 2, y = py, f = 3, mv = 1, run = 0, gfx = p_gfx() })
+PG.on_ghost_pos({ mg = grp, mn = num, x = (px+2)*16, y = py*16, f = 3, mv = 1, an = 6, run = 0, gfx = p_gfx() })
 
 local oe
 for _=1,150 do PG.on_frame(); emu.frameadvance(); oe = PG.debug().oeId; if oe and oe < 16 then break end end
@@ -37,13 +37,13 @@ check("receiver spawned the ghost", oe and oe < 16, "oeId=" .. tostring(oe))
 if not (oe and oe < 16) then finish(); return end
 check("spawned slot is ours (localId 0xF0)", oe_localid(oe) == 0xF0)
 
--- keep posting the same target; the patch should walk the ghost to (px+2, py)
+-- keep posting the same target; the patch LERPs the ghost to (px+2, py) (collision tile pinned there)
 for _=1,150 do PG.on_frame(); emu.frameadvance()
-  PG.on_ghost_pos({ mg = grp, mn = num, x = px + 2, y = py, f = 3, mv = 0, run = 0, gfx = p_gfx() }) end
+  PG.on_ghost_pos({ mg = grp, mn = num, x = (px+2)*16, y = py*16, f = 3, mv = 0, an = 2, run = 0, gfx = p_gfx() }) end
 check("ghost reached the partner tile", math.abs(oe_cx(oe) - (px+2)) <= 1, "gx=" .. oe_cx(oe) .. " want " .. (px+2))
 
 -- partner leaves to a different map -> receiver clears it
-PG.on_ghost_pos({ mg = (grp+1) % 256, mn = num, x = px, y = py, f = 1, mv = 0, run = 0, gfx = p_gfx() })
+PG.on_ghost_pos({ mg = (grp+1) % 256, mn = num, x = px*16, y = py*16, f = 1, mv = 0, an = 0, run = 0, gfx = p_gfx() })
 for _=1,8 do PG.on_frame(); emu.frameadvance() end
 local gone = true
 for i=0,15 do if (memory.read_u8(OE+i*OST) & 1)==1 and oe_localid(i)==0xF0 then gone=false end end

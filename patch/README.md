@@ -19,7 +19,7 @@ build-specific). Re-pin and rebuild for a different build: `python patch/tools/b
 ## Apply the patch
 
 Apply `patch/dist/SLink-RR.ups` to your clean RR ROM with any UPS patcher
-(Flips, NUPS, RomPatcher.js, …). Result md5 should be `09c21212a856b820ae6618ba4b7d3161`.
+(Flips, NUPS, RomPatcher.js, …). Result md5 should be `0a3194f8c4a3bbaa5582374ca503ddfb`.
 (`SLink-RR.ips` is also provided.) Then load the patched ROM in BizHawk as usual.
 
 ## Verify the patch loaded
@@ -35,16 +35,19 @@ in EmuHawk → it reports `RESULT: PASS`.
   a bonus pair links, an area becomes a dead zone. The client routes these to the native box
   when patched + in the overworld, else to the HUD/center-prompt (so unpatched/in-battle is
   unchanged).
-- **Peer ghost** — your partner appears as a real engine object-event (NPC) walking your
-  overworld in real time. The client broadcasts its player TILE ~20 Hz (server relays it
-  ephemeral+coalesced); the partner's patch spawns a real NPC and WALKS it toward that tile via
-  the engine's native held-movement API (`GHOST_SPAWN`/`GHOST_CLEAR` + GhostState), so the engine
-  owns animation, sub-pixel motion, palette, day/night tint, culling, and collision. Talk to the
-  ghost (face it + A) for a dismissable message. RR + patch only; both players must be patched.
-  - **Known issue:** the ghost uses *your own* trainer sprite, not the partner's chosen RR
-    avatar. Rendering the partner's avatar collides on the shared player palette slot
-    (`PALSLOT_PLAYER`) and corrupts colours; until that's solved with a dedicated palette slot,
-    the ghost matches your sprite (palette-safe). It mirrors the partner's *position/movement*.
+- **Peer ghost** — your partner (another real player playing their own game) appears as a real
+  engine object-event (NPC) walking your overworld in real time, rendered as **their own trainer
+  avatar + colours**, moving and animating **exactly as they move**. The client broadcasts its
+  player's sub-pixel WORLD-PIXEL position + facing + live animNum + avatar (live sprite
+  images/anims ROM ptrs + true 16-colour palette) ~20 Hz (server relays it ephemeral+coalesced);
+  the partner's patch spawns a real NPC, neutralizes its callback, and drives `pos1` by LERPing
+  toward that position (continuous + speed-agnostic — no tile-quantized "walk-stop" stutter),
+  plays their animNum, and paints their avatar onto a dedicated OBJ palette slot (15) so the
+  player's own slot 0 is never touched. Talk to the ghost (face it + A) for a dismissable message.
+  RR + patch only; both players must be patched.
+  - **Deferred (on-foot works now):** bike/surf/fishing avatar variants (need size-matched
+    re-spawn + larger VRAM tile handling); day/night tint on the avatar palette (v1 shows the
+    partner's true colours, un-tinted at night). The two-instance visual run is the final gate.
 
 ## Validated but NOT yet wired into the server-driven client
 

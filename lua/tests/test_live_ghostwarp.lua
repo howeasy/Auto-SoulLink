@@ -24,7 +24,7 @@ local function check(n,c,e) if not c then fails=fails+1 end; log(string.format("
 local function finish() log(fails==0 and "RESULT: PASS" or ("RESULT: FAIL ("..fails..")"))
   local f=io.open(OUT,"w"); if f then f:write(table.concat(lines,"\n").."\n"); f:close() end; client.exit() end
 local function spawn()
-  MB.ghost_set_target(p_sx(), p_sy(), 1, 0, p_gfx()); MB.ghost_spawn(p_gfx())
+  MB.ghost_set_pos(p_sx() * 16, p_sy() * 16, 1, 0, 0); MB.ghost_spawn(p_gfx())
   for _=1,120 do emu.frameadvance(); if MB.ghost_oe() < 16 then return MB.ghost_oe() end end
   return 16
 end
