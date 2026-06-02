@@ -112,6 +112,7 @@ typedef struct {
 /* ---- engine globals (validated: SLink RR profile <-> BPRE.ld <-> binary) ---- */
 #define gBattleMons          0x02023BE4u
 #define BATTLE_MON_SIZE      0x58u
+#define gBattleOutcome       0x02023E8Au   /* RR: in-battle iff gBattleMons[0].maxHP>0 && outcome==0 */
 #define gChosenActionByBank  0x02023D7Cu
 #define gChosenMovesByBanks  0x02023DC4u
 #define gBattleCommunication 0x02023E82u
@@ -362,6 +363,15 @@ static u8 walk_anim(u8 f) { return (f >= 1 && f <= 4) ? (u8)(f + 3) : 4; }
  * cycle plays). Speed-agnostic + continuous => no tile-quantized stutter. Owns map/gfx lifecycle. */
 static void drive_ghost(void)
 {
+    /* SUSPEND during battle. The battle engine REUSES gSprites for battle sprites, so touching the
+     * ghost's sprite here would corrupt battle graphics / crash (the reported rival-battle crash).
+     * RR in-battle test = gBattleMons[0].maxHP>0 && gBattleOutcome==0. Forget our slot WITHOUT
+     * RemoveEventObject (gSprites is battle-owned now); the post-battle map reload clears the OE, and
+     * we respawn a fresh ghost once back in the overworld. */
+    if (R16(gBattleMons + 0x2C) > 0 && R8(gBattleOutcome) == 0) {
+        GH->oeId = 0xFF; GH->flags = 0;
+        return;
+    }
     if (!GH->active) { if (GH->oeId != 0xFF) ghost_remove(); return; }
 
     u32 player = player_oe();                     /* the player's ACTUAL slot (not always 0) */
@@ -392,6 +402,10 @@ static void drive_ghost(void)
             u32 spr = gSprites + (u32)sid * SPR_STRIDE;
             R32(spr + 0x1C) = ((u32)&ghost_cb) | 1u;   /* neutralize the movement callback */
             R8(spr + 0x3E) |= 0x02;                    /* coordOffset-enabled (scroll with the map) */
+            R8(spr + 0x3E) |= 0x04;                    /* INVISIBLE until a fresh camera baseline is
+                                                        * cached + first proper placement — avoids the
+                                                        * "glitch at bad coordinates during the screen
+                                                        * transition" before C/disp are valid. */
         }
         GH->flags = 0;                           /* recompute C + disp (snap) on first drive */
         GH->snap = 1;
