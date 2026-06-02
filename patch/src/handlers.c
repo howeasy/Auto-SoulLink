@@ -78,7 +78,7 @@ typedef struct {
     volatile u8  pmapNum;    /* 13 player's last map num */
     volatile u8  snap;       /* 14 Lua sets -> jump disp straight to the target (first/warp/desync) */
     volatile u8  an;         /* 15 partner's live animNum (exact animation) */
-    volatile u8  _pad0;      /* 16 */
+    volatile u8  run;        /* 16 partner running/biking (speed: 1 px/frame walk, 2 px/frame run) */
     volatile u8  avatarDirty;/* 17 Lua sets when imgs/anims/palette changed; C applies + clears */
     volatile u8  _pad1[2];   /* 18..19 align the u32 ptrs */
     volatile u32 imgs;       /* 20 partner's live gSprites[sid].images ROM ptr (avatar override) */
@@ -343,13 +343,12 @@ static void apply_avatar(u32 g)
      * SetGraphicsId, but re-assert defensively against reflection/ground-effect repaints). */
     u16 attr2 = R16(spr + 0x04);
     R16(spr + 0x04) = (u16)((attr2 & (u16)~0xF000u) | (GHOST_PAL_SLOT << 12));
+    /* Write only the UNFADED (true) colours here. The day/night-tinted FADED slot is owned by the Lua
+     * receiver end-of-frame — if the patch also wrote FADED every frame-top it would overwrite the
+     * tint before the engine's Faded->RAM DMA, so the ghost would never tint (the bug). */
     u32 uf = gPlttBufferUnfaded_OBJ + GHOST_PAL_SLOT * 0x20;
-    u32 fd = gPlttBufferFaded_OBJ   + GHOST_PAL_SLOT * 0x20;
-    for (u32 i = 0; i < 16; i++) {
-        u16 c = R16(GHOST_PAL_BUF + i * 2);
-        R16(uf + i * 2) = c;
-        R16(fd + i * 2) = c;
-    }
+    for (u32 i = 0; i < 16; i++)
+        R16(uf + i * 2) = R16(GHOST_PAL_BUF + i * 2);
 }
 
 /* idle/walk animNum from facing (pret ANIM_STD: idle face = f-1 (0..3 S/N/W/E); walk = f+3 (4..7)). */
@@ -420,31 +419,28 @@ static void drive_ghost(void)
     }
     if (!(GH->flags & GH_F_HAVE_C)) return;       /* need a baseline before we can place the ghost */
 
-    /* (disp) LERP the interpolated world-px toward the partner's broadcast position (snap on first
-     * frame / warp / big desync) so motion is continuous + speed-agnostic. Fixed-point px<<8. */
-    s32 tx = (s32)GH->wx << 8, ty = (s32)GH->wy << 8;
+    /* (disp) follow the partner's broadcast world-px at a CONSTANT velocity that matches the engine's
+     * own NPC speeds — exactly 1 px/frame walking, 2 px/frame running — so the ghost moves with the
+     * same uniform cadence as an NPC/the player (no ease-out, no sub-pixel rounding jitter). A small
+     * constant follow-lag (<= one sample interval) is invisible; large desync snaps. disp = integer px. */
+    s16 tx = GH->wx, ty = GH->wy;
     if (GH->snap) {                               /* explicit snap: jump straight to the target */
         GH->dispx = tx; GH->dispy = ty; GH->snap = 0; GH->flags |= GH_F_HAVE_DISP;
+    } else if (!(GH->flags & GH_F_HAVE_DISP)) {   /* first time: start from the ghost's current pos */
+        GH->dispx = (s16)R16(gspr + 0x20) - GH->cx;
+        GH->dispy = (s16)R16(gspr + 0x22) - GH->cy;
+        GH->flags |= GH_F_HAVE_DISP;
     } else {
-        if (!(GH->flags & GH_F_HAVE_DISP)) {      /* first time: start from the ghost's current pos */
-            GH->dispx = (s32)((s16)R16(gspr + 0x20) - GH->cx) << 8;
-            GH->dispy = (s32)((s16)R16(gspr + 0x22) - GH->cy) << 8;
-            GH->flags |= GH_F_HAVE_DISP;
-        }
-        s32 ex = (tx - GH->dispx), ey = (ty - GH->dispy);
-        s32 ax = ex < 0 ? -ex : ex, ay = ey < 0 ? -ey : ey;
-        if (ax > (GHOST_SNAP_PX << 8) || ay > (GHOST_SNAP_PX << 8)) { GH->dispx = tx; GH->dispy = ty; }
+        int dx = tx - GH->dispx, dy = ty - GH->dispy;
+        int adx = dx < 0 ? -dx : dx, ady = dy < 0 ? -dy : dy;
+        if (adx > GHOST_SNAP_PX || ady > GHOST_SNAP_PX) { GH->dispx = tx; GH->dispy = ty; }
         else {
-            /* follow toward the sampled position; a constant-velocity FLOOR (>=1px while there's a
-             * meaningful gap) avoids the ease-out crawl between 20 Hz samples so the pace matches the
-             * player's constant walk speed rather than decelerating. */
-            s32 mx = (ex * GHOST_LERP_NUM) >> 8, my = (ey * GHOST_LERP_NUM) >> 8;
-            if (ex >  0x100 && mx <  0x100) mx =  0x100; else if (ex < -0x100 && mx > -0x100) mx = -0x100;
-            if (ey >  0x100 && my <  0x100) my =  0x100; else if (ey < -0x100 && my > -0x100) my = -0x100;
-            GH->dispx += mx; GH->dispy += my;
+            int spd = GH->run ? 2 : 1;            /* uniform px/frame == engine WALK_NORMAL / FAST_1 */
+            if (adx <= spd) GH->dispx = tx; else GH->dispx += (dx > 0 ? spd : -spd);
+            if (ady <= spd) GH->dispy = ty; else GH->dispy += (dy > 0 ? spd : -spd);
         }
     }
-    s16 wpx = (s16)(GH->dispx >> 8), wpy = (s16)(GH->dispy >> 8);
+    s16 wpx = (s16)GH->dispx, wpy = (s16)GH->dispy;
 
     /* place the sprite (map-relative pos1; the engine adds coordOffset) + keep coordOffset enabled. */
     R16(gspr + 0x20) = (u16)(wpx + GH->cx);

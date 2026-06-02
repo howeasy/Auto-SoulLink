@@ -133,17 +133,19 @@ function PG.on_frame()
         local attr2 = memory.read_u16_le(sa + 0x04)
         memory.write_u16_le(sa + 0x04, (attr2 & 0x0FFF) | (15 << 12))   -- OBJ palette slot 15
         if S.pcols then
-          -- TINT: paint the partner's TRUE colours into the Unfaded slot, and the DAY/NIGHT-tinted
-          -- colours into the Faded slot (the engine DMAs Faded -> palette RAM). The tint ratio is the
-          -- player's own slot Faded/Unfaded, so the ghost darkens/colours with the world like everyone.
+          -- TINT: RR applies day/night tint to OBJ palette RAM DIRECTLY (not the Faded shadow buffer),
+          -- and does NOT tint our hijacked slot 15 — so derive the tint from the player's own slot as
+          -- (live palette RAM) / (Unfaded true colours), and apply that ratio to the partner's true
+          -- colours. Write the tinted result to Faded slot 15 (the engine DMAs Faded->RAM) AND straight
+          -- to RAM slot 15, so the ghost darkens/colours with the world like every other sprite.
           local psid2 = memory.read_u8(poe + 0x04)
           local ps = (psid2 < 64) and ((memory.read_u16_le(0x0202063C + psid2*0x44 + 0x04) >> 12) & 0x0F) or 0
           local rn,gn,bn,rd,gd,bd = 0,0,0,0,0,0
           for i = 0, 15 do
-            local uf = memory.read_u16_le(0x020373F8 + ps*0x20 + i*2)
-            local fd = memory.read_u16_le(0x020377F8 + ps*0x20 + i*2)
+            local uf = memory.read_u16_le(0x020373F8 + ps*0x20 + i*2)   -- unfaded = true colours
+            local rm = memory.read_u16_le(0x05000200 + ps*0x20 + i*2)   -- live palette RAM = tinted
             rd=rd+(uf&0x1F); gd=gd+((uf>>5)&0x1F); bd=bd+((uf>>10)&0x1F)
-            rn=rn+(fd&0x1F); gn=gn+((fd>>5)&0x1F); bn=bn+((fd>>10)&0x1F)
+            rn=rn+(rm&0x1F); gn=gn+((rm>>5)&0x1F); bn=bn+((rm>>10)&0x1F)
           end
           for i = 0, 15 do
             local c = S.pcols[i] or 0
@@ -151,8 +153,10 @@ function PG.on_frame()
             local tr = (rd>0) and math.min(31, math.floor(r*rn/rd + 0.5)) or r
             local tg = (gd>0) and math.min(31, math.floor(g*gn/gd + 0.5)) or g
             local tb = (bd>0) and math.min(31, math.floor(b*bn/bd + 0.5)) or b
-            memory.write_u16_le(0x020373F8 + 15*0x20 + i*2, c)                       -- unfaded = true
-            memory.write_u16_le(0x020377F8 + 15*0x20 + i*2, tr | (tg<<5) | (tb<<10)) -- faded = tinted
+            local tc = tr | (tg<<5) | (tb<<10)
+            memory.write_u16_le(0x020373F8 + 15*0x20 + i*2, c)    -- unfaded slot 15 = true
+            memory.write_u16_le(0x020377F8 + 15*0x20 + i*2, tc)   -- faded slot 15 = tinted (DMA'd to RAM)
+            memory.write_u16_le(0x05000200 + 15*0x20 + i*2, tc)   -- live RAM slot 15 = tinted (now)
           end
         end
         -- LAYERING: replicate the engine's per-frame OE subpriority (sElevationToSubpriority[elev] +
@@ -175,7 +179,7 @@ function PG.on_frame()
   -- animNum; the patch LERPs the ghost there sub-pixel (continuous, speed-agnostic) and plays their
   -- animation. Snap on the first frame on this map or a large jump (warp/lag); else slide smoothly.
   local wx, wy = g.x or 0, g.y or 0
-  MB.ghost_set_pos(wx, wy, g.f, g.mv == 1, g.an)
+  MB.ghost_set_pos(wx, wy, g.f, g.mv == 1, g.an, g.run == 1)
   if S.last_w == nil then
     MB.ghost_snap()                              -- first frame on this map: place, don't slide in
     S.last_w = { x = wx, y = wy }

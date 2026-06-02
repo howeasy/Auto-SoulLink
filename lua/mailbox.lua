@@ -123,6 +123,7 @@ MB.GH_FACE   = MB.GH + 10  -- u8: partner facing 1=S 2=N 3=W 4=E (idle anim)
 MB.GH_MV     = MB.GH + 11  -- u8: 1 = partner moving (play walk/run anim), 0 = idle
 MB.GH_SNAP   = MB.GH + 14  -- u8: Lua sets 1 -> patch jumps the ghost straight to (wx,wy)
 MB.GH_AN     = MB.GH + 15  -- u8: partner's live animNum (exact animation)
+MB.GH_RUN    = MB.GH + 16  -- u8: partner running/biking (1 px/frame walk, 2 px/frame run)
 MB.GH_AVATARDIRTY = MB.GH + 17  -- u8: Lua sets when imgs/anims/palette changed; patch applies
 MB.GH_IMGS   = MB.GH + 20  -- u32: partner's live gSprites[sid].images ROM ptr
 MB.GH_ANIMS  = MB.GH + 24  -- u32: partner's live gSprites[sid].anims  ROM ptr
@@ -142,12 +143,13 @@ function MB.ghost_oe() return memory.read_u8(MB.GH_OEID) end   -- 0xFF until spa
 -- Per-tick update: post the partner's WORLD-PIXEL position + facing + moving + live animNum. The
 -- patch LERPs the ghost sprite toward (wx,wy) so motion is continuous + sub-pixel. Plain EWRAM
 -- writes; no opcode/ack churn. face 1-4, mv 0/1, an = partner's animNum.
-function MB.ghost_set_pos(wx, wy, face, mv, an)
+function MB.ghost_set_pos(wx, wy, face, mv, an, run)
     memory.write_s16_le(MB.GH_WX, wx)
     memory.write_s16_le(MB.GH_WY, wy)
     memory.write_u8(MB.GH_FACE, (face and face >= 1 and face <= 4) and face or 1)
     memory.write_u8(MB.GH_MV, mv and 1 or 0)
     memory.write_u8(MB.GH_AN, an and (an & 0xFF) or 0)
+    memory.write_u8(MB.GH_RUN, run and 1 or 0)
 end
 
 -- Jump the ghost straight to the currently-posted (wx,wy) — first frame on a map / warp / big
