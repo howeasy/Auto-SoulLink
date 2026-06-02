@@ -286,9 +286,13 @@ static void check_peer_interact(void)
     if (!SS->pi_armed) return;
     if (R8(sScriptContext2Enabled)) return;              /* a dialogue/script is already up */
     if (!(R16(gMain + 0x2E) & KEY_A)) return;            /* A newly pressed this frame? */
+    u32 p = player_oe();                                  /* the player's actual object-event */
+    if (!(R8(p) & 0x80)) return;                          /* player IDLE (heldMovementFinished) only —
+                                                           * so running/bumping into the ghost can't
+                                                           * trigger the dialogue + lock input; talk is a
+                                                           * deliberate stationary A-press (waving). */
     u32 g = gObjectEvents + (u32)SS->pi_oe * OE_STRIDE;
     if (!(R8(g) & 1)) return;                             /* ghost active? */
-    u32 p = player_oe();                                  /* the player's actual object-event */
     int px = (s16)R16(p + 0x10), py = (s16)R16(p + 0x12);
     u8  f  = R8(p + 0x18) & 0x0F;
     if      (f == 1) py++;       /* down */
@@ -365,13 +369,12 @@ static void drive_ghost(void)
 {
     /* SUSPEND during battle. The battle engine REUSES gSprites for battle sprites, so touching the
      * ghost's sprite here would corrupt battle graphics / crash (the reported rival-battle crash).
-     * RR in-battle test = gBattleMons[0].maxHP>0 && gBattleOutcome==0. Forget our slot WITHOUT
-     * RemoveEventObject (gSprites is battle-owned now); the post-battle map reload clears the OE, and
-     * we respawn a fresh ghost once back in the overworld. */
-    if (R16(gBattleMons + 0x2C) > 0 && R8(gBattleOutcome) == 0) {
-        GH->oeId = 0xFF; GH->flags = 0;
-        return;
-    }
+     * RR in-battle test = gBattleMons[0].maxHP>0 && gBattleOutcome==0. Touch NOTHING — just return.
+     * A trainer battle does NOT reload the map, so afterward the engine RESTORES our object-event
+     * (reloaded from its graphicsId = the default stand-in); the slot-reassign guard (d) then sees it
+     * is still ours and RESUMES driving + re-applies the partner avatar (so sync continues without an
+     * area transition). A whiteout DOES reload the map -> the slot is reassigned -> (d) respawns. */
+    if (R16(gBattleMons + 0x2C) > 0 && R8(gBattleOutcome) == 0) return;
     if (!GH->active) { if (GH->oeId != 0xFF) ghost_remove(); return; }
 
     u32 player = player_oe();                     /* the player's ACTUAL slot (not always 0) */
