@@ -1622,7 +1622,7 @@ end
 -- The engine caches species, ability, types, stats, moves, IVs, hp, level,
 -- maxHP, item, status, personality, and OTID per-battler when a mon is sent
 -- out — these are read DIRECTLY from gBattleMons during the turn, NOT
--- re-fetched from gEnemyParty.  After writeEnemyParty changes the underlying
+-- re-fetched from gEnemyParty.  After OP_SET_ENEMY_PARTY changes the underlying
 -- party slot, the active foe's battle-mon cache is stale; this function
 -- mirrors what SendOutPokemon does, copying the fields that drive ability
 -- text, type effectiveness, damage calc, and HP bar.
@@ -1723,77 +1723,11 @@ function M.refreshActiveEnemyBattlers()
     end
 end
 
--- Overwrites gEnemyParty with the provided list of 100-byte mon blobs.
--- Accepts either a list of u8-arrays or a list of hex strings (auto-decoded).
--- For RR/CFRU the party-mon layout is byte-for-byte identical to enemy-mon
--- layout (CFRU_NO_ENCRYPT true), so a raw memcpy is sufficient — no substruct
--- math, no PID rotation, no stat recompute, no AI re-init.  Unused slots beyond
--- #blobs have maxHP zeroed (CFRU sometimes doesn't update gEnemyPartyCount, so
--- the engine scans until maxHP==0 per the comment at readEnemyParty above).
--- ENEMY_COUNT_ADDR is also updated for engines that do read it.
--- Returns species_id list (read back after write) on success, or nil, errMsg.
--- Caller is expected to have already verified isInBattle() — writing outside
--- of a battle is harmless (the next battle init clobbers gEnemyParty) but is
--- never the intended use.
-function M.writeEnemyParty(blobs)
-    if not M.ENEMY_BASE or M.ENEMY_BASE == 0 then
-        return nil, "no ENEMY_BASE for current profile"
-    end
-    if type(blobs) ~= "table" or #blobs == 0 then
-        return nil, "empty blobs list"
-    end
-    if #blobs > 6 then return nil, "max 6 mons" end
-    -- Normalize: accept hex strings or u8 arrays.
-    local norm = {}
-    for i, blob in ipairs(blobs) do
-        if type(blob) == "string" then
-            local arr, err = M.hexToBytes(blob)
-            if not arr then return nil, fmt("blob %d: %s", i, err) end
-            blob = arr
-        end
-        if type(blob) ~= "table" or #blob ~= M.MON_SIZE then
-            return nil, fmt("blob %d: expected %d bytes, got %s",
-                i, M.MON_SIZE, type(blob) == "table" and tostring(#blob) or type(blob))
-        end
-        norm[i] = blob
-    end
-    -- Write each blob to gEnemyParty[i-1].
-    for i, blob in ipairs(norm) do
-        local base = M.ENEMY_BASE + (i - 1) * M.MON_SIZE
-        for j = 1, M.MON_SIZE do
-            mem_w8(base + j - 1, blob[j])
-        end
-    end
-    -- Zero maxHP on remaining slots so CFRU's scan-until-maxHP==0 terminates.
-    for slot = #norm, 5 do
-        local base = M.ENEMY_BASE + slot * M.MON_SIZE
-        mem_w8(base + M.OFF_MAX_HP,     0)
-        mem_w8(base + M.OFF_MAX_HP + 1, 0)
-    end
-    -- Update gEnemyPartyCount for engines that do read it.
-    if M.ENEMY_COUNT_ADDR and M.ENEMY_COUNT_ADDR ~= 0 then
-        mem_w8(M.ENEMY_COUNT_ADDR, #norm)
-    end
-    -- The engine caches species, ability, types, stats, moves, IVs, hp, level,
-    -- maxHP, item, status, PID, OTID in gBattleMons per-battler.  Without this
-    -- refresh, the active foe keeps the original rival's ability/moves/stats
-    -- even though gEnemyParty now holds the partner's mon — the sprite swaps
-    -- but combat reads the stale cache.  Mirrors what SendOutPokemon does.
-    pcall(M.refreshActiveEnemyBattlers)
-    -- Readback: collect species IDs so the caller can ack/verify.
-    local species = {}
-    for i = 1, #norm do
-        local base = M.ENEMY_BASE + (i - 1) * M.MON_SIZE
-        local ok, sid = pcall(M.decryptSpecies, base)
-        species[i] = (ok and sid) or 0
-    end
-    return species
-end
-
--- Post-step for the companion-patch path: when OP_SET_ENEMY_PARTY has natively byte-copied the
--- blobs into gEnemyParty (the patch does the write + count; see handlers.c), the active foe's
--- gBattleMons cache is still stale — refresh it exactly as writeEnemyParty's tail does, then read
--- back the species list for the ack. `count` = number of mons the patch wrote.
+-- Post-step for the companion-patch Rival Team Swap (OP_SET_ENEMY_PARTY is the ONLY path — the raw
+-- writeEnemyParty RAM-poke was removed once rival swap was confirmed functional + the patch made a
+-- hard requirement).  After the patch has natively byte-copied the partner blobs into gEnemyParty
+-- (write + count; see handlers.c), the active foe's gBattleMons cache is still stale — mirror what
+-- SendOutPokemon does to refresh it, then read back the species list for the ack. `count` = mons written.
 function M.refreshEnemyPartyNative(count)
     pcall(M.refreshActiveEnemyBattlers)
     local species = {}

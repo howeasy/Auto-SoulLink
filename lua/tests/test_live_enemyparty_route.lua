@@ -9,7 +9,7 @@
 -- test stages DETERMINISTIC synthetic 100-byte blobs (distinct per slot) and asserts each enemy slot
 -- comes back BYTE-FOR-BYTE identical — something CreateMon fundamentally cannot do (it derives the
 -- bytes from species+level).  The count is set and the first unused slot's maxHP is zeroed (the
--- CFRU scan terminator), matching M.writeEnemyParty's contract.
+-- CFRU scan terminator).
 --
 -- Savestate-free by design: the opcode is a pure memcpy into the gEnemyParty EWRAM region, so it is
 -- validated from a fresh boot (no battle context needed, and no fragile savestate/ROM-build coupling).
