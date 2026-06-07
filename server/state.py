@@ -184,6 +184,14 @@ class SoulLinkState:
         # whenever the trainer ID is in the adapter's rival set AND the
         # partner has cached blobs.  Per-run rule, never flipped at runtime.
         self.rival_team_swap: bool = rival_team_swap
+        # Talk-to-partner: each player's latest in-game progress (badge count), reported via the
+        # `status` event; surfaced to the partner in the talk-to-partner box (the nuzlocke helper).
+        self.player_badges: dict[str, int] = {"a": 0, "b": 0}
+        # One in-flight linked-pair trade. {token, initiator, a_slot, b_slot, a_blob_hex, b_blob_hex,
+        # a_key, b_key, a_label, b_label, link, confirms:{"a":None,"b":None}}. Both players confirm via
+        # a native YES/NO menu before the faithful blob swap is applied.  None = no trade pending.
+        self.pending_trade: Optional[dict] = None
+        self._trade_token: int = 0
 
     # ── public API ───────────────────────────────────────────────────────────
 
@@ -195,6 +203,8 @@ class SoulLinkState:
         """
         event = msg.get("event", "unknown")
 
+        self._tick_pending_trade()    # free the single trade slot if a side abandoned it (link untouched)
+
         if event == "hello":
             self._handle_hello(player_id, msg)
         elif event == "area_enter":
@@ -203,6 +213,16 @@ class SoulLinkState:
             self._handle_ghost_pos(player_id, msg)
         elif event == "peer_interact":
             self._handle_peer_interact(player_id, msg)
+        elif event == "trade_request":
+            self._handle_trade_request(player_id, msg)
+        elif event == "mon_chosen":
+            self._handle_mon_chosen(player_id, msg)
+        elif event == "menu_result":
+            self._handle_menu_result(player_id, msg)
+        elif event == "trade_done":
+            self._handle_trade_done(player_id, msg)
+        elif event == "status":
+            self._handle_status(player_id, msg)
         elif event == "capture":
             self._handle_capture(player_id, msg)
         elif event == "faint":
@@ -325,24 +345,257 @@ class SoulLinkState:
             "pcol": str(msg.get("pcol", "") or "")[:64],
         }
         q = self.queued_commands[partner]
-        # coalesce: keep only the latest ghost_pos so the queue can't grow unbounded
+        # coalesce: at most one ghost_pos is ever queued (latest wins), so this ~20 Hz relay can't grow
+        # the queue. Fast path replaces it in place when it's already last; otherwise drop any stale
+        # ghost_pos and append the fresh one.
         if q and q[-1].get("cmd") == "ghost_pos":
             q[-1] = cmd
         else:
-            self.queued_commands[partner] = [c for c in q if c.get("cmd") != "ghost_pos"]
-            self.queued_commands[partner].append(cmd)
+            self.queued_commands[partner] = [c for c in q if c.get("cmd") != "ghost_pos"] + [cmd]
 
     def _handle_peer_interact(self, player_id: str, msg: dict):
         """A player talked to their partner's ghost (pressed A toward the engine-NPC). The
         patch already showed a native box on the initiator's side; notify the PARTNER so they
         know they were 'waved at'. Testing stub for the richer trade/ready-check flows."""
+        self._notify_waved(player_id)
+
+    def _notify_waved(self, player_id: str):
+        """Friendly 'partner waved' notification to the OTHER player. Used as the no-trade fallback
+        for talk-to-partner and by the legacy peer_interact event."""
         partner = _partner(player_id)
         self.queued_commands[partner].append({
-            "cmd": "msgbox",
-            "text": "Your partner waved at you!",
-            "fb": "prompt",
+            "cmd": "msgbox", "text": "Your partner waved!", "fb": "prompt",
         })
-        log.info(f"[{player_id}] peer_interact → notifying {partner}")
+        log.info(f"[{player_id}] waved → notifying {partner}")
+
+    def _mon_label(self, mon: "MonInfo") -> str:
+        """Display label for a linked mon: nickname, else species name, else a key prefix."""
+        return mon.nickname or self.adapter.species_name(mon.species) or mon.key[:8]
+
+    def _handle_status(self, player_id: str, msg: dict):
+        """Cache a player's in-game progress (badge count) for the talk-to-partner status helper."""
+        try:
+            b = int(msg.get("badges", 0))
+        except (TypeError, ValueError):
+            b = 0
+        self.player_badges[player_id] = max(0, min(8, b))
+
+    def _eligible_trade_pairs(self, player_id: str):
+        """(slot, key, entry, partner_blob) for each of the player's party mons that is one half of a
+        LIVE link whose partner half is in the partner's party (blobs cached for both) — i.e. the only
+        mons that may be traded. Sorted by party slot. This is the linked-pair invariant's source set."""
+        partner = _partner(player_id)
+        par_blobs = self.partner_blobs.get(partner, [])
+        out = []
+        for be in sorted(self.partner_blobs.get(player_id, []), key=lambda e: e.get("slot", 99)):
+            k = be.get("key", "")
+            entry = self._key_index.get(k)
+            if not entry or entry.status != LinkStatus.ALIVE:
+                continue
+            my_mon  = entry.a if player_id == "a" else entry.b
+            par_mon = entry.b if player_id == "a" else entry.a
+            if not my_mon or not par_mon or my_mon.key != k:
+                continue
+            par_be = next((e for e in par_blobs if e.get("key") == par_mon.key), None)
+            if par_be is None:
+                continue
+            out.append((int(be.get("slot", 0)), k, entry, par_be))
+        return out
+
+    # A trade holds the single `pending_trade` slot. If a side abandons it (walks away from a menu /
+    # the scene, or disconnects) the slot would wedge every future trade. `age` counts events seen
+    # while the trade makes NO progress (each trade handler resets it to 0); past this many, abandon.
+    # Because the link is only mutated ATOMICALLY in _handle_trade_done (once BOTH sides report), an
+    # abort here can never leave the link half-swapped — it just frees the slot.
+    TRADE_WATCHDOG_EVENTS = 4000
+
+    def _tick_pending_trade(self):
+        pt = self.pending_trade
+        if pt is None:
+            return
+        pt["age"] = pt.get("age", 0) + 1
+        if pt["age"] > self.TRADE_WATCHDOG_EVENTS:
+            log.info(f"trade watchdog: abandoning stuck trade (phase {pt.get('phase')}, token {pt.get('token')})")
+            self.pending_trade = None
+
+    def _handle_trade_request(self, player_id: str, msg: dict):
+        """Talk-to-partner → show the native action menu (TRADE / WAVE). TRADE opens the party picker;
+        WAVE just notifies the partner. (2-option yes/no menu for now: YES = Trade, NO = Wave.)"""
+        if self.pending_trade is not None:
+            return                                # a trade is already in flight — ignore silently (no spam)
+        self._trade_token += 1
+        token = f"t{self._trade_token}"
+        self.pending_trade = {"phase": "menu", "initiator": player_id, "token": token, "reprompts": 0, "age": 0}
+        # Native multichoice list — the proper menu with labelled options.
+        self.queued_commands[player_id].append({
+            "cmd": "show_choices", "token": token, "options": ["Trade", "Wave"]})
+        log.info(f"[{player_id}] trade_request → action menu (Trade/Wave) token={token}")
+
+    def _handle_mon_chosen(self, player_id: str, msg: dict):
+        """The initiator picked a party slot. Enforce the linked-pair invariant: the slot MUST be one
+        half of a live link with the partner's half present. Eligible → confirm menu to BOTH; ineligible
+        → re-prompt "Pick a linked POKeMON!"; cancel (slot 7) → abort."""
+        pt = self.pending_trade
+        if not pt or pt.get("phase") != "choosing" or str(msg.get("token", "")) != pt["token"]:
+            return
+        if player_id != pt["initiator"]:
+            return
+        pt["age"] = 0                                  # progress — reset the abandonment watchdog
+        try:
+            slot = int(msg.get("slot", 7))
+        except (TypeError, ValueError):
+            slot = 7
+        if slot < 0 or slot > 5:                       # SLOT_CANCEL (7) / B-press
+            self.pending_trade = None
+            self.queued_commands[player_id].append({
+                "cmd": "msgbox", "text": "Trade canceled.", "fb": "prompt"})
+            return
+        match = next((p for p in self._eligible_trade_pairs(player_id) if p[0] == slot), None)
+        if match is None:                              # not a linked mon -> re-prompt (capped)
+            pt["reprompts"] = pt.get("reprompts", 0) + 1
+            if pt["reprompts"] > 3:
+                self.pending_trade = None
+                self.queued_commands[player_id].append({
+                    "cmd": "msgbox", "text": "Trade canceled.", "fb": "prompt"})
+                return
+            self.queued_commands[player_id].append({
+                "cmd": "msgbox", "text": "Pick a linked POKeMON!", "fb": "prompt"})
+            self.queued_commands[player_id].append({"cmd": "choose_mon", "token": pt["token"]})
+            return
+        _slot, my_key, entry, par_be = match
+        partner = _partner(player_id)
+        my_be = next(e for e in self.partner_blobs[player_id] if e.get("key") == my_key)
+        a_be = my_be if player_id == "a" else par_be
+        b_be = par_be if player_id == "a" else my_be
+        pt.update({
+            "phase": "confirming", "link": entry,
+            "a_slot": int(a_be["slot"]), "b_slot": int(b_be["slot"]),
+            "a_blob_hex": a_be["blob"].hex(), "b_blob_hex": b_be["blob"].hex(),
+            "a_key": entry.a.key, "b_key": entry.b.key,
+            "a_label": self._mon_label(entry.a), "b_label": self._mon_label(entry.b),
+        })
+        # The initiator already committed (chose Trade + picked the mon); only the PARTNER confirms.
+        partner = _partner(player_id)
+        p_gives = pt["a_label"] if partner == "a" else pt["b_label"]   # the partner's own half
+        p_gets  = pt["b_label"] if partner == "a" else pt["a_label"]   # the initiator's half
+        # Non-blocking HUD for the initiator (a field msgbox would set sScriptContext2Enabled and block
+        # the native trade scene from starting); the partner gets the confirm menu.
+        self.queued_commands[player_id].append({
+            "cmd": "hud_show", "text": "Trade offer sent - waiting for partner...",
+            "r": 255, "g": 220, "b": 60, "frames": 600})
+        self.queued_commands[partner].append({
+            "cmd": "show_menu", "token": pt["token"],
+            "text": f"Trade your {p_gives} for {p_gets}?"})
+        log.info(f"[{player_id}] chose slot {slot} → partner-confirm {entry.a.key[:8]}<->{entry.b.key[:8]}")
+
+    def _handle_menu_result(self, player_id: str, msg: dict):
+        """Native-menu choices for the trade flow, phase-aware:
+        - "menu":       the initiator's TRADE(YES)/WAVE(NO) action menu.
+        - "confirming": the PARTNER's accept(YES)/decline(NO) of the offer."""
+        pt = self.pending_trade
+        if not pt or str(msg.get("token", "")) != pt["token"]:
+            return
+        pt["age"] = 0                                  # progress — reset the abandonment watchdog
+        try:
+            choice = int(msg.get("choice", 0))
+        except (TypeError, ValueError):
+            choice = 0
+        phase = pt.get("phase")
+        if phase == "menu":                                # initiator's action menu (multichoice index)
+            if player_id != pt["initiator"]:
+                return
+            if choice == 0:                                # TRADE → open the party picker (if eligible)
+                if not self._eligible_trade_pairs(player_id):
+                    self.pending_trade = None
+                    self.queued_commands[player_id].append({
+                        "cmd": "msgbox", "text": "No linked pair in your party to trade.", "fb": "prompt"})
+                    return
+                pt["phase"] = "choosing"
+                self.queued_commands[player_id].append({"cmd": "choose_mon", "token": pt["token"]})
+            elif choice == 1:                              # WAVE → notify the partner
+                self.pending_trade = None
+                self._notify_waved(player_id)
+            else:                                          # B-press / cancel (0x7F) → abort silently
+                self.pending_trade = None
+            return
+        if phase == "confirming":                          # partner accepted / declined the offer
+            if player_id != _partner(pt["initiator"]):
+                return
+            if choice == 1:
+                self._execute_trade(pt)
+            else:
+                self.pending_trade = None
+                self.queued_commands[pt["initiator"]].append({
+                    "cmd": "msgbox", "text": "Your partner declined the trade.", "fb": "prompt"})
+                self.queued_commands[player_id].append({
+                    "cmd": "msgbox", "text": "Trade declined.", "fb": "prompt"})
+
+    def _execute_trade(self, pt: dict):
+        """Both confirmed → tell each client to run the NATIVE trade (stage gEnemyParty[0] + the trade
+        scene) for its half. We do NOT mutate the link here. The swap is applied ATOMICALLY in
+        _handle_trade_done once BOTH sides report their post-trade mon, so a half-completed trade
+        (one side's scene fails / the player waits forever / disconnects) can NEVER leave the link
+        half-swapped with mismatched keys (the old 'pairs break if you wait too long' bug). The
+        watchdog (_tick_pending_trade) frees the slot if a side never reports — and because nothing
+        was mutated, the link is untouched on abort."""
+        self.queued_commands["a"].append({
+            "cmd": "apply_trade", "slot": pt["a_slot"], "blob_hex": pt["b_blob_hex"]})
+        self.queued_commands["b"].append({
+            "cmd": "apply_trade", "slot": pt["b_slot"], "blob_hex": pt["a_blob_hex"]})
+        pt["phase"] = "applying"
+        pt["done"] = {"a": False, "b": False}
+        pt["new"]  = {"a": None, "b": None}   # (new_key, new_species) reported by each client post-scene
+        pt["age"]  = 0
+        log.info(f"trade applying: A slot {pt['a_slot']} <-> B slot {pt['b_slot']} (link {pt['link'].area_id})")
+
+    def _handle_trade_done(self, player_id: str, msg: dict):
+        """Each client reports its post-trade mon (new_key/new_species — captures any trade-evolution).
+        We BUFFER each side's result and apply the whole swap ATOMICALLY only once BOTH have reported,
+        so the link is never observable in a half-swapped state. Then play the jingle + 'Traded!' box."""
+        pt = self.pending_trade
+        if not pt or pt.get("phase") != "applying":
+            return
+        pt["age"] = 0                                   # progress — reset the abandonment watchdog
+        new_key = str(msg.get("new_key", "") or "")
+        try:
+            new_species = int(msg.get("new_species", 0) or 0)
+        except (TypeError, ValueError):
+            new_species = 0
+        pt.setdefault("new", {"a": None, "b": None})[player_id] = (new_key, new_species)
+        pt.setdefault("done", {"a": False, "b": False})[player_id] = True
+        if not all(pt["done"].values()):
+            return                                      # wait for the other side before touching the link
+
+        # ── BOTH sides reported → apply the swap atomically ──────────────────────
+        # The mon DATA moves to the other player (entry.a now tracks the mon A holds, entry.b the mon B
+        # holds); then each half's key/species is patched from that side's post-scene readback (captures
+        # trade-evolution). _key_index + party_keys are rebuilt from the two OLD keys to the two NEW keys.
+        entry = pt["link"]
+        entry.a, entry.b = entry.b, entry.a             # A now owns B's old mon and vice-versa
+        for old in (pt["a_key"], pt["b_key"]):
+            self._key_index.pop(old, None)
+        for pid, half in (("a", entry.a), ("b", entry.b)):
+            nk, ns = (pt["new"].get(pid) or ("", 0))
+            if half and nk:
+                half.key = nk
+                if ns:
+                    half.species = ns
+        # party_keys: A drops its traded-away key + gains the mon it now holds (entry.a's key); same for B.
+        self.party_keys["a"].discard(pt["a_key"]); self.party_keys["a"].add(entry.a.key)
+        self.party_keys["b"].discard(pt["b_key"]); self.party_keys["b"].add(entry.b.key)
+        self._key_index[entry.a.key] = entry
+        self._key_index[entry.b.key] = entry
+
+        for pid in ("a", "b"):
+            gives = pt["a_label"] if pid == "a" else pt["b_label"]
+            gets  = pt["b_label"] if pid == "a" else pt["a_label"]
+            self.queued_commands[pid].append({"cmd": "play_sound", "sound": 25})   # SE_SUCCESS
+            self.queued_commands[pid].append({
+                "cmd": "msgbox", "text": f"Traded {gives} for {gets}!",
+                "r": 100, "g": 255, "b": 160, "frames": 300})
+        self._save()
+        log.info(f"trade complete (token {pt['token']})")
+        self.pending_trade = None
 
     @classmethod
     def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False) -> "SoulLinkState":

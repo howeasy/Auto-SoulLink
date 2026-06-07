@@ -1,6 +1,8 @@
 -- test_live_peerinteract.lua — talk-to-ghost with the engine-driven ghost. The patch spawns the
 -- ghost (OP_GHOST_SPAWN) and AUTO-ARMS interaction on it; we walk it to the tile in front of the
--- player, press A facing it, and assert pi_count bumps + a dismissable native box shows the message.
+-- player, press A facing it, and assert pi_count bumps. The patch NO LONGER opens its own box on
+-- interact (the SERVER now drives the talk-to-partner menu via OP_SHOW_MENU; a local box would set
+-- sScriptContext2Enabled and make that menu bounce) — so we also assert no box auto-opened.
 -- Load with the PATCHED ROM + overworld savestate.
 local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
 local OUT = WT .. "/patch/build/peerinteract_result.txt"
@@ -42,10 +44,9 @@ joypad.set({}); for _=1,20 do emu.frameadvance() end
 
 check("peer-interact counter incremented", MB.peer_interact_count() > c0,
       string.format("%d -> %d", c0, MB.peer_interact_count()))
-local enc = MB.fr_encode("Hi from your partner!")
-local match = true
-for i=1,#enc do if memory.read_u8(gStringVar4 + (i-1)) ~= enc[i] then match=false; break end end
-check("native interaction message shown (dismissable dialogue)", match)
+-- The patch must NOT open its own box (server drives the menu): sScriptContext2Enabled stays 0.
+check("no local box auto-opened (server drives the menu)", memory.read_u8(0x03000F9C) == 0,
+      "sScriptContext2Enabled=" .. memory.read_u8(0x03000F9C))
 check("game still running (no softlock)", MB.present())
 
 MB.ghost_clear()

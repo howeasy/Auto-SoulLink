@@ -2662,6 +2662,11 @@ class SLinkServer:
             # Talk-to-ghost: handled in state.handle_event (_handle_peer_interact),
             # which notifies the partner. Low-frequency; no enrichment needed here.
             pass
+        elif event in ("trade_request", "mon_chosen", "menu_result", "trade_done", "status"):
+            # Talk-to-partner trade flow (request → pick → confirm → trade scene → done) + periodic
+            # badge status: handled in state.handle_event. User-paced (or ~0.2 Hz for status); no
+            # server-side enrichment or per-event logging needed.
+            pass
         else:
             log.debug(f"[{player_id}] unknown event '{event}' seq={msg.get('seq','?')}")
 

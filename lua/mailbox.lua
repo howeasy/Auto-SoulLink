@@ -53,6 +53,18 @@ function MB.set_enemy_party(byte_rows)
     return MB.send(MB.OP_SET_ENEMY_PARTY, {n})
 end
 
+-- Trade (talk-to-partner actions). Faithful single-mon write into gPlayerParty[slot] — the same raw
+-- 100-byte-blob basis as set_enemy_party but for the PLAYER party, so the partner's traded half is
+-- reproduced exactly (species/moves/IVs/EVs/PID/item). `blob_row` = a decoded 100-byte array
+-- (M.hexToBytes). `bump` ensures the party count covers the slot (a trade replaces an existing slot,
+-- so normally false). Returns the seq to poll, or nil if the blob is malformed.
+MB.OP_SET_PARTY_MON = 18
+function MB.set_party_mon(slot, blob_row, bump)
+    if not blob_row or #blob_row < 100 then return nil end
+    for j = 1, 100 do memory.write_u8(MB.BLOB_BUF + (j - 1), blob_row[j]) end
+    return MB.send(MB.OP_SET_PARTY_MON, {slot, bump and 1 or 0})
+end
+
 MB.OP_FORCE_MOVE_SLOT = 5   -- args: {battler, target, move_pos} — controller-swap driver
 function MB.force_move_slot_args(battler, target, move_pos)
     return {battler, target, move_pos}
@@ -66,7 +78,9 @@ end
 
 MB.OP_DESPAWN_PEER_NPC = 7  -- args: {objectEventId}
 MB.OP_SHOW_MESSAGE  = 8     -- text pre-written to the text buffer (see MB.write_message)
-MB.OP_PLAY_FANFARE  = 9     -- args: {song_lo, song_hi}
+MB.OP_PLAY_FANFARE  = 9     -- args: {song_lo, song_hi} (jingle: link-formed / trade-complete)
+MB.OP_SHOW_MENU     = 17    -- native YES/NO menu over the text buffer; ASYNC (poll, then menu_result)
+MB.OP_PLAY_SE       = 19    -- native sound effect via PlaySE: args {song_lo, song_hi}
 
 MB.TEXT_BUF = 0x0203F900    -- patch reads FR-encoded text from here for SHOW_MESSAGE
 
@@ -97,6 +111,55 @@ function MB.write_message(text)
 end
 
 function MB.fanfare_args(song) return {song % 256, math.floor(song / 256) % 256} end
+
+-- Native sound effect (PlaySE). Same packing as a fanfare; the patch plays it on the SE track.
+function MB.play_se(song) return MB.send(MB.OP_PLAY_SE, MB.fanfare_args(song)) end
+
+-- Native YES/NO menu over `prompt` (the menuing foundation for talk-to-partner actions). ASYNC: the
+-- field script runs over many frames, so poll the returned seq with MB.poll; on ST_OK read the choice
+-- with MB.menu_result() (1 = YES, 0 = NO / B-press). Returns the seq, or nil if the patch is absent.
+function MB.show_menu(prompt)
+    if not MB.present() then return nil end
+    MB.write_message(prompt or "")
+    return MB.send(MB.OP_SHOW_MENU, {})
+end
+function MB.menu_result() return MB.read_result_u8(0) end
+
+-- Native multichoice list (a PROPER menu with custom option labels, e.g. {"Trade","Wave"}). Stages
+-- [count][FR str 0xFF-term]... into MENU_BUF, then opens the menu. ASYNC like show_menu: poll the seq;
+-- on ST_OK read the chosen index with MB.menu_result() (0..n-1, or 127 = B-press/cancel). nil if absent.
+MB.OP_SHOW_CHOICES = 22
+MB.MENU_BUF = 0x0203FC90
+function MB.show_choices(options)
+    if not MB.present() then return nil end
+    local n = #options
+    if n == 0 or n > 8 then return nil end
+    memory.write_u8(MB.MENU_BUF, n)
+    local off = MB.MENU_BUF + 1
+    for i = 1, n do
+        local bytes = MB.fr_encode(options[i])   -- FR-encoded, already 0xFF-terminated
+        for j = 1, #bytes do memory.write_u8(off, bytes[j]); off = off + 1 end
+    end
+    return MB.send(MB.OP_SHOW_CHOICES, {})
+end
+
+-- Native "Choose a POKeMON" party menu (pick WHICH linked mon to trade). ASYNC like show_menu: poll
+-- the seq; on ST_OK read the chosen slot with MB.choose_result() (0-5, or 7 = cancel/B). nil if absent.
+MB.OP_CHOOSE_PARTY_MON = 20
+function MB.choose_party_mon()
+    if not MB.present() then return nil end
+    return MB.send(MB.OP_CHOOSE_PARTY_MON, {})
+end
+function MB.choose_result() return MB.read_result_u8(0) end
+
+-- Native in-game TRADE scene (animation + trade-evolution): trades gPlayerParty[slot] with the mon
+-- staged in gEnemyParty[0]. Caller must stage that mon first (MB.set_enemy_party({blob})). ASYNC:
+-- poll the seq; ST_OK once the scene returns to the overworld. nil if the patch is absent.
+MB.OP_TRADE_SCENE = 21
+function MB.trade_scene(slot)
+    if not MB.present() then return nil end
+    return MB.send(MB.OP_TRADE_SCENE, {slot})
+end
 
 MB.OP_APPLY_DAMAGE = 10     -- linked HP / chip: args {battler, amt_lo, amt_hi}; result[0..1]=new hp
 MB.OP_CURE_STATUS  = 11     -- link-cured status: args {battler}

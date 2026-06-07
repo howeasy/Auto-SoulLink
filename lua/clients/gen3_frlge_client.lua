@@ -103,6 +103,16 @@ local HUD   = require("hud")
 local ok_mb, MB = pcall(require, "mailbox")
 if not ok_mb then MB = nil end
 local function patch_present() return MB ~= nil and MB.present() end
+
+-- A native field box is a BLOCKING dialogue (lockall + A-to-dismiss), so it must only open in a genuinely
+-- SAFE state: patched, in the overworld, AND no field script/box already running. isInOverworld() is still
+-- true mid-dialogue / mid-cutscene, where OP_SHOW_MESSAGE is REFUSED (it guards on sScriptContext2Enabled)
+-- and — without this check — the notification was silently DROPPED. When this returns false the caller
+-- falls back to a Lua overlay (center-prompt / HUD) instead of losing the message. 0x03000F9C =
+-- sScriptContext2Enabled (same address the trade state machine uses for "field clear").
+local function safe_native_box()
+    return patch_present() and M.isInOverworld() and memory.read_u8(0x03000F9C) == 0
+end
 local patch_logged = false   -- latch: log patch presence/absence once (beacon appears ~frame 13)
 local pg_send_logged = false -- one-shot: confirm we're broadcasting our overworld position
 -- world-pixel calibration (sub-pixel position via the coordOffset delta, captured while idle)
@@ -237,6 +247,16 @@ local function parse_command_list(raw)
                 blobs_hex[#blobs_hex + 1] = s
             end
         end
+        -- talk-to-partner menu / trade fields
+        local token    = obj:match('"token"%s*:%s*"([^"]*)"')        -- show_menu/show_choices round-trip id
+        local slot     = tonumber(obj:match('"slot"%s*:%s*(%-?%d+)')) -- apply_trade party slot
+        local blob_hex = obj:match('"blob_hex"%s*:%s*"([0-9A-Fa-f]*)"') -- apply_trade single 100-byte mon
+        local options  = nil                                          -- show_choices option labels
+        local opt_raw  = obj:match('"options"%s*:%s*(%b[])')
+        if opt_raw then
+            options = {}
+            for s in opt_raw:gmatch('"([^"]*)"') do options[#options + 1] = s end
+        end
         if cmd then
             cmds[#cmds+1] = {
                 cmd=cmd, key=key, message=msg, stats=stats,
@@ -245,6 +265,7 @@ local function parse_command_list(raw)
                 gimgs=gimgs, ganim=ganim, gpcol=gpcol,
                 sound=sound, area_id=area_id, areas=areas,
                 trainer_id=trainer_id, blobs_hex=blobs_hex,
+                token=token, slot=slot, blob_hex=blob_hex, options=options,
             }
         end
     end
@@ -346,6 +367,35 @@ local ENEMY_PARTY_TIMEOUT = 120        -- frames before assuming the opcode was 
 local pending_enemy_party = nil        -- {seq, trainer_id, blobs_hex, start_frame} (one in flight)
 -- apply_rival_team_fallback is defined below the `local send` forward-declaration (it calls send()).
 
+-- Talk-to-partner native UI (show_menu / choose_mon commands). One at a time; polled in on_frame, then
+-- the result is reported back keyed by the server's token: kind="menu" -> menu_result{choice}, "choose"
+-- -> mon_chosen{slot}.
+local pending_ui = nil                 -- {seq, token, kind, start_frame}
+local MENU_TIMEOUT = 1860              -- frames before giving up on a menu (patch's own ~1800 + slack)
+-- A native notification box we sent + are CONFIRMING opened (OP_SHOW_MESSAGE returns result[0]=1 shown /
+-- 0 refused). If refused (a field script/box slipped in after our safe-area check, the 1-frame race), the
+-- on_frame poll falls back to the Lua overlay so the notification is never dropped. {seq, fb, text, r,g,b,
+-- frames, start_frame}; fb = "prompt" (center) or "hud" (status line) for the fallback presentation.
+local pending_msgbox = nil
+local MSGBOX_CONFIRM_TIMEOUT = 12      -- frames; patch acks in ~1, so a lost ack -> assume shown (no double)
+-- Native trade-scene apply (apply_trade command): a 2-step async state machine — stage the partner mon
+-- into gEnemyParty[0], then run the native trade scene; on failure fall back to the silent party write.
+local pending_trade_apply = nil        -- {slot, blob, old_key, phase="pending"|"stage"|"scene", seq, start_frame}
+local TRADE_STAGE_TIMEOUT = 120        -- frames to stage gEnemyParty[0]
+-- Backstop only — the patch's drive_ui (kind 3) is the source of truth for scene completion and acks
+-- ST_OK/ST_FAIL when the scene returns to the field. This client-side cap is LONGER than the patch's
+-- own ~5400-frame scene timeout so the patch normally wins the race; if the patch ack is ever lost we
+-- reconcile from the slot (NEVER a silent swap on top of a possibly-running scene — that double-write
+-- was the "pairs break if you wait too long" corruption).
+local TRADE_SCENE_BACKSTOP = 6000      -- > patch scene timeout (5400); ~100 s
+-- A trade replaces a party slot with the partner's mon = a KEY CHANGE. Hand it to the same key-
+-- migration path the Nature-Changer uses (suppress the spurious capture/box diff for old+new), so
+-- the per-frame party-sync handlers don't fire phantom events. {old=<traded-away key>, new=<received>}.
+local pending_trade_migration = nil
+-- Periodic self-status (badge count) so the server can show the partner's progress in-game.
+local last_status_badges = -1          -- last badge count we sent (only resend on change)
+local status_cooldown = 0              -- frames until the next status send is allowed
+
 -- Companion-patch opcodes are a SINGLE-SLOT request channel (the frame hook consumes one
 -- opcode/frame) and OP_FORCE_MOVE_SLOT arms a single ArmedMove struct — so two native
 -- explodes in one Lua frame (e.g. a doubles whiteout) would clobber each other.  Queue
@@ -382,6 +432,24 @@ local confirmed_real_player_faints = 0   -- count we've already credited via cou
 -- defined further down; without this the calls hit a nil global and crash the handler.
 local send
 
+-- After a trade (native scene OR silent fallback) finishes, read our post-trade party slot — which now
+-- holds the partner's mon, possibly trade-EVOLVED — and (1) report its key + species so the server can
+-- reconcile the link half, and (2) register the old->new KEY CHANGE so the local party-sync handlers
+-- treat it as a migration (no phantom capture/box). Declared here (after `local send`) because it
+-- calls send(). `old_key` is the key that occupied the slot BEFORE the trade (captured at trade start).
+local function emit_trade_done(slot, old_key)
+    local base = (M.PARTY_BASE or 0x02024284) + slot * (M.MON_SIZE or 0x64)
+    local ok_k, key     = pcall(M.monKey, base)
+    local ok_s, species = pcall(M.decryptSpecies, base)
+    local new_key = (ok_k and key) or ""
+    if old_key and old_key ~= "" and new_key ~= "" and old_key ~= new_key then
+        pending_trade_migration = { old = old_key, new = new_key }
+    end
+    send({ event = "trade_done", slot = slot,
+           new_key = new_key, new_species = (ok_s and species) or 0 },
+         "trade_done", true, false)
+end
+
 -- Arm a native auto-Explode on an active battler: write Explosion into its battle-mon move
 -- slot 0 (PP>0 required) and trigger OP_FORCE_MOVE_SLOT. The patch's controller swap reads
 -- moves[move_pos] at fire time, so the just-written move is what executes. Records the
@@ -416,9 +484,14 @@ local function apply_rival_team_fallback(blobs_hex, trainer_id)
 end
 -- ── Command dispatcher ────────────────────────────────────────────────────────
 local function dispatch_commands(cmds)
+    -- At most ONE native field box per dispatch pass — only one box can be on screen, so a second
+    -- msgbox/gui_prompt in the same batch would be refused + lost. The rest fall back to a Lua overlay.
+    local native_box_used = false
     for _, c in ipairs(cmds) do
         if c.cmd == "play_sound" and c.sound then
-            M.playSE(c.sound)
+            -- Native SE via the companion patch (PlaySE) when present — retires the fragile Lua m4a
+            -- SE1 RAM-poke (M.playSE / profile SE_SONG_HEADERS). Fallback keeps unpatched ROMs working.
+            if patch_present() then MB.play_se(c.sound) else M.playSE(c.sound) end
         elseif (c.cmd == "force_faint" or c.cmd == "force_explode") and c.key then
             -- Populate nick_cache from server-provided nickname (for mons not in our party yet).
             if c.nickname and c.nickname ~= "" then
@@ -624,16 +697,80 @@ local function dispatch_commands(cmds)
                 console.log("[SLink-FRLGE]   ↳ memorialize deduped: "..c.key:sub(1,8))
             end
         elseif c.cmd == "msgbox" and c.text then
-            -- Momentous event: native field message box when the patch is present and we're
-            -- in the overworld (it's a field box); otherwise fall back to the HUD overlay.
-            if patch_present() and M.isInOverworld() then
+            -- Native field box ONLY in a safe area (patched, overworld, no field script/box up, none used
+            -- this pass, none still awaiting confirm). We then CONFIRM it actually opened (on_frame poll) and
+            -- fall back to a Lua overlay (center-prompt for fb="prompt", else the HUD line) if the patch
+            -- refused it — so the notification is NEVER dropped.
+            local fb_style = (c.fb == "prompt") and "prompt" or "hud"
+            if safe_native_box() and not native_box_used and pending_msgbox == nil then
                 MB.write_message(c.text)
-                MB.send(MB.OP_SHOW_MESSAGE, {})
+                local s = MB.send(MB.OP_SHOW_MESSAGE, {})
+                native_box_used = true
+                pending_msgbox = { seq = s, fb = fb_style, text = c.text, r = c.r or 255, g = c.g or 255,
+                                   b = c.b or 255, frames = c.frames or 300, start_frame = frame_count }
                 console.log("[SLink-FRLGE]   ↳ msgbox (native): " .. c.text)
-            elseif c.fb == "prompt" then
+            elseif fb_style == "prompt" then
                 prompt_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
             else
                 hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+            end
+        elseif c.cmd == "show_menu" and c.text and c.token then
+            -- Talk-to-partner action menu (native YES/NO). Async: register + poll in on_frame, then
+            -- emit menu_result{token,choice}. Unpatched or out-of-overworld can't show a native menu,
+            -- so auto-decline (choice 0) immediately — the server treats that as "no".
+            if patch_present() and M.isInOverworld() and not pending_ui then
+                local seq = MB.show_menu(c.text)
+                if seq then
+                    pending_ui = { seq = seq, token = c.token, kind = "menu", start_frame = frame_count }
+                else
+                    send({ event = "menu_result", token = c.token, choice = 0 }, "menu_result", true, false)
+                end
+            else
+                send({ event = "menu_result", token = c.token, choice = 0 }, "menu_result", true, false)
+            end
+        elseif c.cmd == "show_choices" and c.options and c.token then
+            -- Native multichoice list (e.g. Trade / Wave). Async: register + poll, then emit
+            -- menu_result{token, choice=index} (0-based, or 127 = cancel). Unpatched / out-of-overworld
+            -- can't show a native menu -> report cancel so the server aborts the flow cleanly.
+            if patch_present() and M.isInOverworld() and not pending_ui then
+                local seq = MB.show_choices(c.options)
+                if seq then
+                    pending_ui = { seq = seq, token = c.token, kind = "menu", start_frame = frame_count }
+                else
+                    send({ event = "menu_result", token = c.token, choice = 127 }, "menu_result", true, false)
+                end
+            else
+                send({ event = "menu_result", token = c.token, choice = 127 }, "menu_result", true, false)
+            end
+        elseif c.cmd == "choose_mon" and c.token then
+            -- Pick which linked mon to trade via the native party menu. Async: register + poll, then
+            -- emit mon_chosen{token,slot} (0-5, or 7=cancel). Unpatched/out-of-overworld -> cancel.
+            if patch_present() and M.isInOverworld() and not pending_ui then
+                local seq = MB.choose_party_mon()
+                if seq then
+                    pending_ui = { seq = seq, token = c.token, kind = "choose", start_frame = frame_count }
+                else
+                    send({ event = "mon_chosen", token = c.token, slot = 7 }, "mon_chosen", true, false)
+                end
+            else
+                send({ event = "mon_chosen", token = c.token, slot = 7 }, "mon_chosen", true, false)
+            end
+        elseif c.cmd == "apply_trade" and c.blob_hex and c.slot ~= nil then
+            -- Trade: BUFFER the request (decode the blob now); the on_frame state machine waits until the
+            -- field is clear, stages the partner mon into gEnemyParty[0], runs the NATIVE trade scene
+            -- (animation + trade-evolution), and falls back to a silent party write on failure. Buffering
+            -- (vs acting here) means a not-yet-overworld / mid-dialogue arrival is never silently dropped.
+            local arr = M.hexToBytes(c.blob_hex)
+            if arr and #arr >= 100 then
+                -- Capture the key currently in the slot (the mon we're trading AWAY) BEFORE the swap,
+                -- so trade completion can register old->new as a key migration.
+                local ok_ok, old_key = pcall(M.monKey, (M.PARTY_BASE or 0x02024284) + c.slot * (M.MON_SIZE or 0x64))
+                pending_trade_apply = { slot = c.slot, blob = arr, old_key = ok_ok and old_key or nil,
+                                        phase = "pending", start_frame = frame_count }
+                console.log("[SLink-FRLGE]   ↳ apply_trade received (slot " .. tostring(c.slot) ..
+                            ") — queued for native trade")
+            else
+                console.log("[SLink-FRLGE]   ↳ apply_trade: bad blob_hex, skipped")
             end
         elseif c.cmd == "ghost_pos" then
             if PG then PG.on_ghost_pos({ mg=c.gmg, mn=c.gmn, x=c.ggx, y=c.ggy, f=c.ggf,
@@ -642,8 +779,22 @@ local function dispatch_commands(cmds)
         elseif c.cmd == "hud_show" and c.text then
             hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
         elseif c.cmd == "gui_prompt" and c.text then
-            prompt_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
-            console.log("[SLink-FRLGE]   ↳ gui_prompt: "..c.text)
+            -- Same routing as msgbox (the pre-stated requirement): a NATIVE in-game field box only in a
+            -- safe area (patched, overworld, no field script/box already up, one box per pass), else the
+            -- center-prompt overlay. gui_prompts are momentous overworld decisions (dupe / clause reroll),
+            -- so the native box is the right in-game presentation; unpatched / in-battle / mid-dialogue
+            -- falls back to the center prompt — never dropped.
+            if safe_native_box() and not native_box_used and pending_msgbox == nil then
+                MB.write_message(c.text)
+                local s = MB.send(MB.OP_SHOW_MESSAGE, {})
+                native_box_used = true
+                pending_msgbox = { seq = s, fb = "prompt", text = c.text, r = c.r or 255, g = c.g or 255,
+                                   b = c.b or 255, frames = c.frames or 300, start_frame = frame_count }
+                console.log("[SLink-FRLGE]   ↳ gui_prompt (native): "..c.text)
+            else
+                prompt_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+                console.log("[SLink-FRLGE]   ↳ gui_prompt: "..c.text)
+            end
         elseif c.cmd == "resolved_areas" and c.areas then
             for _, a in ipairs(c.areas) do resolved_areas[a] = true end
             resolved_areas_seeded = true
@@ -1509,6 +1660,46 @@ local function on_frame()
     local in_battle    = M.isInBattle()
     local is_overworld = M.isInOverworld()
 
+    -- A battle or warp mid-trade strands the in-flight apply: the trade state machine below is gated on
+    -- is_overworld, so a battle freezes it (its opcode seq rots), and the partner has ALREADY committed
+    -- their half — leaving us without their mon. Resolve it safely the instant we leave the field or the
+    -- map changes: silent-swap the partner's mon in if our slot still holds the PRE-trade mon (the scene
+    -- never swapped), else just reconcile from the slot (the same rule the scene-FAIL branch uses, so we
+    -- never double-write a slot the native scene already swapped -> no corrupted keys / pairs-break).
+    if pending_trade_apply and (in_battle or area ~= prev_area or loc ~= prev_loc) then
+        local p = pending_trade_apply
+        local cur
+        local ok_k, k = pcall(M.monKey, (M.PARTY_BASE or 0x02024284) + p.slot * (M.MON_SIZE or 0x64))
+        if ok_k then cur = k end
+        if (cur == nil or cur == p.old_key) and patch_present() then
+            console.log("[SLink-FRLGE]   ↳ trade: interrupted (battle/warp) before swap -> silent swap")
+            MB.set_party_mon(p.slot, p.blob, false)
+        else
+            console.log("[SLink-FRLGE]   ↳ trade: interrupted (battle/warp) after swap -> reconcile from slot")
+        end
+        emit_trade_done(p.slot, p.old_key)
+        pending_trade_apply = nil
+    end
+
+    -- Confirm a native notification box actually OPENED. OP_SHOW_MESSAGE returns result[0]=0 when the patch
+    -- refused it (a field script/box slipped in after our safe-area check — the 1-frame race); in that case
+    -- fall back to the Lua overlay so the notification is NEVER dropped. The patch acks within ~1 frame; on
+    -- a lost ack (timeout) assume it showed, to avoid a double box.
+    if pending_msgbox then
+        local pm = pending_msgbox
+        local st = MB.poll(pm.seq)
+        if st ~= nil then
+            if MB.read_result_u8(0) == 0 then           -- 0 = box was REFUSED (field busy), never shown
+                if pm.fb == "prompt" then prompt_show(pm.text, pm.r, pm.g, pm.b, pm.frames)
+                else hud_show(pm.text, pm.r, pm.g, pm.b, pm.frames) end
+                console.log("[SLink-FRLGE]   ↳ native box refused (field busy) — fell back: "..pm.text)
+            end
+            pending_msgbox = nil
+        elseif frame_count - pm.start_frame > MSGBOX_CONFIRM_TIMEOUT then
+            pending_msgbox = nil
+        end
+    end
+
     -- Peer ghost (RR + companion patch): broadcast our overworld WORLD-PIXEL position (sub-pixel) +
     -- facing + moving + live animNum ~20 Hz, plus our AVATAR (live sprite images/anims ROM ptrs +
     -- true 16-colour palette) so the partner sees US as ourselves, moving exactly as we move. The
@@ -1561,9 +1752,106 @@ local function on_frame()
         end
         if PG then
             PG.on_frame()
-            if PG.consume_interact() then
-                send({ event = "peer_interact" }, "peer_interact", true, false)
+            if PG.consume_interact() and not pending_ui and not pending_trade_apply then
+                -- Talk-to-partner opens the action menu (Trade / Wave) — but only if no menu/trade is
+                -- already in flight, so mashing A near the ghost can't stack requests.
+                send({ event = "trade_request" }, "trade_request", true, false)
             end
+        end
+
+        -- Poll an in-flight native UI op (show_menu / choose_mon); report the result to the server.
+        if pending_ui then
+            local st = MB.poll(pending_ui.seq)
+            local timed_out = frame_count - pending_ui.start_frame > MENU_TIMEOUT
+            if st ~= nil or timed_out then
+                if pending_ui.kind == "menu" then
+                    local choice = (st == MB.ST_OK) and MB.menu_result() or 0
+                    send({ event = "menu_result", token = pending_ui.token, choice = choice },
+                         "menu_result", true, false)
+                else  -- "choose"
+                    local slot = (st == MB.ST_OK) and MB.choose_result() or 7
+                    send({ event = "mon_chosen", token = pending_ui.token, slot = slot },
+                         "mon_chosen", true, false)
+                end
+                pending_ui = nil
+            end
+        end
+
+        -- Drive the native trade-scene apply: wait for a clear field -> stage gEnemyParty[0] -> run the
+        -- trade scene -> trade_done. Falls back to a silent party write (OP_SET_PARTY_MON) on any failure
+        -- so a trade never strands. (Reaches here only while in the overworld — the enclosing gate.)
+        if pending_trade_apply then
+            local p = pending_trade_apply
+            local function fallback(why)
+                console.log("[SLink-FRLGE]   ↳ trade: " .. why .. " -> silent swap fallback")
+                MB.set_party_mon(p.slot, p.blob, false); emit_trade_done(p.slot, p.old_key); pending_trade_apply = nil
+            end
+            if p.phase == "pending" then
+                if not patch_present() then
+                    fallback("no patch")
+                elseif memory.read_u8(0x03000F9C) == 0 and not pending_ui then   -- field clear (no script/menu)
+                    local sseq = MB.set_enemy_party({ p.blob })                  -- stage the partner mon
+                    if sseq then
+                        p.phase = "stage"; p.seq = sseq; p.start_frame = frame_count
+                        console.log("[SLink-FRLGE]   ↳ trade: staging partner mon -> gEnemyParty[0]")
+                    else
+                        fallback("stage send failed")
+                    end
+                elseif frame_count - p.start_frame > 1800 then
+                    fallback("field never cleared")
+                end
+            elseif p.phase == "stage" then
+                local st = MB.poll(p.seq)
+                if st == MB.ST_OK then
+                    local tseq = MB.trade_scene(p.slot)
+                    if tseq then
+                        p.phase = "scene"; p.seq = tseq; p.start_frame = frame_count
+                        console.log("[SLink-FRLGE]   ↳ trade: running native trade scene (slot " ..
+                                    tostring(p.slot) .. ")")
+                    else
+                        fallback("trade_scene send failed")
+                    end
+                elseif st == MB.ST_FAIL or frame_count - p.start_frame > TRADE_STAGE_TIMEOUT then
+                    fallback("stage failed/timeout")
+                end
+            else  -- "scene"
+                local st = MB.poll(p.seq)
+                if st == MB.ST_OK then
+                    console.log("[SLink-FRLGE]   ↳ trade: native scene complete")
+                    emit_trade_done(p.slot, p.old_key); pending_trade_apply = nil   -- (maybe evolved) report new mon
+                elseif st == MB.ST_FAIL then
+                    -- The native scene reported failure. It may or may not have ALREADY swapped the slot.
+                    -- A silent OP_SET_PARTY_MON on top of a scene that DID swap is a double-write (corrupted
+                    -- keys → "pairs break"). So only fall back to the faithful silent swap if the slot still
+                    -- holds our PRE-trade mon (scene never swapped); otherwise reconcile from the slot.
+                    local cur
+                    local ok_k, k = pcall(M.monKey, (M.PARTY_BASE or 0x02024284) + p.slot * (M.MON_SIZE or 0x64))
+                    if ok_k then cur = k end
+                    if cur == nil or cur == p.old_key then
+                        fallback("scene failed before swap")
+                    else
+                        console.log("[SLink-FRLGE]   ↳ trade: scene FAIL after swap — reconciling from slot (no overwrite)")
+                        emit_trade_done(p.slot, p.old_key); pending_trade_apply = nil
+                    end
+                elseif frame_count - p.start_frame > TRADE_SCENE_BACKSTOP then
+                    -- Patch ack lost (the scene almost certainly completed the swap natively). Do NOT
+                    -- silent-swap — just reconcile from whatever is in the slot so the party diff un-freezes.
+                    console.log("[SLink-FRLGE]   ↳ trade: scene ack lost — reconciling from slot (no overwrite)")
+                    emit_trade_done(p.slot, p.old_key); pending_trade_apply = nil
+                end
+            end
+        end
+
+        -- Periodic self-status: badge count, so the server can surface the PARTNER's progress in-game
+        -- (folded into the talk-to-partner box). Only resend when it changes (rate-limited).
+        if status_cooldown > 0 then status_cooldown = status_cooldown - 1 end
+        if status_cooldown == 0 then
+            local badges = M.readBadges()
+            if badges ~= last_status_badges then
+                send({ event = "status", badges = badges }, "status", true, false)
+                last_status_badges = badges
+            end
+            status_cooldown = 300   -- ~5 s between checks (badge changes are rare)
         end
     end
 
@@ -1893,7 +2181,11 @@ local function on_frame()
             _sync_blocked_logged = false
         end
     end
-    if safe_now and #pending_sync_cmds > 0 and writes_enabled then
+    -- DEFER all box/party sync writes while a native trade is mid-flight (staging → scene). The server
+    -- can queue a party_mon/box_mon for a trading mon ("Unbox") that would otherwise execute on top of
+    -- the trade scene rewriting the party slot — the user's "unbox race". The trade owns the party until
+    -- it completes; the migration block then purges the now-stale commands for the swapped keys.
+    if safe_now and #pending_sync_cmds > 0 and writes_enabled and not pending_trade_apply then
         local cmd = pending_sync_cmds[1]  -- peek before removing
         -- Safety gate: if target party slot is in mid-copy quarantine, defer one frame.
         local blocked = false
@@ -2598,6 +2890,7 @@ local function on_frame()
     end
     local party_diff_ok = not borrowed_battle and not party_frozen
         and post_unfreeze_frames == 0
+        and not pending_trade_apply         -- freeze the diff for the whole trade (party swaps mid-scene)
         and (in_battle or post_battle_frames > 0 or is_overworld)
 
     if party_diff_ok then
@@ -2610,6 +2903,38 @@ local function on_frame()
     -- Suppressed while gift buffer has entries — mass party swaps produce false
     -- signature matches that corrupt local state.
     local key_migrated = {}  -- old_key → true AND new_key → true (skip downstream diff loops)
+    -- A completed TRADE is a known key change: suppress the swap's capture/box diff for both keys (the
+    -- server already reconciled the link via trade_done; do NOT emit a key_change here — that path is
+    -- for same-mon PID changes, and the cross-player swap is handled server-side). Drop the traded-away
+    -- mon's caches; the received mon's are repopulated by the normal party read.
+    if pending_trade_migration then
+        local old_k, new_k = pending_trade_migration.old, pending_trade_migration.new
+        key_migrated[old_k] = true
+        key_migrated[new_k] = true
+        all_known_keys[old_k] = nil; all_known_keys[new_k] = true
+        sync_written_keys[new_k] = true
+        _display_cache[old_k] = nil; nick_cache[old_k] = nil; _ability_cache[old_k] = nil
+        mon_stats_cache[old_k] = nil
+        console.log(string.format("[SLink-FRLGE] trade key migration: %s -> %s", old_k:sub(1,8), new_k:sub(1,8)))
+        pending_trade_migration = nil
+        -- Purge any box/party sync commands the server queued for the swapped keys during the trade
+        -- (deferred, not executed, while pending_trade_apply was set) — they're stale now that the mon
+        -- has moved players, and would otherwise fail ("key not found in any box") or move the wrong mon.
+        do
+            local kept = {}
+            for _, p in ipairs(pending_sync_cmds) do
+                if p.key ~= old_k and p.key ~= new_k then kept[#kept + 1] = p end
+            end
+            pending_sync_cmds = kept
+        end
+        -- Settle window: the native trade scene just rewrote a party slot. Baseline the received mon
+        -- into prev_party RIGHT NOW (so the disappeared/appeared loops below see no change this frame)
+        -- and freeze diffs for a few more frames while the game finishes settling the party — otherwise
+        -- the traded-in mon (a brand-new key) gets mis-read as a fresh capture and triggers the box /
+        -- "Unbox this POKeMON?" prompt the user saw mid-trade.
+        prev_party = curr_party
+        post_unfreeze_frames = POST_UNFREEZE_SETTLE
+    end
     if #gift_capture_buffer == 0 then
     do
         local disappeared, appeared = {}, {}

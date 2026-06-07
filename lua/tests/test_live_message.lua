@@ -1,7 +1,9 @@
 -- test_live_message.lua — Phase-4 native UI: SHOW_MESSAGE (native field message box) +
--- PLAY_FANFARE. Confirms ShowFieldMessage ran (returns "shown", copies the FR-encoded text
--- into gStringVar4, and reports "busy" on an immediate second call), and PLAY_FANFARE acks
--- without crashing. Load with the PATCHED ROM + overworld savestate.
+-- PLAY_FANFARE. SHOW_MESSAGE runs the DISMISSABLE sign-msgbox field script (run_sign_msgbox:
+-- loadword TEXT_BUF / callstd MSGBOX_SIGN), so it reads SLINK_TEXT_BUF directly — it does NOT
+-- copy into gStringVar4 the way the old bare ShowFieldMessage did. We confirm: the opcode acks
+-- "shown", a box is actually up (an immediate second call reports "busy"), the FR text was staged
+-- in TEXT_BUF, and PLAY_FANFARE acks without crashing. Load with the PATCHED ROM + overworld save.
 
 local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
 local OUT = WT .. "/patch/build/message_result.txt"
@@ -30,16 +32,15 @@ check("ShowFieldMessage returned shown (1)", MB.read_result_u8(0) == 1, "result=
 local busy = send_wait(MB.OP_SHOW_MESSAGE, {})
 check("second SHOW reports box busy (0)", MB.read_result_u8(0) == 0, "result="..MB.read_result_u8(0))
 
--- gStringVar4 should hold the FR-encoded message (ShowFieldMessage copied it there)
+-- The FR-encoded text was staged in the patch's TEXT_BUF (what run_sign_msgbox's field script reads).
+-- (The dismissable sign-msgbox reads TEXT_BUF directly; it does NOT route through gStringVar4.)
 local enc = MB.fr_encode(TEXT)
 local match, firstbad = true, nil
 for i = 1, #enc do
-    if memory.read_u8(gStringVar4 + (i-1)) ~= enc[i] then match = false; firstbad = i; break end
+    if memory.read_u8(MB.TEXT_BUF + (i-1)) ~= enc[i] then match = false; firstbad = i; break end
 end
-log(string.format("gStringVar4[0..3] = %02X %02X %02X %02X (want %02X %02X %02X %02X)",
-    memory.read_u8(gStringVar4),memory.read_u8(gStringVar4+1),memory.read_u8(gStringVar4+2),memory.read_u8(gStringVar4+3),
-    enc[1],enc[2],enc[3],enc[4]))
-check("gStringVar4 holds the FR-encoded message", match, firstbad and ("first mismatch at "..firstbad) or nil)
+check("FR text staged in TEXT_BUF for the field script", match,
+      firstbad and ("first mismatch at "..firstbad) or nil)
 
 -- let the box's task run a while; the game must keep running (no crash/freeze)
 for _=1,120 do emu.frameadvance() end

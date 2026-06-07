@@ -34,7 +34,13 @@ enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
        OP_APPLY_DAMAGE = 10, OP_CURE_STATUS = 11,
        OP_SET_RULES = 12, OP_ARM_PEER_INTERACT = 13,
        OP_GHOST_SPAWN = 14, OP_GHOST_CLEAR = 15,
-       OP_SET_ENEMY_PARTY = 16 };
+       OP_SET_ENEMY_PARTY = 16,
+       OP_SHOW_MENU = 17,         /* native yes/no menu; async result -> mailbox result[0] */
+       OP_SET_PARTY_MON = 18,     /* faithful 100-byte blob copy into gPlayerParty[slot] (trade) */
+       OP_PLAY_SE = 19,           /* native sound effect via PlaySE (retires the m4a RAM-poke) */
+       OP_CHOOSE_PARTY_MON = 20,  /* native "Choose a POKeMON" menu; async result[0]=slot(0-5)/7=cancel */
+       OP_TRADE_SCENE = 21,       /* native trade animation+evolution: gPlayerParty[slot] <-> gEnemyParty[0] */
+       OP_SHOW_CHOICES = 22 };    /* native multichoice list (custom options); async result[0]=index/0x7F=cancel */
 enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
 
 /* Armed forced-move state (controller-swap driver), EWRAM scratch past the mailbox. */
@@ -95,6 +101,23 @@ typedef struct {
  * SLINK_BLOB_BUF (ends 0x0203FC58), below EWRAM end 0x0203FFFF; 2-aligned for u16 colour writes. */
 #define GHOST_PAL_BUF 0x0203FC60u
 
+/* Async native-UI state. The talk-to-partner UI ops (yes/no menu, party chooser, trade scene) all run
+ * a multi-frame field script; drive_ui polls until each finishes and acks. Above GHOST_PAL_BUF (16
+ * colours = ends 0x0203FC80), below EWRAM end 0x0203FFFF — in the SLink scratch. `fieldCb` is captured
+ * every frame while the player is WALKING (you can't walk in a menu/battle/scene) and is used to (a)
+ * gate the ghost driver off during a menu/scene — it writes sprite memory the engine repurposes there —
+ * and (b) detect the trade scene's start (cb2 leaves the field) + return (cb2 comes back). */
+typedef struct {
+    volatile u8  pending;   /* 0 idle; >0 a UI op is in flight */
+    volatile u8  kind;      /* 1 = yes/no menu, 2 = party chooser, 3 = native trade scene */
+    volatile u16 seq;       /* mailbox seq to ack when the op resolves */
+    volatile u16 frames;    /* startup / run timeout counter */
+    volatile u8  phase;     /* yesno: 1=waiting-lock 2=running; trade: 0=waiting-start 1=running */
+    volatile u8  _pad;
+    volatile u32 fieldCb;   /* captured overworld field callback2 (gMain.callback2) */
+} UiState;
+#define MENU ((UiState *)0x0203FC80u)
+
 #define gSaveBlock2Ptr 0x0300500Cu
 #define gMain          0x030030F0u   /* newKeys @ +0x2E (A = 0x0001) */
 #define KEY_A          0x0001u
@@ -149,6 +172,66 @@ typedef u8 (*ShowMsg_t)(const u8 *str);
 #define ShowFieldMessage ((ShowMsg_t)0x0806943Du)
 typedef void (*PlayFanfare_t)(u16 songId);
 #define PlayFanfare ((PlayFanfare_t)0x08071C61u)
+/* void PlaySE(u16 songId) @0x080722CC (BPRE.ld) — the m4a SE player. The server's play_sound IDs
+ * (SE_SUCCESS 25 / SE_FAILURE 26 / SE_FAINT 16 / SE_SHINY 95 / SE_BOO 22) are sound EFFECTS, played
+ * here natively instead of via the fragile Lua m4a SE1 RAM-poke (M.playSE / SE_SONG_HEADERS). */
+typedef void (*PlaySE_t)(u16 songId);
+#define PlaySE ((PlaySE_t)0x080722CDu)
+/* gSpecialVar_Result (VAR_RESULT / Var800D) — yesnobox/multichoice write the chosen index here.
+ * CFRU event_data.h gives 0x020370D0; corroborated by the live RR profile's gSpecialVar_MonBoxId
+ * @0x020370D6 sitting just past it. (OP_SHOW_MENU live test re-confirms: YES -> 1, NO/B -> 0.) */
+#define gSpecialVar_Result 0x020370D0u
+/* gSpecialVar_0x8004 @ 0x020370C0 (party-chooser result slot), 0x8005 @ 0x020370C2 (trade player slot)
+ * — CFRU event_data.h. We invoke the native PARTY MENU + IN-GAME TRADE SCENE by their FireRed `special`
+ * indices via a field script (`special <idx>`), the same ScriptContext1_SetupScript path the msgbox uses.
+ * DoInGameTradeScene trades gPlayerParty[Var8005] <-> gEnemyParty[0] (TradeMons) and runs trade-evolution
+ * on the received mon — it does NOT read the ROM trade table (only CreateInGameTradePokemon does), so we
+ * stage gEnemyParty[0] ourselves (OP_SET_ENEMY_PARTY). Indices are FireRed's; validated live on RR. */
+#define gSpecialVar_0x8004   0x020370C0u
+/* The FireRed `special` INDICES are WRONG on RR — CFRU/RR reordered gSpecials (the live spike proved
+ * `special 170` was a no-op: the party menu never opened). So we invoke the native menus by ADDRESS via
+ * CFRU's `callnative` (callasm, script-cmd 0x23 + a 4-byte fn ptr). The party-menu internals ARE
+ * symbol-mapped in BPRE.ld; a tiny trampoline replicates ChoosePartyMon's InitPartyMenu call. */
+typedef void (*InitPartyMenu_t)(u8 menuType, u8 layout, u8 action, u8 keepCursor, u8 msgId,
+                                void *task, void *callback);
+#define InitPartyMenu          ((InitPartyMenu_t)0x0811EA45u)
+#define TASK_HANDLE_CHOOSE_MON 0x0811FB29u   /* Task_HandleChooseMonInput (sets Var8004) */
+#define CB2_RETURN_TO_FIELD    0x080567DDu   /* CB2_ReturnToField (menu exit -> resume the field script) */
+/* DoInGameTradeScene (RR) — RE'd via patch/tools/find_trade_scene.py (the FR `special` index is
+ * reordered on RR, so we call it by ADDRESS via callnative). It's the tiny fn
+ *   LockPlayerFieldControls(); CreateTask(Task_InGameTrade,10);
+ *   BeginNormalPaletteFade(PALETTES_ALL,0,0,16,RGB_BLACK); HelpSystem_Disable(0x812B478);
+ * whose task installs CB2 0x080505CC — which references gSelectedTradeMonPositions + Var8005 +
+ * gEnemyParty, i.e. the in-game NPC trade. Trades gPlayerParty[Var8005] <-> gEnemyParty[0] and runs
+ * trade-evolution on the received mon. (A near-identical twin @0x08046FD4 installs a Var8004 scene —
+ * NOT the trade; do not use it.) */
+#define DO_INGAME_TRADE      0x08054440u
+/* ---- custom multichoice (a PROPER list menu: TRADE / WAVE / ...) ----
+ * RR's gMultichoiceLists is ROM-index-bound, so we replicate DrawVerticalMultichoiceMenu in C with our
+ * OWN option list (Lua stages FR-encoded strings in SLINK_MENU_BUF: [u8 count][str 0xFF-term]...). All
+ * primitives are BPRE.ld-mapped; the engine's Task_MultichoiceMenu_HandleInput drives input, writes the
+ * chosen index to gSpecialVar_Result, closes the window, and ScriptContext_Enable()s (resumes waitstate).
+ * A benign mcId (0) in the task skips MultiChoicePrintHelpDescription's cable-club-only help. */
+#define FONT_NORMAL 2u
+#define gTasks 0x03005090u                  /* struct Task[]; stride 0x28, s16 data[16] @ +8 */
+#define TASK_MULTICHOICE_INPUT 0x0809CC98u   /* Task_MultichoiceMenu_HandleInput */
+typedef u16  (*GetStringWidth_t)(u8 font, const u8 *str, s16 letterSpacing);
+#define GetStringWidth               ((GetStringWidth_t)0x08005ED5u)
+typedef u8   (*CreateWindowFromRect_t)(u8 left, u8 top, u8 width, u8 height);
+#define CreateWindowFromRect         ((CreateWindowFromRect_t)0x0809D655u)
+typedef void (*SetStdBorder_t)(u8 win, u8 copyToVram);
+#define SetStandardWindowBorderStyle ((SetStdBorder_t)0x080F7751u)
+typedef void (*AddTextPrinter_t)(u8 win, u8 font, const u8 *str, u8 x, u8 y, u8 speed, void *cb);
+#define AddTextPrinterParameterized  ((AddTextPrinter_t)0x08002C49u)
+typedef void (*CopyWinVram_t)(u8 win, u8 mode);
+#define CopyWindowToVram             ((CopyWinVram_t)0x08003F21u)
+typedef void (*MenuInitCursor_t)(u8 win, u8 font, u8 left, u8 top, u8 lineH, u8 count, u8 init);
+#define Menu_InitCursor              ((MenuInitCursor_t)0x0810F7D9u)
+typedef u8   (*CreateTask_t)(void *func, u8 priority);
+#define CreateTask                   ((CreateTask_t)0x0807741Du)
+typedef void (*SchedBg_t)(u8 bgId);
+#define ScheduleBgCopyTilemapToVram  ((SchedBg_t)0x080F67A5u)
+#define SLINK_MENU_BUF 0x0203FC90u           /* [u8 count][FR str 0xFF-term]... staged for OP_SHOW_CHOICES */
 /* void ScriptContext1_SetupScript(const u8 *ptr) @0x08069AE4 — queues a field script the
  * overworld runs NATIVELY: lockall -> message -> waitmessage -> waitbuttonpress -> releaseall.
  * Unlike a bare ShowFieldMessage (draws a box nothing ever closes), this is a real, navigable,
@@ -205,6 +288,8 @@ typedef void (*OeTurn_t)(void *oe, u8 dir);
 #define DIR_WEST  3u
 #define DIR_EAST  4u
 #define GHOST_SNAP_TILES 10  /* >this many tiles off -> snap instead of walking there */
+
+static void ghost_remove(void);   /* defined below; drive_ui tears the ghost down when the trade scene starts */
 
 static void ack(u16 st, u16 reason)
 {
@@ -263,6 +348,62 @@ static void enforce_rules(void)
     if (sb2) R16(sb2 + 0x14) |= OPT_BATTLE_STYLE_SET;
 }
 
+/* callnative target: build a vertical multichoice window from the options Lua staged in SLINK_MENU_BUF
+ * ([u8 count][FR str 0xFF-term]...), mirroring DrawVerticalMultichoiceMenu, then hand input to the
+ * engine's Task_MultichoiceMenu_HandleInput (it sets gSpecialVar_Result = chosen index / SCR_MENU_CANCEL,
+ * closes the window, and resumes the script). */
+static const u8 sMcHeight[9] = { 1, 2, 4, 6, 7, 9, 11, 13, 14 };
+static void show_choices_entry(void)
+{
+    volatile u8 *buf = (volatile u8 *)SLINK_MENU_BUF;
+    u8 count = buf[0];
+    if (count == 0) return;
+    if (count > 8) count = 8;
+    const u8 *opts[8];
+    const u8 *p   = (const u8 *)(SLINK_MENU_BUF + 1);
+    const u8 *end = (const u8 *)0x02040000u;   /* EWRAM end — never scan past it (malformed stage guard) */
+    for (u8 i = 0; i < count; i++) {
+        opts[i] = p;
+        while (p < end && *p != 0xFF) p++;
+        if (p >= end) return;                  /* unterminated option -> abort the menu, don't run off EWRAM */
+        p++;
+    }
+    s32 sw = 0;
+    for (u8 i = 0; i < count; i++) { s32 t = GetStringWidth(FONT_NORMAL, opts[i], 0); if (t > sw) sw = t; }
+    u8 width = (u8)((sw + 9) / 8 + 1);
+    u8 left = 1; if (left + width > 28) left = (u8)(28 - width);
+    u8 win = CreateWindowFromRect(left, 1, width, sMcHeight[count]);
+    SetStandardWindowBorderStyle(win, 0);
+    for (u8 i = 0; i < count; i++)
+        AddTextPrinterParameterized(win, FONT_NORMAL, opts[i], 8, (u8)(14 * i + 2), 0xFF, 0);
+    CopyWindowToVram(win, 2 /*COPYWIN_GFX*/);
+    Menu_InitCursor(win, FONT_NORMAL, 0, 2, 14, count, 0);
+    u8 tid = CreateTask((void *)(TASK_MULTICHOICE_INPUT | 1u), 80);
+    volatile s16 *d = (volatile s16 *)(gTasks + (u32)tid * 0x28u + 8u);
+    d[4] = 0;                     /* tIgnoreBPress (0 = B cancels) */
+    d[5] = (count > 3) ? 1 : 0;   /* tWrapAround */
+    d[6] = win;                   /* tWindowId */
+    d[7] = 0;                     /* tMultichoiceId: benign id (no help description) */
+    ScheduleBgCopyTilemapToVram(0);
+}
+
+/* Field script: lockall ; callnative show_choices_entry ; waitstate ; releaseall ; end. Brackets like
+ * the yes/no menu (lockall sets sScriptContext2Enabled), so drive_ui kind 1 publishes the result
+ * (gSpecialVar_Result = chosen option index, or SCR_MENU_CANCEL 0x7F on B). Caller guards on
+ * sScriptContext2Enabled. */
+static void run_choices(void)
+{
+    volatile u8 *s = (volatile u8 *)SLINK_SCRIPT_BUF;
+    u32 fn = ((u32)&show_choices_entry) | 1u;
+    s[0] = 0x69;                                                 /* lockall */
+    s[1] = 0x23;                                                 /* callnative */
+    s[2] = (u8)fn; s[3] = (u8)(fn >> 8); s[4] = (u8)(fn >> 16); s[5] = (u8)(fn >> 24);
+    s[6] = 0x27;                                                 /* waitstate */
+    s[7] = 0x6B;                                                 /* releaseall */
+    s[8] = 0x02;                                                 /* end */
+    ScriptContext1_SetupScript((const u8 *)SLINK_SCRIPT_BUF);
+}
+
 /* Show the FR-encoded text already in SLINK_TEXT_BUF as a NATIVE, A-dismissable dialogue. Builds
  * a 9-byte field script "loadword 0, SLINK_TEXT_BUF ; callstd MSGBOX_SIGN(3) ; end" and runs it via
  * ScriptContext1_SetupScript (the std sign msgbox = lockall/message/waitmessage/waitbuttonpress/
@@ -279,8 +420,127 @@ static void run_sign_msgbox(void)
     ScriptContext1_SetupScript((const u8 *)SLINK_SCRIPT_BUF);
 }
 
-/* Peer interaction: when the player presses A facing the ghost NPC, show the pre-set message
- * (dismissable native box) and bump a counter the Lua client polls (to notify the server / partner). */
+/* Like run_sign_msgbox but a YES/NO CHOICE — the menuing foundation for talk-to-partner actions.
+ * Builds "lockall ; loadword 0,SLINK_TEXT_BUF ; callstd MSGBOX_YESNO(5) ; releaseall ; end" and runs
+ * it via ScriptContext1_SetupScript. Std_MsgboxYesNo = message/waitmessage/yesnobox (it does NOT lock
+ * on its own, so we wrap lockall/releaseall). The choice lands in gSpecialVar_Result (1=YES, 0=NO/B);
+ * drive_menu() publishes it back to Lua. Script-cmd bytes: lockall 0x69, loadword 0x0F, callstd 0x09,
+ * releaseall 0x6B, end 0x02 (pokefirered data/script_cmd_table.inc). Shares SLINK_SCRIPT_BUF with
+ * run_sign_msgbox (only one dialogue is ever up). Caller guards on sScriptContext2Enabled. */
+static void run_yesno_msgbox(void)
+{
+    volatile u8 *s = (volatile u8 *)SLINK_SCRIPT_BUF;
+    s[0]  = 0x69;                                     /* lockall */
+    s[1]  = 0x0F; s[2] = 0x00;                        /* loadword dest 0, <text ptr> */
+    s[3]  = (u8)(SLINK_TEXT_BUF);        s[4] = (u8)(SLINK_TEXT_BUF >> 8);
+    s[5]  = (u8)(SLINK_TEXT_BUF >> 16);  s[6] = (u8)(SLINK_TEXT_BUF >> 24);
+    s[7]  = 0x09; s[8] = 0x05;                        /* callstd MSGBOX_YESNO */
+    s[9]  = 0x6B;                                     /* releaseall */
+    s[10] = 0x02;                                     /* end */
+    ScriptContext1_SetupScript((const u8 *)SLINK_SCRIPT_BUF);
+}
+
+/* callnative target: open the native "Choose a POKeMON" menu by replicating ChoosePartyMon's
+ * InitPartyMenu call (CHOOSE_SINGLE_MON / CHOOSE_AND_CLOSE). The chosen slot lands in Var8004 (0-5),
+ * or SLOT_CANCEL (7) on B; Task_HandleChooseMonInput writes it and exits via CB2_ReturnToField, which
+ * resumes our field script's waitstate. */
+__attribute__((used))
+static void slink_open_party_menu(void)
+{
+    InitPartyMenu(3, 0, 11, 0, 0, (void *)TASK_HANDLE_CHOOSE_MON, (void *)CB2_RETURN_TO_FIELD);
+}
+
+/* Field script: `callnative slink_open_party_menu ; waitstate ; end` (callasm = 0x23 + fn ptr). The FR
+ * `special` index path is dead on RR (see the defines above), so we call InitPartyMenu by address. */
+static void run_party_chooser(void)
+{
+    volatile u8 *s = (volatile u8 *)SLINK_SCRIPT_BUF;
+    u32 fn = ((u32)&slink_open_party_menu) | 1u;                 /* Thumb */
+    s[0] = 0x23;                                                 /* callnative */
+    s[1] = (u8)fn; s[2] = (u8)(fn >> 8); s[3] = (u8)(fn >> 16); s[4] = (u8)(fn >> 24);
+    s[5] = 0x27;                                                 /* waitstate */
+    s[6] = 0x02;                                                 /* end */
+    ScriptContext1_SetupScript((const u8 *)SLINK_SCRIPT_BUF);
+}
+
+/* Run the native in-game TRADE scene on gPlayerParty[slot] against the mon we pre-staged in
+ * gEnemyParty[0] (animation + trade-evolution, the real thing). Field script:
+ * `setvar 0x8005, slot ; callnative DoInGameTradeScene ; waitstate ; end` (callasm = 0x23 + fn ptr;
+ * the scene's CB2 sets gSelectedTradeMonPositions[player] from Var8005 and trades against gEnemyParty[0]). */
+static void run_trade_scene(u8 slot)
+{
+    volatile u8 *s = (volatile u8 *)SLINK_SCRIPT_BUF;
+    u32 fn = DO_INGAME_TRADE | 1u;                                     /* Thumb */
+    s[0] = 0x16; s[1] = 0x05; s[2] = 0x80; s[3] = slot; s[4] = 0x00;   /* setvar VAR_0x8005, slot */
+    s[5] = 0x23;                                                       /* callnative DoInGameTradeScene */
+    s[6] = (u8)fn; s[7] = (u8)(fn >> 8); s[8] = (u8)(fn >> 16); s[9] = (u8)(fn >> 24);
+    s[10] = 0x27;                                                      /* waitstate */
+    s[11] = 0x02;                                                      /* end */
+    ScriptContext1_SetupScript((const u8 *)SLINK_SCRIPT_BUF);
+}
+
+static void ui_done(u16 st, u8 result0)
+{
+    MENU->pending = 0;
+    MB->result[0] = result0;
+    MB->status = st; MB->reason = (st == ST_OK) ? 0 : 12;
+    MB->ack_seq = MENU->seq; MB->opcode = 0;
+}
+
+/* Poll whichever async native-UI op OP_SHOW_MENU / OP_CHOOSE_PARTY_MON / OP_TRADE_SCENE set up, and
+ * ack when it resolves. Each kind has its own start/done signal (the field script starts a frame or
+ * two after SetupScript). All time out so a lost UI can't wedge the mailbox. */
+static void drive_ui(void)
+{
+    if (!MENU->pending) return;
+
+    if (MENU->kind == 1) {                         /* yes/no menu: lockall sets sScriptContext2Enabled */
+        u8 active = R8(sScriptContext2Enabled);
+        if (MENU->phase == 1) {                    /* waiting for the script to lock the field */
+            if (active) { MENU->phase = 2; MENU->frames = 0; }
+            else if (++MENU->frames > 60) ui_done(ST_FAIL, 0);
+            return;
+        }
+        if (active) { if (++MENU->frames > 1800) ui_done(ST_FAIL, 0); return; }
+        ui_done(ST_OK, (u8)R16(gSpecialVar_Result));   /* 1=YES 0=NO/B */
+        return;
+    }
+
+    if (MENU->kind == 2) {                         /* party chooser: Var8004 sentinel 0xFF -> 0-7 */
+        u16 v = R16(gSpecialVar_0x8004);
+        if (v <= 7) ui_done(ST_OK, (u8)v);         /* 0-5 chosen, 7 = cancel */
+        else if (++MENU->frames > 1800) ui_done(ST_FAIL, 0);
+        return;
+    }
+
+    /* kind == 3: native trade scene — the CB2 leaves the field, runs, then returns. */
+    {
+        u32 cb = R32(gMain + 0x04);
+        if (MENU->phase == 0) {                    /* waiting for the scene to take over the screen */
+            if (MENU->fieldCb && cb != MENU->fieldCb) { MENU->phase = 1; MENU->frames = 0; }
+            else if (++MENU->frames > 180) ui_done(ST_FAIL, 0);   /* never started */
+            return;
+        }
+        /* The in-game-trade text reads the RECEIVED-mon name + OT from sInGameTrades[Var8004] (our stale
+         * chooser slot -> a default like "Rukia"). Override gStringVar3 (received nickname) + gStringVar1
+         * (OT) from the mon we actually staged in gEnemyParty[0], each frame, so "X sent over Y" names the
+         * real traded mon. (gStringVar2 = the sent mon is already correct.) Party-mon plaintext (NO_ENCRYPT):
+         * nickname @ +0x08 (11 b), otName @ +0x14 (8 b). gStringVar1=0x02021CD0, gStringVar3=0x02021D04. */
+        { volatile u8 *nk = (volatile u8 *)(gEnemyParty + 0x08), *ot = (volatile u8 *)(gEnemyParty + 0x14);
+          volatile u8 *v3 = (volatile u8 *)0x02021D04u, *v1 = (volatile u8 *)0x02021CD0u;
+          for (u32 i = 0; i < 11; i++) v3[i] = nk[i];
+          for (u32 i = 0; i < 8;  i++) v1[i] = ot[i]; }
+        if (cb == MENU->fieldCb) ui_done(ST_OK, 0);               /* back on the field -> done */
+        else if (++MENU->frames > 5400) ui_done(ST_FAIL, 0);      /* ~90 s safety */
+    }
+}
+
+/* Peer interaction: when the player presses A facing the ghost NPC, bump a counter the Lua client
+ * polls. The client then emits trade_request and the SERVER drives the talk-to-partner UI (a native
+ * trade menu via OP_SHOW_MENU, or a "waved" message). We deliberately do NOT open a box here: a local
+ * box would set sScriptContext2Enabled and make the server's OP_SHOW_MENU bounce (it guards on that),
+ * so the menu would never appear. (Earlier this called run_sign_msgbox for a standalone "hello" box;
+ * that's superseded by the server-driven menu.) */
 static void check_peer_interact(void)
 {
     if (!SS->pi_armed) return;
@@ -300,8 +560,13 @@ static void check_peer_interact(void)
     else if (f == 3) px--;       /* left */
     else if (f == 4) px++;       /* right */
     if (px == (s16)R16(g + 0x10) && py == (s16)R16(g + 0x12)) {
-        SS->pi_count++;
-        run_sign_msgbox();
+        SS->pi_count++;          /* the client polls this -> trade_request -> server drives the menu */
+        /* CONSUME the A-press so the ENGINE doesn't ALSO run the ghost OE's interaction. Our ghost has
+         * localId 0xF0 with no map object-event template, so the engine's facing-script lookup yields a
+         * garbage pointer -> a random "broken NPC" battle / warp (the user's teleport-to-SS-Anne). The
+         * hook runs inside CallCallbacks BEFORE the field callback reads JOY_NEW(A), so clearing the A
+         * bit here makes the engine see no press this frame. */
+        R16(gMain + 0x2E) &= (u16)~KEY_A;
     }
 }
 
@@ -311,8 +576,13 @@ static void ghost_remove(void)
 {
     if (GH->oeId != 0xFF) {
         u32 g = gObjectEvents + (u32)GH->oeId * OE_STRIDE;
-        if ((R8(g) & 1) && R8(g + 0x08) == GH->localId)
-            RemoveEventObject((void *)g);
+        if ((R8(g) & 1) && R8(g + 0x08) == GH->localId) {
+            RemoveEventObject((void *)g);   /* frees the sprite (this build's fn = RemoveObjectEvent
+                                             * INTERNAL — it does NOT clear the OE active flag) */
+            R8(g) = 0;                      /* so explicitly deactivate the object-event; otherwise the
+                                             * collision OE LINGERS as an invisible wall after a clear
+                                             * (only masked before because map changes reload all OEs) */
+        }
         GH->oeId = 0xFF;
     }
     GH->flags = 0;
@@ -375,6 +645,33 @@ static void drive_ghost(void)
      * is still ours and RESUMES driving + re-applies the partner avatar (so sync continues without an
      * area transition). A whiteout DOES reload the map -> the slot is reassigned -> (d) respawns. */
     if (R16(gBattleMons + 0x2C) > 0 && R8(gBattleOutcome) == 0) return;
+
+    /* A native trade scene is pending or about to take over: tear the ghost down NOW and DON'T respawn
+     * until the scene op finishes. This branch runs while the field is still active (between the client
+     * dispatching OP_TRADE_SCENE and the scene CB2 actually grabbing the screen), so RemoveEventObject
+     * works in a clean field context — unlike removing it mid-scene, which raced DoInGameTradeScene's own
+     * object-event snapshot/restore and left an INVISIBLE-COLLISION orphan (+ corrupted later battle
+     * sprites) when the scene reset+reloaded with our OE/palette-slot-15 still live. Once drive_ui clears
+     * MENU->pending (scene returned to the field), the normal lifecycle below respawns the ghost cleanly. */
+    if (MENU->pending && MENU->kind == 3) {
+        if (GH->oeId != 0xFF) ghost_remove();
+        return;
+    }
+
+    /* GARBAGE-COLLECT stray ghost OEs: any ACTIVE object-event carrying our exclusive sentinel
+     * localId (0xF0 — real map NPCs use small localIds) that is NOT our live slot is an ORPHAN left
+     * by some teardown path that didn't fully clean up (scripts/cutscenes/slot-reassignment/warps).
+     * Free its sprite + deactivate it. This catch-all stops "invisible collision" from accumulating
+     * after dialogue and other scripted events, regardless of how the orphan was created. */
+    for (u32 i = 0; i < 16; i++) {
+        if (i == GH->oeId) continue;
+        u32 oo = gObjectEvents + i * OE_STRIDE;
+        if ((R8(oo) & 1) && R8(oo + 0x08) == 0xF0u) {
+            RemoveEventObject((void *)oo);   /* free the sprite */
+            R8(oo) = 0;                       /* + deactivate (this build's RemoveEventObject won't) */
+        }
+    }
+
     if (!GH->active) { if (GH->oeId != 0xFF) ghost_remove(); return; }
 
     u32 player = player_oe();                     /* the player's ACTUAL slot (not always 0) */
@@ -506,10 +803,30 @@ void slink_hook(void)
     MB->signature   = SLNK_SIG;   /* presence beacon, every frame */
     MB->abi_version = ABI_VER;
 
+    /* Capture the overworld FIELD callback while the player is walking (you can't walk in a menu /
+     * battle / trade scene), then gate the sprite-touching drivers off when we're NOT on the field —
+     * so the native party menu / trade scene CB2 (which repurpose gSprites) aren't corrupted by the
+     * ghost driver. The async pollers (drive_ui) only read state + the mailbox, so they always run. */
+    { u32 p = player_oe();
+      if ((R8(p) & 1) && !(R8(p) & 0x80)) MENU->fieldCb = R32(gMain + 0x04); }
+    u8 field_active = (MENU->fieldCb == 0) || (R32(gMain + 0x04) == MENU->fieldCb);
+
     drive_force_move();           /* runs the armed controller-swap each frame */
     enforce_rules();              /* persistent nuzlocke option enforcement */
-    drive_ghost();                /* engine-driven peer ghost (spawn/walk/despawn lifecycle) */
-    check_peer_interact();        /* talk-to-ghost detection */
+    if (field_active) {
+        drive_ghost();            /* engine-driven peer ghost (spawn/walk/despawn lifecycle) */
+        check_peer_interact();    /* talk-to-ghost detection */
+    } else if (GH->oeId != 0xFF && GH->oeId < 16) {
+        /* In a menu/scene CB2 (party picker / trade scene), the engine repurposes gSprites — hide our
+         * ghost sprite so its tiles can't bleed into the menu (the initiator's "sprite glitch"). It's
+         * re-shown by drive_ghost when the field is active again. */
+        u32 g = gObjectEvents + (u32)GH->oeId * OE_STRIDE;
+        if ((R8(g) & 1) && R8(g + 0x08) == GH->localId) {
+            u8 sid = R8(g + 0x04);
+            if (sid < 64) R8(gSprites + (u32)sid * SPR_STRIDE + 0x3E) |= 0x04;   /* invisible */
+        }
+    }
+    drive_ui();                   /* async native UI (menu / party chooser / trade scene) publisher */
 
     u16 op = MB->opcode;
     if (op == 0) return;          /* idle */
@@ -529,6 +846,7 @@ void slink_hook(void)
         u8  target = MB->args[1];
         u8  pos    = MB->args[2];
         u16 mid    = (u16)(MB->args[4] | (MB->args[5] << 8));
+        if (b > 3 || pos > 3) { ack(ST_FAIL, 2); return; }   /* bound battler/move slot (no OOB read) */
         R8 (gChosenActionByBank  + b)     = 0;     /* USE_MOVE */
         R16(gChosenMovesByBanks  + b * 2) = mid;
         R8 (gBattleCommunication + b)     = 3;
@@ -576,6 +894,23 @@ void slink_hook(void)
         break;
     }
 
+    case OP_SET_PARTY_MON: {     /* TRADE: faithful 100-byte blob copy into gPlayerParty[slot].
+                                    args: [0]=slot [1]=bump (1 = ensure party count covers the slot).
+                                    Lua staged ONE complete party-mon (the partner's traded half) in
+                                    SLINK_BLOB_BUF. Same basis as OP_SET_ENEMY_PARTY (RR NO_ENCRYPT ->
+                                    raw memcpy preserves species/moves/IVs/EVs/PID/item exactly), but
+                                    into the PLAYER party. A trade replaces an existing slot, so the
+                                    count is unchanged unless `bump` is set (defensive). */
+        u8 slot = MB->args[0];
+        u8 bump = MB->args[1];
+        if (slot > 5) { ack(ST_FAIL, 2); return; }
+        volatile u8 *src = (volatile u8 *)SLINK_BLOB_BUF;
+        volatile u8 *dst = (volatile u8 *)(gPlayerParty + (u32)slot * MON_SIZE);
+        for (u32 j = 0; j < MON_SIZE; j++) dst[j] = src[j];
+        if (bump && R8(gPlayerPartyCount) < slot + 1) R8(gPlayerPartyCount) = slot + 1;
+        break;
+    }
+
     case OP_SPAWN_PEER_NPC: {     /* args: [0]=gfxId [1]=localId [2..3]=x [4..5]=y [6]=movement */
         u8  gfx     = MB->args[0];
         u8  localId = MB->args[1];
@@ -594,9 +929,59 @@ void slink_hook(void)
         break;
     }
 
-    case OP_PLAY_FANFARE: {       /* args: [0..1] = songId */
+    case OP_PLAY_FANFARE: {       /* args: [0..1] = songId (jingle: link-formed / trade-complete) */
         PlayFanfare((u16)(MB->args[0] | (MB->args[1] << 8)));
         break;
+    }
+
+    case OP_PLAY_SE: {            /* args: [0..1] = songId — native sound effect (PlaySE) */
+        PlaySE((u16)(MB->args[0] | (MB->args[1] << 8)));
+        break;
+    }
+
+    case OP_SHOW_MENU: {          /* text (FR-encoded) in SLINK_TEXT_BUF -> native YES/NO menu. ASYNC:
+                                     ack ST_BUSY now; drive_ui publishes the choice (result[0]) when
+                                     the field script resolves. The menuing foundation for talk-to-
+                                     partner actions (Trade / status / ...). */
+        if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }  /* a box/script already up */
+        run_yesno_msgbox();
+        MENU->kind = 1; MENU->phase = 1; MENU->seq = MB->seq; MENU->frames = 0; MENU->pending = 1;
+        MB->status = ST_BUSY; MB->opcode = 0;
+        return;
+    }
+
+    case OP_SHOW_CHOICES: {       /* options (FR-encoded) staged in SLINK_MENU_BUF -> native multichoice
+                                     list. ASYNC; lockall-bracketed like OP_SHOW_MENU, so drive_ui kind 1
+                                     publishes the chosen index (result[0]; 0x7F = cancel). */
+        if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
+        run_choices();
+        MENU->kind = 1; MENU->phase = 1; MENU->seq = MB->seq; MENU->frames = 0; MENU->pending = 1;
+        MB->status = ST_BUSY; MB->opcode = 0;
+        return;
+    }
+
+    case OP_CHOOSE_PARTY_MON: {   /* native "Choose a POKeMON" party menu. ASYNC: ack ST_BUSY; drive_ui
+                                     publishes the chosen slot (result[0]=0-5, or 7=cancel) once the menu
+                                     closes (Var8004). Used to pick WHICH linked mon to trade. */
+        if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
+        R16(gSpecialVar_0x8004) = 0x00FF;    /* sentinel -> the menu overwrites it with 0-5 / 7 */
+        run_party_chooser();
+        MENU->kind = 2; MENU->seq = MB->seq; MENU->frames = 0; MENU->pending = 1;
+        MB->status = ST_BUSY; MB->opcode = 0;
+        return;
+    }
+
+    case OP_TRADE_SCENE: {        /* args[0]=slot. Run the NATIVE trade animation+evolution: trades
+                                     gPlayerParty[slot] with the mon staged in gEnemyParty[0] (caller
+                                     must OP_SET_ENEMY_PARTY count=1 first). ASYNC: ack ST_BUSY; drive_ui
+                                     acks ST_OK when the scene returns to the field. */
+        if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
+        if (MB->args[0] > 5) { ack(ST_FAIL, 2); return; }
+        if (!MENU->fieldCb) MENU->fieldCb = R32(gMain + 0x04);   /* dispatched from the field */
+        run_trade_scene(MB->args[0]);
+        MENU->kind = 3; MENU->phase = 0; MENU->seq = MB->seq; MENU->frames = 0; MENU->pending = 1;
+        MB->status = ST_BUSY; MB->opcode = 0;
+        return;
     }
 
     case OP_APPLY_DAMAGE: {       /* linked HP / chip: args [0]=battler [1..2]=amount(u16) */
@@ -638,6 +1023,10 @@ void slink_hook(void)
     }
 
     case OP_GHOST_SPAWN:          /* engine-driven ghost: args [0]=gfxId [1]=localId. The frame */
+        ghost_remove();           /* CLEAN UP any existing ghost FIRST. A re-spawn (client reconnect / */
+                                  /* Lua reload re-inits the receiver -> re-sends OP_GHOST_SPAWN) used */
+                                  /* to just set oeId=0xFF, ORPHANING the live OE as a permanent */
+                                  /* invisible wall "where the player was at connection". Now removed. */
         GH->gfxId  = MB->args[0]; /* hook (drive_ghost) spawns + drives it; Lua then posts the */
         GH->localId = MB->args[1];/* partner's world-px position + avatar into GhostState. */
         GH->oeId   = 0xFF;
@@ -655,6 +1044,7 @@ void slink_hook(void)
         break;
 
     case OP_FORCE_MOVE_SLOT:      /* args: [0]=battler [1]=target [2]=move_pos */
+        if (MB->args[0] > 3 || MB->args[2] > 3) { ack(ST_FAIL, 2); return; }  /* bound: slink_force_controller reads gBattleMons[battler].moves[move_pos] */
         AM->battler  = MB->args[0];
         AM->target   = MB->args[1];
         AM->move_pos = MB->args[2];

@@ -177,6 +177,212 @@ def test_ghost_pos_not_persisted(tmp_path, monkeypatch):
         assert "ghost_pos" not in links.read_text()
 
 
+# ── talk-to-partner: trade linked pairs + status helper ───────────────────────
+
+def _with_trade_blobs(state, a_slot=0, b_slot=1):
+    """Populate partner_blobs for the make_state_with_link pair (A:1 / B:2) so a trade is eligible."""
+    state.partner_blobs["a"] = [{"slot": a_slot, "species_id": 1, "level": 5,
+                                 "key": "A:1", "blob": bytes([0xAA] * 100)}]
+    state.partner_blobs["b"] = [{"slot": b_slot, "species_id": 4, "level": 7,
+                                 "key": "B:2", "blob": bytes([0xBB] * 100)}]
+    return state
+
+
+def _menu(cmds):
+    return [c for c in cmds if c.get("cmd") == "show_menu"]
+
+
+def _choose(cmds):
+    return [c for c in cmds if c.get("cmd") == "choose_mon"]
+
+
+def _choices(cmds):
+    return [c for c in cmds if c.get("cmd") == "show_choices"]
+
+
+def _open_trade(state, who="a"):
+    """trade_request -> action multichoice -> pick TRADE (index 0). Returns token (phase 'choosing')."""
+    token = _choices(state.handle_event(who, {"event": "trade_request"}))[0]["token"]
+    state.handle_event(who, {"event": "menu_result", "token": token, "choice": 0})   # 0 = Trade
+    return token
+
+
+def _offer_and_pick(state, slot=0, who="a"):
+    """trade_request -> TRADE -> pick `slot`. Returns the token (partner now has the confirm queued)."""
+    token = _open_trade(state, who)
+    state.handle_event(who, {"event": "mon_chosen", "token": token, "slot": slot})
+    return token
+
+
+def test_trade_request_opens_action_menu(tmp_path, monkeypatch):
+    """Talking to the partner opens the native action multichoice (Trade / Wave) — not the picker yet."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = _with_trade_blobs(make_state_with_link())
+    cmds_a = state.handle_event("a", {"event": "trade_request"})
+    mc = _choices(cmds_a)
+    assert len(mc) == 1 and mc[0]["options"] == ["Trade", "Wave"] and not _choose(cmds_a)
+    assert state.pending_trade and state.pending_trade["phase"] == "menu"
+
+
+def test_menu_wave_notifies_partner(tmp_path, monkeypatch):
+    """Choosing WAVE (index 1) on the action menu just waves the partner — no trade."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = _with_trade_blobs(make_state_with_link())
+    token = _choices(state.handle_event("a", {"event": "trade_request"}))[0]["token"]
+    state.handle_event("a", {"event": "menu_result", "token": token, "choice": 1})   # 1 = Wave
+    assert state.pending_trade is None
+    assert has_cmd(state.handle_event("b", {"event": "tick"}), "msgbox")             # partner waved
+
+
+def test_menu_trade_opens_picker(tmp_path, monkeypatch):
+    """Choosing TRADE (index 0) opens the native party picker."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = _with_trade_blobs(make_state_with_link())
+    token = _choices(state.handle_event("a", {"event": "trade_request"}))[0]["token"]
+    cmds_a = state.handle_event("a", {"event": "menu_result", "token": token, "choice": 0})
+    assert _choose(cmds_a) and state.pending_trade["phase"] == "choosing"
+
+
+def test_menu_cancel_aborts(tmp_path, monkeypatch):
+    """B-press (cancel, 127) on the action menu aborts with no trade and no wave."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = _with_trade_blobs(make_state_with_link())
+    token = _choices(state.handle_event("a", {"event": "trade_request"}))[0]["token"]
+    state.handle_event("a", {"event": "menu_result", "token": token, "choice": 127})
+    assert state.pending_trade is None
+
+
+def test_pick_linked_mon_offers_partner_confirm(tmp_path, monkeypatch):
+    """Picking an eligible linked mon sends ONLY the PARTNER a confirm (initiator already committed)."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = _with_trade_blobs(make_state_with_link())
+    token = _open_trade(state)
+    cmds_a = state.handle_event("a", {"event": "mon_chosen", "token": token, "slot": 0})
+    assert not _menu(cmds_a)                                  # initiator gets no confirm menu
+    cmds_b = state.handle_event("b", {"event": "tick"})
+    assert _menu(cmds_b) and _menu(cmds_b)[0]["token"] == token   # partner gets the confirm
+    assert state.pending_trade["phase"] == "confirming"
+
+
+def test_pick_non_linked_mon_reprompts(tmp_path, monkeypatch):
+    """The linked-pair invariant: picking a slot that is NOT a linked pair re-prompts, never trades."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = _with_trade_blobs(make_state_with_link())   # only slot 0 (A:1) is an eligible linked mon
+    token = _open_trade(state)
+    cmds_a = state.handle_event("a", {"event": "mon_chosen", "token": token, "slot": 3})  # not linked
+    assert _choose(cmds_a) and not _menu(cmds_a)         # re-prompt, no confirm
+    assert has_cmd(cmds_a, "msgbox")                     # "Pick a linked POKeMON!"
+    assert state.pending_trade["phase"] == "choosing"
+
+
+def test_partner_accept_then_done_reconciles(tmp_path, monkeypatch):
+    """Partner accepts -> apply_trade(native) to each; the link is swapped ATOMICALLY only once BOTH
+    sides report trade_done (never observable half-swapped), reconciling key + trade-evolution."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = _with_trade_blobs(make_state_with_link())
+    token = _offer_and_pick(state, slot=0)
+    assert state.pending_trade["phase"] == "confirming"
+    cmds_b = state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})  # accept
+    assert state.pending_trade["phase"] == "applying"
+    bt = next(c for c in cmds_b if c.get("cmd") == "apply_trade")
+    assert bt["slot"] == 1 and bt["blob_hex"] == "aa" * 100   # B receives A's mon (0xAA)
+    at = next(c for c in state.handle_event("a", {"event": "tick"}) if c.get("cmd") == "apply_trade")
+    assert at["slot"] == 0 and at["blob_hex"] == "bb" * 100   # A receives B's mon (0xBB)
+    e = state.links[0]
+    assert e.a.key == "A:1" and e.b.key == "B:2"             # NOT swapped yet — wait for both trade_done
+    # post-scene readback: A's received mon trade-EVOLVED (species -> 5).
+    state.handle_event("a", {"event": "trade_done", "slot": 0, "new_key": "B:2", "new_species": 5})
+    assert state.pending_trade is not None, "still waiting on B's trade_done"
+    assert e.a.key == "A:1", "link stays UNCHANGED until BOTH report (no half-swapped state)"
+    cmds_b2 = state.handle_event("b", {"event": "trade_done", "slot": 1, "new_key": "A:1", "new_species": 1})
+    assert state.pending_trade is None
+    assert e.a.key == "B:2" and e.b.key == "A:1"             # atomic ownership swap on both-done
+    assert e.a.species == 5
+    assert has_cmd(cmds_b2, "msgbox") and has_cmd(cmds_b2, "play_sound")   # jingle + "Traded!" after scene
+    assert "B:2" in state.party_keys["a"] and "A:1" in state.party_keys["b"]
+
+
+def test_trade_one_side_done_leaves_link_untouched(tmp_path, monkeypatch):
+    """If only ONE side reports trade_done (the other's scene hangs / fails), the link must NOT be
+    half-swapped — the 'pairs break if you wait too long' corruption. Nothing changes until both report."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = _with_trade_blobs(make_state_with_link())
+    token = _offer_and_pick(state, slot=0)
+    state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})   # accept
+    state.handle_event("a", {"event": "tick"})                                       # deliver A's apply_trade
+    state.handle_event("a", {"event": "trade_done", "slot": 0, "new_key": "B:2", "new_species": 5})
+    e = state.links[0]
+    assert state.pending_trade is not None and state.pending_trade["phase"] == "applying"
+    assert e.a.key == "A:1" and e.b.key == "B:2", "no swap until B also reports"
+    assert "A:1" in state.party_keys["a"] and "B:2" in state.party_keys["b"], "party_keys untouched"
+
+
+def test_trade_watchdog_frees_abandoned_slot(tmp_path, monkeypatch):
+    """An abandoned trade (a side never responds) eventually frees the single pending_trade slot so
+    future trades aren't wedged — and because the swap is atomic, the link is left untouched."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = _with_trade_blobs(make_state_with_link())
+    _offer_and_pick(state, slot=0)                                   # phase 'confirming'; partner never answers
+    assert state.pending_trade is not None
+    for _ in range(state.TRADE_WATCHDOG_EVENTS + 5):                 # unrelated activity, no trade progress
+        state.handle_event("b", {"event": "tick"})
+    assert state.pending_trade is None, "watchdog frees the abandoned slot"
+    assert state.links[0].a.key == "A:1", "link untouched by an abandoned trade"
+
+
+def test_trade_uses_the_matching_link_half(tmp_path, monkeypatch):
+    """MATCHING-pair guarantee: with multiple links, picking one mon trades EXACTLY that link's
+    counterpart half — the server auto-selects the partner's matching mon, never another link's."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link("A:1", "B:2", "route_1")               # link L1
+    e2 = LinkEntry(area_id="route_2", a=MonInfo(key="A:3", level=5),
+                   b=MonInfo(key="B:4", level=5), status=LinkStatus.ALIVE)
+    state.links.append(e2); state._index_entry(e2)
+    state.party_keys["a"].add("A:3"); state.party_keys["b"].add("B:4")
+    state.partner_blobs["a"] = [{"slot": 0, "key": "A:1", "blob": bytes([0x11] * 100)},
+                                {"slot": 1, "key": "A:3", "blob": bytes([0x33] * 100)}]
+    state.partner_blobs["b"] = [{"slot": 0, "key": "B:2", "blob": bytes([0x22] * 100)},
+                                {"slot": 1, "key": "B:4", "blob": bytes([0x44] * 100)}]
+    # A picks slot 1 = A:3 (half of L2). The matching half is B:4 — NOT B:2 (a different link).
+    token = _offer_and_pick(state, slot=1)
+    assert state.pending_trade["link"].area_id == "route_2"             # the L2 link was selected
+    cmds_b = state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})
+    bt = next(c for c in cmds_b if c.get("cmd") == "apply_trade")
+    at = next(c for c in state.handle_event("a", {"event": "tick"}) if c.get("cmd") == "apply_trade")
+    assert at["slot"] == 1 and at["blob_hex"] == "44" * 100   # A receives B:4 (the MATCHING half), not B:2
+    assert bt["slot"] == 1 and bt["blob_hex"] == "33" * 100   # B receives A:3
+
+
+def test_partner_declines_cancels(tmp_path, monkeypatch):
+    """The partner declining the offer cancels and applies nothing."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = _with_trade_blobs(make_state_with_link())
+    token = _offer_and_pick(state, slot=0)
+    cmds_b = state.handle_event("b", {"event": "menu_result", "token": token, "choice": 0})  # decline
+    assert state.pending_trade is None
+    assert has_cmd(cmds_b, "msgbox") and not has_cmd(cmds_b, "apply_trade")
+    assert state.links[0].a.key == "A:1", "link unchanged on decline"
+
+
+def test_menu_trade_no_pair(tmp_path, monkeypatch):
+    """Choosing TRADE with no eligible linked pair tells the initiator, no picker opens."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()          # no partner_blobs => nothing tradeable
+    token = _choices(state.handle_event("a", {"event": "trade_request"}))[0]["token"]
+    cmds_a = state.handle_event("a", {"event": "menu_result", "token": token, "choice": 0})  # TRADE
+    assert has_cmd(cmds_a, "msgbox") and not _choose(cmds_a)
+    assert state.pending_trade is None
+
+
+def test_status_badges_cached(tmp_path, monkeypatch):
+    """The status event caches each player's badge count (kept for future helpers; not shown in text)."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = _with_trade_blobs(make_state_with_link())
+    state.handle_event("a", {"event": "status", "badges": 5})
+    state.handle_event("b", {"event": "status", "badges": 2})
+    assert state.player_badges == {"a": 5, "b": 2}
+
+
 # ── explode_mode (run rule) ───────────────────────────────────────────────────
 
 def test_explode_mode_defaults_false():
