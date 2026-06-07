@@ -358,6 +358,20 @@ local pending_explosions = {}          -- [monKey] → {slot, battler, start_fra
 local FORCE_MOVE_TIMEOUT = 720         -- > patch's 600f deadline (dead-man's-switch only)
 local pending_force_moves = {}         -- [monKey] → {slot, battler, seq, start_frame}
 
+-- ⚠ NATIVE BATTLE-CONTROL KILL SWITCH — DISABLED in production (gates explode + faint).
+-- The native explode path (OP_FORCE_MOVE_SLOT controller-pointer swap) FAILED in real two-
+-- sided play: the swap relies on RR-version-specific controller addresses in handlers.c and
+-- did NOT fire, so the move wasn't forced — and the Explosion we inject into gBattleMons.
+-- moves[0] was left in an OPEN FIGHT menu, so manually selecting it SOFTLOCKED.  The proven
+-- Lua paths skip the menu entirely (Variant-3 menu-skip for explode, via canonical CFRU
+-- addresses; deferred-faint for force_faint) and shipped reliably, so production falls back
+-- to them.  The headless one-sided savestate test only proved the move COMMITS (PP drop); it
+-- can't exercise real turn execution or the open-menu softlock — hence this regression.
+-- Flip to true ONLY after a two-instance LIVE run validates the native path on the live ROM
+-- (re-discover the controller addresses for that RR version first).  The native machinery
+-- below (arm_native_explode, §4a-ter poll, drain, mb_explode_queue) is retained, inert.
+local NATIVE_BATTLE_CONTROL_ENABLED = false
+
 -- Native-patch Rival-Team-Swap state (RR companion patch only).  When the patch is present we
 -- dispatch OP_SET_ENEMY_PARTY (faithful blob copy) instead of the raw writeEnemyParty RAM-poke,
 -- then settle the ack here: ST_OK → refresh the active foe's gBattleMons in Lua + ack the server;
@@ -525,7 +539,7 @@ local function dispatch_commands(cmds)
                         if is_active_battler and is_explode then
                             -- Explode Mode (RR only): the active linked mon auto-Explodes.
                             local battler = M.getBattlerForPartySlot(slot)
-                            if patch_present() and currently_in_battle and battler >= 0 then
+                            if NATIVE_BATTLE_CONTROL_ENABLED and patch_present() and currently_in_battle and battler >= 0 then
                                 -- NATIVE (companion patch): write Explosion into the battle mon's
                                 -- move slot 0, then arm OP_FORCE_MOVE_SLOT.  The controller-swap
                                 -- driver reads moves[move_pos] at fire time (handlers.c
@@ -569,7 +583,7 @@ local function dispatch_commands(cmds)
                         elseif is_active_battler then
                             -- force_faint, active battler.
                             local battler = M.getBattlerForPartySlot(slot)
-                            if patch_present() and currently_in_battle and battler >= 0 then
+                            if NATIVE_BATTLE_CONTROL_ENABLED and patch_present() and currently_in_battle and battler >= 0 then
                                 -- NATIVE (companion patch): OP_FORCE_FAINT zeroes gBattleMons HP
                                 -- inside the frame hook, so we can faint the active battler
                                 -- immediately instead of deferring until it switches out.
@@ -1704,7 +1718,7 @@ local function on_frame()
     -- facing + moving + live animNum ~20 Hz, plus our AVATAR (live sprite images/anims ROM ptrs +
     -- true 16-colour palette) so the partner sees US as ourselves, moving exactly as we move. The
     -- partner's patch LERPs the ghost to our position + plays our animation. No-ops without the patch.
-    if IS_RR and is_overworld then
+    if IS_RR and is_overworld and patch_present() then
         local OE = MB.player_oe()   -- the player's ACTUAL object-event (not always slot 0)
         -- Calibrate sub-pixel: while the player is tile-aligned (idle), snapshot (tile, coordOffset);
         -- world-px = alignTile*16 + (coffAtAlign - coffNow) tracks the smooth scroll between tiles.
