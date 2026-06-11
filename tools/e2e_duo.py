@@ -1,0 +1,359 @@
+#!/usr/bin/env python3
+"""e2e_duo.py — TWO-INSTANCE headless E2E harness for the SLink companion patch.
+
+Runs a throwaway SLink server + two concurrent EmuHawk instances (players a/b), both
+loading savestates from the SAME save (instance B mutates its party OTIDs pre-hello so
+mon keys don't collide in the server's flat key index), then orchestrates a scenario
+via the server's debug HTTP API and waits for both instances' result files.
+
+    python tools/e2e_duo.py --scenario faint
+    python tools/e2e_duo.py --scenario all --keep-alive
+
+Per instance: a generated stub (patch/build/duo_{a,b}.lua) bakes SLINK_HOST/PORT/PLAYER
+plus the SLINK_DUO table and dofiles lua/tests/duo/duo_main.lua, which runs the REAL
+production client and the scenario coroutine (lua/tests/duo/scenario_<name>.lua).
+Result protocol: patch/build/e2e_<scenario>_{a,b}_result.txt — incremental log lines,
+"MYKEY <slot> <key>" markers, final "RESULT: PASS|FAIL".
+
+Launch rules (hard-won): CWD = repo root with RELATIVE EmuHawk arg paths (absolute paths
+containing the "Google Drive" space break BizHawk's CLI parser); absolute paths are fine
+INSIDE Lua. Per-instance --config copies avoid the shared config.ini write race.
+"""
+import argparse
+import json
+import os
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.request
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+EMUHAWK = "E:/Howard/Bizhawk/EmuHawk.exe"
+BIZHAWK_CONFIG = "E:/Howard/Bizhawk/config.ini"
+SAVESTATE_DIR = "E:/Howard/Bizhawk/GBA/State"
+ROM_REL = "patch/build/slink_RR.gba"
+BUILD = os.path.join(REPO, "patch", "build")
+WT_FWD = REPO.replace("\\", "/")
+
+# Per-scenario knobs: extra server flags, savestate, per-side timeout (seconds).
+SCENARIOS = {
+    "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
+    "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
+    "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
+    "ghost":   {"flags": ["--overworld-presence"], "savestate": "slink_overworld.State",
+                "timeout": 420},
+}
+
+
+def free_port():
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def api(http_port, method, path, body=None, timeout=10):
+    url = f"http://127.0.0.1:{http_port}{path}"
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(url, data=data, method=method,
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read().decode())
+
+
+def read_result(scenario, inst):
+    path = os.path.join(BUILD, f"e2e_{scenario}_{inst}_result.txt")
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8", errors="replace") as f:
+        return f.read()
+
+
+def wait_for(desc, pred, timeout, interval=2.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        v = pred()
+        if v:
+            return v
+        time.sleep(interval)
+    raise TimeoutError(f"timed out after {timeout}s waiting for {desc}")
+
+
+def extract_keys(text):
+    """MYKEY <slot> <key> lines -> {slot: key}."""
+    keys = {}
+    for line in (text or "").splitlines():
+        parts = line.split()
+        if len(parts) == 3 and parts[0] == "MYKEY":
+            keys[int(parts[1])] = parts[2]
+    return keys
+
+
+def extract_marks(text, tag):
+    """'<tag> <value>' lines -> [values]."""
+    out = []
+    for line in (text or "").splitlines():
+        parts = line.split(None, 1)
+        if len(parts) == 2 and parts[0] == tag:
+            out.append(parts[1])
+    return out
+
+
+class DuoRun:
+    def __init__(self, scenario, args):
+        self.scenario = scenario
+        self.cfg = SCENARIOS[scenario]
+        self.args = args
+        self.tcp_port = free_port()
+        self.http_port = free_port()
+        self.data_dir = tempfile.mkdtemp(prefix=f"slink_duo_{scenario}_")
+        self.server = None
+        self.emus = []
+        self.go_files = {inst: os.path.join(BUILD, f"duo_go_{scenario}_{inst}.txt")
+                         for inst in ("a", "b")}
+
+    # ── lifecycle ────────────────────────────────────────────────────────────
+    def start_server(self):
+        cmd = [sys.executable, "-m", "server.server",
+               "--host", "127.0.0.1",
+               "--port", str(self.tcp_port),
+               "--http-port", str(self.http_port),
+               "--data-dir", self.data_dir] + self.cfg["flags"] + self.args.server_flags
+        self.server = subprocess.Popen(
+            cmd, cwd=REPO,
+            stdout=open(os.path.join(self.data_dir, "server.log"), "w"),
+            stderr=subprocess.STDOUT)
+        wait_for("server HTTP up", lambda: self._status() is not None, 30)
+        print(f"[duo] server up: tcp={self.tcp_port} http={self.http_port} data={self.data_dir}")
+
+    def _status(self):
+        try:
+            return api(self.http_port, "GET", "/api/status", timeout=3)
+        except Exception:
+            return None
+
+    def start_instances(self):
+        for inst in ("a", "b"):
+            for f in (self._result_path(inst), self.go_files[inst]):
+                if os.path.exists(f):
+                    os.remove(f)
+        savestate = f"{SAVESTATE_DIR}/{self.cfg['savestate']}"
+        for inst in ("a", "b"):
+            cfg_ini = os.path.join(BUILD, f"duo_cfg_{inst}.ini")
+            shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
+            stub = os.path.join(BUILD, f"duo_{inst}.lua")
+            duo = {
+                "wt": WT_FWD, "player": inst, "scenario": self.scenario,
+                "savestate": savestate, "mutate_otid": inst == "b",
+                "result": f"{WT_FWD}/patch/build/e2e_{self.scenario}_{inst}_result.txt",
+                "go_file": self.go_files[inst].replace("\\", "/"),
+                "timeout_frames": self.cfg["timeout"] * 60,
+            }
+            with open(stub, "w") as f:
+                f.write('SLINK_HOST = "127.0.0.1"\n')
+                f.write(f"SLINK_PORT = {self.tcp_port}\n")
+                f.write(f'SLINK_PLAYER = "{inst}"\n')
+                f.write("SLINK_DUO = {\n")
+                for k, v in duo.items():
+                    if isinstance(v, str):
+                        f.write(f'  {k} = "{v}",\n')
+                    elif isinstance(v, bool):
+                        f.write(f"  {k} = {str(v).lower()},\n")
+                    else:
+                        f.write(f"  {k} = {v},\n")
+                f.write("}\n")
+                f.write(f'dofile("{WT_FWD}/lua/tests/duo/duo_main.lua")\n')
+            p = subprocess.Popen(
+                [EMUHAWK, f"--config=patch/build/duo_cfg_{inst}.ini",
+                 f"--lua=patch/build/duo_{inst}.lua", ROM_REL],
+                cwd=REPO)
+            self.emus.append(p)
+        print("[duo] two EmuHawk instances launched")
+
+    def wait_keys(self):
+        """Both wrappers log MYKEY lines right after savestate+mutation."""
+        def both():
+            ka = extract_keys(read_result(self.scenario, "a"))
+            kb = extract_keys(read_result(self.scenario, "b"))
+            return (ka, kb) if ka and kb else None
+        ka, kb = wait_for("MYKEY lines from both instances", both, 120)
+        if set(ka.values()) & set(kb.values()):
+            raise RuntimeError(f"key collision between instances: {ka} vs {kb}")
+        print(f"[duo] keys: a={ka.get(0)} b={kb.get(0)}")
+        return ka, kb
+
+    def wait_connected(self):
+        def both():
+            st = self._status()
+            if not st:
+                return None
+            players = st.get("players", {})
+            return (players.get("a", {}).get("connected")
+                    and players.get("b", {}).get("connected")) or None
+        wait_for("both players hello'd", both, 120)
+        print("[duo] both players connected")
+
+    def inject_link(self, a_key, b_key):
+        def linked():
+            try:
+                r = api(self.http_port, "POST", "/api/inject_link",
+                        {"a_key": a_key, "b_key": b_key, "area_id": "duo", "force": True})
+                return r if r.get("ok") else None
+            except Exception:
+                return None
+        wait_for("inject_link", linked, 60)
+        print(f"[duo] linked {a_key} <-> {b_key}")
+
+    def go(self, lines_by_inst=None):
+        """Write the per-instance go-files; lines_by_inst = {"a": [...], "b": [...]} or None."""
+        for inst in ("a", "b"):
+            with open(self.go_files[inst], "w") as f:
+                for l in (lines_by_inst or {}).get(inst, []):
+                    f.write(l + "\n")
+                f.write("GO\n")
+        print("[duo] go-files written")
+
+    def set_pokeballs(self):
+        """Faints are suppressed server-side until the nuzlocke is active (pokéballs obtained)."""
+        for p in ("a", "b"):
+            r = api(self.http_port, "POST", "/api/debug/set_pokeballs",
+                    {"player": p, "value": True})
+            if not r.get("ok"):
+                raise RuntimeError(f"set_pokeballs failed: {r}")
+        print("[duo] pokeballs_obtained set for both players")
+
+    def queue_command(self, player, cmd):
+        body = dict(cmd)
+        body["player"] = player
+        r = api(self.http_port, "POST", "/api/debug/queue_command", body)
+        if not r.get("ok"):
+            raise RuntimeError(f"queue_command failed: {r}")
+        print(f"[duo] queued for {player}: {cmd}")
+
+    def wait_results(self):
+        def both():
+            ra = read_result(self.scenario, "a")
+            rb = read_result(self.scenario, "b")
+            if ra and "RESULT:" in ra and rb and "RESULT:" in rb:
+                return ra, rb
+            return None
+        return wait_for("both RESULT lines", both, self.cfg["timeout"])
+
+    def _result_path(self, inst):
+        return os.path.join(BUILD, f"e2e_{self.scenario}_{inst}_result.txt")
+
+    def cleanup(self, passed):
+        for p in self.emus:
+            if p.poll() is None:
+                subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"],
+                               capture_output=True)
+        if self.server and self.server.poll() is None:
+            self.server.terminate()
+            try:
+                self.server.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.server.kill()
+        for gf in self.go_files.values():
+            if os.path.exists(gf):
+                os.remove(gf)
+        if passed and not self.args.keep_data:
+            shutil.rmtree(self.data_dir, ignore_errors=True)
+        else:
+            print(f"[duo] data dir kept: {self.data_dir}")
+
+    # ── per-scenario orchestration ───────────────────────────────────────────
+    def orchestrate(self):
+        ka, kb = self.wait_keys()
+        self.wait_connected()
+        self.set_pokeballs()
+        if self.scenario == "faint":
+            self.inject_link(ka[0], kb[0])
+            self.go()
+        elif self.scenario == "boxsync":
+            # Symmetric: BOTH sides deposit their slot-1 filler, then withdraw it statless
+            # (native OP_DEPOSIT_MON / OP_WITHDRAW_MON; the Lua asserts live in the scenario).
+            self.go()
+            self.queue_command("a", {"cmd": "box_mon", "key": ka[1]})
+            self.queue_command("b", {"cmd": "box_mon", "key": kb[1]})
+            for inst, key in (("a", ka[1]), ("b", kb[1])):
+                wait_for(f"{inst} deposit done",
+                         lambda i=inst: "DEPOSIT_DONE" in (read_result(self.scenario, i) or ""),
+                         180)
+                self.queue_command(inst, {"cmd": "party_mon", "key": key})
+        elif self.scenario == "trade":
+            # MVP scripted trade: no inject_link (the server menu flow is pytest-covered, and a
+            # link whose halves swap owners behind the server's back would just feed the
+            # reconciler). Cross-inject apply_trade with each side's slot-0 blob.
+            def blobs():
+                ba = extract_marks(read_result(self.scenario, "a"), "MYBLOB")
+                bb = extract_marks(read_result(self.scenario, "b"), "MYBLOB")
+                return (ba[0], bb[0]) if ba and bb else None
+            blob_a, blob_b = wait_for("MYBLOB from both", blobs, 120)
+            self.queue_command("a", {"cmd": "apply_trade", "slot": 0, "blob_hex": blob_b,
+                                     "token": "duo"})
+            self.queue_command("b", {"cmd": "apply_trade", "slot": 0, "blob_hex": blob_a,
+                                     "token": "duo"})
+            # The partner's pre-trade key rides in each go-file (blob bytes 0-3 PID, 4-7 OTID).
+            def key_of(blob):
+                pid = int.from_bytes(bytes.fromhex(blob[:8]), "little")
+                otid = int.from_bytes(bytes.fromhex(blob[8:16]), "little")
+                return f"{pid:08X}:{otid:08X}"
+            self.go({"a": [f"PARTNER {key_of(blob_b)}"],
+                     "b": [f"PARTNER {key_of(blob_a)}"]})
+        elif self.scenario == "ghost":
+            self.go()
+        else:
+            raise ValueError(self.scenario)
+
+    def run(self):
+        passed = False
+        try:
+            self.start_server()
+            self.start_instances()
+            self.orchestrate()
+            ra, rb = self.wait_results()
+            pa = "RESULT: PASS" in ra
+            pb = "RESULT: PASS" in rb
+            passed = pa and pb
+            print(f"[duo] {self.scenario}: a={'PASS' if pa else 'FAIL'} "
+                  f"b={'PASS' if pb else 'FAIL'}")
+            if not passed:
+                for inst, text in (("a", ra), ("b", rb)):
+                    print(f"--- {self.scenario} {inst} result ---")
+                    print("\n".join(text.splitlines()[-25:]))
+            if self.args.keep_alive:
+                input("[duo] --keep-alive: press Enter to tear down…")
+        finally:
+            self.cleanup(passed)
+        return passed
+
+
+def main():
+    # The client logs contain Unicode arrows; don't let a cp1252 console kill the runner.
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--scenario", default="faint",
+                    choices=list(SCENARIOS) + ["all"])
+    ap.add_argument("--keep-alive", action="store_true",
+                    help="pause before teardown for manual inspection")
+    ap.add_argument("--keep-data", action="store_true",
+                    help="never delete the temp server data dir")
+    ap.add_argument("--server-flags", nargs="*", default=[],
+                    help="extra flags for server.server")
+    args = ap.parse_args()
+
+    names = list(SCENARIOS) if args.scenario == "all" else [args.scenario]
+    results = {}
+    for name in names:
+        print(f"\n========== scenario: {name} ==========")
+        results[name] = DuoRun(name, args).run()
+    print("\n========== summary ==========")
+    for name, ok in results.items():
+        print(f"  {name}: {'PASS' if ok else 'FAIL'}")
+    sys.exit(0 if all(results.values()) else 1)
+
+
+if __name__ == "__main__":
+    main()
