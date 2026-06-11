@@ -66,7 +66,7 @@ if not MB.present() then return finish(false, "no SLNK beacon (unpatched ROM?)")
 local count = memory.read_u8(PARTY_COUNT)
 if count == 0 or count > 6 then return finish(false, "bad party count " .. count) end
 local FILLERS = {1, 4, 7}  -- Bulbasaur/Charmander/Squirtle lines, lv 5
-while count < 3 do
+while D.fillers ~= false and count < 3 do
     local seq = MB.send(MB.OP_CREATE_MON, MB.create_mon_args(count, FILLERS[count], 5, 0, 1))
     local st
     for _ = 1, 120 do emu.frameadvance(); st = MB.poll(seq); if st then break end end

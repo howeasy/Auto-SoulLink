@@ -4,7 +4,7 @@ BizHawk Lua test scripts. Three families:
 
 - **`duo/`** — the TWO-INSTANCE headless E2E harness: `duo_main.lua` (shared wrapper that runs
   the REAL production client; instance B mutates party OTIDs pre-hello so keys don't collide)
-  plus `scenario_{faint,boxsync,trade,ghost}.lua`. Driven by `tools/e2e_duo.py`, which boots a
+  plus `scenario_{faint,boxsync,trade,ghost,explode}.lua`. Driven by `tools/e2e_duo.py`, which boots a
   throwaway server + two concurrent EmuHawk instances (per-instance `--config` copies) and
   orchestrates via the debug HTTP API. Run: `python tools/e2e_duo.py --scenario all`
   (or `SLINK_E2E=1 pytest tests/e2e/`). This automates the old "two-instance E2E (USER gate)".

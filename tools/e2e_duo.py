@@ -38,13 +38,18 @@ ROM_REL = "patch/build/slink_RR.gba"
 BUILD = os.path.join(REPO, "patch", "build")
 WT_FWD = REPO.replace("\\", "/")
 
-# Per-scenario knobs: extra server flags, savestate, per-side timeout (seconds).
+# Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout
+# (seconds), fillers (default True; or {"a":…,"b":…} — explode keeps B at ONE mon so the
+# Explosion self-faint whites out instead of opening the switch menu).
 SCENARIOS = {
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "ghost":   {"flags": ["--overworld-presence"], "savestate": "slink_overworld.State",
                 "timeout": 420},
+    "explode": {"flags": ["--explode-mode"],
+                "savestate": {"a": "slink_overworld.State", "b": "slink_prebattle.State"},
+                "fillers": {"a": True, "b": False}, "timeout": 600},
 }
 
 
@@ -139,14 +144,17 @@ class DuoRun:
             for f in (self._result_path(inst), self.go_files[inst]):
                 if os.path.exists(f):
                     os.remove(f)
-        savestate = f"{SAVESTATE_DIR}/{self.cfg['savestate']}"
         for inst in ("a", "b"):
             cfg_ini = os.path.join(BUILD, f"duo_cfg_{inst}.ini")
             shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
             stub = os.path.join(BUILD, f"duo_{inst}.lua")
+            ss = self.cfg["savestate"]
+            fillers = self.cfg.get("fillers", True)
             duo = {
                 "wt": WT_FWD, "player": inst, "scenario": self.scenario,
-                "savestate": savestate, "mutate_otid": inst == "b",
+                "savestate": f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}",
+                "fillers": fillers[inst] if isinstance(fillers, dict) else fillers,
+                "mutate_otid": inst == "b",
                 "result": f"{WT_FWD}/patch/build/e2e_{self.scenario}_{inst}_result.txt",
                 "go_file": self.go_files[inst].replace("\\", "/"),
                 "timeout_frames": self.cfg["timeout"] * 60,
@@ -270,6 +278,13 @@ class DuoRun:
         self.set_pokeballs()
         if self.scenario == "faint":
             self.inject_link(ka[0], kb[0])
+            self.go()
+        elif self.scenario == "explode":
+            self.inject_link(ka[0], kb[0])
+            # B must be inside a LIVE battle before A's faint fires the force_explode (a
+            # frozen battle savestate can't execute the coerced turn — foe never commits).
+            wait_for("B inside a live battle",
+                     lambda: "IN_BATTLE" in (read_result(self.scenario, "b") or ""), 240)
             self.go()
         elif self.scenario == "boxsync":
             # Symmetric: BOTH sides deposit their slot-1 filler, then withdraw it statless

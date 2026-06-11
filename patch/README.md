@@ -61,7 +61,7 @@ set per run in the run manager's **New run** form or via server CLI flags):
 | `native_sounds` | OFF | `--native-sounds` | Lua m4a `playSE` poke |
 | `battle_calc` | ON | `--no-battle-calc` | damage display hidden (kill-switch byte) |
 | `pc_trade_npc` | ON | `--no-pc-trade-npc` | no Pokémon-Center trade NPC (only effective while overworld presence is OFF) |
-| `native_battle_control` | OFF | `--native-battle-control` | Variant-3 RAM explode + deferred faint (EXPERIMENTAL: the controller-swap softlocked in real play; thunk addrs re-validated by `probe_movecursor_thunks.lua` — enable only for a live two-instance soak) |
+| `native_battle_control` | OFF | `--native-battle-control` | Variant-3 RAM explode + deferred faint. NOT a user toggle (no manager checkbox): it selects the IMPLEMENTATION PATH under Explode Mode — CLI-only dev switch for the native controller-swap soak (which softlocked in real play; thunk addrs re-validated by `probe_movecursor_thunks.lua`) |
 
 Run RULES that happen to need the patch (`--explode-mode`, `--rival-team-swap`,
 `--overworld-presence`) stay opt-in per run as before. **Not toggleable by design**: native PC

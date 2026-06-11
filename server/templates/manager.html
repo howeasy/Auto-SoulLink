@@ -41,71 +41,91 @@
              x-model="newRunName"
              @keyup.enter="createRun()">
       <div class="mgr-new-opts-section">
-        <div class="mgr-new-opts-label">Link Clauses</div>
+        <div class="mgr-new-opts-head">
+          <span class="mgr-new-opts-label">Link Clauses</span>
+          <span class="mgr-info" tabindex="0" role="note"
+                data-tip="Reject a soul-link when both mons share this trait — keeps a paired run varied.">
+            <svg aria-hidden="true"><use href="#i-info"/></svg>
+          </span>
+        </div>
         <div class="mgr-new-opts">
-          <label><input type="checkbox" x-model="newOpts.species_lock">
+          <label data-tip="Reject links where both mons are in the same evolution family.">
+            <input type="checkbox" x-model="newOpts.species_lock">
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-dna"/></svg>
             Species Clause
           </label>
-          <label><input type="checkbox" x-model="newOpts.gender_lock">
+          <label data-tip="Reject links where both mons share a gender.">
+            <input type="checkbox" x-model="newOpts.gender_lock">
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-gender"/></svg>
             Gender Clause
           </label>
-          <label><input type="checkbox" x-model="newOpts.type_lock">
+          <label data-tip="Reject links where both mons share any type.">
+            <input type="checkbox" x-model="newOpts.type_lock">
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-type"/></svg>
             Type Clause
           </label>
         </div>
       </div>
       <div class="mgr-new-opts-section">
-        <div class="mgr-new-opts-label">Requires ROM patch</div>
-        <p class="mgr-new-opts-note">
-          These need the companion ROM patch on both players' games.
-          <a href="/patcher">Get the patch →</a>
-        </p>
+        <div class="mgr-new-opts-head">
+          <span class="mgr-new-opts-label">ROM Patch</span>
+          <span class="mgr-info" tabindex="0" role="note"
+                data-tip="These need the companion ROM patch applied to BOTH players' games.">
+            <svg aria-hidden="true"><use href="#i-info"/></svg>
+          </span>
+          <a class="mgr-new-opts-get" href="/patcher" target="_blank" rel="noopener"
+             title="Get the companion patch">
+            <svg aria-hidden="true"><use href="#i-extlink"/></svg> Get patch
+          </a>
+        </div>
         <div class="mgr-new-opts">
-          <label><input type="checkbox" x-model="newOpts.explode_mode">
+          <label data-tip="On a partner's death, force the linked mon to auto-Explode (RR; Variant-3 menu-skip).">
+            <input type="checkbox" x-model="newOpts.explode_mode">
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-explode"/></svg>
             Explode Mode
           </label>
-          <label><input type="checkbox" x-model="newOpts.rival_team_swap">
+          <label data-tip="Rival/trainer battles load your partner's exact team instead of the canned one.">
+            <input type="checkbox" x-model="newOpts.rival_team_swap">
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-rival-swap"/></svg>
             Rival Swap
           </label>
-          <label><input type="checkbox" x-model="newOpts.overworld_presence">
+          <label data-tip="See your partner walking in your overworld as a live peer ghost.">
+            <input type="checkbox" x-model="newOpts.overworld_presence">
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-presence"/></svg>
             Overworld Presence
           </label>
         </div>
-      </div>
-      <div class="mgr-new-opts-section">
-        <div class="mgr-new-opts-label">Native enhancements</div>
-        <p class="mgr-new-opts-note">
-          ROM-patch UI/audio paths. These don't change soullink rules — off
-          falls back to the Lua overlay (or hides the extra).
-        </p>
-        <div class="mgr-new-opts">
-          <label><input type="checkbox" x-model="newOpts.native_messages">
-            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-msgbox"/></svg>
-            Native Messages
-          </label>
-          <label><input type="checkbox" x-model="newOpts.native_sounds">
-            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-sound"/></svg>
-            Native Sounds
-          </label>
-          <label title="Native battle control"><input type="checkbox" x-model="newOpts.native_battle_control">
-            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-rival-swap"/></svg>
-            Native battle control (experimental)
-          </label>
-          <label><input type="checkbox" x-model="newOpts.battle_calc">
-            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-calc"/></svg>
-            Battle Calc
-          </label>
-          <label><input type="checkbox" x-model="newOpts.pc_trade_npc">
-            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-pcnpc"/></svg>
-            PC Trade NPC
-          </label>
-        </div>
+        <details class="mgr-new-disclosure">
+          <summary>
+            Native UI &amp; audio
+            <span class="mgr-info" tabindex="0" role="note"
+                  data-tip="ROM-patch UI/audio paths. Off = Lua overlay fallback (or the extra is hidden). These don't change soul-link rules.">
+              <svg aria-hidden="true"><use href="#i-info"/></svg>
+            </span>
+          </summary>
+          <div class="mgr-new-opts">
+            <label data-tip="Draw field + battle notifications as native in-game text boxes instead of the Lua HUD overlay.">
+              <input type="checkbox" x-model="newOpts.native_messages">
+              <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-msgbox"/></svg>
+              Native Messages
+            </label>
+            <label data-tip="Play notification sounds through the game's own audio engine instead of the Lua m4a poke.">
+              <input type="checkbox" x-model="newOpts.native_sounds">
+              <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-sound"/></svg>
+              Native Sounds
+            </label>
+            <label data-tip="Show the bundled in-battle damage / type-effectiveness calculator. Off hides it (on by default).">
+              <input type="checkbox" x-model="newOpts.battle_calc">
+              <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-calc"/></svg>
+              Battle Calc
+            </label>
+            <label data-tip="Spawn a Pokémon-Center trade NPC for trading (on by default; only used when Overworld Presence is off).">
+              <input type="checkbox" x-model="newOpts.pc_trade_npc">
+              <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-pcnpc"/></svg>
+              PC Trade NPC
+            </label>
+          </div>
+        </details>
       </div>
       <button class="mgr-create-btn" @click="createRun()">
         <svg class="mgr-btn-ico" aria-hidden="true"><use href="#i-plus"/></svg>
@@ -276,12 +296,6 @@
             <span class="mgr-badge mgr-badge-lock">
               <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-sound"/></svg>
               Native SFX
-            </span>
-          </template>
-          <template x-if="current?.native_battle_control">
-            <span class="mgr-badge mgr-badge-lock" title="Native battle control">
-              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-rival-swap"/></svg>
-              Native Battle
             </span>
           </template>
           <template x-if="current && current.battle_calc === false">
@@ -461,7 +475,7 @@ function runManager() {
     managerPort: window.SLINK_MANAGER_PORT,
     newRunName: '',
     newOpts: { species_lock: false, gender_lock: false, type_lock: false, explode_mode: false, rival_team_swap: false, overworld_presence: false,
-               native_messages: false, native_sounds: false, battle_calc: true, pc_trade_npc: true, native_battle_control: false },
+               native_messages: false, native_sounds: false, battle_calc: true, pc_trade_npc: true },
     liveStatus: null,
     liveStatusError: '',
     _liveStatusInterval: null,

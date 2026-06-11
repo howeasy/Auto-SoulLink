@@ -19,12 +19,12 @@ pytestmark = pytest.mark.skipif(
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-@pytest.mark.parametrize("scenario", ["faint", "boxsync", "trade", "ghost"])
+@pytest.mark.parametrize("scenario", ["faint", "boxsync", "trade", "ghost", "explode"])
 def test_duo_scenario(scenario):
     proc = subprocess.run(
         [sys.executable, os.path.join(REPO, "tools", "e2e_duo.py"),
          "--scenario", scenario],
         cwd=REPO, capture_output=True, text=True, encoding="utf-8",
-        errors="replace", timeout=900)
+        errors="replace", timeout=1200)
     assert proc.returncode == 0, (
         f"duo {scenario} failed:\n{proc.stdout[-3000:]}\n{proc.stderr[-1000:]}")

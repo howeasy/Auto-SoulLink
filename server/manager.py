@@ -454,8 +454,6 @@ def _render_cards(runs: list[dict], host: str) -> str:
             lock_badges += '<span class="lock-badge">Native Msgs</span>'
         if run.get("native_sounds"):
             lock_badges += '<span class="lock-badge">Native SFX</span>'
-        if run.get("native_battle_control"):
-            lock_badges += '<span class="lock-badge">Native Battle</span>'
         if not run.get("battle_calc", True):
             lock_badges += '<span class="lock-badge">Calc Off</span>'
         if not run.get("pc_trade_npc", True):
