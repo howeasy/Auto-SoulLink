@@ -1,0 +1,105 @@
+{# SLink Companion ROM Patcher — applies patch/dist/SLink-RR.ups to a clean
+   Radical Red ROM entirely in the browser. The UPS apply + hashing live in
+   /static/patcher.js (a 1:1 port of patch/tools/make_ups.py); nothing is ever
+   uploaded. This template only owns the SLink chrome + page layout. #}
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block head_extra %}
+  <link rel="stylesheet" href="/static/patcher.css">
+{% endblock %}
+
+{% block content %}
+  {{ sidebar_html | safe }}
+  <main class="dash-main">
+    <div class="patcher-wrap"
+         data-base-md5="{{ base_rom_md5 }}"
+         data-patched-md5="{{ patched_rom_md5 }}"
+         data-patch-url="/companion/SLink-RR.ups">
+
+      <header class="patcher-head">
+        <h1>Companion ROM Patcher</h1>
+        <p class="patcher-lead">
+          Apply the SLink companion patch to your <strong>clean Radical Red</strong> ROM
+          right here — the patch runs entirely in your browser, nothing is uploaded.
+          The patch is <strong>optional</strong>: without it the SLink Lua client falls
+          back to its existing behaviour, and unpatched players are unaffected.
+        </p>
+      </header>
+
+      {# ── Patch-and-download ─────────────────────────────────────────── #}
+      <section class="patcher-card">
+        <h2>1 · Patch your ROM</h2>
+        <label id="drop" class="patcher-drop" for="rom-input">
+          <input id="rom-input" type="file" accept=".gba,application/octet-stream" hidden>
+          <span class="patcher-drop-ico" aria-hidden="true">⬇</span>
+          <span class="patcher-drop-text">
+            Drop your <code>Pokemon - Radical Red.gba</code> here, or click to choose
+          </span>
+          <span id="rom-name" class="patcher-drop-name"></span>
+        </label>
+
+        <div class="patcher-actions">
+          <button id="apply" type="button" class="patcher-btn" disabled>Apply patch</button>
+          <a id="download" class="patcher-btn patcher-btn-ok" hidden download>Download patched ROM</a>
+        </div>
+
+        <div id="status" class="patcher-status" role="status" aria-live="polite"></div>
+
+        <dl class="patcher-fp" id="fp" hidden>
+          <div><dt>Input md5</dt><dd id="fp-in">—</dd></div>
+          <div><dt>Output md5</dt><dd id="fp-out">—</dd></div>
+        </dl>
+      </section>
+
+      {# ── What this unlocks ──────────────────────────────────────────── #}
+      <section class="patcher-card">
+        <h2>What the patch unlocks</h2>
+        <p class="patcher-muted">
+          These native in-game features <strong>require</strong> the patch (both linked
+          players must be patched for the peer/trade features). Everything else in SLink
+          works without it.
+        </p>
+        <ul class="patcher-features">
+          <li><strong>Native message box</strong> — momentous overworld events (a link
+            forms, a shiny is found, an area becomes a dead zone) show in the real in-game
+            text box instead of the HUD.</li>
+          <li><strong>Peer ghost</strong> — your partner walks your overworld as a real
+            NPC, rendered as their own trainer avatar &amp; colours, moving in real time.</li>
+          <li><strong>Talk to your partner</strong> — face the ghost + press A for a native
+            <em>Trade / Say hey</em> menu. Trade plays the real in-game trade scene on both
+            sides (including trade-evolution); Say hey pings your partner.</li>
+          <li><strong>Native sound</strong> — link / KO / shiny cues play through the game's
+            own sound engine instead of a Lua RAM-poke.</li>
+          <li><strong>Bundled Battle Calc</strong> — an in-battle damage / type-effectiveness
+            readout for the highlighted move, folded into the same patch.</li>
+        </ul>
+        <p class="patcher-muted">
+          Patch-dependent augmentations (<strong>Explode Mode</strong>, <strong>Rival Swap</strong>,
+          <strong>Overworld Presence</strong>) are toggled per-run when you create a run in the
+          <strong>Manager</strong> — under the “Requires ROM patch” section.
+        </p>
+      </section>
+
+      {# ── Manual download ────────────────────────────────────────────── #}
+      <section class="patcher-card">
+        <h2>Prefer your own patcher?</h2>
+        <p class="patcher-muted">
+          Download the raw UPS and apply it with Flips, NUPS, RomPatcher.js, … Your clean
+          ROM's md5 should be <code>{{ base_rom_md5 }}</code>; the patched result should be
+          <code>{{ patched_rom_md5 }}</code>.
+        </p>
+        <p>
+          <a class="patcher-btn patcher-btn-ghost" href="/companion/SLink-RR.ups" download>
+            Download SLink-RR.ups
+          </a>
+        </p>
+      </section>
+    </div>
+  </main>
+{% endblock %}
+
+{% block scripts %}
+  <script src="/static/patcher.js" defer></script>
+{% endblock %}

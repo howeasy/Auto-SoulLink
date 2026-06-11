@@ -37,9 +37,12 @@ MB.OP_SET_ENEMY_PARTY = 16
 MB.BLOB_BUF = 0x0203FA00     -- patch reads count*100 raw party-mon bytes from here (matches handlers.c)
 
 -- Stage decoded blobs (a list of 100-byte arrays) into the patch's blob buffer.
+-- Errors loudly on a short row: writing row[j]=nil would throw mid-stage with a half-written
+-- buffer already in EWRAM (callers validate length, this is the last line of defense).
 function MB.write_enemy_blobs(byte_rows)
     for i = 1, #byte_rows do
         local row, off = byte_rows[i], MB.BLOB_BUF + (i - 1) * 100
+        if #row < 100 then error(string.format("write_enemy_blobs: row %d is %d bytes (want 100)", i, #row)) end
         for j = 1, 100 do memory.write_u8(off + (j - 1), row[j]) end
     end
 end
@@ -85,11 +88,13 @@ MB.OP_PLAY_SE       = 19    -- native sound effect via PlaySE: args {song_lo, so
 MB.TEXT_BUF = 0x0203F900    -- patch reads FR-encoded text from here for SHOW_MESSAGE
 
 -- ASCII -> FireRed charmap (letters, digits, space, common punctuation), 0xFF-terminated.
+-- "\n" maps to the FR line-break control (0xFE) so message-box text can span two lines.
 function MB.fr_encode(s)
     local out = {}
     for i = 1, #s do
         local c = s:sub(i, i); local b = c:byte(); local v
         if c == " " then v = 0x00
+        elseif c == "\n" then v = 0xFE
         elseif b >= 48 and b <= 57 then v = 0xA1 + (b - 48)   -- 0-9
         elseif b >= 65 and b <= 90 then v = 0xBB + (b - 65)   -- A-Z
         elseif b >= 97 and b <= 122 then v = 0xD5 + (b - 97)  -- a-z
@@ -104,10 +109,17 @@ function MB.fr_encode(s)
     return out
 end
 
--- write FR-encoded text into the patch's text buffer (call before sending SHOW_MESSAGE)
-function MB.write_message(text)
+-- write FR-encoded text into the patch's text buffer (call before sending SHOW_MESSAGE). `color` (optional)
+-- prepends the FR foreground-color control code `0xFC 0x01 <id>` (battle text palette: 1=red, 4=gold,
+-- 5=green, 7=blue, 10=white) — used to theme the in-battle notification to the event (HUD conventions).
+function MB.write_message(text, color)
     local bytes = MB.fr_encode(text)
-    for i = 1, #bytes do memory.write_u8(MB.TEXT_BUF + (i - 1), bytes[i]) end
+    local off = MB.TEXT_BUF
+    if color then
+        memory.write_u8(off, 0xFC); memory.write_u8(off + 1, 0x01); memory.write_u8(off + 2, color)
+        off = off + 3
+    end
+    for i = 1, #bytes do memory.write_u8(off + (i - 1), bytes[i]) end
 end
 
 function MB.fanfare_args(song) return {song % 256, math.floor(song / 256) % 256} end
@@ -125,12 +137,14 @@ function MB.show_menu(prompt)
 end
 function MB.menu_result() return MB.read_result_u8(0) end
 
--- Native multichoice list (a PROPER menu with custom option labels, e.g. {"Trade","Wave"}). Stages
--- [count][FR str 0xFF-term]... into MENU_BUF, then opens the menu. ASYNC like show_menu: poll the seq;
--- on ST_OK read the chosen index with MB.menu_result() (0..n-1, or 127 = B-press/cancel). nil if absent.
+-- Native multichoice list (a PROPER menu with custom option labels, e.g. {"Trade","Say hey"}). Stages
+-- [count][FR str 0xFF-term]... into MENU_BUF, then opens the menu. `prompt` (optional) is spoken in a
+-- message box that STAYS OPEN under the floating list (the talk-NPC's line) and closes after the pick.
+-- ASYNC like show_menu: poll the seq; on ST_OK read the chosen index with MB.menu_result()
+-- (0..n-1, or 127 = B-press/cancel). nil if absent.
 MB.OP_SHOW_CHOICES = 22
 MB.MENU_BUF = 0x0203FC90
-function MB.show_choices(options)
+function MB.show_choices(options, prompt)
     if not MB.present() then return nil end
     local n = #options
     if n == 0 or n > 8 then return nil end
@@ -140,7 +154,9 @@ function MB.show_choices(options)
         local bytes = MB.fr_encode(options[i])   -- FR-encoded, already 0xFF-terminated
         for j = 1, #bytes do memory.write_u8(off, bytes[j]); off = off + 1 end
     end
-    return MB.send(MB.OP_SHOW_CHOICES, {})
+    local with_text = (prompt ~= nil and prompt ~= "") and 1 or 0
+    if with_text == 1 then MB.write_message(prompt) end
+    return MB.send(MB.OP_SHOW_CHOICES, {with_text})
 end
 
 -- Native "Choose a POKeMON" party menu (pick WHICH linked mon to trade). ASYNC like show_menu: poll
@@ -161,19 +177,92 @@ function MB.trade_scene(slot)
     return MB.send(MB.OP_TRADE_SCENE, {slot})
 end
 
-MB.OP_APPLY_DAMAGE = 10     -- linked HP / chip: args {battler, amt_lo, amt_hi}; result[0..1]=new hp
-MB.OP_CURE_STATUS  = 11     -- link-cured status: args {battler}
-function MB.apply_damage_args(battler, amount)
-    return {battler, amount % 256, math.floor(amount / 256) % 256}
+-- Native IN-BATTLE notification text (the BizHawk-HUD-in-battle replacement). The field message box can't
+-- open during battle, so this draws FR-encoded text via the engine's BattlePutTextOnWindow (the same
+-- primitive the bundled Battle Calc hooks), re-asserted by the patch every frame for `frames`. Only valid
+-- in battle (the patch acks ST_FAIL otherwise). `win` = battle window id (the spike sweeps this; production
+-- bakes the chosen default); `flags` ORs into the window arg (0x80 = don't clear the background). Sync ack.
+-- Returns the seq, or nil if the patch is absent.
+MB.OP_SHOW_BATTLE_MESSAGE = 23
+MB.BATTLE_NOTIF = 0x0203FD00   -- BattleNotif struct: active@0, win@1, flags@2, frames(u16)@4
+function MB.show_battle_message(text, frames, win, color)
+    if not MB.present() then return nil end
+    MB.write_message(text, color)               -- `color` = FR text color id (themes the text to the event)
+    frames = frames or 240
+    return MB.send(MB.OP_SHOW_BATTLE_MESSAGE,
+                   { frames % 256, math.floor(frames / 256) % 256, win or 0, 0 })
 end
 
-MB.OP_SET_RULES = 12          -- ROM-enforced nuzlocke: args {enforce}
+-- PC box ⇄ party storage (Phase-1 migration of depositPartyMon / retrieveBoxMon off the Lua RAM-poke).
+-- Lua does the READ (scan the box for a key / find an empty slot — see memory_gba scanBoxForKey /
+-- the deposit slot scan) and passes the located box slot; the patch does the WRITE via CFRU's own
+-- compressed-box conversion (CompressedMonToMon / CreateCompressedMonFromBoxMon), so the mon is
+-- compressed/decompressed faithfully and a withdrawn mon comes back fully formed (level/stats/PP
+-- recomputed by the engine — no server-cached stats needed). boxId 0-24, boxPos 0-29, partySlot 0-5.
+MB.OP_DEPOSIT_MON  = 24
+MB.OP_WITHDRAW_MON = 25
+MB.OP_MEMORIALIZE  = 26
+function MB.deposit_mon(party_slot, box_id, box_pos)   -- party[slot] -> box[box_id][box_pos]
+    return MB.send(MB.OP_DEPOSIT_MON, {party_slot, box_id, box_pos})
+end
+function MB.withdraw_mon(box_id, box_pos, party_slot)  -- box[box_id][box_pos] -> party[slot]
+    return MB.send(MB.OP_WITHDRAW_MON, {box_id, box_pos, party_slot})
+end
+-- party[slot] -> memorial box[box_id][box_pos]. Same conversion as deposit_mon but the party removal
+-- is zero + swap-with-last (NOT shift) so survivors keep their slot indices (CFRU deferred battle
+-- writes target slots — mirrors M.memorializeMon). Lua picks the free slot + renames the box.
+function MB.memorialize_mon(party_slot, box_id, box_pos)
+    return MB.send(MB.OP_MEMORIALIZE, {party_slot, box_id, box_pos})
+end
+
+-- Event-push ring (native -> Lua; EvRing in handlers.c @ 0x0203FD10). The patch's frame hook pushes
+-- battle edges (faint-settled via the gBattleResults counters, end-of-battle outcome); Lua drains
+-- them here instead of re-deriving the same facts by polling. events_init() resyncs the read index
+-- on (re)load so stale events from before a Lua restart are skipped.
+MB.EVR        = 0x0203FD10
+MB.EV_PLAYER_FAINT = 1   -- a = playerFaintCounter after the bump
+MB.EV_FOE_FAINT    = 2   -- a = foeFaintCounter after the bump
+MB.EV_OUTCOME      = 3   -- a = gBattleOutcome on the end-of-battle edge (1 won, 2 lost/whiteout, ...)
+function MB.events_init()
+    memory.write_u8(MB.EVR + 1, memory.read_u8(MB.EVR))   -- rd = wr (drop anything stale)
+    memory.write_u8(MB.EVR + 2, 0)                        -- clear overflow
+end
+-- Drain all pending events. Returns a list of {type=, a=, b=} (possibly empty) plus an overflow
+-- bool (true = the ring dropped at least one event since the last drain; flag is cleared).
+function MB.events_drain()
+    local out = {}
+    local wr, rd = memory.read_u8(MB.EVR), memory.read_u8(MB.EVR + 1)
+    while rd ~= wr and #out < 8 do
+        local v = memory.read_u32_le(MB.EVR + 8 + (rd % 8) * 4)
+        out[#out + 1] = { type = v & 0xFF, a = (v >> 8) & 0xFF, b = (v >> 16) & 0xFFFF }
+        rd = (rd + 1) % 256
+    end
+    memory.write_u8(MB.EVR + 1, rd)
+    local ovf = memory.read_u8(MB.EVR + 2) ~= 0
+    if ovf then memory.write_u8(MB.EVR + 2, 0) end
+    return out, ovf
+end
+
+-- opcodes 10 OP_APPLY_DAMAGE, 11 OP_CURE_STATUS, 12 OP_SET_RULES REMOVED (RR-redundant / dropped
+-- features). Numbers stay reserved; the patch acks ST_FAIL for them. Do not reuse without a rebuild.
 MB.OP_ARM_PEER_INTERACT = 13  -- talk-to-ghost: args {ghost_oeId, armed} (legacy; ghost auto-arms now)
 MB.OP_GHOST_SPAWN = 14        -- engine-driven peer ghost: args {gfxId, localId}; hook spawns+drives
 MB.OP_GHOST_CLEAR = 15        -- hook cleanly removes the ghost
--- SlinkState struct @ 0x0203F8D0: enforce_rules, pi_armed, pi_oe, pi_count
+-- SlinkState struct @ 0x0203F8D0: _rsvd0 (was enforce_rules), pi_armed, pi_oe, pi_count
 MB.PI_COUNT = 0x0203F8D3
 function MB.peer_interact_count() return memory.read_u8(MB.PI_COUNT) end
+
+-- TradeNpcState struct @ 0x0203F8D4 (patch's drive_trade_npc): enable, oeId, mapG, mapN.
+-- The patch spawns/arms/despawns a Pokémon-Center trade NPC whenever `enable`=1 (set by the client
+-- when overworld presence is OFF). Mutually exclusive with the peer ghost (which owns pi_oe when ON).
+MB.TN_ENABLE = 0x0203F8D4
+function MB.set_pc_npc(enable) memory.write_u8(MB.TN_ENABLE, enable and 1 or 0) end
+
+-- Battle-Calc display kill switch (one byte after TradeNpcState; matches handlers.c SLINK_CALC_OFF).
+-- INVERTED: 0 (EWRAM boot default — no Lua/config) = calc SHOWN; 1 = the battletext shim skips the
+-- calc trampoline so the damage display never draws. Plain EWRAM write, safe before the beacon.
+MB.CALC_OFF = 0x0203F8D8
+function MB.set_battle_calc(enable) memory.write_u8(MB.CALC_OFF, enable and 0 or 1) end
 
 -- GhostState @ 0x0203F850 (shared with the patch's drive_ghost). Lua writes target/gfx each tick;
 -- the frame hook walks a real object-event toward it natively. Offsets match handlers.c.
@@ -233,6 +322,23 @@ function MB.ghost_set_avatar(imgs, anims, pcol_hex)
         end
     end
     memory.write_u8(MB.GH_AVATARDIRTY, 1)
+end
+
+-- SwapState @ 0x0203F840 (published read-only by the patch: slink_backup_wrap sets begin,
+-- drive_swap_state clears end). Authoritative borrowed-party ("Party Freeze") signal: active=1
+-- while the engine has gPlayerParty swapped for a borrowed/preset party (Battle-Tower preset
+-- battles, Poke Dude, partner/mock); seq increments on each BEGIN edge — the frame CFRU backs the
+-- real party up, which is frame-exact and threshold-free (replaces the client's >=3-PID-change
+-- overworld heuristic). real_pid = gPlayerParty[0]'s PID at begin (cross-check). Returns nil when the
+-- patch/beacon is absent so the caller falls back to the PID heuristic. Offsets match handlers.c.
+MB.SW = 0x0203F840
+function MB.read_swap_state()
+    if not MB.present() then return nil end
+    return {
+        active   = memory.read_u8(MB.SW + 0),
+        seq      = memory.read_u8(MB.SW + 1),
+        real_pid = memory.read_u32_le(MB.SW + 4),
+    }
 end
 
 MB.ST_IDLE, MB.ST_BUSY, MB.ST_OK, MB.ST_FAIL = 0, 1, 2, 3

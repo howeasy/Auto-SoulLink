@@ -11,11 +11,18 @@ non-hosting player needs to run SLink in BizHawk:
 The server (Python), test suite, code-generation tools, and server-only
 JSON data files are intentionally excluded.
 
+Optionally (RR players) it also bundles, under companion/:
+  - patch/dist/SLink-RR.ups   (the native code-injection patch)   [--with-patch]
+  - the patch guide
+  - a pre-patched ROM                                              [--rom <path>]
+
 Usage:
     python tools/make_release.py
     python tools/make_release.py --version 1.2.3
     python tools/make_release.py --version 1.2.3 --out dist/
     python tools/make_release.py --host 192.168.1.10 --port 54321 --player b
+    python tools/make_release.py --with-patch
+    python tools/make_release.py --rom patch/build/slink_RR.gba   # patch + ROM
 
 The optional --host/--port/--player flags bake connection settings directly
 into the launcher scripts (slink_gen*.lua) as a convenience. The recommended
@@ -62,6 +69,11 @@ _LUA_ROOT = [
     "memory_gba.lua",
     "memory_nds.lua",
     "socket.lua",
+    # Companion-patch modules (RR native features) — pcall-required by the Gen 3 client.
+    # Required for the companion patch to work; harmless when the ROM is unpatched
+    # (patch_present() stays false, so the client falls back to RAM-poke).
+    "mailbox.lua",
+    "peer_ghost_npc.lua",
     # Gen 2 area tables live in lua/ (loaded via _lua_root)
     "gen2_crystal_areas.lua",
     "gen2_crystal_locations.lua",
@@ -111,6 +123,14 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
 
 # lua/x64/ — DLL optional (present on dev machine, excluded from git)
 _LUA_X64_OPTIONAL = ["socket-windows-5-4.dll"]
+
+# ── Companion patch (Radical Red native code-injection) — optional add-on ──────
+# RR-only. Bundled under companion/ when --with-patch or --rom is given. The UPS
+# is the distributable; a pre-patched ROM may be included with --rom for a
+# playgroup that already owns the base ROM.
+_COMPANION_UPS = "patch/dist/SLink-RR.ups"
+_COMPANION_README = "patch/README.md"
+_COMPANION_ROM_ARCNAME = "Pokemon - Radical Red (SLink companion).gba"
 
 # Launcher scripts (relative to lua/) whose SLINK_* lines get patched
 _LAUNCHER_SCRIPTS: set[str] = {
@@ -266,6 +286,8 @@ def build_release(
     port: int | None = None,
     player: str | None = None,
     skip_generators: bool = False,
+    with_patch: bool = False,
+    rom: Path | None = None,
 ) -> Path:
     zip_name = f"SLink-player-{version}.zip"
     zip_path = out_dir / zip_name
@@ -293,6 +315,19 @@ def build_release(
         for m in missing:
             print(f"  {m}", file=sys.stderr)
         sys.exit(1)
+
+    # ── Companion patch (optional) pre-flight ─────────────────────────────────
+    # A --rom implies bundling the patch too (the ROM only makes sense with it).
+    include_companion = with_patch or rom is not None
+    if include_companion:
+        ups = REPO_ROOT / _COMPANION_UPS
+        if not ups.exists():
+            print(f"ERROR — companion requested but missing: {ups}\n"
+                  f"  build it first: python patch/tools/build.py", file=sys.stderr)
+            sys.exit(1)
+        if rom is not None and not rom.exists():
+            print(f"ERROR — --rom not found: {rom}", file=sys.stderr)
+            sys.exit(1)
 
     # ── Optional: DLL ─────────────────────────────────────────────────────────
     dll_warnings: list[str] = []
@@ -343,6 +378,19 @@ def build_release(
                 )
                 print(f"  [added]   {prefix}data/games/{gen}/{fname}")
 
+        # ── Companion patch (RR native features) — optional ───────────────────
+        if include_companion:
+            zf.write(REPO_ROOT / _COMPANION_UPS, prefix + "companion/SLink-RR.ups")
+            print(f"  [added]   {prefix}companion/SLink-RR.ups")
+            readme = REPO_ROOT / _COMPANION_README
+            if readme.exists():
+                zf.write(readme, prefix + "companion/COMPANION_PATCH.md")
+                print(f"  [added]   {prefix}companion/COMPANION_PATCH.md")
+            if rom is not None:
+                rom_mb = rom.stat().st_size // (1024 * 1024)
+                zf.write(rom, prefix + f"companion/{_COMPANION_ROM_ARCNAME}")
+                print(f"  [added]   {prefix}companion/{_COMPANION_ROM_ARCNAME}  ({rom_mb} MB)")
+
     size_kb = zip_path.stat().st_size // 1024
     print(f"\nDone — {zip_path.name}  ({size_kb} KB)")
 
@@ -367,6 +415,12 @@ def main() -> None:
                         help='Player slot to bake into launcher scripts: "a" or "b"')
     parser.add_argument("--skip-generators", action="store_true",
                         help="Skip running area-map generators")
+    parser.add_argument("--with-patch", action="store_true",
+                        help="Bundle the RR companion patch (patch/dist/SLink-RR.ups) + guide "
+                             "under companion/")
+    parser.add_argument("--rom", metavar="PATH",
+                        help="Bundle a pre-patched ROM under companion/ (implies --with-patch); "
+                             "e.g. patch/build/slink_RR.gba")
     args = parser.parse_args()
 
     build_release(
@@ -376,6 +430,8 @@ def main() -> None:
         port=args.port,
         player=args.player,
         skip_generators=args.skip_generators,
+        with_patch=args.with_patch,
+        rom=Path(args.rom) if args.rom else None,
     )
 
 

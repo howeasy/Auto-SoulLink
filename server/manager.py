@@ -245,6 +245,19 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
         cmd.append("--explode-mode")
     if run.get("rival_team_swap"):
         cmd.append("--rival-team-swap")
+    if run.get("overworld_presence"):
+        cmd.append("--overworld-presence")
+    if run.get("native_messages"):
+        cmd.append("--native-messages")
+    if run.get("native_sounds"):
+        cmd.append("--native-sounds")
+    if run.get("native_battle_control"):
+        cmd.append("--native-battle-control")
+    # battle_calc / pc_trade_npc default ON — the CLI flags are the inverse (--no-*).
+    if not run.get("battle_calc", True):
+        cmd.append("--no-battle-calc")
+    if not run.get("pc_trade_npc", True):
+        cmd.append("--no-pc-trade-npc")
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.DEVNULL,
@@ -377,6 +390,12 @@ def _adopt_orphans(runs: list[dict]) -> bool:
             "type_lock":    bool(rules.get("type_lock", False)),
             "explode_mode": bool(rules.get("explode_mode", False)),
             "rival_team_swap": bool(rules.get("rival_team_swap", False)),
+            "overworld_presence": bool(rules.get("overworld_presence", False)),
+            "native_messages": bool(rules.get("native_messages", False)),
+            "native_sounds": bool(rules.get("native_sounds", False)),
+            "battle_calc": bool(rules.get("battle_calc", True)),
+            "pc_trade_npc": bool(rules.get("pc_trade_npc", True)),
+            "native_battle_control": bool(rules.get("native_battle_control", False)),
         }
         runs.append(run)
         known_ids.add(run_id)  # avoid port collision across multiple orphans
@@ -429,6 +448,18 @@ def _render_cards(runs: list[dict], host: str) -> str:
             lock_badges += '<span class="lock-badge">Explode</span>'
         if run.get("rival_team_swap"):
             lock_badges += '<span class="lock-badge">Rival Swap</span>'
+        if run.get("overworld_presence"):
+            lock_badges += '<span class="lock-badge">Overworld</span>'
+        if run.get("native_messages"):
+            lock_badges += '<span class="lock-badge">Native Msgs</span>'
+        if run.get("native_sounds"):
+            lock_badges += '<span class="lock-badge">Native SFX</span>'
+        if run.get("native_battle_control"):
+            lock_badges += '<span class="lock-badge">Native Battle</span>'
+        if not run.get("battle_calc", True):
+            lock_badges += '<span class="lock-badge">Calc Off</span>'
+        if not run.get("pc_trade_npc", True):
+            lock_badges += '<span class="lock-badge">PC NPC Off</span>'
 
         # Read game/rom_type from the run's links.json
         game_badge = ""
@@ -629,6 +660,12 @@ class RunManager:
             "type_lock":    bool(body.get("type_lock", False)),
             "explode_mode": bool(body.get("explode_mode", False)),
             "rival_team_swap": bool(body.get("rival_team_swap", False)),
+            "overworld_presence": bool(body.get("overworld_presence", False)),
+            "native_messages": bool(body.get("native_messages", False)),
+            "native_sounds": bool(body.get("native_sounds", False)),
+            "battle_calc": bool(body.get("battle_calc", True)),
+            "pc_trade_npc": bool(body.get("pc_trade_npc", True)),
+            "native_battle_control": bool(body.get("native_battle_control", False)),
         }
         # Create data directory immediately
         os.makedirs(os.path.join(MANAGER_DIR, run_id), exist_ok=True)
@@ -942,6 +979,16 @@ async def main(host: str, port: int):
     app.router.add_get("/api/status",         manager.handle_proxy_status)
     app.router.add_get("/api/events",         manager.handle_proxy_events)
     app.router.add_post("/api/attempts",      manager.handle_proxy_attempts)
+
+    # Companion ROM patcher — global setup tool, reachable from the manager too.
+    # The manager hosts the page itself, so manager_port=None (Manager nav item
+    # would dead-link to self) and tcp_port=None (not tied to a run).
+    from server.chrome import build_sidebar_html
+    from server.patcher import setup_patcher_routes
+    setup_patcher_routes(
+        app,
+        lambda active: build_sidebar_html(active, tcp_port=None, manager_port=None),
+    )
 
     # Lifecycle: shared aiohttp ClientSession for proxy requests
     async def _startup(app: web.Application) -> None:

@@ -31,6 +31,7 @@ _NAV_ITEMS = [
     ("stream",   "/stream",           "Stream",   "M5 1h2v2H5zM9 1h2v2H9zM1 4h14v10H1zM6 6v6l5-3z",                                                                "nav-stream"),
     ("twitch",   "/twitch",           "Twitch",   "M2 2v8h3v3l3-3h6V2zm3 3h1v3H5zm4 0h1v3H9z",                                                                     "nav-twitch"),
     ("obs",      "/obs",              "OBS",      "M3 4h2l1-1h4l1 1h2v8H3zm5 1a3 3 0 100 6 3 3 0 000-6zm0 2a1 1 0 100 2 1 1 0 000-2z",                             "nav-obs"),
+    ("patcher",  "/patcher",          "Patcher",  "M11 1a4 4 0 00-3.8 5.2L1 12.4 3.6 15l6.2-6.2A4 4 0 1011 1zm0 2a2 2 0 110 4 2 2 0 010-4z",      "nav-patcher"),
     ("calc",     "/calc/normal.html", "Calc",     "M2 1h12v14H2zM4 3v3h8V3zM4 7v2h2V7zm3 0v2h2V7zm3 0v2h2V7zM4 10v2h2v-2zm3 0v2h2v-2zm3 0v5h2v-5z",               "nav-calc"),
     ("debug",    "/debug",            "Debug",    "M6 1l1 2h2l1-2 1 1-1 2h1v1h2v2h-2v2h2v2h-2v1l-3 2-3-2v-1H3v-2h2V9H3V7h2V5h1L5 3z",                             "nav-debug"),
 ]

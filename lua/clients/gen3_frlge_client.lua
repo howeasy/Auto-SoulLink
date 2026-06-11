@@ -104,6 +104,13 @@ local ok_mb, MB = pcall(require, "mailbox")
 if not ok_mb then MB = nil end
 local function patch_present() return MB ~= nil and MB.present() end
 
+-- Native-enhancement toggles (server `config` on hello; see state.py). Pre-config defaults match the
+-- server's: messages/sounds OFF (Lua HUD/m4a paths until the native paths win the A/B test), calc ON
+-- (the EWRAM byte's boot default already shows it — nothing to write until config says otherwise).
+-- Declared HERE (before safe_native_box) so the gates below close over the real locals.
+local native_msgs_enabled = false   -- field msgbox + in-battle notifications via the patch
+local native_sfx_enabled  = false   -- notification sounds via the patch's PlaySE
+
 -- A native field box is a BLOCKING dialogue (lockall + A-to-dismiss), so it must only open in a genuinely
 -- SAFE state: patched, in the overworld, AND no field script/box already running. isInOverworld() is still
 -- true mid-dialogue / mid-cutscene, where OP_SHOW_MESSAGE is REFUSED (it guards on sScriptContext2Enabled)
@@ -111,12 +118,14 @@ local function patch_present() return MB ~= nil and MB.present() end
 -- falls back to a Lua overlay (center-prompt / HUD) instead of losing the message. 0x03000F9C =
 -- sScriptContext2Enabled (same address the trade state machine uses for "field clear").
 local function safe_native_box()
-    return patch_present() and M.isInOverworld() and memory.read_u8(0x03000F9C) == 0
+    return native_msgs_enabled and patch_present() and M.isInOverworld()
+       and memory.read_u8(0x03000F9C) == 0
 end
 local patch_logged = false   -- latch: log patch presence/absence once (beacon appears ~frame 13)
 local pg_send_logged = false -- one-shot: confirm we're broadcasting our overworld position
 -- world-pixel calibration (sub-pixel position via the coordOffset delta, captured while idle)
 local pg_align_tx, pg_align_ty, pg_coff_ax, pg_coff_ay = nil, nil, 0, 0
+local pg_last_sent_wx, pg_last_sent_wy = nil, nil  -- last broadcast world-px (mv = advancing?)
 -- Engine-NPC peer ghost (companion-patch path; no-ops without the patch).
 local ok_pg, PG = pcall(require, "peer_ghost_npc")
 if ok_pg then
@@ -125,6 +134,13 @@ else
     console.log("[SLink-FRLGE] peer-ghost receiver FAILED to load: " .. tostring(PG))
     PG = nil
 end
+-- Disable the patch's PC trade-NPC until the server's `config` command resolves the presence rule, so a
+-- stale/garbage EWRAM enable byte can't spawn the NPC before we know the run is presence-OFF. Plain EWRAM
+-- write — safe even before the patch beacon is up.
+if MB then MB.set_pc_npc(false) end
+-- Resync the event ring's read index (drop events from before this Lua load) — plain EWRAM writes,
+-- safe before the patch beacon is up. See MB.events_drain in on_frame.
+if MB then MB.events_init() end
 
 -- Game module detection — provides game-specific area/gift classification
 -- and profile data for memory.lua initialization
@@ -184,6 +200,12 @@ end
 -- ── Response parsing ──────────────────────────────────────────────────────────
 local function parse_command_list(raw)
     local cmds = {}
+    -- JSON boolean -> Lua boolean (nil when the field is absent; dispatch treats nil as "not sent")
+    local function jbool(obj, field)
+        local v = obj:match('"' .. field .. '"%s*:%s*(%a+)')
+        if v == "true" then return true elseif v == "false" then return false end
+        return nil
+    end
     local arr = raw:match('"commands"%s*:%s*(%b[])')
     if not arr then return cmds end
     for obj in arr:gmatch('%b{}') do
@@ -205,6 +227,7 @@ local function parse_command_list(raw)
         end
         -- hud_show / msgbox fields
         local text    = obj:match('"text"%s*:%s*"([^"]*)"')
+        if text then text = text:gsub("\\n", "\n") end   -- JSON-escaped newline -> real (FR line break)
         local fb      = obj:match('"fb"%s*:%s*"([^"]*)"')   -- msgbox fallback style: "prompt" or hud
         -- ghost_pos (peer ghost) fields — x,y are TILE coords now; the patch interpolates.
         local gmg  = tonumber(obj:match('"mg"%s*:%s*(%-?%d+)'))
@@ -257,6 +280,13 @@ local function parse_command_list(raw)
             options = {}
             for s in opt_raw:gmatch('"([^"]*)"') do options[#options + 1] = s end
         end
+        -- config (per-run patch-feature toggles) — JSON booleans, nil when absent
+        local overworld_presence = jbool(obj, "overworld_presence")
+        local native_messages    = jbool(obj, "native_messages")
+        local native_sounds      = jbool(obj, "native_sounds")
+        local battle_calc        = jbool(obj, "battle_calc")
+        local pc_trade_npc       = jbool(obj, "pc_trade_npc")
+        local native_battle_control = jbool(obj, "native_battle_control")
         if cmd then
             cmds[#cmds+1] = {
                 cmd=cmd, key=key, message=msg, stats=stats,
@@ -266,6 +296,9 @@ local function parse_command_list(raw)
                 sound=sound, area_id=area_id, areas=areas,
                 trainer_id=trainer_id, blobs_hex=blobs_hex,
                 token=token, slot=slot, blob_hex=blob_hex, options=options,
+                overworld_presence=overworld_presence, native_messages=native_messages,
+                native_sounds=native_sounds, battle_calc=battle_calc, pc_trade_npc=pc_trade_npc,
+                native_battle_control=native_battle_control,
             }
         end
     end
@@ -313,6 +346,13 @@ local resolved_areas        = {}
 local resolved_areas_seeded = false
 local pending_hud_area      = nil
 
+-- Pokémon-Center trade NPC (presence-OFF trade entry point). The companion patch spawns/arms/despawns
+-- the NPC; the client only (a) tells the patch when to do so via MB.set_pc_npc (presence OFF) and
+-- (b) relays the talk (pi_count bump -> trade_request). `pc_npc_enabled` is set from the server's
+-- `config` command on hello; `pc_npc_pi_last` tracks the interact counter delta.
+local pc_npc_enabled = false
+local pc_npc_pi_last = nil
+
 -- ── HUD overlay ───────────────────────────────────────────────────────────────
 -- Minimal on-screen display shown during deaths and party swaps only.
 -- GBA screen: 240 × 160. HUD appears at the bottom.
@@ -322,6 +362,57 @@ HUD.init({screen_w = 240, screen_h = 160, hud_x = 3, hud_y = 146, hud_right = 23
 local hud_show     = HUD.show
 local hud_render   = HUD.render
 local prompt_show  = HUD.prompt
+
+-- In-battle notification presentation. The native FIELD message box can't open in battle, so notifications
+-- that fire IN battle used the BizHawk Lua HUD overlay. With the companion patch we instead draw NATIVE text
+-- into the Battle Calc's move-info area (top-left, window 0xD) via the in-context BattlePutTextOnWindow hook
+-- (OP_SHOW_BATTLE_MESSAGE) — no emulator overlay, and it shows even outside the FIGHT menu (the patch draws
+-- it reentrantly whenever the engine redraws a window). Falls back to the BizHawk overlay when unpatched or
+-- not in battle (out-of-battle + unpatched unchanged). Text must be FR-charmap-safe (A-Z/a-z/0-9/space/!?.-,/:).
+local NATIVE_BATTLE_FRAMES = 180   -- how long to hold the native notification once first shown (~3s; tunable)
+local NATIVE_BATTLE_WIN    = 0x0D  -- the Battle Calc's move-info area (top-left) — see slink_battletext_hook
+-- Window 0xD clips visually at ~28 chars ("…Squirtle linke|"); truncate per line like hud.lua's fit_hud
+-- so a long notification ends in ".." instead of being cut mid-glyph. FR-safe ('.' is in the charmap).
+local NATIVE_BATTLE_MAXCHARS = 28
+local function fit_battle_text(text)
+    local out = {}
+    for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+        local fitted = line
+        if #fitted > NATIVE_BATTLE_MAXCHARS then
+            fitted = fitted:sub(1, NATIVE_BATTLE_MAXCHARS - 2) .. ".."
+        end
+        out[#out + 1] = fitted
+    end
+    return table.concat(out, "\n")
+end
+-- Map the HUD's event color (r,g,b — the same convention the overlay uses) to an FR battle-text color id
+-- (battle move-info palette: 1=red, 4=gold, 5=green, 10=white) so the native text is themed like the HUD:
+-- red = KO/BOOM/dead-zone, gold = shiny, green = link/trade/positive, white = neutral.
+local function fr_battle_color(r, g, b)
+    r, g, b = r or 255, g or 255, b or 255
+    if r >= 180 and g >= 150 and b < 130 then return 4        -- gold/yellow (shiny)
+    elseif g > r and g >= 150 then return 5                   -- green (link / trade / positive)
+    elseif r >= 170 and g < 150 then return 1                 -- red (KO / BOOM / dead-zone)
+    else return 10 end                                        -- white (neutral)
+end
+-- Pending native in-battle notifications. show_fallback QUEUES (never sends inline): the same dispatch
+-- pass may have just sent another opcode (e.g. force_faint's OP_FORCE_FAINT, or arm_native_explode's
+-- OP_FORCE_MOVE_SLOT) and the single-slot mailbox would CLOBBER it — losing the armed native action.
+-- The on_frame drain sends ONE per frame, only when the mailbox slot is idle AND no notification is
+-- currently showing (so stacked messages display sequentially, each for its full duration).
+local pending_battle_msgs = {}
+local function show_fallback(text, fb, r, g, b, frames)
+    if patch_present() and M.isInBattle() then
+        -- native in-battle text, themed to the event (the SOUND comes from the server's separate play_sound,
+        -- routed to the Lua m4a path in battle so it can't clobber the text opcode — see play_sound dispatch).
+        pending_battle_msgs[#pending_battle_msgs + 1] =
+            { text = text, color = fr_battle_color(r, g, b), fb = fb, r = r, g = g, b = b, frames = frames }
+    elseif fb == "prompt" then
+        prompt_show(text, r, g, b, frames or 300)
+    else
+        hud_show(text, r, g, b, frames or 300)
+    end
+end
 local game_over_flag   = false  -- set by game_over command; persistent HUD
 local rebuild_active   = false  -- true between rebuild_start and rebuild_done
 
@@ -367,10 +458,13 @@ local pending_force_moves = {}         -- [monKey] → {slot, battler, seq, star
 -- addresses; deferred-faint for force_faint) and shipped reliably, so production falls back
 -- to them.  The headless one-sided savestate test only proved the move COMMITS (PP drop); it
 -- can't exercise real turn execution or the open-menu softlock — hence this regression.
--- Flip to true ONLY after a two-instance LIVE run validates the native path on the live ROM
--- (re-discover the controller addresses for that RR version first).  The native machinery
--- below (arm_native_explode, §4a-ter poll, drain, mb_explode_queue) is retained, inert.
-local NATIVE_BATTLE_CONTROL_ENABLED = false
+-- Now a per-run server config flag (`--native-battle-control`, default OFF everywhere): enable
+-- ONLY after a two-instance LIVE run validates the native path on the live ROM. The controller
+-- thunk addresses were re-validated for the current build (probe_movecursor_thunks.lua: live
+-- gBattlerControllerFuncs[0] == ACTION_CTRL_A / MOVE_CTRL_THUNK), so the remaining risk is the
+-- swap's runtime behavior, not the addresses.  The native machinery below (arm_native_explode,
+-- §4a-ter poll, drain, mb_explode_queue) is retained, inert while OFF.
+local native_battle_control_enabled = false
 
 -- Native-patch Rival-Team-Swap state.  The RR companion patch + OP_SET_ENEMY_PARTY are a HARD
 -- REQUIREMENT — the old writeEnemyParty RAM-poke fallback was removed once rival swap was confirmed
@@ -381,6 +475,20 @@ local NATIVE_BATTLE_CONTROL_ENABLED = false
 -- forced-move controller swap that softlocked, so it stays native-only.
 local ENEMY_PARTY_TIMEOUT = 120        -- frames before assuming the opcode was dropped → error ack
 local pending_enemy_party = nil        -- {seq, trainer_id, blobs_hex, start_frame} (one in flight)
+
+-- Native PC box⇄party storage (OP_DEPOSIT_MON / OP_WITHDRAW_MON). The opcode acks NEXT frame (the hook
+-- runs between Lua callbacks), so a deposit/withdraw is async: exec_box_mon/exec_party_mon fire the
+-- opcode + register this, and a poll in on_frame (§4a-quinque) does the success bookkeeping or — on
+-- ST_FAIL/timeout — the Lua RAM-poke fallback (so a patched-but-failed op never strands the sync).
+-- {mode="deposit"|"withdraw", key, slot, box, pos, stats, seq, start_frame}. One at a time.
+local STORAGE_OP_TIMEOUT = 120
+local pending_storage = nil
+-- One in-flight native OP_MEMORIALIZE (mirrors pending_storage): {key, box, slot, pre_count, seq,
+-- start_frame}. The §4a-sexies poll finishes it (verify + HUD + memorialize_done + rename) or falls
+-- back to the Lua path. If the native opcode ever fails, native memorialize is disabled for the
+-- session (the proven Lua path takes over for the rest of the run).
+local pending_memorialize = nil
+local memorialize_native_disabled = false
 
 -- Talk-to-partner native UI (show_menu / choose_mon commands). One at a time; polled in on_frame, then
 -- the result is reported back keyed by the server's token: kind="menu" -> menu_result{choice}, "choose"
@@ -442,6 +550,13 @@ local FAINT_DEBOUNCE_FRAMES = 3
 local pending_faint_debounce = {}  -- [monKey] → frames_remaining
 local battle_start_player_faints  = nil  -- gBattleResults snapshot at battle start
 local confirmed_real_player_faints = 0   -- count we've already credited via counter
+-- EvRing fast-path (patched ROMs, ROADMAP §3): the patch pushes a frame-granular
+-- EV_PLAYER_FAINT once protection (Sturdy/Sash/Endure) has resolved, and EV_OUTCOME on the
+-- end-of-battle edge. These ACCELERATE the detectors below (skip the debounce timer / declare
+-- whiteout on the engine's own LOSS edge); the per-frame polls stay as the unpatched fallback.
+-- Boot/unpatched defaults (0/false) reproduce today's behavior exactly.
+local ev_faint_credit = 0      -- unconsumed EV_PLAYER_FAINT events; any confirmed faint eats one
+local ev_outcome_loss = false  -- EV_OUTCOME==2 (LOSS) seen this battle; consumed by whiteout
 
 -- Forward declaration: dispatch_commands (below) sends rival_team_replaced before send() is
 -- defined further down; without this the calls hit a nil global and crash the handler.
@@ -488,7 +603,10 @@ local function dispatch_commands(cmds)
         if c.cmd == "play_sound" and c.sound then
             -- Native SE via the companion patch (PlaySE) when present — retires the fragile Lua m4a
             -- SE1 RAM-poke (M.playSE / profile SE_SONG_HEADERS). Fallback keeps unpatched ROMs working.
-            if patch_present() then MB.play_se(c.sound) else M.playSE(c.sound) end
+            -- IN BATTLE, use the Lua m4a path instead: a native in-battle notification (OP_SHOW_BATTLE_MESSAGE)
+            -- may be sent the same frame, and the single-slot mailbox would otherwise clobber one opcode.
+            if native_sfx_enabled and patch_present() and not M.isInBattle() then MB.play_se(c.sound)
+            else M.playSE(c.sound) end
         elseif (c.cmd == "force_faint" or c.cmd == "force_explode") and c.key then
             -- Populate nick_cache from server-provided nickname (for mons not in our party yet).
             if c.nickname and c.nickname ~= "" then
@@ -522,7 +640,7 @@ local function dispatch_commands(cmds)
                         if is_active_battler and is_explode then
                             -- Explode Mode (RR only): the active linked mon auto-Explodes.
                             local battler = M.getBattlerForPartySlot(slot)
-                            if NATIVE_BATTLE_CONTROL_ENABLED and patch_present() and currently_in_battle and battler >= 0 then
+                            if native_battle_control_enabled and patch_present() and currently_in_battle and battler >= 0 then
                                 -- NATIVE (companion patch): write Explosion into the battle mon's
                                 -- move slot 0, then arm OP_FORCE_MOVE_SLOT.  The controller-swap
                                 -- driver reads moves[move_pos] at fire time (handlers.c
@@ -543,7 +661,7 @@ local function dispatch_commands(cmds)
                                         slot, battler, c.key))
                                 end
                                 M.playSE(M.SE_LINKED_KO)
-                                hud_show("!! " .. nick_label(c.key) .. " BOOM!", 255, 80, 80, 360)
+                                show_fallback("!! " .. nick_label(c.key) .. " BOOM!", "hud", 255, 80, 80, 360)
                             elseif M.forceExplodeBattler and battler >= 0 and M.forceExplodeBattler(battler) then
                                 -- FALLBACK (unpatched ROM): Variant-3 menu-skip RAM writes
                                 -- pre-fill the engine's action-commit state so the FIGHT/BAG/
@@ -552,7 +670,7 @@ local function dispatch_commands(cmds)
                                     slot = slot, battler = battler, start_frame = frame_count,
                                 }
                                 M.playSE(M.SE_LINKED_KO)
-                                hud_show("!! " .. nick_label(c.key) .. " BOOM!", 255, 80, 80, 360)
+                                show_fallback("!! " .. nick_label(c.key) .. " BOOM!", "hud", 255, 80, 80, 360)
                                 console.log(string.format(
                                     "[SLink-FRLGE]   ↳ force_explode → menu skip coerced (fallback) slot=%d battler=%d key=%s",
                                     slot, battler, c.key))
@@ -561,12 +679,12 @@ local function dispatch_commands(cmds)
                                 console.log(string.format(
                                     "[SLink-FRLGE]   ↳ force_explode DEFERRED (helper refused — non-RR profile?) slot=%d key=%s",
                                     slot, c.key))
-                                hud_show("!! " .. nick_label(c.key) .. " KO pending", 255, 80, 80, 360)
+                                show_fallback("!! " .. nick_label(c.key) .. " KO pending", "hud", 255, 80, 80, 360)
                             end
                         elseif is_active_battler then
                             -- force_faint, active battler.
                             local battler = M.getBattlerForPartySlot(slot)
-                            if NATIVE_BATTLE_CONTROL_ENABLED and patch_present() and currently_in_battle and battler >= 0 then
+                            if native_battle_control_enabled and patch_present() and currently_in_battle and battler >= 0 then
                                 -- NATIVE (companion patch): OP_FORCE_FAINT zeroes gBattleMons HP
                                 -- inside the frame hook, so we can faint the active battler
                                 -- immediately instead of deferring until it switches out.
@@ -585,7 +703,7 @@ local function dispatch_commands(cmds)
                                 console.log(string.format(
                                     "[SLink-FRLGE]   ↳ force_faint → native FORCE_FAINT slot=%d battler=%d key=%s",
                                     slot, battler, c.key))
-                                hud_show("!! " .. nick_label(c.key) .. " KO'd", 255, 80, 80, 360)
+                                show_fallback("!! " .. nick_label(c.key) .. " KO!", "hud", 255, 80, 80, 360)
                             else
                                 -- FALLBACK (unpatched ROM): defer the HP=0 write until the mon
                                 -- switches out or the battle ends (engine continuously refreshes
@@ -594,7 +712,7 @@ local function dispatch_commands(cmds)
                                 console.log(string.format(
                                     "[SLink-FRLGE]   ↳ force_faint DEFERRED (active battler) slot=%d key=%s",
                                     slot, c.key))
-                                hud_show("!! " .. nick_label(c.key) .. " KO pending", 255, 80, 80, 360)
+                                show_fallback("!! " .. nick_label(c.key) .. " KO pending", "hud", 255, 80, 80, 360)
                             end
                         else
                             -- Bench mon (or out of battle): immediate HP=0 write.
@@ -641,6 +759,9 @@ local function dispatch_commands(cmds)
                 for i = 1, #c.blobs_hex do
                     local arr, e = M.hexToBytes(c.blobs_hex[i])
                     if not arr then derr = e or "decode"; break end
+                    if #arr ~= 100 then  -- short blob would nil-write mid-stage; long = malformed server data
+                        derr = string.format("blob %d length %d (want 100)", i, #arr); break
+                    end
                     rows[i] = arr
                 end
                 local seq = (not derr) and MB.set_enemy_party(rows) or nil
@@ -713,10 +834,10 @@ local function dispatch_commands(cmds)
                 pending_msgbox = { seq = s, fb = fb_style, text = c.text, r = c.r or 255, g = c.g or 255,
                                    b = c.b or 255, frames = c.frames or 300, start_frame = frame_count }
                 console.log("[SLink-FRLGE]   ↳ msgbox (native): " .. c.text)
-            elseif fb_style == "prompt" then
-                prompt_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
             else
-                hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+                -- Not a safe overworld box: native BATTLE message box when patched + in battle (the
+                -- BizHawk-HUD-in-battle replacement), else the Lua overlay (center-prompt / HUD).
+                show_fallback(c.text, fb_style, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
             end
         elseif c.cmd == "show_menu" and c.text and c.token then
             -- Talk-to-partner action menu (native YES/NO). Async: register + poll in on_frame, then
@@ -733,11 +854,11 @@ local function dispatch_commands(cmds)
                 send({ event = "menu_result", token = c.token, choice = 0 }, "menu_result", true, false)
             end
         elseif c.cmd == "show_choices" and c.options and c.token then
-            -- Native multichoice list (e.g. Trade / Wave). Async: register + poll, then emit
+            -- Native multichoice list (e.g. Trade / Say hey). Async: register + poll, then emit
             -- menu_result{token, choice=index} (0-based, or 127 = cancel). Unpatched / out-of-overworld
             -- can't show a native menu -> report cancel so the server aborts the flow cleanly.
             if patch_present() and M.isInOverworld() and not pending_ui then
-                local seq = MB.show_choices(c.options)
+                local seq = MB.show_choices(c.options, c.text)   -- c.text = the talk-NPC's spoken line
                 if seq then
                     pending_ui = { seq = seq, token = c.token, kind = "menu", start_frame = frame_count }
                 else
@@ -796,7 +917,7 @@ local function dispatch_commands(cmds)
                                    b = c.b or 255, frames = c.frames or 300, start_frame = frame_count }
                 console.log("[SLink-FRLGE]   ↳ gui_prompt (native): "..c.text)
             else
-                prompt_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+                show_fallback(c.text, "prompt", c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
                 console.log("[SLink-FRLGE]   ↳ gui_prompt: "..c.text)
             end
         elseif c.cmd == "resolved_areas" and c.areas then
@@ -809,6 +930,28 @@ local function dispatch_commands(cmds)
                 hud_show(">> New encounter: " .. disp, 80, 255, 120, 180)
             end
             pending_hud_area = nil
+        elseif c.cmd == "config" then
+            -- Per-run patch-feature config. overworld_presence OFF -> the patch's Pokémon-Center trade
+            -- NPC is the trade entry point (gated by its own pc_trade_npc toggle); ON -> trades go
+            -- through the peer ghost. native_messages / native_sounds pick the patch path over the Lua
+            -- fallback; battle_calc drives the patch's calc kill-switch byte.
+            if c.overworld_presence ~= nil then
+                pc_npc_enabled = (c.overworld_presence == false) and (c.pc_trade_npc ~= false)
+                if patch_present() then MB.set_pc_npc(pc_npc_enabled) end
+            end
+            if c.native_messages ~= nil then native_msgs_enabled = (c.native_messages == true) end
+            if c.native_sounds ~= nil then native_sfx_enabled = (c.native_sounds == true) end
+            if c.battle_calc ~= nil and MB then MB.set_battle_calc(c.battle_calc == true) end
+            -- Native explode/faint controller swap (ROADMAP §2): default OFF after the real-play
+            -- softlock; the Variant-3 RAM path stays production until a live two-instance soak.
+            if c.native_battle_control ~= nil then
+                native_battle_control_enabled = (c.native_battle_control == true)
+            end
+            console.log(string.format(
+                "[SLink-FRLGE]   ↳ config: presence=%s pc_npc=%s native_msgs=%s native_sfx=%s calc=%s battlectl=%s",
+                tostring(c.overworld_presence), tostring(pc_npc_enabled),
+                tostring(native_msgs_enabled), tostring(native_sfx_enabled), tostring(c.battle_calc),
+                tostring(native_battle_control_enabled)))
         elseif c.cmd == "unresolve_area" and c.area_id then
             resolved_areas[c.area_id] = nil
             console.log("[SLink-FRLGE]   ↳ unresolve_area: "..c.area_id.." (species clause reroll)")
@@ -1353,6 +1496,13 @@ local pre_swap_pids          = nil -- pre-swap snapshot used for revert detectio
 -- authoritative unfreeze signal.  NOT used for freeze triggering (it goes
 -- stale between swaps; _stable_party_pids is the freeze baseline).
 local _backup_trusted        = false
+-- Authoritative borrowed-party signal from the companion patch (SwapState @ 0x0203F840).
+-- When the patch is present it flags the EXACT frame CFRU backs up the real party (a swap
+-- begin) by bumping `seq`, and clears `active` on restore — frame-exact and threshold-free.
+-- On RR-with-patch this REPLACES the ≥3-PID-change trigger above (which false-positives on
+-- compaction); the PID heuristic stays as the fallback for vanilla/AP and unpatched ROMs.
+-- `_last_swap_seq` is lazily seeded so the first observation never counts as a begin edge.
+local _last_swap_seq         = nil
 
 -- Per-session:
 local all_known_keys   = {}   -- all keys ever seen in party or box
@@ -1394,15 +1544,30 @@ local function exec_box_mon(key)
                 stats.pp3 = memory.read_u8(base + 0x36)
                 stats.pp4 = memory.read_u8(base + 0x37)
             end
+            -- Cache stats on the server so an UNPATCHED partner's Lua withdraw can restore them
+            -- (the native withdraw recomputes everything, so it ignores these). Sent for both paths.
+            send({event="stats_cache", key=key, stats=stats},
+                 "stats_cache:"..key:sub(1,8), true, true)
+            -- NATIVE deposit (companion patch preferred): the patch does the compressed write; Lua only
+            -- locates a free box slot. Async — settled in on_frame §4a-quinque (Lua fallback on failure).
+            if patch_present() then
+                local bx, px = M.findEmptyBoxSlot()
+                if bx then
+                    sync_written_keys[key] = true
+                    local seq = MB.deposit_mon(slot, bx, px)
+                    if seq then
+                        pending_storage = {mode = "deposit", key = key, slot = slot, box = bx,
+                                           pos = px, stats = stats, seq = seq, start_frame = frame_count}
+                        return "pending"
+                    end
+                end
+                -- no free slot / send failed → fall through to the proven Lua path
+            end
             local bi, si, err = M.depositPartyMon(slot)
             if bi then
                 console.log(string.format("[SLink-FRLGE] ✓ box_mon: %s → box%d s%d", key:sub(1,8), bi, si))
                 sync_written_keys[key] = true
                 hud_show("↓ " .. nick_label(key) .. " boxed", 100, 180, 255, 200)
-                -- Cache stats on server so party_mon can restore them correctly later.
-                -- Use stats_cache (not party_to_box) to avoid triggering sync feedback loop.
-                send({event="stats_cache", key=key, stats=stats},
-                     "stats_cache:"..key:sub(1,8), true, true)
             else
                 console.log("[SLink-FRLGE] ✗ box_mon failed: "..(err or "?").."  key="..key:sub(1,8))
                 hud_show("X Box fail: " .. nick_label(key), 255, 80, 80, 240)
@@ -1433,6 +1598,24 @@ local function exec_party_mon(key, stats)
                  "sync_retrieve_done:"..key:sub(1,8), true, true)
             return
         end
+    end
+    -- NATIVE withdraw (companion patch preferred): the engine recomputes level/stats/PP, so it works
+    -- even without server-cached stats. Lua only locates the box slot holding the key. Async — settled
+    -- in on_frame §4a-quinque (Lua fallback on failure).
+    if patch_present() then
+        local count = memory.read_u8(M.PARTY_COUNT_ADDR)
+        local bx, px = M.scanBoxForKey(key)
+        if bx and count < 6 then
+            sync_written_keys[key] = true
+            all_known_keys[key]    = true
+            local seq = MB.withdraw_mon(bx, px, count)
+            if seq then
+                pending_storage = {mode = "withdraw", key = key, slot = count, box = bx,
+                                   pos = px, stats = stats, seq = seq, start_frame = frame_count}
+                return "pending"
+            end
+        end
+        -- not in a box / party full / send failed → fall through to the proven Lua path
     end
     -- Fail closed: refuse to retrieve without valid stats (prevents zero-stat crash).
     if not stats or not stats.level or stats.level <= 0
@@ -1482,6 +1665,37 @@ local function exec_party_mon(key, stats)
     end
 end
 
+-- Shared memorialize epilogue (both the Lua RAM-poke path and the native OP_MEMORIALIZE poll land
+-- here): verify the move, notify the HUD + server, rename overflow boxes.
+local function memorialize_finish(key, bi, si, pre_count)
+    local post_count = memory.read_u8(M.PARTY_COUNT_ADDR)
+    local still_in_party = false
+    for slot = 0, post_count - 1 do
+        local base = M.PARTY_BASE + slot * M.MON_SIZE
+        if M.monKey(base) == key then still_in_party = true; break end
+    end
+    local in_memorial = M.boxMonKey(bi, si) == key
+
+    console.log(string.format("[SLink-FRLGE] ✓ memorialize: %s → box%d s%d  count=%d→%d  gone=%s  in_box=%s",
+        key:sub(1, 8), bi, si, pre_count, post_count,
+        tostring(not still_in_party), tostring(in_memorial)))
+
+    if still_in_party then
+        console.log("[SLink-FRLGE] ⚠ memorialize VERIFY FAIL: key still in party after memorialize!")
+    end
+
+    hud_show("† " .. nick_label(key) .. " buried", 255, 140, 40, 300)
+    send({event="memorialize_done", key=key, box=bi}, "memorialize_done:"..key:sub(1,8), true)
+    -- Rename overflow boxes (Box 12 → "DEAD 2", Box 11 → "DEAD 3", etc.)
+    if bi ~= M.MEMORIAL_BOX and not memorial_overflow_renamed[bi] then
+        local n = M.MEMORIAL_BOX - bi + 1  -- Box 12→2, Box 11→3, ...
+        pcall(M.renameBox, bi, "DEAD " .. n)
+        memorial_overflow_renamed[bi] = true
+        console.log(string.format("[SLink-FRLGE] Overflow box %d renamed to 'DEAD %d'", bi, n))
+    end
+    return not still_in_party and in_memorial
+end
+
 local function exec_memorialize(key)
     -- Drain any stale box_mon/party_mon for this key from the queue
     local filtered = {}
@@ -1496,34 +1710,37 @@ local function exec_memorialize(key)
     local pre_count = memory.read_u8(M.PARTY_COUNT_ADDR)
     console.log(string.format("[SLink-FRLGE] memorialize: key=%s partyCount=%d", key:sub(1,8), pre_count))
 
+    -- NATIVE fast path (companion patch, party-resident mon only): OP_MEMORIALIZE does the
+    -- compress + zero + swap-with-last in one frame-hook pass — no multi-frame Lua RAM-poke window
+    -- for CFRU's deferred writes to race. ASYNC like deposit/withdraw: return "pending"; the
+    -- §4a-sexies poll runs memorialize_finish (or falls back to the Lua path below on failure).
+    -- Box-resident mons (died while boxed) always take the Lua path — it scans boxes too.
+    if patch_present() and not memorialize_native_disabled
+       and not pending_storage and not pending_memorialize then
+        local count = memory.read_u8(M.PARTY_COUNT_ADDR)
+        local pslot = nil
+        for slot = 0, count - 1 do
+            if M.monKey(M.PARTY_BASE + slot * M.MON_SIZE) == key then pslot = slot; break end
+        end
+        if pslot then
+            local bi, si = M.findFreeMemorialSlot()
+            if bi then
+                local seq = MB.memorialize_mon(pslot, bi, si)
+                if seq then
+                    pending_memorialize = {key = key, box = bi, slot = si, pre_count = count,
+                                           seq = seq, start_frame = frame_count}
+                    console.log(string.format(
+                        "[SLink-FRLGE]   ↳ native OP_MEMORIALIZE armed: slot=%d → box%d s%d seq=%d",
+                        pslot, bi, si, seq))
+                    return "pending"
+                end
+            end
+        end
+    end
+
     local bi, si = M.memorializeMon(key)
     if bi then
-        -- Verify: confirm the key is gone from party and present in memorial box
-        local post_count = memory.read_u8(M.PARTY_COUNT_ADDR)
-        local still_in_party = false
-        for slot = 0, post_count - 1 do
-            local base = M.PARTY_BASE + slot * M.MON_SIZE
-            if M.monKey(base) == key then still_in_party = true; break end
-        end
-        local in_memorial = M.boxMonKey(bi, si) == key
-
-        console.log(string.format("[SLink-FRLGE] ✓ memorialize: %s → box%d s%d  count=%d→%d  gone=%s  in_box=%s",
-            key:sub(1, 8), bi, si, pre_count, post_count,
-            tostring(not still_in_party), tostring(in_memorial)))
-
-        if still_in_party then
-            console.log("[SLink-FRLGE] ⚠ memorialize VERIFY FAIL: key still in party after memorialize!")
-        end
-
-        hud_show("† " .. nick_label(key) .. " buried", 255, 140, 40, 300)
-        send({event="memorialize_done", key=key, box=bi}, "memorialize_done:"..key:sub(1,8), true)
-        -- Rename overflow boxes (Box 12 → "DEAD 2", Box 11 → "DEAD 3", etc.)
-        if bi ~= M.MEMORIAL_BOX and not memorial_overflow_renamed[bi] then
-            local n = M.MEMORIAL_BOX - bi + 1  -- Box 12→2, Box 11→3, ...
-            pcall(M.renameBox, bi, "DEAD " .. n)
-            memorial_overflow_renamed[bi] = true
-            console.log(string.format("[SLink-FRLGE] Overflow box %d renamed to 'DEAD %d'", bi, n))
-        end
+        memorialize_finish(key, bi, si, pre_count)
     else
         console.log("[SLink-FRLGE] ✗ memorialize failed: "..tostring(si).."  key="..key:sub(1,8))
         hud_show("X Mem fail: " .. nick_label(key), 255, 80, 80, 300)
@@ -1572,6 +1789,27 @@ local function on_frame()
             memorial_box_renamed = true
             console.log("[SLink-FRLGE] Memorial box renamed to 'THE DEAD'")
         end
+    end
+
+    -- 0c. Drain the patch's event ring (faint-settled / battle-outcome edges pushed natively each
+    -- frame) into the fast-path credits consumed by the faint debounce + whiteout detectors below
+    -- (ROADMAP §3). The per-frame Lua polls remain the unpatched fallback / safety net.
+    if patch_present() then
+        local evs, ovf = MB.events_drain()
+        for _, e in ipairs(evs) do
+            if e.type == MB.EV_PLAYER_FAINT then
+                ev_faint_credit = ev_faint_credit + 1
+                console.log("[SLink-FRLGE] [ev] player faint settled (counter=" .. e.a ..
+                            ", credit=" .. ev_faint_credit .. ")")
+            elseif e.type == MB.EV_FOE_FAINT then
+                console.log("[SLink-FRLGE] [ev] foe faint settled (counter=" .. e.a .. ")")
+            elseif e.type == MB.EV_OUTCOME then
+                if e.a == 2 then ev_outcome_loss = true end
+                console.log("[SLink-FRLGE] [ev] battle outcome=" .. e.a ..
+                            (e.a == 2 and " (LOSS/whiteout)" or ""))
+            end
+        end
+        if ovf then console.log("[SLink-FRLGE] [ev] ⚠ event ring overflowed (events dropped)") end
     end
 
     -- 1. Drive TCP pump
@@ -1704,6 +1942,23 @@ local function on_frame()
         end
     end
 
+    -- Drain pending native in-battle notifications: ONE per frame, only when the mailbox opcode slot is
+    -- IDLE (so we never clobber a force_faint / force-move arm sent earlier the same frame) and no
+    -- notification is currently on screen (BattleNotif.active — stacked messages show sequentially).
+    -- If the battle ended before a queued message showed, flush it to the BizHawk overlay instead so the
+    -- notification is never lost.
+    if #pending_battle_msgs > 0 then
+        if not (native_msgs_enabled and patch_present() and M.isInBattle()) then
+            local m = table.remove(pending_battle_msgs, 1)
+            if m.fb == "prompt" then prompt_show(m.text, m.r, m.g, m.b, m.frames or 300)
+            else hud_show(m.text, m.r, m.g, m.b, m.frames or 300) end
+        elseif memory.read_u16_le(0x0203F806) == 0           -- mailbox opcode slot idle (MB.BASE+6)
+           and memory.read_u8(MB.BATTLE_NOTIF) == 0 then     -- no notification currently showing
+            local m = table.remove(pending_battle_msgs, 1)
+            MB.show_battle_message(fit_battle_text(m.text), NATIVE_BATTLE_FRAMES, NATIVE_BATTLE_WIN, m.color)
+        end
+    end
+
     -- Peer ghost (RR + companion patch): broadcast our overworld WORLD-PIXEL position (sub-pixel) +
     -- facing + moving + live animNum ~20 Hz, plus our AVATAR (live sprite images/anims ROM ptrs +
     -- true 16-colour palette) so the partner sees US as ourselves, moving exactly as we move. The
@@ -1719,14 +1974,22 @@ local function on_frame()
             pg_align_tx = memory.read_s16_le(OE + 0x10); pg_align_ty = memory.read_s16_le(OE + 0x12)
             pg_coff_ax = coffx; pg_coff_ay = coffy
         end
-        if frame_count % 3 == 0 then
+        -- 30 Hz while moving (fresher targets shrink the patch's lead-extrapolation window),
+        -- 20 Hz idle (nothing changes; don't double the idle chatter).
+        if frame_count % (idle and 3 or 2) == 0 then
             local f = memory.read_u8(OE + 0x18) & 0x0F
             if f < 1 or f > 4 then f = 1 end
             local sid  = memory.read_u8(OE + 0x04)
             local anim = (sid < 64) and memory.read_u8(0x0202063C + sid * 0x44 + 0x2A) or 0
-            local moving = not idle
             local wx = pg_align_tx * 16 + (pg_coff_ax - coffx)   -- sub-pixel world position
             local wy = pg_align_ty * 16 + (pg_coff_ay - coffy)
+            -- mv means "position actually ADVANCING", not "walk animation playing": a wall bump
+            -- is a held movement (not idle) that never moves us, and broadcasting mv=1 for it
+            -- makes the partner's ghost lead-extrapolate past us and hold there (the driver
+            -- refuses backward steps while mv=1). The ghost's animation comes from `an`, so a
+            -- bump still animates; only the motion model sees us as stationary.
+            local moving = (not idle) and (wx ~= pg_last_sent_wx or wy ~= pg_last_sent_wy)
+            pg_last_sent_wx, pg_last_sent_wy = wx, wy
             -- Our avatar: live sprite images(+0x0C)/anims(+0x08) ROM ptrs + the true (untinted) 16
             -- colours from the player's OBJ palette slot in the Unfaded shadow buffer.
             local imgs, anim_ptr, pcol = 0, 0, nil
@@ -1757,9 +2020,24 @@ local function on_frame()
         if PG then
             PG.on_frame()
             if PG.consume_interact() and not pending_ui and not pending_trade_apply then
-                -- Talk-to-partner opens the action menu (Trade / Wave) — but only if no menu/trade is
+                -- Talk-to-partner opens the action menu (Trade / Say hey) — but only if no menu/trade is
                 -- already in flight, so mashing A near the ghost can't stack requests.
                 send({ event = "trade_request" }, "trade_request", true, false)
+            end
+        end
+
+        -- Pokémon-Center trade NPC (presence-OFF mode): the patch spawns/arms the NPC and bumps pi_count
+        -- on talk; here we just relay it as the SAME trade_request, with the SAME in-flight guard. The
+        -- ghost path is dormant when presence is OFF (server starves ghost_pos), so pi_count has a single
+        -- consumer at a time — the two paths never both fire.
+        if patch_present() and pc_npc_enabled then
+            local cnt = MB.peer_interact_count()
+            if pc_npc_pi_last == nil then pc_npc_pi_last = cnt end
+            if cnt ~= pc_npc_pi_last then
+                pc_npc_pi_last = cnt
+                if not pending_ui and not pending_trade_apply then
+                    send({ event = "trade_request" }, "trade_request", true, false)
+                end
             end
         end
 
@@ -2001,7 +2279,7 @@ local function on_frame()
                 _battle_hp_cache[key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
                 force_fainted_keys[key] = true
                 pending_explosions[key] = nil
-                hud_show("!! " .. nick_label(key) .. " KO'd (fb)", 255, 80, 80, 360)
+                show_fallback("!! " .. nick_label(key) .. " KO! (fb)", "hud", 255, 80, 80, 360)
                 console.log(string.format(
                     "[SLink-FRLGE]   ↳ EXPLOSION FALLBACK fired slot=%d battler=%d key=%s",
                     st.slot, st.battler, key))
@@ -2102,6 +2380,95 @@ local function on_frame()
         end
     end
 
+    -- 4a-quinque. Settle the native PC box⇄party storage op (OP_DEPOSIT_MON / OP_WITHDRAW_MON). Async:
+    -- the opcode acks next frame. ST_OK → success bookkeeping; ST_FAIL → Lua fallback; timeout → re-check
+    -- the real party/box state (a lost ack on a SUCCEEDED op must not double-run through the fallback).
+    if pending_storage then
+        local ps = pending_storage
+        local status = MB.poll(ps.seq)
+        local outcome  -- "ok" | "fallback" | nil (keep waiting)
+        if status == MB.ST_OK then
+            outcome = "ok"
+        elseif status == MB.ST_FAIL then
+            outcome = "fallback"
+        elseif (frame_count - ps.start_frame) >= STORAGE_OP_TIMEOUT then
+            -- Lost ack: decide from real state so a succeeded-but-unacked op isn't re-run.
+            local in_party, pc = false, memory.read_u8(M.PARTY_COUNT_ADDR)
+            for s = 0, pc - 1 do
+                local b = M.PARTY_BASE + s * M.MON_SIZE
+                if M.slotOccupied(b) and M.monKey(b) == ps.key then in_party = true; break end
+            end
+            if ps.mode == "deposit" then
+                outcome = in_party and "fallback" or "ok"   -- still in party → never ran → fall back
+            else
+                outcome = in_party and "ok" or "fallback"   -- now in party → ran → done
+            end
+            console.log(string.format("[SLink-FRLGE] storage %s timeout: in_party=%s → %s",
+                ps.mode, tostring(in_party), outcome))
+        end
+        if outcome == "ok" then
+            sync_written_keys[ps.key] = true
+            if ps.mode == "deposit" then
+                console.log(string.format("[SLink-FRLGE] ✓ box_mon (native): %s → box%d s%d", ps.key:sub(1,8), ps.box, ps.pos))
+                hud_show("↓ " .. nick_label(ps.key) .. " boxed", 100, 180, 255, 200)
+            else
+                all_known_keys[ps.key] = true
+                console.log(string.format("[SLink-FRLGE] ✓ party_mon (native): %s ← box%d s%d", ps.key:sub(1,8), ps.box, ps.pos))
+                hud_show("↑ " .. nick_label(ps.key) .. " unboxed", 100, 255, 160, 200)
+                send({event = "sync_retrieve_done", key = ps.key}, "sync_retrieve_done:"..ps.key:sub(1,8), true, true)
+            end
+        elseif outcome == "fallback" then
+            console.log(string.format("[SLink-FRLGE] native %s %s — Lua fallback (key=%s)",
+                ps.mode, (status == MB.ST_FAIL and "FAILED" or "timed out/unrun"), ps.key:sub(1,8)))
+            if ps.mode == "deposit" then
+                local bi, _si, err = M.depositPartyMon(ps.slot)
+                if bi then sync_written_keys[ps.key] = true
+                    hud_show("↓ " .. nick_label(ps.key) .. " boxed", 100, 180, 255, 200)
+                else console.log("[SLink-FRLGE] ✗ box_mon fallback failed: "..(err or "?"))
+                    hud_show("X Box fail: " .. nick_label(ps.key), 255, 80, 80, 240) end
+            else
+                local ok, err = M.retrieveBoxMon(ps.key, ps.stats)
+                if ok then sync_written_keys[ps.key] = true; all_known_keys[ps.key] = true
+                    hud_show("↑ " .. nick_label(ps.key) .. " unboxed", 100, 255, 160, 200)
+                    send({event = "sync_retrieve_done", key = ps.key}, "sync_retrieve_done:"..ps.key:sub(1,8), true, true)
+                else console.log("[SLink-FRLGE] ✗ party_mon fallback failed: "..(err or "?"))
+                    hud_show("! Unbox " .. nick_label(ps.key), 255, 200, 60, 600)
+                    send({event = "sync_retrieve_failed", key = ps.key}, "sync_retrieve_failed:"..ps.key:sub(1,8), true, true) end
+            end
+        end
+        if outcome then
+            -- Refresh the borrowed-party detector baseline to the now-modified party (like the sync loop).
+            local _post = _read_party_pids()
+            for i = 0, 5 do _stable_party_pids[i] = _post[i]; _last_party_pids[i] = _post[i] end
+            _last_pid_change_frame = frame_count
+            post_unfreeze_frames = POST_UNFREEZE_SETTLE
+            pending_storage = nil
+        end
+    end
+
+    -- 4a-sexies. Settle the native memorialize (OP_MEMORIALIZE). On ST_OK run the shared epilogue
+    -- (verify + HUD + memorialize_done + overflow rename); on failure/timeout disable the native
+    -- path for the session and re-queue the command so the proven Lua RAM-poke path takes over.
+    if pending_memorialize then
+        local pm = pending_memorialize
+        local st = MB.poll(pm.seq)
+        local timed_out = frame_count - pm.start_frame > 120
+        if st == MB.ST_OK then
+            memorialize_finish(pm.key, pm.box, pm.slot, pm.pre_count)
+            local _post = _read_party_pids()
+            for i = 0, 5 do _stable_party_pids[i] = _post[i]; _last_party_pids[i] = _post[i] end
+            _last_pid_change_frame = frame_count
+            pending_memorialize = nil
+        elseif st == MB.ST_FAIL or timed_out then
+            console.log(string.format(
+                "[SLink-FRLGE] ✗ native memorialize %s (key=%s) — Lua path takes over for this run",
+                timed_out and "TIMED OUT" or "FAILED", pm.key:sub(1, 8)))
+            memorialize_native_disabled = true
+            pending_memorialize = nil
+            table.insert(pending_sync_cmds, 1, {cmd = "memorialize", key = pm.key})
+        end
+    end
+
     -- 4b. Flush deferred battle faints: apply force_faint to mons that are no longer
     -- the active battler (switched out) or when battle has ended.
     if next(pending_battle_faints) and writes_enabled then
@@ -2128,7 +2495,7 @@ local function on_frame()
                         pending_battle_faints[key] = nil
                         M.playSE(M.SE_LINKED_KO)
                         console.log(string.format("[SLink-FRLGE]   ↳ DEFERRED force_faint applied slot=%d key=%s", slot, key))
-                        hud_show("!! " .. nick_label(key) .. " KO'd", 255, 80, 80, 360)
+                        show_fallback("!! " .. nick_label(key) .. " KO!", "hud", 255, 80, 80, 360)
                     end
                     break
                 end
@@ -2190,7 +2557,10 @@ local function on_frame()
     -- can queue a party_mon/box_mon for a trading mon ("Unbox") that would otherwise execute on top of
     -- the trade scene rewriting the party slot — the user's "unbox race". The trade owns the party until
     -- it completes; the migration block then purges the now-stale commands for the swapped keys.
-    if safe_now and #pending_sync_cmds > 0 and writes_enabled and not pending_trade_apply then
+    -- `not pending_storage` / `not pending_memorialize`: only one native party-mutating op in flight
+    -- at a time — the next sync cmd waits until the §4a-quinque/-sexies poll resolves it (or falls back).
+    if safe_now and #pending_sync_cmds > 0 and writes_enabled and not pending_trade_apply
+       and not pending_storage and not pending_memorialize then
         local cmd = pending_sync_cmds[1]  -- peek before removing
         -- Safety gate: if target party slot is in mid-copy quarantine, defer one frame.
         local blocked = false
@@ -2241,7 +2611,12 @@ local function on_frame()
             elseif cmd.cmd == "memorialize" then
                 exec_ok, exec_err = pcall(exec_memorialize, cmd.key)
             end
-            if exec_ok then
+            if exec_ok and exec_err == "pending" then
+                -- Async native storage op fired (OP_DEPOSIT_MON/WITHDRAW_MON): the party isn't modified
+                -- until the opcode runs next frame. The §4a-quinque poll updates the baseline on
+                -- completion; pending_storage gates this loop meanwhile so nothing races the change.
+                -- (intentionally no baseline update here — deferred to the poll)
+            elseif exec_ok then
                 -- Sync command modified party slots — immediately update the
                 -- PID swap detector's stable baseline so rapid back-to-back
                 -- commands (e.g. 3× box_mon) don't accumulate diffs and
@@ -2303,6 +2678,7 @@ local function on_frame()
         -- fast-confirm via counter delta on profiles that expose it.
         battle_start_player_faints  = (M.readFaintCounters())
         confirmed_real_player_faints = 0
+        ev_faint_credit = 0; ev_outcome_loss = false  -- battle-scoped EvRing credits
         -- Detect borrowed-party battles (CFRU/RR only).
         local ok_bb, is_bb = pcall(M.isBorrowedBattle)
         borrowed_battle = ok_bb and is_bb or false
@@ -2518,6 +2894,7 @@ local function on_frame()
             pending_faint_debounce = {}  -- clear any debounce state
             battle_start_player_faints  = nil
             confirmed_real_player_faints = 0
+            ev_faint_credit = 0; ev_outcome_loss = false  -- drop battle-scoped EvRing credits
             post_battle_frames = POST_BATTLE_GRACE
             memorialize_battle_cooldown = MEMORIALIZE_POST_BATTLE_COOLDOWN
             post_eob_frames    = POST_EOB_SAFETY_CAP
@@ -2532,6 +2909,7 @@ local function on_frame()
         pending_faint_debounce = {}  -- clear any debounce state
         battle_start_player_faints  = nil
         confirmed_real_player_faints = 0
+        ev_faint_credit = 0; ev_outcome_loss = false  -- drop battle-scoped EvRing credits
         post_battle_frames = POST_BATTLE_GRACE
         memorialize_battle_cooldown = MEMORIALIZE_POST_BATTLE_COOLDOWN
         post_eob_frames    = POST_EOB_SAFETY_CAP
@@ -2571,6 +2949,23 @@ local function on_frame()
     end
     if _slot_changed then _last_pid_change_frame = frame_count end
 
+    -- Authoritative borrowed-party signal from the companion patch (preferred over the
+    -- PID heuristic when present).  `_auth_begin_edge` = the patch bumped `seq` this frame
+    -- (CFRU just backed up the real party → a swap is beginning).  `_swap.active` reflects
+    -- the live swap window.  Absent (nil) on unpatched ROMs / vanilla / AP — the PID
+    -- heuristic below then drives the freeze exactly as before.
+    local _swap = (MB ~= nil) and MB.read_swap_state() or nil
+    local use_authoritative_swap = _swap ~= nil
+    local _auth_begin_edge = false
+    if _swap then
+        if _last_swap_seq == nil then
+            _last_swap_seq = _swap.seq          -- seed; never an edge on first observation
+        elseif _swap.seq ~= _last_swap_seq then
+            _last_swap_seq = _swap.seq
+            _auth_begin_edge = true
+        end
+    end
+
     -- Bootstrap: if the profile has a real-party backup address, trust it
     -- the first time we observe (live party == backup) with a non-empty
     -- party.  This means we caught the engine in a quiet overworld state
@@ -2606,18 +3001,37 @@ local function on_frame()
     -- battle start; the PID detector is only needed for overworld transitions.
     local _pid_reverted = false
     if not party_frozen and not in_battle then
-        local diff = _pids_diff_count(_curr_pids, _stable_party_pids)
-        if diff >= PID_SWAP_THRESHOLD then
-            if _is_compaction_shift(_curr_pids, _stable_party_pids) then
-                -- All new PIDs are from the existing party — normal deposit or
-                -- withdrawal caused slot compaction.  Update stable baseline
-                -- immediately so subsequent frames don't re-trigger.
-                for i = 0, 5 do _stable_party_pids[i] = _curr_pids[i] end
-                _last_pid_change_frame = frame_count
-                console.log(string.format(
-                    "[SLink-FRLGE] PID shift: %d/6 slots moved (party compaction, not a swap)",
-                    diff))
-            else
+        -- Trigger source: authoritative patch signal (preferred) or the PID heuristic.
+        local _do_freeze, _freeze_log = false, nil
+        if use_authoritative_swap then
+            -- The patch flagged the real-party backup this frame — a borrowed swap is
+            -- beginning.  Threshold-free and false-positive-free: no compaction guard is
+            -- needed because the engine genuinely backed the party up (vs. the heuristic,
+            -- which can't tell a swap from a deposit-driven slot compaction).
+            if _auth_begin_edge then
+                _do_freeze  = true
+                _freeze_log = "patch swap-begin (authoritative)"
+            end
+        else
+            local diff = _pids_diff_count(_curr_pids, _stable_party_pids)
+            if diff >= PID_SWAP_THRESHOLD then
+                if _is_compaction_shift(_curr_pids, _stable_party_pids) then
+                    -- All new PIDs are from the existing party — normal deposit or
+                    -- withdrawal caused slot compaction.  Update stable baseline
+                    -- immediately so subsequent frames don't re-trigger.
+                    for i = 0, 5 do _stable_party_pids[i] = _curr_pids[i] end
+                    _last_pid_change_frame = frame_count
+                    console.log(string.format(
+                        "[SLink-FRLGE] PID shift: %d/6 slots moved (party compaction, not a swap)",
+                        diff))
+                else
+                    _do_freeze  = true
+                    _freeze_log = string.format(
+                        "PID SWAP: %d/6 slots differ from stable baseline", diff)
+                end
+            end
+        end
+        if _do_freeze then
             party_frozen           = true
             freeze_frames_left     = FREEZE_TIMEOUT_FRAMES
             pending_freeze_release = false
@@ -2636,10 +3050,7 @@ local function on_frame()
             -- Discard buffered box_to_party events (same reasoning — transient
             -- keys from the borrowed party are not real withdrawals).
             box_to_party_buffer = {}
-            console.log(string.format(
-                "[SLink-FRLGE] ★ PID SWAP: %d/6 slots differ from stable baseline; freezing party diff",
-                diff))
-            end
+            console.log("[SLink-FRLGE] ★ " .. _freeze_log .. "; freezing party diff")
         end
     else
         -- While frozen: revert = "live party matches the real party again".
@@ -2679,6 +3090,16 @@ local function on_frame()
         if _pid_reverted and not pending_freeze_release then
             pending_freeze_release = true
             freeze_release_reason  = "PID revert"
+        end
+        -- Authoritative end: the patch cleared `active` once gPlayerParty was restored
+        -- from the backup (after the borrowed party diverged) — as authoritative as a PID
+        -- revert, so release immediately (set _pid_reverted to bypass the eob gate below).
+        if use_authoritative_swap and _swap.active == 0 then
+            _pid_reverted = true
+            if not pending_freeze_release then
+                pending_freeze_release = true
+                freeze_release_reason  = "patch swap-end (authoritative)"
+            end
         end
         -- Release when: (a) trigger fired AND eob_clear, OR (b) trigger
         -- fired via PID revert (bypass eob gate — revert is authoritative),
@@ -2896,6 +3317,7 @@ local function on_frame()
     local party_diff_ok = not borrowed_battle and not party_frozen
         and post_unfreeze_frames == 0
         and not pending_trade_apply         -- freeze the diff for the whole trade (party swaps mid-scene)
+        and not pending_storage             -- freeze the diff while a native deposit/withdraw is in flight
         and (in_battle or post_battle_frames > 0 or is_overworld)
 
     if party_diff_ok then
@@ -3274,11 +3696,25 @@ local function on_frame()
             -- (active battler awaiting switch-out), or the mon was coerced into
             -- Exploding — don't double-report.
             pending_faint_debounce[k] = nil
+        elseif ev_faint_credit > 0 and n_pending == 1 then
+            -- Fast-path (EvRing, patched): the patch pushed a settled EV_PLAYER_FAINT —
+            -- the engine committed the faint after protection resolved. Same single-pending
+            -- safety rule as the counter path (the ring doesn't say WHICH key). Bump the
+            -- counter credit too so the polled fast-path can't double-fire for this faint.
+            pending_faint_debounce[k] = nil
+            ev_faint_credit = ev_faint_credit - 1
+            confirmed_real_player_faints = confirmed_real_player_faints + 1
+            console.log("[SLink-FRLGE]   ↳ faint CONFIRMED via EvRing event key="..k:sub(1,8))
+            send({event="faint", key=k, area_id=area},
+                 "faint:"..k:sub(1,8), true)
+            real_faint_occurred = true
         elseif curr_pfc
                and (curr_pfc - battle_start_player_faints) > confirmed_real_player_faints then
             -- Fast-path: counter delta exceeds the count we've already credited.
             pending_faint_debounce[k] = nil
             confirmed_real_player_faints = confirmed_real_player_faints + 1
+            -- The ring pushed an event for this same faint; eat it so it can't go stale.
+            if ev_faint_credit > 0 then ev_faint_credit = ev_faint_credit - 1 end
             console.log("[SLink-FRLGE]   ↳ faint CONFIRMED via gBattleResults delta key="..k:sub(1,8))
             send({event="faint", key=k, area_id=area},
                  "faint:"..k:sub(1,8), true)
@@ -3288,6 +3724,8 @@ local function on_frame()
             if frames_left <= 0 then
                 -- Confirmed via timer fallback.
                 pending_faint_debounce[k] = nil
+                -- A real faint also pushed a ring event; consume it so it can't go stale.
+                if ev_faint_credit > 0 then ev_faint_credit = ev_faint_credit - 1 end
                 console.log("[SLink-FRLGE]   ↳ faint debounce CONFIRMED key="..k:sub(1,8))
                 send({event="faint", key=k, area_id=area},
                      "faint:"..k:sub(1,8), true)
@@ -3301,8 +3739,13 @@ local function on_frame()
     -- ── whiteout ─────────────────────────────────────────────────────────────
     -- Don't declare whiteout while faint debounce is in progress — some of
     -- those HP=0 readings may be transient (Sturdy/Focus Sash recovery).
-    if had_alive and all_zero and not party_frozen and real_faint_occurred
+    -- EvRing fast-path: the engine's own EV_OUTCOME==2 (LOSS) edge also qualifies —
+    -- it can land a frame after the last faint was confirmed, when
+    -- real_faint_occurred is no longer set this pass. One-shot (consumed on send).
+    if had_alive and all_zero and not party_frozen
+       and (real_faint_occurred or ev_outcome_loss)
        and not next(pending_faint_debounce) then
+        ev_outcome_loss = false
         M.playSE(M.SE_BOO)
         send({event="whiteout"}, "whiteout", true)
     end

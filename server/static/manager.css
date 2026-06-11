@@ -94,6 +94,18 @@ body {
   font-weight: 700;
   padding: 2px 0 1px;
 }
+/* Caption under a section header (e.g. the "Requires ROM patch" group) —
+   explains the dependency and links to the Patcher page. */
+.mgr-new-opts-note {
+  margin: 0 0 2px;
+  font-size: 0.72em;
+  line-height: 1.35;
+  color: var(--c-dim);
+}
+.mgr-new-opts-note a {
+  color: var(--c-link);
+  white-space: nowrap;
+}
 /* Single-column option list inside each section.  Two-column at this
    sidebar width forces every label (e.g. "Species Clause", "Explode Mode")
    to wrap to a second line, which is taller and less readable than one

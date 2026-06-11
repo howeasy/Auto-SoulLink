@@ -2,19 +2,21 @@
 --
 -- The partner is ANOTHER real player playing their own game; we show THEM in our overworld — their
 -- own trainer avatar + colours, moving and animating exactly as they move. The companion patch's
--- frame hook (drive_ghost in handlers.c) spawns a real engine object-event and consumes the
--- partner's committed STEP STREAM (one tile per step the partner actually walked), so the engine
--- owns sub-pixel motion / animation / day-night tint / culling / collision and the ghost mirrors
--- the partner's exact path one step behind — no "chase the sampled tile -> stop at every tile"
--- stutter. We no longer puppet sprite memory from Lua.
+-- frame hook (drive_ghost in handlers.c) spawns a real engine object-event for the sprite slot /
+-- collision / palette, neutralizes its callback, and follows the partner's broadcast sub-pixel
+-- WORLD-PIXEL position at constant engine velocity (1 px/frame walk, 2 run), extrapolating up to
+-- GHOST_LEAD_CAP_PX past a stale sample while the partner is still moving — continuous motion, no
+-- "chase the sampled tile -> stop at every tile" stutter. We no longer puppet sprite memory from
+-- Lua. (The older step-stream design was rejected: it belongs to the abandoned held-movement
+-- driver — see patch/ROADMAP.md §1.)
 --
--- This receiver's whole job, when the partner is on the SAME map: request the ghost once; each tile
--- the partner advances, push one step into the shared ring; keep the absolute tile posted (snap
--- target); forward the partner's avatar (live sprite images/anims ptrs + palette). When not same
--- map, clear it. The patch owns the spawn/despawn/map-change/gfx-change lifecycle.
+-- This receiver's whole job, when the partner is on the SAME map: request the ghost once; keep the
+-- partner's world-px position + facing/moving/anim posted into GhostState; forward their avatar
+-- (live sprite images/anims ptrs + palette). When not same map, clear it. The patch owns the
+-- spawn/despawn/map-change/gfx-change lifecycle.
 --
--- Feed via on_ghost_pos{mg,mn,x,y,f,mv,run,gfx,imgs,anim,pcol}; x,y are TILE coords (object-event
--- currentCoords space). Requires the patch (mailbox); no-ops gracefully without.
+-- Feed via on_ghost_pos{mg,mn,x,y,f,mv,run,gfx,imgs,anim,pcol}; x,y are WORLD PIXELS (sub-pixel).
+-- Requires the patch (mailbox); no-ops gracefully without.
 
 local ok_mb, MB = pcall(require, "mailbox")
 if not ok_mb then MB = nil end
@@ -51,6 +53,11 @@ end
 
 function PG.on_frame()
   if not PG.present() then return end
+  -- Only touch the ghost in the WALKABLE FIELD. Menus (party/bag/start), the trade scene, etc. reuse
+  -- gSprites for their own UI; the avatar re-assert below writes gSprites[ghost_sid], which corrupts
+  -- those screens (the party-menu "square"/sprite errors). is_overworld is TRUE in menus (only battle
+  -- flips it false), so gate on gMain.callback2 == CB2_Overworld (the field, incl. field dialogues).
+  if memory.read_u32_le(0x030030F4) ~= 0x080565B5 then return end
   local poe = MB.player_oe()                                              -- player's actual slot
   local pmg, pmn = memory.read_u8(poe + 0x0A), memory.read_u8(poe + 0x09) -- local player map
   local g = S.ghost
@@ -107,6 +114,7 @@ function PG.on_frame()
     S.av_imgs = g.imgs
     S.av_anims = g.anim or 0
     S.pcols = nil
+    S.tint_sig = nil                               -- new colours -> force a tint recompute
     if g.pcol and #g.pcol >= 64 then
       S.pcols = {}
       for i = 0, 15 do S.pcols[i] = tonumber(g.pcol:sub(i*4+1, i*4+4), 16) or 0 end
@@ -128,10 +136,18 @@ function PG.on_frame()
       local gsid = memory.read_u8(OE + goe*0x24 + 0x04)
       if gsid < 64 then
         local sa = 0x0202063C + gsid*0x44
-        memory.write_u32_le(sa + 0x0C, S.av_imgs)                       -- sprite.images
-        if S.av_anims and S.av_anims ~= 0 then memory.write_u32_le(sa + 0x08, S.av_anims) end
+        -- Read-compare-write: the re-assert must still WIN whenever the engine reverted the sprite,
+        -- but on the (vast majority of) frames where nothing reverted, skip the redundant writes.
+        if memory.read_u32_le(sa + 0x0C) ~= S.av_imgs then
+          memory.write_u32_le(sa + 0x0C, S.av_imgs)                     -- sprite.images
+        end
+        if S.av_anims and S.av_anims ~= 0 and memory.read_u32_le(sa + 0x08) ~= S.av_anims then
+          memory.write_u32_le(sa + 0x08, S.av_anims)                    -- sprite.anims
+        end
         local attr2 = memory.read_u16_le(sa + 0x04)
-        memory.write_u16_le(sa + 0x04, (attr2 & 0x0FFF) | (15 << 12))   -- OBJ palette slot 15
+        if (attr2 & 0xF000) ~= (15 << 12) then
+          memory.write_u16_le(sa + 0x04, (attr2 & 0x0FFF) | (15 << 12)) -- OBJ palette slot 15
+        end
         if S.pcols then
           -- TINT: RR applies day/night tint to OBJ palette RAM DIRECTLY (not the Faded shadow buffer),
           -- and does NOT tint our hijacked slot 15 — so derive the tint from the player's own slot as
@@ -140,23 +156,35 @@ function PG.on_frame()
           -- to RAM slot 15, so the ghost darkens/colours with the world like every other sprite.
           local psid2 = memory.read_u8(poe + 0x04)
           local ps = (psid2 < 64) and ((memory.read_u16_le(0x0202063C + psid2*0x44 + 0x04) >> 12) & 0x0F) or 0
-          local rn,gn,bn,rd,gd,bd = 0,0,0,0,0,0
-          for i = 0, 15 do
-            local uf = memory.read_u16_le(0x020373F8 + ps*0x20 + i*2)   -- unfaded = true colours
-            local rm = memory.read_u16_le(0x05000200 + ps*0x20 + i*2)   -- live palette RAM = tinted
-            rd=rd+(uf&0x1F); gd=gd+((uf>>5)&0x1F); bd=bd+((uf>>10)&0x1F)
-            rn=rn+(rm&0x1F); gn=gn+((rm>>5)&0x1F); bn=bn+((rm>>10)&0x1F)
-          end
-          for i = 0, 15 do
-            local c = S.pcols[i] or 0
-            local r,g,b = c&0x1F, (c>>5)&0x1F, (c>>10)&0x1F
-            local tr = (rd>0) and math.min(31, math.floor(r*rn/rd + 0.5)) or r
-            local tg = (gd>0) and math.min(31, math.floor(g*gn/gd + 0.5)) or g
-            local tb = (bd>0) and math.min(31, math.floor(b*bn/bd + 0.5)) or b
-            local tc = tr | (tg<<5) | (tb<<10)
-            memory.write_u16_le(0x020373F8 + 15*0x20 + i*2, c)    -- unfaded slot 15 = true
-            memory.write_u16_le(0x020377F8 + 15*0x20 + i*2, tc)   -- faded slot 15 = tinted (DMA'd to RAM)
-            memory.write_u16_le(0x05000200 + 15*0x20 + i*2, tc)   -- live RAM slot 15 = tinted (now)
+          -- The tint only moves on day/night transitions and screen fades — both change the PLAYER's
+          -- live palette row (the tint source). Signature that row (8 u32 reads) and skip the ~80-op
+          -- recompute+rewrite on the frames it hasn't moved: Faded slot 15 keeps DMA-ing our last
+          -- tinted colours to RAM, so skipping writes nothing stale.
+          local sig = { ps }
+          for i = 0, 7 do sig[i + 2] = memory.read_u32_le(0x05000200 + ps*0x20 + i*4) end
+          local prev, dirty = S.tint_sig, false
+          if not prev then dirty = true
+          else for k = 1, 9 do if sig[k] ~= prev[k] then dirty = true; break end end end
+          if dirty then
+            S.tint_sig = sig
+            local rn,gn,bn,rd,gd,bd = 0,0,0,0,0,0
+            for i = 0, 15 do
+              local uf = memory.read_u16_le(0x020373F8 + ps*0x20 + i*2)   -- unfaded = true colours
+              local rm = memory.read_u16_le(0x05000200 + ps*0x20 + i*2)   -- live palette RAM = tinted
+              rd=rd+(uf&0x1F); gd=gd+((uf>>5)&0x1F); bd=bd+((uf>>10)&0x1F)
+              rn=rn+(rm&0x1F); gn=gn+((rm>>5)&0x1F); bn=bn+((rm>>10)&0x1F)
+            end
+            for i = 0, 15 do
+              local c = S.pcols[i] or 0
+              local r,g,b = c&0x1F, (c>>5)&0x1F, (c>>10)&0x1F
+              local tr = (rd>0) and math.min(31, math.floor(r*rn/rd + 0.5)) or r
+              local tg = (gd>0) and math.min(31, math.floor(g*gn/gd + 0.5)) or g
+              local tb = (bd>0) and math.min(31, math.floor(b*bn/bd + 0.5)) or b
+              local tc = tr | (tg<<5) | (tb<<10)
+              memory.write_u16_le(0x020373F8 + 15*0x20 + i*2, c)    -- unfaded slot 15 = true
+              memory.write_u16_le(0x020377F8 + 15*0x20 + i*2, tc)   -- faded slot 15 = tinted (DMA'd to RAM)
+              memory.write_u16_le(0x05000200 + 15*0x20 + i*2, tc)   -- live RAM slot 15 = tinted (now)
+            end
           end
         end
         -- LAYERING: replicate the engine's per-frame OE subpriority (sElevationToSubpriority[elev] +
@@ -170,6 +198,7 @@ function PG.on_frame()
           memory.write_u8(sa + 0x3F, memory.read_u8(sa + 0x3F) | 0x04)  -- animBeginning
           memory.write_u8(sa + 0x2C, memory.read_u8(sa + 0x2C) & 0xBF)  -- animPaused = 0
           S.last_gsid = gsid
+          S.tint_sig = nil          -- map reload may have wiped faded slot 15 -> force a re-stamp
         end
       end
     end

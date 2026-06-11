@@ -27,15 +27,93 @@ is a valid map for the base engine here.
   so control falls through to the callback dispatch at `0x08000524`.
   - Binary: `0x0800051A..0x08000523 = C0 46 ×5` (confirmed via disasm).
 
-- **Code region `0x08378CA8`** (file `0x378CA8`) — a `0x14900`-byte (~83 KB) `0xFF`
-  free run (from `find_freespace.py`). Distance from the hook `0x0800051A` is
-  `0x37 8790` ≈ 3.62 MB, **within Thumb BL ±4 MB range**. Holds the trampoline +
-  dispatcher + per-opcode handlers. (Deeper pointer-reference audit before Phase 1.)
+- **Code region `0x08378F70`** (file `0x378F70`, `CODE_BASE`) — the `0xFF` free run that
+  resumes right after the bundled RR4.1_Custom **Battle Calc** block (which owns
+  `0x08378CA8..0x08378F6F`); `0x14638` ≈ 81 KB free. Distance from the hook `0x0800051A`
+  is `0x378A52` ≈ 3.62 MB, **within Thumb BL ±4 MB range**. Holds the trampoline +
+  dispatcher + per-opcode handlers. `build.py` asserts this region is all-`0xFF` (after the
+  Battle Calc is applied) before injecting, so it can never clobber the Battle Calc or engine.
+  - On a plain base RR (no Battle Calc) `0x08378CA8` itself is free; `CODE_BASE` was moved to
+    `0x08378F70` purely to coexist with the bundled Battle Calc — see "Bundled RR4.1_Custom
+    Battle Calc" below.
 
 - **Mailbox `0x0203F800`** (EWRAM) — above CFRU's highest known EWRAM symbol
   (`0x0203F3AE`), with ~0x450 bytes margin, below EWRAM end `0x0203FFFF`.
   **Runtime-validated**: watched for stray writes across gameplay before trusting
   (Phase-0 gate). Mailbox is ≤256 bytes.
+
+- **SwapState `0x0203F840`** (EWRAM, 8 B) — authoritative borrowed-party ("Party Freeze")
+  signal, published struct (read-only mirror for Lua), in the free gap between the mailbox
+  (ends `0x0203F840`) and GhostState (`0x0203F850`). Fields: `u8 active` (1 while a borrowed/
+  preset party is installed), `u8 seq` (++ on each begin edge — Lua triggers the freeze on the
+  edge), `u8 diverged` (internal latch), `u8 _pad`, `u32 real_pid` (`gPlayerParty[0]` PID at
+  begin). **Begin** is hooked authoritatively: build.py redirects CFRU BackupParty's two
+  party→backup memcpy `BL` sites (`0x0804C10C`, `0x0804C212`, both `BL 0x081E5E78`) to
+  `slink_backup_wrap`, which does the real copy then flags begin once (guarded on dst ==
+  `REAL_PARTY_BACKUP 0x02025564`). **End** is per-frame in `drive_swap_state`: clear `active`
+  once `gPlayerParty` matches the backup buffer again after diverging (RestoreParty memcpy
+  `0x0804C254` is left unhooked). Hook sites discovered live via
+  `lua/tests/probe_party_backup_writer.lua`.
+
+- **SLINK_CALC_OFF `0x0203F8D8`** (EWRAM, 1 B) — Battle-Calc display kill switch, right after
+  TradeNpcState (`0x0203F8D4`, 4 B) in the gap before `SLINK_SCRIPT_BUF 0x0203F8E0`. **INVERTED**:
+  `0` (EWRAM boot default — no Lua/config) = calc SHOWN as today; `1` = `slink_battletext_hook`
+  skips the calc trampoline, replays the two displaced halfwords (clean RR `0x080D87BE`:
+  `mov r7,r8` ; `push {r7}`) and resumes the function body at `0x080D87C3` — as if the calc patch
+  weren't installed. Driven by the per-run `battle_calc` toggle (`MB.set_battle_calc`). LIVE
+  (`test_live_calctoggle`: A-mash battles + flip churn, both paths).
+
+- **EvRing `0x0203FD10`** (EWRAM, 40 B) — native→Lua event-push ring, after BattleNotif (ends
+  `0x0203FD08`). `{u8 wr, u8 rd, u8 overflow, u8 inb, u8 pfc, u8 ofc, u8 _pad[2], u32 ev[8]}`;
+  events packed `type | a<<8 | b<<16`. Producers (`drive_events`, every frame): EV_PLAYER_FAINT=1 /
+  EV_FOE_FAINT=2 on `gBattleResults` (`0x03004F90`, player@+0 foe@+1) counter deltas — they bump
+  only AFTER Sturdy/Sash/Endure resolve (the authoritative settle signal); EV_OUTCOME=3 with
+  `gBattleOutcome` on the end-of-battle edge. Frame-granular counter polling was chosen over a BL
+  hook into `Cmd_tryfaintmon` deliberately: same settle semantics, zero new detours, zero battle
+  reentrancy. The producer's prev-state latches live IN the struct (our ROM blob has no .data/.bss —
+  mutable statics are impossible). Lua: `MB.events_init/events_drain`. LIVE (`test_live_events`:
+  single bump, multi-bump delta, overflow drop+flag+recover).
+
+## Bundled RR4.1_Custom Battle Calc (in-battle damage calculator)
+
+The emitted patch folds in the **Battle Calc**, extracted as a base-RR → RR4.1_Custom UPS
+delta (`rr41_battle_calc.ups`, regenerate via `tools/make_battle_calc_patch.py`) and applied
+before SLink injection. It is the same RR build as ours run through a customizer: **3,412
+bytes in 13 regions** (base RR `8529f3a4…` → custom `b50b3a51…`; integrated-output md5
+`7f3be72b…`). All engine/controller addresses above are **unchanged** by it — verified
+byte-identical.
+
+**Battle Calc = an in-battle damage / type-effectiveness calculator.** All addresses resolved
+against `BPRE.ld` and disassembled (capstone):
+
+- **Detour** `0x080D87BE` = `BL 0x08378CA8` over `BattlePutTextOnWindow`'s prologue.
+- **Trampoline `0x08378CA8` (712 B)**: masks the window id (`r1 & 0x3F`), reads
+  `gMoveSelectionCursor` (`0x02023FFC`), formats a colored decimal number (FR control codes
+  `0xFC 01 04/06` + digit charmap `0xA1`=‘0’) into CFRU scratch `0x0203F200`, calls
+  `BattlePutTextOnWindow`.
+- **New funcs `0x09360000`–`0x09360F17` (~2.7 KB)**: `0x9360C00` reads `gBattleMons` type
+  `+0x20` / ability `+0x1B` / item `+0x4C` / move `+0x2E` and applies `×3`/shift multipliers
+  (type-effectiveness); `0x9360400` is a PID^OTID checksum guard caching into
+  `gNewBS`/`0x0203F000`; `0x9360000` builds the string over `gDisplayedStringBattle`,
+  installed via a redirected pointer at `0x08069C54` (`0x090B1C58 → 0x09360341`).
+- **Trivial extras**: one move name edited (`gMoveNames+0x1304`, 4 B) + an 8-byte config
+  tweak at `0x083FEC02`.
+
+**Disjoint from SLink** (so they coexist): SLink hook `0x0800051A` ≠ mod hooks
+(`0x080D87BE`, `0x08069C54`); SLink EWRAM `0x0203F800+` vs mod EWRAM `≤0x0203F200` /
+`gNewBS 0x0203E038`; SLink code relocated to `0x08378F70`, just above the mod's
+`0x08378CA8` block. IPS cannot ship this (Battle Calc code at file `~0x1360000` > 16 MB) — UPS only.
+
+### The 13 changed regions
+| ROM | bytes | what |
+|---|---|---|
+| `0x08069C54` | 4 | redirected fn-pointer → new code `0x09360341` |
+| `0x080D87BE` | 4 | `BL` hook over `BattlePutTextOnWindow` |
+| `0x08248398` | 4 | move-name string edit (`gMoveNames+0x1304`) |
+| `0x08378CA8`–`0x08378F6F` | 712 | trampoline (SLink moved above it) |
+| `0x083FEC02` | 8 | config/data tweak |
+| `0x09360000`/`0400`/`0C00` | ~2.7 K | new damage-calc + string functions |
+| 5× `0x0904D…0x090AC…` | ~30 | small table records |
 
 ## Mailbox ABI v1 (little-endian)
 
@@ -63,9 +141,7 @@ is a valid map for the base engine here.
 | 7 | DESPAWN_PEER_NPC | `[0]`=objEventId | DestroySprite + clear object-event (clean removal) |
 | 8 | SHOW_MESSAGE | text pre-written (FR-encoded) to `0x0203F900` → `result[0]`=shown | native field message box (`ShowFieldMessage`) |
 | 9 | PLAY_FANFARE | `[0..1]`=songId | `PlayFanfare(songId)` |
-| 10 | APPLY_DAMAGE | `[0]`=battler `[1..2]`=amount → `result[0..1]`=new hp | linked HP / chip: `gBattleMons[b].hp -= amount` (clamp 0) |
-| 11 | CURE_STATUS | `[0]`=battler | link-cured status: clear `gBattleMons[b].status1` |
-| 12 | SET_RULES | `[0]`=enforce | ROM-enforced nuzlocke: persistently keep battle style on SET |
+| 10–12 | _(reserved)_ | — | **REMOVED** — were APPLY_DAMAGE / CURE_STATUS / SET_RULES (linked chip / status / nuzlocke battle-style). Dropped: chip+status as features, set-mode/level-cap is native to RR. Numbers kept reserved (no dispatch case → ack ST_FAIL); see "Removed opcodes" below |
 | 13 | ARM_PEER_INTERACT | `[0]`=ghost oeId `[1]`=armed | talk-to-ghost detection (legacy; ghost auto-arms now) |
 | 14 | GHOST_SPAWN | `[0]`=gfxId `[1]`=localId | engine-driven peer ghost: hook spawns+walks it via held movements (GhostState@0x0203F850) |
 | 15 | GHOST_CLEAR | — | hook cleanly removes the ghost (RemoveEventObject) |
@@ -76,6 +152,10 @@ is a valid map for the base engine here.
 | 20 | CHOOSE_PARTY_MON | — → `result[0]`=slot(0-5)/7=cancel | native "Choose a POKéMON" menu via `callnative InitPartyMenu` (FR `special` idx is reordered on RR); ASYNC, `drive_ui` publishes Var8004 |
 | 21 | TRADE_SCENE | `[0]`=slot | native in-game trade animation+evolution via `callnative DoInGameTradeScene` @`0x08054440` (RE'd); trades `gPlayerParty[slot]` ↔ `gEnemyParty[0]`; ASYNC |
 | 22 | SHOW_CHOICES | options FR-encoded in `SLINK_MENU_BUF` (`[u8 count][str 0xFF]...`) → `result[0]`=index/0x7F=cancel | native multichoice list (custom labels); replicates `DrawVerticalMultichoiceMenu` in C (`CreateWindowFromRect 0x809D654`, `SetStandardWindowBorderStyle 0x80F7750`, `AddTextPrinterParameterized 0x8002C48`, `CopyWindowToVram 0x8003F20`, `Menu_InitCursor 0x810F7D8`, `CreateTask 0x807741C` → `Task_MultichoiceMenu_HandleInput 0x809CC98`, `GetStringWidth 0x8005ED4`, `ScheduleBgCopyTilemapToVram 0x80F67A4`); FONT_NORMAL=2, gTasks=0x3005090. ASYNC (lockall-bracketed, drive_ui kind 1) |
+| 24 | DEPOSIT_MON | `[0]`=partySlot `[1]`=boxId `[2]`=boxPos | party→PC box (CFRU `CreateCompressedMonFromBoxMon` + shift-compact party). LIVE (`test_live_boxsync`). See "PC storage / box migration reference" |
+| 25 | WITHDRAW_MON | `[0]`=boxId `[1]`=boxPos `[2]`=partySlot | PC box→party (CFRU `CompressedMonToMon`; engine recomputes level/stats/PP). LIVE (`test_live_boxsync`) |
+| 26 | MEMORIALIZE | `[0]`=partySlot `[1]`=boxId `[2]`=boxPos | party→memorial box. Same compress as DEPOSIT_MON but removal is **zero + SWAP-WITH-LAST** (not shift) so survivors keep their slot indices — CFRU's deferred battle writes target slots (mirrors Lua `M.memorializeMon`). Lua picks the free memorial slot + renames boxes. LIVE (`test_live_memorialize`) |
+| 23 | SHOW_BATTLE_MESSAGE | `[0..1]`=duration frames, `[2]`=window id (0→`0xD`). FR text in `SLINK_TEXT_BUF` | **native IN-BATTLE text** (the BizHawk-HUD-in-battle replacement), drawn into the Battle Calc's move-info window (`0xD`, top-left). `BattleNotif`@`0x0203FD00` {active,win,task,phase,frames}. **Two parts:** (1) build.py RE-POINTS the calc's `BattlePutTextOnWindow` detour @`0x080D87BE` (was `BL 0x08378CA8`) to naked shim `slink_battletext_hook` → `slink_battle_inject` swaps the text ptr for window `BN->win` IN-CONTEXT (inside the engine's draw), then `bx 0x08378CA9` (calc trampoline). REAL callable entry = `0x080D87BD` (prologue @`0x080D87BC`), NOT the detour @`0x080D87BE`. (2) `drive_battle_notif` `CreateTask`s `slink_notif_task` which draws every frame via **RunTasks** (the in-context point — calling `BattlePutTextOnWindow` from the slink_hook frame hook WHITE-OUTS the BG); on teardown draws an empty FR string then `DestroyTask 0x08077508` (poking the task struct @+0 corrupts the FUNC ptr → RunTasks crash; isActive@+4). SYNC ack |
 
 **RR `gSpecials` is REORDERED** — the FireRed `special` indices (e.g. ChoosePartyMon 170, DoInGameTradeScene
 265) DO NOT work on RR (live-proven no-ops). The native menus/scene are invoked **by address** via CFRU's
@@ -101,13 +181,10 @@ nickname) and `gStringVar1 = 0x02021CD0` (received OT); `gStringVar2`/`gStringVa
 as talk-to-ghost (ScriptContext1_SetupScript + MSGBOX_SIGN), not bare ShowFieldMessage, so the
 "partner waved at you" box closes on A.
 
-## Phase-5 (peer interaction + ROM-enforced settings) — validated
-EWRAM state `SlinkState @ 0x0203F8D0` {enforce_rules, pi_armed, pi_oe, pi_count}. The frame hook runs
-`enforce_rules()` + `check_peer_interact()` every frame (no-op until armed).
-- **SET_RULES** (ROM-enforced nuzlocke): while enforced, each frame sets `optionsBattleStyle` = SET
-  (bit 9 / mask 0x0200 of the options u16 at `*gSaveBlock2Ptr`(0x0300500C)+0x14) — so "no free switch
-  after a KO" can't be turned off in the options menu. Live: SHIFT→SET, re-enforced after a change
-  attempt, releasable. Extensible to text-speed/scene/etc.
+## Phase-5 (peer interaction) — validated
+EWRAM state `SlinkState @ 0x0203F8D0` {_rsvd0, pi_armed, pi_oe, pi_count} (`_rsvd0` = the removed
+`enforce_rules` byte, kept to pin the `pi_*` offsets). The frame hook runs `check_peer_interact()`
+every frame (no-op until armed).
 - **ARM_PEER_INTERACT** (talk-to-ghost): each frame, if A is newly pressed (`gMain`(0x030030F0)+0x2E &
   0x0001) and the tile in front of the player (object-event facing@0x18: 1=down/2=up/3=left/4=right)
   equals the ghost object-event's tile, bump `pi_count` (the client polls it to notify the server/
@@ -123,16 +200,18 @@ EWRAM state `SlinkState @ 0x0203F8D0` {enforce_rules, pi_armed, pi_oe, pi_count}
   != 0 (a dialogue is already up) so mashing A mid-conversation doesn't re-trigger. Live-validated
   (`test_live_peerinteract` on rebuilt ROM: counter++, message shown, no softlock).
 
-## Phase-5 (linked battle rules) — primitives validated
-New gameplay only a patch enables. `gBattleMons` hp@0x28, maxHP@0x2C, status1@0x4C (stride 0x58).
-- **APPLY_DAMAGE** = shared-fate chip: reduce a battler's battle HP by `amount` (clamped to 0 = a
-  linked KO). The engine refreshes the health box on its next touch; at battle end CFRU copies
-  gBattleMons.hp back to the party, so the chip persists. Returns the new HP.
-- **CURE_STATUS** = link-cured: zero a battler's non-volatile status (poison/burn/etc.).
-**Live-validated** (`test_live_linkdamage.lua`, in-battle save): chip 30→25→15, lethal→0, poison→cured.
-**Orchestration (the cross-game relay) is server/client integration** — the client detects an HP delta
-in battle and reports it; the server relays a fraction to the partner, whose client sends APPLY_DAMAGE
-(same pattern as force_faint propagation). That wiring + a run-rule flag is the remaining feature work.
+## Removed opcodes (10 APPLY_DAMAGE, 11 CURE_STATUS, 12 SET_RULES)
+These were built + live-validated but never wired, and are removed to reclaim ROM/EWRAM:
+- **APPLY_DAMAGE / CURE_STATUS** (linked chip / link-cured status, `gBattleMons` hp@0x28, status1@0x4C):
+  the shared-fate linked-battle mechanics were **dropped as features** for RR.
+- **SET_RULES** (ROM-enforced battle-style SET / nuzlocke): **redundant on RR** — the base hack already
+  enforces set mode + level caps and ships a toggleable infinite repel.
+
+Opcode **numbers 10–12 stay reserved** (no dispatch case → `default: ack(ST_FAIL, 1)`, same as an
+older patch) so 13+ keep their ABI slot; `SlinkState._rsvd0` pins the `pi_*` offsets. For a future,
+less-featured base game these are easy to re-add: chip = `hp -= amount` clamp 0 (engine refreshes the
+health box, CFRU copies gBattleMons.hp→party at battle end so it persists); status = zero status1;
+set-rules = OR `optionsBattleStyle` SET (bit 9 / 0x0200 of options u16 at `*gSaveBlock2Ptr`+0x14).
 
 ## Phase-4 (native UI) — validated
 `ShowFieldMessage = 0x0806943C` `(const u8 *str)` — copies `str` (FR-charmap, 0xFF-terminated) into
@@ -236,7 +315,12 @@ fires once, no corruption, no Z-move. Comm enum confirmed: 1 BEFORE → 2 WAIT_A
 
 **RR-build-specific addresses (runtime-discovered — re-discover per RR version):**
 action-menu controllers `0x0802E439`/`0x0802E3B5`, move-menu controller thunk `0x0802EA11`
-(→ real `HandleInputChooseMove` 0x090AB8B8). Also found (used by the abandoned emit approach,
+(→ real `HandleInputChooseMove` 0x090AB8B8). **RE-VALIDATED 2026-06-11 on the current build**
+(`lua/tests/probe_movecursor_thunks.lua`): live `gBattlerControllerFuncs[0]` reads exactly
+`0x0802E439` at the action menu and `0x0802EA11` at the move menu — the constants are correct,
+so the 2026-06 real-play softlock was NOT stale addresses; re-enable work (config flag
+`--native-battle-control`, default OFF) must focus on the swap's runtime behavior under a live
+two-instance soak. Also found (used by the abandoned emit approach,
 kept for reference): `EmitTwoReturnValues=0x0800E848`, `EmitMoveChosen=0x090AA73C`,
 `PlayerBufferExecCompleted=0x0802E33C`, `gBattleBufferB=0x20233C4` (stride 0x200, CFRU format
 `[0]=0x21 [1]=10/action [2]=move_pos [3]=target [4]=mega [5]=ultra [6]=zMove [7]=dynamax`).
@@ -275,3 +359,50 @@ MOVEMENT_TYPE_NONE, then each step `EventObjectSetHeldMovement(oe, GetWalk*Actio
 `EventObjectClearHeldMovementIfFinished`. The engine animates/positions/palettes/collides natively.
 `SpawnSpecialObjectEventParameterized`=0x805E831 and `ScriptContext1_SetupScript`=0x08069AE5 already
 validated above.
+
+## PC storage / box migration reference (forward-looking — for OP_DEPOSIT_MON/WITHDRAW/MEMORIALIZE)
+Groundwork for retiring the Lua `depositPartyMon`/`retrieveBoxMon`/`memorializeMon` RAM-pokes
+(`memory_gba.lua`). **The data layout is already fully mapped by SLink's Lua** (`lua/games/gen3_frlge.lua`):
+PC boxes use CFRU's **58-byte (0x3A) `CompressedPokemon`** (NOT the 80-byte BoxPokemon), unencrypted,
+fixed substruct order; `POKEMON_STORAGE_BASE = 0x02029314`, **25 boxes**, and the boxes are
+**non-contiguous in EWRAM** — see `CFRU_BOX_BASES` (the `sPokemonBoxPtrs[]` table; e.g. box0 @
+`0x2029314+4`, box20 @ `0x203CB44`, box23 @ `0x2027434`, box25 @ `0x2024638`).
+
+**Base-engine mon accessors — VALIDATED on the live ROM** (disasm prologue ✓, `patch/build/slink_RR.gba`):
+| symbol | addr | prologue | note |
+|---|---|---|---|
+| `GetMonData` | 0x0803FBE8 | push {r4,lr} | party `struct Pokemon` field read |
+| `SetMonData` | 0x0804037C | push {r4,lr} | party field write |
+| `BoxMonToMon` | 0x0803E774 | push {r4,lr};sub sp,#4 | expand an 80-byte BoxPokemon → 100-byte Pokemon |
+| `CompactPartySlots` | 0x080937DC | push {r4-r7,lr} | close gaps after a party removal |
+| `IsPokemonStorageFull` | 0x08040FA0 | push {r4-r6,lr} | box-space guard |
+| `Memcpy` | 0x081E5E78 | — | raw copy (the BL the backup-wrap hook & `CopyMon` thunk target) |
+| `GetMonDataFromAnyBox` | 0x0808BA18 | ldr r3,[pc];bx r3 | **CFRU trampoline** → real body ~`0x090B6B38` (the compressed-aware box accessor) |
+| `SetMonDataFromAnyBox` | 0x0808BA5C | push;ldr r2,[pc];bx r2 | CFRU trampoline (compressed-aware box write) |
+
+NB `CopyMon` (BPRE.ld 0x8040B08) is just a `bl Memcpy` thunk with no size set up — use `Memcpy` directly.
+
+**The conversion primitives live in CFRU `src/pokemon_storage_system.c`** (CFRU-custom, in the
+`0x09xxxxxx` added-code region, so NOT in BPRE.ld). **LOCATED 2026-06-08 by scanning the ROM for the
+`sPokemonBoxPtrs[]` table** (`SLink-RR.gba`): the 25 box-base pointers (= SLink's `CFRU_BOX_BASES`) sit
+as a const u32 table at **ROM `0x09148930`** (all 25 verified; dword after = `0x02031658` box-name base).
+13 literal-pool xrefs to it cluster the storage functions in **`0x090B68xx–0x090B6Dxx`**:
+| function | addr | confidence | evidence |
+|---|---|---|---|
+| **`CompressedMonToMon`(comp*, dst*)** — **WITHDRAW** primitive | **0x090B6A24** | ✓✓ LIVE | body = `sub sp,#0x50` (local BoxPokemon) → `CreateBoxMonFromCompressedMon(&box, comp)` → `BoxMonToMon(&box, dst)` — exact source match; **round-trip-proven on hardware** |
+| **`CreateCompressedMonFromBoxMon`(box*, comp*)** — **DEPOSIT** primitive | **0x090B6B78** | ✓✓ LIVE | body = `Memset(comp,0,0x3A)` then the exact `0x1C`/substruct0/EV/misc/move copies from source; **round-trip-proven** |
+| `CreateBoxMonFromCompressedMon`(box*, comp*) | 0x090B6924 | ✓ HIGH | the 80-byte builder `CompressedMonToMon` tail-calls (don't need it directly) |
+| `GetCompressedMonPtr` math (inlined) | 0x090B69F4 | ✓ | computes `*(u32*)(0x09148930 + boxId*4) + boxPos*0x3A`, bounds boxId≤0x18 & pos≤0x1d. **Inlined in the handler** |
+
+**IMPLEMENTED + LIVE-VALIDATED (2026-06-08, opcodes 24/25, build md5 7a8e8ebc):**
+`OP_WITHDRAW_MON(box,pos,partySlot)` = `comp = *(u32*)(0x09148930 + box*4) + pos*0x3A`;
+`CompressedMonToMon(comp, &gPlayerParty[slot])`; extend `gPlayerPartyCount`; zero the 58-byte box slot.
+`OP_DEPOSIT_MON(partySlot,box,pos)` = `CreateCompressedMonFromBoxMon(&gPlayerParty[slot] /*its first 80
+bytes ARE a BoxPokemon*/, comp)`; then shift-compact the party + decrement count (mirrors Lua
+`depositPartyMon`). Because the engine conversion runs the real `BoxMonToMon`/`CalculatePPWithBonus`/
+`CalculateMonStats`, a withdrawn mon comes out fully formed (level/stats/PP) — **the server-cached
+`stats` blob is no longer needed**. Proven by `lua/tests/test_live_boxsync.lua` (deposit→withdraw of the
+save's real lead mon: personality/OT/species preserved, level recomputed, box slot freed, no corruption).
+**Still TODO:** wire `gen3_frlge_client.lua` `exec_box_mon`/`exec_party_mon` to the native path (async +
+patch-detect + Lua fallback), two-instance soul-link test, then delete the Lua RAM-poke. `OP_MEMORIALIZE`
+(deposit into `MEMORIAL_BOX` + box rename) is the follow-up.

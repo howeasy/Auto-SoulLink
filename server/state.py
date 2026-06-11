@@ -90,7 +90,7 @@ def is_shiny(key: str) -> bool:
 
 
 class SoulLinkState:
-    def __init__(self, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False):
+    def __init__(self, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True, native_battle_control: bool = False):
         # When data_dir is provided (manager mode) use it; otherwise fall back to the
         # module-level globals so monkeypatch works in tests and the standalone server
         # keeps working unchanged.
@@ -184,6 +184,34 @@ class SoulLinkState:
         # whenever the trainer ID is in the adapter's rival set AND the
         # partner has cached blobs.  Per-run rule, never flipped at runtime.
         self.rival_team_swap: bool = rival_team_swap
+        # Overworld Presence (peer ghost).  Set once at run creation via the
+        # `--overworld-presence` CLI flag (mirrors --rival-team-swap).  When
+        # True, the server relays each player's `ghost_pos` to the partner and
+        # honours `peer_interact`, so the partner walks the overworld as a live
+        # NPC.  When False, both are dropped server-side — no ghost ever spawns.
+        # ROM-patch-required: the Lua side additionally self-gates on
+        # patch_present(), so the feature is live only when this flag is ON AND
+        # both players are patched.  Per-run rule, never flipped at runtime.
+        self.overworld_presence: bool = overworld_presence
+        # Native-enhancement toggles (ROM-patch features the Lua client can route either natively
+        # or through its Lua fallback).  All four ride the same `config` command the client gets
+        # on hello; none are flipped at runtime.  Unlike the opt-in run RULES above, these do not
+        # change soullink semantics — they pick the rendering/audio/UX path:
+        #  * native_messages (default OFF): field message box + in-battle notifications drawn by
+        #    the patch instead of the Lua HUD overlay.  Off until A/B testing picks a winner.
+        #  * native_sounds   (default OFF): notification sounds via the patch's PlaySE.
+        #  * battle_calc     (default ON):  the bundled Battle Calc damage display.  Baked into the
+        #    patched ROM; the client gates it via the patch's config byte (1 = disabled).
+        #  * pc_trade_npc    (default ON):  the Pokémon-Center trade NPC.  Only EFFECTIVE while
+        #    overworld_presence is OFF (the ghost replaces it as the trade entry point).
+        self.native_messages: bool = native_messages
+        self.native_sounds: bool = native_sounds
+        self.battle_calc: bool = battle_calc
+        self.pc_trade_npc: bool = pc_trade_npc
+        #  * native_battle_control (default OFF): the patch's native explode/faint controller
+        #    swap.  Off after a real-play softlock; the Variant-3 RAM path stays the fallback
+        #    until the native path is re-proven (ROADMAP §2).
+        self.native_battle_control: bool = native_battle_control
         # Talk-to-partner: each player's latest in-game progress (badge count), reported via the
         # `status` event; surfaced to the partner in the talk-to-partner box (the nuzlocke helper).
         self.player_badges: dict[str, int] = {"a": 0, "b": 0}
@@ -192,6 +220,12 @@ class SoulLinkState:
         # a native YES/NO menu before the faithful blob swap is applied.  None = no trade pending.
         self.pending_trade: Optional[dict] = None
         self._trade_token: int = 0
+        # Per-player tick countdown during which _reconcile_party_keys is suppressed after a trade
+        # completes. A trade is a party↔party swap, so no box/party sync is ever legitimately needed
+        # from it; but for a few ticks each client's party read is still settling, and the drift
+        # reconciler would otherwise mis-read the freshly-received mon as "ghost-boxed" and queue a
+        # spurious party_mon ("Unbox") to the partner. See _reconcile_party_keys / _handle_trade_done.
+        self._trade_settle_ticks: dict[str, int] = {"a": 0, "b": 0}
 
     # ── public API ───────────────────────────────────────────────────────────
 
@@ -331,6 +365,11 @@ class SoulLinkState:
     def _handle_ghost_pos(self, player_id: str, msg: dict):
         """Relay a player's overworld position to the partner as an (ephemeral) ghost_pos
         command for the engine-NPC peer ghost. High-frequency; never persisted."""
+        # Overworld Presence toggle: when off, drop the relay so the partner never
+        # receives a ghost_pos → no ghost ever spawns. The Lua side keeps emitting
+        # (it self-gates only on patch presence); we gate the run-level feature here.
+        if not self.overworld_presence:
+            return
         partner = _partner(player_id)
         cmd = {
             "cmd": "ghost_pos",
@@ -356,17 +395,22 @@ class SoulLinkState:
     def _handle_peer_interact(self, player_id: str, msg: dict):
         """A player talked to their partner's ghost (pressed A toward the engine-NPC). The
         patch already showed a native box on the initiator's side; notify the PARTNER so they
-        know they were 'waved at'. Testing stub for the richer trade/ready-check flows."""
-        self._notify_waved(player_id)
+        know someone said hey. Testing stub for the richer trade/ready-check flows."""
+        # Overworld Presence toggle: inert when the feature is off (no ghost to talk to).
+        if not self.overworld_presence:
+            return
+        self._notify_hey(player_id)
 
-    def _notify_waved(self, player_id: str):
-        """Friendly 'partner waved' notification to the OTHER player. Used as the no-trade fallback
-        for talk-to-partner and by the legacy peer_interact event."""
+    def _notify_hey(self, player_id: str):
+        """Friendly '<partner> says hey!' notification to the OTHER player. Used as the no-trade
+        fallback for talk-to-partner and by the legacy peer_interact event."""
         partner = _partner(player_id)
+        sayer = (self.player_identity.get(player_id) or {}).get("trainer_name", "")
+        text = f"{sayer} says hey!" if sayer else "Your partner says hey!"
         self.queued_commands[partner].append({
-            "cmd": "msgbox", "text": "Your partner waved!", "fb": "prompt",
+            "cmd": "msgbox", "text": text, "fb": "prompt",
         })
-        log.info(f"[{player_id}] waved → notifying {partner}")
+        log.info(f"[{player_id}] says hey → notifying {partner}")
 
     def _mon_label(self, mon: "MonInfo") -> str:
         """Display label for a linked mon: nickname, else species name, else a key prefix."""
@@ -408,6 +452,9 @@ class SoulLinkState:
     # Because the link is only mutated ATOMICALLY in _handle_trade_done (once BOTH sides report), an
     # abort here can never leave the link half-swapped — it just frees the slot.
     TRADE_WATCHDOG_EVENTS = 4000
+    # Ticks to suppress party-key drift reconciliation on each side after a trade completes, while the
+    # clients' party snapshots settle (prevents the post-trade spurious "Unbox" party_mon).
+    TRADE_SETTLE_TICKS = 12
 
     def _tick_pending_trade(self):
         pt = self.pending_trade
@@ -419,17 +466,25 @@ class SoulLinkState:
             self.pending_trade = None
 
     def _handle_trade_request(self, player_id: str, msg: dict):
-        """Talk-to-partner → show the native action menu (TRADE / WAVE). TRADE opens the party picker;
-        WAVE just notifies the partner. (2-option yes/no menu for now: YES = Trade, NO = Wave.)"""
+        """Talk-to-partner → show the native action menu (TRADE / SAY HEY). TRADE opens the party
+        picker; SAY HEY just pings the partner."""
         if self.pending_trade is not None:
             return                                # a trade is already in flight — ignore silently (no spam)
         self._trade_token += 1
         token = f"t{self._trade_token}"
         self.pending_trade = {"phase": "menu", "initiator": player_id, "token": token, "reprompts": 0, "age": 0}
-        # Native multichoice list — the proper menu with labelled options.
+        # Native multichoice list — the proper menu with labelled options. `text` is spoken by whoever
+        # the player just talked to (the box stays open under the floating menu): presence OFF means the
+        # Pokémon-Center trade NPC (Prof Oak), presence ON means the partner's overworld ghost.
+        partner_name = (self.player_identity.get(_partner(player_id)) or {}).get("trainer_name", "")
+        who = partner_name or "your partner"
+        if self.overworld_presence:
+            text = f"{who} is right here!\nWhat will you do?"
+        else:
+            text = f"OAK: Took you long enough.\n{who} is waiting. Make it quick."
         self.queued_commands[player_id].append({
-            "cmd": "show_choices", "token": token, "options": ["Trade", "Wave"]})
-        log.info(f"[{player_id}] trade_request → action menu (Trade/Wave) token={token}")
+            "cmd": "show_choices", "token": token, "options": ["Trade", "Say hey"], "text": text})
+        log.info(f"[{player_id}] trade_request → action menu (Trade/Say hey) token={token}")
 
     def _handle_mon_chosen(self, player_id: str, msg: dict):
         """The initiator picked a party slot. Enforce the linked-pair invariant: the slot MUST be one
@@ -512,9 +567,9 @@ class SoulLinkState:
                     return
                 pt["phase"] = "choosing"
                 self.queued_commands[player_id].append({"cmd": "choose_mon", "token": pt["token"]})
-            elif choice == 1:                              # WAVE → notify the partner
+            elif choice == 1:                              # SAY HEY → ping the partner
                 self.pending_trade = None
-                self._notify_waved(player_id)
+                self._notify_hey(player_id)
             else:                                          # B-press / cancel (0x7F) → abort silently
                 self.pending_trade = None
             return
@@ -596,11 +651,14 @@ class SoulLinkState:
         self._save()
         log.info(f"trade complete (token {pt['token']})")
         self.pending_trade = None
+        # Arm the post-trade settle window on BOTH sides: the swap is party↔party, so suppress the
+        # drift reconciler while each client's party read settles (no spurious "Unbox" party_mon).
+        self._trade_settle_ticks = {"a": self.TRADE_SETTLE_TICKS, "b": self.TRADE_SETTLE_TICKS}
 
     @classmethod
-    def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False) -> "SoulLinkState":
+    def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True, native_battle_control: bool = False) -> "SoulLinkState":
         """Load persisted state from data/links.json, or return a fresh instance."""
-        state = cls(data_dir=data_dir, species_lock=species_lock, gender_lock=gender_lock, type_lock=type_lock, explode_mode=explode_mode, is_rr=is_rr, adapter=adapter, rival_team_swap=rival_team_swap)
+        state = cls(data_dir=data_dir, species_lock=species_lock, gender_lock=gender_lock, type_lock=type_lock, explode_mode=explode_mode, is_rr=is_rr, adapter=adapter, rival_team_swap=rival_team_swap, overworld_presence=overworld_presence, native_messages=native_messages, native_sounds=native_sounds, battle_calc=battle_calc, pc_trade_npc=pc_trade_npc, native_battle_control=native_battle_control)
         if not os.path.exists(state._links_path):
             return state
         try:
@@ -654,6 +712,12 @@ class SoulLinkState:
                 state.type_lock = bool(saved_rules.get("type_lock", type_lock))
                 state.explode_mode = bool(saved_rules.get("explode_mode", explode_mode))
                 state.rival_team_swap = bool(saved_rules.get("rival_team_swap", rival_team_swap))
+                state.overworld_presence = bool(saved_rules.get("overworld_presence", overworld_presence))
+                state.native_messages = bool(saved_rules.get("native_messages", native_messages))
+                state.native_sounds = bool(saved_rules.get("native_sounds", native_sounds))
+                state.battle_calc = bool(saved_rules.get("battle_calc", battle_calc))
+                state.pc_trade_npc = bool(saved_rules.get("pc_trade_npc", pc_trade_npc))
+                state.native_battle_control = bool(saved_rules.get("native_battle_control", native_battle_control))
             state.run_over = bool(data.get("run_over", False))
             state.attempts_count = int(data.get("attempts_count", 0))
             state.rom_type = data.get("rom_type", "")
@@ -926,6 +990,21 @@ class SoulLinkState:
             self.queued_commands[player_id].append({
                 "cmd": "resolved_areas", "areas": []
             })
+
+        # Tell the client the run's patch-feature config. overworld_presence: when OFF, the
+        # companion patch's Pokémon-Center trade NPC becomes the trade entry point (the peer
+        # ghost — and its talk-to-trade trigger — only exists when presence is ON); the client
+        # gates the PC-NPC driver on pc_trade_npc AND NOT overworld_presence. native_messages /
+        # native_sounds pick the patch path over the Lua HUD fallback; battle_calc drives the
+        # patch's calc config byte (display is baked into the patched ROM, the byte hides it).
+        self.queued_commands[player_id].append({
+            "cmd": "config", "overworld_presence": bool(self.overworld_presence),
+            "native_messages": bool(self.native_messages),
+            "native_sounds": bool(self.native_sounds),
+            "battle_calc": bool(self.battle_calc),
+            "pc_trade_npc": bool(self.pc_trade_npc),
+            "native_battle_control": bool(self.native_battle_control),
+        })
 
         # Re-arm an in-flight rebuild: reconcile restored_keys from the fresh
         # party snapshot (some party_mons may have executed before disconnect),
@@ -2057,6 +2136,15 @@ class SoulLinkState:
         """
         if self.rebuild_pending.get(player_id):
             return
+        # A trade owns party bookkeeping for its whole lifetime + a short settle window after. The swap
+        # is party↔party (both halves stay in party), so the reconciler can only produce false positives
+        # here — most damagingly a spurious party_mon ("Unbox") to the partner when a settling tick makes
+        # the freshly-received mon look "ghost-boxed". Skip entirely until the window drains.
+        if self.pending_trade is not None:
+            return
+        if self._trade_settle_ticks.get(player_id, 0) > 0:
+            self._trade_settle_ticks[player_id] -= 1
+            return
 
         actual_keys = {mon.get("key", "") for mon in party if mon.get("key")}
         tracked_keys = self.party_keys[player_id]
@@ -2418,6 +2506,7 @@ class SoulLinkState:
             # the legacy `force_faint` deferred-faint command.
             cmd_name = "force_explode" if self.explode_mode else "force_faint"
             self.queued_commands[partner].append({"cmd": cmd_name, "key": partner_mon.key, "nickname": partner_mon.nickname or ""})
+            self.queued_commands[partner].append({"cmd": "play_sound", "sound": 26})   # SE_FAILURE — the KO notification's noise (HUD convention)
             self.party_keys[partner].discard(partner_mon.key)
             log.debug(f"[PARTY] player={partner}  party_keys remove {partner_mon.key[:8]}  ({cmd_name} from {player_id})")
             log.info(f"[{player_id}] faint → {cmd_name} {partner}:{partner_mon.key}")
@@ -2741,6 +2830,12 @@ class SoulLinkState:
                 "type_lock": self.type_lock,
                 "explode_mode": self.explode_mode,
                 "rival_team_swap": self.rival_team_swap,
+                "overworld_presence": self.overworld_presence,
+                "native_messages": self.native_messages,
+                "native_sounds": self.native_sounds,
+                "battle_calc": self.battle_calc,
+                "pc_trade_npc": self.pc_trade_npc,
+                "native_battle_control": self.native_battle_control,
             },
             "links": [
                 {

@@ -37,7 +37,9 @@ def make_state_with_link(a_key="A:1", b_key="B:2", area="route_1",
 
 
 def noop_only(cmds: list) -> bool:
-    return all(c.get("cmd") in ("noop", "play_sound", "resolved_areas") for c in cmds)
+    # `config` (overworld_presence rule) and `resolved_areas` are benign informational pushes the
+    # server always queues on hello — they never represent a sync action.
+    return all(c.get("cmd") in ("noop", "play_sound", "resolved_areas", "config") for c in cmds)
 
 
 def has_cmd(cmds: list, cmd: str, key: str | None = None) -> bool:
@@ -104,6 +106,7 @@ def test_ghost_pos_relays_to_partner(tmp_path, monkeypatch):
     """A's overworld position relays to B (and only B) as a ghost_pos command."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = make_state_with_link()
+    state.overworld_presence = True  # opt-in per-run feature
 
     cmds_a = state.handle_event("a", {"event": "ghost_pos",
                                       "mg": 3, "mn": 5, "x": 352, "y": 160, "f": 4, "gfx": 7})
@@ -121,6 +124,7 @@ def test_ghost_pos_coalesces(tmp_path, monkeypatch):
     """Many ghost_pos before the partner drains keep only the latest (queue can't grow)."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = make_state_with_link()
+    state.overworld_presence = True  # opt-in per-run feature
 
     for x in (16, 160, 352):
         state.handle_event("a", {"event": "ghost_pos",
@@ -135,6 +139,7 @@ def test_ghost_pos_relays_mv_run_gfx(tmp_path, monkeypatch):
     """The engine-driven ghost rides on world-pixel coords + mv/run/gfx; the patch LERPs + animates."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = make_state_with_link()
+    state.overworld_presence = True  # opt-in per-run feature
     state.handle_event("a", {"event": "ghost_pos", "mg": 1, "mn": 1,
                              "x": 16, "y": 9, "f": 4, "mv": 1, "run": 1, "gfx": 5})
     g = _ghost_cmds(state.handle_event("b", {"event": "tick"}))[0]
@@ -146,6 +151,7 @@ def test_ghost_pos_relays_avatar_and_anim(tmp_path, monkeypatch):
     must relay so the ghost renders as THEMSELVES, animating exactly as they move."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = make_state_with_link()
+    state.overworld_presence = True  # opt-in per-run feature
     pcol = "".join(f"{(0x0421 * (i + 1)) & 0x7FFF:04X}" for i in range(16))
     state.handle_event("a", {"event": "ghost_pos", "mg": 1, "mn": 1,
                              "x": 32, "y": 16, "f": 2, "mv": 1, "an": 10,
@@ -160,6 +166,7 @@ def test_peer_interact_notifies_partner(tmp_path, monkeypatch):
     """Talk-to-ghost notifies the OTHER player (not the initiator)."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = make_state_with_link()
+    state.overworld_presence = True  # opt-in per-run feature
     cmds_a = state.handle_event("a", {"event": "peer_interact"})
     assert not has_cmd(cmds_a, "msgbox")          # initiator gets nothing back
     cmds_b = state.handle_event("b", {"event": "tick"})
@@ -171,10 +178,26 @@ def test_ghost_pos_not_persisted(tmp_path, monkeypatch):
     links = tmp_path / "links.json"
     monkeypatch.setattr("server.state.LINKS_PATH", str(links))
     state = make_state_with_link()
+    state.overworld_presence = True  # opt-in per-run feature
     state.handle_event("a", {"event": "ghost_pos",
                              "mg": 1, "mn": 1, "x": 99, "y": 0, "f": 1, "gfx": 0})
     if links.exists():
         assert "ghost_pos" not in links.read_text()
+
+
+def test_overworld_presence_off_drops_relay(tmp_path, monkeypatch):
+    """Overworld Presence is opt-in (default off): with the flag off, ghost_pos and
+    peer_interact are dropped server-side so no ghost ever spawns for the partner."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()  # overworld_presence defaults to False
+    assert state.overworld_presence is False
+
+    state.handle_event("a", {"event": "ghost_pos",
+                             "mg": 1, "mn": 1, "x": 99, "y": 0, "f": 1, "gfx": 0})
+    state.handle_event("a", {"event": "peer_interact"})
+    cmds_b = state.handle_event("b", {"event": "tick"})
+    assert not _ghost_cmds(cmds_b)         # no ghost relayed
+    assert not has_cmd(cmds_b, "msgbox")   # no say-hey notification
 
 
 # ── talk-to-partner: trade linked pairs + status helper ───────────────────────
@@ -215,23 +238,32 @@ def _offer_and_pick(state, slot=0, who="a"):
 
 
 def test_trade_request_opens_action_menu(tmp_path, monkeypatch):
-    """Talking to the partner opens the native action multichoice (Trade / Wave) — not the picker yet."""
+    """Talking to the partner opens the native action multichoice (Trade / Say hey) — not the picker yet."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = _with_trade_blobs(make_state_with_link())
     cmds_a = state.handle_event("a", {"event": "trade_request"})
     mc = _choices(cmds_a)
-    assert len(mc) == 1 and mc[0]["options"] == ["Trade", "Wave"] and not _choose(cmds_a)
+    assert len(mc) == 1 and mc[0]["options"] == ["Trade", "Say hey"] and not _choose(cmds_a)
     assert state.pending_trade and state.pending_trade["phase"] == "menu"
+    # The talk-NPC speaks a line under the menu. Presence OFF (default) -> the PC trade NPC (Oak);
+    # presence ON -> the partner's ghost (no Oak).
+    assert mc[0]["text"].startswith("OAK:")
+    state.pending_trade = None
+    state.overworld_presence = True
+    mc_on = _choices(state.handle_event("a", {"event": "trade_request"}))
+    assert mc_on[0]["text"] and "OAK" not in mc_on[0]["text"]
 
 
-def test_menu_wave_notifies_partner(tmp_path, monkeypatch):
-    """Choosing WAVE (index 1) on the action menu just waves the partner — no trade."""
+def test_menu_say_hey_notifies_partner(tmp_path, monkeypatch):
+    """Choosing SAY HEY (index 1) on the action menu just pings the partner — no trade."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = _with_trade_blobs(make_state_with_link())
     token = _choices(state.handle_event("a", {"event": "trade_request"}))[0]["token"]
-    state.handle_event("a", {"event": "menu_result", "token": token, "choice": 1})   # 1 = Wave
+    state.handle_event("a", {"event": "menu_result", "token": token, "choice": 1})   # 1 = Say hey
     assert state.pending_trade is None
-    assert has_cmd(state.handle_event("b", {"event": "tick"}), "msgbox")             # partner waved
+    cmds_b = state.handle_event("b", {"event": "tick"})
+    assert has_cmd(cmds_b, "msgbox")                                                 # partner pinged
+    assert any("says hey" in c.get("text", "") for c in cmds_b if c.get("cmd") == "msgbox")
 
 
 def test_menu_trade_opens_picker(tmp_path, monkeypatch):
@@ -244,7 +276,7 @@ def test_menu_trade_opens_picker(tmp_path, monkeypatch):
 
 
 def test_menu_cancel_aborts(tmp_path, monkeypatch):
-    """B-press (cancel, 127) on the action menu aborts with no trade and no wave."""
+    """B-press (cancel, 127) on the action menu aborts with no trade and no say-hey."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = _with_trade_blobs(make_state_with_link())
     token = _choices(state.handle_event("a", {"event": "trade_request"}))[0]["token"]
@@ -330,6 +362,56 @@ def test_trade_watchdog_frees_abandoned_slot(tmp_path, monkeypatch):
     assert state.links[0].a.key == "A:1", "link untouched by an abandoned trade"
 
 
+def test_post_trade_settle_suppresses_reconcile_unbox(tmp_path, monkeypatch):
+    """Regression: after a trade completes, a still-settling party tick must NOT make the drift
+    reconciler queue a spurious party_mon ('Unbox') to the partner — the user's residual 'Unbox HUD'
+    after a working trade. The post-trade settle window suppresses _reconcile_party_keys until the
+    clients' party snapshots settle; the window is bounded so genuine drift still self-heals."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+
+    # A reconcile trigger: a live link whose halves are BOTH server-side boxed (party_keys empty), with
+    # player A's tick reporting its half in-party → "ghost-boxed" → reconcile pulls the partner via party_mon.
+    def fresh_trigger_state():
+        st = make_state_with_link()
+        st.party_keys["a"].discard("A:1")
+        st.party_keys["b"].discard("B:2")
+        return st
+
+    # Baseline (no settle window): the tick DOES queue a partner party_mon (the bug path exists).
+    base = fresh_trigger_state()
+    base.handle_event("a", {"event": "tick", "party": [{"key": "A:1"}]})
+    assert has_cmd(base.queued_commands["b"], "party_mon", "B:2"), \
+        "sanity: reconcile normally pulls the partner via party_mon"
+
+    # With the post-trade settle window armed, the SAME tick is suppressed — no spurious Unbox.
+    armed = fresh_trigger_state()
+    armed._trade_settle_ticks = {"a": armed.TRADE_SETTLE_TICKS, "b": armed.TRADE_SETTLE_TICKS}
+    armed.handle_event("a", {"event": "tick", "party": [{"key": "A:1"}]})
+    assert not has_cmd(armed.queued_commands["b"], "party_mon"), \
+        "post-trade settle window must suppress the spurious partner Unbox"
+
+    # Bounded: after the window drains, the reconciler resumes (genuine drift still heals).
+    for _ in range(armed.TRADE_SETTLE_TICKS + 1):
+        armed.handle_event("a", {"event": "tick", "party": [{"key": "A:1"}]})
+    assert has_cmd(armed.queued_commands["b"], "party_mon", "B:2"), \
+        "after the settle window drains, reconcile resumes (window is bounded, not permanent)"
+
+
+def test_trade_done_arms_post_trade_settle_window(tmp_path, monkeypatch):
+    """A completed trade arms the settle window on BOTH sides (the guard that prevents the post-trade
+    Unbox is wired to the real trade-completion path, not just unit-pokeable)."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = _with_trade_blobs(make_state_with_link())
+    token = _offer_and_pick(state, slot=0)
+    state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})   # accept
+    state.handle_event("a", {"event": "tick"})                                       # deliver A's apply_trade
+    state.handle_event("a", {"event": "trade_done", "slot": 0, "new_key": "B:2", "new_species": 5})
+    state.handle_event("b", {"event": "trade_done", "slot": 1, "new_key": "A:1", "new_species": 1})
+    assert state.pending_trade is None
+    assert state._trade_settle_ticks["a"] == state.TRADE_SETTLE_TICKS
+    assert state._trade_settle_ticks["b"] == state.TRADE_SETTLE_TICKS
+
+
 def test_trade_uses_the_matching_link_half(tmp_path, monkeypatch):
     """MATCHING-pair guarantee: with multiple links, picking one mon trades EXACTLY that link's
     counterpart half — the server auto-selects the partner's matching mon, never another link's."""
@@ -409,6 +491,23 @@ def test_explode_mode_off_emits_force_faint(tmp_path, monkeypatch):
     cmds_b = state.handle_event("b", {"event": "tick"})
     assert has_cmd(cmds_b, "force_faint", "B:2")
     assert not has_cmd(cmds_b, "force_explode")
+
+
+# ── overworld_presence (run rule) ─────────────────────────────────────────────
+
+def test_overworld_presence_defaults_false():
+    """overworld_presence must default to False — peer ghost is now opt-in per run."""
+    state = SoulLinkState()
+    assert state.overworld_presence is False
+
+
+def test_overworld_presence_round_trips_through_save_load(tmp_path, monkeypatch):
+    """Setting overworld_presence=True must persist via _save() and be restored by load()."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(data_dir=str(tmp_path), overworld_presence=True)
+    state._save()
+    reloaded = SoulLinkState.load(data_dir=str(tmp_path))
+    assert reloaded.overworld_presence is True
 
 
 def test_explode_mode_on_emits_force_explode(tmp_path, monkeypatch):
@@ -1898,6 +1997,29 @@ def test_hello_sends_resolved_areas(tmp_path, monkeypatch):
     areas = set(resolved_cmd[0]["areas"])
     assert "route_1" in areas, "linked area must be in resolved_areas"
     assert "route_2" in areas, "area with player's pending capture must be in resolved_areas"
+
+
+def test_hello_sends_config_overworld_presence_false(tmp_path, monkeypatch):
+    """On hello, the server must push a config command carrying overworld_presence (default False).
+
+    The client gates the companion patch's Pokémon-Center trade NPC on this flag: OFF -> NPC is the
+    trade entry point; ON -> trades go through the peer ghost.
+    """
+    state = make_fresh_state(tmp_path, monkeypatch)  # overworld_presence defaults to False
+    cmds = state.handle_event("a", {"event": "hello", "party": []})
+    config_cmd = [c for c in cmds if c.get("cmd") == "config"]
+    assert len(config_cmd) == 1, "hello must include exactly one config command"
+    assert config_cmd[0]["overworld_presence"] is False
+
+
+def test_hello_sends_config_overworld_presence_true(tmp_path, monkeypatch):
+    """When the run rule is ON, the hello config command reports overworld_presence=True."""
+    state = make_fresh_state(tmp_path, monkeypatch)
+    state.overworld_presence = True  # opt-in per-run feature
+    cmds = state.handle_event("a", {"event": "hello", "party": []})
+    config_cmd = [c for c in cmds if c.get("cmd") == "config"]
+    assert len(config_cmd) == 1, "hello must include exactly one config command"
+    assert config_cmd[0]["overworld_presence"] is True
 
 
 def test_pokeballs_obtained_persists_through_save_load(tmp_path, monkeypatch):

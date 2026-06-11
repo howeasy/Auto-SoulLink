@@ -58,7 +58,11 @@
         </div>
       </div>
       <div class="mgr-new-opts-section">
-        <div class="mgr-new-opts-label">Run Augmentations</div>
+        <div class="mgr-new-opts-label">Requires ROM patch</div>
+        <p class="mgr-new-opts-note">
+          These need the companion ROM patch on both players' games.
+          <a href="/patcher">Get the patch →</a>
+        </p>
         <div class="mgr-new-opts">
           <label><input type="checkbox" x-model="newOpts.explode_mode">
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-explode"/></svg>
@@ -67,6 +71,39 @@
           <label><input type="checkbox" x-model="newOpts.rival_team_swap">
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-rival-swap"/></svg>
             Rival Swap
+          </label>
+          <label><input type="checkbox" x-model="newOpts.overworld_presence">
+            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-presence"/></svg>
+            Overworld Presence
+          </label>
+        </div>
+      </div>
+      <div class="mgr-new-opts-section">
+        <div class="mgr-new-opts-label">Native enhancements</div>
+        <p class="mgr-new-opts-note">
+          ROM-patch UI/audio paths. These don't change soullink rules — off
+          falls back to the Lua overlay (or hides the extra).
+        </p>
+        <div class="mgr-new-opts">
+          <label><input type="checkbox" x-model="newOpts.native_messages">
+            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-msgbox"/></svg>
+            Native Messages
+          </label>
+          <label><input type="checkbox" x-model="newOpts.native_sounds">
+            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-sound"/></svg>
+            Native Sounds
+          </label>
+          <label title="Native battle control"><input type="checkbox" x-model="newOpts.native_battle_control">
+            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-rival-swap"/></svg>
+            Native battle control (experimental)
+          </label>
+          <label><input type="checkbox" x-model="newOpts.battle_calc">
+            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-calc"/></svg>
+            Battle Calc
+          </label>
+          <label><input type="checkbox" x-model="newOpts.pc_trade_npc">
+            <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-pcnpc"/></svg>
+            PC Trade NPC
           </label>
         </div>
       </div>
@@ -221,6 +258,42 @@
             <span class="mgr-badge mgr-badge-lock">
               <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-rival-swap"/></svg>
               Rival Swap
+            </span>
+          </template>
+          <template x-if="current?.overworld_presence">
+            <span class="mgr-badge mgr-badge-lock">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-presence"/></svg>
+              Overworld
+            </span>
+          </template>
+          <template x-if="current?.native_messages">
+            <span class="mgr-badge mgr-badge-lock">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-msgbox"/></svg>
+              Native Msgs
+            </span>
+          </template>
+          <template x-if="current?.native_sounds">
+            <span class="mgr-badge mgr-badge-lock">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-sound"/></svg>
+              Native SFX
+            </span>
+          </template>
+          <template x-if="current?.native_battle_control">
+            <span class="mgr-badge mgr-badge-lock" title="Native battle control">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-rival-swap"/></svg>
+              Native Battle
+            </span>
+          </template>
+          <template x-if="current && current.battle_calc === false">
+            <span class="mgr-badge mgr-badge-lock">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-calc"/></svg>
+              Calc Off
+            </span>
+          </template>
+          <template x-if="current && current.pc_trade_npc === false">
+            <span class="mgr-badge mgr-badge-lock">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-pcnpc"/></svg>
+              PC NPC Off
             </span>
           </template>
         </div>
@@ -387,7 +460,8 @@ function runManager() {
     pinnedRunName: '',
     managerPort: window.SLINK_MANAGER_PORT,
     newRunName: '',
-    newOpts: { species_lock: false, gender_lock: false, type_lock: false, explode_mode: false, rival_team_swap: false },
+    newOpts: { species_lock: false, gender_lock: false, type_lock: false, explode_mode: false, rival_team_swap: false, overworld_presence: false,
+               native_messages: false, native_sounds: false, battle_calc: true, pc_trade_npc: true, native_battle_control: false },
     liveStatus: null,
     liveStatusError: '',
     _liveStatusInterval: null,

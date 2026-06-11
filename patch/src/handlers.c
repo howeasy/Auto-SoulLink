@@ -31,8 +31,10 @@ typedef struct {
 enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
        OP_FORCE_MOVE_SLOT = 5, OP_SPAWN_PEER_NPC = 6, OP_DESPAWN_PEER_NPC = 7,
        OP_SHOW_MESSAGE = 8, OP_PLAY_FANFARE = 9,
-       OP_APPLY_DAMAGE = 10, OP_CURE_STATUS = 11,
-       OP_SET_RULES = 12, OP_ARM_PEER_INTERACT = 13,
+       /* 10 OP_APPLY_DAMAGE, 11 OP_CURE_STATUS, 12 OP_SET_RULES: REMOVED (RR-redundant /
+        * dropped features). Numbers kept RESERVED so opcodes 13+ keep their ABI slot; the
+        * mailbox dispatch has no case for them -> default ack(ST_FAIL) (older-patch behavior). */
+       OP_ARM_PEER_INTERACT = 13,
        OP_GHOST_SPAWN = 14, OP_GHOST_CLEAR = 15,
        OP_SET_ENEMY_PARTY = 16,
        OP_SHOW_MENU = 17,         /* native yes/no menu; async result -> mailbox result[0] */
@@ -40,7 +42,14 @@ enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
        OP_PLAY_SE = 19,           /* native sound effect via PlaySE (retires the m4a RAM-poke) */
        OP_CHOOSE_PARTY_MON = 20,  /* native "Choose a POKeMON" menu; async result[0]=slot(0-5)/7=cancel */
        OP_TRADE_SCENE = 21,       /* native trade animation+evolution: gPlayerParty[slot] <-> gEnemyParty[0] */
-       OP_SHOW_CHOICES = 22 };    /* native multichoice list (custom options); async result[0]=index/0x7F=cancel */
+       OP_SHOW_CHOICES = 22,      /* native multichoice list (custom options); async result[0]=index/0x7F=cancel */
+       OP_SHOW_BATTLE_MESSAGE = 23, /* native IN-BATTLE text (BizHawk-HUD replacement); re-asserted N frames */
+       OP_DEPOSIT_MON = 24,       /* party -> PC box (compress): args [0]=partySlot [1]=boxId [2]=boxPos */
+       OP_WITHDRAW_MON = 25,      /* PC box -> party (decompress): args [0]=boxId [1]=boxPos [2]=partySlot */
+       OP_MEMORIALIZE = 26 };     /* party -> memorial box: args [0]=partySlot [1]=boxId [2]=boxPos.
+                                     Deposit conversion, but removal is zero + SWAP-WITH-LAST (not
+                                     shift) so survivors keep their slot indices (CFRU deferred
+                                     battle writes target slots; mirrors Lua M.memorializeMon). */
 enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
 
 /* Armed forced-move state (controller-swap driver), EWRAM scratch past the mailbox. */
@@ -50,14 +59,38 @@ typedef struct {
 } ArmedMove;
 #define AM ((ArmedMove *)0x0203F8C0u)
 
-/* Persistent companion-patch state (nuzlocke enforcement + peer interaction). */
+/* Persistent companion-patch state (peer interaction). */
 typedef struct {
-    volatile u8 enforce_rules;   /* re-assert battle-style SET every frame */
+    volatile u8 _rsvd0;          /* was enforce_rules (OP_SET_RULES, removed); kept to pin pi_* offsets */
     volatile u8 pi_armed;        /* peer-interaction detection on */
     volatile u8 pi_oe;           /* ghost object-event id to watch */
     volatile u8 pi_count;        /* ++ on each interact (Lua polls); also shows the box */
 } SlinkState;
 #define SS ((SlinkState *)0x0203F8D0u)
+
+/* Pokémon-Center TRADE NPC (presence-OFF trade entry point). When overworld presence is toggled OFF
+ * the peer ghost never spawns, so the talk-to-partner trade trigger disappears. This driver spawns a
+ * real engine NPC in every Pokémon Center 1F and arms the SAME generic talk detector
+ * (check_peer_interact, via SS->pi_oe) on it — so talking to it bumps SS->pi_count, the Lua client
+ * emits trade_request, and the server drives the trade exactly as the ghost path does. Mutually
+ * exclusive with the ghost: Lua sets `enable` ONLY when presence is OFF (when ON the ghost owns
+ * pi_oe). The sentinel localId 0xF1 is distinct from the ghost's 0xF0, so drive_ghost's 0xF0 orphan-GC
+ * never touches it. Lives in the free EWRAM gap between SlinkState (ends 0x0203F8D4) and
+ * SLINK_SCRIPT_BUF (0x0203F8E0); all u8, 1-aligned. */
+typedef struct {
+    volatile u8 enable;   /* 0  Lua sets 1 when overworld presence is OFF (PC-NPC trade mode) */
+    volatile u8 oeId;     /* 1  spawned object-event id (0xFF = none) */
+    volatile u8 mapG;     /* 2  map group the NPC is spawned on (map-change detection) */
+    volatile u8 mapN;     /* 3  map num */
+} TradeNpcState;
+#define TN ((TradeNpcState *)0x0203F8D4u)
+
+/* Battle-Calc display kill switch (one byte right after TradeNpcState, still inside the free gap
+ * before SLINK_SCRIPT_BUF 0x0203F8E0). INVERTED semantics: 0 (the EWRAM boot default — i.e. no Lua,
+ * no config) = calc SHOWN exactly as today; 1 = the battletext shim skips the calc trampoline, so
+ * the damage display never draws. Lua writes it from the server's per-run `battle_calc` toggle. */
+#define SLINK_CALC_OFF 0x0203F8D8u
+#define TN_LOCALID 0xF1u   /* exclusive sentinel (ghost uses 0xF0) */
 
 /* Engine-driven peer ghost. The peer is ANOTHER real player; we reproduce THEIR avatar + THEIR
  * exact sub-pixel motion + animation. This is the proven Lua-"clone" model ported into the patch
@@ -69,6 +102,9 @@ typedef struct {
  * 0x0203F840) and AM (0x0203F8C0); u32/s32 fields 4-aligned. */
 #define GHOST_LERP_NUM   128           /* 0.5 follow gain toward the sampled target (128/256) */
 #define GHOST_SNAP_PX    48            /* >this many px off -> snap (warp/desync), don't slide */
+#define GHOST_LEAD_CAP_PX 12           /* max px to extrapolate past a stale target while the
+                                        * partner is flagged moving (kills the reach-and-pause
+                                        * stutter between ~30 Hz samples; fresh targets absorb) */
 typedef struct {
     volatile u8  active;     /* 0  1 = ghost should exist + be driven */
     volatile u8  oeId;       /* 1  object-event id the hook owns (0xFF = not spawned) */
@@ -89,10 +125,13 @@ typedef struct {
     volatile u8  _pad1[2];   /* 18..19 align the u32 ptrs */
     volatile u32 imgs;       /* 20 partner's live gSprites[sid].images ROM ptr (avatar override) */
     volatile u32 anims;      /* 24 partner's live gSprites[sid].anims  ROM ptr */
-    volatile s32 dispx;      /* 28 interpolated x, fixed-point (px << 8) */
-    volatile s32 dispy;      /* 32 interpolated y, fixed-point (px << 8) */
+    volatile s32 dispx;      /* 28 interpolated x, world-px (PLAIN px — constant-velocity follow) */
+    volatile s32 dispy;      /* 32 interpolated y, world-px */
     volatile s16 cx;         /* 36 cached C baseline x (playerSprite.pos1 - playerTile*16) */
     volatile s16 cy;         /* 38 cached C baseline y */
+    volatile u8  leadpx;     /* 40 px extrapolated PAST a stale target while the partner is
+                              *    still moving (<= GHOST_LEAD_CAP_PX); fresh targets absorb it.
+                              *    Boot-zero = no lead = the old reach-and-pause behavior. */
 } GhostState;
 #define GH ((GhostState *)0x0203F850u)
 #define GH_F_HAVE_C    0x01u
@@ -118,10 +157,71 @@ typedef struct {
 } UiState;
 #define MENU ((UiState *)0x0203FC80u)
 
-#define gSaveBlock2Ptr 0x0300500Cu
+/* In-battle notification state. The native FIELD message box (OP_SHOW_MESSAGE) can't open during a
+ * battle, so SLink notifications that fire in battle (a linked mon KO'd, a shiny found mid-battle, ...)
+ * fell back to the BizHawk Lua HUD overlay. Instead we draw native ROM text in battle via
+ * BattlePutTextOnWindow (the same engine primitive the bundled RR4.1 Battle Calc hooks). The battle
+ * engine constantly redraws its windows, so a one-shot write would flash and vanish — drive_battle_notif
+ * RE-ASSERTS the staged text (SLINK_TEXT_BUF) every frame for `frames`, then stops (the engine's next
+ * battle-text write reclaims the window — clean teardown, nothing allocated). Lives in the free EWRAM
+ * gap above SLINK_MENU_BUF (ends 0x0203FCFF), below EWRAM end 0x0203FFFF. */
+typedef struct {
+    volatile u8  active;    /* 0 idle, 1 showing the notification */
+    volatile u8  win;       /* target battle window id (low 6 bits) — the Battle Calc's move-info area (0xD) */
+    volatile u8  task;      /* engine task id drawing it each frame via RunTasks (0xFF = none) */
+    volatile u8  phase;     /* 0 = not yet drawn, 1 = shown (timer only counts down after this) */
+    volatile u16 frames;    /* frames left after first shown (counts down to 0 -> stop) */
+    volatile u16 _pad2;
+} BattleNotif;
+#define BN ((BattleNotif *)0x0203FD00u)
+
+/* Event-push ring (native -> Lua). The frame hook OBSERVES battle state natively and pushes events;
+ * Lua drains the ring instead of (eventually: in addition to) re-deriving the same facts with
+ * per-frame interpreted polling. First producers: player/foe faint-settled (gBattleResults faint
+ * counters — they bump only AFTER Sturdy/Focus Sash/Endure resolve, the authoritative "real faint"
+ * signal the Lua fast-path already trusts) and the battle-outcome edge (whiteout/loss detection).
+ * The producer's prev-state latches live IN the struct: our ROM blob has no .data/.bss, so mutable
+ * statics are impossible — all mutable state must be explicit EWRAM. In the free gap after
+ * BattleNotif (ends 0x0203FD08); ev[] is 4-aligned at +8. Lua-side API: lua/mailbox.lua MB.events_*. */
+typedef struct {
+    volatile u8  wr;        /* 0 writer index (native), free-running u8; slot = wr & 7 */
+    volatile u8  rd;        /* 1 reader index (Lua); ring empty iff rd == wr */
+    volatile u8  overflow;  /* 2 set when a push found the ring full (event dropped); Lua clears */
+    volatile u8  inb;       /* 3 producer latch: previous in-battle state */
+    volatile u8  pfc;       /* 4 producer latch: previous playerFaintCounter */
+    volatile u8  ofc;       /* 5 producer latch: previous foeFaintCounter */
+    volatile u8  _pad[2];
+    volatile u32 ev[8];     /* 8.. packed events: type | (a << 8) | (b << 16) */
+} EvRing;
+#define EV ((EvRing *)0x0203FD10u)
+#define EV_PLAYER_FAINT 1u  /* a = playerFaintCounter after the bump */
+#define EV_FOE_FAINT    2u  /* a = foeFaintCounter after the bump */
+#define EV_OUTCOME      3u  /* a = gBattleOutcome on its end-of-battle edge (1 won, 2 lost/whiteout, ...) */
+
+/* Authoritative borrowed-party ("Party Freeze") signal. RR/CFRU temporarily replaces gPlayerParty
+ * with a borrowed/preset party for Battle-Tower-style preset battles, Poke Dude tutorials, and
+ * partner/mock battles. The engine first BACKS UP the real party to REAL_PARTY_BACKUP via a memcpy
+ * loop (BackupParty @ ~0x0804C200), installs the borrowed party, then RESTORES from the backup when
+ * the battle ends (RestoreParty @ 0x0804C230). We catch the BEGIN authoritatively by redirecting the
+ * backup memcpy's BL (build.py rewrites the 0x0804C10C/0x0804C212 sites -> slink_backup_wrap) and the
+ * END per-frame, when gPlayerParty matches the backup again after having diverged. Lua reads this and
+ * freezes party-diffing while active=1 — replacing its fragile >=3-PID-change overworld heuristic.
+ * Published struct (GhostState-style) in the free EWRAM gap between the mailbox (ends 0x0203F840) and
+ * GhostState (0x0203F850); real_pid is 4-aligned at +4. Discovered live via
+ * lua/tests/probe_party_backup_writer.lua. */
+#define REAL_PARTY_BACKUP 0x02025564u
+typedef struct {
+    volatile u8  active;    /* 1 while a borrowed party is installed (begin -> restore) */
+    volatile u8  seq;       /* ++ on each begin edge; Lua triggers the freeze on the edge */
+    volatile u8  diverged;  /* internal: gPlayerParty has differed from the backup since begin */
+    volatile u8  _pad;
+    volatile u32 real_pid;  /* gPlayerParty[0] PID snapshot at begin (real party; Lua cross-check) */
+} SwapState;
+#define SW ((SwapState *)0x0203F840u)
+
 #define gMain          0x030030F0u   /* newKeys @ +0x2E (A = 0x0001) */
 #define KEY_A          0x0001u
-#define OPT_BATTLE_STYLE_SET 0x0200u /* bit 9 of options u16 @ SaveBlock2+0x14 */
+/* gSaveBlock2Ptr 0x0300500Cu + OPT_BATTLE_STYLE_SET 0x0200u removed with OP_SET_RULES */
 
 /* ---- battle-controller plumbing (RR build-specific, runtime-discovered) ---- */
 #define gBattlerControllerFuncs 0x03004FE0u   /* u32[4] */
@@ -136,6 +236,15 @@ typedef struct {
 #define gBattleMons          0x02023BE4u
 #define BATTLE_MON_SIZE      0x58u
 #define gBattleOutcome       0x02023E8Au   /* RR: in-battle iff gBattleMons[0].maxHP>0 && outcome==0 */
+#define gBattleResults       0x03004F90u   /* IWRAM (RR/CFRU): playerFaintCounter @ +0, foeFaintCounter
+                                            * @ +1 — bumped by Cmd_tryfaintmon AFTER protection
+                                            * (Sturdy/Sash/Endure) resolves; engine resets on battle
+                                            * start. Same address the Lua fast-path polls
+                                            * (lua/games/gen3_frlge.lua BATTLE_RESULTS_ADDR). */
+#define CB2_OVERWORLD        0x080565B5u   /* RR field main callback (gMain.callback2, thumb bit set).
+                                            * Stable while walking AND during field dialogues; ANY menu
+                                            * (party/bag/start), battle, or scene sets a different cb2 and
+                                            * REUSES gSprites, so the ghost must suspend unless cb2==this. */
 #define gChosenActionByBank  0x02023D7Cu
 #define gChosenMovesByBanks  0x02023DC4u
 #define gBattleCommunication 0x02023E82u
@@ -147,9 +256,60 @@ typedef struct {
 #define gEnemyPartyCount     0x0202402Au
 #define MON_SIZE             100u
 
+/* CFRU compressed PC-box storage (OP_DEPOSIT_MON / OP_WITHDRAW_MON). RE'd via the sPokemonBoxPtrs
+ * pointer table — see patch/src/ADDRESSES.md "PC storage / box migration reference".
+ * sPokemonBoxPtrs[boxId] = EWRAM base of box `boxId`; a slot = base + boxPos * COMPRESSED_MON_SIZE.
+ * The conversion fns run the engine's real BoxMonToMon/CalculatePPWithBonus/CalculateMonStats, so a
+ * withdrawn mon comes out fully-formed (level/stats/PP) — no server-cached stats needed. */
+#define sPokemonBoxPtrs      0x09148930u   /* const u32[25] table of per-box compressed-mon bases */
+#define COMPRESSED_MON_SIZE  0x3Au          /* 58-byte CFRU CompressedPokemon */
+#define IN_BOX_COUNT         30u
+#define TOTAL_BOXES_COUNT    25u
+typedef void (*CompressedMonToMon_t)(void *comp, void *dst);            /* box(compressed) -> party Pokemon */
+#define CompressedMonToMon ((CompressedMonToMon_t)0x090B6A25u)
+typedef void (*CreateCompressedMonFromBoxMon_t)(void *boxMon, void *comp); /* party(BoxPokemon) -> box */
+#define CreateCompressedMonFromBoxMon ((CreateCompressedMonFromBoxMon_t)0x090B6B79u)
+
 #define R8(a)   (*(volatile u8 *)(a))
 #define R16(a)  (*(volatile u16*)(a))
 #define R32(a)  (*(volatile u32*)(a))
+
+/* CFRU's party-backup memcpy: memcpy(dst, src, n) @ 0x081E5E78 (the BL target the backup loop
+ * originally called). build.py redirects the two backup-writer BL sites to slink_backup_wrap, which
+ * performs the real copy then flags swap-begin ONCE — idempotent, and guarded on dst being the
+ * dedicated backup buffer so an unrelated memcpy through this site can never trip it. */
+typedef void *(*Memcpy_t)(void *dst, const void *src, u32 n);
+#define real_memcpy ((Memcpy_t)0x081E5E79u)
+__attribute__((used)) void *slink_backup_wrap(void *dst, const void *src, u32 n)
+{
+    void *r = real_memcpy(dst, src, n);
+    if ((u32)dst == REAL_PARTY_BACKUP && !SW->active) {
+        SW->active   = 1;
+        SW->diverged = 0;
+        SW->real_pid = R32(gPlayerParty);
+        SW->seq++;
+    }
+    return r;
+}
+
+/* Per-frame: end the swap once gPlayerParty matches the backup again, after the borrowed party was
+ * actually installed (the `diverged` latch). `active=0` therefore tracks "the real party is live"
+ * exactly: it clears on a post-battle restore AND on a cancelled/backed-out selector (party put back
+ * with no battle). The engine always backs up BEFORE installing a borrowed party, so active=1 is
+ * structurally guaranteed whenever the party is borrowed — any 0 window genuinely is the real party.
+ * The cancelled-selector edge with no divergence at all falls to Lua's freeze-timeout backstop. */
+static void drive_swap_state(void)
+{
+    if (!SW->active) return;
+    u8 match = 1;
+    for (u32 i = 0; i < 6; i++) {
+        if (R32(gPlayerParty + i * MON_SIZE) != R32(REAL_PARTY_BACKUP + i * MON_SIZE)) {
+            match = 0; break;
+        }
+    }
+    if (!match) SW->diverged = 1;
+    else if (SW->diverged) SW->active = 0;   /* real party restored (post-battle or backed out) */
+}
 
 /* CreateMon(mon, species, level, fixedIV, hasFixedPersonality, fixedPersonality,
  *           otIdType, otId)  @ 0x0803DA54 (Thumb) */
@@ -229,9 +389,21 @@ typedef void (*MenuInitCursor_t)(u8 win, u8 font, u8 left, u8 top, u8 lineH, u8 
 #define Menu_InitCursor              ((MenuInitCursor_t)0x0810F7D9u)
 typedef u8   (*CreateTask_t)(void *func, u8 priority);
 #define CreateTask                   ((CreateTask_t)0x0807741Du)
+typedef void (*DestroyTask_t)(u8 taskId);
+#define DestroyTask                  ((DestroyTask_t)0x08077509u)   /* BPRE.ld 0x8077508 (Thumb) */
 typedef void (*SchedBg_t)(u8 bgId);
 #define ScheduleBgCopyTilemapToVram  ((SchedBg_t)0x080F67A5u)
 #define SLINK_MENU_BUF 0x0203FC90u           /* [u8 count][FR str 0xFF-term]... staged for OP_SHOW_CHOICES */
+/* void BattlePutTextOnWindow(const u8 *frText, u8 windowId) @0x080D87BE — the engine's IN-BATTLE text
+ * draw (the bundled RR4.1 Battle Calc detours its prologue to inject damage numbers). General primitive:
+ * the engine uses it for the bottom message window AND the move-select window. windowId low 6 bits =
+ * window; bit7 (0x80) = don't clear the window's tile background first. We call it each frame from
+ * drive_battle_notif to keep a SLink notification visible during battle. */
+typedef void (*BattlePutText_t)(const u8 *frText, u8 windowId);
+/* REAL callable entry = the function prologue `push {r4-r7,lr}` @ 0x080D87BC (Thumb 0x080D87BD). NOT
+ * 0x080D87BE — that's the calc's detour (2nd instruction), so entering there skips the prologue. We call
+ * this REENTRANTLY from our own hook (slink_battle_inject) to draw the notification window in-context. */
+#define BattlePutTextOnWindow ((BattlePutText_t)0x080D87BDu)
 /* void ScriptContext1_SetupScript(const u8 *ptr) @0x08069AE4 — queues a field script the
  * overworld runs NATIVELY: lockall -> message -> waitmessage -> waitbuttonpress -> releaseall.
  * Unlike a bare ShowFieldMessage (draws a box nothing ever closes), this is a real, navigable,
@@ -240,15 +412,20 @@ typedef void (*SetupScript_t)(const u8 *ptr);
 #define ScriptContext1_SetupScript ((SetupScript_t)0x08069AE5u)
 #define sScriptContext2Enabled 0x03000F9Cu   /* u8 != 0 while a field script/dialogue is active */
 #define SLINK_TEXT_BUF   0x0203F900u   /* Lua writes FR-encoded text here before SHOW_MESSAGE */
-#define SLINK_SCRIPT_BUF 0x0203F8E0u   /* 9-byte EWRAM scratch: our "msgbox sign" bytecode */
+#define SLINK_SCRIPT_BUF 0x0203F8E0u   /* EWRAM scratch for our field-script bytecode (largest user:
+                                          run_choices with_text = 18 B; 0x20 free to SLINK_TEXT_BUF) */
 #define SLINK_BLOB_BUF   0x0203FA00u   /* 600 bytes (6x100): Lua stages the partner's raw party-mon
                                           blobs here before OP_SET_ENEMY_PARTY (Rival Team Swap).
                                           Above SLINK_TEXT_BUF (short field text) and below EWRAM
                                           end 0x0203FFFF (leaves >=0x100 for text, ends 0x0203FC58). */
 #define gObjectEvents 0x02036E38u   /* stride 0x24 */
 #define OE_STRIDE     0x24u
+#define OE_SPRITE_ID  0x04u         /* u8 spriteId inside an object-event */
 #define gSprites      0x0202063Cu   /* stride 0x44 */
 #define SPR_STRIDE    0x44u
+#define SPR_COUNT     64u           /* gSprites slots; any spriteId >= 64 is garbage, never index with it */
+#define SPR_ANIMS     0x08u         /* const union AnimCmd **anims */
+#define SPR_IMAGES    0x0Cu         /* const struct SpriteFrameImage *images */
 #define gPlayerAvatar 0x02037078u   /* CFRU; objectEventId @ +0x05 (the player's gObjectEvents slot) */
 /* OBJ palette EWRAM shadow buffers (the engine DMAs Faded -> OBJ palette RAM 0x05000200 each frame).
  * Slot 0 base; per-slot = base + slot*0x20. Cross-validated vs the clone's radical_red profile. */
@@ -265,6 +442,12 @@ static u32 player_oe(void)
     if (id >= 16) id = 0;
     return gObjectEvents + (u32)id * OE_STRIDE;
 }
+
+/* True only on the walkable field (gMain.callback2 == CB2_Overworld). Menu / bag / party / battle /
+ * trade-scene CB2s repurpose gSprites + the window system, so launching a field script (yes/no box,
+ * multichoice, party picker, trade scene) there overwrites their tiles -> visual corruption / freeze.
+ * sScriptContext2Enabled alone is NOT a sufficient gate: it's 0 inside those menu CB2s too. */
+static u8 on_field(void) { return R32(gMain + 0x04) == CB2_OVERWORLD; }
 
 /* ---- engine object-event movement API (CFRU follower model; see ADDRESSES.md). The "EventObject"
  * names are CFRU's; identical to pokefirered "ObjectEvent". All take a struct EventObject *. ---- */
@@ -340,13 +523,6 @@ static void drive_force_move(void)
     }
 }
 
-/* ROM-enforced nuzlocke: keep battle style on SET so the player can't free-switch after a KO. */
-static void enforce_rules(void)
-{
-    if (!SS->enforce_rules) return;
-    u32 sb2 = R32(gSaveBlock2Ptr);
-    if (sb2) R16(sb2 + 0x14) |= OPT_BATTLE_STYLE_SET;
-}
 
 /* callnative target: build a vertical multichoice window from the options Lua staged in SLINK_MENU_BUF
  * ([u8 count][FR str 0xFF-term]...), mirroring DrawVerticalMultichoiceMenu, then hand input to the
@@ -357,8 +533,7 @@ static void show_choices_entry(void)
 {
     volatile u8 *buf = (volatile u8 *)SLINK_MENU_BUF;
     u8 count = buf[0];
-    if (count == 0) return;
-    if (count > 8) count = 8;
+    if (count == 0 || count > 8) return;   /* >8 = malformed/uninitialized stage -> reject, don't clamp */
     const u8 *opts[8];
     const u8 *p   = (const u8 *)(SLINK_MENU_BUF + 1);
     const u8 *end = (const u8 *)0x02040000u;   /* EWRAM end — never scan past it (malformed stage guard) */
@@ -387,20 +562,32 @@ static void show_choices_entry(void)
     ScheduleBgCopyTilemapToVram(0);
 }
 
-/* Field script: lockall ; callnative show_choices_entry ; waitstate ; releaseall ; end. Brackets like
- * the yes/no menu (lockall sets sScriptContext2Enabled), so drive_ui kind 1 publishes the result
- * (gSpecialVar_Result = chosen option index, or SCR_MENU_CANCEL 0x7F on B). Caller guards on
+/* Field script: lockall ; [msgbox] ; callnative show_choices_entry ; waitstate ; [closemessage] ;
+ * releaseall ; end. Brackets like the yes/no menu (lockall sets sScriptContext2Enabled), so drive_ui
+ * kind 1 publishes the result (gSpecialVar_Result = chosen option index, or SCR_MENU_CANCEL 0x7F on
+ * B). `with_text` shows the FR text Lua staged in SLINK_TEXT_BUF via callstd MSGBOX_DEFAULT (4 =
+ * message + waitmessage, box STAYS OPEN under the floating multichoice — the vending-machine /
+ * elevator pattern), closed after the pick. The talk-NPC speaks this way ("OAK: ..." + Trade/Say hey).
+ * Max script = 18 B; SLINK_SCRIPT_BUF has 0x20 before SLINK_TEXT_BUF (0x0203F900). Caller guards on
  * sScriptContext2Enabled. */
-static void run_choices(void)
+static void run_choices(u8 with_text)
 {
     volatile u8 *s = (volatile u8 *)SLINK_SCRIPT_BUF;
     u32 fn = ((u32)&show_choices_entry) | 1u;
-    s[0] = 0x69;                                                 /* lockall */
-    s[1] = 0x23;                                                 /* callnative */
-    s[2] = (u8)fn; s[3] = (u8)(fn >> 8); s[4] = (u8)(fn >> 16); s[5] = (u8)(fn >> 24);
-    s[6] = 0x27;                                                 /* waitstate */
-    s[7] = 0x6B;                                                 /* releaseall */
-    s[8] = 0x02;                                                 /* end */
+    u32 i = 0;
+    s[i++] = 0x69;                                               /* lockall */
+    if (with_text) {
+        s[i++] = 0x0F; s[i++] = 0x00;                            /* loadword dest 0, <text ptr> */
+        s[i++] = (u8)(SLINK_TEXT_BUF);       s[i++] = (u8)(SLINK_TEXT_BUF >> 8);
+        s[i++] = (u8)(SLINK_TEXT_BUF >> 16); s[i++] = (u8)(SLINK_TEXT_BUF >> 24);
+        s[i++] = 0x09; s[i++] = 0x04;                            /* callstd MSGBOX_DEFAULT (stays open) */
+    }
+    s[i++] = 0x23;                                               /* callnative */
+    s[i++] = (u8)fn; s[i++] = (u8)(fn >> 8); s[i++] = (u8)(fn >> 16); s[i++] = (u8)(fn >> 24);
+    s[i++] = 0x27;                                               /* waitstate */
+    if (with_text) s[i++] = 0x68;                                /* closemessage (drop the speech box) */
+    s[i++] = 0x6B;                                               /* releaseall */
+    s[i++] = 0x02;                                               /* end */
     ScriptContext1_SetupScript((const u8 *)SLINK_SCRIPT_BUF);
 }
 
@@ -544,6 +731,9 @@ static void drive_ui(void)
 static void check_peer_interact(void)
 {
     if (!SS->pi_armed) return;
+    if (R32(gMain + 4) != CB2_OVERWORLD) return;         /* WALKABLE FIELD only — an A-press to advance
+                                                          * battle/menu text must NOT fire the talk
+                                                          * (which would run a field script there). */
     if (R8(sScriptContext2Enabled)) return;              /* a dialogue/script is already up */
     if (!(R16(gMain + 0x2E) & KEY_A)) return;            /* A newly pressed this frame? */
     u32 p = player_oe();                                  /* the player's actual object-event */
@@ -605,11 +795,16 @@ static void ghost_cb(void *s) { (void)s; }
 static void apply_avatar(u32 g)
 {
     if (!GH->imgs) return;                         /* no partner avatar received yet */
-    u8 sid = R8(g + 0x04);
-    if (sid >= 64) return;
+    /* The imgs/anims ptrs are PEER-SUPPLIED (broadcast by the partner's client). Only ever write
+     * ROM pointers into the sprite struct — a corrupt/hostile value would send AnimateSprite reading
+     * arbitrary memory. 32 MB ROM window: [0x08000000, 0x0A000000). */
+    if (GH->imgs < 0x08000000u || GH->imgs >= 0x0A000000u) return;
+    if (GH->anims && (GH->anims < 0x08000000u || GH->anims >= 0x0A000000u)) return;
+    u8 sid = R8(g + OE_SPRITE_ID);
+    if (sid >= SPR_COUNT) return;
     u32 spr = gSprites + (u32)sid * SPR_STRIDE;
-    R32(spr + 0x0C) = GH->imgs;                    /* sprite.images — re-assert every frame */
-    if (GH->anims) R32(spr + 0x08) = GH->anims;    /* sprite.anims */
+    R32(spr + SPR_IMAGES) = GH->imgs;              /* sprite.images — re-assert every frame */
+    if (GH->anims) R32(spr + SPR_ANIMS) = GH->anims;  /* sprite.anims */
     if (GH->avatarDirty) {
         R8(spr + 0x3F) |= 0x04;                    /* animBeginning -> re-DMA frame0 from new imgs */
         GH->avatarDirty = 0;
@@ -645,6 +840,13 @@ static void drive_ghost(void)
      * is still ours and RESUMES driving + re-applies the partner avatar (so sync continues without an
      * area transition). A whiteout DOES reload the map -> the slot is reassigned -> (d) respawns. */
     if (R16(gBattleMons + 0x2C) > 0 && R8(gBattleOutcome) == 0) return;
+
+    /* SUSPEND in any non-field context (party menu / bag / start menu / battle intro / trade scene /
+     * map-load transitions). Those screens REUSE gSprites for their own UI, so driving the ghost's
+     * sprite slot there corrupts them (the "square in the middle of the party menu" + freeze). Only
+     * the walkable field (incl. field dialogues) keeps gMain.callback2 == CB2_OVERWORLD; touch nothing
+     * otherwise. The ghost OE is preserved across menus, so the lifecycle below RESUMES on return. */
+    if (R32(gMain + 4) != CB2_OVERWORLD) return;
 
     /* A native trade scene is pending or about to take over: tear the ghost down NOW and DON'T respawn
      * until the scene op finishes. This branch runs while the field is still active (between the client
@@ -744,18 +946,47 @@ static void drive_ghost(void)
     s16 tx = GH->wx, ty = GH->wy;
     if (GH->snap) {                               /* explicit snap: jump straight to the target */
         GH->dispx = tx; GH->dispy = ty; GH->snap = 0; GH->flags |= GH_F_HAVE_DISP;
+        GH->leadpx = 0;
     } else if (!(GH->flags & GH_F_HAVE_DISP)) {   /* first time: start from the ghost's current pos */
         GH->dispx = (s16)R16(gspr + 0x20) - GH->cx;
         GH->dispy = (s16)R16(gspr + 0x22) - GH->cy;
         GH->flags |= GH_F_HAVE_DISP;
+        GH->leadpx = 0;
     } else {
         int dx = tx - GH->dispx, dy = ty - GH->dispy;
         int adx = dx < 0 ? -dx : dx, ady = dy < 0 ? -dy : dy;
-        if (adx > GHOST_SNAP_PX || ady > GHOST_SNAP_PX) { GH->dispx = tx; GH->dispy = ty; }
-        else {
-            int spd = GH->run ? 2 : 1;            /* uniform px/frame == engine WALK_NORMAL / FAST_1 */
-            if (adx <= spd) GH->dispx = tx; else GH->dispx += (dx > 0 ? spd : -spd);
-            if (ady <= spd) GH->dispy = ty; else GH->dispy += (dy > 0 ? spd : -spd);
+        int spd = GH->run ? 2 : 1;                /* uniform px/frame == engine WALK_NORMAL / FAST_1 */
+        if (adx > GHOST_SNAP_PX || ady > GHOST_SNAP_PX) {
+            GH->dispx = tx; GH->dispy = ty; GH->leadpx = 0;
+        } else if (GH->mv && adx == 0 && ady == 0) {
+            /* LEAD EXTRAPOLATION: arrived at a STALE target while the partner is still moving
+             * (the ~30 Hz sample hasn't refreshed yet) -> keep walking in their facing instead
+             * of the old reach-and-pause stutter. Budgeted: at most GHOST_LEAD_CAP_PX past the
+             * sample; the next fresh target absorbs the lead. */
+            if (GH->leadpx + spd <= GHOST_LEAD_CAP_PX) {
+                GH->leadpx = (u8)(GH->leadpx + spd);
+                switch (GH->face) {
+                    case 1:  GH->dispy += spd; break;   /* S */
+                    case 2:  GH->dispy -= spd; break;   /* N */
+                    case 3:  GH->dispx -= spd; break;   /* W */
+                    default: GH->dispx += spd; break;   /* E */
+                }
+            }
+        } else {
+            /* Converging on a live target. While the partner is MOVING, never step BACKWARD
+             * along their facing axis: a lead past the previous sample would otherwise walk
+             * back toward it and oscillate — let the next fresh target absorb the overshoot.
+             * Once the partner stops (mv==0) we converge unrestricted and settle exactly. */
+            int stepx = (adx <= spd) ? dx : (dx > 0 ? spd : -spd);
+            int stepy = (ady <= spd) ? dy : (dy > 0 ? spd : -spd);
+            if (GH->mv) {
+                if      (GH->face == 4 && stepx < 0) stepx = 0;   /* E: no westward step */
+                else if (GH->face == 3 && stepx > 0) stepx = 0;   /* W: no eastward step */
+                else if (GH->face == 1 && stepy < 0) stepy = 0;   /* S: no northward step */
+                else if (GH->face == 2 && stepy > 0) stepy = 0;   /* N: no southward step */
+            }
+            GH->dispx += stepx; GH->dispy += stepy;
+            if (GH->dispx == tx && GH->dispy == ty) GH->leadpx = 0;  /* settled -> budget back */
         }
     }
     s16 wpx = (s16)GH->dispx, wpy = (s16)GH->dispy;
@@ -797,6 +1028,234 @@ static void drive_ghost(void)
     }
 }
 
+/* PER-FRAME in-context notification draw. Runs via the engine's RunTasks (the safe frame point) every
+ * battle frame while a notification is active, so our text shows PERSISTENTLY in the target window — even
+ * OUTSIDE the FIGHT menu / during a static message (the BattlePutTextOnWindow hook alone only fires when the
+ * engine itself redraws something, which is sporadic). Drawing from RunTasks is in-context, so it does NOT
+ * white-out the BG the way calling BattlePutTextOnWindow from the slink_hook frame hook does. Self-destructs
+ * when the notification ends or the battle does. (The draw re-enters our BattlePutTextOnWindow hook, which
+ * swaps in our text for the target window — see slink_battle_inject.) */
+static const u8 sEmptyFr[1] = { 0xFF };   /* empty FR string -> BattlePutTextOnWindow blanks the window */
+/* The standard in-battle TEXT palette (BG palette slot 6) — what the FC 01 <id> colour codes index:
+ * 1=red, 4=gold, 5=green, 0xA=white, ... Captured live at turn resolution (probe_palettes.lua). The
+ * engine only loads this palette in SOME battle phases (resolution / FIGHT menu); at the action-select
+ * menu and the battle intro slot 6 is ALL ZEROS, so themed text rendered BLACK there (the injected-event
+ * E2E caught it). While our notification is showing, slink_notif_task re-stamps these colours into the
+ * Faded shadow buffer + palette RAM each frame (the ghost-tint technique), so the theme colours render in
+ * EVERY phase. Nothing else renders with slot 6 in the phases where the engine leaves it zeroed. */
+static const u16 sBattleTextPal[16] = {
+    0x426F, 0x195E, 0x1D54, 0x1B1F, 0x1B9B, 0x2B2F, 0x6F73, 0x7E67,
+    0x5114, 0x7ADE, 0x6318, 0x2E97, 0x457F, 0x45EA, 0x18C6, 0x7FFF,
+};
+#define BG_PAL6_FADED 0x020376B8u   /* gPlttBufferFaded + 6*32 (BG half; engine DMAs Faded->palette RAM) */
+#define BG_PAL6_RAM   0x050000C0u   /* BG palette RAM slot 6 (stamp directly too: colour NOW, no 1f lag) */
+static void slink_notif_task(u8 taskId)
+{
+    u8 win = (u8)(BN->win & 0x3F);
+    if (!BN->active || !(R16(gBattleMons + 0x2C) > 0 && R8(gBattleOutcome) == 0)) {
+        /* CLEAR our text from the window on the way out (our text otherwise LINGERS until the engine next
+         * redraws that window — which for the move-info window is only at the FIGHT menu). Only if still in
+         * battle (battle teardown frees the windows). Then engine-proper task teardown — poking the struct
+         * @+0 corrupts the FUNC ptr and crashes RunTasks. */
+        if (R16(gBattleMons + 0x2C) > 0 && R8(gBattleOutcome) == 0)
+            BattlePutTextOnWindow(sEmptyFr, win);
+        DestroyTask(taskId);
+        BN->task = 0xFF;
+        return;
+    }
+    for (u32 i = 0; i < 16; i++) {                 /* keep the text palette loaded in every phase */
+        R16(BG_PAL6_FADED + i * 2) = sBattleTextPal[i];
+        R16(BG_PAL6_RAM   + i * 2) = sBattleTextPal[i];
+    }
+    BattlePutTextOnWindow((const u8 *)SLINK_TEXT_BUF, win);
+    BN->phase = 1;   /* drawn at least once -> the timer may count down */
+}
+
+/* In-battle notification driver (runs from slink_hook). Ensures the per-frame draw task exists and counts
+ * the notification down. CreateTask only ALLOCATES a task slot here (no drawing) so it's safe from the frame
+ * hook; the slink_notif_task it creates does the actual drawing in-context via RunTasks. */
+static void drive_battle_notif(void)
+{
+    if (!BN->active) return;
+    if (!(R16(gBattleMons + 0x2C) > 0 && R8(gBattleOutcome) == 0)) { BN->active = 0; return; }
+    if (BN->task >= 16)
+        BN->task = CreateTask((void *)((u32)&slink_notif_task | 1u), 1);   /* priority 1 = drawn above most */
+    if (BN->phase && (BN->frames == 0 || --BN->frames == 0)) BN->active = 0;
+}
+
+/* BattlePutTextOnWindow text-swap (called by the shim, IN-CONTEXT inside the engine's own draw). When a
+ * notification is active and the engine (or the Battle Calc) is drawing OUR target window, substitute our
+ * text — so the calc can't overwrite our notification at the move menu. Per-frame persistence is handled by
+ * slink_notif_task; this just makes the engine's own draws of the target window show our text too. */
+__attribute__((used)) const u8 *slink_battle_inject(const u8 *text, u32 windowId)
+{
+    if (BN->active && (windowId & 0x3F) == (BN->win & 0x3F)) return (const u8 *)SLINK_TEXT_BUF;
+    return text;
+}
+
+/* IN-CONTEXT hook for the engine's BattlePutTextOnWindow (the safe way to draw native in-battle text).
+ * The bundled Battle Calc detours that function's 2nd instruction (0x080D87BE) with `BL 0x08378CA8` (its
+ * trampoline). build.py RE-POINTS that detour to THIS shim, so we run FIRST but still inside the engine's
+ * own draw call — the correct frame context. On entry r0 = text ptr, r1 = windowId, lr = 0x080D87C2 (the
+ * BL's return into the function body). We call slink_battle_inject(r0,r1) -> the text to draw (and it does
+ * the reentrant notification draw), then branch into the calc trampoline (lr preserved → it returns into
+ * the body as the original BL would). Naked: preserve r1 (windowId) + lr across the C call. */
+__attribute__((naked, used)) void slink_battletext_hook(void)
+{
+    __asm__ volatile(
+        ".syntax unified           \n"
+        ".thumb                    \n"
+        "push {r1, lr}             \n"   /* preserve windowId + the BL return (0x080D87C2) across the C call */
+        "bl   slink_battle_inject  \n"   /* r0 = inject(r0=text, r1=windowId) = text to draw */
+        "pop  {r1}                 \n"   /* restore windowId */
+        "pop  {r3}                 \n"   /* r3 = saved lr (Thumb-1 POP can't target lr directly) */
+        "mov  lr, r3               \n"   /* lr = 0x080D87C2 (so the trampoline returns into the body) */
+        "ldr  r2, =0x0203F8D8      \n"   /* SLINK_CALC_OFF: 1 = hide the Battle Calc display */
+        "ldrb r2, [r2]             \n"
+        "cmp  r2, #0               \n"
+        "bne  1f                   \n"
+        "ldr  r2, =0x08378CA9      \n"   /* calc ON: fall through to the calc trampoline (Thumb); it
+                                          * replays the displaced insns and returns into the body */
+        "bx   r2                   \n"
+        "1:                        \n"   /* calc OFF: replay the two halfwords the calc's BL displaced
+                                          * (clean RR @0x080D87BE: mov r7,r8 ; push {r7}) and continue
+                                          * the function body directly — as if the calc weren't there */
+        "mov  r7, r8               \n"
+        "push {r7}                 \n"
+        "ldr  r2, =0x080D87C3      \n"   /* body resume (Thumb) */
+        "bx   r2                   \n"
+        ".ltorg                    \n"
+    );
+}
+
+/* ---- Pokémon-Center trade NPC driver (presence-OFF mode) -------------------------------------- */
+/* Tunables — CONFIRM IN-GAME on RR (see lua/tests/test_live_pcnpc.lua). graphicsId must be a neutral
+ * NPC (NOT 0 = the player base). Tile is gObjectEvents currentCoords space (absolute map tile + 7);
+ * the FRLG PC 1F interior is a single shared layout, so one tile serves every center. */
+#define PCNPC_GFX     0x47u   /* 71 = Prof Oak — user-picked via lua/tests/sprite_gallery.lua */
+#define PCNPC_MOVEMENT 0x02u  /* MOVEMENT_TYPE_WANDER_AROUND: engine-driven idle pacing (steps +
+                               * facing changes). Range is clamped to +-1 tile post-spawn below. */
+#define PCNPC_TILE_X  0x0Au   /* TBD: currentCoords X; verify reachable + clear of the counter/PC */
+#define PCNPC_TILE_Y  0x09u   /* TBD: currentCoords Y */
+
+/* Pokémon-Center 1F map IDs as (mapGroup<<8 | mapNum), from
+ * data/games/gen3_frlge/gen3_frlge_locations.lua. These are the project's FRLG resolver values; RR is
+ * FRLG-based and preserves them in practice, but VERIFY live (a PC may be renumbered/absent on RR).
+ * Read-only .rodata is fine in our ROM section (only mutable statics would be a problem). */
+static const u16 kPokecenter1F[] = {
+    0x0504, 0x0605, 0x0703, 0x0800, 0x0901, 0x0A0C, 0x0B05, 0x0C05, 0x0D00, 0x0E06,
+    0x1000, 0x1500, 0x1F03, 0x2000, 0x2102, 0x2201, 0x2301, 0x2400, 0x2500,
+};
+static u8 is_pokecenter(u8 g, u8 n)
+{
+    u16 key = (u16)(((u16)g << 8) | n);
+    for (u32 i = 0; i < sizeof(kPokecenter1F) / sizeof(kPokecenter1F[0]); i++)
+        if (kPokecenter1F[i] == key) return 1;
+    return 0;
+}
+
+/* Remove our trade NPC cleanly IF the slot is still ours, and disarm talk. Mirrors ghost_remove.
+ * Only ever called when TN->oeId != 0xFF (every call site guards on that), so clearing pi_armed here
+ * can't stomp the ghost's arm (the ON-presence path never spawns this NPC). */
+static void tn_remove(void)
+{
+    u8 oe = TN->oeId;
+    if (oe == 0xFF) return;
+    u32 g = gObjectEvents + (u32)oe * OE_STRIDE;
+    if ((R8(g) & 1) && R8(g + 0x08) == TN_LOCALID) {
+        RemoveEventObject((void *)g);   /* free sprite */
+        R8(g) = 0;                       /* + deactivate (this build's RemoveEventObject won't) */
+    }
+    /* Only disarm if the talk slot is still OURS — never stomp the ghost's arm (the ghost arms once,
+     * at spawn; clearing it here would permanently kill talk-to-ghost on a presence ON transition). */
+    if (SS->pi_oe == oe) SS->pi_armed = 0;
+    TN->oeId = 0xFF;
+}
+
+static void drive_trade_npc(void)
+{
+    /* Same suspends as drive_ghost: never touch sprites in battle or outside the walkable field. */
+    if (R16(gBattleMons + 0x2C) > 0 && R8(gBattleOutcome) == 0) return;
+    if (R32(gMain + 4) != CB2_OVERWORLD) return;
+
+    /* A native trade scene is about to take over (it reloads map OEs): tear down NOW in a clean field
+     * context and respawn after the scene returns — mirrors drive_ghost's MENU kind-3 branch. */
+    if (MENU->pending && MENU->kind == 3) {
+        if (TN->oeId != 0xFF) tn_remove();
+        return;
+    }
+
+    /* Presence ON (or not yet configured): the ghost owns talk; stay out of pi_oe entirely. */
+    if (!TN->enable) { if (TN->oeId != 0xFF) tn_remove(); return; }
+
+    u32 player = player_oe();
+    u8 pg = R8(player + 0x0A), pn = R8(player + 0x09);
+
+    /* Map change -> the warp rebuilt all OE slots; clean-remove ours so we re-spawn on the new map. */
+    if (TN->oeId != 0xFF && (pg != TN->mapG || pn != TN->mapN)) tn_remove();
+
+    if (!is_pokecenter(pg, pn)) { if (TN->oeId != 0xFF) tn_remove(); return; }
+    TN->mapG = pg; TN->mapN = pn;
+
+    /* Spawn once at the fixed counter tile (solid, elev 3) and arm talk on the live slot. */
+    if (TN->oeId == 0xFF) {
+        if (R8(sScriptContext2Enabled)) return;   /* not mid-dialogue / warp fade */
+        int oe = SpawnSpecialObjectEventParameterized(PCNPC_GFX, PCNPC_MOVEMENT,
+                                                      TN_LOCALID, PCNPC_TILE_X, PCNPC_TILE_Y, /*elev*/3);
+        if (oe >= 16) return;                      /* no free slot on this map; retry next frame */
+        TN->oeId  = (u8)oe;
+        /* Confine the wander. rangeX/rangeY are the 4-bit fields in the HIGH byte of the u16 at OE
+         * +0x18 (facing/movementDirection occupy the low byte — same word check_peer_interact reads
+         * facing from). The parameterized spawn hardcodes range 0 = UNLIMITED, which would let the
+         * NPC roam the whole center and block the door/counter; 0x11 = pace within +-1 tile of the
+         * spawn point (the engine's wander handler respects initialCoords +- range). */
+        R8(gObjectEvents + (u32)oe * OE_STRIDE + 0x19) = 0x11;
+        SS->pi_oe = (u8)oe; SS->pi_armed = 1;
+        return;
+    }
+
+    /* Slot freed/reassigned under us (post-scene reload, scripted event) -> forget, respawn next frame. */
+    u32 g = gObjectEvents + (u32)TN->oeId * OE_STRIDE;
+    if (!(R8(g) & 1) || R8(g + 0x08) != TN_LOCALID) {
+        if (SS->pi_oe == TN->oeId) SS->pi_armed = 0;
+        TN->oeId = 0xFF;
+        return;
+    }
+
+    /* Keep talk armed on our slot (defensive: another driver may have touched pi_*). */
+    if (SS->pi_oe != TN->oeId || !SS->pi_armed) { SS->pi_oe = TN->oeId; SS->pi_armed = 1; }
+}
+
+/* ---- event-push producers (EvRing — see the struct comment) ----------------------------------- */
+static void ev_push(u8 type, u8 a, u16 b)
+{
+    if ((u8)(EV->wr - EV->rd) >= 8) { EV->overflow = 1; return; }   /* full: drop + flag, never stall */
+    EV->ev[EV->wr & 7] = (u32)type | ((u32)a << 8) | ((u32)b << 16);
+    EV->wr++;                                                       /* publish AFTER the payload write */
+}
+
+/* Observe battle state natively each frame and push edges as events. Frame-granular counter polling
+ * is deliberately chosen over a BL hook into Cmd_tryfaintmon: same settle semantics (the counters
+ * only move after protection resolves), zero new detour points, zero battle-engine reentrancy. A
+ * multi-faint frame shows as a counter delta > 1 and pushes one event per faint. */
+static void drive_events(void)
+{
+    u8 in_battle = (R16(gBattleMons + 0x2C) > 0 && R8(gBattleOutcome) == 0);
+    if (in_battle && !EV->inb) {            /* battle start: latch counter baselines (engine resets them) */
+        EV->pfc = R8(gBattleResults);
+        EV->ofc = R8(gBattleResults + 1);
+    }
+    if (in_battle) {
+        u8 pfc = R8(gBattleResults), ofc = R8(gBattleResults + 1);
+        while (EV->pfc != pfc) { EV->pfc++; ev_push(EV_PLAYER_FAINT, EV->pfc, 0); }
+        while (EV->ofc != ofc) { EV->ofc++; ev_push(EV_FOE_FAINT, EV->ofc, 0); }
+    } else if (EV->inb) {                   /* battle just ended: push the outcome edge once */
+        u8 oc = R8(gBattleOutcome);
+        if (oc) ev_push(EV_OUTCOME, oc, 0);
+    }
+    EV->inb = in_battle;
+}
+
 __attribute__((section(".text.entry"), used))
 void slink_hook(void)
 {
@@ -812,10 +1271,13 @@ void slink_hook(void)
     u8 field_active = (MENU->fieldCb == 0) || (R32(gMain + 0x04) == MENU->fieldCb);
 
     drive_force_move();           /* runs the armed controller-swap each frame */
-    enforce_rules();              /* persistent nuzlocke option enforcement */
+    drive_swap_state();           /* ends the borrowed-party "Party Freeze" window (begin is a BL hook) */
+    drive_battle_notif();         /* re-assert native in-battle notification text (self-guards on battle) */
+    drive_events();               /* push faint-settled / battle-outcome edges into the EvRing */
     if (field_active) {
         drive_ghost();            /* engine-driven peer ghost (spawn/walk/despawn lifecycle) */
-        check_peer_interact();    /* talk-to-ghost detection */
+        drive_trade_npc();        /* Pokémon-Center trade NPC (presence-OFF trade entry point) */
+        check_peer_interact();    /* talk-to-ghost / talk-to-NPC detection (generic on SS->pi_oe) */
     } else if (GH->oeId != 0xFF && GH->oeId < 16) {
         /* In a menu/scene CB2 (party picker / trade scene), the engine repurposes gSprites — hide our
          * ghost sprite so its tiles can't bleed into the menu (the initiator's "sprite glitch"). It's
@@ -944,6 +1406,7 @@ void slink_hook(void)
                                      the field script resolves. The menuing foundation for talk-to-
                                      partner actions (Trade / status / ...). */
         if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }  /* a box/script already up */
+        if (!on_field()) { ack(ST_FAIL, 3); return; }                 /* menu/battle CB2 -> corruption */
         run_yesno_msgbox();
         MENU->kind = 1; MENU->phase = 1; MENU->seq = MB->seq; MENU->frames = 0; MENU->pending = 1;
         MB->status = ST_BUSY; MB->opcode = 0;
@@ -951,10 +1414,13 @@ void slink_hook(void)
     }
 
     case OP_SHOW_CHOICES: {       /* options (FR-encoded) staged in SLINK_MENU_BUF -> native multichoice
-                                     list. ASYNC; lockall-bracketed like OP_SHOW_MENU, so drive_ui kind 1
-                                     publishes the chosen index (result[0]; 0x7F = cancel). */
+                                     list. args[0]=1: also speak the SLINK_TEXT_BUF text in a message box
+                                     that stays open under the list (the talk-NPC's line). ASYNC;
+                                     lockall-bracketed like OP_SHOW_MENU, so drive_ui kind 1 publishes
+                                     the chosen index (result[0]; 0x7F = cancel). */
         if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
-        run_choices();
+        if (!on_field()) { ack(ST_FAIL, 3); return; }
+        run_choices(MB->args[0]);
         MENU->kind = 1; MENU->phase = 1; MENU->seq = MB->seq; MENU->frames = 0; MENU->pending = 1;
         MB->status = ST_BUSY; MB->opcode = 0;
         return;
@@ -964,6 +1430,7 @@ void slink_hook(void)
                                      publishes the chosen slot (result[0]=0-5, or 7=cancel) once the menu
                                      closes (Var8004). Used to pick WHICH linked mon to trade. */
         if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
+        if (!on_field()) { ack(ST_FAIL, 3); return; }
         R16(gSpecialVar_0x8004) = 0x00FF;    /* sentinel -> the menu overwrites it with 0-5 / 7 */
         run_party_chooser();
         MENU->kind = 2; MENU->seq = MB->seq; MENU->frames = 0; MENU->pending = 1;
@@ -977,6 +1444,8 @@ void slink_hook(void)
                                      acks ST_OK when the scene returns to the field. */
         if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
         if (MB->args[0] > 5) { ack(ST_FAIL, 2); return; }
+        if (!on_field()) { ack(ST_FAIL, 3); return; }            /* also keeps fieldCb from caching a
+                                                                  * transient menu CB2 (stale-cb hang) */
         if (!MENU->fieldCb) MENU->fieldCb = R32(gMain + 0x04);   /* dispatched from the field */
         run_trade_scene(MB->args[0]);
         MENU->kind = 3; MENU->phase = 0; MENU->seq = MB->seq; MENU->frames = 0; MENU->pending = 1;
@@ -984,27 +1453,8 @@ void slink_hook(void)
         return;
     }
 
-    case OP_APPLY_DAMAGE: {       /* linked HP / chip: args [0]=battler [1..2]=amount(u16) */
-        u8  b   = MB->args[0];
-        u16 amt = (u16)(MB->args[1] | (MB->args[2] << 8));
-        u32 hpaddr = gBattleMons + (u32)b * BATTLE_MON_SIZE + 0x28;
-        u16 hp = R16(hpaddr);
-        hp = (hp > amt) ? (u16)(hp - amt) : 0;
-        R16(hpaddr) = hp;         /* engine refreshes the health box on its next touch */
-        MB->result[0] = (u8)hp;   /* result[0..1] = new hp (0 => mon will faint) */
-        MB->result[1] = (u8)(hp >> 8);
-        break;
-    }
-
-    case OP_CURE_STATUS: {        /* link-cured status: args [0]=battler — clear status1 */
-        u8 b = MB->args[0];
-        *(volatile u32 *)(gBattleMons + (u32)b * BATTLE_MON_SIZE + 0x4C) = 0;
-        break;
-    }
-
-    case OP_SET_RULES:            /* ROM-enforced nuzlocke: args [0]=enforce (1=on) */
-        SS->enforce_rules = MB->args[0];
-        break;
+    /* opcodes 10 OP_APPLY_DAMAGE, 11 OP_CURE_STATUS, 12 OP_SET_RULES REMOVED — no case here, so
+     * they fall through to default: ack(ST_FAIL, 1), the same as any unknown/older opcode. */
 
     case OP_ARM_PEER_INTERACT:    /* talk-to-ghost: args [0]=ghost oeId [1]=armed (1=on) */
         SS->pi_oe = MB->args[0];
@@ -1016,7 +1466,9 @@ void slink_hook(void)
         u8 oe = MB->args[0];
         if (oe >= 16) { ack(ST_FAIL, 2); return; }
         u32 oebase = gObjectEvents + (u32)oe * OE_STRIDE;
-        u8 spriteId = R8(oebase + 0x04);
+        if (!(R8(oebase) & 1)) { ack(ST_FAIL, 3); return; }   /* OE not active: spriteId is garbage */
+        u8 spriteId = R8(oebase + OE_SPRITE_ID);
+        if (spriteId >= SPR_COUNT) { ack(ST_FAIL, 4); return; }  /* never index gSprites OOB */
         DestroySprite((void *)(gSprites + (u32)spriteId * SPR_STRIDE));
         R8(oebase + 0x00) = 0;    /* clear active flag (RemoveObjectEventInternal) */
         break;
@@ -1054,6 +1506,75 @@ void slink_hook(void)
         MB->status   = ST_BUSY;   /* the controller acks when the move fires */
         MB->opcode   = 0;
         return;
+
+    case OP_SHOW_BATTLE_MESSAGE: {  /* native IN-BATTLE text (the BizHawk-HUD-in-battle replacement).
+                                       args: [0..1]=duration frames, [2]=window id (0 -> 0xD). Text staged
+                                       FR-encoded in SLINK_TEXT_BUF. ARM only: drive_battle_notif spawns a
+                                       RunTasks draw task (slink_notif_task) that renders it each frame. */
+        if (!(R16(gBattleMons + 0x2C) > 0 && R8(gBattleOutcome) == 0)) { ack(ST_FAIL, 1); return; }  /* not in battle */
+        BN->frames  = (u16)(MB->args[0] | (MB->args[1] << 8));
+        if (BN->frames == 0) BN->frames = 240;
+        BN->win     = MB->args[2] ? MB->args[2] : 0x0D;   /* target window (default 0xD = the calc's move-info area) */
+        BN->task    = 0xFF;                               /* no draw task yet (drive_battle_notif creates it) */
+        BN->phase   = 0;
+        BN->active  = 1;
+        break;                                            /* -> ack(ST_OK, 0) */
+    }
+
+    case OP_WITHDRAW_MON: {       /* PC box (compressed) -> party. args [0]=boxId [1]=boxPos [2]=partySlot.
+                                     Lua scans the box for the key (a READ) and passes the located slot +
+                                     the target party slot (= current count). The engine conversion runs
+                                     the real BoxMonToMon/PP/stats math, so the mon comes out fully formed. */
+        u8 box = MB->args[0], pos = MB->args[1], ps = MB->args[2];
+        if (box >= TOTAL_BOXES_COUNT || pos >= IN_BOX_COUNT || ps > 5) { ack(ST_FAIL, 2); return; }
+        u32 comp = R32(sPokemonBoxPtrs + (u32)box * 4) + (u32)pos * COMPRESSED_MON_SIZE;
+        CompressedMonToMon((void *)comp, (void *)(gPlayerParty + (u32)ps * MON_SIZE));
+        if (R8(gPlayerPartyCount) <= ps) R8(gPlayerPartyCount) = (u8)(ps + 1);   /* extend count to cover the new slot */
+        for (u32 i = 0; i < COMPRESSED_MON_SIZE; i++) R8(comp + i) = 0;          /* free the box slot (the mon moved) */
+        break;
+    }
+
+    case OP_DEPOSIT_MON: {        /* party -> PC box (compressed). args [0]=partySlot [1]=boxId [2]=boxPos.
+                                     A party Pokemon's first 80 bytes ARE a BoxPokemon, so compress straight
+                                     from it; then remove the mon from the party (shift-compact + count--),
+                                     mirroring the Lua depositPartyMon exactly. */
+        u8 ps = MB->args[0], box = MB->args[1], pos = MB->args[2];
+        if (ps > 5 || box >= TOTAL_BOXES_COUNT || pos >= IN_BOX_COUNT) { ack(ST_FAIL, 2); return; }
+        u8 count = R8(gPlayerPartyCount);
+        if (ps >= count) { ack(ST_FAIL, 3); return; }                           /* slot must hold a real mon */
+        u32 comp = R32(sPokemonBoxPtrs + (u32)box * 4) + (u32)pos * COMPRESSED_MON_SIZE;
+        CreateCompressedMonFromBoxMon((void *)(gPlayerParty + (u32)ps * MON_SIZE), (void *)comp);
+        for (u8 s = ps; (u8)(s + 1) < count; s++)                               /* shift [ps+1..] down one slot */
+            real_memcpy((void *)(gPlayerParty + (u32)s * MON_SIZE),
+                        (void *)(gPlayerParty + (u32)(s + 1) * MON_SIZE), MON_SIZE);
+        { u32 last = gPlayerParty + (u32)(count - 1) * MON_SIZE;                /* zero the vacated last slot */
+          for (u32 i = 0; i < MON_SIZE; i++) R8(last + i) = 0; }
+        R8(gPlayerPartyCount) = (u8)(count - 1);
+        break;
+    }
+
+    case OP_MEMORIALIZE: {        /* party -> memorial box. args [0]=partySlot [1]=boxId [2]=boxPos.
+                                     Same compress as OP_DEPOSIT_MON, but removal is ZERO + SWAP-WITH-
+                                     LAST (not shift): surviving mons KEEP their slot indices, so
+                                     CFRU's deferred battle writes can't land on the wrong mon —
+                                     mirrors Lua M.memorializeMon exactly. Lua picks the free memorial
+                                     slot + does the box rename (one-time, non-critical RAM writes). */
+        u8 ps = MB->args[0], box = MB->args[1], pos = MB->args[2];
+        if (ps > 5 || box >= TOTAL_BOXES_COUNT || pos >= IN_BOX_COUNT) { ack(ST_FAIL, 2); return; }
+        u8 count = R8(gPlayerPartyCount);
+        if (ps >= count) { ack(ST_FAIL, 3); return; }
+        u32 comp = R32(sPokemonBoxPtrs + (u32)box * 4) + (u32)pos * COMPRESSED_MON_SIZE;
+        CreateCompressedMonFromBoxMon((void *)(gPlayerParty + (u32)ps * MON_SIZE), (void *)comp);
+        u32 base = gPlayerParty + (u32)ps * MON_SIZE;
+        for (u32 i = 0; i < MON_SIZE; i++) R8(base + i) = 0;
+        if ((u8)(ps + 1) < count) {                                             /* swap last into the hole */
+            u32 last = gPlayerParty + (u32)(count - 1) * MON_SIZE;
+            real_memcpy((void *)base, (void *)last, MON_SIZE);
+            for (u32 i = 0; i < MON_SIZE; i++) R8(last + i) = 0;
+        }
+        R8(gPlayerPartyCount) = (u8)(count - 1);
+        break;
+    }
 
     default:
         ack(ST_FAIL, 1);          /* unknown opcode */

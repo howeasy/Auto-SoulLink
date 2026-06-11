@@ -1764,6 +1764,24 @@ end
 -- Zeros the 100-byte party slot, compacts the party, decrements count.
 -- Returns boxIdx, slotIdx on success, or nil, errMsg on failure.
 -- ONLY call in safe state (overworld, not in battle).
+-- Read-only scan for the first empty non-memorial box slot. Returns boxIdx, slotIdx, boxAddr (or nil +
+-- reason). Used by the native deposit path (OP_DEPOSIT_MON) which needs the destination slot to pass to
+-- the patch; the patch does the actual compressed write. Mirrors depositPartyMon's empty-slot scan.
+function M.findEmptyBoxSlot()
+    for boxIdx = 0, M.BOXES_PER_STORE - 1 do
+        if boxIdx ~= M.MEMORIAL_BOX then
+            for slotIdx = 0, M.MONS_PER_BOX - 1 do
+                local boxAddr = M.boxMonAddr(boxIdx, slotIdx)
+                if not boxAddr then return nil, "box address unavailable" end
+                if (memory.read_u8(boxAddr + M.OFF_FLAGS) & 0x02) == 0 then
+                    return boxIdx, slotIdx, boxAddr
+                end
+            end
+        end
+    end
+    return nil, "no free box slot (all non-memorial boxes full)"
+end
+
 function M.depositPartyMon(partySlot)
     local partyBase = M.PARTY_BASE + partySlot * M.MON_SIZE
     local slotSize  = M.boxSlotSize()
@@ -2085,6 +2103,13 @@ function M.readBoxSummary()
 end
 
 function M.retrieveBoxMon(key, stats)
+    -- Fail closed: without valid cached stats the party-only bytes (level/HP/maxHP)
+    -- would stay zero — a zero-stat mon crashes the game. Callers fall back to
+    -- sync_retrieve_failed on nil.
+    if not stats or not stats.level or stats.level <= 0
+       or not stats.maxHP or stats.maxHP <= 0 then
+        return nil, "no valid stats"
+    end
     local count = memory.read_u8(M.PARTY_COUNT_ADDR)
     if count >= 6 then return nil, "party full" end
     local boxIdx, slotIdx, boxAddr = M.scanBoxForKey(key)

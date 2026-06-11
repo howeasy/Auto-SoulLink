@@ -50,33 +50,42 @@ local sid = oe_spr(oe)
 -- settle (ghost snaps to the start position, queue calm)
 for k=1,60 do if k%3==0 then feed() end; PG.on_frame(); emu.frameadvance() end
 
--- WALK the partner continuously east at ~1 px/frame (player walk speed), feeding at 20 Hz.
-local samples = {}
-local fnum = 0
-for k = 1, 96 do
-  fnum = fnum + 1
-  wx = wx + 1                              -- partner advances 1 px this frame (continuous)
-  if fnum % 3 == 0 then feed() end          -- 20 Hz sub-pixel sampling of the moving partner
-  PG.on_frame()
-  emu.frameadvance()
-  samples[#samples+1] = spr_x(sid)
+-- WALK the partner continuously east at ~1 px/frame (player walk speed). Two passes:
+--   steady   — feed every 2nd frame (the production 30 Hz moving cadence): with the lead
+--              extrapolation the ghost must NEVER freeze while the partner moves (<= 1).
+--   jittered — drop every 4th send (server coalescing / pump hiccups): the lead must bridge
+--              the 4-frame gaps (<= 2). The pre-lead driver fails this pass (reach-and-pause).
+local function walk_pass(name, drop_every, max_allowed)
+  local samples = {}
+  local fnum, sends = 0, 0
+  for k = 1, 96 do
+    fnum = fnum + 1
+    wx = wx + 1                              -- partner advances 1 px this frame (continuous)
+    if fnum % 2 == 0 then                     -- 30 Hz sub-pixel sampling of the moving partner
+      sends = sends + 1
+      if not (drop_every and sends % drop_every == 0) then feed() end
+    end
+    PG.on_frame()
+    emu.frameadvance()
+    samples[#samples+1] = spr_x(sid)
+  end
+  local WARM = 10
+  local zero_run, max_zero_run, total_zero, moves = 0, 0, 0, 0
+  for i = WARM + 1, #samples do
+    local d = samples[i] - samples[i-1]
+    if d == 0 then zero_run = zero_run + 1; total_zero = total_zero + 1
+      if zero_run > max_zero_run then max_zero_run = zero_run end
+    else zero_run = 0; moves = moves + 1 end
+  end
+  log(name .. " pos1.x full seq: " .. table.concat(samples, ","))
+  log(string.format("%s window: %d frames, %d moved, %d frozen, longest frozen run = %d",
+      name, #samples - WARM, moves, total_zero, max_zero_run))
+  check(name .. ": ghost moved during the walk", moves > 0)
+  check(name .. ": no stall while the partner is moving", max_zero_run <= max_allowed,
+        "longest frozen run = " .. max_zero_run .. " frames (want <= " .. max_allowed .. ")")
 end
-
-local WARM = 10
-local zero_run, max_zero_run, total_zero, moves = 0, 0, 0, 0
-for i = WARM + 1, #samples do
-  local d = samples[i] - samples[i-1]
-  if d == 0 then zero_run = zero_run + 1; total_zero = total_zero + 1
-    if zero_run > max_zero_run then max_zero_run = zero_run end
-  else zero_run = 0; moves = moves + 1 end
-end
-log("pos1.x full seq: " .. table.concat(samples, ","))
-log(string.format("moving window: %d frames, %d moved, %d frozen, longest frozen run = %d",
-    #samples - WARM, moves, total_zero, max_zero_run))
-
-check("ghost moved during the walk", moves > 0)
-check("no multi-frame stall while the partner is moving (smooth slide)", max_zero_run <= 3,
-      "longest frozen run = " .. max_zero_run .. " frames (want <= 3)")
+walk_pass("steady", nil, 1)
+walk_pass("jittered", 4, 2)
 PG.on_ghost_pos({ mg=grp, mn=num, x=wx, y=wy, f=4, mv=0, an=3, run=0, gfx=gfx })
 for _=1,8 do PG.on_frame(); emu.frameadvance() end
 finish()

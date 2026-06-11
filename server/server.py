@@ -1483,7 +1483,10 @@ class SLinkServer:
                  manager_port: int = 0,
                  species_lock: bool = False, gender_lock: bool = False,
                  type_lock: bool = False, explode_mode: bool = False,
-                 rival_team_swap: bool = False):
+                 rival_team_swap: bool = False, overworld_presence: bool = False,
+                 native_messages: bool = False, native_sounds: bool = False,
+                 battle_calc: bool = True, pc_trade_npc: bool = True,
+                 native_battle_control: bool = False):
         self._data_dir = data_dir  # None → use global DATA_DIR (backward compat)
         self._run_id   = run_id
         self._run_name = run_name
@@ -1495,7 +1498,13 @@ class SLinkServer:
                                         gender_lock=gender_lock,
                                         type_lock=type_lock,
                                         explode_mode=explode_mode,
-                                        rival_team_swap=rival_team_swap)
+                                        rival_team_swap=rival_team_swap,
+                                        overworld_presence=overworld_presence,
+                                        native_messages=native_messages,
+                                        native_sounds=native_sounds,
+                                        battle_calc=battle_calc,
+                                        pc_trade_npc=pc_trade_npc,
+                                        native_battle_control=native_battle_control)
         # Game adapter — shared with state machine for consistent behavior.
         # Provides both rules and presentation methods.
         self.adapter = self.state.adapter
@@ -3092,6 +3101,12 @@ class SLinkServer:
                 "type_lock": s.type_lock,
                 "explode_mode": s.explode_mode,
                 "rival_team_swap": s.rival_team_swap,
+                "overworld_presence": s.overworld_presence,
+                "native_messages": s.native_messages,
+                "native_sounds": s.native_sounds,
+                "battle_calc": s.battle_calc,
+                "pc_trade_npc": s.pc_trade_npc,
+                "native_battle_control": s.native_battle_control,
             },
             "recent_events": list(self._recent_events),
             "killfeed": sorted(
@@ -3203,6 +3218,8 @@ class SLinkServer:
             lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-explode"/></svg> Explode Mode</span>')
         if s.rival_team_swap:
             lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-rival-swap"/></svg> Rival Team Swap</span>')
+        if s.overworld_presence:
+            lock_badges.append('<span class="badge badge-lock"><svg class="inline-ico" aria-hidden="true"><use href="#i-presence"/></svg> Overworld Presence</span>')
         if lock_badges:
             parts.append(f'<div class="lock-rules">Rules: {" ".join(lock_badges)}</div>')
 
@@ -7367,7 +7384,13 @@ class SLinkServer:
             gender_lock=self.state.gender_lock,
             type_lock=self.state.type_lock,
             explode_mode=self.state.explode_mode,
-            rival_team_swap=self.state.rival_team_swap)
+            rival_team_swap=self.state.rival_team_swap,
+            overworld_presence=self.state.overworld_presence,
+            native_messages=self.state.native_messages,
+            native_sounds=self.state.native_sounds,
+            battle_calc=self.state.battle_calc,
+            pc_trade_npc=self.state.pc_trade_npc,
+            native_battle_control=self.state.native_battle_control)
         self.adapter = self.state.adapter
         # Restore events.json and reload ring buffer
         if os.path.exists(backup_events):
@@ -7393,7 +7416,13 @@ class SLinkServer:
                                    gender_lock=self.state.gender_lock,
                                    type_lock=self.state.type_lock,
                                    explode_mode=self.state.explode_mode,
-                                   rival_team_swap=self.state.rival_team_swap)
+                                   rival_team_swap=self.state.rival_team_swap,
+                                   overworld_presence=self.state.overworld_presence,
+                                   native_messages=self.state.native_messages,
+                                   native_sounds=self.state.native_sounds,
+                                   battle_calc=self.state.battle_calc,
+                                   pc_trade_npc=self.state.pc_trade_npc,
+                                   native_battle_control=self.state.native_battle_control)
         self.adapter = self.state.adapter
         self._last_seq.clear()
         self.connected_players.clear()
@@ -7805,7 +7834,10 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                data_dir: str = None, run_id: str = None, run_name: str = "",
                species_lock: bool = False, gender_lock: bool = False,
                type_lock: bool = False, explode_mode: bool = False,
-               rival_team_swap: bool = False,
+               rival_team_swap: bool = False, overworld_presence: bool = False,
+               native_messages: bool = False, native_sounds: bool = False,
+               battle_calc: bool = True, pc_trade_npc: bool = True,
+               native_battle_control: bool = False,
                manager_port: int = 0, verbose: bool = False):
     _configure_logging(data_dir, verbose)
     if reset:
@@ -7819,7 +7851,13 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                       tcp_port=port, manager_port=manager_port,
                       species_lock=species_lock, gender_lock=gender_lock,
                       type_lock=type_lock, explode_mode=explode_mode,
-                      rival_team_swap=rival_team_swap)
+                      rival_team_swap=rival_team_swap,
+                      overworld_presence=overworld_presence,
+                      native_messages=native_messages,
+                      native_sounds=native_sounds,
+                      battle_calc=battle_calc,
+                      pc_trade_npc=pc_trade_npc,
+                      native_battle_control=native_battle_control)
 
     # TCP game server.
     # limit=4 MiB lifts asyncio's default 64 KiB readline buffer so Gen 5's
@@ -7939,6 +7977,9 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         app.router.add_get("/calc/",          srv.handle_calc_redirect)
         app.router.add_get("/calc/{path:.*}", srv.handle_calc_files)
         app.router.add_get("/api/calc/mons",  srv.handle_calc_mons)
+
+        from server.patcher import setup_patcher_routes
+        setup_patcher_routes(app, srv._build_sidebar_html)
         runner = aiohttp_web.AppRunner(app)
         await runner.setup()
         http_site = aiohttp_web.TCPSite(runner, host, http_port)
@@ -7972,6 +8013,18 @@ if __name__ == "__main__":
     parser.add_argument("--explode-mode",   action="store_true", dest="explode_mode", help="On partner death, force the linked mon to auto-Explode (RR only; menu-skip via Variant-3 memory writes)")
     parser.add_argument("--rival-team-swap", action="store_true", dest="rival_team_swap",
         help="On rival battles, replace the rival's team with the partner's current party (RR only; mirrors --explode-mode as an opt-in per-run rule)")
+    parser.add_argument("--overworld-presence", action="store_true", dest="overworld_presence",
+        help="Peer ghost: render your partner walking your overworld as a live NPC (RR + companion patch required; opt-in per-run rule)")
+    parser.add_argument("--native-messages", action="store_true", dest="native_messages",
+        help="Show SLink notifications via the companion patch's native message box / in-battle text instead of the Lua HUD overlay (RR + patch; default off)")
+    parser.add_argument("--native-sounds", action="store_true", dest="native_sounds",
+        help="Play SLink notification sounds via the companion patch's native PlaySE (RR + patch; default off)")
+    parser.add_argument("--no-battle-calc", action="store_false", dest="battle_calc",
+        help="Hide the bundled Battle Calc damage display (RR + patch; shown by default)")
+    parser.add_argument("--no-pc-trade-npc", action="store_false", dest="pc_trade_npc",
+        help="Disable the Pokémon-Center trade NPC (RR + patch; on by default, only active while overworld presence is off)")
+    parser.add_argument("--native-battle-control", action="store_true", dest="native_battle_control",
+        help="Enable the native explode/faint controller swap (RR patch; EXPERIMENTAL — default off, Variant-3 RAM path remains the fallback)")
     parser.add_argument("--manager-port", type=int, default=0,   help="Manager HTTP port (enables 'Run Manager' link on status page)")
     parser.add_argument("--verbose",      action="store_true",   help="Enable DEBUG-level logging to file and console (default: INFO only)")
     args = parser.parse_args()
@@ -7981,5 +8034,11 @@ if __name__ == "__main__":
                      type_lock=args.type_lock,
                      explode_mode=args.explode_mode,
                      rival_team_swap=args.rival_team_swap,
+                     overworld_presence=args.overworld_presence,
+                     native_messages=args.native_messages,
+                     native_sounds=args.native_sounds,
+                     battle_calc=args.battle_calc,
+                     pc_trade_npc=args.pc_trade_npc,
+                     native_battle_control=args.native_battle_control,
                      manager_port=args.manager_port,
                      verbose=args.verbose))

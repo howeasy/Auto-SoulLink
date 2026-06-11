@@ -1,4 +1,9 @@
-# Peer Ghost — handoff notes (READ THIS FIRST)
+# Peer Ghost — handoff notes (HISTORICAL)
+
+> **⚠ HISTORICAL DOCUMENT.** Every md5 below is stale — they name intermediate builds from the
+> peer-ghost bring-up (June 2026). The CURRENT patched md5 lives in `patch/README.md` and
+> `server/patcher.py` (`PATCHED_ROM_MD5`), and is printed by every `python patch/tools/build.py`
+> run. Keep this file for the discovery narrative + RE offsets; do not trust its build hashes.
 
 Branch: `feat/rom-patch-companion` (worktree `condescending-bassi-9175e6`). Companion patch for
 Radical Red. The peer ghost shows your soul-link partner as a walking NPC in your RR overworld.
