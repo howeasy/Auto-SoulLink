@@ -1,4 +1,4 @@
-﻿--[[
+--[[
   lua/test_3_server.lua — SERVER CONNECTIVITY + AUTO EVENT TEST
 
   Connects to the Python TCP server and automatically detects + sends every

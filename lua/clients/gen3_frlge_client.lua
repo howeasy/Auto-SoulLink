@@ -102,7 +102,19 @@ local HUD   = require("hud")
 -- Optional companion-patch mailbox (native in-game UI etc.). Absent on unpatched ROMs.
 local ok_mb, MB = pcall(require, "mailbox")
 if not ok_mb then MB = nil end
-local function patch_present() return MB ~= nil and MB.present() end
+-- Presence is memoised per frame: ~10 call sites run every frame and each MB.present() costs
+-- two BizHawk memory reads. NOT a permanent latch — a soft reset clears EWRAM, so the beacon
+-- must be re-read (its loss/return drives the config re-assert in on_frame). One table, not
+-- separate locals: the main chunk is at Lua's 200-local limit.
+local PP = { frame = nil, val = false, was = nil, calc = true }
+local function patch_present()
+    local f = emu.framecount()
+    if f ~= PP.frame then
+        PP.frame = f
+        PP.val = MB ~= nil and MB.present()
+    end
+    return PP.val
+end
 
 -- Native-enhancement toggles (server `config` on hello; see state.py). Pre-config defaults match the
 -- server's: messages/sounds OFF (Lua HUD/m4a paths until the native paths win the A/B test), calc ON
@@ -122,6 +134,8 @@ local function safe_native_box()
        and memory.read_u8(0x03000F9C) == 0
 end
 local patch_logged = false   -- latch: log patch presence/absence once (beacon appears ~frame 13)
+-- PP.was (above) holds the previous frame's beacon state (nil = never sampled); it drives the
+-- config-byte re-assert when the beacon comes (back) up post-reset.
 local pg_send_logged = false -- one-shot: confirm we're broadcasting our overworld position
 -- world-pixel calibration (sub-pixel position via the coordOffset delta, captured while idle)
 local pg_align_tx, pg_align_ty, pg_coff_ax, pg_coff_ay = nil, nil, 0, 0
@@ -274,6 +288,7 @@ local function parse_command_list(raw)
         local token    = obj:match('"token"%s*:%s*"([^"]*)"')        -- show_menu/show_choices round-trip id
         local slot     = tonumber(obj:match('"slot"%s*:%s*(%-?%d+)')) -- apply_trade party slot
         local blob_hex = obj:match('"blob_hex"%s*:%s*"([0-9A-Fa-f]*)"') -- apply_trade single 100-byte mon
+        local old_key  = obj:match('"old_key"%s*:%s*"([^"]*)"')       -- apply_trade: key the slot SHOULD hold
         local options  = nil                                          -- show_choices option labels
         local opt_raw  = obj:match('"options"%s*:%s*(%b[])')
         if opt_raw then
@@ -295,7 +310,7 @@ local function parse_command_list(raw)
                 gimgs=gimgs, ganim=ganim, gpcol=gpcol,
                 sound=sound, area_id=area_id, areas=areas,
                 trainer_id=trainer_id, blobs_hex=blobs_hex,
-                token=token, slot=slot, blob_hex=blob_hex, options=options,
+                token=token, slot=slot, blob_hex=blob_hex, old_key=old_key, options=options,
                 overworld_presence=overworld_presence, native_messages=native_messages,
                 native_sounds=native_sounds, battle_calc=battle_calc, pc_trade_npc=pc_trade_npc,
                 native_battle_control=native_battle_control,
@@ -352,6 +367,9 @@ local pending_hud_area      = nil
 -- `config` command on hello; `pc_npc_pi_last` tracks the interact counter delta.
 local pc_npc_enabled = false
 local pc_npc_pi_last = nil
+-- PP.calc (above) holds the Battle Calc kill-switch state from the server config, kept so both
+-- patch bytes (TN_ENABLE, CALC_OFF) can be RE-asserted when the patch beacon comes (back) up —
+-- a soft reset clears EWRAM while the TCP connection (and the one-shot config) does not recur.
 
 -- ── HUD overlay ───────────────────────────────────────────────────────────────
 -- Minimal on-screen display shown during deaths and party swaps only.
@@ -567,7 +585,7 @@ local send
 -- reconcile the link half, and (2) register the old->new KEY CHANGE so the local party-sync handlers
 -- treat it as a migration (no phantom capture/box). Declared here (after `local send`) because it
 -- calls send(). `old_key` is the key that occupied the slot BEFORE the trade (captured at trade start).
-local function emit_trade_done(slot, old_key)
+local function emit_trade_done(slot, old_key, token)
     local base = (M.PARTY_BASE or 0x02024284) + slot * (M.MON_SIZE or 0x64)
     local ok_k, key     = pcall(M.monKey, base)
     local ok_s, species = pcall(M.decryptSpecies, base)
@@ -575,9 +593,36 @@ local function emit_trade_done(slot, old_key)
     if old_key and old_key ~= "" and new_key ~= "" and old_key ~= new_key then
         pending_trade_migration = { old = old_key, new = new_key }
     end
-    send({ event = "trade_done", slot = slot,
+    -- token ties this report to the trade the server dispatched (a stale report from an
+    -- earlier aborted trade must not count toward the current one).
+    send({ event = "trade_done", slot = slot, token = token or "",
            new_key = new_key, new_species = (ok_s and species) or 0 },
          "trade_done", true, false)
+end
+
+-- The apply_trade slot index is a snapshot from mon_chosen; the player free-roams until the
+-- apply actually runs and may have reordered their party. Re-locate the offered mon by key
+-- and fix p.slot in place. If the key is nowhere in the party (boxed in the apply window —
+-- the server re-validates at confirm, so this is a seconds-wide race), keep the original
+-- slot and log loudly. ponytail: last-resort slot write can still hit a bystander mon in
+-- that race; a full fix needs client-side abort + server-side one-sided rollback.
+local function relocate_trade_slot(p)
+    if not p.old_key or p.old_key == "" then return end
+    local ok_c, count = pcall(memory.read_u8, M.PARTY_COUNT_ADDR)
+    if not ok_c then return end
+    for slot = 0, math.min(count, 6) - 1 do
+        local ok_k, k = pcall(M.monKey, (M.PARTY_BASE or 0x02024284) + slot * (M.MON_SIZE or 0x64))
+        if ok_k and k == p.old_key then
+            if slot ~= p.slot then
+                console.log("[SLink-FRLGE]   ↳ trade: party reordered — mon moved slot " ..
+                            tostring(p.slot) .. " -> " .. tostring(slot))
+                p.slot = slot
+            end
+            return
+        end
+    end
+    console.log("[SLink-FRLGE]   ↳ trade: WARNING old_key not in party — applying to original slot " ..
+                tostring(p.slot))
 end
 
 -- Arm a native auto-Explode on an active battler: write Explosion into its battle-mon move
@@ -599,6 +644,24 @@ local function dispatch_commands(cmds)
     -- At most ONE native field box per dispatch pass — only one box can be on screen, so a second
     -- msgbox/gui_prompt in the same batch would be refused + lost. The rest fall back to a Lua overlay.
     local native_box_used = false
+    -- Shared by the msgbox and gui_prompt branches: a NATIVE field box only in a safe area
+    -- (patched, overworld, no field script/box up, none used this pass, none awaiting confirm),
+    -- CONFIRMED by the on_frame poll with a Lua-overlay fallback — never dropped.
+    local function try_native_box(text, fb, label, r, g, b, frames)
+        if safe_native_box() and not native_box_used and pending_msgbox == nil then
+            MB.write_message(text)
+            local s = MB.send(MB.OP_SHOW_MESSAGE, {})
+            native_box_used = true
+            pending_msgbox = { seq = s, fb = fb, text = text, r = r or 255, g = g or 255,
+                               b = b or 255, frames = frames or 300, start_frame = frame_count }
+            console.log("[SLink-FRLGE]   ↳ " .. label .. " (native): " .. text)
+        else
+            -- Not a safe overworld box: native BATTLE message box when patched + in battle (the
+            -- BizHawk-HUD-in-battle replacement), else the Lua overlay (center-prompt / HUD).
+            show_fallback(text, fb, r or 255, g or 255, b or 255, frames or 300)
+            console.log("[SLink-FRLGE]   ↳ " .. label .. ": " .. text)
+        end
+    end
     for _, c in ipairs(cmds) do
         if c.cmd == "play_sound" and c.sound then
             -- Native SE via the companion patch (PlaySE) when present — retires the fragile Lua m4a
@@ -822,23 +885,9 @@ local function dispatch_commands(cmds)
                 console.log("[SLink-FRLGE]   ↳ memorialize deduped: "..c.key:sub(1,8))
             end
         elseif c.cmd == "msgbox" and c.text then
-            -- Native field box ONLY in a safe area (patched, overworld, no field script/box up, none used
-            -- this pass, none still awaiting confirm). We then CONFIRM it actually opened (on_frame poll) and
-            -- fall back to a Lua overlay (center-prompt for fb="prompt", else the HUD line) if the patch
-            -- refused it — so the notification is NEVER dropped.
-            local fb_style = (c.fb == "prompt") and "prompt" or "hud"
-            if safe_native_box() and not native_box_used and pending_msgbox == nil then
-                MB.write_message(c.text)
-                local s = MB.send(MB.OP_SHOW_MESSAGE, {})
-                native_box_used = true
-                pending_msgbox = { seq = s, fb = fb_style, text = c.text, r = c.r or 255, g = c.g or 255,
-                                   b = c.b or 255, frames = c.frames or 300, start_frame = frame_count }
-                console.log("[SLink-FRLGE]   ↳ msgbox (native): " .. c.text)
-            else
-                -- Not a safe overworld box: native BATTLE message box when patched + in battle (the
-                -- BizHawk-HUD-in-battle replacement), else the Lua overlay (center-prompt / HUD).
-                show_fallback(c.text, fb_style, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
-            end
+            -- Lua-overlay fallback style: center-prompt for fb="prompt", else the HUD line.
+            try_native_box(c.text, (c.fb == "prompt") and "prompt" or "hud", "msgbox",
+                           c.r, c.g, c.b, c.frames)
         elseif c.cmd == "show_menu" and c.text and c.token then
             -- Talk-to-partner action menu (native YES/NO). Async: register + poll in on_frame, then
             -- emit menu_result{token,choice}. Unpatched or out-of-overworld can't show a native menu,
@@ -846,7 +895,9 @@ local function dispatch_commands(cmds)
             if patch_present() and M.isInOverworld() and not pending_ui then
                 local seq = MB.show_menu(c.text)
                 if seq then
-                    pending_ui = { seq = seq, token = c.token, kind = "menu", start_frame = frame_count }
+                    -- cancel: what a failed/timed-out poll reports. Yes/no menu: 0 = declined.
+                    pending_ui = { seq = seq, token = c.token, kind = "menu", cancel = 0,
+                                   start_frame = frame_count }
                 else
                     send({ event = "menu_result", token = c.token, choice = 0 }, "menu_result", true, false)
                 end
@@ -860,7 +911,10 @@ local function dispatch_commands(cmds)
             if patch_present() and M.isInOverworld() and not pending_ui then
                 local seq = MB.show_choices(c.options, c.text)   -- c.text = the talk-NPC's spoken line
                 if seq then
-                    pending_ui = { seq = seq, token = c.token, kind = "menu", start_frame = frame_count }
+                    -- cancel: multichoice index 0 is a REAL option ("Trade"), so a failed/timed-out
+                    -- poll must report the cancel sentinel 127, never 0.
+                    pending_ui = { seq = seq, token = c.token, kind = "menu", cancel = 127,
+                                   start_frame = frame_count }
                 else
                     send({ event = "menu_result", token = c.token, choice = 127 }, "menu_result", true, false)
                 end
@@ -888,9 +942,12 @@ local function dispatch_commands(cmds)
             local arr = M.hexToBytes(c.blob_hex)
             if arr and #arr >= 100 then
                 -- Capture the key currently in the slot (the mon we're trading AWAY) BEFORE the swap,
-                -- so trade completion can register old->new as a key migration.
-                local ok_ok, old_key = pcall(M.monKey, (M.PARTY_BASE or 0x02024284) + c.slot * (M.MON_SIZE or 0x64))
-                pending_trade_apply = { slot = c.slot, blob = arr, old_key = ok_ok and old_key or nil,
+                -- so trade completion can register old->new as a key migration. Prefer the
+                -- server-sent old_key (authoritative — the slot index is a stale snapshot and
+                -- the player may have reordered their party since mon_chosen).
+                local ok_ok, slot_key = pcall(M.monKey, (M.PARTY_BASE or 0x02024284) + c.slot * (M.MON_SIZE or 0x64))
+                local old_key = (c.old_key and c.old_key ~= "" and c.old_key) or (ok_ok and slot_key) or nil
+                pending_trade_apply = { slot = c.slot, blob = arr, old_key = old_key, token = c.token,
                                         phase = "pending", start_frame = frame_count }
                 console.log("[SLink-FRLGE]   ↳ apply_trade received (slot " .. tostring(c.slot) ..
                             ") — queued for native trade")
@@ -909,17 +966,7 @@ local function dispatch_commands(cmds)
             -- center-prompt overlay. gui_prompts are momentous overworld decisions (dupe / clause reroll),
             -- so the native box is the right in-game presentation; unpatched / in-battle / mid-dialogue
             -- falls back to the center prompt — never dropped.
-            if safe_native_box() and not native_box_used and pending_msgbox == nil then
-                MB.write_message(c.text)
-                local s = MB.send(MB.OP_SHOW_MESSAGE, {})
-                native_box_used = true
-                pending_msgbox = { seq = s, fb = "prompt", text = c.text, r = c.r or 255, g = c.g or 255,
-                                   b = c.b or 255, frames = c.frames or 300, start_frame = frame_count }
-                console.log("[SLink-FRLGE]   ↳ gui_prompt (native): "..c.text)
-            else
-                show_fallback(c.text, "prompt", c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
-                console.log("[SLink-FRLGE]   ↳ gui_prompt: "..c.text)
-            end
+            try_native_box(c.text, "prompt", "gui_prompt", c.r, c.g, c.b, c.frames)
         elseif c.cmd == "resolved_areas" and c.areas then
             for _, a in ipairs(c.areas) do resolved_areas[a] = true end
             resolved_areas_seeded = true
@@ -937,11 +984,17 @@ local function dispatch_commands(cmds)
             -- fallback; battle_calc drives the patch's calc kill-switch byte.
             if c.overworld_presence ~= nil then
                 pc_npc_enabled = (c.overworld_presence == false) and (c.pc_trade_npc ~= false)
-                if patch_present() then MB.set_pc_npc(pc_npc_enabled) end
+                -- Plain EWRAM write, safe pre-beacon (same as the boot-time set_pc_npc(false)):
+                -- gating on patch_present() here dropped the enable when the config command
+                -- raced the patch beacon (~frame 13). Also re-asserted on beacon return.
+                if MB then MB.set_pc_npc(pc_npc_enabled) end
             end
             if c.native_messages ~= nil then native_msgs_enabled = (c.native_messages == true) end
             if c.native_sounds ~= nil then native_sfx_enabled = (c.native_sounds == true) end
-            if c.battle_calc ~= nil and MB then MB.set_battle_calc(c.battle_calc == true) end
+            if c.battle_calc ~= nil then
+                PP.calc = (c.battle_calc == true)
+                if MB then MB.set_battle_calc(PP.calc) end
+            end
             -- Native explode/faint controller swap (ROADMAP §2): default OFF after the real-play
             -- softlock; the Variant-3 RAM path stays production until a live two-instance soak.
             if c.native_battle_control ~= nil then
@@ -1862,6 +1915,11 @@ local function on_frame()
         was_connected = now_connected
     end
 
+    -- 3a-bis. Drain the mailbox outbox: the single-slot mailbox takes one opcode per frame,
+    -- extra sends from a batched dispatch queue in mailbox.lua and are posted here as the
+    -- hook frees the slot (pump BEFORE dispatch so last frame's consumption is seen first).
+    if MB then MB.pump() end
+
     -- 3b. Dispatch received responses (may enqueue sync cmds)
     while true do
         local line = C.receive()
@@ -1888,6 +1946,20 @@ local function on_frame()
             patch_logged = true
         end
     end
+    -- Re-assert the config-driven patch bytes whenever the beacon comes (back) up: a soft
+    -- reset clears EWRAM (TN_ENABLE -> 0, CALC_OFF -> 0) while the TCP connection — and thus
+    -- the one-shot `config` command — survives, so without this the PC trade NPC stays dead
+    -- and a --no-battle-calc run silently re-enables the calc for the rest of the session.
+    if IS_RR then
+        local pp = patch_present()
+        if pp and not PP.was then
+            if MB then MB.set_pc_npc(pc_npc_enabled); MB.set_battle_calc(PP.calc) end
+            if PP.was == false then
+                console.log("[SLink-FRLGE] patch beacon returned (reset?) — config bytes re-asserted")
+            end
+        end
+        PP.was = pp
+    end
 
     -- 4. Read current state — cache battle/overworld state once per frame.
     -- Within a single on_frame() callback the GBA CPU is frozen, so these
@@ -1910,6 +1982,7 @@ local function on_frame()
     -- never double-write a slot the native scene already swapped -> no corrupted keys / pairs-break).
     if pending_trade_apply and (in_battle or area ~= prev_area or loc ~= prev_loc) then
         local p = pending_trade_apply
+        relocate_trade_slot(p)
         local cur
         local ok_k, k = pcall(M.monKey, (M.PARTY_BASE or 0x02024284) + p.slot * (M.MON_SIZE or 0x64))
         if ok_k then cur = k end
@@ -1919,7 +1992,7 @@ local function on_frame()
         else
             console.log("[SLink-FRLGE]   ↳ trade: interrupted (battle/warp) after swap -> reconcile from slot")
         end
-        emit_trade_done(p.slot, p.old_key)
+        emit_trade_done(p.slot, p.old_key, p.token)
         pending_trade_apply = nil
     end
 
@@ -2033,7 +2106,11 @@ local function on_frame()
         if patch_present() and pc_npc_enabled then
             local cnt = MB.peer_interact_count()
             if pc_npc_pi_last == nil then pc_npc_pi_last = cnt end
-            if cnt ~= pc_npc_pi_last then
+            if cnt < pc_npc_pi_last then
+                -- counter went BACKWARDS: savestate load / soft reset rewound EWRAM. Re-latch
+                -- silently — treating the delta as a talk fired phantom trade_requests.
+                pc_npc_pi_last = cnt
+            elseif cnt ~= pc_npc_pi_last then
                 pc_npc_pi_last = cnt
                 if not pending_ui and not pending_trade_apply then
                     send({ event = "trade_request" }, "trade_request", true, false)
@@ -2047,7 +2124,7 @@ local function on_frame()
             local timed_out = frame_count - pending_ui.start_frame > MENU_TIMEOUT
             if st ~= nil or timed_out then
                 if pending_ui.kind == "menu" then
-                    local choice = (st == MB.ST_OK) and MB.menu_result() or 0
+                    local choice = (st == MB.ST_OK) and MB.menu_result() or (pending_ui.cancel or 0)
                     send({ event = "menu_result", token = pending_ui.token, choice = choice },
                          "menu_result", true, false)
                 else  -- "choose"
@@ -2066,12 +2143,14 @@ local function on_frame()
             local p = pending_trade_apply
             local function fallback(why)
                 console.log("[SLink-FRLGE]   ↳ trade: " .. why .. " -> silent swap fallback")
-                MB.set_party_mon(p.slot, p.blob, false); emit_trade_done(p.slot, p.old_key); pending_trade_apply = nil
+                relocate_trade_slot(p)
+                MB.set_party_mon(p.slot, p.blob, false); emit_trade_done(p.slot, p.old_key, p.token); pending_trade_apply = nil
             end
             if p.phase == "pending" then
                 if not patch_present() then
                     fallback("no patch")
                 elseif memory.read_u8(0x03000F9C) == 0 and not pending_ui then   -- field clear (no script/menu)
+                    relocate_trade_slot(p)                                       -- party may have been reordered
                     local sseq = MB.set_enemy_party({ p.blob })                  -- stage the partner mon
                     if sseq then
                         p.phase = "stage"; p.seq = sseq; p.start_frame = frame_count
@@ -2100,7 +2179,7 @@ local function on_frame()
                 local st = MB.poll(p.seq)
                 if st == MB.ST_OK then
                     console.log("[SLink-FRLGE]   ↳ trade: native scene complete")
-                    emit_trade_done(p.slot, p.old_key); pending_trade_apply = nil   -- (maybe evolved) report new mon
+                    emit_trade_done(p.slot, p.old_key, p.token); pending_trade_apply = nil   -- (maybe evolved) report new mon
                 elseif st == MB.ST_FAIL then
                     -- The native scene reported failure. It may or may not have ALREADY swapped the slot.
                     -- A silent OP_SET_PARTY_MON on top of a scene that DID swap is a double-write (corrupted
@@ -2113,13 +2192,13 @@ local function on_frame()
                         fallback("scene failed before swap")
                     else
                         console.log("[SLink-FRLGE]   ↳ trade: scene FAIL after swap — reconciling from slot (no overwrite)")
-                        emit_trade_done(p.slot, p.old_key); pending_trade_apply = nil
+                        emit_trade_done(p.slot, p.old_key, p.token); pending_trade_apply = nil
                     end
                 elseif frame_count - p.start_frame > TRADE_SCENE_BACKSTOP then
                     -- Patch ack lost (the scene almost certainly completed the swap natively). Do NOT
                     -- silent-swap — just reconcile from whatever is in the slot so the party diff un-freezes.
                     console.log("[SLink-FRLGE]   ↳ trade: scene ack lost — reconciling from slot (no overwrite)")
-                    emit_trade_done(p.slot, p.old_key); pending_trade_apply = nil
+                    emit_trade_done(p.slot, p.old_key, p.token); pending_trade_apply = nil
                 end
             end
         end

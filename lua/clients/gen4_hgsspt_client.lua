@@ -167,6 +167,7 @@ local function parse_command_list(raw)
         local g     = tonumber(obj:match('"g"%s*:%s*(%d+)'))
         local b     = tonumber(obj:match('"b"%s*:%s*(%d+)'))
         local frames = tonumber(obj:match('"frames"%s*:%s*(%d+)'))
+        local fb    = obj:match('"fb"%s*:%s*"([^"]*)"')   -- msgbox fallback style (prompt/hud)
         local area_id = obj:match('"area_id"%s*:%s*"([^"]*)"')
         local areas_arr = nil
         local areas_raw = obj:match('"areas"%s*:%s*(%b[])')
@@ -176,7 +177,7 @@ local function parse_command_list(raw)
         end
         if cmd then
             cmds[#cmds+1] = {cmd=cmd, key=key, message=msg,
-                             text=text, r=r, g=g, b=b, frames=frames,
+                             text=text, fb=fb, r=r, g=g, b=b, frames=frames,
                              area_id=area_id, areas=areas_arr}
         end
     end
@@ -187,8 +188,9 @@ end
 -- NDS screen: 256 × 192. HUD appears at bottom of the lower screen (BizHawk layout).
 HUD.init({screen_w = 256, screen_h = 192, hud_x = 3, hud_y = 180, hud_right = 253,
           prompt_y = 53, prompt_h = 14, gameover_y = 70})
-local hud_show   = HUD.show
-local hud_render = HUD.render
+local hud_show    = HUD.show
+local hud_render  = HUD.render
+local prompt_show = HUD.prompt
 
 -- ── Game-over persistent overlay ─────────────────────────────────────────────
 local game_over_flag = false
@@ -298,6 +300,15 @@ local function dispatch_commands(cmds)
             console.log("[SLink]   ↳ unresolve_area: " .. c.area_id)
         elseif c.cmd == "hud_show" and c.text then
             hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+        elseif (c.cmd == "msgbox" or c.cmd == "gui_prompt") and c.text then
+            -- Gen 3's native message-box / prompt commands (link-formed / dead-zone / shiny
+            -- notices are sent as msgbox to every gen) — render via the Lua overlay here.
+            if c.fb == "hud" then
+                hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+            else
+                prompt_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+            end
+            console.log("[SLink]   ↳ " .. c.cmd .. ": " .. c.text)
         elseif c.cmd == "game_over" then
             game_over_flag = true
             if M.playSE then M.playSE(M.SE_GAME_OVER) end

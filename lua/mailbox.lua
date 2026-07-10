@@ -113,6 +113,10 @@ end
 -- prepends the FR foreground-color control code `0xFC 0x01 <id>` (battle text palette: 1=red, 4=gold,
 -- 5=green, 7=blue, 10=white) — used to theme the in-battle notification to the event (HUD conventions).
 function MB.write_message(text, color)
+    -- TEXT_BUF is 256 bytes (BLOB_BUF starts at +0x100): truncate rather than spill encoded
+    -- text into the staged trade/rival mon blobs. Room = 256 - terminator - color prefix.
+    local limit = 255 - (color and 3 or 0)
+    if #text > limit then text = text:sub(1, limit) end
     local bytes = MB.fr_encode(text)
     local off = MB.TEXT_BUF
     if color then
@@ -148,6 +152,12 @@ function MB.show_choices(options, prompt)
     if not MB.present() then return nil end
     local n = #options
     if n == 0 or n > 8 then return nil end
+    -- MENU_BUF is 112 bytes (BattleNotif at +0x70, the faint-event ring right after): refuse
+    -- an over-long option list rather than corrupt those — a mangled event ring can decode as
+    -- a phantom EV_PLAYER_FAINT and force-faint the partner's linked mon.
+    local total = 1
+    for i = 1, n do total = total + #options[i] + 1 end   -- fr_encode is 1 byte/char + 0xFF
+    if total > 112 then return nil end
     memory.write_u8(MB.MENU_BUF, n)
     local off = MB.MENU_BUF + 1
     for i = 1, n do
@@ -356,18 +366,46 @@ function MB.present()
     return memory.read_u16_le(MB.BASE + O_ABI) == MB.ABI
 end
 
--- Post a command. `args` is an optional array of byte values written to args[].
--- Returns the seq to poll on. Non-blocking: the injected hook consumes it next frame.
-function MB.send(opcode, args)
+-- The mailbox is SINGLE-SLOT: the injected hook consumes one opcode per frame, clearing
+-- O_OPCODE. Two sends in the same frame would clobber each other (the server routinely
+-- batches e.g. play_sound + msgbox in one TCP response), so a send while the slot is still
+-- occupied queues in a Lua-side outbox that MB.pump() (called once per frame by the client)
+-- drains as the slot frees. ponytail: payload BUFFERS (TEXT_BUF/MENU_BUF/BLOB_BUF) are still
+-- staged at call time, so two QUEUED ops targeting the same buffer would collide — the
+-- client's one-native-box-per-dispatch guard is what keeps that from happening today.
+local outbox = {}
+local function slot_free()
+    return memory.read_u16_le(MB.BASE + O_OPCODE) == 0
+end
+local function post(opcode, args, s)
     if args then
         for i = 1, #args do memory.write_u8(MB.BASE + O_ARGS + (i - 1), args[i]) end
     end
-    seq = (seq + 1) % 0x10000
     memory.write_u16_le(MB.BASE + O_STATUS, MB.ST_BUSY)
-    memory.write_u16_le(MB.BASE + O_ACKSEQ, (seq + 0xFFFF) % 0x10000)  -- != seq yet
-    memory.write_u16_le(MB.BASE + O_SEQ, seq)
+    memory.write_u16_le(MB.BASE + O_ACKSEQ, (s + 0xFFFF) % 0x10000)  -- != seq yet
+    memory.write_u16_le(MB.BASE + O_SEQ, s)
     memory.write_u16_le(MB.BASE + O_OPCODE, opcode)   -- write opcode LAST (triggers dispatch)
+end
+
+-- Post a command. `args` is an optional array of byte values written to args[].
+-- Returns the seq to poll on. Non-blocking: the injected hook consumes it next frame
+-- (or, if the slot is occupied, the op is queued and posted by a later MB.pump()).
+function MB.send(opcode, args)
+    seq = (seq + 1) % 0x10000
+    if #outbox > 0 or not slot_free() then
+        outbox[#outbox + 1] = {op = opcode, args = args, seq = seq}
+        return seq
+    end
+    post(opcode, args, seq)
     return seq
+end
+
+-- Drain one queued op per frame once the hook has consumed the previous one. Call once per
+-- frame from the client's on_frame.
+function MB.pump()
+    if #outbox == 0 or not slot_free() then return end
+    local e = table.remove(outbox, 1)
+    post(e.op, e.args, e.seq)
 end
 
 -- Poll a previously sent command. Returns status, reason once the hook has acked the

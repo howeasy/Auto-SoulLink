@@ -318,7 +318,7 @@ class SoulLinkState:
                         self.party_keys[partner].discard(partner_mon.key)
                         self.queued_commands[partner].append({
                             "cmd": "hud_show",
-                            "text": "[!] " + (partner_mon.nickname or self.adapter.species_name(partner_mon.species) or partner_mon.key[:8]) + ": re-boxed",
+                            "text": "[!] " + self._mon_label(partner_mon) + ": re-boxed",
                             "r": 255, "g": 200, "b": 60
                         })
                         log.info(f"[{partner}] re-boxing {partner_mon.key[:8]} — partner's retrieve failed")
@@ -371,18 +371,23 @@ class SoulLinkState:
         if not self.overworld_presence:
             return
         partner = _partner(player_id)
-        cmd = {
-            "cmd": "ghost_pos",
-            "mg": int(msg.get("mg", 0)), "mn": int(msg.get("mn", 0)),
-            "x": int(msg.get("x", 0)),   "y": int(msg.get("y", 0)),   # TILE coords
-            "f": int(msg.get("f", 1)),   "gfx": int(msg.get("gfx", 0)),
-            "mv": int(msg.get("mv", 0)), "run": int(msg.get("run", 0)),
-            "an": int(msg.get("an", 0)),   # partner's live animNum (exact animation)
-            # partner avatar (so they render as THEMSELVES): live sprite images/anims ROM ptrs +
-            # true 16-colour palette (64 hex). Pass-through only; identical across the same RR build.
-            "imgs": int(msg.get("imgs", 0)), "anim": int(msg.get("anim", 0)),
-            "pcol": str(msg.get("pcol", "") or "")[:64],
-        }
+        try:
+            cmd = {
+                "cmd": "ghost_pos",
+                "mg": int(msg.get("mg", 0)), "mn": int(msg.get("mn", 0)),
+                "x": int(msg.get("x", 0)),   "y": int(msg.get("y", 0)),   # TILE coords
+                "f": int(msg.get("f", 1)),   "gfx": int(msg.get("gfx", 0)),
+                "mv": int(msg.get("mv", 0)), "run": int(msg.get("run", 0)),
+                "an": int(msg.get("an", 0)),   # partner's live animNum (exact animation)
+                # partner avatar (so they render as THEMSELVES): live sprite images/anims ROM ptrs +
+                # true 16-colour palette (64 hex). Pass-through only; identical across the same RR build.
+                "imgs": int(msg.get("imgs", 0)), "anim": int(msg.get("anim", 0)),
+                "pcol": str(msg.get("pcol", "") or "")[:64],
+            }
+        except (TypeError, ValueError):
+            # A nil RAM read on the client can emit a null/garbage field at ~20 Hz; dropping the
+            # sample keeps the connection alive (an uncaught error here tears down the TCP loop).
+            return
         q = self.queued_commands[partner]
         # coalesce: at most one ghost_pos is ever queued (latest wins), so this ~20 Hz relay can't grow
         # the queue. Fast path replaces it in place when it's already last; otherwise drop any stale
@@ -417,7 +422,9 @@ class SoulLinkState:
         return mon.nickname or self.adapter.species_name(mon.species) or mon.key[:8]
 
     def _handle_status(self, player_id: str, msg: dict):
-        """Cache a player's in-game progress (badge count) for the talk-to-partner status helper."""
+        """Cache a player's in-game progress (badge count). NOTE: nothing consumes this yet —
+        the overlays read SLinkServer's separate hello/tick badge bitmask; this 0-8 count is
+        parked here for a future talk-to-partner progress display."""
         try:
             b = int(msg.get("badges", 0))
         except (TypeError, ValueError):
@@ -462,6 +469,15 @@ class SoulLinkState:
             return
         pt["age"] = pt.get("age", 0) + 1
         if pt["age"] > self.TRADE_WATCHDOG_EVENTS:
+            if pt.get("phase") == "applying":
+                # apply_trade was already dispatched: the clients WILL swap RAM (queued commands
+                # survive reconnects), so silently freeing the slot here would leave the server's
+                # keys pointing at mons the players no longer hold. Commit the swap instead,
+                # falling back to the known pre-trade keys for any side that never reported
+                # (no trade-evolution assumed for that side).
+                log.warning(f"trade watchdog: force-completing stuck 'applying' trade (token {pt.get('token')})")
+                self._commit_trade(pt)
+                return
             log.info(f"trade watchdog: abandoning stuck trade (phase {pt.get('phase')}, token {pt.get('token')})")
             self.pending_trade = None
 
@@ -591,12 +607,29 @@ class SoulLinkState:
         _handle_trade_done once BOTH sides report their post-trade mon, so a half-completed trade
         (one side's scene fails / the player waits forever / disconnects) can NEVER leave the link
         half-swapped with mismatched keys (the old 'pairs break if you wait too long' bug). The
-        watchdog (_tick_pending_trade) frees the slot if a side never reports — and because nothing
-        was mutated, the link is untouched on abort."""
+        watchdog (_tick_pending_trade) force-completes an 'applying' trade that never fully
+        reports (the clients WILL swap once the queued commands run)."""
+        # Re-validate: the offer was vetted at mon_chosen, but the players free-roam while the
+        # partner deliberates — the offered pair may have fainted/died or been boxed since.
+        entry = pt["link"]
+        if (entry.status != LinkStatus.ALIVE
+                or pt["a_key"] not in self.party_keys["a"]
+                or pt["b_key"] not in self.party_keys["b"]):
+            self.pending_trade = None
+            for pid in ("a", "b"):
+                self.queued_commands[pid].append({
+                    "cmd": "msgbox", "text": "Trade canceled - a POKeMON is\nno longer available.",
+                    "fb": "prompt"})
+            log.info(f"trade aborted at confirm: pair no longer tradable (token {pt['token']})")
+            return
+        # old_key lets the client re-locate the mon if the party was reordered after mon_chosen
+        # (the slot index is a snapshot); token lets trade_done reports be matched to THIS trade.
         self.queued_commands["a"].append({
-            "cmd": "apply_trade", "slot": pt["a_slot"], "blob_hex": pt["b_blob_hex"]})
+            "cmd": "apply_trade", "slot": pt["a_slot"], "blob_hex": pt["b_blob_hex"],
+            "old_key": pt["a_key"], "token": pt["token"]})
         self.queued_commands["b"].append({
-            "cmd": "apply_trade", "slot": pt["b_slot"], "blob_hex": pt["a_blob_hex"]})
+            "cmd": "apply_trade", "slot": pt["b_slot"], "blob_hex": pt["a_blob_hex"],
+            "old_key": pt["b_key"], "token": pt["token"]})
         pt["phase"] = "applying"
         pt["done"] = {"a": False, "b": False}
         pt["new"]  = {"a": None, "b": None}   # (new_key, new_species) reported by each client post-scene
@@ -610,6 +643,11 @@ class SoulLinkState:
         pt = self.pending_trade
         if not pt or pt.get("phase") != "applying":
             return
+        # A stale report from an earlier aborted trade must not count toward this one. Clients
+        # that predate the token echo omit the field — accept those (empty token) for compat.
+        tok = str(msg.get("token", "") or "")
+        if tok and tok != pt["token"]:
+            return
         pt["age"] = 0                                   # progress — reset the abandonment watchdog
         new_key = str(msg.get("new_key", "") or "")
         try:
@@ -620,8 +658,18 @@ class SoulLinkState:
         pt.setdefault("done", {"a": False, "b": False})[player_id] = True
         if not all(pt["done"].values()):
             return                                      # wait for the other side before touching the link
+        self._commit_trade(pt)
 
-        # ── BOTH sides reported → apply the swap atomically ──────────────────────
+    def _commit_trade(self, pt: dict):
+        """Apply the swap atomically. Called with both sides reported (normal path) or by the
+        watchdog force-completing a stuck 'applying' trade (missing sides fall back to the
+        pre-trade key of the mon that side RECEIVED — correct unless it trade-evolved)."""
+        pt.setdefault("new", {"a": None, "b": None})
+        if not (pt["new"].get("a") or [""])[0]:
+            pt["new"]["a"] = (pt["b_key"], 0)           # A received B's old mon
+        if not (pt["new"].get("b") or [""])[0]:
+            pt["new"]["b"] = (pt["a_key"], 0)
+        # ── apply the swap atomically ─────────────────────────────────────────────
         # The mon DATA moves to the other player (entry.a now tracks the mon A holds, entry.b the mon B
         # holds); then each half's key/species is patched from that side's post-scene readback (captures
         # trade-evolution). _key_index + party_keys are rebuilt from the two OLD keys to the two NEW keys.
@@ -1498,8 +1546,8 @@ class SoulLinkState:
             log.debug(f"[PENDING] {area_id}  removed  (link formed)")
             log.info(f"Linked {a_mon.key} ↔ {b_mon.key} in {area_id}")
             # Notify both players with success sound + link info HUD
-            a_label = a_mon.nickname or self.adapter.species_name(a_mon.species) or a_mon.key[:8]
-            b_label = b_mon.nickname or self.adapter.species_name(b_mon.species) or b_mon.key[:8]
+            a_label = self._mon_label(a_mon)
+            b_label = self._mon_label(b_mon)
             # "msgbox" = a momentous event: the client shows it in the native in-game
             # message box when the companion patch is present + overworld, else falls back
             # to the HUD overlay (so unpatched clients are unaffected). Text is kept clean
@@ -2014,7 +2062,7 @@ class SoulLinkState:
                 log.warning(f"[{player_id}] box_to_party blocked: {key[:8]} is quarantined (pending in {area_id})")
                 self.queued_commands[player_id].append({
                     "cmd": "hud_show",
-                    "text": "[!] " + (cap.nickname or self.adapter.species_name(cap.species) or key[:8]) + ": unlinked",
+                    "text": "[!] " + self._mon_label(cap) + ": unlinked",
                     "r": 255, "g": 200, "b": 60
                 })
                 return
@@ -2136,11 +2184,14 @@ class SoulLinkState:
         """
         if self.rebuild_pending.get(player_id):
             return
-        # A trade owns party bookkeeping for its whole lifetime + a short settle window after. The swap
-        # is party↔party (both halves stay in party), so the reconciler can only produce false positives
-        # here — most damagingly a spurious party_mon ("Unbox") to the partner when a settling tick makes
-        # the freshly-received mon look "ghost-boxed". Skip entirely until the window drains.
-        if self.pending_trade is not None:
+        # A trade owns party bookkeeping while the swap is in flight + a short settle window after.
+        # The swap is party↔party (both halves stay in party), so the reconciler can only produce
+        # false positives here — most damagingly a spurious party_mon ("Unbox") to the partner when
+        # a settling tick makes the freshly-received mon look "ghost-boxed". Only the 'applying'
+        # phase mutates RAM, so only it suppresses reconciliation: a trade wedged at the menu /
+        # confirm stage (player walked away) must not suspend drift enforcement for both runs
+        # until the watchdog fires.
+        if self.pending_trade is not None and self.pending_trade.get("phase") == "applying":
             return
         if self._trade_settle_ticks.get(player_id, 0) > 0:
             self._trade_settle_ticks[player_id] -= 1
@@ -2726,10 +2777,20 @@ class SoulLinkState:
         """Readback ack from the Lua write — log mismatch loudly so the
         dashboard banner can surface a CFRU/RR drift.
 
-        msg = {trainer_id: int, species_ids: list[int]}
+        msg = {trainer_id: int, species_ids: list[int], error?: str}
         """
         trainer_id = msg.get("trainer_id", 0)
         species = msg.get("species_ids") or []
+        err = str(msg.get("error", "") or "")
+        if err:
+            # The client couldn't perform the swap (patch_required / patch_failed /
+            # patch_timeout). Without this the player fights the canned rival team
+            # all run and never learns why.
+            log.warning(f"[{player_id}] rival team swap FAILED: {err}")
+            self.queued_commands[player_id].append({
+                "cmd": "hud_show", "text": f"Rival Swap failed: {err}",
+                "r": 255, "g": 80, "b": 80, "frames": 600})
+            return
         if not isinstance(species, list):
             log.warning(f"[{player_id}] rival_team_replaced: species_ids not a list")
             return

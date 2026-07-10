@@ -83,3 +83,19 @@ def test_md5_constants_match_readme():
     # And both look like md5 hex.
     assert re.fullmatch(r"[0-9a-f]{32}", patcher.BASE_ROM_MD5)
     assert re.fullmatch(r"[0-9a-f]{32}", patcher.PATCHED_ROM_MD5)
+
+
+def test_md5_constants_match_build_tools():
+    """The base-ROM md5 is also hardcoded in patch/tools/build.py (RR_MD5) and
+    make_battle_calc_patch.py (EXPECT_BASE_RR_MD5) — the historically-stale copies
+    the README<->patcher.py test doesn't cover. Pin all four to one value."""
+    tools = os.path.normpath(os.path.join(
+        os.path.dirname(patcher.__file__), "..", "patch", "tools"))
+    build_src = open(os.path.join(tools, "build.py"), encoding="utf-8").read()
+    calc_src = open(os.path.join(tools, "make_battle_calc_patch.py"), encoding="utf-8").read()
+    m = re.search(r'RR_MD5\s*=\s*"([0-9a-f]{32})"', build_src)
+    assert m and m.group(1) == patcher.BASE_ROM_MD5, \
+        "build.py RR_MD5 drifted from server/patcher.py BASE_ROM_MD5"
+    m = re.search(r'EXPECT_BASE_RR_MD5\s*=\s*"([0-9a-f]{32})"', calc_src)
+    assert m and m.group(1) == patcher.BASE_ROM_MD5, \
+        "make_battle_calc_patch.py EXPECT_BASE_RR_MD5 drifted from server/patcher.py BASE_ROM_MD5"

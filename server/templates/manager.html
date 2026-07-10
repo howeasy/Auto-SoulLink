@@ -310,6 +310,11 @@
               PC NPC Off
             </span>
           </template>
+          <!-- Experimental (softlocked in real play once). No create-form checkbox, but the flag
+               is still accepted via API / old registry entries — keep it visible when active. -->
+          <template x-if="current?.native_battle_control">
+            <span class="mgr-badge mgr-badge-lock">&#9888; Native Battle</span>
+          </template>
         </div>
 
         <template x-if="current?.last_event">

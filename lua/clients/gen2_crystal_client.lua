@@ -135,6 +135,7 @@ local function parse_command_list(raw)
         local g       = tonumber(obj:match('"g"%s*:%s*(%d+)'))
         local b       = tonumber(obj:match('"b"%s*:%s*(%d+)'))
         local frames  = tonumber(obj:match('"frames"%s*:%s*(%d+)'))
+        local fb      = obj:match('"fb"%s*:%s*"([^"]*)"')   -- msgbox fallback style (prompt/hud)
         local area_id = obj:match('"area_id"%s*:%s*"([^"]*)"')
         local areas   = nil
         local areas_raw = obj:match('"areas"%s*:%s*(%b[])')
@@ -146,7 +147,7 @@ local function parse_command_list(raw)
         end
         if cmd then
             cmds[#cmds + 1] = {
-                cmd = cmd, key = key, text = text,
+                cmd = cmd, key = key, text = text, fb = fb,
                 r = r, g = g, b = b, frames = frames,
                 area_id = area_id, areas = areas,
             }
@@ -233,6 +234,15 @@ local function dispatch_commands(cmds)
         elseif c.cmd == "gui_prompt" and c.text then
             prompt_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
             console.log("[SLink-Crystal]   ↳ gui_prompt: " .. c.text)
+        elseif c.cmd == "msgbox" and c.text then
+            -- Gen 3's native message-box command (link-formed / dead-zone / shiny notices are
+            -- sent as msgbox to every gen) — render via the Lua overlay here.
+            if c.fb == "hud" then
+                hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+            else
+                prompt_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
+            end
+            console.log("[SLink-Crystal]   ↳ msgbox: " .. c.text)
         elseif c.cmd == "play_sound" and c.sound then
             -- Gen 3 emits m4a SE_* IDs (95=SHINY, 26=FAILURE, 25=SUCCESS, 22=BOO).
             -- Translated to semantic event names; profile sfx_ids resolves to a

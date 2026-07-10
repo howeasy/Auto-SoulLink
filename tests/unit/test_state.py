@@ -362,6 +362,101 @@ def test_trade_watchdog_frees_abandoned_slot(tmp_path, monkeypatch):
     assert state.links[0].a.key == "A:1", "link untouched by an abandoned trade"
 
 
+def test_trade_watchdog_force_completes_applying(tmp_path, monkeypatch):
+    """Once apply_trade is DISPATCHED, the clients will swap RAM (queued commands survive
+    reconnects), so the watchdog must COMMIT a stuck 'applying' trade — silently freeing the
+    slot left the server's keys pointing at mons the players no longer hold."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = _with_trade_blobs(make_state_with_link())
+    token = _offer_and_pick(state, slot=0)
+    state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})   # accept
+    # A reports; B's scene hangs forever.
+    state.handle_event("a", {"event": "trade_done", "slot": 0, "new_key": "B:2", "new_species": 5})
+    for _ in range(state.TRADE_WATCHDOG_EVENTS + 5):
+        state.handle_event("a", {"event": "tick"})
+    assert state.pending_trade is None
+    e = state.links[0]
+    assert e.a.key == "B:2" and e.b.key == "A:1", \
+        "watchdog commits the swap (B falls back to the pre-trade key of the mon it received)"
+    assert "B:2" in state.party_keys["a"] and "A:1" in state.party_keys["b"]
+
+
+def test_execute_trade_revalidates_offer(tmp_path, monkeypatch):
+    """The players free-roam while the partner deliberates: if the offered pair died or a half
+    left the party since mon_chosen, the confirm must ABORT — not dispatch a stale pre-death
+    blob (resurrecting a dead mon) and re-add DEAD keys to party_keys."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    # Pair fainted during 'confirming'.
+    state = _with_trade_blobs(make_state_with_link())
+    token = _offer_and_pick(state, slot=0)
+    state.links[0].status = LinkStatus.DEAD
+    cmds_b = state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})
+    assert state.pending_trade is None
+    assert not has_cmd(cmds_b, "apply_trade")
+    assert any("no longer available" in c.get("text", "") for c in cmds_b if c.get("cmd") == "msgbox")
+    # A half was boxed during 'confirming'.
+    state2 = _with_trade_blobs(make_state_with_link())
+    token2 = _offer_and_pick(state2, slot=0)
+    state2.party_keys["a"].discard("A:1")
+    cmds_b2 = state2.handle_event("b", {"event": "menu_result", "token": token2, "choice": 1})
+    assert state2.pending_trade is None and not has_cmd(cmds_b2, "apply_trade")
+
+
+def test_stale_trade_done_token_is_dropped(tmp_path, monkeypatch):
+    """A trade_done carrying an OLD trade's token must not count toward the current trade
+    (a replayed report from an aborted trade could otherwise commit wrong keys)."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = _with_trade_blobs(make_state_with_link())
+    token = _offer_and_pick(state, slot=0)
+    state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})   # accept
+    state.handle_event("a", {"event": "trade_done", "slot": 0, "token": "t999",     # stale token
+                             "new_key": "B:2", "new_species": 5})
+    assert state.pending_trade is not None and not state.pending_trade["done"]["a"]
+    # The matching token (and, for old clients, a missing one) IS counted.
+    state.handle_event("a", {"event": "trade_done", "slot": 0, "token": token,
+                             "new_key": "B:2", "new_species": 5})
+    assert state.pending_trade["done"]["a"]
+
+
+def test_reconcile_suppressed_only_while_applying(tmp_path, monkeypatch):
+    """A trade wedged at the MENU stage (player walked away without answering) must not
+    suspend party/box drift enforcement for both runs until the watchdog fires; only the
+    'applying' phase (RAM actually mutating) suppresses the reconciler."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+
+    def fresh_trigger_state():   # same reconcile trigger as the settle-window test above
+        st = make_state_with_link()
+        st.party_keys["a"].discard("A:1")
+        st.party_keys["b"].discard("B:2")
+        return st
+
+    wedged = fresh_trigger_state()
+    wedged.pending_trade = {"phase": "menu", "initiator": "a", "token": "t1", "age": 0}
+    wedged.handle_event("a", {"event": "tick", "party": [{"key": "A:1"}]})
+    assert has_cmd(wedged.queued_commands["b"], "party_mon", "B:2"), \
+        "a menu-stage trade must not suppress drift reconciliation"
+
+    applying = fresh_trigger_state()
+    applying.pending_trade = {"phase": "applying", "initiator": "a", "token": "t1", "age": 0}
+    applying.handle_event("a", {"event": "tick", "party": [{"key": "A:1"}]})
+    assert not has_cmd(applying.queued_commands["b"], "party_mon"), \
+        "the applying phase (RAM mutating) still suppresses the reconciler"
+
+
+def test_malformed_ghost_pos_is_dropped(tmp_path, monkeypatch):
+    """A null/garbage field in a ghost_pos (nil RAM read on the client) must be dropped, not
+    raise out of handle_event — an uncaught error tears down the TCP loop at ~20 Hz."""
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = make_state_with_link()
+    state.overworld_presence = True
+    state.handle_event("a", {"event": "ghost_pos", "mg": 1, "mn": 1,
+                             "x": None, "y": 16, "f": 2})            # x: null
+    state.handle_event("a", {"event": "ghost_pos", "mg": 1, "mn": 1,
+                             "x": "garbage", "y": 16, "f": 2})       # non-numeric
+    assert not _ghost_cmds(state.handle_event("b", {"event": "tick"})), \
+        "malformed samples are dropped, not relayed"
+
+
 def test_post_trade_settle_suppresses_reconcile_unbox(tmp_path, monkeypatch):
     """Regression: after a trade completes, a still-settling party tick must NOT make the drift
     reconciler queue a spurious party_mon ('Unbox') to the partner — the user's residual 'Unbox HUD'

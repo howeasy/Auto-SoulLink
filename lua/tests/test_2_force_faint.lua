@@ -1,4 +1,4 @@
-﻿--[[
+--[[
   lua/test_2_force_faint.lua — FORCE FAINT + WHITEOUT VALIDATION TEST
 
   Tests that HP=0 writes trigger correct in-game faint behaviour, including

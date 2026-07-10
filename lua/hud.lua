@@ -66,7 +66,12 @@ local GLYPH_MAP = {
 
 -- Fold known glyphs to ASCII, then drop any remaining bytes >= 0x80.
 local function sanitize(s)
-    if type(s) ~= "string" then return s == nil and s or tostring(s) end  -- never hand gui.drawText a non-string
+    -- never hand gui.drawText a non-string; nil passes through unchanged (the and/or form
+    -- returned the literal string "nil" — classic falsy-branch footgun)
+    if type(s) ~= "string" then
+        if s == nil then return nil end
+        return tostring(s)
+    end
     if s == "" then return s end
     for utf8_seq, ascii in pairs(GLYPH_MAP) do
         s = s:gsub(utf8_seq, ascii)

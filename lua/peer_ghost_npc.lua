@@ -224,9 +224,12 @@ function PG.on_frame()
     console.log("[peer-ghost] ghost spawned (engine oeId=" .. MB.ghost_oe() .. ")")
   end
 
-  -- surface talk-to-ghost interactions (patch bumps pi_count + shows a dismissable box)
+  -- surface talk-to-ghost interactions (patch bumps pi_count + shows a dismissable box).
+  -- A BACKWARDS counter means a savestate load / soft reset rewound EWRAM: re-latch
+  -- silently instead of firing a phantom interact.
   local cnt = MB.peer_interact_count()
-  if cnt ~= S.pi_last then S.interact_pending = true; S.pi_last = cnt end
+  if cnt < S.pi_last then S.pi_last = cnt
+  elseif cnt ~= S.pi_last then S.interact_pending = true; S.pi_last = cnt end
 end
 
 function PG.debug()

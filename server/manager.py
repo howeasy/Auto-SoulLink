@@ -458,6 +458,10 @@ def _render_cards(runs: list[dict], host: str) -> str:
             lock_badges += '<span class="lock-badge">Calc Off</span>'
         if not run.get("pc_trade_npc", True):
             lock_badges += '<span class="lock-badge">PC NPC Off</span>'
+        if run.get("native_battle_control"):
+            # Experimental path (softlocked in real play once); the UI checkbox was removed but
+            # the flag is still accepted via API / old registry entries — it must stay VISIBLE.
+            lock_badges += '<span class="lock-badge">Native Battle &#9888;</span>'
 
         # Read game/rom_type from the run's links.json
         game_badge = ""

@@ -546,6 +546,8 @@ static void show_choices_entry(void)
     s32 sw = 0;
     for (u8 i = 0; i < count; i++) { s32 t = GetStringWidth(FONT_NORMAL, opts[i], 0); if (t > sw) sw = t; }
     u8 width = (u8)((sw + 9) / 8 + 1);
+    if (width > 27) width = 27;                /* clamp: (28 - width) underflows u8 for wide labels
+                                                  -> off-map window rect -> BG corruption */
     u8 left = 1; if (left + width > 28) left = (u8)(28 - width);
     u8 win = CreateWindowFromRect(left, 1, width, sMcHeight[count]);
     SetStandardWindowBorderStyle(win, 0);
@@ -1299,6 +1301,7 @@ void slink_hook(void)
 
     case OP_FORCE_FAINT: {
         u8 b = MB->args[0];
+        if (b > 3) { ack(ST_FAIL, 2); return; }   /* bound battler (no OOB EWRAM write) */
         R16(gBattleMons + b * BATTLE_MON_SIZE + 0x28) = 0;   /* hp = 0 */
         break;
     }
@@ -1386,6 +1389,12 @@ void slink_hook(void)
 
     case OP_SHOW_MESSAGE: {       /* text (FR-encoded, 0xFF-term) already in SLINK_TEXT_BUF */
         if (R8(sScriptContext2Enabled)) { MB->result[0] = 0; break; }  /* a box/script is already up */
+        if (!on_field()) { MB->result[0] = 0; break; }  /* same guard as its SHOW_MENU/SHOW_CHOICES
+                                                           siblings: a non-field CB2 with the flag
+                                                           clear (e.g. evolution scene) would stage
+                                                           the script under the wrong CB2 and still
+                                                           ack "shown" — the client then skips its
+                                                           Lua fallback and the message is lost */
         run_sign_msgbox();        /* DISMISSABLE native dialogue (not bare ShowFieldMessage) */
         MB->result[0] = 1;
         break;
@@ -1457,6 +1466,7 @@ void slink_hook(void)
      * they fall through to default: ack(ST_FAIL, 1), the same as any unknown/older opcode. */
 
     case OP_ARM_PEER_INTERACT:    /* talk-to-ghost: args [0]=ghost oeId [1]=armed (1=on) */
+        if (MB->args[0] >= 16) { ack(ST_FAIL, 2); return; }  /* bound: check_peer_interact indexes gObjectEvents[pi_oe] */
         SS->pi_oe = MB->args[0];
         SS->pi_armed = MB->args[1];
         if (MB->args[1]) SS->pi_count = 0;
@@ -1512,6 +1522,7 @@ void slink_hook(void)
                                        FR-encoded in SLINK_TEXT_BUF. ARM only: drive_battle_notif spawns a
                                        RunTasks draw task (slink_notif_task) that renders it each frame. */
         if (!(R16(gBattleMons + 0x2C) > 0 && R8(gBattleOutcome) == 0)) { ack(ST_FAIL, 1); return; }  /* not in battle */
+        if (MB->args[2] > 0x1F) { ack(ST_FAIL, 2); return; }  /* bound: BattlePutTextOnWindow indexes the battle window template array */
         BN->frames  = (u16)(MB->args[0] | (MB->args[1] << 8));
         if (BN->frames == 0) BN->frames = 240;
         BN->win     = MB->args[2] ? MB->args[2] : 0x0D;   /* target window (default 0xD = the calc's move-info area) */
@@ -1528,6 +1539,13 @@ void slink_hook(void)
         u8 box = MB->args[0], pos = MB->args[1], ps = MB->args[2];
         if (box >= TOTAL_BOXES_COUNT || pos >= IN_BOX_COUNT || ps > 5) { ack(ST_FAIL, 2); return; }
         u32 comp = R32(sPokemonBoxPtrs + (u32)box * 4) + (u32)pos * COMPRESSED_MON_SIZE;
+        {   /* source slot must actually hold a mon: expanding a zeroed slot creates a
+               species-0 garbage party member and bumps the count to cover it. Freed slots
+               are zero-filled (below), so an all-zero scan is exact. */
+            u32 nz = 0;
+            for (u32 i = 0; i < COMPRESSED_MON_SIZE; i++) nz |= R8(comp + i);
+            if (!nz) { ack(ST_FAIL, 3); return; }
+        }
         CompressedMonToMon((void *)comp, (void *)(gPlayerParty + (u32)ps * MON_SIZE));
         if (R8(gPlayerPartyCount) <= ps) R8(gPlayerPartyCount) = (u8)(ps + 1);   /* extend count to cover the new slot */
         for (u32 i = 0; i < COMPRESSED_MON_SIZE; i++) R8(comp + i) = 0;          /* free the box slot (the mon moved) */
@@ -1543,6 +1561,13 @@ void slink_hook(void)
         u8 count = R8(gPlayerPartyCount);
         if (ps >= count) { ack(ST_FAIL, 3); return; }                           /* slot must hold a real mon */
         u32 comp = R32(sPokemonBoxPtrs + (u32)box * 4) + (u32)pos * COMPRESSED_MON_SIZE;
+        {   /* destination box slot must be EMPTY: a desynced server aiming at an occupied
+               slot would silently destroy the mon stored there — permanent loss in a
+               Nuzlocke. Empty slots are zero-filled. */
+            u32 nz = 0;
+            for (u32 i = 0; i < COMPRESSED_MON_SIZE; i++) nz |= R8(comp + i);
+            if (nz) { ack(ST_FAIL, 4); return; }
+        }
         CreateCompressedMonFromBoxMon((void *)(gPlayerParty + (u32)ps * MON_SIZE), (void *)comp);
         for (u8 s = ps; (u8)(s + 1) < count; s++)                               /* shift [ps+1..] down one slot */
             real_memcpy((void *)(gPlayerParty + (u32)s * MON_SIZE),
