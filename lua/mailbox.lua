@@ -91,6 +91,13 @@ MB.TEXT_BUF = 0x0203F900    -- patch reads FR-encoded text from here for SHOW_ME
 -- single source of truth (a hand-rolled second copy here once drifted on 0xB8/0xB9).
 -- "\n" maps to the FR line-break control (0xFE) so message-box text can span two lines;
 -- unknown characters encode as space (0x00) — the encode path must never error.
+-- Self-locate: test scripts dofile() this module without the client's package.path, so
+-- seed the path from this file's own directory before requiring (require caches, so the
+-- client's later require("memory_gba") shares the same instance).
+do
+    local dir = debug.getinfo(1, "S").source:match("^@(.*[/\\])")
+    if dir then package.path = dir .. "?.lua;" .. package.path end
+end
 local FR_REV = require("memory_gba").CHARSET_REV   -- memory_gba's module scope is inert (no reads)
 function MB.fr_encode(s)
     local out = {}
