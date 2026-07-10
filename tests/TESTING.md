@@ -568,41 +568,37 @@ Run through the steps below **in order**. Each step depends on the previous.
 
 ---
 
-## Test 5 — Rival Team Swap (Radical Red only, RAM Write)
+## Test 5 — Rival Team Swap (Radical Red only, Companion Patch required)
 
-**Scripts:** `lua/tests/test_rival_team_swap_inject.lua` (single-instance isolation harness)  
-**Emulators:** **One** is enough for Phase 0. **⚠ Writes to RAM — save a BizHawk state first.** Writes only touch `gEnemyParty` (transient EWRAM), so no save corruption — but you'll lose your current battle state if you reset.
+**Scripts:** `lua/tests/test_live_enemyparty.lua` (in-battle `CREATE_MON` → enemy party + active-foe refresh) and `lua/tests/test_live_enemyparty_route.lua` (production `OP_SET_ENEMY_PARTY` routing — byte-for-byte blob faithfulness)  
+**Emulators:** **One** is enough for the isolation scripts. **⚠ Requires the PATCHED ROM** (`patch/build/slink_RR.gba`) — the companion patch is a hard requirement for Rival Team Swap; the old `writeEnemyParty` RAM-poke fallback was removed. Writes only touch `gEnemyParty` (transient EWRAM), so no save corruption.
 
-### Phase 0 — Isolation harness (no server, no partner)
+### Phase 0 — Isolation scripts (no server, no partner)
 
-Load `test_rival_team_swap_inject.lua` from the BizHawk Lua console with Radical Red running.
+Both scripts are headless one-shot runs: launch EmuHawk with the patched ROM and `--lua=<script>`, and they write an incremental log ending in `RESULT: PASS|FAIL` to `patch/build/`, then exit. Adjust the `WT` (repo root) and, for the first script, `STATE` (savestate) paths at the top of each script for your machine.
 
-| Key | Action |
-|---|---|
-| F5 | Snapshot `gPlayerParty` → write hex blobs to `lua/tests/output/last_party_snapshot.json` |
-| F6 | Inject the last F5 snapshot (or live party) into `gEnemyParty` — use in any battle |
-| F7 | Inject a hardcoded 6-mon synthetic team (Charizard L50, Blastoise L50, Venusaur L50, Pikachu L50, Snorlax L50, Mewtwo L50) |
-| F8 | Readback diff — compares `M.readEnemyParty` against the most recent injection |
+**`test_live_enemyparty.lua`** — loads an in-battle savestate (`slink_battle.State`), waits for the patch's mailbox beacon, then sends `OP_CREATE_MON` for Snorlax (143) and Diglett (50) at L40 into empty `gEnemyParty` slots with the enemy-count bump. Result file: `patch/build/enemyparty_result.txt`.
 
 **Pass criteria:**
-1. F5 in the overworld writes `last_party_snapshot.json` with one entry per occupied slot; each `blob_hex` is exactly 200 characters.
-2. F7 in a wild Rattata/Pidgey battle visibly switches the enemy's sprite/level to Charizard L50 within one frame.
-3. F8 prints `[T-RS] readback PASS (species=[6,9,3,25,143,150])` after F7.
-4. F6/F7 outside battle log `not in battle — write skipped` (no crash, no save corruption).
-5. F6/F7 in a Poké Dude tutorial / borrowed-party battle log `borrowed-party battle — write skipped`.
+1. Beacon present (`MB.present()`); a missing beacon means an unpatched ROM.
+2. Each created mon acks within 30 frames with `level == 40`, non-zero PID, and `maxhp > 0`.
+3. Snorlax `maxhp` > Diglett `maxhp` (species-specific base stats reached the enemy side).
+4. `gEnemyPartyCount` bumped to 3.
 
-**FAIL:** F7 visual swap doesn't fire → wrong `ENEMY_BASE` for the current profile. Confirm console line `profile: PARTY_BASE=0x... ENEMY_BASE=0x... CFRU_NO_ENCRYPT=true` shows on script load.  
-**FAIL:** F8 reports `readback FAIL` → CFRU_NO_ENCRYPT not true OR substruct order rotated by PID. Confirm RR ROM, not vanilla.
+**`test_live_enemyparty_route.lua`** — savestate-free (pure EWRAM memcpy, validated from a fresh boot). Mirrors exactly what `gen3_frlge_client.lua` does on `replace_rival_team` with the patch present: stages three deterministic synthetic 100-byte party-mon blobs in the patch's blob buffer, then `MB.send(OP_SET_ENEMY_PARTY, {count})`. Result file: `patch/build/enemypartyroute_result.txt`.
 
-### Phases 1-3 — End-to-end with server + partner
+**Pass criteria:**
+1. Beacon appears during boot (~frame 13).
+2. Each enemy slot reads back **byte-for-byte identical** to the staged blob (faithfulness — moves/IVs/EVs/PID/item preserved, which per-slot `CREATE_MON` cannot do).
+3. `gEnemyPartyCount` set to the staged count; the first unused slot's `maxHP` is zeroed (the CFRU scan terminator).
 
-Once Phase 0 passes, the full pipeline is testable through Test 4 (`lua/slink.lua` on both BizHawks) with `python -m server.server` running. Steps:
+### End-to-end with server + partner
 
-1. **Phase 1 — Plumbing.** Both clients connected, both with a non-empty party. Dashboard at http://localhost:8080/ shows a `<details>` panel "Rival Team Swap — partner team cache & auto-trigger" listing each player's cached blob count and species chips. Cache repopulates within ~0.5 s of any party-composition change (level up, mon swap, deposit/withdraw).
-2. **Phase 2 — Manual inject.** Click "Inject [partner]'s team into [self]'s battle" while in any battle. Rival's lead Pokémon visibly switches within ~1 frame. Lua console: `↳ replace_rival_team OK trainer=... species=[...]`.
-3. **Phase 3 — Auto-trigger.** Toggle "Auto-trigger on rival battles" ON (default). Walk into any Rival fight on either player (Oak's Lab onward — 27 IDs total spanning early/mid/late game). The rival's team auto-replaces with the partner's current party without any click. Lua console: `trainer_battle_start trainer_id=... is_rival=true` then `replace_rival_team OK ...`. Server `data/slink.log` confirms: `[a] trainer_battle_start trainer_id=325 is_rival=True` / `queued replace_rival_team (..., source=auto)`. Toggle OFF → original rival team appears.
+Run the full Test 4 setup (`lua/slink.lua` on both BizHawks, patched RR ROMs) with `python -m server.server --rival-team-swap`. Walk into any Rival (Terry) fight on either player (Oak's Lab onward — 27 IDs spanning early/mid/late game). The server sends `replace_rival_team` with the partner's cached party blobs; the client dispatches the native `OP_SET_ENEMY_PARTY`, refreshes the active foe's `gBattleMons` (`M.refreshEnemyPartyNative`), and acks `rival_team_replaced` with a species readback. Lua console: `trainer_battle_start trainer_id=... is_rival=true` then the swap dispatch. Server `data/slink.log` confirms: `[a] trainer_battle_start trainer_id=325 is_rival=True` / `queued replace_rival_team (..., source=auto)`.
 
 **Negative paths to verify:**
+- **Unpatched ROM** → client logs `replace_rival_team: companion patch ABSENT — required, skipping` and acks `rival_team_replaced` with `error="patch_required"`; no swap, no crash.
+- Out of battle when the command arrives → `not in battle, skipping` + `error="not_in_battle"` ack (out-of-battle writes would be harmless but the readback would be stale).
 - Partner offline (B disconnected) → A walks into a Rival fight → no swap; A fights the original rival. Server log: `auto-trigger skipped: partner 'b' has no cached party blobs`.
 - Non-rival trainer (e.g. Bug Catcher) → no swap.
 - Vanilla / AP ROM loaded → adapter returns empty rival set → never fires (Lua still emits the event; server logs `is_rival=False`).
@@ -648,8 +644,8 @@ Run `python -m server.server --explode-mode` with both BizHawks connected (Test 
 ## Unit Tests (pytest — no emulator required)
 
 ```bash
-pytest tests/unit/ -v                                 # all 1142 tests
-pytest tests/unit/test_state.py -v                    # 287 tests (incl. tick reconciliation + Explode Mode)
+pytest tests/unit/ -v                                 # all 1190 tests
+pytest tests/unit/test_state.py -v                    # 318 tests (incl. tick reconciliation + Explode Mode)
 pytest tests/unit/test_gen3_adapter.py -v             # 216 tests
 pytest tests/unit/test_gen4_adapter.py -v             # 100 tests
 pytest tests/unit/test_gen1_adapter.py -v             # 103 tests
@@ -665,11 +661,14 @@ pytest tests/unit/test_state_rival_battle_start.py -v # 15 tests (rival-swap aut
 pytest tests/unit/test_state_party_blob_cache.py -v   # 10 tests (blob_hex cache)
 pytest tests/unit/test_gen3_adapter_rival_ids.py -v   # 8 tests (rival trainer IDs)
 pytest tests/unit/test_cli_rival_team_swap.py -v      # 4 tests (--rival-team-swap CLI)
+pytest tests/unit/test_cli_native_toggles.py -v       # 9 tests (native message/sound/calc/NPC/battle-control toggles)
+pytest tests/unit/test_cli_overworld_presence.py -v   # 4 tests (--overworld-presence CLI)
+pytest tests/unit/test_patcher_routes.py -v           # 4 tests (/patcher + /companion/SLink-RR.ups routes)
 ```
 
 All tests use `tmp_path` + `monkeypatch` fixtures for isolated file I/O. No server, no emulator, no network.
 
-### test_state.py — State Machine Tests (287 tests)
+### test_state.py — State Machine Tests (318 tests)
 
 Covers the core `SoulLinkState` FSM in `server/state.py`. Key helper: `make_state_with_link()` creates a pre-linked pair with `pokeballs_obtained` active and party size 2.
 
@@ -694,6 +693,23 @@ Covers the core `SoulLinkState` FSM in `server/state.py`. Key helper: `make_stat
 | Command queue ordering | 3 | Deposit→withdraw cancellation, mixed sync+HUD delivery |
 
 > Rival Team Swap state coverage lives in `test_state_rival_battle_start.py` (auto-trigger matrix, `queue_rival_team_swap`, `rival_team_replaced` ack) and `test_state_party_blob_cache.py` (`blob_hex` ingest + validation).
+
+## Automated Two-Instance E2E (companion patch)
+
+`tools/e2e_duo.py` runs a throwaway SLink server plus **two** concurrent headless EmuHawk instances (players a/b, both on the patched ROM `patch/build/slink_RR.gba`, savestates from the same save with instance B's party OTIDs mutated pre-hello to avoid key collisions), orchestrates a scenario via the server's debug HTTP API, and waits for both instances' result files (`patch/build/e2e_<scenario>_{a,b}_result.txt`, final line `RESULT: PASS|FAIL`):
+
+```bash
+python tools/e2e_duo.py --scenario faint      # one scenario
+python tools/e2e_duo.py --scenario all        # faint, boxsync, trade, ghost, explode
+```
+
+Scenarios: `faint`, `boxsync`, `trade`, `ghost` (runs with `--overworld-presence`), `explode` (runs with `--explode-mode`). Each instance loads a generated stub (`patch/build/duo_{a,b}.lua`) that runs the **real production client** plus a scenario coroutine from `lua/tests/duo/`. Windows-only; needs `E:/Howard/Bizhawk` and the patched ROM.
+
+The pytest wrapper `tests/e2e/test_duo.py` parametrizes the same five scenarios but is skipped unless explicitly requested (each takes minutes and spawns EmuHawk twice):
+
+```bash
+SLINK_E2E=1 pytest tests/e2e/ -q
+```
 
 ### Desync Audit Findings (Gen 3)
 
@@ -745,9 +761,9 @@ This deletes `data/links.json` and clears all in-memory state. The Lua clients w
 | Overworld full-party wipe does not auto-whiteout | No game engine hook for this without a ROM patch | Server detects it via snapshot diff; player must manually visit Pokémon Center |
 | Party HP values on status page not live | Server only receives HP on faint or hello — no per-frame HP stream | Shows 0 for fainted mons; non-zero for others reflects last-seen value, not current |
 | Pokéball count updates at tick rate | Sent with each tick event | Brief lag between bag change and status page update (~1 s) |
-| Party sync executes on next safe state tick | Sync writes deferred until fresh `isInOverworld()` check at execution point | Up to ~0.5 s delay after a party/box action before partner's game updates |
+| Party sync executes on next safe state tick (**unpatched ROMs** — patched ROMs run box/party sync natively via the companion patch's `DEPOSIT_MON`/`WITHDRAW_MON` opcodes) | Sync writes deferred until fresh `isInOverworld()` check at execution point | Up to ~0.5 s delay after a party/box action before partner's game updates |
 | Party sync may require manual PC action | `party_mon` fails closed if partner's party is full or stats are missing | Player sees persistent HUD notice and must manually withdraw from PC |
-| Memorial box write requires safe state | `memorialize` command deferred until overworld | Brief delay between faint confirmation and Box 13 move; mon may still appear at 0 HP in party during that window |
+| Memorial box write requires safe state (**unpatched ROMs** — patched ROMs memorialize natively via the companion patch's `MEMORIALIZE` opcode) | `memorialize` command deferred until overworld | Brief delay between faint confirmation and Box 13 move; mon may still appear at 0 HP in party during that window |
 | AP starter location varies | AP randomized start puts player in random town | Starter capture uses `"intro"` area_id — both players link even if they start in different towns |
 | Quarantine enforcement on reconnect | Server re-quarantines pending keys from hello party snapshot | Brief window (~1 tick) where quarantined mon may be in party before re-deposit |
 | `party_size` tracking ~1s stale | Updated from tick events, not real-time | Reactive `sync_retrieve_failed` catches cases where stale data caused incorrect proactive decisions |

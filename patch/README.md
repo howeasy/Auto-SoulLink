@@ -118,8 +118,9 @@ These opcodes are built and live-validated (see `lua/tests/test_live_*.lua`) but
 production client doesn't invoke them yet — each needs its own server/client integration
 (the message box above is the template):
 
-- Battle: `FORCE_FAINT`, `FORCE_MOVE_SLOT` (native battle control disabled pending controller
-  re-discovery + a two-instance live run — see `patch/ROADMAP.md`)
+- Battle: `FORCE_FAINT`, `FORCE_MOVE_SLOT` ARE wired, but ship **disabled by default** behind
+  the `--native-battle-control` server flag after a live softlock — the Lua Variant-3 RAM path
+  remains the production default (see `patch/ROADMAP.md`)
 - Mon: `CREATE_MON`, `GIVE_MON` (`SET_ENEMY_PARTY` rival-team-swap and `SET_PARTY_MON` trade ARE wired)
 - Overworld: `ARM_PEER_INTERACT` (talk-to-ghost; `SPAWN/DESPAWN_PEER_NPC` is now wired — see above)
 - Rules/UI: `PLAY_FANFARE` (`SHOW_MENU`, `PLAY_SE` ARE wired)

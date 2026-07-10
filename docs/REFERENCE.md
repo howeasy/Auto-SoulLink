@@ -151,8 +151,20 @@ Lua clients and the server speak newline-delimited JSON over one persistent TCP 
 | `no_catch` | Player failed to catch in an area (run / KO / flee) → dead-zone candidate. |
 | `tick` | ~60-frame heartbeat; flushes queued cross-player commands and refreshes status-page party data. Occupied party slots carry `blob_hex` when `--rival-team-swap` is active. |
 | `trainer_battle_start` | A trainer battle began, with the trainer opponent ID. Gates the rival-team-swap match (`rival_trainer_ids()`); also an OBS trigger event. |
-| `rival_team_replaced` | Ack of a `replace_rival_team` command, with a species readback of the team written into `gEnemyParty`. |
+| `rival_team_replaced` | Ack of a `replace_rival_team` command, with a species readback of the team written into `gEnemyParty` (or `error="patch_required"` on an unpatched ROM). |
 | `sync_retrieve_done` / `sync_retrieve_failed` | Confirms a `party_mon` retrieval succeeded / failed (paired party-room check). |
+| `whiteout` | Full party wipe — triggers whiteout propagation to the partner. |
+| `party_to_box` / `box_to_party` | A known mon moved between party and PC — drives party sync. |
+| `key_change` | Nature Changer NPC rewrote a mon's personality — old key → new key migration. |
+| `stats_cache` | Caches a boxed mon's party-only stat fields so `party_mon` can restore them. |
+| `memorialize_done` / `memorialize_failed` | Ack of a `memorialize` command. |
+| `status` | **Companion patch.** Reports patch presence/build info and per-feature availability. |
+| `ghost_pos` | **Companion patch, `--overworld-presence`.** The player's overworld position/facing, relayed to the partner's peer ghost. |
+| `peer_interact` | **Companion patch.** Player talked to the peer ghost / trade NPC — opens the trade flow. |
+| `trade_request` | **Companion patch.** Player initiated a trade with the partner. |
+| `menu_result` | **Companion patch.** Result of a native yes/no menu (`show_menu`) or multichoice (`show_choices`). |
+| `mon_chosen` | **Companion patch.** Result of the native "Choose a POKéMON" menu (`choose_mon`). |
+| `trade_done` | **Companion patch.** Ack that the native trade scene completed. |
 
 ### Commands (server → Lua)
 
@@ -160,11 +172,21 @@ Lua clients and the server speak newline-delimited JSON over one persistent TCP 
 |---|---|
 | `force_faint` | Zero a mon's HP immediately (linked-death propagation, illegal capture, whiteout). |
 | `force_explode` | **RR-only, `--explode-mode`.** Replaces `force_faint` when a linked partner dies mid-battle — coerces the survivor's active mon into Explosion. Falls back to `force_faint` on vanilla/AP/Emerald and for bench mons. |
-| `replace_rival_team` | **RR-only, `--rival-team-swap`.** Byte-copies the partner run's party blobs (per-slot `blob_hex`) over the rival/Terry team in EWRAM, then refreshes the active battlers. Acked by `rival_team_replaced`. |
+| `replace_rival_team` | **RR-only, `--rival-team-swap`.** Byte-copies the partner run's party blobs (per-slot `blob_hex`) over the rival/Terry team via the companion patch's native `OP_SET_ENEMY_PARTY`, then refreshes the active battlers. Acked by `rival_team_replaced`. **Requires the RR companion patch** ([patch/README.md](../patch/README.md)) — there is no unpatched fallback; unpatched clients ack `error="patch_required"` and skip. |
 | `box_mon` / `party_mon` | Deposit / retrieve a mon — **deferred** to the next overworld safe state. |
 | `memorialize` | Move a dead pair to Box 13 ("Box 14" in-game) — deferred to safe state. |
 | `play_sound` / `hud_show` | Play an in-game SE / show a HUD overlay message (`message`, `color`, `duration`). |
 | `resolved_areas` | Sent in the `hello` reply — area states to treat as already resolved on reconnect. |
+| `config` | Sent in the `hello` reply — per-run toggles (`overworld_presence`, `native_messages`, `native_sounds`, `battle_calc`, `pc_trade_npc`, `native_battle_control`). |
+| `unresolve_area` | Remove an area from the client's resolved set (shiny bonus-pair slot reopening). |
+| `gui_prompt` | Show a BizHawk GUI text prompt (e.g. clause-violation retry notice). |
+| `game_over` | The run is over (unrecoverable whiteout) — re-sent on reconnect. |
+| `rebuild_start` / `rebuild_done` | Bracket a post-whiteout party rebuild (restore boxed survivors, then resume normal sync). |
+| `msgbox` | **Companion patch.** Show a native in-game message box / in-battle text instead of the Lua HUD (`--native-messages`). |
+| `show_menu` / `show_choices` | **Companion patch.** Native yes/no menu / multichoice list; answered by `menu_result`. |
+| `choose_mon` | **Companion patch.** Native "Choose a POKéMON" party menu; answered by `mon_chosen`. |
+| `apply_trade` | **Companion patch.** Write the partner's traded mon into the party and run the native trade scene; acked by `trade_done`. |
+| `ghost_pos` | **Companion patch, `--overworld-presence`.** The partner's overworld position — drives the peer-ghost NPC. |
 
 > The OBS-trigger event names in [OBS Scene Trigger Integration](#obs-scene-trigger-integration) are a *separate* concept (derived signals for scene switching) even where names overlap (e.g. `trainer_battle_start`).
 
@@ -209,6 +231,8 @@ The status server (default port 8080) exposes these pages and endpoints.
 | `/stream/enc-table-b` | GET | Overlay — wild encounter rates for Player B's current area |
 | `/launcher/{player}` | GET | Download pre-configured launcher Lua script |
 | `/calc/` | GET | Damage calculator |
+| `/patcher` | GET | In-browser companion-ROM patcher (also mounted on the Manager port 8090) |
+| `/companion/SLink-RR.ups` | GET | Download the built companion UPS patch (also mounted on the Manager port 8090) |
 | `/api/status` | GET | Full state JSON dump |
 | `/api/events` | GET | SSE event stream |
 | `/api/calc/mons` | GET | Live party + enemy data for calc bridge |
@@ -224,6 +248,8 @@ The status server (default port 8080) exposes these pages and endpoints.
 | `/api/obs/connect` | POST | Connect one or both OBS players |
 | `/api/obs/disconnect` | POST | Disconnect one or both OBS players |
 | `/api/obs/scenes/{player}` | GET | List available scenes from a connected OBS instance |
+| `/api/obs/triggers` | POST | Save just the trigger rules list (auto-save on drag-reorder) |
+| `/api/obs/areas` | GET | Labeled area-group buckets for the trigger area filter picker |
 | `/api/obs/test` | POST | Test a scene switch for a player |
 | `/api/reset` | POST | Wipe all state and start fresh |
 | `/api/inject_link` | POST | Manually link two mons by key |
@@ -597,7 +623,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Gender clause (opt-in) | `--gender-clause` — rejects links where both mons are the same gender (♂+♂ or ♀+♀). Genderless mons are exempt. The violating capture is force-fainted; the area stays pending for retry |
 | Type clause (opt-in) | `--type-clause` — rejects links where both mons share any type (e.g. Charizard Fire/Flying ↔ Pidgey Normal/Flying — shared Flying). Uses RR type data when available; falls back to vanilla Gen I–III types. The violating capture is force-fainted; the area stays pending for retry |
 | Explode mode (opt-in) | `--explode-mode` — **Radical Red only.** When a linked mon dies mid-battle, its partner receives a `force_explode` command instead of the deferred `force_faint`, coercing the partner's active Pokémon into using Explosion. Bench mons and vanilla/AP/Emerald fall back to `force_faint`. Persisted in `links.json` under `rules.explode_mode`. |
-| Rival team swap (opt-in) | `--rival-team-swap` — **Radical Red only.** On a `trainer_battle_start` against a configured rival ID (`adapter.rival_trainer_ids()`), the server sends `replace_rival_team` carrying the *partner's* live party blobs; the client byte-copies them into `gEnemyParty` (EWRAM-only) and acks with `rival_team_replaced`. Supplied per-launch from the Manager run registry. |
+| Rival team swap (opt-in) | `--rival-team-swap` — **Radical Red only.** On a `trainer_battle_start` against a configured rival ID (`adapter.rival_trainer_ids()`), the server sends `replace_rival_team` carrying the *partner's* live party blobs; the client byte-copies them into `gEnemyParty` (EWRAM-only) via the companion patch's native `OP_SET_ENEMY_PARTY` and acks with `rival_team_replaced`. **Requires the RR companion patch** ([patch/README.md](../patch/README.md)) — no unpatched fallback; unpatched clients ack `error="patch_required"` and skip. Supplied per-launch from the Manager run registry. |
 | Shiny Clause (always on) | When a player catches a shiny, their partner's **next encounter** becomes the shiny's Soul Link partner (a bonus pair). The bonus pair goes through all normal Soul Link rules — lock clauses apply, faint propagation is enforced, party sync is required. The area that triggered the shiny is not consumed. If multiple shinies are caught before bonuses are claimed, bonuses queue up (FIFO). Gen 1 is naturally excluded (`is_shiny()` always returns `False`). The catching player receives a shiny sound effect and GUI prompt; the partner is notified that a bonus encounter is pending. |
 
 ---
@@ -648,7 +674,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Type clause (opt-in `--type-clause`) | ✅ Working |
 | Shiny Clause (always on — bonus pairs) | ✅ Working |
 | Explode mode (opt-in `--explode-mode`, RR-only `force_explode`) | ✅ Working |
-| Rival team swap (opt-in `--rival-team-swap`, RR-only `replace_rival_team`) | ✅ Working |
+| Rival team swap (opt-in `--rival-team-swap`, RR-only `replace_rival_team`; requires companion patch) | ✅ Working |
 | Gift/egg `gift_<area>` namespace (standalone pairs, gate + quarantine bypass) | ✅ Working |
 | Status page — Upcoming Key Trainers panel (RR priority-trainer pipeline) | ✅ Working |
 | Status page — linked-party Split/Combined view toggle (localStorage) | ✅ Working |
@@ -730,8 +756,8 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 ### Unit tests (no emulator required)
 
 ```bash
-pytest tests/unit/ -v          # all 1142 tests
-pytest tests/unit/test_state.py -v             # 287 state machine tests (incl. tick reconciliation)
+pytest tests/unit/ -v          # all 1190 tests
+pytest tests/unit/test_state.py -v             # 318 state machine tests (incl. tick reconciliation)
 pytest tests/unit/test_gen3_adapter.py -v      # 216 Gen 3 adapter tests
 pytest tests/unit/test_gen4_adapter.py -v      # 100 Gen 4 adapter tests
 pytest tests/unit/test_gen1_adapter.py -v      # 103 Gen 1 adapter tests
@@ -748,9 +774,13 @@ pytest tests/unit/test_state_rival_battle_start.py -v  # 15 rival-team-swap trig
 pytest tests/unit/test_state_party_blob_cache.py -v    # 10 party blob_hex cache tests
 pytest tests/unit/test_gen3_adapter_rival_ids.py -v    # 8 rival trainer-ID tests
 pytest tests/unit/test_cli_rival_team_swap.py -v       # 4 --rival-team-swap CLI tests
+# Companion patch + per-run toggles:
+pytest tests/unit/test_cli_native_toggles.py -v        # 9 native-toggle CLI tests
+pytest tests/unit/test_cli_overworld_presence.py -v    # 4 --overworld-presence CLI tests
+pytest tests/unit/test_patcher_routes.py -v            # 4 /patcher + /companion route tests
 ```
 
-287 state machine tests covering: linking, dead zones, faint propagation, whiteout, party sync (including confirmation-based `sync_retrieve_done`/`sync_retrieve_failed`, PC swap event ordering), box capture stats caching, memorial box, reconnect re-queuing, illegal captures, encounter logging, AP ROM type handling, species clause (evo families), gender clause (genderless edge cases), type clause (shared types, partial overlap, monotypes), combined clauses, violation recovery, clause rule persistence, same-save species duplicate prevention, dynamic gift areas, hello resolved_areas, gift area no_catch protection, unlinked encounter quarantine, paired party sync enforcement, dead zone quarantined mon retirement, CFRU/RR species data validation (Gen 3 ID rekey, Gen 4+ cross-gen evolutions, gender ratios), battle HP cache writeback (CFRU), double-buffer party diff, frame ordering, player identity lock (OT ID per slot — first lock, wrong OT rejection, event blocking, persistence, empty party skip, per-player independence), persistent run metadata (rom_type, trainer_names), shiny bonus pairs (pending_bonus FIFO queue, pair formation, faint propagation both directions, party sync at formation, FIFO multi-bonus, lock clause violations with retry, area unresolve, persistence, key migration, no-wildcard-exemption), nature change (key_change migration), dupes clause partner pending capture check, and **tick reconciliation** (server-side diff of Lua party snapshots against `party_keys[player_id]` to repair ghost-boxed and ghost-party drift, gated against in-flight box/party/memorialize commands and active whiteout rebuilds), and **Explode Mode** (default-off, save/load round-trip, off → `force_faint` vs on → `force_explode`). Rival Team Swap state coverage lives in `test_state_rival_battle_start.py` (auto-trigger matrix, `queue_rival_team_swap`, `rival_team_replaced` ack) and `test_state_party_blob_cache.py` (`blob_hex` ingest, length/hex validation, per-player isolation).
+318 state machine tests covering: linking, dead zones, faint propagation, whiteout, party sync (including confirmation-based `sync_retrieve_done`/`sync_retrieve_failed`, PC swap event ordering), box capture stats caching, memorial box, reconnect re-queuing, illegal captures, encounter logging, AP ROM type handling, species clause (evo families), gender clause (genderless edge cases), type clause (shared types, partial overlap, monotypes), combined clauses, violation recovery, clause rule persistence, same-save species duplicate prevention, dynamic gift areas, hello resolved_areas, gift area no_catch protection, unlinked encounter quarantine, paired party sync enforcement, dead zone quarantined mon retirement, CFRU/RR species data validation (Gen 3 ID rekey, Gen 4+ cross-gen evolutions, gender ratios), battle HP cache writeback (CFRU), double-buffer party diff, frame ordering, player identity lock (OT ID per slot — first lock, wrong OT rejection, event blocking, persistence, empty party skip, per-player independence), persistent run metadata (rom_type, trainer_names), shiny bonus pairs (pending_bonus FIFO queue, pair formation, faint propagation both directions, party sync at formation, FIFO multi-bonus, lock clause violations with retry, area unresolve, persistence, key migration, no-wildcard-exemption), nature change (key_change migration), dupes clause partner pending capture check, and **tick reconciliation** (server-side diff of Lua party snapshots against `party_keys[player_id]` to repair ghost-boxed and ghost-party drift, gated against in-flight box/party/memorialize commands and active whiteout rebuilds), and **Explode Mode** (default-off, save/load round-trip, off → `force_faint` vs on → `force_explode`). Rival Team Swap state coverage lives in `test_state_rival_battle_start.py` (auto-trigger matrix, `queue_rival_team_swap`, `rival_team_replaced` ack) and `test_state_party_blob_cache.py` (`blob_hex` ingest, length/hex validation, per-player isolation).
 
 7 OBS priority tests covering: highest-priority rule wins when multiple events fire simultaneously, lower-priority fallback when high-priority event didn't fire, independent per-player resolution, exact `area_id` filter matching, and **area-group** filter matching (`group:routes`, etc.) against the active adapter's classified area map.
 
@@ -807,6 +837,8 @@ See `tests/TESTING.md` for the full 9-step end-to-end test procedure. Load `lua/
 | `data/links.json` | Persisted link table — written after every state change |
 | `data/memorial.json` | Persisted memorial log |
 | `server/manager.py` | Run Manager — creates/starts/stops/archives named runs on port 8090 |
+| `server/patcher.py` | Companion-ROM patcher routes — `/patcher` page + `/companion/SLink-RR.ups` download, mounted on both the per-run server (8080) and the Manager (8090) |
+| `patch/` | RR companion ROM patch — C sources (`src/handlers.c` mailbox opcodes), build pipeline (`tools/build.py`), built UPS in `dist/`; see `patch/README.md` |
 | `server/obs_controller.py` | OBS Controller — per-player `simpleobsws` connections, coalescing queue workers, priority-based `submit_fired()` resolver, config I/O at `data/obs_config.json` |
 | `server/twitch_bot.py` | Twitch chat bot — twitchio 3.x EventSub, command handling, activity log |
 | `lua/tests/` | BizHawk test scripts (memory, force-faint, server comms, ability diag, etc.) |
@@ -814,6 +846,7 @@ See `tests/TESTING.md` for the full 9-step end-to-end test procedure. Load `lua/
 | `tools/gen_rr_priority_trainers.py` | Generator for `rr_priority_trainers.json` + the calc `slink_priority.js` setdex (RR priority/key trainers) |
 | `tools/lua_syntax_check.py` | Syntax-checks `lua/**/*.lua` with lupa (Lua 5.5) — catches `goto`/bitwise errors the system luac 5.1 rejects |
 | `tools/inject_full_mocks.py` | Injects full mock state (6 linked pairs, dead-zone, boxed pair, memorial, enemy battle w/ held items) into a running server for UI testing |
+| `tools/e2e_duo.py` | Two-instance headless E2E harness — throwaway server + two EmuHawk instances running scripted scenarios (faint, boxsync, trade, ghost, explode); pytest wrapper in `tests/e2e/test_duo.py` (gated behind `SLINK_E2E=1`) |
 | `ruff.toml` / `requirements-dev.txt` | Ruff lint config + pinned dev dependency (`pip install -r requirements-dev.txt`; `ruff check .`) |
 | `tests/TESTING.md` | Live BizHawk test guide |
 | **Damage Calculator** | |
@@ -1053,6 +1086,13 @@ python -m server.server --help
 # --type-clause         reject links where both mons share any type
 # --explode-mode        (RR only) on partner death, force the linked mon to auto-Explode (force_explode instead of force_faint)
 # --rival-team-swap     (RR only) on rival battles, replace the rival's team with the partner's current party (replace_rival_team)
+# --overworld-presence  peer ghost: render your partner walking your overworld as a live NPC (RR + companion patch required)
+# --native-messages     show SLink notifications via the patch's native message box / in-battle text instead of the Lua HUD (RR + patch; default off)
+# --native-sounds       play SLink notification sounds via the patch's native PlaySE (RR + patch; default off)
+# --no-battle-calc      hide the bundled Battle Calc damage display (RR + patch; shown by default)
+# --no-pc-trade-npc     disable the Pokémon-Center trade NPC (RR + patch; on by default, only active while overworld presence is off)
+# --native-battle-control  enable the native explode/faint controller swap (RR patch; EXPERIMENTAL — default off, Variant-3 RAM path remains the fallback)
+# --verbose             enable DEBUG-level logging to file and console (default: INFO only)
 ```
 
 ---
@@ -1209,7 +1249,7 @@ Create rules on the `/obs` page. Each rule maps a game event to a scene name:
 
 Multiple events can fire in the same dispatch cycle (e.g., entering battle in a new encounter area fires `battle_start`, `wild_battle_start`, and `battle_start_new` simultaneously). Rules are evaluated **top-to-bottom** — for each OBS instance (player A or B), only the **first** matching rule wins.
 
-Reorder rules by dragging the ⠿ handle. Click **💾 Save Config** after reordering.
+Reorder rules by dragging the ⠿ handle. The new order saves automatically on drop (`autoSaveTriggers()` → `POST /api/obs/triggers`).
 
 ### Implementation Details
 
@@ -1232,7 +1272,7 @@ python -m server.manager --host 0.0.0.0
 
 **Features:**
 - Create, start, stop, and archive named runs — each run is a separate `server.py` subprocess with its own TCP port, HTTP port, and data directory
-- Per-run rule configuration via UI checkboxes, in two sections — **Link Clauses** (species / gender / type) and **Run Augmentations** (Explode Mode / Rival Swap, RR-only)
+- Per-run rule configuration via UI checkboxes — **Link Clauses** (species / gender / type), **Run Augmentations** (Explode Mode / Rival Swap / Overworld Presence peer ghost, RR-only), and a **Native UI & audio** disclosure for the companion-patch toggles (Native Messages, Native Sounds — both off by default; Battle Calc, PC Trade NPC — both on by default)
 - Launcher script downloads — generates pre-configured `slink_<player>.lua` files with the correct host IP, TCP port, and player ID based on the URL used to access the manager
 - Direct links to each run's status page
 - Simplified per-run **Live Status** panel — connection, current area, party levels + HP, badges, in-battle banner, and link counts, pulled via the same-origin `/api/runs/<id>/live` proxy (no cross-port request, flicker-free reactive merge)
@@ -1251,6 +1291,13 @@ python -m server.manager --host 0.0.0.0
 | `POST /api/runs/<id>/delete` | Delete a run |
 | `GET /api/runs/<id>/launcher/<player>` | Download launcher script (`player` = `"a"` or `"b"`) |
 | `GET /api/runs/<id>/live` | Same-origin proxy of a run's `/api/status` (feeds the manager's simplified Live Status panel without a cross-port request) |
+| `GET\|POST /api/stream/pin` | Read / set which run the manager's stream overlays are pinned to |
+| `GET /stream` / `GET /stream/{name}` | Overlay gallery + per-overlay proxy relaying to the pinned/active run's HTTP port (stable OBS browser-source URLs; `/stream/{name}/fragment` serves the HTMX poll) |
+| `GET /api/status` | Proxy of the active (pinned or latest) run's `/api/status` |
+| `GET /api/events` | Proxy of the active run's SSE event stream |
+| `POST /api/attempts` | Proxy of the active run's attempts-counter setter |
+| `GET /patcher` | In-browser companion-ROM patcher (same page as the per-run server's) |
+| `GET /companion/SLink-RR.ups` | Download the built companion UPS patch |
 
 **Examples:**
 

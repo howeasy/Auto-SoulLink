@@ -80,7 +80,10 @@ Opt-in per-run rules — passed as CLI flags (or toggled in the Run Manager's ne
 | Flag | Effect |
 |------|--------|
 | `--explode-mode` | On a linked partner's death, the surviving mon is coerced into using **Explosion** mid-battle (server emits a `force_explode` command) instead of a silent force-faint |
-| `--rival-team-swap` | On a rival battle, the rival's team is replaced live with the **partner run's current party** (server emits `replace_rival_team`) |
+| `--rival-team-swap` | On a rival battle, the rival's team is replaced live with the **partner run's current party** (server emits `replace_rival_team`; requires the companion patch) |
+| `--overworld-presence` | **Peer ghost** — your partner walks your overworld as a live NPC with their own avatar and 1:1 movement (requires the companion patch) |
+
+Per-run **native UI & audio toggles** (also in the Run Manager's new-run form; all require the companion patch, none change Soul Link rules): `--native-messages` (notifications as native in-game text boxes instead of the Lua HUD), `--native-sounds` (notification sounds via the game's own audio engine), `--no-battle-calc` (hide the bundled in-battle damage calculator, shown by default), `--no-pc-trade-npc` (disable the Pokémon-Center trade NPC, on by default and only active while Overworld Presence is off).
 
 ## Web Pages
 
@@ -106,6 +109,11 @@ Opt-in per-run rules — passed as CLI flags (or toggled in the Run Manager's ne
 | `/stream/badges` | Badge display |
 | `/stream/stream-memorial` | Memorial wall for stream |
 | `/calc/` | Radical Red damage calculator with live party bridge |
+| `/patcher` | In-browser companion-ROM patcher — applies `SLink-RR.ups` to a clean Radical Red ROM client-side (nothing uploaded). Also served on the Manager port (8090). |
+
+## Companion Patch (Radical Red)
+
+An optional UPS patch (`patch/`) injects native SLink support into the Radical Red ROM. It enables the **peer ghost** (Overworld Presence), **native trade** (talk-to-partner / PC trade NPC), **in-battle notifications**, **native message boxes and sounds**, the bundled **Battle Calc** damage display, and the native Rival Team Swap path. Build it with `patch/tools/build.py`; apply it in the browser at `/patcher` (or download the `.ups` from `/companion/SLink-RR.ups`). See [patch/README.md](patch/README.md) for the full feature list and opcode reference.
 
 ## OBS Scene Triggers
 
@@ -227,7 +235,7 @@ python -m server.manager --host 0.0.0.0
 ## Tests
 
 ```bash
-pytest tests/unit/ -v        # 1142 tests, no emulator needed
+pytest tests/unit/ -v        # 1190 tests, no emulator needed
 ```
 
 ## Project Structure
@@ -252,11 +260,13 @@ server/
   templating.py          # aiohttp-jinja2 setup, theme cookie resolver, no-cache middleware
   chrome.py              # Shared sidebar/nav structure for every page
   overlay_catalog.py     # Stream overlay registry (URLs, layouts, query params)
+  patcher.py             # /patcher page + /companion/SLink-RR.ups routes (both ports)
+patch/                   # Companion ROM patch (C sources, mailbox handlers, build.py, dist .ups)
 data/
   games/                 # Per-game static data (area maps, items)
   obs_config.json        # OBS connection + trigger rule config
 calc/                    # Radical Red damage calculator + live bridge (rendered via Jinja shell)
-tests/                   # pytest unit tests (1142) + BizHawk test scripts
+tests/                   # pytest unit tests (1190) + two-instance E2E (tests/e2e/) + BizHawk test scripts
 tools/                   # Code generators (area maps, data tables)
 ```
 

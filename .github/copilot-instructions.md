@@ -29,7 +29,7 @@ python -m server.server --reset   # wipe all state and start a fresh run
 #   --verbose            Enable structured DEBUG logging to <data-dir>/slink.log
 
 # Unit tests — no emulator or server required
-# (287 + 216 + 100 + 103 + 179 + 140 + 46 + 6 + 7 + 4 + 3 + 14 + 15 + 10 + 8 + 4 = 1142 tests)
+# (318 + 216 + 100 + 103 + 179 + 140 + 46 + 6 + 7 + 4 + 3 + 14 + 15 + 10 + 8 + 4 + 9 + 4 + 4 = 1190 tests)
 pytest tests/unit/test_state.py -v
 pytest tests/unit/test_gen3_adapter.py -v
 pytest tests/unit/test_gen4_adapter.py -v
@@ -47,6 +47,10 @@ pytest tests/unit/test_state_rival_battle_start.py -v
 pytest tests/unit/test_state_party_blob_cache.py -v
 pytest tests/unit/test_gen3_adapter_rival_ids.py -v
 pytest tests/unit/test_cli_rival_team_swap.py -v
+# Companion patch + per-run toggles:
+pytest tests/unit/test_cli_native_toggles.py -v
+pytest tests/unit/test_cli_overworld_presence.py -v
+pytest tests/unit/test_patcher_routes.py -v
 
 # Single test
 pytest tests/unit/test_state.py::test_faint_queues_force_faint_for_partner -v
@@ -334,7 +338,7 @@ SLink-RR/
 - **`lua/tests/test_sound_discovery.lua`** — Diagnostic script: scans ROM for gSongTable and reports SE song header addresses for the current ROM profile.
 - **`lua/tests/test_ability_diag.lua`** — Diagnostic script: auto-detects ROM profile, validates gBaseStats address, shows party ability data per slot.
 - **`lua/tests/test_item_discovery.lua`** — ROM scanner for RR/CFRU gItems table. Uses CFRU probe scoring (IDs 52-62) and itemId field validation to find the correct table. Outputs JSON to `rr_items.json`.
-- **`tests/unit/test_state.py`** — 287 pytest unit tests for the state machine.
+- **`tests/unit/test_state.py`** — 318 pytest unit tests for the state machine.
 - **`tests/unit/test_gen1_adapter.py`** — 103 tests for the Gen 1 adapter.
 - **`tests/unit/test_gen2_adapter.py`** — 179 tests for the Gen 2 adapter.
 - **`tests/unit/test_gen3_adapter.py`** — 216 tests for the Gen 3 adapter.
@@ -349,6 +353,9 @@ SLink-RR/
 - **`tests/unit/test_state_party_blob_cache.py`** — 10 tests for the `blob_hex` party-blob cache (ingest, length/hex validation, per-player isolation).
 - **`tests/unit/test_gen3_adapter_rival_ids.py`** — 8 tests for `rival_trainer_ids()` (set size 27, known-ID anchors, vanilla empty, mutation safety).
 - **`tests/unit/test_cli_rival_team_swap.py`** — 4 tests for the `--rival-team-swap` CLI flag (help, store_true, default false, explicit true).
+- **`tests/unit/test_cli_native_toggles.py`** — 9 tests for the companion-patch per-run toggles (`--native-messages`, `--native-sounds`, `--no-battle-calc`, `--no-pc-trade-npc`, `--native-battle-control`).
+- **`tests/unit/test_cli_overworld_presence.py`** — 4 tests for the `--overworld-presence` CLI flag.
+- **`tests/unit/test_patcher_routes.py`** — 4 tests for the `/patcher` page + `/companion/SLink-RR.ups` routes (incl. md5 constants matching `patch/README.md`).
 
 ---
 
@@ -887,21 +894,33 @@ When `--explode-mode` is active, a linked partner's death sends `force_explode` 
 
 `gBattleStruct` is heap-allocated — dereference the pointer at `0x02023FE8` first, then write the per-battler sub-fields. These addresses live only in the RR profile (`lua/games/gen3_frlge.lua`); `M.forceExplodeBattler()` returns false on vanilla/AP, where `force_explode` degrades to a deferred `force_faint`. **Per-frame reinforcement** (`gen3_frlge_client.lua`): the engine resets `gBattleCommunication[battler]` at turn start, so the client re-writes the committed-action state every frame **only while `gBattleCommunication[battler] < 3`** (writing 3 unconditionally would lock the engine in state 3 and softlock the game). Files: `lua/memory_gba.lua` (`M.forceExplodeBattler`), `lua/games/gen3_frlge.lua` (addresses), `lua/clients/gen3_frlge_client.lua` (dispatch + reinforcement), `server/state.py` (`force_explode` vs `force_faint` in `_propagate_faint`), `server/server.py` (`--explode-mode`).
 
+> **Native battle path:** the companion patch also wires native `FORCE_FAINT` / `FORCE_MOVE_SLOT` opcodes for explode/faint, but they are **disabled by default** behind `--native-battle-control` after a live softlock — the Lua Variant-3 memory-write path above remains production.
+
 ### Rival Team Swap (RR/CFRU only — optional per-run rule)
 
-When `--rival-team-swap` is active, walking into a rival battle makes the server replace the rival's team with the *partner's current party*, mirrored across the link. EWRAM-only; never touches the SaveBlock.
+When `--rival-team-swap` is active, walking into a rival battle makes the server replace the rival's team with the *partner's current party*, mirrored across the link. EWRAM-only; never touches the SaveBlock. **The RR companion patch is a hard requirement** — the client dispatches the native `OP_SET_ENEMY_PARTY` opcode via the companion-patch mailbox (`lua/mailbox.lua` ↔ `patch/src/handlers.c`); the old `M.writeEnemyParty` RAM-poke fallback was removed. Unpatched clients ack `rival_team_replaced` with `error="patch_required"` and skip the swap (see `gen3_frlge_client.lua`).
 
-**New `memory_gba.lua` primitives:**
+**`memory_gba.lua` primitives:**
 - `M.readPartyBlob(slot)` — raw 100-byte party-mon struct as a u8 array.
 - `M.bytesToHex(bytes)` / `M.hexToBytes(s)` — blob ↔ hex transport (200 hex chars per mon).
-- `M.writeEnemyParty(blobs)` — byte-copies each blob into `gEnemyParty[i]`, zeroes `maxHP` on unused trailing slots (CFRU scans until `maxHP == 0` as the team terminator), writes `ENEMY_COUNT_ADDR`, returns a species readback for the ack.
-- `M.refreshActiveEnemyBattlers()` — re-populates `gBattleMons[1]` (and `[3]` in doubles) from the freshly-written `gEnemyParty`; without it the engine keeps cached ability/type/HP from the original rival mon.
+- `M.refreshEnemyPartyNative(count)` — post-step after the patch has natively byte-copied the blobs into `gEnemyParty`: refreshes the active foe's stale `gBattleMons` cache (via `M.refreshActiveEnemyBattlers`, which re-populates `gBattleMons[1]` and `[3]` in doubles — without it the engine keeps cached ability/type/HP from the original rival mon), then reads back the species list for the ack.
+
+**Native path (patch):** `OP_SET_ENEMY_PARTY` byte-copies each staged 100-byte blob into `gEnemyParty[i]`, zeroes `maxHP` on the first unused trailing slot (CFRU scans until `maxHP == 0` as the team terminator), and sets `gEnemyPartyCount` — preserving the partner's exact moves/IVs/EVs/PID/item.
 
 **Blob transport (server):** every `hello` / `tick` / safe snapshot carries a per-slot `blob_hex` field (200 chars), folded into `build_party_snapshot`. The server caches them in `partner_blobs[player_id]` via `_ingest_party_blobs`, which validates length (==200) and hex-decodability and drops malformed entries.
 
-**Trigger pipeline (`server/state.py`):** `_handle_trainer_battle_start` fires `queue_rival_team_swap(target, trainer_id)` when **all** hold — trainer ID ∈ `adapter.rival_trainer_ids()`, the `rival_team_swap` toggle is on, and the partner has cached blobs. The server emits a `replace_rival_team` command (blobs in hex); Lua applies it via `writeEnemyParty` + `refreshActiveEnemyBattlers` and replies with a `rival_team_replaced` event carrying the species readback, which `_handle_rival_team_replaced` logs.
+**Trigger pipeline (`server/state.py`):** `_handle_trainer_battle_start` fires `queue_rival_team_swap(target, trainer_id)` when **all** hold — trainer ID ∈ `adapter.rival_trainer_ids()`, the `rival_team_swap` toggle is on, and the partner has cached blobs. The server emits a `replace_rival_team` command (blobs in hex); Lua decodes the blobs, stages them in the patch's blob buffer, dispatches `OP_SET_ENEMY_PARTY`, runs `M.refreshEnemyPartyNative`, and replies with a `rival_team_replaced` event carrying the species readback, which `_handle_rival_team_replaced` logs.
 
 **Rival ID detection:** base `rival_trainer_ids()` returns `set()`. Gen 3 RR builds `_RR_RIVAL_TRAINER_IDS` at import by scanning `rr_trainers.json` for trainers named **"Terry"** (RR's default rival name) in classes `{81, 89, 90}` (Rival Early/Mid/Late) — 27 IDs. Filtering by name avoids false positives from the generic "Rival" class. New events: `trainer_battle_start`, `rival_team_replaced`. New command: `replace_rival_team`.
+
+### Companion Patch (RR only — code-injection ROM patch)
+
+The `patch/` directory holds a UPS companion patch for Radical Red that adds native SLink support — peer ghost (Overworld Presence), native trade (talk-to-partner + PC trade NPC), native message boxes / in-battle notifications, native sounds, the bundled Battle Calc, native box/party sync + memorialize, and the native Rival Team Swap path.
+
+- **Mailbox protocol:** the Lua client talks to the injected code through an EWRAM mailbox — `lua/mailbox.lua` (client side) ↔ `patch/src/handlers.c` (in-ROM dispatch). The client stages args/blobs, writes an opcode, and polls for the ack status.
+- **Opcode table:** the authoritative enum lives in `patch/src/handlers.c` (~lines 31–49) — `OP_PING`=1 through `OP_MEMORIALIZE`=26. Opcodes **10–12** (`APPLY_DAMAGE`, `CURE_STATUS`, `SET_RULES`) are **removed** but their numbers stay reserved so 13+ keep their ABI slots (dispatch has no case for them → default `ST_FAIL` ack). Address reference: `patch/src/ADDRESSES.md`.
+- **Build & distribution:** `patch/tools/build.py` (gcc → ld → objcopy → inject → UPS/IPS, round-trip self-checked). `server/patcher.py` serves the in-browser patcher page at `GET /patcher` and the built patch at `GET /companion/SLink-RR.ups`, mounted on both the per-run server (8080) and the Manager (8090).
+- **Per-run toggles** (Manager new-run form / CLI flags; sent to the client in the `hello` reply's `config` command): `--overworld-presence`, `--native-messages`, `--native-sounds`, `--no-battle-calc`, `--no-pc-trade-npc`, `--native-battle-control` (experimental, default off). None change Soul Link rules; unpatched ROMs fall back to the Lua paths where one exists.
 
 ### Area Normalization
 
@@ -994,7 +1013,7 @@ For **static/gift encounters** (Starter, Lapras, Eevee, fossils), a new monKey a
 | `box_mon` | Deposit the named mon from party to the first available PC box slot |
 | `party_mon` | Retrieve the named mon from a PC box to the first available party slot; writes stats from server cache |
 | `memorialize` | Move dead mon from party/box to Box 13 ("THE DEAD"); deferred to safe state |
-| `replace_rival_team` | **RR, `--rival-team-swap`.** Byte-copy the partner's party blobs into `gEnemyParty` (`M.writeEnemyParty`), then `M.refreshActiveEnemyBattlers()`; ack with `rival_team_replaced` |
+| `replace_rival_team` | **RR, `--rival-team-swap`, companion patch required.** Stage the partner's party blobs in the patch mailbox and dispatch native `OP_SET_ENEMY_PARTY`, then `M.refreshEnemyPartyNative()`; ack with `rival_team_replaced` (unpatched → `error="patch_required"`, swap skipped) |
 | `hud_show` | Display a text message on the BizHawk HUD overlay with custom RGB color and duration |
 | `noop` | No action; returned when there is nothing to do |
 
@@ -1112,8 +1131,8 @@ Below the cards:
 ### Unit tests — no emulator or server required
 
 ```bash
-pytest tests/unit/ -v   # 1142 tests
-pytest tests/unit/test_state.py -v          # 287 tests (incl. tick reconciliation + Explode Mode)
+pytest tests/unit/ -v   # 1190 tests
+pytest tests/unit/test_state.py -v          # 318 tests (incl. tick reconciliation + Explode Mode)
 pytest tests/unit/test_gen1_adapter.py -v   # 103 tests
 pytest tests/unit/test_gen2_adapter.py -v   # 179 tests
 pytest tests/unit/test_gen3_adapter.py -v   # 216 tests

@@ -14,7 +14,7 @@ gen<N>_<abbreviations>
 | `gen2_crystal`  | Crystal (Gold/Silver supported as variant profiles) |
 | `gen3_frlge`    | FireRed, LeafGreen, Emerald, Radical Red        |
 | `gen4_hgsspt`   | HeartGold, SoulSilver, Platinum                 |
-| `gen5_bw`       | Black, White                                    |
+| `gen5_bw`       | Black, White, Black 2, White 2                  |
 
 ## What goes where
 
