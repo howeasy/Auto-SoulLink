@@ -62,6 +62,7 @@ local GLYPH_MAP = {
     ["\195\179"]     = "o",    -- U+00F3 o-acute
     ["\195\186"]     = "u",    -- U+00FA u-acute
     ["\195\177"]     = "n",    -- U+00F1 n-tilde
+    ["\195\151"]     = "x",    -- U+00D7 multiplication sign (FR charmap 0xB9 in nicknames)
 }
 
 -- Fold known glyphs to ASCII, then drop any remaining bytes >= 0x80.

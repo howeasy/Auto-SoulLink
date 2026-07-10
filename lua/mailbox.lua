@@ -87,23 +87,16 @@ MB.OP_PLAY_SE       = 19    -- native sound effect via PlaySE: args {song_lo, so
 
 MB.TEXT_BUF = 0x0203F900    -- patch reads FR-encoded text from here for SHOW_MESSAGE
 
--- ASCII -> FireRed charmap (letters, digits, space, common punctuation), 0xFF-terminated.
--- "\n" maps to the FR line-break control (0xFE) so message-box text can span two lines.
+-- ASCII -> FireRed charmap, 0xFF-terminated. Uses memory_gba's exported CHARSET_REV as the
+-- single source of truth (a hand-rolled second copy here once drifted on 0xB8/0xB9).
+-- "\n" maps to the FR line-break control (0xFE) so message-box text can span two lines;
+-- unknown characters encode as space (0x00) — the encode path must never error.
+local FR_REV = require("memory_gba").CHARSET_REV   -- memory_gba's module scope is inert (no reads)
 function MB.fr_encode(s)
     local out = {}
     for i = 1, #s do
-        local c = s:sub(i, i); local b = c:byte(); local v
-        if c == " " then v = 0x00
-        elseif c == "\n" then v = 0xFE
-        elseif b >= 48 and b <= 57 then v = 0xA1 + (b - 48)   -- 0-9
-        elseif b >= 65 and b <= 90 then v = 0xBB + (b - 65)   -- A-Z
-        elseif b >= 97 and b <= 122 then v = 0xD5 + (b - 97)  -- a-z
-        elseif c == "!" then v = 0xAB elseif c == "?" then v = 0xAC
-        elseif c == "." then v = 0xAD elseif c == "-" then v = 0xAE
-        elseif c == "," then v = 0xB8 elseif c == "/" then v = 0xBA
-        elseif c == ":" then v = 0xF0
-        else v = 0x00 end
-        out[#out + 1] = v
+        local c = s:sub(i, i)
+        out[#out + 1] = (c == "\n") and 0xFE or FR_REV[c] or 0x00
     end
     out[#out + 1] = 0xFF
     return out

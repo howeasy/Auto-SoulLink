@@ -687,13 +687,22 @@ local _CHARSET = {
     [0xAB]="!",[0xAC]="?",[0xAD]=".",[0xAE]="-",[0xAF]="·",
     [0xB0]="…",[0xB1]="«",[0xB2]="»",
     [0xB3]="'",[0xB4]="'",[0xB5]="♂",[0xB6]="♀",
-    [0xB8]="$",[0xB9]=",",[0xBA]="/",
+    -- 0xB7-0xB9 verified against pret/pokefirered charmap.txt: B7='¥' (the Pokédollar,
+    -- transliterated "$"), B8=',', B9='×'. (An old off-by-one had B8="$", B9=",".)
+    [0xB7]="$",[0xB8]=",",[0xB9]="×",[0xBA]="/",
+    [0xF0]=":",
     [0x00]=" ",  -- space in US/English FRLG
 }
 
 -- Reverse lookup: ASCII character → FRLG byte value (for encoding strings to RAM).
 local _CHARSET_REV = {}
 for byte, char in pairs(_CHARSET) do _CHARSET_REV[char] = byte end
+_CHARSET_REV["'"] = 0xB4   -- 0xB3/0xB4 both decode to "'"; pin the encode side (pairs order varies)
+
+-- Exported: the single source of truth for the FR charmap. mailbox.lua's fr_encode
+-- builds on CHARSET_REV instead of maintaining a second (previously divergent) copy.
+M.CHARSET     = _CHARSET
+M.CHARSET_REV = _CHARSET_REV
 
 -- Decodes a FRLG-encoded string at addr up to max_len bytes.
 -- Stops at 0xFF (EOS). Unknown bytes decode as "?". Trailing spaces are stripped.
