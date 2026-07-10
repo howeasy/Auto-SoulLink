@@ -37,7 +37,7 @@ PATCH_FILE = os.path.normpath(
 # the patched result. Surfaced to the page so it can echo the README's friendly
 # fingerprints; correctness is gated by the UPS-embedded CRC32 in patcher.js.
 BASE_ROM_MD5 = "8529f3a45d32bce4da637976fcf269d4"
-PATCHED_ROM_MD5 = "d45485d4da2c60cf3062c7c5527270a7"
+PATCHED_ROM_MD5 = "5577bd022d7ab638274ba456d719aa40"
 
 
 def setup_patcher_routes(
