@@ -186,8 +186,14 @@ ghost/trade/msgbox traffic for no benefit.
       `[1 2 3 4 5 8 6]` when enabled, callback fires on row 5 and no other row, and does not fire
       at all while disabled. (`lua/tests/test_live_startmenu.lua` pins the menu globals and the
       pre-splice shape independently.)
-- [ ] **2. The screen.** `show_info_entry` + `run_info()` + opcode 27, driven from staged EWRAM
-      lines. Gate: text staged in Lua appears on screen and A/B closes it cleanly.
+- [x] **2. The screen.** `show_info_entry` + `run_info()` + opcode 27, driven from staged EWRAM
+      lines. `lua/tests/test_live_infoscreen.lua` PASSES. Redesigned to look native after the first
+      version drew a plain multichoice list box: the player's own OPTIONS frame, a blue title with a
+      right-aligned PAGE hint, a hairline rule, party-menu mon rows with `Lv` glyphs and HP bars on
+      FRLG's own colour thresholds, and red for a dead mon. Row kind is derived from the staged
+      field count, so the EWRAM contract did not change. Fixed a real bug on the way: the first
+      window was 27x14 = 378 tiles against a 352-tile ceiling, overrunning the field message-box
+      window.
 - [ ] **3. Frame-hook path.** `opened != drawn` opens the screen with no opcode at all, so the row
       works even if the client is mid-round-trip.
 - [ ] **4. Real content + pagination.** Lua composes the page from live run state.

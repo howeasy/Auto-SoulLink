@@ -9,7 +9,7 @@
  */
 #include <stdint.h>
 typedef uint8_t u8; typedef uint16_t u16; typedef uint32_t u32;
-typedef int16_t s16; typedef int32_t s32;
+typedef int8_t s8; typedef int16_t s16; typedef int32_t s32;
 
 #define MAILBOX_ADDR 0x0203F800u
 #define SLNK_SIG     0x4B4E4C53u   /* 'SLNK' */
@@ -46,10 +46,12 @@ enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
        OP_SHOW_BATTLE_MESSAGE = 23, /* native IN-BATTLE text (BizHawk-HUD replacement); re-asserted N frames */
        OP_DEPOSIT_MON = 24,       /* party -> PC box (compress): args [0]=partySlot [1]=boxId [2]=boxPos */
        OP_WITHDRAW_MON = 25,      /* PC box -> party (decompress): args [0]=boxId [1]=boxPos [2]=partySlot */
-       OP_MEMORIALIZE = 26 };     /* party -> memorial box: args [0]=partySlot [1]=boxId [2]=boxPos.
+       OP_MEMORIALIZE = 26,       /* party -> memorial box: args [0]=partySlot [1]=boxId [2]=boxPos.
                                      Deposit conversion, but removal is zero + SWAP-WITH-LAST (not
                                      shift) so survivors keep their slot indices (CFRU deferred
                                      battle writes target slots; mirrors Lua M.memorializeMon). */
+       OP_SHOW_INFO = 27 };       /* §6 SOULLINK info screen from the lines staged in SlinkInfo;
+                                     async, result[0] = 0 (A) / 0x7F (B) — the pagination signal */
 enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
 
 /* Armed forced-move state (controller-swap driver), EWRAM scratch past the mailbox. */
@@ -231,6 +233,15 @@ typedef struct {
     volatile u8 line[8][32]; /* +8 FR-encoded, 0xFF-terminated (ends 0x0203FE4C) */
 } SlinkInfo;
 #define SI ((SlinkInfo *)0x0203FD44u)
+#define INFO_ROWS      6u   /* body rows that fit at a 13px pitch in the 104px content area */
+#define INFO_PAGE_SLOT 7u   /* slot 7 holds the header's page indicator; `lines` never counts it */
+
+/* FR charmap (same table as lua/mailbox.lua fr_encode): 'A'=0xBB, 'a'=0xD5, space=0x00, EOS=0xFF.
+ * Spelled as arithmetic on the character literal so the mapping is checkable by eye. */
+#define FU(c) (u8)(0xBBu + ((c) - 'A'))
+#define FL(c) (u8)(0xD5u + ((c) - 'a'))
+#define FSP   0x00u
+#define FEOS  0xFFu
 
 /* RR builds the start menu into these two globals; both located live by lua/tests/test_live_startmenu.lua,
  * which also asserts a normal field menu is exactly [1 2 3 4 5 6] with EXIT (id 6) last. */
@@ -435,6 +446,23 @@ typedef void (*DestroyTask_t)(u8 taskId);
 #define DestroyTask                  ((DestroyTask_t)0x08077509u)   /* BPRE.ld 0x8077508 (Thumb) */
 typedef void (*SchedBg_t)(u8 bgId);
 #define ScheduleBgCopyTilemapToVram  ((SchedBg_t)0x080F67A5u)
+/* The colour-aware printer. AddTextPrinterParameterized (above) hardcodes a fixed colour triple;
+ * this one takes an explicit {bg, fg, shadow} — which is how every real FRLG info screen gets its
+ * two-tone look. BPRE.ld:1321. */
+typedef void (*AddTextPrinter4_t)(u8 win, u8 font, u8 x, u8 y, u8 letterSp, u8 lineSp,
+                                  const u8 *color, s8 speed, const u8 *str);
+#define AddTextPrinterParameterized4 ((AddTextPrinter4_t)0x0812E5A5u)
+/* Rectangle fill inside a window's pixel buffer — the hairline rule under a header, and later the
+ * HP bars. Clips to the surface internally (FillBitmapRect4Bit), so an over-wide rect is safe. */
+typedef void (*FillWinPixRect_t)(u8 win, u8 fill, u16 x, u16 y, u16 w, u16 h);
+#define FillWindowPixelRect          ((FillWinPixRect_t)0x08004379u)
+#define FONT_SMALL 0u                        /* 8x13 vs FONT_NORMAL's 10x14 — narrower, 1px shorter */
+
+/* Canonical FR text colours, {bg, fg, shadow}. bg=1 matches the PIXEL_FILL(1) interior that
+ * SetStandardWindowBorderStyle leaves behind, so these read correctly on a standard window. */
+static const u8 sColBody[3]  = { 1, 2, 3 };   /* dark gray on white — body text */
+static const u8 sColTitle[3] = { 1, 8, 9 };   /* blue — headers and values */
+static const u8 sColAlert[3] = { 1, 4, 5 };   /* red — a dead mon */
 #define SLINK_MENU_BUF 0x0203FC90u           /* [u8 count][FR str 0xFF-term]... staged for OP_SHOW_CHOICES */
 /* void BattlePutTextOnWindow(const u8 *frText, u8 windowId) @0x080D87BE — the engine's IN-BATTLE text
  * draw (the bundled RR4.1 Battle Calc detours its prologue to inject damage numbers). General primitive:
@@ -614,10 +642,9 @@ static void show_choices_entry(void)
  * elevator pattern), closed after the pick. The talk-NPC speaks this way ("OAK: ..." + Trade/Say hey).
  * Max script = 18 B; SLINK_SCRIPT_BUF has 0x20 before SLINK_TEXT_BUF (0x0203F900). Caller guards on
  * sScriptContext2Enabled. */
-static void run_choices(u8 with_text)
+static void run_ui_script(u32 fn, u8 with_text)
 {
     volatile u8 *s = (volatile u8 *)SLINK_SCRIPT_BUF;
-    u32 fn = ((u32)&show_choices_entry) | 1u;
     u32 i = 0;
     s[i++] = 0x69;                                               /* lockall */
     if (with_text) {
@@ -633,6 +660,178 @@ static void run_choices(u8 with_text)
     s[i++] = 0x6B;                                               /* releaseall */
     s[i++] = 0x02;                                               /* end */
     ScriptContext1_SetupScript((const u8 *)SLINK_SCRIPT_BUF);
+}
+
+static void run_choices(u8 with_text) { run_ui_script(((u32)&show_choices_entry) | 1u, with_text); }
+
+/* callnative target: the §6 SOULLINK info screen. A SIBLING of show_choices_entry, not an extension
+ * of it — that one rejects count > 8 and its whole shape (measure the widest option, size the window
+ * to it, wrap the cursor) is option-list logic. This draws a fixed full-width panel of pre-formatted
+ * lines Lua staged in SlinkInfo.
+ *
+ * It still hands input to the engine's multichoice task with a count of ONE. That is deliberate: A
+ * *or* B then closes the window, tears it down and resumes the script for free, and drive_ui kind 1
+ * publishes which one was pressed (0 = A, 0x7F = B) — which is exactly the pagination signal, so
+ * pagination costs no extra code. The price is a selector arrow in the 8px left gutter of line 0,
+ * where the option text never goes. */
+/* "SOUL LINK" and an empty string, FR-encoded. The title is a ROM const, not a staged line — it is
+ * the same on every page, and a header the player can't accidentally overwrite is one fewer thing
+ * for the Lua side to get wrong. */
+static const u8 sInfoTitle[] = { FU('S'), FU('O'), FU('U'), FU('L'), FSP,
+                                 FU('L'), FU('I'), FU('N'), FU('K'), FEOS };
+static const u8 sInfoEmpty[1] = { FEOS };
+
+/* Copy a staged slot onto the stack, guaranteeing termination. Copying rather than repairing in
+ * place keeps drawing IDEMPOTENT: re-opening the panel without restaging must render identically. */
+static const u8 *slot_str(volatile u8 *src, u8 *buf)
+{
+    if (src[0] == 0xFF || src[0] == 0x00) return sInfoEmpty;
+    for (u8 i = 0; i < 32; i++) buf[i] = src[i];
+    buf[31] = 0xFF;
+    return (const u8 *)buf;
+}
+
+/* x for a right-aligned string in the 216px content area. GetStringWidth is pixel-exact for English
+ * (the renderer and the measurer both skip letterSpacing outside Japanese mode), so this needs no
+ * fudge factor. */
+static u8 rx(const u8 *s)
+{
+    u32 w = GetStringWidth(FONT_SMALL, s, 0);
+    return (u8)(w >= 216u ? 0u : 216u - w);
+}
+
+/* Split one staged slot into fields on 0xFE (what lua/mailbox.lua's fr_encode already emits for
+ * "\n"). Copies to the caller's stack buffer first, so a redraw of the same stage is identical —
+ * splitting in place would turn every field separator into a terminator and render name-only rows
+ * the second time the panel opened. Returns the field count, which is how the row KIND is decided:
+ * 1 = plain text, 2 = label/value, 5 = mon row. Self-describing, so no metadata byte is stored and
+ * Lua can mix row kinds on one page without the patch knowing anything about the content. */
+static u8 split_slot(volatile u8 *src, u8 *buf, const u8 *f[5])
+{
+    u8 i, k = 1;
+    for (i = 0; i < 32; i++) buf[i] = src[i];
+    buf[31] = 0xFF;
+    for (i = 0; i < 5; i++) f[i] = sInfoEmpty;
+    f[0] = buf;
+    for (i = 0; i < 32 && buf[i] != 0xFF; i++)
+        if (buf[i] == 0xFE) { buf[i] = 0xFF; if (k < 5) f[k++] = &buf[i + 1]; }
+    return k;
+}
+
+/* Decimal from FR digits (charmap 0xA1 = '0'). Written out rather than using a library atoi because
+ * this blob has no libc, and deliberately without '/' or '%' on a runtime value — those emit a call
+ * to __aeabi_uidiv, which does not exist here either. */
+static u8 parse_u8(const u8 *s)
+{
+    u32 v = 0, n = 0;
+    while (*s >= 0xA1u && *s <= 0xAAu && n < 3) { v = v * 10u + (u32)(*s - 0xA1u); s++; n++; }
+    return (u8)(v > 255u ? 255u : v);
+}
+
+#define BAR_W 38u                          /* inner track width in px; Lua scales HP to 0..38 */
+static const u8 sLvGlyph[] = { 0xF9, 0x05, 0xFF };   /* the engine's own "Lv" glyph (gText_Lv) */
+
+/* One party-menu-style row: LABEL  Name  Lv## [====----]      cur/max
+ * Modelled on the party menu because that is the screen every player already reads HP from. */
+static void info_mon_row(u8 win, u8 y, const u8 *f[5])
+{
+    u8 bp = parse_u8(f[4]);
+    if (bp > BAR_W) bp = BAR_W;
+    /* A dead mon is the one thing on this screen that must be unmissable, so it is the one thing
+     * that gets the alert colour — on both the name and the HP text. */
+    const u8 *col = bp ? sColBody : sColAlert;
+    AddTextPrinterParameterized4(win, FONT_SMALL, 0,   y, 0, 0, sColTitle, 0xFF, f[0]);  /* area */
+    AddTextPrinterParameterized4(win, FONT_SMALL, 26,  y, 0, 0, col,       0xFF, f[1]);  /* name */
+    AddTextPrinterParameterized4(win, FONT_SMALL, 80,  y, 0, 0, sColBody,  0xFF, sLvGlyph);
+    AddTextPrinterParameterized4(win, FONT_SMALL, 88,  y, 0, 0, sColBody,  0xFF, f[2]);  /* level */
+    AddTextPrinterParameterized4(win, FONT_SMALL, rx(f[3]), y, 0, 0, col,  0xFF, f[3]);  /* cur/max */
+    /* Bar: outline, then track, then fill. FillWindowPixelRect clips internally, but bp is clamped
+     * above anyway so a bad stage can't push the fill into the HP-text column. */
+    FillWindowPixelRect(win, 0x22, 108, (u16)(y + 3), 40, 7);
+    FillWindowPixelRect(win, 0x11, 109, (u16)(y + 4), BAR_W, 5);
+    if (bp) {
+        /* FRLG's own thresholds, >50% green / >20% yellow / else red — as two compares on the
+         * pixel width, so there is still no division anywhere. */
+        u8 c = (bp > 19u) ? 6u : (bp > 7u) ? 5u : 4u;
+        FillWindowPixelRect(win, (u8)(c | (c << 4)), 109, (u16)(y + 4), bp, 5);
+    }
+}
+
+static void show_info_entry(void)
+{
+    u8 n = SI->lines;
+    /* Clamp and repair, never bail. Everything below must reach CreateTask: we are a callnative
+     * inside a lockall'd script whose `waitstate` is resolved ONLY by the input task created at the
+     * end, so an early return leaves the player in a locked overworld with no window and no way
+     * out. (show_choices_entry still has the original bailing shape and that latent softlock.) */
+    if (n == 0) n = 1;
+    if (n > INFO_ROWS) n = INFO_ROWS;
+
+    /* 27x13, NOT 27x14. CreateWindowFromRect hardcodes baseBlock 0x38 and the field message-box
+     * window sits at 0x198, so the budget is 352 tiles — 27x14 = 378 spends 26 tiles INTO the
+     * msgbox. The shipped version had that bug; for run_choices(with_text) the msgbox it would
+     * corrupt is a live one. 27x13 = 351 ends at 0x196, one tile clear. */
+    u8 win = CreateWindowFromRect(1, 2, 27, 13);
+    SetStandardWindowBorderStyle(win, 0);   /* draws the player's OPTIONS frame + PIXEL_FILL(1) */
+
+    /* Header: title left, page indicator right — the layout every real RR info screen uses (the
+     * Pokemon Info page puts its title top-left and its button hints top-right). */
+    u8 pgbuf[32];
+    const u8 *pg = slot_str(&SI->line[INFO_PAGE_SLOT][0], pgbuf);
+    AddTextPrinterParameterized4(win, FONT_NORMAL, 0, 0, 0, 0, sColTitle, 0xFF, sInfoTitle);
+    AddTextPrinterParameterized4(win, FONT_SMALL, rx(pg), 1, 0, 0, sColBody, 0xFF, pg);
+    FillWindowPixelRect(win, 0x33, 0, 15, 216, 1);          /* hairline rule under the header */
+
+    for (u8 i = 0; i < n; i++) {
+        u8 buf[32];
+        const u8 *f[5];
+        u8 y  = (u8)(18 + 13 * i);
+        u8 nf = split_slot(&SI->line[i][0], buf, f);
+        if (nf >= 5) {
+            info_mon_row(win, y, f);
+        } else if (nf == 2) {
+            /* label/value, the trainer-card and OPTIONS grammar: label left, value right in the
+             * accent colour. Blue rather than the save box's red, because on this screen red is
+             * reserved for "this mon is dead". */
+            AddTextPrinterParameterized4(win, FONT_SMALL, 0, y, 0, 0, sColBody, 0xFF, f[0]);
+            AddTextPrinterParameterized4(win, FONT_SMALL, rx(f[1]), y, 0, 0, sColTitle, 0xFF, f[1]);
+        } else {
+            AddTextPrinterParameterized4(win, FONT_SMALL, 0, y, 0, 0, sColBody, 0xFF, f[0]);
+        }
+    }
+
+    CopyWindowToVram(win, 2 /*COPYWIN_GFX*/);
+    /* The cursor is NOT decorative — Task_MultichoiceMenu_HandleInput drives input through the
+     * sMenu state this populates, so it is repointed, never dropped. Parking it beside the page
+     * indicator makes it read as the "press A" affordance it actually is, instead of an arrow
+     * selecting a body row that isn't selectable. */
+    u8 cx = rx(pg);
+    Menu_InitCursor(win, FONT_SMALL, (u8)(cx >= 10 ? cx - 10 : 0), 1, 13, 1, 0);
+    u8 tid = CreateTask((void *)(TASK_MULTICHOICE_INPUT | 1u), 80);
+    volatile s16 *d = (volatile s16 *)(gTasks + (u32)tid * 0x28u + 8u);
+    d[4] = 0;      /* tIgnoreBPress: 0 so B closes too */
+    d[5] = 0;      /* tWrapAround: one row, nowhere to wrap */
+    d[6] = win;    /* tWindowId */
+    d[7] = 0;      /* tMultichoiceId: benign id (no help description) */
+    ScheduleBgCopyTilemapToVram(0);
+    SI->drawn = SI->opened;   /* this open is handled (step 3's frame-hook path reads the difference) */
+}
+
+static void run_info(void) { run_ui_script(((u32)&show_info_entry) | 1u, 0); }
+
+/* Validate the staged panel BEFORE the script is set up. Once lockall has run, the only thing that
+ * can release the field is the input task show_info_entry creates, so a rejection has to happen
+ * here — out here it is a clean ST_FAIL, in there it would be a softlock. */
+static u8 info_lines_ok(void)
+{
+    u8 n = SI->lines;
+    if (n == 0 || n > INFO_ROWS) return 0;
+    for (u8 i = 0; i < n; i++) {
+        u8 k = 0;
+        while (k < 32 && SI->line[i][k] != 0xFF) k++;
+        if (k >= 32) return 0;
+    }
+    return 1;
 }
 
 /* Show the FR-encoded text already in SLINK_TEXT_BUF as a NATIVE, A-dismissable dialogue. Builds
@@ -1436,12 +1635,6 @@ typedef u8 (*StartMenuFn)(void);
 #define StartMenu_Id8Orig ((StartMenuFn)0x0806F56Du)  /* what act[8].func was before we took it */
 #define SetUpStartMenu_Orig ((void (*)(void))0x090BE179u)
 
-/* FR charmap (same table as lua/mailbox.lua fr_encode): 'A'=0xBB, 'a'=0xD5, space=0x00, EOS=0xFF.
- * Spelled as arithmetic on the character literal so the mapping is checkable by eye. */
-#define FU(c) (u8)(0xBBu + ((c) - 'A'))
-#define FL(c) (u8)(0xD5u + ((c) - 'a'))
-#define FSP   0x00u
-#define FEOS  0xFFu
 const u8 sSoulLinkLabel[] = { FU('S'), FU('O'), FU('U'), FU('L'), FU('L'), FU('I'), FU('N'),
                               FU('K'), FEOS };
 const u8 sSoulLinkDesc[] = { FU('C'), FL('h'), FL('e'), FL('c'), FL('k'), FSP,
@@ -1641,6 +1834,23 @@ void slink_hook(void)
         if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
         if (!on_field()) { ack(ST_FAIL, 3); return; }
         run_choices(MB->args[0]);
+        MENU->kind = 1; MENU->phase = 1; MENU->seq = MB->seq; MENU->frames = 0; MENU->pending = 1;
+        MB->status = ST_BUSY; MB->opcode = 0;
+        return;
+    }
+
+    case OP_SHOW_INFO: {          /* §6 SOULLINK info screen. Lines are staged as plain EWRAM writes
+                                     into SlinkInfo (not through the mailbox — ~260 B of text would
+                                     contend with ghost/trade/msgbox traffic for nothing); args[0] is
+                                     just the page number to display. ASYNC, lockall-bracketed, so
+                                     drive_ui kind 1 publishes result[0] = 0 (A) / 0x7F (B). */
+        if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
+        if (!on_field()) { ack(ST_FAIL, 3); return; }
+        if (!info_lines_ok()) { ack(ST_FAIL, 2); return; }   /* nothing staged, or a slot with no
+                                                                terminator — must be caught HERE, see
+                                                                info_lines_ok */
+        SI->page = MB->args[0];
+        run_info();
         MENU->kind = 1; MENU->phase = 1; MENU->seq = MB->seq; MENU->frames = 0; MENU->pending = 1;
         MB->status = ST_BUSY; MB->opcode = 0;
         return;

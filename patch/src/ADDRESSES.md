@@ -128,6 +128,75 @@ Menu globals, both located live: **`sNumStartMenuActions = 0x020370F5`**, **`sSt
 splices SOULLINK at index 5 and pushes EXIT to 6 — and it splices *only* into that exact shape, so
 the link menu and any future RR revision are left alone rather than guessed at.
 
+### The info screen (opcode 27)
+
+`show_info_entry` is a **sibling** of `show_choices_entry`, not an extension — that one rejects
+`count > 8` and its shape (measure the widest option, size the window to it, wrap the cursor) is
+option-list logic. Both share `run_ui_script()` for the `lockall ; callnative ; waitstate ;
+releaseall ; end` bracket.
+
+It hands input to the engine's multichoice task with **count = 1**. A *or* B then closes the
+window, tears it down and resumes the script for free, and `drive_ui` kind 1 publishes which was
+pressed — `result[0]` = `0` (A) or `0x7F` (B). That difference **is** the pagination protocol; there
+is no separate "next page" opcode.
+
+> **A `callnative` target inside a `lockall` script must never fail to create its input task.**
+> `waitstate` is resolved only by that task, so an early `return` leaves the player in a locked
+> overworld with no window and no way out. The staged panel is validated *before* the script is set
+> up (`info_lines_ok()` → `ack(ST_FAIL, 2)`), and `show_info_entry` clamps and repairs rather than
+> bailing. The first run of `test_live_infoscreen` caught exactly this — a malformed stage came back
+> with no status at all because the script never resolved. `show_choices_entry` still has the
+> original bailing shape and the same latent softlock.
+
+#### Window tile budget — a hard ceiling that is easy to blow
+
+`CreateWindowFromRect` hardcodes **baseBlock `0x38`**, and the field message-box window's template
+(`0x0841F42C`) has baseBlock **`0x198`**. The usable range is therefore `0x038..0x197` = **352
+tiles**, and `width * height` must fit inside it.
+
+At width 27 the **maximum height is 13** (351 tiles, ending `0x196`). The first shipped version of
+this screen used `27 x 14` = 378 tiles and overran the message-box window by 26 — fixed to
+`CreateWindowFromRect(1, 2, 27, 13)`.
+
+> **`show_choices_entry` has the same latent overrun.** It calls `CreateWindowFromRect(left, 1,
+> width, sMcHeight[count])`; with `count == 8` (`sMcHeight[8] = 14`) and a `width` near its 27
+> clamp it spends up to 378 tiles. For `run_choices(with_text=1)` the message box it would corrupt
+> is a **live** one. It needs a combined `width * height <= 352` guard, not just the width clamp.
+
+#### Looking native
+
+Derived from RR's own screens (captured by `lua/tests/_ref_screens.lua`): the trainer card, the
+Pokémon Info page, OPTIONS and the party menu. The closest engine analogue is the start-menu
+**save-stats box** (`PrintSaveStats`, alive in RR at `0x0806FCF4`) — one framed window, coloured
+header, hairline rule, small-font rows at fixed x with explicit colour triples.
+
+| element | how |
+|---|---|
+| frame | `SetStandardWindowBorderStyle(win, 0)` — draws the **player's OPTIONS frame choice**, so the panel matches whatever they picked |
+| colour | `AddTextPrinterParameterized4` @ `0x0812E5A5`, taking an explicit `{bg, fg, shadow}` triple. Canonical: body `{1,2,3}`, accent/blue `{1,8,9}`, alert/red `{1,4,5}` |
+| title | ROM const, `FONT_NORMAL`, blue, top-left |
+| page hint | right-aligned at `216 - GetStringWidth(...)`, with the menu cursor parked beside it — the `▲Page ✕Cancel` convention off the Pokémon Info page. `GetStringWidth` is pixel-exact for English (renderer and measurer both skip `letterSpacing` outside Japanese mode), so right-align needs no fudge |
+| rule / HP bars | `FillWindowPixelRect` @ `0x08004379` (clips internally) |
+| `Lv` | the engine's own glyph, FR bytes `F9 05` |
+| fonts | `FONT_SMALL` (0) is 8x13, `FONT_NORMAL` (2) is 10x14. Rows use SMALL at a 13px pitch: 6 rows in the 104px content area |
+
+**Row kind is derived from the field count**, not stored — slots are split on `0xFE`, which
+`MB.fr_encode` already emits for `"
+"`. 5 fields = a party-menu-style mon row (area, name, `Lv`,
+HP text, bar px), 2 = label/value, 1 = full-width text. So the `SlinkInfo` contract is unchanged and
+Lua can mix row kinds on a page without the patch knowing anything about the content. The split
+copies to a stack buffer rather than editing in place, so redrawing the same stage is idempotent.
+
+Bar colour uses FRLG's own >50% / >20% thresholds as two compares on the pixel width — **no
+division anywhere**, because this blob has no libgcc (`/` on a runtime value emits an undefined
+`__aeabi_uidiv`). Lua does the HP→pixels division and stages the result. `barpx == 0` renders the
+name and HP text in red and leaves the bar empty: that is the fainted signal.
+
+LIVE (`test_live_infoscreen`): rejects an empty panel and an unterminated line without locking the
+field, draws (BG VRAM changes), renders all three row kinds, asserts the panel's own tiles actually
+contain blue/red/green (a flat-black screen would otherwise pass), A→`0` and B→`0x7F` both close and
+release, and it reopens cleanly.
+
 The callback deliberately **does not draw**: it bumps `opened` and tail-calls `StartMenu_Exit`
 (`0x0806F541`, which is already `act[6].func` and therefore proven safe in this slot). That is what
 makes the hook gateable on its own. LIVE (`test_live_soullinkmenu`): stock 6-row menu when

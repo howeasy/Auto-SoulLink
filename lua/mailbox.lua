@@ -304,8 +304,68 @@ MB.INFO_OPENED = MB.INFO + 1   -- u8: patch ++ when the row is chosen (poll for 
 MB.INFO_DRAWN  = MB.INFO + 2   -- u8: patch's ack of OPENED
 MB.INFO_LINES  = MB.INFO + 3   -- u8: populated line count, 0..8 (0 = the screen refuses to open)
 MB.INFO_LINE   = MB.INFO + 8   -- u8[8][32]: FR-encoded, 0xFF-terminated
+MB.OP_SHOW_INFO  = 27
+MB.INFO_MAXLINES = 6    -- body rows that fit at the panel's 13px pitch; the title is a ROM const
+MB.INFO_LINEW    = 32   -- bytes per slot; a line must fit encoded + terminator, so 31 chars max
+MB.INFO_PAGESLOT = 7    -- the header's page indicator; `lines` never counts it
 function MB.set_info_enable(enable) memory.write_u8(MB.INFO_ENABLE, enable and 1 or 0) end
 function MB.info_opened() return memory.read_u8(MB.INFO_OPENED) end
+
+-- Row builders. The patch decides a row's KIND from how many "\n"-separated fields it has, so
+-- these three helpers are the whole layout vocabulary: 5 fields = a party-menu-style mon row,
+-- 2 = a label/value row, 1 (a plain string) = full-width text.
+--
+-- Lua does the HP->pixels division because the patch has no libgcc and cannot divide at runtime.
+-- barpx 0 is what renders the name and HP in red, so it IS the fainted signal — pass 0 for a dead
+-- mon even if you have no HP numbers for it.
+MB.INFO_BAR_W = 38
+function MB.info_bar(cur, max)
+    if not cur or not max or max <= 0 or cur <= 0 then return 0 end
+    local px = math.floor(cur * MB.INFO_BAR_W / max + 0.5)
+    if px < 1 then px = 1 end                  -- a live mon must never render as an empty bar
+    return math.min(MB.INFO_BAR_W, px)
+end
+-- label <=4 chars (an area tag), name <=10 (the engine's own gSpeciesNames stride-11 limit).
+function MB.info_mon(label, name, level, hptext, barpx)
+    return table.concat({ tostring(label):sub(1, 4), tostring(name):sub(1, 10),
+                          tostring(level), tostring(hptext),
+                          tostring(math.max(0, math.min(MB.INFO_BAR_W, math.floor(barpx or 0)))) }, "\n")
+end
+function MB.info_stat(label, value) return tostring(label) .. "\n" .. tostring(value) end
+
+-- Stage the panel. `lines` is a list of plain ASCII strings (a GBA panel is ~26 usable chars, so
+-- format for that before calling). Truncates rather than spilling: the patch rejects any slot
+-- without a 0xFF inside its 32 bytes, so an over-long line would blank the whole screen instead of
+-- just itself. Extra lines past the 8th are dropped, and `pages` lets the caller say so on screen.
+function MB.write_info(lines, page, pages)
+    local n = math.min(#lines, MB.INFO_MAXLINES)
+    for i = 1, n do
+        local bytes = MB.fr_encode(tostring(lines[i]):sub(1, MB.INFO_LINEW - 1))
+        local off = MB.INFO_LINE + (i - 1) * MB.INFO_LINEW
+        for j = 1, #bytes do memory.write_u8(off + (j - 1), bytes[j]) end
+    end
+    memory.write_u8(MB.INFO + 4, page or 0)
+    memory.write_u8(MB.INFO + 5, pages or 1)
+    -- The page indicator goes in slot 7, which `lines` never counts and the row loop never reads —
+    -- the patch draws it right-aligned in the header. Staging it as a slot rather than a new struct
+    -- field keeps the EWRAM contract untouched, and an older Lua that never writes it simply leaves
+    -- the header without an indicator instead of breaking.
+    local pg = MB.fr_encode(string.format("PAGE %d/%d", (page or 0) + 1, pages or 1))
+    local pgoff = MB.INFO_LINE + MB.INFO_PAGESLOT * MB.INFO_LINEW
+    for j = 1, math.min(#pg, MB.INFO_LINEW) do memory.write_u8(pgoff + (j - 1), pg[j]) end
+    -- lines LAST: it is the patch's "this panel is ready" gate, so publishing it before the text
+    -- would let a frame-hook open race a half-written page.
+    memory.write_u8(MB.INFO_LINES, n)
+    memory.write_u8(MB.INFO + 6, (memory.read_u8(MB.INFO + 6) + 1) % 256)   -- gen++
+    return n
+end
+
+-- Open the staged panel. ASYNC like SHOW_MENU/SHOW_CHOICES: poll MB.poll(seq), then read
+-- MB.info_result() — 0 = A (advance a page), 0x7F = B (close). That difference is the whole
+-- pagination protocol; there is no separate "next page" opcode.
+MB.INFO_ADVANCE, MB.INFO_CLOSE = 0, 0x7F
+function MB.show_info(page) return MB.send(MB.OP_SHOW_INFO, { page or 0 }) end
+function MB.info_result() return MB.read_result_u8(0) end
 
 -- GhostState @ 0x0203F850 (shared with the patch's drive_ghost). Lua writes target/gfx each tick;
 -- the frame hook walks a real object-event toward it natively. Offsets match handlers.c.
