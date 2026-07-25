@@ -606,9 +606,14 @@ def test_overworld_presence_round_trips_through_save_load(tmp_path, monkeypatch)
 
 
 def test_explode_mode_on_emits_force_explode(tmp_path, monkeypatch):
-    """With explode_mode=True, partner-faint propagation sends `force_explode` instead."""
+    """With explode_mode=True on Radical Red, partner-faint propagation sends `force_explode`.
+
+    The adapter must say it supports the command — only RR's Lua client implements it.
+    See tests/unit/test_explode_mode_gate.py for the non-RR fallback.
+    """
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = make_state_with_link()
+    state.adapter = Gen3Adapter(is_rr=True)
     state.explode_mode = True
     state.handle_event("a", {"event": "faint", "key": "A:1"})
     cmds_b = state.handle_event("b", {"event": "tick"})

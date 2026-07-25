@@ -59,10 +59,14 @@ async def backup_loop(
     try:
         while True:
             await asyncio.sleep(interval_s)
-            if is_active():
-                try:
+            # is_active() is inside the try too: it reads live server state, and an exception
+            # there used to kill the task outright — no backups for the rest of the session, and
+            # nothing in the log to say so. A backup loop that dies silently is worse than one
+            # that skips a cycle.
+            try:
+                if is_active():
                     do_backup(links_path, events_path, max_slots)
-                except Exception as e:
-                    log.warning("Backup failed: %s", e)
+            except Exception as e:
+                log.warning("Backup failed: %s", e)
     except asyncio.CancelledError:
         pass

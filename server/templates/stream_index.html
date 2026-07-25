@@ -371,7 +371,7 @@
 {{ sidebar_html | safe }}
 <div class="launcher"
      x-data="overlayLauncher()"
-     x-init="init(window.SLINK_OVERLAY_CATALOG)">
+     x-init="setup(window.SLINK_OVERLAY_CATALOG)">
 
   {# ── Left rail: families + items ────────────────────────────────── #}
   <nav class="rail" :class="railCollapsed ? 'rail-collapsed' : ''">
@@ -582,7 +582,11 @@ function overlayLauncher() {
       return this.catalog[this.active] || { title: '', desc: '', sizes: [], layouts: [''] };
     },
 
-    init(overlays) {
+      // NOT named `init`: Alpine auto-invokes a component's `init()` with NO arguments
+      // during initialisation, so an `init(arg)` here runs TWICE — once with arg
+      // undefined. See tests/unit/test_routes_smoke.py for the guard.
+    setup(overlays) {
+      if (!overlays || !overlays.length) return;
       this.overlays = overlays;
       overlays.forEach(o => { this.catalog[o.slug] = o; });
       this.active = overlays[0].slug;

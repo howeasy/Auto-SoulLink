@@ -26,7 +26,7 @@
   ('funtastic-smoke',      'Smoke',       '#333333'),
 ] -%}
 
-<div class="theme-switcher" x-data="themeSwitcher()" x-init="init('{{ theme }}')">
+<div class="theme-switcher" x-data="themeSwitcher()" x-init="setup('{{ theme }}')">
   <details>
     <summary>
       <span class="theme-swatch" :style="`background:${swatchFor(active)}`"></span>
@@ -94,7 +94,14 @@
     };
     return {
       active: 'default',
-      init(serverTheme) {
+      // NOT named `init`: Alpine auto-invokes a component's `init()` with NO arguments as
+      // part of initialisation, so an `init(serverTheme)` here ran twice — once with
+      // serverTheme undefined, which set active to undefined and pointed the stylesheet
+      // <link> at a nonexistent theme file (a 404 on every page load), and again from x-init
+      // with the real value. The stray run also registered a SECOND htmx:afterSettle and
+      // storage listener, so every SSE settle did the theme work twice.
+      setup(serverTheme) {
+        if (!serverTheme || !THEMES[serverTheme]) serverTheme = 'default';
         // Defensive: if this script ever runs on a stream page (it shouldn't —
         // base.html skips the switcher when body.stream is set) DO NOT touch
         // localStorage. Overlays must honour their URL parameter exclusively.

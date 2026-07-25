@@ -322,6 +322,11 @@ class Gen3Adapter(GameAdapter):
             return set(_RR_RIVAL_TRAINER_IDS)
         return set()
 
+    def supports_explode_mode(self) -> bool:
+        """Explode Mode is Radical Red only — only its client handles `force_explode`
+        (the Variant-3 menu-skip path in gen3_frlge_client.lua)."""
+        return self._is_rr
+
     # ── GamePresentationAdapter ──────────────────────────────────────────
 
     def sprite_html(self, species_id: int, form: int = 0) -> str:

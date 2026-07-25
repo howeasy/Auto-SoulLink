@@ -34,6 +34,13 @@ DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 LINKS_PATH    = os.path.join(DATA_DIR, "links.json")
 MEMORIAL_PATH = os.path.join(DATA_DIR, "memorial.json")
 
+# The commands that mean "your linked partner just died".  Explode Mode swaps one for
+# the other (_propagate_faint), so everything downstream — event log, OBS triggers,
+# overlay filters — must accept BOTH.  Matching the bare string "force_faint" is how
+# Explode Mode kills came to be invisible in the dashboard and to OBS.
+DEATH_COMMANDS = ("force_faint", "force_explode")
+
+
 class AreaStatus(str, Enum):
     UNSEEN      = "unseen"
     PENDING_A   = "pending_a"    # A captured/entered; B not yet resolved
@@ -90,7 +97,7 @@ def is_shiny(key: str) -> bool:
 
 
 class SoulLinkState:
-    def __init__(self, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True, native_battle_control: bool = False):
+    def __init__(self, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True):
         # When data_dir is provided (manager mode) use it; otherwise fall back to the
         # module-level globals so monkeypatch works in tests and the standalone server
         # keeps working unchanged.
@@ -208,10 +215,6 @@ class SoulLinkState:
         self.native_sounds: bool = native_sounds
         self.battle_calc: bool = battle_calc
         self.pc_trade_npc: bool = pc_trade_npc
-        #  * native_battle_control (default OFF): the patch's native explode/faint controller
-        #    swap.  Off after a real-play softlock; the Variant-3 RAM path stays the fallback
-        #    until the native path is re-proven (ROADMAP §2).
-        self.native_battle_control: bool = native_battle_control
         # Talk-to-partner: each player's latest in-game progress (badge count), reported via the
         # `status` event; surfaced to the partner in the talk-to-partner box (the nuzlocke helper).
         self.player_badges: dict[str, int] = {"a": 0, "b": 0}
@@ -704,9 +707,9 @@ class SoulLinkState:
         self._trade_settle_ticks = {"a": self.TRADE_SETTLE_TICKS, "b": self.TRADE_SETTLE_TICKS}
 
     @classmethod
-    def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True, native_battle_control: bool = False) -> "SoulLinkState":
+    def load(cls, data_dir: str = None, species_lock: bool = False, gender_lock: bool = False, type_lock: bool = False, explode_mode: bool = False, is_rr: bool = False, adapter: GameRulesAdapter = None, rival_team_swap: bool = False, overworld_presence: bool = False, native_messages: bool = False, native_sounds: bool = False, battle_calc: bool = True, pc_trade_npc: bool = True) -> "SoulLinkState":
         """Load persisted state from data/links.json, or return a fresh instance."""
-        state = cls(data_dir=data_dir, species_lock=species_lock, gender_lock=gender_lock, type_lock=type_lock, explode_mode=explode_mode, is_rr=is_rr, adapter=adapter, rival_team_swap=rival_team_swap, overworld_presence=overworld_presence, native_messages=native_messages, native_sounds=native_sounds, battle_calc=battle_calc, pc_trade_npc=pc_trade_npc, native_battle_control=native_battle_control)
+        state = cls(data_dir=data_dir, species_lock=species_lock, gender_lock=gender_lock, type_lock=type_lock, explode_mode=explode_mode, is_rr=is_rr, adapter=adapter, rival_team_swap=rival_team_swap, overworld_presence=overworld_presence, native_messages=native_messages, native_sounds=native_sounds, battle_calc=battle_calc, pc_trade_npc=pc_trade_npc)
         if not os.path.exists(state._links_path):
             return state
         try:
@@ -765,7 +768,6 @@ class SoulLinkState:
                 state.native_sounds = bool(saved_rules.get("native_sounds", native_sounds))
                 state.battle_calc = bool(saved_rules.get("battle_calc", battle_calc))
                 state.pc_trade_npc = bool(saved_rules.get("pc_trade_npc", pc_trade_npc))
-                state.native_battle_control = bool(saved_rules.get("native_battle_control", native_battle_control))
             state.run_over = bool(data.get("run_over", False))
             state.attempts_count = int(data.get("attempts_count", 0))
             state.rom_type = data.get("rom_type", "")
@@ -1051,7 +1053,6 @@ class SoulLinkState:
             "native_sounds": bool(self.native_sounds),
             "battle_calc": bool(self.battle_calc),
             "pc_trade_npc": bool(self.pc_trade_npc),
-            "native_battle_control": bool(self.native_battle_control),
         })
 
         # Re-arm an in-flight rebuild: reconcile restored_keys from the fresh
@@ -2543,6 +2544,18 @@ class SoulLinkState:
             log.debug(f"[CLAUSE] {a_name} ↔ {b_name}  " + "  ".join(checks))
         return None
 
+    def queued_death_cmd(self, player_id: str, key: str) -> Optional[str]:
+        """The death command queued for `key` on `player_id`, or None.
+
+        One predicate for every "did the partner get killed" check, so Explode Mode's
+        `force_explode` can never again be missed by a caller that only knew about
+        `force_faint`.  Returns the command name so callers can report what happened.
+        """
+        for c in self.queued_commands.get(player_id, []):
+            if c.get("cmd") in DEATH_COMMANDS and c.get("key") == key:
+                return c["cmd"]
+        return None
+
     def _propagate_faint(self, player_id: str, entry: LinkEntry, killer: Optional[dict] = None,
                          level: int = 0):
         """Mark entry dead, queue force_faint (or force_explode if Explode Mode is on)
@@ -2553,9 +2566,14 @@ class SoulLinkState:
         if partner_mon:
             # Explode Mode: send `force_explode` so the client takes the
             # Variant-3 menu-skip path (auto-Explosion for active battlers,
-            # immediate forceFaint for bench mons).  When off, fall back to
-            # the legacy `force_faint` deferred-faint command.
-            cmd_name = "force_explode" if self.explode_mode else "force_faint"
+            # immediate forceFaint for bench mons).  When off — or when the
+            # game's client wouldn't understand it — fall back to the legacy
+            # `force_faint` deferred-faint command.  Without the adapter gate,
+            # a Gen 1/2/4/5 run with --explode-mode would emit a command those
+            # clients only log, and the linked mon would never faint.
+            explode = self.explode_mode and bool(
+                self.adapter and self.adapter.supports_explode_mode())
+            cmd_name = "force_explode" if explode else "force_faint"
             self.queued_commands[partner].append({"cmd": cmd_name, "key": partner_mon.key, "nickname": partner_mon.nickname or ""})
             self.queued_commands[partner].append({"cmd": "play_sound", "sound": 26})   # SE_FAILURE — the KO notification's noise (HUD convention)
             self.party_keys[partner].discard(partner_mon.key)
@@ -2896,7 +2914,6 @@ class SoulLinkState:
                 "native_sounds": self.native_sounds,
                 "battle_calc": self.battle_calc,
                 "pc_trade_npc": self.pc_trade_npc,
-                "native_battle_control": self.native_battle_control,
             },
             "links": [
                 {

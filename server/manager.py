@@ -251,8 +251,10 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
         cmd.append("--native-messages")
     if run.get("native_sounds"):
         cmd.append("--native-sounds")
-    if run.get("native_battle_control"):
-        cmd.append("--native-battle-control")
+    # Every registry entry has carried a `verbose` key since the first release, but nothing
+    # ever passed it through — a per-run DEBUG log was silently impossible from the manager.
+    if run.get("verbose"):
+        cmd.append("--verbose")
     # battle_calc / pc_trade_npc default ON — the CLI flags are the inverse (--no-*).
     if not run.get("battle_calc", True):
         cmd.append("--no-battle-calc")
@@ -395,7 +397,6 @@ def _adopt_orphans(runs: list[dict]) -> bool:
             "native_sounds": bool(rules.get("native_sounds", False)),
             "battle_calc": bool(rules.get("battle_calc", True)),
             "pc_trade_npc": bool(rules.get("pc_trade_npc", True)),
-            "native_battle_control": bool(rules.get("native_battle_control", False)),
         }
         runs.append(run)
         known_ids.add(run_id)  # avoid port collision across multiple orphans
@@ -458,10 +459,6 @@ def _render_cards(runs: list[dict], host: str) -> str:
             lock_badges += '<span class="lock-badge">Calc Off</span>'
         if not run.get("pc_trade_npc", True):
             lock_badges += '<span class="lock-badge">PC NPC Off</span>'
-        if run.get("native_battle_control"):
-            # Experimental path (softlocked in real play once); the UI checkbox was removed but
-            # the flag is still accepted via API / old registry entries — it must stay VISIBLE.
-            lock_badges += '<span class="lock-badge">Native Battle &#9888;</span>'
 
         # Read game/rom_type from the run's links.json
         game_badge = ""
@@ -667,7 +664,7 @@ class RunManager:
             "native_sounds": bool(body.get("native_sounds", False)),
             "battle_calc": bool(body.get("battle_calc", True)),
             "pc_trade_npc": bool(body.get("pc_trade_npc", True)),
-            "native_battle_control": bool(body.get("native_battle_control", False)),
+            "verbose": bool(body.get("verbose", False)),
         }
         # Create data directory immediately
         os.makedirs(os.path.join(MANAGER_DIR, run_id), exist_ok=True)

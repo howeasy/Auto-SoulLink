@@ -201,6 +201,21 @@ class GameRulesAdapter(ABC):
         """
         return set()
 
+    def supports_explode_mode(self) -> bool:
+        """Whether this game's Lua client understands the `force_explode` command.
+
+        Explode Mode swaps the deferred `force_faint` for `force_explode`, which
+        coerces the surviving partner into Explosion.  Only the Gen 3 Radical Red
+        client implements it (`gen3_frlge_client.lua`); the Gen 1/2/4/5 clients
+        fall into their unknown-command branch and merely log it, so the linked
+        mon would never faint — a silent Soul Link rule violation.
+
+        Default False so an unsupported game falls back to the normal deferred
+        faint, mirroring the `rival_trainer_ids()` gate: the game-specific adapter
+        opts in, and no `game_id` branch appears in shared code.
+        """
+        return False
+
 
 class GamePresentationAdapter(ABC):
     """Interface for game-specific display/UI logic.

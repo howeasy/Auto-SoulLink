@@ -102,8 +102,5 @@ except ImportError:
 from .gen1_rby import Gen1Adapter  # noqa: E402
 register_adapter("gen1_rby", Gen1Adapter)
 
-try:
-    from .gen2_crystal import Gen2CrystalAdapter  # noqa: E402
-    register_adapter("gen2_crystal", Gen2CrystalAdapter)
-except ImportError:
-    pass  # Adapter not yet implemented
+from .gen2_crystal import Gen2CrystalAdapter  # noqa: E402
+register_adapter("gen2_crystal", Gen2CrystalAdapter)

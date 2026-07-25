@@ -27,7 +27,7 @@
 
 <div class="mgr-launcher"
      x-data="runManager()"
-     x-init="init(window.SLINK_RUNS)">
+     x-init="setup(window.SLINK_RUNS)">
 
   {# ── Left rail: runs grouped by status ──────────────────────────────── #}
   <nav class="mgr-rail">
@@ -310,11 +310,6 @@
               PC NPC Off
             </span>
           </template>
-          <!-- Experimental (softlocked in real play once). No create-form checkbox, but the flag
-               is still accepted via API / old registry entries — keep it visible when active. -->
-          <template x-if="current?.native_battle_control">
-            <span class="mgr-badge mgr-badge-lock">&#9888; Native Battle</span>
-          </template>
         </div>
 
         <template x-if="current?.last_event">
@@ -508,7 +503,11 @@ function runManager() {
         .map(s => ({ label: labels[s], runs: byStatus[s] }));
     },
 
-    init(runs) {
+      // NOT named `init`: Alpine auto-invokes a component's `init()` with NO arguments
+      // during initialisation, so an `init(arg)` here runs TWICE — once with arg
+      // undefined. See tests/unit/test_routes_smoke.py for the guard.
+    setup(runs) {
+      if (!runs) return;
       this.runs = runs;
       if (runs.length > 0) {
         // Prefer first running, otherwise first overall.

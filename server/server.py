@@ -606,6 +606,7 @@ _DEBUG_HTML = """<!DOCTYPE html>
       <div><label>Target Player</label><select id="cmd-player"><option value="a">A</option><option value="b">B</option></select></div>
       <div><label>Command</label><select id="cmd-type">
         <option value="force_faint">force_faint</option>
+        <option value="force_explode">force_explode</option>
         <option value="box_mon">box_mon</option>
         <option value="party_mon">party_mon</option>
         <option value="memorialize">memorialize</option>
@@ -1485,8 +1486,7 @@ class SLinkServer:
                  type_lock: bool = False, explode_mode: bool = False,
                  rival_team_swap: bool = False, overworld_presence: bool = False,
                  native_messages: bool = False, native_sounds: bool = False,
-                 battle_calc: bool = True, pc_trade_npc: bool = True,
-                 native_battle_control: bool = False):
+                 battle_calc: bool = True, pc_trade_npc: bool = True):
         self._data_dir = data_dir  # None → use global DATA_DIR (backward compat)
         self._run_id   = run_id
         self._run_name = run_name
@@ -1503,8 +1503,7 @@ class SLinkServer:
                                         native_messages=native_messages,
                                         native_sounds=native_sounds,
                                         battle_calc=battle_calc,
-                                        pc_trade_npc=pc_trade_npc,
-                                        native_battle_control=native_battle_control)
+                                        pc_trade_npc=pc_trade_npc)
         # Game adapter — shared with state machine for consistent behavior.
         # Provides both rules and presentation methods.
         self.adapter = self.state.adapter
@@ -1880,13 +1879,16 @@ class SLinkServer:
                     if item:    meta_bits.append(f'<span class="tr-item">@ {item}</span>')
                     if nature:  meta_bits.append(f'<span class="tr-nature dim">{nature}</span>')
                     meta_html = (' · '.join(meta_bits)) if meta_bits else ''
+                    # Built outside the f-string: a backslash inside an f-string expression
+                    # is Python 3.12+ syntax and would not parse on 3.11.
+                    meta_row = f'<div class="tr-mon-meta">{meta_html}</div>' if meta_html else ''
                     out += (
                         f'<div class="tr-party-row">'
                         f'<div class="tr-mon-hdr">'
                         f'<span class="tr-species">{species}</span>'
                         f'<span class="tr-lv">{lv_text}</span>'
                         f'</div>'
-                        f'{f"<div class=\"tr-mon-meta\">{meta_html}</div>" if meta_html else ""}'
+                        f'{meta_row}'
                         f'{moves_html}'
                         f'</div>'
                     )
@@ -2738,18 +2740,18 @@ class SLinkServer:
             _link = self.state._key_index.get(_faint_key)
             if _link:
                 _p_mon = _link.b if player_id == "a" else _link.a
-                if _p_mon and any(
-                    c.get("cmd") == "force_faint" and c.get("key") == _p_mon.key
-                    for c in self.state.queued_commands.get(_partner, [])
-                ):
+                _death = (self.state.queued_death_cmd(_partner, _p_mon.key)
+                          if _p_mon else None)
+                if _death:
                     _cached = self._mon_cache.get(_p_mon.key, {})
                     _p_nick = (
                         _cached.get("nickname") or
                         self.adapter.species_name(_cached.get("species_id", 0)) or
                         _p_mon.key[:8]
                     )
-                    self._log_event(_partner, "force_faint",
-                                    f"⚡ {_p_nick} force fainted!",
+                    _verb = "exploded" if _death == "force_explode" else "force fainted"
+                    self._log_event(_partner, _death,
+                                    f"⚡ {_p_nick} {_verb}!",
                                     _area_id, _p_mon.key)
 
         if event == "capture":
@@ -2846,16 +2848,13 @@ class SLinkServer:
 
         if event == "faint":
             fired.append(("faint", player_id, {}))
-            # link_death — partner receives force_faint command
+            # link_death — partner receives a death command (force_faint or force_explode)
             _faint_key = msg.get("key", "")
             if _faint_key:
                 _link = self.state._key_index.get(_faint_key)
                 if _link:
                     _p_mon = _link.b if player_id == "a" else _link.a
-                    if _p_mon and any(
-                        c.get("cmd") == "force_faint" and c.get("key") == _p_mon.key
-                        for c in self.state.queued_commands.get(_partner, [])
-                    ):
+                    if _p_mon and self.state.queued_death_cmd(_partner, _p_mon.key):
                         fired.append(("link_death", _partner, {}))
 
         if event == "whiteout":
@@ -3106,7 +3105,6 @@ class SLinkServer:
                 "native_sounds": s.native_sounds,
                 "battle_calc": s.battle_calc,
                 "pc_trade_npc": s.pc_trade_npc,
-                "native_battle_control": s.native_battle_control,
             },
             "recent_events": list(self._recent_events),
             "killfeed": sorted(
@@ -3465,11 +3463,14 @@ class SLinkServer:
             )
             enemy_party = bs.get("enemy_party", [])
             if enemy_party:
+                # Built outside the f-string: a backslash inside an f-string expression is
+                # Python 3.12+ syntax and would not parse on 3.11.
+                abl_th = '<th class="col-abl">Ability</th>' if has_abilities else ''
                 chunks.append(
                     f'<table class="foe-table"><tr><th>Foe</th>'
                     f'<th class="col-lv">Lv</th><th class="col-hp">HP</th>'
                     f'<th class="col-type">Type</th>'
-                    f'{"<th class=\"col-abl\">Ability</th>" if has_abilities else ""}</tr>'
+                    f'{abl_th}</tr>'
                 )
                 for ei, em in enumerate(enemy_party):
                     esid   = em.get("species_id", 0)
@@ -5533,6 +5534,7 @@ class SLinkServer:
         "no_catch":     "en", "area_enter":   "ea", "linked":     "el",
         "dead_zone":    "ed", "violation":    "ev", "key_change": "ek",
         "force_faint":  "ef", "hello":        "eh", "shiny":      "es",
+        "force_explode": "ef",
         "memorialize":  "em", "party_to_box": "ep", "box_to_party": "ep",
         "reroll":       "er",
     }
@@ -7389,8 +7391,7 @@ class SLinkServer:
             native_messages=self.state.native_messages,
             native_sounds=self.state.native_sounds,
             battle_calc=self.state.battle_calc,
-            pc_trade_npc=self.state.pc_trade_npc,
-            native_battle_control=self.state.native_battle_control)
+            pc_trade_npc=self.state.pc_trade_npc)
         self.adapter = self.state.adapter
         # Restore events.json and reload ring buffer
         if os.path.exists(backup_events):
@@ -7421,8 +7422,7 @@ class SLinkServer:
                                    native_messages=self.state.native_messages,
                                    native_sounds=self.state.native_sounds,
                                    battle_calc=self.state.battle_calc,
-                                   pc_trade_npc=self.state.pc_trade_npc,
-                                   native_battle_control=self.state.native_battle_control)
+                                   pc_trade_npc=self.state.pc_trade_npc)
         self.adapter = self.state.adapter
         self._last_seq.clear()
         self.connected_players.clear()
@@ -7830,6 +7830,118 @@ class SLinkServer:
 
 # ── entrypoint ─────────────────────────────────────────────────────────────────
 
+
+def build_app(srv):
+    """Build the aiohttp app with every route registered.
+
+    Extracted from main() so tests can construct the SAME app and walk the SAME route
+    table — a test that re-declared the routes would drift the moment one was added here.
+    """
+    app = aiohttp_web.Application()
+    setup_templating(app)
+    app.router.add_get("/",            srv.handle_status_html)
+    app.router.add_get("/memorial",    srv.handle_memorial_html)
+    app.router.add_get("/api/status",  srv.handle_status_json)
+    app.router.add_get("/api/events",  srv.handle_sse)
+    app.router.add_post("/api/reset",              srv.handle_reset_api)
+    app.router.add_post("/api/inject_link",        srv.handle_inject_link_api)
+    app.router.add_post("/api/inject_link_by_slot", srv.handle_inject_link_by_slot_api)
+    # Stream overlay routes
+    app.router.add_get("/stream",          srv.handle_stream_index)
+    app.router.add_get("/stream/",         srv.handle_stream_index)
+    app.router.add_get("/stream/party-a",          srv.handle_stream_party_a)
+    app.router.add_get("/stream/party-b",          srv.handle_stream_party_b)
+    # HTMX poll targets for the templated party overlay — return only the
+    # #root subtree so idiomorph swaps in place without re-rendering the
+    # vendored script tags.
+    app.router.add_get("/stream/party-a/fragment", srv.handle_stream_party_a_fragment)
+    app.router.add_get("/stream/party-b/fragment", srv.handle_stream_party_b_fragment)
+    app.router.add_get("/stream/enemy-focus-a/fragment",    srv.handle_stream_enemy_focus_a_fragment)
+    app.router.add_get("/stream/enemy-focus-b/fragment",    srv.handle_stream_enemy_focus_b_fragment)
+    app.router.add_get("/stream/enemy-trainer-a/fragment",  srv.handle_stream_enemy_trainer_a_fragment)
+    app.router.add_get("/stream/enemy-trainer-b/fragment",  srv.handle_stream_enemy_trainer_b_fragment)
+    app.router.add_get("/stream/focus-a/fragment",          srv.handle_stream_focus_a_fragment)
+    app.router.add_get("/stream/focus-b/fragment",          srv.handle_stream_focus_b_fragment)
+    app.router.add_get("/stream/enemy-focus-a",   srv.handle_stream_enemy_focus_a)
+    app.router.add_get("/stream/enemy-focus-b",   srv.handle_stream_enemy_focus_b)
+    app.router.add_get("/stream/enemy-trainer-a", srv.handle_stream_enemy_trainer_a)
+    app.router.add_get("/stream/enemy-trainer-b", srv.handle_stream_enemy_trainer_b)
+    app.router.add_get("/stream/links",                  srv.handle_stream_links)
+    app.router.add_get("/stream/links/fragment",         srv.handle_stream_links_fragment)
+    app.router.add_get("/stream/linked-party",           srv.handle_stream_linked_party)
+    app.router.add_get("/stream/linked-party/fragment",  srv.handle_stream_linked_party_fragment)
+    app.router.add_get("/stream/boxed-links",            srv.handle_stream_boxed_links)
+    app.router.add_get("/stream/boxed-links/fragment",   srv.handle_stream_boxed_links_fragment)
+    app.router.add_get("/stream/deaths",            srv.handle_stream_deaths)
+    app.router.add_get("/stream/deaths/fragment",   srv.handle_stream_deaths_fragment)
+    app.router.add_get("/stream/attempts",          srv.handle_stream_attempts)
+    app.router.add_get("/stream/attempts/fragment", srv.handle_stream_attempts_fragment)
+    app.router.add_post("/api/attempts",   srv.handle_api_attempts)
+    app.router.add_get("/stream/areas",             srv.handle_stream_areas)
+    app.router.add_get("/stream/areas/fragment",    srv.handle_stream_areas_fragment)
+    app.router.add_get("/stream/events",            srv.handle_stream_events)
+    app.router.add_get("/stream/events/fragment",   srv.handle_stream_events_fragment)
+    app.router.add_get("/stream/badges-a",          srv.handle_stream_badges_a)
+    app.router.add_get("/stream/badges-a/fragment", srv.handle_stream_badges_a_fragment)
+    app.router.add_get("/stream/badges-b",          srv.handle_stream_badges_b)
+    app.router.add_get("/stream/badges-b/fragment", srv.handle_stream_badges_b_fragment)
+    app.router.add_get("/stream/encounters",            srv.handle_stream_encounters)
+    app.router.add_get("/stream/encounters/fragment",   srv.handle_stream_encounters_fragment)
+    app.router.add_get("/stream/stream-memorial",           srv.handle_stream_stream_memorial)
+    app.router.add_get("/stream/stream-memorial/fragment",  srv.handle_stream_stream_memorial_fragment)
+    app.router.add_get("/stream/ticker",            srv.handle_stream_ticker)
+    app.router.add_get("/stream/ticker/fragment",   srv.handle_stream_ticker_fragment)
+    app.router.add_get("/stream/focus-a",         srv.handle_stream_focus_a)
+    app.router.add_get("/stream/focus-b",         srv.handle_stream_focus_b)
+    app.router.add_get("/stream/area-encounter",            srv.handle_stream_area_encounter)
+    app.router.add_get("/stream/area-encounter/fragment",   srv.handle_stream_area_encounter_fragment)
+    app.router.add_get("/stream/enc-table-a",               srv.handle_stream_enc_table_a)
+    app.router.add_get("/stream/enc-table-a/fragment",      srv.handle_stream_enc_table_a_fragment)
+    app.router.add_get("/stream/enc-table-b",               srv.handle_stream_enc_table_b)
+    app.router.add_get("/stream/enc-table-b/fragment",      srv.handle_stream_enc_table_b_fragment)
+    app.router.add_get("/launcher/{player}", srv.handle_launcher)
+    # Twitch bot routes
+    app.router.add_get("/twitch",               srv.handle_twitch_page)
+    app.router.add_get("/api/bot/status",       srv.handle_bot_status)
+    app.router.add_post("/api/bot/config",      srv.handle_bot_config)
+    app.router.add_post("/api/bot/reload",      srv.handle_bot_reload)
+    app.router.add_post("/api/bot/enable",      srv.handle_bot_enable)
+    app.router.add_post("/api/bot/disable",     srv.handle_bot_disable)
+    app.router.add_post("/api/bot/preview",     srv.handle_bot_preview)
+    # OBS scene trigger routes
+    app.router.add_get("/obs",                  srv.handle_obs_page)
+    app.router.add_get("/api/obs/status",       srv.handle_obs_status)
+    app.router.add_post("/api/obs/config",      srv.handle_obs_config)
+    app.router.add_post("/api/obs/triggers",    srv.handle_obs_triggers)
+    app.router.add_get("/api/obs/scenes/{player}", srv.handle_obs_scenes)
+    app.router.add_get("/api/obs/areas",        srv.handle_obs_areas)
+    app.router.add_post("/api/obs/test",        srv.handle_obs_test)
+    app.router.add_post("/api/obs/connect",     srv.handle_obs_connect)
+    app.router.add_post("/api/obs/disconnect",  srv.handle_obs_disconnect)
+    # Debug routes
+    app.router.add_get("/debug",                       srv.handle_debug_html)
+    app.router.add_get("/api/debug/raw_state",         srv.handle_debug_raw_state)
+    app.router.add_get("/api/debug/manual_link_data",  srv.handle_debug_manual_link_data)
+    app.router.add_post("/api/debug/inject_event",     srv.handle_debug_inject_event)
+    app.router.add_post("/api/debug/queue_command",    srv.handle_debug_queue_command)
+    app.router.add_post("/api/debug/set_pokeballs",    srv.handle_debug_set_pokeballs)
+    app.router.add_post("/api/debug/set_area_state",   srv.handle_debug_set_area_state)
+    app.router.add_post("/api/debug/clear_pending",    srv.handle_debug_clear_pending)
+    app.router.add_post("/api/debug/unlink",            srv.handle_debug_unlink)
+    app.router.add_post("/api/debug/revive",            srv.handle_debug_revive)
+    app.router.add_get("/api/debug/backups",            srv.handle_debug_list_backups)
+    app.router.add_post("/api/debug/rollback",          srv.handle_debug_rollback)
+    # RR Damage Calculator routes
+    app.router.add_get("/calc",           srv.handle_calc_redirect)
+    app.router.add_get("/calc/",          srv.handle_calc_redirect)
+    app.router.add_get("/calc/{path:.*}", srv.handle_calc_files)
+    app.router.add_get("/api/calc/mons",  srv.handle_calc_mons)
+
+    from server.patcher import setup_patcher_routes
+    setup_patcher_routes(app, srv._build_sidebar_html)
+    return app
+
+
 async def main(host: str, port: int, http_port: int, reset: bool = False,
                data_dir: str = None, run_id: str = None, run_name: str = "",
                species_lock: bool = False, gender_lock: bool = False,
@@ -7837,7 +7949,6 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                rival_team_swap: bool = False, overworld_presence: bool = False,
                native_messages: bool = False, native_sounds: bool = False,
                battle_calc: bool = True, pc_trade_npc: bool = True,
-               native_battle_control: bool = False,
                manager_port: int = 0, verbose: bool = False):
     _configure_logging(data_dir, verbose)
     if reset:
@@ -7856,8 +7967,7 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                       native_messages=native_messages,
                       native_sounds=native_sounds,
                       battle_calc=battle_calc,
-                      pc_trade_npc=pc_trade_npc,
-                      native_battle_control=native_battle_control)
+                      pc_trade_npc=pc_trade_npc)
 
     # TCP game server.
     # limit=4 MiB lifts asyncio's default 64 KiB readline buffer so Gen 5's
@@ -7878,108 +7988,7 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
 
     # HTTP status page
     if AIOHTTP_AVAILABLE:
-        app = aiohttp_web.Application()
-        setup_templating(app)
-        app.router.add_get("/",            srv.handle_status_html)
-        app.router.add_get("/memorial",    srv.handle_memorial_html)
-        app.router.add_get("/api/status",  srv.handle_status_json)
-        app.router.add_get("/api/events",  srv.handle_sse)
-        app.router.add_post("/api/reset",              srv.handle_reset_api)
-        app.router.add_post("/api/inject_link",        srv.handle_inject_link_api)
-        app.router.add_post("/api/inject_link_by_slot", srv.handle_inject_link_by_slot_api)
-        # Stream overlay routes
-        app.router.add_get("/stream",          srv.handle_stream_index)
-        app.router.add_get("/stream/",         srv.handle_stream_index)
-        app.router.add_get("/stream/party-a",          srv.handle_stream_party_a)
-        app.router.add_get("/stream/party-b",          srv.handle_stream_party_b)
-        # HTMX poll targets for the templated party overlay — return only the
-        # #root subtree so idiomorph swaps in place without re-rendering the
-        # vendored script tags.
-        app.router.add_get("/stream/party-a/fragment", srv.handle_stream_party_a_fragment)
-        app.router.add_get("/stream/party-b/fragment", srv.handle_stream_party_b_fragment)
-        app.router.add_get("/stream/enemy-focus-a/fragment",    srv.handle_stream_enemy_focus_a_fragment)
-        app.router.add_get("/stream/enemy-focus-b/fragment",    srv.handle_stream_enemy_focus_b_fragment)
-        app.router.add_get("/stream/enemy-trainer-a/fragment",  srv.handle_stream_enemy_trainer_a_fragment)
-        app.router.add_get("/stream/enemy-trainer-b/fragment",  srv.handle_stream_enemy_trainer_b_fragment)
-        app.router.add_get("/stream/focus-a/fragment",          srv.handle_stream_focus_a_fragment)
-        app.router.add_get("/stream/focus-b/fragment",          srv.handle_stream_focus_b_fragment)
-        app.router.add_get("/stream/enemy-focus-a",   srv.handle_stream_enemy_focus_a)
-        app.router.add_get("/stream/enemy-focus-b",   srv.handle_stream_enemy_focus_b)
-        app.router.add_get("/stream/enemy-trainer-a", srv.handle_stream_enemy_trainer_a)
-        app.router.add_get("/stream/enemy-trainer-b", srv.handle_stream_enemy_trainer_b)
-        app.router.add_get("/stream/links",                  srv.handle_stream_links)
-        app.router.add_get("/stream/links/fragment",         srv.handle_stream_links_fragment)
-        app.router.add_get("/stream/linked-party",           srv.handle_stream_linked_party)
-        app.router.add_get("/stream/linked-party/fragment",  srv.handle_stream_linked_party_fragment)
-        app.router.add_get("/stream/boxed-links",            srv.handle_stream_boxed_links)
-        app.router.add_get("/stream/boxed-links/fragment",   srv.handle_stream_boxed_links_fragment)
-        app.router.add_get("/stream/deaths",            srv.handle_stream_deaths)
-        app.router.add_get("/stream/deaths/fragment",   srv.handle_stream_deaths_fragment)
-        app.router.add_get("/stream/attempts",          srv.handle_stream_attempts)
-        app.router.add_get("/stream/attempts/fragment", srv.handle_stream_attempts_fragment)
-        app.router.add_post("/api/attempts",   srv.handle_api_attempts)
-        app.router.add_get("/stream/areas",             srv.handle_stream_areas)
-        app.router.add_get("/stream/areas/fragment",    srv.handle_stream_areas_fragment)
-        app.router.add_get("/stream/events",            srv.handle_stream_events)
-        app.router.add_get("/stream/events/fragment",   srv.handle_stream_events_fragment)
-        app.router.add_get("/stream/badges-a",          srv.handle_stream_badges_a)
-        app.router.add_get("/stream/badges-a/fragment", srv.handle_stream_badges_a_fragment)
-        app.router.add_get("/stream/badges-b",          srv.handle_stream_badges_b)
-        app.router.add_get("/stream/badges-b/fragment", srv.handle_stream_badges_b_fragment)
-        app.router.add_get("/stream/encounters",            srv.handle_stream_encounters)
-        app.router.add_get("/stream/encounters/fragment",   srv.handle_stream_encounters_fragment)
-        app.router.add_get("/stream/stream-memorial",           srv.handle_stream_stream_memorial)
-        app.router.add_get("/stream/stream-memorial/fragment",  srv.handle_stream_stream_memorial_fragment)
-        app.router.add_get("/stream/ticker",            srv.handle_stream_ticker)
-        app.router.add_get("/stream/ticker/fragment",   srv.handle_stream_ticker_fragment)
-        app.router.add_get("/stream/focus-a",         srv.handle_stream_focus_a)
-        app.router.add_get("/stream/focus-b",         srv.handle_stream_focus_b)
-        app.router.add_get("/stream/area-encounter",            srv.handle_stream_area_encounter)
-        app.router.add_get("/stream/area-encounter/fragment",   srv.handle_stream_area_encounter_fragment)
-        app.router.add_get("/stream/enc-table-a",               srv.handle_stream_enc_table_a)
-        app.router.add_get("/stream/enc-table-a/fragment",      srv.handle_stream_enc_table_a_fragment)
-        app.router.add_get("/stream/enc-table-b",               srv.handle_stream_enc_table_b)
-        app.router.add_get("/stream/enc-table-b/fragment",      srv.handle_stream_enc_table_b_fragment)
-        app.router.add_get("/launcher/{player}", srv.handle_launcher)
-        # Twitch bot routes
-        app.router.add_get("/twitch",               srv.handle_twitch_page)
-        app.router.add_get("/api/bot/status",       srv.handle_bot_status)
-        app.router.add_post("/api/bot/config",      srv.handle_bot_config)
-        app.router.add_post("/api/bot/reload",      srv.handle_bot_reload)
-        app.router.add_post("/api/bot/enable",      srv.handle_bot_enable)
-        app.router.add_post("/api/bot/disable",     srv.handle_bot_disable)
-        app.router.add_post("/api/bot/preview",     srv.handle_bot_preview)
-        # OBS scene trigger routes
-        app.router.add_get("/obs",                  srv.handle_obs_page)
-        app.router.add_get("/api/obs/status",       srv.handle_obs_status)
-        app.router.add_post("/api/obs/config",      srv.handle_obs_config)
-        app.router.add_post("/api/obs/triggers",    srv.handle_obs_triggers)
-        app.router.add_get("/api/obs/scenes/{player}", srv.handle_obs_scenes)
-        app.router.add_get("/api/obs/areas",        srv.handle_obs_areas)
-        app.router.add_post("/api/obs/test",        srv.handle_obs_test)
-        app.router.add_post("/api/obs/connect",     srv.handle_obs_connect)
-        app.router.add_post("/api/obs/disconnect",  srv.handle_obs_disconnect)
-        # Debug routes
-        app.router.add_get("/debug",                       srv.handle_debug_html)
-        app.router.add_get("/api/debug/raw_state",         srv.handle_debug_raw_state)
-        app.router.add_get("/api/debug/manual_link_data",  srv.handle_debug_manual_link_data)
-        app.router.add_post("/api/debug/inject_event",     srv.handle_debug_inject_event)
-        app.router.add_post("/api/debug/queue_command",    srv.handle_debug_queue_command)
-        app.router.add_post("/api/debug/set_pokeballs",    srv.handle_debug_set_pokeballs)
-        app.router.add_post("/api/debug/set_area_state",   srv.handle_debug_set_area_state)
-        app.router.add_post("/api/debug/clear_pending",    srv.handle_debug_clear_pending)
-        app.router.add_post("/api/debug/unlink",            srv.handle_debug_unlink)
-        app.router.add_post("/api/debug/revive",            srv.handle_debug_revive)
-        app.router.add_get("/api/debug/backups",            srv.handle_debug_list_backups)
-        app.router.add_post("/api/debug/rollback",          srv.handle_debug_rollback)
-        # RR Damage Calculator routes
-        app.router.add_get("/calc",           srv.handle_calc_redirect)
-        app.router.add_get("/calc/",          srv.handle_calc_redirect)
-        app.router.add_get("/calc/{path:.*}", srv.handle_calc_files)
-        app.router.add_get("/api/calc/mons",  srv.handle_calc_mons)
-
-        from server.patcher import setup_patcher_routes
-        setup_patcher_routes(app, srv._build_sidebar_html)
+        app = build_app(srv)
         runner = aiohttp_web.AppRunner(app)
         await runner.setup()
         http_site = aiohttp_web.TCPSite(runner, host, http_port)
@@ -8023,8 +8032,6 @@ if __name__ == "__main__":
         help="Hide the bundled Battle Calc damage display (RR + patch; shown by default)")
     parser.add_argument("--no-pc-trade-npc", action="store_false", dest="pc_trade_npc",
         help="Disable the Pokémon-Center trade NPC (RR + patch; on by default, only active while overworld presence is off)")
-    parser.add_argument("--native-battle-control", action="store_true", dest="native_battle_control",
-        help="Enable the native explode/faint controller swap (RR patch; EXPERIMENTAL — default off, Variant-3 RAM path remains the fallback)")
     parser.add_argument("--manager-port", type=int, default=0,   help="Manager HTTP port (enables 'Run Manager' link on status page)")
     parser.add_argument("--verbose",      action="store_true",   help="Enable DEBUG-level logging to file and console (default: INFO only)")
     args = parser.parse_args()
@@ -8039,6 +8046,5 @@ if __name__ == "__main__":
                      native_sounds=args.native_sounds,
                      battle_calc=args.battle_calc,
                      pc_trade_npc=args.pc_trade_npc,
-                     native_battle_control=args.native_battle_control,
                      manager_port=args.manager_port,
                      verbose=args.verbose))

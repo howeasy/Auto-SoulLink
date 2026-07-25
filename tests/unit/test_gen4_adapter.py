@@ -192,7 +192,9 @@ def test_species_types_dual(adapter):
 
 # ── area_display_name ────────────────────────────────────────────────────
 
-def test_area_display_name_fallback(adapter):
+def test_area_display_name_fallback_keeps_the_raw_id(adapter):
+    # Renamed: a second def with the same name lower in this file shadowed it, so this
+    # assertion had never actually run.
     name = adapter.area_display_name("unknown_area_xyz")
     assert "unknown" in name.lower() or "xyz" in name.lower()
 

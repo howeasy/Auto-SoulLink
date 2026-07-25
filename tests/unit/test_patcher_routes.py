@@ -22,8 +22,6 @@ from aiohttp.test_utils import TestClient, TestServer
 
 import server.patcher as patcher
 
-pytest_plugins = ("pytest_asyncio",)
-
 
 def _make_app() -> web.Application:
     app = web.Application()

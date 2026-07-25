@@ -34,7 +34,9 @@ SPEED_PILLS = ["0.5", "1", "1.5", "2", "3"]
 
 # Pre-canned event filter pills (used by /stream/events and /stream/ticker).
 EVENT_FILTERS_DEFAULT_ON = [
-    "capture", "shiny", "faint", "force_faint", "whiteout",
+    # force_explode is Explode Mode's stand-in for force_faint — same event to a viewer,
+    # so it defaults on alongside it.
+    "capture", "shiny", "faint", "force_faint", "force_explode", "whiteout",
     "area_enter", "no_catch", "linked", "dead_zone", "violation",
     "memorialize", "key_change", "hello", "reroll",
 ]
