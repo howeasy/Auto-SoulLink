@@ -38,9 +38,100 @@ is a valid map for the base engine here.
     Battle Calc" below.
 
 - **Mailbox `0x0203F800`** (EWRAM) — above CFRU's highest known EWRAM symbol
-  (`0x0203F3AE`), with ~0x450 bytes margin, below EWRAM end `0x0203FFFF`.
+  (`0x0203F3AE`), below EWRAM end `0x0203FFFF`.
   **Runtime-validated**: watched for stray writes across gameplay before trusting
   (Phase-0 gate). Mailbox is ≤256 bytes.
+  > **The gap below the mailbox is NOT free space.** An earlier revision of this file described
+  > "~0x450 bytes margin" between `0x0203F3AE` and `0x0203F800`; that reads as headroom and it
+  > isn't. `0x0203F3AE` is the ceiling of an *incomplete* symbol list, and a scan of the ROM finds
+  > that window densely referenced from engine/libc code. Do not allocate below `0x0203F800`.
+
+## EWRAM allocation map (the single source of truth)
+
+Every address here is a `#define` in `handlers.c`; the sizes were confirmed by compiling
+`_Static_assert(base + sizeof(T) == end)` for each struct with the vendored toolchain. Keep this
+table in step with `handlers.c` — four blocks (`ArmedMove`, `GHOST_PAL_BUF`, `UiState`,
+`SLINK_MENU_BUF`, 164 B in total) once existed only in the source, so anyone allocating from this
+document alone would have clobbered live state.
+
+| start | size | what |
+|---|---|---|
+| `0x0203F800` | 64 | Mailbox (ABI v1) |
+| `0x0203F840` | 8 | `SwapState` — borrowed-party / Party Freeze |
+| `0x0203F848` | *8* | — gap |
+| `0x0203F850` | 44 | `GhostState` |
+| `0x0203F87C` | *68* | — gap (largest interior block) |
+| `0x0203F8C0` | 8 | `ArmedMove` |
+| `0x0203F8C8` | *8* | — gap |
+| `0x0203F8D0` | 4 | `SlinkState` (`pi_*` peer-interact) |
+| `0x0203F8D4` | 4 | `TradeNpcState` |
+| `0x0203F8D8` | 1 | `SLINK_CALC_OFF` — Battle-Calc kill switch |
+| `0x0203F8D9` | *7* | — gap |
+| `0x0203F8E0` | 32 | `SLINK_SCRIPT_BUF` (18 B max used) |
+| `0x0203F900` | 256 | `SLINK_TEXT_BUF` — FR text staging |
+| `0x0203FA00` | 600 | `SLINK_BLOB_BUF` — party/enemy mon blobs |
+| `0x0203FC58` | *8* | — gap |
+| `0x0203FC60` | 32 | `GHOST_PAL_BUF` |
+| `0x0203FC80` | 12 | `UiState` |
+| `0x0203FC8C` | *4* | — gap |
+| `0x0203FC90` | 112 | `SLINK_MENU_BUF` — multichoice options |
+| `0x0203FD00` | 8 | `BattleNotif` |
+| `0x0203FD08` | *8* | — gap |
+| `0x0203FD10` | 52 | `EvRing` |
+| `0x0203FD44` | 264 | `SlinkInfo` — §6 SOULLINK menu/info (see below) |
+| `0x0203FE4C` | *436* | — **free tail, the last contiguous run to `0x0203FFFF`** |
+
+**436 contiguous bytes remain**, plus 111 across seven interior gaps (largest 68 B). When the tail
+is gone the next feature must reuse a buffer or fragment; say so here rather than letting it be
+discovered the expensive way.
+
+**The tail is runtime-proven free, not inferred.** `lua/tests/test_live_ewramtail.lua` paints all
+700 bytes of `0x0203FD44..0x0203FFFF` with a per-address pattern and watches them across seven
+savestates and 5,100 frames of mashed input (overworld, Pokécenter, a door warp, battle, the
+action/move menus), with a detector self-check each scene — it clobbers the mailbox beacon and
+requires the frame hook to restore it, so the watch cannot silently pass while blind. Zero bytes
+changed. This matters because the *static* argument for the region was wrong twice: "above CFRU's
+highest known symbol" is an incomplete list, and a ROM literal-pool scan offered as backup turned
+out to be measuring coincidental word matches inside PCM and graphics data, not literal pools.
+
+> Suspected, unproven, and unrelated to §6: six 4-aligned words at `SLINK_BLOB_BUF+0x174..0x188`
+> (`0x0203FB74`–`0x0203FB88`) are referenced from code at `0x081E82DC`–`0x081E89F0` that
+> disassembles as a heap free-list allocator. If it ever runs while a 4+ mon rival-team-swap stage
+> is live, the stage would be corrupted. The live gates pass, so it may never execute — but a
+> future reuse of `SLINK_BLOB_BUF` should stop at `+0x174` until someone watches it.
+
+## §6 SOULLINK start-menu entry
+
+`SlinkInfo @ 0x0203FD44` (264 B, ends `0x0203FE4C`): `{u8 enable, opened, drawn, lines, page,
+pages, gen, _pad; u8 line[8][32]}`. Every byte's zero value reproduces pre-feature behaviour —
+`enable=0` splices no row *and* makes the callback tail-call the row it displaced, `opened==drawn`
+means the frame hook never draws, `lines=0` makes the screen refuse to open.
+
+RR reads the start menu's description and action arrays through **one** base literal `0x09148FB4`
+with hardcoded offsets — `desc[i] = *(base+8+4i)` (13 entries, ending `0x09148FEF`) and
+`action[i] = base+0x3C+8i` (13 entries). Those ranges **abut**: `desc[13]` *is* `act[0].text`. So a
+14th action id cannot own a description without re-encoding compiled CFRU `ldr` immediates. We take
+over **id 8** instead — a second PLAYER row that only `SetUpStartMenu_Link` appends, and which
+`lua/tests/test_live_startmenu.lua` proves absent from the menu a real player opens.
+
+`build.py` rewrites four words, each verified against its expected current value first:
+
+| ROM word | was | becomes |
+|---|---|---|
+| `0x09148FDC` (`desc[8]`) | `0x0841A049` | `sSoulLinkDesc` |
+| `0x09149030` (`act[8].text`) | `0x0841628E` | `sSoulLinkLabel` |
+| `0x09149034` (`act[8].func`) | `0x0806F56D` | `slink_startmenu_cb\|1` |
+| `0x0806ED58` (`SetUpStartMenu` literal) | `0x090BE179` | `slink_setup_start_menu\|1` |
+
+Menu globals, both located live: **`sNumStartMenuActions = 0x020370F5`**, **`sStartMenuOrder =
+0x020370F6`**. A normal field menu is exactly `[1 2 3 4 5 6]` with EXIT (id 6) last, so the wrapper
+splices SOULLINK at index 5 and pushes EXIT to 6 — and it splices *only* into that exact shape, so
+the link menu and any future RR revision are left alone rather than guessed at.
+
+The callback deliberately **does not draw**: it bumps `opened` and tail-calls `StartMenu_Exit`
+(`0x0806F541`, which is already `act[6].func` and therefore proven safe in this slot). That is what
+makes the hook gateable on its own. LIVE (`test_live_soullinkmenu`): stock 6-row menu when
+disabled, `[1 2 3 4 5 8 6]` when enabled, and the callback fires on row 5 **and no other row**.
 
 - **SwapState `0x0203F840`** (EWRAM, 8 B) — authoritative borrowed-party ("Party Freeze")
   signal, published struct (read-only mirror for Lua), in the free gap between the mailbox
@@ -63,16 +154,40 @@ is a valid map for the base engine here.
   weren't installed. Driven by the per-run `battle_calc` toggle (`MB.set_battle_calc`). LIVE
   (`test_live_calctoggle`: A-mash battles + flip churn, both paths).
 
-- **EvRing `0x0203FD10`** (EWRAM, 40 B) — native→Lua event-push ring, after BattleNotif (ends
-  `0x0203FD08`). `{u8 wr, u8 rd, u8 overflow, u8 inb, u8 pfc, u8 ofc, u8 _pad[2], u32 ev[8]}`;
-  events packed `type | a<<8 | b<<16`. Producers (`drive_events`, every frame): EV_PLAYER_FAINT=1 /
-  EV_FOE_FAINT=2 on `gBattleResults` (`0x03004F90`, player@+0 foe@+1) counter deltas — they bump
-  only AFTER Sturdy/Sash/Endure resolve (the authoritative settle signal); EV_OUTCOME=3 with
-  `gBattleOutcome` on the end-of-battle edge. Frame-granular counter polling was chosen over a BL
-  hook into `Cmd_tryfaintmon` deliberately: same settle semantics, zero new detours, zero battle
-  reentrancy. The producer's prev-state latches live IN the struct (our ROM blob has no .data/.bss —
-  mutable statics are impossible). Lua: `MB.events_init/events_drain`. LIVE (`test_live_events`:
-  single bump, multi-bump delta, overflow drop+flag+recover).
+- **EvRing `0x0203FD10`** (EWRAM, 52 B, ends `0x0203FD44`) — native→Lua event-push ring, after
+  BattleNotif (ends `0x0203FD08`).
+  `{u8 wr, u8 rd, u8 overflow, u8 inb, u8 pfc, u8 ofc, u8 prim, u8 pcnt, u32 ev[8], u16 spc[6]}`;
+  events packed `type | a<<8 | b<<16`. Producers (`drive_events`, every frame):
+  - **EV_PLAYER_FAINT=1 / EV_FOE_FAINT=2** on `gBattleResults` (`0x03004F90`, player@+0 foe@+1)
+    counter deltas — they bump only AFTER Sturdy/Sash/Endure resolve (the authoritative settle
+    signal). `a` = the counter value after the bump.
+  - **EV_OUTCOME=3** with `gBattleOutcome` on the end-of-battle edge.
+  - **EV_PARTY_ADD=4** when `gPlayerPartyCount` grows (catch / gift / withdraw / trade-in);
+    `a` = new count, `b` = species of the slot that appeared.
+  - **EV_EVOLVE=5** when a party slot's species changes IN PLACE (both sides nonzero — a slot
+    filling or emptying is not an evolution); `a` = slot, `b` = the new species. CFRU is
+    NO_ENCRYPT with fixed substruct order, so species is a raw u16 at `mon + 0x20`.
+
+  Frame-granular polling was chosen over BL hooks (`Cmd_tryfaintmon`, `EvolutionScene`) deliberately:
+  same settle semantics, zero new detours, zero battle/script reentrancy — and 7 reads a frame is
+  cheaper than the per-frame party DECRYPTION it replaces on the Lua side.
+
+  The producer's prev-state latches live IN the struct (our ROM blob has no .data/.bss — mutable
+  statics are impossible). `prim` (+6) is the party-latch primed flag: **0 makes the next frame latch
+  only**, which is what keeps the all-zero EWRAM boot default reproducing pre-producer behaviour
+  instead of replaying the existing party as events. The party producers are suppressed entirely
+  while `SwapState.active` (a borrowed Battle-Tower/Poke-Dude party replaces `gPlayerParty` wholesale
+  — every slot would read as evolved) and `prim` is cleared so they re-prime against the real party.
+
+  Lua: `MB.events_init/events_drain`, `MB.EV_*`, `MB.EVR_PRIM`. LIVE: `test_live_events` (single
+  bump, multi-bump delta, overflow drop+flag+recover), `test_live_partyevents` (prime-emits-nothing,
+  in-place evolve, fill-is-not-evolve, stone/trade evolution with key+level unchanged, count growth,
+  shrink emits nothing).
+
+  Consumers: EV_PLAYER_FAINT and EV_OUTCOME drive behaviour (faint fast-path, whiteout
+  acceleration). EV_PARTY_ADD and EV_EVOLVE are a cross-check that asserts the ring agrees with the
+  Lua diff and counts disagreements — the soak instrument the §3 authority swap is waiting on. See
+  `ev_xcheck` in `lua/clients/gen3_frlge_client.lua`.
 
 ## Bundled RR4.1_Custom Battle Calc (in-battle damage calculator)
 
@@ -403,6 +518,6 @@ bytes ARE a BoxPokemon*/, comp)`; then shift-compact the party + decrement count
 `CalculateMonStats`, a withdrawn mon comes out fully formed (level/stats/PP) — **the server-cached
 `stats` blob is no longer needed**. Proven by `lua/tests/test_live_boxsync.lua` (deposit→withdraw of the
 save's real lead mon: personality/OT/species preserved, level recomputed, box slot freed, no corruption).
-**Still TODO:** wire `gen3_frlge_client.lua` `exec_box_mon`/`exec_party_mon` to the native path (async +
-patch-detect + Lua fallback), two-instance soul-link test, then delete the Lua RAM-poke. `OP_MEMORIALIZE`
-(deposit into `MEMORIAL_BOX` + box rename) is the follow-up.
+**Status:** DONE — `exec_box_mon`/`exec_party_mon` run through `MB.deposit_mon`/`MB.withdraw_mon`
+(async + patch-detect + Lua fallback), and `OP_MEMORIALIZE` (26) landed as the follow-up. The Lua
+RAM-poke path is kept deliberately: it is the fallback for unpatched ROMs.

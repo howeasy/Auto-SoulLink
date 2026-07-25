@@ -55,7 +55,7 @@ local _PROFILE_RESET_KEYS = {
     "BATTLE_TYPE_ADDR", "BATTLE_OUTCOME_ADDR",
     "BATTLE_MONS_ADDR", "BATTLER_PARTY_INDEXES_ADDR", "BATTLERS_COUNT_ADDR",
     "BATTLE_MAIN_FUNC_ADDR", "RETURN_FROM_BATTLE_ADDR",
-    "LOCKED_MOVES_ADDR", "LOCK_STATUS2_VALUE",
+    "LOCKED_MOVES_ADDR",
     "CHOSEN_MOVE_ADDRS", "BATTLE_COMM_ADDR",
     "CHOSEN_ACTION_ADDR", "CHOSEN_MOVE_ADDR",
     "BATTLE_STRUCT_PTR_ADDR", "BATTLE_STRUCT_MOVE_TARGET_OFF", "BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF",
@@ -406,16 +406,11 @@ M.BATTLE_MON_MOVES_OFF       = 0x0C        -- BattlePokemon.moves[4] offset (4 �
 M.BATTLE_MON_PP_OFF          = 0x24        -- BattlePokemon.pp[4]    offset (4 × u8)
 M.BATTLE_MON_STATUS2_OFF     = 0x50        -- BattlePokemon.status2  offset (u32)
 
--- status2 bitflags (pret/pokefirered include/constants/battle.h).
--- Vanilla layout — kept for reference and for the F8 decoder in the test:
---   bit 10        (0x00000400): STATUS2_MULTIPLETURNS  — Outrage/Petal Dance/Thrash lock
---   bits 14-15    (0x0000C000): STATUS2_LOCK_CONFUSE   — rampage turn counter (1..3)
--- CFRU / Radical Red repurposes bits 11-13 (vanilla WRAPPED) for its own multi-
--- turn lock counter; vanilla MULTIPLETURNS at bit 10 is NOT used by CFRU.
--- Therefore the *value* to OR into status2 is profile-specific — see
--- LOCK_STATUS2_VALUE in lua/games/gen3_frlge.lua.
-M.STATUS2_MULTIPLETURNS      = 0x00000400  -- vanilla MULTIPLETURNS, bit 10
-M.STATUS2_LOCK_CONFUSE       = 0x0000C000  -- vanilla LOCK_CONFUSE counter, bits 14-15
+-- status2 bitflags reference (pret/pokefirered include/constants/battle.h):
+--   bit 10     (0x00000400): STATUS2_MULTIPLETURNS  — Outrage/Petal Dance/Thrash lock
+--   bits 14-15 (0x0000C000): STATUS2_LOCK_CONFUSE   — rampage turn counter (1..3)
+-- SLink no longer writes any of these. The rampage-lock approach to forcing Explosion
+-- was abandoned (double-faint softlock); Variant-3 action-commit is the shipping path.
 
 -- Move IDs used by SLink to coerce battle behaviour.
 M.MOVE_EXPLOSION             = 153         -- Vanilla + CFRU/RR — self-faint move
@@ -1295,17 +1290,12 @@ end
 -- Explosion (move 153, 5 PP each).  If the action-select menu opens for any
 -- reason, every slot reads "Explosion" so the player can't pick anything else.
 --
--- Step 2 (if LOCKED_MOVES_ADDR is set in the profile): activate the engine's
--- own multi-turn-lock path (Outrage/Petal Dance/Thrash) so the menu never opens
--- and the player has no swap option:
---   • gLockedMoves[battler] = MOVE_EXPLOSION  (the locked-in move ID)
---   • gBattleMons[battler].status2 |= STATUS2_MULTIPLETURNS
--- On the next turn the engine sees MULTIPLETURNS, skips HandleAction_ChooseAction
--- (no menu shown), and HandleAction_UseMove reads gLockedMoves[battler] for the
--- forced move.  Switching is blocked because CanBattlerSwitch() checks the same
--- status2 bit.
+-- Step 2 (Variant 3, below): pre-fill the engine's action-commit state so the
+-- action-select menu never opens.  The older rampage/multi-turn-lock approach
+-- (gLockedMoves + STATUS2_MULTIPLETURNS) was ABANDONED — it caused a double-faint
+-- softlock with Explosion — and LOCK_STATUS2_VALUE is nil on every Gen 3 profile.
 --
--- Writes ONLY to gBattleMons + gLockedMoves; the party struct is untouched.
+-- Writes ONLY to gBattleMons + the commit state; the party struct is untouched.
 --
 -- Caller must supply a player-side battler index (0 = primary, 2 = doubles
 -- secondary). Returns true on success, false if not in battle, no
@@ -1319,16 +1309,6 @@ function M.forceExplodeBattler(battler_idx)
     for i = 0, 3 do
         memory.write_u16_le(base + M.BATTLE_MON_MOVES_OFF + i * 2, M.MOVE_EXPLOSION)
         memory.write_u8   (base + M.BATTLE_MON_PP_OFF    + i,     5)
-    end
-    -- Step 2: engine-level forced-move + no-swap via the multi-turn-lock path.
-    -- Only attempt when the profile supplies LOCKED_MOVES_ADDR — without it the
-    -- engine would read gLockedMoves[battler] = 0 = MOVE_NONE and behave
-    -- undefined.  The Step 1 lockdown alone still prevents picking a different
-    -- move; the user can still SWAP / BAG / RUN without Step 2.
-    if M.LOCKED_MOVES_ADDR and M.LOCK_STATUS2_VALUE then
-        memory.write_u16_le(M.LOCKED_MOVES_ADDR + battler_idx * 2, M.MOVE_EXPLOSION)
-        local status2 = memory.read_u32_le(base + M.BATTLE_MON_STATUS2_OFF)
-        memory.write_u32_le(base + M.BATTLE_MON_STATUS2_OFF, status2 | M.LOCK_STATUS2_VALUE)
     end
     -- Variant 3: full bypass of the rampage path.  Pre-fill the engine's
     -- action-commit state directly at the canonical CFRU addresses (from

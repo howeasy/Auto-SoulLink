@@ -18,6 +18,14 @@ MB.ABI  = 1
 local O_SIG, O_ABI, O_OPCODE, O_SEQ, O_STATUS, O_ACKSEQ, O_REASON, O_ARGS, O_RESULT =
       0, 4, 6, 8, 10, 12, 14, 16, 48
 
+-- This table mirrors the FULL opcode ABI implemented by patch/src/handlers.c — keep the two
+-- in sync (patch/src/ADDRESSES.md is the reference).  Several opcodes have no production
+-- caller; their consumers are the headless gates in lua/tests (run via tests/live/), which
+-- are what prove the ROM side still works.  Don't prune a constant just because the client
+-- doesn't send it — check lua/tests first.
+--
+-- OP_FORCE_FAINT (2) and OP_FORCE_MOVE_SLOT (5) are gate-only ON PURPOSE: the native
+-- controller swap softlocked in real play, so the Lua Variant-3 path is production.
 MB.OP_PING        = 1
 MB.OP_FORCE_FAINT = 2   -- args: {battler}
 MB.OP_FORCE_MOVE  = 3   -- args: {battler, target, move_pos, 0, move_lo, move_hi}
@@ -233,6 +241,16 @@ MB.EVR        = 0x0203FD10
 MB.EV_PLAYER_FAINT = 1   -- a = playerFaintCounter after the bump
 MB.EV_FOE_FAINT    = 2   -- a = foeFaintCounter after the bump
 MB.EV_OUTCOME      = 3   -- a = gBattleOutcome on the end-of-battle edge (1 won, 2 lost/whiteout, ...)
+MB.EV_PARTY_ADD    = 4   -- a = new party count, b = species of the slot that appeared
+MB.EV_EVOLVE       = 5   -- a = party slot, b = the NEW species (in-place change; both sides nonzero)
+MB.EV_NAMES = { [1] = "player_faint", [2] = "foe_faint", [3] = "outcome",
+                [4] = "party_add",    [5] = "evolve" }
+-- Producer latches live inside the ring struct (the ROM blob has no .data/.bss). `prim` (+6) is the
+-- "party latches primed" flag: 0 makes the next frame LATCH ONLY, which is what makes the boot
+-- default (all-zero EWRAM) reproduce the pre-producer behaviour instead of firing a burst of
+-- spurious party events. Clearing it is how you force a re-prime (the patch does this itself while
+-- a borrowed party is installed).
+MB.EVR_PRIM = 0x0203FD16
 function MB.events_init()
     memory.write_u8(MB.EVR + 1, memory.read_u8(MB.EVR))   -- rd = wr (drop anything stale)
     memory.write_u8(MB.EVR + 2, 0)                        -- clear overflow
@@ -273,6 +291,21 @@ function MB.set_pc_npc(enable) memory.write_u8(MB.TN_ENABLE, enable and 1 or 0) 
 -- calc trampoline so the damage display never draws. Plain EWRAM write, safe before the beacon.
 MB.CALC_OFF = 0x0203F8D8
 function MB.set_battle_calc(enable) memory.write_u8(MB.CALC_OFF, enable and 0 or 1) end
+
+-- SlinkInfo @ 0x0203FD44 — the §6 SOULLINK start-menu entry (patch struct of the same name).
+-- Plain EWRAM writes rather than opcodes, same as set_pc_npc / set_battle_calc above: the menu
+-- row is a config bit, not a command, and staging text through the single-slot mailbox would
+-- contend with ghost/trade/msgbox traffic for nothing.
+-- Boot default 0 = no SOULLINK row and the displaced row behaves as stock, so an unpatched-Lua
+-- session is indistinguishable from today. Safe to write before the beacon.
+MB.INFO        = 0x0203FD44
+MB.INFO_ENABLE = MB.INFO + 0   -- u8: 1 = splice the SOULLINK row into the START menu
+MB.INFO_OPENED = MB.INFO + 1   -- u8: patch ++ when the row is chosen (poll for the edge)
+MB.INFO_DRAWN  = MB.INFO + 2   -- u8: patch's ack of OPENED
+MB.INFO_LINES  = MB.INFO + 3   -- u8: populated line count, 0..8 (0 = the screen refuses to open)
+MB.INFO_LINE   = MB.INFO + 8   -- u8[8][32]: FR-encoded, 0xFF-terminated
+function MB.set_info_enable(enable) memory.write_u8(MB.INFO_ENABLE, enable and 1 or 0) end
+function MB.info_opened() return memory.read_u8(MB.INFO_OPENED) end
 
 -- GhostState @ 0x0203F850 (shared with the patch's drive_ghost). Lua writes target/gfx each tick;
 -- the frame hook walks a real object-event toward it natively. Offsets match handlers.c.

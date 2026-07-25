@@ -190,13 +190,52 @@ typedef struct {
     volatile u8  inb;       /* 3 producer latch: previous in-battle state */
     volatile u8  pfc;       /* 4 producer latch: previous playerFaintCounter */
     volatile u8  ofc;       /* 5 producer latch: previous foeFaintCounter */
-    volatile u8  _pad[2];
+    volatile u8  prim;      /* 6 producer latch: party latches primed (0 at boot -> prime, don't push) */
+    volatile u8  pcnt;      /* 7 producer latch: previous gPlayerPartyCount */
     volatile u32 ev[8];     /* 8.. packed events: type | (a << 8) | (b << 16) */
+    volatile u16 spc[6];    /* 40.. producer latch: previous species per party slot (ends 0x0203FD44) */
 } EvRing;
 #define EV ((EvRing *)0x0203FD10u)
 #define EV_PLAYER_FAINT 1u  /* a = playerFaintCounter after the bump */
 #define EV_FOE_FAINT    2u  /* a = foeFaintCounter after the bump */
 #define EV_OUTCOME      3u  /* a = gBattleOutcome on its end-of-battle edge (1 won, 2 lost/whiteout, ...) */
+#define EV_PARTY_ADD    4u  /* a = new gPlayerPartyCount, b = species of the slot that appeared */
+#define EV_EVOLVE       5u  /* a = party slot, b = the NEW species (old != new, both nonzero) */
+
+/* ---- §6 SOULLINK in-game menu -------------------------------------------------------------
+ * Run status without alt-tabbing to the dashboard: a SOULLINK row in the START menu opening a
+ * native info screen. This block is the DATA CONTRACT plus the menu hook; the screen itself is
+ * a separate step and reads the same struct.
+ *
+ * ponytail: 0x0203FD44 is the LAST contiguous EWRAM this patch owns — it starts immediately
+ * after EvRing (ends 0x0203FD44) and the 700-byte run to 0x0203FFFF is all that is left. This
+ * struct takes 264 of it; 436 remain. The next feature reuses a buffer or fragments the interior
+ * gaps. That the run is genuinely free is not inferred: lua/tests/test_live_ewramtail.lua paints it
+ * and watches all 700 bytes across 7 savestates / 5,100 frames with a live detector self-check.
+ *
+ * Every byte's ZERO value must reproduce pre-feature behaviour, because EWRAM boots zeroed and an
+ * unpatched-Lua run never writes here:
+ *   enable=0  -> no row is spliced, and the action callback tail-calls the ORIGINAL id-8 function,
+ *                so even a cable-club menu behaves exactly as stock.
+ *   opened==drawn -> the frame hook never runs the screen.
+ *   lines=0   -> the screen refuses to draw; an empty box is unreachable by construction. */
+typedef struct {
+    volatile u8 enable;      /* +0 0 = feature invisible (BOOT DEFAULT); Lua sets it */
+    volatile u8 opened;      /* +1 patch ++ when the row is chosen (SS->pi_count idiom) */
+    volatile u8 drawn;       /* +2 patch's ack of `opened`; equal = handled */
+    volatile u8 lines;       /* +3 0..8 populated lines; 0 = nothing to draw */
+    volatile u8 page;        /* +4 Lua-set, display only */
+    volatile u8 pages;       /* +5 Lua-set, display only */
+    volatile u8 gen;         /* +6 Lua ++ after staging (redraw-on-change) */
+    volatile u8 _pad;        /* +7 */
+    volatile u8 line[8][32]; /* +8 FR-encoded, 0xFF-terminated (ends 0x0203FE4C) */
+} SlinkInfo;
+#define SI ((SlinkInfo *)0x0203FD44u)
+
+/* RR builds the start menu into these two globals; both located live by lua/tests/test_live_startmenu.lua,
+ * which also asserts a normal field menu is exactly [1 2 3 4 5 6] with EXIT (id 6) last. */
+#define sNumStartMenuActions 0x020370F5u
+#define sStartMenuOrder      0x020370F6u
 
 /* Authoritative borrowed-party ("Party Freeze") signal. RR/CFRU temporarily replaces gPlayerParty
  * with a borrowed/preset party for Battle-Tower-style preset battles, Poke Dude tutorials, and
@@ -255,6 +294,9 @@ typedef struct {
 #define gEnemyParty          0x0202402Cu
 #define gEnemyPartyCount     0x0202402Au
 #define MON_SIZE             100u
+/* CFRU is NO_ENCRYPT with substructs in FIXED order (Growth first), so species is a raw u16 at
+ * mon + 0x20 — no PID-keyed permutation or XOR decrypt. Mirrors lua/memory_gba.lua's CFRU path. */
+#define MON_SPECIES_OFF      0x20u
 
 /* CFRU compressed PC-box storage (OP_DEPOSIT_MON / OP_WITHDRAW_MON). RE'd via the sPokemonBoxPtrs
  * pointer table — see patch/src/ADDRESSES.md "PC storage / box migration reference".
@@ -794,6 +836,81 @@ static void ghost_cb(void *s) { (void)s; }
  * tint/fade pass can't drop them (v1 shows the partner's true colours — day/night tint on the avatar
  * is a documented follow-up). The partner's on-foot frame is 16x32, matching the stand-in's tiles. */
 #define GHOST_PAL_SLOT 15u
+#define OBJ_PLTT_RAM   0x05000200u   /* live OBJ palette RAM; the engine DMAs Faded -> here each frame */
+
+/* Unsigned divide. The blob links handlers.o ALONE — no libgcc — so `/` on a runtime value emits an
+ * undefined reference to __aeabi_uidiv (same class of problem as the -fno-jump-tables flag, which is
+ * there to keep the compiler off libgcc's switch helpers). Restoring division, 32 iterations; the
+ * only caller runs it three times a frame. */
+static u32 udiv(u32 n, u32 d)
+{
+    u32 q = 0, r = 0;
+    if (!d) return 0;
+    for (s32 i = 31; i >= 0; i--) {
+        r = (r << 1) | ((n >> i) & 1u);
+        if (r >= d) { r -= d; q |= 1u << i; }
+    }
+    return q;
+}
+
+/* Day/night tint for the ghost's hijacked palette slot (ROADMAP §5).
+ *
+ * RR tints OBJ palettes by writing palette RAM directly, and it does NOT know about slot 15, so the
+ * ghost would sit at full daylight brightness in a night map. Derive the tint the engine is applying
+ * from the PLAYER's own slot — (live palette RAM) / (unfaded true colours), summed per channel over
+ * the 16 entries — and apply that same ratio to the partner's true colours.
+ *
+ * Writes UNFADED slot 15 = the partner's true colours, FADED slot 15 = tinted (the engine DMAs
+ * Faded -> RAM), and RAM slot 15 = tinted so the current frame is already right. Writing the
+ * UNTINTED colours into FADED is what used to make the ghost never tint — that is the bug this
+ * ordering avoids, not a reason to leave FADED alone.
+ *
+ * Recomputed unconditionally every frame. The Lua version this replaces had to signature-gate the
+ * recompute (~80 interpreted ops); in C the whole thing is 3 divisions and 48 multiplies, which is
+ * far cheaper than the dirty-tracking it would take to skip it — and skipping nothing means there
+ * is no staleness path to get wrong. Owning both halves here also removes the "two writers, one
+ * palette" hazard the roadmap flagged. */
+static void apply_tint(void)
+{
+    u32 poe = player_oe();
+    u8  psid = R8(poe + OE_SPRITE_ID);
+    u32 uf15 = gPlttBufferUnfaded_OBJ + GHOST_PAL_SLOT * 0x20;
+    u32 fd15 = gPlttBufferFaded_OBJ   + GHOST_PAL_SLOT * 0x20;
+    u32 rm15 = OBJ_PLTT_RAM           + GHOST_PAL_SLOT * 0x20;
+
+    u32 rn = 0, gn = 0, bn = 0, rd = 0, gd = 0, bd = 0;
+    if (psid < SPR_COUNT) {
+        u8 ps = (u8)((R16(gSprites + (u32)psid * SPR_STRIDE + 0x04) >> 12) & 0x0F);
+        u32 pu = gPlttBufferUnfaded_OBJ + (u32)ps * 0x20;
+        u32 pr = OBJ_PLTT_RAM           + (u32)ps * 0x20;
+        for (u32 i = 0; i < 16; i++) {
+            u16 t = R16(pu + i * 2);          /* true colours   -> denominator */
+            u16 l = R16(pr + i * 2);          /* live (tinted)  -> numerator   */
+            rd += t & 0x1Fu; gd += (t >> 5) & 0x1Fu; bd += (t >> 10) & 0x1Fu;
+            rn += l & 0x1Fu; gn += (l >> 5) & 0x1Fu; bn += (l >> 10) & 0x1Fu;
+        }
+    }
+    /* 8.8 fixed point, one division per channel. A zero denominator (palette not loaded yet) means
+     * "no information" -> identity, i.e. the partner's true colours, which is the old behaviour. */
+    u32 sr = rd ? udiv(rn << 8, rd) : 256u;
+    u32 sg = gd ? udiv(gn << 8, gd) : 256u;
+    u32 sb = bd ? udiv(bn << 8, bd) : 256u;
+
+    for (u32 i = 0; i < 16; i++) {
+        u16 c = R16(GHOST_PAL_BUF + i * 2);
+        u32 r = ((c & 0x1Fu) * sr + 128u) >> 8;
+        u32 gg = (((c >> 5) & 0x1Fu) * sg + 128u) >> 8;
+        u32 b = (((c >> 10) & 0x1Fu) * sb + 128u) >> 8;
+        if (r > 31u) r = 31u;
+        if (gg > 31u) gg = 31u;
+        if (b > 31u) b = 31u;
+        u16 tc = (u16)(r | (gg << 5) | (b << 10));
+        R16(uf15 + i * 2) = c;    /* unfaded = the partner's TRUE colours */
+        R16(fd15 + i * 2) = tc;   /* faded   = tinted (engine DMAs this to RAM) */
+        R16(rm15 + i * 2) = tc;   /* RAM     = tinted now, so this frame is already correct */
+    }
+}
+
 static void apply_avatar(u32 g)
 {
     if (!GH->imgs) return;                         /* no partner avatar received yet */
@@ -815,12 +932,7 @@ static void apply_avatar(u32 g)
      * SetGraphicsId, but re-assert defensively against reflection/ground-effect repaints). */
     u16 attr2 = R16(spr + 0x04);
     R16(spr + 0x04) = (u16)((attr2 & (u16)~0xF000u) | (GHOST_PAL_SLOT << 12));
-    /* Write only the UNFADED (true) colours here. The day/night-tinted FADED slot is owned by the Lua
-     * receiver end-of-frame — if the patch also wrote FADED every frame-top it would overwrite the
-     * tint before the engine's Faded->RAM DMA, so the ghost would never tint (the bug). */
-    u32 uf = gPlttBufferUnfaded_OBJ + GHOST_PAL_SLOT * 0x20;
-    for (u32 i = 0; i < 16; i++)
-        R16(uf + i * 2) = R16(GHOST_PAL_BUF + i * 2);
+    apply_tint();
 }
 
 /* idle/walk animNum from facing (pret ANIM_STD: idle face = f-1 (0..3 S/N/W/E); walk = f+3 (4..7)). */
@@ -1137,8 +1249,15 @@ __attribute__((naked, used)) void slink_battletext_hook(void)
 #define PCNPC_GFX     0x47u   /* 71 = Prof Oak — user-picked via lua/tests/sprite_gallery.lua */
 #define PCNPC_MOVEMENT 0x02u  /* MOVEMENT_TYPE_WANDER_AROUND: engine-driven idle pacing (steps +
                                * facing changes). Range is clamped to +-1 tile post-spawn below. */
-#define PCNPC_TILE_X  0x0Au   /* TBD: currentCoords X; verify reachable + clear of the counter/PC */
-#define PCNPC_TILE_Y  0x09u   /* TBD: currentCoords Y */
+/* VERIFIED IN-GAME 2026-07-25 on a real Pokémon Center 1F (map 5,4): the NPC spawns at this tile,
+ * gets a sprite slot, arms talk, and is removed cleanly when disabled — lua/tests/test_live_pcnpc.lua
+ * passes end to end. Re-check with:
+ *   python tools/mkstates.py --only pokecenter   # needs a save in front of a PC door
+ *   python tools/run_gate.py lua/tests/test_live_pcnpc.lua
+ * Low blast radius either way: the trade NPC only spawns when overworld presence is OFF and the
+ * pc_trade_npc toggle is ON. */
+#define PCNPC_TILE_X  0x0Au   /* currentCoords X */
+#define PCNPC_TILE_Y  0x09u   /* currentCoords Y */
 
 /* Pokémon-Center 1F map IDs as (mapGroup<<8 | mapNum), from
  * data/games/gen3_frlge/gen3_frlge_locations.lua. These are the project's FRLG resolver values; RR is
@@ -1256,6 +1375,98 @@ static void drive_events(void)
         if (oc) ev_push(EV_OUTCOME, oc, 0);
     }
     EV->inb = in_battle;
+
+    /* Party producers: EV_PARTY_ADD (count grew — catch / gift / withdraw / trade-in) and
+     * EV_EVOLVE (a slot's species changed in place). Both are pure polling: 7 reads a frame
+     * versus the per-frame party DECRYPTION Lua does today, and no new detour points. CFRU is
+     * NO_ENCRYPT, so species is a raw u16 at mon + MON_SPECIES_OFF.
+     *
+     * Suppressed entirely while a borrowed party is installed (Battle Tower / Poke Dude /
+     * partner battles replace gPlayerParty wholesale — every slot would look "evolved"), and
+     * `prim` is cleared so the latches re-prime against the real party when it is restored.
+     *
+     * prim = 0 is the EWRAM boot default, and the first pass through it only LATCHES. That
+     * keeps the invariant that an all-zero EWRAM reproduces the old behaviour: an unpatched
+     * or pre-config session never sees a burst of spurious events for a party it already had. */
+    if (SW->active) {
+        EV->prim = 0;
+    } else {
+        u8 cnt = R8(gPlayerPartyCount);
+        if (cnt > 6) cnt = 6;                       /* garbage guard: never index past the party */
+        if (!EV->prim) {
+            EV->pcnt = cnt;
+            for (u32 i = 0; i < 6; i++)
+                EV->spc[i] = R16(gPlayerParty + i * MON_SIZE + MON_SPECIES_OFF);
+            EV->prim = 1;
+        } else {
+            for (u32 i = 0; i < 6; i++) {
+                u16 sp = R16(gPlayerParty + i * MON_SIZE + MON_SPECIES_OFF);
+                u16 prev = EV->spc[i];
+                if (sp != prev) {
+                    /* Only an in-place change of a real mon is an evolution; 0 on either side is
+                     * the slot being filled or emptied, which EV_PARTY_ADD / the count covers. */
+                    if (sp && prev && i < cnt) ev_push(EV_EVOLVE, (u8)i, sp);
+                    EV->spc[i] = sp;
+                }
+            }
+            if (cnt > EV->pcnt)
+                ev_push(EV_PARTY_ADD, cnt, R16(gPlayerParty + (cnt - 1) * MON_SIZE + MON_SPECIES_OFF));
+            EV->pcnt = cnt;
+        }
+    }
+}
+
+/* ---- §6 SOULLINK start-menu entry ----------------------------------------------------------
+ * RR reads the start menu's description array and its action array through ONE base literal with
+ * hardcoded offsets: desc[i] = *(0x09148FB4+8+4i) for 13 entries ending 0x09148FEF, and
+ * action[i] = 0x09148FF0+8i for 13 entries. Those ranges ABUT — desc[13] is literally act[0].text
+ * — so a 14th action id structurally cannot own a description without re-encoding compiled CFRU
+ * `ldr` immediates or taking over StartCB_HandleInput.
+ *
+ * So take over id 8 instead: a second PLAYER row that only SetUpStartMenu_Link ever appends, and
+ * which lua/tests/test_live_startmenu.lua proves absent from the menu a real player opens. build.py
+ * repoints three table words at the strings and callback below (each verified before it is
+ * written) plus the SetUpStartMenu redirect literal at the wrapper. Four words, no relocation.
+ *
+ * The callback deliberately does NOT draw. It bumps a counter and closes the menu, which is what
+ * makes this step gateable on its own: the entry can be proven to appear and fire before a single
+ * pixel of the info screen exists. */
+typedef u8 (*StartMenuFn)(void);
+#define StartMenu_Exit    ((StartMenuFn)0x0806F541u)  /* = act[6].func, so proven safe in this slot */
+#define StartMenu_Id8Orig ((StartMenuFn)0x0806F56Du)  /* what act[8].func was before we took it */
+#define SetUpStartMenu_Orig ((void (*)(void))0x090BE179u)
+
+/* FR charmap (same table as lua/mailbox.lua fr_encode): 'A'=0xBB, 'a'=0xD5, space=0x00, EOS=0xFF.
+ * Spelled as arithmetic on the character literal so the mapping is checkable by eye. */
+#define FU(c) (u8)(0xBBu + ((c) - 'A'))
+#define FL(c) (u8)(0xD5u + ((c) - 'a'))
+#define FSP   0x00u
+#define FEOS  0xFFu
+const u8 sSoulLinkLabel[] = { FU('S'), FU('O'), FU('U'), FU('L'), FU('L'), FU('I'), FU('N'),
+                              FU('K'), FEOS };
+const u8 sSoulLinkDesc[] = { FU('C'), FL('h'), FL('e'), FL('c'), FL('k'), FSP,
+                             FL('t'), FL('h'), FL('e'), FSP,
+                             FU('S'), FU('O'), FU('U'), FU('L'), FSP, FU('L'), FU('I'), FU('N'),
+                             FU('K'), FSP, FL('r'), FL('u'), FL('n'), FEOS };
+
+u8 slink_startmenu_cb(void)
+{
+    /* Not enabled -> behave as the row we displaced, so a patched ROM with no Lua is stock. */
+    if (!SI->enable) return StartMenu_Id8Orig();
+    SI->opened++;
+    return StartMenu_Exit();
+}
+
+void slink_setup_start_menu(void)
+{
+    SetUpStartMenu_Orig();
+    if (!SI->enable) return;
+    /* Splice ONLY into the exact menu shape test_live_startmenu.lua validated — 6 rows ending in EXIT.
+     * Any other shape (the link menu, a future RR revision) is left alone rather than guessed at. */
+    if (R8(sNumStartMenuActions) != 6 || R8(sStartMenuOrder + 5) != 6) return;
+    R8(sStartMenuOrder + 5) = 8;   /* SOULLINK takes EXIT's place... */
+    R8(sStartMenuOrder + 6) = 6;   /* ...and EXIT moves down, staying last */
+    R8(sNumStartMenuActions) = 7;
 }
 
 __attribute__((section(".text.entry"), used))

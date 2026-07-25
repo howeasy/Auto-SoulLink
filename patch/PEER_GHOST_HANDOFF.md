@@ -5,8 +5,9 @@
 > `server/patcher.py` (`PATCHED_ROM_MD5`), and is printed by every `python patch/tools/build.py`
 > run. Keep this file for the discovery narrative + RE offsets; do not trust its build hashes.
 
-Branch: `feat/rom-patch-companion` (worktree `condescending-bassi-9175e6`). Companion patch for
-Radical Red. The peer ghost shows your soul-link partner as a walking NPC in your RR overworld.
+Written on the `feat/rom-patch-companion` branch, since merged to `master` (its worktree is gone).
+Companion patch for Radical Red: the peer ghost shows your soul-link partner as a walking NPC in
+your RR overworld.
 
 ## ✅ RESOLVED (2026-06-01) — read this first; the rest is historical
 

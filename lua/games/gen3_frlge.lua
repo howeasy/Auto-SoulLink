@@ -11,7 +11,9 @@
     • vanilla      — unmodified FRLG US 1.0 (and data-only randomizers)
     • ap           — Archipelago-patched FRLG
     • radical_red  — Radical Red 4.1 / CFRU-based hacks
-    • emerald      — Pokémon Emerald US (stub — addresses TBD)
+    • emerald      — Pokémon Emerald US (RAM profile complete; area/location NAME tables
+                     are NOT generated yet, so area resolution falls back to FireRed and
+                     is WRONG — treat Emerald as experimental until they exist)
 --]]
 
 local GEN3 = {}
@@ -88,7 +90,6 @@ GEN3.profiles = {
         -- Engine lock disabled — see radical_red profile for rationale.
         -- (Vanilla candidate would have been 0xC400: bit 10 MULTIPLETURNS +
         -- bits 14-15 LOCK_CONFUSE counter=3.)
-        LOCK_STATUS2_VALUE         = nil,
         GMAIN_ADDR                 = 0x030030F0,
         SB1_PTR_ADDR               = 0x03005008,
         SB2_PTR_ADDR               = 0x0300500C,
@@ -157,7 +158,6 @@ GEN3.profiles = {
         -- TODO VERIFY before relying on the forced-move behaviour in AP.
         LOCKED_MOVES_ADDR          = 0x02023DCC,
         -- Engine lock disabled — see radical_red profile for rationale.
-        LOCK_STATUS2_VALUE         = nil,
         GMAIN_ADDR                 = 0x03003040,
         SB1_PTR_ADDR               = 0x03004F58,
         SB2_PTR_ADDR               = 0x03004F5C,
@@ -218,7 +218,6 @@ GEN3.profiles = {
         -- Rampage-based engine lock disabled: see commit history — caused
         -- double-faint softlock with Explosion.  Replaced by chosen-move pre-fill
         -- (CHOSEN_MOVE_ADDRS) which avoids the rampage state machine entirely.
-        LOCK_STATUS2_VALUE         = nil,
         -- ── Variant 3 (active): full action-state pre-fill, no rampage ─────
         -- Rampage-based attempts (LOCK_STATUS2_VALUE = 0x1800 / 0x1000) all
         -- softlocked on double-faint because the engine queues a phantom turn 2
@@ -231,7 +230,6 @@ GEN3.profiles = {
         -- "battler 0 already committed to USE_MOVE / Explosion" and skips the
         -- action-select menu — without touching status2 — so no rampage state
         -- exists to corrupt the dead mon's post-Explosion processing.
-        LOCK_STATUS2_VALUE         = nil,   -- no rampage flag
         CHOSEN_MOVE_ADDRS          = nil,   -- the 3 candidates were wrong arrays
         -- gActionForBanks (= gChosenActionByBattler) — per-battler action choice
         -- (0=USE_MOVE, 2=SWITCH, 3=RUN, ...).  Writing 0 commits the battler
@@ -389,11 +387,9 @@ GEN3.profiles = {
         -- this address is the authoritative real-party reference.
         REAL_PARTY_BACKUP_ADDR           = 0x02025564,
     },
-    -- Emerald US 1.0 — stub profile (addresses TBD, requires research)
-    -- Game code: BPEE. Same Gen 3 Pokemon struct (100 bytes, encrypted substructs).
-    -- Key differences from FRLG: different EWRAM layout, different gMain address,
-    -- Battle Frontier, double battles in wild grass, abilities matter more.
-    emerald = nil,  -- TODO: populate with Emerald-specific addresses
+    -- Emerald US 1.0 (game code BPEE) is defined further down as an ADDITIVE assignment
+    -- (`GEN3.profiles.emerald = {...}`) so it could be added without touching FRLG/AP/RR.
+    -- Declared nil here only to reserve the key; the real table overwrites it below.
 }
 
 -- ── Variant detection ─────────────────────────────────────────────────────────
@@ -572,11 +568,23 @@ do
     end
 end
 
+-- One warning per missing Emerald table per session (this runs on every map change).
+local _emerald_warned = {}
+
 local function _lookup_table(frlg_module, emerald_module)
     if GEN3._game_code == "BPEE" then
         local ok, tbl = pcall(require, emerald_module)
         if ok then
             return tbl
+        end
+        -- The Emerald tables do not exist in the repo yet.  Silently serving the FireRed
+        -- names here made an Emerald run look like it was resolving areas correctly while
+        -- every name was wrong — say so instead.
+        if not _emerald_warned[emerald_module] then
+            _emerald_warned[emerald_module] = true
+            console.log("[GEN3] ⚠ " .. emerald_module .. " not found — falling back to the " ..
+                        "FireRed table. Area/location NAMES WILL BE WRONG on Emerald. " ..
+                        "Generate the table with tools/gen_area_map.py to fix.")
         end
     end
     return require(frlg_module)

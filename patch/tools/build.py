@@ -11,24 +11,49 @@ Pipeline (plan §3):
   7. verify by disassembly ; emit UPS/IPS (round-trip self-checked)
 
 Usage: python patch/tools/build.py [--rom <Radical Red.gba>]
+       python patch/tools/build.py --check     # reproducibility gate (see main)
 """
 import argparse
+import glob
 import hashlib
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH = os.path.dirname(HERE)
 BUILD = os.path.join(PATCH, "build")
 DIST = os.path.join(PATCH, "dist")
 SRC = os.path.join(PATCH, "src")
-GCCDIR = os.path.join(PATCH, "vendor", "armgcc",
-                      "xpack-arm-none-eabi-gcc-15.2.1-1.1", "bin")
-GCC = os.path.join(GCCDIR, "arm-none-eabi-gcc.exe")
-LD = os.path.join(GCCDIR, "arm-none-eabi-ld.exe")
-OBJCOPY = os.path.join(GCCDIR, "arm-none-eabi-objcopy.exe")
-NM = os.path.join(GCCDIR, "arm-none-eabi-nm.exe")
+EXE = ".exe" if os.name == "nt" else ""
+
+
+def _toolchain_dir():
+    """Locate the arm-none-eabi bin dir: $SLINK_ARMGCC, then patch/vendor/armgcc/*/bin
+    (newest first), then PATH.  Globbed rather than version-pinned so bumping the
+    vendored xPack release doesn't silently break the build."""
+    cands = [os.environ.get("SLINK_ARMGCC", "")]
+    cands += sorted(glob.glob(os.path.join(PATCH, "vendor", "armgcc", "*", "bin")),
+                    reverse=True)
+    for d in cands:
+        if d and os.path.exists(os.path.join(d, "arm-none-eabi-gcc" + EXE)):
+            return d
+    return "" if shutil.which("arm-none-eabi-gcc") else None
+
+
+GCCDIR = _toolchain_dir()
+
+
+def _tool(name):
+    return os.path.join(GCCDIR, name + EXE) if GCCDIR else name
+
+
+GCC = _tool("arm-none-eabi-gcc")
+LD = _tool("arm-none-eabi-ld")
+OBJCOPY = _tool("arm-none-eabi-objcopy")
+NM = _tool("arm-none-eabi-nm")
 
 ROM_BASE = 0x08000000
 # 0x08378F70, not 0x08378CA8: the bundled RR4.1_Custom Battle Calc occupies
@@ -45,6 +70,23 @@ BACKUP_MEMCPY = 0x081E5E78  # the engine memcpy the sites originally `bl`'d (san
 # The Battle Calc detours BattlePutTextOnWindow's 2nd instruction (0x080D87BE) to this trampoline.
 # We re-point that detour to our in-context shim, which falls through to this trampoline. See [6/7].
 BATTLE_CALC_TRAMPOLINE = 0x08378CA8
+# §6 SOULLINK start-menu entry. RR reads the menu's description and action arrays through one base
+# literal with hardcoded offsets, and the two ranges abut (desc[13] IS act[0].text), so a 14th
+# action id cannot own a description. We take over id 8 instead — a second PLAYER row only
+# SetUpStartMenu_Link ever appends, proven absent from a real field menu by
+# lua/tests/test_live_startmenu.lua. Four word writes, each verified against its expected current value
+# so a different RR build fails the build instead of producing a subtly wrong ROM.
+STARTMENU_TABLE = 0x09148FB4
+STARTMENU_DESC8 = STARTMENU_TABLE + 8 + 4 * 8       # 0x09148FDC — desc[8]
+STARTMENU_ACT8 = STARTMENU_TABLE + 0x3C + 8 * 8     # 0x09149030 — act[8] = {text, func}
+STARTMENU_SETUP_LIT = 0x0806ED58                    # CFRU's SetUpStartMenu redirect literal
+STARTMENU_EXPECT = {
+    STARTMENU_DESC8: 0x0841A049,       # duplicate of desc[3] (PLAYER)
+    STARTMENU_ACT8: 0x0841628E,        # duplicate of act[3].text (PLAYER)
+    STARTMENU_ACT8 + 4: 0x0806F56D,    # id 8's own action func (NOT act[3].func)
+    STARTMENU_SETUP_LIT: 0x090BE179,   # the original SetUpStartMenu
+}
+
 RR_MD5 = "8529f3a45d32bce4da637976fcf269d4"
 DEFAULT_RR = r"E:/Google Drive/SLink/Pokemon - Radical Red.gba"
 # Committed base-RR -> RR4.1_Custom Battle Calc delta (the in-battle damage / type-
@@ -86,18 +128,29 @@ def thumb_bl(src, dst):
 
 
 def main():
+    global BUILD, DIST
     ap = argparse.ArgumentParser()
     ap.add_argument("--rom", default=DEFAULT_RR)
     ap.add_argument("--no-verify-md5", action="store_true")
     ap.add_argument("--no-battle-calc", action="store_true",
                     help="skip folding in the RR4.1_Custom Battle Calc delta "
                          "(emit base-RR + SLink only)")
+    ap.add_argument("--check", action="store_true",
+                    help="reproducibility gate: build into a temp dir and assert the "
+                         "emitted UPS is byte-identical to the committed dist/SLink-RR.ups. "
+                         "Touches nothing in the tree.")
     args = ap.parse_args()
+    committed_ups = os.path.join(DIST, "SLink-RR.ups")
+    tmp = tempfile.mkdtemp(prefix="slink-build-") if args.check else None
+    if args.check:
+        if not os.path.exists(committed_ups):
+            sys.exit(f"--check: no committed patch at {committed_ups}")
+        BUILD = DIST = tmp
     os.makedirs(BUILD, exist_ok=True)
     os.makedirs(DIST, exist_ok=True)
-    for t in (GCC, LD, OBJCOPY):
-        if not os.path.exists(t):
-            sys.exit(f"toolchain missing: {t}")
+    if GCCDIR is None:
+        sys.exit("toolchain missing: no arm-none-eabi-gcc in $SLINK_ARMGCC, "
+                 "patch/vendor/armgcc/*/bin, or PATH")
 
     obj = os.path.join(BUILD, "handlers.o")
     elf = os.path.join(BUILD, "handlers.elf")
@@ -108,27 +161,25 @@ def main():
     run([LD, "-T", os.path.join(SRC, "slink.ld"), "-e", "slink_hook",
          "--no-warn-rwx-segments", obj, "-o", elf])
     print("[3/7] verify slink_hook address")
-    syms = run([NM, elf])
-    hook_addr = None
-    bt_hook_addr = None
-    backup_wrap_addr = None
-    for line in syms.splitlines():
+    # Every symbol the ROM-side rewrites need to point at. Missing one is fatal: it would mean a
+    # detour or table word silently keeping its old target.
+    WANTED = ("slink_hook", "slink_battletext_hook", "slink_backup_wrap",
+              "slink_startmenu_cb", "slink_setup_start_menu", "sSoulLinkLabel", "sSoulLinkDesc")
+    sym = {}
+    for line in run([NM, elf]).splitlines():
         parts = line.split()
-        if len(parts) == 3 and parts[2] == "slink_hook":
-            hook_addr = int(parts[0], 16)
-        elif len(parts) == 3 and parts[2] == "slink_battletext_hook":
-            bt_hook_addr = int(parts[0], 16)
-        elif len(parts) == 3 and parts[2] == "slink_backup_wrap":
-            backup_wrap_addr = int(parts[0], 16)
-    if hook_addr != CODE_BASE:
-        sys.exit(f"slink_hook at {hook_addr:#x}, expected {CODE_BASE:#x}")
-    if bt_hook_addr is None:
-        sys.exit("slink_battletext_hook symbol not found")
-    if backup_wrap_addr is None:
-        sys.exit("slink_backup_wrap symbol not found")
-    print(f"      slink_hook @ {hook_addr:#010x} OK")
-    print(f"      slink_battletext_hook @ {bt_hook_addr:#010x}")
-    print(f"      slink_backup_wrap @ {backup_wrap_addr:#010x}")
+        if len(parts) == 3 and parts[2] in WANTED:
+            sym[parts[2]] = int(parts[0], 16)
+    missing = [s for s in WANTED if s not in sym]
+    if missing:
+        sys.exit(f"symbols not found in handlers.elf: {', '.join(missing)}")
+    if sym["slink_hook"] != CODE_BASE:
+        sys.exit(f"slink_hook at {sym['slink_hook']:#x}, expected {CODE_BASE:#x}")
+    bt_hook_addr = sym["slink_battletext_hook"]
+    backup_wrap_addr = sym["slink_backup_wrap"]
+    print(f"      slink_hook @ {sym['slink_hook']:#010x} OK")
+    for s in WANTED[1:]:
+        print(f"      {s} @ {sym[s]:#010x}")
     print("[4/7] objcopy -> bin")
     run([OBJCOPY, "-O", "binary", elf, binf])
     blob = open(binf, "rb").read()
@@ -173,6 +224,25 @@ def main():
         data[s_off:s_off + 4] = thumb_bl(site, backup_wrap_addr)
     print(f"      redirected backup BL sites {', '.join(hex(s) for s in BACKUP_BL_SITES)} "
           f"-> slink_backup_wrap {backup_wrap_addr:#x}")
+    # §6: take over start-menu action id 8 -> SOULLINK. Verify-then-write, same discipline as the
+    # BL redirects above: if any word is not what we RE'd, the RR/CFRU layout moved and guessing
+    # would corrupt a menu the player uses every session.
+    def w32(addr, value):
+        o = addr - ROM_BASE
+        data[o:o + 4] = value.to_bytes(4, "little")
+
+    for addr, expect in STARTMENU_EXPECT.items():
+        got = int.from_bytes(bytes(data[addr - ROM_BASE:addr - ROM_BASE + 4]), "little")
+        if got != expect:
+            sys.exit(f"start-menu word {addr:#x} is {got:#010x}, expected {expect:#010x} — "
+                     "RR/CFRU start-menu layout changed; re-run lua/tests/test_live_startmenu.lua and re-RE")
+    w32(STARTMENU_DESC8, sym["sSoulLinkDesc"])
+    w32(STARTMENU_ACT8, sym["sSoulLinkLabel"])
+    w32(STARTMENU_ACT8 + 4, sym["slink_startmenu_cb"] | 1)          # Thumb bit
+    w32(STARTMENU_SETUP_LIT, sym["slink_setup_start_menu"] | 1)
+    print(f"      start-menu id 8 -> SOULLINK (label {sym['sSoulLinkLabel']:#x}, "
+          f"cb {sym['slink_startmenu_cb'] | 1:#x}, setup wrapper "
+          f"{sym['slink_setup_start_menu'] | 1:#x})")
     # Re-point the Battle Calc's BattlePutTextOnWindow detour (0x080D87BE: `BL 0x08378CA8`) to our in-context
     # shim, which swaps the text ptr when a notification is active then falls through to the calc trampoline.
     # Only meaningful when the Battle Calc is present (it installs that detour); skip if --no-battle-calc.
@@ -194,6 +264,17 @@ def main():
     assert hashlib.md5(make_ups.ups_apply(clean, ups)).hexdigest() == hashlib.md5(patched).hexdigest()
     open(os.path.join(DIST, "SLink-RR.ups"), "wb").write(ups)
     print(f"      SLink-RR.ups ({len(ups)} B) round-trip OK")
+    if args.check:
+        want = open(committed_ups, "rb").read()
+        shutil.rmtree(tmp, ignore_errors=True)
+        if ups != want:
+            sys.exit(f"CHECK FAIL: rebuilt UPS ({len(ups)} B, md5 "
+                     f"{hashlib.md5(ups).hexdigest()}) != committed "
+                     f"({len(want)} B, md5 {hashlib.md5(want).hexdigest()}) — "
+                     "handlers.c and dist/SLink-RR.ups are out of sync; rebuild and commit")
+        print(f"\nCHECK OK. dist/SLink-RR.ups reproduces from source "
+              f"(patched md5 {hashlib.md5(patched).hexdigest()})")
+        return 0
     ips_path = os.path.join(DIST, "SLink-RR.ips")
     try:
         ips = make_ups.ips_create(clean, patched)

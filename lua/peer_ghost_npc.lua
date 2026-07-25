@@ -31,7 +31,8 @@ local SNAP_PX = 48             -- world-px jump beyond this in one update -> sna
 local S
 
 function PG.init() S = { ghost = nil, spawned = false, pi_last = 0, interact_pending = false,
-                         last_w = nil, av_imgs = nil, av_anims = nil, pcols = nil, last_gsid = nil } end
+                         last_w = nil, av_imgs = nil, av_anims = nil, last_gsid = nil,
+                         spawn_gfx = nil } end
 function PG.present() return MB ~= nil and MB.present() end
 function PG.set_interact_text(s) if s and s ~= "" then interact_text = s end end
 
@@ -42,7 +43,8 @@ function PG.on_ghost_clear()
   if not S then return end
   S.ghost = nil
   if S.spawned and MB then MB.ghost_clear() end
-  S.spawned = false; S.last_w = nil; S.av_imgs = nil; S.av_anims = nil; S.pcols = nil; S.last_gsid = nil
+  S.spawned = false; S.last_w = nil; S.av_imgs = nil; S.av_anims = nil; S.last_gsid = nil
+  S.spawn_gfx = nil
 end
 
 -- True once per detected talk-to-ghost (the client emits a peer_interact event to the server).
@@ -77,18 +79,29 @@ function PG.on_frame()
     return
   end
 
-  -- Spawn the stand-in with a FIXED 16x32 / 8-tile base gfx (0 = the default player base), NOT the
-  -- local player's gfx. The local player's graphicsId can resolve to a DIFFERENT OAM size than the
-  -- actual on-foot character (e.g. a custom character whose graphicsId's static graphics-info is
-  -- 32x32 / 16 tiles), which would leave the ghost a 32x32 OAM and render the 8-tile partner frame as
-  -- a corrupted blob. A fixed 16x32 base guarantees the OAM matches every 8-tile on-foot partner; the
-  -- patch then repaints it to the PARTNER's avatar (their live sprite ptrs + colours into slot 15).
-  local STANDIN_GFX = 0
+  -- Spawn with the PARTNER's own graphicsId, so the engine allocates the OAM shape/size and tile
+  -- count that their sprite actually needs. This is what makes bike / surf / fishing work: those
+  -- frames are 32x32 / 16 tiles, and the old fixed 16x32 stand-in rendered them as a corrupted blob
+  -- because the avatar repoint only swaps the image POINTER, not the OAM geometry.
+  --
+  -- Never the LOCAL player's gfx: a custom local character can resolve to a different OAM size than
+  -- the partner's, which is the bug the stand-in was working around. Both players run the same RR
+  -- build, so the partner's graphicsId indexes the same graphics-info table here. Fall back to 0 (the
+  -- default 16x32 player base) until their gfx has actually arrived.
+  local want_gfx = (type(g.gfx) == "number" and g.gfx >= 0 and g.gfx <= 255) and g.gfx or 0
   if not S.spawned then
     MB.write_message(interact_text)     -- pre-set the talk-to-ghost message (patch shows it)
-    MB.ghost_spawn(STANDIN_GFX)         -- patch spawns the 16x32 stand-in + drives from here
+    MB.ghost_spawn(want_gfx)            -- patch spawns it + drives from here
     S.spawned, S.pi_last = true, MB.peer_interact_count()
+    S.spawn_gfx = want_gfx
     S.last_w = nil; S.av_imgs = nil
+  elseif want_gfx ~= S.spawn_gfx then
+    -- Partner mounted the bike / started surfing / cast a rod: re-post the gfxId. drive_ghost sees
+    -- gfxId ~= curGfx and does a clean remove + respawn at the new size, then re-applies the avatar.
+    MB.ghost_spawn(want_gfx)
+    S.spawn_gfx = want_gfx
+    S.av_imgs = nil                     -- force the avatar re-forward onto the new sprite slot
+    console.log("[peer-ghost] partner avatar size changed -> respawn gfx=" .. want_gfx)
   end
 
   -- One-shot diagnostic: is the partner's avatar data actually DIFFERENT from ours? (If you both
@@ -113,12 +126,6 @@ function PG.on_frame()
     MB.ghost_set_avatar(g.imgs, g.anim or 0, g.pcol)
     S.av_imgs = g.imgs
     S.av_anims = g.anim or 0
-    S.pcols = nil
-    S.tint_sig = nil                               -- new colours -> force a tint recompute
-    if g.pcol and #g.pcol >= 64 then
-      S.pcols = {}
-      for i = 0, 15 do S.pcols[i] = tonumber(g.pcol:sub(i*4+1, i*4+4), 16) or 0 end
-    end
   end
 
   -- Re-assert the partner's avatar onto the ghost sprite EVERY FRAME, here in Lua. The client runs
@@ -148,45 +155,6 @@ function PG.on_frame()
         if (attr2 & 0xF000) ~= (15 << 12) then
           memory.write_u16_le(sa + 0x04, (attr2 & 0x0FFF) | (15 << 12)) -- OBJ palette slot 15
         end
-        if S.pcols then
-          -- TINT: RR applies day/night tint to OBJ palette RAM DIRECTLY (not the Faded shadow buffer),
-          -- and does NOT tint our hijacked slot 15 — so derive the tint from the player's own slot as
-          -- (live palette RAM) / (Unfaded true colours), and apply that ratio to the partner's true
-          -- colours. Write the tinted result to Faded slot 15 (the engine DMAs Faded->RAM) AND straight
-          -- to RAM slot 15, so the ghost darkens/colours with the world like every other sprite.
-          local psid2 = memory.read_u8(poe + 0x04)
-          local ps = (psid2 < 64) and ((memory.read_u16_le(0x0202063C + psid2*0x44 + 0x04) >> 12) & 0x0F) or 0
-          -- The tint only moves on day/night transitions and screen fades — both change the PLAYER's
-          -- live palette row (the tint source). Signature that row (8 u32 reads) and skip the ~80-op
-          -- recompute+rewrite on the frames it hasn't moved: Faded slot 15 keeps DMA-ing our last
-          -- tinted colours to RAM, so skipping writes nothing stale.
-          local sig = { ps }
-          for i = 0, 7 do sig[i + 2] = memory.read_u32_le(0x05000200 + ps*0x20 + i*4) end
-          local prev, dirty = S.tint_sig, false
-          if not prev then dirty = true
-          else for k = 1, 9 do if sig[k] ~= prev[k] then dirty = true; break end end end
-          if dirty then
-            S.tint_sig = sig
-            local rn,gn,bn,rd,gd,bd = 0,0,0,0,0,0
-            for i = 0, 15 do
-              local uf = memory.read_u16_le(0x020373F8 + ps*0x20 + i*2)   -- unfaded = true colours
-              local rm = memory.read_u16_le(0x05000200 + ps*0x20 + i*2)   -- live palette RAM = tinted
-              rd=rd+(uf&0x1F); gd=gd+((uf>>5)&0x1F); bd=bd+((uf>>10)&0x1F)
-              rn=rn+(rm&0x1F); gn=gn+((rm>>5)&0x1F); bn=bn+((rm>>10)&0x1F)
-            end
-            for i = 0, 15 do
-              local c = S.pcols[i] or 0
-              local r,g,b = c&0x1F, (c>>5)&0x1F, (c>>10)&0x1F
-              local tr = (rd>0) and math.min(31, math.floor(r*rn/rd + 0.5)) or r
-              local tg = (gd>0) and math.min(31, math.floor(g*gn/gd + 0.5)) or g
-              local tb = (bd>0) and math.min(31, math.floor(b*bn/bd + 0.5)) or b
-              local tc = tr | (tg<<5) | (tb<<10)
-              memory.write_u16_le(0x020373F8 + 15*0x20 + i*2, c)    -- unfaded slot 15 = true
-              memory.write_u16_le(0x020377F8 + 15*0x20 + i*2, tc)   -- faded slot 15 = tinted (DMA'd to RAM)
-              memory.write_u16_le(0x05000200 + 15*0x20 + i*2, tc)   -- live RAM slot 15 = tinted (now)
-            end
-          end
-        end
         -- LAYERING: replicate the engine's per-frame OE subpriority (sElevationToSubpriority[elev] +
         -- screen-Y term + 1) so the ghost sorts in front/behind the player by depth, not always on top.
         local pelev = memory.read_u8(poe + 0x0B) & 0x0F
@@ -198,7 +166,6 @@ function PG.on_frame()
           memory.write_u8(sa + 0x3F, memory.read_u8(sa + 0x3F) | 0x04)  -- animBeginning
           memory.write_u8(sa + 0x2C, memory.read_u8(sa + 0x2C) & 0xBF)  -- animPaused = 0
           S.last_gsid = gsid
-          S.tint_sig = nil          -- map reload may have wiped faded slot 15 -> force a re-stamp
         end
       end
     end

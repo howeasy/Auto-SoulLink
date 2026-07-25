@@ -19,7 +19,7 @@ build-specific). Re-pin and rebuild for a different build: `python patch/tools/b
 ## Apply the patch
 
 Apply `patch/dist/SLink-RR.ups` to your clean RR ROM with any UPS patcher
-(Flips, NUPS, RomPatcher.js, …). Result md5 should be `5577bd022d7ab638274ba456d719aa40`.
+(Flips, NUPS, RomPatcher.js, …). Result md5 should be `8dcffce7659be02474dfa0f876639f8a`.
 Then load the patched ROM in BizHawk as usual.
 
 UPS only — no IPS is provided. The patch now bundles the **Battle Calc** (the in-battle
@@ -61,7 +61,6 @@ set per run in the run manager's **New run** form or via server CLI flags):
 | `native_sounds` | OFF | `--native-sounds` | Lua m4a `playSE` poke |
 | `battle_calc` | ON | `--no-battle-calc` | damage display hidden (kill-switch byte) |
 | `pc_trade_npc` | ON | `--no-pc-trade-npc` | no Pokémon-Center trade NPC (only effective while overworld presence is OFF) |
-| `native_battle_control` | OFF | `--native-battle-control` | Variant-3 RAM explode + deferred faint. NOT a user toggle (no manager checkbox): it selects the IMPLEMENTATION PATH under Explode Mode — CLI-only dev switch for the native controller-swap soak (which softlocked in real play; thunk addrs re-validated by `probe_movecursor_thunks.lua`) |
 
 Run RULES that happen to need the patch (`--explode-mode`, `--rival-team-swap`,
 `--overworld-presence`) stay opt-in per run as before. **Not toggleable by design**: native PC
@@ -85,9 +84,13 @@ for unpatched ROMs only).
   plays their animNum, and paints their avatar onto a dedicated OBJ palette slot (15) so the
   player's own slot 0 is never touched. Talk to the ghost (face it + A) for a dismissable message.
   RR + patch only; both players must be patched.
-  - **Deferred (on-foot works now):** bike/surf/fishing avatar variants (need size-matched
-    re-spawn + larger VRAM tile handling); day/night tint on the avatar palette (v1 shows the
-    partner's true colours, un-tinted at night). The two-instance visual run is the final gate.
+  - **Bike / surf / fishing** are handled: the ghost spawns with the PARTNER's own `graphicsId`,
+    so the engine allocates the OAM size and tile count their sprite needs, and `drive_ghost`
+    re-spawns on a gfx change when they mount or dismount.
+  - **Day/night tint** is applied natively (`apply_tint`): the patch measures the ratio the engine
+    is applying to the player's own palette slot and applies it to the partner's colours, so the
+    ghost darkens with the world. The Lua tint writer is gone — one owner, no off-tick flicker.
+  - The two-instance visual run remains the final gate for how it all *feels* on screen.
 - **Talk to your partner → action menu (Trade / Say hey).** Face the partner ghost + press A to open a
   native **multichoice list** (`Trade` / `Say hey`, extensible). **Say hey** pings the partner
   (the in-game nuzlocke status helper). **Trade** opens the native **"Choose a
@@ -118,9 +121,10 @@ These opcodes are built and live-validated (see `lua/tests/test_live_*.lua`) but
 production client doesn't invoke them yet — each needs its own server/client integration
 (the message box above is the template):
 
-- Battle: `FORCE_FAINT`, `FORCE_MOVE_SLOT` ARE wired, but ship **disabled by default** behind
-  the `--native-battle-control` server flag after a live softlock — the Lua Variant-3 RAM path
-  remains the production default (see `patch/ROADMAP.md`)
+- Battle: `FORCE_FAINT`, `FORCE_MOVE_SLOT` — validated headlessly
+  (`lua/tests/test_live_forcemove.lua`) but **deliberately never sent by the client**: the
+  controller swap softlocked in real play, so the Lua Variant-3 RAM path is the single
+  production mechanism.  Reserved in the ABI; see `patch/ROADMAP.md` §2.
 - Mon: `CREATE_MON`, `GIVE_MON` (`SET_ENEMY_PARTY` rival-team-swap and `SET_PARTY_MON` trade ARE wired)
 - Overworld: `ARM_PEER_INTERACT` (talk-to-ghost; `SPAWN/DESPAWN_PEER_NPC` is now wired — see above)
 - Rules/UI: `PLAY_FANFARE` (`SHOW_MENU`, `PLAY_SE` ARE wired)
