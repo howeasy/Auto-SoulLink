@@ -153,7 +153,6 @@ _CRYSTAL_MAP: dict[str, Optional[str]] = {
     "ENEMY_MON_HP_ADDR": "wEnemyMonHP",
     "ENEMY_MON_LEVEL_ADDR": "wEnemyMonLevel",
     "ENEMY_MON_MAXHP_ADDR": "wEnemyMonMaxHP",
-    "ENEMY_SPECIES_LIST_ADDR": "wOTPartySpecies",
     "MAP_GROUP_ADDR": "wMapGroup",
     "MAP_NUMBER_ADDR": "wMapNumber",
     "PLAYER_ID_ADDR": "wPlayerID",

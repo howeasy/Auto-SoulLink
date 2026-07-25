@@ -108,9 +108,9 @@ Load plain Red / Blue / Yellow / Crystal. Server should report the vanilla varia
 
 ## 5. SFX dispatch discovery (optional — Phase 7 feature)
 
-Phase 7 ships with SFX dispatch **disabled by default** (`sfx_dispatch_addr=nil` in both profiles). Audio output is the only way to verify; no static analysis reaches this.
+`SFX_DISPATCH_ADDR` is now populated for Red (`0xD35B`), Yellow (`0xD35A`) and Crystal (`0xC2BD`), so SFX dispatch is LIVE on those profiles — this section is only needed for the ones still missing it (Gold/Silver). Audio output is the only way to verify; no static analysis reaches this.
 
-If you want to enable in-game SFX on capture/faint/whiteout/gift events:
+To discover the address for a profile that lacks one:
 1. Load `lua/tests/test_gen{1,2}_sfx.lua` in BizHawk. In a quiet area (music off if possible), press F1–F4 to write candidate SFX IDs to candidate dispatch addresses.
 2. If you hear the expected sound effect, note which key + address combination worked.
 3. Edit the profile to set `sfx_dispatch_addr` and `sfx_ids = {capture=..., faint=..., whiteout=..., gift=...}`.

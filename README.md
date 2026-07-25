@@ -6,7 +6,8 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 
 | Gen | Games | ROM Variants | Status |
 |-----|-------|-------------|--------|
-| 3 | FireRed, LeafGreen, Emerald | Vanilla, randomized, Archipelago, Radical Red 4.1 (CFRU) | **✅ Stable** |
+| 3 | FireRed, LeafGreen | Vanilla, randomized, Archipelago, Radical Red 4.1 (CFRU) | **✅ Stable** |
+| 3 | Emerald | Vanilla | ⚠️ Experimental — RAM profile is complete, but the area/location name tables are not generated, so area resolution falls back to FireRed and is wrong |
 | 1 | Red, Blue, Yellow | US English | ⚠️ Experimental |
 | 2 | Crystal | GBC | ⚠️ Experimental |
 | 4 | HeartGold, SoulSilver, Platinum | Vanilla, Renegade Platinum | ⚠️ Experimental |

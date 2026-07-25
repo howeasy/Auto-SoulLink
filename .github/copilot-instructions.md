@@ -353,7 +353,7 @@ SLink-RR/
 - **`tests/unit/test_state_party_blob_cache.py`** — 10 tests for the `blob_hex` party-blob cache (ingest, length/hex validation, per-player isolation).
 - **`tests/unit/test_gen3_adapter_rival_ids.py`** — 8 tests for `rival_trainer_ids()` (set size 27, known-ID anchors, vanilla empty, mutation safety).
 - **`tests/unit/test_cli_rival_team_swap.py`** — 4 tests for the `--rival-team-swap` CLI flag (help, store_true, default false, explicit true).
-- **`tests/unit/test_cli_native_toggles.py`** — 9 tests for the companion-patch per-run toggles (`--native-messages`, `--native-sounds`, `--no-battle-calc`, `--no-pc-trade-npc`, `--native-battle-control`).
+- **`tests/integration/test_cli_native_toggles.py`** — tests for the companion-patch per-run toggles (`--native-messages`, `--native-sounds`, `--no-battle-calc`, `--no-pc-trade-npc`).
 - **`tests/unit/test_cli_overworld_presence.py`** — 4 tests for the `--overworld-presence` CLI flag.
 - **`tests/unit/test_patcher_routes.py`** — 4 tests for the `/patcher` page + `/companion/SLink-RR.ups` routes (incl. md5 constants matching `patch/README.md`).
 
@@ -419,7 +419,7 @@ The Gen 4 adapter is the **cleanest implementation** — use it as the template 
 
 **server.py is now fully game-agnostic.** All game-specific data and logic routes through the adapter pattern. The only `pokemon_data` import remaining is `GENDER_SYMBOL` (a universal `{0: "♂", 1: "♀", 2: "—"}` mapping).
 
-No legacy patterns remain.
+Remaining back-compat shims (leave them, don't extend them): the `"frlg"` rom_type alias in `adapters/__init__.py`, the accepted-but-ignored `is_rr` parameter on three `pokemon_data.py` functions, and the legacy theme-name aliases in `templating.py`.
 
 ### Completed Refactoring
 
@@ -659,7 +659,7 @@ A mon is shiny if: Defense DV = 10, Speed DV = 10, Special DV = 10, and Attack D
 
 - Some WRAM addresses (wMapGroup, wMapNumber, wBattleMode, box addresses) need BizHawk verification
 - Box storage: only active box in WRAM; memorial box support deferred
-- Crystal-only — Gold/Silver can be added later as variant profiles in `gen2_crystal.lua`
+- Gold/Silver ship as variant profiles in `gen2_crystal.lua` (Phase 11, pret-authoritative addresses via `tools/build_pret_syms.py`); `detect_variant()` returns them
 
 ---
 
@@ -894,7 +894,7 @@ When `--explode-mode` is active, a linked partner's death sends `force_explode` 
 
 `gBattleStruct` is heap-allocated — dereference the pointer at `0x02023FE8` first, then write the per-battler sub-fields. These addresses live only in the RR profile (`lua/games/gen3_frlge.lua`); `M.forceExplodeBattler()` returns false on vanilla/AP, where `force_explode` degrades to a deferred `force_faint`. **Per-frame reinforcement** (`gen3_frlge_client.lua`): the engine resets `gBattleCommunication[battler]` at turn start, so the client re-writes the committed-action state every frame **only while `gBattleCommunication[battler] < 3`** (writing 3 unconditionally would lock the engine in state 3 and softlock the game). Files: `lua/memory_gba.lua` (`M.forceExplodeBattler`), `lua/games/gen3_frlge.lua` (addresses), `lua/clients/gen3_frlge_client.lua` (dispatch + reinforcement), `server/state.py` (`force_explode` vs `force_faint` in `_propagate_faint`), `server/server.py` (`--explode-mode`).
 
-> **Native battle path:** the companion patch also wires native `FORCE_FAINT` / `FORCE_MOVE_SLOT` opcodes for explode/faint, but they are **disabled by default** behind `--native-battle-control` after a live softlock — the Lua Variant-3 memory-write path above remains production.
+> **Native battle path:** the companion patch still implements `FORCE_FAINT` / `FORCE_MOVE_SLOT`, but the client **never sends them** — the controller swap softlocked in real play, so the Lua Variant-3 memory-write path above is the single production mechanism. The opcodes stay in the ROM (headless-gated by `lua/tests/test_live_forcemove.lua`) and reserved in the ABI; `--native-battle-control` was removed. See `patch/ROADMAP.md` §2.
 
 ### Rival Team Swap (RR/CFRU only — optional per-run rule)
 
@@ -920,7 +920,7 @@ The `patch/` directory holds a UPS companion patch for Radical Red that adds nat
 - **Mailbox protocol:** the Lua client talks to the injected code through an EWRAM mailbox — `lua/mailbox.lua` (client side) ↔ `patch/src/handlers.c` (in-ROM dispatch). The client stages args/blobs, writes an opcode, and polls for the ack status.
 - **Opcode table:** the authoritative enum lives in `patch/src/handlers.c` (~lines 31–49) — `OP_PING`=1 through `OP_MEMORIALIZE`=26. Opcodes **10–12** (`APPLY_DAMAGE`, `CURE_STATUS`, `SET_RULES`) are **removed** but their numbers stay reserved so 13+ keep their ABI slots (dispatch has no case for them → default `ST_FAIL` ack). Address reference: `patch/src/ADDRESSES.md`.
 - **Build & distribution:** `patch/tools/build.py` (gcc → ld → objcopy → inject → UPS/IPS, round-trip self-checked). `server/patcher.py` serves the in-browser patcher page at `GET /patcher` and the built patch at `GET /companion/SLink-RR.ups`, mounted on both the per-run server (8080) and the Manager (8090).
-- **Per-run toggles** (Manager new-run form / CLI flags; sent to the client in the `hello` reply's `config` command): `--overworld-presence`, `--native-messages`, `--native-sounds`, `--no-battle-calc`, `--no-pc-trade-npc`, `--native-battle-control` (experimental, default off). None change Soul Link rules; unpatched ROMs fall back to the Lua paths where one exists.
+- **Per-run toggles** (Manager new-run form / CLI flags; sent to the client in the `hello` reply's `config` command): `--overworld-presence`, `--native-messages`, `--native-sounds`, `--no-battle-calc`, `--no-pc-trade-npc`. None change Soul Link rules; unpatched ROMs fall back to the Lua paths where one exists.
 
 ### Area Normalization
 

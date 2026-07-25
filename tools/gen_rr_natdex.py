@@ -343,7 +343,7 @@ FORM_BASE_MAP = {
     # Giratina/Shaymin forms
     "GIRATINA_ORIGIN": 487, "SHAYMIN_SKY": 492,
     # Darmanitan forms
-    "DARMANITAN_ZEN": 555, "DARMANITAN_G_ZEN": 555, "DARMANITANZEN": 555,
+    "DARMANITAN_ZEN": 555, "DARMANITANZEN": 555,   # DARMANITAN_G_ZEN is already mapped above
     # Tornadus/Thundurus/Landorus Therian
     "TORNADUS_THERIAN": 641, "THUNDURUS_THERIAN": 642, "LANDORUS_THERIAN": 645,
     # Keldeo, Meloetta, Genesect forms

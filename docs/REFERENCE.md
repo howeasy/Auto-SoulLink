@@ -3,7 +3,12 @@
 SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a Lua client that reads game RAM every frame and sends JSON events (area entered, capture, faint, etc.) to a central Python server over TCP. The server enforces Soul Link rules — linking encounters by area, propagating faints, syncing party/box state, moving dead pairs to a memorial box — and returns commands back to the Lua clients in the same response.
 
 **Supported Games:**
-- **Gen 3** — FireRed, LeafGreen, Emerald (vanilla, randomized, Archipelago, Radical Red/CFRU) — **✅ Stable**
+- **Gen 3** — FireRed, LeafGreen (vanilla, randomized, Archipelago, Radical Red/CFRU) — **✅ Stable**
+- **Gen 3** — Emerald — ⚠️ **Experimental**. The RAM profile (`GEN3.profiles.emerald`) is complete, but
+  `gen3_emerald_areas` / `gen3_emerald_locations` have never been generated, so `resolve_area` falls back
+  to the FireRed tables — Emerald map IDs do not match FireRed's, so area names and the area IDs that drive
+  encounter linking are WRONG. The client logs a warning once per session. Generate the tables before
+  running Emerald for real.
 - **Gen 1** — Red, Blue, Yellow (US English) — ⚠️ **Experimental** — feature parity with Gen 3, pending live verification (`docs/gen1_gen2_runtime_checks.md`). Archipelago Red/Blue (Alchav) auto-detected.
 - **Gen 2** — Crystal, Gold, Silver (GB/GBC) — ⚠️ **Experimental** — feature parity with Gen 3, pending live verification. Archipelago Crystal (gerbiljames fork) auto-detected. Gold/Silver added in Phase 11 with pret-authoritative addresses via [tools/build_pret_syms.py](../tools/build_pret_syms.py).
 - **Gen 4** — HeartGold, SoulSilver, Platinum — ⚠️ **Experimental**
@@ -19,7 +24,7 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 |---|---|
 | BizHawk 2.9+ | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core). **Gen 3:** Two instances with US 1.0 FRLG/Emerald ROMs. **Gen 4:** Two instances with US HGSS ROMs |
 | ROMs | **Gen 1:** Red/Blue/Yellow (US). **Gen 3:** Vanilla, randomized (UPR), Archipelago, or Radical Red 4.1. **Gen 4:** HeartGold/SoulSilver US |
-| Python 3.10+ | `pip install -r requirements.txt` |
+| Python 3.11+ | `pip install -r requirements.txt` (CI runs 3.12; `ruff.toml` targets py311) |
 | Scripts in `lua/` | `slink.lua` (universal entry point), `memory_gba.lua`, `connector.lua`, `socket.lua` |
 | LuaSocket DLL | Copy `socket-windows-5-4.dll` from an Archipelago install into `lua/x64/` (see `lua/x64/README.md`) |
 | Network | Both BizHawk instances must reach the Python server (localhost or LAN) |
@@ -177,7 +182,7 @@ Lua clients and the server speak newline-delimited JSON over one persistent TCP 
 | `memorialize` | Move a dead pair to Box 13 ("Box 14" in-game) — deferred to safe state. |
 | `play_sound` / `hud_show` | Play an in-game SE / show a HUD overlay message (`message`, `color`, `duration`). |
 | `resolved_areas` | Sent in the `hello` reply — area states to treat as already resolved on reconnect. |
-| `config` | Sent in the `hello` reply — per-run toggles (`overworld_presence`, `native_messages`, `native_sounds`, `battle_calc`, `pc_trade_npc`, `native_battle_control`). |
+| `config` | Sent in the `hello` reply — per-run toggles (`overworld_presence`, `native_messages`, `native_sounds`, `battle_calc`, `pc_trade_npc`). |
 | `unresolve_area` | Remove an area from the client's resolved set (shiny bonus-pair slot reopening). |
 | `gui_prompt` | Show a BizHawk GUI text prompt (e.g. clause-violation retry notice). |
 | `game_over` | The run is over (unrecoverable whiteout) — re-sent on reconnect. |
@@ -748,6 +753,24 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Twitch chat bot (twitchio 3.x EventSub WebSocket) | ✅ Working |
 | OBS scene trigger integration (simpleobsws v5 async) | ✅ Working |
 | OBS priority-based trigger resolution (draggable rules list) | ✅ Working |
+| **Radical Red Companion Patch** (optional native layer — [patch/README.md](../patch/README.md)) | |
+| Companion patch build + distribution (`patch/tools/build.py`, UPS at `/companion/`, in-browser patcher) | ✅ Working |
+| Build reproducibility gate (`build.py --check` asserts the committed UPS rebuilds byte-identically) | ✅ Working |
+| Mailbox ABI v1 (`0x0203F800`) — opcode dispatch + seq/ack protocol | ✅ Working |
+| Peer ghost — partner rendered as a real engine NPC with their own avatar, sub-pixel motion, lead extrapolation | ✅ Working |
+| Peer ghost — native day/night tint on the partner's palette slot | ✅ Working |
+| Peer ghost — bike / surf / fishing avatars (spawns with the partner's own `graphicsId`) | ✅ Working — pending two-instance visual check |
+| Talk to partner → native action menu (Trade / Say hey) | ✅ Working |
+| Native trade — real in-game trade animation + trade-evolution, linked halves only | ✅ Working |
+| Native PC box ⇄ party storage (`DEPOSIT_MON` / `WITHDRAW_MON`) | ✅ Working |
+| Native memorialize (`MEMORIALIZE`) — dead pairs to the memorial box in one frame-hook pass | ✅ Working |
+| Native message box (overworld) + native in-battle message | ✅ Working (per-run `native_messages`, default off) |
+| Native sound (`PlaySE`) | ✅ Working (per-run `native_sounds`, default off) |
+| Bundled Battle Calc damage display + per-run kill switch | ✅ Working (`battle_calc`, default on) |
+| Pokémon-Center trade NPC (presence-off mode) | ⚠️ Spawn tile unverified in-game — see `PCNPC_TILE_X/Y` in `handlers.c` |
+| Rival team swap via native `SET_ENEMY_PARTY` | ✅ Working |
+| Event-push ring (`EvRing`) — faint-settled, battle outcome, party-add, evolution | ✅ Producing; Lua consumers still use the proven polling (patch/ROADMAP.md §3-§4) |
+| Native explode/faint controller swap (`FORCE_FAINT` / `FORCE_MOVE_SLOT`) | ❌ Not used — softlocked in real play; the Lua Variant-3 RAM path is the single production mechanism (ROADMAP §2). Opcodes remain in the ROM, headless-gated. |
 
 ---
 
@@ -1091,7 +1114,6 @@ python -m server.server --help
 # --native-sounds       play SLink notification sounds via the patch's native PlaySE (RR + patch; default off)
 # --no-battle-calc      hide the bundled Battle Calc damage display (RR + patch; shown by default)
 # --no-pc-trade-npc     disable the Pokémon-Center trade NPC (RR + patch; on by default, only active while overworld presence is off)
-# --native-battle-control  enable the native explode/faint controller swap (RR patch; EXPERIMENTAL — default off, Variant-3 RAM path remains the fallback)
 # --verbose             enable DEBUG-level logging to file and console (default: INFO only)
 ```
 
