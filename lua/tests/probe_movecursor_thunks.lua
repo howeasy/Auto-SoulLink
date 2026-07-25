@@ -8,7 +8,8 @@
 -- the address the swap must match. PASS = the live pointers equal the handlers.c constants
 -- (Thumb bit included). A FAIL means re-discovery is needed before re-enabling
 -- native_battle_control (see the NATIVE EXPLODE/FAINT DISABLED postmortem).
-local WT  = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/movecursor_thunks_result.txt"
 local CTRL = 0x03004FE0
 

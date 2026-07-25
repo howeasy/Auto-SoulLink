@@ -4,7 +4,8 @@
 -- interact (the SERVER now drives the talk-to-partner menu via OP_SHOW_MENU; a local box would set
 -- sScriptContext2Enabled and make that menu bounce) — so we also assert no box auto-opened.
 -- Load with the PATCHED ROM + overworld savestate.
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/peerinteract_result.txt"
 local MB = dofile(WT .. "/lua/mailbox.lua")
 local OE, OST, gStringVar4 = 0x02036E38, 0x24, 0x02021D18

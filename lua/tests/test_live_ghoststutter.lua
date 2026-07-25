@@ -9,7 +9,8 @@
 --
 -- (The OLD tile-quantized held-movement driver froze ~10 frames at each tile boundary. The sub-pixel
 --  LERP driver slides continuously.)
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/ghoststutter_result.txt"
 package.path = WT .. "/lua/?.lua;" .. package.path
 local PG = require("peer_ghost_npc")

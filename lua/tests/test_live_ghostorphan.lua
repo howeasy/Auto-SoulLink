@@ -2,7 +2,8 @@
 -- Drive the real receiver through a connect, move the partner, then scan ALL object-events for our
 -- ghost sentinel (localId 0xF0). There must be EXACTLY ONE (the live ghost) — any extra = an orphan
 -- OE left behind (a permanent invisible wall). Also exercise a re-init (reconnect) + clear/respawn.
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/ghostorphan_result.txt"
 package.path = WT .. "/lua/?.lua;" .. package.path
 local PG = require("peer_ghost_npc")

@@ -9,7 +9,8 @@
 -- and point STATE at it. The test also prints the spawned NPC's tile + the player's map id so you can
 -- confirm/tune PCNPC_GFX / PCNPC_TILE_X/Y and the kPokecenter1F map list in patch/src/handlers.c.
 
-local WT    = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT   = WT .. "/patch/build/pcnpc_result.txt"
 local STATE = "E:/Howard/Bizhawk/GBA/State/slink_pokecenter.State"   -- <-- savestate inside a PC 1F
 local MB    = dofile(WT .. "/lua/mailbox.lua")

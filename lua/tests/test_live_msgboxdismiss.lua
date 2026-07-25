@@ -2,7 +2,8 @@
 -- player's "Your partner waved at you!" box used to stick open). The patch routes it through the
 -- std sign-msgbox script (lockall/message/waitbuttonpress/releaseall). Assert: showing the message
 -- enables a field script (sScriptContext2Enabled != 0), and an A-press dismisses it (returns to 0).
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/msgboxdismiss_result.txt"
 local MB = dofile(WT .. "/lua/mailbox.lua")
 local SCRIPT_ACTIVE = 0x03000F9C   -- sScriptContext2Enabled (u8 != 0 while a field script is up)

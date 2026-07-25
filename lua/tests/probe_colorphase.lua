@@ -2,7 +2,8 @@
 -- (A) the ACTION menu phase and (B) turn RESOLUTION (the phase where the theme demo showed color), and
 -- dump SLINK_TEXT_BUF's first bytes to prove whether the FC 01 04 prefix is staged in both.
 local SDIR = "E:/Howard/Bizhawk/GBA/State"
-local WT   = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT  = WT .. "/patch/build/colorphase_result.txt"
 local MB   = dofile(WT .. "/lua/mailbox.lua")
 local lines = {}; local function log(s) lines[#lines+1]=s; console.log(s) end

@@ -1,7 +1,8 @@
 -- test_live_ghostreceiver.lua — drive the REAL receiver (peer_ghost_npc) the way the client does:
 -- require it, feed on_ghost_pos a partner on the SAME map a couple tiles away, call on_frame each
 -- frame, and assert it spawns + walks the engine ghost. Isolates the receiver from the network path.
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/ghostreceiver_result.txt"
 package.path = WT .. "/lua/?.lua;" .. package.path
 local PG = require("peer_ghost_npc")

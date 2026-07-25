@@ -1,6 +1,7 @@
 -- test_live_ghostlayer.lua — VISUAL: does the ghost layer correctly (behind the player when north,
 -- in front when south)? Geometry only, so a single-instance recoloured ghost is representative.
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local SHOT = WT .. "/patch/build/ghostlayer_"
 local OUT = WT .. "/patch/build/ghostlayer_result.txt"
 local MB = dofile(WT .. "/lua/mailbox.lua")

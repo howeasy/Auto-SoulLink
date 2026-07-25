@@ -575,7 +575,17 @@ Run through the steps below **in order**. Each step depends on the previous.
 
 ### Phase 0 — Isolation scripts (no server, no partner)
 
-Both scripts are headless one-shot runs: launch EmuHawk with the patched ROM and `--lua=<script>`, and they write an incremental log ending in `RESULT: PASS|FAIL` to `patch/build/`, then exit. Adjust the `WT` (repo root) and, for the first script, `STATE` (savestate) paths at the top of each script for your machine.
+Both scripts are headless one-shot runs that write an incremental log ending in `RESULT: PASS|FAIL` to `patch/build/`, then exit. **Launch them with `tools/run_gate.py`, not by hand** — it exports `SLINK_ROOT` (BizHawk reports `debug.getinfo(...).source == "main"` for a `--lua=` script, so a gate cannot locate the repo on its own), copies the BizHawk config so back-to-back runs don't race, kills a hung emulator, and prints the verdict:
+
+```bash
+python tools/run_gate.py lua/tests/test_live_enemyparty.lua
+```
+
+Or run the whole set through pytest — `tests/live/test_lua_gates.py` walks every `test_live_*.lua` / `test_mailbox_*.lua`, picks the right ROM (patched, or the clean one for the negative controls), and skips any gate whose savestate is stale:
+
+```bash
+SLINK_LIVE=1 pytest tests/live -q
+```
 
 **`test_live_enemyparty.lua`** — loads an in-battle savestate (`slink_battle.State`), waits for the patch's mailbox beacon, then sends `OP_CREATE_MON` for Snorlax (143) and Diglett (50) at L40 into empty `gEnemyParty` slots with the enemy-count bump. Result file: `patch/build/enemyparty_result.txt`.
 
@@ -641,32 +651,35 @@ Run `python -m server.server --explode-mode` with both BizHawks connected (Test 
 
 ---
 
-## Unit Tests (pytest — no emulator required)
+## Test layout
+
+| Directory | Needs | Command |
+|---|---|---|
+| `tests/unit/` | nothing | `pytest tests/unit -q` |
+| `tests/integration/` | a server subprocess on a loopback port | `pytest tests/integration -q` |
+| `tests/live/` | EmuHawk + the patched ROM + a current savestate | `SLINK_LIVE=1 pytest tests/live -q` |
+| `tests/e2e/` | TWO EmuHawk instances + a throwaway server | `SLINK_E2E=1 pytest tests/e2e -q` |
+
+`pytest -q` alone runs everything; `live` and `e2e` skip unless their env var is set, and each
+skips with a specific reason (missing EmuHawk, missing ROM, stale savestate) rather than hanging.
+Markers `live` / `e2e` / `slow` are registered in `pytest.ini`, which also sets `--strict-markers`.
+
+## Unit + integration tests (pytest — no emulator required)
 
 ```bash
-pytest tests/unit/ -v                                 # all 1190 tests
-pytest tests/unit/test_state.py -v                    # 318 tests (incl. tick reconciliation + Explode Mode)
-pytest tests/unit/test_gen3_adapter.py -v             # 216 tests
-pytest tests/unit/test_gen4_adapter.py -v             # 100 tests
-pytest tests/unit/test_gen1_adapter.py -v             # 103 tests
-pytest tests/unit/test_gen2_adapter.py -v             # 179 tests
-pytest tests/unit/test_gen5_adapter.py -v             # 140 tests
-pytest tests/unit/test_stat_stages.py -v              # 46 tests
-pytest tests/unit/test_obs_priority.py -v             # 7 tests (priority + area-group filters)
-pytest tests/unit/test_manager_launcher.py -v         # 4 tests (BizHawk launcher Lua syntax)
-pytest tests/unit/test_phase1_comms.py -v             # 6 tests
-pytest tests/unit/test_profile_addresses.py -v        # 3 tests
-pytest tests/unit/test_trainer_panel.py -v            # 14 tests (Upcoming Key Trainers panel)
-pytest tests/unit/test_state_rival_battle_start.py -v # 15 tests (rival-swap auto-trigger)
-pytest tests/unit/test_state_party_blob_cache.py -v   # 10 tests (blob_hex cache)
-pytest tests/unit/test_gen3_adapter_rival_ids.py -v   # 8 tests (rival trainer IDs)
-pytest tests/unit/test_cli_rival_team_swap.py -v      # 4 tests (--rival-team-swap CLI)
-pytest tests/unit/test_cli_native_toggles.py -v       # 9 tests (native message/sound/calc/NPC/battle-control toggles)
-pytest tests/unit/test_cli_overworld_presence.py -v   # 4 tests (--overworld-presence CLI)
-pytest tests/unit/test_patcher_routes.py -v           # 4 tests (/patcher + /companion/SLink-RR.ups routes)
+pytest tests/unit tests/integration -q            # ~1370 tests, a few seconds
+pytest tests/unit/test_state.py -q                # the SoulLinkState FSM
+pytest tests/unit/test_routes_smoke.py -q         # every registered GET route renders
+pytest tests/unit/test_explode_mode_gate.py -q    # explode-mode adapter gate + death predicate
+pytest tests/unit/test_overlay_catalog.py -q      # catalogue slugs vs real routes
+pytest tests/unit/test_backup_rotation.py -q      # rolling backup slots
+pytest tests/unit/test_manager_spawn_flags.py -q  # registry keys reach the server CLI
+pytest tests/unit/test_gen{1,2,3,4,5}_adapter.py -q
 ```
 
-All tests use `tmp_path` + `monkeypatch` fixtures for isolated file I/O. No server, no emulator, no network.
+`tests/conftest.py` repoints `DATA_DIR` / `LINKS_PATH` / `MEMORIAL_PATH` at a per-test tmp dir for
+**every** test, so a test cannot write over live run state (three used to write over
+`data/memorial.json`). No server, no emulator, no network.
 
 ### test_state.py — State Machine Tests (318 tests)
 

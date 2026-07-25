@@ -2,7 +2,8 @@
 -- server's play_sound command to PlaySE via the patch (instead of the fragile Lua m4a SE1 RAM-poke).
 -- Headless can't assert audio, so this proves the opcode runs + acks cleanly (no crash) for a real
 -- SE id. Load with the PATCHED ROM:  EmuHawk.exe --lua=<this> patch/build/slink_RR.gba
-local WT  = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/playse_result.txt"
 local MB  = dofile(WT .. "/lua/mailbox.lua")
 

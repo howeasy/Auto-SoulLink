@@ -12,7 +12,8 @@
 -- the table's end read garbage pointers and can glitch or crash. We cap at 0xEF (vanilla FR ends
 -- ~0x96; CFRU/RR extends it, so mid-range ids are usually fine — back off if a range looks corrupt).
 
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local MB = dofile(WT .. "/lua/mailbox.lua")
 pcall(memory.usememorydomain, "System Bus")
 

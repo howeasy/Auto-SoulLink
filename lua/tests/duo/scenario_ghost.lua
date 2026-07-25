@@ -71,6 +71,12 @@ return function(ctx)
     local wx_changed = false
     local total_px = 0
     local behind_run, max_behind, at_run, max_at = 0, 0, 0, 0
+    -- Diagnostics for the behind-stall gate: what was happening when the ghost sat still?
+    local GH_FACE, GH_LEAD = GHOST + 10, GHOST + 40
+    local stall_face0, stall_turned, stall_lead0 = nil, false, 0
+    local worst = { run = 0, face0 = 0, turned = false, lead = 0, dxr = 0, dyr = 0 }
+    local turn_stalls, straight_stalls = 0, 0
+    local prev_face = memory.read_u8(GH_FACE)
     for i = 1, 2400 do
         local dx, dy = memory.read_s32_le(GH_DISPX), memory.read_s32_le(GH_DISPY)
         local wx, wy = memory.read_s16_le(GH_WX), memory.read_s16_le(GHOST + 8)
@@ -78,10 +84,27 @@ return function(ctx)
         local moved = (dx ~= prev_dx) or (dy ~= prev_dy)
         local at_target = (dx == wx) and (dy == wy)
         if wx ~= first_wx then wx_changed = true end
+        local face = memory.read_u8(GH_FACE)
         if moved then
             total_px = total_px + math.abs(dx - prev_dx) + math.abs(dy - prev_dy)
+            if behind_run > 0 then          -- a stall just ended: classify it
+                if stall_turned then turn_stalls = turn_stalls + 1
+                else straight_stalls = straight_stalls + 1 end
+                if behind_run > worst.run then
+                    worst = { run = behind_run, face0 = stall_face0 or 0, turned = stall_turned,
+                              lead = stall_lead0, dxr = wx - dx, dyr = wy - dy }
+                end
+            end
             behind_run, at_run = 0, 0
+            stall_face0, stall_turned = nil, false
         elseif mv == 1 and not at_target then
+            if behind_run == 0 then
+                stall_face0 = face
+                stall_lead0 = memory.read_u8(GH_LEAD)
+                stall_turned = false
+            elseif face ~= stall_face0 then
+                stall_turned = true          -- the partner changed direction mid-stall
+            end
             behind_run = behind_run + 1
             if behind_run > max_behind then max_behind = behind_run end
             at_run = 0
@@ -93,6 +116,7 @@ return function(ctx)
             behind_run, at_run = 0, 0
         end
         prev_dx, prev_dy = dx, dy
+        prev_face = face
         if i % 600 == 0 then
             log(string.format("sample wx=%d wy=%d dispx=%d dispy=%d mv=%d", wx, wy, dx, dy, mv))
         end
@@ -100,6 +124,10 @@ return function(ctx)
     end
     log(string.format("GHOSTMETRIC moved_px=%d max_behind_stall=%d max_at_target_stall=%d wx_changed=%s",
         total_px, max_behind, max_at, tostring(wx_changed)))
+    log(string.format("GHOSTSTALLS at-a-turn=%d in-a-straight-line=%d | worst run=%d face=%d "
+        .. "turned=%s lead=%d residual=(%d,%d)", turn_stalls, straight_stalls, worst.run,
+        worst.face0, tostring(worst.turned), worst.lead, worst.dxr, worst.dyr))
+    local _ = prev_face
     pcall(function()
         client.screenshot(ctx.duo.wt .. "/patch/build/e2e_ghost_b.png")
     end)

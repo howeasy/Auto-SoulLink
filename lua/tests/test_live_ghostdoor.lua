@@ -2,7 +2,8 @@
 -- Drive the REAL receiver (so the end-of-frame avatar re-assert runs), spawn the ghost as the OTHER
 -- character, then walk the player THROUGH the door (scripted input) and verify the ghost is STILL the
 -- other character after the warp (sprite->images + the displayed VRAM tiles), not the local stand-in.
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT  = WT .. "/patch/build/ghostdoor_result.txt"
 local SHOT = WT .. "/patch/build/ghostdoor_"
 package.path = WT .. "/lua/?.lua;" .. package.path

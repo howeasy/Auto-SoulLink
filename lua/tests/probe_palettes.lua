@@ -2,7 +2,8 @@
 -- differ between the ACTION-menu phase (colors render dark) and turn RESOLUTION (colors render right)?
 -- Dumps all 16 BG palette slots (16 u16 colours each) at both phases and logs the slots that differ.
 local SDIR = "E:/Howard/Bizhawk/GBA/State"
-local WT   = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT  = WT .. "/patch/build/palettes_result.txt"
 local lines = {}; local function log(s) lines[#lines+1]=s; console.log(s) end
 

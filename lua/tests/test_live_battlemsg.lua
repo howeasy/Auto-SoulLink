@@ -11,7 +11,8 @@
 --   EmuHawk.exe --lua=lua/tests/test_live_battlemsg.lua patch/build/slink_RR.gba   (relative paths, from worktree)
 -- Outputs: patch/build/battlemsg_baseline.png, patch/build/battlemsg_winNN.png, patch/build/battlemsg_result.txt
 
-local WT    = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local DIR   = WT .. "/patch/build"
 local OUT   = DIR .. "/battlemsg_result.txt"
 local STATE = "E:/Howard/Bizhawk/GBA/State/slink_battle.State"

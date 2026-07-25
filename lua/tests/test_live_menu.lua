@@ -6,7 +6,8 @@
 -- Also re-confirms gSpecialVar_Result @ 0x020370D0 on this RR build (YES default cursor + A => 1).
 -- Needs the overworld savestate (a field script only runs in the overworld). Load with the PATCHED
 -- ROM:  EmuHawk.exe --lua=<this> patch/build/slink_RR.gba
-local WT  = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/menu_result.txt"
 local MB  = dofile(WT .. "/lua/mailbox.lua")
 local SC2 = 0x03000F9C   -- sScriptContext2Enabled (non-zero while the field script is up)

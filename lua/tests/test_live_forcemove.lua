@@ -8,7 +8,8 @@
 -- executes the forced move. The test nudges the (savestate-frozen) battle to the action
 -- menu with clear_exec, then lets the patch drive.
 
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/forcemove_result.txt"
 local STATE = "E:/Howard/Bizhawk/GBA/State/slink_battle.State"
 local MB = dofile(WT .. "/lua/mailbox.lua")

@@ -2,7 +2,8 @@
 -- must never appear, so MB.present() stays false and the client falls back to the
 -- RAM-poke path (plan §3 graceful degradation). Load with the *clean* RR ROM.
 
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/absent_result.txt"
 local MB = dofile(WT .. "/lua/mailbox.lua")
 

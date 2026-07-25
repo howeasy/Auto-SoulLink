@@ -3,7 +3,8 @@
 -- assert the spawned ghost sprite ADOPTS those images/anims ptrs and renders on its OWN dedicated
 -- OBJ palette slot (15, != the player's slot 0) painted with the posted colours. This proves the
 -- override mechanism end to end; exact-avatar correctness is the two-instance visual gate.
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/ghostavatar_result.txt"
 local MB = dofile(WT .. "/lua/mailbox.lua")
 local OE, OST, GS, GST = 0x02036E38, 0x24, 0x0202063C, 0x44

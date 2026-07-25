@@ -13,7 +13,8 @@
 --   EmuHawk.exe --lua=lua/tests/test_live_boxsync.lua patch/build/slink_RR.gba
 -- (launch from the worktree cwd with RELATIVE paths — the "Google Drive" space splits absolute args.)
 
-local WT  = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/boxsync_result.txt"
 local STATE = "E:/Howard/Bizhawk/GBA/State/slink_overworld.State"
 local MB  = dofile(WT .. "/lua/mailbox.lua")

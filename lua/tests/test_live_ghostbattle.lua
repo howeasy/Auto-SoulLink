@@ -1,7 +1,8 @@
 -- test_live_ghostbattle.lua — the ghost must SUSPEND during battle (patch must not touch gSprites,
 -- which the battle engine reuses -> the reported rival-battle corruption/crash). Load an in-battle
 -- savestate, request a ghost, advance frames, and assert it does NOT spawn / drive while in battle.
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/ghostbattle_result.txt"
 local MB = dofile(WT .. "/lua/mailbox.lua")
 local GBATTLEMONS, GBATTLEOUTCOME = 0x02023BE4, 0x02023E8A

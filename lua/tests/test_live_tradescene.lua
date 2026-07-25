@@ -8,7 +8,8 @@
 -- holds either way). Trade-evolution species change is validated in the two-instance manual run.
 -- Needs the overworld savestate (has a party). Load with the PATCHED ROM:
 --   EmuHawk.exe --lua=<this> patch/build/slink_RR.gba
-local WT  = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/tradescene_result.txt"
 local MB  = dofile(WT .. "/lua/mailbox.lua")
 local MON = 100

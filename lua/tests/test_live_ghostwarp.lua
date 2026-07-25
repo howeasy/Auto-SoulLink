@@ -3,7 +3,8 @@
 -- collision" appeared. The patch's drive_ghost now owns map-change detection and RemoveEventObject's
 -- the ghost cleanly. Assert: (1) OP_GHOST_CLEAR fully removes the ghost; (2) a simulated map change
 -- never leaves an ORPHAN object-event with our localId (0xF0). Load PATCHED ROM + overworld save.
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/ghostwarp_result.txt"
 local MB = dofile(WT .. "/lua/mailbox.lua")
 local OE, OST = 0x02036E38, 0x24

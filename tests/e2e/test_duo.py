@@ -5,6 +5,10 @@ minutes each, Windows-only, needs E:/Howard/Bizhawk + the patched ROM — so the
 module is skipped unless explicitly requested:
 
     SLINK_E2E=1 pytest tests/e2e/ -q
+
+Every scenario loads a savestate, and BizHawk stops on a modal version dialog when handed
+a state from another release (the emulator then hangs rather than erroring), so each
+scenario also skips while its state is stale.  tools/mkstates.py rebuilds them.
 """
 import os
 import subprocess
@@ -12,15 +16,34 @@ import sys
 
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    os.environ.get("SLINK_E2E") != "1",
-    reason="two-instance E2E only runs with SLINK_E2E=1 (spawns EmuHawk twice)")
-
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(REPO, "tools"))
+
+import mkstates  # noqa: E402
+from e2e_duo import SCENARIOS  # noqa: E402
+
+pytestmark = [
+    pytest.mark.e2e,
+    pytest.mark.slow,
+    pytest.mark.skipif(os.environ.get("SLINK_E2E") != "1",
+                       reason="two-instance E2E only runs with SLINK_E2E=1 (spawns EmuHawk twice)"),
+]
 
 
-@pytest.mark.parametrize("scenario", ["faint", "boxsync", "trade", "ghost", "explode"])
+def _states_for(scenario):
+    ss = SCENARIOS[scenario]["savestate"]
+    return sorted(set(ss.values())) if isinstance(ss, dict) else [ss]
+
+
+@pytest.mark.parametrize("scenario", sorted(SCENARIOS))
 def test_duo_scenario(scenario):
+    if not os.path.exists(mkstates.EMUHAWK):
+        pytest.skip(f"EmuHawk not found at {mkstates.EMUHAWK}")
+    emu = mkstates.emuhawk_version()
+    for name in _states_for(scenario):
+        stale, why = mkstates.is_stale(os.path.join(mkstates.STATE_DIR, name), emu)
+        if stale:
+            pytest.skip(f"{name} {why} — rebuild with `python tools/mkstates.py`")
     proc = subprocess.run(
         [sys.executable, os.path.join(REPO, "tools", "e2e_duo.py"),
          "--scenario", scenario],

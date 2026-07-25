@@ -3,7 +3,8 @@
 -- a proper object-event + sprite (so the engine owns rendering — retiring the Lua peer-ghost
 -- saga). Load with the PATCHED ROM + overworld savestate.
 
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/spawnnpc_result.txt"
 local STATE = "E:/Howard/Bizhawk/GBA/State/slink_overworld.State"
 local MB = dofile(WT .. "/lua/mailbox.lua")

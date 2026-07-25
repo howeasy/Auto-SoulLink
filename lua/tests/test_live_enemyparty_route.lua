@@ -17,7 +17,8 @@
 -- is existing, separately-covered code and is exercised by test_live_enemyparty.lua in a real battle.
 -- Load with the PATCHED ROM:  EmuHawk.exe --lua=<this> patch/build/slink_RR.gba
 
-local WT  = "E:/Google Drive/SLink/.claude/worktrees/compassionate-mestorf-28e848"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/enemypartyroute_result.txt"
 local MB  = dofile(WT .. "/lua/mailbox.lua")
 

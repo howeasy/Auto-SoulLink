@@ -2,7 +2,8 @@
 -- DISTINCT recoloured avatar (proving it renders on its own palette slot, not the player's), and
 -- walk it across via the sub-pixel LERP driver, capturing screenshots so the ghost is visible
 -- standing beside you and mid-walk.
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/ghostshow_result.txt"
 local SHOT = WT .. "/patch/build/ghostshow_"
 local MB = dofile(WT .. "/lua/mailbox.lua")

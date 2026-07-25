@@ -1,7 +1,8 @@
 -- input_sanity.lua — does joypad.set reach the GBA core from this savestate? Try each direction; log the
 -- player tile before/after + what joypad.get reports, to find the correct input invocation.
 local SDIR = "E:/Howard/Bizhawk/GBA/State"
-local WT  = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/input_sanity_result.txt"
 local function poe() local id = memory.read_u8(0x02037078 + 5); if id >= 16 then id = 0 end; return 0x02036E38 + id * 0x24 end
 local function tile() return memory.read_u16_le(poe() + 0x10), memory.read_u16_le(poe() + 0x12) end

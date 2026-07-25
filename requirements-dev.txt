@@ -7,3 +7,9 @@ ruff==0.15.15
 # capstone — ARM/Thumb disassembler used by the companion-patch toolchain
 # (patch/tools/disasm.py and build.py's hook/inject verification step).
 capstone==5.0.7
+
+# lupa — embedded Lua runtime. tools/lua_syntax_check.py parse-loads every lua/**/*.lua
+# with it (the system luac is 5.1 and rejects the 5.4 syntax BizHawk accepts), and
+# tests/unit/test_manager_launcher.py importorskips it. Undeclared until now, so a fresh
+# clone silently skipped those tests and had no Lua syntax gate.
+lupa==2.8

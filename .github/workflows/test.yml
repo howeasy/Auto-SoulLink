@@ -1,0 +1,34 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      # Gate on the rules that catch real breakage: syntax errors (incl. accidental
+      # 3.12-only constructs, since ruff.toml targets py311), undefined names, duplicate
+      # definitions and duplicate dict keys. The rest of `ruff check .` is a large
+      # pre-existing style worklist that ruff.toml documents as deferred — gating on it
+      # would mean a CI that is red on day one and therefore ignored.
+      - name: Lint (bug-class rules)
+        run: ruff check . --select E9,F6,F7,F81,F82
+      - name: Lint (full, advisory)
+        run: ruff check . --statistics || true
+      - name: Lua syntax (all lua/**/*.lua parse under 5.4)
+        run: python tools/lua_syntax_check.py
+      # tests/live and tests/e2e need EmuHawk + a patched ROM, so they are not run here;
+      # their markers are registered in pytest.ini and they skip without SLINK_LIVE/SLINK_E2E.
+      - name: Unit + integration tests
+        run: pytest tests/unit tests/integration -q

@@ -5,7 +5,8 @@
 -- "shown", a box is actually up (an immediate second call reports "busy"), the FR text was staged
 -- in TEXT_BUF, and PLAY_FANFARE acks without crashing. Load with the PATCHED ROM + overworld save.
 
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/message_result.txt"
 local MB = dofile(WT .. "/lua/mailbox.lua")
 local gStringVar4 = 0x02021D18

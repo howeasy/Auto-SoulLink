@@ -4,7 +4,8 @@
 -- (PCNPC_TILE_X/Y in patch/src/handlers.c). Press A on it — the console logs each talk detection.
 -- Stop the script (or close BizHawk) when done; it disables the driver on exit.
 
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local MB = dofile(WT .. "/lua/mailbox.lua")
 pcall(memory.usememorydomain, "System Bus")
 

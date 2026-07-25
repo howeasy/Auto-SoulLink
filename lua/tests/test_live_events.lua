@@ -8,7 +8,8 @@
 -- the multi-bump (delta > 1 -> one event per faint) and overflow (ring full -> drop + flag) paths.
 --   EmuHawk.exe --lua=lua/tests/test_live_events.lua patch/build/slink_RR.gba
 
-local WT  = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/events_result.txt"
 local STATE = "E:/Howard/Bizhawk/GBA/State/slink_battle.State"
 local MB  = dofile(WT .. "/lua/mailbox.lua")

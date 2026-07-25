@@ -4,7 +4,8 @@
 -- partner, raise a real sign box, move the partner DURING the freeze, dismiss it, then assert: still
 -- exactly ONE ghost OE, and its collision tile == its drawn tile, its elevation matches the player
 -- (no stale/leftover solid tile).
-local WT = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/ghostscript_result.txt"
 package.path = WT .. "/lua/?.lua;" .. package.path
 local PG = require("peer_ghost_npc")

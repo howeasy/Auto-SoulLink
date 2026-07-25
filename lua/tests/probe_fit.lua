@@ -2,7 +2,8 @@
 -- 30-char message clipped at the window edge ("…Squirtle linke|"); the fitted one must end ".."
 -- inside the window. Renders the FITTED text at the action menu and screenshots.
 local SDIR = "E:/Howard/Bizhawk/GBA/State"
-local WT   = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local MB   = dofile(WT .. "/lua/mailbox.lua")
 
 pcall(function() client.speedmode(400) end)

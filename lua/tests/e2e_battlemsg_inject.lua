@@ -6,7 +6,8 @@
 -- notification mid-display, proving the right text + thematic color rendered for each injected event.
 -- HARDENED: incremental log flush every write (diagnose silent mid-run deaths), pcall'd dofile, and a
 -- periodic mailbox/BN heartbeat so a stall is visible in the partial log.
-local WT  = "E:/Google Drive/SLink/.claude/worktrees/condescending-bassi-9175e6"
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
+assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
 local OUT = WT .. "/patch/build/e2e_result.txt"
 local logf = io.open(OUT, "w")
 local function log(s)
