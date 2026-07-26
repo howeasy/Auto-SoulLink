@@ -145,8 +145,14 @@ is no separate "next page" opcode.
 > overworld with no window and no way out. The staged panel is validated *before* the script is set
 > up (`info_lines_ok()` → `ack(ST_FAIL, 2)`), and `show_info_entry` clamps and repairs rather than
 > bailing. The first run of `test_live_infoscreen` caught exactly this — a malformed stage came back
-> with no status at all because the script never resolved. `show_choices_entry` still has the
-> original bailing shape and the same latent softlock.
+> with no status at all because the script never resolved.
+>
+> **`show_choices_entry` had the identical bug and is fixed the same way**: `choices_ok()` validates
+> the staged list in `OP_SHOW_CHOICES` before `lockall`, and the entry clamps the count and
+> terminates a runaway option in place rather than returning. `test_live_choices` asserts all three
+> malformed stages (count 0, count > 8, unterminated option) come back `ST_FAIL` with the field
+> **unlocked** — and those assertions were confirmed to FAIL on the pre-fix binary with exactly the
+> softlock signature: no ack at all, field locked forever.
 
 #### Window tile budget — a hard ceiling that is easy to blow
 
@@ -158,10 +164,9 @@ At width 27 the **maximum height is 13** (351 tiles, ending `0x196`). The first 
 this screen used `27 x 14` = 378 tiles and overran the message-box window by 26 — fixed to
 `CreateWindowFromRect(1, 2, 27, 13)`.
 
-> **`show_choices_entry` has the same latent overrun.** It calls `CreateWindowFromRect(left, 1,
-> width, sMcHeight[count])`; with `count == 8` (`sMcHeight[8] = 14`) and a `width` near its 27
-> clamp it spends up to 378 tiles. For `run_choices(with_text=1)` the message box it would corrupt
-> is a **live** one. It needs a combined `width * height <= 352` guard, not just the width clamp.
+`show_choices_entry` had the same overrun and now carries a combined guard: it shrinks the **width**
+until `width * height <= 352` (never the height — a narrower option is cosmetic, a dropped option row
+is wrong). The loop terminates without a divide, since it stops at width 8 and `8 * 14 = 112`.
 
 #### Looking native
 

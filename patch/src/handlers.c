@@ -252,6 +252,7 @@ typedef void (*FadeScreen_t)(u8 mode, s8 delay);
 #define FL(c) (u8)(0xD5u + ((c) - 'a'))
 #define FSP   0x00u
 #define FEOS  0xFFu
+static const u8 sFrEmpty[1] = { FEOS };   /* a terminated empty FR string */
 
 /* RR builds the start menu into these two globals; both located live by lua/tests/test_live_startmenu.lua,
  * which also asserts a normal field menu is exactly [1 2 3 4 5 6] with EXIT (id 6) last. */
@@ -473,6 +474,7 @@ typedef void (*FillWinPixRect_t)(u8 win, u8 fill, u16 x, u16 y, u16 w, u16 h);
 static const u8 sColBody[3]  = { 1, 2, 3 };   /* dark gray on white — body text */
 static const u8 sColTitle[3] = { 1, 8, 9 };   /* blue — headers and values */
 static const u8 sColAlert[3] = { 1, 4, 5 };   /* red — a dead mon */
+#define MENU_BUF_LEN   112u                 /* BattleNotif starts at +0x70 */
 #define SLINK_MENU_BUF 0x0203FC90u           /* [u8 count][FR str 0xFF-term]... staged for OP_SHOW_CHOICES */
 /* void BattlePutTextOnWindow(const u8 *frText, u8 windowId) @0x080D87BE — the engine's IN-BATTLE text
  * draw (the bundled RR4.1 Battle Calc detours its prologue to inject damage numbers). General primitive:
@@ -609,30 +611,61 @@ static void drive_force_move(void)
  * engine's Task_MultichoiceMenu_HandleInput (it sets gSpecialVar_Result = chosen index / SCR_MENU_CANCEL,
  * closes the window, and resumes the script). */
 static const u8 sMcHeight[9] = { 1, 2, 4, 6, 7, 9, 11, 13, 14 };
+/* Validate the staged option list BEFORE the script is set up. Mirror of info_lines_ok, and for the
+ * same reason: once lockall has run, the ONLY thing that can release the field is the input task
+ * show_choices_entry creates, so a rejection has to happen out here where it is a clean ST_FAIL. */
+static u8 choices_ok(void)
+{
+    volatile u8 *buf = (volatile u8 *)SLINK_MENU_BUF;
+    u8 count = buf[0];
+    if (count == 0 || count > 8) return 0;
+    u32 i = 1;
+    for (u8 k = 0; k < count; k++) {
+        while (i < MENU_BUF_LEN && buf[i] != 0xFF) i++;
+        if (i >= MENU_BUF_LEN) return 0;       /* option with no terminator inside the buffer */
+        i++;
+    }
+    return 1;
+}
+
 static void show_choices_entry(void)
 {
     volatile u8 *buf = (volatile u8 *)SLINK_MENU_BUF;
     u8 count = buf[0];
-    if (count == 0 || count > 8) return;   /* >8 = malformed/uninitialized stage -> reject, don't clamp */
+    /* Clamp and repair, NEVER bail — every path below must reach CreateTask. This function is a
+     * callnative inside a lockall'd script whose `waitstate` only that task resolves, so an early
+     * return strands the player in a locked overworld with no window and no way out. The opcode
+     * rejects a malformed stage at the boundary (choices_ok), so reaching here with bad data means
+     * something wrote SLINK_MENU_BUF behind our back. */
+    if (count == 0) count = 1;
+    if (count > 8) count = 8;
     const u8 *opts[8];
-    const u8 *p   = (const u8 *)(SLINK_MENU_BUF + 1);
-    const u8 *end = (const u8 *)0x02040000u;   /* EWRAM end — never scan past it (malformed stage guard) */
-    for (u8 i = 0; i < count; i++) {
-        opts[i] = p;
-        while (p < end && *p != 0xFF) p++;
-        if (p >= end) return;                  /* unterminated option -> abort the menu, don't run off EWRAM */
-        p++;
+    u32 i = 1;
+    for (u8 k = 0; k < count; k++) {
+        if (i >= MENU_BUF_LEN) { opts[k] = sFrEmpty; continue; }   /* ran out of staged bytes */
+        opts[k] = (const u8 *)(SLINK_MENU_BUF + i);
+        while (i < MENU_BUF_LEN && buf[i] != 0xFF) i++;
+        if (i >= MENU_BUF_LEN) buf[MENU_BUF_LEN - 1] = 0xFF;       /* terminate in place */
+        else i++;
     }
     s32 sw = 0;
-    for (u8 i = 0; i < count; i++) { s32 t = GetStringWidth(FONT_NORMAL, opts[i], 0); if (t > sw) sw = t; }
+    for (u8 k = 0; k < count; k++) { s32 t = GetStringWidth(FONT_NORMAL, opts[k], 0); if (t > sw) sw = t; }
     u8 width = (u8)((sw + 9) / 8 + 1);
     if (width > 27) width = 27;                /* clamp: (28 - width) underflows u8 for wide labels
                                                   -> off-map window rect -> BG corruption */
+    u8 height = sMcHeight[count];
+    /* Tile budget: CreateWindowFromRect hardcodes baseBlock 0x38 and the field message-box window
+     * sits at 0x198, so width * height must fit 352 tiles. At width 27 with 8 options (height 14)
+     * this spends 378 and runs 26 tiles INTO that window — which run_choices(with_text=1) has LIVE
+     * underneath the list. Shrink the width rather than the height: a slightly narrower option is
+     * cosmetic, a dropped option row is wrong. Terminates without a divide (no libgcc): the loop
+     * stops at width 8, and 8 * 14 = 112 is well inside the budget. */
+    while ((u32)width * (u32)height > 352u && width > 8u) width--;
     u8 left = 1; if (left + width > 28) left = (u8)(28 - width);
-    u8 win = CreateWindowFromRect(left, 1, width, sMcHeight[count]);
+    u8 win = CreateWindowFromRect(left, 1, width, height);
     SetStandardWindowBorderStyle(win, 0);
-    for (u8 i = 0; i < count; i++)
-        AddTextPrinterParameterized(win, FONT_NORMAL, opts[i], 8, (u8)(14 * i + 2), 0xFF, 0);
+    for (u8 k = 0; k < count; k++)
+        AddTextPrinterParameterized(win, FONT_NORMAL, opts[k], 8, (u8)(14 * k + 2), 0xFF, 0);
     CopyWindowToVram(win, 2 /*COPYWIN_GFX*/);
     Menu_InitCursor(win, FONT_NORMAL, 0, 2, 14, count, 0);
     u8 tid = CreateTask((void *)(TASK_MULTICHOICE_INPUT | 1u), 80);
@@ -689,13 +722,12 @@ static void run_choices(u8 with_text) { run_ui_script(((u32)&show_choices_entry)
  * for the Lua side to get wrong. */
 static const u8 sInfoTitle[] = { FU('S'), FL('o'), FL('u'), FL('l'), FSP,
                                  FU('L'), FL('i'), FL('n'), FL('k'), FEOS };
-static const u8 sInfoEmpty[1] = { FEOS };
 
 /* Copy a staged slot onto the stack, guaranteeing termination. Copying rather than repairing in
  * place keeps drawing IDEMPOTENT: re-opening the panel without restaging must render identically. */
 static const u8 *slot_str(volatile u8 *src, u8 *buf)
 {
-    if (src[0] == 0xFF || src[0] == 0x00) return sInfoEmpty;
+    if (src[0] == 0xFF || src[0] == 0x00) return sFrEmpty;
     for (u8 i = 0; i < 32; i++) buf[i] = src[i];
     buf[31] = 0xFF;
     return (const u8 *)buf;
@@ -721,7 +753,7 @@ static u8 split_slot(volatile u8 *src, u8 *buf, const u8 *f[5])
     u8 i, k = 1;
     for (i = 0; i < 32; i++) buf[i] = src[i];
     buf[31] = 0xFF;
-    for (i = 0; i < 5; i++) f[i] = sInfoEmpty;
+    for (i = 0; i < 5; i++) f[i] = sFrEmpty;
     f[0] = buf;
     for (i = 0; i < 32 && buf[i] != 0xFF; i++)
         if (buf[i] == 0xFE) { buf[i] = 0xFF; if (k < 5) f[k++] = &buf[i + 1]; }
@@ -1913,6 +1945,7 @@ void slink_hook(void)
                                      the chosen index (result[0]; 0x7F = cancel). */
         if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
         if (!on_field()) { ack(ST_FAIL, 3); return; }
+        if (!choices_ok()) { ack(ST_FAIL, 2); return; }   /* must be caught HERE — see choices_ok */
         run_choices(MB->args[0]);
         MENU->kind = 1; MENU->phase = 1; MENU->seq = MB->seq; MENU->frames = 0; MENU->pending = 1;
         MB->status = ST_BUSY; MB->opcode = 0;
