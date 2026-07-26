@@ -36,6 +36,29 @@ SPLIT_ICONS = {
 STAT_STAGE_LABELS = ["ATK", "DEF", "SPD", "SATK", "SDEF", "ACC", "EVA"]
 
 
+def _relative_luminance(hex_color: str) -> float:
+    """WCAG relative luminance of a #rgb / #rrggbb colour."""
+    h = hex_color.lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    def channel(pair: str) -> float:
+        v = int(pair, 16) / 255
+        return v / 12.92 if v <= 0.04045 else ((v + 0.055) / 1.055) ** 2.4
+    return 0.2126 * channel(h[0:2]) + 0.7152 * channel(h[2:4]) + 0.0722 * channel(h[4:6])
+
+
+def readable_on(bg: str) -> str:
+    """Black or white, whichever has more contrast against `bg`.
+
+    This replaced a hand-maintained whitelist of five "light" type names. Measured against the
+    real TYPE_COLOR table, that whitelist put white text on nine backgrounds that fail WCAG AA —
+    Steel at 1.94:1, Grass 2.06, Bug 2.20, Rock 2.59, Flying 2.65, Fire 2.68, Water 3.07,
+    Psychic 3.11 — and type is the primary matchup signal in the party, box, encounter and every
+    stream overlay. Deriving it fixes all nine and cannot drift when a colour is added.
+    """
+    return "#000" if _relative_luminance(bg) > 0.179 else "#fff"
+
+
 def type_badges_html(species_id: int, *, adapter) -> str:
     """Return HTML type badge(s) for a species, or empty string if unknown."""
     if not species_id or not adapter:
@@ -48,7 +71,7 @@ def type_badges_html(species_id: int, *, adapter) -> str:
     n2 = adapter.type_name(t2)
     c1 = TYPE_COLOR.get(n1, "#666")
     def badge(name: str, color: str) -> str:
-        text_color = "#000" if name in ("Electric", "Ice", "Normal", "Ground", "Fairy") else "#fff"
+        text_color = readable_on(color)
         return (f'<span style="display:inline-block;padding:1px 5px;border-radius:3px;'
                 f'font-size:0.78em;background:{color};color:{text_color};margin:1px">'
                 f'{name}</span>')
@@ -72,7 +95,7 @@ def move_table_html(move_details: list[dict], *, is_box: bool = False, mon_key: 
         name = html.escape(md.get("name", "?"))
         type_name = md.get("type_name", "")
         type_color = TYPE_COLOR.get(type_name, "#666")
-        text_color = "#000" if type_name in ("Electric", "Ice", "Normal", "Ground", "Fairy") else "#fff"
+        text_color = readable_on(type_color)
         type_badge = (f'<span class="type-badge" style="background:{type_color};color:{text_color}">'
                       f'{type_name}</span>')
         split = md.get("split", 0)

@@ -61,8 +61,13 @@
   --c-dead:     #f03838;
   --c-pend:     #f8a020;
   --c-gold:     #f8d030;
+  /* Opaque surface for sticky headers — must hide rows scrolling beneath, so it
+     cannot be one of the translucent tokens above. */
+  --c-sticky:   #222228;
+  /* Lightness for the encounter-rate hue gradient (see _build_status_html). */
+  --enc-rate-l: 48%;
   --c-txt:      #e6e6e6;
-  --c-dim:      rgba(220, 220, 220, .4);
+  --c-dim:      rgba(220, 220, 220, .55);  /* .4 was 3.08:1 — secondary, but still body text */
   --c-bg:       rgba(7, 9, 16, .90);
   --c-card:     rgba(255, 255, 255, .038);
   --c-edge:     rgba(255, 255, 255, .09);
@@ -332,12 +337,14 @@ body:not(.dark-theme) {
 /* ── Light theme — body class override
  * Overrides for OBS browser sources using ?theme=light. */
 body.theme-light {
-  --c-alive: #1a9a38;
-  --c-dead:  #c82020;
-  --c-pend:  #c86010;
-  --c-gold:  #1a5fb0;
+  --c-alive: #105f22;  /* AA 4.59 on the tinted card these badges actually sit on */
+  --c-dead:  #a31a1a;  /* AA 4.52 on the tinted card */
+  --c-pend:  #833f0a;  /* AA 4.59 on the tinted card */
+  --c-gold:  #165298;  /* AA 4.57 on the tinted pills this is used on */
+  --c-sticky: #e6ebf7;
+  --enc-rate-l: 24%;  /* AA: worst hue (yellow) 2.39 -> 4.62 */
   --c-txt:   #18182a;
-  --c-dim:   rgba(24, 24, 42, .5);
+  --c-dim:   rgba(24, 24, 42, .7);   /* .5 was 3.12:1 — muted, but body text still needs AA */
   --c-bg:    rgba(238, 242, 252, .92);
   --c-card:  rgba(0, 0, 0, .028);
   --c-edge:  rgba(0, 0, 0, .10);
@@ -345,12 +352,12 @@ body.theme-light {
   /* Brand drops from gold to the same deep blue used for --c-gold so the
    * SLink wordmark / theme swatch / calc header accent passes WCAG 3:1
    * against the near-white background. */
-  --c-brand: #1a5fb0;
+  --c-brand: #165298;  /* AA 4.57 on tinted pills */
   /* Link + info accents pull down to mid blue / mid cyan so they pass
    * 4.5:1 contrast on the cream background. (Defaults #6af / #7cf are
    * too pale for light mode.) */
-  --c-link:  #1a5fb0;
-  --c-info:  #2073a0;
+  --c-link: #165298;  /* AA 4.57 on tinted pills */
+  --c-info: #18587a;  /* AA 4.53 on tinted pills */
 }
 
 /* ── Transparent theme — body class override

@@ -493,10 +493,10 @@ _DEBUG_HTML = """<!DOCTYPE html>
   .live-bar .player-pill { display:inline-flex; align-items:center; gap:4px; padding:2px 10px;
                            border-radius:12px; font-weight:600; font-size:0.9em; }
   .live-bar .player-pill.on { background:#14532d; color:var(--green); }
-  .live-bar .player-pill.off { background:#1c1c1c; color:#555; }
+  .live-bar .player-pill.off { background:#1c1c1c; color:var(--c-dim); }
   .live-bar .stat { color:var(--muted); }
   .live-bar .stat b { color:var(--text); font-variant-numeric:tabular-nums; }
-  .live-bar .event-log { flex:1; text-align:right; color:#666; font-family:monospace; font-size:0.9em;
+  .live-bar .event-log { flex:1; text-align:right; color:var(--c-dim); font-family:monospace; font-size:0.9em;
                          overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:400px; }
 
   .grid { display:grid; grid-template-columns:1fr 1fr; gap:1em; }
@@ -543,7 +543,7 @@ _DEBUG_HTML = """<!DOCTYPE html>
   .ml-table tr:hover { background:#1a1a2a; }
   .ml-table .st-alive { color:var(--green); }
   .ml-table .st-dead { color:var(--red); }
-  .ml-table .st-memorial { color:#888; }
+  .ml-table .st-memorial { color:var(--c-dim); }
   .ml-table .btn-unlink { padding:2px 8px; font-size:0.8em; }
   .ml-table .btn-revive { padding:2px 8px; font-size:0.8em; background:#2a6; color:#fff; border:none; border-radius:3px; cursor:pointer; }
   .ml-table .btn-revive:hover { background:#3b7; }
@@ -673,7 +673,7 @@ _DEBUG_HTML = """<!DOCTYPE html>
     </div>
     <div class="result" id="danger-result"></div>
     <h2 style="margin-top:1em"><span class="h2-left">&#128190; Rollback to Backup</span></h2>
-    <div id="backup-list" style="color:#888">Loading backups…</div>
+    <div id="backup-list" style="color:var(--c-dim)">Loading backups…</div>
     <div class="result" id="rollback-result"></div>
   </div>
 
@@ -998,14 +998,14 @@ async function loadBackups() {
   var j = await r.json();
   var el = document.getElementById('backup-list');
   if (!j.backups || j.backups.length === 0) {
-    el.innerHTML = '<span style="color:#555;font-size:0.9em">No backups yet — created every 5 min when both players connected.</span>';
+    el.innerHTML = '<span style="color:var(--c-dim);font-size:0.9em">No backups yet — created every 5 min when both players connected.</span>';
     return;
   }
   window._backupData = {};
   var rows = j.backups.map(function(b) {
     window._backupData[b.slot] = b;
     var sum = b.summary;
-    var detail = sum ? '<span style="color:#4f8">'+sum.links_alive+'&#x2764;</span> <span style="color:#f55">'+sum.links_dead+'&#x2620;</span> '+sum.areas_pending+' pending '+sum.areas_dead_zone+' dz' : '<span style="color:#666">?</span>';
+    var detail = sum ? '<span style="color:#4f8">'+sum.links_alive+'&#x2764;</span> <span style="color:#f55">'+sum.links_dead+'&#x2620;</span> '+sum.areas_pending+' pending '+sum.areas_dead_zone+' dz' : '<span style="color:var(--c-dim)">?</span>';
     return '<tr><td class="slot-link" onclick="doRollback('+b.slot+')">#' + b.slot + '</td><td>' + b.modified + '</td><td>' + detail + '</td><td>' + (b.size/1024).toFixed(1) + 'K</td></tr>';
   });
   el.innerHTML = '<table class="backup-table"><tr><th>Slot</th><th>Time</th><th>State</th><th>Size</th></tr>' + rows.join('') + '</table>';
@@ -1052,7 +1052,7 @@ async function loadLiveState() {
     if (rules.species_lock) ruleItems.push('<span style="color:#f97316">Species</span>');
     if (rules.gender_lock) ruleItems.push('<span style="color:#a78bfa">Gender</span>');
     if (rules.type_lock) ruleItems.push('<span style="color:#38bdf8">Type</span>');
-    h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Lock Rules:</b> ' + (ruleItems.length ? ruleItems.join(' \\u00b7 ') : '<span style="color:#555">none</span>') + '</div>';
+    h += '<div style="margin-bottom:0.6em"><b style="color:var(--text)">Lock Rules:</b> ' + (ruleItems.length ? ruleItems.join(' \\u00b7 ') : '<span style="color:var(--c-dim)">none</span>') + '</div>';
 
     // Player identity
     var ident = j.player_identity || {};
@@ -1062,7 +1062,7 @@ async function loadLiveState() {
       if (id) {
         h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': <span style="color:var(--green)">' + (id.trainer_name||'?') + '</span> (OT: ' + (id.ot_id||'?') + ')<br>';
       } else {
-        h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': <span style="color:#555">not locked</span><br>';
+        h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': <span style="color:var(--c-dim)">not locked</span><br>';
       }
     });
     h += '</div>';
@@ -1082,7 +1082,7 @@ async function loadLiveState() {
     ['a','b'].forEach(function(pid) {
       var keys = pk[pid] || [];
       h += '&nbsp;&nbsp;' + pid.toUpperCase() + ' (' + keys.length + '): ';
-      h += keys.length ? keys.map(function(k){return '<code style="color:#60a5fa">'+k.substring(0,8)+'</code>';}).join(', ') : '<span style="color:#555">empty</span>';
+      h += keys.length ? keys.map(function(k){return '<code style="color:#60a5fa">'+k.substring(0,8)+'</code>';}).join(', ') : '<span style="color:var(--c-dim)">empty</span>';
       h += '<br>';
     });
     h += '</div>';
@@ -1094,7 +1094,7 @@ async function loadLiveState() {
     ['a','b'].forEach(function(pid) {
       var keys = bk[pid] || [];
       h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': ';
-      h += keys.length ? keys.map(function(k){return '<code style="color:#fbbf24">'+k.substring(0,8)+'</code>';}).join(', ') : '<span style="color:#555">none</span>';
+      h += keys.length ? keys.map(function(k){return '<code style="color:#fbbf24">'+k.substring(0,8)+'</code>';}).join(', ') : '<span style="color:var(--c-dim)">none</span>';
       h += '<br>';
     });
     h += '</div>';
@@ -1108,7 +1108,7 @@ async function loadLiveState() {
         var keys = pb_bonus[pid] || [];
         if (!keys.length) return;
         h += '&nbsp;&nbsp;' + pid.toUpperCase() + ': ';
-        h += keys.map(function(k){return '<code style="color:#ffd700">\u23f3 '+k.substring(0,8)+'</code>';}).join(', ');
+        h += keys.map(function(k){return '<code style="color:var(--c-gold)">\u23f3 '+k.substring(0,8)+'</code>';}).join(', ');
         h += '<br>';
       });
       h += '</div>';
@@ -1153,7 +1153,7 @@ async function loadMemorial() {
     if (boxIdx >= 0) {
       h += '<div style="margin-bottom:0.8em"><b style="color:var(--text)">Memorial Box:</b> Box ' + (boxIdx + 1) + ' (index ' + boxIdx + ')</div>';
     } else {
-      h += '<div style="margin-bottom:0.8em"><b style="color:var(--text)">Memorial Box:</b> <span style="color:#555">No dedicated memorial box (Gen 1/2)</span></div>';
+      h += '<div style="margin-bottom:0.8em"><b style="color:var(--text)">Memorial Box:</b> <span style="color:var(--c-dim)">No dedicated memorial box (Gen 1/2)</span></div>';
     }
 
     // 2. Pending memorials
@@ -1169,7 +1169,7 @@ async function loadMemorial() {
         if (!pkeys.length) return;
         h += '&nbsp;&nbsp;<b>' + pid.toUpperCase() + ':</b> ';
         h += pkeys.map(function(pk) {
-          return '<code style="color:var(--yellow)">' + pk.species_name + '</code> <span style="color:#555">[' + pk.key.substring(0,8) + ']</span>';
+          return '<code style="color:var(--yellow)">' + pk.species_name + '</code> <span style="color:var(--c-dim)">[' + pk.key.substring(0,8) + ']</span>';
         }).join(', ');
         h += '<br>';
       });
@@ -1185,7 +1185,7 @@ async function loadMemorial() {
         totalSlots += entries.length;
       });
       if (totalSlots === 0) {
-        h += ' <span style="color:#555;font-size:0.9em">— empty or not scanned by emulator</span></div>';
+        h += ' <span style="color:var(--c-dim);font-size:0.9em">— empty or not scanned by emulator</span></div>';
       } else {
         h += '</div>';
         ['a','b'].forEach(function(pid) {
@@ -1206,7 +1206,7 @@ async function loadMemorial() {
             h += '<tr' + (e.status === 'quarantined' ? ' style="background:#3a1a0a"' : '') + '>';
             h += '<td>' + (e.slot + 1) + '</td>';
             h += '<td>' + (e.species_name || '#' + e.species_id) + '</td>';
-            h += '<td>' + (e.nickname || '<span style="color:#555">—</span>') + '</td>';
+            h += '<td>' + (e.nickname || '<span style="color:var(--c-dim)">—</span>') + '</td>';
             h += '<td style="font-family:monospace;font-size:0.9em">' + e.key.substring(0,8) + '</td>';
             h += '<td style="color:' + statusColor + ';font-weight:600">' + statusLabel + '</td>';
             h += '</tr>';
@@ -1234,7 +1234,7 @@ async function loadMemorial() {
       });
       h += '</tbody></table></details>';
     } else {
-      h += '<div style="margin-top:0.6em;color:#555">No memorial log entries yet.</div>';
+      h += '<div style="margin-top:0.6em;color:var(--c-dim)">No memorial log entries yet.</div>';
     }
 
     document.getElementById('memorial-content').innerHTML = h;
@@ -1360,7 +1360,7 @@ function renderLinksTable() {
   var d = _lastStatus;
   var el = document.getElementById('ml-links-table');
   if (!d || !d.links || d.links.length === 0) {
-    el.innerHTML = '<span style="color:#555;font-size:0.85em">No links yet.</span>';
+    el.innerHTML = '<span style="color:var(--c-dim);font-size:0.85em">No links yet.</span>';
     return;
   }
   var h = '<table class="ml-table"><thead><tr><th>Area</th><th>A</th><th>B</th><th>Status</th><th></th></tr></thead><tbody>';
@@ -1647,7 +1647,11 @@ class SLinkServer:
                 min_lv = e.get("min_level", 0)
                 max_lv = e.get("max_level", 0)
                 # Rate colour: hsl(rate*2, 85%, 45%) — green=high, red=low
-                rate_color = f"hsl({min(rate * 2, 120)}, 85%, 48%)"
+                # Hue carries the meaning (red = rare, green = common) so it stays; only the
+                # LIGHTNESS is theme-controlled. Fixed at 48% this was 1.06:1 on the light theme —
+                # a yellow "20%" on near-white. --enc-rate-l lets each theme pick a readable one
+                # without flattening the gradient into a single colour.
+                rate_color = f"hsl({min(rate * 2, 120)}, 85%, var(--enc-rate-l, 48%))"
                 if sid:
                     sprite_tag = self.adapter.sprite_html(sid)
                     # Replace mon-sprite class with enc-sprite for smaller 20px icon
@@ -3335,7 +3339,7 @@ class SLinkServer:
         # ── GAME OVER banner ──────────────────────────────────────────────────
         if d.get("run_over"):
             parts.append(
-                '<div style="background:#b00;color:#fff;text-align:center;padding:1em 0.5em;'
+                '<div style="background:var(--c-dead);color:#fff;text-align:center;padding:1em 0.5em;'
                 'font-size:1.8em;font-weight:bold;letter-spacing:0.15em;border-radius:8px;'
                 'margin-bottom:1em;text-shadow:2px 2px 4px #000">'
                 '<svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> GAME OVER — SOUL LINK <svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg></div>'
@@ -3585,7 +3589,7 @@ class SLinkServer:
                                and pid in d["pending_captures"][cur_area])
                 if cur_area and area_st not in ("linked", "dead_zone") and not has_pending:
                     new_enc = True
-            new_enc_badge = (' <span style="color:#5f5;font-weight:bold">'
+            new_enc_badge = (' <span style="color:var(--c-alive);font-weight:bold">'
                              '★ NEW ENCOUNTER</span>' if new_enc else "")
             doubles_chip = (' <span class="dbl-chip">'
                             '<svg class="inline-ico" aria-hidden="true"><use href="#i-swords"/></svg>'
@@ -3775,7 +3779,7 @@ class SLinkServer:
             balls     = p["ball_count"]
             balls_cls = "yes" if balls > 0 else "warn"
             trainer   = html.escape(p.get("trainer_name", ""))
-            trainer_str = f'<span style="color:#ff0">{trainer}</span> &mdash; ' if trainer else ""
+            trainer_str = f'<span style="color:var(--c-gold)">{trainer}</span> &mdash; ' if trainer else ""
 
             parts.append(f'<div class="player-card {card_cls}">')
             _safe_run = re.sub(r'[^\w-]', '_', self._run_name or self._run_id or "SLink").strip('_') or "SLink"
@@ -3824,7 +3828,7 @@ class SLinkServer:
             id_err = p.get("identity_error", "")
             if id_err:
                 parts.append(
-                    f'<div style="background:#600;color:#fcc;padding:0.5em 0.8em;'
+                    f'<div style="background:var(--c-dead);color:#fff;padding:0.5em 0.8em;'
                     f'border:1px solid #f44;border-radius:4px;margin:0.4em 0;'
                     f'font-weight:bold;">'
                     f'&#9888; {html.escape(id_err)}'
@@ -3902,7 +3906,7 @@ class SLinkServer:
                             )
                             link_cls = "pending_b"
                         elif key in d.get("bonus_keys", {}).get(pid, []):
-                            partner_str = '<span style="color:#ffd700">★ Shiny Clause</span>'
+                            partner_str = '<span style="color:var(--c-gold)">★ Shiny Clause</span>'
                             link_cls    = "alive"
                         else:
                             partner_str = '<span class="dim">unlinked</span>'
@@ -4019,7 +4023,7 @@ class SLinkServer:
                             )
                             bx_link_cls = "pending_b"
                         elif bx_key in d.get("bonus_keys", {}).get(pid, []):
-                            bx_partner_str = '<span style="color:#ffd700">★ Shiny Clause</span>'
+                            bx_partner_str = '<span style="color:var(--c-gold)">★ Shiny Clause</span>'
                             bx_link_cls    = "alive"
                         else:
                             bx_partner_str = '<span class="dim">—</span>'
@@ -4684,12 +4688,12 @@ class SLinkServer:
         parts.append('<h2>Recent Events</h2>')
         events = list(self._recent_events)
         if events:
-            parts.append('<div style="max-height:300px;overflow-y:auto;border:1px solid #333;border-radius:3px;">')
+            parts.append('<div style="max-height:300px;overflow-y:auto;border:1px solid var(--c-edge);border-radius:3px;">')
             parts.append(
                 '<table style="margin-bottom:0"><thead><tr>'
-                '<th style="position:sticky;top:0;background:#222">Time</th>'
-                '<th style="position:sticky;top:0;background:#222;text-align:left">Player</th>'
-                '<th style="position:sticky;top:0;background:#222">Details</th>'
+                '<th style="position:sticky;top:0;background:var(--c-sticky)">Time</th>'
+                '<th style="position:sticky;top:0;background:var(--c-sticky);text-align:left">Player</th>'
+                '<th style="position:sticky;top:0;background:var(--c-sticky)">Details</th>'
                 '</tr></thead><tbody>'
             )
             for ev in events:
@@ -5926,14 +5930,14 @@ class SLinkServer:
     body{font-family:var(--font-heading);color:var(--c-txt);min-height:100vh}
     .dash-main{padding:1.2em 1.4em 2em;font-family:var(--font-heading)}
     h1{font-family:var(--font-heading);color:var(--c-gold);font-size:1.5em;margin-bottom:.3em;text-shadow:0 0 8px color-mix(in srgb,var(--c-brand) 50%,transparent)}
-    .sub{color:#888;font-size:.85em;margin-bottom:1.5em}
+    .sub{color:var(--c-dim);font-size:.85em;margin-bottom:1.5em}
     .sub a{color:#6af;text-decoration:none}
     .panel{background:#12141e;border:1px solid #2a2c3a;border-radius:8px;padding:1.2em;margin-bottom:1.2em}
     .panel h2{font-family:'Press Start 2P',monospace;font-size:.7em;color:#f8d030;margin-bottom:.8em;letter-spacing:.05em}
     .status-badge{display:inline-block;padding:3px 12px;border-radius:3px;font-size:.82em;font-weight:700;letter-spacing:.05em}
     .sb-on{background:#1a4a1a;color:#3de85a;border:1px solid #3de85a}
     .sb-off{background:#3a1a1a;color:#f03838;border:1px solid #f03838}
-    .sb-dis{background:#2a2a2a;color:#888;border:1px solid #888}
+    .sb-dis{background:#2a2a2a;color:var(--c-dim);border:1px solid #888}
     label{display:block;color:#aaa;font-size:.8em;margin-bottom:.2em;margin-top:.7em}
     input[type=text],input[type=number]{width:100%;background:#1a1c28;color:#e0e0e0;border:1px solid #363850;border-radius:4px;padding:6px 10px;font-size:.85em}
     input[type=text]:focus,input[type=number]:focus{outline:none;border-color:#f8d030}
@@ -5942,17 +5946,17 @@ class SLinkServer:
     .btn-red{color:#f03838;border-color:#f03838}.btn-red:hover{background:#3a1a1a}
     .btn-grn{color:#3de85a;border-color:#3de85a}.btn-grn:hover{background:#1a3a1a}
     .btn-row{display:flex;gap:.6em;flex-wrap:wrap;margin-top:.8em}
-    .hint{color:#666;font-size:.75em;margin-top:.3em}
+    .hint{color:var(--c-dim);font-size:.75em;margin-top:.3em}
     table{width:100%;border-collapse:collapse;font-size:.83em}
-    th{text-align:left;color:#888;padding:4px 8px;border-bottom:1px solid #2a2c3a;font-weight:400}
+    th{text-align:left;color:var(--c-dim);padding:4px 8px;border-bottom:1px solid #2a2c3a;font-weight:400}
     td{padding:4px 8px;border-bottom:1px solid #1a1c24;vertical-align:top}
     td.cmd{font-family:monospace;color:#f8d030;white-space:nowrap}
     td.arg{font-family:monospace;color:#aaa;white-space:nowrap}
     .log-entry{font-size:.78em;padding:4px 0;border-bottom:1px solid #1a1c24;display:flex;gap:.7em}
-    .log-ts{color:#555;flex-shrink:0;white-space:nowrap}
+    .log-ts{color:var(--c-dim);flex-shrink:0;white-space:nowrap}
     .log-txt{color:#ccc;word-break:break-all}
     #log-list .log-entry:last-child{border-bottom:none}
-    .empty{color:#555;font-size:.82em;font-style:italic}
+    .empty{color:var(--c-dim);font-size:.82em;font-style:italic}
     .preview-box{background:#1a1c28;border:1px solid #363850;border-radius:4px;padding:8px 12px;font-size:.82em;min-height:2em;color:#6af;font-family:monospace;white-space:pre-wrap;word-break:break-all}
     select{background:#1a1c28;color:#e0e0e0;border:1px solid #363850;border-radius:4px;padding:6px 10px;font-size:.85em;width:100%}
     .row2{display:grid;grid-template-columns:1fr 1fr;gap:1em}
@@ -5969,7 +5973,7 @@ class SLinkServer:
   <div class="panel">
     <h2>STATUS</h2>
     <span id="status-badge" class="status-badge sb-dis">Loading&hellip;</span>
-    <span id="status-channel" style="margin-left:.8em;color:#888;font-size:.85em"></span>
+    <span id="status-channel" style="margin-left:.8em;color:var(--c-dim);font-size:.85em"></span>
     <span id="token-badge" style="margin-left:1em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block"></span>
     <span id="clientid-badge" style="margin-left:.5em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block"></span>
     <div id="status-error" style="display:none;margin-top:.7em;background:rgba(240,56,56,.1);border:1px solid #f03838;border-radius:4px;padding:7px 12px;color:#f03838;font-size:.82em;font-family:monospace;word-break:break-all"></div>
@@ -6015,7 +6019,7 @@ class SLinkServer:
 
   <div class="panel">
     <h2>COMMAND PREVIEW</h2>
-    <p style="color:#888;font-size:.82em;margin-bottom:.7em">Test what the bot would reply — no message is sent to chat.</p>
+    <p style="color:var(--c-dim);font-size:.82em;margin-bottom:.7em">Test what the bot would reply — no message is sent to chat.</p>
     <div style="display:flex;gap:.6em;flex-wrap:wrap;align-items:flex-end">
       <div style="flex:1;min-width:160px">
         <label>Command</label>
@@ -6196,7 +6200,7 @@ class SLinkServer:
     body{font-family:var(--font-heading);color:var(--c-txt);min-height:100vh}
     .dash-main{padding:1.2em 1.4em 2em;font-family:var(--font-heading)}
     h1{font-family:var(--font-heading);color:var(--c-info);font-size:1.5em;margin-bottom:.3em;text-shadow:0 0 8px color-mix(in srgb,var(--c-brand) 50%,transparent)}
-    .sub{color:#888;font-size:.85em;margin-bottom:1.5em}
+    .sub{color:var(--c-dim);font-size:.85em;margin-bottom:1.5em}
     .sub a{color:#6af;text-decoration:none}
     .panel{background:#12141e;border:1px solid #2a2c3a;border-radius:8px;padding:1.2em;margin-bottom:1.2em}
     .panel h2{font-family:'Press Start 2P',monospace;font-size:.7em;color:#b8f0ff;margin-bottom:.8em;letter-spacing:.05em}
@@ -6214,7 +6218,7 @@ class SLinkServer:
     .btn-s{color:#b8f0ff;border-color:#b8f0ff}.btn-s:hover{background:#1a3050}
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.2em}
     table{width:100%;border-collapse:collapse;font-size:.82em}
-    th{color:#888;font-weight:600;padding:5px 8px;text-align:left;border-bottom:1px solid #2a2c3a}
+    th{color:var(--c-dim);font-weight:600;padding:5px 8px;text-align:left;border-bottom:1px solid #2a2c3a}
     td{padding:5px 8px;border-bottom:1px solid #1e2030;vertical-align:middle}
     tr:hover td{background:#1a1c28}
     .frow{display:flex;gap:.5em;align-items:flex-end;flex-wrap:wrap}
@@ -6243,7 +6247,7 @@ class SLinkServer:
         </div>
         <label>Host<input id="host-a" type="text" placeholder="192.168.1.x"></label>
         <label>Port<input id="port-a" type="number" value="4455" min="1" max="65535"></label>
-        <label>Password <small style="color:#666">(blank = keep current)</small>
+        <label>Password <small style="color:var(--c-dim)">(blank = keep current)</small>
           <input id="pw-a" type="password" placeholder=""></label>
         <div class="cbtns">
           <button class="btn btn-g" onclick="connect('a')">Connect</button>
@@ -6258,7 +6262,7 @@ class SLinkServer:
         </div>
         <label>Host<input id="host-b" type="text" placeholder="192.168.1.x"></label>
         <label>Port<input id="port-b" type="number" value="4455" min="1" max="65535"></label>
-        <label>Password <small style="color:#666">(blank = keep current)</small>
+        <label>Password <small style="color:var(--c-dim)">(blank = keep current)</small>
           <input id="pw-b" type="password" placeholder=""></label>
         <div class="cbtns">
           <button class="btn btn-g" onclick="connect('b')">Connect</button>
@@ -6277,7 +6281,7 @@ class SLinkServer:
 
   <div class="panel">
     <h2>TRIGGER RULES</h2>
-    <p style="margin:0 0 .6em;color:#888;font-size:.85em">Rules are evaluated <strong>top-to-bottom</strong> — when multiple events fire at once, the highest row wins per OBS player. Drag <span style="font-size:1em">⠿</span> to reorder.</p>
+    <p style="margin:0 0 .6em;color:var(--c-dim);font-size:.85em">Rules are evaluated <strong>top-to-bottom</strong> — when multiple events fire at once, the highest row wins per OBS player. Drag <span style="font-size:1em">⠿</span> to reorder.</p>
     <table id="triggers-table">
       <thead><tr><th style="width:1.6em"></th><th>#</th><th>Event</th><th>Player Filter</th><th>Target OBS</th><th>Scene</th><th>Area Filter</th><th></th></tr></thead>
       <tbody id="triggers-body"></tbody>
@@ -6335,7 +6339,7 @@ class SLinkServer:
         <datalist id="scene-list-both"></datalist>
       </div>
       <div>
-        <label>Area Filter <small style="color:#666">(area_enter only)</small></label>
+        <label>Area Filter <small style="color:var(--c-dim)">(area_enter only)</small></label>
         <select id="new-area">
           <option value="">(any area)</option>
         </select>
@@ -6371,7 +6375,7 @@ class SLinkServer:
     }
 
     function areaFilterLabel(v) {
-      if (!v) return '<span style="color:#444">—</span>';
+      if (!v) return '<span style="color:var(--c-dim)">—</span>';
       if (v.indexOf('group:') === 0) {
         var label = _areaNameById[v] || v.slice(6);
         return '<span style="background:#1a2a3a;color:#6af;border:1px solid #2a4a6a;border-radius:3px;padding:1px 6px;font-size:.78em">☰ '
@@ -6385,7 +6389,7 @@ class SLinkServer:
     function renderTriggers() {
       var tbody = document.getElementById('triggers-body');
       if (!triggers.length) {
-        tbody.innerHTML = '<tr><td colspan="8" style="color:#555;text-align:center;padding:1em">No triggers — add one below</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="color:var(--c-dim);text-align:center;padding:1em">No triggers — add one below</td></tr>';
         return;
       }
       tbody.innerHTML = triggers.map(function(t, i) {
