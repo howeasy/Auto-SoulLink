@@ -126,7 +126,9 @@ slot 15 scales by it, while unfaded keeps the true colours) plus the existing `t
 **Remaining:** the two-instance VISUAL check — mounting a bike / surfing in front of a real partner
 is the only way to confirm the variant sprites read correctly on screen.
 
-## 6. SOULLINK menu entry + in-game info screen (IN PROGRESS — restructured 2026-07-25)
+## 6. ~~SOULLINK menu entry + in-game info screen~~ — LANDED 2026-07-26
+
+All six steps done and gated end to end: `test_live_startmenu`, `test_live_ewramtail`, `test_live_soullinkmenu`, `test_live_infoscreen`, and the `infopanel` duo scenario (two emulators, a real server, three injected pairs).
 
 **Was:** "a persistent field HUD (your linked mon + partner's, HP/status, badges) drawn
 natively, replacing transient HUD popups for state."

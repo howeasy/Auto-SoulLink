@@ -184,6 +184,7 @@ Lua clients and the server speak newline-delimited JSON over one persistent TCP 
 | `resolved_areas` | Sent in the `hello` reply — area states to treat as already resolved on reconnect. |
 | `config` | Sent in the `hello` reply — per-run toggles (`overworld_presence`, `native_messages`, `native_sounds`, `battle_calc`, `pc_trade_npc`). |
 | `unresolve_area` | Remove an area from the client's resolved set (shiny bonus-pair slot reopening). |
+| `link_panel` | Content for the native in-game SOULLINK screen: flat, pre-formatted `field\|field\|...` rows, built **per recipient** (the panel says "yours" and "your partner's"). Sent only when the content changes, and only to clients whose adapter returns `supports_info_panel()`. Rows are flat because the Lua client has no JSON decoder — `parse_command_list` is a pattern scraper. |
 | `gui_prompt` | Show a BizHawk GUI text prompt (e.g. clause-violation retry notice). |
 | `game_over` | The run is over (unrecoverable whiteout) — re-sent on reconnect. |
 | `rebuild_start` / `rebuild_done` | Bracket a post-whiteout party rebuild (restore boxed survivors, then resume normal sync). |
@@ -779,7 +780,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 ### Unit tests (no emulator required)
 
 ```bash
-pytest tests/unit/ -v          # all 1190 tests
+pytest tests/unit/ -v          # ~1450 tests, no emulator needed
 pytest tests/unit/test_state.py -v             # 318 state machine tests (incl. tick reconciliation)
 pytest tests/unit/test_gen3_adapter.py -v      # 216 Gen 3 adapter tests
 pytest tests/unit/test_gen4_adapter.py -v      # 100 Gen 4 adapter tests
@@ -1305,7 +1306,6 @@ python -m server.manager --host 0.0.0.0
 |---|---|
 | `GET /` | Manager dashboard |
 | `GET /api/runs` | List all runs (JSON) |
-| `GET /api/runs/cards` | HTML run cards (used internally by dashboard SSE) |
 | `POST /api/runs/new` | Create a new run |
 | `POST /api/runs/<id>/start` | Start a run |
 | `POST /api/runs/<id>/stop` | Stop a run |
@@ -1451,6 +1451,9 @@ All are gated to the supporting game (currently Gen 3 Radical Red); the base `Ga
 | Method | Returns / does | Base default |
 |---|---|---|
 | `rival_trainer_ids()` | Trainer IDs treated as the rival for `--rival-team-swap` (Gen 3 RR: 27 "Terry" IDs in classes 81/89/90, built at import from `rr_trainers.json`). | `set()` |
+| `supports_info_panel()` | Whether this client can render the native in-game SOULLINK screen; gates the `link_panel` command so no other client is sent something it would only log. Gen 3 opts in for Radical Red. | `False` |
+| `supports_abilities()` | Whether the game has abilities at all — drives the party table's Ability column. Overridden `False` by Gen 1 and Gen 2. | `True` |
+| `status_token(status_cond)` | Three-letter status (`PSN`/`PAR`/`SLP`/`BRN`/`FRZ`/`TOX`) from the raw per-generation bitfield. | `""` |
 | `gift_link_area(area_id)` | Maps a gift/egg capture into the `gift_<area>` namespace for standalone gift pairs. | `gift_<area>` remap |
 | `trainers_for_area(area_id)` | Key/priority trainer IDs appearing in an area (Upcoming Key Trainers panel). | `[]` |
 | `trainer_party(trainer_id)` | A trainer's curated party for the panel + calc handoff. | `[]` |

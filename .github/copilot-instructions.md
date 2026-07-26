@@ -29,7 +29,8 @@ python -m server.server --reset   # wipe all state and start a fresh run
 #   --verbose            Enable structured DEBUG logging to <data-dir>/slink.log
 
 # Unit tests — no emulator or server required
-# (318 + 216 + 100 + 103 + 179 + 140 + 46 + 6 + 7 + 4 + 3 + 14 + 15 + 10 + 8 + 4 + 9 + 4 + 4 = 1190 tests)
+# (~1450 and growing — the hand-maintained per-file sum that used to live here drifted
+#  constantly; run the suite for the real number)
 pytest tests/unit/test_state.py -v
 pytest tests/unit/test_gen3_adapter.py -v
 pytest tests/unit/test_gen4_adapter.py -v
@@ -1131,7 +1132,7 @@ Below the cards:
 ### Unit tests — no emulator or server required
 
 ```bash
-pytest tests/unit/ -v   # 1190 tests
+pytest tests/unit/ -v   # ~1450 tests
 pytest tests/unit/test_state.py -v          # 318 tests (incl. tick reconciliation + Explode Mode)
 pytest tests/unit/test_gen1_adapter.py -v   # 103 tests
 pytest tests/unit/test_gen2_adapter.py -v   # 179 tests

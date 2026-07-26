@@ -713,12 +713,12 @@ Covers the core `SoulLinkState` FSM in `server/state.py`. Key helper: `make_stat
 
 ```bash
 python tools/e2e_duo.py --scenario faint      # one scenario
-python tools/e2e_duo.py --scenario all        # faint, boxsync, trade, ghost, explode
+python tools/e2e_duo.py --scenario all        # all six
 ```
 
-Scenarios: `faint`, `boxsync`, `trade`, `ghost` (runs with `--overworld-presence`), `explode` (runs with `--explode-mode`). Each instance loads a generated stub (`patch/build/duo_{a,b}.lua`) that runs the **real production client** plus a scenario coroutine from `lua/tests/duo/`. Windows-only; needs `E:/Howard/Bizhawk` and the patched ROM.
+Scenarios: `faint`, `boxsync`, `trade`, `ghost` (runs with `--overworld-presence`), `explode` (runs with `--explode-mode`), `infopanel` (three injected pairs, then drives the native SOULLINK menu end to end: the `link_panel` payload crosses the wire, renders as pairs, opens from the START menu, pages on A and closes on B). Each instance loads a generated stub (`patch/build/duo_{a,b}.lua`) that runs the **real production client** plus a scenario coroutine from `lua/tests/duo/`. Windows-only; needs `E:/Howard/Bizhawk` and the patched ROM.
 
-The pytest wrapper `tests/e2e/test_duo.py` parametrizes the same five scenarios but is skipped unless explicitly requested (each takes minutes and spawns EmuHawk twice):
+The pytest wrapper `tests/e2e/test_duo.py` parametrizes the same six scenarios but is skipped unless explicitly requested (each takes minutes and spawns EmuHawk twice):
 
 ```bash
 SLINK_E2E=1 pytest tests/e2e/ -q

@@ -136,7 +136,7 @@ Per-run **native UI & audio toggles** (also in the Run Manager's new-run form; a
 
 ## Companion Patch (Radical Red)
 
-An optional UPS patch (`patch/`) injects native SLink support into the Radical Red ROM. It enables the **peer ghost** (Overworld Presence), **native trade** (talk-to-partner / PC trade NPC), **in-battle notifications**, **native message boxes and sounds**, the bundled **Battle Calc** damage display, and the native Rival Team Swap path. Build it with `patch/tools/build.py`; apply it in the browser at `/patcher` (or download the `.ups` from `/companion/SLink-RR.ups`). See [patch/README.md](patch/README.md) for the full feature list and opcode reference.
+An optional UPS patch (`patch/`) injects native SLink support into the Radical Red ROM. It enables the **peer ghost** (Overworld Presence), **native trade** (talk-to-partner / PC trade NPC), **in-battle notifications**, **native message boxes and sounds**, the bundled **Battle Calc** damage display, the native Rival Team Swap path, and a **Soul Link entry in the game's own START menu** that opens a native run summary — linked pairs with both halves' HP, status and level, dead zones and badges — so you can check the run without leaving the game. Build it with `patch/tools/build.py`; apply it in the browser at `/patcher` (or download the `.ups` from `/companion/SLink-RR.ups`). See [patch/README.md](patch/README.md) for the full feature list and opcode reference.
 
 ## OBS Scene Triggers
 
@@ -258,8 +258,19 @@ python -m server.manager --host 0.0.0.0
 ## Tests
 
 ```bash
-pytest tests/unit/ -v        # 1190 tests, no emulator needed
+pytest tests/unit/ -v                          # ~1450 tests, no emulator needed
+pytest tests/ -q                               # + integration (~1475)
+
+# Headless BizHawk gates — drive a real emulator against the patched ROM
+SLINK_LIVE=1 pytest tests/live/ -q             # 39 gates
+
+# Two-instance end-to-end: two emulators + a real server
+SLINK_E2E=1 SLINK_LIVE=1 pytest tests/e2e/ -q  # 6 scenarios
 ```
+
+The live gates and duo scenarios need BizHawk, the ROMs and current savestates
+(`python tools/mkstates.py`); they skip cleanly when those are missing. See
+[tests/TESTING.md](tests/TESTING.md).
 
 ## Project Structure
 
@@ -289,7 +300,7 @@ data/
   games/                 # Per-game static data (area maps, items)
   obs_config.json        # OBS connection + trigger rule config
 calc/                    # Radical Red damage calculator + live bridge (rendered via Jinja shell)
-tests/                   # pytest unit tests (1190) + two-instance E2E (tests/e2e/) + BizHawk test scripts
+tests/                   # unit + integration (~1475), live BizHawk gates (tests/live/), two-instance E2E (tests/e2e/)
 tools/                   # Code generators (area maps, data tables)
 ```
 
