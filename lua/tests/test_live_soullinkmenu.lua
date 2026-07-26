@@ -137,5 +137,67 @@ if memory.read_u8(SI + 1) ~= 0 then
     finish(false); return
 end
 
+-- 5. END TO END: choosing the row must actually OPEN THE SCREEN, with no mailbox round-trip.
+-- The callback only bumps a counter; drive_info in the frame hook is what turns that into a panel.
+-- Without this the row could fire forever and never show the player anything -- and it has to work
+-- even when the client is mid-command, which is exactly why it does not go through an opcode.
+local function vram_hash()
+    local h = 0
+    for a = 0x06000000, 0x0600FFFF, 4 do h = (h * 31 + memory.read_u32_le(a)) % 0x7FFFFFFF end
+    return h
+end
+
+boot(true)
+local PANEL = {}
+MB.info_pair(PANEL, "RT03", { name = "Bulbasaur", level = 12, hp = "19/23", bar = MB.info_bar(19, 23) },
+                            { name = "Squirtle",  level = 11, hp = "FNT",   bar = 0 })
+MB.write_info(PANEL, 0, 1)
+local before = vram_hash()
+tap("Start", 90)
+for _ = 1, SPLICE do tap("Down", 12) end
+tap("A", 60)
+for _ = 1, 150 do emu.frameadvance() end          -- start menu closes, then the script opens the panel
+local after = vram_hash()
+log(string.format("row -> panel: vram %d -> %d (drawn=%s)", before, after, tostring(before ~= after)))
+pcall(function() client.screenshot(WT .. "/patch/build/soullink_menu_panel.png") end)
+if before == after then
+    log("FAIL: choosing SOULLINK opened nothing — drive_info never ran the screen")
+    finish(false); return
+end
+if memory.read_u8(0x03000F9C) == 0 then
+    log("FAIL: no field script is locked — the panel is not up")
+    finish(false); return
+end
+-- THE SCREEN MUST NOT BE BLACK. When a start-menu row is chosen the engine fades to black unless
+-- the action function is one of three whitelisted ones, because every other stock row hands off to
+-- a screen that fades itself back in. Ours stays on the field, so the patch has to undo that fade.
+-- This assertion exists because the first version did not, and everything above still passed: VRAM
+-- changed, the script locked, the counters were right, and the player saw a black screen.
+local lit = 0
+for i = 1, 15 do if memory.read_u16_le(0x05000000 + i * 2) ~= 0 then lit = lit + 1 end end
+log("non-black entries in BG palette 0: " .. lit .. "/15")
+if lit < 8 then
+    log("FAIL: the screen is faded to black — the engine's start-menu fade was not undone")
+    finish(false); return
+end
+tap("A", 60)
+for _ = 1, 90 do emu.frameadvance() end
+if memory.read_u8(0x03000F9C) ~= 0 then
+    log("FAIL: the panel did not release the field when closed")
+    finish(false); return
+end
+-- and with nothing staged the row must be inert rather than drawing an empty box
+boot(true)
+memory.write_u8(MB.INFO_LINES, 0)
+tap("Start", 90)
+for _ = 1, SPLICE do tap("Down", 12) end
+tap("A", 60)
+for _ = 1, 150 do emu.frameadvance() end
+if memory.read_u8(0x03000F9C) ~= 0 then
+    log("FAIL: an unstaged panel still locked the field")
+    finish(false); return
+end
+log("row opens the panel with no opcode, closes cleanly, and is inert when nothing is staged")
+
 log("SOULLINK row: hidden when disabled, spliced at index 5 when enabled, callback fires there only")
 finish(true)

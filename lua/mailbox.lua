@@ -333,6 +333,17 @@ function MB.info_mon(label, name, level, hptext, barpx)
 end
 function MB.info_stat(label, value) return tostring(label) .. "\n" .. tostring(value) end
 
+-- Append a linked PAIR as its two rows: yours on top, your partner's below. The second row carries
+-- an EMPTY label, which is exactly what the patch keys the tie bracket off — so pairing is never
+-- left to the reader inferring it from two adjacent rows sharing an area tag. Always append both
+-- rows together; a lone continuation row would draw an orphan with no bracket and no area.
+-- `mine`/`theirs` are { name=, level=, hp=, bar= } (bar via MB.info_bar, or 0 for fainted).
+function MB.info_pair(rows, label, mine, theirs)
+    rows[#rows + 1] = MB.info_mon(label, mine.name, mine.level, mine.hp, mine.bar)
+    rows[#rows + 1] = MB.info_mon("", theirs.name, theirs.level, theirs.hp, theirs.bar)
+    return rows
+end
+
 -- Stage the panel. `lines` is a list of plain ASCII strings (a GBA panel is ~26 usable chars, so
 -- format for that before calling). Truncates rather than spilling: the patch rejects any slot
 -- without a 0xFF inside its 32 bytes, so an over-long line would blank the whole screen instead of

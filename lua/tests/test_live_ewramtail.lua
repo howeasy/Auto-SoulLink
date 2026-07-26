@@ -1,8 +1,7 @@
--- test_live_ewramtail.lua — prove the 700-byte EWRAM tail 0x0203FD44..0x0203FFFF is REALLY free.
+-- test_live_ewramtail.lua — prove the UNALLOCATED EWRAM tail is REALLY free.
 --
--- Everything the patch owns now ends at EvRing's last byte (0x0203FD43). The tail above it is
--- the last contiguous EWRAM this patch can claim, and the §6 SOULLINK info screen wants most of
--- it for a text page. Its freeness had only ever been ASSERTED, never measured: the argument was
+-- This is the last contiguous EWRAM the patch can claim, and §6 already took 264 bytes of it.
+-- Its freeness had only ever been ASSERTED, never measured: the argument was
 -- that it sits above CFRU's highest KNOWN EWRAM symbol — the ceiling of an admittedly incomplete
 -- list. An attempt to shore that up with a ROM literal-pool scan did not survive review (the scan
 -- found 35 references into the window, and none of them is a literal pool at all — they are
@@ -21,8 +20,14 @@ assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this scr
 local OUT = WT .. "/patch/build/ewram_tail_result.txt"
 local MB = dofile(WT .. "/lua/mailbox.lua")
 
-local TAIL_LO, TAIL_HI = 0x0203FD44, 0x0203FFFF     -- EvRing ends 0x0203FD44 (exclusive)
-local N = TAIL_HI - TAIL_LO + 1                     -- 700
+-- The FREE tail: what the patch has not claimed. It began at 0x0203FD44 (where EvRing ends) and
+-- the first run of this gate proved all 700 bytes of that run untouched across 7 savestates. §6
+-- then allocated SlinkInfo at 0x0203FD44..0x0203FE4B out of it, so the watch moves up to what is
+-- still unallocated. Painting a region the patch OWNS would be testing the wrong thing — worse, it
+-- would switch the SOULLINK feature on with garbage state and the patch would then write there
+-- itself, which is exactly how this gate started failing when SlinkInfo landed.
+local TAIL_LO, TAIL_HI = 0x0203FE4C, 0x0203FFFF     -- SlinkInfo ends 0x0203FE4C (exclusive)
+local N = TAIL_HI - TAIL_LO + 1                     -- 436
 
 local lines = {}
 local function log(s) lines[#lines + 1] = s; console.log(s) end

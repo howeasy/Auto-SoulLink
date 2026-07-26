@@ -229,12 +229,22 @@ typedef struct {
     volatile u8 page;        /* +4 Lua-set, display only */
     volatile u8 pages;       /* +5 Lua-set, display only */
     volatile u8 gen;         /* +6 Lua ++ after staging (redraw-on-change) */
-    volatile u8 _pad;        /* +7 */
+    volatile u8 fadephase;   /* +7 0 = still need to undo the engine's fade, 1 = faded back in */
     volatile u8 line[8][32]; /* +8 FR-encoded, 0xFF-terminated (ends 0x0203FE4C) */
 } SlinkInfo;
 #define SI ((SlinkInfo *)0x0203FD44u)
-#define INFO_ROWS      6u   /* body rows that fit at a 13px pitch in the 104px content area */
+#define INFO_ROWS      6u   /* body rows that fit at the pitch below, in the 104px content area */
+#define INFO_PITCH    13u   /* row pitch = FONT_SMALL's own glyph height, so nothing clips */
 #define INFO_PAGE_SLOT 7u   /* slot 7 holds the header's page indicator; `lines` never counts it */
+
+/* void FadeScreen(u8 mode, s8 delay) — FADE_FROM_BLACK is mode 0. See slink_startmenu_cb. */
+typedef void (*FadeScreen_t)(u8 mode, s8 delay);
+#define FadeScreen      ((FadeScreen_t)0x0807A819u)
+#define FADE_FROM_BLACK 0u
+/* gPaletteFade @ 0x02037AB8 (BPRE.ld). The struct is a pile of bitfields whose packing is not worth
+ * deriving, so the `active` flag was located live instead: byte +7 holds 0x80 for the whole fade and
+ * clears on the frame it finishes. */
+#define gPaletteFadeActive 0x02037ABFu
 
 /* FR charmap (same table as lua/mailbox.lua fr_encode): 'A'=0xBB, 'a'=0xD5, space=0x00, EOS=0xFF.
  * Spelled as arithmetic on the character literal so the mapping is checkable by eye. */
@@ -677,8 +687,8 @@ static void run_choices(u8 with_text) { run_ui_script(((u32)&show_choices_entry)
 /* "SOUL LINK" and an empty string, FR-encoded. The title is a ROM const, not a staged line — it is
  * the same on every page, and a header the player can't accidentally overwrite is one fewer thing
  * for the Lua side to get wrong. */
-static const u8 sInfoTitle[] = { FU('S'), FU('O'), FU('U'), FU('L'), FSP,
-                                 FU('L'), FU('I'), FU('N'), FU('K'), FEOS };
+static const u8 sInfoTitle[] = { FU('S'), FL('o'), FL('u'), FL('l'), FSP,
+                                 FU('L'), FL('i'), FL('n'), FL('k'), FEOS };
 static const u8 sInfoEmpty[1] = { FEOS };
 
 /* Copy a staged slot onto the stack, guaranteeing termination. Copying rather than repairing in
@@ -731,6 +741,23 @@ static u8 parse_u8(const u8 *s)
 #define BAR_W 38u                          /* inner track width in px; Lua scales HP to 0..38 */
 static const u8 sLvGlyph[] = { 0xF9, 0x05, 0xFF };   /* the engine's own "Lv" glyph (gText_Lv) */
 
+/* Draw the bracket that ties a Soul Link PAIR's two rows together:
+ *
+ *     RT03 ┬ Bulbasaur  Lv12 [####--]   19/23     <- yours
+ *          └ Squirtle   Lv11 [------]     FNT     <- your partner's
+ *
+ * Pairing is the whole point of this screen, and two adjacent rows sharing an area tag conveyed it
+ * only by implication. The bracket is drawn rather than printed — three filled rectangles, no glyphs
+ * — so it costs no charmap and lines up with the text exactly. Blue, matching the area tag it hangs
+ * from. `y` is the FIRST row of the pair; the second is always y + INFO_PITCH. */
+static void info_pair_bracket(u8 win, u8 y)
+{
+    u8 mid1 = (u8)(y + 6), mid2 = (u8)(y + INFO_PITCH + 6);
+    FillWindowPixelRect(win, 0x88, 24, mid1, 1, (u16)(mid2 - mid1 + 1));   /* the stem */
+    FillWindowPixelRect(win, 0x88, 24, mid1, 4, 1);                        /* tick into row 1 */
+    FillWindowPixelRect(win, 0x88, 24, mid2, 4, 1);                        /* tick into row 2 */
+}
+
 /* One party-menu-style row: LABEL  Name  Lv## [====----]      cur/max
  * Modelled on the party menu because that is the screen every player already reads HP from. */
 static void info_mon_row(u8 win, u8 y, const u8 *f[5])
@@ -741,9 +768,9 @@ static void info_mon_row(u8 win, u8 y, const u8 *f[5])
      * that gets the alert colour — on both the name and the HP text. */
     const u8 *col = bp ? sColBody : sColAlert;
     AddTextPrinterParameterized4(win, FONT_SMALL, 0,   y, 0, 0, sColTitle, 0xFF, f[0]);  /* area */
-    AddTextPrinterParameterized4(win, FONT_SMALL, 26,  y, 0, 0, col,       0xFF, f[1]);  /* name */
-    AddTextPrinterParameterized4(win, FONT_SMALL, 80,  y, 0, 0, sColBody,  0xFF, sLvGlyph);
-    AddTextPrinterParameterized4(win, FONT_SMALL, 88,  y, 0, 0, sColBody,  0xFF, f[2]);  /* level */
+    AddTextPrinterParameterized4(win, FONT_SMALL, 30,  y, 0, 0, col,       0xFF, f[1]);  /* name */
+    AddTextPrinterParameterized4(win, FONT_SMALL, 82,  y, 0, 0, sColBody,  0xFF, sLvGlyph);
+    AddTextPrinterParameterized4(win, FONT_SMALL, 90,  y, 0, 0, sColBody,  0xFF, f[2]);  /* level */
     AddTextPrinterParameterized4(win, FONT_SMALL, rx(f[3]), y, 0, 0, col,  0xFF, f[3]);  /* cur/max */
     /* Bar: outline, then track, then fill. FillWindowPixelRect clips internally, but bp is clamped
      * above anyway so a bad stage can't push the fill into the HP-text column. */
@@ -785,9 +812,13 @@ static void show_info_entry(void)
     for (u8 i = 0; i < n; i++) {
         u8 buf[32];
         const u8 *f[5];
-        u8 y  = (u8)(18 + 13 * i);
+        u8 y  = (u8)(18 + INFO_PITCH * i);
         u8 nf = split_slot(&SI->line[i][0], buf, f);
         if (nf >= 5) {
+            /* A row whose FIRST field is empty continues the pair above it — the slot then starts
+             * with the 0xFE separator, so one byte read decides it. No extra field, no string
+             * compare, and Lua keeps control of the grouping. */
+            if (i + 1 < n && SI->line[i + 1][0] == 0xFE) info_pair_bracket(win, y);
             info_mon_row(win, y, f);
         } else if (nf == 2) {
             /* label/value, the trainer-card and OPTIONS grammar: label left, value right in the
@@ -822,6 +853,40 @@ static void run_info(void) { run_ui_script(((u32)&show_info_entry) | 1u, 0); }
 /* Validate the staged panel BEFORE the script is set up. Once lockall has run, the only thing that
  * can release the field is the input task show_info_entry creates, so a rejection has to happen
  * here — out here it is a clean ST_FAIL, in there it would be a softlock. */
+/* The frame-hook half of the SOULLINK menu row. The start-menu callback deliberately does not draw
+ * — it bumps `opened` and closes the menu — so this is what turns that bump into a screen, with no
+ * mailbox round-trip at all. That matters: the row has to work even when the client is mid-command
+ * or the server is briefly unreachable, and a menu entry that sometimes does nothing is worse than
+ * no menu entry.
+ *
+ * Deliberately does NOT touch UiState: drive_ui acks the MAILBOX, and there is no seq to ack here.
+ * The field script's own input task closes the window and releases the field. */
+static u8 info_lines_ok(void);
+static void run_info(void);
+static void drive_info(void)
+{
+    if (SI->drawn == SI->opened) return;              /* nothing was opened */
+    if (!SI->enable) { SI->drawn = SI->opened; return; }
+    if (MENU->pending) return;                        /* an opcode-driven native UI is in flight */
+    if (R8(sScriptContext2Enabled)) return;           /* the start menu / a dialogue is still up */
+    if (!on_field()) return;
+    if (R8(gPaletteFadeActive) & 0x80) return;        /* a fade is running — let it finish */
+    /* UNDO THE ENGINE'S FADE-TO-BLACK (see slink_startmenu_cb). Every other start-menu row hands
+     * off to a screen that fades itself back in; ours stays on the field, so if we do not do this
+     * the player is left looking at black. It has to happen here rather than in the callback
+     * because BeginNormalPaletteFade refuses while the engine's own fade is still active — hence
+     * the wait above, and hence two passes: fade in on the first, draw on the second once the
+     * screen is actually visible. */
+    if (SI->fadephase == 0) { FadeScreen(FADE_FROM_BLACK, 0); SI->fadephase = 1; return; }
+    SI->fadephase = 0;
+    /* Claim the bump BEFORE setting up the script. show_info_entry runs a frame or two later via the
+     * script engine, so waiting for it to clear `drawn` would re-arm this every frame in between and
+     * stack up field scripts. */
+    SI->drawn = SI->opened;
+    if (!info_lines_ok()) return;                     /* nothing staged — swallow, don't draw empty */
+    run_info();
+}
+
 static u8 info_lines_ok(void)
 {
     u8 n = SI->lines;
@@ -1635,18 +1700,32 @@ typedef u8 (*StartMenuFn)(void);
 #define StartMenu_Id8Orig ((StartMenuFn)0x0806F56Du)  /* what act[8].func was before we took it */
 #define SetUpStartMenu_Orig ((void (*)(void))0x090BE179u)
 
-const u8 sSoulLinkLabel[] = { FU('S'), FU('O'), FU('U'), FU('L'), FU('L'), FU('I'), FU('N'),
-                              FU('K'), FEOS };
+const u8 sSoulLinkLabel[] = { FU('S'), FL('o'), FL('u'), FL('l'), FSP,
+                              FU('L'), FL('i'), FL('n'), FL('k'), FEOS };
 const u8 sSoulLinkDesc[] = { FU('C'), FL('h'), FL('e'), FL('c'), FL('k'), FSP,
                              FL('t'), FL('h'), FL('e'), FSP,
-                             FU('S'), FU('O'), FU('U'), FU('L'), FSP, FU('L'), FU('I'), FU('N'),
-                             FU('K'), FSP, FL('r'), FL('u'), FL('n'), FEOS };
+                             FU('S'), FL('o'), FL('u'), FL('l'), FSP,
+                             FU('L'), FL('i'), FL('n'), FL('k'), FSP,
+                             FL('r'), FL('u'), FL('n'), FEOS };
 
 u8 slink_startmenu_cb(void)
 {
     /* Not enabled -> behave as the row we displaced, so a patched ROM with no Lua is stock. */
     if (!SI->enable) return StartMenu_Id8Orig();
     SI->opened++;
+    /* THE ENGINE FADES THE SCREEN TO BLACK BEHIND US. Undoing it is drive_info's job, not ours —
+     * see the comment there. Doing it here does not work: the engine starts its fade on this very
+     * frame and BeginNormalPaletteFade refuses while one is already active, so the call is dropped.
+     * OLD COMMENT, kept because it is the explanation:
+     * When a start-menu row is chosen, the engine checks the action function it just installed
+     * against a three-entry whitelist at 0x0806F394 — {0x0806F4E9, 0x0806F541, 0x0806F555} — and
+     * for anything NOT in it calls FadeScreen(FADE_TO_BLACK), because every other stock row hands
+     * off to a new screen (party, bag, trainer card, save, option) that fades itself back in.
+     * Our row stays on the field and opens a field window instead, so nothing would ever fade back
+     * in and the player would be left staring at a black screen. The whitelist is in ROM and keyed
+     * on the function pointer, so we cannot join it — we undo the fade instead.
+     * Found the hard way: the step-1 gate asserted counters and row order, all of which passed
+     * while the screen was black. */
     return StartMenu_Exit();
 }
 
@@ -1684,6 +1763,7 @@ void slink_hook(void)
         drive_ghost();            /* engine-driven peer ghost (spawn/walk/despawn lifecycle) */
         drive_trade_npc();        /* Pokémon-Center trade NPC (presence-OFF trade entry point) */
         check_peer_interact();    /* talk-to-ghost / talk-to-NPC detection (generic on SS->pi_oe) */
+        drive_info();             /* open the SOULLINK screen when the START-menu row was chosen */
     } else if (GH->oeId != 0xFF && GH->oeId < 16) {
         /* In a menu/scene CB2 (party picker / trade scene), the engine repurposes gSprites — hide our
          * ghost sprite so its tiles can't bleed into the menu (the initiator's "sprite glitch"). It's

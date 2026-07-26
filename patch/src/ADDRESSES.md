@@ -79,7 +79,7 @@ document alone would have clobbered live state.
 | `0x0203FD08` | *8* | — gap |
 | `0x0203FD10` | 52 | `EvRing` |
 | `0x0203FD44` | 264 | `SlinkInfo` — §6 SOULLINK menu/info (see below) |
-| `0x0203FE4C` | *436* | — **free tail, the last contiguous run to `0x0203FFFF`** |
+| `0x0203FE4C` | *436* | — **free tail, the last contiguous run to `0x0203FFFF`** (what `test_live_ewramtail` now watches) |
 
 **436 contiguous bytes remain**, plus 111 across seven interior gaps (largest 68 B). When the tail
 is gone the next feature must reuse a buffer or fragment; say so here rather than letting it be
@@ -196,6 +196,44 @@ LIVE (`test_live_infoscreen`): rejects an empty panel and an unterminated line w
 field, draws (BG VRAM changes), renders all three row kinds, asserts the panel's own tiles actually
 contain blue/red/green (a flat-black screen would otherwise pass), A→`0` and B→`0x7F` both close and
 release, and it reopens cleanly.
+
+#### The engine fades to black behind you
+
+When a start-menu row is chosen, `0x0806F394` compares the action function it just installed
+against a **three-entry whitelist** — `{0x0806F4E9 (Save), 0x0806F541 (Exit), 0x0806F555}` — and for
+anything else calls `FadeScreen(FADE_TO_BLACK)`. Every other stock row hands off to a screen
+(party, bag, trainer card, option) that fades itself back in. **Ours stays on the field**, so
+without undoing it the player is left staring at black. The whitelist is compiled ROM keyed on the
+function pointer, so we cannot join it.
+
+`drive_info` undoes it — and it has to be there, not in the callback: the engine starts its fade on
+the same frame the callback is installed, and `BeginNormalPaletteFade` refuses while a fade is
+already active, so a fade-in issued from the callback is silently dropped. So `drive_info` waits for
+`gPaletteFade.active` to clear, calls `FadeScreen(FADE_FROM_BLACK, 0)`, and opens the panel on the
+following pass (`SlinkInfo.fadephase` carries the two states).
+
+**`gPaletteFade` is `0x02037AB8`, and its `active` flag is byte `+7` bit `0x80`** — located live by
+tracing the struct across a fade rather than deriving the bitfield packing, which is not worth
+reasoning about. It holds `0x80` for the whole fade (~20 frames) and clears on the frame it ends.
+
+> This cost real time and the gate is the reason it will not recur: the original
+> `test_live_soullinkmenu` asserted row order, the callback firing, and that VRAM changed — **all
+> of which passed while the screen was solid black**. It now also asserts BG palette 0 is not
+> faded out.
+
+### Pair grouping
+
+A Soul Link pair is two mons, and two adjacent rows sharing an area tag conveyed that only by
+implication. Rows are now tied by a drawn bracket (three `FillWindowPixelRect` calls, no glyphs):
+
+```
+RT03 ┬ Bulbasaur  Lv12 [####--]   19/23     <- yours
+     └ Squirtle   Lv11 [------]     FNT     <- your partner's
+```
+
+**A row whose FIRST field is empty continues the pair above it.** The staged slot then begins with
+the `0xFE` separator, so the patch decides it with a single byte read — no extra field, no string
+compare, and Lua keeps control of the grouping (`MB.info_pair`).
 
 The callback deliberately **does not draw**: it bumps `opened` and tail-calls `StartMenu_Exit`
 (`0x0806F541`, which is already `act[6].func` and therefore proven safe in this slot). That is what

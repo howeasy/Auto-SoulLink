@@ -194,8 +194,12 @@ ghost/trade/msgbox traffic for no benefit.
       field count, so the EWRAM contract did not change. Fixed a real bug on the way: the first
       window was 27x14 = 378 tiles against a 352-tile ceiling, overrunning the field message-box
       window.
-- [ ] **3. Frame-hook path.** `opened != drawn` opens the screen with no opcode at all, so the row
-      works even if the client is mid-round-trip.
+- [x] **3. Frame-hook path.** `drive_info` opens the screen on `opened != drawn`, with no opcode at
+      all, so the row works even if the client is mid-round-trip. Gated end-to-end in
+      `test_live_soullinkmenu`: choosing the row draws the panel and closing it releases the field.
+      This is where the engine's start-menu fade-to-black had to be undone — see ADDRESSES.md.
+      Pair grouping landed here too (mandatory, user's call): paired rows are tied by a drawn
+      bracket, keyed off an empty first field.
 - [ ] **4. Real content + pagination.** Lua composes the page from live run state.
 
 **Known gap for step 4:** the client is *not* currently sent the link table. It does receive

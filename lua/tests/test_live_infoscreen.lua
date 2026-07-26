@@ -38,12 +38,13 @@ pcall(function() client.speedmode(400) end)
 -- All three row kinds are represented, because the patch picks the kind from the field count and a
 -- fixture of only one kind would never exercise that dispatch. One mon is deliberately fainted
 -- (barpx 0) and one is deliberately in the red band, so the colour thresholds are covered too.
-local PANEL = { MB.info_mon("RT03", "Bulbasaur",  12, "19/23", MB.info_bar(19, 23)),
-                MB.info_mon("RT03", "Squirtle",   11, "FNT",   0),
-                MB.info_mon("VIRI", "Butterfree", 14, " 4/38", MB.info_bar(4, 38)),
-                MB.info_stat("Dead zones", "2"),
-                MB.info_stat("Badges", "5/8"),
-                "Waiting on partner..." }
+local PANEL = {}
+MB.info_pair(PANEL, "RT03", { name = "Bulbasaur",  level = 12, hp = "19/23", bar = MB.info_bar(19, 23) },
+                            { name = "Squirtle",   level = 11, hp = "FNT",   bar = 0 })
+MB.info_pair(PANEL, "VIRI", { name = "Butterfree", level = 14, hp = " 4/38", bar = MB.info_bar(4, 38) },
+                            { name = "Nidoran",    level = 13, hp = "22/28", bar = MB.info_bar(22, 28) })
+PANEL[#PANEL + 1] = MB.info_stat("Dead zones", "2")
+PANEL[#PANEL + 1] = "Waiting on partner..."
 
 local function boot()
     assert(pcall(savestate.load, SDIR .. "/slink_overworld.State"), "no overworld savestate")
@@ -136,18 +137,27 @@ end
 -- two-tone -- a blue header over dark-gray body text with a light-gray rule -- and a screen that
 -- drew but drew flat black would pass every check above. Read the panel's own tiles and count
 -- which 4bpp palette indices actually appear.
-local function panel_palette()
+-- Panel tiles are row-major, 27 wide, 32 bytes each (4bpp), from baseBlock 0x38. Banding by tile
+-- lets an assertion say "blue appears HERE", which is the only way to prove a specific element
+-- drew rather than just that the palette is in use somewhere on the panel.
+local function panel_palette_tiles(tx0, tx1, ty0, ty1)
     local cbb = ((memory.read_u16_le(0x04000008) >> 2) & 3) * 0x4000
     local base = 0x06000000 + cbb + 0x38 * 32
     local seen = {}
-    for t = 0, 350 do
-        for b = 0, 31 do
-            local v = memory.read_u8(base + t * 32 + b)
-            seen[v & 0xF] = true; seen[v >> 4] = true
+    for ty = ty0, ty1 do
+        for tx = tx0, tx1 do
+            local t = ty * 27 + tx
+            if t >= 0 and t <= 350 then
+                for b = 0, 31 do
+                    local v = memory.read_u8(base + t * 32 + b)
+                    seen[v & 0xF] = true; seen[v >> 4] = true
+                end
+            end
         end
     end
     return seen
 end
+local function panel_palette() return panel_palette_tiles(0, 26, 0, 12) end
 local pal = panel_palette()
 local have = {}
 for i = 0, 15 do if pal[i] then have[#have + 1] = i end end
@@ -164,6 +174,23 @@ if not pal[2] then
     log("FAIL: no dark-gray body text")
     finish(false); return
 end
+
+-- 3c. PAIR GROUPING. Two rows sharing an area tag conveyed pairing only by implication; the tie
+-- bracket is what makes it explicit, so assert it landed in the gutter between the label and the
+-- name (px x 24..27 -> tile col 3; the pair's two rows span px y 24..37 -> tile rows 3..4).
+-- Nothing else blue is drawn there: the area tag ends before x=24 and the name is body-coloured.
+local gutter = panel_palette_tiles(3, 3, 3, 4)
+if not gutter[8] then
+    log("FAIL: no tie bracket between the pair's rows — grouping did not draw")
+    finish(false); return
+end
+-- and a lone row must NOT get one: row 5 (Dead zones) is a label/value, not a pair member.
+local solo = panel_palette_tiles(3, 3, 8, 9)
+if solo[8] then
+    log("FAIL: a bracket was drawn beside a non-pair row")
+    finish(false); return
+end
+log("pair bracket present between paired rows, absent beside unpaired ones")
 
 -- 4. A closes it, and reports 0.
 press("A", 60)
