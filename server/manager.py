@@ -260,10 +260,18 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
         cmd.append("--no-battle-calc")
     if not run.get("pc_trade_npc", True):
         cmd.append("--no-pc-trade-npc")
+    # Keep the child's stderr. It used to go to DEVNULL, so a run that died on startup — a taken
+    # port, a bad ROM path, a stack trace — vanished without trace and the Manager just showed it
+    # as stopped.
+    _spawn_log = os.path.join(data_dir, "spawn.log")
+    try:
+        _errf = open(_spawn_log, "ab", buffering=0)   # data_dir was created above
+    except OSError:
+        _errf = asyncio.subprocess.DEVNULL
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
+        stderr=_errf,
         # Detach from our process group so CTRL-C on the manager doesn't kill runs
         creationflags=0x00000008 if sys.platform == "win32" else 0,  # DETACHED_PROCESS on Windows
     )

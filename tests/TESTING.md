@@ -11,7 +11,7 @@ Tests 1–3 are diagnostic; **Test 4 (`slink.lua` or `slink_gen3.lua`) is the pr
 | Requirement | Detail |
 |---|---|
 | BizHawk 2.9+ | Both instances open, each with a FireRed or LeafGreen US 1.0 save loaded (vanilla, randomized, AP-patched, or Radical Red 4.1) |
-| LuaSocket DLL | Copy `socket-windows-5-4.dll` from your Archipelago install into `lua/x64/` (see `lua/x64/README.md`) |
+| LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
 | Python server | `python -m server.server --host 127.0.0.1 --port 54321` (run from project root; needed from Test 3 onward) |
 | Status page | `http://localhost:8080/` — flicker-free auto-refresh every 2 s (HTMX + idiomorph morph swap); shows player areas, gym badges, party, Pokéball counts, encounters table; battle display above party |
 | Scripts in `lua/` | `memory_gba.lua`, `connector.lua`, `socket.lua`, `slink.lua`, all files in `tests/` |

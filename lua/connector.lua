@@ -39,6 +39,7 @@ local _sock           = nil
 local _connected      = false
 local _send_queue     = {}      -- {string} lines waiting to be sent
 local _line_queue     = {}      -- {string} complete received lines ready to read
+local _fail_logged = false   -- one connect-failure message per outage
 local _reconnect_cd   = 0       -- frames remaining before next reconnect attempt
 
 local RECONNECT_FRAMES = 30     -- ~0.5 s at 60 fps (initial retry interval)
@@ -157,6 +158,18 @@ function M.pump()
             local ok, err = _do_connect()
             if ok then
                 console.log(string.format("[SLink] Reconnected to %s:%d", _host, _port))
+                _fail_logged = false
+            elseif err and err ~= "connecting" then
+                -- Say WHY, once per outage. Silence here is the worst possible first-run
+                -- experience: the emulator looks fine, the script looks fine, and nothing
+                -- happens. Logged once rather than every backoff tick so a long outage does
+                -- not bury the console.
+                if not _fail_logged then
+                    _fail_logged = true
+                    console.log(string.format(
+                        "[SLink] Cannot reach the server at %s:%d (%s). Is it running? " ..
+                        "Start it with:  python -m server.server", _host, _port, tostring(err)))
+                end
             end
             -- If err == "connecting", _check_pending_connect will handle it next frame
         end

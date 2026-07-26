@@ -69,7 +69,7 @@
 -- Launcher scripts set SLINK_* globals before dofile("clients/gen3_frlge_client.lua").
 -- Direct loading uses the defaults below.
 local SERVER_HOST = SLINK_HOST   or "127.0.0.1"
-local SERVER_PORT = SLINK_PORT   or 54322
+local SERVER_PORT = SLINK_PORT   or 54321
 local PLAYER_ID   = SLINK_PLAYER or "a"   -- "a" = FireRed, "b" = LeafGreen
 -- Clear globals so they don't leak across reloads
 SLINK_HOST = nil; SLINK_PORT = nil; SLINK_PLAYER = nil

@@ -1,21 +1,22 @@
 # lua/x64/
 
-This directory must contain the LuaSocket native DLL for BizHawk.
+Holds the LuaSocket native DLL that BizHawk's Lua needs in order to open a TCP
+socket. Without it the client cannot talk to the server at all.
 
-## Required file
+## Nothing to do
 
-  socket-windows-5-4.dll   (BizHawk 2.9 / Lua 5.4)
+  socket-windows-5-4.dll   (BizHawk 2.9+ / Lua 5.4)
 
-## How to get it
+**This file is already in the repository** — it is committed and not gitignored,
+so a fresh clone has everything it needs. Earlier revisions of this README (and
+of `docs/REFERENCE.md` and `tests/TESTING.md`) said it was excluded and told you
+to copy it out of an Archipelago install. That was wrong, and it read as a hard
+blocker to anyone who did not have Archipelago.
 
-Copy from your Archipelago installation:
+## If it ever goes missing
 
-  <Archipelago>\data\lua\x64\socket-windows-5-4.dll
+Any Archipelago release ships the same DLL at
+`<Archipelago>\data\lua\x64\socket-windows-5-4.dll`
+(https://github.com/ArchipelagoMW/Archipelago/releases), or restore it with:
 
-If you do not have Archipelago installed, download from:
-  https://github.com/ArchipelagoMW/Archipelago/releases
-  (any release; the DLL is in data/lua/x64/ inside the install directory)
-
-## Why it is not committed
-
-Binary DLLs are excluded from the repository via .gitignore.
+    git checkout -- lua/x64/socket-windows-5-4.dll

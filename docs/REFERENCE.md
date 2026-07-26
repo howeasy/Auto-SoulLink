@@ -26,7 +26,7 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 | ROMs | **Gen 1:** Red/Blue/Yellow (US). **Gen 3:** Vanilla, randomized (UPR), Archipelago, or Radical Red 4.1. **Gen 4:** HeartGold/SoulSilver US |
 | Python 3.11+ | `pip install -r requirements.txt` (CI runs 3.12; `ruff.toml` targets py311) |
 | Scripts in `lua/` | `slink.lua` (universal entry point), `memory_gba.lua`, `connector.lua`, `socket.lua` |
-| LuaSocket DLL | Copy `socket-windows-5-4.dll` from an Archipelago install into `lua/x64/` (see `lua/x64/README.md`) |
+| LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
 | Network | Both BizHawk instances must reach the Python server (localhost or LAN) |
 
 ---

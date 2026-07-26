@@ -15,6 +15,28 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 
 > **Note:** Only Gen 3 has been extensively tested in live gameplay. Gens 1, 2, 4, and 5 have full feature parity with Gen 3 (moves/PP, stat stages, doubles, forms, egg detection, stream overlays) and pass their unit-test suites, but live-play coverage is limited — treat them as experimental. Gen 4 doubles + stat-stage battle-struct addresses are read-only-scannable via `lua/tests/test_gen4_battlers_count.lua` + `test_gen4_stat_stages.lua` and need a one-time live capture to populate the profile. Gen 5 has the same shape via `lua/tests/test_gen5_block_b.lua` and `lua/tests/test_gen5_doubles.lua`. Gen 1/2 runtime checks live in `docs/gen1_gen2_runtime_checks.md`.
 
+## Before you start
+
+| You need | Notes |
+|---|---|
+| **Python 3.11+** | `pip install -r requirements.txt` |
+| **BizHawk 2.9+** | Two instances, one per player. Savestates are version-locked — a state written by a different BizHawk stops the emulator on a modal dialog. |
+| **Two ROMs** | One per player. Both players must run the **same game**. |
+| **A full checkout, on both machines** | The launcher scripts are small stubs that `dofile` the real client out of this repo, so a remote friend needs the repo too — sending them just the `.lua` will not work. |
+
+The LuaSocket DLL is **already committed** at `lua/x64/socket-windows-5-4.dll`. There is nothing to download.
+
+## Which server am I running?
+
+There are two ways to run SLink, and they listen on different ports. Picking the wrong URL is the most common first-run confusion.
+
+| | Command | Dashboard | Use when |
+|---|---|---|---|
+| **Single server** | `python -m server.server` | `http://localhost:8080/` | One run, started by hand. Simplest. |
+| **Run Manager** | `python -m server.manager --host 0.0.0.0` | `http://localhost:8090/` | Several runs, start/stop from the browser. Each run it spawns gets **its own** dashboard starting at **8081** — the Manager links to it. |
+
+Both listen for the game clients on TCP **54321** (the Manager gives each spawned run its own TCP port). If a port is taken, the server now says so and suggests a free one instead of printing a traceback.
+
 ## Quick Start
 
 ```bash

@@ -8141,8 +8141,17 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
     # doesn't trip LimitOverrunError and force the connection closed each tick.
     # Gen 4 (18 boxes) and Gen 1-3 (smaller PCs) fit under the old limit but get
     # the bigger headroom for free.
-    tcp_server = await asyncio.start_server(srv.handle_client, host, port,
-                                            limit=4 * 1024 * 1024)
+    try:
+        tcp_server = await asyncio.start_server(srv.handle_client, host, port,
+                                                limit=4 * 1024 * 1024)
+    except OSError as e:
+        # A bare traceback here reads as "SLink is broken" when it almost always means the port
+        # is taken — usually a server the user forgot they left running.
+        raise SystemExit(
+            f"\nCannot listen on TCP {host}:{port} — {e}\n"
+            "  Another SLink server is probably already running.\n"
+            f"  Use a different port:  python -m server.server --port {port + 10}\n"
+        ) from None
     addrs = ", ".join(str(s.getsockname()) for s in tcp_server.sockets)
     run_label = f" [{run_id}]" if run_id else ""
     log.info(f"SLink{run_label} TCP server listening on {addrs}")
@@ -8158,7 +8167,17 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         runner = aiohttp_web.AppRunner(app)
         await runner.setup()
         http_site = aiohttp_web.TCPSite(runner, host, http_port)
-        await http_site.start()
+        try:
+            await http_site.start()
+        except OSError as e:
+            await runner.cleanup()
+            tcp_server.close()
+            raise SystemExit(
+                f"\nCannot listen on HTTP {host}:{http_port} — {e}\n"
+                "  The dashboard port is in use (the Run Manager uses 8090, and the runs\n"
+                "  it spawns start at 8081).\n"
+                f"  Use a different port:  python -m server.server --http-port {http_port + 10}\n"
+            ) from None
         # Start Twitch bot if configured
         await srv._restart_bot()
         log.info(f"SLink{run_label} status page at http://{host if host != '0.0.0.0' else 'localhost'}:{http_port}/")
