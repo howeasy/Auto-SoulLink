@@ -96,23 +96,29 @@ if (window._slinkDashInit) {
   }
   document.body.addEventListener('htmx:afterSettle', refreshClientUI);
 
-  // Mouse-interaction pause — preserve clicks even when an SSE ping arrives
-  // mid-mousedown. Cancel beforeSwap if the user is interacting and re-fire
-  // the morph after mouseup.
+  // Mouse-interaction pause — don't morph the DOM out from under a click or a drag.
+  //
+  // This used to be able to freeze the page permanently: the flag was set on any mousedown and
+  // only ever cleared by a mouseup ON THE DOCUMENT. Alt-Tab to the emulator mid-click, drag out
+  // of the window, or open devtools during a drag, and no mouseup ever arrives — every swap is
+  // vetoed from then on, silently, on the one page you watch during a live run. So clear it on
+  // anything that means the interaction is over, not just the happy path.
+  //
+  // The old recovery path re-fired an 'sse:ping' event, which nothing listens for (#content is
+  // hx-trigger="every 2s"); it is deleted rather than kept as decoration. The next poll is at
+  // most 2s away, so there is nothing to re-fire.
   var userInteracting = false;
-  var pendingSwap = null;
+  function endInteraction() { userInteracting = false; }
   document.addEventListener('mousedown', function() { userInteracting = true; });
-  document.addEventListener('mouseup', function() {
-    setTimeout(function() {
-      userInteracting = false;
-      if (pendingSwap && window.htmx) {
-        pendingSwap = null;
-        window.htmx.trigger(document.body, 'sse:ping');
-      }
-    }, 250);
+  document.addEventListener('mouseup', function() { setTimeout(endInteraction, 250); });
+  document.addEventListener('dragend', endInteraction);
+  document.addEventListener('mouseleave', endInteraction);   // pointer left the document
+  window.addEventListener('blur', endInteraction);           // Alt-Tab away mid-click
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) endInteraction();
   });
   document.body.addEventListener('htmx:beforeSwap', function(ev) {
-    if (userInteracting) { ev.preventDefault(); pendingSwap = true; return; }
+    if (userInteracting) { ev.preventDefault(); return; }
     // Pre-swap chroma-key: HTMX's polling refresh fetches a fresh HTML
     // response, and idiomorph syncs every <img>'s src back to the original
     // funnotbun URL (with green/blue background) — even on elements we've

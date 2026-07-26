@@ -122,6 +122,9 @@ class SoulLinkState:
         self._key_index: dict[str, LinkEntry] = {}
         # commands queued for delivery to each player on their next request
         self.queued_commands: dict[str, list[dict]] = {"a": [], "b": []}
+        # Last persistence error, or "" when the most recent save succeeded. Surfaced on the
+        # dashboard: a run that has silently stopped saving looks identical to one that is fine.
+        self.save_failed: str = ""
         # set of monKeys known to be in each player's party right now
         self.party_keys: dict[str, set[str]] = {"a": set(), "b": set()}
         # cached party stats per monKey (populated by party_to_box events, echoed in party_mon)
@@ -2978,5 +2981,12 @@ class SoulLinkState:
         }
         try:
             self._atomic_write_json(self._links_path, payload)
+            self.save_failed = ""
         except OSError as e:
+            # NOT fatal — losing the run in memory would be worse than losing the file. But it must
+            # not be silent either: this repo commonly lives in a synced folder (Google Drive),
+            # which is exactly the lock _atomic_write_json's retry loop exists for. If those
+            # retries are exhausted the run is no longer being persisted, and the player should
+            # find that out now rather than at the next restart.
+            self.save_failed = str(e)
             log.warning(f"[SAVE] links.json write failed (non-fatal): {e}")

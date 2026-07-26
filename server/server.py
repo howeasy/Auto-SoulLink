@@ -26,6 +26,7 @@ import html
 import shutil
 import mimetypes
 from collections import deque
+import time
 from datetime import datetime
 
 from server.overlay_catalog import build_index_context as _build_stream_index_context
@@ -1478,6 +1479,29 @@ def _bot_save_config(data_dir: str | None, cfg: dict):
 
 # ── per-connection handler ─────────────────────────────────────────────────────
 
+# A client is considered stale once it has said nothing for this long. The Gen 3 client ticks
+# about twice a second and the dashboard polls every 2s, so 10s is far outside normal jitter.
+STALE_AFTER_SECS = 10
+
+
+def _age_secs(ts):
+    """Whole seconds since `ts` (an epoch float), or None if there is no timestamp."""
+    if not ts:
+        return None
+    return max(0, int(time.time() - ts))
+
+
+def _age_label(age):
+    """Human 'how long ago' for the players panel. None -> em dash."""
+    if age is None:
+        return "—"
+    if age < 60:
+        return f"{age}s ago"
+    if age < 3600:
+        return f"{age // 60}m ago"
+    return f"{age // 3600}h ago"
+
+
 def _area_tag(name: str) -> str:
     """Abbreviate an area name for the info panel's 4-character label column.
 
@@ -2222,6 +2246,9 @@ class SLinkServer:
                     "connected":  True,
                     "last_event": msg.get("event", "?"),
                     "last_seen":  datetime.now().strftime("%H:%M:%S"),
+                    # `connected` only clears in the reader's finally block, so a crashed emulator
+                    # or a slept laptop leaves the badge green forever. An age does not lie.
+                    "last_seen_ts": time.time(),
                     "rom_type":   self.connected_players.get(player_id, {}).get("rom_type", "?"),
                 }
                 if msg.get("event") == "hello":
@@ -3123,12 +3150,16 @@ class SLinkServer:
             return bs
 
         return {
+            # "" when the last save succeeded; the error text when it did not.
+            "save_failed": getattr(s, "save_failed", ""),
             "players": {
                 pid: {
                     "connected":      self.connected_players.get(pid, {}).get("connected", False),
                     "rom_type":       self.connected_players.get(pid, {}).get("rom_type", "?"),
                     "last_event":     self.connected_players.get(pid, {}).get("last_event", "—"),
                     "last_seen":      self.connected_players.get(pid, {}).get("last_seen", "—"),
+                    # Seconds since this player last said anything, or None if never seen.
+                    "last_seen_age":  _age_secs(self.connected_players.get(pid, {}).get("last_seen_ts")),
                     "nuzlocke_active": s.pokeballs_obtained.get(pid, False),
                     "current_area":   self.player_area.get(pid, ""),
                     "current_area_id": self.player_area_id.get(pid, ""),
@@ -3288,6 +3319,17 @@ class SLinkServer:
                 f'{html.escape(na)}: {a_icon} {a_word}<br>'
                 f'{html.escape(nb)}: {b_icon} {b_word}'
                 f'</span>'
+            )
+
+        # ── Persistence failure banner ────────────────────────────────────────
+        # The run keeps working in memory, but it is no longer being written to disk. Silent data
+        # loss is the worst failure this server has, so it gets a banner at the very top.
+        if d.get("save_failed"):
+            parts.append(
+                '<div class="save-warn">&#9888; <b>Run progress is not being saved.</b> '
+                f'{html.escape(d["save_failed"])} '
+                '&mdash; check the data directory is writable (a syncing folder can hold the '
+                'lock). The run continues in memory; fix this before restarting the server.</div>'
             )
 
         # ── GAME OVER banner ──────────────────────────────────────────────────
@@ -3763,9 +3805,17 @@ class SLinkServer:
                 f'<div class="info-row">'
                 f'<span>&#128205; <b class="area">{area_disp}</b></span>'
                 f'<span>&#9702; Pokéballs: <b class="{balls_cls}">{balls}</b></span>'
-                f'<span>Last: <b>{p["last_event"]}</b> @ {p["last_seen"]}</span>'
+                f'<span>Last: <b>{p["last_event"]}</b> {_age_label(p.get("last_seen_age"))}</span>'
                 f'</div>'
             )
+            # Say so loudly when a client has gone quiet. Everything else on this card keeps
+            # rendering the last known values, which is exactly what makes silence dangerous.
+            _age = p.get("last_seen_age")
+            if _age is not None and _age >= STALE_AFTER_SECS:
+                parts.append(
+                    f'<div class="stale-warn">&#9888; No data for {_age_label(_age)}'
+                    f' &mdash; emulator closed, script stopped, or machine asleep?</div>'
+                )
             if enc_html:
                 parts.append(enc_html)
             if trn_html:

@@ -1780,3 +1780,25 @@ td .mon-sprite, td img.mon-sprite {
   text-align: center; padding: 0.8em 0; font-style: italic;
 }
 .lp-hdr-meta .area { color: var(--c-txt); }
+
+/* ── Truthfulness banners (Phase 1A) ──────────────────────────────────────────
+   Both say "what you are looking at may not be what is happening". They use the
+   token layer rather than hex literals so they follow the active theme. */
+.stale-warn {
+  margin: 0.35em 0 0;
+  padding: 0.3em 0.5em;
+  border-left: 3px solid var(--c-warn, #d08700);
+  background: color-mix(in srgb, var(--c-warn, #d08700) 12%, transparent);
+  color: var(--c-text);
+  font-size: 0.85em;
+  border-radius: 0 4px 4px 0;
+}
+.save-warn {
+  margin: 0 0 1em;
+  padding: 0.6em 0.8em;
+  border: 1px solid var(--c-bad, #b00);
+  border-left: 4px solid var(--c-bad, #b00);
+  background: color-mix(in srgb, var(--c-bad, #b00) 14%, transparent);
+  color: var(--c-text);
+  border-radius: 6px;
+}
