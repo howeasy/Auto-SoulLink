@@ -39,6 +39,11 @@
       hx-target="#root"
       hx-select="#root"
       hx-disinherit="*">
+  {# The SVG sprite. Overlay roots <use> #i-x (dead pair), #i-sparkle (shiny) and #i-cross
+     (memorial), and without this they resolved to nothing and rendered as empty space in OBS.
+     Paid once at initial paint: the polling fragments return only #root, so the morph never
+     replaces this. #}
+  {% include "_svg_icons.html" %}
   {% block root %}{% endblock %}
 </body>
 </html>

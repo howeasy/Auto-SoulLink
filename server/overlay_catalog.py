@@ -274,4 +274,9 @@ def build_index_context(request) -> dict[str, Any]:
         "overlays_json":           json.dumps(OVERLAYS),
         "layout_labels_json":      json.dumps(LAYOUT_LABELS),
         "default_filters_on_json": json.dumps(EVENT_FILTERS_DEFAULT_ON),
+        # The full pill roster, single-sourced. stream_index.html used to hardcode its own
+        # copy, which had drifted: it was missing force_explode, so with Explode Mode on
+        # there was no pill for it and the "all filters enabled" comparison — which counts
+        # against this list — could never be satisfied.
+        "all_filters_json":        json.dumps(EVENT_FILTERS_DEFAULT_ON + EVENT_FILTERS_DEFAULT_OFF),
     }

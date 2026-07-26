@@ -366,6 +366,7 @@
   window.SLINK_OVERLAY_CATALOG    = {{ overlays_json           | safe }};
   window.SLINK_LAYOUT_LABELS      = {{ layout_labels_json      | safe }};
   window.SLINK_DEFAULT_FILTERS_ON = {{ default_filters_on_json | safe }};
+  window.SLINK_ALL_FILTERS = {{ all_filters_json | safe }};
 </script>
 
 {{ sidebar_html | safe }}
@@ -556,12 +557,7 @@ function overlayLauncher() {
       { slug: 'funtastic-smoke',      label: 'Smoke',       swatch: '#333333' },
     ],
     layoutLabels: window.SLINK_LAYOUT_LABELS,
-    allFilters: [
-      'capture', 'shiny', 'faint', 'force_faint', 'whiteout',
-      'area_enter', 'no_catch', 'linked', 'dead_zone', 'violation',
-      'memorialize', 'key_change', 'hello', 'reroll',
-      'party_to_box', 'box_to_party',
-    ],
+    allFilters: window.SLINK_ALL_FILTERS,
     defaultFiltersOn: new Set(window.SLINK_DEFAULT_FILTERS_ON),
 
     // Reactive state
