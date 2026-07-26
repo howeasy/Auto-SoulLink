@@ -20,6 +20,7 @@ write race when gates run back to back.
 """
 import argparse
 import glob
+import re
 import os
 import shutil
 import subprocess
@@ -33,23 +34,34 @@ BUILD = os.path.join(REPO, "patch", "build")
 DEFAULT_ROM = "patch/build/slink_RR.gba"
 
 
-def _results_snapshot():
-    """mtimes of every *_result.txt so we can tell which one THIS run wrote."""
-    return {p: os.path.getmtime(p) for p in glob.glob(os.path.join(BUILD, "*_result.txt"))}
+# Every gate names its own result file: `local OUT = WT .. "/patch/build/<name>_result.txt"`.
+# Reading that out of the script means we watch exactly ONE file instead of "whichever file in
+# patch/build changed" — the earlier approach could attribute a stale neighbour's verdict to this
+# run, kill a still-running EmuHawk, and report a PASS that belonged to a different gate. That
+# never fired in practice (measured: one file touched per run) but it is a landmine under every
+# "N gates pass" claim, and there is no reason to leave it armed.
+_OUT_RE = re.compile(r"patch/build/([A-Za-z0-9_]+_result\.txt)")
 
 
-def _verdict_in(after, before):
-    """True once some *_result.txt this run touched ends in a RESULT: line."""
-    for p, m in after.items():
-        if before.get(p) == m:
-            continue
-        try:
-            with open(p, encoding="utf-8", errors="replace") as f:
-                if any(ln.strip().startswith("RESULT:") for ln in f):
-                    return True
-        except OSError:
-            pass
-    return False
+def _result_path_for(script):
+    """The result file THIS gate writes, read from its own source. None if it declares none."""
+    try:
+        with open(os.path.join(REPO, script), encoding="utf-8", errors="replace") as f:
+            m = _OUT_RE.search(f.read())
+    except OSError:
+        return None
+    return os.path.join(BUILD, m.group(1)) if m else None
+
+
+def _has_verdict(path):
+    """True once `path` exists and ends in a RESULT: line."""
+    if not path or not os.path.exists(path):
+        return False
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            return any(ln.strip().startswith("RESULT:") for ln in f)
+    except OSError:
+        return False
 
 
 def run_gate(script, rom=DEFAULT_ROM, timeout=240, quiet=False):
@@ -63,7 +75,12 @@ def run_gate(script, rom=DEFAULT_ROM, timeout=240, quiet=False):
     cfg_rel = f"patch/build/gate_cfg_{tag}.ini"
     shutil.copyfile(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel))
 
-    before = _results_snapshot()
+    # Delete this gate's own result file up front so a leftover from a previous run cannot be
+    # mistaken for this one's verdict — an mtime comparison would not catch a file the gate never
+    # rewrites because it crashed before writing.
+    out_path = _result_path_for(script)
+    if out_path and os.path.exists(out_path):
+        os.remove(out_path)
     env = dict(os.environ, SLINK_ROOT=REPO.replace("\\", "/"))
     cmd = [EMUHAWK, f"--config={cfg_rel}", f"--lua={script}", rom]
     if not quiet:
@@ -75,15 +92,12 @@ def run_gate(script, rom=DEFAULT_ROM, timeout=240, quiet=False):
         time.sleep(1.0)
         # Don't wait on the process once the gate has published its verdict: a script that
         # fails to exit cleanly would otherwise burn the entire timeout for a finished run.
-        if _verdict_in(_results_snapshot(), before):
+        if _has_verdict(out_path):
             break
-    hung = proc.poll() is None and not _verdict_in(_results_snapshot(), before)
+    hung = proc.poll() is None and not _has_verdict(out_path)
     if proc.poll() is None:
         subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)
-    # The gate names its own result file; find whichever one this run touched.
-    after = _results_snapshot()
-    fresh = [p for p, m in after.items() if before.get(p) != m]
-    path = max(fresh, key=os.path.getmtime) if fresh else None
+    path = out_path if _has_verdict(out_path) else None
     text = ""
     if path:
         with open(path, encoding="utf-8", errors="replace") as f:
