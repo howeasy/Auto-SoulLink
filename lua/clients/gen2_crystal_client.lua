@@ -34,7 +34,9 @@
   │  force_faint    — write HP = 0 to matching party slot (immediate)
   │  box_mon        — deposit partner's linked mon to PC (deferred: safe state)
   │  party_mon      — restore partner's linked mon to party (deferred: safe state)
-  │  memorialize    — move dead mon to PC box as graveyard (deferred: safe state)
+  │  memorialize    — move dead mon to PC box as graveyard (deferred: safe state).
+  │                   MUST reply memorialize_done (or _failed) on every path — the server
+  │                   holds the key in pending_memorials until it hears back.
   │  hud_show       — display text on the BizHawk HUD overlay
   │  noop           — no action
   └────────────────────────────────────────────────────────────────────────
@@ -1233,14 +1235,24 @@ local function on_frame()
                     local k = M.monKeyCached(i, base)
                     if k == cmd.key then found_slot = i; break end
                 end
+                -- EVERY path below must report back. This client used to do the deposit and
+                -- say nothing, and it was the only one of the five that didn't: the server keeps
+                -- the key in `pending_memorials` until a `memorialize_done` arrives, so the pair
+                -- never reached LinkStatus.MEMORIAL, `_write_memorial` never ran (the Memorial
+                -- page stayed empty for an entire Gen 2 run), and every reconnect re-queued the
+                -- same memorialize command forever. Mirrors gen1_rby_client.lua.
                 if found_slot then
                     local ok, err = M.depositMemorialMon(found_slot)
                     if ok then
                         console.log("[SLink-Crystal]   ↳ memorialize OK: deposited slot " .. found_slot)
                         hud_show("RIP " .. nick_label(cmd.key), 180, 180, 180, 300)
+                        send({event = "memorialize_done", key = cmd.key},
+                             "memorialize_done:" .. cmd.key:sub(1, 8), true)
                     else
                         console.log("[SLink-Crystal]   ↳ memorialize FAIL: " .. (err or "?"))
                         hud_show("! Mem fail: " .. (err or "?"), 255, 100, 100, 300)
+                        send({event = "memorialize_failed", key = cmd.key, reason = err or "unknown"},
+                             "memorialize_failed:" .. cmd.key:sub(1, 8), true)
                     end
                 else
                     -- Try box scan — might already be in box
@@ -1251,6 +1263,11 @@ local function on_frame()
                         console.log("[SLink-Crystal]   ↳ memorialize: key not found " .. cmd.key:sub(1,8))
                         hud_show("! " .. nick_label(cmd.key) .. " missing", 255, 200, 60, 240)
                     end
+                    -- Already boxed, or gone entirely: either way there is nothing left to do,
+                    -- so confirm it. Staying silent here is what made the command re-fire on
+                    -- every reconnect. (Same call Gen 1 makes for its "not in party" case.)
+                    send({event = "memorialize_done", key = cmd.key},
+                         "memorialize_done:" .. cmd.key:sub(1, 8), true)
                 end
                 sync_written_keys[cmd.key] = true
             end
