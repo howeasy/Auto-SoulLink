@@ -200,13 +200,20 @@ ghost/trade/msgbox traffic for no benefit.
       This is where the engine's start-menu fade-to-black had to be undone — see ADDRESSES.md.
       Pair grouping landed here too (mandatory, user's call): paired rows are tied by a drawn
       bracket, keyed off an empty first field.
-- [ ] **4. Real content + pagination.** Lua composes the page from live run state.
+- [x] **4. Real content + pagination.** LANDED. The server builds a `link_panel` command per
+      recipient (`_build_link_panel`), gated by the new `GameRulesAdapter.supports_info_panel()`
+      and re-sent only when its content changes; the client stages it into EWRAM so opening the
+      row needs no round-trip, and pages 6 rows at a time on A.
+      **Rows are flat `field|field|...` strings, not nested JSON** — the client has no JSON
+      decoder (`parse_command_list` is a pattern scraper), so a nested payload never reached it.
+      That also puts the formatting in Python where it is unit-tested (`tests/unit/test_link_panel.py`).
+      A boxed mon carries its own state so it is not coloured like a dead one.
+      **END-TO-END:** `tools/e2e_duo.py --scenario infopanel` — two real emulators, a real server,
+      three injected pairs: payload crosses the wire, renders AS PAIRS, the START-menu row opens
+      it, A pages, B closes and releases the field.
 
-**Known gap for step 4:** the client is *not* currently sent the link table. It does receive
-`resolved_areas` / `unresolve_area` and a good deal of partner data (the whole partner party via
-`replace_rival_team`, a full mon via `apply_trade`, live position/avatar via `ghost_pos`), but
-pair-by-pair link state has no command. Step 4 needs a new server→client payload; design it then,
-not now.
+**That known gap is closed:** pair-by-pair link state previously had no server→client command at
+all. `link_panel` is that command.
 
 The invariants below apply in full — in particular each step needs its own headless
 `lua/tests/test_live_*.lua` gate before any client wiring, and the boot-zero EWRAM default must

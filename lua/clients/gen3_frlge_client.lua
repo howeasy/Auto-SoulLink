@@ -168,6 +168,32 @@ local mem_u16  = memory.read_u16_le
 local mem_u32  = memory.read_u32_le
 
 -- ── Utility helpers ───────────────────────────────────────────────────────────
+-- ONE local: this file is at Lua's 200-locals-per-function ceiling.
+-- Native SOULLINK panel (§6). `panel` is the server's last link_panel payload; the rest is the
+-- little state machine that pages through it. `rows` is the server's last link_panel payload:
+-- flat, pre-formatted row strings.
+local INFO = { rows = nil, page = 0, pages = 1, enabled = false, drawn = nil, showing = false }
+
+-- Stage INFO.page into the patch's EWRAM panel. The server sends rows pre-formatted and flat
+-- (`field|field|...`), because this client has no JSON decoder — parse_command_list is a pattern
+-- scraper, so a nested payload would never reach here. All this does is chunk them into pages and
+-- turn the separator back into the newline the encoder maps to the FR field separator.
+-- 6 rows per page, and a pair is always 2 rows starting at an even index, so a pair can never
+-- straddle a page boundary.
+function info_stage()
+    if not (MB and INFO.rows) then return 0 end
+    local n = #INFO.rows
+    INFO.pages = math.max(1, math.ceil(n / 6))
+    if INFO.page >= INFO.pages then INFO.page = 0 end
+    local rows = {}
+    for i = INFO.page * 6 + 1, math.min(n, (INFO.page + 1) * 6) do
+        rows[#rows + 1] = (INFO.rows[i]:gsub("|", "\n"))
+    end
+    if #rows == 0 then rows[1] = "No run data yet" end
+    MB.write_info(rows, INFO.page, INFO.pages)
+    return INFO.pages
+end
+
 local function area_display(id)
     return id:gsub("_", " "):gsub("(%a)([%w]*)", function(a, b) return a:upper()..b end)
 end
@@ -226,6 +252,14 @@ local function parse_command_list(raw)
         local cmd = obj:match('"cmd"%s*:%s*"([^"]+)"')
         local key = obj:match('"key"%s*:%s*"([^"]+)"')
         local msg = obj:match('"message"%s*:%s*"([^"]*)"')
+        -- link_panel rows: a flat JSON array of strings. Safe to scrape with a naive quoted-string
+        -- pattern because the server emits only names, digits and '|' -- never a quote or backslash.
+        local rows = nil
+        local rowsj = obj:match('"rows"%s*:%s*(%b[])')
+        if rowsj then
+            rows = {}
+            for r in rowsj:gmatch('"([^"]*)"') do rows[#rows + 1] = r end
+        end
         local stats = nil
         local sj = obj:match('"stats"%s*:%s*(%b{})')
         if sj then
@@ -303,7 +337,7 @@ local function parse_command_list(raw)
         local pc_trade_npc       = jbool(obj, "pc_trade_npc")
         if cmd then
             cmds[#cmds+1] = {
-                cmd=cmd, key=key, message=msg, stats=stats,
+                cmd=cmd, key=key, message=msg, stats=stats, rows=rows,
                 text=text, fb=fb, r=r, g=g, b=b, frames=frames,
                 gmg=gmg, gmn=gmn, ggx=ggx, ggy=ggy, ggf=ggf, ggfx=ggfx, gmv=gmv, grun=grun, gan=gan,
                 gimgs=gimgs, ganim=ganim, gpcol=gpcol,
@@ -358,6 +392,7 @@ local nick_cache        = {}  -- key → display label (updated from party snaps
 local resolved_areas        = {}
 local resolved_areas_seeded = false
 local pending_hud_area      = nil
+
 
 -- Pokémon-Center trade NPC (presence-OFF trade entry point). The companion patch spawns/arms/despawns
 -- the NPC; the client only (a) tells the patch when to do so via MB.set_pc_npc (presence OFF) and
@@ -937,6 +972,15 @@ local function dispatch_commands(cmds)
             -- so the native box is the right in-game presentation; unpatched / in-battle / mid-dialogue
             -- falls back to the center prompt — never dropped.
             try_native_box(c.text, "prompt", "gui_prompt", c.r, c.g, c.b, c.frames)
+        elseif c.cmd == "link_panel" and c.rows then
+            -- The server sends this only when its content changed. Keep it and re-stage page 0, so
+            -- the panel is always ready in EWRAM and opening the START-menu row needs no round-trip
+            -- (that is the whole reason the patch opens it from the frame hook).
+            INFO.rows = c.rows
+            INFO.page = 0
+            info_stage()
+            console.log(string.format("[SLink-FRLGE]   link_panel: %d rows, %d page(s)",
+                                      #c.rows, INFO.pages))
         elseif c.cmd == "resolved_areas" and c.areas then
             for _, a in ipairs(c.areas) do resolved_areas[a] = true end
             resolved_areas_seeded = true
@@ -1932,6 +1976,34 @@ local function on_frame()
     -- One-shot companion-patch detection log (RR only — the patch is RR-specific). The
     -- native beacon at 0x0203F800 appears a few frames after boot, so latch on the first
     -- positive detection; if still absent after a grace window, announce fallback once.
+    -- Native SOULLINK panel. The row is turned on only once the patch is actually present (an
+    -- unpatched ROM has no menu to splice into), and only once there is something to show — a row
+    -- that opens an empty box is worse than no row.
+    if IS_RR and MB and patch_present() then
+        if not INFO.enabled and INFO.rows then
+            MB.set_info_enable(true); INFO.enabled = true
+            console.log("[SLink-FRLGE] SOULLINK menu row enabled")
+        end
+        -- Pagination. The patch publishes A (0) / B (0x7F) into gSpecialVar_Result when the panel
+        -- closes, and drive_info re-opens on an `opened` bump — so paging is: notice the panel
+        -- closed, and if it closed with A and there is another page, stage it and bump `opened`.
+        local drawn = memory.read_u8(MB.INFO_DRAWN)
+        if INFO.drawn == nil then INFO.drawn = drawn end
+        if drawn ~= INFO.drawn then INFO.drawn = drawn; INFO.showing = true end
+        if INFO.showing and memory.read_u8(0x03000F9C) == 0 then
+            INFO.showing = false
+            if memory.read_u16_le(0x020370D0) == 0 and INFO.pages > 1 then   -- A = next page
+                INFO.page = (INFO.page + 1) % INFO.pages
+                info_stage()
+                -- Re-arm the patch's frame-hook open by bumping the counter it watches.
+                memory.write_u8(MB.INFO_OPENED, (memory.read_u8(MB.INFO_OPENED) + 1) % 256)
+            else
+                INFO.page = 0
+                info_stage()      -- closed with B: next open starts at page 1 again
+            end
+        end
+    end
+
     if IS_RR and not patch_logged then
         if patch_present() then
             console.log("[SLink-FRLGE] companion patch: PRESENT — native features enabled")

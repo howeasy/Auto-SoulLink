@@ -226,6 +226,27 @@ reasoning about. It holds `0x80` for the whole fade (~20 frames) and clears on t
 > of which passed while the screen was solid black**. It now also asserts BG palette 0 is not
 > faded out.
 
+### Where the content comes from
+
+`link_panel` (server → client), built per recipient by `SLinkServer._build_link_panel` and gated by
+`GameRulesAdapter.supports_info_panel()` (default False; Gen 3 opts in for Radical Red only, exactly
+like `supports_explode_mode`). Re-sent only when its content changes.
+
+Rows are **flat `field|field|...` strings, not nested JSON**: the Lua client has no JSON decoder —
+`parse_command_list` is a pattern scraper — so a nested payload silently never arrives. Field order
+matches `MB.info_mon`: `label|name|level|hp|barpx|state`. The bar is scaled to pixels *server-side*
+because the ROM blob cannot divide (no libgcc), so `SLinkServer.INFO_BAR_W` mirrors `BAR_W` in
+handlers.c. `state` = `B` marks a boxed mon: alive but out of the party, so it has no live HP and
+must not be coloured like a dead one.
+
+The client stages the payload into EWRAM as soon as it arrives, so opening the menu row needs no
+round-trip, and pages 6 rows at a time (a pair is 2 rows at an even index, so it can never straddle
+a page boundary).
+
+**END-TO-END:** `tools/e2e_duo.py --scenario infopanel` — two emulators, a real server, three
+injected pairs; asserts the payload crosses, renders as pairs, opens from the START-menu row over a
+non-black screen, pages on A, and closes on B releasing the field.
+
 ### Pair grouping
 
 A Soul Link pair is two mons, and two adjacent rows sharing an area tag conveyed that only by

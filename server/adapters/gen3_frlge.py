@@ -322,6 +322,10 @@ class Gen3Adapter(GameAdapter):
             return set(_RR_RIVAL_TRAINER_IDS)
         return set()
 
+    def supports_info_panel(self) -> bool:
+        """The native SOULLINK info screen ships in the Radical Red companion patch only."""
+        return self._is_rr
+
     def supports_explode_mode(self) -> bool:
         """Explode Mode is Radical Red only — only its client handles `force_explode`
         (the Variant-3 menu-skip path in gen3_frlge_client.lua)."""

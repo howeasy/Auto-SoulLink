@@ -1478,6 +1478,19 @@ def _bot_save_config(data_dir: str | None, cfg: dict):
 
 # ── per-connection handler ─────────────────────────────────────────────────────
 
+def _area_tag(name: str) -> str:
+    """Abbreviate an area name for the info panel's 4-character label column.
+
+    "Route 3" -> "RT03" reads better than a blind truncation to "Rout", which is why this is not
+    just a slice. Purely string handling — no game data — so it is not adapter territory; the name
+    itself comes from the adapter.
+    """
+    m = re.match(r"\s*route\s*(\d+)", name or "", re.I)
+    if m:
+        return f"RT{int(m.group(1)):02d}"
+    return re.sub(r"[^0-9A-Za-z]", "", name or "").upper()[:4]
+
+
 class SLinkServer:
     def __init__(self, data_dir: str = None, run_id: str = None,
                  run_name: str = "", tcp_port: int = 0,
@@ -1527,6 +1540,8 @@ class SLinkServer:
         self._mon_cache: dict[str, dict] = {}
         # Orphan keys already warned about — suppress repeat warnings on every tick.
         self._warned_orphan_keys: set[str] = set()
+        # Last `link_panel` payload sent to each player, so it is re-sent only on change.
+        self._last_panel_sig: dict[str, str] = {"a": None, "b": None}
         # Battle state: in_battle flag + enemy team snapshot
         self.battle_state: dict[str, dict] = {
             "a": {"in_battle": False, "is_trainer_battle": False, "enemy_party": [],
@@ -2286,6 +2301,69 @@ class SLinkServer:
         writer.write(data.encode("utf-8"))
         await writer.drain()
 
+    # Mirrors BAR_W in patch/src/handlers.c: the info panel's HP bar is 38 px of track. The scaling
+    # is done here because the ROM blob has no libgcc and therefore cannot divide at runtime.
+    INFO_BAR_W = 38
+
+    def _build_link_panel(self, player_id: str) -> dict:
+        """Rows for the native in-game SOULLINK panel, for ONE player.
+
+        Built per recipient because the panel is framed as "yours" and "your partner's" — the same
+        run reads differently from each side, and telling the halves of a pair apart is the entire
+        point of the screen.
+
+        Rows are emitted PRE-FORMATTED and flat, `field|field|...`, because the Lua client has no
+        JSON decoder — `parse_command_list` is a pattern scraper, so a nested payload simply never
+        reaches it. Flat strings of a shape it can scrape keep the formatting here, in Python, where
+        it is unit-testable.
+
+        Field order matches MB.info_mon: label|name|level|hp|barpx|state. A row with an EMPTY label
+        continues the pair above it (that is what draws the tie bracket). Two fields = label/value,
+        one = full-width text. Pairs occupy 2 rows each and the client pages 6 rows at a time, so a
+        pair can never straddle a page boundary.
+        """
+        from server.state import AreaStatus, LinkStatus
+        partner = "b" if player_id == "a" else "a"
+        s = self.state
+
+        def half(mon, owner, label):
+            det = self.party_details.get(owner, {}).get(mon.key) or {}
+            cached = self._mon_cache.get(mon.key, {})
+            species = det.get("species_id") or cached.get("species_id") or mon.species
+            name = (det.get("nickname") or cached.get("nickname")
+                    or (self.adapter.species_name(species) if species else "")
+                    or mon.nickname or "?")
+            level = int(det.get("level") or cached.get("level") or mon.level or 0)
+            if not det:
+                # Boxed: alive but out of the party, so there is no live HP. It gets its own state
+                # rather than an empty bar, which the panel would colour like a dead mon.
+                return f"{label}|{name[:10]}|{level}|BOX|0|B"
+            hp, mx = int(det.get("hp", 0) or 0), int(det.get("maxHP", 0) or 0)
+            if hp <= 0:
+                return f"{label}|{name[:10]}|{level}|FNT|0|"
+            px = max(1, min(self.INFO_BAR_W, round(hp * self.INFO_BAR_W / mx))) if mx > 0 else 0
+            return f"{label}|{name[:10]}|{level}|{hp}/{mx}|{px}|"
+
+        rows = []
+        npairs = 0
+        for e in s.links:
+            if not (e.a and e.a.key and e.b and e.b.key):
+                continue                      # half-formed: one side hasn't caught yet
+            mine_mon   = e.a if player_id == "a" else e.b
+            theirs_mon = e.b if player_id == "a" else e.a
+            rows.append(half(mine_mon, player_id, _area_tag(self.adapter.area_display_name(e.area_id))))
+            rows.append(half(theirs_mon, partner, ""))   # empty label = continues the pair above
+            npairs += 1
+
+        if not rows:
+            rows.append("No linked pairs yet")
+        dead_zones = sum(1 for st in s.area_states.values() if st == AreaStatus.DEAD_ZONE)
+        alive = sum(1 for e in s.links if e.status == LinkStatus.ALIVE)
+        rows.append(f"Pairs alive|{alive}/{npairs}")
+        rows.append(f"Dead zones|{dead_zones}")
+        rows.append(f"Badges|{s.player_badges.get(player_id, 0)}/8")
+        return {"cmd": "link_panel", "rows": rows}
+
     def _cache_mon_info(self, key: str, detail: dict):
         """Update the persistent per-monKey display cache from a detail dict.
 
@@ -2708,6 +2786,16 @@ class SLinkServer:
                 self._cache_mon_info(k, det)
 
         cmds = self.state.handle_event(player_id, msg)
+
+        # Refresh the native in-game panel, but only when its content actually changed — this runs
+        # on every tick, and the panel is a few hundred bytes. The client keeps the last one staged
+        # in EWRAM so opening the menu needs no round-trip at all.
+        if self.adapter.supports_info_panel():
+            _panel = self._build_link_panel(player_id)
+            _sig = json.dumps(_panel, sort_keys=True)
+            if _sig != self._last_panel_sig.get(player_id):
+                self._last_panel_sig[player_id] = _sig
+                cmds = list(cmds) + [_panel]
 
         # Post-dispatch: log outcome events that require state-machine results.
         _partner = "b" if player_id == "a" else "a"

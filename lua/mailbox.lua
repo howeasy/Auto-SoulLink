@@ -326,10 +326,15 @@ function MB.info_bar(cur, max)
     return math.min(MB.INFO_BAR_W, px)
 end
 -- label <=4 chars (an area tag), name <=10 (the engine's own gSpeciesNames stride-11 limit).
-function MB.info_mon(label, name, level, hptext, barpx)
+-- `state` is optional: "B" = boxed (alive, but out of the party so it has no live HP — drawn in
+-- normal colours with an empty bar). Anything else keeps the default rule, where an empty bar means
+-- dead and the row goes red. Boxed must NOT read as dead: telling a player their mon died when it
+-- is sitting in a box is the one mistake this screen cannot make.
+function MB.info_mon(label, name, level, hptext, barpx, state)
     return table.concat({ tostring(label):sub(1, 4), tostring(name):sub(1, 10),
                           tostring(level), tostring(hptext),
-                          tostring(math.max(0, math.min(MB.INFO_BAR_W, math.floor(barpx or 0)))) }, "\n")
+                          tostring(math.max(0, math.min(MB.INFO_BAR_W, math.floor(barpx or 0)))),
+                          state or "" }, "\n")
 end
 function MB.info_stat(label, value) return tostring(label) .. "\n" .. tostring(value) end
 
@@ -339,8 +344,8 @@ function MB.info_stat(label, value) return tostring(label) .. "\n" .. tostring(v
 -- rows together; a lone continuation row would draw an orphan with no bracket and no area.
 -- `mine`/`theirs` are { name=, level=, hp=, bar= } (bar via MB.info_bar, or 0 for fainted).
 function MB.info_pair(rows, label, mine, theirs)
-    rows[#rows + 1] = MB.info_mon(label, mine.name, mine.level, mine.hp, mine.bar)
-    rows[#rows + 1] = MB.info_mon("", theirs.name, theirs.level, theirs.hp, theirs.bar)
+    rows[#rows + 1] = MB.info_mon(label, mine.name, mine.level, mine.hp, mine.bar, mine.state)
+    rows[#rows + 1] = MB.info_mon("", theirs.name, theirs.level, theirs.hp, theirs.bar, theirs.state)
     return rows
 end
 

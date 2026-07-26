@@ -47,6 +47,8 @@ SCENARIOS = {
     "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "ghost":   {"flags": ["--overworld-presence"], "savestate": "slink_overworld.State",
                 "timeout": 420},
+    # The native panel needs the RR patch present and a formed pair; no extra server flags.
+    "infopanel": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "explode": {"flags": ["--explode-mode"],
                 "savestate": {"a": "slink_overworld.State", "b": "slink_prebattle.State"},
                 "fillers": {"a": True, "b": False}, "timeout": 600},
@@ -203,11 +205,11 @@ class DuoRun:
         wait_for("both players hello'd", both, 120)
         print("[duo] both players connected")
 
-    def inject_link(self, a_key, b_key):
+    def inject_link(self, a_key, b_key, area_id="duo"):
         def linked():
             try:
                 r = api(self.http_port, "POST", "/api/inject_link",
-                        {"a_key": a_key, "b_key": b_key, "area_id": "duo", "force": True})
+                        {"a_key": a_key, "b_key": b_key, "area_id": area_id, "force": True})
                 return r if r.get("ok") else None
             except Exception:
                 return None
@@ -276,7 +278,14 @@ class DuoRun:
         ka, kb = self.wait_keys()
         self.wait_connected()
         self.set_pokeballs()
-        if self.scenario == "faint":
+        if self.scenario == "infopanel":
+            # THREE pairs, not one: 3 pairs (6 rows) + 3 summary rows = 9 rows = 2 pages, which is
+            # what makes the pagination half of the scenario meaningful. One pair fits on a single
+            # page and would never exercise it.
+            for i in range(min(3, len(ka), len(kb))):
+                self.inject_link(ka[i], kb[i], area_id=f"duo{i}")
+            self.go()
+        elif self.scenario == "faint":
             self.inject_link(ka[0], kb[0])
             self.go()
         elif self.scenario == "explode":

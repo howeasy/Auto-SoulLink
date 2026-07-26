@@ -201,6 +201,22 @@ class GameRulesAdapter(ABC):
         """
         return set()
 
+    def supports_info_panel(self) -> bool:
+        """Whether this game's Lua client can render the native in-game info panel.
+
+        The panel is drawn by the companion ROM patch's SOULLINK start-menu screen,
+        which exists only for Radical Red.  Other clients would fall into their
+        unknown-command branch and log a warning every time the panel changed, so
+        the server simply doesn't send `link_panel` to them.
+
+        Default False for the same reason as `supports_explode_mode`: the
+        game-specific adapter opts in and no `game_id` branch appears in shared
+        code.  A client that supports it still decides for itself whether to turn
+        the menu row on, since only the client can see whether the patch is
+        actually present in the ROM it is attached to.
+        """
+        return False
+
     def supports_explode_mode(self) -> bool:
         """Whether this game's Lua client understands the `force_explode` command.
 
