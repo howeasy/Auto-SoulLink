@@ -58,15 +58,15 @@ def test_second_row_of_a_pair_has_an_empty_label(srv):
 
 def test_live_hp_and_bar_come_from_the_party_snapshot(srv):
     """LinkEntry stores identity; current HP only exists in party_details."""
-    label, name, level, hp, bar, state = rows(srv, "a")[0].split("|")
-    assert (level, hp, state) == ("12", "19/23", "")
+    label, name, level, hp, bar, state, status = rows(srv, "a")[0].split("|")
+    assert (level, hp, state, status) == ("12", "19/23", "", "")
     # 19/23 of a 38px track ~= 31px, and it must never round to 0 for a living mon.
     assert 1 <= int(bar) <= 38
 
 
 def test_a_fainted_mon_reports_no_bar_so_the_row_goes_red(srv):
     srv.party_details["b"]["bbb"]["hp"] = 0
-    _, _, _, hp, bar, state = rows(srv, "a")[1].split("|")
+    _, _, _, hp, bar, state, _ = rows(srv, "a")[1].split("|")
     assert (hp, bar, state) == ("FNT", "0", "")
 
 
@@ -75,7 +75,7 @@ def test_a_boxed_mon_is_not_reported_as_dead(srv):
     styling — telling a player their mon died when it is sitting in a box is the one mistake
     this screen must never make."""
     srv.party_details["b"] = {}
-    _, _, _, hp, bar, state = rows(srv, "a")[1].split("|")
+    _, _, _, hp, bar, state, _ = rows(srv, "a")[1].split("|")
     assert (hp, state) == ("BOX", "B")
 
 
@@ -89,7 +89,7 @@ def test_half_formed_pairs_are_omitted(srv):
     """One side having caught is not a pair yet."""
     srv.state.links.append(
         LinkEntry(area_id="route_4", a=_mon("ccc"), b=None, status=LinkStatus.ALIVE))
-    assert len([r for r in rows(srv, "a") if r.count("|") == 5]) == 2   # still just the one pair
+    assert len([r for r in rows(srv, "a") if r.count("|") == 6]) == 2   # still just the one pair
 
 
 def test_summary_rows_report_the_run(srv):
@@ -97,6 +97,39 @@ def test_summary_rows_report_the_run(srv):
     srv.state.player_badges["a"] = 5
     stats = dict(r.split("|") for r in rows(srv, "a") if r.count("|") == 1)
     assert stats == {"Pairs alive": "1/1", "Dead zones": "1", "Badges": "5/8"}
+
+
+def test_dead_zones_are_named_not_just_counted(srv):
+    """A count tells the player a number; the names tell them where they can no longer catch,
+    which is the part they can act on."""
+    srv.state.area_states["route_9"] = AreaStatus.DEAD_ZONE
+    srv.state.area_states["mt_moon"] = AreaStatus.DEAD_ZONE
+    named = [r for r in rows(srv, "a") if r.startswith("- ")]
+    assert len(named) == 2
+    assert any("Moon" in r for r in named)
+
+
+def test_status_condition_is_reported(srv):
+    """A poisoned linked mon is exactly what a player opens this screen to find out, and it is
+    invisible from the HP bar alone."""
+    srv.party_details["a"]["aaa"]["status_cond"] = 0x08          # poisoned
+    assert rows(srv, "a")[0].split("|")[6] == "PSN"
+    srv.party_details["a"]["aaa"]["status_cond"] = 0x40          # paralysed
+    assert rows(srv, "a")[0].split("|")[6] == "PAR"
+
+
+def test_toxic_is_reported_as_tox_not_psn(srv):
+    """Toxic sets the poison bit too, so order matters."""
+    srv.party_details["a"]["aaa"]["status_cond"] = 0x88
+    assert rows(srv, "a")[0].split("|")[6] == "TOX"
+
+
+def test_status_decoding_is_adapter_owned(srv):
+    """The bitfield is per-generation, so shared code must not decode it. A game that has not
+    implemented it shows no status rather than a wrong one."""
+    from server.adapters.base import GameRulesAdapter
+    assert GameRulesAdapter.status_token(object(), 0x40) == ""
+    assert Gen3Adapter(is_rr=True).status_token(0x40) == "PAR"
 
 
 def test_dead_pair_is_not_counted_alive(srv):

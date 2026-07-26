@@ -748,15 +748,15 @@ static u8 rx(const u8 *s)
  * the second time the panel opened. Returns the field count, which is how the row KIND is decided:
  * 1 = plain text, 2 = label/value, 5 = mon row. Self-describing, so no metadata byte is stored and
  * Lua can mix row kinds on one page without the patch knowing anything about the content. */
-static u8 split_slot(volatile u8 *src, u8 *buf, const u8 *f[6])
+static u8 split_slot(volatile u8 *src, u8 *buf, const u8 *f[7])
 {
     u8 i, k = 1;
     for (i = 0; i < 32; i++) buf[i] = src[i];
     buf[31] = 0xFF;
-    for (i = 0; i < 6; i++) f[i] = sFrEmpty;
+    for (i = 0; i < 7; i++) f[i] = sFrEmpty;
     f[0] = buf;
     for (i = 0; i < 32 && buf[i] != 0xFF; i++)
-        if (buf[i] == 0xFE) { buf[i] = 0xFF; if (k < 6) f[k++] = &buf[i + 1]; }
+        if (buf[i] == 0xFE) { buf[i] = 0xFF; if (k < 7) f[k++] = &buf[i + 1]; }
     return k;
 }
 
@@ -792,7 +792,7 @@ static void info_pair_bracket(u8 win, u8 y)
 
 /* One party-menu-style row: LABEL  Name  Lv## [====----]      cur/max
  * Modelled on the party menu because that is the screen every player already reads HP from. */
-static void info_mon_row(u8 win, u8 y, const u8 *f[6])
+static void info_mon_row(u8 win, u8 y, const u8 *f[7])
 {
     u8 bp = parse_u8(f[4]);
     if (bp > BAR_W) bp = BAR_W;
@@ -812,6 +812,10 @@ static void info_mon_row(u8 win, u8 y, const u8 *f[6])
     AddTextPrinterParameterized4(win, FONT_SMALL, rx(f[3]), y, 0, 0, col,  0xFF, f[3]);  /* cur/max */
     /* Bar: outline, then track, then fill. FillWindowPixelRect clips internally, but bp is clamped
      * above anyway so a bad stage can't push the fill into the HP-text column. */
+    /* 7th field: a status token (PSN/PAR/SLP/BRN/FRZ/TOX), drawn in the gap between the bar and
+     * the right-aligned HP text. Status is invisible from an HP bar, and a poisoned linked mon is
+     * exactly what a player opens this screen to check. Alert-coloured because it is a warning. */
+    AddTextPrinterParameterized4(win, FONT_SMALL, 152, y, 0, 0, sColAlert, 0xFF, f[6]);
     FillWindowPixelRect(win, 0x22, 108, (u16)(y + 3), 40, 7);
     FillWindowPixelRect(win, 0x11, 109, (u16)(y + 4), BAR_W, 5);
     if (bp && !boxed) {
@@ -849,7 +853,7 @@ static void show_info_entry(void)
 
     for (u8 i = 0; i < n; i++) {
         u8 buf[32];
-        const u8 *f[6];
+        const u8 *f[7];
         u8 y  = (u8)(18 + INFO_PITCH * i);
         u8 nf = split_slot(&SI->line[i][0], buf, f);
         if (nf >= 5) {

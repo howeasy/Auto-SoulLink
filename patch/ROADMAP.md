@@ -211,6 +211,10 @@ ghost/trade/msgbox traffic for no benefit.
       **END-TO-END:** `tools/e2e_duo.py --scenario infopanel` — two real emulators, a real server,
       three injected pairs: payload crosses the wire, renders AS PAIRS, the START-menu row opens
       it, A pages, B closes and releases the field.
+- [x] **5. Polish.** Status conditions (PSN/PAR/SLP/BRN/FRZ/TOX) in their own column between the bar
+      and the HP text, decoded by a new adapter method (`status_token`, inert default) since the
+      bitfield is per-generation; dead zones NAMED rather than only counted; boxed mons visually
+      distinct from dead ones. Mon icons remain deliberately out — see below.
 
 **That known gap is closed:** pair-by-pair link state previously had no server→client command at
 all. `link_panel` is that command.

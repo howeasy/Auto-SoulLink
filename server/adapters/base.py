@@ -201,6 +201,14 @@ class GameRulesAdapter(ABC):
         """
         return set()
 
+    def status_token(self, status_cond: int) -> str:
+        """A 3-letter status token (SLP/PSN/BRN/FRZ/PAR/TOX) for a raw status value, or "".
+
+        The encoding is per-generation, so shared code must not decode it. Default "" means a game
+        that has not implemented this simply shows no status rather than a wrong one.
+        """
+        return ""
+
     def supports_info_panel(self) -> bool:
         """Whether this game's Lua client can render the native in-game info panel.
 

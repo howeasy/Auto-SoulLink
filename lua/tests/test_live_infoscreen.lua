@@ -41,8 +41,11 @@ pcall(function() client.speedmode(400) end)
 local PANEL = {}
 MB.info_pair(PANEL, "RT03", { name = "Bulbasaur",  level = 12, hp = "19/23", bar = MB.info_bar(19, 23) },
                             { name = "Squirtle",   level = 11, hp = "FNT",   bar = 0 })
-MB.info_pair(PANEL, "VIRI", { name = "Butterfree", level = 14, hp = " 4/38", bar = MB.info_bar(4, 38) },
-                            { name = "Nidoran",    level = 13, hp = "22/28", bar = MB.info_bar(22, 28) })
+-- One statused and one boxed mon, so the 7th (status) and 6th (state) fields are both exercised.
+-- A boxed mon must NOT render like a dead one: red means dead on this screen.
+MB.info_pair(PANEL, "VIRI", { name = "Butterfree", level = 14, hp = " 4/38", bar = MB.info_bar(4, 38),
+                              status = "PSN" },
+                            { name = "Nidoran",    level = 13, hp = "BOX", bar = 0, state = "B" })
 PANEL[#PANEL + 1] = MB.info_stat("Dead zones", "2")
 PANEL[#PANEL + 1] = "Waiting on partner..."
 
@@ -191,6 +194,16 @@ if solo[8] then
     finish(false); return
 end
 log("pair bracket present between paired rows, absent beside unpaired ones")
+
+-- 3d. STATUS COLUMN. A poisoned linked mon is invisible from the HP bar alone, so the token is
+-- drawn in the gap between the bar and the right-aligned HP text (content px 152+, tile cols 19-20).
+-- Restricted to that band so the FAINTED row's red name/HP text cannot satisfy it by accident.
+local band = panel_palette_tiles(19, 20, 6, 7)
+if not (band[4] or band[5]) then
+    log("FAIL: no status token drawn in the status column")
+    finish(false); return
+end
+log("status token present in its own column")
 
 -- 4. A closes it, and reports 0.
 press("A", 60)

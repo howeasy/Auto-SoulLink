@@ -330,11 +330,11 @@ end
 -- normal colours with an empty bar). Anything else keeps the default rule, where an empty bar means
 -- dead and the row goes red. Boxed must NOT read as dead: telling a player their mon died when it
 -- is sitting in a box is the one mistake this screen cannot make.
-function MB.info_mon(label, name, level, hptext, barpx, state)
+function MB.info_mon(label, name, level, hptext, barpx, state, status)
     return table.concat({ tostring(label):sub(1, 4), tostring(name):sub(1, 10),
                           tostring(level), tostring(hptext),
                           tostring(math.max(0, math.min(MB.INFO_BAR_W, math.floor(barpx or 0)))),
-                          state or "" }, "\n")
+                          state or "", (status or ""):sub(1, 3) }, "\n")
 end
 function MB.info_stat(label, value) return tostring(label) .. "\n" .. tostring(value) end
 
@@ -344,8 +344,10 @@ function MB.info_stat(label, value) return tostring(label) .. "\n" .. tostring(v
 -- rows together; a lone continuation row would draw an orphan with no bracket and no area.
 -- `mine`/`theirs` are { name=, level=, hp=, bar= } (bar via MB.info_bar, or 0 for fainted).
 function MB.info_pair(rows, label, mine, theirs)
-    rows[#rows + 1] = MB.info_mon(label, mine.name, mine.level, mine.hp, mine.bar, mine.state)
-    rows[#rows + 1] = MB.info_mon("", theirs.name, theirs.level, theirs.hp, theirs.bar, theirs.state)
+    rows[#rows + 1] = MB.info_mon(label, mine.name, mine.level, mine.hp, mine.bar,
+                                  mine.state, mine.status)
+    rows[#rows + 1] = MB.info_mon("", theirs.name, theirs.level, theirs.hp, theirs.bar,
+                                  theirs.state, theirs.status)
     return rows
 end
 

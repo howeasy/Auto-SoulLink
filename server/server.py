@@ -2337,12 +2337,15 @@ class SLinkServer:
             if not det:
                 # Boxed: alive but out of the party, so there is no live HP. It gets its own state
                 # rather than an empty bar, which the panel would colour like a dead mon.
-                return f"{label}|{name[:10]}|{level}|BOX|0|B"
+                return f"{label}|{name[:10]}|{level}|BOX|0|B|"
             hp, mx = int(det.get("hp", 0) or 0), int(det.get("maxHP", 0) or 0)
             if hp <= 0:
-                return f"{label}|{name[:10]}|{level}|FNT|0|"
+                return f"{label}|{name[:10]}|{level}|FNT|0||"
             px = max(1, min(self.INFO_BAR_W, round(hp * self.INFO_BAR_W / mx))) if mx > 0 else 0
-            return f"{label}|{name[:10]}|{level}|{hp}/{mx}|{px}|"
+            # 7th field: status. A poisoned or paralysed linked mon is exactly the kind of thing a
+            # player opens this screen to find out, and it is invisible from the HP bar alone.
+            tok = self.adapter.status_token(int(det.get("status_cond", 0) or 0))
+            return f"{label}|{name[:10]}|{level}|{hp}/{mx}|{px}||{tok}"
 
         rows = []
         npairs = 0
@@ -2357,11 +2360,15 @@ class SLinkServer:
 
         if not rows:
             rows.append("No linked pairs yet")
-        dead_zones = sum(1 for st in s.area_states.values() if st == AreaStatus.DEAD_ZONE)
+        dead_zones = sorted(a for a, st in s.area_states.items() if st == AreaStatus.DEAD_ZONE)
         alive = sum(1 for e in s.links if e.status == LinkStatus.ALIVE)
         rows.append(f"Pairs alive|{alive}/{npairs}")
-        rows.append(f"Dead zones|{dead_zones}")
+        rows.append(f"Dead zones|{len(dead_zones)}")
         rows.append(f"Badges|{s.player_badges.get(player_id, 0)}/8")
+        # NAME the dead zones. A count tells a player a number; the names tell them where they can
+        # no longer catch, which is the part they can act on. Pagination carries the overflow.
+        for area_id in dead_zones:
+            rows.append("- " + self.adapter.area_display_name(area_id)[:28])
         return {"cmd": "link_panel", "rows": rows}
 
     def _cache_mon_info(self, key: str, detail: dict):

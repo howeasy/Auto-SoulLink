@@ -322,6 +322,17 @@ class Gen3Adapter(GameAdapter):
             return set(_RR_RIVAL_TRAINER_IDS)
         return set()
 
+    def status_token(self, status_cond: int) -> str:
+        """Gen 3 `status1` bitfield. Same ordering as html_render.status_icon_html — TOX is checked
+        before PSN because Toxic sets both bits."""
+        if not status_cond:
+            return ""
+        for mask, tok in ((0x07, "SLP"), (0x80, "TOX"), (0x08, "PSN"),
+                          (0x10, "BRN"), (0x20, "FRZ"), (0x40, "PAR")):
+            if status_cond & mask:
+                return tok
+        return ""
+
     def supports_info_panel(self) -> bool:
         """The native SOULLINK info screen ships in the Radical Red companion patch only."""
         return self._is_rr
