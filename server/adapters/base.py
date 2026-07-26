@@ -201,6 +201,18 @@ class GameRulesAdapter(ABC):
         """
         return set()
 
+    def supports_abilities(self) -> bool:
+        """Whether this game has Pokémon abilities at all.
+
+        Gen 1 and Gen 2 do not, so their party tables must not render an Ability column. This
+        used to be a `game_id in ("gen1_rby", "gen2_crystal")` test inside server.py — the last
+        game_id branch in shared code, and exactly what the isolation contract forbids.
+
+        Default True because abilities exist from Gen 3 onward; the two adapters that predate
+        them override it.
+        """
+        return True
+
     def status_token(self, status_cond: int) -> str:
         """A 3-letter status token (SLP/PSN/BRN/FRZ/PAR/TOX) for a raw status value, or "".
 

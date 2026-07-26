@@ -52,7 +52,16 @@
 
 {% block content %}
   {{ sidebar_html | safe }}
-  <main class="dash-main">
+  {# The only page in the app that never refreshed: a pair dying mid-run left the wall stale
+     until someone reloaded. Same 2s idiomorph poll the dashboard uses, scoped to this main so
+     the sidebar and its <details> state are untouched. #}
+  <main class="dash-main" id="memorial-main"
+        hx-ext="morph"
+        hx-get="/memorial"
+        hx-trigger="every 2s"
+        hx-swap="morph:outerHTML"
+        hx-target="this"
+        hx-select="#memorial-main">
     <h1>&#x1FAA6; <span>Memorial Wall</span></h1>
     <p class="subtitle">{{ page_title }}</p>
 

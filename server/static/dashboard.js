@@ -288,10 +288,12 @@ if (window._slinkDashInit) {
 (function() {
   var query = '';
   function applySearch() {
-    var rows = document.querySelectorAll('table tr');
-    // Pass 1: each row hides/shows based on its own text content.
+    // Scoped to tables that list POKEMON. It used to run over `table tr`, which swept the
+    // Recent Events log too — searching "pikachu" left the event feed showing 1 of 53 rows with
+    // no indication why, and the heading still claimed the full count.
+    var rows = document.querySelectorAll('table:not([data-no-search]) tr');
     rows.forEach(function(tr) {
-      // Skip header rows — they should never disappear.
+      // Header rows must never disappear.
       if (tr.parentElement && tr.parentElement.tagName === 'THEAD') {
         tr.classList.remove('dash-search-hide');
         return;
@@ -300,20 +302,9 @@ if (window._slinkDashInit) {
       var text = (tr.textContent || '').toLowerCase();
       tr.classList.toggle('dash-search-hide', text.indexOf(query) === -1);
     });
-    // Pass 2: a `move-row` follows its parent mon row. Match its visibility
-    // to the row directly above so the moves table doesn't orphan-show under
-    // a filtered-out mon.
-    if (query) {
-      document.querySelectorAll('tr.move-row').forEach(function(mr) {
-        var prev = mr.previousElementSibling;
-        if (prev && !prev.classList.contains('dash-search-hide')) {
-          mr.classList.remove('dash-search-hide');
-        } else {
-          mr.classList.add('dash-search-hide');
-        }
-      });
-    }
+    // (The old `tr.move-row` follow-the-parent pass is gone — nothing emits that class.)
   }
+
   function bindSearch() {
     var input = document.getElementById('dash-search-input');
     if (!input) return;

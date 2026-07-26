@@ -606,7 +606,8 @@ body.dash-collapsed .font-switcher--in-sidebar .font-pills {
   min-width: 0;
   background: transparent;
   border: 0;
-  outline: 0;
+  /* No `outline: 0` — this is a real text input and removing its focus ring made it
+     keyboard-invisible. It is the only such suppression the dashboard had. */
   color: var(--c-txt);
   font-family: var(--font-heading);
   font-size: 0.95em;
@@ -1786,3 +1787,10 @@ td .mon-sprite, td img.mon-sprite {
   color: var(--c-text);
   border-radius: 6px;
 }
+
+/* Partner HP in the Split view's pair column (Phase 1E). Colour-coded on the same
+   >50% / >20% thresholds the party HP bars use, so the two read consistently. */
+.partner-hp { font-variant-numeric: tabular-nums; font-size: .9em; opacity: .95; }
+.partner-hp.hp-high { color: var(--c-alive); }
+.partner-hp.hp-mid  { color: var(--c-pend); }
+.partner-hp.hp-low  { color: var(--c-dead); }

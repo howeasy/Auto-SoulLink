@@ -73,3 +73,22 @@ def test_no_bare_hex_text_colours_left_in_the_dashboard_builder():
     # #fff over an explicitly token-coloured banner background is deliberate.
     leftovers = [x for x in leftovers if x.lower() not in ("color:#fff", "color:#ffffff")]
     assert leftovers == [], f"hardcoded text colours remain: {sorted(set(leftovers))}"
+
+
+def test_no_stylesheet_suppresses_focus_rings():
+    """Exactly two rules removed keyboard focus indicators. The audit's "72 elements" figure was
+    a probe artifact — programmatic .focus() does not set keyboard modality, so Chrome's UA ring
+    is suppressed by the measurement itself. The static proof is that there should be no
+    `outline: 0` / `outline: none` declarations at all."""
+    import glob
+    import os
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    offenders = []
+    for path in glob.glob(os.path.join(root, "server", "static", "**", "*.css"), recursive=True):
+        with open(path, encoding="utf-8") as f:
+            for n, line in enumerate(f, 1):
+                if line.strip().startswith(("/*", "*")):
+                    continue
+                if re.search(r"outline:\s*(0|none)\b", line):
+                    offenders.append(f"{os.path.basename(path)}:{n}")
+    assert not offenders, f"focus rings suppressed at: {offenders}"

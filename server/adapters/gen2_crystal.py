@@ -147,6 +147,10 @@ class Gen2CrystalAdapter(GameAdapter):
 
     # ── GameRulesAdapter ─────────────────────────────────────────────────
 
+    def supports_abilities(self) -> bool:
+        """This generation predates abilities — the party table must not render the column."""
+        return False
+
     def is_gift_area(self, area_id: str) -> bool:
         return area_id in _GIFT_AREAS or area_id.startswith("gift_")
 

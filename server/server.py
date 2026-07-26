@@ -3405,7 +3405,7 @@ class SLinkServer:
             "Red": "Red", "Blue": "Blue", "Yellow": "Yellow",
         }
         # Gen 1 has no abilities — hide that column
-        has_abilities = not (self.adapter and self.adapter.game_id in ("gen1_rby", "gen2_crystal"))
+        has_abilities = bool(self.adapter and self.adapter.supports_abilities())
 
         # ── Shared mon-cell helpers ────────────────────────────────────────
         # _lp_mon_cell renders the stacked "sprite + nickname / Lv · types /
@@ -3890,6 +3890,23 @@ class SLinkServer:
                                         break
                             partner_str = mon_label(p_mon.key, p_nick, p_mon.species, p_gender,
                                                     shiny=p_mon.is_shiny)
+                            # "Is my partner's linked mon about to die?" is the question this
+                            # column exists to answer, and the name alone could not. p_det is
+                            # already fetched above for the nickname, so this is free.
+                            if p_det:
+                                p_hp = int(p_det.get("hp", 0) or 0)
+                                p_mx = int(p_det.get("maxHP", 0) or 0)
+                                if p_mx:
+                                    p_pct = max(0, min(100, int(p_hp / p_mx * 100)))
+                                    p_cls = ("hp-high" if p_pct > 50
+                                             else "hp-mid" if p_pct > 20 else "hp-low")
+                                    p_tok = self.adapter.status_token(
+                                        int(p_det.get("status_cond", 0) or 0))
+                                    partner_str += (
+                                        f' <span class="partner-hp {p_cls}">{p_hp}/{p_mx}</span>'
+                                        + (f' <span class="status-icon s-{p_tok.lower()}">{p_tok}</span>'
+                                           if p_tok else "")
+                                    )
                         else:
                             partner_str = '<span class="dim">—</span>'
                         link_cls = entry.status.value
@@ -4690,7 +4707,7 @@ class SLinkServer:
         if events:
             parts.append('<div style="max-height:300px;overflow-y:auto;border:1px solid var(--c-edge);border-radius:3px;">')
             parts.append(
-                '<table style="margin-bottom:0"><thead><tr>'
+                '<table class="events-table" data-no-search style="margin-bottom:0"><thead><tr>'
                 '<th style="position:sticky;top:0;background:var(--c-sticky)">Time</th>'
                 '<th style="position:sticky;top:0;background:var(--c-sticky);text-align:left">Player</th>'
                 '<th style="position:sticky;top:0;background:var(--c-sticky)">Details</th>'
