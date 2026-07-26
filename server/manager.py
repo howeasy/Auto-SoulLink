@@ -427,110 +427,6 @@ _STATUS_BADGE = {
     "archived": '<span class="badge archived"><span class="badge-dot"></span> archived</span>',
 }
 
-def _render_cards(runs: list[dict], host: str) -> str:
-    cards = ""
-    for run in sorted(runs, key=lambda r: r["created_at"], reverse=True):
-        rid    = run["run_id"]
-        name   = run.get("name") or rid
-        status = run.get("status", "stopped")
-        badge  = _STATUS_BADGE.get(status, status)
-        created = run.get("created_at", "")[:16].replace("T", " ")
-        tcp    = run.get("tcp_port", "?")
-        http   = run.get("http_port", "?")
-        status_url_js = f"'//' + window.location.hostname + ':{http}'"
-        lock_badges = ""
-        if run.get("species_lock"):
-            lock_badges += '<span class="lock-badge">Species</span>'
-        if run.get("gender_lock"):
-            lock_badges += '<span class="lock-badge">Gender</span>'
-        if run.get("type_lock"):
-            lock_badges += '<span class="lock-badge">Type</span>'
-        if run.get("explode_mode"):
-            lock_badges += '<span class="lock-badge">Explode</span>'
-        if run.get("rival_team_swap"):
-            lock_badges += '<span class="lock-badge">Rival Swap</span>'
-        if run.get("overworld_presence"):
-            lock_badges += '<span class="lock-badge">Overworld</span>'
-        if run.get("native_messages"):
-            lock_badges += '<span class="lock-badge">Native Msgs</span>'
-        if run.get("native_sounds"):
-            lock_badges += '<span class="lock-badge">Native SFX</span>'
-        if not run.get("battle_calc", True):
-            lock_badges += '<span class="lock-badge">Calc Off</span>'
-        if not run.get("pc_trade_npc", True):
-            lock_badges += '<span class="lock-badge">PC NPC Off</span>'
-
-        # Read game/rom_type from the run's links.json
-        game_badge = ""
-        links_path = os.path.join(MANAGER_DIR, rid, "links.json")
-        try:
-            with open(links_path) as f:
-                rom_type = json.load(f).get("rom_type", "")
-            if rom_type:
-                display_game = rom_type.replace("_", " ").title()
-                game_badge = f'<span class="game-badge">{display_game}</span>'
-        except (json.JSONDecodeError, OSError, FileNotFoundError):
-            pass
-
-        # Read last event from the run's events.json
-        last_event_html = ""
-        events_path = os.path.join(MANAGER_DIR, rid, "events.json")
-        try:
-            with open(events_path) as f:
-                evts = json.load(f)
-            if evts:
-                ev = evts[0]  # most recent (saved newest-first)
-                ev_ts   = ev.get("ts", "")[-8:]
-                ev_p    = ev.get("player", "").upper()
-                ev_text = ev.get("text", "")
-                last_event_html = (
-                    f'<div class="last-event">'
-                    f'<span class="ev-ts">{ev_ts}</span> '
-                    f'<b>{ev_p}</b> {ev_text}'
-                    f'</div>'
-                )
-        except (json.JSONDecodeError, OSError, FileNotFoundError):
-            pass
-
-        btn_start   = f'<button class="btn start"   onclick="act(\'{rid}\',\'start\')">Start</button>'   if status == "stopped"  else ""
-        btn_stop    = f'<button class="btn stop"    onclick="act(\'{rid}\',\'stop\')">Stop</button>'     if status == "running"  else ""
-        btn_archive = f'<button class="btn archive" onclick="archive_run(\'{rid}\',\'{name.replace(chr(39), chr(92)+chr(39))}\')">Archive</button>' if status != "archived" else ""
-        btn_delete  = f'<button class="btn delete"  onclick="del_run(\'{rid}\',\'{name.replace(chr(39), chr(92)+chr(39))}\')">Delete</button>'
-        btn_view    = f'<a class="btn view" href="#" onclick="window.open({status_url_js});return false" target="_blank">Open Status</a>'
-        btn_pin     = (f'<button class="btn pin" title="Pin as stream overlay source" '
-                       f'onclick="pinRun(\'{rid}\')">Pin Stream</button>') if status == "running" else ""
-
-        launcher_html = ""
-        if status != "archived":
-            safe_name = re.sub(r'[^\w-]', '_', name).strip('_') or rid
-            launcher_html = f'''<div class="launcher-info"><span class="launcher-label">BizHawk scripts</span>
-              <a class="btn launcher" href="/api/runs/{rid}/launcher/a" download="slink_{safe_name}_a.lua">Player A</a>
-              <a class="btn launcher" href="/api/runs/{rid}/launcher/b" download="slink_{safe_name}_b.lua">Player B</a>
-            </div>'''
-
-        cards += f"""
-        <div class="card {status}">
-          <div class="card-header">
-            <span class="run-name">{name}</span>
-            {badge}
-          </div>
-          <div class="card-meta">
-            <span>Created: {created}</span>
-            <span>TCP: {tcp}</span>
-            <span>HTTP: {http}</span>
-            {game_badge}
-            {lock_badges}
-          </div>
-          {launcher_html}
-          {last_event_html}
-          <div class="card-actions">
-            {btn_start}{btn_stop}{btn_archive}{btn_delete}{btn_view}{btn_pin}
-          </div>
-        </div>"""
-    return cards or '<p style="color:var(--muted)">No runs yet. Create one above.</p>'
-
-
-# ── Request handlers ────────────────────────────────────────────────────────
 
 class RunManager:
     def __init__(self, bind_host: str, manager_port: int = MANAGER_HTTP_PORT):
@@ -618,10 +514,6 @@ class RunManager:
         except (json.JSONDecodeError, OSError, FileNotFoundError):
             pass
         return r
-
-    async def handle_cards(self, request: web.Request) -> web.Response:
-        runs = self._get()
-        return web.Response(text=_render_cards(runs, self.bind_host), content_type="text/html")
 
     async def handle_list(self, request: web.Request) -> web.Response:
         return web.json_response({"runs": self._get()})
@@ -950,7 +842,6 @@ async def main(host: str, port: int):
     # Run-management routes
     app.router.add_get("/",                           manager.handle_index)
     app.router.add_get("/api/runs",                   manager.handle_list)
-    app.router.add_get("/api/runs/cards",             manager.handle_cards)
     app.router.add_post("/api/runs/new",              manager.handle_new)
     app.router.add_post("/api/runs/{run_id}/start",   manager.handle_start)
     app.router.add_post("/api/runs/{run_id}/stop",    manager.handle_stop)

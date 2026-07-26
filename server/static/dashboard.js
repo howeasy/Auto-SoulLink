@@ -2,7 +2,7 @@
  *
  * Loaded by server.py:_STATUS_HTML with `defer` so it runs after the body
  * markup parses. Refresh is owned by HTMX — the #content div declares
- *   hx-ext="morph,sse" sse-connect="/api/events"
+ *   hx-ext="morph" (2s poll; the SSE path was retired)
  *   hx-trigger="sse:ping" hx-swap="morph:outerHTML"
  * — idiomorph preserves <img> identity (data-species) and <details open>
  * state across swaps. This file just handles:
@@ -156,22 +156,6 @@ if (window._slinkDashInit) {
   processAllSprites();
 
   // Attempts +/- adjustor; posts the new count then asks HTMX to refresh.
-  window.adjAttempts = function(delta) {
-    var bar = document.getElementById('attempts-bar');
-    var cur = bar ? parseInt(bar.dataset.count, 10) : 0;
-    var next = Math.max(0, cur + delta);
-    fetch('/api/attempts', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ count: next })
-    })
-      .then(function(r) { return r.json(); })
-      .then(function(j) {
-        if (j.ok && window.htmx) {
-          window.htmx.trigger(document.body, 'sse:ping');
-        }
-      });
-  };
 })();
 
 

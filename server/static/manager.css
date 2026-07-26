@@ -764,7 +764,7 @@ body {
 .mgr-preview-empty .mgr-section-label { display: block; margin-bottom: 8px; }
 .mgr-preview-empty p { margin: 0; font-size: 0.95em; }
 
-/* Theme switcher slot — manager.js relocates the floating switcher here,
+/* Theme switcher slot — dashboard.js relocates the floating switcher here,
  * styled to fill the rail width with its dropdown opening upward to avoid
  * colliding with the runs list above. */
 .mgr-rail-theme {
