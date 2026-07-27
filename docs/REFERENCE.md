@@ -19,6 +19,9 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
     cartridges; memorialize into Box 12; Explode Mode arming Explosion; the enemy-party
     write; `force_faint`; box level at `box+0x03`; Yellow's −1 WRAM shift (reads); the
     companion patch's VBlank hook and SFX.
+    All six scenarios run on **two pairings** — Red/Blue and **Yellow/Red** — so Yellow's −1
+    WRAM shift is exercised through the server and against a partner, not just by
+    single-instance gates.
   - **NOT proven live** — the dead zone, whiteout and the species/gender/type clauses; any
     map *transition* (the playthrough stays on Route 1, so 1 of 39 encounter areas is
     exercised, not 0 but not many); `party_mon`/`retrieveBoxMon`, which has still never

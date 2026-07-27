@@ -151,6 +151,18 @@ GAMES = {
         "fixture": {"a": "red", "b": "blue"},
         "scenario_prefix": "gen1_",
     },
+    # Yellow paired against Red. Yellow shifts nearly every WRAM address by -1, and until now
+    # it only ever ran SINGLE-instance gates — no duo, so no Yellow address had ever been
+    # exercised through the server, and none of its WRITE paths had run alongside a partner.
+    # Pairing it with Red rather than another Yellow means a shift bug shows up as an
+    # asymmetry between the two halves instead of cancelling out.
+    "gen1_yellow": {
+        "main": "lua/tests/duo/duo_gen1_main.lua",
+        "rom": {"a": "patch/build/gen1_yellow.gbc", "b": "patch/build/gen1_red.gb"},
+        "uses_savestate": False,
+        "fixture": {"a": "yellow", "b": "red"},
+        "scenario_prefix": "gen1_",
+    },
 }
 
 
@@ -160,6 +172,9 @@ class DuoRun:
         self.cfg = SCENARIOS[scenario]
         self.args = args
         self.game = getattr(args, "game", "gen3_rr")
+        # Family, not id. Gen 1 has more than one duo configuration (red/blue, yellow/red)
+        # and every `== "gen1"` check silently sent the others down the Gen 3 path.
+        self.is_gen1 = self.game.startswith("gen1")
         self.gcfg = GAMES[self.game]
         self.tcp_port = free_port()
         self.http_port = free_port()
@@ -190,7 +205,7 @@ class DuoRun:
             return None
 
     def start_instances(self):
-        if self.game == "gen1":
+        if self.is_gen1:
             from gen1_playthrough import staged_rom
             for key in self.gcfg["fixture"].values():
                 staged_rom(key)     # space-free copy; BizHawk's CLI splits on spaces
@@ -200,7 +215,7 @@ class DuoRun:
                     os.remove(f)
         for inst in ("a", "b"):
             cfg_ini = os.path.join(BUILD, f"duo_cfg_{inst}.ini")
-            if self.game == "gen1":
+            if self.is_gen1:
                 # Muted, on the second monitor: two emulators for several minutes each.
                 from gen1_playthrough import write_run_config
                 write_run_config(BIZHAWK_CONFIG, cfg_ini)
@@ -415,7 +430,7 @@ class DuoRun:
             wait_for("B inside a live battle",
                      lambda: "IN_BATTLE" in (read_result(self.scenario, "b") or ""), 240)
             self.go()
-        elif self.scenario == "boxsync" and self.game == "gen1":
+        elif self.scenario == "boxsync" and self.is_gen1:
             # Gen 1 exercises the RULE, not the storage opcodes: link the pair, then let A
             # deposit its own half. The server's _handle_party_to_box is what must send
             # box_mon to B — nothing is injected here, so a broken rule cannot be masked by

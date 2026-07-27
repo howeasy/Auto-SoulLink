@@ -37,8 +37,22 @@ pytestmark = [
                        reason="two-instance E2E only runs with SLINK_E2E=1 (spawns EmuHawk twice)"),
 ]
 
-# A is Red, B is Blue — see GAMES["gen1"] in tools/e2e_duo.py.
-DUO_ROMS = ("red", "blue")
+# Two duo configurations, see GAMES in tools/e2e_duo.py:
+#   gen1         A=Red,    B=Blue
+#   gen1_yellow  A=Yellow, B=Red
+#
+# Yellow is not a formality. It shifts nearly every WRAM address by -1, and until this
+# parametrisation existed it only ever ran SINGLE-instance gates — so no Yellow address had
+# been exercised through the server and none of its write paths had run against a partner.
+# Pairing it with Red rather than a second Yellow means a shift bug shows up as an asymmetry
+# between the two halves instead of cancelling out. Adding it immediately found a harness bug:
+# the orchestrator branched on `self.game == "gen1"`, so every non-default Gen 1 configuration
+# silently took the Gen 3 path.
+DUO_GAMES = {
+    "gen1": ("red", "blue"),
+    "gen1_yellow": ("yellow", "red"),
+}
+DUO_ROMS = DUO_GAMES["gen1"]
 
 # Every Soul Link rule Gen 1 supports, end to end through the real server:
 #   faint        one player's death kills the partner's linked mon on the other machine
@@ -54,11 +68,12 @@ DUO_ROMS = ("red", "blue")
 SCENARIOS = ("faint", "boxsync", "memorialize", "rivalswap", "explode_g1", "playthrough")
 
 
+@pytest.mark.parametrize("game", sorted(DUO_GAMES))
 @pytest.mark.parametrize("scenario", SCENARIOS)
-def test_gen1_duo(scenario):
+def test_gen1_duo(scenario, game):
     if not os.path.exists(play.EMUHAWK):
         pytest.skip(f"EmuHawk not found at {play.EMUHAWK}")
-    for rom in DUO_ROMS:
+    for rom in DUO_GAMES[game]:
         if not os.path.exists(os.path.join(REPO, play.ROMS[rom])):
             pytest.skip(f"{play.ROMS[rom]} not present (ROMs are gitignored)")
         fixture = os.path.join(play.FIXTURES, f"{rom}_town.SaveRAM")
@@ -68,8 +83,8 @@ def test_gen1_duo(scenario):
 
     proc = subprocess.run(
         [sys.executable, os.path.join(REPO, "tools", "e2e_duo.py"),
-         "--game", "gen1", "--scenario", scenario],
+         "--game", game, "--scenario", scenario],
         cwd=REPO, capture_output=True, text=True, encoding="utf-8",
         errors="replace", timeout=1200)
     assert proc.returncode == 0, (
-        f"gen1 duo {scenario} failed:\n{proc.stdout[-4000:]}\n{proc.stderr[-1000:]}")
+        f"{game} duo {scenario} failed:\n{proc.stdout[-4000:]}\n{proc.stderr[-1000:]}")

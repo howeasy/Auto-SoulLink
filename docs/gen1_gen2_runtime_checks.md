@@ -12,7 +12,7 @@ received. Everything it asked a human to click through is now a test.
 pytest tests/unit/ -q                                    # 1528, no emulator needed
 python tools/verify_profile_addresses.py                 # every address vs pret decomps
 SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q     # 8 gates on real cartridges
-SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py -q         # 5 two-instance Soul Link rules
+SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py -q         # 12: 6 rules x Red/Blue and Yellow/Red
 ```
 
 | Old manual step | Now |

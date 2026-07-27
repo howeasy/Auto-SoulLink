@@ -11,7 +11,7 @@ that:
 
 ```bash
 SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 8 gates: memory + writes x RBY, patch x 2
-SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py -q       # 5 scenarios, two emulators, real server
+SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py -q       # 12: 6 scenarios x 2 ROM pairings
 ```
 
 The duo E2E runs **Red as player A and Blue as player B** and proves faint propagation,

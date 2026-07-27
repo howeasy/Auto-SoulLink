@@ -23,16 +23,49 @@ return function(ctx)
     local fmt = string.format
     if not ctx.wait_go() then return false, "no go-file" end
 
-    local IN_BATTLE = 0xD057
-    local CUR_MAP   = 0xD35E
+    -- EVERY address comes from the loaded profile, never a literal. Yellow shifts nearly all
+    -- of WRAM by -1, and the first version of this file hardcoded Red's addresses: on Yellow
+    -- it read the ball count as 255 and the map as the wrong byte. That is precisely the bug
+    -- class the Yellow pairing exists to catch, and it caught it here first.
+    -- The two menu addresses are the exception and are genuinely NOT shifted (pret: both
+    -- games put wCurrentMenuItem at 0xCC26 and wMaxMenuItem at 0xCC28).
+    local IN_BATTLE = M.BATTLE_FLAG_ADDR
+    local CUR_MAP   = M.MAP_ID_ADDR
+    local ENEMY_SP  = M.ENEMY_MON_SPECIES_ADDR
+    local ENEMY_LV  = M.ENEMY_MON_LEVEL_ADDR
+    local BAG_QTY0  = M.BAG_ITEMS_ADDR + 1      -- wBagItems[0].quantity
     local MAX_MENU  = 0xCC28
     local CUR_MENU  = 0xCC26
-    local BAG_QTY0  = 0xD31F      -- wBagItems[0].quantity
     local function u8(a) return M.read_u8(a) end
 
-    log(fmt("start: map=0x%02X party=%d balls=%d", u8(CUR_MAP), ctx.party_count(), u8(BAG_QTY0)))
-    if u8(CUR_MAP) ~= 0x0C then
-        return false, fmt("expected to start on Route 1 (0x0C), got 0x%02X", u8(CUR_MAP))
+    -- Report the map; do NOT require a specific one. The three battery fixtures were built
+    -- independently and do not all sit on the same route (Red/Blue are on Route 1 = 0x0C,
+    -- Yellow came out on Route 3 = 0x0E). Which route does not matter to this scenario —
+    -- what matters is that it has wild encounters and that BOTH instances are in the same
+    -- area, since Soul Link pairs the first catch per area. The runner checks the pairing.
+    local start_map = u8(CUR_MAP)
+    -- wYCoord / wXCoord sit immediately after wCurMap in both profiles (pret: wCurMap,
+    -- wYCoord, wXCoord), so they ride the same -1 Yellow shift as MAP_ID_ADDR.
+    local Y_COORD, X_COORD = CUR_MAP + 3, CUR_MAP + 4
+    local home_x, home_y = u8(X_COORD), u8(Y_COORD)
+    log(fmt("MAP 0x%02X pos=(%d,%d) party=%d balls=%d",
+            start_map, home_x, home_y, ctx.party_count(), u8(BAG_QTY0)))
+
+    -- Walk back to the tile we started on. Pacing up and down does NOT net to zero: a wild
+    -- battle interrupts mid-step, so the position drifts a little every hunt and after ~20
+    -- hunts the player has wandered clean out of the grass ("no wild encounter after 600
+    -- held steps"). Re-centring between hunts keeps the search where the encounters are.
+    local function go_home()
+        for _ = 1, 40 do
+            local dx, dy = u8(X_COORD) - home_x, u8(Y_COORD) - home_y
+            if dx == 0 and dy == 0 then return true end
+            local dir
+            if dy ~= 0 then dir = (dy > 0) and "Up" or "Down"
+            else dir = (dx > 0) and "Left" or "Right" end
+            ctx.hold(dir, 12, function() return u8(IN_BATTLE) ~= 0 end)
+            if u8(IN_BATTLE) ~= 0 then return false end   -- an encounter on the way is fine
+        end
+        return true
     end
     -- The Nuzlocke gate must come from the REAL bag, not a debug POST. If this is false the
     -- server will (correctly) ignore our capture, so assert it before spending frames.
@@ -66,10 +99,22 @@ return function(ctx)
     local function wait_for_menu()
         -- Each column is its own 2-item menu, so wMaxMenuItem==1 means the battle menu is up.
         -- (It reads 3 earlier, left over from a previous menu — that misled the first probe.)
+        --
+        -- Advance with B, NOT A. B clears text without confirming a selection; A confirms
+        -- whatever the cursor sits on, which at a fresh battle menu is FIGHT. That made the
+        -- scenario attack the wild mon between throws — a level-5 Squirtle one-shots a
+        -- level-3 Rattata, so the battle ended with "it got away" and the run burned 18 balls
+        -- over 20 hunts without a single catch. A Nuzlocke player throwing balls never
+        -- presses FIGHT.
+        -- CHECK BEFORE PRESSING. The press has to advance text, but the moment the menu is
+        -- up an A confirms whatever the cursor sits on — FIGHT — and a level-5 starter
+        -- one-shots a level-3 wild mon, ending the battle with "it got away". Testing first
+        -- means we never press at a live menu. (Using B instead does not work: B does not
+        -- advance this text reliably, and the run then never reaches the menu at all.)
         for _ = 1, 80 do
-            press("A", 4, 12)
             if u8(MAX_MENU) == 1 then return true end
             if u8(IN_BATTLE) == 0 then return false end
+            press("A", 4, 12)
         end
         return false
     end
@@ -104,9 +149,9 @@ return function(ctx)
             if u8(IN_BATTLE) ~= 0 then entered = true break end
         end
         if not entered then return false, "no wild encounter after 600 held steps in the grass" end
-        met_species = u8(0xCFE5)
+        met_species = u8(ENEMY_SP)
         log(fmt("hunt %d: wild species=0x%02X level=%d (balls=%d)",
-                hunt, met_species, u8(0xCFF3), u8(BAG_QTY0)))
+                hunt, met_species, u8(ENEMY_LV), u8(BAG_QTY0)))
         if u8(IN_BATTLE) ~= 1 then
             return false, fmt("expected a WILD battle (wIsInBattle==1), got %d", u8(IN_BATTLE))
         end
@@ -145,6 +190,7 @@ return function(ctx)
             break
         end
         log(fmt("hunt %d: it got away (balls=%d) — back into the grass", hunt, u8(BAG_QTY0)))
+        go_home()
     end
 
     if not mon then
@@ -167,7 +213,7 @@ return function(ctx)
 
     -- The runner reads this line to pair the two catches and check server state.
     log(fmt("CAUGHT %s species=0x%02X level=%d on map 0x%02X",
-            mon.key, mon.species_index, mon.level, u8(CUR_MAP)))
+            mon.key, mon.species_index, mon.level, start_map))
     log(fmt("balls %d -> %d, party %d -> %d",
             balls_before, u8(BAG_QTY0), party_before, ctx.party_count()))
 
