@@ -76,6 +76,33 @@ _RED_MAP: dict[str, Optional[str]] = {
     "BAG_ITEMS_ADDR": "wBagItems",
     "bag_max_items": None,
     "BATTLE_FLAG_ADDR": "wIsInBattle",
+    # Rival Team Swap / Explode Mode (Gen 1 does both from RAM, no ROM patch).
+    "CUR_OPPONENT_ADDR": "wCurOpponent",
+    "ENEMY_OT_NAMES_ADDR": "wEnemyMonOT",
+    "ENEMY_NICKS_ADDR": "wEnemyMonNicks",
+    "PLAYER_SELECTED_MOVE_ADDR": "wPlayerSelectedMove",
+    "PLAYER_MOVE_LIST_INDEX_ADDR": "wPlayerMoveListIndex",
+    "PLAYER_MON_NUMBER_ADDR": "wPlayerMonNumber",
+    "BATTLE_MON_MOVES_ADDR": "wBattleMonMoves",
+    "BATTLE_MON_PP_ADDR": "wBattleMonPP",
+    "JOY_IGNORE_ADDR": "wJoyIgnore",
+    "FONT_LOADED_ADDR": "wFontLoaded",
+    "CURRENT_BOX_NUM_ADDR": "wCurrentBoxNum",
+
+    # ── Memorial-box SRAM guard (see M.protectSramBoxes) ──────────────────────
+    # This one IS worth verifying: it is the same wCurrentBoxNum the client reads, and the
+    # guard is wrong in a save-destroying way if it points anywhere else.
+    "changed_boxes_addr": "wCurrentBoxNum",
+    "changed_boxes_bit": None,          # BIT_HAS_CHANGED_BOXES = 7, a constant
+    "checksum_offset": None,            # offset within an SRAM bank, not an address
+    "box_len": None,                    # wBoxDataEnd - wBoxDataStart, a size
+    "boxes_per_bank": None,             # NUM_BOXES / 2, a constant
+    # $DEE2 is the free WRAM the companion patch claims — it has no pret symbol precisely
+    # because pret's linker reports it as empty (WRAM0 TOTAL EMPTY $001E).
+    "companion_patch_mailbox": None,
+    # A flat ROM offset, not a WRAM symbol. Verified far more strongly at runtime: the
+    # writes gate reads the actual instruction bytes there and asserts CB 7E CC.
+    "change_box_bit_test_rom_addr": None,
     "ENEMY_MON_SPECIES_ADDR": "wEnemyMon",
     "ENEMY_MON_HP_ADDR": "wEnemyMonHP",
     "ENEMY_MON_LEVEL_ADDR": "wEnemyMonLevel",
@@ -90,6 +117,11 @@ _RED_MAP: dict[str, Optional[str]] = {
     "hp_offset": None,
     "maxhp_offset": None,
     "level_offset": None,
+    # Derived offset, not an address. Gen 1's box struct keeps BoxLevel at +0x03
+    # (pret wBoxMon1BoxLevel) while the party level lives at +0x21.
+    "box_level_offset": None,
+    # Derived offset: start of the computed stat block (wPartyMon1Attack, party+0x24).
+    "stats_offset": None,
     "status_offset": None,
     "enemy_status_offset": None,
     "ball_item_ids": None,
@@ -120,6 +152,14 @@ _RED_MAP: dict[str, Optional[str]] = {
 }
 _add("red", "pokered", _RED_MAP)
 _add("blue", "pokered", _RED_MAP)  # blue shares red profile in Lua
+
+# ── Archipelago Red/Blue (Alchav's fork, NOT pret) ────────────────────────────
+# The AP fork adds WRAM for item/event tracking, moving 861 of 2171 shared symbols —
+# wCurMap +216, wEnemyMons -18, the box block +11. Same field names, different repo, so
+# the AP profiles get verified against `alchav_pokered` instead of `pokered`. Without
+# this the AP blocks would be unverified and free to rot back into inheriting vanilla.
+# blue_ap inherits red_ap, exactly as vanilla blue inherits red, so only red_ap is listed.
+_add("red_ap", "alchav_pokered", _RED_MAP)
 
 # ── Yellow (pokeyellow) ───────────────────────────────────────────────────────
 # Same field-name shape as Red/Blue.
