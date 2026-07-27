@@ -707,7 +707,7 @@ Covers the core `SoulLinkState` FSM in `server/state.py`. Key helper: `make_stat
 
 > Rival Team Swap state coverage lives in `test_state_rival_battle_start.py` (auto-trigger matrix, `queue_rival_team_swap`, `rival_team_replaced` ack) and `test_state_party_blob_cache.py` (`blob_hex` ingest + validation).
 
-## Automated Two-Instance E2E (companion patch)
+## Automated Two-Instance E2E (Gen 3, companion patch)
 
 `tools/e2e_duo.py` runs a throwaway SLink server plus **two** concurrent headless EmuHawk instances (players a/b, both on the patched ROM `patch/build/slink_RR.gba`, savestates from the same save with instance B's party OTIDs mutated pre-hello to avoid key collisions), orchestrates a scenario via the server's debug HTTP API, and waits for both instances' result files (`patch/build/e2e_<scenario>_{a,b}_result.txt`, final line `RESULT: PASS|FAIL`):
 
@@ -746,6 +746,53 @@ A comprehensive audit of the Gen 3 sync codebase verified that all high-risk des
 |---|---|---|
 | Nature change signature collision (two mons with identical otId:species:level:nickname) | Near-zero (requires same OT, same species, same level, same nickname in party simultaneously) | No migration occurs — old key orphaned, new key treated as unknown. Manual fix via debug page. |
 | `party_size` 1-tick stale window after a box action | Every box action (~1s window) | `sync_retrieve_failed` callback catches this reactively — partner's mon re-boxed if retrieval couldn't execute. No permanent desync. |
+
+---
+
+## Automated Gen 1 Verification (no manual steps, no patch)
+
+Everything above for Gen 3 is a human clicking through BizHawk. Gen 1 is not — there is
+nothing to run by hand.
+
+```bash
+SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 8 gates
+SLINK_E2E=1  pytest tests/e2e/test_duo_gen1.py -q      # 5 duo scenarios
+python tools/e2e_duo.py --game gen1 --scenario all     # the same duo run, directly
+```
+
+**Gates** (`tests/live/test_gen1_gates.py`) — each boots a fixture, asserts against the
+running game, and writes `RESULT: PASS|FAIL`:
+
+| Gate | Runs on | Covers |
+|---|---|---|
+| `test_gen1_memory_gate.lua` | red, blue, yellow | mon keys, party/box reads, PP with its PP-Up mask, stat stages, enemy struct, the Pokéball nuzlocke gate |
+| `test_gen1_writes_gate.lua` | red, blue, yellow | `force_faint`, the box round-trip, the ~404-byte enemy-party write, Explosion into the move slot |
+| `test_gen1_patch_gate.lua` | red, blue (patched) | the companion-patch spike — see [patch/gen1/README.md](../patch/gen1/README.md) |
+
+Parametrised over all three cartridges deliberately: **Yellow shifts nearly every WRAM
+address by −1**, so a Red-only run would never exercise the profile most likely to be wrong.
+
+**Duo scenarios** (`lua/tests/duo/scenario_gen1_*.lua`) — two emulators, a real server,
+**Red as player A and Blue as player B**: `faint`, `boxsync`, `memorialize`, `rivalswap`,
+`explode_g1`. Unlike Gen 3, none of this needs a patched ROM — Gen 1's enemy party is
+plaintext, so the rival swap and Explode Mode run on stock cartridges.
+
+### Fixtures
+
+`tests/fixtures/gen1/{red,blue,yellow}_{town,battle}.SaveRAM`, committed. Rebuild from a cold
+boot with:
+
+```bash
+python tools/gen1_playthrough.py --rom red --target town
+```
+
+These are **battery saves, not savestates**. A `.SaveRAM` is plain SRAM and is not
+version-locked, so unlike the Gen 3 `.State` files they never rot when BizHawk is upgraded —
+`tools/mkstates.py` exists precisely because the Gen 3 ones do. Two targets because the
+overworld gates need encounter-free ground (a town) and the battle gates need tall grass.
+
+Every gate skips — never hangs — when EmuHawk, a cartridge dump (gitignored) or a fixture is
+missing.
 
 ---
 

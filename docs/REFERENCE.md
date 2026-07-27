@@ -9,12 +9,39 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
   to the FireRed tables — Emerald map IDs do not match FireRed's, so area names and the area IDs that drive
   encounter linking are WRONG. The client logs a warning once per session. Generate the tables before
   running Emerald for real.
-- **Gen 1** — Red, Blue, Yellow (US English) — ⚠️ **Experimental** — feature parity with Gen 3, pending live verification (`docs/gen1_gen2_runtime_checks.md`). Archipelago Red/Blue (Alchav) auto-detected.
+- **Gen 1** — Red, Blue, Yellow (US English) — 🟡 **Partially verified.** The Soul Link
+  *mechanisms* are proven against running cartridges; a *playthrough* is not. Be precise about
+  which you are relying on:
+  - **Proven live** — faint propagation and party→box sync across two real cartridges
+    (Red as A, Blue as B); memorialize into Box 12; Explode Mode arming Explosion; the
+    enemy-party write; `force_faint`; box level at `box+0x03`; the Poké Ball bag read; Yellow's
+    −1 WRAM shift (reads); the companion patch's VBlank hook and SFX.
+  - **NOT proven live** — encounter linking, dead zone, whiteout and the species/gender/type
+    clauses (all pairs in the E2E are injected via `/api/inject_link` and the Nuzlocke gate is
+    force-set, so none of these has ever fired from real play); `area_enter` (**0 of 39 encounter
+    areas** are ever visited — every live test sits in Pallet Town); any real wild encounter or
+    capture; `party_mon`/`retrieveBoxMon`, which has never executed on a cartridge; evolution
+    `key_change`; and the Archipelago variants, which have never been launched at all.
+  Both duo battles are staged by poking `wIsInBattle`, and the battle engine has never executed
+  a turn. Rival swap and Explode Mode need **no ROM patch** on Gen 1 (no encryption, no
+  checksums); the optional Red/Blue companion patch adds sound only.
 - **Gen 2** — Crystal, Gold, Silver (GB/GBC) — ⚠️ **Experimental** — feature parity with Gen 3, pending live verification. Archipelago Crystal (gerbiljames fork) auto-detected. Gold/Silver added in Phase 11 with pret-authoritative addresses via [tools/build_pret_syms.py](../tools/build_pret_syms.py).
 - **Gen 4** — HeartGold, SoulSilver, Platinum — ⚠️ **Experimental**
 - **Gen 5** — Black, White, Black 2, White 2 — ⚠️ **Experimental**
 
-> **Note:** Only Gen 3 has extensive live-play coverage. Gens 1, 2, 4, and 5 have full feature pipelines (moves+PP, stat stages, enemy moves+PP, trainer names, encounter tables, AP detection) and pass their unit-test suites; static profile addresses are verified by [tools/verify_profile_addresses.py](../tools/verify_profile_addresses.py) against pret decomps. Runtime smoke tests still pending — see `docs/gen1_gen2_runtime_checks.md`. Treat as ⚠️ Experimental until those runtime checks land.
+> **Note:** Gen 1 has live coverage of its mechanisms, not of a run — see the per-generation
+> caveats above before trusting it. Gen 3 has extensive live-play coverage. Gens 2, 4 and 5 have full feature pipelines
+> (moves+PP, stat stages, enemy moves+PP, trainer names, encounter tables, AP detection) and pass
+> their unit-test suites; static profile addresses are verified by
+> [tools/verify_profile_addresses.py](../tools/verify_profile_addresses.py) against pret decomps.
+> They remain ⚠️ Experimental because nothing has run them against a cartridge.
+>
+> That distinction is not academic. Bringing Gen 1 up found defects no static check could reach —
+> a deferred-command queue that bound to a nil global and crashed the client on the first box or
+> memorialize command; a `party_to_box` debounce that could never complete, so party/box sync was
+> silently dead; a box level read from an offset past the end of the box struct; Archipelago
+> detection reading HRAM instead of ROM. All of those passed the unit suite and the Lua syntax
+> gate. Treat "unit tests pass" as necessary, not sufficient.
 
 ---
 
@@ -780,11 +807,11 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 ### Unit tests (no emulator required)
 
 ```bash
-pytest tests/unit/ -v          # ~1450 tests, no emulator needed
+pytest tests/unit/ -v          # 1528 tests, no emulator needed
 pytest tests/unit/test_state.py -v             # 318 state machine tests (incl. tick reconciliation)
 pytest tests/unit/test_gen3_adapter.py -v      # 216 Gen 3 adapter tests
 pytest tests/unit/test_gen4_adapter.py -v      # 100 Gen 4 adapter tests
-pytest tests/unit/test_gen1_adapter.py -v      # 103 Gen 1 adapter tests
+pytest tests/unit/test_gen1_adapter.py -v      # Gen 1 adapter tests
 pytest tests/unit/test_gen2_adapter.py -v      # 179 Gen 2 adapter tests
 pytest tests/unit/test_gen5_adapter.py -v      # 140 Gen 5 adapter tests
 pytest tests/unit/test_stat_stages.py -v       # 46 stat stage tests
@@ -822,7 +849,19 @@ pytest tests/unit/test_phase1_comms.py -v
 
 ### BizHawk live tests
 
-See `tests/TESTING.md` for the full 9-step end-to-end test procedure. Load `lua/slink.lua` on both instances and run through Steps 1–9 in order.
+**Gen 3** is a manual procedure: see `tests/TESTING.md` for the full 9-step end-to-end test. Load `lua/slink.lua` on both instances and run through Steps 1–9 in order. Its automated pieces are `SLINK_LIVE=1 pytest tests/live/test_lua_gates.py` (savestate-driven; rebuild states with `tools/mkstates.py` after a BizHawk upgrade) and `SLINK_E2E=1 pytest tests/e2e/test_duo.py` (six scenarios on the patched RR ROM).
+
+**Gen 1** has no manual procedure — all of it is automated and skips cleanly when EmuHawk, a cartridge dump or a fixture is missing:
+
+```bash
+SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 8 gates
+SLINK_E2E=1  pytest tests/e2e/test_duo_gen1.py -q      # 5 duo scenarios
+python tools/e2e_duo.py --game gen1 --scenario all     # the same duo run, directly
+```
+
+The gates (`test_gen1_memory_gate.lua`, `test_gen1_writes_gate.lua`) run on **all three cartridges** — Yellow shifts nearly every WRAM address by −1, so a Red-only run would skip the profile most likely to be wrong — plus the companion-patch gate on the two patched builds. The duo scenarios (`faint`, `boxsync`, `memorialize`, `rivalswap`, `explode_g1`) run **Red as player A and Blue as player B**, and need no patched ROM.
+
+Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and are committed. They are battery saves, not savestates, so they are not BizHawk-version-locked and never go stale. Rebuild from a cold boot with `python tools/gen1_playthrough.py --rom red --target town` (`town` = encounter-free ground for the overworld gates, `battle` = tall grass for the battle gates).
 
 ---
 
@@ -834,6 +873,9 @@ See `tests/TESTING.md` for the full 9-step end-to-end test procedure. Load `lua/
 | `lua/slink_gen3.lua` | **Gen 3 launcher** — configure host/port/player, load in BizHawk |
 | `lua/slink_gen4.lua` | **Gen 4 launcher** — configure host/port/player, load in BizHawk |
 | `lua/slink_gen5.lua` | **Gen 5 launcher** — configure host/port/player, load in BizHawk |
+| `lua/clients/gen1_rby_client.lua` | Gen 1 production client — Red/Blue/Yellow + Archipelago Red/Blue. Runs off `event.onframeend` behind a pcall, so it composes with the duo harness. Rival team swap + Explode Mode with no ROM patch. |
+| `lua/games/gen1_rby.lua` | Gen 1 game module — ROM header detection, per-variant address profiles (Yellow is −1 on most; `red_ap` is a full literal profile because the AP fork relocates WRAM), Archipelago detection from the `ROM` domain at `0x5F22` |
+| `lua/memory_gb.lua` | GB/GBC RAM helpers — **shared by Gen 1 and Gen 2**, so every offset is profile-keyed, never a per-game constant. Party/box read+write, PP-Up masking, `isInOverworld`, enemy-party write, force-faint, force-explode |
 | `lua/clients/gen3_frlge_client.lua` | Gen 3 production client — FRLG/Emerald/Radical Red. Localized BizHawk memory functions, display data cache, battle/overworld state cached once per frame. |
 | `lua/clients/gen4_hgsspt_client.lua` | Gen 4 production client — HeartGold/SoulSilver. NDS memory model, LCRNG-aware, HP debounce. |
 | `lua/clients/gen5_bw_client.lua` | Gen 5 production client — Black, White, Black 2, White 2. PID:OTID keys, 220-byte PKM structs, shared NDS helpers. |
@@ -1446,11 +1488,12 @@ See `.github/copilot-instructions.md` → "Adapter Isolation Rules" for the full
 
 ### Adapter methods added in 0.2.6
 
-All are gated to the supporting game (currently Gen 3 Radical Red); the base `GameRulesAdapter` / `GamePresentationAdapter` ships inert defaults so other gens inherit the no-op — never branch on `game_id` in shared code.
+Each is gated to the games that support it; the base `GameRulesAdapter` / `GamePresentationAdapter` ships inert defaults so every other gen inherits the no-op — never branch on `game_id` in shared code. `rival_trainer_ids()` and `supports_explode_mode()` are overridden by **both** Gen 3 Radical Red and Gen 1; the rest are Gen 3 RR only.
 
 | Method | Returns / does | Base default |
 |---|---|---|
-| `rival_trainer_ids()` | Trainer IDs treated as the rival for `--rival-team-swap` (Gen 3 RR: 27 "Terry" IDs in classes 81/89/90, built at import from `rr_trainers.json`). | `set()` |
+| `rival_trainer_ids()` | Trainer IDs treated as the rival for `--rival-team-swap`. Gen 3 RR: 27 "Terry" IDs in classes 81/89/90, built at import from `rr_trainers.json`. Gen 1: `{225, 242, 243}` — RIVAL1/2/3 classes `$19`/`$2A`/`$2B` plus `OPP_ID_OFFSET(200)`. | `set()` |
+| `party_blob_size()` | Expected byte length of one party-mon blob, used by `_ingest_party_blobs` to reject malformed payloads. Gen 3 returns `100` (its boxmon struct); **Gen 1 returns `66`** — 44-byte struct + 11-byte OT name + 11-byte nickname, because Gen 1 keeps names in parallel arrays rather than inside the struct. `0` disables blob ingestion. | `0` |
 | `supports_info_panel()` | Whether this client can render the native in-game SOULLINK screen; gates the `link_panel` command so no other client is sent something it would only log. Gen 3 opts in for Radical Red. | `False` |
 | `supports_abilities()` | Whether the game has abilities at all — drives the party table's Ability column. Overridden `False` by Gen 1 and Gen 2. | `True` |
 | `status_token(status_cond)` | Three-letter status (`PSN`/`PAR`/`SLP`/`BRN`/`FRZ`/`TOX`) from the raw per-generation bitfield. | `""` |
