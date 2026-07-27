@@ -68,6 +68,18 @@ DUO_ROMS = DUO_GAMES["gen1"]
 SCENARIOS = ("faint", "boxsync", "memorialize", "rivalswap", "explode_g1", "playthrough")
 
 
+def _subprocess_timeout(scenario: str) -> int:
+    """Always outlive the scenario's OWN timeout, with margin for startup and teardown.
+
+    A fixed 1200s here silently under-cut the playthrough's 1500s budget: pytest killed the
+    subprocess mid-hunt and reported TimeoutExpired, which looks exactly like a hang. Deriving
+    it from the same table the runner uses means the two can never drift apart again.
+    """
+    sys.path.insert(0, os.path.join(REPO, "tools"))
+    from e2e_duo import SCENARIOS
+    return SCENARIOS[scenario]["timeout"] + 300
+
+
 @pytest.mark.parametrize("game", sorted(DUO_GAMES))
 @pytest.mark.parametrize("scenario", SCENARIOS)
 def test_gen1_duo(scenario, game):
@@ -85,6 +97,6 @@ def test_gen1_duo(scenario, game):
         [sys.executable, os.path.join(REPO, "tools", "e2e_duo.py"),
          "--game", game, "--scenario", scenario],
         cwd=REPO, capture_output=True, text=True, encoding="utf-8",
-        errors="replace", timeout=1200)
+        errors="replace", timeout=_subprocess_timeout(scenario))
     assert proc.returncode == 0, (
         f"{game} duo {scenario} failed:\n{proc.stdout[-4000:]}\n{proc.stderr[-1000:]}")
