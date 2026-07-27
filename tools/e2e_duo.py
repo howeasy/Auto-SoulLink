@@ -38,12 +38,22 @@ ROM_REL = "patch/build/slink_RR.gba"
 BUILD = os.path.join(REPO, "patch", "build")
 WT_FWD = REPO.replace("\\", "/")
 
-# Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout
+# Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout,
+# and `games` — which titles a scenario applies to (default: gen3_rr only, since that is
+# what this harness was built for). Gen 1-only scenarios have no savestate at all, so
+# tests/e2e/test_duo.py must not try to run them.
 # (seconds), fillers (default True; or {"a":…,"b":…} — explode keeps B at ONE mon so the
 # Explosion self-faint whites out instead of opening the switch menu).
 SCENARIOS = {
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
+    # Gen 1 only for now: both halves die, then the pair is buried in Box 12.
+    "memorialize": {"flags": [], "timeout": 300, "games": ("gen1",)},
+    # Gen 1 does the rival swap from pure RAM — no companion patch, unlike Gen 3.
+    "rivalswap": {"flags": ["--rival-team-swap"], "timeout": 300, "games": ("gen1",)},
+    # Gen 1 explode: RAM-only, no companion patch. Distinct from the Gen 3 "explode" entry
+    # below, which loads savestates and keeps B at a single mon.
+    "explode_g1": {"flags": ["--explode-mode"], "timeout": 300, "games": ("gen1",)},
     "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "ghost":   {"flags": ["--overworld-presence"], "savestate": "slink_overworld.State",
                 "timeout": 420},
@@ -108,11 +118,43 @@ def extract_marks(text, tag):
     return out
 
 
+# ── Games ────────────────────────────────────────────────────────────────────
+# The duo harness was written for Radical Red and hardcoded to it. Gen 1 differs in three
+# ways that matter, so the per-game bits live here rather than being threaded through:
+#
+#   * NO SAVESTATE. Gen 1 boots from a battery save (tests/fixtures/gen1/*.SaveRAM), which
+#     is not BizHawk-version-locked the way a .State is — nothing to rebuild after an
+#     emulator upgrade.
+#   * DIFFERENT CARTRIDGES per instance: A is Red, B is Blue. Closer to how the feature is
+#     actually played, and the two cannot collide over BizHawk's SaveRAM because it names
+#     saves from its own gamedb entry.
+#   * Its own duo wrapper, since the boot and the HP endianness differ.
+#
+# gen3_rr keeps exactly the previous behaviour and stays the default.
+GAMES = {
+    "gen3_rr": {
+        "main": "lua/tests/duo/duo_main.lua",
+        "rom": {"a": ROM_REL, "b": ROM_REL},
+        "uses_savestate": True,
+        "scenario_prefix": "",
+    },
+    "gen1": {
+        "main": "lua/tests/duo/duo_gen1_main.lua",
+        "rom": {"a": "patch/build/gen1_red.gb", "b": "patch/build/gen1_blue.gb"},
+        "uses_savestate": False,
+        "fixture": {"a": "red", "b": "blue"},
+        "scenario_prefix": "gen1_",
+    },
+}
+
+
 class DuoRun:
     def __init__(self, scenario, args):
         self.scenario = scenario
         self.cfg = SCENARIOS[scenario]
         self.args = args
+        self.game = getattr(args, "game", "gen3_rr")
+        self.gcfg = GAMES[self.game]
         self.tcp_port = free_port()
         self.http_port = free_port()
         self.data_dir = tempfile.mkdtemp(prefix=f"slink_duo_{scenario}_")
@@ -142,25 +184,45 @@ class DuoRun:
             return None
 
     def start_instances(self):
+        if self.game == "gen1":
+            from gen1_playthrough import staged_rom
+            for key in self.gcfg["fixture"].values():
+                staged_rom(key)     # space-free copy; BizHawk's CLI splits on spaces
         for inst in ("a", "b"):
             for f in (self._result_path(inst), self.go_files[inst]):
                 if os.path.exists(f):
                     os.remove(f)
         for inst in ("a", "b"):
             cfg_ini = os.path.join(BUILD, f"duo_cfg_{inst}.ini")
-            shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
+            if self.game == "gen1":
+                # Muted, on the second monitor: two emulators for several minutes each.
+                from gen1_playthrough import write_run_config
+                write_run_config(BIZHAWK_CONFIG, cfg_ini)
+            else:
+                shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
             stub = os.path.join(BUILD, f"duo_{inst}.lua")
-            ss = self.cfg["savestate"]
             fillers = self.cfg.get("fillers", True)
             duo = {
                 "wt": WT_FWD, "player": inst, "scenario": self.scenario,
-                "savestate": f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}",
                 "fillers": fillers[inst] if isinstance(fillers, dict) else fillers,
                 "mutate_otid": inst == "b",
                 "result": f"{WT_FWD}/patch/build/e2e_{self.scenario}_{inst}_result.txt",
+                # So an instance can wait for its partner to finish before exiting —
+                # client.exit() kills the emulator, and a side that leaves early stops
+                # sending the very events the other side is waiting on.
+                "partner_result": (f"{WT_FWD}/patch/build/e2e_{self.scenario}_"
+                                   f"{'b' if inst == 'a' else 'a'}_result.txt"),
                 "go_file": self.go_files[inst].replace("\\", "/"),
                 "timeout_frames": self.cfg["timeout"] * 60,
             }
+            if self.gcfg["uses_savestate"]:
+                ss = self.cfg["savestate"]
+                duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
+            else:
+                # Seed this instance's battery save. Red and Blue get different filenames
+                # from BizHawk's gamedb, so the two instances never fight over one file.
+                from run_gen1_gate import seed_saveram
+                seed_saveram(self.gcfg["fixture"][inst], "town")
             with open(stub, "w") as f:
                 f.write('SLINK_HOST = "127.0.0.1"\n')
                 f.write(f"SLINK_PORT = {self.tcp_port}\n")
@@ -174,10 +236,10 @@ class DuoRun:
                     else:
                         f.write(f"  {k} = {v},\n")
                 f.write("}\n")
-                f.write(f'dofile("{WT_FWD}/lua/tests/duo/duo_main.lua")\n')
+                f.write(f'dofile("{WT_FWD}/{self.gcfg["main"]}")\n')
             p = subprocess.Popen(
                 [EMUHAWK, f"--config=patch/build/duo_cfg_{inst}.ini",
-                 f"--lua=patch/build/duo_{inst}.lua", ROM_REL],
+                 f"--lua=patch/build/duo_{inst}.lua", self.gcfg["rom"][inst]],
                 cwd=REPO)
             self.emus.append(p)
         print("[duo] two EmuHawk instances launched")
@@ -285,8 +347,12 @@ class DuoRun:
             for i in range(min(3, len(ka), len(kb))):
                 self.inject_link(ka[i], kb[i], area_id=f"duo{i}")
             self.go()
-        elif self.scenario == "faint":
+        elif self.scenario in ("faint", "memorialize", "explode_g1"):
             self.inject_link(ka[0], kb[0])
+            self.go()
+        elif self.scenario == "rivalswap":
+            # No link needed: the swap is gated on the rival id and the partner having
+            # cached blobs, not on a formed pair. Go straight away and let A drive.
             self.go()
         elif self.scenario == "explode":
             self.inject_link(ka[0], kb[0])
@@ -294,6 +360,13 @@ class DuoRun:
             # frozen battle savestate can't execute the coerced turn — foe never commits).
             wait_for("B inside a live battle",
                      lambda: "IN_BATTLE" in (read_result(self.scenario, "b") or ""), 240)
+            self.go()
+        elif self.scenario == "boxsync" and self.game == "gen1":
+            # Gen 1 exercises the RULE, not the storage opcodes: link the pair, then let A
+            # deposit its own half. The server's _handle_party_to_box is what must send
+            # box_mon to B — nothing is injected here, so a broken rule cannot be masked by
+            # the harness doing the work itself.
+            self.inject_link(ka[0], kb[0])
             self.go()
         elif self.scenario == "boxsync":
             # Symmetric: BOTH sides deposit their slot-1 filler, then withdraw it statless
@@ -358,6 +431,8 @@ def main():
     # The client logs contain Unicode arrows; don't let a cp1252 console kill the runner.
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--game", default="gen3_rr", choices=sorted(GAMES),
+                    help="gen3_rr (Radical Red, default) or gen1 (Red as A, Blue as B)")
     ap.add_argument("--scenario", default="faint",
                     choices=list(SCENARIOS) + ["all"])
     ap.add_argument("--keep-alive", action="store_true",
