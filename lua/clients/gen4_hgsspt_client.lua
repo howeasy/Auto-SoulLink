@@ -168,6 +168,23 @@ local function parse_command_list(raw)
         local b     = tonumber(obj:match('"b"%s*:%s*(%d+)'))
         local frames = tonumber(obj:match('"frames"%s*:%s*(%d+)'))
         local fb    = obj:match('"fb"%s*:%s*"([^"]*)"')   -- msgbox fallback style (prompt/hud)
+        -- The server attaches the cached stat block to party_mon (state.py mon_stats).
+        -- exec_party_mon falls back to `stats.level or 5` / `stats.maxHP or 1`, so
+        -- without parsing this every restored mon came back at level 5 with 1 max HP.
+        local stats = nil
+        local sj = obj:match('"stats"%s*:%s*(%b{})')
+        if sj then
+            stats = {
+                level   = tonumber(sj:match('"level"%s*:%s*(%d+)')),
+                maxHP   = tonumber(sj:match('"maxHP"%s*:%s*(%d+)')),
+                attack  = tonumber(sj:match('"attack"%s*:%s*(%d+)')),
+                defense = tonumber(sj:match('"defense"%s*:%s*(%d+)')),
+                speed   = tonumber(sj:match('"speed"%s*:%s*(%d+)')),
+                spAtk   = tonumber(sj:match('"spAtk"%s*:%s*(%d+)')),
+                spDef   = tonumber(sj:match('"spDef"%s*:%s*(%d+)')),
+            }
+        end
+        local nickname = obj:match('"nickname"%s*:%s*"([^"]*)"')
         local area_id = obj:match('"area_id"%s*:%s*"([^"]*)"')
         local areas_arr = nil
         local areas_raw = obj:match('"areas"%s*:%s*(%b[])')
@@ -176,7 +193,7 @@ local function parse_command_list(raw)
             for a in areas_raw:gmatch('"([^"]+)"') do areas_arr[#areas_arr+1] = a end
         end
         if cmd then
-            cmds[#cmds+1] = {cmd=cmd, key=key, message=msg,
+            cmds[#cmds+1] = {cmd=cmd, key=key, message=msg, stats=stats, nickname=nickname,
                              text=text, fb=fb, r=r, g=g, b=b, frames=frames,
                              area_id=area_id, areas=areas_arr}
         end

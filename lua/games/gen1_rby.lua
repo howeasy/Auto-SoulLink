@@ -68,6 +68,23 @@ M.PROFILES = {
         bag_max_items      = 20,
         -- Battle
         BATTLE_FLAG_ADDR   = 0xD057,  -- 0=overworld, 1=wild, 2=trainer
+        -- Safe-state predicates. `not in_battle` alone is also true in the PC box UI, the
+        -- party menu and the naming screen — all windows where writing party/box memory
+        -- corrupts what the open UI is about to write back.
+        JOY_IGNORE_ADDR    = 0xCD6B,  -- wJoyIgnore: nonzero while a script owns input
+        FONT_LOADED_ADDR   = 0xCFC4,  -- wFontLoaded: bit 0 set while a text box is up
+        CURRENT_BOX_NUM_ADDR = 0xD5A0,  -- wCurrentBoxNum (low 7 bits = active box index)
+
+        -- pokered's ChangeBox wipes every SRAM box the first time the player opens the box
+        -- menu (engine/menus/save.asm:366). Box 12 is our memorial, so the client claims the
+        -- banks first via M.protectSramBoxes(). Geometry from pret: NUM_BOXES 12, 6 per bank
+        -- in banks 2/3, wBoxDataEnd-wBoxDataStart = 1122, checksum block at sBank2/3AllBoxes-
+        -- Checksum (0xBA4C) = bank base + 0x1A4C. BIT_HAS_CHANGED_BOXES = 7.
+        sram_box_layout = {
+            box_len = 1122, boxes_per_bank = 6, banks = {2, 3},
+            checksum_offset = 0x1A4C,
+            changed_boxes_addr = 0xD5A0, changed_boxes_bit = 0x80,
+        },
         -- Active enemy battle mon (wEnemyMon at CFE5, battle_struct layout)
         ENEMY_MON_SPECIES_ADDR = 0xCFE5,  -- internal species index (+0x00)
         ENEMY_MON_HP_ADDR      = 0xCFE6,  -- 2 bytes big-endian (+0x01)
@@ -88,7 +105,13 @@ M.PROFILES = {
         species_offset     = 0x00,
         hp_offset          = 0x01,    -- current HP (2 bytes BE)
         maxhp_offset       = 0x22,    -- max HP (2 bytes BE)
-        level_offset       = 0x21,    -- actual level
+        level_offset       = 0x21,    -- actual level (pret wPartyMon1Level, party+0x21)
+        -- Computed stats: Atk/Def/Spd/Spc, 2 bytes each, big-endian (wPartyMon1Attack).
+        -- Past the 33-byte box struct, so they are lost on deposit — see readPartyStats.
+        stats_offset       = 0x24,
+        -- pret wBoxMon1BoxLevel is box+0x03. The party level at +0x21 is PAST the end of
+        -- the 33-byte box struct, so reading it from a box base lands in the next slot.
+        box_level_offset   = 0x03,
         status_offset      = 0x04,    -- non-volatile status (u8: bits 0-2 SLP, 3 PSN, 4 BRN, 5 FRZ, 6 PAR)
         enemy_status_offset = 0x04,   -- same offset in active enemy battle struct (mirrors party struct)
         -- Ball item IDs
@@ -107,7 +130,11 @@ M.PROFILES = {
         -- Moves + PP within party struct (Phase 3 — pret/pokered macros, 4 bytes each).
         moves_offset            = 0x08,    -- 4 move IDs at +0x08..0x0B
         pp_offset               = 0x1D,    -- 4 PP bytes at +0x1D..0x20 (simple counters, no PP-Up encoding in Gen 1)
-        pp_encoding             = "raw",   -- Gen 1 PP is raw 0..40, no top-bits PP-Up
+        -- pret/pokered constants/pokemon_data_constants.asm:101-102 define
+        --   PP_UP_MASK EQU %11000000   PP_MASK EQU %00111111
+        -- so Gen 1 packs PP-Ups in the top two bits exactly like Gen 2. This said "raw",
+        -- which reported a move with PP Ups applied as having up to 3x its real PP.
+        pp_encoding             = "ppup_packed",
         -- Enemy battle struct moves + PP (Phase 4 — wEnemyMon is a battle_struct with the
         -- same layout as party_struct in Gen 1). wEnemyMon @ 0xCFE5; moves at +0x08 = 0xCFED;
         -- PP at +0x19 = 0xCFFE (DataCrystal RBY map). PP is raw (no PP-Ups).
@@ -119,20 +146,57 @@ M.PROFILES = {
         -- Working hypothesis 0xD031/0xD05D; Phase 9 diagnostic confirms.
         TRAINER_CLASS_ADDR      = 0xD031,
         TRAINER_ID_ADDR         = 0xD05D,
-        -- Phase 7: Sound-effect dispatch. wMusicID at 0xD35B per pret/pokered;
-        -- the audio engine consumes the byte on the next audio frame. SFX IDs from
-        -- constants/music_constants.asm.
-        SFX_DISPATCH_ADDR       = 0xD35B,
+        -- wCurOpponent = trainer class + OPP_ID_OFFSET(200). This is the id the trainer
+        -- tables and rival_trainer_ids() are keyed by.
+        CUR_OPPONENT_ADDR       = 0xD059,
+        -- Enemy party name arrays, needed to write a partner's team faithfully: Gen 1
+        -- keeps OT names and nicknames OUTSIDE the mon struct, in parallel arrays.
+        ENEMY_OT_NAMES_ADDR     = 0xD9AC,  -- wEnemyMonOT,    6 x 11
+        ENEMY_NICKS_ADDR        = 0xD9EE,  -- wEnemyMonNicks, 6 x 11
+        -- Explode Mode. The engine reads the player's chosen move from
+        -- wPlayerSelectedMove and the slot index from wPlayerMoveListIndex; the active
+        -- battler's moves/PP live in wBattleMonMoves/wBattleMonPP.
+        PLAYER_SELECTED_MOVE_ADDR = 0xCCDC,
+        PLAYER_MOVE_LIST_INDEX_ADDR = 0xCC2E,
+        -- Which PARTY slot is currently out. Gen 1 does have this — do not assume slot 0.
+        PLAYER_MON_NUMBER_ADDR  = 0xCC2F,
+        BATTLE_MON_MOVES_ADDR   = 0xD01C,
+        BATTLE_MON_PP_ADDR      = 0xD02D,
+        -- Sound-effect dispatch. DISABLED pending live validation.
+        -- 0xD35B is wMapMusicSoundID (pret/pokered) — the STORED MAP MUSIC ID, not a
+        -- sound hook. Writing SFX ids there corrupted the map's background music on
+        -- every capture, gift, faint and whiteout. The real hook is wNewSoundID at
+        -- 0xC0EE (same address in Yellow — audio WRAM at 0xC000 is not shifted), but
+        -- Gen 1 has NO RAM-writable sound trigger. wNewSoundID (0xC0EE) looks like one and
+        -- is not: PlaySound takes the id in register `a` and only uses that address as
+        -- internal scratch (pokered home/audio.asm:140), and nothing polls it. So this stays
+        -- nil for an unpatched cartridge and playSfx is a no-op. The client raises it to the
+        -- companion patch's mailbox byte at runtime when it detects the 'SLNK' beacon —
+        -- see M.detectCompanionPatch(). Yellow can never have it (no free WRAM to patch).
+        SFX_DISPATCH_ADDR       = nil,  -- set at runtime on patched Red/Blue only
+        companion_patch_mailbox = 0xDEE2,  -- 'SLNK' beacon; see patch/gen1/README.md
+        -- ROM offset of ChangeBox's `bit BIT_HAS_CHANGED_BOXES, [hl]` (CB 7E), followed by
+        -- `call z, EmptyAllSRAMBoxes`. Unique in the dump. The writes gate reads these bytes
+        -- so it verifies the game behaviour the memorial guard defends against, rather than
+        -- trusting a source read.
+        change_box_bit_test_rom_addr = 0x738B2,
         sfx_ids                 = {
-            capture   = 0x88,   -- SFX_GET_ITEM_1
-            gift      = 0x88,   -- SFX_GET_ITEM_1
-            faint     = 0xB4,   -- SFX_FAINT_FALL
-            whiteout  = 0xB4,   -- SFX_FAINT_FALL
-            no_catch  = 0x9C,   -- SFX_DENIED
-            success   = 0x86,   -- SFX_LEVEL_UP (link formed, nuzlocke start)
-            failure   = 0x9C,   -- SFX_DENIED
-            boo       = 0x9C,   -- SFX_DENIED
-            shiny     = 0x88,   -- SFX_GET_ITEM_1 (Gen 1 has no dedicated shiny SE)
+            -- Ids are BANK-RELATIVE in Gen 1: the same number is a different sound depending
+            -- on which audio bank is loaded (overworld=Audio1, battle=Audio2). Every id below
+            -- is one of the 64 that resolve identically in ALL THREE banks, so a capture or a
+            -- faint fired mid-battle cannot play the wrong sound. Derived from the SFX header
+            -- label offsets in data/pret_rom_syms.json: id = (SFX_X - SFX_Headers_N) / 3.
+            -- The expressive Audio1-only alternatives (Denied 0xA5, Collision 0xB4,
+            -- Get_Key_Item 0x94) are correct ONLY in the overworld — don't use them here.
+            capture   = 0x89,   -- SFX_GET_ITEM_2
+            gift      = 0x89,   -- SFX_GET_ITEM_2
+            faint     = 0x8C,   -- SFX_TINK
+            whiteout  = 0x8C,   -- SFX_TINK
+            no_catch  = 0x8C,   -- SFX_TINK
+            success   = 0x8D,   -- SFX_HEAL_HP
+            failure   = 0x8C,   -- SFX_TINK
+            boo       = 0x8C,   -- SFX_TINK
+            shiny     = 0x89,   -- SFX_GET_ITEM_2 (Gen 1 has no dedicated shiny SE)
         },
     },
 
@@ -157,6 +221,20 @@ M.PROFILES = {
         BAG_ITEMS_ADDR     = 0xD31D,
         bag_max_items      = 20,
         BATTLE_FLAG_ADDR   = 0xD056,
+        JOY_IGNORE_ADDR    = 0xCD6B,  -- not shifted (0xCDxx block is shared)
+        FONT_LOADED_ADDR   = 0xCFC3,
+        CURRENT_BOX_NUM_ADDR = 0xD59F,
+
+        -- pokered's ChangeBox wipes every SRAM box the first time the player opens the box
+        -- menu (engine/menus/save.asm:366). Box 12 is our memorial, so the client claims the
+        -- banks first via M.protectSramBoxes(). Geometry from pret: NUM_BOXES 12, 6 per bank
+        -- in banks 2/3, wBoxDataEnd-wBoxDataStart = 1122, checksum block at sBank2/3AllBoxes-
+        -- Checksum (0xBA4C) = bank base + 0x1A4C. BIT_HAS_CHANGED_BOXES = 7.
+        sram_box_layout = {
+            box_len = 1122, boxes_per_bank = 6, banks = {2, 3},
+            checksum_offset = 0x1A4C,
+            changed_boxes_addr = 0xD59F, changed_boxes_bit = 0x80,
+        },
         ENEMY_MON_SPECIES_ADDR = 0xCFE4,
         ENEMY_MON_HP_ADDR      = 0xCFE5,
         ENEMY_MON_LEVEL_ADDR   = 0xCFF2,
@@ -172,6 +250,8 @@ M.PROFILES = {
         hp_offset          = 0x01,
         maxhp_offset       = 0x22,
         level_offset       = 0x21,
+        stats_offset       = 0x24,
+        box_level_offset   = 0x03,    -- pret wBoxMon1BoxLevel; see the red block
         status_offset      = 0x04,    -- non-volatile status (u8)
         enemy_status_offset = 0x04,   -- same offset in active enemy battle struct
         ball_item_ids      = {0x01, 0x02, 0x03, 0x04},
@@ -187,7 +267,7 @@ M.PROFILES = {
         -- Moves + PP: same struct offsets as Red/Blue (no -1 shift inside the struct).
         moves_offset            = 0x08,
         pp_offset               = 0x1D,
-        pp_encoding             = "raw",
+        pp_encoding             = "ppup_packed",   -- see the red block
         -- Yellow's wEnemyMon is shifted -1 like other battle addresses.
         ENEMY_BATTLE_MOVES_ADDR = 0xCFEC,
         ENEMY_BATTLE_PP_ADDR    = 0xCFFD,
@@ -195,33 +275,105 @@ M.PROFILES = {
         -- Yellow shift -1
         TRAINER_CLASS_ADDR      = 0xD030,
         TRAINER_ID_ADDR         = 0xD05C,
-        -- Phase 7: SFX dispatch. Yellow shifts wMusicID -1 to 0xD35A.
-        SFX_DISPATCH_ADDR       = 0xD35A,
+        CUR_OPPONENT_ADDR       = 0xD058,
+        ENEMY_OT_NAMES_ADDR     = 0xD9AB,
+        ENEMY_NICKS_ADDR        = 0xD9ED,
+        -- 0xCCxx/0xCC2E are NOT shifted in Yellow (only the 0xD0xx+ block is).
+        PLAYER_SELECTED_MOVE_ADDR = 0xCCDC,
+        PLAYER_MOVE_LIST_INDEX_ADDR = 0xCC2E,
+        PLAYER_MON_NUMBER_ADDR  = 0xCC2F,   -- not shifted in Yellow
+        BATTLE_MON_MOVES_ADDR   = 0xD01B,
+        BATTLE_MON_PP_ADDR      = 0xD02C,
+        -- SFX dispatch DISABLED — see the red block. 0xD35A is Yellow's
+        -- wMapMusicSoundID, not a sound hook. Note wNewSoundID is 0xC0EE in BOTH games:
+        -- the -1 shift applies to the 0xD3xx block, not to audio WRAM at 0xC000.
+        -- Yellow can never have SFX: 0xC0EE (wNewSoundID) is PlaySound's scratch, not a
+        -- polled mailbox, and Yellow has zero free WRAM for the companion patch that provides
+        -- a real one (pret map: WRAM0 TOTAL EMPTY $0000). No companion_patch_mailbox here.
+        SFX_DISPATCH_ADDR       = nil,
+        change_box_bit_test_rom_addr = 0x73BFB,  -- see the red block
         sfx_ids                 = {
-            capture   = 0x88,
-            gift      = 0x88,
-            faint     = 0xB4,
-            whiteout  = 0xB4,
-            no_catch  = 0x9C,
-            success   = 0x86,
-            failure   = 0x9C,
-            boo       = 0x9C,
-            shiny     = 0x88,
+            -- Ids are BANK-RELATIVE in Gen 1: the same number is a different sound depending
+            -- on which audio bank is loaded (overworld=Audio1, battle=Audio2). Every id below
+            -- is one of the 64 that resolve identically in ALL THREE banks, so a capture or a
+            -- faint fired mid-battle cannot play the wrong sound. Derived from the SFX header
+            -- label offsets in data/pret_rom_syms.json: id = (SFX_X - SFX_Headers_N) / 3.
+            -- The expressive Audio1-only alternatives (Denied 0xA5, Collision 0xB4,
+            -- Get_Key_Item 0x94) are correct ONLY in the overworld — don't use them here.
+            capture   = 0x89,   -- SFX_GET_ITEM_2
+            gift      = 0x89,   -- SFX_GET_ITEM_2
+            faint     = 0x8C,   -- SFX_TINK
+            whiteout  = 0x8C,   -- SFX_TINK
+            no_catch  = 0x8C,   -- SFX_TINK
+            success   = 0x8D,   -- SFX_HEAL_HP
+            failure   = 0x8C,   -- SFX_TINK
+            boo       = 0x8C,   -- SFX_TINK
+            shiny     = 0x89,   -- SFX_GET_ITEM_2 (Gen 1 has no dedicated shiny SE)
         },
+    },
+
+    -- Archipelago Red/Blue is built from Alchav's FORK of pokered, not from pret, and the
+    -- fork adds ~121 lines of WRAM for AP item/event/dexsanity tracking. That relocates
+    -- real addresses: 861 of the 2171 WRAM symbols shared with vanilla move.
+    --
+    -- This profile used to inherit EVERY vanilla address and override only the label, so
+    -- an AP run read the wrong byte for its current map, badges, trainer ID, PC box and
+    -- enemy party. Listed below are exactly the fields whose pret symbol moved, taken from
+    -- `alchav_pokered` in data/pret_syms.json; the ~19 unchanged fields are inherited from
+    -- red via the metatable attached just after this table.
+    --
+    -- Independently corroborated: AP's own client.py reads CurrentMap at WRAM offset
+    -- 0x1436, i.e. bus 0xD436 — matching MAP_ID_ADDR here.
+    red_ap = {
+        -- The AP fork rebuilds the ROM, so vanilla ROM offsets do not carry over.
+        change_box_bit_test_rom_addr = false,
+        
+        variant_label           = "Red (AP)",
+        -- +216: AP's tracking block sits ahead of the player-data area.
+        MAP_ID_ADDR             = 0xD436,   -- wCurMap
+        PLAYER_ID_ADDR          = 0xD431,   -- wPlayerID
+        BADGES_ADDR             = 0xD42E,   -- wObtainedBadges
+        -- -18: the enemy party block moves DOWN, not up.
+        ENEMY_COUNT_ADDR        = 0xD88A,   -- wEnemyPartyCount
+        ENEMY_SPECIES_LIST_ADDR = 0xD88B,   -- wEnemyPartySpecies
+        ENEMY_BASE_ADDR         = 0xD892,   -- wEnemyMons
+        -- +11: the PC box block.
+        BOX_COUNT_ADDR          = 0xDA8B,   -- wBoxCount
+        BOX_SPECIES_ADDR        = 0xDA8C,   -- wBoxSpecies
+        BOX_BASE_ADDR           = 0xDAA1,   -- wBoxMon1
+        BOX_OT_NAMES_ADDR       = 0xDD35,   -- wBoxMonOT
+        BOX_NICKS_ADDR          = 0xDE11,   -- wBoxMonNicks
+        -- +116: wCurrentBoxNum moves further than the rest of the box block.
+        CURRENT_BOX_NUM_ADDR    = 0xD614,   -- wCurrentBoxNum
+
+        -- pokered's ChangeBox wipes every SRAM box the first time the player opens the box
+        -- menu (engine/menus/save.asm:366). Box 12 is our memorial, so the client claims the
+        -- banks first via M.protectSramBoxes(). Geometry from pret: NUM_BOXES 12, 6 per bank
+        -- in banks 2/3, wBoxDataEnd-wBoxDataStart = 1122, checksum block at sBank2/3AllBoxes-
+        -- Checksum (0xBA4C) = bank base + 0x1A4C. BIT_HAS_CHANGED_BOXES = 7.
+        sram_box_layout = {
+            box_len = 1122, boxes_per_bank = 6, banks = {2, 3},
+            checksum_offset = 0x1A4C,
+            changed_boxes_addr = 0xD614, changed_boxes_bit = 0x80,
+        },
+        -- -18, with the rest of the enemy party block.
+        ENEMY_OT_NAMES_ADDR     = 0xD99A,   -- wEnemyMonOT
+        ENEMY_NICKS_ADDR        = 0xD9DC,   -- wEnemyMonNicks
+        -- JOY_IGNORE_ADDR / FONT_LOADED_ADDR are unmoved (0xCDxx / 0xCFxx), inherited.
     },
 }
 
 -- Blue uses same addresses as Red
 M.PROFILES.blue = M.PROFILES.red
 
--- ═══ Archipelago variants (Phase 8) ═══════════════════════════════════════
--- Pokemon Red/Blue Archipelago (Alchav, official ArchipelagoMW/Archipelago)
--- preserves the vanilla WRAM layout — no address relocation. ROM title at
--- 0x134 is unchanged ("POKEMON RED" / "POKEMON BLUE"); the seed name written
--- to 0xFFDB by the AP patcher distinguishes it from a vanilla cart. Profiles
--- clone vanilla addresses with a variant_label override.
-M.PROFILES.red_ap  = setmetatable({variant_label = "Red (AP)"},  {__index = M.PROFILES.red})
-M.PROFILES.blue_ap = setmetatable({variant_label = "Blue (AP)"}, {__index = M.PROFILES.blue})
+-- ═══ Archipelago variants ═════════════════════════════════════════════════
+-- red_ap is declared INSIDE M.PROFILES above so tools/verify_profile_addresses.py can see
+-- it — that parser only walks literal blocks within M.PROFILES. Inheritance of the ~19
+-- unchanged fields is attached here, after the table exists.
+setmetatable(M.PROFILES.red_ap, {__index = M.PROFILES.red})
+-- Blue's AP build shares Red's layout, exactly as vanilla Blue shares vanilla Red's.
+M.PROFILES.blue_ap = setmetatable({variant_label = "Blue (AP)"},
+                                  {__index = M.PROFILES.red_ap})
 
 -- Lowercase alias for game_detect.lua compatibility
 M.profiles = M.PROFILES
@@ -259,6 +411,45 @@ function M.detect()
     return title == "POKEMON RED" or title == "POKEMON BLUE" or title == "POKEMON YELLOW"
 end
 
+-- Archipelago writes the multiworld seed name as 20 bytes of Gen 1 charset text to ROM
+-- offset 0x5F22 (`Title_Seed`), and the slot name to 0x5F42 — confirmed against the AP
+-- world's rom.py and the shipped basepatch, whose unrandomized placeholder decodes to
+-- "(NOT RANDOMIZED)".
+M.AP_SEED_ROM_OFFSET = 0x5F22
+M.AP_SEED_LEN = 16
+
+-- Bytes that can appear in an encoded Gen 1 string: terminator, space, A-Z + punctuation,
+-- a-z, and the digit block. Deliberately NOT a full charmap — this only has to separate
+-- "looks like text" from "looks like code".
+local function _is_text_byte(b)
+    return b == 0x50            -- "@" terminator
+        or b == 0x7F            -- space
+        or (b >= 0x80 and b <= 0x9F)   -- A-Z ( ) : ; [ ]
+        or (b >= 0xA0 and b <= 0xB9)   -- a-z
+        or (b >= 0xF6 and b <= 0xFF)   -- 0-9
+end
+
+-- True when the seed slot holds text rather than the executable code vanilla has there.
+-- Measured on the real ROMs: vanilla scores 1/16 text-range bytes, an AP build 16/16, so
+-- a 3/4 threshold separates them with enormous margin.
+function M.detect_archipelago()
+    -- Read the FLAT ROM domain, not the System Bus: 0x5F22 lives in bank 1, and on the
+    -- bus 0x4000-0x7FFF is a window onto whatever bank is mapped right now. Self-contained
+    -- (BizHawk's `memory` global) because the game module is loaded before initProfile.
+    local has_rom = false
+    for _, d in ipairs(memory.getmemorydomainlist()) do
+        if d == "ROM" then has_rom = true; break end
+    end
+    if not has_rom then return false end
+    local textish = 0
+    for i = 0, M.AP_SEED_LEN - 1 do
+        local ok, b = pcall(memory.read_u8, M.AP_SEED_ROM_OFFSET + i, "ROM")
+        if not ok then return false end
+        if _is_text_byte(b) then textish = textish + 1 end
+    end
+    return textish >= math.floor(M.AP_SEED_LEN * 3 / 4)
+end
+
 function M.detect_variant()
     local title = M._readRomTitle()
     local base
@@ -266,19 +457,13 @@ function M.detect_variant()
     elseif title == "POKEMON BLUE" then base = "blue"
     elseif title == "POKEMON YELLOW" then base = "yellow"
     else return nil end
-    -- Phase 8: detect Archipelago patch via seed name at 0xFFDB (21 bytes).
-    -- Vanilla ROMs have zeros there; AP-patched ROMs write a seed identifier.
-    -- Yellow has no upstream AP world yet — skip the check.
+    -- Yellow has no upstream AP world.
     if base == "yellow" then return base end
-    local ok, ap_marker = pcall(function()
-        local non_zero = false
-        for i = 0, 5 do
-            local b = memory.read_u8(0xFFDB + i, "System Bus")
-            if b ~= 0 and b ~= 0xFF then non_zero = true; break end
-        end
-        return non_zero
-    end)
-    if ok and ap_marker then return base .. "_ap" end
+    -- This used to read CPU 0xFFDB on the System Bus, which is HRAM — runtime scratch,
+    -- nonzero during normal play — so every vanilla cart eventually self-identified as
+    -- AP. The seed lives in ROM bank 1 and must be read from the flat ROM domain.
+    local ok, is_ap = pcall(M.detect_archipelago)
+    if ok and is_ap then return base .. "_ap" end
     return base
 end
 
@@ -296,10 +481,15 @@ function M._readRomTitle()
     return nil
 end
 
+-- rom_type is a KEY, not a label: the server maps it through _ROM_TYPE_TO_GAME_ID to pick
+-- an adapter, and renders the pretty name from its own _VARIANT_LABEL table. This used to
+-- return "Red (AP)", which is in neither table, so an AP run resolved to game_id=None and
+-- the hello never bound an adapter. Gen 3 already uses the lowercase-snake form
+-- (firered_ap); Gen 1 now matches it.
 function M.rom_type_for_variant(variant)
     local names = {
         red = "Red", blue = "Blue", yellow = "Yellow",
-        red_ap = "Red (AP)", blue_ap = "Blue (AP)",
+        red_ap = "red_ap", blue_ap = "blue_ap",
     }
     return names[variant] or variant
 end

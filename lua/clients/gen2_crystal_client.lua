@@ -138,6 +138,10 @@ local function parse_command_list(raw)
         local b       = tonumber(obj:match('"b"%s*:%s*(%d+)'))
         local frames  = tonumber(obj:match('"frames"%s*:%s*(%d+)'))
         local fb      = obj:match('"fb"%s*:%s*"([^"]*)"')   -- msgbox fallback style (prompt/hud)
+        -- Numeric Gen 3 SE id (the server emits `"sound": 25`), mapped to a semantic
+        -- event name by playSfxFromGen3Id. Without this the play_sound handler below
+        -- can never fire, because c.sound is always nil.
+        local sound   = tonumber(obj:match('"sound"%s*:%s*(%d+)'))
         local area_id = obj:match('"area_id"%s*:%s*"([^"]*)"')
         local areas   = nil
         local areas_raw = obj:match('"areas"%s*:%s*(%b[])')
@@ -149,7 +153,7 @@ local function parse_command_list(raw)
         end
         if cmd then
             cmds[#cmds + 1] = {
-                cmd = cmd, key = key, text = text, fb = fb,
+                cmd = cmd, key = key, text = text, fb = fb, sound = sound,
                 r = r, g = g, b = b, frames = frames,
                 area_id = area_id, areas = areas,
             }
@@ -838,7 +842,13 @@ local function diff_party()
                     for _, prev in pairs(prev_party) do
                         if prev.key == key then was_in_party = true; break end
                     end
-                    if was_in_party then
+                    -- `or deposit_debounce[key]`: prev_party is overwritten with the
+                    -- CURRENT party at the end of every diff_party, so the key is only
+                    -- "in prev_party" on the single frame it vanishes. Without the second
+                    -- clause the counter reaches 1 and stops, DEBOUNCE_FRAMES is 3, and
+                    -- party_to_box can never fire — party/box sync was dead in both Gen 1
+                    -- and Gen 2. Once debouncing has started, keep counting.
+                    if was_in_party or deposit_debounce[key] then
                         deposit_debounce[key] = (deposit_debounce[key] or 0) + 1
                         if deposit_debounce[key] >= DEBOUNCE_FRAMES then
                             -- Verify it's actually in the box

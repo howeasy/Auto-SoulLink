@@ -131,6 +131,35 @@ local function parse_command_list(raw)
         local b       = tonumber(obj:match('"b"%s*:%s*(%d+)'))
         local frames  = tonumber(obj:match('"frames"%s*:%s*(%d+)'))
         local fb      = obj:match('"fb"%s*:%s*"([^"]*)"')   -- msgbox fallback style (prompt/hud)
+        -- Numeric Gen 3 SE id (the server emits `"sound": 25`), mapped to a semantic
+        -- event name by playSfxFromGen3Id. Unquoted, so match digits — not a string.
+        local sound   = tonumber(obj:match('"sound"%s*:%s*(%d+)'))
+        -- Attached to force_faint by the server so the toast can name a mon we have
+        -- never held (state.py queues it in four places).
+        local nickname = obj:match('"nickname"%s*:%s*"([^"]*)"')
+        -- Cached party-only stats attached to party_mon. Gen 1's box struct drops level,
+        -- maxHP and the computed stats, so without these a withdrawn mon comes back
+        -- with maxHP equal to whatever HP it had when deposited.
+        local stats = nil
+        local sj = obj:match('"stats"%s*:%s*(%b{})')
+        if sj then
+            stats = {
+                level   = tonumber(sj:match('"level"%s*:%s*(%d+)')),
+                maxHP   = tonumber(sj:match('"maxHP"%s*:%s*(%d+)')),
+                attack  = tonumber(sj:match('"attack"%s*:%s*(%d+)')),
+                defense = tonumber(sj:match('"defense"%s*:%s*(%d+)')),
+                speed   = tonumber(sj:match('"speed"%s*:%s*(%d+)')),
+                spAtk   = tonumber(sj:match('"spAtk"%s*:%s*(%d+)')),
+                spDef   = tonumber(sj:match('"spDef"%s*:%s*(%d+)')),
+            }
+        end
+        -- replace_rival_team carries the partner's team as an array of hex blobs.
+        local blobs_hex = nil
+        local blobs_raw = obj:match('"blobs_hex"%s*:%s*(%b[])')
+        if blobs_raw then
+            blobs_hex = {}
+            for h in blobs_raw:gmatch('"([0-9A-Fa-f]*)"') do blobs_hex[#blobs_hex + 1] = h end
+        end
         local area_id = obj:match('"area_id"%s*:%s*"([^"]*)"')
         local areas   = nil
         local areas_raw = obj:match('"areas"%s*:%s*(%b[])')
@@ -142,7 +171,8 @@ local function parse_command_list(raw)
         end
         if cmd then
             cmds[#cmds + 1] = {
-                cmd = cmd, key = key, text = text, fb = fb,
+                cmd = cmd, key = key, text = text, fb = fb, sound = sound,
+                nickname = nickname, stats = stats, blobs_hex = blobs_hex,
                 r = r, g = g, b = b, frames = frames,
                 area_id = area_id, areas = areas,
             }
@@ -161,8 +191,14 @@ local rom_type        = G.rom_type_for_variant(variant)
 local val_ok, val_err = M.validateROM()
 local writes_enabled  = val_ok
 
-console.log(fmt("[SLink-RBY] Detected: %s (variant=%s) writes=%s",
-    G.display_name, variant, tostring(writes_enabled)))
+-- Optional companion patch (vanilla Red/Blue only). Its one player-visible feature is sound:
+-- Gen 1 has no RAM-writable audio trigger, so an unpatched cartridge stays silent and every
+-- playSfx call is a no-op. Detection reads the beacon, so a wrong or absent patch is inert.
+local patch_abi = M.detectCompanionPatch()
+
+console.log(fmt("[SLink-RBY] Detected: %s (variant=%s) writes=%s patch=%s",
+    G.display_name, variant, tostring(writes_enabled),
+    patch_abi and ("ABI " .. patch_abi) or "none (SFX disabled)"))
 if not val_ok then
     console.log(fmt("[SLink-RBY] ROM validation: %s (will retry each frame)", val_err))
 end
@@ -204,9 +240,23 @@ local resolved_areas        = {}
 local resolved_areas_seeded = false
 local rebuild_active        = false  -- true between rebuild_start and rebuild_done
 
+-- Sync command queue (box_mon / party_mon / memorialize — deferred until safe).
+-- MUST be declared before dispatch_commands: a local declared after a function is
+-- not in that function's scope, so the queue reads below would bind to a nil global
+-- and `ipairs(nil)` would kill the client on the first deferred command.
+-- Every other gen's client declares these before its dispatcher for the same reason.
+local pending_sync_cmds = {}
+local sync_written_keys = {}  -- keys recently written to avoid re-triggering events
+
 local function dispatch_commands(cmds)
     for _, c in ipairs(cmds) do
         if c.cmd == "force_faint" and c.key then
+            -- Seed the nickname cache from the server, which attaches it precisely so the
+            -- toast can name a mon we have never held. Without this nick_label falls back
+            -- to the raw key.
+            if c.nickname and c.nickname ~= "" then
+                nick_cache[c.key] = c.nickname
+            end
             if writes_enabled then
                 local count = M.getPartyCount()
                 for slot = 0, count - 1 do
@@ -220,6 +270,73 @@ local function dispatch_commands(cmds)
                 end
             else
                 console.log("[SLink-RBY]   ↳ force_faint skipped (writes off) key=" .. tostring(c.key))
+            end
+        elseif c.cmd == "force_explode" and c.key then
+            -- Explode Mode: coerce the surviving partner into Explosion instead of the
+            -- deferred force_faint. Gen 1 needs no ROM patch — the engine reads the chosen
+            -- move from wPlayerSelectedMove. Only meaningful for the ACTIVE battler; a
+            -- benched mon falls back to the plain faint so the rule still lands.
+            local done = false
+            if writes_enabled and M.isInBattle() then
+                local count = M.getPartyCount()
+                -- wPlayerMonNumber holds the party slot that is actually out; defaulting to
+                -- slot 0 would arm the wrong mon whenever the player has switched.
+                local active = M.getActivePartySlot and M.getActivePartySlot() or 0
+                for slot = 0, count - 1 do
+                    local mon = M.readPartySlot(slot)
+                    if mon and mon.key == c.key then
+                        if slot == active then
+                            local ok = M.forceExplode(slot)
+                            if ok then
+                                done = true
+                                console.log("[SLink-RBY]   ↳ force_explode armed: " .. c.key:sub(1, 8))
+                                hud_show("!! " .. nick_label(c.key) .. " EXPLODES!", 255, 140, 40, 300)
+                            end
+                        end
+                        break
+                    end
+                end
+            end
+            if not done then
+                -- Benched, not in battle, or writes off — fall back to the normal faint.
+                if writes_enabled then
+                    local count = M.getPartyCount()
+                    for slot = 0, count - 1 do
+                        local mon = M.readPartySlot(slot)
+                        if mon and mon.key == c.key then
+                            M.forceFaint(slot)
+                            hud_show("!! " .. nick_label(c.key) .. " DIED!", 255, 80, 80, 360)
+                            break
+                        end
+                    end
+                end
+                console.log("[SLink-RBY]   ↳ force_explode fell back to force_faint")
+            end
+        elseif c.cmd == "replace_rival_team" and c.blobs_hex then
+            -- Rival Team Swap: byte-copy the partner's live party over the rival's.
+            -- Gen 1's enemy party is plaintext at a fixed address, so unlike Gen 3 this
+            -- needs no companion patch.
+            local ok, err = false, "writes disabled"
+            if writes_enabled then
+                local blobs = {}
+                for _, h in ipairs(c.blobs_hex) do
+                    local b = M.hexToBytes and M.hexToBytes(h)
+                    if b then blobs[#blobs + 1] = b end
+                end
+                if #blobs > 0 then
+                    ok, err = M.writeEnemyParty(blobs)
+                else
+                    ok, err = false, "no decodable blobs"
+                end
+            end
+            if ok then
+                console.log(fmt("[SLink-RBY]   ↳ replace_rival_team OK (%s mons)", tostring(err)))
+                hud_show("** RIVAL TEAM SWAP **", 255, 120, 255, 300)
+                send({event = "rival_team_replaced", n = err}, "rival_team_replaced", true)
+            else
+                console.log("[SLink-RBY]   ↳ replace_rival_team FAIL: " .. tostring(err))
+                send({event = "rival_team_replaced", error = tostring(err)},
+                     "rival_team_replaced", true)
             end
         elseif c.cmd == "hud_show" and c.text then
             hud_show(c.text, c.r or 255, c.g or 255, c.b or 255, c.frames or 300)
@@ -317,6 +434,17 @@ local frame_count       = 0
 -- Battle tracking
 local in_battle           = false
 local prev_in_battle      = false
+-- Set when a battle ends; cleared on the first genuinely-overworld frame, which is when
+-- the `safe` event fires. The server treats `safe` like a tick that also means "deferred
+-- commands can run now", so it must not be sent while a menu or script still owns input.
+local pending_safe        = false
+-- Rival Team Swap: trainer_battle_start fires once per trainer battle, and only after the
+-- opponent id has held steady. wCurOpponent is written during the battle-init sequence, so
+-- a single-frame read can catch it mid-update.
+local trainer_battle_sent   = false
+local trainer_last_id       = nil
+local trainer_stable_frames = 0
+local TRAINER_STABLE_GATE   = 3
 local battle_is_wild      = false
 local battle_area_id      = ""
 local captured_this_battle = false
@@ -330,20 +458,16 @@ local last_map_id  = -1
 -- Nuzlocke gate
 local nuzlocke_active = false
 
--- Sync command queue (box_mon / party_mon — deferred until safe)
-local pending_sync_cmds = {}
-local sync_written_keys = {}  -- keys recently written to avoid re-triggering events
+-- (pending_sync_cmds / sync_written_keys are declared above dispatch_commands)
 
 -- ── Party snapshot builder ────────────────────────────────────────────────────
 local function build_party_snapshot()
     local count = M.getPartyCount()
     local snap = {}
-    -- Gen 1 doesn't track an "active party slot" pointer; the battle struct
-    -- (wBattleMon) holds the active mon's live stats. For the status page's
-    -- stat-stage badges, mark slot 0 as active when in battle (Gen 1 nuzlocke
-    -- runs typically don't switch mid-battle; switching would shift the badges
-    -- to the wrong slot until the user reports a fix is needed).
+    -- wPlayerMonNumber (0xCC2F) is the party slot currently on the field, so the
+    -- stat-stage badges follow a mid-battle switch instead of staying pinned to slot 0.
     local in_b = in_battle and M.isInBattle()
+    local active_slot = in_b and (M.getActivePartySlot and M.getActivePartySlot() or 0) or nil
     local player_stages = in_b and M.readPlayerStatStages() or nil
     for slot = 0, count - 1 do
         local mon = M.readPartySlot(slot)
@@ -354,10 +478,15 @@ local function build_party_snapshot()
                 hp = mon.hp,
                 maxHP = mon.maxHP,
                 level = mon.level,
+                slot = slot,
                 species_id = G.toNatDex(mon.species_index),
                 nickname = nick,
                 status_cond = mon.status_cond or 0,
             }
+            -- Raw bytes for the partner's rival-team swap. Rides the existing snapshot
+            -- (hello/tick/safe) rather than adding a parallel sync event, matching gen3.
+            local blob = M.readPartyBlob(slot)
+            if blob then entry.blob_hex = M.bytesToHex(blob) end
             -- Phase 3: moves + PP from party struct. Server enriches into move_details.
             -- Gen 1 has no PP-Up encoding; pp_bonuses stays 0.
             local party_base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
@@ -367,7 +496,7 @@ local function build_party_snapshot()
                 entry.pp    = mp.pp
                 entry.pp_bonuses = 0
             end
-            if slot == 0 and player_stages then
+            if slot == active_slot and player_stages then
                 entry.active = true
                 entry.stat_stages = player_stages
             end
@@ -804,7 +933,13 @@ local function diff_party()
                     for _, prev in pairs(prev_party) do
                         if prev.key == key then was_in_party = true; break end
                     end
-                    if was_in_party then
+                    -- `or deposit_debounce[key]`: prev_party is overwritten with the
+                    -- CURRENT party at the end of every diff_party, so the key is only
+                    -- "in prev_party" on the single frame it vanishes. Without the second
+                    -- clause the counter reaches 1 and stops, DEBOUNCE_FRAMES is 3, and
+                    -- party_to_box can never fire — party/box sync was dead in both Gen 1
+                    -- and Gen 2. Once debouncing has started, keep counting.
+                    if was_in_party or deposit_debounce[key] then
                         deposit_debounce[key] = (deposit_debounce[key] or 0) + 1
                         if deposit_debounce[key] >= DEBOUNCE_FRAMES then
                             -- Verify it's actually in the box
@@ -1046,6 +1181,9 @@ local function on_frame()
     elseif not cur_in_battle and in_battle then
         -- Battle ended
         post_battle_frames = POST_BATTLE_GRACE
+        pending_safe = true
+        trainer_battle_sent = false
+        trainer_stable_frames = 0
         console.log(fmt("[SLink-RBY] Battle END captured=%s", tostring(captured_this_battle)))
     end
     prev_in_battle = in_battle
@@ -1088,10 +1226,40 @@ local function on_frame()
     -- 9. Party diff (capture, faint, evolution, sync detection)
     diff_party()
 
-    -- 9b. Execute pending sync commands (box_mon / party_mon) when safe
-    if writes_enabled and not in_battle and #pending_sync_cmds > 0 then
-        local cmd = table.remove(pending_sync_cmds, 1)
+    -- 9b. Execute pending sync commands (box_mon / party_mon / memorialize) when safe.
+    -- `not in_battle` alone was too permissive: it is also true in the PC box UI, the party
+    -- menu and the naming screen, where the open UI writes its own copy back over ours.
+    -- PEEK rather than pop — the command is only dropped once it has actually been handled,
+    -- so a mid-write error retries next frame instead of losing the deposit. See keep_queued
+    -- below for which paths requeue and their bounds.
+    -- Defer every box operation while the MEMORIAL box is the active one. Two distinct
+    -- hazards: a normal box_mon would deposit a live mon into the graveyard, and
+    -- memorialize writes Box 12's SRAM directly while the game holds a WRAM copy of the
+    -- active box that it would write back over us. Staying queued means the command simply
+    -- runs once the player switches boxes.
+    local active_box = M.getCurrentBoxNum and M.getCurrentBoxNum()
+    local box_safe = (active_box == nil) or (active_box ~= MEMORIAL_BOX_INDEX)
+
+    if writes_enabled and box_safe and M.isInOverworld() and #pending_sync_cmds > 0 then
+        local cmd = pending_sync_cmds[1]
+        local handled = true
         local ok, err
+
+        -- Bounded requeue. `handled` starts true and the peek-before-remove above is only
+        -- meaningful if some path clears it — for a long time none did, so the "retries next
+        -- frame" the comment promised did not exist and every failure was dropped silently.
+        -- That matters most where the branch reports NOTHING to the server: the server keeps
+        -- believing the command is in flight, and the pair desyncs permanently.
+        -- Returns true while the command should stay queued.
+        local function keep_queued(limit)
+            local n = (cmd._retries or 0) + 1
+            cmd._retries = n
+            if n <= limit then
+                handled = false
+                return true
+            end
+            return false
+        end
         if cmd.cmd == "box_mon" then
             local count = M.getPartyCount()
             local found_slot = nil
@@ -1107,16 +1275,38 @@ local function on_frame()
                 console.log("[SLink-RBY]   ↳ box_mon: " .. cmd.key:sub(1, 8) .. " not in party (OK)")
                 sync_written_keys[cmd.key] = true
             elseif count <= 1 then
-                console.log("[SLink-RBY]   ↳ box_mon skipped: last mon in party")
-                hud_show("! Only mon!", 255, 200, 60, 240)
+                -- The party can gain a mon later, so stay queued instead of dropping a
+                -- deposit the server still thinks is in flight. Bounded so it cannot spin
+                -- forever if the player never catches anything again.
+                if keep_queued(600) then
+                    if cmd._retries == 1 then
+                        console.log("[SLink-RBY]   ↳ box_mon deferred: last mon in party")
+                        hud_show("! Only mon!", 255, 200, 60, 240)
+                    end
+                else
+                    console.log("[SLink-RBY]   ↳ box_mon DROPPED: still the last mon after "
+                                .. "600 safe frames")
+                    hud_show("X Deposit failed!", 255, 80, 80, 240)
+                end
             else
+                -- Read the party-only stats BEFORE depositing — the box struct drops
+                -- level/maxHP/Atk/Def/Spd/Spc, so the server has to hold them for us until
+                -- this mon is withdrawn again (possibly in a later session).
+                local pre_stats = M.readPartyStats(found_slot)
                 ok, err = M.depositPartyMon(found_slot)
                 if ok then
                     sync_written_keys[cmd.key] = true
+                    if pre_stats then
+                        send({event = "stats_cache", key = cmd.key, stats = pre_stats},
+                             "stats_cache:" .. cmd.key:sub(1, 8), true)
+                    end
                     console.log("[SLink-RBY]   ↳ box_mon OK: " .. cmd.key:sub(1, 8))
                     hud_show("v " .. nick_label(cmd.key) .. " boxed", 100, 180, 255, 200)
+                elseif keep_queued(3) then
+                    console.log(fmt("[SLink-RBY]   ↳ box_mon retry %d/3: %s",
+                                    cmd._retries, err or "?"))
                 else
-                    console.log("[SLink-RBY]   ↳ box_mon FAIL: " .. (err or "?"))
+                    console.log("[SLink-RBY]   ↳ box_mon FAIL (giving up): " .. (err or "?"))
                     hud_show("X Deposit failed!", 255, 80, 80, 240)
                 end
             end
@@ -1149,7 +1339,9 @@ local function on_frame()
                          "sync_retrieve_failed:" .. cmd.key:sub(1, 8), true)
                 end
             else
-                ok, err = M.retrieveBoxMon(cmd.key)
+                -- cmd.stats is the block cached at deposit time (server mon_stats); without
+                -- it the mon returns with maxHP = its stored HP and zeroed stats.
+                ok, err = M.retrieveBoxMon(cmd.key, cmd.stats)
                 if ok then
                     sync_written_keys[cmd.key] = true
                     all_known_keys[cmd.key] = true
@@ -1198,13 +1390,51 @@ local function on_frame()
                     hud_show("+ " .. nick_label(cmd.key) .. " buried", 255, 140, 40, 300)
                     send({event = "memorialize_done", key = cmd.key},
                          "memorialize_done:" .. cmd.key:sub(1, 8), true)
+                elseif keep_queued(3) then
+                    console.log(fmt("[SLink-RBY]   ↳ memorialize retry %d/3: %s",
+                                    cmd._retries, err or "?"))
                 else
-                    console.log("[SLink-RBY]   ↳ memorialize FAIL: " .. (err or "?"))
+                    console.log("[SLink-RBY]   ↳ memorialize FAIL (giving up): " .. (err or "?"))
                     hud_show("X Memorial failed!", 255, 80, 80, 300)
                     send({event = "memorialize_failed", key = cmd.key, reason = err or "unknown"},
                          "memorialize_failed:" .. cmd.key:sub(1, 8), true)
                 end
             end
+        end
+        if handled then table.remove(pending_sync_cmds, 1) end
+    end
+
+    -- 9b-bis. Rival Team Swap: announce a TRAINER battle once its opponent id is stable.
+    -- The server decides whether this id is a rival (adapter.rival_trainer_ids) and whether
+    -- the run has the rule on, then answers with replace_rival_team.
+    if in_battle and not trainer_battle_sent and not battle_is_wild then
+        local tid = M.readTrainerOpponentId and M.readTrainerOpponentId()
+        if tid and tid > 0 then
+            if tid == trainer_last_id then
+                trainer_stable_frames = trainer_stable_frames + 1
+            else
+                trainer_last_id = tid
+                trainer_stable_frames = 1
+            end
+            if trainer_stable_frames >= TRAINER_STABLE_GATE then
+                trainer_battle_sent = true
+                send({event = "trainer_battle_start", trainer_id = tid},
+                     "trainer_battle_start", true)
+            end
+        end
+    end
+
+    -- 9c. safe — the first genuinely-overworld frame after a battle ends. The server
+    -- treats it as a tick that also means "deferred writes can run now", so it waits for
+    -- isInOverworld rather than just "not in battle": the post-battle frames still have a
+    -- text box up and a script holding the joypad.
+    if pending_safe and M.isInOverworld() and post_battle_frames == 0 then
+        pending_safe = false
+        if C.connected() then
+            local evt = {event = "safe", has_pokeballs = nuzlocke_active, area_id = last_area_id}
+            local raw_count = M.getPartyCount()
+            if raw_count >= 1 and raw_count <= 6 then evt.party = build_party_snapshot() end
+            send(evt, "safe", true)
         end
     end
 
@@ -1240,8 +1470,19 @@ if init_count <= 6 then
     end
 end
 
--- ── Main loop ─────────────────────────────────────────────────────────────────
-while true do
-    on_frame()
-    emu.frameadvance()
+-- An unguarded read during a screen transition would otherwise take the whole
+-- client down rather than dropping a single frame. Mirrors gen3's on_frame_safe.
+local function on_frame_safe()
+    local ok, err = pcall(on_frame)
+    if not ok then console.log("[SLink-RBY] ERROR (handler kept alive): " .. tostring(err)) end
 end
+
+-- ── Main loop ─────────────────────────────────────────────────────────────────
+-- A frame CALLBACK, not `while true do ... emu.frameadvance() end`.
+--
+-- Gen 3, 4 and 5 all register a callback; Gen 1 and 2 were the outliers. The blocking loop
+-- never returns, so anything that dofile()s this client hangs forever — which is exactly
+-- what the two-instance duo harness has to do (it loads the REAL production client and
+-- drives a scenario coroutine alongside it). Behaviour per frame is unchanged.
+event.onframeend(on_frame_safe, "slink_gen1")
+console.log("[SLink-RBY] Running — play normally to trigger events…")
