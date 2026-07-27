@@ -146,6 +146,19 @@ local ctx = {player = D.player, log = log, M = M, G = G}
 
 function ctx.frames(n) for _ = 1, n do coroutine.yield() end end
 
+-- Input. Gen 1 needs a direction HELD to walk — a tap only turns the player — so scenarios
+-- that actually play the game (rather than poking RAM) need to drive the pad, not just wait.
+-- joypad.set is per-frame, so the hold has to be re-applied every frame it should last.
+function ctx.hold(btn, frames, stop)
+    for _ = 1, (frames or 8) do
+        joypad.set({[btn] = true})
+        coroutine.yield()
+        if stop and stop() then return true end
+    end
+    coroutine.yield()
+    return false
+end
+
 function ctx.wait_until(pred, max_frames, what)
     for _ = 1, (max_frames or 14400) do
         local v = pred()

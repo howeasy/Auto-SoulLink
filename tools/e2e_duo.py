@@ -54,6 +54,12 @@ SCENARIOS = {
     # Gen 1 explode: RAM-only, no companion patch. Distinct from the Gen 3 "explode" entry
     # below, which loads savestates and keeps B at a single mon.
     "explode_g1": {"flags": ["--explode-mode"], "timeout": 300, "games": ("gen1",)},
+    # The only scenario that PLAYS. Both instances walk Route 1's grass, meet a real wild
+    # Pokemon and throw a real ball; the link is formed by the server from the resulting
+    # `capture` events. Nothing is injected and the Nuzlocke gate comes from the real bag,
+    # so this is the only coverage of encounter linking, area_enter and the ball gate.
+    "playthrough": {"flags": [], "timeout": 1500, "games": ("gen1",),
+                    "target": "battle", "no_setup": True, "frames": 200000},
     "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "ghost":   {"flags": ["--overworld-presence"], "savestate": "slink_overworld.State",
                 "timeout": 420},
@@ -213,7 +219,9 @@ class DuoRun:
                 "partner_result": (f"{WT_FWD}/patch/build/e2e_{self.scenario}_"
                                    f"{'b' if inst == 'a' else 'a'}_result.txt"),
                 "go_file": self.go_files[inst].replace("\\", "/"),
-                "timeout_frames": self.cfg["timeout"] * 60,
+                # Scenarios that PLAY the game need a frame budget set by how long the game
+                # takes, not by the wall-clock timeout: at 400x, timeout*60 runs out mid-hunt.
+                "timeout_frames": self.cfg.get("frames", self.cfg["timeout"] * 60),
             }
             if self.gcfg["uses_savestate"]:
                 ss = self.cfg["savestate"]
@@ -222,7 +230,7 @@ class DuoRun:
                 # Seed this instance's battery save. Red and Blue get different filenames
                 # from BizHawk's gamedb, so the two instances never fight over one file.
                 from run_gen1_gate import seed_saveram
-                seed_saveram(self.gcfg["fixture"][inst], "town")
+                seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"))
             with open(stub, "w") as f:
                 f.write('SLINK_HOST = "127.0.0.1"\n')
                 f.write(f"SLINK_PORT = {self.tcp_port}\n")
@@ -277,6 +285,45 @@ class DuoRun:
                 return None
         wait_for("inject_link", linked, 60)
         print(f"[duo] linked {a_key} <-> {b_key}")
+
+    def assert_real_link_formed(self):
+        """The whole point of the playthrough scenario.
+
+        Both instances catch a wild mon through actual play; the server must pair those two
+        captures BY AREA on its own. Nothing here injects anything — if encounter linking is
+        broken, no link appears and this raises. This is the only assertion in the suite that
+        covers the rule SLink exists for.
+        """
+        def caught(inst):
+            txt = read_result(self.scenario, inst) or ""
+            for line in txt.splitlines():
+                if "CAUGHT " in line:
+                    return line.split("CAUGHT ", 1)[1].split()[0]
+            return None
+
+        def both_caught():
+            a, b = caught("a"), caught("b")
+            return (a, b) if a and b else None
+
+        a_key, b_key = wait_for("both instances to catch a wild mon", both_caught,
+                                self.cfg["timeout"])
+        print(f"[duo] real captures: a={a_key} b={b_key}")
+
+        def linked():
+            st = self._status() or {}
+            for link in (st.get("links") or []):
+                keys = {link.get("a_key"), link.get("b_key")}
+                if keys == {a_key, b_key}:
+                    return link
+            return None
+
+        link = wait_for("the SERVER to pair the two real captures", linked, 180)
+        area = link.get("area_id")
+        print(f"[duo] ENCOUNTER LINK FORMED FROM REAL PLAY: "
+              f"{a_key} <-> {b_key} in area={area}")
+        if area in (None, "", "duo"):
+            raise RuntimeError(f"link formed but area_id is {area!r} — expected a real "
+                               f"encounter area resolved from the map, not a harness value")
 
     def go(self, lines_by_inst=None):
         """Write the per-instance go-files; lines_by_inst = {"a": [...], "b": [...]} or None."""
@@ -339,6 +386,13 @@ class DuoRun:
     def orchestrate(self):
         ka, kb = self.wait_keys()
         self.wait_connected()
+        if self.cfg.get("no_setup"):
+            # Deliberately does NOT call set_pokeballs() or inject_link(): this scenario
+            # exists to prove the paths those shortcuts bypass. The fixture carries real
+            # Poke Balls, so the gate flips from the client's own bag read.
+            self.go()
+            self.assert_real_link_formed()
+            return
         self.set_pokeballs()
         if self.scenario == "infopanel":
             # THREE pairs, not one: 3 pairs (6 rows) + 3 summary rows = 9 rows = 2 pages, which is

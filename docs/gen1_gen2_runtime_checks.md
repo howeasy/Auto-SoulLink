@@ -93,9 +93,9 @@ instruction bytes at the `ChangeBox` branch to confirm the game behaviour it def
 
   | Never exercised live | Why it matters |
   |---|---|
-  | Encounter linking, dead zone, whiteout, all three clauses | every duo pair is injected via `/api/inject_link` and the Nuzlocke gate is force-set, so none has fired from real play |
-  | `area_enter` — **0 of 39** encounter areas visited | every live test sits in Pallet Town (map `0x00`); the 94-entry map table has had zero transitions validated |
-  | Any real wild encounter or capture | both gates load the `town` fixture; the `*_battle.SaveRAM` fixtures are loaded by nothing |
+  | Dead zone, whiteout, all three clauses | still injected. **Encounter linking and the ball gate are now covered** by the `playthrough` scenario, which injects nothing |
+  | `area_enter` — **1 of 39** encounter areas | the playthrough resolves `route_1` from the real map, but never crosses a boundary, so no map *transition* is validated |
+  | ~~Any real wild encounter or capture~~ | **COVERED.** The playthrough loads the `battle` fixture, hunts, and catches — the `*_battle.SaveRAM` files are no longer dead weight |
   | `party_mon` / `retrieveBoxMon` | the withdraw half of party sync has **never executed on a cartridge** |
   | A battle turn | both duo battles are staged by poking `wIsInBattle`; the engine never consumes our enemy-party or Explosion writes |
   | Evolution / `key_change` | Gen 1 keys embed species, so every evolution rewrites the key |

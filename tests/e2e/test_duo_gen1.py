@@ -46,7 +46,12 @@ DUO_ROMS = ("red", "blue")
 #   memorialize  a dead pair is buried in Gen 1's Box 12 graveyard, and acked
 #   rivalswap    the rival fights you with the partner's live team (no ROM patch)
 #   explode_g1   the survivor is coerced into Explosion instead of a plain faint
-SCENARIOS = ("faint", "boxsync", "memorialize", "rivalswap", "explode_g1")
+# "playthrough" is last because it is the slowest and the only one that PLAYS: it walks
+# Route 1's grass on both cartridges, meets real wild Pokemon, throws real Poke Balls, and
+# requires the SERVER to pair the two captures by area. Nothing is injected and the Nuzlocke
+# gate comes from the real bag, so it is the only coverage of encounter linking, area
+# resolution and the ball gate — every other scenario injects the state it verifies.
+SCENARIOS = ("faint", "boxsync", "memorialize", "rivalswap", "explode_g1", "playthrough")
 
 
 @pytest.mark.parametrize("scenario", SCENARIOS)

@@ -12,16 +12,18 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 - **Gen 1** — Red, Blue, Yellow (US English) — 🟡 **Partially verified.** The Soul Link
   *mechanisms* are proven against running cartridges; a *playthrough* is not. Be precise about
   which you are relying on:
-  - **Proven live** — faint propagation and party→box sync across two real cartridges
-    (Red as A, Blue as B); memorialize into Box 12; Explode Mode arming Explosion; the
-    enemy-party write; `force_faint`; box level at `box+0x03`; the Poké Ball bag read; Yellow's
-    −1 WRAM shift (reads); the companion patch's VBlank hook and SFX.
-  - **NOT proven live** — encounter linking, dead zone, whiteout and the species/gender/type
-    clauses (all pairs in the E2E are injected via `/api/inject_link` and the Nuzlocke gate is
-    force-set, so none of these has ever fired from real play); `area_enter` (**0 of 39 encounter
-    areas** are ever visited — every live test sits in Pallet Town); any real wild encounter or
-    capture; `party_mon`/`retrieveBoxMon`, which has never executed on a cartridge; evolution
-    `key_change`; and the Archipelago variants, which have never been launched at all.
+  - **Proven live** — **encounter linking from actual play**: both cartridges walk Route 1's
+    grass, meet real wild Pokémon, throw real Poké Balls, and the server pairs the two
+    captures by area on its own (`area=route_1`, nothing injected, Nuzlocke gate flipped by
+    the client's own bag read). Plus faint propagation and party→box sync across two real
+    cartridges; memorialize into Box 12; Explode Mode arming Explosion; the enemy-party
+    write; `force_faint`; box level at `box+0x03`; Yellow's −1 WRAM shift (reads); the
+    companion patch's VBlank hook and SFX.
+  - **NOT proven live** — the dead zone, whiteout and the species/gender/type clauses; any
+    map *transition* (the playthrough stays on Route 1, so 1 of 39 encounter areas is
+    exercised, not 0 but not many); `party_mon`/`retrieveBoxMon`, which has still never
+    executed on a cartridge; evolution `key_change`; and the Archipelago variants, which have
+    never been launched.
   Both duo battles are staged by poking `wIsInBattle`, and the battle engine has never executed
   a turn. Rival swap and Explode Mode need **no ROM patch** on Gen 1 (no encryption, no
   checksums); the optional Red/Blue companion patch adds sound only.
