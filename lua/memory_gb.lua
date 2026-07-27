@@ -1245,41 +1245,25 @@ end
 
 --- True when this map has wild Pokémon at all (wGrassRate == 0 means none).
 --
--- ONLY MEANINGFUL BEFORE THE FIRST BATTLE ON A MAP. wGrassRate lives in a UNION with the
--- enemy party (pret/pokered ram/wram.asm:2145-2172): wGrassRate/wGrassMons and
--- wEnemyPartyCount/wEnemyMons are the SAME BYTES. Any battle populates the enemy party and
--- destroys the wild table, and the game only rebuilds it on map entry. That is not a bug —
--- it is the documented origin of the MissingNo. glitch, where Cinnabar and Route 21 skip the
--- reload and the leftover enemy-party bytes get interpreted as wild data.
+-- Zero does NOT mean "a battle ate the table". An earlier version of this file claimed that,
+-- on the basis of the UNION at pret/pokered ram/wram.asm:2143-2172, and it was wrong twice:
+--
+--   * The overlay does not line up the way it looks. The second branch opens with
+--     wLinkEnemyTrainerName (11 bytes) + padding + wSerialEnemyDataBlock, so wEnemyPartyCount
+--     lands at 0xD89C — in the 8-byte hole AFTER wGrassMons — and wEnemyMons lands on
+--     wWaterRate. A battle therefore clobbers the WATER table, never the grass one.
+--   * It would not matter anyway: after every battle the game runs
+--     .noFaintCheck -> EnterMap -> LoadMapHeader -> LoadWildData
+--     (home/overworld.asm:353, :2309, :2253), rebuilding the whole table.
+--
+-- What actually zeroes it is standing on a map whose wild data is NothingWildMons — Pallet
+-- Town and Viridian City among them (data/wild/grass_water.asm:3-4), both of which Route 1
+-- connects to with no warp, and both of which HAVE grass tiles. So isInGrass() stays true
+-- while the rate is zero, which reads as "walking in grass forever with nothing happening".
+-- If you see that, check the map id before blaming the game.
 function M.hasWildEncounters()
     if not M.GRASS_RATE_ADDR then return nil end
     return M.read_u8(M.GRASS_RATE_ADDR) ~= 0
-end
-
--- The whole wild-data block: wGrassRate + wGrassMons, 8 bytes of padding, wWaterRate +
--- wWaterMons. wWaterRate - wGrassRate is 0x1D in both games, and the water half is the same
--- size again, so 0x32 bytes covers all of it.
-local WILD_DATA_LEN = 0x32
-
---- Snapshot the wild-encounter table so it can be reinstated after a battle eats it.
--- Call BEFORE the first battle on a map, while the union still holds wild data.
-function M.snapshotWildData()
-    if not M.GRASS_RATE_ADDR then return nil end
-    local snap = {}
-    for i = 0, WILD_DATA_LEN - 1 do
-        snap[i + 1] = M.read_u8(M.GRASS_RATE_ADDR + i)
-    end
-    return snap
-end
-
---- Put it back. This writes the same bytes the game's own map-entry reload would write, so a
--- scripted run can keep hunting on one map instead of walking out and back to force a reload.
-function M.restoreWildData(snap)
-    if not (M.GRASS_RATE_ADDR and snap) then return false end
-    for i = 0, WILD_DATA_LEN - 1 do
-        M.write_u8(M.GRASS_RATE_ADDR + i, snap[i + 1])
-    end
-    return true
 end
 
 --- True while the player is mid-ledge-hop, exiting a door, or fishing.

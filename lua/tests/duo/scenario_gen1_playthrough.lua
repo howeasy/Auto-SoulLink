@@ -65,20 +65,8 @@ return function(ctx)
     M.write_u8(BAG_QTY0, 40)
     local party_before = ctx.party_count()
     local balls_before = u8(BAG_QTY0)
-    -- Snapshot the wild-encounter table NOW, before any battle. It shares memory with the
-    -- enemy party (wram.asm:2145-2172 is a UNION), so the first wild battle overwrites it and
-    -- the game only rebuilds it on map entry — after which the player can walk in grass
-    -- forever with nothing happening. Earlier versions of this scenario appeared to work only
-    -- because their buggy pacing drifted across the map boundary and back, reloading it by
-    -- accident. Restoring the snapshot is exactly what map entry does.
-    local wild_data = M.snapshotWildData()
-    log(fmt("stocked: balls=%d wGrassRate=%s wildData=%s",
-            balls_before, tostring(M.hasWildEncounters()),
-            wild_data and (#wild_data .. " bytes") or "nil"))
-    -- Snapshot the starting keys. The property that matters is that a NEW mon entered the
-    -- party — that is exactly what the client turns into a `capture` event. Comparing against
-    -- the species we last met is weaker AND wrong across hunts: a mon that got away leaves
-    -- met_species pointing at the wrong encounter.
+    log(fmt("stocked: balls=%d wGrassRate=%s", balls_before,
+            tostring(M.hasWildEncounters())))
 
     -- At 400x speed a blind press sequence loses menu edges, so nothing here is fired and
     -- hoped for: every step is verified against an observable, and the whole sequence retries.
@@ -93,17 +81,9 @@ return function(ctx)
         -- Each column is its own 2-item menu, so wMaxMenuItem==1 means the battle menu is up.
         -- (It reads 3 earlier, left over from a previous menu — that misled the first probe.)
         --
-        -- Advance with B, NOT A. B clears text without confirming a selection; A confirms
-        -- whatever the cursor sits on, which at a fresh battle menu is FIGHT. That made the
-        -- scenario attack the wild mon between throws — a level-5 Squirtle one-shots a
-        -- level-3 Rattata, so the battle ended with "it got away" and the run burned 18 balls
-        -- over 20 hunts without a single catch. A Nuzlocke player throwing balls never
-        -- presses FIGHT.
-        -- CHECK BEFORE PRESSING. The press has to advance text, but the moment the menu is
-        -- up an A confirms whatever the cursor sits on — FIGHT — and a level-5 starter
-        -- one-shots a level-3 wild mon, ending the battle with "it got away". Testing first
-        -- means we never press at a live menu. (Using B instead does not work: B does not
-        -- advance this text reliably, and the run then never reaches the menu at all.)
+        -- CHECK BEFORE PRESSING. The press has to advance text, but the moment the menu is up
+        -- an A confirms whatever the cursor sits on — FIGHT — and a level-5 starter one-shots
+        -- a level-3 wild mon, ending the battle with "it got away".
         for _ = 1, 80 do
             if u8(MAX_MENU) == 1 then return true end
             if u8(IN_BATTLE) == 0 then return false end
@@ -114,8 +94,27 @@ return function(ctx)
 
     -- Returns true once a ball has actually left the bag.
     local function try_throw()
+        -- REFUSE TO PRESS DIRECTIONS OUTSIDE A BATTLE. Left/Up/Down below are menu
+        -- navigation, but if the battle has already ended they are MOVEMENT — and Down walks
+        -- the player south over one of Route 1's one-way ledges toward Pallet Town, which has
+        -- grass tiles and encounter rate 0. That is the entire drift mechanism, and it is
+        -- what made the rate read zero and look like the game eating the wild table.
+        -- wMaxMenuItem can read a stale 1 from a previous menu, so it is not enough on its own.
+        if u8(IN_BATTLE) == 0 then return false end
         local before = u8(BAG_QTY0)
-        press("Left"); press("Up"); press("Down")
+        -- Check between EVERY press, not just around the group. The battle can end partway
+        -- through — the mon flees, or the last ball resolves — and then the remaining presses
+        -- are movement. One stray `Down` is all it takes: it walks south over a one-way ledge
+        -- into Pallet Town, which has grass tiles and encounter rate 0, so the run then looks
+        -- like endless bad luck rather than a navigation bug.
+        local function menu_press(btn)
+            if u8(IN_BATTLE) == 0 then return false end
+            press(btn)
+            return u8(IN_BATTLE) ~= 0
+        end
+        if not (menu_press("Left") and menu_press("Up") and menu_press("Down")) then
+            return false
+        end
         if u8(CUR_MENU) ~= 1 then return false end          -- not on ITEM; caller retries
         press("A", 10, 45)                                   -- open the bag
         press("A", 10, 45)                                   -- use slot 0 = POKé BALL
@@ -159,6 +158,12 @@ return function(ctx)
         for i = 1, 600 do
             ctx.hold(dirs[(i % 2) + 1], 12, in_battle)
             if in_battle() then entered = true break end
+            if u8(CUR_MAP) ~= start_map then
+                return false, fmt("walked off map 0x%02X onto 0x%02X — Route 1's neighbours "
+                                  .. "have grass tiles but encounter rate 0, so this would "
+                                  .. "otherwise look like an endless run of bad luck",
+                                  start_map, u8(CUR_MAP))
+            end
             if M.isInGrass() == false then
                 -- Stepped off the patch: immediately step back the way we came, so we cannot
                 -- wander far enough to fall down one of Route 1's one-way ledges.
@@ -168,9 +173,16 @@ return function(ctx)
             end
         end
         if not entered then
-            return false, fmt("no wild encounter in 600 steps (left the grass %d times, "
-                              .. "in_grass=%s, wGrassRate=%s)", off_grass,
-                              tostring(M.isInGrass()), tostring(M.hasWildEncounters()))
+            -- Report the MAP first. Pallet Town and Viridian City both border Route 1 with no
+            -- warp, both have grass tiles, and both have encounter rate 0 — so drifting into
+            -- one looks exactly like bad luck: standing on grass, walking, nothing happening.
+            -- That cost a lot of time being mistaken for a game bug.
+            return false, fmt("no wild encounter in 600 steps: map=0x%02X (started 0x%02X)%s, "
+                              .. "in_grass=%s, wGrassRate=%s, left the grass %d times",
+                              u8(CUR_MAP), start_map,
+                              u8(CUR_MAP) ~= start_map and " — WALKED OFF THE MAP" or "",
+                              tostring(M.isInGrass()), tostring(M.hasWildEncounters()),
+                              off_grass)
         end
         met_species = u8(ENEMY_SP)
         log(fmt("hunt %d: wild species=0x%02X level=%d (balls=%d)",
@@ -219,7 +231,6 @@ return function(ctx)
             mon = M.readPartySlot(ctx.party_count() - 1)
             break
         end
-        M.restoreWildData(wild_data)     -- the battle just ate the wild table; put it back
         log(fmt("hunt %d: it got away (balls=%d) in_grass=%s wGrassRate=%s — back to the grass",
                 hunt, u8(BAG_QTY0), tostring(M.isInGrass()), tostring(M.hasWildEncounters())))
     end
