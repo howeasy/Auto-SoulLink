@@ -89,6 +89,12 @@ _RED_MAP: dict[str, Optional[str]] = {
     "FONT_LOADED_ADDR": "wFontLoaded",
     "CURRENT_BOX_NUM_ADDR": "wCurrentBoxNum",
 
+    # The game's own wild-encounter preconditions (see M.isInGrass).
+    "TILE_MAP_ADDR": "wTileMap",
+    "GRASS_TILE_ADDR": "wGrassTile",
+    "GRASS_RATE_ADDR": "wGrassRate",
+    "MOVEMENT_FLAGS_ADDR": "wMovementFlags",
+
     # ── Memorial-box SRAM guard (see M.protectSramBoxes) ──────────────────────
     # This one IS worth verifying: it is the same wCurrentBoxNum the client reads, and the
     # guard is wrong in a save-destroying way if it points anywhere else.

@@ -246,6 +246,10 @@ function M.initProfile(game_module, variant)
     -- The profile also provides a sfx_ids table mapping semantic events
     -- ("capture", "faint", "whiteout", "gift") to ROM SFX constants.
     -- Without confirmed addresses, leave disabled to avoid corrupting game state.
+    M.TILE_MAP_ADDR           = prof.TILE_MAP_ADDR
+    M.GRASS_TILE_ADDR         = prof.GRASS_TILE_ADDR
+    M.GRASS_RATE_ADDR         = prof.GRASS_RATE_ADDR
+    M.MOVEMENT_FLAGS_ADDR     = prof.MOVEMENT_FLAGS_ADDR
     M.SFX_DISPATCH_ADDR       = prof.SFX_DISPATCH_ADDR
     M.SFX_IDS                 = prof.sfx_ids or {}
 end
@@ -1215,6 +1219,75 @@ function M.readMovesAndPP(struct_base, base_pp_table)
         end
     end
     return result
+end
+
+-- ═══ Overworld: the game's own wild-encounter preconditions ══════════════
+-- Profile-keyed (Gen 1 only declares these), so Gen 2 inherits a nil no-op.
+--
+-- These exist because driving the overworld blind does not work. Pacing back and forth to
+-- farm encounters drifts: Route 1's ledges are ONE-WAY, so a stray southward step drops the
+-- player off the route with no way back, and every later step reports "no encounter" while
+-- looking perfectly healthy. Rather than heuristics, ask the game what it asks itself.
+--
+-- pokered TryDoWildEncounter (engine/battle/wild_encounters.asm:27-32):
+--     hlcoord 9, 9        ; bottom-right tile of the half-block we stand in
+--     ld c, [hl]
+--     ld a, [wGrassTile]
+--     cp c                ; equal -> grass -> an encounter can roll
+-- hlcoord x,y is wTileMap + y*20 + x, so the probe tile is wTileMap + 189.
+
+--- True when the player is standing on a tile that can roll a wild encounter.
+function M.isInGrass()
+    if not (M.TILE_MAP_ADDR and M.GRASS_TILE_ADDR) then return nil end
+    local tile = M.read_u8(M.TILE_MAP_ADDR + 189)
+    return tile == M.read_u8(M.GRASS_TILE_ADDR)
+end
+
+--- True when this map has wild Pokémon at all (wGrassRate == 0 means none).
+--
+-- ONLY MEANINGFUL BEFORE THE FIRST BATTLE ON A MAP. wGrassRate lives in a UNION with the
+-- enemy party (pret/pokered ram/wram.asm:2145-2172): wGrassRate/wGrassMons and
+-- wEnemyPartyCount/wEnemyMons are the SAME BYTES. Any battle populates the enemy party and
+-- destroys the wild table, and the game only rebuilds it on map entry. That is not a bug —
+-- it is the documented origin of the MissingNo. glitch, where Cinnabar and Route 21 skip the
+-- reload and the leftover enemy-party bytes get interpreted as wild data.
+function M.hasWildEncounters()
+    if not M.GRASS_RATE_ADDR then return nil end
+    return M.read_u8(M.GRASS_RATE_ADDR) ~= 0
+end
+
+-- The whole wild-data block: wGrassRate + wGrassMons, 8 bytes of padding, wWaterRate +
+-- wWaterMons. wWaterRate - wGrassRate is 0x1D in both games, and the water half is the same
+-- size again, so 0x32 bytes covers all of it.
+local WILD_DATA_LEN = 0x32
+
+--- Snapshot the wild-encounter table so it can be reinstated after a battle eats it.
+-- Call BEFORE the first battle on a map, while the union still holds wild data.
+function M.snapshotWildData()
+    if not M.GRASS_RATE_ADDR then return nil end
+    local snap = {}
+    for i = 0, WILD_DATA_LEN - 1 do
+        snap[i + 1] = M.read_u8(M.GRASS_RATE_ADDR + i)
+    end
+    return snap
+end
+
+--- Put it back. This writes the same bytes the game's own map-entry reload would write, so a
+-- scripted run can keep hunting on one map instead of walking out and back to force a reload.
+function M.restoreWildData(snap)
+    if not (M.GRASS_RATE_ADDR and snap) then return false end
+    for i = 0, WILD_DATA_LEN - 1 do
+        M.write_u8(M.GRASS_RATE_ADDR + i, snap[i + 1])
+    end
+    return true
+end
+
+--- True while the player is mid-ledge-hop, exiting a door, or fishing.
+-- TryDoWildEncounter returns early on this, and it is also how we notice a ledge was jumped
+-- (the drift that no amount of walking can undo).
+function M.isMoveLocked()
+    if not M.MOVEMENT_FLAGS_ADDR then return nil end
+    return M.read_u8(M.MOVEMENT_FLAGS_ADDR) ~= 0
 end
 
 -- ═══ Sound effects (Phase 7) ═════════════════════════════════════════════

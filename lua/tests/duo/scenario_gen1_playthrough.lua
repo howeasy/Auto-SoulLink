@@ -51,37 +51,30 @@ return function(ctx)
     log(fmt("MAP 0x%02X pos=(%d,%d) party=%d balls=%d",
             start_map, home_x, home_y, ctx.party_count(), u8(BAG_QTY0)))
 
-    -- Walk back to the tile we started on. Pacing up and down does NOT net to zero: a wild
-    -- battle interrupts mid-step, so the position drifts a little every hunt and after ~20
-    -- hunts the player has wandered clean out of the grass ("no wild encounter after 600
-    -- held steps"). Re-centring between hunts keeps the search where the encounters are.
-    local function go_home()
-        for _ = 1, 40 do
-            local dx, dy = u8(X_COORD) - home_x, u8(Y_COORD) - home_y
-            if dx == 0 and dy == 0 then return true end
-            local dir
-            if dy ~= 0 then dir = (dy > 0) and "Up" or "Down"
-            else dir = (dx > 0) and "Left" or "Right" end
-            ctx.hold(dir, 12, function() return u8(IN_BATTLE) ~= 0 end)
-            if u8(IN_BATTLE) ~= 0 then return false end   -- an encounter on the way is fine
-        end
-        return true
-    end
-    -- The Nuzlocke gate must come from the REAL bag, not a debug POST. If this is false the
-    -- server will (correctly) ignore our capture, so assert it before spending frames.
-    if not M.hasPokeballs() then
-        return false, "hasPokeballs() is false — the real bag read is what gates the rules"
+    -- Wild encounters need the map to have them at all, and the player to be standing on a
+    -- grass tile. Both are things the GAME knows, so ask it instead of inferring from
+    -- coordinates (see M.isInGrass / M.hasWildEncounters, which mirror TryDoWildEncounter).
+    if M.hasWildEncounters() == false then
+        return false, fmt("map 0x%02X has no wild encounters (wGrassRate == 0)", start_map)
     end
 
-    -- Stock the bag to 40 balls. This is the ONE thing the scenario hands itself, and it is
-    -- deliberately the most inert one available: Poké Balls are an item the game sells, and
-    -- topping them up changes nothing about the encounter, the throw, the capture event or
-    -- the link. Gen 1's catch rate on a full-HP wild mon is low enough that 5 balls made this
-    -- a coin flip — a real player weakens the mon first, which is a lot of menu driving for
-    -- no extra coverage. The RULES all still have to happen for real.
+    -- Stock the bag. The most inert thing this scenario hands itself: Poké Balls are an item
+    -- the game sells, and topping them up changes nothing about the encounter, the capture,
+    -- or the link. (This line was silently lost in an edit once and the run quietly went back
+    -- to 5 balls, which looks exactly like bad luck rather than a bug — hence the log below.)
     M.write_u8(BAG_QTY0, 40)
     local party_before = ctx.party_count()
     local balls_before = u8(BAG_QTY0)
+    -- Snapshot the wild-encounter table NOW, before any battle. It shares memory with the
+    -- enemy party (wram.asm:2145-2172 is a UNION), so the first wild battle overwrites it and
+    -- the game only rebuilds it on map entry — after which the player can walk in grass
+    -- forever with nothing happening. Earlier versions of this scenario appeared to work only
+    -- because their buggy pacing drifted across the map boundary and back, reloading it by
+    -- accident. Restoring the snapshot is exactly what map entry does.
+    local wild_data = M.snapshotWildData()
+    log(fmt("stocked: balls=%d wGrassRate=%s wildData=%s",
+            balls_before, tostring(M.hasWildEncounters()),
+            wild_data and (#wild_data .. " bytes") or "nil"))
     -- Snapshot the starting keys. The property that matters is that a NEW mon entered the
     -- party — that is exactly what the client turns into a `capture` event. Comparing against
     -- the species we last met is weaker AND wrong across hunts: a mon that got away leaves
@@ -143,12 +136,42 @@ return function(ctx)
         if u8(BAG_QTY0) == 0 then return false, "out of Poké Balls after " .. hunt .. " hunts" end
 
         -- 1. Walk in the grass until something jumps us. Gen 1 needs a direction HELD.
-        local entered = false
+        -- Pace EAST-WEST, never north-south. Route 1's ledges run horizontally and are
+        -- one-way: pacing Up/Down eventually hops one southward and the player can never
+        -- climb back to the grass, drifts to Pallet Town, and every later hunt reports "no
+        -- wild encounter" — which is exactly what the area_enter:route_1 ->
+        -- area_enter:pallet_town pair in the client log was telling us. Left/Right stays on
+        -- one row, so it cannot cross a ledge, and grass tiles span the row either way.
+        -- Pace, but let the GAME tell us when we have stepped off the grass and turn around
+        -- immediately. Four blind heuristics failed here before this: Up/Down pacing hops
+        -- Route 1's one-way ledges and strands the player in Pallet Town, and walking "back
+        -- to the start tile" just grinds against the ledge it fell off. wTileMap[9,9] vs
+        -- wGrassTile is the exact test TryDoWildEncounter runs, so it cannot disagree with
+        -- the game about whether an encounter is even possible.
+        -- ALTERNATE every step. Holding one direction just walks into the edge of the patch
+        -- and stops: no step is taken, so no encounter is ever rolled, and the grass check
+        -- keeps reading true because the player never moved. (That is exactly what the first
+        -- version of this loop did — it only flipped direction on leaving the grass, which
+        -- therefore never happened: "left the grass 0 times, in_grass=true".)
+        local dirs = {"Left", "Right"}
+        local entered, off_grass = false, 0
+        local in_battle = function() return u8(IN_BATTLE) ~= 0 end
         for i = 1, 600 do
-            ctx.hold(({"Up", "Down"})[(i % 2) + 1], 12, function() return u8(IN_BATTLE) ~= 0 end)
-            if u8(IN_BATTLE) ~= 0 then entered = true break end
+            ctx.hold(dirs[(i % 2) + 1], 12, in_battle)
+            if in_battle() then entered = true break end
+            if M.isInGrass() == false then
+                -- Stepped off the patch: immediately step back the way we came, so we cannot
+                -- wander far enough to fall down one of Route 1's one-way ledges.
+                ctx.hold(dirs[((i + 1) % 2) + 1], 12, in_battle)
+                if in_battle() then entered = true break end
+                off_grass = off_grass + 1
+            end
         end
-        if not entered then return false, "no wild encounter after 600 held steps in the grass" end
+        if not entered then
+            return false, fmt("no wild encounter in 600 steps (left the grass %d times, "
+                              .. "in_grass=%s, wGrassRate=%s)", off_grass,
+                              tostring(M.isInGrass()), tostring(M.hasWildEncounters()))
+        end
         met_species = u8(ENEMY_SP)
         log(fmt("hunt %d: wild species=0x%02X level=%d (balls=%d)",
                 hunt, met_species, u8(ENEMY_LV), u8(BAG_QTY0)))
@@ -158,8 +181,15 @@ return function(ctx)
 
         -- 2. Throw balls until it sticks, the battle ends, or we run out.
         local party_at_start = ctx.party_count()
+        -- KEEP THROWING. Giving up after 5 balls ends the battle without a catch, which is
+        -- a `no_catch` — and in Soul Link a failed FIRST encounter locks the area as a dead
+        -- zone for BOTH players, so every later capture there is (correctly) refused and no
+        -- pair can ever form. That is the rule working, not a bug, but it means a scenario
+        -- that wants a link must actually land the catch. Gen 1's rate on a full-HP wild mon
+        -- is roughly 1 in 5, so 30 throws out of a 40-ball bag makes a miss vanishingly
+        -- unlikely, and we never voluntarily leave the battle.
         local throws, attempts = 0, 0
-        while u8(IN_BATTLE) ~= 0 and throws < 5 and attempts < 20 do
+        while u8(IN_BATTLE) ~= 0 and throws < 30 and attempts < 60 do
             attempts = attempts + 1
             if not wait_for_menu() then break end
             if u8(BAG_QTY0) == 0 then break end
@@ -189,8 +219,9 @@ return function(ctx)
             mon = M.readPartySlot(ctx.party_count() - 1)
             break
         end
-        log(fmt("hunt %d: it got away (balls=%d) — back into the grass", hunt, u8(BAG_QTY0)))
-        go_home()
+        M.restoreWildData(wild_data)     -- the battle just ate the wild table; put it back
+        log(fmt("hunt %d: it got away (balls=%d) in_grass=%s wGrassRate=%s — back to the grass",
+                hunt, u8(BAG_QTY0), tostring(M.isInGrass()), tostring(M.hasWildEncounters())))
     end
 
     if not mon then

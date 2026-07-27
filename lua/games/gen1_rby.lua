@@ -44,6 +44,12 @@ end
 
 M.PROFILES = {
     red = {
+        -- The game's own wild-encounter preconditions; see M.isInGrass().
+        -- wTileMap is NOT shifted in Yellow (both 0xC3A0); the rest are.
+        TILE_MAP_ADDR      = 0xC3A0,
+        GRASS_TILE_ADDR    = 0xD535,
+        GRASS_RATE_ADDR    = 0xD887,
+        MOVEMENT_FLAGS_ADDR = 0xD736,
         -- Party
         PARTY_COUNT_ADDR   = 0xD163,
         PARTY_SPECIES_ADDR = 0xD164,  -- 6 bytes + 0xFF terminator
@@ -202,6 +208,12 @@ M.PROFILES = {
 
     -- Yellow has shifted WRAM addresses
     yellow = {
+        -- The game's own wild-encounter preconditions; see M.isInGrass().
+        -- wTileMap is NOT shifted in Yellow (both 0xC3A0); the rest are.
+        TILE_MAP_ADDR      = 0xC3A0,
+        GRASS_TILE_ADDR    = 0xD534,
+        GRASS_RATE_ADDR    = 0xD886,
+        MOVEMENT_FLAGS_ADDR = 0xD735,
         PARTY_COUNT_ADDR   = 0xD162,
         PARTY_SPECIES_ADDR = 0xD163,
         PARTY_BASE_ADDR    = 0xD16A,
@@ -325,6 +337,12 @@ M.PROFILES = {
     -- Independently corroborated: AP's own client.py reads CurrentMap at WRAM offset
     -- 0x1436, i.e. bus 0xD436 — matching MAP_ID_ADDR here.
     red_ap = {
+        -- The game's own wild-encounter preconditions; see M.isInGrass().
+        -- wTileMap is NOT shifted in Yellow (both 0xC3A0); the rest are.
+        TILE_MAP_ADDR      = 0xC3A0,
+        GRASS_TILE_ADDR    = 0xD58D,
+        GRASS_RATE_ADDR    = 0xD875,
+        MOVEMENT_FLAGS_ADDR = nil,
         -- The AP fork rebuilds the ROM, so vanilla ROM offsets do not carry over.
         change_box_bit_test_rom_addr = false,
         
