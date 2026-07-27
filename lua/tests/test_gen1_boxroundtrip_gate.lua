@@ -431,52 +431,65 @@ do
 end
 
 -- ═════════════════════════════════════════════════════════════════════════════
--- PHASE 4 — the no-cache fallback, pinned
--- retrieveBoxMon documents that without a stat block the mon returns with maxHP == its
--- stored HP and zeroed stats. That is a KNOWN CEILING, not a mystery: assert it exactly, so
--- (a) the damage is proven bounded rather than arbitrary, and (b) whoever implements RBY's
--- CalcStats in Lua gets told by this gate that they changed it. It also doubles as the
--- control for phases 1-2: if the stats come back ZERO here and correct there, the cache is
--- demonstrably the thing doing the work.
+-- PHASE 4 — no cache: REFUSE, do not improvise
+-- This phase pinned the opposite behaviour when it was written, and it was right to: the old
+-- code returned a mon with maxHP = current HP and Atk/Def/Spd/Spc left at ZERO, because step 1
+-- zeroes all 44 bytes and the box only carries 33 of them. A player who restarted the client
+-- and withdrew got a Pokemon that could not fight — silently, permanently, and with nothing
+-- left in the box to restore from.
+--
+-- retrieveBoxMon now refuses instead. The client turns `false` into sync_retrieve_failed, so
+-- the server learns the withdraw did not happen and the pair stays consistent.
+--
+-- The last check is the known-positive control: supplying stats must make the SAME withdraw
+-- succeed. Without it this phase would also pass if retrieveBoxMon were broken outright.
 -- ═════════════════════════════════════════════════════════════════════════════
-t.log("── phase 4: no cache, no server stats (the documented lossy path) ──")
+t.log("── phase 4: no cache -> refuse rather than corrupt ──")
 do
     local slot = find_party_slot(real_key)
     t.check("the real mon is available for the fallback test", slot ~= nil)
     if slot then
         local before = snap_party(slot)
+        -- Capture the real stat block BEFORE depositing: snap_party carries raw struct bytes,
+        -- not a stats table, and the control below needs something retrieveBoxMon will accept.
+        local real_stats = M.readPartyStats(slot)
+        t.check("captured a stat block for the control", real_stats ~= nil)
         t.check("deposit for the fallback test", M.depositPartyMon(slot))
+        local box_after_deposit = M.getBoxCount()
+        local party_after_deposit = M.getPartyCount()
         M._party_tail_cache = {}                 -- nothing cached anywhere
-        poison_party_slot(M.getPartyCount())
-        local ok, err = M.retrieveBoxMon(real_key, nil)
-        t.check("retrieveBoxMon still succeeds with no stats at all", ok, tostring(err))
+        poison_party_slot(party_after_deposit)
 
-        local back = find_party_slot(real_key)
-        t.check("the mon still comes back", back ~= nil)
-        if back then
-            local after = snap_party(back)
-            local hp = after.struct[0x01] * 256 + after.struct[0x02]
-            -- What MUST still be right: everything the 33-byte box struct carries.
-            t.check("fallback keeps Level (from BoxLevel at +0x03, refreshed on deposit)",
-                    after.struct[0x21] == before.level,
-                    fmt("got %d, want %d", after.struct[0x21], before.level))
-            t.check("fallback keeps current HP", hp == before.struct[0x01] * 256 + before.struct[0x02])
-            t.check("fallback keeps moves, PP, Exp, StatExp, DVs and the names",
-                    diff(before, after, nil, BOXLEN) == nil,
-                    tostring(diff(before, after, nil, BOXLEN)))
-            -- What is KNOWINGLY wrong. Pinned, not hidden.
-            t.check("fallback sets maxHP = current HP (documented ceiling)",
-                    after.struct[0x22] * 256 + after.struct[0x23] == hp,
-                    fmt("maxHP=%d hp=%d", after.struct[0x22] * 256 + after.struct[0x23], hp))
-            t.check("fallback leaves Atk/Def/Spd/Spc at zero (documented ceiling)",
-                    after.struct[0x24] == 0 and after.struct[0x25] == 0
-                    and after.struct[0x26] == 0 and after.struct[0x27] == 0
-                    and after.struct[0x28] == 0 and after.struct[0x29] == 0
-                    and after.struct[0x2A] == 0 and after.struct[0x2B] == 0,
-                    "if this fails someone implemented CalcStats — update phase 4")
-            t.log("   NOTE: this path returns a playable but statistically wrong mon. "
-                  .. "It only happens when the server has no mon_stats for the key.")
+        local ok, err = M.retrieveBoxMon(real_key, nil)
+        t.check("retrieveBoxMon REFUSES when it has no stats", ok == false,
+                fmt("returned %s (%s)", tostring(ok), tostring(err)))
+        t.check("...and says why", type(err) == "string" and #err > 0, tostring(err))
+
+        -- Nothing may have moved. A refusal that half-completes is worse than one that
+        -- corrupts, because the count is bumped over a poisoned struct.
+        t.check("the party count did not change", M.getPartyCount() == party_after_deposit,
+                fmt("%d -> %d", party_after_deposit, M.getPartyCount()))
+        t.check("the mon is NOT in the party", find_party_slot(real_key) == nil)
+        t.check("the mon is still safe in the box", M.getBoxCount() == box_after_deposit,
+                fmt("box %d -> %d", box_after_deposit, M.getBoxCount()))
+
+        -- No half-written mon left behind: the refusal zeroes the slot it was building in,
+        -- so the poison bytes must be gone rather than partially overwritten.
+        local landing = M.PARTY_BASE_ADDR + party_after_deposit * M.PARTY_STRUCT_SIZE
+        local nonzero = 0
+        for i = 0, M.PARTY_STRUCT_SIZE - 1 do
+            if M.read_u8(landing + i) ~= 0 then nonzero = nonzero + 1 end
         end
+        t.check("the landing slot was left clean, not half-written", nonzero == 0,
+                fmt("%d of %d bytes non-zero", nonzero, M.PARTY_STRUCT_SIZE))
+
+        -- KNOWN-POSITIVE CONTROL: the same withdraw, with stats, must work.
+        local rok, rerr = M.retrieveBoxMon(real_key, real_stats)
+        t.check("the SAME withdraw succeeds once stats are supplied", rok, tostring(rerr))
+        local back = find_party_slot(real_key)
+        t.check("and the mon comes back intact", back ~= nil
+                and diff(before, snap_party(back), nil, BOXLEN) == nil,
+                back and tostring(diff(before, snap_party(back), nil, BOXLEN)) or "not found")
     end
 end
 
