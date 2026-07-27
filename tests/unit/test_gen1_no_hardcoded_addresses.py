@@ -77,7 +77,8 @@ def test_scripts_exist():
 
 @pytest.mark.parametrize("path", SCRIPTS, ids=lambda p: os.path.basename(p))
 def test_no_yellow_shifted_literals(path, shifted_addresses):
-    src = _strip_lua_comments(open(path, encoding="utf-8").read())
+    with open(path, encoding="utf-8") as f:
+        src = _strip_lua_comments(f.read())
     offenders = []
     for m in HEX.finditer(src):
         addr = int(m.group(0), 16)
