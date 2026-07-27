@@ -43,6 +43,9 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
     "renegade_platinum": "gen4_hgsspt",  # Drayano60 difficulty hack on Platinum
     "Red": "gen1_rby", "Blue": "gen1_rby", "Yellow": "gen1_rby",
     "red": "gen1_rby", "blue": "gen1_rby", "yellow": "gen1_rby",
+    # Archipelago (Alchav's Red/Blue world). Same adapter, same RAM layout — the AP fork
+    # only changes ROM content. Yellow has no upstream AP world.
+    "red_ap": "gen1_rby", "blue_ap": "gen1_rby",
     "Crystal": "gen2_crystal", "crystal": "gen2_crystal",
     "pokemon_black": "gen5_bw",
     "pokemon_white": "gen5_bw",
@@ -59,6 +62,7 @@ _VARIANT_LABEL: dict[str, str] = {
     "platinum": "Platinum", "hgss": "HGSS",
     "Red": "Red", "Blue": "Blue", "Yellow": "Yellow",
     "red": "Red", "blue": "Blue", "yellow": "Yellow",
+    "red_ap": "Red (AP)", "blue_ap": "Blue (AP)",
     "Crystal": "Crystal", "crystal": "Crystal",
     "pokemon_black": "Pokémon Black",
     "pokemon_white": "Pokémon White",
