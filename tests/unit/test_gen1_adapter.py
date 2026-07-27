@@ -605,13 +605,43 @@ def test_encounter_table_entry_schema(adapter):
 def test_encounter_table_coverage(adapter):
     """Full pret-generated coverage across all 25 routes + dungeons + safari.
 
-    Sanity floor — if the generator regresses, this catches it.
+    Sanity floor — if the generator regresses, this catches it. The file is keyed by game
+    version first: Red and Blue differ in 25 of 39 wild areas and Yellow differs from Red
+    in 36 of 39, so every variant needs its own coverage floor.
     """
-    import json
     from server.adapters.gen1_rby import _GEN1_ENCOUNTERS
-    assert len(_GEN1_ENCOUNTERS) >= 35, (
-        f"Gen 1 encounter coverage shrank to {len(_GEN1_ENCOUNTERS)} areas"
+    assert set(_GEN1_ENCOUNTERS) == {"red", "blue", "yellow"}, (
+        f"expected per-variant encounter tables, got keys {sorted(_GEN1_ENCOUNTERS)}"
     )
+    for variant, areas in _GEN1_ENCOUNTERS.items():
+        assert len(areas) >= 35, (
+            f"Gen 1 {variant} encounter coverage shrank to {len(areas)} areas"
+        )
+
+
+def test_encounter_tables_differ_per_version():
+    """Red, Blue and Yellow must not be serving each other's tables.
+
+    The generator ignored pokered's `IF DEF(_RED)` / `IF DEF(_BLUE)` blocks and
+    concatenated both branches, producing one blended table that was wrong for both games
+    — Route 2 listed Weedle AND Caterpie, the latter at a nonsense 0% rate.
+    """
+    from server.adapters.gen1_rby import _GEN1_ENCOUNTERS
+    red, blue, yellow = (_GEN1_ENCOUNTERS[v] for v in ("red", "blue", "yellow"))
+    assert sum(1 for a in red if red[a] != blue.get(a)) >= 20, \
+        "Red and Blue tables are suspiciously identical — is the version split being applied?"
+    assert sum(1 for a in red if red[a] != yellow.get(a)) >= 30, \
+        "Red and Yellow tables are suspiciously identical"
+    # Route 2 is the clearest version split, and no rate may ever be zero.
+    assert {e["name"] for e in red["route_2"]["Grass"]} >= {"Weedle"}
+    assert {e["name"] for e in blue["route_2"]["Grass"]} >= {"Caterpie"}
+    for variant, areas in _GEN1_ENCOUNTERS.items():
+        for area_id, block in areas.items():
+            for method, entries in block.items():
+                assert sum(e["rate"] for e in entries) == 100, \
+                    f"{variant}/{area_id}/{method} rates do not sum to 100"
+                assert all(e["rate"] > 0 for e in entries), \
+                    f"{variant}/{area_id}/{method} has a 0%-rate species (blended table?)"
 
 
 @pytest.mark.parametrize("area_id,expected_species_substr", [
