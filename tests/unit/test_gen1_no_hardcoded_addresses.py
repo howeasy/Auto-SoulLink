@@ -26,10 +26,23 @@ lupa = pytest.importorskip("lupa")
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# The one script whose literals ARE the point. test_gen1_ap_gate.lua exists to check the
+# loaded profile against addresses derived independently of it, so reading them from
+# `M.SOMETHING_ADDR` would make it compare the profile with itself and pass unconditionally.
+# It is also the only Gen 1 gate that cannot run on Yellow: Yellow has no upstream
+# Archipelago world, and gen1_rby.detect_variant() returns "yellow" without ever consulting
+# the seed slot, so the Red/Blue literals below can never be applied to a Yellow cartridge.
+ORACLE_SCRIPTS = {"test_gen1_ap_gate.lua"}
+
 # Scripts that drive a real cartridge and are (or could be) run against more than one variant.
 SCRIPTS = sorted(
-    glob.glob(os.path.join(REPO, "lua", "tests", "duo", "scenario_gen1_*.lua"))
-    + glob.glob(os.path.join(REPO, "lua", "tests", "test_gen1_*_gate.lua"))
+    p for p in (
+        glob.glob(os.path.join(REPO, "lua", "tests", "duo", "scenario_gen1_*.lua"))
+        # gen1_hunt.lua is not a scenario, but the scenarios delegate every cartridge read to
+        # it — leaving it out would let the literals simply move one file over.
+        + glob.glob(os.path.join(REPO, "lua", "tests", "duo", "gen1_*.lua"))
+        + glob.glob(os.path.join(REPO, "lua", "tests", "test_gen1_*_gate.lua"))
+    ) if os.path.basename(p) not in ORACLE_SCRIPTS
 )
 
 HEX = re.compile(r"0x[0-9A-Fa-f]{4}")

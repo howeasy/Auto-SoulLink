@@ -166,6 +166,10 @@ _add("blue", "pokered", _RED_MAP)  # blue shares red profile in Lua
 # this the AP blocks would be unverified and free to rot back into inheriting vanilla.
 # blue_ap inherits red_ap, exactly as vanilla blue inherits red, so only red_ap is listed.
 _add("red_ap", "alchav_pokered", _RED_MAP)
+# The fork predates pret's symbol rename, so a handful of fields answer to the OLD name.
+# Without the override the lookup misses, the field is reported WARN instead of FAIL, and an
+# address that is simply absent from the profile looks like a deliberate opt-out.
+PROFILE_TO_PRET[("red_ap", "MOVEMENT_FLAGS_ADDR")] = ("alchav_pokered", "wd736")
 
 # ── Yellow (pokeyellow) ───────────────────────────────────────────────────────
 # Same field-name shape as Red/Blue.

@@ -40,6 +40,13 @@ pytestmark = [
 GATES = {
     "lua/tests/test_gen1_memory_gate.lua": "town",
     "lua/tests/test_gen1_writes_gate.lua": "town",
+    # The withdraw half of party sync. test_gen1_writes_gate only deposits.
+    "lua/tests/test_gen1_boxroundtrip_gate.lua": "town",
+    # Evolution: a Gen 1 key is DVs:OTID:SPECIES, so evolving rewrites it. Drives a real
+    # Moon Stone through the real bag menus — no battle, no encounter RNG, and
+    # uncancellable (wForceEvolution). Needs the town save, not the battle one:
+    # ItemUseEvoStone refuses outright while wIsInBattle is set.
+    "lua/tests/test_gen1_evolution_gate.lua": "town",
 }
 ROMS = ("red", "blue", "yellow")
 
@@ -97,4 +104,35 @@ def test_gen1_companion_patch(rom, emuhawk):
                                          rom_key=rom, target="town",
                                          timeout=300, quiet=True)
     assert passed, (f"companion patch gate on {rom} did not PASS\n"
+                    f"result: {result_path}\n{text[-3000:]}")
+
+
+# The Archipelago builds and their negative control. `red_cold`/`blue_cold` run the SAME
+# gate on the VANILLA cartridge, where every AP assertion has to come out the other way —
+# without that pair, a detection function stuck at "yes" would pass on its own.
+AP_ROMS = ("red_ap", "blue_ap", "red_cold", "blue_cold")
+
+
+@pytest.mark.parametrize("rom", AP_ROMS)
+def test_gen1_archipelago(rom, emuhawk):
+    """Does SLink read an Archipelago cartridge, and only when it is one?
+
+    Needs no fixture: the fork's save block is 4 bytes longer than vanilla's
+    (sMainDataCheckSum 0xB523 -> 0xB527), so no committed .SaveRAM is loadable by it and the
+    gate asserts against the ROM and the intro instead. See the gate's own header.
+    """
+    from run_gen1_gate import PATCHED
+    _, rom_rel, _ = PATCHED[rom]
+    if rom_rel is None:                       # the vanilla control: needs only the dump
+        base = play.ROMS[rom.rsplit("_", 1)[0]]
+        if not os.path.exists(os.path.join(REPO, base)):
+            pytest.skip(f"{base} not present (ROMs are gitignored)")
+    elif not os.path.exists(os.path.join(REPO, rom_rel)):
+        pytest.skip(f"{rom_rel} not built — `python tools/gen1_ap_rom.py` "
+                    f"(needs a Pokemon RB apworld and the vanilla dump)")
+
+    passed, result_path, text = run_gate("lua/tests/test_gen1_ap_gate.lua",
+                                         rom_key=rom, target="town",
+                                         timeout=300, quiet=True)
+    assert passed, (f"Archipelago gate on {rom} did not PASS\n"
                     f"result: {result_path}\n{text[-3000:]}")

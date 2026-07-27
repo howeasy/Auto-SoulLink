@@ -342,7 +342,14 @@ M.PROFILES = {
         TILE_MAP_ADDR      = 0xC3A0,
         GRASS_TILE_ADDR    = 0xD58D,
         GRASS_RATE_ADDR    = 0xD875,
-        MOVEMENT_FLAGS_ADDR = nil,
+        -- -18, with the rest of that block. This was nil because the fork predates pret's
+        -- symbol rename and has no `wMovementFlags` — it still calls the byte `wd736`, so
+        -- looking the vanilla NAME up in the AP symbol table found nothing and the field
+        -- was left unset, which reads as "this build has no movement flags". It does:
+        -- bank 0 references 0xD724 eleven times, exactly as vanilla references 0xD736.
+        -- Careful — alchav ALSO has a symbol literally called `wd730` (0xD71E), and that
+        -- one is pret's wStatusFlags5, not this.
+        MOVEMENT_FLAGS_ADDR = 0xD724,
         -- The AP fork rebuilds the ROM, so vanilla ROM offsets do not carry over.
         change_box_bit_test_rom_addr = false,
         

@@ -54,9 +54,21 @@ SAVERAM_NAMES = {
 # FILENAME — `slink_red.gb` becomes "slink red.SaveRAM". Seeding only the vanilla name meant
 # the patched build found no save, started a NEW GAME, and the gate reported party=0.
 #   key -> (fixture to seed from, ROM path, SaveRAM filename BizHawk will use)
+#
+# A fixture of None means COLD BOOT: there is no battery save to seed, and any stale one is
+# removed so the ROM reaches NEW GAME. The Archipelago builds are in that category — the
+# fork's save block is 4 bytes longer (sMainDataCheckSum 0xB523 -> 0xB527), so a vanilla
+# .SaveRAM fails the AP checksum and CONTINUE is not offered at all.
 PATCHED = {
     "red_patched": ("red", "patch/gen1/build/slink_red.gb", "slink red.SaveRAM"),
     "blue_patched": ("blue", "patch/gen1/build/slink_blue.gb", "slink blue.SaveRAM"),
+    "red_ap": (None, "patch/build/gen1_red_ap.gb", "gen1 red ap.SaveRAM"),
+    "blue_ap": (None, "patch/build/gen1_blue_ap.gb", "gen1 blue ap.SaveRAM"),
+    # The AP gate's negative control: the SAME gate on the VANILLA cartridge, cold, so it
+    # reaches the same intro and every AP assertion has to come out the other way. A ROM
+    # path of None means "the vanilla dump for the key before _cold", staged as usual.
+    "red_cold": (None, None, SAVERAM_NAMES["red"]),
+    "blue_cold": (None, None, SAVERAM_NAMES["blue"]),
 }
 
 # Gates name their own verdict file; read it out of the source so we watch exactly one file
@@ -98,14 +110,24 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
         raise FileNotFoundError(f"EmuHawk not found at {EMUHAWK} (set $SLINK_EMUHAWK)")
     if rom_key in PATCHED:
         base_key, rom_rel, saveram_name = PATCHED[rom_key]
+        if rom_rel is None:
+            rom_rel = staged_rom(rom_key.rsplit("_", 1)[0])
         if not os.path.exists(os.path.join(REPO, rom_rel)):
-            raise FileNotFoundError(
-                f"{rom_rel} missing — build it with `python patch/gen1/tools/build.py`")
-        fixture = os.path.join(FIXTURES, f"{base_key}_{target}.SaveRAM")
-        if not os.path.exists(fixture):
-            raise FileNotFoundError(f"missing fixture {os.path.relpath(fixture, REPO)}")
+            builder = ("python tools/gen1_ap_rom.py" if base_key is None
+                       else "python patch/gen1/tools/build.py")
+            raise FileNotFoundError(f"{rom_rel} missing — build it with `{builder}`")
         os.makedirs(SAVERAM_DIR, exist_ok=True)
-        shutil.copyfile(fixture, os.path.join(SAVERAM_DIR, saveram_name))
+        if base_key is None:
+            # Cold boot. A leftover save from an earlier run would put the title screen on
+            # CONTINUE and quietly change what the gate is booting into.
+            stale = os.path.join(SAVERAM_DIR, saveram_name)
+            if os.path.exists(stale):
+                os.remove(stale)
+        else:
+            fixture = os.path.join(FIXTURES, f"{base_key}_{target}.SaveRAM")
+            if not os.path.exists(fixture):
+                raise FileNotFoundError(f"missing fixture {os.path.relpath(fixture, REPO)}")
+            shutil.copyfile(fixture, os.path.join(SAVERAM_DIR, saveram_name))
     else:
         rom_rel = staged_rom(rom_key)
         seed_saveram(rom_key, target)

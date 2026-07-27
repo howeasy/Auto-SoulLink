@@ -19,7 +19,10 @@
 
 local Lib = {}
 
-function Lib.start(gate_name)
+-- opts.no_boot = true  → set up M/G and the check helpers, but skip the boot-to-CONTINUE
+-- drive. For gates that have no battery save to boot FROM (the Archipelago builds) and
+-- assert on the ROM rather than on a loaded game.
+function Lib.start(gate_name, opts)
     local ROOT = SLINK_ROOT or os.getenv("SLINK_ROOT")
     assert(ROOT, "SLINK_ROOT unset — launch via tools/run_gen1_gate.py")
 
@@ -81,6 +84,11 @@ function Lib.start(gate_name)
     end
     M.initProfile(G, variant)
     t.variant = variant
+    if opts and opts.no_boot then
+        t.log(fmt("[%s] variant=%s — no_boot: asserting without a battery save",
+                  gate_name, variant))
+        return t
+    end
     t.log(fmt("[%s] variant=%s — booting from battery save", gate_name, variant))
 
     -- Boot to CONTINUE, then PROVE we are actually in the game by walking.

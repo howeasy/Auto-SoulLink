@@ -60,12 +60,25 @@ DUO_ROMS = DUO_GAMES["gen1"]
 #   memorialize  a dead pair is buried in Gen 1's Box 12 graveyard, and acked
 #   rivalswap    the rival fights you with the partner's live team (no ROM patch)
 #   explode_g1   the survivor is coerced into Explosion instead of a plain faint
+#   whiteout     A poisons its last mon to death, takes pokered's real HandleBlackOut, and
+#                the partner loses its linked mon AND gets the auto-rebuild pulled back
 # "playthrough" is last because it is the slowest and the only one that PLAYS: it walks
 # Route 1's grass on both cartridges, meets real wild Pokemon, throws real Poke Balls, and
 # requires the SERVER to pair the two captures by area. Nothing is injected and the Nuzlocke
 # gate comes from the real bag, so it is the only coverage of encounter linking, area
 # resolution and the ball gate — every other scenario injects the state it verifies.
-SCENARIOS = ("faint", "boxsync", "memorialize", "rivalswap", "explode_g1", "playthrough")
+#   deadzone     a real failed encounter locks the area for BOTH, and the partner's later
+#                catch in that area is taken straight back off them
+#   dupes        the species clause rejects the second half of a same-family pair
+SCENARIOS = ("faint", "boxsync", "memorialize", "rivalswap", "explode_g1", "whiteout",
+             "playthrough", "deadzone", "dupes")
+
+# Scenarios that PLAY need BOTH cartridges standing on the SAME encounter map: Soul Link
+# pairs and locks by area, so two fixtures on different routes share nothing to test. The
+# Red/Blue battery saves both sit on Route 1; the Yellow one came out on Route 3, so the
+# Yellow pairing has no shared area and these would grind to a timeout instead of failing
+# with a reason.
+SAME_MAP_ONLY = ("playthrough", "deadzone", "dupes")
 
 
 def _subprocess_timeout(scenario: str) -> int:
@@ -83,6 +96,9 @@ def _subprocess_timeout(scenario: str) -> int:
 @pytest.mark.parametrize("game", sorted(DUO_GAMES))
 @pytest.mark.parametrize("scenario", SCENARIOS)
 def test_gen1_duo(scenario, game):
+    if scenario in SAME_MAP_ONLY and game != "gen1":
+        pytest.skip(f"{scenario} needs both cartridges on one encounter map; "
+                    f"{game}'s fixtures are on different routes")
     if not os.path.exists(play.EMUHAWK):
         pytest.skip(f"EmuHawk not found at {play.EMUHAWK}")
     for rom in DUO_GAMES[game]:

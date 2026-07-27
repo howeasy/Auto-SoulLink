@@ -1084,10 +1084,24 @@ function M.retrieveBoxMon(key, stats)
         M.applyPartyStats(pcount, cached)
         if M._party_tail_cache then M._party_tail_cache[key] = nil end
     else
-        -- No cache at all: maxHP = stored HP is wrong but bounded, and is the behaviour
-        -- that shipped before. The engine would recalculate from DVs + StatExp; doing that
-        -- here would mean reimplementing RBY's stat formula plus a base-stat table.
-        M.write_u16_be(party_dst + M.MAXHP_OFFSET, hp)
+        -- NO CACHE: REFUSE, do not improvise.
+        --
+        -- The old behaviour was to set maxHP = stored HP and carry on. That is worse than it
+        -- looks: line 1064 zeroes the whole 44-byte party struct and the box only carries 33
+        -- of them, so Attack/Defence/Speed/Special are left at **0**. A player who restarts
+        -- the client and then withdraws gets a mon that cannot fight — silent, permanent save
+        -- corruption, and the mon is out of the box so there is nothing to undo it from.
+        --
+        -- Rebuilding them properly means RBY's stat formula plus the base-stat table, which
+        -- is readable from ROM but is real work; until that exists, returning false is
+        -- correct. The caller (gen1_rby_client.lua) already reports sync_retrieve_failed on
+        -- false, so the server learns the withdraw did not happen and the pair stays
+        -- consistent instead of quietly diverging.
+        --
+        -- This path had NEVER executed on a cartridge, which is why it survived this long.
+        memzero(party_dst, M.PARTY_STRUCT_SIZE)   -- leave no half-written mon behind
+        return false, "no cached stats for " .. tostring(key)
+            .. " — refusing to withdraw a mon with zeroed stats"
     end
 
     -- 3. Copy OT name from box (SRAM) to party (WRAM)
