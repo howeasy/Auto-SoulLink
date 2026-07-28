@@ -62,6 +62,12 @@ return function(ctx)
 
     -- ── forcing the wild table ───────────────────────────────────────────────
     H.forced_species = nil
+    -- Set true by callers that would rather take whatever the route offers than fail. See
+    -- the note at the mismatch check below for why this exists.
+    H.forced_advisory = false
+    -- See the lost-encounter branch in H.hunt: opt out of fatal-on-loss when the area under
+    -- test is already dead-zoned.
+    H.retry_on_loss = false
     function H.force_wild(species_index, level)
         if not H.GRASS_MONS then return false end
         for slot = 0, 9 do
@@ -250,7 +256,19 @@ return function(ctx)
             -- The probe's own control. A forced species that never shows up means the
             -- wGrassMons write is not doing what this file claims — say that, loudly, rather
             -- than quietly testing a rule against the wrong Pokemon.
-            if H.forced_species and met ~= H.forced_species then
+            -- Forcing is ADVISORY. Writing wGrassMons does not change what the game
+            -- serves: four hypotheses were tested and killed (wrong address, reload between
+            -- write and encounter, leftover boot battle, encounter committed before the
+            -- write) — see lua/tests/probe_gen1_wildtable.lua. The address is provably right
+            -- and the bytes are provably forced at encounter time, and the game still hands
+            -- back the route's own slots. Nobody has explained it.
+            --
+            -- Neither scenario actually needs a chosen species: the dead zone wants a FAILED
+            -- encounter, and the species clause only needs both sides to catch the SAME
+            -- species, which Route 1 delivers on its own (it holds nothing but PIDGEY and
+            -- RATTATA). So a mismatch is now logged and ignored rather than aborting a
+            -- 1500-second run over a convenience that never worked.
+            if H.forced_species and met ~= H.forced_species and not H.forced_advisory then
                 return nil, fmt("met species 0x%02X but the wild table was forced to 0x%02X "
                                 .. "— the wGrassMons write did not take", met, H.forced_species)
             end
@@ -328,7 +346,16 @@ return function(ctx)
             -- refused by the dead-zone rule, not by whatever rule the caller was testing.
             -- The species-clause scenario in particular would "fail" for entirely the wrong
             -- reason. Fail here instead, where the cause is still legible.
-            if mode == "catch" then
+            -- A lost encounter fires no_catch, which dead-zones the area — so by default
+            -- that is FATAL in catch mode: the next capture there would be refused by the
+            -- dead-zone rule rather than by the rule under test, and the failure would point
+            -- at the wrong thing.
+            --
+            -- H.retry_on_loss opts out, for callers where the area is ALREADY dead and a
+            -- second no_catch changes nothing. The dead-zone scenario's B side is exactly
+            -- that: it is deliberately catching inside a locked area, so losing a ball on
+            -- the way costs nothing but a retry.
+            if mode == "catch" and not H.retry_on_loss then
                 return nil, fmt("hunt %d lost the encounter (balls %d) — in catch mode that "
                                 .. "fires no_catch and dead-zones the area, which would "
                                 .. "invalidate the rule under test", hunt, u8(H.BAG_QTY0))

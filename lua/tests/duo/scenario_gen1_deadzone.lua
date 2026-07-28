@@ -15,8 +15,9 @@
 --      go-file until then, so the ordering is a fact rather than a hope), then walks the
 --      same grass, catches a real Pokemon, and must have it taken away.
 --
--- Both sides point the wild table at a level-2 MAGIKARP, which cannot appear on Route 1 by
--- chance and cannot damage anything (SPLASH only) — see lua/tests/duo/gen1_hunt.lua.
+-- Whatever Route 1 offers is fine: a failed encounter is a failed encounter, so this needs
+-- no chosen species. It once forced the wild table to a MAGIKARP for convenience; that never
+-- worked, and four hypotheses for why are recorded dead in lua/tests/probe_gen1_wildtable.lua.
 return function(ctx)
     local log, M = ctx.log, ctx.M
     local H = dofile(SLINK_DUO.wt .. "/lua/tests/duo/gen1_hunt.lua")(ctx)
@@ -28,9 +29,10 @@ return function(ctx)
     end
     local ok, err = H.stock_balls(40)
     if not ok then return false, err end
-    if not H.force_wild(H.MAGIKARP, 2) then
-        return false, "no GRASS_RATE_ADDR in this profile — cannot choose the encounter"
-    end
+    -- NO SPECIES FORCING. This scenario wants a FAILED encounter, and any species fails
+    -- just as well as a chosen one. Forcing wGrassMons demonstrably does not change what the
+    -- game serves (four hypotheses killed in lua/tests/probe_gen1_wildtable.lua), so
+    -- depending on it only added a way to lose.
 
     -- The runner reads this to check both cartridges are on ONE map: Soul Link pairs and
     -- locks by area, so two fixtures on different routes share nothing to test.
@@ -41,7 +43,12 @@ return function(ctx)
     log(string.format("MAP 0x%02X role=%s balls=%d party=%d",
                       M.getCurrentMap(), ctx.player, H.balls(), ctx.party_count()))
 
-    if ctx.player == "a" then
+    -- B is catching INSIDE an already-locked area, so a lost ball there cannot invalidate
+-- anything — let it retry instead of aborting the run. (A's side keeps the default: its
+-- failed encounter is the thing being tested, and it must be the FIRST one.)
+if ctx.player == "b" then H.retry_on_loss = true end
+
+if ctx.player == "a" then
         local balls0, party0 = H.balls(), ctx.party_count()
         local killed, kerr = H.hunt("kill", 20)
         if not killed then return false, kerr end
