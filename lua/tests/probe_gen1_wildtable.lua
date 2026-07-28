@@ -62,7 +62,28 @@ t.check("slot 1 is Route 1's (level 3, RATTATA)",
         fmt("got (%d, 0x%02X) want (3, 0x%02X)",
             M.read_u8(mons_addr + 2), M.read_u8(mons_addr + 3), RATTATA))
 
--- 3. Now force it, and walk until an encounter. This is the real question: does a write the
+-- 3. ARE WE ALREADY IN A BATTLE? gen1_gatelib's boot probes movement with Left/Right to
+--    prove the game is live, and on a grass fixture that can trigger an encounter by itself.
+--    If so, the species was decided BEFORE any write and the walk loop below would find
+--    in_battle set on its first check — measuring a battle that predates the experiment.
+local IN_BATTLE = M.BATTLE_FLAG_ADDR
+local ENEMY_SP  = M.ENEMY_MON_SPECIES_ADDR
+t.check("not already in a battle when the table is forced",
+        M.read_u8(IN_BATTLE) == 0,
+        fmt("in_battle=%d enemy=0x%02X — the boot walk started one, so anything measured "
+            .. "below is about THAT battle, not the forced table",
+            M.read_u8(IN_BATTLE), M.read_u8(ENEMY_SP)))
+
+-- Clear it if so, then re-check, so the experiment starts from the overworld either way.
+if M.read_u8(IN_BATTLE) ~= 0 then
+    for _ = 1, 400 do
+        t.hold("B", 3, nil)
+        if M.read_u8(IN_BATTLE) == 0 then break end
+    end
+    t.log(fmt("cleared the pre-existing battle: in_battle=%d", M.read_u8(IN_BATTLE)))
+end
+
+-- 4. Now force it, and walk until an encounter. This is the real question: does a write the
 --    game can see actually change what we meet?
 for slot = 0, 9 do
     M.write_u8(mons_addr + slot * 2, 5)
@@ -71,8 +92,6 @@ end
 t.check("the forced table reads back as MAGIKARP", M.read_u8(mons_addr + 1) == MAGIKARP,
         fmt("got 0x%02X", M.read_u8(mons_addr + 1)))
 
-local IN_BATTLE = M.BATTLE_FLAG_ADDR
-local ENEMY_SP  = M.ENEMY_MON_SPECIES_ADDR
 local entered = false
 for i = 1, 400 do
     t.hold(({"Left", "Right"})[(i % 2) + 1], 12,
@@ -82,7 +101,22 @@ end
 t.check("an encounter happened", entered, fmt("in_battle=%d", M.read_u8(IN_BATTLE)))
 
 if entered then
+    -- Sample BOTH, and sample late. wCurOpponent is what wild_encounters.asm writes the
+    -- chosen slot's species into; wEnemyMon (0xCFE5) is the battle struct that
+    -- LoadEnemyMonData builds from it a few frames later. Reading the struct the instant
+    -- wIsInBattle flips can catch it before it is populated.
+    local CUR_OPPONENT = M.CUR_OPPONENT_ADDR
+    t.log(fmt("at flip: curOpponent=0x%02X enemyMon=0x%02X",
+              CUR_OPPONENT and M.read_u8(CUR_OPPONENT) or 0, M.read_u8(ENEMY_SP)))
+    for _ = 1, 120 do t.step(nil) end
+    t.log(fmt("after 120f: curOpponent=0x%02X enemyMon=0x%02X level=%d",
+              CUR_OPPONENT and M.read_u8(CUR_OPPONENT) or 0, M.read_u8(ENEMY_SP),
+              M.read_u8(M.ENEMY_MON_LEVEL_ADDR)))
     local met = M.read_u8(ENEMY_SP)
+    t.check("wCurOpponent holds the forced species",
+            CUR_OPPONENT and M.read_u8(CUR_OPPONENT) == MAGIKARP,
+            fmt("curOpponent=0x%02X want 0x%02X — this is what the slot read writes",
+                CUR_OPPONENT and M.read_u8(CUR_OPPONENT) or 0, MAGIKARP))
     t.log(fmt("met 0x%02X; table now reads slot0=(%d,0x%02X) rate=%d",
               met, M.read_u8(mons_addr), M.read_u8(mons_addr + 1), M.read_u8(rate_addr)))
     t.check("the forced species is what we actually met", met == MAGIKARP,
