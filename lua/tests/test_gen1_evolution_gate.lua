@@ -179,6 +179,10 @@ if not menu_open() then fail_here("START menu opened", fmt("frame %d", t.frame))
 
 for _ = 1, 12 do
     if r8(CUR_MENU) == ITEM_INDEX then break end
+    -- Re-check INSIDE the loop: if a press closed the menu, the remaining Down holds stop
+    -- being menu navigation and become overworld movement, which walks the player off the
+    -- fixture's tile and makes every later check fail for the wrong reason.
+    if not menu_open() then break end
     t.hold("Down", 6, nil)
     run(10, nil, function() return r8(CUR_MENU) == ITEM_INDEX end)
 end
@@ -229,11 +233,36 @@ t.check("party menu cursor is pinned to slot 0",
         r8(CUR_MENU) == 0 and r8(MAX_MENU) == 0,
         fmt("cur=%d max=%d", r8(CUR_MENU), r8(MAX_MENU)))
 
+-- ── Confirm the mon, and make sure the press actually LANDS ──────────────────
+-- DisplayPartyMenu returns CARRY on cancel, and wForceEvolution is only set when carry is
+-- clear (item_effects.asm:774-778). So a press that does not register as a fresh edge is
+-- indistinguishable from the player backing out: the item use is dropped silently and
+-- ItemUseNoEffect runs. That is exactly what this gate hit — every earlier step passed,
+-- wEvoStoneItemID was set, and then nothing evolved.
+--
+-- pokered's JoypadLowSensitivity wants a fresh press EDGE, and two t.hold calls back to back
+-- give it barely one release frame. So: release for a clear gap, press, and RETRY until the
+-- flag latches, rather than pressing once and hoping.
+local confirmed = false
+for attempt = 1, 12 do
+    run(20, nil, nil)                      -- neutral frames guarantee a release edge
+    t.hold("A", 4, nil)
+    run(20, nil, function() return r8(FORCE_EVOLUTION) ~= 0 end)
+    if r8(FORCE_EVOLUTION) ~= 0 then
+        confirmed = true
+        t.log(fmt("[evo] party-menu confirm landed on attempt %d", attempt))
+        break
+    end
+    if not on_party_menu() then break end  -- menu gone: either cancelled or already moving on
+end
+t.check("the party-menu confirmation registered as a press, not a cancel", confirmed,
+        confirmed and fmt("wForceEvolution=%d", r8(FORCE_EVOLUTION))
+                  or "DisplayPartyMenu returned carry — the item use was dropped as a cancel")
+
 -- ── The evolution ────────────────────────────────────────────────────────────
 -- From here on: SAMPLE EVERY FRAME AND PRESS NOTHING. The texts end with `done`, so the
 -- sequence is self-advancing, and a neutral pad means nothing this gate does can influence
 -- what it observes.
-t.hold("A", 6, nil)
 local evolved = run(3000, nil, function() return list_species() == CLEFABLE end)
 
 local struct_frame = seen[invariant .. ":8E"]
@@ -257,7 +286,7 @@ t.log(fmt("[evo] after:  key=%s level=%d hp=%d/%d nick=%q  (struct changed at fr
           tostring(struct_frame)))
 
 -- ── What the server is owed ──────────────────────────────────────────────────
-t.check("the key changed", after_key ~= before_key, fmt("still %s", after_key))
+t.check("the key changed", after_key ~= before_key, fmt("%s -> %s", before_key, after_key))
 t.check("the new key carries the CLEFABLE index", after_key:sub(11, 12) == "8E",
         fmt("key=%s", after_key))
 
