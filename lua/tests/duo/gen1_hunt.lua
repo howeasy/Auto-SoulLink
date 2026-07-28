@@ -72,6 +72,26 @@ return function(ctx)
         return true
     end
 
+    --- Re-apply the forced table, and say whether it actually stuck.
+    --
+    -- A forced table does NOT survive a map load, and every battle ends with
+    --     .noFaintCheck -> EnterMap -> LoadMapHeader -> LoadWildData
+    -- (home/overworld.asm:353, :2309, :2253), which rebuilds wGrassRate/wGrassMons straight
+    -- from ROM. So forcing once at setup is only good until the first encounter — after that
+    -- the route's real slots are back and the scenario meets a Pidgey instead of the species
+    -- it asked for. Re-force before every hunt and verify the readback rather than assuming.
+    function H.reforce_wild()
+        if not H.forced_species then return true end
+        H.force_wild(H.forced_species, H.forced_level)
+        for slot = 0, 9 do
+            if u8(H.GRASS_MONS + slot * 2 + 1) ~= H.forced_species then
+                return false, fmt("slot %d reads 0x%02X after the write, want 0x%02X",
+                                  slot, u8(H.GRASS_MONS + slot * 2 + 1), H.forced_species)
+            end
+        end
+        return true
+    end
+
     -- ── bag ──────────────────────────────────────────────────────────────────
     -- The throw sequence uses the FIRST bag item, so the fixture's slot 0 has to be a ball.
     -- Say so out loud rather than silently throwing a Potion at a Magikarp.
@@ -212,6 +232,12 @@ return function(ctx)
             if mode == "catch" and u8(H.BAG_QTY0) == 0 then
                 return nil, "out of Poke Balls after " .. hunt .. " hunts"
             end
+            -- The previous hunt's battle ended through EnterMap, which reloaded the wild
+            -- table from ROM and undid any forcing. Put it back before walking.
+            local forced_ok, forced_err = H.reforce_wild()
+            if not forced_ok then
+                return nil, "could not force the wild table: " .. tostring(forced_err)
+            end
             local ok, err = H.find_battle(start_map)
             if not ok then return nil, err end
 
@@ -294,6 +320,18 @@ return function(ctx)
                                     .. "real catch", balls0, u8(H.BAG_QTY0))
                 end
                 return mon
+            end
+            -- D1: IN "catch" MODE A LOST ENCOUNTER IS FATAL, NOT A RETRY.
+            -- gen1_rby_client.lua fires `no_catch` on any wild battle that ends without a
+            -- capture, and latches resolved_areas[area] for the client's lifetime. So
+            -- retrying after a miss DEAD-ZONES the area — and a later capture there is then
+            -- refused by the dead-zone rule, not by whatever rule the caller was testing.
+            -- The species-clause scenario in particular would "fail" for entirely the wrong
+            -- reason. Fail here instead, where the cause is still legible.
+            if mode == "catch" then
+                return nil, fmt("hunt %d lost the encounter (balls %d) — in catch mode that "
+                                .. "fires no_catch and dead-zones the area, which would "
+                                .. "invalidate the rule under test", hunt, u8(H.BAG_QTY0))
             end
             ctx.log(fmt("hunt %d: it got away (balls=%d) — back to the grass", hunt, u8(H.BAG_QTY0)))
         end

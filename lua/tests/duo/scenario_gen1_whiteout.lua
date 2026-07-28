@@ -49,6 +49,16 @@ return function(ctx)
     if ctx.player == "a" then
         ctx.frames(120)                       -- let the link-inject HUD commands drain
 
+        -- THE NUZLOCKE GATE IS A SILENT PRECONDITION. check_whiteout (gen1_rby_client.lua)
+        -- returns immediately unless nuzlocke_active, which is M.hasPokeballs(). Without this
+        -- assertion a drifted fixture blacks out for real, EVERY A-side check below passes,
+        -- no whiteout is ever sent, and the failure surfaces 14400 frames later on B as "the
+        -- auto-rebuild did not run" — pointing squarely at the server instead of the bag.
+        if not M.hasPokeballs() then
+            return false, "hasPokeballs() is false — the client would never emit `whiteout`, "
+                          .. "and this scenario would fail on B for the wrong reason"
+        end
+
         -- 1. Deposit our half of pair 1. The client emits party_to_box, and the server's
         --    _handle_party_to_box both mirrors box_mon to B AND drops B's half from
         --    party_keys immediately — so the pair is co-located-in-box server-side without
