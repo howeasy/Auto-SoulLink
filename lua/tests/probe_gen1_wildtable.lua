@@ -83,22 +83,50 @@ if M.read_u8(IN_BATTLE) ~= 0 then
     t.log(fmt("cleared the pre-existing battle: in_battle=%d", M.read_u8(IN_BATTLE)))
 end
 
--- 4. Now force it, and walk until an encounter. This is the real question: does a write the
---    game can see actually change what we meet?
-for slot = 0, 9 do
-    M.write_u8(mons_addr + slot * 2, 5)
-    M.write_u8(mons_addr + slot * 2 + 1, MAGIKARP)
+-- 4. Force it, walk, and take the SECOND encounter.
+--
+-- `wIsInBattle == 0` is NOT the same as "no encounter pending". TryDoWildEncounter picks the
+-- slot on a step, but the flag does not flip until several frames later (fade, music), so an
+-- encounter committed by gen1_gatelib's boot movement probe is already decided while
+-- in_battle still reads 0. A table forced inside that gap applies to the NEXT encounter, not
+-- the one about to appear — which is exactly the (3, PIDGEY) we kept measuring.
+local function force()
+    for slot = 0, 9 do
+        M.write_u8(mons_addr + slot * 2, 5)
+        M.write_u8(mons_addr + slot * 2 + 1, MAGIKARP)
+    end
 end
+local function walk_to_battle()
+    for i = 1, 400 do
+        t.hold(({"Left", "Right"})[(i % 2) + 1], 12,
+               function() return M.read_u8(IN_BATTLE) ~= 0 end)
+        if M.read_u8(IN_BATTLE) ~= 0 then return true end
+    end
+    return false
+end
+local function leave_battle()
+    for _ = 1, 600 do
+        t.hold("B", 3, nil)
+        if M.read_u8(IN_BATTLE) == 0 then return true end
+    end
+    return false
+end
+
+force()
+-- Flush anything already committed. If nothing is pending this simply meets a wild mon from
+-- the forced table, which is the answer we want either way.
+if walk_to_battle() then
+    t.log(fmt("first encounter after forcing: 0x%02X (level %d) — flushing it",
+              M.read_u8(ENEMY_SP), M.read_u8(M.ENEMY_MON_LEVEL_ADDR)))
+    leave_battle()
+    for _ = 1, 120 do t.step(nil) end
+end
+force()                                   -- the battle reloaded the table on its way out
 t.check("the forced table reads back as MAGIKARP", M.read_u8(mons_addr + 1) == MAGIKARP,
         fmt("got 0x%02X", M.read_u8(mons_addr + 1)))
 
-local entered = false
-for i = 1, 400 do
-    t.hold(({"Left", "Right"})[(i % 2) + 1], 12,
-           function() return M.read_u8(IN_BATTLE) ~= 0 end)
-    if M.read_u8(IN_BATTLE) ~= 0 then entered = true break end
-end
-t.check("an encounter happened", entered, fmt("in_battle=%d", M.read_u8(IN_BATTLE)))
+local entered = walk_to_battle()
+t.check("a second encounter happened", entered, fmt("in_battle=%d", M.read_u8(IN_BATTLE)))
 
 if entered then
     -- Sample BOTH, and sample late. wCurOpponent is what wild_encounters.asm writes the
