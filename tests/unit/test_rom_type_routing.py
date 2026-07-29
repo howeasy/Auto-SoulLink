@@ -15,16 +15,18 @@ The test drives the REAL Lua under lupa rather than restating a list of strings 
 A hand-maintained list would have been just as wrong as the dict it was checking — both
 would have been written from the same mistaken belief about what the module returns.
 """
-import glob
 import os
-import re
 
 import pytest
 
 lupa = pytest.importorskip("lupa")
 
-from server.adapters import _ROM_TYPE_TO_GAME_ID, _VARIANT_LABEL  # noqa: E402
-from server.adapters import game_id_for_rom_type, variant_label  # noqa: E402
+from server.adapters import (  # noqa: E402  # noqa: E402
+    _ROM_TYPE_TO_GAME_ID,
+    _VARIANT_LABEL,
+    game_id_for_rom_type,
+    variant_label,
+)
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
