@@ -5,106 +5,107 @@
     "202": "Bug Catcher",
     "203": "Lass",
     "204": "Sailor",
-    "205": "Jr. Trainer ♂",
-    "206": "Jr. Trainer ♀",
+    "205": "Jr. Trainer ♂",
+    "206": "Jr. Trainer ♀",
     "207": "Pokémaniac",
     "208": "Super Nerd",
     "209": "Hiker",
     "210": "Biker",
     "211": "Burglar",
-    "212": "Juggler",
-    "213": "Fisher",
-    "214": "Swimmer",
-    "215": "Cue Ball",
-    "216": "Gambler",
-    "217": "Beauty",
-    "218": "Psychic",
-    "219": "Rocker",
-    "220": "Juggler",
-    "221": "Tamer",
-    "222": "Bird Keeper",
-    "223": "Blackbelt",
-    "224": "Rival",
-    "225": "Prof. Oak",
-    "226": "Chief",
-    "227": "Scientist",
-    "228": "Giovanni",
-    "229": "Rocket Grunt",
-    "230": "Cooltrainer ♂",
-    "231": "Cooltrainer ♀",
-    "232": "Bruno",
-    "233": "Brock",
-    "234": "Misty",
-    "235": "Lt. Surge",
-    "236": "Erika",
-    "237": "Koga",
-    "238": "Blaine",
-    "239": "Sabrina",
-    "240": "Gentleman",
-    "241": "Rival",
+    "212": "Engineer",
+    "213": "Juggler",
+    "214": "Fisher",
+    "215": "Swimmer",
+    "216": "Cue Ball",
+    "217": "Gambler",
+    "218": "Beauty",
+    "219": "Psychic",
+    "220": "Rocker",
+    "221": "Juggler",
+    "222": "Tamer",
+    "223": "Bird Keeper",
+    "224": "Blackbelt",
+    "225": "Rival",
+    "226": "Prof. Oak",
+    "227": "Chief",
+    "228": "Scientist",
+    "229": "Giovanni",
+    "230": "Rocket Grunt",
+    "231": "Cooltrainer ♂",
+    "232": "Cooltrainer ♀",
+    "233": "Bruno",
+    "234": "Brock",
+    "235": "Misty",
+    "236": "Lt. Surge",
+    "237": "Erika",
+    "238": "Koga",
+    "239": "Blaine",
+    "240": "Sabrina",
+    "241": "Gentleman",
     "242": "Rival",
-    "243": "Lorelei",
-    "244": "Channeler",
-    "245": "Agatha",
-    "246": "Lance"
+    "243": "Rival",
+    "244": "Lorelei",
+    "245": "Channeler",
+    "246": "Agatha",
+    "247": "Lance"
   },
   "named_trainers": {
-    "232": {
-      "1": "Bruno"
+    "225": {
+      "1": "Blue",
+      "2": "Blue",
+      "3": "Blue"
     },
-    "233": {
-      "1": "Brock"
+    "226": {
+      "1": "Prof. Oak"
     },
-    "234": {
-      "1": "Misty"
-    },
-    "235": {
-      "1": "Lt. Surge"
-    },
-    "236": {
-      "1": "Erika"
-    },
-    "237": {
-      "1": "Koga"
-    },
-    "238": {
-      "1": "Blaine"
-    },
-    "239": {
-      "1": "Sabrina"
-    },
-    "228": {
+    "229": {
       "1": "Giovanni",
       "2": "Giovanni",
       "3": "Giovanni"
     },
-    "224": {
-      "1": "Blue",
-      "2": "Blue",
-      "3": "Blue"
+    "233": {
+      "1": "Bruno"
     },
-    "225": {
-      "1": "Prof. Oak"
+    "234": {
+      "1": "Brock"
     },
-    "241": {
-      "1": "Blue",
-      "2": "Blue",
-      "3": "Blue"
+    "235": {
+      "1": "Misty"
+    },
+    "236": {
+      "1": "Lt. Surge"
+    },
+    "237": {
+      "1": "Erika"
+    },
+    "238": {
+      "1": "Koga"
+    },
+    "239": {
+      "1": "Blaine"
+    },
+    "240": {
+      "1": "Sabrina"
     },
     "242": {
+      "1": "Blue",
+      "2": "Blue",
+      "3": "Blue"
+    },
+    "243": {
       "1": "Blue",
       "2": "Blue",
       "3": "Blue",
       "4": "Blue",
       "5": "Blue"
     },
-    "243": {
+    "244": {
       "1": "Lorelei"
     },
-    "245": {
+    "246": {
       "1": "Agatha"
     },
-    "246": {
+    "247": {
       "1": "Lance"
     }
   }

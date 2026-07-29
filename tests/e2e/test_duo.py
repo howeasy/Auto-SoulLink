@@ -35,7 +35,14 @@ def _states_for(scenario):
     return sorted(set(ss.values())) if isinstance(ss, dict) else [ss]
 
 
-@pytest.mark.parametrize("scenario", sorted(SCENARIOS))
+# Gen 1-only scenarios (memorialize / rivalswap / explode_g1) boot battery fixtures and
+# declare no savestate — running them here would KeyError in _states_for. They have their
+# own module: tests/e2e/test_duo_gen1.py.
+GEN3_SCENARIOS = sorted(k for k, v in SCENARIOS.items()
+                        if "gen3_rr" in v.get("games", ("gen3_rr",)))
+
+
+@pytest.mark.parametrize("scenario", GEN3_SCENARIOS)
 def test_duo_scenario(scenario):
     if not os.path.exists(mkstates.EMUHAWK):
         pytest.skip(f"EmuHawk not found at {mkstates.EMUHAWK}")

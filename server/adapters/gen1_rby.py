@@ -258,9 +258,23 @@ class Gen1Adapter(GameAdapter):
     indices that must be converted to National Dex numbers.
     """
 
+    # rom_type (as the Lua client sends it) → encounter-table variant. Red and Blue share
+    # a decomp but differ in 25 of 39 wild areas; Yellow is a separate decomp and differs
+    # from Red in 36 of 39. AP ROMs inherit their base game's tables.
+    _ROM_TYPE_TO_ENC_VARIANT = {
+        "Red": "red", "red": "red", "red_ap": "red", "Red (AP)": "red",
+        "Blue": "blue", "blue": "blue", "blue_ap": "blue", "Blue (AP)": "blue",
+        "Yellow": "yellow", "yellow": "yellow",
+    }
+    _DEFAULT_ENC_VARIANT = "red"
+
     def __init__(self, **kwargs):
-        # Gen 1 has no variants (no is_rr equivalent); kwargs accepted but ignored
-        pass
+        # Gen 1's only variant axis is the game version, which selects the wild encounter
+        # tables. rom_type is passed by the hello path and restored from links.json on
+        # reload; when it is absent we fall back to Red rather than serving no tables.
+        rom_type = kwargs.get("rom_type") or ""
+        self._enc_variant = self._ROM_TYPE_TO_ENC_VARIANT.get(
+            rom_type, self._DEFAULT_ENC_VARIANT)
 
     @property
     def game_id(self) -> str:
@@ -271,6 +285,32 @@ class Gen1Adapter(GameAdapter):
     def supports_abilities(self) -> bool:
         """This generation predates abilities — the party table must not render the column."""
         return False
+
+    # RIVAL1 / RIVAL2 / RIVAL3 in OPP space: pret trainer_constants.asm gives $19/$2A/$2B
+    # and OPP_ID_OFFSET = 200, which is what wCurOpponent holds and what the client sends
+    # on trainer_battle_start. Mirrored in lua/games/gen1_rby_trainers.lua RIVAL_CLASS_IDS
+    # and pinned to pret by tests/unit/test_gen1_trainer_tables.py.
+    _RIVAL_IDS = frozenset({225, 242, 243})
+
+    def rival_trainer_ids(self) -> set[int]:
+        """Gen 1's rival is identified by CLASS, not by individual trainer number — all
+        three rival classes are rival-only, so the class alone is unambiguous."""
+        return set(self._RIVAL_IDS)
+
+    def supports_explode_mode(self) -> bool:
+        """Gen 1 needs no ROM patch for this. Explosion is move 153, and the engine takes
+        the player's choice from wPlayerSelectedMove, so coercing it is a plain RAM write —
+        unlike Gen 3, where the same feature required the companion patch."""
+        return True
+
+    def party_blob_size(self) -> int:
+        """44-byte party struct + 11-byte OT name + 11-byte nickname.
+
+        Gen 1 stores names in arrays parallel to the struct rather than inside it, so a
+        faithful copy — the kind a rival-team swap writes back into wEnemyMons and its two
+        name arrays — is this composite, not just the struct.
+        """
+        return 44 + 11 + 11
 
     def is_gift_area(self, area_id: str) -> bool:
         return area_id in _GIFT_AREAS or area_id.startswith("gift_")
@@ -364,8 +404,12 @@ class Gen1Adapter(GameAdapter):
 
     def encounter_table(self, area_id: str) -> dict[str, list[dict]] | None:
         """Return wild encounter data for the given area, or None if unknown.
-        Partial coverage — see data/games/gen1_rby/encounter_tables.json."""
-        return _GEN1_ENCOUNTERS.get(area_id)
+
+        The table file is keyed by game version first — Red, Blue and Yellow have
+        genuinely different wild tables, and the generator used to blend Red's and Blue's
+        into one set that matched neither.
+        """
+        return _GEN1_ENCOUNTERS.get(self._enc_variant, {}).get(area_id)
 
     def item_name(self, item_id: int) -> str:
         if not item_id:

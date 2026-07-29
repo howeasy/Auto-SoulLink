@@ -201,6 +201,22 @@ class GameRulesAdapter(ABC):
         """
         return set()
 
+    def party_blob_size(self) -> int:
+        """Bytes in one cached party-mon blob, or 0 if this game doesn't cache them.
+
+        `_ingest_party_blobs` validates every incoming blob against this before storing it
+        for the Rival Team Swap. It used to test a hardcoded 100 — Gen 3's boxmon size —
+        which silently discarded any other generation's blobs, leaving `partner_blobs`
+        empty so the swap could only ever answer "partner has no cached party blobs".
+
+        The size is per-game and not simply the party-struct size: Gen 1 keeps OT names and
+        nicknames in parallel arrays outside the struct, so a faithful copy is 44 + 11 + 11.
+
+        Default 0 so a game that has not opted in stores nothing, rather than storing blobs
+        of an unvalidated length.
+        """
+        return 0
+
     def supports_abilities(self) -> bool:
         """Whether this game has Pokémon abilities at all.
 

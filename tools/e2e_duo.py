@@ -38,12 +38,41 @@ ROM_REL = "patch/build/slink_RR.gba"
 BUILD = os.path.join(REPO, "patch", "build")
 WT_FWD = REPO.replace("\\", "/")
 
-# Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout
+# Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout,
+# and `games` — which titles a scenario applies to (default: gen3_rr only, since that is
+# what this harness was built for). Gen 1-only scenarios have no savestate at all, so
+# tests/e2e/test_duo.py must not try to run them.
 # (seconds), fillers (default True; or {"a":…,"b":…} — explode keeps B at ONE mon so the
 # Explosion self-faint whites out instead of opening the switch menu).
 SCENARIOS = {
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
+    # Gen 1 only for now: both halves die, then the pair is buried in Box 12.
+    "memorialize": {"flags": [], "timeout": 300, "games": ("gen1",)},
+    # Gen 1 does the rival swap from pure RAM — no companion patch, unlike Gen 3.
+    "rivalswap": {"flags": ["--rival-team-swap"], "timeout": 300, "games": ("gen1",)},
+    # Gen 1 explode: RAM-only, no companion patch. Distinct from the Gen 3 "explode" entry
+    # below, which loads savestates and keeps B at a single mon.
+    "explode_g1": {"flags": ["--explode-mode"], "timeout": 300, "games": ("gen1",)},
+    # A poisons its last mon to death and takes pokered's real HandleBlackOut. Longer than
+    # `faint` because it walks for the poison tick, mashes through two text boxes and then
+    # waits out the auto-rebuild round trip.
+    "whiteout": {"flags": [], "timeout": 600, "games": ("gen1",)},
+    # The only scenario that PLAYS. Both instances walk Route 1's grass, meet a real wild
+    # Pokemon and throw a real ball; the link is formed by the server from the resulting
+    # `capture` events. Nothing is injected and the Nuzlocke gate comes from the real bag,
+    # so this is the only coverage of encounter linking, area_enter and the ball gate.
+    "playthrough": {"flags": [], "timeout": 1500, "games": ("gen1",),
+                    "target": "battle", "no_setup": True, "frames": 200000},
+    # A meets a real wild Pokemon and KILLS it — a genuine failed encounter, no ball spent —
+    # which must lock the area for BOTH players. B is released only once the SERVER reports
+    # the lock, then catches there and must have the catch taken away.
+    "deadzone": {"flags": [], "timeout": 1500, "games": ("gen1",),
+                 "target": "battle", "no_setup": True, "frames": 200000},
+    # Species clause. Both cartridges point their wild table at ONE species, both catch it in
+    # the same area, and the later capture must be rejected as a same-family duplicate.
+    "dupes": {"flags": ["--species-clause"], "timeout": 1500, "games": ("gen1",),
+              "target": "battle", "no_setup": True, "frames": 200000},
     "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "ghost":   {"flags": ["--overworld-presence"], "savestate": "slink_overworld.State",
                 "timeout": 420},
@@ -108,11 +137,58 @@ def extract_marks(text, tag):
     return out
 
 
+# ── Games ────────────────────────────────────────────────────────────────────
+# The duo harness was written for Radical Red and hardcoded to it. Gen 1 differs in three
+# ways that matter, so the per-game bits live here rather than being threaded through:
+#
+#   * NO SAVESTATE. Gen 1 boots from a battery save (tests/fixtures/gen1/*.SaveRAM), which
+#     is not BizHawk-version-locked the way a .State is — nothing to rebuild after an
+#     emulator upgrade.
+#   * DIFFERENT CARTRIDGES per instance: A is Red, B is Blue. Closer to how the feature is
+#     actually played, and the two cannot collide over BizHawk's SaveRAM because it names
+#     saves from its own gamedb entry.
+#   * Its own duo wrapper, since the boot and the HP endianness differ.
+#
+# gen3_rr keeps exactly the previous behaviour and stays the default.
+GAMES = {
+    "gen3_rr": {
+        "main": "lua/tests/duo/duo_main.lua",
+        "rom": {"a": ROM_REL, "b": ROM_REL},
+        "uses_savestate": True,
+        "scenario_prefix": "",
+    },
+    "gen1": {
+        "main": "lua/tests/duo/duo_gen1_main.lua",
+        "rom": {"a": "patch/build/gen1_red.gb", "b": "patch/build/gen1_blue.gb"},
+        "uses_savestate": False,
+        "fixture": {"a": "red", "b": "blue"},
+        "scenario_prefix": "gen1_",
+    },
+    # Yellow paired against Red. Yellow shifts nearly every WRAM address by -1, and until now
+    # it only ever ran SINGLE-instance gates — no duo, so no Yellow address had ever been
+    # exercised through the server, and none of its WRITE paths had run alongside a partner.
+    # Pairing it with Red rather than another Yellow means a shift bug shows up as an
+    # asymmetry between the two halves instead of cancelling out.
+    "gen1_yellow": {
+        "main": "lua/tests/duo/duo_gen1_main.lua",
+        "rom": {"a": "patch/build/gen1_yellow.gbc", "b": "patch/build/gen1_red.gb"},
+        "uses_savestate": False,
+        "fixture": {"a": "yellow", "b": "red"},
+        "scenario_prefix": "gen1_",
+    },
+}
+
+
 class DuoRun:
     def __init__(self, scenario, args):
         self.scenario = scenario
         self.cfg = SCENARIOS[scenario]
         self.args = args
+        self.game = getattr(args, "game", "gen3_rr")
+        # Family, not id. Gen 1 has more than one duo configuration (red/blue, yellow/red)
+        # and every `== "gen1"` check silently sent the others down the Gen 3 path.
+        self.is_gen1 = self.game.startswith("gen1")
+        self.gcfg = GAMES[self.game]
         self.tcp_port = free_port()
         self.http_port = free_port()
         self.data_dir = tempfile.mkdtemp(prefix=f"slink_duo_{scenario}_")
@@ -142,25 +218,47 @@ class DuoRun:
             return None
 
     def start_instances(self):
+        if self.is_gen1:
+            from gen1_playthrough import staged_rom
+            for key in self.gcfg["fixture"].values():
+                staged_rom(key)     # space-free copy; BizHawk's CLI splits on spaces
         for inst in ("a", "b"):
             for f in (self._result_path(inst), self.go_files[inst]):
                 if os.path.exists(f):
                     os.remove(f)
         for inst in ("a", "b"):
             cfg_ini = os.path.join(BUILD, f"duo_cfg_{inst}.ini")
-            shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
+            if self.is_gen1:
+                # Muted, on the second monitor: two emulators for several minutes each.
+                from gen1_playthrough import write_run_config
+                write_run_config(BIZHAWK_CONFIG, cfg_ini)
+            else:
+                shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
             stub = os.path.join(BUILD, f"duo_{inst}.lua")
-            ss = self.cfg["savestate"]
             fillers = self.cfg.get("fillers", True)
             duo = {
                 "wt": WT_FWD, "player": inst, "scenario": self.scenario,
-                "savestate": f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}",
                 "fillers": fillers[inst] if isinstance(fillers, dict) else fillers,
                 "mutate_otid": inst == "b",
                 "result": f"{WT_FWD}/patch/build/e2e_{self.scenario}_{inst}_result.txt",
+                # So an instance can wait for its partner to finish before exiting —
+                # client.exit() kills the emulator, and a side that leaves early stops
+                # sending the very events the other side is waiting on.
+                "partner_result": (f"{WT_FWD}/patch/build/e2e_{self.scenario}_"
+                                   f"{'b' if inst == 'a' else 'a'}_result.txt"),
                 "go_file": self.go_files[inst].replace("\\", "/"),
-                "timeout_frames": self.cfg["timeout"] * 60,
+                # Scenarios that PLAY the game need a frame budget set by how long the game
+                # takes, not by the wall-clock timeout: at 400x, timeout*60 runs out mid-hunt.
+                "timeout_frames": self.cfg.get("frames", self.cfg["timeout"] * 60),
             }
+            if self.gcfg["uses_savestate"]:
+                ss = self.cfg["savestate"]
+                duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
+            else:
+                # Seed this instance's battery save. Red and Blue get different filenames
+                # from BizHawk's gamedb, so the two instances never fight over one file.
+                from run_gen1_gate import seed_saveram
+                seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"))
             with open(stub, "w") as f:
                 f.write('SLINK_HOST = "127.0.0.1"\n')
                 f.write(f"SLINK_PORT = {self.tcp_port}\n")
@@ -174,10 +272,10 @@ class DuoRun:
                     else:
                         f.write(f"  {k} = {v},\n")
                 f.write("}\n")
-                f.write(f'dofile("{WT_FWD}/lua/tests/duo/duo_main.lua")\n')
+                f.write(f'dofile("{WT_FWD}/{self.gcfg["main"]}")\n')
             p = subprocess.Popen(
                 [EMUHAWK, f"--config=patch/build/duo_cfg_{inst}.ini",
-                 f"--lua=patch/build/duo_{inst}.lua", ROM_REL],
+                 f"--lua=patch/build/duo_{inst}.lua", self.gcfg["rom"][inst]],
                 cwd=REPO)
             self.emus.append(p)
         print("[duo] two EmuHawk instances launched")
@@ -216,14 +314,177 @@ class DuoRun:
         wait_for("inject_link", linked, 60)
         print(f"[duo] linked {a_key} <-> {b_key}")
 
+    def assert_real_link_formed(self):
+        """The whole point of the playthrough scenario.
+
+        Both instances catch a wild mon through actual play; the server must pair those two
+        captures BY AREA on its own. Nothing here injects anything — if encounter linking is
+        broken, no link appears and this raises. This is the only assertion in the suite that
+        covers the rule SLink exists for.
+        """
+        def caught(inst):
+            txt = read_result(self.scenario, inst) or ""
+            for line in txt.splitlines():
+                if "CAUGHT " in line:
+                    return line.split("CAUGHT ", 1)[1].split()[0]
+            return None
+
+        def both_caught():
+            a, b = caught("a"), caught("b")
+            return (a, b) if a and b else None
+
+        a_key, b_key = wait_for("both instances to catch a wild mon", both_caught,
+                                self.cfg["timeout"])
+        print(f"[duo] real captures: a={a_key} b={b_key}")
+
+        def linked():
+            st = self._status() or {}
+            for link in (st.get("links") or []):
+                keys = {link.get("a_key"), link.get("b_key")}
+                if keys == {a_key, b_key}:
+                    return link
+            return None
+
+        link = wait_for("the SERVER to pair the two real captures", linked, 180)
+        area = link.get("area_id")
+        print(f"[duo] ENCOUNTER LINK FORMED FROM REAL PLAY: "
+              f"{a_key} <-> {b_key} in area={area}")
+        if area in (None, "", "duo"):
+            raise RuntimeError(f"link formed but area_id is {area!r} — expected a real "
+                               f"encounter area resolved from the map, not a harness value")
+
     def go(self, lines_by_inst=None):
         """Write the per-instance go-files; lines_by_inst = {"a": [...], "b": [...]} or None."""
         for inst in ("a", "b"):
-            with open(self.go_files[inst], "w") as f:
-                for l in (lines_by_inst or {}).get(inst, []):
-                    f.write(l + "\n")
-                f.write("GO\n")
-        print("[duo] go-files written")
+            self._go_one(inst, (lines_by_inst or {}).get(inst, []))
+
+    def _go_one(self, inst, lines=()):
+        """Release ONE instance. Scenarios where B must provably act after A do this rather
+        than starting both and hoping the ordering holds."""
+        with open(self.go_files[inst], "w") as f:
+            for line in lines:
+                f.write(line + "\n")
+            f.write("GO\n")
+        print(f"[duo] go-file written for {inst}")
+
+    # ── result-file readers ──────────────────────────────────────────────────
+    def _marks(self, inst, tag):
+        return extract_marks(read_result(self.scenario, inst) or "", tag)
+
+    def _caught(self, inst):
+        for line in (read_result(self.scenario, inst) or "").splitlines():
+            if "CAUGHT " in line:
+                return line.split("CAUGHT ", 1)[1].split()[0]
+        return None
+
+    def _area(self, inst):
+        marks = self._marks(inst, "AREA")
+        return marks[0] if marks else None
+
+    def _dead_zone_area(self):
+        for area, st in ((self._status() or {}).get("area_states") or {}).items():
+            if st == "dead_zone":
+                return area
+        return None
+
+    def _shared_area(self):
+        """The one encounter area both cartridges are standing on."""
+        a, b = self._area("a"), self._area("b")
+        if not (a and b):
+            return None
+        if a != b:
+            raise RuntimeError(
+                f"A is on {a} and B is on {b}. Soul Link pairs and locks BY AREA, so these "
+                f"scenarios need both fixtures on one encounter map — the Red/Blue battery "
+                f"saves share Route 1, the Yellow one sits on Route 3.")
+        return a
+
+    # ── assertions ───────────────────────────────────────────────────────────
+    def assert_dead_zone_refusal(self):
+        """(a) A real failed encounter locks the area, and the PARTNER is refused there.
+
+        Nothing is injected: A's no_catch comes from the client noticing its own wild battle
+        ended with no new party member, and the area lock is read back off the live server
+        before B is allowed to move. Withholding B's go-file until then is what makes "B
+        caught INSIDE a dead zone" a fact instead of a race.
+        """
+        self._go_one("a")
+        area = wait_for("A's failed encounter to lock an area",
+                        self._dead_zone_area, self.cfg["timeout"])
+        print(f"[duo] DEAD ZONE FROM REAL PLAY: {area}")
+        a_area = self._area("a")
+        if a_area and a_area != area:
+            raise RuntimeError(f"A played on {a_area} but {area} is what got locked")
+
+        self._go_one("b")
+        wait_for("B to report its area", lambda: self._area("b"), 900)
+        self._shared_area()      # raises with a readable message if the fixtures disagree
+
+        b_key = wait_for("B to catch a wild mon inside the dead zone",
+                         lambda: self._caught("b"), self.cfg["timeout"])
+        wait_for("B's client to retire the refused capture",
+                 lambda: "REFUSED " in (read_result(self.scenario, "b") or ""), 900)
+        print(f"[duo] B caught {b_key} in the dead area and the client retired it")
+
+        st = self._status() or {}
+        got = (st.get("area_states") or {}).get(area)
+        if got != "dead_zone":
+            raise RuntimeError(f"{area} is {got!r} after B's capture, not dead_zone — the "
+                               f"lock did not survive a capture attempt")
+        for link in st.get("links") or []:
+            if b_key in (link.get("a_key"), link.get("b_key")) and link.get("status") == "alive":
+                raise RuntimeError(f"B's dead-zone catch {b_key} formed a LIVE link")
+        if ((st.get("pending_captures") or {}).get(area) or {}).get("b"):
+            raise RuntimeError(f"B's dead-zone catch is pending in {area} — it was accepted")
+        if not [lnk for lnk in (st.get("links") or [])
+                if lnk.get("area_id") == area and lnk.get("status") == "dead"]:
+            raise RuntimeError(f"no DEAD link entry recorded for {area}")
+
+    def assert_species_clause_rejection(self):
+        """(b) The species clause rejects a partner catch from the same evolution family.
+
+        Both cartridges are pointed at one species through wGrassMons, so both meet it for
+        real; the server rejects whichever capture arrives second. Neither side knows in
+        advance which it will be, so the verdicts are cross-checked here.
+        """
+        self.go()
+        wait_for("both instances to report their area",
+                 lambda: self._area("a") and self._area("b"), 900)
+        area = self._shared_area()
+        keys = wait_for("both instances to catch the forced species",
+                        lambda: (self._caught("a"), self._caught("b"))
+                        if self._caught("a") and self._caught("b") else None,
+                        self.cfg["timeout"])
+        print(f"[duo] both caught in {area}: a={keys[0]} b={keys[1]}")
+
+        def verdicts():
+            out = {}
+            for inst in ("a", "b"):
+                text = read_result(self.scenario, inst) or ""
+                for tag in ("REJECTED", "KEPT"):
+                    if any(ln.startswith(tag + " ") for ln in text.splitlines()):
+                        out[inst] = tag
+            return out if len(out) == 2 else None
+
+        v = wait_for("both instances to report a verdict", verdicts, 900)
+        if sorted(v.values()) != ["KEPT", "REJECTED"]:
+            raise RuntimeError(f"expected exactly one rejection, got {v} — with both sides "
+                               f"holding the same species the clause must fire exactly once")
+
+        st = self._status() or {}
+        if [lnk for lnk in (st.get("links") or []) if lnk.get("area_id") == area]:
+            raise RuntimeError(f"a link was recorded in {area} — the clause did not reject")
+        pend = ((st.get("pending_captures") or {}).get(area) or {})
+        if len(pend) != 1:
+            raise RuntimeError(f"expected one surviving pending capture in {area}, got {pend}")
+        rejected = next(i for i, tag in v.items() if tag == "REJECTED")
+        if rejected in pend:
+            raise RuntimeError(f"{rejected} reported REJECTED but its capture is still pending")
+        got = (st.get("area_states") or {}).get(area)
+        if got not in ("pending_a", "pending_b"):
+            raise RuntimeError(f"{area} is {got!r} — a clause rejection must reopen the area "
+                               f"for a retry, not lock or link it")
+        print(f"[duo] SPECIES CLAUSE: {rejected}'s catch rejected, {area} reopened ({got})")
 
     def set_pokeballs(self):
         """Faints are suppressed server-side until the nuzlocke is active (pokéballs obtained)."""
@@ -277,6 +538,18 @@ class DuoRun:
     def orchestrate(self):
         ka, kb = self.wait_keys()
         self.wait_connected()
+        if self.cfg.get("no_setup"):
+            # Deliberately does NOT call set_pokeballs() or inject_link(): these scenarios
+            # exist to prove the paths those shortcuts bypass. The fixture carries real
+            # Poke Balls, so the gate flips from the client's own bag read.
+            if self.scenario == "deadzone":
+                self.assert_dead_zone_refusal()
+            elif self.scenario == "dupes":
+                self.assert_species_clause_rejection()
+            else:
+                self.go()
+                self.assert_real_link_formed()
+            return
         self.set_pokeballs()
         if self.scenario == "infopanel":
             # THREE pairs, not one: 3 pairs (6 rows) + 3 summary rows = 9 rows = 2 pages, which is
@@ -285,8 +558,21 @@ class DuoRun:
             for i in range(min(3, len(ka), len(kb))):
                 self.inject_link(ka[i], kb[i], area_id=f"duo{i}")
             self.go()
-        elif self.scenario == "faint":
+        elif self.scenario in ("faint", "memorialize", "explode_g1"):
             self.inject_link(ka[0], kb[0])
+            self.go()
+        elif self.scenario == "whiteout":
+            # TWO pairs, and the second one is not padding. Measured against the real
+            # server: on a cartridge every `faint` beats the `whiteout` to the server, so
+            # _handle_whiteout finds nothing left to retire and its only observable effect
+            # is the auto-rebuild — which needs an alive, fully-boxed pair to pull back. A
+            # boxes its slot-1 half during the scenario; link it here or there is no pair.
+            self.inject_link(ka[0], kb[0], area_id="duo0")
+            self.inject_link(ka[1], kb[1], area_id="duo1")
+            self.go()
+        elif self.scenario == "rivalswap":
+            # No link needed: the swap is gated on the rival id and the partner having
+            # cached blobs, not on a formed pair. Go straight away and let A drive.
             self.go()
         elif self.scenario == "explode":
             self.inject_link(ka[0], kb[0])
@@ -294,6 +580,13 @@ class DuoRun:
             # frozen battle savestate can't execute the coerced turn — foe never commits).
             wait_for("B inside a live battle",
                      lambda: "IN_BATTLE" in (read_result(self.scenario, "b") or ""), 240)
+            self.go()
+        elif self.scenario == "boxsync" and self.is_gen1:
+            # Gen 1 exercises the RULE, not the storage opcodes: link the pair, then let A
+            # deposit its own half. The server's _handle_party_to_box is what must send
+            # box_mon to B — nothing is injected here, so a broken rule cannot be masked by
+            # the harness doing the work itself.
+            self.inject_link(ka[0], kb[0])
             self.go()
         elif self.scenario == "boxsync":
             # Symmetric: BOTH sides deposit their slot-1 filler, then withdraw it statless
@@ -358,6 +651,8 @@ def main():
     # The client logs contain Unicode arrows; don't let a cp1252 console kill the runner.
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--game", default="gen3_rr", choices=sorted(GAMES),
+                    help="gen3_rr (Radical Red, default) or gen1 (Red as A, Blue as B)")
     ap.add_argument("--scenario", default="faint",
                     choices=list(SCENARIOS) + ["all"])
     ap.add_argument("--keep-alive", action="store_true",

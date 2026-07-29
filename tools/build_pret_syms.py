@@ -17,8 +17,16 @@ Usage:
     python tools/build_pret_syms.py               # build with cached pret repos
     python tools/build_pret_syms.py --update      # git pull each repo first
     python tools/build_pret_syms.py --clean       # wipe .cache/pret/ and reclone
+    python tools/build_pret_syms.py --rom-syms    # ROM-space labels, no RGBDS needed
 
-Output: data/pret_syms.json
+Output: data/pret_syms.json          (WRAM/SRAM, this file's original job)
+        data/pret_rom_syms.json      (--rom-syms: ROM-space labels for patch work)
+
+RGBDS version note: the pin stays at v1.0.1 even though pret/pokered's INSTALL.md now
+asks for 1.0.2. That requirement is for a FULL ROM build; this script only assembles
+ram.asm against a trimmed layout, which 1.0.1 handles — verified by regenerating all four
+repos and diffing (no address used by any Lua profile moved). A full build is not needed
+at all now that --rom-syms fetches pret's own CI-built symbols.
     {
       "pokered":     {"wPartyCount": 53603, ...},
       "pokeyellow":  {"wPartyCount": 53602, ...},
@@ -60,18 +68,35 @@ PRET_REPOS = {
         "variant_define": "_RED",
         "ram_files": ["ram/wram.asm", "ram/hram.asm", "ram/sram.asm", "ram/vram.asm"],
         "link_mode": "dmg",
+        "preinclude": "includes.asm",
     },
     "pokeyellow": {
         "url": "https://github.com/pret/pokeyellow.git",
         "variant_define": None,
         "ram_files": ["ram/wram.asm", "ram/hram.asm", "ram/sram.asm", "ram/vram.asm"],
         "link_mode": "dmg",
+        "preinclude": "includes.asm",
+    },
+    # Archipelago Red/Blue is built from Alchav's fork, NOT from pret — and the fork adds
+    # ~121 lines of WRAM for AP item/event tracking, which shifts real addresses:
+    # wCurMap +216, wPlayerID +216, wObtainedBadges +216, wEnemyMons -18, wBoxCount +11
+    # (861 of 2171 shared symbols move). Cross-checked against AP's own client.py, which
+    # reads CurrentMap at WRAM offset 0x1436 = bus 0xD436 — exactly what this build emits.
+    # So an AP run needs its own profile; inheriting vanilla's addresses reads garbage.
+    # The fork predates pret's includes.asm refactor, hence no preinclude.
+    "alchav_pokered": {
+        "url": "https://github.com/Alchav/pokered.git",
+        "variant_define": "_RED",
+        "ram_files": ["ram/wram.asm", "ram/hram.asm", "ram/sram.asm", "ram/vram.asm"],
+        "link_mode": "dmg",
+        "preinclude": None,
     },
     "pokecrystal": {
         "url": "https://github.com/pret/pokecrystal.git",
         "variant_define": None,
         "ram_files": ["ram/wram.asm", "ram/hram.asm", "ram/sram.asm", "ram/vram.asm"],
         "link_mode": "cgb",
+        "preinclude": "includes.asm",
     },
     # Gold + Silver share a single pret repo (pokegold). One build produces
     # gold.sym; pokesilver_obj uses -D _SILVER but WRAM symbols are identical
@@ -81,6 +106,7 @@ PRET_REPOS = {
         "variant_define": "_GOLD",
         "ram_files": ["ram/wram.asm", "ram/hram.asm", "ram/sram.asm", "ram/vram.asm"],
         "link_mode": "cgb",
+        "preinclude": "includes.asm",
     },
 }
 
@@ -222,10 +248,14 @@ def _build_repo_syms(name: str, spec: dict, rgbds_bin: pathlib.Path, *, update: 
     rgbasm_cmd = [
         str(rgbasm),
         "-Q8",
-        "-P", "includes.asm",
         "-E",
         "-o", str(ram_o),
     ]
+    # Current pret repos funnel their includes through includes.asm and expect it
+    # pre-included. Alchav's AP fork predates that refactor and pulls constants.asm from
+    # ram.asm itself, so pre-including anything there double-defines every macro.
+    if spec.get("preinclude"):
+        rgbasm_cmd[3:3] = ["-P", spec["preinclude"]]
     if spec.get("variant_define"):
         rgbasm_cmd += ["-D", spec["variant_define"]]
     rgbasm_cmd.append("ram.asm")
@@ -284,13 +314,115 @@ def _parse_sym(sym_path: pathlib.Path) -> dict[str, int]:
     return out
 
 
+# ── ROM-space symbols (the `symbols` branch) ─────────────────────────────────
+#
+# pret publishes CI-built .sym/.map artifacts on a `symbols` branch, generated from a
+# byte-identical ROM build. That means every ROM label — ~12.5k globals per game — is
+# available WITHOUT a local build, so no GNU make and no host C compiler for pret's
+# own tools/. The alternative was vendoring w64devkit to run one full build; this is
+# the same data, verified, for a git fetch.
+#
+# repo -> {output key: sym filename on the symbols branch}
+ROM_SYM_SOURCES = {
+    "pokered": {"pokered": "pokered.sym", "pokeblue": "pokeblue.sym"},
+    "pokeyellow": {"pokeyellow": "pokeyellow.sym"},
+}
+ROM_SYMS_OUT = DATA_DIR / "pret_rom_syms.json"
+
+
+def _parse_rom_sym(text: str) -> dict[str, int]:
+    """Parse .sym text → {symbol: (bank << 16) | offset} for ROM-space symbols.
+
+    Keeps only GLOBAL labels. Local sub-labels (`DisableLCD.wait`) are internal jump
+    targets — 4.8k of the 17.4k entries, never useful as a hook point — so dropping
+    them cuts the artifact by a third for no loss.
+
+    Bank is packed into the high half because a Game Boy ROM address is only meaningful
+    with its bank: $4000-$7FFF is whichever bank is currently mapped.
+    """
+    out: dict[str, int] = {}
+    line_re = re.compile(r'^([0-9A-Fa-f]+):([0-9A-Fa-f]+)\s+(\S+)\s*$')
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith(";"):
+            continue
+        m = line_re.match(line)
+        if not m:
+            continue
+        bank, addr, name = int(m.group(1), 16), int(m.group(2), 16), m.group(3)
+        if addr > 0x7FFF or "." in name:
+            continue
+        out[name] = (bank << 16) | addr
+    return out
+
+
+def _expected_rom_sha1(repo: pathlib.Path) -> dict[str, str]:
+    """{rom stem: sha1} from the repo's roms.sha1, e.g. {"pokered": "ea9bcae6..."}."""
+    path = repo / "roms.sha1"
+    if not path.exists():
+        return {}
+    out = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        name = pathlib.Path(parts[1].lstrip("*"))
+        # roms.sha1 also lists VC patch artifacts (`pokered.patch`), which share a stem
+        # with the ROM and would otherwise overwrite it — take only real ROM images.
+        if name.suffix not in (".gb", ".gbc"):
+            continue
+        out[name.stem] = parts[0]
+    return out
+
+
+def build_rom_syms(*, update: bool) -> int:
+    """Fetch the `symbols` branch of each pret repo and write ROM_SYMS_OUT."""
+    all_syms: dict[str, dict] = {}
+    for repo_name, sym_files in ROM_SYM_SOURCES.items():
+        spec = PRET_REPOS[repo_name]
+        repo = _clone_or_pull(repo_name, spec["url"], update=update)
+        # A shallow clone has no `symbols` branch until asked for it by name.
+        _git(repo, "fetch", "--depth", "1", "origin", "symbols")
+        sha1s = _expected_rom_sha1(repo)
+        for out_key, fname in sym_files.items():
+            text = subprocess.run(
+                ["git", "-C", str(repo), "show", f"FETCH_HEAD:{fname}"],
+                capture_output=True, text=True, check=True,
+            ).stdout
+            symbols = _parse_rom_sym(text)
+            all_syms[out_key] = {
+                # The sha1 of the ROM these symbols describe. A consumer can hash the
+                # user's cartridge dump and refuse to apply addresses that were built
+                # against a different ROM — the whole safety property of using
+                # prebuilt symbols instead of building locally.
+                "rom_sha1": sha1s.get(out_key, ""),
+                "symbols": dict(sorted(symbols.items())),
+            }
+            print(f"[{out_key}] {len(symbols)} ROM symbols "
+                  f"(rom sha1 {all_syms[out_key]['rom_sha1'][:12] or '?'})", file=sys.stderr)
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    ROM_SYMS_OUT.write_text(json.dumps(all_syms, indent=1, sort_keys=False) + "\n",
+                            encoding="utf-8")
+    total = sum(len(v["symbols"]) for v in all_syms.values())
+    print(f"\n[done] {total} ROM symbols across {len(all_syms)} games → {ROM_SYMS_OUT}",
+          file=sys.stderr)
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--update", action="store_true",
                         help="git pull each cached pret repo before building")
     parser.add_argument("--clean", action="store_true",
                         help="wipe .cache/pret/ and reclone everything")
+    parser.add_argument("--rom-syms", action="store_true",
+                        help="fetch ROM-space symbols from pret's `symbols` branch into "
+                             "data/pret_rom_syms.json (no RGBDS needed) and exit")
     args = parser.parse_args()
+
+    if args.rom_syms:
+        return build_rom_syms(update=args.update)
 
     if args.clean and PRET_CACHE.exists():
         print(f"[clean] removing {PRET_CACHE}", file=sys.stderr)

@@ -337,6 +337,11 @@ class Gen3Adapter(GameAdapter):
         """The native SOULLINK info screen ships in the Radical Red companion patch only."""
         return self._is_rr
 
+    def party_blob_size(self) -> int:
+        """A full 100-byte boxmon, which is what the client already sends. This is the
+        value `_ingest_party_blobs` used to hardcode, so behaviour here is unchanged."""
+        return 100
+
     def supports_explode_mode(self) -> bool:
         """Explode Mode is Radical Red only — only its client handles `force_explode`
         (the Variant-3 menu-skip path in gen3_frlge_client.lua)."""

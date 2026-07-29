@@ -786,14 +786,18 @@ class SoulLinkState:
                 # Re-resolve adapter from registry if available
                 try:
                     from server.adapters import get_adapter
-                    state.adapter = get_adapter(saved_game_id, is_rr=effective_rr)
+                    # rom_type is restored above and selects per-variant data inside the
+                    # adapter (e.g. Gen 1's Red/Blue/Yellow encounter tables).
+                    state.adapter = get_adapter(saved_game_id, is_rr=effective_rr,
+                                                rom_type=state.rom_type)
                 except (KeyError, ImportError):
                     log.warning(f"No adapter for saved game_id={saved_game_id!r}; keeping current adapter")
             elif effective_rr != getattr(state.adapter, '_is_rr', False):
                 # Adapter game_id matches but is_rr flag differs — recreate
                 try:
                     from server.adapters import get_adapter
-                    state.adapter = get_adapter(state.adapter.game_id, is_rr=effective_rr)
+                    state.adapter = get_adapter(state.adapter.game_id, is_rr=effective_rr,
+                                                rom_type=state.rom_type)
                 except (KeyError, ImportError):
                     pass
             saved_names = data.get("trainer_names", {})
@@ -2698,18 +2702,24 @@ class SoulLinkState:
         """
         if not isinstance(party, list):
             return
+        # Per-game blob size — see GameRulesAdapter.party_blob_size. 0 means this game
+        # doesn't cache blobs at all, so there is nothing to ingest.
+        expected = self.adapter.party_blob_size()
+        if not expected:
+            self.partner_blobs[player_id] = []
+            return
         accepted: list[dict] = []
         for s in party:
             if not isinstance(s, dict):
                 continue
             blob_hex = s.get("blob_hex", "")
-            if not isinstance(blob_hex, str) or len(blob_hex) != 200:
+            if not isinstance(blob_hex, str) or len(blob_hex) != expected * 2:
                 continue
             try:
                 blob = bytes.fromhex(blob_hex)
             except ValueError:
                 continue
-            if len(blob) != 100:
+            if len(blob) != expected:
                 continue
             accepted.append({
                 "slot": int(s.get("slot", len(accepted))),

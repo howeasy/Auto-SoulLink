@@ -2,10 +2,15 @@
 
 Two bugs this covers:
 
-1. `--explode-mode` emitted `force_explode` for EVERY game, but only the Gen 3 Radical Red
-   Lua client implements that command — Gen 1/2/4/5 clients fall into their unknown-command
-   branch and merely log it, so the linked partner never fainted.  A silent Soul Link rule
+1. `--explode-mode` emitted `force_explode` for EVERY game, but only clients that actually
+   implement the command can act on it — the rest fall into their unknown-command branch
+   and merely log it, so the linked partner never fainted.  A silent Soul Link rule
    violation, and the opposite of how `rival_team_swap` is gated.
+
+   Support is per-client, not "RR only": Gen 1 implements force_explode from pure RAM
+   (Explosion is move 153 and the engine reads the choice from wPlayerSelectedMove), so it
+   needs no companion patch. Gen 2/4/5 and vanilla Gen 3 still have no handler and must
+   keep falling back to the deferred faint.
 
 2. Downstream watchers compared the literal string "force_faint", so under Explode Mode the
    dashboard death event and the OBS `link_death` trigger never fired.
@@ -39,11 +44,15 @@ def test_rr_adapter_supports_explode_mode():
 
 @pytest.mark.parametrize("adapter", [
     Gen3Adapter(is_rr=False),   # vanilla / AP / Emerald FRLG
-    Gen1Adapter(),
     Gen4Adapter(),
 ])
-def test_non_rr_adapters_do_not_support_explode_mode(adapter):
+def test_adapters_without_a_handler_do_not_support_explode_mode(adapter):
     assert adapter.supports_explode_mode() is False
+
+
+def test_gen1_supports_explode_mode_without_a_rom_patch():
+    """Gen 1 has no encryption and no checksums, so coercing Explosion is a RAM write."""
+    assert Gen1Adapter().supports_explode_mode() is True
 
 
 # ── the gate in _propagate_faint ─────────────────────────────────────────────
@@ -55,7 +64,7 @@ def test_explode_mode_emits_force_explode_on_rr():
     assert "force_faint" not in _cmds(state, "b")
 
 
-@pytest.mark.parametrize("adapter", [Gen3Adapter(is_rr=False), Gen1Adapter(), Gen4Adapter()])
+@pytest.mark.parametrize("adapter", [Gen3Adapter(is_rr=False), Gen4Adapter()])
 def test_explode_mode_falls_back_to_force_faint_when_unsupported(adapter):
     """The partner must still die — just via the deferred faint the client understands."""
     state = _explode_state(adapter)

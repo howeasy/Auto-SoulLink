@@ -274,6 +274,11 @@ local function parse_command_list(raw)
             }
         end
         -- hud_show / msgbox fields
+        -- The server attaches `nickname` to force_faint so the toast can name a mon that
+        -- is not in our party yet (state.py queues it in four places). Without extracting
+        -- it here the `if c.nickname` guard below never passed and nick_cache was never
+        -- seeded from a command — the toast fell back to the raw key.
+        local nickname = obj:match('"nickname"%s*:%s*"([^"]*)"')
         local text    = obj:match('"text"%s*:%s*"([^"]*)"')
         if text then text = text:gsub("\\n", "\n") end   -- JSON-escaped newline -> real (FR line break)
         local fb      = obj:match('"fb"%s*:%s*"([^"]*)"')   -- msgbox fallback style: "prompt" or hud
@@ -337,7 +342,7 @@ local function parse_command_list(raw)
         local pc_trade_npc       = jbool(obj, "pc_trade_npc")
         if cmd then
             cmds[#cmds+1] = {
-                cmd=cmd, key=key, message=msg, stats=stats, rows=rows,
+                cmd=cmd, key=key, message=msg, stats=stats, rows=rows, nickname=nickname,
                 text=text, fb=fb, r=r, g=g, b=b, frames=frames,
                 gmg=gmg, gmn=gmn, ggx=ggx, ggy=ggy, ggf=ggf, ggfx=ggfx, gmv=gmv, grun=grun, gan=gan,
                 gimgs=gimgs, ganim=ganim, gpcol=gpcol,

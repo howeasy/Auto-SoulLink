@@ -82,7 +82,9 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 
 ### Game Maturity
 
-**Only Gen 3 has been extensively tested in live gameplay.** Gen 1, 2, 4, and 5 have Python unit tests and Lua clients but limited real-world testing — treat them as experimental. When making changes to shared code (`server.py`, `state.py`, `adapters/base.py`), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check.
+**Gen 1 and Gen 3 have live coverage; Gen 2, 4 and 5 do not.** Gen 1 runs headless gates on all three cartridges (`SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py`) plus five two-instance Soul Link scenarios (`SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py`). Gens 2, 4 and 5 have Python unit tests and Lua clients but have never executed against a running game — treat them as experimental. When making changes to shared code (`server.py`, `state.py`, `adapters/base.py`), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check.
+
+Bringing Gen 1 to live coverage found four defects that the unit suite and the Lua syntax gate both passed: `pending_sync_cmds` declared *after* `dispatch_commands`, so every deferred `box_mon` / `party_mon` / `memorialize` bound to a nil global and killed the client on first use; a `party_to_box` debounce that could never reach its threshold, so party→box sync was silently dead (**this one was in Gen 2 as well**); a box level read from offset `+0x21`, which is past the end of the 33-byte Gen 1 box struct; and Archipelago detection probing HRAM at `0xFFDB` instead of the ROM. Static analysis cannot find any of these. If you add a generation, add gates.
 
 ## Soul Link Rules (Full Specification)
 
@@ -340,7 +342,7 @@ SLink-RR/
 - **`lua/tests/test_ability_diag.lua`** — Diagnostic script: auto-detects ROM profile, validates gBaseStats address, shows party ability data per slot.
 - **`lua/tests/test_item_discovery.lua`** — ROM scanner for RR/CFRU gItems table. Uses CFRU probe scoring (IDs 52-62) and itemId field validation to find the correct table. Outputs JSON to `rr_items.json`.
 - **`tests/unit/test_state.py`** — 318 pytest unit tests for the state machine.
-- **`tests/unit/test_gen1_adapter.py`** — 103 tests for the Gen 1 adapter.
+- **`tests/unit/test_gen1_adapter.py`** — Gen 1 adapter unit tests. Live coverage lives in `tests/live/test_gen1_gates.py` (8 gates × real cartridges) and `tests/e2e/test_duo_gen1.py` (5 two-instance scenarios).
 - **`tests/unit/test_gen2_adapter.py`** — 179 tests for the Gen 2 adapter.
 - **`tests/unit/test_gen3_adapter.py`** — 216 tests for the Gen 3 adapter.
 - **`tests/unit/test_gen4_adapter.py`** — 100 tests for the Gen 4 adapter.
@@ -570,7 +572,105 @@ Read the ROM title from GB header at `0x0134` (16 bytes ASCII). Values: `POKEMON
 - No encryption — plaintext party/box data
 - Only 1 box active in RAM at a time (12 boxes total, rest in SRAM)
 - 151 species with non-sequential internal indices (INDEX_TO_NATDEX lookup required)
-- Memorialize deposits to current active box (no dedicated memorial box number like Gen 3's Box 13)
+- Memorialize deposits to a dedicated memorial box: **Box 12**, via `M.depositMemorialMon`
+  (falls back to `depositPartyMon` if Box 12 is full). This previously read "current active
+  box, no dedicated memorial box" — that contradicted the code, `data/games/gen1_rby/README.md`
+  and `server/adapters/gen1_rby.py`, all three of which agree on Box 12.
+
+### What Gen 1 gets for free that Gen 3 needed a ROM patch for
+
+Gen 3 needed the native companion patch for Rival Team Swap because `gEnemyParty` is
+encrypted and checksummed. **Gen 1 has neither**, so both RR-style augmentations are plain
+RAM writes and work on unmodified cartridges.
+
+**Rival Team Swap** — one contiguous ~404-byte write, Red/Blue (Yellow is −1 except where
+noted):
+
+| Region | Red/Blue | Size |
+|--------|----------|------|
+| wEnemyPartyCount | 0xD89C | 1 |
+| wEnemyPartySpecies | 0xD89D | 6 + 0xFF terminator |
+| wEnemyMons | 0xD8A4 | 6 × 44 |
+| wEnemyMonOT | 0xD9AC | 6 × 11 |
+| wEnemyMonNicks | 0xD9EE | 6 × 11 |
+
+The OT names and nicknames live in **parallel arrays**, not inside the mon struct — which is
+why `party_blob_size()` returns **66** for Gen 1 (44 + 11 + 11 assembled by
+`M.readPartyBlob`) rather than the struct size. Rival detection is `wIsInBattle == 2` and
+`wTrainerClass` ∈ {0x19, 0x2A, 0x2B} → OPP {225, 242, 243} (`OPP_ID_OFFSET = 200`).
+
+**Write window matters.** `LoadEnemyMonData` re-derives the active mon from the party arrays
+when a mon is sent out, so the swap must land *before* the first send-out. The client writes
+on `trainer_battle_start`, which is gated on three stable frames of `wIsInBattle == 2`.
+
+**Explode Mode** — `EXPLOSION = 153` into `wBattleMonMoves` (0xD01C) slot 0 with PP at
+`wBattleMonPP` (0xD02D), mirrored into the party struct (+0x08 / +0x1D so the move survives
+a switch), plus `wPlayerMoveListIndex` (0xCC2E) and `wPlayerSelectedMove` (0xCCDC). Falls
+back to `force_faint` when the target is benched.
+
+### Safe-state gate
+
+`M.isInOverworld()` is `wIsInBattle == 0` **and** `wJoyIgnore == 0` (0xCD6B — nonzero while a
+script owns the joypad) **and** `wFontLoaded` bit 0 clear (0xCFC4 — a text box is up). A bare
+`not in_battle` is also true in the PC box UI, the party menu, the naming screen and the
+title screen, all of which are unsafe write windows. Deferred `box_mon` is additionally
+refused while `wCurrentBoxNum` (0xD5A0, low 7 bits) is the memorial box.
+
+### PP-Up encoding
+
+Gen 1 packs the PP-Up count in the **top two bits** of each PP byte (`PP_UP_MASK`), same as
+Gen 2 — `pp_encoding = "ppup_packed"`. The claim in an earlier revision of
+`data/games/gen1_rby/README.md` that Gen 1 has no PP-Up encoding was wrong.
+
+### Archipelago (Alchav/pokered)
+
+Detected by reading the **ROM domain** at `0x5F22` (`Title_Seed`, 20 bytes in the Gen 1
+charset), not HRAM. `rom_type` is `red_ap` / `blue_ap`, registered in `_ROM_TYPE_TO_GAME_ID`.
+The AP fork relocates WRAM, so `red_ap` is a **full literal profile** in `M.PROFILES` with 11
+changed addresses — not an inherited copy with a couple of overrides.
+
+### SFX needs the companion patch — Gen 1 has no RAM sound trigger
+
+`SFX_DISPATCH_ADDR` is `nil` on an unpatched cartridge, and that is permanent, not pending.
+It used to be `0xD35B` (`wMapMusicSoundID`, the stored map music id), so every capture and
+faint corrupted the map's BGM. **`wNewSoundID` (`0xC0EE`) is not the fix** — it looks like a
+mailbox and is not: `PlaySound` takes the id in register `a` and only uses that address as
+internal scratch (`home/audio.asm:140`), and nothing polls it. No address works; the id has
+to reach a `call`.
+
+The companion patch supplies one — a request byte at mailbox+7 consumed each VBlank, at a
+point where the game has already switched to `wAudioROMBank` and run `Audio1_UpdateMusic`
+(`home/vblank.asm:53-71`), so it is audio-bank context by construction. `PlaySound` parks the
+caller's bank in `hSavedROMBank` (`$FFB9`), which the hook saves and restores because the main
+thread may itself be mid-`PlaySound` when the interrupt fires.
+
+**Sound ids are bank-relative.** The same number is a different sound depending on which audio
+bank is loaded (overworld = Audio1, battle = Audio2). 128 shared SFX are id-aligned across
+banks 1 and 2, but only 64 exist in all three — the profile defaults use only those, so an
+event fired mid-battle cannot play the wrong sound. Ids are derived, not guessed:
+`id = (SFX_X - SFX_Headers_N) / 3` over the header labels in `data/pret_rom_syms.json`.
+
+`M.detectCompanionPatch()` reads the `'SLNK'` beacon at runtime and only raises
+`SFX_DISPATCH_ADDR` at ABI ≥ 2, so unpatched ROMs, Yellow (no free WRAM to patch) and AP
+builds all stay a clean no-op.
+
+### The memorial box must claim the SRAM banks first
+
+`ChangeBox` opens with `bit BIT_HAS_CHANGED_BOXES, [hl]` (bit 7 of `wCurrentBoxNum`) followed
+by `call z, EmptyAllSRAMBoxes` (`engine/menus/save.asm:366`; same in pokeyellow and the AP
+fork). The first time a player ever picks "CHANGE BOX", the game marks **every** SRAM box
+empty as a one-time init — including box 12, the memorial. A run that buried a pair before the
+player first opened the box menu would lose it silently.
+
+`M.protectSramBoxes()` runs that init itself and sets the bit, so the game's wipe never fires.
+Safe by construction: bit 7 clear means `ChangeBox` has never run, which is the only path that
+writes a real mon to an SRAM box, so there is nothing of the player's to destroy. It is
+idempotent — a second memorial must not re-run the wipe, or it erases the first.
+
+The box-bank checksums are a red herring: every reference in the decomp is a write or a range
+length, and nothing ever reads them. SLink recomputes them anyway (`M.refreshSramBoxChecksums`)
+so SRAM stays self-consistent, but correctness does not depend on it. All of this is
+profile-keyed on `sram_box_layout`, which only Gen 1 declares — Gen 2's box banks differ.
 
 ---
 

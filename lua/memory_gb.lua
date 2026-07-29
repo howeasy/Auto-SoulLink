@@ -157,6 +157,23 @@ function M.initProfile(game_module, variant)
     M.BAG_ITEMS_ADDR      = prof.BAG_ITEMS_ADDR
     M.BAG_MAX_ITEMS       = prof.bag_max_items or 20
     M.BATTLE_FLAG_ADDR    = prof.BATTLE_FLAG_ADDR
+    -- Optional safe-state predicates; nil on profiles that haven't opted in (see
+    -- M.isInOverworld).
+    M.JOY_IGNORE_ADDR     = prof.JOY_IGNORE_ADDR
+    M.FONT_LOADED_ADDR    = prof.FONT_LOADED_ADDR
+    M.CURRENT_BOX_NUM_ADDR = prof.CURRENT_BOX_NUM_ADDR
+    -- Start of the computed stat block in the party struct (Atk/Def/Spd/Spc), which the
+    -- box struct does not carry. See M.readPartyStats.
+    M.STATS_OFFSET        = prof.stats_offset
+    -- Rival Team Swap / Explode Mode (Gen 1: pure RAM, no ROM patch needed).
+    M.CUR_OPPONENT_ADDR   = prof.CUR_OPPONENT_ADDR
+    M.ENEMY_OT_NAMES_ADDR = prof.ENEMY_OT_NAMES_ADDR
+    M.ENEMY_NICKS_ADDR    = prof.ENEMY_NICKS_ADDR
+    M.PLAYER_SELECTED_MOVE_ADDR   = prof.PLAYER_SELECTED_MOVE_ADDR
+    M.PLAYER_MOVE_LIST_INDEX_ADDR = prof.PLAYER_MOVE_LIST_INDEX_ADDR
+    M.PLAYER_MON_NUMBER_ADDR = prof.PLAYER_MON_NUMBER_ADDR
+    M.BATTLE_MON_MOVES_ADDR = prof.BATTLE_MON_MOVES_ADDR
+    M.BATTLE_MON_PP_ADDR    = prof.BATTLE_MON_PP_ADDR
     M.MAP_ID_ADDR         = prof.MAP_ID_ADDR
     M.PLAYER_NAME_ADDR    = prof.PLAYER_NAME_ADDR
     M.PLAYER_ID_ADDR      = prof.PLAYER_ID_ADDR
@@ -194,6 +211,12 @@ function M.initProfile(game_module, variant)
     M.HP_OFFSET           = prof.hp_offset or 0x01      -- current HP (2 bytes BE)
     M.MAXHP_OFFSET        = prof.maxhp_offset or 0x22   -- max HP (2 bytes BE)
     M.LEVEL_OFFSET        = prof.level_offset or 0x21   -- actual level
+    -- Level WITHIN THE BOX STRUCT, which is not always the party level offset.
+    -- Gen 2's box struct keeps level at the same +0x1F as the party struct, so the two
+    -- coincide; Gen 1 stores BoxLevel at +0x03 while the party level lives at +0x21 —
+    -- past the end of the 33-byte box struct, i.e. inside the NEXT box slot.
+    -- Defaults to LEVEL_OFFSET so a profile that does not set it behaves exactly as before.
+    M.BOX_LEVEL_OFFSET    = prof.box_level_offset or M.LEVEL_OFFSET
     -- Status condition offset within party struct (u8)
     M.STATUS_OFFSET       = prof.status_offset or 0x04
     -- Status condition offset within active enemy battle struct (u8)
@@ -223,6 +246,10 @@ function M.initProfile(game_module, variant)
     -- The profile also provides a sfx_ids table mapping semantic events
     -- ("capture", "faint", "whiteout", "gift") to ROM SFX constants.
     -- Without confirmed addresses, leave disabled to avoid corrupting game state.
+    M.TILE_MAP_ADDR           = prof.TILE_MAP_ADDR
+    M.GRASS_TILE_ADDR         = prof.GRASS_TILE_ADDR
+    M.GRASS_RATE_ADDR         = prof.GRASS_RATE_ADDR
+    M.MOVEMENT_FLAGS_ADDR     = prof.MOVEMENT_FLAGS_ADDR
     M.SFX_DISPATCH_ADDR       = prof.SFX_DISPATCH_ADDR
     M.SFX_IDS                 = prof.sfx_ids or {}
 end
@@ -557,6 +584,190 @@ function M.isWildBattle()
     return M.read_u8(M.BATTLE_FLAG_ADDR) == 1
 end
 
+-- Is it safe to write party/box memory right now?
+--
+-- `not isInBattle()` is NOT enough on its own: it is equally true in the PC box UI, the
+-- party menu, the naming screen and mid-cutscene — every place where the open UI holds
+-- its own copy of the data and writes it back over ours. Two cheap predicates close the
+-- windows that actually corrupt state:
+--   wJoyIgnore  — nonzero while a script owns the joypad (cutscene, forced movement)
+--   wFontLoaded — bit 0 set while a text box / menu font is loaded, i.e. a UI is up
+--
+-- Profile-gated: a profile that declares neither address keeps the old battle-only
+-- behaviour, so Gen 2 opts in by adding the addresses rather than by this changing under
+-- it. Gen 1 has no task/callback system to gate on, so a Gen 3-style multi-predicate
+-- check is not available here — these two are the ones worth having.
+function M.isInOverworld()
+    if M.isInBattle() then return false end
+    if M.JOY_IGNORE_ADDR and M.read_u8(M.JOY_IGNORE_ADDR) ~= 0 then return false end
+    if M.FONT_LOADED_ADDR and (M.read_u8(M.FONT_LOADED_ADDR) % 2) == 1 then return false end
+    return true
+end
+
+-- Active PC box index (0-based). The high bit of wCurrentBoxNum is a "changed box" flag.
+function M.getCurrentBoxNum()
+    if not M.CURRENT_BOX_NUM_ADDR then return nil end
+    return M.read_u8(M.CURRENT_BOX_NUM_ADDR) % 0x80
+end
+
+-- ═══ Rival Team Swap ═══
+-- wCurOpponent = trainer class + OPP_ID_OFFSET(200); this is the id the adapter's
+-- rival_trainer_ids() is keyed by. nil in a wild battle or on a profile without the address.
+function M.readTrainerOpponentId()
+    if not M.CUR_OPPONENT_ADDR then return nil end
+    local v = M.read_u8(M.CUR_OPPONENT_ADDR)
+    if v == 0 then return nil end
+    return v
+end
+
+-- Overwrite the enemy trainer's whole team with `blobs` (each a 66-byte array from
+-- readPartyBlob: 44-byte struct + 11-byte OT + 11-byte nickname).
+--
+-- No encryption, no checksums, no ASLR — this is the plain byte copy that Gen 3 needed a
+-- companion patch for. The engine reads everything it needs for a trainer mon out of these
+-- structs on send-out: species (+0x00), current HP (+0x01), status (+0x04), moves (+0x08)
+-- and level (+0x21). Stats and DVs are NOT taken from here — LoadEnemyMonData recomputes
+-- them from the species header with fixed trainer DVs — so the swapped team fights at the
+-- partner's levels with the partner's moves and HP, but with trainer-standard DVs.
+function M.writeEnemyParty(blobs)
+    if not (M.ENEMY_COUNT_ADDR and M.ENEMY_BASE_ADDR and M.ENEMY_SPECIES_LIST_ADDR
+            and M.ENEMY_OT_NAMES_ADDR and M.ENEMY_NICKS_ADDR) then
+        return false, "profile lacks enemy party addresses"
+    end
+    local n = #blobs
+    if n < 1 then return false, "no blobs" end
+    if n > 6 then n = 6 end
+    local struct = M.PARTY_STRUCT_SIZE
+
+    for i = 1, n do
+        local b = blobs[i]
+        if #b < struct + 22 then return false, "blob too short" end
+        local dst = M.ENEMY_BASE_ADDR + (i - 1) * struct
+        for j = 0, struct - 1 do M.write_u8(dst + j, b[j + 1]) end
+        for j = 0, 10 do M.write_u8(M.ENEMY_OT_NAMES_ADDR + (i - 1) * 11 + j, b[struct + 1 + j]) end
+        for j = 0, 10 do M.write_u8(M.ENEMY_NICKS_ADDR + (i - 1) * 11 + j, b[struct + 12 + j]) end
+        -- The species LIST is what the engine iterates to pick the next mon; the copy
+        -- inside each struct is not enough on its own.
+        M.write_u8(M.ENEMY_SPECIES_LIST_ADDR + (i - 1), b[1])
+    end
+    M.write_u8(M.ENEMY_SPECIES_LIST_ADDR + n, 0xFF)   -- terminator
+    M.write_u8(M.ENEMY_COUNT_ADDR, n)
+    return true, n
+end
+
+-- ═══ Explode Mode ═══
+-- Coerce the active battler into Explosion (move 153). Gen 1 takes the player's choice from
+-- wPlayerSelectedMove, so this is a RAM write rather than a patched battle script.
+-- Slot 0's move and PP are overwritten because the engine decrements PP by slot index and
+-- would otherwise refuse a move the mon does not know.
+M.MOVE_EXPLOSION = 153
+
+-- Which party slot is currently on the field (wPlayerMonNumber), or nil if the profile
+-- doesn't declare it. Explode Mode only applies to this mon — a benched partner has to
+-- fall back to a plain faint.
+function M.getActivePartySlot()
+    if not M.PLAYER_MON_NUMBER_ADDR then return nil end
+    return M.read_u8(M.PLAYER_MON_NUMBER_ADDR)
+end
+
+function M.forceExplode(slot)
+    if not (M.BATTLE_MON_MOVES_ADDR and M.PLAYER_SELECTED_MOVE_ADDR) then
+        return false, "profile lacks explode addresses"
+    end
+    if not M.isInBattle() then return false, "not in battle" end
+    local mv = M.MOVE_EXPLOSION
+    M.write_u8(M.BATTLE_MON_MOVES_ADDR, mv)
+    if M.BATTLE_MON_PP_ADDR then M.write_u8(M.BATTLE_MON_PP_ADDR, 5) end
+    -- Mirror into the party struct so a switch-out/in does not restore the old move.
+    if slot and M.PARTY_BASE_ADDR and M.MOVES_OFFSET then
+        local base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
+        M.write_u8(base + M.MOVES_OFFSET, mv)
+        if M.PP_OFFSET then M.write_u8(base + M.PP_OFFSET, 5) end
+    end
+    if M.PLAYER_MOVE_LIST_INDEX_ADDR then M.write_u8(M.PLAYER_MOVE_LIST_INDEX_ADDR, 0) end
+    M.write_u8(M.PLAYER_SELECTED_MOVE_ADDR, mv)
+    return true
+end
+
+-- A whole party mon as raw bytes, for handing the partner's team to the server.
+--
+-- Gen 1 keeps OT names and nicknames in PARALLEL arrays rather than inside the struct, so
+-- a faithful copy is three pieces, not one: 44-byte struct + 11-byte OT + 11-byte nick.
+-- That composite is what the server caches and what a rival-team swap writes back, which
+-- is why Gen 1's blob is 66 bytes where Gen 3's is a flat 100.
+-- Returns nil if the slot is empty or the profile lacks the name arrays.
+function M.readPartyBlob(slot)
+    if not (M.PARTY_OT_NAMES_ADDR and M.PARTY_NICKS_ADDR) then return nil end
+    local base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
+    if M.read_u8(base + M.SPECIES_OFFSET) == 0 then return nil end
+    local out = {}
+    local n = 0
+    for i = 0, M.PARTY_STRUCT_SIZE - 1 do n = n + 1; out[n] = M.read_u8(base + i) end
+    for i = 0, 10 do n = n + 1; out[n] = M.read_u8(M.PARTY_OT_NAMES_ADDR + slot * 11 + i) end
+    for i = 0, 10 do n = n + 1; out[n] = M.read_u8(M.PARTY_NICKS_ADDR + slot * 11 + i) end
+    return out
+end
+
+function M.bytesToHex(bytes)
+    local parts = {}
+    for i = 1, #bytes do parts[i] = string.format("%02X", bytes[i]) end
+    return table.concat(parts)
+end
+
+-- Inverse of bytesToHex. Returns nil for odd-length or non-hex input rather than a partial
+-- decode, so a truncated blob is rejected outright instead of writing garbage into RAM.
+function M.hexToBytes(s)
+    if type(s) ~= "string" or #s == 0 or #s % 2 ~= 0 then return nil end
+    local out = {}
+    for i = 1, #s, 2 do
+        local b = tonumber(s:sub(i, i + 1), 16)
+        if not b then return nil end
+        out[#out + 1] = b
+    end
+    return out
+end
+
+-- The party-only stats a box struct cannot hold, read BEFORE a deposit.
+--
+-- Gen 1's box struct is the first 33 bytes of the 44-byte party struct, so level (+0x21),
+-- maxHP (+0x22) and the four computed stats (+0x24..+0x2B) are simply lost on deposit.
+-- The engine recalculates them from DVs and StatExp when the player withdraws through the
+-- PC; SLink writes the party struct directly, so it has to put them back itself. Sending
+-- them to the server as `stats_cache` makes that survive a client restart, which an
+-- in-memory table cannot.
+--
+-- Returns nil on profiles that don't declare the stat offsets, so callers can skip.
+function M.readPartyStats(slot)
+    if not (M.STATS_OFFSET and M.MAXHP_OFFSET and M.LEVEL_OFFSET) then return nil end
+    local base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
+    local s = M.STATS_OFFSET
+    return {
+        level   = M.read_u8(base + M.LEVEL_OFFSET),
+        maxHP   = M.read_u16_be(base + M.MAXHP_OFFSET),
+        attack  = M.read_u16_be(base + s),
+        defense = M.read_u16_be(base + s + 2),
+        speed   = M.read_u16_be(base + s + 4),
+        -- Gen 1 has ONE Special stat; mirror it into both slots so the shared renderer and
+        -- the Gen 3-shaped stats dict do not need a generation branch.
+        spAtk   = M.read_u16_be(base + s + 6),
+        spDef   = M.read_u16_be(base + s + 6),
+    }
+end
+
+-- Write a cached stat block back into a party slot after a retrieve.
+function M.applyPartyStats(slot, stats)
+    if not (stats and M.STATS_OFFSET) then return false end
+    local base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
+    local s = M.STATS_OFFSET
+    if stats.level  then M.write_u8(base + M.LEVEL_OFFSET, stats.level) end
+    if stats.maxHP  then M.write_u16_be(base + M.MAXHP_OFFSET, stats.maxHP) end
+    if stats.attack then M.write_u16_be(base + s, stats.attack) end
+    if stats.defense then M.write_u16_be(base + s + 2, stats.defense) end
+    if stats.speed  then M.write_u16_be(base + s + 4, stats.speed) end
+    if stats.spAtk  then M.write_u16_be(base + s + 6, stats.spAtk) end
+    return true
+end
+
 function M.isTrainerBattle()
     return M.read_u8(M.BATTLE_FLAG_ADDR) == 2
 end
@@ -770,6 +981,17 @@ function M.depositPartyMon(slot)
     local box_dst = M.BOX_BASE_ADDR + bcount * M.BOX_STRUCT_SIZE
     memcpy_party_to_box(box_dst, party_base, M.BOX_STRUCT_SIZE)
 
+    -- Refresh the stored box level from the LIVE party level. Gen 1's BoxLevel (+0x03) is
+    -- written at catch time and goes stale the moment the mon levels up, so copying the
+    -- struct verbatim would box a mon at the level it was caught at.
+    M.box_write_u8(box_dst + M.BOX_LEVEL_OFFSET, M.read_u8(party_base + M.LEVEL_OFFSET))
+
+    -- Stash the party-only stats the box struct cannot hold, so a deposit+withdraw within
+    -- one session restores correctly even before the server echoes stats_cache back. The
+    -- server's copy is the durable one; this is just the same-session fallback.
+    M._party_tail_cache = M._party_tail_cache or {}
+    M._party_tail_cache[M.monKey(party_base)] = M.readPartyStats(slot)
+
     -- 2. Copy OT name (11 bytes) from party (WRAM) to box (SRAM)
     local party_ot = M.PARTY_OT_NAMES_ADDR + slot * 11
     local box_ot = M.BOX_OT_NAMES_ADDR + bcount * 11
@@ -820,7 +1042,9 @@ end
 
 --- Retrieve a mon from the current box by key and add to party.
 -- Returns true on success, false + error string on failure.
-function M.retrieveBoxMon(key)
+-- `stats` (optional) is the server's cached stat block for this key, from the party_mon
+-- command. Without it the mon comes back with maxHP = its stored HP and zeroed stats.
+function M.retrieveBoxMon(key, stats)
     local pcount = M.getPartyCount()
     if pcount >= 6 then
         return false, "party full"
@@ -840,14 +1064,45 @@ function M.retrieveBoxMon(key)
     memzero(party_dst, M.PARTY_STRUCT_SIZE)  -- zero full party struct first
     memcpy_box_to_party(party_dst, box_base, M.BOX_STRUCT_SIZE)
 
-    -- 2. Recalculate party-only stats (level + stats at end of struct)
-    -- Read level from box struct
-    local box_level = M.box_read_u8(box_base + M.LEVEL_OFFSET)
+    -- 2. Restore the party-only tail, which the box struct does not carry.
+    -- The box holds only the first BOX_STRUCT_SIZE bytes, so level (Gen 1: BoxLevel at
+    -- +0x03, NOT the party's +0x21) comes from BOX_LEVEL_OFFSET, and maxHP/stats have to
+    -- come from the deposit-time cache. The engine would recalculate them from
+    -- DVs+StatExp via CalcStats; replaying what we saved is the same answer without
+    -- reimplementing RBY's stat formula, which would also need a base-stat table we
+    -- don't ship.
+    local box_level = M.box_read_u8(box_base + M.BOX_LEVEL_OFFSET)
     M.write_u8(party_dst + M.LEVEL_OFFSET, box_level)
-    -- For HP: set current HP = max HP (full heal on retrieve)
     local hp = M.box_read_u16_be(box_base + M.HP_OFFSET)
     M.write_u16_be(party_dst + M.HP_OFFSET, hp)
-    M.write_u16_be(party_dst + M.MAXHP_OFFSET, hp)
+
+    -- `stats` comes from the server's stats_cache, recorded at deposit time; it survives a
+    -- client restart, unlike anything held in Lua. The in-process table is only a fallback
+    -- for a deposit+withdraw inside one session before the server has echoed anything back.
+    local cached = stats or (M._party_tail_cache and M._party_tail_cache[key])
+    if cached then
+        M.applyPartyStats(pcount, cached)
+        if M._party_tail_cache then M._party_tail_cache[key] = nil end
+    else
+        -- NO CACHE: REFUSE, do not improvise.
+        --
+        -- The old behaviour was to set maxHP = stored HP and carry on. That is worse than it
+        -- looks: line 1064 zeroes the whole 44-byte party struct and the box only carries 33
+        -- of them, so Attack/Defence/Speed/Special are left at **0**. A player who restarts
+        -- the client and then withdraws gets a mon that cannot fight — silent, permanent save
+        -- corruption, and the mon is out of the box so there is nothing to undo it from.
+        --
+        -- Rebuilding them properly means RBY's stat formula plus the base-stat table, which
+        -- is readable from ROM but is real work; until that exists, returning false is
+        -- correct. The caller (gen1_rby_client.lua) already reports sync_retrieve_failed on
+        -- false, so the server learns the withdraw did not happen and the pair stays
+        -- consistent instead of quietly diverging.
+        --
+        -- This path had NEVER executed on a cartridge, which is why it survived this long.
+        memzero(party_dst, M.PARTY_STRUCT_SIZE)   -- leave no half-written mon behind
+        return false, "no cached stats for " .. tostring(key)
+            .. " — refusing to withdraw a mon with zeroed stats"
+    end
 
     -- 3. Copy OT name from box (SRAM) to party (WRAM)
     local box_ot = M.BOX_OT_NAMES_ADDR + box_slot * 11
@@ -980,6 +1235,59 @@ function M.readMovesAndPP(struct_base, base_pp_table)
     return result
 end
 
+-- ═══ Overworld: the game's own wild-encounter preconditions ══════════════
+-- Profile-keyed (Gen 1 only declares these), so Gen 2 inherits a nil no-op.
+--
+-- These exist because driving the overworld blind does not work. Pacing back and forth to
+-- farm encounters drifts: Route 1's ledges are ONE-WAY, so a stray southward step drops the
+-- player off the route with no way back, and every later step reports "no encounter" while
+-- looking perfectly healthy. Rather than heuristics, ask the game what it asks itself.
+--
+-- pokered TryDoWildEncounter (engine/battle/wild_encounters.asm:27-32):
+--     hlcoord 9, 9        ; bottom-right tile of the half-block we stand in
+--     ld c, [hl]
+--     ld a, [wGrassTile]
+--     cp c                ; equal -> grass -> an encounter can roll
+-- hlcoord x,y is wTileMap + y*20 + x, so the probe tile is wTileMap + 189.
+
+--- True when the player is standing on a tile that can roll a wild encounter.
+function M.isInGrass()
+    if not (M.TILE_MAP_ADDR and M.GRASS_TILE_ADDR) then return nil end
+    local tile = M.read_u8(M.TILE_MAP_ADDR + 189)
+    return tile == M.read_u8(M.GRASS_TILE_ADDR)
+end
+
+--- True when this map has wild Pokémon at all (wGrassRate == 0 means none).
+--
+-- Zero does NOT mean "a battle ate the table". An earlier version of this file claimed that,
+-- on the basis of the UNION at pret/pokered ram/wram.asm:2143-2172, and it was wrong twice:
+--
+--   * The overlay does not line up the way it looks. The second branch opens with
+--     wLinkEnemyTrainerName (11 bytes) + padding + wSerialEnemyDataBlock, so wEnemyPartyCount
+--     lands at 0xD89C — in the 8-byte hole AFTER wGrassMons — and wEnemyMons lands on
+--     wWaterRate. A battle therefore clobbers the WATER table, never the grass one.
+--   * It would not matter anyway: after every battle the game runs
+--     .noFaintCheck -> EnterMap -> LoadMapHeader -> LoadWildData
+--     (home/overworld.asm:353, :2309, :2253), rebuilding the whole table.
+--
+-- What actually zeroes it is standing on a map whose wild data is NothingWildMons — Pallet
+-- Town and Viridian City among them (data/wild/grass_water.asm:3-4), both of which Route 1
+-- connects to with no warp, and both of which HAVE grass tiles. So isInGrass() stays true
+-- while the rate is zero, which reads as "walking in grass forever with nothing happening".
+-- If you see that, check the map id before blaming the game.
+function M.hasWildEncounters()
+    if not M.GRASS_RATE_ADDR then return nil end
+    return M.read_u8(M.GRASS_RATE_ADDR) ~= 0
+end
+
+--- True while the player is mid-ledge-hop, exiting a door, or fishing.
+-- TryDoWildEncounter returns early on this, and it is also how we notice a ledge was jumped
+-- (the drift that no amount of walking can undo).
+function M.isMoveLocked()
+    if not M.MOVEMENT_FLAGS_ADDR then return nil end
+    return M.read_u8(M.MOVEMENT_FLAGS_ADDR) ~= 0
+end
+
 -- ═══ Sound effects (Phase 7) ═════════════════════════════════════════════
 -- Trigger an in-game sound effect by writing its ROM SFX ID to the music/SFX
 -- dispatch register. Profile-gated: if SFX_DISPATCH_ADDR is nil, this is a
@@ -988,6 +1296,29 @@ end
 --
 -- M.playSfx("capture") looks up profile.sfx_ids.capture and writes it to
 -- the dispatch register. Unknown event names are no-ops.
+
+--- Detect the Gen 1 companion patch and, if present, enable SFX through its mailbox.
+--
+-- Gen 1 has no RAM-writable sound trigger — `wNewSoundID` is PlaySound's internal scratch,
+-- not a polled mailbox — so an unpatched cartridge simply cannot play a sound from Lua and
+-- SFX_DISPATCH_ADDR stays nil. The patched build adds a VBlank hook that consumes a sound id
+-- from mailbox+7, which gives us a real dispatch register.
+--
+-- Profile-keyed on `companion_patch_mailbox`, so Gen 2 never runs this. Called once at
+-- startup; returns the detected ABI version, or nil when unpatched.
+function M.detectCompanionPatch()
+    local mb = M.profile and M.profile.companion_patch_mailbox
+    if not mb then return nil end
+    local tag = string.char(M.read_u8(mb), M.read_u8(mb + 1),
+                            M.read_u8(mb + 2), M.read_u8(mb + 3))
+    if tag ~= "SLNK" then return nil end
+    local abi = M.read_u8(mb + 4)
+    -- ABI 1 was the beacon-only spike; the SFX request byte arrived in ABI 2.
+    if abi >= 2 then
+        M.SFX_DISPATCH_ADDR = mb + 7
+    end
+    return abi
+end
 
 function M.playSfx(event_name)
     if not M.SFX_DISPATCH_ADDR then return false end
@@ -1047,6 +1378,101 @@ end
 -- Gen 2: Box 14 (SRAM bank 3, CartRAM offset 0x79E0)
 -- If no dedicated memorial box is available, falls back to depositPartyMon.
 -- Returns true on success, false + error string on failure.
+-- ═══ Gen 1 SRAM box-bank integrity ═══
+-- Profile-keyed via `sram_box_layout`, which only the Gen 1 profiles declare — Gen 2's box
+-- banks have a different layout and no equivalent one-time wipe, so none of this runs there.
+--
+-- THE POINT OF THIS, and it is not the checksums. pokered's `ChangeBox` opens with
+--     bit BIT_HAS_CHANGED_BOXES, [hl]   ; hl = wCurrentBoxNum, bit 7
+--     call z, EmptyAllSRAMBoxes         ; if so, empty ALL boxes in SRAM
+-- (engine/menus/save.asm:366, identical in pokeyellow:351 and Alchav's AP fork:354). So the
+-- first time the player ever picks "CHANGE BOX", the game marks every SRAM box empty as a
+-- one-time init — **including box 12, where we put the memorial**. A run that memorialised
+-- before the player first touched the box menu would silently lose every buried mon.
+--
+-- The fix is to do that init ourselves, once, and then set the bit so the game never does.
+-- It is safe: bit 7 clear means the game has never run ChangeBox, which is the only path that
+-- writes a real mon to an SRAM box — so there is nothing of the player's to destroy.
+local function sram_box_geometry()
+    local L = M.profile and M.profile.sram_box_layout
+    if not L then return nil end
+    -- Defaults match pret/pokered: 12 boxes, 6 per bank, 1122-byte box, banks 2 and 3.
+    return {
+        box_len   = L.box_len or 1122,
+        per_bank  = L.boxes_per_bank or 6,
+        banks     = L.banks or {2, 3},
+        -- CartRAM offset of each bank's checksum block = bank*0x2000 + (0xBA4C - 0xA000).
+        ck_offset = L.checksum_offset or 0x1A4C,
+        flag_addr = L.changed_boxes_addr,   -- wCurrentBoxNum
+        flag_bit  = L.changed_boxes_bit or 0x80,
+    }
+end
+
+--- Complement of the 8-bit sum, i.e. pokered's `CalcCheckSum` (save.asm:297).
+local function sram_sum(off, len)
+    local d = 0
+    for i = 0, len - 1 do
+        d = (d + mem_r8(off + i, SRAM_DOMAIN)) % 256
+    end
+    return d
+end
+
+--- Recompute one bank's all-boxes checksum and its 6 per-box checksums.
+-- One pass: the all-boxes range is exactly the per-box ranges concatenated, so the total is
+-- the sum of the parts and we never read a byte twice.
+local function recompute_bank_checksums(g, bank)
+    local base = bank * SRAM_BANK_SIZE
+    local total, per = 0, {}
+    for i = 0, g.per_bank - 1 do
+        local s = sram_sum(base + i * g.box_len, g.box_len)
+        per[i] = (255 - s) % 256
+        total = (total + s) % 256
+    end
+    local ck = base + g.ck_offset
+    mem_w8(ck, (255 - total) % 256, SRAM_DOMAIN)
+    for i = 0, g.per_bank - 1 do
+        mem_w8(ck + 1 + i, per[i], SRAM_DOMAIN)
+    end
+end
+
+--- Run the game's one-time SRAM box init ourselves, if it has not happened yet.
+-- Returns true when it actually did the init (so the caller knows both banks changed).
+function M.protectSramBoxes()
+    local g = sram_box_geometry()
+    if not g or not g.flag_addr then return false end
+
+    local flag = M.read_u8(g.flag_addr)
+    if flag % (g.flag_bit * 2) >= g.flag_bit then
+        return false                          -- already initialised, by us or by the game
+    end
+
+    -- EmptySRAMBox: count = 0, then the 0xFF species terminator (save.asm:572).
+    for _, bank in ipairs(g.banks) do
+        for i = 0, g.per_bank - 1 do
+            local box = bank * SRAM_BANK_SIZE + i * g.box_len
+            mem_w8(box, 0, SRAM_DOMAIN)
+            mem_w8(box + 1, 0xFF, SRAM_DOMAIN)
+        end
+    end
+    M.write_u8(g.flag_addr, flag + g.flag_bit)
+    return true
+end
+
+--- Refresh the checksums for whichever banks we touched.
+-- ponytail: vanilla pokered never READS these — every reference is a write (verified by
+-- grepping the whole decomp), and ChangeBox recomputes them from SRAM anyway. We write them
+-- so SRAM stays self-consistent for forks that might check. If this ever costs a visible
+-- frame hitch, drop it; correctness does not depend on it.
+function M.refreshSramBoxChecksums(all_banks)
+    local g = sram_box_geometry()
+    if not g then return end
+    if all_banks then
+        for _, bank in ipairs(g.banks) do recompute_bank_checksums(g, bank) end
+    else
+        recompute_bank_checksums(g, g.banks[#g.banks])   -- memorial box lives in the last bank
+    end
+end
+
 function M.depositMemorialMon(slot)
     local mem_off = M.profile and M.profile.memorial_box_cartram_offset
     if not mem_off then
@@ -1059,6 +1485,11 @@ function M.depositMemorialMon(slot)
     if not mem_off then
         return M.depositPartyMon(slot)
     end
+
+    -- Before anything is written: claim the SRAM box banks so the game's first-ChangeBox
+    -- wipe can never run and erase the memorial. Must precede the count read below, since
+    -- the init resets that count to 0.
+    local did_init = M.protectSramBoxes()
 
     local pcount = M.getPartyCount()
     if pcount <= 1 then
@@ -1125,6 +1556,7 @@ function M.depositMemorialMon(slot)
     M.write_u8(M.PARTY_SPECIES_ADDR + new_pcount, 0xFF)
     M.write_u8(M.PARTY_COUNT_ADDR, new_pcount)
 
+    M.refreshSramBoxChecksums(did_init)
     return true
 end
 
