@@ -28,12 +28,27 @@
   │  box_to_party   — previously known monKey returns to party from box
   │  key_change     — evolution detected (species changes, DVs+OTID invariant)
   │  tick           — automatic every 30 frames; carries ball_count
+  │  safe           — first genuinely-overworld frame after a battle; the server treats
+  │                   it as a tick that also means "deferred writes can run now"
+  │  stats_cache    — the party-only tail, sent on deposit. Gen 2's 32-byte box struct
+  │                   carries no HP, no maxHP and none of the five stats, so the server
+  │                   holding this block is the ONLY way the mon can be withdrawn later.
+  │  sync_retrieve_done / sync_retrieve_failed
+  │                 — outcome of a party_mon. Every path must report, or the server keeps
+  │                   believing the withdraw is in flight and the pair desyncs for good.
   └────────────────────────────────────────────────────────────────────────
+  NOT YET IMPLEMENTED (Gen 1 has them): trainer_battle_start / rival_team_replaced, and
+  the force_explode / replace_rival_team commands. They need Crystal's battle-engine
+  addresses — selected move, active party slot, enemy OT/nickname arrays — none of which
+  are in the profile yet and none of which should be guessed from their Gen 1 offsets.
 
   ┌─ COMMANDS DISPATCHED ──────────────────────────────────────────────────
   │  force_faint    — write HP = 0 to matching party slot (immediate)
   │  box_mon        — deposit partner's linked mon to PC (deferred: safe state)
-  │  party_mon      — restore partner's linked mon to party (deferred: safe state)
+  │  party_mon      — restore partner's linked mon to party (deferred: safe state).
+  │                   MUST be given the server's cached stats block: retrieveBoxMon
+  │                   refuses rather than hand back a mon with zeroed stats, so a
+  │                   stats-less call fails 100% of the time.
   │  memorialize    — move dead mon to PC box as graveyard (deferred: safe state).
   │                   MUST reply memorialize_done (or _failed) on every path — the server
   │                   holds the key in pending_memorials until it hears back.
@@ -366,6 +381,10 @@ local battle_area_id      = ""
 local captured_this_battle = false
 local post_battle_frames  = 0
 local POST_BATTLE_GRACE   = 15  -- frames to wait after battle before no_catch
+-- Set when a battle ends; cleared on the first genuinely-overworld frame, which is when the
+-- `safe` event fires. The server treats `safe` like a tick that also means "deferred
+-- commands can run now", so it must not be sent while a menu or script still owns input.
+local pending_safe        = false
 
 -- Battle debounce: require consecutive frames to avoid single-frame glitches
 -- Crystal's wBattleMode (0xD22D) can flicker during transitions/animations
@@ -1171,6 +1190,7 @@ local function on_frame()
         -- Battle confirmed ended
         in_battle = false
         post_battle_frames = POST_BATTLE_GRACE
+        pending_safe = true
         console.log(fmt("[SLink-Crystal] Battle END captured=%s", tostring(captured_this_battle)))
     end
 
@@ -1218,10 +1238,35 @@ local function on_frame()
         diff_party()
     end
 
-    -- 9b. Execute pending sync commands (box_mon / party_mon) when safe
+    -- 9b. Execute pending sync commands (box_mon / party_mon / memorialize) when safe.
     -- Crystal's PC box is in SRAM (CartRAM domain). memory_gb.lua routes via box_read/box_write.
-    if writes_enabled and not in_battle and #pending_sync_cmds > 0 then
+    --
+    -- `not in_battle` alone was too permissive: it is also true in the PC box UI, the party
+    -- menu and the naming screen, where the open UI holds its own copy of the data and
+    -- writes it back over ours. isInOverworld() additionally requires wScriptRunning == 0 —
+    -- measured on real Crystal as 00 in the overworld and FF with a menu open
+    -- (lua/tests/probe_gen2_safestate.lua). wJoypadDisable, the obvious Gen 1 analogue,
+    -- reads 00 in BOTH and would have looked like a fix while changing nothing.
+    --
+    -- Defer every box operation while the MEMORIAL box is the active one. Two distinct
+    -- hazards: a normal box_mon would deposit a live mon into the graveyard, and memorialize
+    -- writes Box 14's SRAM directly while the game holds its own view of the active box.
+    -- Staying queued means the command simply runs once the player switches boxes.
+    local active_box = M.getCurrentBoxNum and M.getCurrentBoxNum()
+    local box_safe = (active_box == nil) or (active_box ~= MEMORIAL_BOX_INDEX)
+
+    if writes_enabled and box_safe and M.isInOverworld() and #pending_sync_cmds > 0 then
         local cmd = pending_sync_cmds[1]
+        -- Bounded requeue. The command is only dropped once `handled` survives to the bottom,
+        -- so a transient failure retries next frame instead of vanishing while the server
+        -- goes on believing it is in flight. Returns true while it should stay queued.
+        local handled = true
+        local function keep_queued(limit)
+            local n = (cmd._retries or 0) + 1
+            cmd._retries = n
+            if n <= limit then handled = false return true end
+            return false
+        end
         local exec_ok, exec_err = pcall(function()
             if cmd.cmd == "box_mon" then
                 -- Find the mon in party and deposit to current box
@@ -1234,14 +1279,26 @@ local function on_frame()
                 end
                 if found_slot then
                     console.log(fmt("[SLink-Crystal]   ↳ box_mon: attempting deposit slot %d, box_count=%d", found_slot, M.getBoxCount()))
+                    -- Read the party-only tail BEFORE depositing. Gen 2's 32-byte box struct
+                    -- ends at Level +0x1F and carries no HP, maxHP or computed stats at all,
+                    -- so unless the server holds them the mon cannot be withdrawn later —
+                    -- retrieveBoxMon refuses rather than hand back a mon with zeroed Attack.
+                    local pre_stats = M.readPartyStats(found_slot)
                     local ok, err = M.depositPartyMon(found_slot)
                     if ok then
                         -- Verify: read back the box count
                         local new_count = M.getBoxCount()
                         console.log(fmt("[SLink-Crystal]   ↳ box_mon OK: deposited slot %d, new box_count=%d", found_slot, new_count))
                         hud_show(nick_label(cmd.key) .. " boxed", 100, 255, 100, 180)
+                        if pre_stats then
+                            send({event = "stats_cache", key = cmd.key, stats = pre_stats},
+                                 "stats_cache:" .. cmd.key:sub(1, 8), true)
+                        end
+                    elseif keep_queued(3) then
+                        console.log(fmt("[SLink-Crystal]   ↳ box_mon retry %d/3: %s",
+                                        cmd._retries, err or "?"))
                     else
-                        console.log("[SLink-Crystal]   ↳ box_mon FAIL: " .. (err or "?"))
+                        console.log("[SLink-Crystal]   ↳ box_mon FAIL (giving up): " .. (err or "?"))
                         hud_show("! Box fail: " .. (err or "?"), 255, 100, 100, 300)
                     end
                 else
@@ -1250,14 +1307,24 @@ local function on_frame()
                 end
                 sync_written_keys[cmd.key] = true
             elseif cmd.cmd == "party_mon" then
-                -- Retrieve mon from box to party
-                local ok, err = M.retrieveBoxMon(cmd.key)
+                -- cmd.stats is the block cached at deposit time and echoed back by the
+                -- server (mon_stats). Calling this WITHOUT it was not a degradation — since
+                -- retrieveBoxMon started refusing rather than improvising, a stats-less
+                -- withdraw fails 100% of the time, so Gen 2 party sync did not work at all.
+                local ok, err = M.retrieveBoxMon(cmd.key, cmd.stats)
                 if ok then
                     console.log("[SLink-Crystal]   ↳ party_mon OK: retrieved " .. cmd.key:sub(1,8))
                     hud_show(nick_label(cmd.key) .. " unboxed", 100, 255, 100, 180)
+                    all_known_keys[cmd.key] = true
+                    send({event = "sync_retrieve_done", key = cmd.key},
+                         "sync_retrieve_done:" .. cmd.key:sub(1, 8), true)
                 else
                     console.log("[SLink-Crystal]   ↳ party_mon FAIL: " .. (err or "?"))
                     hud_show("! Unbox fail: " .. (err or "?"), 255, 100, 100, 300)
+                    -- EVERY failing path must report back, or the server keeps believing the
+                    -- withdraw is in flight and the pair desyncs permanently.
+                    send({event = "sync_retrieve_failed", key = cmd.key},
+                         "sync_retrieve_failed:" .. cmd.key:sub(1, 8), true)
                 end
                 sync_written_keys[cmd.key] = true
             elseif cmd.cmd == "memorialize" then
@@ -1308,11 +1375,29 @@ local function on_frame()
                 sync_written_keys[cmd.key] = true
             end
         end)
-        table.remove(pending_sync_cmds, 1)
         if not exec_ok then
             console.log("[SLink-Crystal]   ↳ sync cmd ERROR: " .. tostring(exec_err))
             hud_show("! Box op fail", 255, 100, 100, 300)
             sync_written_keys[cmd.key] = true
+            handled = true            -- a raised error is not retryable; drop it
+        end
+        -- PEEK, then remove only if handled. This used to remove unconditionally, which is
+        -- what made the bounded requeue above impossible.
+        if handled then table.remove(pending_sync_cmds, 1) end
+    end
+
+    -- 9c. safe — the first genuinely-overworld frame after a battle ends. The server treats
+    -- it as a tick that also means "deferred writes can run now", so it waits for
+    -- isInOverworld rather than just "not in battle": the post-battle frames still have a
+    -- text box up and a script holding the joypad.
+    if pending_safe and M.isInOverworld() and post_battle_frames == 0 then
+        pending_safe = false
+        if C.connected() then
+            local evt = {event = "safe", has_pokeballs = nuzlocke_active,
+                         area_id = last_area_id}
+            local raw_count = M.getPartyCount()
+            if raw_count >= 1 and raw_count <= 6 then evt.party = build_party_snapshot() end
+            send(evt, "safe", true)
         end
     end
     -- 10. Tick event

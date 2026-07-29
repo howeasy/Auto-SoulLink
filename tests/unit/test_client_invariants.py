@@ -87,6 +87,49 @@ def test_frame_handler_is_wrapped_in_pcall(path):
 PAYLOAD_FIELDS = {"party_mon": ["stats"]}
 
 
+# ── Invariant 3: the withdraw must be handed its cached stats ────────────────
+
+GB_CLIENTS = [p for p in CLIENTS if "gen1" in os.path.basename(p) or "gen2" in os.path.basename(p)]
+
+
+@pytest.mark.parametrize("path", GB_CLIENTS, ids=lambda p: os.path.basename(p))
+def test_retrieve_is_called_with_cached_stats(path):
+    """`M.retrieveBoxMon(key)` with no second argument cannot work.
+
+    A Game Boy box struct drops the party-only tail — Gen 1 loses maxHP and the computed
+    stats, Gen 2 loses those AND current HP. retrieveBoxMon refuses outright rather than
+    improvise (handing back a mon with zeroed Attack is silent, permanent save corruption
+    and the mon is already out of the box). So a one-argument call does not degrade party
+    sync, it disables it: every withdraw fails. Gen 2 shipped exactly that.
+    """
+    src = _strip_comments(_src(path))
+    calls = re.findall(r"M\.retrieveBoxMon\(([^)]*)\)", src)
+    assert calls, f"{os.path.basename(path)} never calls M.retrieveBoxMon"
+    for args in calls:
+        assert "," in args, (
+            f"{os.path.basename(path)} calls M.retrieveBoxMon({args.strip()}) with no stats "
+            f"block — the withdraw will refuse every time")
+
+
+@pytest.mark.parametrize("path", GB_CLIENTS, ids=lambda p: os.path.basename(p))
+def test_deferred_writes_are_gated_on_the_overworld(path):
+    """`not in_battle` is not a safe-state gate.
+
+    It is also true in the PC box UI, the party menu and the naming screen, where the open
+    UI holds its own copy of the data and writes it back over ours. isInOverworld() adds the
+    per-generation "something else owns the game" address — wJoyIgnore/wFontLoaded in Gen 1,
+    wScriptRunning in Gen 2 (measured, not chosen by name: wJoypadDisable reads 0 with a
+    Crystal menu open, and wTextboxFlags is text-speed configuration).
+    """
+    src = _strip_comments(_src(path))
+    m = re.search(r"if\s+writes_enabled\s+and\s+([^\n]*?)#pending_sync_cmds\s*>\s*0", src)
+    assert m, f"{os.path.basename(path)}: could not find the pending_sync_cmds gate"
+    guard = m.group(1)
+    assert "isInOverworld" in guard, (
+        f"{os.path.basename(path)} gates deferred writes on `{guard.strip()}` rather than "
+        f"M.isInOverworld() — writes can land while a menu owns the data")
+
+
 @pytest.mark.parametrize("path", CLIENTS, ids=lambda p: os.path.basename(p))
 def test_deferred_enqueue_carries_payload_fields(path):
     """A queued command that drops a field silently disables whatever needed it."""
