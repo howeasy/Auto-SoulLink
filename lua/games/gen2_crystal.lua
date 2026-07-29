@@ -39,8 +39,8 @@ M.PROFILES = {
         party_struct_size    = 48,
 
         -- Enemy party (wOTPartyCount / wOTPartyMons)
-        ENEMY_COUNT_ADDR     = 0xD280,  -- TODO: verify in BizHawk
-        ENEMY_BASE_ADDR      = 0xD288,  -- TODO: verify in BizHawk
+        ENEMY_COUNT_ADDR     = 0xD280,  -- verified vs pret by tools/verify_profile_addresses.py
+        ENEMY_BASE_ADDR      = 0xD288,  -- verified vs pret by tools/verify_profile_addresses.py
 
         -- Current active box in SRAM (wBoxCount / wBoxMons)
         -- These addresses are System Bus view (0xA000+offset). Accessed via CartRAM domain.
@@ -62,7 +62,7 @@ M.PROFILES = {
         bag_max_items        = 12,      -- ball pocket max size
 
         -- Battle (wBattleMode: 0=overworld, 1=wild, 2=trainer)
-        BATTLE_FLAG_ADDR     = 0xD22D,  -- TODO: verify in BizHawk
+        BATTLE_FLAG_ADDR     = 0xD22D,  -- verified vs pret by tools/verify_profile_addresses.py
 
         -- Active enemy battle mon (wEnemyMon / wBattleMon structure)
         -- Source: DataCrystal RAM map — battle struct is NOT the same as party struct
@@ -72,7 +72,7 @@ M.PROFILES = {
         ENEMY_MON_MAXHP_ADDR   = 0xD218,  -- max HP (2 bytes BE)
 
         -- Enemy species list
-        ENEMY_SPECIES_LIST_ADDR = 0xD281, -- TODO: verify in BizHawk
+        ENEMY_SPECIES_LIST_ADDR = 0xD281, -- verified vs pret by tools/verify_profile_addresses.py
 
         -- Map (2-byte group:number addressing)
         MAP_GROUP_ADDR       = 0xDCB5,   -- wMapGroup
@@ -176,7 +176,14 @@ M.PROFILES = {
         -- Phase 7: Sound-effect dispatch. wMusicID at 0xC2BD per pret/pokecrystal.
         -- The audio engine consumes the byte on the next audio frame.
         -- SFX IDs from constants/sfx_constants.asm.
-        SFX_DISPATCH_ADDR       = 0xC2BD,
+        -- wMusicID. This said 0xC2BD, which is wCryTracks — the comment named the right
+        -- symbol and the value was a different one, exactly the shape of the Gen 1 SFX bug
+        -- (that one pointed at wMapMusicSoundID and corrupted the map's BGM on every capture
+        -- and faint). UNVERIFIED ON HARDWARE: Gen 1 also taught that the right-looking symbol
+        -- need not be a trigger at all — wNewSoundID turned out to be PlaySound's internal
+        -- scratch, so no address would have worked. Treat sound as unproven until a probe
+        -- shows wChannelSoundIDs actually changing.
+        SFX_DISPATCH_ADDR       = 0xC29D,
         sfx_ids                 = {
             capture   = 0x44,   -- SFX_CAUGHT_MON
             gift      = 0x44,   -- SFX_CAUGHT_MON
@@ -263,7 +270,9 @@ M.PROFILES = {
         hp_offset            = 0x22,
         maxhp_offset         = 0x24,
         status_offset        = 0x20,
-        enemy_status_offset  = 0x20,
+        -- battle_struct, not party_struct: wEnemyMonStatus(0xD0FD) - wEnemyMon(0xD0EF) = 0x0E.
+        -- Was 0x20 (the party_struct offset). Crystal was fixed and these two were missed.
+        enemy_status_offset  = 0x0E,
 
         -- Box struct offsets (32-byte truncated party_struct)
         box_species_offset   = 0x00,
@@ -361,7 +370,9 @@ M.PROFILES = {
         hp_offset            = 0x22,
         maxhp_offset         = 0x24,
         status_offset        = 0x20,
-        enemy_status_offset  = 0x20,
+        -- battle_struct, not party_struct: wEnemyMonStatus(0xD0FD) - wEnemyMon(0xD0EF) = 0x0E.
+        -- Was 0x20 (the party_struct offset). Crystal was fixed and these two were missed.
+        enemy_status_offset  = 0x0E,
         box_species_offset   = 0x00,
         box_held_item_offset = 0x01,
         box_otid_offset      = 0x06,

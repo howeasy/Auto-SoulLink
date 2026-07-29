@@ -144,8 +144,11 @@ _RED_MAP: dict[str, Optional[str]] = {
     "enemy_battle_pp_encoding": None,
     "TRAINER_CLASS_ADDR": "wTrainerClass",
     "TRAINER_ID_ADDR": "wTrainerNo",
-    # SFX dispatch — game-engine constants, not pret WRAM symbols.
-    "SFX_DISPATCH_ADDR": None,  # wMusicID (0xD35B red/blue, 0xD35A yellow)
+    # SFX dispatch. This IS a pret WRAM symbol, so verify it rather than skipping.
+    # It was skipped, and that is how Gen 2 shipped 0xC2BD (wCryTracks) under a comment
+    # naming wMusicID. Gen 1's is nil (no RAM sound trigger exists there), and a nil profile
+    # value is skipped anyway, so mapping it costs Gen 1 nothing.
+    "SFX_DISPATCH_ADDR": "wMusicID",
     "capture":   None,
     "gift":      None,
     "faint":     None,
@@ -241,8 +244,8 @@ _CRYSTAL_MAP: dict[str, Optional[str]] = {
     "enemy_battle_pp_encoding": None,
     "TRAINER_CLASS_ADDR": "wOtherTrainerClass",
     "TRAINER_ID_ADDR": "wOtherTrainerID",
-    # SFX dispatch — game-engine constants (wMusicID 0xC2BD), not pret WRAM symbols.
-    "SFX_DISPATCH_ADDR": None,
+    # SFX dispatch — a real symbol, verified. See the Gen 1 table for why this is not skipped.
+    "SFX_DISPATCH_ADDR": "wMusicID",
     "capture":   None,
     "gift":      None,
     "faint":     None,

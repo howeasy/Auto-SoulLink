@@ -46,7 +46,19 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
     # Archipelago (Alchav's Red/Blue world). Same adapter, same RAM layout — the AP fork
     # only changes ROM content. Yellow has no upstream AP world.
     "red_ap": "gen1_rby", "blue_ap": "gen1_rby",
+    # Gen 2. `lua/games/gen2_crystal.lua:rom_type_for_variant` returns the title-cased forms;
+    # the lowercase ones mirror the Gen 1 convention above and are what new code should send.
+    # Registering BOTH is deliberate: a rom_type is persisted into the run directory
+    # (server/state.py), so dropping the title-cased spellings would orphan existing runs.
+    #
+    # Gold, Silver and Crystal (AP) were MISSING here, and the failure was silent rather than
+    # loud: game_id_for_rom_type() returned None, the guard in server.py never switched the
+    # adapter, and the run continued under whichever adapter was already loaded — the Gen 3
+    # default. Every Gen 2 claim that did not come from a Crystal run rested on that.
     "Crystal": "gen2_crystal", "crystal": "gen2_crystal",
+    "Gold": "gen2_crystal", "gold": "gen2_crystal",
+    "Silver": "gen2_crystal", "silver": "gen2_crystal",
+    "Crystal (AP)": "gen2_crystal", "crystal_ap": "gen2_crystal",
     "pokemon_black": "gen5_bw",
     "pokemon_white": "gen5_bw",
     "pokemon_black_2": "gen5_bw",
@@ -64,6 +76,9 @@ _VARIANT_LABEL: dict[str, str] = {
     "red": "Red", "blue": "Blue", "yellow": "Yellow",
     "red_ap": "Red (AP)", "blue_ap": "Blue (AP)",
     "Crystal": "Crystal", "crystal": "Crystal",
+    "Gold": "Gold", "gold": "Gold",
+    "Silver": "Silver", "silver": "Silver",
+    "Crystal (AP)": "Crystal (AP)", "crystal_ap": "Crystal (AP)",
     "pokemon_black": "Pokémon Black",
     "pokemon_white": "Pokémon White",
     "pokemon_black_2": "Pokémon Black 2",

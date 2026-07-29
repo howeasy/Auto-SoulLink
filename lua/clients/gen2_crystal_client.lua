@@ -143,6 +143,24 @@ local function parse_command_list(raw)
         -- can never fire, because c.sound is always nil.
         local sound   = tonumber(obj:match('"sound"%s*:%s*(%d+)'))
         local area_id = obj:match('"area_id"%s*:%s*"([^"]*)"')
+        -- Cached party-only stats attached to party_mon. Gen 2's box struct is 32 bytes and
+        -- carries NO maxHP and none of the five stats, so without these a withdrawn mon has
+        -- nowhere to get them from. Mirrors the Gen 1 parser; the server sends this block
+        -- from mon_stats (server/state.py). Note Gen 2 has genuinely separate SpAtk and
+        -- SpDef, unlike Gen 1's single Special.
+        local stats = nil
+        local sj = obj:match('"stats"%s*:%s*(%b{})')
+        if sj then
+            stats = {
+                level   = tonumber(sj:match('"level"%s*:%s*(%d+)')),
+                maxHP   = tonumber(sj:match('"maxHP"%s*:%s*(%d+)')),
+                attack  = tonumber(sj:match('"attack"%s*:%s*(%d+)')),
+                defense = tonumber(sj:match('"defense"%s*:%s*(%d+)')),
+                speed   = tonumber(sj:match('"speed"%s*:%s*(%d+)')),
+                spAtk   = tonumber(sj:match('"spAtk"%s*:%s*(%d+)')),
+                spDef   = tonumber(sj:match('"spDef"%s*:%s*(%d+)')),
+            }
+        end
         local areas   = nil
         local areas_raw = obj:match('"areas"%s*:%s*(%b[])')
         if areas_raw then
@@ -155,7 +173,7 @@ local function parse_command_list(raw)
             cmds[#cmds + 1] = {
                 cmd = cmd, key = key, text = text, fb = fb, sound = sound,
                 r = r, g = g, b = b, frames = frames,
-                area_id = area_id, areas = areas,
+                area_id = area_id, areas = areas, stats = stats,
             }
         end
     end
@@ -274,7 +292,15 @@ local function dispatch_commands(cmds)
                 end
             end
             pending_sync_cmds = filtered
-            pending_sync_cmds[#pending_sync_cmds + 1] = {cmd = "party_mon", key = c.key}
+            -- Carry c.stats through. The Gen 2 box struct is 32 bytes and holds NO maxHP
+            -- and none of the five stats, so the server's mon_stats block is the only place
+            -- a withdrawn mon's stats can come from — dropping it here is not a degradation,
+            -- it is the difference between a working withdraw and none. Same bug was in the
+            -- Gen 1 client. (The stats_cache event that fills mon_stats lands in P4; until
+            -- then this is nil, and retrieveBoxMon correctly refuses rather than writing a
+            -- zero-stat mon.)
+            pending_sync_cmds[#pending_sync_cmds + 1] =
+                {cmd = "party_mon", key = c.key, stats = c.stats}
             console.log("[SLink-Crystal]   ↳ party_mon QUEUED: " .. c.key:sub(1, 8))
         elseif c.cmd == "memorialize" and c.key then
             -- Deduplicate: skip if already queued
@@ -1321,8 +1347,18 @@ if init_count <= 6 then
     end
 end
 
--- ── Main loop ─────────────────────────────────────────────────────────────────
-while true do
-    on_frame()
-    emu.frameadvance()
+local function on_frame_safe()
+    local ok, err = pcall(on_frame)
+    if not ok then console.log("[SLink-GSC] ERROR (handler kept alive): " .. tostring(err)) end
 end
+
+-- ── Main loop ─────────────────────────────────────────────────────────────────
+-- A frame CALLBACK, not `while true do ... emu.frameadvance() end`.
+--
+-- Two reasons, both learned in Gen 1. The blocking loop never returns, so anything that
+-- dofile()s this client hangs forever — which is exactly what the two-instance duo harness
+-- has to do, since it loads the REAL production client and drives a scenario coroutine
+-- alongside it. And without the pcall, one bad read during a screen transition kills the
+-- client outright instead of dropping a frame. Behaviour per frame is unchanged.
+event.onframeend(on_frame_safe, "slink_gen2")
+console.log("[SLink-GSC] Running — play normally to trigger events…")

@@ -151,6 +151,20 @@ class Gen2CrystalAdapter(GameAdapter):
         """This generation predates abilities — the party table must not render the column."""
         return False
 
+    def party_blob_size(self) -> int:
+        """48-byte party struct + 11-byte OT name + 11-byte nickname.
+
+        Like Gen 1, Gen 2 keeps OT names and nicknames in arrays PARALLEL to the mon struct
+        rather than inside it (pret/pokecrystal ram/wram.asm: wPartyMons, then wPartyMonOTs,
+        then wPartyMonNicknames), so a faithful copy is this composite and not just the
+        struct. The struct itself is 48 bytes here against Gen 1's 44 — Gen 2 added a held
+        item, happiness, pokerus and caught data, and split Special into SpAtk/SpDef.
+
+        This returned the base default of 0 until now, which made `_ingest_party_blobs`
+        discard every Gen 2 blob it was ever sent.
+        """
+        return 48 + 11 + 11
+
     def is_gift_area(self, area_id: str) -> bool:
         return area_id in _GIFT_AREAS or area_id.startswith("gift_")
 

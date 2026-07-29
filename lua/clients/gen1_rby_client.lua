@@ -377,8 +377,16 @@ local function dispatch_commands(cmds)
                 end
             end
             pending_sync_cmds = filtered
-            pending_sync_cmds[#pending_sync_cmds + 1] = {cmd = "party_mon", key = c.key}
-            console.log("[SLink-RBY]   ↳ party_mon QUEUED: " .. c.key:sub(1, 8))
+            -- CARRY c.stats THROUGH. This enqueued only {cmd, key}, so the `cmd.stats` the
+            -- executor reads was ALWAYS nil and the server's mon_stats block never reached
+            -- retrieveBoxMon. The box struct does not carry maxHP or the five stats, so the
+            -- only surviving source was the in-process _party_tail_cache — which dies with
+            -- the client. Since retrieveBoxMon now refuses rather than returning a zeroed
+            -- mon, that made party_mon fail outright after any restart.
+            pending_sync_cmds[#pending_sync_cmds + 1] =
+                {cmd = "party_mon", key = c.key, stats = c.stats}
+            console.log(fmt("[SLink-RBY]   ↳ party_mon QUEUED: %s (stats=%s)",
+                            c.key:sub(1, 8), c.stats and "yes" or "no"))
         elseif c.cmd == "memorialize" and c.key then
             -- Deduplicate: skip if already queued
             local already_queued = false
