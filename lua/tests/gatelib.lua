@@ -145,49 +145,59 @@ function Lib.start(gate_name, opts)
     assert(base, fmt("%s profile has no coordinate base address", spec.label))
     local x_addr, y_addr = base + spec.coord_dx, base + spec.coord_dy
 
-    -- Three conditions, and ALL are required:
+    -- WHAT IT TAKES TO BELIEVE THE GAME IS RUNNING, in three escalations, each of which was
+    -- measured to be insufficient before the next was added:
     --
-    --   1. the party count is sane — only CONTINUE produces that. A NEW GAME has no party,
-    --      so this also catches an A press landing on the wrong menu row.
-    --   2. the player walks one way,
-    --   3. and walks BACK to exactly where it started.
+    --   1. Party count sane + ONE move. Declared success on Gen 1's title screen, because
+    --      the coordinates flip from 0xFF (uninitialised) to 0x00 during boot and the
+    --      CONTINUE preview loads the save into the very WRAM the party lives in.
+    --   2. Add a ROUND TRIP — move out, move back to exactly the start. Declared success on
+    --      Crystal at frame 404, screenshotted as a BLANK SCREEN, with the title screen not
+    --      appearing until frame ~1400. The loader writes those bytes repeatedly while a map
+    --      is being set up, so a there-and-back pattern happens by itself.
+    --   3. Add PERSISTENCE, below. Two round trips separated by an idle, with the position
+    --      required to be unchanged across that idle. A parked player does not move when
+    --      nothing is pressed; a screen that is still loading keeps writing.
     --
-    -- (3) is not belt-and-braces. During boot the coordinates flip from 0xFF (uninitialised)
-    -- to 0x00, which reads as "the player moved" on a blank screen, and 0xFF -> 0x00 is even
-    -- a delta of one — so no amount of scrutiny of a SINGLE move can tell a walk from an
-    -- initialisation flip. Requiring the party count to be sane was supposed to cover that,
-    -- and does not: measured on Crystal, this loop declared itself booted at frame 398, some
-    -- 800 frames before the title screen even appears, on WRAM that also reported 8 badges
-    -- and a nickname of "8?9?9?9?9?9". A round trip cannot be faked by initialisation —
-    -- there is no second flip to carry the value back.
+    -- Note what is NOT used: "the map id is nonzero" would be the obvious extra condition and
+    -- is wrong, because Gen 1's town fixture stands in Pallet Town, which IS map 0.
     --
     -- Probe with LEFT/RIGHT, never up/down: both generations' title lists are VERTICAL
     -- menus, so a Down press moves the cursor off CONTINUE onto NEW GAME. The outward
     -- direction alternates because whichever way we try first may be a wall.
-    local booted = false
     local function pos() return M.read_u8(x_addr), M.read_u8(y_addr) end
-    for i = 1, 300 do
+
+    --- One there-and-back walk. Returns true only if it ended exactly where it started.
+    local function round_trip(out)
+        local back = (out == "Right") and "Left" or "Right"
+        local x0, y0 = pos()
+        -- A direction must be HELD to walk; a tap only turns the player to face it.
+        t.hold(out, 20, function()
+            local x, y = pos()
+            return x ~= x0 or y ~= y0
+        end)
+        local x1, y1 = pos()
+        if x1 == x0 and y1 == y0 then return false end
+        t.hold(back, 20, function()
+            local x, y = pos()
+            return x == x0 and y == y0
+        end)
+        local x2, y2 = pos()
+        return x2 == x0 and y2 == y0
+    end
+
+    local booted = false
+    for i = 1, 400 do
         local pc = M.getPartyCount()
-        if pc >= 1 and pc <= 6 then
-            local out = (i % 2 == 0) and "Right" or "Left"
-            local back = (out == "Right") and "Left" or "Right"
-            local x0, y0 = pos()
-            -- A direction must be HELD to walk; a tap only turns the player to face it.
-            t.hold(out, 20, function()
-                local x, y = pos()
-                return x ~= x0 or y ~= y0
-            end)
-            local x1, y1 = pos()
-            if x1 ~= x0 or y1 ~= y0 then
-                t.hold(back, 20, function()
-                    local x, y = pos()
-                    return x == x0 and y == y0
-                end)
-                local x2, y2 = pos()
-                if x2 == x0 and y2 == y0 and M.getPartyCount() == pc then
-                    booted = true
-                    break
-                end
+        if pc >= 1 and pc <= 6 and round_trip((i % 2 == 0) and "Right" or "Left") then
+            local xa, ya = pos()
+            for _ = 1, 90 do t.step(nil) end        -- press NOTHING and watch
+            local xb, yb = pos()
+            if xa == xb and ya == yb
+               and round_trip((i % 2 == 0) and "Left" or "Right")
+               and M.getPartyCount() == pc then
+                booted = true
+                break
             end
         end
         -- Advance the attract loop / title menu / save-preview box. 6 frames, not 2 — a

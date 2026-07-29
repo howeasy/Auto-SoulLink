@@ -78,6 +78,19 @@ M.PROFILES = {
         -- flag into bit 7 of its equivalent; Gen 2's is a plain index, and the
         -- shared mask is harmless on 0..13.
         CURRENT_BOX_NUM_ADDR = 0xDB72,
+        -- The safe-state predicate: nonzero while a script or a full-screen menu owns the
+        -- game. Named JOY_IGNORE_ADDR because that is the shared key memory_gb's
+        -- isInOverworld() reads; Gen 1's equivalent really is wJoyIgnore.
+        --
+        -- MEASURED, not chosen by name (lua/tests/probe_gen2_safestate.lua on real Crystal):
+        --   wScriptRunning  00 overworld -> FF with the START menu open -> 00 closed   USABLE
+        --   wJoypadDisable  00 in BOTH — the obvious Gen 1 analogue, and it does not fire
+        --   wTextboxFlags   01 in both — it is text-SPEED config, not "a box is open"
+        --   wMapEventStatus differs but does not return to its overworld value
+        -- Gating writes on `not in_battle` alone is what this replaces: that is also true in
+        -- the PC box UI, the party menu and the naming screen, where the open UI holds its
+        -- own copy of the data and writes it back over ours.
+        JOY_IGNORE_ADDR      = 0xD438,
         BOX_SPECIES_ADDR     = 0xAD11,                  -- ends at 0xAD25
         BOX_BASE_ADDR        = 0xAD26,                  -- ends at 0xAFA5 (20*32=640 bytes)
         BOX_OT_NAMES_ADDR    = 0xAFA6,                  -- ends at 0xB081 (20*11=220 bytes)
@@ -248,6 +261,19 @@ M.PROFILES = {
         -- flag into bit 7 of its equivalent; Gen 2's is a plain index, and the
         -- shared mask is harmless on 0..13.
         CURRENT_BOX_NUM_ADDR = 0xD8BC,
+        -- The safe-state predicate: nonzero while a script or a full-screen menu owns the
+        -- game. Named JOY_IGNORE_ADDR because that is the shared key memory_gb's
+        -- isInOverworld() reads; Gen 1's equivalent really is wJoyIgnore.
+        --
+        -- MEASURED, not chosen by name (lua/tests/probe_gen2_safestate.lua on real Crystal):
+        --   wScriptRunning  00 overworld -> FF with the START menu open -> 00 closed   USABLE
+        --   wJoypadDisable  00 in BOTH — the obvious Gen 1 analogue, and it does not fire
+        --   wTextboxFlags   01 in both — it is text-SPEED config, not "a box is open"
+        --   wMapEventStatus differs but does not return to its overworld value
+        -- Gating writes on `not in_battle` alone is what this replaces: that is also true in
+        -- the PC box UI, the party menu and the naming screen, where the open UI holds its
+        -- own copy of the data and writes it back over ours.
+        JOY_IGNORE_ADDR      = 0xD15F,
         BOX_SPECIES_ADDR     = 0xAD6D,  -- sBoxSpecies
         BOX_BASE_ADDR        = 0xAD82,  -- sBoxMons (20 × 32 bytes)
         BOX_OT_NAMES_ADDR    = 0xB002,  -- sBoxMonOTs
@@ -358,6 +384,19 @@ M.PROFILES = {
         -- flag into bit 7 of its equivalent; Gen 2's is a plain index, and the
         -- shared mask is harmless on 0..13.
         CURRENT_BOX_NUM_ADDR = 0xD8BC,
+        -- The safe-state predicate: nonzero while a script or a full-screen menu owns the
+        -- game. Named JOY_IGNORE_ADDR because that is the shared key memory_gb's
+        -- isInOverworld() reads; Gen 1's equivalent really is wJoyIgnore.
+        --
+        -- MEASURED, not chosen by name (lua/tests/probe_gen2_safestate.lua on real Crystal):
+        --   wScriptRunning  00 overworld -> FF with the START menu open -> 00 closed   USABLE
+        --   wJoypadDisable  00 in BOTH — the obvious Gen 1 analogue, and it does not fire
+        --   wTextboxFlags   01 in both — it is text-SPEED config, not "a box is open"
+        --   wMapEventStatus differs but does not return to its overworld value
+        -- Gating writes on `not in_battle` alone is what this replaces: that is also true in
+        -- the PC box UI, the party menu and the naming screen, where the open UI holds its
+        -- own copy of the data and writes it back over ours.
+        JOY_IGNORE_ADDR      = 0xD15F,
         BOX_SPECIES_ADDR     = 0xAD6D,
         BOX_BASE_ADDR        = 0xAD82,
         BOX_OT_NAMES_ADDR    = 0xB002,

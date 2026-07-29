@@ -236,6 +236,44 @@ end
 emit(fmt("[gen2-play] in the bedroom at f=%d (%d,%d), timeOfDay=%d",
          frame, r8(A.x), r8(A.y), r8(A.time_of_day)))
 
+--- Park on a tile where LEFT/RIGHT walking actually works, and refuse to build if none is
+--- reachable.
+---
+--- Every gate proves it has booted into a live game by walking there and back, because that
+--- is the only claim the CONTINUE preview cannot fake — it loads the save into the very WRAM
+--- the party and coordinates live in, so party counts, map ids and safe-state flags all read
+--- correct on a blank screen. The probe uses LEFT/RIGHT only: the title list is a vertical
+--- menu, and a stray Down would slide the cursor off CONTINUE onto NEW GAME.
+---
+--- Which makes WHERE THIS FIXTURE PARKS a hard requirement rather than a detail. Measured:
+--- ride_intro leaves the player at (3,4), where the bed is to the left and the desk to the
+--- right — both horizontal moves are walls, and every gate hung for 17454 frames on a
+--- perfectly live game. Certifying the tile here, once, beats debugging it in each gate.
+local function can_walk_horizontally()
+    local function round_trip(out)
+        local back = (out == "Right") and "Left" or "Right"
+        local x0, y0 = r8(A.x), r8(A.y)
+        hold(out, 20, function() return r8(A.x) ~= x0 or r8(A.y) ~= y0 end)
+        if r8(A.x) == x0 and r8(A.y) == y0 then return false end
+        hold(back, 20, function() return r8(A.x) == x0 and r8(A.y) == y0 end)
+        return r8(A.x) == x0 and r8(A.y) == y0
+    end
+    return round_trip("Right") or round_trip("Left")
+end
+
+local parked = false
+for _, nudge in ipairs({"", "Up", "Up", "Down", "Down", "Down"}) do
+    if nudge ~= "" then hold(nudge, 20) end
+    if can_walk_horizontally() then parked = true break end
+end
+if not parked then
+    finish(false, fmt("no tile with free horizontal movement near (%d,%d) — every gate "
+                      .. "proves it booted by walking left/right, so a fixture parked "
+                      .. "between two walls hangs all of them", r8(A.x), r8(A.y)))
+end
+emit(fmt("[gen2-play] parked at (%d,%d): left/right round trip verified",
+         r8(A.x), r8(A.y)))
+
 -- Fast text, SET battle style, battle scene off. Determinism, not speed:
 -- constants/ram_constants.asm — TEXT_DELAY_MASK %111, NO_TEXT_SCROLL 4, BATTLE_SHIFT 6,
 -- BATTLE_SCENE 7.

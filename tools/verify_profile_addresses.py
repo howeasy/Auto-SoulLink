@@ -227,6 +227,9 @@ _CRYSTAL_MAP: dict[str, Optional[str]] = {
     "stats_offset": None,
     "spdef_offset": None,
     "CURRENT_BOX_NUM_ADDR": "wCurBox",
+    # Gen 2 has no wJoyIgnore. The measured equivalent is wScriptRunning — see the
+    # profile comment for the three candidates that looked right and were not.
+    "JOY_IGNORE_ADDR": "wScriptRunning",
     "box_species_offset": None,
     "box_held_item_offset": None,
     "box_otid_offset": None,
