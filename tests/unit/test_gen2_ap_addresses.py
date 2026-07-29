@@ -75,10 +75,10 @@ def test_map_addresses_match_archipelagos_own_table(ap_ram):
     """The two the profile actually uses. A wrong map address breaks area resolution, which
     breaks encounter linking — the rule SLink exists for."""
     ap = _profiles()["crystal_ap"]
-    assert ap.MAP_GROUP_ADDR == ap_ram["wMapGroup"], (
+    assert ap_ram["wMapGroup"] == ap.MAP_GROUP_ADDR, (
         f"crystal_ap MAP_GROUP_ADDR is {ap.MAP_GROUP_ADDR:#06x}, Archipelago declares "
         f"{ap_ram['wMapGroup']:#06x}")
-    assert ap.MAP_NUMBER_ADDR == ap_ram["wMapNumber"], (
+    assert ap_ram["wMapNumber"] == ap.MAP_NUMBER_ADDR, (
         f"crystal_ap MAP_NUMBER_ADDR is {ap.MAP_NUMBER_ADDR:#06x}, Archipelago declares "
         f"{ap_ram['wMapNumber']:#06x}")
 
@@ -86,7 +86,7 @@ def test_map_addresses_match_archipelagos_own_table(ap_ram):
 def test_map_addresses_are_not_vanillas(vanilla):
     """The specific regression: inheriting vanilla's map addresses."""
     ap = _profiles()["crystal_ap"]
-    assert ap.MAP_GROUP_ADDR != vanilla["wMapGroup"], (
+    assert vanilla["wMapGroup"] != ap.MAP_GROUP_ADDR, (
         "crystal_ap is serving vanilla's wMapGroup — the metatable inheritance is back")
 
 
