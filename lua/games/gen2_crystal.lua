@@ -24,6 +24,34 @@ function M.toNatDex(species_id)
     return 0
 end
 
+-- ═══ Ball item IDs ═══
+-- DERIVED, not transcribed: these are exactly the items pret files in the BALL pocket
+-- (data/items/attributes.asm, whose row N is item N+1 — the table starts at MASTER_BALL).
+-- Identical in pokecrystal and pokegold, so all three profiles share one list.
+--
+-- The previous list had the Apricorn balls at 0xA9-0xAF, which are really SUN_STONE,
+-- POLKADOT_BOW, UP_GRADE, BERRY, GOLD_BERRY and SQUIRTBOTTLE, and Park Ball at 0xB2
+-- instead of 0xB1. Since the Balls pocket can only ever hold real balls, that produced no
+-- false positives — it produced SILENCE: a player carrying only Kurt's Apricorn balls read
+-- as having none, so the Nuzlocke gate never opened and no rule was enforced all run.
+--
+-- LIGHT_BALL (0xA3) is deliberately absent. It is Pikachu's held item, not a ball, and it
+-- is filed in the ITEM pocket — the one entry that name-matching would get wrong.
+local BALL_ITEM_IDS = {
+    0x01,   -- MASTER_BALL
+    0x02,   -- ULTRA_BALL
+    0x04,   -- GREAT_BALL
+    0x05,   -- POKE_BALL
+    0x9D,   -- HEAVY_BALL
+    0x9F,   -- LEVEL_BALL
+    0xA0,   -- LURE_BALL
+    0xA1,   -- FAST_BALL
+    0xA4,   -- FRIEND_BALL
+    0xA5,   -- MOON_BALL
+    0xA6,   -- LOVE_BALL
+    0xB1,   -- PARK_BALL (unobtainable in Gold/Silver, but in their pocket table too)
+}
+
 -- ═══ Memory Profiles ═══
 -- Crystal US (CGB-BYTE-0). Addresses from pret/pokecrystal wram.asm.
 -- Crystal has no variants — one profile covers all US ROMs.
@@ -109,23 +137,7 @@ M.PROFILES = {
         box_dv_offset_2      = 0x16,
         box_level_offset     = 0x1F,    -- box level (level at time of deposit)
 
-        -- Ball item IDs (Crystal)
-        -- Source: pret/pokecrystal constants/item_constants.asm
-        ball_item_ids        = {
-            0x01,   -- Master Ball
-            0x02,   -- Ultra Ball
-            0x04,   -- Great Ball
-            0x05,   -- Poké Ball
-            -- Apricorn balls (0xA9-0xAF)
-            0xA9,   -- Fast Ball
-            0xAA,   -- Level Ball
-            0xAB,   -- Lure Ball
-            0xAC,   -- Heavy Ball
-            0xAD,   -- Love Ball
-            0xAE,   -- Friend Ball
-            0xAF,   -- Moon Ball
-            0xB2,   -- Park Ball (Bug Catching Contest)
-        },
+        ball_item_ids        = BALL_ITEM_IDS,
 
         -- Gen 2 uses same text encoding as Gen 1
         generation = 2,
@@ -282,22 +294,7 @@ M.PROFILES = {
         box_dv_offset_2      = 0x16,
         box_level_offset     = 0x1F,
 
-        -- Ball item IDs — Gold/Silver have the same Apricorn ball constants as
-        -- Crystal, except no Park Ball (introduced in Crystal's Bug Catching
-        -- Contest only).
-        ball_item_ids        = {
-            0x01,  -- Master Ball
-            0x02,  -- Ultra Ball
-            0x04,  -- Great Ball
-            0x05,  -- Poké Ball
-            0xA9,  -- Fast Ball
-            0xAA,  -- Level Ball
-            0xAB,  -- Lure Ball
-            0xAC,  -- Heavy Ball
-            0xAD,  -- Love Ball
-            0xAE,  -- Friend Ball
-            0xAF,  -- Moon Ball
-        },
+        ball_item_ids        = BALL_ITEM_IDS,
 
         generation     = 2,
         uses_map_group = true,
@@ -379,7 +376,7 @@ M.PROFILES = {
         box_dv_offset_1      = 0x15,
         box_dv_offset_2      = 0x16,
         box_level_offset     = 0x1F,
-        ball_item_ids        = {0x01, 0x02, 0x04, 0x05, 0xA9, 0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF},
+        ball_item_ids        = BALL_ITEM_IDS,
         generation     = 2,
         uses_map_group = true,
         is_egg_species = 0xFD,
