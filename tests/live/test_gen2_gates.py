@@ -42,6 +42,8 @@ pytestmark = [
 # lua/tests/gen2_playthrough.lua for why Gen 2 has no grass one.
 GATES = {
     "lua/tests/test_gen2_memory_gate.lua": "town",
+    # Everything that MUTATES a cartridge: force_faint, deposit, withdraw, memorial burial.
+    "lua/tests/test_gen2_writes_gate.lua": "town",
 }
 ROMS = ("crystal",)
 

@@ -1083,8 +1083,26 @@ function M.retrieveBoxMon(key, stats)
     -- don't ship.
     local box_level = M.box_read_u8(box_base + M.BOX_LEVEL_OFFSET)
     M.write_u8(party_dst + M.LEVEL_OFFSET, box_level)
-    local hp = M.box_read_u16_be(box_base + M.HP_OFFSET)
-    M.write_u16_be(party_dst + M.HP_OFFSET, hp)
+
+    -- DOES THE BOX STRUCT EVEN CONTAIN HP?
+    --
+    -- Gen 1's does: 33 bytes, current HP at +0x01, so a deposit preserves it. Gen 2's does
+    -- NOT — its box_struct is 32 bytes and ends at Level +0x1F, while the party's HP lives
+    -- at +0x22 in the party-only tail. Reading HP_OFFSET off a Gen 2 box base therefore
+    -- lands two bytes into the NEXT box slot and returns that mon's move ids as an HP value.
+    --
+    -- The test is derived rather than declared, because "HP_OFFSET falls outside the box
+    -- struct" IS the condition, and a separate profile flag could disagree with the offsets
+    -- it describes.
+    --
+    -- What to do instead is not a guess: pret's SendGetMonIntoFromBox (move_mon.asm) shows
+    -- that on withdrawal Gen 2 clears MON_STATUS and copies MON_MAXHP into MON_HP. The mon
+    -- comes back healthy and full, because the cartridge has nowhere to have kept anything
+    -- else. maxHP arrives with the cached stats below, so the copy happens after them.
+    local box_has_hp = (M.HP_OFFSET + 2) <= M.BOX_STRUCT_SIZE
+    if box_has_hp then
+        M.write_u16_be(party_dst + M.HP_OFFSET, M.box_read_u16_be(box_base + M.HP_OFFSET))
+    end
 
     -- `stats` comes from the server's stats_cache, recorded at deposit time; it survives a
     -- client restart, unlike anything held in Lua. The in-process table is only a fallback
@@ -1092,6 +1110,13 @@ function M.retrieveBoxMon(key, stats)
     local cached = stats or (M._party_tail_cache and M._party_tail_cache[key])
     if cached then
         M.applyPartyStats(pcount, cached)
+        if not box_has_hp then
+            -- pret SendGetMonIntoFromBox: MON_STATUS = 0, MON_HP = MON_MAXHP. Status is
+            -- already 0 from the memzero above (Gen 2's +0x20 is outside the copied box
+            -- struct), so only HP needs writing.
+            M.write_u16_be(party_dst + M.HP_OFFSET,
+                           M.read_u16_be(party_dst + M.MAXHP_OFFSET))
+        end
         if M._party_tail_cache then M._party_tail_cache[key] = nil end
     else
         -- NO CACHE: REFUSE, do not improvise.
