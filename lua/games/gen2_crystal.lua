@@ -398,11 +398,49 @@ M.PROFILES = {
     },
 }
 
--- ═══ Archipelago variant (Phase 8) ═══════════════════════════════════════
--- Pokemon Crystal Archipelago (gerbiljames/Archipelago-Crystal fork) uses the
--- same RAM layout as vanilla Crystal — only the ROM title differs ("AP_CRYSTAL"
--- vs "PM_CRYSTAL"). The crystal_ap profile inherits all addresses from crystal.
-M.PROFILES.crystal_ap = setmetatable({variant_label = "Crystal (AP)"}, {__index = M.PROFILES.crystal})
+-- ═══ Archipelago variant ═════════════════════════════════════════════════
+-- THE "SAME LAYOUT AS VANILLA" ASSUMPTION IS FALSE, and it is falsifiable without a ROM.
+--
+-- The shipped pokemon_crystal.apworld carries its own `ram_addresses` table
+-- (pokemon_crystal/data/data.json, WRAM-domain offsets that add 0xC000). Diffed against
+-- data/pret_syms.json's vanilla pokecrystal, the fork moves things by FOUR different amounts
+-- and in both directions:
+--
+--     wMapEventStatus  0xD433 -> 0xD437   +4
+--     wMapGroup        0xDCB5 -> 0xDCC0  +11
+--     wMapNumber       0xDCB6 -> 0xDCC1  +11
+--     wEventFlags      0xDA72 -> 0xDA8F  +29
+--     wStatusFlags     0xD84C -> 0xD827  -37
+--
+-- So a blanket `setmetatable(..., {__index = crystal})` served WRONG addresses for anything
+-- past an insertion point. Gen 1's red_ap had exactly this bug (+88 / -18 / +216).
+--
+-- WHAT IS AND IS NOT KNOWN. Only those five vanilla symbols appear in the apworld's table,
+-- and there is no public fork repo to build a full symbol set from (the URL the docs used to
+-- name is gone), so tools/build_pret_syms.py cannot do for AP Crystal what it does for
+-- alchav_pokered. The five below are overridden because they are PROVEN wrong. Every other
+-- address is still inherited and is therefore UNVERIFIED — it may well be right, and there is
+-- no evidence either way.
+--
+-- Consequently AP Crystal is NOT claimed as supported. Treat this profile as "vanilla plus
+-- the five corrections we can prove" until a live gate on a generated AP ROM says otherwise.
+-- tests/unit/test_gen2_ap_addresses.py pins these five against the apworld's own data so the
+-- profile cannot silently drift from what AP itself declares.
+M.PROFILES.crystal_ap = setmetatable({
+    variant_label  = "Crystal (AP)",
+    -- Proven from the apworld's ram_addresses (see above).
+    MAP_GROUP_ADDR  = 0xDCC0,   -- wMapGroup,  vanilla 0xDCB5 (+11)
+    MAP_NUMBER_ADDR = 0xDCC1,   -- wMapNumber, vanilla 0xDCB6 (+11)
+    -- Recorded for the address checker and for whoever builds the live gate. The profile has
+    -- no key for these today; they are the only other fork addresses we can prove.
+    ap_known_addresses = {
+        wMapEventStatus = 0xD437,
+        wStatusFlags    = 0xD827,
+        wEventFlags     = 0xDA8F,
+    },
+    -- Everything else is inherited from vanilla Crystal and NOT verified.
+    ap_addresses_unverified = true,
+}, {__index = M.PROFILES.crystal})
 
 -- Lowercase alias for game_detect.lua compatibility
 M.profiles = M.PROFILES
