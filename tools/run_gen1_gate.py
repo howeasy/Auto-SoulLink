@@ -91,15 +91,22 @@ def _result_path_for(script):
     return os.path.join(BUILD, m.group(1) + "_result.txt") if m else None
 
 
-def seed_saveram(rom_key: str, target: str) -> str:
-    """Copy the committed fixture into BizHawk's SaveRAM dir so the ROM boots into it."""
+def seed_saveram(rom_key: str, target: str, dest_dir: str | None = None) -> str:
+    """Copy the committed fixture into BizHawk's SaveRAM dir so the ROM boots into it.
+
+    `dest_dir` overrides where it lands, and MUST match whatever `write_run_config` was told,
+    or the emulator boots an empty save from a directory nobody seeded. That pairing is the
+    whole point of the per-instance redirect: two instances of one cartridge share a gamedb
+    filename, so they need separate directories rather than separate names.
+    """
     fixture = os.path.join(FIXTURES, f"{rom_key}_{target}.SaveRAM")
     if not os.path.exists(fixture):
         raise FileNotFoundError(
             f"missing fixture {os.path.relpath(fixture, REPO)} — build it with "
             f"`python tools/gen1_playthrough.py --rom {rom_key} --target {target}`")
-    os.makedirs(SAVERAM_DIR, exist_ok=True)
-    dst = os.path.join(SAVERAM_DIR, SAVERAM_NAMES[rom_key])
+    target_dir = dest_dir or SAVERAM_DIR
+    os.makedirs(target_dir, exist_ok=True)
+    dst = os.path.join(target_dir, SAVERAM_NAMES[rom_key])
     shutil.copyfile(fixture, dst)
     return dst
 

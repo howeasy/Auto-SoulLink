@@ -211,6 +211,14 @@ class DuoRun:
         wait_for("server HTTP up", lambda: self._status() is not None, 30)
         print(f"[duo] server up: tcp={self.tcp_port} http={self.http_port} data={self.data_dir}")
 
+    def _saveram_dir(self, inst: str) -> str:
+        """A SaveRAM directory unique to this run AND this instance.
+
+        Per-run as well as per-instance so a crashed run cannot leave a stale save that the
+        next one silently boots from — the failure that looks like "the fixture is wrong".
+        """
+        return os.path.join(BUILD, f"saveram_{self.scenario}_{inst}")
+
     def _status(self):
         try:
             return api(self.http_port, "GET", "/api/status", timeout=3)
@@ -230,8 +238,16 @@ class DuoRun:
             cfg_ini = os.path.join(BUILD, f"duo_cfg_{inst}.ini")
             if self.is_gen1:
                 # Muted, on the second monitor: two emulators for several minutes each.
+                #
+                # Each instance also gets its OWN SaveRAM directory. BizHawk names a SaveRAM
+                # file from its gamedb entry, keyed on the ROM hash rather than the path we
+                # launched, so two instances of the SAME cartridge resolve to one file and
+                # stamp on each other. Gen 1 avoided that by pairing Red with Blue, which is
+                # a constraint on what can be tested together rather than a fix — and Gen 2
+                # has only one dump. Per-instance dirs make a same-cartridge duo work.
                 from gen1_playthrough import write_run_config
-                write_run_config(BIZHAWK_CONFIG, cfg_ini)
+                write_run_config(BIZHAWK_CONFIG, cfg_ini,
+                                 saveram_dir=self._saveram_dir(inst))
             else:
                 shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
             stub = os.path.join(BUILD, f"duo_{inst}.lua")
@@ -255,10 +271,12 @@ class DuoRun:
                 ss = self.cfg["savestate"]
                 duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
             else:
-                # Seed this instance's battery save. Red and Blue get different filenames
-                # from BizHawk's gamedb, so the two instances never fight over one file.
+                # Seed this instance's battery save into the SAME per-instance directory
+                # write_run_config redirected to, above. Seeding the shared directory instead
+                # would leave the emulator booting an empty save from the redirected one.
                 from run_gen1_gate import seed_saveram
-                seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"))
+                seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"),
+                             dest_dir=self._saveram_dir(inst))
             with open(stub, "w") as f:
                 f.write('SLINK_HOST = "127.0.0.1"\n')
                 f.write(f"SLINK_PORT = {self.tcp_port}\n")
