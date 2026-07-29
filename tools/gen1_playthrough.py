@@ -115,6 +115,18 @@ def write_run_config(src: str, dst: str, saveram_dir: str | None = None) -> None
         cfg["MainWindowMaximized"] = False
         cfg["SaveWindowPosition"] = False
 
+    # Pin the Game Boy RTC. Gen 2 branches on time of day — encounter tables, scripts, and
+    # which Pokemon are even present — so a fixture built at 10am and replayed at 2am is a
+    # different game. Left to the real clock this presents as unreproducible flake rather
+    # than as a clock problem. Gen 1 has no RTC and is unaffected either way.
+    #
+    # Forced rather than asserted: this makes determinism a property of the harness instead
+    # of a property of whichever config.ini the developer happens to have.
+    sync = cfg.setdefault("CoreSyncSettings", {}).setdefault(
+        "BizHawk.Emulation.Cores.Nintendo.Gameboy.Gameboy", {})
+    sync["RealTimeRTC"] = False
+    sync["InitialTime"] = 0
+
     if saveram_dir:
         os.makedirs(saveram_dir, exist_ok=True)
         # BizHawk stores paths per (System, Type). The Game Boy family shares one entry,
