@@ -274,7 +274,7 @@ class DuoRun:
                 # Seed this instance's battery save into the SAME per-instance directory
                 # write_run_config redirected to, above. Seeding the shared directory instead
                 # would leave the emulator booting an empty save from the redirected one.
-                from run_gen1_gate import seed_saveram
+                from run_gb_gate import seed_saveram
                 seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"),
                              dest_dir=self._saveram_dir(inst))
             with open(stub, "w") as f:

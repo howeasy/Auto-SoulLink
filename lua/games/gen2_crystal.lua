@@ -74,6 +74,10 @@ M.PROFILES = {
         -- These addresses are System Bus view (0xA000+offset). Accessed via CartRAM domain.
         -- Layout: count(1) + species(21) + mons(20*32=640) + OT_names(20*11=220) + nicks(20*11=220)
         BOX_COUNT_ADDR       = 0xAD10,
+        -- wCurBox: the active PC box, 0-based. Gen 1 packs a "changed boxes"
+        -- flag into bit 7 of its equivalent; Gen 2's is a plain index, and the
+        -- shared mask is harmless on 0..13.
+        CURRENT_BOX_NUM_ADDR = 0xDB72,
         BOX_SPECIES_ADDR     = 0xAD11,                  -- ends at 0xAD25
         BOX_BASE_ADDR        = 0xAD26,                  -- ends at 0xAFA5 (20*32=640 bytes)
         BOX_OT_NAMES_ADDR    = 0xAFA6,                  -- ends at 0xB081 (20*11=220 bytes)
@@ -123,7 +127,12 @@ M.PROFILES = {
         level_offset         = 0x1F,    -- actual level (party-calculated)
         hp_offset            = 0x22,    -- current HP (2 bytes big-endian)
         maxhp_offset         = 0x24,    -- max HP (2 bytes big-endian)
-        status_offset        = 0x20,    -- non-volatile status (u8: bits 0-2 SLP, 3 PSN, 4 BRN, 5 FRZ, 6 PAR, 7 TOX)
+        status_offset        = 0x20,
+        -- party_struct tail (pret macros/ram.asm): Atk +0x26, Def +0x28, Spd +0x2A,
+        -- SpclAtk +0x2C, SpclDef +0x2E. Gen 2 SPLIT Special, so spdef_offset is a
+        -- real address here rather than the alias of spAtk it is in Gen 1.
+        stats_offset         = 0x26,
+        spdef_offset         = 0x2E,    -- non-volatile status (u8: bits 0-2 SLP, 3 PSN, 4 BRN, 5 FRZ, 6 PAR, 7 TOX)
         -- wEnemyMon is a battle_struct (NOT party_struct). Offsets confirmed by the
         -- profile's other battle-struct addresses: ENEMY_MON_LEVEL_ADDR-SPECIES = 0x0D,
         -- ENEMY_MON_HP_ADDR-SPECIES = 0x10, MaxHP at 0x12 → Status sits at 0x0E.
@@ -235,6 +244,10 @@ M.PROFILES = {
 
         -- Current active box (SRAM bank 1)
         BOX_COUNT_ADDR       = 0xAD6C,  -- sBoxCount
+        -- wCurBox: the active PC box, 0-based. Gen 1 packs a "changed boxes"
+        -- flag into bit 7 of its equivalent; Gen 2's is a plain index, and the
+        -- shared mask is harmless on 0..13.
+        CURRENT_BOX_NUM_ADDR = 0xD8BC,
         BOX_SPECIES_ADDR     = 0xAD6D,  -- sBoxSpecies
         BOX_BASE_ADDR        = 0xAD82,  -- sBoxMons (20 × 32 bytes)
         BOX_OT_NAMES_ADDR    = 0xB002,  -- sBoxMonOTs
@@ -282,6 +295,11 @@ M.PROFILES = {
         hp_offset            = 0x22,
         maxhp_offset         = 0x24,
         status_offset        = 0x20,
+        -- party_struct tail (pret macros/ram.asm): Atk +0x26, Def +0x28, Spd +0x2A,
+        -- SpclAtk +0x2C, SpclDef +0x2E. Gen 2 SPLIT Special, so spdef_offset is a
+        -- real address here rather than the alias of spAtk it is in Gen 1.
+        stats_offset         = 0x26,
+        spdef_offset         = 0x2E,
         -- battle_struct, not party_struct: wEnemyMonStatus(0xD0FD) - wEnemyMon(0xD0EF) = 0x0E.
         -- Was 0x20 (the party_struct offset). Crystal was fixed and these two were missed.
         enemy_status_offset  = 0x0E,
@@ -336,6 +354,10 @@ M.PROFILES = {
         ENEMY_SPECIES_LIST_ADDR = 0xDD56,
         ENEMY_BASE_ADDR      = 0xDD5D,
         BOX_COUNT_ADDR       = 0xAD6C,
+        -- wCurBox: the active PC box, 0-based. Gen 1 packs a "changed boxes"
+        -- flag into bit 7 of its equivalent; Gen 2's is a plain index, and the
+        -- shared mask is harmless on 0..13.
+        CURRENT_BOX_NUM_ADDR = 0xD8BC,
         BOX_SPECIES_ADDR     = 0xAD6D,
         BOX_BASE_ADDR        = 0xAD82,
         BOX_OT_NAMES_ADDR    = 0xB002,
@@ -367,6 +389,11 @@ M.PROFILES = {
         hp_offset            = 0x22,
         maxhp_offset         = 0x24,
         status_offset        = 0x20,
+        -- party_struct tail (pret macros/ram.asm): Atk +0x26, Def +0x28, Spd +0x2A,
+        -- SpclAtk +0x2C, SpclDef +0x2E. Gen 2 SPLIT Special, so spdef_offset is a
+        -- real address here rather than the alias of spAtk it is in Gen 1.
+        stats_offset         = 0x26,
+        spdef_offset         = 0x2E,
         -- battle_struct, not party_struct: wEnemyMonStatus(0xD0FD) - wEnemyMon(0xD0EF) = 0x0E.
         -- Was 0x20 (the party_struct offset). Crystal was fixed and these two were missed.
         enemy_status_offset  = 0x0E,

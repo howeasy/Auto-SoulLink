@@ -222,6 +222,11 @@ _CRYSTAL_MAP: dict[str, Optional[str]] = {
     "maxhp_offset": None,
     "status_offset": None,
     "enemy_status_offset": None,
+    # Derived offsets into party_struct, not addresses. Gen 2 SPLIT Special, so spdef_offset
+    # is a distinct field rather than Gen 1's alias of spAtk.
+    "stats_offset": None,
+    "spdef_offset": None,
+    "CURRENT_BOX_NUM_ADDR": "wCurBox",
     "box_species_offset": None,
     "box_held_item_offset": None,
     "box_otid_offset": None,

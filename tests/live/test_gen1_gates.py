@@ -26,7 +26,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
 import gen1_playthrough as play  # noqa: E402
-from run_gen1_gate import run_gate  # noqa: E402
+from run_gb_gate import run_gate  # noqa: E402
 
 pytestmark = [
     pytest.mark.live,
@@ -93,7 +93,7 @@ def test_gen1_companion_patch(rom, emuhawk):
     AND with a menu open (VBlank is an interrupt, which is why that hook site was chosen),
     that the displaced TrackPlayTime still runs, and that the game still plays.
     """
-    from run_gen1_gate import PATCHED
+    from run_gb_gate import PATCHED
     base_key, rom_rel, _ = PATCHED[rom]
     if not os.path.exists(os.path.join(REPO, rom_rel)):
         pytest.skip(f"{rom_rel} not built — `python patch/gen1/tools/build.py`")
@@ -121,7 +121,7 @@ def test_gen1_archipelago(rom, emuhawk):
     (sMainDataCheckSum 0xB523 -> 0xB527), so no committed .SaveRAM is loadable by it and the
     gate asserts against the ROM and the intro instead. See the gate's own header.
     """
-    from run_gen1_gate import PATCHED
+    from run_gb_gate import PATCHED
     _, rom_rel, _ = PATCHED[rom]
     if rom_rel is None:                       # the vanilla control: needs only the dump
         base = play.ROMS[rom.rsplit("_", 1)[0]]

@@ -165,6 +165,12 @@ function M.initProfile(game_module, variant)
     -- Start of the computed stat block in the party struct (Atk/Def/Spd/Spc), which the
     -- box struct does not carry. See M.readPartyStats.
     M.STATS_OFFSET        = prof.stats_offset
+    -- Gen 1 has ONE Special stat, so its Sp.Def IS its Sp.Atk and the default alias is
+    -- correct. Gen 2 SPLIT them (party_struct: SpclAtk +0x2C, SpclDef +0x2E), so it declares
+    -- a real spdef_offset. Without one, applyPartyStats wrote Sp.Atk over both and every
+    -- withdrawal quietly corrupted Sp.Def.
+    M.SPDEF_OFFSET        = prof.spdef_offset
+                            or (prof.stats_offset and prof.stats_offset + 6)
     -- Rival Team Swap / Explode Mode (Gen 1: pure RAM, no ROM patch needed).
     M.CUR_OPPONENT_ADDR   = prof.CUR_OPPONENT_ADDR
     M.ENEMY_OT_NAMES_ADDR = prof.ENEMY_OT_NAMES_ADDR
@@ -747,10 +753,11 @@ function M.readPartyStats(slot)
         attack  = M.read_u16_be(base + s),
         defense = M.read_u16_be(base + s + 2),
         speed   = M.read_u16_be(base + s + 4),
-        -- Gen 1 has ONE Special stat; mirror it into both slots so the shared renderer and
-        -- the Gen 3-shaped stats dict do not need a generation branch.
         spAtk   = M.read_u16_be(base + s + 6),
-        spDef   = M.read_u16_be(base + s + 6),
+        -- Gen 1 has ONE Special stat, and M.SPDEF_OFFSET aliases it back onto spAtk so the
+        -- shared renderer and the Gen 3-shaped stats dict need no generation branch. Gen 2
+        -- split the stat and points this at its own address.
+        spDef   = M.read_u16_be(base + M.SPDEF_OFFSET),
     }
 end
 
@@ -765,6 +772,9 @@ function M.applyPartyStats(slot, stats)
     if stats.defense then M.write_u16_be(base + s + 2, stats.defense) end
     if stats.speed  then M.write_u16_be(base + s + 4, stats.speed) end
     if stats.spAtk  then M.write_u16_be(base + s + 6, stats.spAtk) end
+    -- In Gen 1 this address IS s+6, so the write is a harmless repeat of the line above. In
+    -- Gen 2 it is the only thing that restores Sp.Def at all.
+    if stats.spDef  then M.write_u16_be(base + M.SPDEF_OFFSET, stats.spDef) end
     return true
 end
 
