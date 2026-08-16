@@ -1307,6 +1307,40 @@ local function on_frame()
                 end
                 sync_written_keys[cmd.key] = true
             elseif cmd.cmd == "party_mon" then
+                -- DO NOT WITHDRAW INTO A PARTY THAT IS ENTIRELY FAINTED.
+                --
+                -- That is the exact window in which the cartridge is deciding whether to
+                -- black out, and handing it a living mon cancels the decision. Measured on
+                -- Gen 1's duo whiteout: the last mon died of poison, the server answered the
+                -- whiteout with the auto-rebuild's party_mon, the withdraw landed between
+                -- text boxes, and HandleBlackOut never ran — no blackout, no money loss, no
+                -- warp. Gen 2 reaches the same state through the same server logic.
+                --
+                -- It WAITS OUT the race and then proceeds; it never refuses. A machine that
+                -- is really blacking out revives within a few frames (the blackout path ends
+                -- in a party heal) and the withdraw lands right after. But the PARTNER
+                -- machine reaches all-fainted by force_faint, where nothing will ever resolve
+                -- it — the cartridge never noticed the HP write — so a guard that refused
+                -- would strand exactly the mon the rebuild exists to restore.
+                local function party_all_fainted()
+                    local n = M.getPartyCount()
+                    if n < 1 or n > 6 then return false end
+                    for s = 0, n - 1 do
+                        local m = M.readPartySlot(s)
+                        if m and m.hp and m.hp > 0 then return false end
+                    end
+                    return true
+                end
+                local BLACKOUT_WAIT = 300   -- ~5s at 60fps; a blackout resolves in far less
+                if party_all_fainted() and (cmd._blackout_waits or 0) < BLACKOUT_WAIT then
+                    cmd._blackout_waits = (cmd._blackout_waits or 0) + 1
+                    handled = false
+                    if cmd._blackout_waits == 1 then
+                        console.log("[SLink-Crystal]   ↳ party_mon deferred: whole party is "
+                                    .. "fainted, letting the blackout resolve first")
+                    end
+                    return
+                end
                 -- cmd.stats is the block cached at deposit time and echoed back by the
                 -- server (mon_stats). Calling this WITHOUT it was not a degradation — since
                 -- retrieveBoxMon started refusing rather than improvising, a stats-less

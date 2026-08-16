@@ -1,4 +1,7 @@
--- scenario_gen1_faint.lua — two-instance Soul Link faint propagation on Gen 1.
+-- scenario_gb_faint.lua — two-instance Soul Link faint propagation on the Game Boy gens.
+--
+-- Shared by Gen 1 (RBY) and Gen 2 (Crystal): every cartridge read goes through ctx, so
+-- there is nothing generation-specific left in here to branch on.
 --
 -- The rule this proves is the core of SLink: when one player's linked mon dies, the
 -- partner's linked mon must die too, on the other machine, through the real server.
@@ -10,12 +13,12 @@
 --   B: assert the linked mon's HP reaches 0 without anyone touching that machine.
 --
 -- This is the end-to-end version of two things that were only ever unit-tested before:
--- the client's faint detection (which reads HP big-endian on Gen 1) and its force_faint
+-- the client's faint detection (which reads HP big-endian on both GB gens) and its force_faint
 -- handler — the very handler whose queue used to bind to a nil global and crash.
 --
--- HP is read and written through ctx, never with raw memory calls: Gen 1 is big-endian
--- where Gen 3 is little-endian, and a scenario poking bytes directly would silently write
--- a byte-swapped value.
+-- HP is read and written through ctx, never with raw memory calls: Gen 1 and Gen 2 are
+-- big-endian where Gen 3 is little-endian, and a scenario poking bytes directly would
+-- silently write a byte-swapped value.
 return function(ctx)
     local log = ctx.log
     if not ctx.wait_go() then return false, "no go-file" end

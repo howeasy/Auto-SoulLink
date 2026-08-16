@@ -1,4 +1,4 @@
--- scenario_gen1_boxsync.lua — party/box sync across two machines.
+-- scenario_gb_boxsync.lua — party/box sync across two machines, Gen 1 and Gen 2.
 --
 -- The Soul Link rule: linked mons must both be in the party or both in the box. When A
 -- deposits their half of a pair, the server has to box B's half automatically.
@@ -15,7 +15,7 @@
 -- to a nil global and crash the Gen 1 client on the first box_mon it ever received, and
 -- the safe-state gate that decides when it is allowed to run.
 --
--- Both sides start with a filler in slot 1 (see duo_gen1_main): depositPartyMon refuses to
+-- Both sides start with a filler in slot 1 (see duo_gb_main): depositPartyMon refuses to
 -- box the last party mon.
 return function(ctx)
     local log = ctx.log

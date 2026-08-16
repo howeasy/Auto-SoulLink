@@ -40,6 +40,8 @@ local GAMES = {
         module     = "games.gen1_rby",
         data_dir   = "gen1_rby",
         label      = "Gen 1",
+        client     = "gen1_rby_client.lua",
+        scenario_prefix = "gen1_",
         coord_base = function(M) return M.MAP_ID_ADDR end,
         coord_dy   = 3,
         coord_dx   = 4,
@@ -48,11 +50,105 @@ local GAMES = {
         module     = "games.gen2_crystal",
         data_dir   = "gen2_crystal",
         label      = "Gen 2",
+        client     = "gen2_crystal_client.lua",
+        scenario_prefix = "gen2_",
         coord_base = function(M) return M.MAP_NUMBER_ADDR end,
         coord_dy   = 1,
         coord_dx   = 2,
     },
 }
+
+Lib.GAMES = GAMES
+
+--- Prove the emulator is in a LIVE overworld, not on a title screen or a loading screen.
+---
+--- Exported because the two-instance duo harness needs exactly this and had its own older
+--- copy — the single-move version, with the false positive documented below still in it.
+--- `step(buttons)` and `hold(btn, frames, stop)` are passed in because the gate driver and
+--- the duo driver advance frames differently (the duo runs inside a coroutine).
+---
+--- WHAT IT TAKES TO BELIEVE THE GAME IS RUNNING, in three escalations, each of which was
+--- measured to be insufficient before the next was added:
+---
+---   1. Party count sane + ONE move. Declared success on Gen 1's title screen, because the
+---      coordinates flip from 0xFF (uninitialised) to 0x00 during boot and the CONTINUE
+---      preview loads the save into the very WRAM the party lives in.
+---   2. Add a ROUND TRIP — move out, move back to exactly the start. Declared success on
+---      Crystal at frame 404, screenshotted as a BLANK SCREEN, with the title screen not
+---      appearing until frame ~1400. The loader writes those bytes repeatedly while a map is
+---      being set up, so a there-and-back pattern happens by itself.
+---   3. Add PERSISTENCE. Two round trips separated by 90 frames of pressing nothing, with
+---      the position required to be unchanged across the idle. A parked player does not move
+---      when nothing is pressed; a screen that is still loading keeps writing.
+---
+--- Note what is NOT used: "the map id is nonzero" is the obvious extra condition and is
+--- wrong, because Gen 1's town fixture stands in Pallet Town, which IS map 0.
+---
+--- Probes with LEFT/RIGHT only, never up/down: both generations' title lists are VERTICAL
+--- menus, so a Down press moves the cursor off CONTINUE onto NEW GAME. That makes the
+--- fixture's parking tile a hard requirement, which is why each playthrough certifies its
+--- own — a save parked between a bed and a desk hangs every gate on a perfectly live game.
+function Lib.prove_booted(M, game_key, step, hold)
+    local spec = GAMES[game_key]
+    assert(spec, "unknown game " .. tostring(game_key))
+    local base = spec.coord_base(M)
+    assert(base, "profile has no coordinate base address")
+    local x_addr, y_addr = base + spec.coord_dx, base + spec.coord_dy
+    local function pos() return M.read_u8(x_addr), M.read_u8(y_addr) end
+
+    local function round_trip(out)
+        local back = (out == "Right") and "Left" or "Right"
+        local x0, y0 = pos()
+        -- A direction must be HELD to walk; a tap only turns the player to face it.
+        hold(out, 20, function()
+            local x, y = pos()
+            return x ~= x0 or y ~= y0
+        end)
+        local x1, y1 = pos()
+        if x1 == x0 and y1 == y0 then return false end
+        hold(back, 20, function()
+            local x, y = pos()
+            return x == x0 and y == y0
+        end)
+        local x2, y2 = pos()
+        return x2 == x0 and y2 == y0
+    end
+
+    for i = 1, 400 do
+        local pc = M.getPartyCount()
+        -- A WILD BATTLE IS ALSO PROOF, and on a grass fixture it is the likelier outcome:
+        -- the walking this proof does is exactly what triggers encounters, so requiring a
+        -- completed round trip in tall grass fails whenever the game does the most normal
+        -- thing it can do. Measured — the Gen 1 `playthrough` scenario, the only one that
+        -- boots onto Route 1, stopped reaching its first line at all.
+        --
+        -- Held to the same persistence standard as the walk: wIsInBattle can read garbage
+        -- while WRAM is being initialised, so it has to STILL be a battle 60 frames later,
+        -- with the party count unchanged. A loader transient does not survive that.
+        if pc >= 1 and pc <= 6 and M.isInBattle() then
+            for _ = 1, 60 do step(nil) end
+            if M.isInBattle() and M.getPartyCount() == pc then
+                return true, x_addr, y_addr
+            end
+        end
+        if pc >= 1 and pc <= 6 and round_trip((i % 2 == 0) and "Right" or "Left") then
+            local xa, ya = pos()
+            for _ = 1, 90 do step(nil) end        -- press NOTHING and watch
+            local xb, yb = pos()
+            if xa == xb and ya == yb
+               and round_trip((i % 2 == 0) and "Left" or "Right")
+               and M.getPartyCount() == pc then
+                return true, x_addr, y_addr
+            end
+        end
+        -- Advance the attract loop / title menu / save-preview box. 6 frames, not 2 — a
+        -- short tap does not reliably register (the same thing that left the naming cursor
+        -- unmoved and the player pivoting instead of walking).
+        hold("A", 6, nil)
+        for _ = 1, 16 do step(nil) end
+    end
+    return false, x_addr, y_addr
+end
 
 -- opts.game    → key into GAMES above (default "gen1_rby")
 -- opts.no_boot → set up M/G and the check helpers but skip the boot-to-CONTINUE drive, for
@@ -140,72 +236,11 @@ function Lib.start(gate_name, opts)
     -- Screenshotting it was the only way that showed up. Crystal's continue screen shows the
     -- same fields and so has the same hazard.
     --
-    -- Walking cannot be faked: if the coordinates change, the overworld loop is live.
-    local base = spec.coord_base(M)
-    assert(base, fmt("%s profile has no coordinate base address", spec.label))
-    local x_addr, y_addr = base + spec.coord_dx, base + spec.coord_dy
+    -- Walking cannot be faked: if the coordinates change, the overworld loop is live. See
+    -- Lib.prove_booted for the two weaker versions of that claim that were measured passing
+    -- on a title screen and on a blank screen.
+    local booted, x_addr, y_addr = Lib.prove_booted(M, opts.game or "gen1_rby", t.step, t.hold)
 
-    -- WHAT IT TAKES TO BELIEVE THE GAME IS RUNNING, in three escalations, each of which was
-    -- measured to be insufficient before the next was added:
-    --
-    --   1. Party count sane + ONE move. Declared success on Gen 1's title screen, because
-    --      the coordinates flip from 0xFF (uninitialised) to 0x00 during boot and the
-    --      CONTINUE preview loads the save into the very WRAM the party lives in.
-    --   2. Add a ROUND TRIP — move out, move back to exactly the start. Declared success on
-    --      Crystal at frame 404, screenshotted as a BLANK SCREEN, with the title screen not
-    --      appearing until frame ~1400. The loader writes those bytes repeatedly while a map
-    --      is being set up, so a there-and-back pattern happens by itself.
-    --   3. Add PERSISTENCE, below. Two round trips separated by an idle, with the position
-    --      required to be unchanged across that idle. A parked player does not move when
-    --      nothing is pressed; a screen that is still loading keeps writing.
-    --
-    -- Note what is NOT used: "the map id is nonzero" would be the obvious extra condition and
-    -- is wrong, because Gen 1's town fixture stands in Pallet Town, which IS map 0.
-    --
-    -- Probe with LEFT/RIGHT, never up/down: both generations' title lists are VERTICAL
-    -- menus, so a Down press moves the cursor off CONTINUE onto NEW GAME. The outward
-    -- direction alternates because whichever way we try first may be a wall.
-    local function pos() return M.read_u8(x_addr), M.read_u8(y_addr) end
-
-    --- One there-and-back walk. Returns true only if it ended exactly where it started.
-    local function round_trip(out)
-        local back = (out == "Right") and "Left" or "Right"
-        local x0, y0 = pos()
-        -- A direction must be HELD to walk; a tap only turns the player to face it.
-        t.hold(out, 20, function()
-            local x, y = pos()
-            return x ~= x0 or y ~= y0
-        end)
-        local x1, y1 = pos()
-        if x1 == x0 and y1 == y0 then return false end
-        t.hold(back, 20, function()
-            local x, y = pos()
-            return x == x0 and y == y0
-        end)
-        local x2, y2 = pos()
-        return x2 == x0 and y2 == y0
-    end
-
-    local booted = false
-    for i = 1, 400 do
-        local pc = M.getPartyCount()
-        if pc >= 1 and pc <= 6 and round_trip((i % 2 == 0) and "Right" or "Left") then
-            local xa, ya = pos()
-            for _ = 1, 90 do t.step(nil) end        -- press NOTHING and watch
-            local xb, yb = pos()
-            if xa == xb and ya == yb
-               and round_trip((i % 2 == 0) and "Left" or "Right")
-               and M.getPartyCount() == pc then
-                booted = true
-                break
-            end
-        end
-        -- Advance the attract loop / title menu / save-preview box. 6 frames, not 2 — a
-        -- short tap does not reliably register (the same thing that left the naming cursor
-        -- unmoved and the player pivoting instead of walking).
-        t.hold("A", 6, nil)
-        for _ = 1, 16 do t.step(nil) end
-    end
     if not booted then
         client.screenshot(ROOT .. "/patch/build/" .. gate_name .. "_bootfail.png")
         t.check("booted into the overworld from the battery save", false,

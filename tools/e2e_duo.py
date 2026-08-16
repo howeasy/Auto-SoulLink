@@ -20,6 +20,7 @@ containing the "Google Drive" space break BizHawk's CLI parser); absolute paths 
 INSIDE Lua. Per-instance --config copies avoid the shared config.ini write race.
 """
 import argparse
+import importlib
 import json
 import os
 import shutil
@@ -48,7 +49,7 @@ SCENARIOS = {
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     # Gen 1 only for now: both halves die, then the pair is buried in Box 12.
-    "memorialize": {"flags": [], "timeout": 300, "games": ("gen1",)},
+    "memorialize": {"flags": [], "timeout": 300, "games": ("gen1", "gen2")},
     # Gen 1 does the rival swap from pure RAM — no companion patch, unlike Gen 3.
     "rivalswap": {"flags": ["--rival-team-swap"], "timeout": 300, "games": ("gen1",)},
     # Gen 1 explode: RAM-only, no companion patch. Distinct from the Gen 3 "explode" entry
@@ -158,7 +159,9 @@ GAMES = {
         "scenario_prefix": "",
     },
     "gen1": {
-        "main": "lua/tests/duo/duo_gen1_main.lua",
+        "main": "lua/tests/duo/duo_gb_main.lua",
+        "game": "gen1_rby",
+        "play": "gen1_playthrough",
         "rom": {"a": "patch/build/gen1_red.gb", "b": "patch/build/gen1_blue.gb"},
         "uses_savestate": False,
         "fixture": {"a": "red", "b": "blue"},
@@ -170,11 +173,30 @@ GAMES = {
     # Pairing it with Red rather than another Yellow means a shift bug shows up as an
     # asymmetry between the two halves instead of cancelling out.
     "gen1_yellow": {
-        "main": "lua/tests/duo/duo_gen1_main.lua",
+        "main": "lua/tests/duo/duo_gb_main.lua",
+        "game": "gen1_rby",
+        "play": "gen1_playthrough",
         "rom": {"a": "patch/build/gen1_yellow.gbc", "b": "patch/build/gen1_red.gb"},
         "uses_savestate": False,
         "fixture": {"a": "yellow", "b": "red"},
         "scenario_prefix": "gen1_",
+    },
+    # THE SAME CARTRIDGE ON BOTH SIDES. There is one Crystal dump, so this pairing only
+    # works because write_run_config gives each instance its own SaveRAM directory: BizHawk
+    # names a save from its gamedb entry, keyed on ROM hash rather than the path launched,
+    # so two instances would otherwise share one file and stamp on each other.
+    #
+    # duo_gb_main resolves scenarios as scenario_<prefix><name> then scenario_gb_<name>, so
+    # faint/boxsync/memorialize come from the shared files — they are written entirely
+    # against ctx and are identical for both generations.
+    "gen2": {
+        "main": "lua/tests/duo/duo_gb_main.lua",
+        "game": "gen2_crystal",
+        "play": "gen2_playthrough",
+        "rom": {"a": "patch/build/gen2_crystal.gbc", "b": "patch/build/gen2_crystal.gbc"},
+        "uses_savestate": False,
+        "fixture": {"a": "crystal", "b": "crystal"},
+        "scenario_prefix": "gen2_",
     },
 }
 
@@ -185,10 +207,12 @@ class DuoRun:
         self.cfg = SCENARIOS[scenario]
         self.args = args
         self.game = getattr(args, "game", "gen3_rr")
-        # Family, not id. Gen 1 has more than one duo configuration (red/blue, yellow/red)
-        # and every `== "gen1"` check silently sent the others down the Gen 3 path.
-        self.is_gen1 = self.game.startswith("gen1")
         self.gcfg = GAMES[self.game]
+        # What the launch path actually branches on is "does this game boot from a battery
+        # save", not which generation it is — Gen 2 needs the identical treatment. Kept as
+        # `is_gen1` only where a SCENARIO is genuinely Gen 1-specific.
+        self.battery_boot = not self.gcfg["uses_savestate"]
+        self.is_gen1 = self.game.startswith("gen1")
         self.tcp_port = free_port()
         self.http_port = free_port()
         self.data_dir = tempfile.mkdtemp(prefix=f"slink_duo_{scenario}_")
@@ -226,17 +250,17 @@ class DuoRun:
             return None
 
     def start_instances(self):
-        if self.is_gen1:
-            from gen1_playthrough import staged_rom
+        if self.battery_boot:
+            play = importlib.import_module(self.gcfg["play"])
             for key in self.gcfg["fixture"].values():
-                staged_rom(key)     # space-free copy; BizHawk's CLI splits on spaces
+                play.staged_rom(key)   # space-free copy; BizHawk's CLI splits on spaces
         for inst in ("a", "b"):
             for f in (self._result_path(inst), self.go_files[inst]):
                 if os.path.exists(f):
                     os.remove(f)
         for inst in ("a", "b"):
             cfg_ini = os.path.join(BUILD, f"duo_cfg_{inst}.ini")
-            if self.is_gen1:
+            if self.battery_boot:
                 # Muted, on the second monitor: two emulators for several minutes each.
                 #
                 # Each instance also gets its OWN SaveRAM directory. BizHawk names a SaveRAM
@@ -254,6 +278,7 @@ class DuoRun:
             fillers = self.cfg.get("fillers", True)
             duo = {
                 "wt": WT_FWD, "player": inst, "scenario": self.scenario,
+                "game": self.gcfg.get("game", ""),
                 "fillers": fillers[inst] if isinstance(fillers, dict) else fillers,
                 "mutate_otid": inst == "b",
                 "result": f"{WT_FWD}/patch/build/e2e_{self.scenario}_{inst}_result.txt",
@@ -599,8 +624,8 @@ class DuoRun:
             wait_for("B inside a live battle",
                      lambda: "IN_BATTLE" in (read_result(self.scenario, "b") or ""), 240)
             self.go()
-        elif self.scenario == "boxsync" and self.is_gen1:
-            # Gen 1 exercises the RULE, not the storage opcodes: link the pair, then let A
+        elif self.scenario == "boxsync" and self.battery_boot:
+            # The GB gens exercise the RULE, not the storage opcodes: link the pair, then let A
             # deposit its own half. The server's _handle_party_to_box is what must send
             # box_mon to B — nothing is injected here, so a broken rule cannot be masked by
             # the harness doing the work itself.
