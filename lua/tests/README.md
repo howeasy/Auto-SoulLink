@@ -2,12 +2,43 @@
 
 BizHawk Lua test scripts. Three families:
 
-- **`duo/`** — the TWO-INSTANCE headless E2E harness: `duo_main.lua` (shared wrapper that runs
-  the REAL production client; instance B mutates party OTIDs pre-hello so keys don't collide)
-  plus `scenario_{faint,boxsync,trade,ghost,explode}.lua`. Driven by `tools/e2e_duo.py`, which boots a
-  throwaway server + two concurrent EmuHawk instances (per-instance `--config` copies) and
-  orchestrates via the debug HTTP API. Run: `python tools/e2e_duo.py --scenario all`
-  (or `SLINK_E2E=1 pytest tests/e2e/`). This automates the old "two-instance E2E (USER gate)".
+- **`duo/`** — the TWO-INSTANCE headless E2E harness. Two wrappers, both of which run the
+  REAL production client (instance B mutates party OTIDs pre-hello so keys don't collide):
+  `duo_main.lua` for Gen 3 (GBA, boots a savestate) and `duo_gb_main.lua` for Gen 1 and
+  Gen 2 (Game Boy, boots a committed battery save). Driven by `tools/e2e_duo.py`, which
+  boots a throwaway server + two concurrent EmuHawk instances (per-instance `--config`
+  copies, and per-instance SaveRAM dirs so two Crystals can share one dump) and orchestrates
+  via the debug HTTP API. This automates the old "two-instance E2E (USER gate)".
+
+  `duo_gb_main.lua` resolves a scenario as `scenario_<prefix><name>` first, then falls back
+  to `scenario_gb_<name>` — so the shared files serve both generations:
+
+  | File(s) | Games |
+  |---|---|
+  | `scenario_{faint,boxsync,trade,ghost,explode,infopanel}.lua` | Gen 3 only |
+  | `scenario_gb_{faint,boxsync,memorialize}.lua` | Gen 1 **and** Gen 2 |
+  | `scenario_gen1_{whiteout,playthrough,deadzone,dupes,rivalswap,explode_g1}.lua` | Gen 1 only |
+
+  `--game` picks the title: `gen3_rr` (default), `gen1` (Red as A, Blue as B), `gen1_yellow`
+  (Yellow as A, Red as B) or `gen2` (Crystal on both sides).
+
+  ```bash
+  SLINK_E2E=1 pytest tests/e2e/test_duo.py -q               # Gen 3
+  SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py -q          # Gen 1 (+ Yellow)
+  SLINK_E2E=1 pytest tests/e2e/test_duo_gen2.py -q          # Gen 2
+  python tools/e2e_duo.py --game gen2 --scenario faint      # one scenario, directly
+  python tools/e2e_duo.py --game gen2 --list                # what --scenario all would run
+  ```
+
+  `--scenario all` runs only the scenarios whose `games` tuple covers `--game` (absent means
+  every title), naming the ones it drops rather than skipping them silently; `--list` prints
+  that selection without booting anything, and asking for a scenario a game cannot run fails
+  immediately instead of timing out on a missing fixture.
+
+  Gen 2 does not run `playthrough`, `deadzone` or `dupes`: those need tall grass, and
+  Crystal's fixture parks indoors because New Bark Town's west exit is script-locked until
+  Elm hands over a starter. The rules they cover are server-side and generation-independent,
+  and Gen 1 runs all three.
 
 - **`test_live_*` / `test_mailbox_*`** — headless gates for the RR companion patch
   (`patch/src/handlers.c`). Run on the PATCHED build from the worktree root:
@@ -15,7 +46,11 @@ BizHawk Lua test scripts. Three families:
   Each loads a savestate from `E:/Howard/Bizhawk/GBA/State/`, writes
   `patch/build/<name>_result.txt` ending `RESULT: PASS|FAIL`, and exits.
 - **`test_gen*_*` / discovery scripts** — per-generation client/profile validation and
-  address-discovery one-shots (interactive; load in the Lua console).
+  address-discovery one-shots (interactive; load in the Lua console). The exception is
+  `test_gen{1,2}_*_gate.lua`, which run HEADLESS off a committed battery save via
+  `tests/live/test_gen1_gates.py` / `test_gen2_gates.py` (`SLINK_LIVE=1 pytest tests/live/ -q`)
+  and share `gatelib.lua` — `gen1_gatelib.lua` is just a one-line shim over it for the Gen 1
+  gates that predate the split.
 
 One-off discovery probes are DELETED once their findings land in
 `patch/src/ADDRESSES.md` — that file records the provenance. Don't resurrect them; write a

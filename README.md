@@ -8,12 +8,12 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 |-----|-------|-------------|--------|
 | 3 | FireRed, LeafGreen | Vanilla, randomized, Archipelago, Radical Red 4.1 (CFRU) | **✅ Stable** |
 | 3 | Emerald | Vanilla | ⚠️ Experimental — RAM profile is complete, but the area/location name tables are not generated, so area resolution falls back to FireRed and is wrong |
-| 1 | Red, Blue, Yellow | US English | ⚠️ Experimental |
-| 2 | Crystal | GBC | ⚠️ Experimental |
-| 4 | HeartGold, SoulSilver, Platinum | Vanilla, Renegade Platinum | ⚠️ Experimental |
-| 5 | Black, White, Black 2, White 2 | US | ⚠️ Experimental |
+| 1 | Red, Blue, Yellow | US English | ⚠️ Partially verified — mechanisms proven on real cartridges, no full playthrough |
+| 2 | Crystal | GBC | ⚠️ Partially verified — Crystal only, mechanisms proven on a real cartridge, no full playthrough |
+| 4 | HeartGold, SoulSilver, Platinum | Vanilla, Renegade Platinum | ⚠️ Experimental — never run against a real game |
+| 5 | Black, White, Black 2, White 2 | US | ⚠️ Experimental — never run against a real game |
 
-> **Note:** Only Gen 3 has been extensively tested in live gameplay. Gens 1, 2, 4, and 5 have full feature parity with Gen 3 (moves/PP, stat stages, doubles, forms, egg detection, stream overlays) and pass their unit-test suites, but live-play coverage is limited — treat them as experimental. Gen 4 doubles + stat-stage battle-struct addresses are read-only-scannable via `lua/tests/test_gen4_battlers_count.lua` + `test_gen4_stat_stages.lua` and need a one-time live capture to populate the profile. Gen 5 has the same shape via `lua/tests/test_gen5_block_b.lua` and `lua/tests/test_gen5_doubles.lua`. Gen 1/2 runtime checks live in `docs/gen1_gen2_runtime_checks.md`.
+> **Note:** Only Gen 3 has been extensively tested in live gameplay. **Gens 1 and 2 are partially verified:** faint propagation, party/box sync and memorialize all execute against real cartridge dumps under the headless gates and the two-instance duo E2E, but neither generation has been played through a run. Gen 2 coverage is Crystal only — Gold, Silver and Archipelago Crystal have no ROM dump to gate against. Gens 4 and 5 have full feature parity with Gen 3 (moves/PP, stat stages, doubles, forms, egg detection, stream overlays) and pass their unit-test suites, but have **never run against a real game** — treat them as experimental. Gen 4 doubles + stat-stage battle-struct addresses are read-only-scannable via `lua/tests/test_gen4_battlers_count.lua` + `test_gen4_stat_stages.lua` and need a one-time live capture to populate the profile. Gen 5 has the same shape via `lua/tests/test_gen5_block_b.lua` and `lua/tests/test_gen5_doubles.lua`. Gen 1/2 runtime checks live in `docs/gen1_gen2_runtime_checks.md`.
 
 ## Before you start
 
@@ -258,18 +258,20 @@ python -m server.manager --host 0.0.0.0
 ## Tests
 
 ```bash
-pytest tests/unit/ -v                          # ~1450 tests, no emulator needed
-pytest tests/ -q                               # + integration (~1475)
+pytest tests/unit/ -v                          # ~1600 tests, no emulator needed
+pytest tests/ -q                               # + integration (~1700)
 
-# Headless BizHawk gates — drive a real emulator against the patched ROM
-SLINK_LIVE=1 pytest tests/live/ -q             # 39 gates
+# Headless BizHawk gates — drive a real emulator
+SLINK_LIVE=1 pytest tests/live/ -q             # 59 gates: Gen 3 (39), Gen 1 (18), Gen 2 (2)
 
 # Two-instance end-to-end: two emulators + a real server
-SLINK_E2E=1 SLINK_LIVE=1 pytest tests/e2e/ -q  # 6 scenarios
+SLINK_E2E=1 SLINK_LIVE=1 pytest tests/e2e/ -q  # 27 runs across Gen 3, Gen 1 and Gen 2
 ```
 
-The live gates and duo scenarios need BizHawk, the ROMs and current savestates
-(`python tools/mkstates.py`); they skip cleanly when those are missing. See
+The live gates and duo scenarios need BizHawk and the ROMs. Gen 3 also needs
+current savestates (`python tools/mkstates.py`); Gen 1 and Gen 2 boot from
+committed battery saves instead, so nothing to rebuild after an emulator
+upgrade. Everything skips cleanly when a ROM or fixture is missing. See
 [tests/TESTING.md](tests/TESTING.md).
 
 ## Project Structure
@@ -300,7 +302,8 @@ data/
   games/                 # Per-game static data (area maps, items)
   obs_config.json        # OBS connection + trigger rule config
 calc/                    # Radical Red damage calculator + live bridge (rendered via Jinja shell)
-tests/                   # unit + integration (~1475), live BizHawk gates (tests/live/), two-instance E2E (tests/e2e/)
+tests/                   # unit + integration (~1700), live BizHawk gates (tests/live/), two-instance E2E (tests/e2e/)
+  fixtures/gen1, gen2    # committed battery saves the GB duo runs boot from
 tools/                   # Code generators (area maps, data tables)
 ```
 

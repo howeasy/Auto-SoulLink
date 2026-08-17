@@ -82,9 +82,13 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 
 ### Game Maturity
 
-**Gen 1 and Gen 3 have live coverage; Gen 2, 4 and 5 do not.** Gen 1 runs headless gates on all three cartridges (`SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py`) plus five two-instance Soul Link scenarios (`SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py`). Gens 2, 4 and 5 have Python unit tests and Lua clients but have never executed against a running game — treat them as experimental. When making changes to shared code (`server.py`, `state.py`, `adapters/base.py`), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check.
+**Gen 1, Gen 2 and Gen 3 have live coverage; Gen 4 and 5 do not.** Gen 1 runs headless gates on all three cartridges (`SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py`) plus nine two-instance Soul Link scenarios across two cartridge pairings, Red/Blue and Yellow/Red (`SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py`). Gens 4 and 5 have Python unit tests and Lua clients but have never executed against a running game — treat them as experimental. When making changes to shared code (`server.py`, `state.py`, `adapters/base.py`), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check.
+
+**Gen 2 is partially verified — mechanisms proven, no playthrough.** A read gate and a write gate run against a real Crystal cartridge (`SLINK_LIVE=1 pytest tests/live/test_gen2_gates.py`), and `faint` / `boxsync` / `memorialize` run two Crystals against a real server (`SLINK_E2E=1 pytest tests/e2e/test_duo_gen2.py`). What has *never* happened on Gen 2 is play: no wild encounter, no area change, no ball thrown, so encounter linking, the dead zone and the species clause have no live Gen 2 evidence. Those three rules are enforced server-side and are generation-independent, and Gen 1's `playthrough` / `deadzone` / `dupes` scenarios cover them. Gen 2's blocker is the fixture: New Bark Town's west exit is script-locked until Elm hands over a starter, so `tools/gen2_playthrough.py` can only park indoors and there is no grass fixture to walk.
 
 Bringing Gen 1 to live coverage found four defects that the unit suite and the Lua syntax gate both passed: `pending_sync_cmds` declared *after* `dispatch_commands`, so every deferred `box_mon` / `party_mon` / `memorialize` bound to a nil global and killed the client on first use; a `party_to_box` debounce that could never reach its threshold, so party→box sync was silently dead (**this one was in Gen 2 as well**); a box level read from offset `+0x21`, which is past the end of the 33-byte Gen 1 box struct; and Archipelago detection probing HRAM at `0xFFDB` instead of the ROM. Static analysis cannot find any of these. If you add a generation, add gates.
+
+Gen 2 was the better-looking of the two on paper — Gold/Silver profiles, gender ratios, item names, 179 adapter tests — and its first contact with a cartridge was worse. Gold, Silver and AP Crystal all routed to the **Gen 3** adapter; `party_blob_size()` inherited `0`, so every Gen 2 party blob was discarded; no profile declared `stats_offset`, so every box deposit dropped the stat block; the Apricorn ball IDs pointed at SUN_STONE, POLKADOT_BOW, UP_GRADE, BERRY, GOLD_BERRY and SQUIRTBOTTLE, which left the Nuzlocke gate shut for anyone carrying balls Kurt made; `retrieveBoxMon` read HP at the party offset off a **32-byte** box base, i.e. two bytes past the end of the slot, so the next boxed mon's move ids came back as an HP value; and the shared stat writer had one Special and aliased Sp.Atk onto Sp.Def. `pytest` was green throughout. Static data breadth is not maturity.
 
 ## Soul Link Rules (Full Specification)
 
@@ -342,8 +346,8 @@ SLink-RR/
 - **`lua/tests/test_ability_diag.lua`** — Diagnostic script: auto-detects ROM profile, validates gBaseStats address, shows party ability data per slot.
 - **`lua/tests/test_item_discovery.lua`** — ROM scanner for RR/CFRU gItems table. Uses CFRU probe scoring (IDs 52-62) and itemId field validation to find the correct table. Outputs JSON to `rr_items.json`.
 - **`tests/unit/test_state.py`** — 318 pytest unit tests for the state machine.
-- **`tests/unit/test_gen1_adapter.py`** — Gen 1 adapter unit tests. Live coverage lives in `tests/live/test_gen1_gates.py` (8 gates × real cartridges) and `tests/e2e/test_duo_gen1.py` (5 two-instance scenarios).
-- **`tests/unit/test_gen2_adapter.py`** — 179 tests for the Gen 2 adapter.
+- **`tests/unit/test_gen1_adapter.py`** — Gen 1 adapter unit tests. Live coverage lives in `tests/live/test_gen1_gates.py` (18 cases: 4 gate scripts × red/blue/yellow, plus the companion-patch and Archipelago gates) and `tests/e2e/test_duo_gen1.py` (18 cases: 9 scenarios × the Red/Blue and Yellow/Red pairings).
+- **`tests/unit/test_gen2_adapter.py`** — 179 tests for the Gen 2 adapter. Live coverage lives in `tests/live/test_gen2_gates.py` (a read gate and a write gate, Crystal only) and `tests/e2e/test_duo_gen2.py` (`faint`, `boxsync`, `memorialize` — two Crystals, one real server).
 - **`tests/unit/test_gen3_adapter.py`** — 216 tests for the Gen 3 adapter.
 - **`tests/unit/test_gen4_adapter.py`** — 100 tests for the Gen 4 adapter.
 - **`tests/unit/test_gen5_adapter.py`** — 140 tests for the Gen 5 adapter.
@@ -689,12 +693,28 @@ Read the ROM title from GB header at `0x0134` (16 bytes ASCII). Value: `PM_CRYST
 | wPartyCount | 0xDCD7 | Party size (0-6) |
 | wPartySpecies | 0xDCD8 | Species list (6 + 0xFF terminator) |
 | wPartyMon1 | 0xDCDF | Party struct base (6 × 48 bytes) |
-| wMapGroup | 0xDCB5 | Current map group (needs verification) |
-| wMapNumber | 0xDCB6 | Current map number (needs verification) |
-| wBattleMode | 0xD22D | 0=overworld, 1=wild, 2=trainer (needs verification) |
+| wMapGroup | 0xDCB5 | Current map group |
+| wMapNumber | 0xDCB6 | Current map number |
+| wBattleMode | 0xD22D | 0=overworld, 1=wild, 2=trainer |
 | wPlayerID | 0xD47B | 2-byte OT ID (big-endian) |
-| wCurrentBoxCount | — | Active box mon count (needs verification) |
-| wCurrentBoxMons | — | Active box struct base (20 × 32 bytes, needs verification) |
+| wCurBox | 0xDB72 | Active PC box index, 0-based (0–13). Plain index — no "changed boxes" bit 7, unlike Gen 1 |
+| wScriptRunning | 0xD438 | Safe-state predicate. Nonzero while a script or full-screen menu owns the game |
+| sBoxCount | 0xAD10 | Active box mon count. **SRAM**, not WRAM — the `s` prefix is pret's; `wBoxCount` is a *Gen 1* symbol. System Bus view, read through the **CartRAM** domain |
+| sBoxMons | 0xAD26 | Active box struct base (20 × 32 bytes), same SRAM/CartRAM caveat |
+
+`JOY_IGNORE_ADDR` in `lua/games/gen2_crystal.lua` is `wScriptRunning`, not a `wJoypadDisable`
+analogue — that was **measured** on real Crystal by `lua/tests/probe_gen2_safestate.lua`, not
+picked by name. `wJoypadDisable` reads `00` both in the overworld and with the START menu open;
+`wTextboxFlags` is text-*speed* config. Gating writes on `not in_battle` alone is what this
+replaces: that is also true inside the PC box UI, the party menu and the naming screen, where
+the open UI holds its own copy of the data and writes it back over ours.
+
+Every address above is checked against pret by `tools/verify_profile_addresses.py` **and**
+exercised on a running cartridge by `lua/tests/test_gen2_memory_gate.lua` — the map pair
+resolves PLAYERS_HOUSE_2F to group 24 / number 7, `wBattleMode` reads out-of-battle in the town
+fixture, and the box reads return a real count and a sane 0–13 active index. A correct address
+read through the wrong *domain* still produces plausible-looking bytes, which is exactly why
+the pret check alone was not enough.
 
 ### Party struct (48 bytes)
 
@@ -741,10 +761,10 @@ A mon is shiny if: Defense DV = 10, Speed DV = 10, Special DV = 10, and Attack D
 - 48-byte party struct / 32-byte box struct (Gen 1: 44/33)
 - Gender and shiny determined by DVs
 - 17 types (Dark + Steel added over Gen 1's 15)
-- 14 boxes × 20 mons per box, only active box in WRAM (similar to Gen 1)
+- 14 boxes × 20 mons per box. The **active** box is the only one with a struct base in the profile (SRAM bank 1, via CartRAM); the rest are reached by flat CartRAM offset
 - No abilities, no ASLR, no encryption — plaintext data
 - Apricorn balls (Level, Lure, Moon, Friend, Fast, Heavy, Love) for nuzlocke gate detection
-- Memorial box support deferred (active box only in WRAM)
+- Memorial box is **Box 14** (`MEMORIAL_BOX_INDEX = 13`, 0-indexed), written straight to SRAM at flat CartRAM `0x79E0` — proven by the `memorialize` duo scenario, not just by the write gate
 
 ### Gift/static encounter area_ids
 
@@ -758,8 +778,27 @@ A mon is shiny if: Defense DV = 10, Speed DV = 10, Special DV = 10, and Attack D
 
 ### Known Limitations (Gen 2 Crystal)
 
-- Some WRAM addresses (wMapGroup, wMapNumber, wBattleMode, box addresses) need BizHawk verification
-- Box storage: only active box in WRAM; memorial box support deferred
+These are what is *actually* open. The addresses and the memorial box are no longer among them
+— see the gate note above.
+
+- **No grass fixture, so nothing has ever been caught.** New Bark Town's west exit is
+  script-locked until Elm hands over a starter, so `tools/gen2_playthrough.py` parks indoors and
+  `tests/fixtures/gen2/crystal_town.SaveRAM` is the only target. That is why `playthrough`,
+  `deadzone` and `dupes` do not run on Gen 2. Those rules live server-side and are
+  generation-independent, and Gen 1 runs all three — buying a Gen 2 grass fixture would buy a
+  second copy of coverage that already exists.
+- **Gold, Silver and AP Crystal have no dumps to run against.** They are supported for
+  correctness — routing, profile keys, per-variant addresses, all checked against pret by
+  `tools/verify_profile_addresses.py` — but a live matrix entry that silently skips reads
+  exactly like one that passes, so the gates are Crystal-only and say so. AP Crystal is worse
+  off for a different reason: the fork has no public repo, only five of its addresses are
+  provable, and its profile stays flagged unverified.
+- **`sram_box_layout` is deliberately absent for Gen 2**, so `protectSramBoxes()` no-ops there.
+  That is correct, not a gap: Gen 2's box banks sit outside the save checksum
+  (`SaveChecksum` / `VerifyChecksum` cover `sGameData..sGameDataEnd` only), and
+  `ChangeBoxSaveGame` does `SaveBox`/`LoadBox` with no `EmptyAllSRAMBoxes` equivalent — there is
+  no one-time wipe to defend the memorial against. `test_gen2_writes_gate.lua` proves the burial
+  survives without it. Do not "fix" this by giving Gen 2 a layout; Gen 1's banks differ.
 - Gold/Silver ship as variant profiles in `gen2_crystal.lua` (Phase 11, pret-authoritative addresses via `tools/build_pret_syms.py`); `detect_variant()` returns them
 
 ---
