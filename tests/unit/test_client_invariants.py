@@ -146,3 +146,52 @@ def test_deferred_enqueue_carries_payload_fields(path):
                         f"  {os.path.basename(path)}:{line} enqueues {cmd_name!r} without "
                         f"{field!r}; the executor reads cmd.{field} and will always see nil")
     assert not problems, "\n".join(problems)
+
+
+@pytest.mark.parametrize("path", GB_CLIENTS, ids=lambda p: os.path.basename(p))
+def test_deferred_sync_executor_is_fault_contained(path):
+    """A raise in the deferred executor does not lose one command — it wedges the client.
+
+    The executor writes real party/box/SRAM memory. Unwrapped, an error escapes
+    `on_frame`, so the `table.remove(pending_sync_cmds, 1)` at the bottom never runs,
+    the same command re-raises on the next frame, and every step after it —
+    trainer_battle_start, the `safe` event, send_tick, the F-keys, the HUD — stops
+    for the rest of the session. `on_frame_safe`'s pcall keeps the process alive,
+    which is precisely what makes it silent: the client stays connected and goes
+    quiet. Gen 1 shipped this way; Gen 2 did not.
+    """
+    src = _strip_comments(_src(path))
+    m = re.search(r"if\s+writes_enabled\s+and[^\n]*#pending_sync_cmds\s*>\s*0\s*then(.*?)"
+                  r"if\s+handled\s+then\s+table\.remove", src, flags=re.S)
+    assert m, f"{os.path.basename(path)}: could not find the deferred executor block"
+    assert "pcall(" in m.group(1), (
+        f"{os.path.basename(path)} runs the deferred sync executor without pcall — one "
+        f"raise wedges the command queue and silences the client for the session")
+
+
+@pytest.mark.parametrize("path", GB_CLIENTS, ids=lambda p: os.path.basename(p))
+def test_command_dispatcher_is_fault_contained(path):
+    """One malformed command must not abort the rest of the batch, or the frame.
+
+    `replace_rival_team` runs hexToBytes over a server-supplied string before writing
+    it into wEnemyMons, so the payload is not trusted input.
+    """
+    src = _strip_comments(_src(path))
+    m = re.search(r"local function dispatch_commands\(cmds\)(.*?)\nend\n", src, flags=re.S)
+    assert m, f"{os.path.basename(path)}: could not find dispatch_commands"
+    assert "pcall(" in m.group(1), (
+        f"{os.path.basename(path)} dispatches server commands without pcall")
+
+
+def test_gen1_nacks_a_failed_sync_command_before_dropping_it():
+    """Silence is worse than failure: a dropped command the server still believes is
+    in flight desyncs the pair permanently. Gen 2 only logs-and-drops here."""
+    src = _strip_comments(_src(
+        [p for p in GB_CLIENTS if "gen1" in os.path.basename(p)][0]))
+    m = re.search(r"if not exec_ok then(.*?)\n        end", src, flags=re.S)
+    assert m, "gen1 client: no failure branch after the executor pcall"
+    body = m.group(1)
+    for evt in ("sync_retrieve_failed", "memorialize_failed"):
+        assert evt in body, (
+            f"the executor's error path does not emit {evt}; the server would keep the "
+            f"command in flight forever")

@@ -250,6 +250,13 @@ local sync_written_keys = {}  -- keys recently written to avoid re-triggering ev
 
 local function dispatch_commands(cmds)
     for _, c in ipairs(cmds) do
+        -- ONE MALFORMED COMMAND MUST NOT TAKE OUT THE BATCH. Gen 1 has more raise
+        -- surface here than Gen 2 (gen2_crystal_client.lua:255 wraps the same loop):
+        -- it also handles force_explode and replace_rival_team, and the latter runs
+        -- M.hexToBytes over a server-supplied string before writing it into
+        -- wEnemyMons. Unwrapped, a bad payload aborted the remaining commands in the
+        -- batch AND the rest of the frame.
+        local cmd_ok, cmd_err = pcall(function()
         if c.cmd == "force_faint" and c.key then
             -- Seed the nickname cache from the server, which attaches it precisely so the
             -- toast can name a mon we have never held. Without this nick_label falls back
@@ -430,6 +437,11 @@ local function dispatch_commands(cmds)
             console.log("[SLink-RBY]   ↳ rebuild_done")
         elseif c.cmd ~= "noop" then
             console.log("[SLink-RBY]   ↳ cmd: " .. tostring(c.cmd))
+        end
+        end)
+        if not cmd_ok then
+            console.log("[SLink-RBY]   ↳ cmd ERROR (" .. tostring(c.cmd) .. "): "
+                        .. tostring(cmd_err))
         end
     end
 end
@@ -1302,6 +1314,22 @@ local function on_frame()
             end
             return false
         end
+        -- FAULT CONTAINMENT. Everything below writes real party/box/SRAM memory, and a
+        -- raise here does not merely lose one command: it escapes on_frame, so the
+        -- `table.remove` at the bottom never runs, the same command re-raises on the very
+        -- next frame, and every step after this one — trainer_battle_start, the `safe`
+        -- event, send_tick, the F-keys, the HUD — stops for the rest of the session.
+        -- on_frame_safe's pcall keeps the process alive, which is exactly what makes the
+        -- failure silent: the client stays connected and simply goes quiet.
+        --
+        -- Gen 2 already wraps the identical block (gen2_crystal_client.lua:1270) but only
+        -- logs and drops. We NACK first, because a dropped command the server still
+        -- believes is in flight desyncs the pair permanently — the hazard this file's own
+        -- comment names a few lines above.
+        --
+        -- The body is left at its original indentation on purpose: re-indenting ~185 lines
+        -- would bury the actual change in an unreviewable diff.
+        local exec_ok, exec_err = pcall(function()
         if cmd.cmd == "box_mon" then
             local count = M.getPartyCount()
             local found_slot = nil
@@ -1486,6 +1514,24 @@ local function on_frame()
                          "memorialize_failed:" .. cmd.key:sub(1, 8), true)
                 end
             end
+        end
+        end)
+        if not exec_ok then
+            local why = tostring(exec_err)
+            console.log("[SLink-RBY]   ↳ sync cmd ERROR (" .. tostring(cmd.cmd) .. "): " .. why)
+            hud_show("X Sync op failed", 255, 100, 100, 300)
+            -- Tell the server BEFORE dropping it. A raised error is not retryable — the
+            -- next frame would raise identically — but silence is worse than failure:
+            -- the server would keep the command in flight forever.
+            if cmd.cmd == "party_mon" then
+                send({event = "sync_retrieve_failed", key = cmd.key, reason = why},
+                     "sync_retrieve_failed:" .. cmd.key:sub(1, 8), true)
+            elseif cmd.cmd == "memorialize" then
+                send({event = "memorialize_failed", key = cmd.key, reason = why},
+                     "memorialize_failed:" .. cmd.key:sub(1, 8), true)
+            end
+            sync_written_keys[cmd.key] = true
+            handled = true
         end
         if handled then table.remove(pending_sync_cmds, 1) end
     end
