@@ -527,14 +527,9 @@ local function build_enemy_snapshot()
 
     local enemy_stages = M.readEnemyStatStages()
     local enemy_moves = M.readEnemyBattleMovesAndPP()
-    -- Phase 5: trainer class + name lookup for non-wild battles. The Lua-side
-    -- lookup avoids needing a server-adapter call (Gen 1 trainer_id alone is
-    -- ambiguous without the class context).
-    local trainer_class_id, trainer_id_within_class = 0, 0
-    if not battle_is_wild and M.TRAINER_CLASS_ADDR and M.TRAINER_ID_ADDR then
-        trainer_class_id = M.read_u8(M.TRAINER_CLASS_ADDR)
-        trainer_id_within_class = M.read_u8(M.TRAINER_ID_ADDR)
-    end
+    -- Trainer class/name is emitted by send_hello and send_tick, not from here —
+    -- this function only builds the enemy party. Two locals used to be read into
+    -- every frame of every trainer battle and then never assigned into any entry.
     if battle_is_wild then
         -- Wild: just the one active mon
         enemy[1] = {
@@ -666,8 +661,21 @@ local function send_hello()
     if cur_in_battle then
         local ep = build_enemy_snapshot()
         if #ep > 0 then evt.enemy_party = ep end
-        if not battle_is_wild and M.TRAINER_CLASS_ADDR then
-            local class_id = M.read_u8(M.TRAINER_CLASS_ADDR)
+        -- CLASS COMES FROM wCurOpponent, NOT wTrainerClass. pokered stores the
+        -- class into wTrainerClass only AFTER subtracting OPP_ID_OFFSET:
+        --     ld a, [wEnemyMonSpecies2] / sub OPP_ID_OFFSET
+        --     jp c, InitWildBattle      / ld [wTrainerClass], a
+        -- (engine/battle/core.asm:6673-6677; identical in pokeyellow
+        -- engine/battle/init_battle.asm:33-36), so that byte holds the RAW const
+        -- $00-$2F. TRAINERS.CLASS_NAMES is keyed 200-247, so every lookup missed
+        -- and resolve() returned ("","") for every trainer in the game — no
+        -- opponent name or class ever reached the server.
+        -- wCurOpponent keeps the +200 form (home/trainers.asm:233-237 stores
+        -- wEngagedTrainerClass and compares it against OPP_ID_OFFSET to decide
+        -- trainer-vs-wild), which is why rival_trainer_ids() already worked.
+        -- wTrainerNo stays as-is: it is the 1-based index WITHIN the class.
+        if not battle_is_wild and M.CUR_OPPONENT_ADDR then
+            local class_id = M.read_u8(M.CUR_OPPONENT_ADDR)
             local trainer_id = M.read_u8(M.TRAINER_ID_ADDR)
             evt.trainer_class_id = class_id
             evt.trainer_id = trainer_id
@@ -714,8 +722,21 @@ local function send_tick()
         -- Phase 5: emit trainer info for non-wild battles. Server populates
         -- battle_state.opponent_class / opponent_name from these fields (server
         -- fallback path widened in phase 5).
-        if not battle_is_wild and M.TRAINER_CLASS_ADDR then
-            local class_id = M.read_u8(M.TRAINER_CLASS_ADDR)
+        -- CLASS COMES FROM wCurOpponent, NOT wTrainerClass. pokered stores the
+        -- class into wTrainerClass only AFTER subtracting OPP_ID_OFFSET:
+        --     ld a, [wEnemyMonSpecies2] / sub OPP_ID_OFFSET
+        --     jp c, InitWildBattle      / ld [wTrainerClass], a
+        -- (engine/battle/core.asm:6673-6677; identical in pokeyellow
+        -- engine/battle/init_battle.asm:33-36), so that byte holds the RAW const
+        -- $00-$2F. TRAINERS.CLASS_NAMES is keyed 200-247, so every lookup missed
+        -- and resolve() returned ("","") for every trainer in the game — no
+        -- opponent name or class ever reached the server.
+        -- wCurOpponent keeps the +200 form (home/trainers.asm:233-237 stores
+        -- wEngagedTrainerClass and compares it against OPP_ID_OFFSET to decide
+        -- trainer-vs-wild), which is why rival_trainer_ids() already worked.
+        -- wTrainerNo stays as-is: it is the 1-based index WITHIN the class.
+        if not battle_is_wild and M.CUR_OPPONENT_ADDR then
+            local class_id = M.read_u8(M.CUR_OPPONENT_ADDR)
             local trainer_id = M.read_u8(M.TRAINER_ID_ADDR)
             evt.trainer_class_id = class_id
             evt.trainer_id = trainer_id
@@ -755,7 +776,20 @@ local function on_new_mon(mon, slot, is_gift)
     if nickname ~= "" then nick_cache[mon.key] = nickname end
 
     local area = last_area_id
-    if is_gift and area == "" then area = "gift" end
+    if is_gift and area == "" then
+        -- PER-MAP, NOT A SHARED CONSTANT. This used to fall back to the literal
+        -- "gift", so every scripted grant on a map that area_map.json did not
+        -- cover landed in ONE area and paired with unrelated events — the
+        -- Magikarp salesman and the Celadon Eevee formed a link with each other.
+        -- Both of those maps are mapped now, but the fallback itself was the bug:
+        -- any future unmapped grant map would collapse the same way. Keying on the
+        -- map id keeps distinct events distinct without needing a table entry,
+        -- while two grants on the SAME map (the Dojo pair, the fossils) still
+        -- share an id, which is correct — those are one logical event where each
+        -- player picks one.
+        local mid = M.getCurrentMap and M.getCurrentMap()
+        area = mid and string.format("gift_map_%d", mid) or "gift"
+    end
 
     local evt = {
         event = "capture",

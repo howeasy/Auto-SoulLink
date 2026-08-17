@@ -25,7 +25,12 @@ def test_game_id(adapter):
     "saffron_city",
     "silph_co",
     "cinnabar_island",
-    "route_4",
+    # route_4 was here and was WRONG — it is a real wild-grass route, and listing it
+    # as a gift area disabled the dead zone, all three clauses and the Pokéball gate
+    # on it. The Magikarp salesman is on MT_MOON_POKECENTER (map 68). See
+    # tests/unit/test_gen1_gift_areas.py.
+    "mt_moon_pokecenter",
+    "celadon_mansion_roof",
     "celadon_game_corner",
     "gift",
 ])

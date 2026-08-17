@@ -84,6 +84,9 @@ _RED_MAP: dict[str, str | None] = {
     "PLAYER_MON_NUMBER_ADDR": "wPlayerMonNumber",
     "BATTLE_MON_MOVES_ADDR": "wBattleMonMoves",
     "BATTLE_MON_PP_ADDR": "wBattleMonPP",
+    # What MainInBattleLoop actually reads for the faint check. force_faint writes
+    # this as well as the party struct — see M.forceFaint in lua/memory_gb.lua.
+    "BATTLE_MON_HP_ADDR": "wBattleMonHP",
     "JOY_IGNORE_ADDR": "wJoyIgnore",
     "FONT_LOADED_ADDR": "wFontLoaded",
     "CURRENT_BOX_NUM_ADDR": "wCurrentBoxNum",

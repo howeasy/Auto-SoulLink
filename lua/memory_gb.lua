@@ -180,6 +180,9 @@ function M.initProfile(game_module, variant)
     M.PLAYER_MON_NUMBER_ADDR = prof.PLAYER_MON_NUMBER_ADDR
     M.BATTLE_MON_MOVES_ADDR = prof.BATTLE_MON_MOVES_ADDR
     M.BATTLE_MON_PP_ADDR    = prof.BATTLE_MON_PP_ADDR
+    -- Gen 1 only so far. `false` (the AP disposition) collapses to nil here so
+    -- every consumer's `if M.BATTLE_MON_HP_ADDR then` guard behaves identically.
+    M.BATTLE_MON_HP_ADDR    = prof.BATTLE_MON_HP_ADDR or nil
     M.MAP_ID_ADDR         = prof.MAP_ID_ADDR
     M.PLAYER_NAME_ADDR    = prof.PLAYER_NAME_ADDR
     M.PLAYER_ID_ADDR      = prof.PLAYER_ID_ADDR
@@ -682,13 +685,25 @@ function M.forceExplode(slot)
     end
     if not M.isInBattle() then return false, "not in battle" end
     local mv = M.MOVE_EXPLOSION
-    M.write_u8(M.BATTLE_MON_MOVES_ADDR, mv)
-    if M.BATTLE_MON_PP_ADDR then M.write_u8(M.BATTLE_MON_PP_ADDR, 5) end
-    -- Mirror into the party struct so a switch-out/in does not restore the old move.
+    -- ALL FOUR SLOTS, not just the first. wPlayerSelectedMove is set here, but the
+    -- engine RE-DERIVES it from the move the player confirms:
+    --     add hl, bc            ; hl = wBattleMonMoves + wCurrentMenuItem
+    --     ld a, [hl] / ld [wPlayerSelectedMove], a
+    -- (engine/battle/core.asm:2664-2668). Writing only slot 0 therefore left every
+    -- other slot holding its real move, so the player escaped the coercion simply by
+    -- picking the second, third or fourth one. Filling all four means any choice
+    -- explodes. The mon is being deliberately killed, so losing its moveset is moot.
+    for i = 0, 3 do
+        M.write_u8(M.BATTLE_MON_MOVES_ADDR + i, mv)
+        if M.BATTLE_MON_PP_ADDR then M.write_u8(M.BATTLE_MON_PP_ADDR + i, 5) end
+    end
+    -- Mirror into the party struct so a switch-out/in does not restore the old moves.
     if slot and M.PARTY_BASE_ADDR and M.MOVES_OFFSET then
         local base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
-        M.write_u8(base + M.MOVES_OFFSET, mv)
-        if M.PP_OFFSET then M.write_u8(base + M.PP_OFFSET, 5) end
+        for i = 0, 3 do
+            M.write_u8(base + M.MOVES_OFFSET + i, mv)
+            if M.PP_OFFSET then M.write_u8(base + M.PP_OFFSET + i, 5) end
+        end
     end
     if M.PLAYER_MOVE_LIST_INDEX_ADDR then M.write_u8(M.PLAYER_MOVE_LIST_INDEX_ADDR, 0) end
     M.write_u8(M.PLAYER_SELECTED_MOVE_ADDR, mv)
@@ -847,9 +862,39 @@ end
 
 -- ═══ HP Writing (Force Faint) ═══
 
+--- Kill a party mon. Writes the party struct AND, when that mon is the one
+--- currently out, the battle struct.
+---
+--- THE PARTY STRUCT ALONE DOES NOTHING TO THE ACTIVE BATTLER. pokered's
+--- MainInBattleLoop opens every single turn with
+---
+---     call ReadPlayerMonCurHPAndStatus     ; engine/battle/core.asm:280
+---     ld hl, wBattleMonHP
+---     ld a, [hli] / or [hl] / jp z, HandlePlayerMonFainted
+---
+--- and ReadPlayerMonCurHPAndStatus (`:1798-1809`) copies wBattleMonHP *into* the
+--- party struct — its own comment says "so it stays after battle or switching".
+--- So the direction of travel is battle -> party, and a party-only write is
+--- overwritten at the top of the next turn without ever being read. Faint
+--- propagation simply did not apply to the mon that was out: the partner died,
+--- the toast fired, and the linked mon fought on at full HP.
+---
+--- Writing wBattleMonHP is what the engine actually consumes; the party write
+--- stays so a benched mon (and the post-battle copy-back) is still correct.
+--- Returns true when the battle struct was also written, for callers that want
+--- to assert the in-battle path really ran.
 function M.forceFaint(slot)
     local base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
     M.write_u16_be(base + M.HP_OFFSET, 0)
+
+    -- Only the active battler has a battle struct, and only in battle. Gen 2
+    -- leaves BATTLE_MON_HP_ADDR unset, so this is a no-op there.
+    if not M.BATTLE_MON_HP_ADDR then return false end
+    if not (M.isInBattle and M.isInBattle()) then return false end
+    local active = M.getActivePartySlot and M.getActivePartySlot()
+    if active ~= slot then return false end
+    M.write_u16_be(M.BATTLE_MON_HP_ADDR, 0)
+    return true
 end
 
 -- ═══ ROM Validation ═══
@@ -1108,6 +1153,20 @@ function M.retrieveBoxMon(key, stats)
     -- client restart, unlike anything held in Lua. The in-process table is only a fallback
     -- for a deposit+withdraw inside one session before the server has echoed anything back.
     local cached = stats or (M._party_tail_cache and M._party_tail_cache[key])
+    -- CONTENT, NOT TRUTHINESS. server.py queues `"stats": s.mon_stats.get(key, {})`
+    -- unconditionally, and `{}` is a TRUTHY table in Lua — so an empty block sailed
+    -- past this guard, applyPartyStats matched none of its `if stats.X` branches and
+    -- wrote nothing, the memzero above stood, and the refusal branch below (whose own
+    -- comment says "silent, permanent save corruption") was skipped entirely. The mon
+    -- came back with maxHP 0 and every stat 0, then vanished from the party snapshot
+    -- (filtered on maxHP > 0) while still occupying a slot.
+    -- maxHP and level are the two the caller cannot reconstruct from the 33-byte box
+    -- struct, so their presence is what makes a block usable at all.
+    local reject_reason = nil
+    if cached and not (cached.maxHP and cached.level) then
+        reject_reason = "unusable stats block (no maxHP/level) for "
+        cached = nil
+    end
     if cached then
         M.applyPartyStats(pcount, cached)
         if not box_has_hp then
@@ -1135,7 +1194,12 @@ function M.retrieveBoxMon(key, stats)
         --
         -- This path had NEVER executed on a cartridge, which is why it survived this long.
         memzero(party_dst, M.PARTY_STRUCT_SIZE)   -- leave no half-written mon behind
-        return false, "no cached stats for " .. tostring(key)
+        -- Name WHICH failure it was: "absent" is a cold client that never saw the
+        -- deposit and may recover on the next stats_cache; "unusable" means the server
+        -- sent a block it could not fill. The caller turns this into
+        -- sync_retrieve_failed, and a run log that cannot tell the two apart sends
+        -- whoever debugs it to the wrong side of the wire.
+        return false, (reject_reason or "no cached stats for ") .. tostring(key)
             .. " — refusing to withdraw a mon with zeroed stats"
     end
 

@@ -168,6 +168,14 @@ M.PROFILES = {
         PLAYER_MON_NUMBER_ADDR  = 0xCC2F,
         BATTLE_MON_MOVES_ADDR   = 0xD01C,
         BATTLE_MON_PP_ADDR      = 0xD02D,
+        -- wBattleMonHP. THE PARTY STRUCT IS NOT THE SOURCE OF TRUTH IN BATTLE.
+        -- MainInBattleLoop opens every turn with `call ReadPlayerMonCurHPAndStatus`,
+        -- which copies wBattleMonHP *into* the party struct ("so it stays after battle
+        -- or switching"), and the faint check on the next line reads wBattleMonHP —
+        -- engine/battle/core.asm:280-284 and :1798-1809. So a force_faint that writes
+        -- only the party struct is overwritten at the top of the next turn and never
+        -- observed: the partner's linked mon kept fighting at full HP.
+        BATTLE_MON_HP_ADDR      = 0xD015,
         -- Sound-effect dispatch. DISABLED pending live validation.
         -- 0xD35B is wMapMusicSoundID (pret/pokered) — the STORED MAP MUSIC ID, not a
         -- sound hook. Writing SFX ids there corrupted the map's background music on
@@ -296,6 +304,7 @@ M.PROFILES = {
         PLAYER_MON_NUMBER_ADDR  = 0xCC2F,   -- not shifted in Yellow
         BATTLE_MON_MOVES_ADDR   = 0xD01B,
         BATTLE_MON_PP_ADDR      = 0xD02C,
+        BATTLE_MON_HP_ADDR      = 0xD014,   -- wBattleMonHP; see the red block
         -- SFX dispatch DISABLED — see the red block. 0xD35A is Yellow's
         -- wMapMusicSoundID, not a sound hook. Note wNewSoundID is 0xC0EE in BOTH games:
         -- the -1 shift applies to the 0xD3xx block, not to audio WRAM at 0xC000.
@@ -395,6 +404,22 @@ M.PROFILES.blue = M.PROFILES.red
 -- red_ap is declared INSIDE M.PROFILES above so tools/verify_profile_addresses.py can see
 -- it — that parser only walks literal blocks within M.PROFILES. Inheritance of the ~19
 -- unchanged fields is attached here, after the table exists.
+-- INHERITANCE IS A HAZARD, NOT JUST A CONVENIENCE. Every address added to `red`
+-- from now on is silently inherited by red_ap/blue_ap, where the Alchav fork has
+-- relocated 861 of the 2171 shared symbols — so a field that is merely *new* is
+-- also, for AP, *wrong*, with no error anywhere. AP is deferred, so the safe
+-- disposition is to disown the fields rather than guess their AP addresses:
+-- `false` is a real value, so `__index` never reaches `red`, and every consumer
+-- already guards on the field being falsy.
+local AP_UNVERIFIED = {
+    -- Added for the in-battle force_faint fix. wBattleMonHP sits in the 0xD0xx
+    -- block, which the AP fork moves; do not inherit Red's 0xD015.
+    "BATTLE_MON_HP_ADDR",
+}
+for _, field in ipairs(AP_UNVERIFIED) do
+    M.PROFILES.red_ap[field] = false
+end
+
 setmetatable(M.PROFILES.red_ap, {__index = M.PROFILES.red})
 -- Blue's AP build shares Red's layout, exactly as vanilla Blue shares vanilla Red's.
 M.PROFILES.blue_ap = setmetatable({variant_label = "Blue (AP)"},

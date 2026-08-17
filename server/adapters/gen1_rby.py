@@ -11,13 +11,26 @@ import os
 import re
 
 from server.data.items.gen1 import ITEM_NAMES as _ITEM_NAMES
-from server.pokemon_data import base_form, species_name as _species_name
+from server.pokemon_data import species_name as _species_name
 
 from .base import GameAdapter, load_area_names_from_obj_map
 
 log = logging.getLogger(__name__)
 
-# Gift/static encounter area_ids
+# Areas where a Pokémon is HANDED to you by a script rather than caught.
+#
+# `route_4` used to be in here, and it was the single worst defect in the Gen 1
+# sweep: Route 4 is a real wild-grass route, so listing it as a gift area made
+# `_handle_area_enter` return early (it could never dead-zone), made
+# `_check_link_violation` be skipped entirely (all three clauses off), and stopped
+# the Pokéball gate ever arming. Route 4 was an unlimited free-catch zone.
+#
+# The Magikarp salesman is not on Route 4 at all — pret puts him on
+# MT_MOON_POKECENTER, map 68 (`scripts/MtMoonPokecenter.asm:47`, `lb bc, MAGIKARP, 5`),
+# which was simply missing from area_map.json. Every grant on an unmapped map fell
+# through to the literal area "gift", so the Magikarp and the Celadon Eevee
+# (CELADON_MANSION_ROOF_HOUSE, map 132) shared one bucket and PAIRED WITH EACH
+# OTHER. Both maps are now in area_map.json with their own ids.
 _GIFT_AREAS = frozenset({
     "pallet_town",
     "oaks_lab",
@@ -25,15 +38,26 @@ _GIFT_AREAS = frozenset({
     "saffron_city",
     "silph_co",
     "cinnabar_island",
-    "route_4",
+    "mt_moon_pokecenter",     # Magikarp salesman
+    "celadon_mansion_roof",   # Eevee
     "celadon_game_corner",
     "gift",
 })
 
-# Gift areas with a forced, identical species (no player choice).
+# Gift areas where the script hands over ONE predetermined species, so both
+# players necessarily receive the same thing and the clauses have nothing to
+# compare. Player-CHOICE gifts (the Oak's Lab starters, the Cinnabar fossils, the
+# Fighting Dojo pair) are deliberately absent — there the two players can pick
+# differently and the clauses must still apply.
+#
+# NOTE the coupling: `gift_link_area` only leaves an area id alone when it is
+# already a gift area, otherwise it namespaces it to `gift_<area>` — and
+# `is_fixed_species_gift` is checked AFTER that rewrite. So every member here
+# must also be in _GIFT_AREAS or the exemption silently stops firing.
+# `test_gen1_gift_areas.py` pins that.
 _FIXED_SPECIES_GIFTS = frozenset({
-    "route_4",   # Magikarp from salesman
-    "silph_co",  # Lapras on 7F
+    "mt_moon_pokecenter",  # Magikarp from the salesman, always level 5
+    "silph_co",            # Lapras on 7F
 })
 
 # Gen 1 type IDs → names
@@ -61,6 +85,31 @@ if os.path.exists(_moves_path):
             _GEN1_MOVES[int(_entry["id"])] = _entry
 else:
     log.warning("Gen 1 moves.json not found: %s", _moves_path)
+
+# ── Load the Gen 1 evolution families ──────────────────────────────────
+# NatDex → family representative (the lowest NatDex in the line), generated from
+# pret/pokered by tools/gen_gen1_evos.py.
+#
+# This exists because the shared `pokemon_data.base_form()` is the CFRU/Gen 3+
+# table: it maps BOTH Hitmonlee (106) and Hitmonchan (107) to 236 (Tyrogue), a
+# species Gen 1 has no concept of — `evos_moves.asm:683,694` give both an empty
+# evolution list. The Fighting Dojo lets you take exactly one, so the canonical
+# Soul Link split was rejected by the species clause and a live mon was
+# force-fainted and buried.
+#
+# Clamping base_form() to 1..151 would NOT have been a fix: 236:[106,107] is the
+# only merge of unrelated species, while 172:[25,26], 173:[35,36] and
+# 174:[39,40] are real families remapped to a Gen 2 baby form — clamping splits
+# Pikachu/Raichu, Clefairy/Clefable and Jigglypuff/Wigglytuff.
+_GEN1_FAMILY: dict[int, int] = {}
+_evos_path = os.path.join(_GEN1_DATA_DIR, "evolutions.json")
+if os.path.exists(_evos_path):
+    with open(_evos_path) as _f:
+        for _k, _v in json.load(_f).get("family", {}).items():
+            _GEN1_FAMILY[int(_k)] = int(_v)
+else:
+    log.warning("Gen 1 evolutions.json not found: %s — evo_family will be identity "
+                "and the species clause will only reject exact duplicates", _evos_path)
 
 # ── Load Gen 1 wild encounter tables (Phase 6) ─────────────────────────
 _GEN1_ENCOUNTERS: dict[str, dict[str, list[dict]]] = {}
@@ -320,7 +369,13 @@ class Gen1Adapter(GameAdapter):
         return area_id in _FIXED_SPECIES_GIFTS
 
     def evo_family(self, species_id: int) -> int:
-        return base_form(species_id, False)
+        """Gen 1's own evolution families — see _GEN1_FAMILY above.
+
+        Falls back to the species itself, never to `base_form()`: an unknown
+        species should be its own family (rejecting only exact duplicates)
+        rather than inheriting a modern-generation grouping Gen 1 does not have.
+        """
+        return _GEN1_FAMILY.get(species_id, species_id)
 
     def gender_from_key(self, key: str, species_id: int) -> str:
         # Gen 1 has no gender mechanic
