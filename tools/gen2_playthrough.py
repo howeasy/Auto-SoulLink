@@ -67,7 +67,8 @@ TARGETS = ("town",)
 # A Crystal .SaveRAM is 32790 bytes, not 32768: BizHawk appends the cartridge's 22-byte RTC
 # block after the four 8KB SRAM banks. Bank-flat offsets below are unaffected, and freezing
 # the clock inside the fixture is a bonus — the saved time of day travels with the save.
-_RTC_TAIL = 22
+# (Recorded as a comment rather than a constant: nothing needs to slice the tail off, and a
+# named constant nobody reads is a fact that can rot without anything noticing.)
 
 # sPokemonData's first byte is sPartyCount (ram/sram.asm). The save block lives in SRAM
 # bank 1, so flat CartRAM = 0x2000 + (sym - 0xA000).

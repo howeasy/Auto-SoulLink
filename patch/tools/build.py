@@ -112,7 +112,8 @@ def run(cmd):
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:
         print(" ".join(cmd))
-        print(r.stdout); print(r.stderr)
+        print(r.stdout)
+        print(r.stderr)
         sys.exit("command failed")
     return r.stdout
 
@@ -157,7 +158,7 @@ def main():
     binf = os.path.join(BUILD, "handlers.bin")
     print("[1/7] compile")
     run([GCC, *CFLAGS, "-c", os.path.join(SRC, "handlers.c"), "-o", obj])
-    print("[2/7] link @ %#x" % CODE_BASE)
+    print(f"[2/7] link @ {CODE_BASE:#x}")
     run([LD, "-T", os.path.join(SRC, "slink.ld"), "-e", "slink_hook",
          "--no-warn-rwx-segments", obj, "-o", elf])
     print("[3/7] verify slink_hook address")
@@ -182,7 +183,8 @@ def main():
         print(f"      {s} @ {sym[s]:#010x}")
     print("[4/7] objcopy -> bin")
     run([OBJCOPY, "-O", "binary", elf, binf])
-    blob = open(binf, "rb").read()
+    with open(binf, "rb") as f:
+        blob = f.read()
     print(f"      handlers.bin = {len(blob)} bytes")
     MAX_CODE_SIZE = 0x14000  # slink.ld MEMORY rom LENGTH — keep the two in sync
     if len(blob) > MAX_CODE_SIZE:
@@ -193,14 +195,16 @@ def main():
     if not args.no_verify_md5 and src_md5 != RR_MD5:
         sys.exit(f"RR md5 mismatch (expected {RR_MD5}, got {src_md5})")
     out_rom = os.path.join(BUILD, "slink_RR.gba")
-    clean = open(args.rom, "rb").read()  # the user's apply target (base RR), kept un-calc'd
+    with open(args.rom, "rb") as f:
+        clean = f.read()  # the user's apply target (base RR), kept un-calc'd
     if args.no_battle_calc:
         data = bytearray(clean)
         print("      Battle Calc SKIPPED (--no-battle-calc) -> base RR + SLink only")
     else:
         # Fold the RR4.1_Custom Battle Calc onto base RR first. ups_apply CRC-gates
         # source == base RR and target == RR4.1_Custom, so a wrong base ROM fails loudly.
-        battle_calc = open(BATTLE_CALC_UPS, "rb").read()
+        with open(BATTLE_CALC_UPS, "rb") as f:
+            battle_calc = f.read()
         data = bytearray(make_ups.ups_apply(clean, battle_calc))
         print(f"      applied Battle Calc {os.path.relpath(BATTLE_CALC_UPS, PATCH)} "
               f"({len(battle_calc)} B) -> RR4.1_Custom")
@@ -262,10 +266,12 @@ def main():
     patched = bytes(data)
     ups = make_ups.ups_create(clean, patched)
     assert hashlib.md5(make_ups.ups_apply(clean, ups)).hexdigest() == hashlib.md5(patched).hexdigest()
-    open(os.path.join(DIST, "SLink-RR.ups"), "wb").write(ups)
+    with open(os.path.join(DIST, "SLink-RR.ups"), "wb") as f:
+        f.write(ups)
     print(f"      SLink-RR.ups ({len(ups)} B) round-trip OK")
     if args.check:
-        want = open(committed_ups, "rb").read()
+        with open(committed_ups, "rb") as f:
+            want = f.read()
         shutil.rmtree(tmp, ignore_errors=True)
         if ups != want:
             sys.exit(f"CHECK FAIL: rebuilt UPS ({len(ups)} B, md5 "
@@ -279,7 +285,8 @@ def main():
     try:
         ips = make_ups.ips_create(clean, patched)
         assert hashlib.md5(make_ups.ips_apply(clean, ips)).hexdigest() == hashlib.md5(patched).hexdigest()
-        open(ips_path, "wb").write(ips)
+        with open(ips_path, "wb") as f:
+            f.write(ips)
         print(f"      SLink-RR.ips ({len(ips)} B) round-trip OK")
     except ValueError as e:
         # The bundled RR4.1_Custom Battle Calc code lives above 16 MB, which IPS's 24-bit

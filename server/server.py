@@ -17,6 +17,7 @@ Run:
 
 import argparse
 import asyncio
+import contextlib
 import html
 import json
 import logging
@@ -52,7 +53,6 @@ except ImportError:
 
 try:
     from .obs_controller import (
-        ALL_TRIGGER_EVENTS,
         AREA_GROUPS,
         OBSController,
         classify_area,
@@ -113,7 +113,7 @@ def _configure_logging(data_dir: str | None, verbose: bool) -> None:
 
 
 
-from server.html_render import (
+from server.html_render import (  # noqa: E402
     move_table_html as _move_table_html,
     stat_stages_html as _stat_stages_html,
     status_icon_html as _status_icon_html,
@@ -1803,7 +1803,7 @@ class SLinkServer:
                     continue
                 nm = (g[0][1].get("name") or "").title() or "?"
                 by_name.setdefault(nm, []).append(g)
-            for nm, buckets in by_name.items():
+            for _nm, buckets in by_name.items():
                 if len(buckets) < 2:
                     continue
                 ordered = sorted(buckets, key=_bucket_cap)
@@ -1919,9 +1919,10 @@ class SLinkServer:
                     else:
                         lv_text = "Lv?"
                     meta_bits = []
-                    if ability: meta_bits.append(f'<span class="tr-ability">{ability}</span>')
-                    if item:    meta_bits.append(f'<span class="tr-item">@ {item}</span>')
-                    if nature:  meta_bits.append(f'<span class="tr-nature dim">{nature}</span>')
+                    # Column-aligned table of optional meta chips — kept on one line each.
+                    if ability: meta_bits.append(f'<span class="tr-ability">{ability}</span>')   # noqa: E701
+                    if item:    meta_bits.append(f'<span class="tr-item">@ {item}</span>')       # noqa: E701
+                    if nature:  meta_bits.append(f'<span class="tr-nature dim">{nature}</span>') # noqa: E701
                     meta_html = (' · '.join(meta_bits)) if meta_bits else ''
                     # Built outside the f-string: a backslash inside an f-string expression
                     # is Python 3.12+ syntax and would not parse on 3.11.
@@ -2096,14 +2097,11 @@ class SLinkServer:
             return
         for q in self._sse_clients:
             # Drain any unconsumed item, then put the new sentinel.
-            try:
+            with contextlib.suppress(asyncio.QueueEmpty):
                 q.get_nowait()
-            except asyncio.QueueEmpty:
-                pass
-            try:
+            # QueueFull should not happen after the drain, but be safe.
+            with contextlib.suppress(asyncio.QueueFull):
                 q.put_nowait(True)
-            except asyncio.QueueFull:
-                pass  # should not happen after drain, but be safe
 
     async def _sse_heartbeat_loop(self):
         """Send SSE keepalive comments every 15 seconds to detect dead clients."""
@@ -4769,8 +4767,8 @@ class SLinkServer:
         # Phase resolution — read run lifecycle signals from the state machine.
         s = self.state
         po = s.pokeballs_obtained or {}
-        alive = sum(1 for l in s.links if (l.status.value if hasattr(l.status, "value") else l.status) == "alive")
-        dead  = sum(1 for l in s.links if (l.status.value if hasattr(l.status, "value") else l.status) in ("dead", "memorial"))
+        alive = sum(1 for lk in s.links if (lk.status.value if hasattr(lk.status, "value") else lk.status) == "alive")
+        dead  = sum(1 for lk in s.links if (lk.status.value if hasattr(lk.status, "value") else lk.status) in ("dead", "memorial"))
         if getattr(s, "run_over", False):
             phase_slug, phase_label = "game_over", "Game over"
         elif not (po.get("a") and po.get("b")):
@@ -5626,10 +5624,7 @@ class SLinkServer:
         trainer_name = p.get("trainer_name") or f"Player {player_id.upper()}"
         badges = []
         for i, pair in enumerate(slugs):
-            if i < 8:
-                earned = bool((primary >> i) & 1)
-            else:
-                earned = bool((kanto >> (i - 8)) & 1)
+            earned = bool((primary >> i) & 1) if i < 8 else bool((kanto >> (i - 8)) & 1)
             badges.append({
                 "slug": pair[0] if isinstance(pair, (list, tuple)) else str(pair),
                 "name": pair[1] if isinstance(pair, (list, tuple)) and len(pair) > 1 else "",
@@ -5644,9 +5639,9 @@ class SLinkServer:
     def _build_encounters_overlay_context(self) -> dict:
         d = self._build_status_dict()
         links = d.get("links", []) or []
-        linked = sum(1 for l in links if l.get("status") == "alive")
-        dead   = sum(1 for l in links if l.get("status") != "alive")
-        shinies = sum(1 for l in links if l.get("a_shiny") or l.get("b_shiny"))
+        linked = sum(1 for lk in links if lk.get("status") == "alive")
+        dead   = sum(1 for lk in links if lk.get("status") != "alive")
+        shinies = sum(1 for lk in links if lk.get("a_shiny") or lk.get("b_shiny"))
         bonus = d.get("bonus_keys", {}) or {}
         shinies += len(bonus.get("a", []) or []) + len(bonus.get("b", []) or [])
         last = links[-1] if links else None
@@ -5763,9 +5758,9 @@ class SLinkServer:
         state = d.get("area_states", {}).get(focus, "unseen")
         # Find a link for this area
         linked_entry = None
-        for l in d.get("links", []) or []:
-            if l.get("area_id") == focus:
-                linked_entry = l
+        for lk in d.get("links", []) or []:
+            if lk.get("area_id") == focus:
+                linked_entry = lk
                 break
         pending = d.get("pending_captures", {}).get(focus, {}) or {}
 
@@ -7131,7 +7126,7 @@ class SLinkServer:
             if not os.path.exists(_map_path):
                 _map_path = os.path.join(_base_dir, "data", "games", "gen3_frlge", "area_map.json")
             with open(_map_path) as _mf:
-                _all_area_ids = sorted(set(v for v in json.load(_mf).values() if v))
+                _all_area_ids = sorted({v for v in json.load(_mf).values() if v})
         except Exception:
             _all_area_ids = []
         all_area_set = set(_all_area_ids)
@@ -7564,7 +7559,8 @@ class SLinkServer:
             shutil.copy2(backup_events, self._events_path)
         else:
             # No events backup for this slot — clear the ring buffer so it stays in sync.
-            open(self._events_path, "w").write("[]")
+            with open(self._events_path, "w") as _ef:
+                _ef.write("[]")
         self._load_events()
         log.warning(f"⚠  Rolled back to backup slot {slot}")
         self._notify_sse()
@@ -7914,7 +7910,7 @@ class SLinkServer:
         s.area_states[area] = AreaStatus.LINKED
 
         # Clean up pending_captures for both mons
-        for pid, key, pend_area in [("a", a_key, a_pend_area), ("b", b_key, b_pend_area)]:
+        for pid, _key, pend_area in [("a", a_key, a_pend_area), ("b", b_key, b_pend_area)]:
             if pend_area and pend_area in s.pending_captures:
                 s.pending_captures[pend_area].pop(pid, None)
                 if not s.pending_captures[pend_area]:

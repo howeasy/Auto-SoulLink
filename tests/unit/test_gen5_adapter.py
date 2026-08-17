@@ -387,7 +387,7 @@ def test_ability_name_species_id_does_not_inject_cfru_override(adapter):
 
 # ── Lua profile structural checks (doubleTripleFlag / BATTLE_MODE_ADDR) ──
 
-import re
+import re  # noqa: E402  (Lua-source section — imported below the adapter unit tests)
 
 
 def _read_gen5_bw_lua() -> str:
@@ -721,7 +721,7 @@ def test_encounter_table_bw2_only_area_via_bw1_adapter_falls_back():
 def test_encounter_table_entry_schema(adapter_bw1):
     """Each entry has required keys: name, species_id, rate, min_level, max_level."""
     enc = adapter_bw1.encounter_table("route_1")
-    for method, entries in enc.items():
+    for entries in enc.values():
         for e in entries:
             assert "name" in e
             assert "species_id" in e

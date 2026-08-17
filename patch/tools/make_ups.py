@@ -122,15 +122,14 @@ IPS_MAX = 0x1000000  # 24-bit offsets
 
 
 def ips_create(source: bytes, target: bytes) -> bytes:
-    if len(target) > IPS_MAX:
-        # changes beyond 16 MB are unrepresentable in IPS
-        if any(
-            (i >= IPS_MAX) and (i >= len(source) or source[i] != target[i])
-            for i in range(IPS_MAX, len(target))
-        ):
-            raise ValueError(
-                "IPS cannot represent changes at/after 16 MB; use UPS for this ROM"
-            )
+    # changes beyond 16 MB are unrepresentable in IPS
+    if len(target) > IPS_MAX and any(
+        (i >= IPS_MAX) and (i >= len(source) or source[i] != target[i])
+        for i in range(IPS_MAX, len(target))
+    ):
+        raise ValueError(
+            "IPS cannot represent changes at/after 16 MB; use UPS for this ROM"
+        )
     patch = bytearray(b"PATCH")
     n = max(len(source), len(target))
     i = 0
@@ -253,14 +252,20 @@ def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("create")
-    c.add_argument("original"); c.add_argument("modified"); c.add_argument("out_basename")
+    c.add_argument("original")
+    c.add_argument("modified")
+    c.add_argument("out_basename")
     c.add_argument("--ips", action="store_true")
     c.set_defaults(func=cmd_create)
     a = sub.add_parser("apply")
-    a.add_argument("original"); a.add_argument("patch"); a.add_argument("out")
+    a.add_argument("original")
+    a.add_argument("patch")
+    a.add_argument("out")
     a.set_defaults(func=cmd_apply)
     v = sub.add_parser("verify")
-    v.add_argument("original"); v.add_argument("modified"); v.add_argument("patch")
+    v.add_argument("original")
+    v.add_argument("modified")
+    v.add_argument("patch")
     v.set_defaults(func=cmd_verify)
     args = ap.parse_args()
     return args.func(args)

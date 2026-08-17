@@ -207,9 +207,15 @@ class TestPartyDetailsPassthrough:
 
     def test_stat_stages_html_not_rendered_for_inactive(self):
         stages = [8, 6, 6, 6, 6, 6, 6]
-        # is_active=False → `(False and _stat_stages_html(...) or "")` must give ""
-        result = False and _stat_stages_html(stages) or ""
+        # Mirrors server.py's `(active and _stat_stages_html(...) or "")` render idiom:
+        # an inactive mon must render nothing even when it has non-neutral stages.
+        is_active = False
+        result = is_active and _stat_stages_html(stages) or ""
         assert result == ""
+        # ...and the same idiom does render once the mon is active (guards the
+        # inactive case above from passing for the wrong reason).
+        is_active = True
+        assert "+2 ATK" in (is_active and _stat_stages_html(stages) or "")
 
 
 # ── _enrich_battle_state passthrough ─────────────────────────────────────────
@@ -238,7 +244,6 @@ class TestEnrichBattleStatePassthrough:
 
     def test_non_active_enemy_stages_none(self):
         """Non-active enemy mons should have stat_stages=None."""
-        stages = [6, 9, 6, 6, 6, 6, 6]
         result = _stat_stages_html(None)
         assert result == ""
 

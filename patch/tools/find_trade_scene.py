@@ -43,7 +43,7 @@ def main():
             bls[insn.address] = tgt
     # Find a CreateTask BL followed within 24 bytes by a BeginNormalPaletteFade BL.
     ct = sorted(a for a, t in bls.items() if t == CREATE_TASK)
-    bf = set(a for a, t in bls.items() if t == BEGIN_FADE)
+    bf = {a for a, t in bls.items() if t == BEGIN_FADE}
     hits = []
     for a in ct:
         for d in range(4, 28, 2):

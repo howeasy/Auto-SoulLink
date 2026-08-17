@@ -40,7 +40,9 @@ MEMORIAL_PATH = os.path.join(DATA_DIR, "memorial.json")
 DEATH_COMMANDS = ("force_faint", "force_explode")
 
 
-class AreaStatus(str, Enum):
+# Not StrEnum: these values are interpolated into JSON, templates and log lines,
+# where StrEnum's str()/format() differ from the (str, Enum) behaviour relied on here.
+class AreaStatus(str, Enum):  # noqa: UP042
     UNSEEN      = "unseen"
     PENDING_A   = "pending_a"    # A captured/entered; B not yet resolved
     PENDING_B   = "pending_b"    # B captured/entered; A not yet resolved
@@ -49,7 +51,7 @@ class AreaStatus(str, Enum):
     DEAD_ZONE   = "dead_zone"
 
 
-class LinkStatus(str, Enum):
+class LinkStatus(str, Enum):  # noqa: UP042  # see AreaStatus above
     ALIVE    = "alive"
     DEAD     = "dead"
     MEMORIAL = "memorial"  # Phase 4: moved to Box 13
@@ -689,8 +691,10 @@ class SoulLinkState:
                 if ns:
                     half.species = ns
         # party_keys: A drops its traded-away key + gains the mon it now holds (entry.a's key); same for B.
-        self.party_keys["a"].discard(pt["a_key"]); self.party_keys["a"].add(entry.a.key)
-        self.party_keys["b"].discard(pt["b_key"]); self.party_keys["b"].add(entry.b.key)
+        self.party_keys["a"].discard(pt["a_key"])
+        self.party_keys["a"].add(entry.a.key)
+        self.party_keys["b"].discard(pt["b_key"])
+        self.party_keys["b"].add(entry.b.key)
         self._key_index[entry.a.key] = entry
         self._key_index[entry.b.key] = entry
 
@@ -876,7 +880,6 @@ class SoulLinkState:
             existing = self.player_identity.get(player_id)
             if existing:
                 if existing["ot_id"] != incoming_ot:
-                    partner = _partner(player_id)
                     err = (f"Identity mismatch for slot {player_id.upper()}: "
                            f"expected {existing['trainer_name']} "
                            f"(OT {existing['ot_id'][:8]}), "
@@ -991,16 +994,16 @@ class SoulLinkState:
             if not key:
                 continue
             entry = self._key_index.get(key)
-            if entry and entry.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL):
-                if not any(c.get("cmd") == "memorialize" and c.get("key") == key
-                           for c in self.queued_commands[player_id]):
-                    self.queued_commands[player_id].append({"cmd": "memorialize", "key": key})
-                    self.queued_commands[player_id].append({
-                        "cmd": "hud_show",
-                        "text": "[x] Dead in party -> grave",
-                        "r": 255, "g": 80, "b": 80
-                    })
-                    log.warning(f"[{player_id}] hello: {key[:8]} is dead/memorial but in party — re-memorializing")
+            if (entry and entry.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL)
+                    and not any(c.get("cmd") == "memorialize" and c.get("key") == key
+                                for c in self.queued_commands[player_id])):
+                self.queued_commands[player_id].append({"cmd": "memorialize", "key": key})
+                self.queued_commands[player_id].append({
+                    "cmd": "hud_show",
+                    "text": "[x] Dead in party -> grave",
+                    "r": 255, "g": 80, "b": 80
+                })
+                log.warning(f"[{player_id}] hello: {key[:8]} is dead/memorial but in party — re-memorializing")
 
         # Back-fill display data (nickname/species) for any linked mons whose MonInfo
         # was loaded from links.json without this data (e.g., captured in a prior session).
@@ -1120,9 +1123,7 @@ class SoulLinkState:
         """
         if self.adapter.is_gift_area(area_id):
             return True
-        if is_egg and not self.adapter.is_daycare_area(area_id):
-            return True
-        return False
+        return bool(is_egg and not self.adapter.is_daycare_area(area_id))
 
     def _handle_capture(self, player_id: str, msg: dict):
         area_id = msg.get("area_id", "")
@@ -1383,7 +1384,6 @@ class SoulLinkState:
             )
             nickname = msg.get("nickname", "")
             label = self._label_from_msg(msg, key)
-            existing_label = existing.nickname or (self.adapter.species_name(existing.species) if existing.species else None) or existing.key[:8]
             self.party_keys[player_id].discard(key)
             self.queued_commands[player_id].append({"cmd": "force_faint", "key": key, "nickname": nickname})
             self._queue_memorialize(player_id, key)
@@ -2228,18 +2228,18 @@ class SoulLinkState:
             # Pull partner if they're server-side boxed too — restores the rule
             # break that the phantom deposit created.
             partner_mon = entry.b if player_id == "a" else entry.a
-            if partner_mon and partner_mon.key not in self.party_keys[partner]:
-                if not self._has_pending_command(partner, partner_mon.key,
-                                                  "party_mon", "box_mon", "memorialize"):
-                    cmd: dict = {"cmd": "party_mon", "key": partner_mon.key}
-                    if partner_mon.nickname:
-                        cmd["nickname"] = partner_mon.nickname
-                    cached = self.mon_stats.get(partner_mon.key)
-                    if cached:
-                        cmd["stats"] = cached
-                    self.queued_commands[partner].append(cmd)
-                    log.warning(f"[{partner}] tick reconcile: queued party_mon {partner_mon.key[:8]} "
-                                f"to restore party-sync with {player_id}")
+            if (partner_mon and partner_mon.key not in self.party_keys[partner]
+                    and not self._has_pending_command(partner, partner_mon.key,
+                                                      "party_mon", "box_mon", "memorialize")):
+                cmd: dict = {"cmd": "party_mon", "key": partner_mon.key}
+                if partner_mon.nickname:
+                    cmd["nickname"] = partner_mon.nickname
+                cached = self.mon_stats.get(partner_mon.key)
+                if cached:
+                    cmd["stats"] = cached
+                self.queued_commands[partner].append(cmd)
+                log.warning(f"[{partner}] tick reconcile: queued party_mon {partner_mon.key[:8]} "
+                            f"to restore party-sync with {player_id}")
 
         # Ghost-party: server thinks key is in party, Lua doesn't see it.  Rarer,
         # but possible if a real party_to_box's emission was suppressed somewhere.
@@ -2427,7 +2427,7 @@ class SoulLinkState:
             self._key_index[new_key] = entry
 
         # 2. Pending captures
-        for area_id, players in self.pending_captures.items():
+        for _area_id, players in self.pending_captures.items():
             cap = players.get(player_id)
             if cap and cap.key == old_key:
                 cap.key = new_key
@@ -2515,10 +2515,9 @@ class SoulLinkState:
         if self.gender_lock and a_mon.key and b_mon.key and a_mon.species and b_mon.species:
             a_gender = self.adapter.gender_from_key(a_mon.key, a_mon.species)
             b_gender = self.adapter.gender_from_key(b_mon.key, b_mon.species)
-            if a_gender in ("male", "female") and b_gender in ("male", "female"):
-                if a_gender == b_gender:
-                    symbol = "♂" if a_gender == "male" else "♀"
-                    return (f"Gender clause: both are {symbol}", "")
+            if a_gender in ("male", "female") and a_gender == b_gender:
+                symbol = "♂" if a_gender == "male" else "♀"
+                return (f"Gender clause: both are {symbol}", "")
 
         if self.type_lock and a_mon.species and b_mon.species:
             a_types = self.adapter.species_types(a_mon.species)

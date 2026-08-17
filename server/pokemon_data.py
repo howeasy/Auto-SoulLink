@@ -1014,7 +1014,7 @@ _VANILLA_ABILITY_NAMES: dict[int, str] = {
 #
 # Keys are (ability_id, natdex_base_form). Alolan/regional forms map to their
 # base form NatDex via to_national() in the lookup path.
-from server.rr_ability_overrides import CFRU_ABILITY_NAME_OVERRIDES_GENERATED
+from server.rr_ability_overrides import CFRU_ABILITY_NAME_OVERRIDES_GENERATED  # noqa: E402
 
 CFRU_ABILITY_NAME_OVERRIDES_MANUAL: dict[tuple[int, int], str] = {
     # Carried over from the pre-generator hand-curated dict. funnotbun's
@@ -1725,7 +1725,7 @@ _NATDEX_SPECIES_TYPES: dict[int, tuple[int, int]] = {
 
 # RR-specific type overrides (loaded from data/rr_types.json at import time).
 # Covers all 1328 RR species including type changes from vanilla.
-import os as _os
+import os as _os  # noqa: E402
 
 _RR_TYPES: dict[int, tuple[int, int]] = {}
 _rr_types_path = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),

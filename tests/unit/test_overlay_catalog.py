@@ -43,7 +43,7 @@ def test_entry_has_the_fields_the_launcher_renders(entry):
 
 def test_slugs_are_unique():
     slugs = [e["slug"] for e in OVERLAYS]
-    assert len(slugs) == len(set(slugs)), f"duplicate slugs: {sorted(set(s for s in slugs if slugs.count(s) > 1))}"
+    assert len(slugs) == len(set(slugs)), f"duplicate slugs: {sorted({s for s in slugs if slugs.count(s) > 1})}"
 
 
 @pytest.mark.parametrize("entry", [e for e in OVERLAYS if e["slug"] not in SYNTHETIC],

@@ -16,7 +16,7 @@ from server.state import SoulLinkState
 def _slot(slot=0, species_id=25, level=10, key="AAAA:BBBB", fill_byte=0xAB,
           maxHP=100, hp=100):
     """Build a single party snapshot entry mirroring build_party_snapshot."""
-    blob_hex = ("%02x" % fill_byte) * 100
+    blob_hex = f"{fill_byte:02x}" * 100
     return {
         "slot": slot, "species_id": species_id, "level": level, "key": key,
         "hp": hp, "maxHP": maxHP, "blob_hex": blob_hex,

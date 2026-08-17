@@ -170,9 +170,7 @@ def _is_form_variant(name: str) -> bool:
             # The TSV has BASCULEGION_M but no plain BASCULEGION
             return False
         # Other _F/_FEMALE forms
-        if suffix in ("F", "FEMALE"):
-            return True
-        return False
+        return suffix in ("F", "FEMALE")
 
     return False
 
@@ -935,7 +933,7 @@ def _fmt_dict_int_str(name: str, d: dict[int, str], comment: str,
             return
         # Join entries into lines of ~line_width
         line = "    "
-        for i, entry in enumerate(buf):
+        for entry in buf:
             if len(line) + len(entry) + 1 > line_width and line.strip():
                 lines.append(line.rstrip())
                 line = "    "

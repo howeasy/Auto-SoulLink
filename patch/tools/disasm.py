@@ -37,11 +37,9 @@ def main():
     blob = data[off:off + count * (4 if args.arm else 4)]
     print(f"{args.rom}  @ rom 0x{addr:08X} (file 0x{off:06X})  "
           f"{'ARM' if args.arm else 'THUMB'}")
-    n = 0
-    for insn in md.disasm(blob, addr):
+    for n, insn in enumerate(md.disasm(blob, addr), 1):
         raw = " ".join(f"{b:02X}" for b in insn.bytes)
         print(f"  0x{insn.address:08X}:  {raw:<12}  {insn.mnemonic}\t{insn.op_str}")
-        n += 1
         if n >= count:
             break
     return 0

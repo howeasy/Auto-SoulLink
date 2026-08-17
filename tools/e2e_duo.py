@@ -261,7 +261,9 @@ class DuoRun:
                "--data-dir", self.data_dir] + self.cfg["flags"] + self.args.server_flags
         self.server = subprocess.Popen(
             cmd, cwd=REPO,
-            stdout=open(os.path.join(self.data_dir, "server.log"), "w"),
+            # The handle is the server subprocess's stdout and must outlive this call —
+            # a `with` would close it out from under the still-running server.
+            stdout=open(os.path.join(self.data_dir, "server.log"), "w"),  # noqa: SIM115
             stderr=subprocess.STDOUT)
         wait_for("server HTTP up", lambda: self._status() is not None, 30)
         print(f"[duo] server up: tcp={self.tcp_port} http={self.http_port} data={self.data_dir}")

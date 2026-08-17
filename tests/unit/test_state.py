@@ -46,11 +46,7 @@ def noop_only(cmds: list) -> bool:
 
 
 def has_cmd(cmds: list, cmd: str, key: str | None = None) -> bool:
-    for c in cmds:
-        if c.get("cmd") == cmd:
-            if key is None or c.get("key") == key:
-                return True
-    return False
+    return any(c.get("cmd") == cmd and (key is None or c.get("key") == key) for c in cmds)
 
 
 # ── faint propagation ─────────────────────────────────────────────────────────
@@ -517,8 +513,10 @@ def test_trade_uses_the_matching_link_half(tmp_path, monkeypatch):
     state = make_state_with_link("A:1", "B:2", "route_1")               # link L1
     e2 = LinkEntry(area_id="route_2", a=MonInfo(key="A:3", level=5),
                    b=MonInfo(key="B:4", level=5), status=LinkStatus.ALIVE)
-    state.links.append(e2); state._index_entry(e2)
-    state.party_keys["a"].add("A:3"); state.party_keys["b"].add("B:4")
+    state.links.append(e2)
+    state._index_entry(e2)
+    state.party_keys["a"].add("A:3")
+    state.party_keys["b"].add("B:4")
     state.partner_blobs["a"] = [{"slot": 0, "key": "A:1", "blob": bytes([0x11] * 100)},
                                 {"slot": 1, "key": "A:3", "blob": bytes([0x33] * 100)}]
     state.partner_blobs["b"] = [{"slot": 0, "key": "B:2", "blob": bytes([0x22] * 100)},
@@ -700,6 +698,7 @@ def test_second_capture_in_pending_area_retired(tmp_path, monkeypatch):
     # First capture — goes to pending
     cmds1 = state.handle_event("a", {"event": "capture", "key": "A:1", "area_id": "route_1", "level": 5})
     assert state.pending_captures["route_1"]["a"].key == "A:1"
+    assert not has_cmd(cmds1, "force_faint", "A:1"), "First capture must not be retired"
 
     # Second capture (different mon) — must be retired
     cmds2 = state.handle_event("a", {"event": "capture", "key": "A:99", "area_id": "route_1", "level": 7})
@@ -1306,8 +1305,8 @@ def test_no_catch_retires_partner_pending_capture(tmp_path, monkeypatch):
     state.handle_event("b", {"event": "area_enter", "area_id": "route_1"})
 
     # B fails → A's capture must be retired
-    cmds_a = state.handle_event("a", {"event": "tick"})  # flush before
-    cmds_b = state.handle_event("b", {"event": "no_catch", "area_id": "route_1"})
+    state.handle_event("a", {"event": "tick"})  # flush before
+    state.handle_event("b", {"event": "no_catch", "area_id": "route_1"})
 
     # force_faint should be queued for A
     cmds_a2 = state.handle_event("a", {"event": "tick"})
@@ -1634,7 +1633,7 @@ def test_box_to_party_during_rebuild_does_not_abort(tmp_path, monkeypatch):
               a_in_party=True, b_in_party=True)
     _add_link(state, "A:box", "B:box", area="route_box",
               a_in_party=False, b_in_party=False)
-    other = _add_link(state, "A:other", "B:other", area="route_other",
+    _add_link(state, "A:other", "B:other", area="route_other",
               a_in_party=False, b_in_party=False)
 
     state.handle_event("a", {"event": "whiteout"})
@@ -1752,7 +1751,7 @@ def test_hello_reconcile_fainted_in_party(tmp_path, monkeypatch):
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = make_state_with_link()
 
-    cmds_a = state.handle_event("a", {
+    state.handle_event("a", {
         "event": "hello",
         "area_id": "route_1",
         "rom_type": "firered",
@@ -4719,7 +4718,8 @@ def test_simultaneous_deposits_both_partners_boxed(tmp_path, monkeypatch):
     # A's partner mon B:2 should be in B's queued_commands OR already handled
     # B's partner mon A:1 is already boxed by A themselves — no duplicate box_mon for A
     cmds_a = state.handle_event("a", {"event": "tick"})
-    cmds_b = state.handle_event("b", {"event": "tick"})
+    state.handle_event("b", {"event": "tick"})
+    assert not has_cmd(cmds_a, "box_mon", "A:1"), "A boxed A:1 themselves — no duplicate box_mon"
 
     # Both should be out of party_keys
     assert "A:1" not in state.party_keys["a"]
@@ -4863,7 +4863,7 @@ def test_simultaneous_faint_no_double_processing(tmp_path, monkeypatch):
     assert state.links[0].status == LinkStatus.DEAD
 
     # B:2 faint arrives → entry already DEAD → ignored
-    cmds_b = state.handle_event("b", {"event": "faint", "key": "B:2"})
+    state.handle_event("b", {"event": "faint", "key": "B:2"})
     # No duplicate force_faint for A should be queued
     cmds_a = state.handle_event("a", {"event": "tick"})
     assert not has_cmd(cmds_a, "force_faint", "A:1"), "No duplicate force_faint for already-dead mon"
@@ -5397,8 +5397,7 @@ def test_tick_reconcile_ghost_boxed_mon_readds_and_pulls_partner(tmp_path, monke
     state.mon_stats["B:2"] = {"level": 7, "maxHP": 22, "attack": 10, "defense": 9,
                               "speed": 12, "spAtk": 8, "spDef": 8}
 
-    cmds_a = state.handle_event("a", {"event": "tick",
-                                      "party": [{"key": "A:1"}]})
+    state.handle_event("a", {"event": "tick", "party": [{"key": "A:1"}]})
     assert "A:1" in state.party_keys["a"]
     # Partner pull is queued on B's side — fetched on B's next round-trip.
     cmds_b = state.handle_event("b", {"event": "tick", "party": []})
@@ -5431,8 +5430,7 @@ def test_tick_reconcile_skips_keys_with_pending_box_mon(tmp_path, monkeypatch):
     state.queued_commands["a"].append({"cmd": "box_mon", "key": "A:1"})
     # During that window Lua's tick still reports the mon in party — don't discard.
     state.party_keys["a"].discard("A:1")  # already discarded as part of party_to_box
-    cmds = state.handle_event("a", {"event": "tick",
-                                    "party": [{"key": "A:1"}]})
+    state.handle_event("a", {"event": "tick", "party": [{"key": "A:1"}]})
     assert "A:1" not in state.party_keys["a"], (
         "reconciler must not re-add a key while box_mon is in-flight"
     )
@@ -5476,7 +5474,7 @@ def test_tick_reconcile_untracked_key_is_added_without_partner_pull(tmp_path, mo
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = SoulLinkState()
     state.pokeballs_obtained = {"a": True, "b": True}
-    cmds = state.handle_event("a", {"event": "tick", "party": [{"key": "ORPHAN:42"}]})
+    state.handle_event("a", {"event": "tick", "party": [{"key": "ORPHAN:42"}]})
     assert "ORPHAN:42" in state.party_keys["a"]
     # No partner pull because there's no link entry.
     cmds_b = state.handle_event("b", {"event": "tick", "party": []})
@@ -5550,8 +5548,8 @@ def test_egg_in_real_area_does_not_lock_area(tmp_path, monkeypatch):
     # The egg did NOT lock vermilion_city ...
     assert state.area_states.get("vermilion_city") != AreaStatus.LINKED
     # ... and formed a standalone gift link under the gift namespace.
-    gift_links = [l for l in state.links
-                  if l.area_id == "gift_vermilion_city" and l.status == LinkStatus.ALIVE]
+    gift_links = [ln for ln in state.links
+                  if ln.area_id == "gift_vermilion_city" and ln.status == LinkStatus.ALIVE]
     assert len(gift_links) == 1
 
     # The real Vermilion wild encounter still links normally afterwards.
@@ -5562,7 +5560,7 @@ def test_egg_in_real_area_does_not_lock_area(tmp_path, monkeypatch):
     state.handle_event("b", {"event": "capture", "key": _WILD_B,
                              "area_id": "vermilion_city", "species_id": 984, "level": 28})
     assert state.area_states.get("vermilion_city") == AreaStatus.LINKED
-    wild = next((l for l in state.links if l.area_id == "vermilion_city"), None)
+    wild = next((ln for ln in state.links if ln.area_id == "vermilion_city"), None)
     assert wild is not None and wild.status == LinkStatus.ALIVE
 
 
@@ -5579,8 +5577,8 @@ def test_gift_flag_in_real_area_does_not_lock_area(tmp_path, monkeypatch):
                                       "level": 25, "gift": True})
 
     assert state.area_states.get("vermilion_city") != AreaStatus.LINKED
-    assert any(l.area_id == "gift_vermilion_city" and l.status == LinkStatus.ALIVE
-               for l in state.links)
+    assert any(ln.area_id == "gift_vermilion_city" and ln.status == LinkStatus.ALIVE
+               for ln in state.links)
     # Gift is not quarantined to the box.
     assert not has_cmd(cmds_b, "box_mon", _EGG_B)
 
@@ -5622,7 +5620,7 @@ def test_gift_links_even_when_real_area_already_linked(tmp_path, monkeypatch):
                              "area_id": "vermilion_city", "species_id": 390,
                              "level": 25, "gift": True})
     assert not has_cmd(cmds_a, "force_faint", _EGG_A)
-    gift_link = next((l for l in state.links if l.area_id == "gift_vermilion_city"), None)
+    gift_link = next((ln for ln in state.links if ln.area_id == "gift_vermilion_city"), None)
     assert gift_link is not None and gift_link.status == LinkStatus.ALIVE
 
 
@@ -5646,8 +5644,8 @@ def test_multiple_gifts_in_same_area_each_link(tmp_path, monkeypatch):
     # The second gift must NOT be retired/force-fainted.
     assert not has_cmd(cmds_a, "force_faint", _WILD_A)
     # Both gift pairs link under the gift namespace.
-    gift_links = [l for l in state.links
-                  if l.area_id == "gift_vermilion_city" and l.status == LinkStatus.ALIVE]
+    gift_links = [ln for ln in state.links
+                  if ln.area_id == "gift_vermilion_city" and ln.status == LinkStatus.ALIVE]
     assert len(gift_links) == 2
     # The real area was never locked by either gift.
     assert state.area_states.get("vermilion_city") != AreaStatus.LINKED

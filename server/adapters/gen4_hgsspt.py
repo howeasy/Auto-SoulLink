@@ -231,9 +231,7 @@ class Gen4Adapter(GameAdapter):
         # Also recognize the "egg_*" prefix the client emits for egg pickups.
         if area_id in _GIFT_AREAS or area_id.startswith("gift_"):
             return True
-        if area_id.startswith("egg_"):
-            return True
-        return False
+        return area_id.startswith("egg_")
 
     def is_fixed_species_gift(self, area_id: str) -> bool:
         # Strip "egg_" prefix so e.g. "egg_route_30" still matches the Togepi entry.

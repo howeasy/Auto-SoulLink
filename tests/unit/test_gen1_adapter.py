@@ -300,7 +300,8 @@ def test_adapter_registered():
 # SoulLinkState integration tests with Gen 1 adapter
 # ══════════════════════════════════════════════════════════════════════════
 
-from server.state import SoulLinkState
+# Integration section — import kept here, below the adapter unit tests.
+from server.state import SoulLinkState  # noqa: E402
 
 
 def _make_gen1_state(tmp_path, monkeypatch):
@@ -323,7 +324,7 @@ def test_integration_capture_linking(tmp_path, monkeypatch):
                              "species": 1, "nickname": "BULBA", "level": 5})
 
     # Link should be formed
-    link = next((l for l in state.links if l.area_id == "route_1"), None)
+    link = next((ln for ln in state.links if ln.area_id == "route_1"), None)
     assert link is not None
     assert link.a.key == "A5F3:1234:99"
     assert link.b.key == "B2C1:5678:A4"
@@ -378,7 +379,7 @@ def test_integration_key_change(tmp_path, monkeypatch):
                              "new_key": "C3D4:1234:1A", "species": 26,
                              "nickname": "RAICHU"})
 
-    link = next((l for l in state.links if l.area_id == "route_3"), None)
+    link = next((ln for ln in state.links if ln.area_id == "route_3"), None)
     assert link is not None
     assert link.a.key == "C3D4:1234:1A"
 
@@ -440,6 +441,8 @@ def test_integration_gender_lock_no_effect(tmp_path, monkeypatch):
     cmds = state.handle_event("b", {"event": "capture", "key": "B2C1:5678:19", "area_id": "route_1", "species": 25, "level": 5})
 
     # Link should form — gender lock should NOT reject (both genderless, genderless is exempt)
+    assert not any(c.get("cmd") == "force_faint" for c in cmds), \
+        "gender lock must not reject a genderless Gen 1 pair"
     assert state.links  # Should have at least one link
     link = state.links[0]
     assert link.status.value == "alive"
@@ -472,7 +475,7 @@ def test_integration_species_lock_after_evolution(tmp_path, monkeypatch):
     # Check for force_faint command (violation)
     has_faint = any(c.get("cmd") == "force_faint" for c in cmds)
     # The link should NOT form with alive status OR a force_faint was issued
-    route2_links = [l for l in state.links if l.area_id == "route_2"]
+    route2_links = [ln for ln in state.links if ln.area_id == "route_2"]
     if route2_links:
         assert route2_links[0].status.value != "alive" or has_faint
     else:

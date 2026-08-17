@@ -18,6 +18,7 @@ Usage (inside SLinkServer):
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -241,10 +242,8 @@ class OBSController:
         for pid in ("a", "b"):
             c = self._clients.get(pid)
             if c:
-                try:
+                with contextlib.suppress(Exception):
                     await c.disconnect()
-                except Exception:
-                    pass
                 self._clients[pid] = None
                 self._status[pid] = "disconnected"
         self._config = new_config
@@ -261,14 +260,10 @@ class OBSController:
     def _push_scene(self, player_id: str, scene: str):
         """Internal: push a resolved scene onto the coalescing queue for one player."""
         q = self._queues[player_id]
-        try:
+        with contextlib.suppress(asyncio.QueueEmpty):
             q.get_nowait()
-        except asyncio.QueueEmpty:
-            pass
-        try:
+        with contextlib.suppress(asyncio.QueueFull):
             q.put_nowait(scene)
-        except asyncio.QueueFull:
-            pass
 
     def submit_fired(self, fired_list: list):
         """Priority-resolve multiple simultaneous triggers; submit at most one scene per target.
@@ -494,10 +489,8 @@ class OBSController:
             rt.cancel()
         c = self._clients.get(player_id)
         if c:
-            try:
+            with contextlib.suppress(Exception):
                 await c.disconnect()
-            except Exception:
-                pass
             self._clients[player_id] = None
         self._status[player_id] = "disconnected"
 

@@ -5,7 +5,8 @@ Each supported game family provides an adapter implementing GameAdapter.
 The registry maps game_id strings to adapter classes.
 """
 
-from .base import GameAdapter, GamePresentationAdapter, GameRulesAdapter
+# The two ABCs are re-exported for adapter authors, not used here.
+from .base import GameAdapter, GamePresentationAdapter, GameRulesAdapter  # noqa: F401
 
 # Registry: game_id -> adapter class
 _REGISTRY: dict[str, type[GameAdapter]] = {}

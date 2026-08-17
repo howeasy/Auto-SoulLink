@@ -124,6 +124,13 @@ def write_run_config(src: str, dst: str, saveram_dir: str | None = None) -> None
     # of a property of whichever config.ini the developer happens to have.
     sync = cfg.setdefault("CoreSyncSettings", {}).setdefault(
         "BizHawk.Emulation.Cores.Nintendo.Gameboy.Gameboy", {})
+    # $type is what BizHawk deserialises these by, and it is only already present if this
+    # config has loaded a GB core before. On a fresh one both setdefaults above create bare
+    # dicts, BizHawk discards the untagged entry, and the pin silently does nothing — which
+    # is the failure the paragraph above claims to have removed. setdefault so an existing
+    # entry keeps whatever tag BizHawk itself wrote.
+    sync.setdefault("$type", "BizHawk.Emulation.Cores.Nintendo.Gameboy.Gameboy"
+                             "+GambatteSyncSettings, BizHawk.Emulation.Cores")
     sync["RealTimeRTC"] = False
     sync["InitialTime"] = 0
 

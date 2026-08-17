@@ -87,7 +87,7 @@ for _rom in ("pokemon_black", "pokemon_white", "pokemon_black_2", "pokemon_white
 # Gen 5 (BW/BW2) item names — full 1-638 range loaded from server/data/items/gen5.py.
 # Source: veekun/pokedex item_names.csv (auto-generated; see tools workflow).
 # Shared across all 4 ROM variants.
-from server.data.items.gen5 import ITEM_NAMES as _GEN5_ITEM_NAMES
+from server.data.items.gen5 import ITEM_NAMES as _GEN5_ITEM_NAMES  # noqa: E402
 
 
 class Gen5Adapter(GameAdapter):
@@ -234,7 +234,8 @@ class Gen5Adapter(GameAdapter):
             # but the zone is BW2-exclusive). Try BW2 tables.
             for fallback in ("pokemon_black_2", "pokemon_white_2"):
                 result = _ENCOUNTER_TABLES.get(fallback, {}).get(area_id)
-                if result: break
+                if result:
+                    break
         return result or None
 
     def area_display_name(self, area_id: str) -> str:

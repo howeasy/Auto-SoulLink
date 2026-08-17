@@ -265,7 +265,8 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
     # as stopped.
     _spawn_log = os.path.join(data_dir, "spawn.log")
     try:
-        _errf = open(_spawn_log, "ab", buffering=0)   # data_dir was created above
+        # Not a context manager: the handle is owned by the subprocess below and must outlive us.
+        _errf = open(_spawn_log, "ab", buffering=0)   # noqa: SIM115
     except OSError:
         _errf = asyncio.subprocess.DEVNULL
     proc = await asyncio.create_subprocess_exec(

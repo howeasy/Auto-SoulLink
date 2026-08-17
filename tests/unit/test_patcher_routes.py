@@ -17,10 +17,10 @@ import re
 import pytest
 
 aiohttp = pytest.importorskip("aiohttp")
-from aiohttp import web
-from aiohttp.test_utils import TestClient, TestServer
+from aiohttp import web  # noqa: E402  (must follow importorskip)
+from aiohttp.test_utils import TestClient, TestServer  # noqa: E402  (must follow importorskip)
 
-import server.patcher as patcher
+import server.patcher as patcher  # noqa: E402  (must follow importorskip)
 
 
 def _make_app() -> web.Application:
@@ -75,7 +75,8 @@ def test_md5_constants_match_readme():
     """BASE_ROM_MD5 / PATCHED_ROM_MD5 must stay in sync with patch/README.md."""
     readme = os.path.normpath(os.path.join(
         os.path.dirname(patcher.__file__), "..", "patch", "README.md"))
-    text = open(readme, encoding="utf-8").read()
+    with open(readme, encoding="utf-8") as fh:
+        text = fh.read()
     assert patcher.BASE_ROM_MD5 in text, "base ROM md5 drifted from patch/README.md"
     assert patcher.PATCHED_ROM_MD5 in text, "patched ROM md5 drifted from patch/README.md"
     # And both look like md5 hex.
@@ -89,8 +90,10 @@ def test_md5_constants_match_build_tools():
     the README<->patcher.py test doesn't cover. Pin all four to one value."""
     tools = os.path.normpath(os.path.join(
         os.path.dirname(patcher.__file__), "..", "patch", "tools"))
-    build_src = open(os.path.join(tools, "build.py"), encoding="utf-8").read()
-    calc_src = open(os.path.join(tools, "make_battle_calc_patch.py"), encoding="utf-8").read()
+    with open(os.path.join(tools, "build.py"), encoding="utf-8") as fh:
+        build_src = fh.read()
+    with open(os.path.join(tools, "make_battle_calc_patch.py"), encoding="utf-8") as fh:
+        calc_src = fh.read()
     m = re.search(r'RR_MD5\s*=\s*"([0-9a-f]{32})"', build_src)
     assert m and m.group(1) == patcher.BASE_ROM_MD5, \
         "build.py RR_MD5 drifted from server/patcher.py BASE_ROM_MD5"
