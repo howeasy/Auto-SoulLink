@@ -122,6 +122,58 @@ class TestStatStagesHtmlMalformed:
 
 # ── party_details stat_stages passthrough ─────────────────────────────────────
 
+def _fresh_battle_state():
+    """The per-player skeleton the server holds before any battle has started."""
+    return {p: {"in_battle": False, "is_trainer_battle": False, "enemy_party": [],
+                "trainer_id": 0, "opponent_name": "", "opponent_class": "",
+                "is_doubles": False}
+            for p in ("a", "b")}
+
+
+def _make_server(tmp_path, battle_state=None):
+    """A minimal SLinkServer, built via __new__ so no sockets or files are opened.
+
+    One copy, shared. This used to be a private method duplicated in two test classes, and
+    the copies had already drifted — one seeded `battle_state` with the skeleton above and
+    the other left it `{}`, so the two disagreed about what "a fresh server" even means.
+    """
+    import unittest.mock as mock
+
+    from server.adapters import get_adapter
+    from server.server import SLinkServer
+    from server.state import SoulLinkState
+
+    srv = SLinkServer.__new__(SLinkServer)
+    srv.data_dir = str(tmp_path)
+    srv.run_id   = "test"
+    srv.run_name = ""
+    srv.manager_port = None
+    srv.verbose  = False
+    srv.host     = "127.0.0.1"
+    srv.port     = 0
+    srv.http_port = 0
+    srv.adapter  = get_adapter("gen3_frlge")
+    with mock.patch("server.state.LINKS_PATH", str(tmp_path / "links.json")):
+        srv.state = SoulLinkState()
+    srv.connected_players = {}
+    srv.party_details = {"a": {}, "b": {}}
+    srv.battle_state  = {} if battle_state is None else battle_state
+    srv.player_area   = {}
+    srv.player_area_id = {}
+    srv.player_ball_count = {}
+    srv.player_badges = {}
+    srv.player_kanto_badges = {}
+    srv.trainer_name  = {}
+    srv._sse_queues   = []
+    srv.event_log     = []
+    srv._backups_dir  = str(tmp_path / "backups")
+    # _build_status_dict reads these two as well; without them it raises AttributeError
+    # before it ever reaches the enemy-party enrichment.
+    srv.pc_boxes = {}
+    srv._recent_events = {}
+    return srv
+
+
 class TestPartyDetailsPassthrough:
     """Verify stat_stages is stored in party_details during tick processing.
 
@@ -129,44 +181,8 @@ class TestPartyDetailsPassthrough:
     party_details dict the server builds from a synthetic tick message.
     """
 
-    def _make_server(self, tmp_path):
-        """Create a minimal SLinkServer instance."""
-        from server.server import SLinkServer
-        srv = SLinkServer.__new__(SLinkServer)
-        srv.data_dir = str(tmp_path)
-        srv.run_id   = "test"
-        srv.run_name = ""
-        srv.manager_port = None
-        srv.verbose  = False
-        srv.host     = "127.0.0.1"
-        srv.port     = 0
-        srv.http_port = 0
-
-        from server.adapters import get_adapter
-        srv.adapter  = get_adapter("gen3_frlge")
-
-        import unittest.mock as mock
-
-        from server.state import SoulLinkState
-        with mock.patch("server.state.LINKS_PATH", str(tmp_path / "links.json")):
-            srv.state = SoulLinkState()
-
-        srv.connected_players = {}
-        srv.party_details = {"a": {}, "b": {}}
-        srv.battle_state  = {}
-        srv.player_area   = {}
-        srv.player_area_id = {}
-        srv.player_ball_count = {}
-        srv.player_badges = {}
-        srv.player_kanto_badges = {}
-        srv.trainer_name  = {}
-        srv._sse_queues   = []
-        srv.event_log     = []
-        srv._backups_dir  = str(tmp_path / "backups")
-        return srv
-
     def test_active_mon_stages_stored(self, tmp_path):
-        srv = self._make_server(tmp_path)
+        srv = _make_server(tmp_path)
         stages = [8, 6, 6, 4, 6, 6, 6]  # ATK+2, SPATK-2
         party_msg = [
             {"key": "AABBCCDD:11223344", "hp": 45, "maxHP": 50, "level": 12,
@@ -189,7 +205,7 @@ class TestPartyDetailsPassthrough:
         assert detail["stat_stages"] == stages
 
     def test_inactive_mon_stages_none(self, tmp_path):
-        srv = self._make_server(tmp_path)
+        srv = _make_server(tmp_path)
         party_msg = [
             {"key": "AABBCCDD:11223344", "hp": 45, "maxHP": 50, "level": 12,
              "active": False, "status_cond": 0}  # no stat_stages key
@@ -223,29 +239,33 @@ class TestPartyDetailsPassthrough:
 class TestEnrichBattleStatePassthrough:
     """stat_stages on enemy mons passes through _enrich_battle_state unchanged."""
 
-    def test_stat_stages_preserved_after_enrich(self):
-        """_enrich_battle_state does em2=dict(em) shallow copy; stat_stages list
-        is preserved by reference (safe because it is not mutated)."""
+    def test_stat_stages_preserved_after_enrich(self, tmp_path):
+        """Drives the REAL enrichment, via the _build_status_dict that owns it.
+
+        The previous version of this test never called the server at all: it rebuilt
+        `em2 = dict(em)` inline and asserted that Python's dict() copies a reference. That
+        passes whatever `_enrich_battle_state` does — including not existing. Since the
+        function is a closure inside _build_status_dict and cannot be imported, the only
+        honest way to reach it is to call its owner, which is what this now does.
+        """
         stages = [6, 9, 6, 6, 6, 6, 6]  # DEF +3
-        enemy_party_in = [
-            {"species_id": 6, "hp": 50, "maxHP": 50, "level": 36,
-             "active": True, "status_cond": 0, "stat_stages": stages},
-            {"species_id": 7, "hp": 0, "maxHP": 40, "level": 30,
-             "active": False, "status_cond": 0, "stat_stages": None},
-        ]
-        # Simulate the shallow copy _enrich_battle_state performs
-        enriched = []
-        for em in enemy_party_in:
-            em2 = dict(em)
-            enriched.append(em2)
+        srv = _make_server(tmp_path, battle_state={"a": {
+            "in_battle": True,
+            "enemy_party": [
+                {"species_id": 6, "hp": 50, "maxHP": 50, "level": 36,
+                 "active": True, "status_cond": 0, "stat_stages": stages},
+                {"species_id": 7, "hp": 0, "maxHP": 40, "level": 30,
+                 "active": False, "status_cond": 0, "stat_stages": None},
+            ]}})
+
+        enriched = srv._build_status_dict()["players"]["a"]["battle_state"]["enemy_party"]
 
         assert enriched[0]["stat_stages"] == stages
         assert enriched[1]["stat_stages"] is None
-
-    def test_non_active_enemy_stages_none(self):
-        """Non-active enemy mons should have stat_stages=None."""
-        result = _stat_stages_html(None)
-        assert result == ""
+        # Positive control: prove the enrichment actually RAN over this party, so the two
+        # assertions above cannot pass by the enemy party being handed back untouched.
+        assert enriched[0]["species_name"] == "Charizard"
+        assert enriched[0]["sprite_html"]
 
     def test_stat_stages_html_renders_enemy_active(self):
         stages = [6, 9, 6, 6, 6, 6, 6]  # DEF +3
@@ -413,41 +433,7 @@ class TestDoublesPassthrough:
     """Verify is_doubles is stored, cleared, and left alone by the tick handler."""
 
     def _make_server(self, tmp_path):
-        import unittest.mock as mock
-
-        from server.server import SLinkServer
-        srv = SLinkServer.__new__(SLinkServer)
-        srv.data_dir = str(tmp_path)
-        srv.run_id   = "test"
-        srv.run_name = ""
-        srv.manager_port = None
-        srv.verbose  = False
-        srv.host     = "127.0.0.1"
-        srv.port     = 0
-        srv.http_port = 0
-        from server.adapters import get_adapter
-        srv.adapter  = get_adapter("gen3_frlge")
-        from server.state import SoulLinkState
-        with mock.patch("server.state.LINKS_PATH", str(tmp_path / "links.json")):
-            srv.state = SoulLinkState()
-        srv.connected_players = {}
-        srv.party_details = {"a": {}, "b": {}}
-        srv.battle_state  = {
-            p: {"in_battle": False, "is_trainer_battle": False, "enemy_party": [],
-                "trainer_id": 0, "opponent_name": "", "opponent_class": "",
-                "is_doubles": False}
-            for p in ("a", "b")
-        }
-        srv.player_area   = {}
-        srv.player_area_id = {}
-        srv.player_ball_count = {}
-        srv.player_badges = {}
-        srv.player_kanto_badges = {}
-        srv.trainer_name  = {}
-        srv._sse_queues   = []
-        srv.event_log     = []
-        srv._backups_dir  = str(tmp_path / "backups")
-        return srv
+        return _make_server(tmp_path, battle_state=_fresh_battle_state())
 
     def _apply_tick(self, srv, player_id, msg):
         """Apply only the is_doubles / enemy_party portion of the tick handler logic."""
