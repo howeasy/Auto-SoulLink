@@ -655,7 +655,16 @@ end
 local function send_hello()
     local cur_map = M.getCurrentMap()
     local area_id = G.resolve_area(cur_map)
-    local snap = build_party_snapshot()
+    -- GATE THE SNAPSHOT ON A SANE PARTY COUNT. Every other caller in this file does
+    -- (diff_party, send_tick, the `safe` event, the connect seeder); hello was the one
+    -- that did not, and it is the worst place to skip it. The server locks
+    -- player_identity[pid].ot_id from party[0]'s key on the FIRST hello, so loading the
+    -- script at the title screen — the normal thing to do — can read uninitialised WRAM,
+    -- latch a garbage OT, and then reject every subsequent hello as "WRONG SAVE" until
+    -- someone hand-edits links.json. An empty party is a legitimate state here (a fresh
+    -- save), so the guard is on the count being IMPOSSIBLE, not on it being zero.
+    local raw_count = M.getPartyCount()
+    local snap = (raw_count >= 0 and raw_count <= 6) and build_party_snapshot() or {}
     local cur_in_battle = M.isInBattle()
 
     local evt = {

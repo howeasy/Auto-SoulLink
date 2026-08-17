@@ -929,6 +929,18 @@ function M.validateROM()
         if mapId > 0xF7 and mapId ~= 0xFF then
             return false, "Map ID out of range: " .. mapId
         end
+        -- This branch used to be the map check ALONE, which is barely a gate: party
+        -- count 0 passes, and map 0 passes too — map 0 is Pallet Town, the fixture's own
+        -- map. So uninitialised WRAM at the title screen validated as a live game.
+        -- Gen 2's branch has always carried this second test; Gen 1's profile has had
+        -- PLAYER_ID_ADDR all along and simply never used it. wPlayerID is assigned when
+        -- the save is created, so 0 is a reliable "no game loaded yet".
+        if M.PLAYER_ID_ADDR then
+            local pid = M.read_u16_be(M.PLAYER_ID_ADDR)
+            if pid == 0 then
+                return false, "Player ID is 0 (pre-game)"
+            end
+        end
     end
     if partyCount > 0 and M.PARTY_SPECIES_ADDR then
         local firstSpecies = M.read_u8(M.PARTY_SPECIES_ADDR)
