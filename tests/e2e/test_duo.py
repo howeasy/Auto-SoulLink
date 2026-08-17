@@ -20,7 +20,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
 import mkstates  # noqa: E402
-from e2e_duo import SCENARIOS  # noqa: E402
+from e2e_duo import SCENARIOS, scenarios_for  # noqa: E402
 
 pytestmark = [
     pytest.mark.e2e,
@@ -35,11 +35,14 @@ def _states_for(scenario):
     return sorted(set(ss.values())) if isinstance(ss, dict) else [ss]
 
 
-# Gen 1-only scenarios (memorialize / rivalswap / explode_g1) boot battery fixtures and
-# declare no savestate — running them here would KeyError in _states_for. They have their
-# own module: tests/e2e/test_duo_gen1.py.
-GEN3_SCENARIOS = sorted(k for k, v in SCENARIOS.items()
-                        if "gen3_rr" in v.get("games", ("gen3_rr",)))
+# Game Boy scenarios boot battery fixtures and declare no savestate — running them here would
+# KeyError in _states_for. They have their own modules: test_duo_gen1.py, test_duo_gen2.py.
+#
+# Asked of the runner rather than re-derived here. This used to be its own generator with its
+# own `("gen3_rr",)` default, which is how the harness ended up with two different answers to
+# "which scenarios does this game run" — and the runner's, the one `--scenario all` used, was
+# the wrong one.
+GEN3_SCENARIOS = sorted(scenarios_for("gen3_rr"))
 
 
 @pytest.mark.parametrize("scenario", GEN3_SCENARIOS)

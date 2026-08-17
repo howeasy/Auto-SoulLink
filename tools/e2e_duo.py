@@ -39,16 +39,26 @@ ROM_REL = "patch/build/slink_RR.gba"
 BUILD = os.path.join(REPO, "patch", "build")
 WT_FWD = REPO.replace("\\", "/")
 
-# Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout,
-# and `games` — which titles a scenario applies to (default: gen3_rr only, since that is
-# what this harness was built for). Gen 1-only scenarios have no savestate at all, so
-# tests/e2e/test_duo.py must not try to run them.
+# Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout
 # (seconds), fillers (default True; or {"a":…,"b":…} — explode keeps B at ONE mon so the
-# Explosion self-faint whites out instead of opening the switch menu).
+# Explosion self-faint whites out instead of opening the switch menu), and `games`.
+#
+# `games` is which titles a scenario applies to. ABSENT MEANS EVERY TITLE — read it through
+# scenarios_for(), never inline.
+#
+# An entry matches the FAMILY as well as the exact id: ("gen1",) covers gen1_yellow, the same
+# way the `is_gen1` check does. Without that, adding a second Gen 1 pairing would mean editing
+# the tuple on every scenario it inherits, and forgetting one silently drops coverage.
+#
+# This key was declared and documented here for a long time while nothing but
+# tests/e2e/test_duo.py read it, so `--scenario all` expanded to the whole table regardless of
+# --game: Gen 3-only scenarios were run against a Game Boy, where they died on the savestate
+# they declare and no GB fixture has.
 SCENARIOS = {
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
-    # Gen 1 only for now: both halves die, then the pair is buried in Box 12.
+    # Both halves die, then the pair is buried in the generation's graveyard box — Box 12 on
+    # Gen 1, Box 14 on Gen 2. Gen 3 has its own memorial path and is not covered here.
     "memorialize": {"flags": [], "timeout": 300, "games": ("gen1", "gen2")},
     # Gen 1 does the rival swap from pure RAM — no companion patch, unlike Gen 3.
     "rivalswap": {"flags": ["--rival-team-swap"], "timeout": 300, "games": ("gen1",)},
@@ -74,15 +84,35 @@ SCENARIOS = {
     # the same area, and the later capture must be rejected as a same-family duplicate.
     "dupes": {"flags": ["--species-clause"], "timeout": 1500, "games": ("gen1",),
               "target": "battle", "no_setup": True, "frames": 200000},
-    "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
+    # The four below are Gen 3-only and say so explicitly. They load Radical Red savestates
+    # and two of them need the RR companion patch, so there is nothing for a Game Boy to run.
+    "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
+                "games": ("gen3_rr",)},
     "ghost":   {"flags": ["--overworld-presence"], "savestate": "slink_overworld.State",
-                "timeout": 420},
+                "timeout": 420, "games": ("gen3_rr",)},
     # The native panel needs the RR patch present and a formed pair; no extra server flags.
-    "infopanel": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
+    "infopanel": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
+                  "games": ("gen3_rr",)},
     "explode": {"flags": ["--explode-mode"],
                 "savestate": {"a": "slink_overworld.State", "b": "slink_prebattle.State"},
-                "fillers": {"a": True, "b": False}, "timeout": 600},
+                "fillers": {"a": True, "b": False}, "timeout": 600,
+                "games": ("gen3_rr",)},
 }
+
+
+def scenario_applies(name, game):
+    """Does `name` apply to `game`? Absent `games` means every title; entries match families."""
+    allowed = SCENARIOS[name].get("games")
+    return allowed is None or any(game == a or game.startswith(a + "_") for a in allowed)
+
+
+def scenarios_for(game):
+    """The scenarios that apply to `game`, in table order.
+
+    The single source of truth for that question — tests/e2e/test_duo.py used to hand-roll
+    its own copy with a different default, which is how the two answers drifted apart.
+    """
+    return [n for n in SCENARIOS if scenario_applies(n, game)]
 
 
 def free_port():
@@ -148,7 +178,8 @@ def extract_marks(text, tag):
 #   * DIFFERENT CARTRIDGES per instance: A is Red, B is Blue. Closer to how the feature is
 #     actually played, and the two cannot collide over BizHawk's SaveRAM because it names
 #     saves from its own gamedb entry.
-#   * Its own duo wrapper, since the boot and the HP endianness differ.
+#   * The shared GB duo wrapper (duo_gb_main.lua), since the boot and the HP endianness
+#     differ from Gen 3. Gen 2 uses the same one.
 #
 # gen3_rr keeps exactly the previous behaviour and stays the default.
 GAMES = {
@@ -236,10 +267,16 @@ class DuoRun:
         print(f"[duo] server up: tcp={self.tcp_port} http={self.http_port} data={self.data_dir}")
 
     def _saveram_dir(self, inst: str) -> str:
-        """A SaveRAM directory unique to this run AND this instance.
+        """A SaveRAM directory unique to this SCENARIO and this instance.
 
-        Per-run as well as per-instance so a crashed run cannot leave a stale save that the
-        next one silently boots from — the failure that looks like "the fixture is wrong".
+        Per-instance is the load-bearing half: two instances of one cartridge (Gen 2 runs
+        Crystal on both sides) resolve to the same gamedb SaveRAM filename and would otherwise
+        share one file and stamp on each other.
+
+        Per-scenario, NOT per-run — the path is reused across invocations and nothing cleans
+        it. That is safe only because `seed_saveram` overwrites the file before every launch,
+        which is what actually prevents a crashed run's save leaking into the next one. Do not
+        weaken that copy on the assumption this directory is fresh; it isn't.
         """
         return os.path.join(BUILD, f"saveram_{self.scenario}_{inst}")
 
@@ -695,7 +732,8 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--game", default="gen3_rr", choices=sorted(GAMES),
-                    help="gen3_rr (Radical Red, default) or gen1 (Red as A, Blue as B)")
+                    help="gen3_rr (Radical Red, default), gen1 (Red as A, Blue as B), "
+                         "gen1_yellow (Yellow as A, Red as B) or gen2 (Crystal both sides)")
     ap.add_argument("--scenario", default="faint",
                     choices=list(SCENARIOS) + ["all"])
     ap.add_argument("--keep-alive", action="store_true",
@@ -704,9 +742,35 @@ def main():
                     help="never delete the temp server data dir")
     ap.add_argument("--server-flags", nargs="*", default=[],
                     help="extra flags for server.server")
+    ap.add_argument("--list", action="store_true",
+                    help="print the scenarios --scenario all would run for --game, then exit")
     args = ap.parse_args()
 
-    names = list(SCENARIOS) if args.scenario == "all" else [args.scenario]
+    if args.list:
+        for name in scenarios_for(args.game):
+            print(name)
+        sys.exit(0)
+
+    if args.scenario == "all":
+        names = scenarios_for(args.game)
+        # NAME what was dropped. A silent filter and a table that genuinely has nothing for
+        # this title look identical from the summary, and "all passed" over a silently empty
+        # selection is the worst possible way to report no coverage.
+        skipped = [n for n in SCENARIOS if n not in names]
+        if skipped:
+            print(f"[duo] {args.game}: skipping {len(skipped)} scenario(s) that do not apply "
+                  f"— {', '.join(skipped)}")
+        if not names:
+            sys.exit(f"[duo] no scenarios apply to {args.game}")
+    else:
+        # Fail NOW rather than after two emulators boot and time out on a missing savestate.
+        # If the pairing really should work, the fix is the scenario's `games` tuple.
+        if not scenario_applies(args.scenario, args.game):
+            allowed = ", ".join(SCENARIOS[args.scenario]["games"])
+            sys.exit(f"[duo] scenario '{args.scenario}' does not apply to --game {args.game} "
+                     f"(it declares games: {allowed}). Add {args.game} to its `games` tuple "
+                     f"in SCENARIOS if it should.")
+        names = [args.scenario]
     results = {}
     for name in names:
         print(f"\n========== scenario: {name} ==========")

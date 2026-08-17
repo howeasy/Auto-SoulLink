@@ -145,7 +145,7 @@ M.PROFILES = {
         -- SpclAtk +0x2C, SpclDef +0x2E. Gen 2 SPLIT Special, so spdef_offset is a
         -- real address here rather than the alias of spAtk it is in Gen 1.
         stats_offset         = 0x26,
-        spdef_offset         = 0x2E,    -- non-volatile status (u8: bits 0-2 SLP, 3 PSN, 4 BRN, 5 FRZ, 6 PAR, 7 TOX)
+        spdef_offset         = 0x2E,    -- SpclDef, per the macro tail above
         -- wEnemyMon is a battle_struct (NOT party_struct). Offsets confirmed by the
         -- profile's other battle-struct addresses: ENEMY_MON_LEVEL_ADDR-SPECIES = 0x0D,
         -- ENEMY_MON_HP_ADDR-SPECIES = 0x10, MaxHP at 0x12 → Status sits at 0x0E.
@@ -210,14 +210,22 @@ M.PROFILES = {
         -- Phase 7: Sound-effect dispatch. wMusicID at 0xC2BD per pret/pokecrystal.
         -- The audio engine consumes the byte on the next audio frame.
         -- SFX IDs from constants/sfx_constants.asm.
-        -- wMusicID. This said 0xC2BD, which is wCryTracks — the comment named the right
-        -- symbol and the value was a different one, exactly the shape of the Gen 1 SFX bug
-        -- (that one pointed at wMapMusicSoundID and corrupted the map's BGM on every capture
-        -- and faint). UNVERIFIED ON HARDWARE: Gen 1 also taught that the right-looking symbol
-        -- need not be a trigger at all — wNewSoundID turned out to be PlaySound's internal
-        -- scratch, so no address would have worked. Treat sound as unproven until a probe
-        -- shows wChannelSoundIDs actually changing.
-        SFX_DISPATCH_ADDR       = 0xC29D,
+        -- LEFT DISABLED ON PURPOSE. This said 0xC2BD, which is wCryTracks — the comment named
+        -- the right symbol and the value was a different one, exactly the shape of the Gen 1
+        -- SFX bug (that one pointed at wMapMusicSoundID and corrupted the map's BGM on every
+        -- capture and faint). wMusicID is 0xC29D and is the value to try.
+        --
+        -- But Gen 1 also taught that the right-looking symbol need not be a trigger at all —
+        -- wNewSoundID turned out to be PlaySound's internal scratch, so NO address would have
+        -- worked. An unproven dispatch address is not a cosmetic risk: it is a blind byte
+        -- written into the live audio engine on every capture, faint and whiteout, and Gen 2
+        -- has just earned live verification everywhere else. Shipping a guess alongside that
+        -- would be the one unmeasured write in an otherwise measured generation.
+        --
+        -- nil = M.playSfx() is a no-op (memory_gb.lua guards on it). To enable: run
+        -- `lua/tests/test_gen2_sfx.lua`, confirm wChannelSoundIDs actually changes, then set
+        -- this to 0xC29D. sfx_ids below are already correct per constants/sfx_constants.asm.
+        SFX_DISPATCH_ADDR       = nil,
         sfx_ids                 = {
             capture   = 0x44,   -- SFX_CAUGHT_MON
             gift      = 0x44,   -- SFX_CAUGHT_MON

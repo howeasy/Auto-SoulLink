@@ -114,18 +114,31 @@ function Lib.prove_booted(M, game_key, step, hold)
         return x2 == x0 and y2 == y0
     end
 
+    -- A WILD BATTLE IS ALSO PROOF, and on a grass fixture it is the likelier outcome: the
+    -- walking this proof does is exactly what triggers encounters, so requiring a completed
+    -- round trip in tall grass fails whenever the game does the most normal thing it can do.
+    -- Measured — the Gen 1 `playthrough` scenario, the only one that boots onto Route 1,
+    -- stopped reaching its first line at all.
+    --
+    -- IT MUST BE A TRANSITION, NOT A READING. "in a battle now, and still in a battle 60
+    -- frames later" asks the emulator for nothing: on a frozen screen NOTHING is running, so
+    -- nothing changes, and any screen whose wIsInBattle byte happens to sit at 1 or 2 passes
+    -- for free. That is the same shape as the bug c227922 exists to close — a proof that a
+    -- stopped machine satisfies. Requiring a non-battle frame FIRST makes it a state change
+    -- the emulator had to execute, which no stalled screen can produce.
+    --
+    -- Not airtight, and stated rather than implied: a screen that reads 0 and later flips to
+    -- a stable 1 would still pass. The walk below is the strong proof; this is the narrow
+    -- exception for fixtures that start in grass, so it is kept as tight as it can be while
+    -- still firing.
+    local saw_out_of_battle = false
     for i = 1, 400 do
         local pc = M.getPartyCount()
-        -- A WILD BATTLE IS ALSO PROOF, and on a grass fixture it is the likelier outcome:
-        -- the walking this proof does is exactly what triggers encounters, so requiring a
-        -- completed round trip in tall grass fails whenever the game does the most normal
-        -- thing it can do. Measured — the Gen 1 `playthrough` scenario, the only one that
-        -- boots onto Route 1, stopped reaching its first line at all.
-        --
-        -- Held to the same persistence standard as the walk: wIsInBattle can read garbage
-        -- while WRAM is being initialised, so it has to STILL be a battle 60 frames later,
-        -- with the party count unchanged. A loader transient does not survive that.
-        if pc >= 1 and pc <= 6 and M.isInBattle() then
+        if pc >= 1 and pc <= 6 and not M.isInBattle() then saw_out_of_battle = true end
+        if saw_out_of_battle and pc >= 1 and pc <= 6 and M.isInBattle() then
+            -- Persistence on top of the transition: wIsInBattle can read garbage while WRAM
+            -- is being initialised, so it has to STILL be a battle 60 frames later with the
+            -- party count unchanged. A loader transient does not survive that.
             for _ = 1, 60 do step(nil) end
             if M.isInBattle() and M.getPartyCount() == pc then
                 return true, x_addr, y_addr
