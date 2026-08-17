@@ -20,6 +20,7 @@ containing the "Google Drive" space break BizHawk's CLI parser); absolute paths 
 INSIDE Lua. Per-instance --config copies avoid the shared config.ini write race.
 """
 import argparse
+import importlib
 import json
 import os
 import shutil
@@ -38,17 +39,27 @@ ROM_REL = "patch/build/slink_RR.gba"
 BUILD = os.path.join(REPO, "patch", "build")
 WT_FWD = REPO.replace("\\", "/")
 
-# Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout,
-# and `games` — which titles a scenario applies to (default: gen3_rr only, since that is
-# what this harness was built for). Gen 1-only scenarios have no savestate at all, so
-# tests/e2e/test_duo.py must not try to run them.
+# Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout
 # (seconds), fillers (default True; or {"a":…,"b":…} — explode keeps B at ONE mon so the
-# Explosion self-faint whites out instead of opening the switch menu).
+# Explosion self-faint whites out instead of opening the switch menu), and `games`.
+#
+# `games` is which titles a scenario applies to. ABSENT MEANS EVERY TITLE — read it through
+# scenarios_for(), never inline.
+#
+# An entry matches the FAMILY as well as the exact id: ("gen1",) covers gen1_yellow, the same
+# way the `is_gen1` check does. Without that, adding a second Gen 1 pairing would mean editing
+# the tuple on every scenario it inherits, and forgetting one silently drops coverage.
+#
+# This key was declared and documented here for a long time while nothing but
+# tests/e2e/test_duo.py read it, so `--scenario all` expanded to the whole table regardless of
+# --game: Gen 3-only scenarios were run against a Game Boy, where they died on the savestate
+# they declare and no GB fixture has.
 SCENARIOS = {
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
-    # Gen 1 only for now: both halves die, then the pair is buried in Box 12.
-    "memorialize": {"flags": [], "timeout": 300, "games": ("gen1",)},
+    # Both halves die, then the pair is buried in the generation's graveyard box — Box 12 on
+    # Gen 1, Box 14 on Gen 2. Gen 3 has its own memorial path and is not covered here.
+    "memorialize": {"flags": [], "timeout": 300, "games": ("gen1", "gen2")},
     # Gen 1 does the rival swap from pure RAM — no companion patch, unlike Gen 3.
     "rivalswap": {"flags": ["--rival-team-swap"], "timeout": 300, "games": ("gen1",)},
     # Gen 1 explode: RAM-only, no companion patch. Distinct from the Gen 3 "explode" entry
@@ -73,15 +84,35 @@ SCENARIOS = {
     # the same area, and the later capture must be rejected as a same-family duplicate.
     "dupes": {"flags": ["--species-clause"], "timeout": 1500, "games": ("gen1",),
               "target": "battle", "no_setup": True, "frames": 200000},
-    "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
+    # The four below are Gen 3-only and say so explicitly. They load Radical Red savestates
+    # and two of them need the RR companion patch, so there is nothing for a Game Boy to run.
+    "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
+                "games": ("gen3_rr",)},
     "ghost":   {"flags": ["--overworld-presence"], "savestate": "slink_overworld.State",
-                "timeout": 420},
+                "timeout": 420, "games": ("gen3_rr",)},
     # The native panel needs the RR patch present and a formed pair; no extra server flags.
-    "infopanel": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
+    "infopanel": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
+                  "games": ("gen3_rr",)},
     "explode": {"flags": ["--explode-mode"],
                 "savestate": {"a": "slink_overworld.State", "b": "slink_prebattle.State"},
-                "fillers": {"a": True, "b": False}, "timeout": 600},
+                "fillers": {"a": True, "b": False}, "timeout": 600,
+                "games": ("gen3_rr",)},
 }
+
+
+def scenario_applies(name, game):
+    """Does `name` apply to `game`? Absent `games` means every title; entries match families."""
+    allowed = SCENARIOS[name].get("games")
+    return allowed is None or any(game == a or game.startswith(a + "_") for a in allowed)
+
+
+def scenarios_for(game):
+    """The scenarios that apply to `game`, in table order.
+
+    The single source of truth for that question — tests/e2e/test_duo.py used to hand-roll
+    its own copy with a different default, which is how the two answers drifted apart.
+    """
+    return [n for n in SCENARIOS if scenario_applies(n, game)]
 
 
 def free_port():
@@ -147,7 +178,8 @@ def extract_marks(text, tag):
 #   * DIFFERENT CARTRIDGES per instance: A is Red, B is Blue. Closer to how the feature is
 #     actually played, and the two cannot collide over BizHawk's SaveRAM because it names
 #     saves from its own gamedb entry.
-#   * Its own duo wrapper, since the boot and the HP endianness differ.
+#   * The shared GB duo wrapper (duo_gb_main.lua), since the boot and the HP endianness
+#     differ from Gen 3. Gen 2 uses the same one.
 #
 # gen3_rr keeps exactly the previous behaviour and stays the default.
 GAMES = {
@@ -158,7 +190,9 @@ GAMES = {
         "scenario_prefix": "",
     },
     "gen1": {
-        "main": "lua/tests/duo/duo_gen1_main.lua",
+        "main": "lua/tests/duo/duo_gb_main.lua",
+        "game": "gen1_rby",
+        "play": "gen1_playthrough",
         "rom": {"a": "patch/build/gen1_red.gb", "b": "patch/build/gen1_blue.gb"},
         "uses_savestate": False,
         "fixture": {"a": "red", "b": "blue"},
@@ -170,11 +204,30 @@ GAMES = {
     # Pairing it with Red rather than another Yellow means a shift bug shows up as an
     # asymmetry between the two halves instead of cancelling out.
     "gen1_yellow": {
-        "main": "lua/tests/duo/duo_gen1_main.lua",
+        "main": "lua/tests/duo/duo_gb_main.lua",
+        "game": "gen1_rby",
+        "play": "gen1_playthrough",
         "rom": {"a": "patch/build/gen1_yellow.gbc", "b": "patch/build/gen1_red.gb"},
         "uses_savestate": False,
         "fixture": {"a": "yellow", "b": "red"},
         "scenario_prefix": "gen1_",
+    },
+    # THE SAME CARTRIDGE ON BOTH SIDES. There is one Crystal dump, so this pairing only
+    # works because write_run_config gives each instance its own SaveRAM directory: BizHawk
+    # names a save from its gamedb entry, keyed on ROM hash rather than the path launched,
+    # so two instances would otherwise share one file and stamp on each other.
+    #
+    # duo_gb_main resolves scenarios as scenario_<prefix><name> then scenario_gb_<name>, so
+    # faint/boxsync/memorialize come from the shared files — they are written entirely
+    # against ctx and are identical for both generations.
+    "gen2": {
+        "main": "lua/tests/duo/duo_gb_main.lua",
+        "game": "gen2_crystal",
+        "play": "gen2_playthrough",
+        "rom": {"a": "patch/build/gen2_crystal.gbc", "b": "patch/build/gen2_crystal.gbc"},
+        "uses_savestate": False,
+        "fixture": {"a": "crystal", "b": "crystal"},
+        "scenario_prefix": "gen2_",
     },
 }
 
@@ -185,10 +238,12 @@ class DuoRun:
         self.cfg = SCENARIOS[scenario]
         self.args = args
         self.game = getattr(args, "game", "gen3_rr")
-        # Family, not id. Gen 1 has more than one duo configuration (red/blue, yellow/red)
-        # and every `== "gen1"` check silently sent the others down the Gen 3 path.
-        self.is_gen1 = self.game.startswith("gen1")
         self.gcfg = GAMES[self.game]
+        # What the launch path actually branches on is "does this game boot from a battery
+        # save", not which generation it is — Gen 2 needs the identical treatment. Kept as
+        # `is_gen1` only where a SCENARIO is genuinely Gen 1-specific.
+        self.battery_boot = not self.gcfg["uses_savestate"]
+        self.is_gen1 = self.game.startswith("gen1")
         self.tcp_port = free_port()
         self.http_port = free_port()
         self.data_dir = tempfile.mkdtemp(prefix=f"slink_duo_{scenario}_")
@@ -206,10 +261,26 @@ class DuoRun:
                "--data-dir", self.data_dir] + self.cfg["flags"] + self.args.server_flags
         self.server = subprocess.Popen(
             cmd, cwd=REPO,
-            stdout=open(os.path.join(self.data_dir, "server.log"), "w"),
+            # The handle is the server subprocess's stdout and must outlive this call —
+            # a `with` would close it out from under the still-running server.
+            stdout=open(os.path.join(self.data_dir, "server.log"), "w"),  # noqa: SIM115
             stderr=subprocess.STDOUT)
         wait_for("server HTTP up", lambda: self._status() is not None, 30)
         print(f"[duo] server up: tcp={self.tcp_port} http={self.http_port} data={self.data_dir}")
+
+    def _saveram_dir(self, inst: str) -> str:
+        """A SaveRAM directory unique to this SCENARIO and this instance.
+
+        Per-instance is the load-bearing half: two instances of one cartridge (Gen 2 runs
+        Crystal on both sides) resolve to the same gamedb SaveRAM filename and would otherwise
+        share one file and stamp on each other.
+
+        Per-scenario, NOT per-run — the path is reused across invocations and nothing cleans
+        it. That is safe only because `seed_saveram` overwrites the file before every launch,
+        which is what actually prevents a crashed run's save leaking into the next one. Do not
+        weaken that copy on the assumption this directory is fresh; it isn't.
+        """
+        return os.path.join(BUILD, f"saveram_{self.scenario}_{inst}")
 
     def _status(self):
         try:
@@ -218,26 +289,35 @@ class DuoRun:
             return None
 
     def start_instances(self):
-        if self.is_gen1:
-            from gen1_playthrough import staged_rom
+        if self.battery_boot:
+            play = importlib.import_module(self.gcfg["play"])
             for key in self.gcfg["fixture"].values():
-                staged_rom(key)     # space-free copy; BizHawk's CLI splits on spaces
+                play.staged_rom(key)   # space-free copy; BizHawk's CLI splits on spaces
         for inst in ("a", "b"):
             for f in (self._result_path(inst), self.go_files[inst]):
                 if os.path.exists(f):
                     os.remove(f)
         for inst in ("a", "b"):
             cfg_ini = os.path.join(BUILD, f"duo_cfg_{inst}.ini")
-            if self.is_gen1:
+            if self.battery_boot:
                 # Muted, on the second monitor: two emulators for several minutes each.
+                #
+                # Each instance also gets its OWN SaveRAM directory. BizHawk names a SaveRAM
+                # file from its gamedb entry, keyed on the ROM hash rather than the path we
+                # launched, so two instances of the SAME cartridge resolve to one file and
+                # stamp on each other. Gen 1 avoided that by pairing Red with Blue, which is
+                # a constraint on what can be tested together rather than a fix — and Gen 2
+                # has only one dump. Per-instance dirs make a same-cartridge duo work.
                 from gen1_playthrough import write_run_config
-                write_run_config(BIZHAWK_CONFIG, cfg_ini)
+                write_run_config(BIZHAWK_CONFIG, cfg_ini,
+                                 saveram_dir=self._saveram_dir(inst))
             else:
                 shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
             stub = os.path.join(BUILD, f"duo_{inst}.lua")
             fillers = self.cfg.get("fillers", True)
             duo = {
                 "wt": WT_FWD, "player": inst, "scenario": self.scenario,
+                "game": self.gcfg.get("game", ""),
                 "fillers": fillers[inst] if isinstance(fillers, dict) else fillers,
                 "mutate_otid": inst == "b",
                 "result": f"{WT_FWD}/patch/build/e2e_{self.scenario}_{inst}_result.txt",
@@ -255,10 +335,12 @@ class DuoRun:
                 ss = self.cfg["savestate"]
                 duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
             else:
-                # Seed this instance's battery save. Red and Blue get different filenames
-                # from BizHawk's gamedb, so the two instances never fight over one file.
-                from run_gen1_gate import seed_saveram
-                seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"))
+                # Seed this instance's battery save into the SAME per-instance directory
+                # write_run_config redirected to, above. Seeding the shared directory instead
+                # would leave the emulator booting an empty save from the redirected one.
+                from run_gb_gate import seed_saveram
+                seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"),
+                             dest_dir=self._saveram_dir(inst))
             with open(stub, "w") as f:
                 f.write('SLINK_HOST = "127.0.0.1"\n')
                 f.write(f"SLINK_PORT = {self.tcp_port}\n")
@@ -581,8 +663,8 @@ class DuoRun:
             wait_for("B inside a live battle",
                      lambda: "IN_BATTLE" in (read_result(self.scenario, "b") or ""), 240)
             self.go()
-        elif self.scenario == "boxsync" and self.is_gen1:
-            # Gen 1 exercises the RULE, not the storage opcodes: link the pair, then let A
+        elif self.scenario == "boxsync" and self.battery_boot:
+            # The GB gens exercise the RULE, not the storage opcodes: link the pair, then let A
             # deposit its own half. The server's _handle_party_to_box is what must send
             # box_mon to B — nothing is injected here, so a broken rule cannot be masked by
             # the harness doing the work itself.
@@ -652,7 +734,8 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--game", default="gen3_rr", choices=sorted(GAMES),
-                    help="gen3_rr (Radical Red, default) or gen1 (Red as A, Blue as B)")
+                    help="gen3_rr (Radical Red, default), gen1 (Red as A, Blue as B), "
+                         "gen1_yellow (Yellow as A, Red as B) or gen2 (Crystal both sides)")
     ap.add_argument("--scenario", default="faint",
                     choices=list(SCENARIOS) + ["all"])
     ap.add_argument("--keep-alive", action="store_true",
@@ -661,9 +744,35 @@ def main():
                     help="never delete the temp server data dir")
     ap.add_argument("--server-flags", nargs="*", default=[],
                     help="extra flags for server.server")
+    ap.add_argument("--list", action="store_true",
+                    help="print the scenarios --scenario all would run for --game, then exit")
     args = ap.parse_args()
 
-    names = list(SCENARIOS) if args.scenario == "all" else [args.scenario]
+    if args.list:
+        for name in scenarios_for(args.game):
+            print(name)
+        sys.exit(0)
+
+    if args.scenario == "all":
+        names = scenarios_for(args.game)
+        # NAME what was dropped. A silent filter and a table that genuinely has nothing for
+        # this title look identical from the summary, and "all passed" over a silently empty
+        # selection is the worst possible way to report no coverage.
+        skipped = [n for n in SCENARIOS if n not in names]
+        if skipped:
+            print(f"[duo] {args.game}: skipping {len(skipped)} scenario(s) that do not apply "
+                  f"— {', '.join(skipped)}")
+        if not names:
+            sys.exit(f"[duo] no scenarios apply to {args.game}")
+    else:
+        # Fail NOW rather than after two emulators boot and time out on a missing savestate.
+        # If the pairing really should work, the fix is the scenario's `games` tuple.
+        if not scenario_applies(args.scenario, args.game):
+            allowed = ", ".join(SCENARIOS[args.scenario]["games"])
+            sys.exit(f"[duo] scenario '{args.scenario}' does not apply to --game {args.game} "
+                     f"(it declares games: {allowed}). Add {args.game} to its `games` tuple "
+                     f"in SCENARIOS if it should.")
+        names = [args.scenario]
     results = {}
     for name in names:
         print(f"\n========== scenario: {name} ==========")

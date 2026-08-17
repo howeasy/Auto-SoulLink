@@ -13,24 +13,24 @@ import json
 import logging
 import os
 
-from .base import GameAdapter
 from server.pokemon_data import (
+    CFRU_FORM_SPRITE_ID,
     GENDER_RATIO,
     GENDER_SYMBOL,
     NATIONAL_SPECIES_NAMES,
     SPECIES_NAMES,
-    CFRU_FORM_SPRITE_ID,
-    EVO_FAMILY,
-    ability_name as _ability_name,
+    _parse_pid_otid_key,
     ability_description as _ability_description,
+    ability_name as _ability_name,
+    natdex_base_form as _natdex_base_form,
+    pid_otid_shiny,
     species_types as _species_types,
-    type_name as _type_name,
     to_cfru as _to_cfru,
     to_national as _to_national,
-    natdex_base_form as _natdex_base_form,
-    _parse_pid_otid_key,
-    pid_otid_shiny,
+    type_name as _type_name,
 )
+
+from .base import GameAdapter
 
 log = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ _data_dir = os.path.join(
 for _map_file in ("area_map_bw.json", "area_map_bw2.json"):
     _area_map_path = os.path.join(_data_dir, _map_file)
     if os.path.exists(_area_map_path):
-        with open(_area_map_path, "r") as _f:
+        with open(_area_map_path) as _f:
             for _entry in json.load(_f):
                 _area_id = _entry.get("area_id", "")
                 _name = _entry.get("name", "")
@@ -81,13 +81,13 @@ _ENCOUNTER_TABLES: dict[str, dict] = {}
 for _rom in ("pokemon_black", "pokemon_white", "pokemon_black_2", "pokemon_white_2"):
     _enc_path = os.path.join(_data_dir, f"encounters_{_rom}.json")
     if os.path.exists(_enc_path):
-        with open(_enc_path, "r", encoding="utf-8") as _f:
+        with open(_enc_path, encoding="utf-8") as _f:
             _ENCOUNTER_TABLES[_rom] = json.load(_f)
 
 # Gen 5 (BW/BW2) item names — full 1-638 range loaded from server/data/items/gen5.py.
 # Source: veekun/pokedex item_names.csv (auto-generated; see tools workflow).
 # Shared across all 4 ROM variants.
-from server.data.items.gen5 import ITEM_NAMES as _GEN5_ITEM_NAMES
+from server.data.items.gen5 import ITEM_NAMES as _GEN5_ITEM_NAMES  # noqa: E402
 
 
 class Gen5Adapter(GameAdapter):
@@ -234,7 +234,8 @@ class Gen5Adapter(GameAdapter):
             # but the zone is BW2-exclusive). Try BW2 tables.
             for fallback in ("pokemon_black_2", "pokemon_white_2"):
                 result = _ENCOUNTER_TABLES.get(fallback, {}).get(area_id)
-                if result: break
+                if result:
+                    break
         return result or None
 
     def area_display_name(self, area_id: str) -> str:

@@ -5,7 +5,8 @@ Each supported game family provides an adapter implementing GameAdapter.
 The registry maps game_id strings to adapter classes.
 """
 
-from .base import GameAdapter, GameRulesAdapter, GamePresentationAdapter
+# The two ABCs are re-exported for adapter authors, not used here.
+from .base import GameAdapter, GamePresentationAdapter, GameRulesAdapter  # noqa: F401
 
 # Registry: game_id -> adapter class
 _REGISTRY: dict[str, type[GameAdapter]] = {}
@@ -46,7 +47,19 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
     # Archipelago (Alchav's Red/Blue world). Same adapter, same RAM layout — the AP fork
     # only changes ROM content. Yellow has no upstream AP world.
     "red_ap": "gen1_rby", "blue_ap": "gen1_rby",
+    # Gen 2. `lua/games/gen2_crystal.lua:rom_type_for_variant` returns the title-cased forms;
+    # the lowercase ones mirror the Gen 1 convention above and are what new code should send.
+    # Registering BOTH is deliberate: a rom_type is persisted into the run directory
+    # (server/state.py), so dropping the title-cased spellings would orphan existing runs.
+    #
+    # Gold, Silver and Crystal (AP) were MISSING here, and the failure was silent rather than
+    # loud: game_id_for_rom_type() returned None, the guard in server.py never switched the
+    # adapter, and the run continued under whichever adapter was already loaded — the Gen 3
+    # default. Every Gen 2 claim that did not come from a Crystal run rested on that.
     "Crystal": "gen2_crystal", "crystal": "gen2_crystal",
+    "Gold": "gen2_crystal", "gold": "gen2_crystal",
+    "Silver": "gen2_crystal", "silver": "gen2_crystal",
+    "Crystal (AP)": "gen2_crystal", "crystal_ap": "gen2_crystal",
     "pokemon_black": "gen5_bw",
     "pokemon_white": "gen5_bw",
     "pokemon_black_2": "gen5_bw",
@@ -64,6 +77,9 @@ _VARIANT_LABEL: dict[str, str] = {
     "red": "Red", "blue": "Blue", "yellow": "Yellow",
     "red_ap": "Red (AP)", "blue_ap": "Blue (AP)",
     "Crystal": "Crystal", "crystal": "Crystal",
+    "Gold": "Gold", "gold": "Gold",
+    "Silver": "Silver", "silver": "Silver",
+    "Crystal (AP)": "Crystal (AP)", "crystal_ap": "Crystal (AP)",
     "pokemon_black": "Pokémon Black",
     "pokemon_white": "Pokémon White",
     "pokemon_black_2": "Pokémon Black 2",
@@ -86,11 +102,13 @@ def variant_label(rom_type: str) -> str:
 
 # Auto-register built-in adapters on import
 from .gen3_frlge import Gen3Adapter  # noqa: E402
+
 register_adapter("gen3_frlge", Gen3Adapter)
 # Backward compat: "frlg" was the old game_id; alias to gen3_frlge
 register_adapter("frlg", Gen3Adapter)
 
 from .gen4_hgsspt import Gen4Adapter  # noqa: E402
+
 register_adapter("gen4_hgsspt", Gen4Adapter)
 
 try:
@@ -104,7 +122,9 @@ except ImportError:
     pass
 
 from .gen1_rby import Gen1Adapter  # noqa: E402
+
 register_adapter("gen1_rby", Gen1Adapter)
 
 from .gen2_crystal import Gen2CrystalAdapter  # noqa: E402
+
 register_adapter("gen2_crystal", Gen2CrystalAdapter)

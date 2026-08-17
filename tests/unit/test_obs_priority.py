@@ -1,6 +1,5 @@
 """Quick sanity test for submit_fired priority resolution."""
 import asyncio
-import sys
 from unittest.mock import MagicMock, patch
 
 

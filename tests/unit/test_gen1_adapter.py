@@ -1,6 +1,7 @@
 """Tests for the Gen 1 RBY adapter."""
 
 import pytest
+
 from server.adapters.gen1_rby import Gen1Adapter
 
 
@@ -299,7 +300,8 @@ def test_adapter_registered():
 # SoulLinkState integration tests with Gen 1 adapter
 # ══════════════════════════════════════════════════════════════════════════
 
-from server.state import SoulLinkState
+# Integration section — import kept here, below the adapter unit tests.
+from server.state import SoulLinkState  # noqa: E402
 
 
 def _make_gen1_state(tmp_path, monkeypatch):
@@ -322,7 +324,7 @@ def test_integration_capture_linking(tmp_path, monkeypatch):
                              "species": 1, "nickname": "BULBA", "level": 5})
 
     # Link should be formed
-    link = next((l for l in state.links if l.area_id == "route_1"), None)
+    link = next((ln for ln in state.links if ln.area_id == "route_1"), None)
     assert link is not None
     assert link.a.key == "A5F3:1234:99"
     assert link.b.key == "B2C1:5678:A4"
@@ -377,7 +379,7 @@ def test_integration_key_change(tmp_path, monkeypatch):
                              "new_key": "C3D4:1234:1A", "species": 26,
                              "nickname": "RAICHU"})
 
-    link = next((l for l in state.links if l.area_id == "route_3"), None)
+    link = next((ln for ln in state.links if ln.area_id == "route_3"), None)
     assert link is not None
     assert link.a.key == "C3D4:1234:1A"
 
@@ -400,13 +402,13 @@ def test_integration_identity_lock(tmp_path, monkeypatch):
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = SoulLinkState(adapter=Gen1Adapter())
     state.pokeballs_obtained = {"a": True, "b": True}
-    
+
     # First hello locks player A's OT ID
     state.handle_event("a", {
         "event": "hello", "party": [{"key": "A5F3:1234:99", "hp": 50, "maxHP": 50, "level": 10}],
         "has_pokeballs": True, "area_id": "route_1", "trainer_name": "RED"
     })
-    
+
     # Second hello with same OT ID works fine
     cmds = state.handle_event("a", {
         "event": "hello", "party": [{"key": "B2C1:1234:99", "hp": 50, "maxHP": 50, "level": 10}],
@@ -414,13 +416,13 @@ def test_integration_identity_lock(tmp_path, monkeypatch):
     })
     # Should NOT get identity error
     assert not any(c.get("cmd") == "hud_show" and "Wrong save" in c.get("text", "") for c in cmds)
-    
+
     # Hello with DIFFERENT OT ID gets rejected
     cmds = state.handle_event("a", {
         "event": "hello", "party": [{"key": "C3D4:5678:99", "hp": 50, "maxHP": 50, "level": 10}],
         "has_pokeballs": True, "area_id": "route_1", "trainer_name": "BLUE"
     })
-    # Should get identity error  
+    # Should get identity error
     assert any(c.get("cmd") == "hud_show" and "WRONG SAVE" in c.get("text", "") for c in cmds)
 
 
@@ -429,16 +431,18 @@ def test_integration_gender_lock_no_effect(tmp_path, monkeypatch):
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = SoulLinkState(adapter=Gen1Adapter(), gender_lock=True)
     state.pokeballs_obtained = {"a": True, "b": True}
-    
+
     # Player A captures on route_1
     state.handle_event("a", {"event": "area_enter", "area_id": "route_1"})
     state.handle_event("a", {"event": "capture", "key": "A5F3:1234:99", "area_id": "route_1", "species": 25, "level": 5})
-    
+
     # Player B captures on route_1
     state.handle_event("b", {"event": "area_enter", "area_id": "route_1"})
     cmds = state.handle_event("b", {"event": "capture", "key": "B2C1:5678:19", "area_id": "route_1", "species": 25, "level": 5})
-    
+
     # Link should form — gender lock should NOT reject (both genderless, genderless is exempt)
+    assert not any(c.get("cmd") == "force_faint" for c in cmds), \
+        "gender lock must not reject a genderless Gen 1 pair"
     assert state.links  # Should have at least one link
     link = state.links[0]
     assert link.status.value == "alive"
@@ -449,29 +453,29 @@ def test_integration_species_lock_after_evolution(tmp_path, monkeypatch):
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = SoulLinkState(adapter=Gen1Adapter(), species_lock=True)
     state.pokeballs_obtained = {"a": True, "b": True}
-    
+
     # Create a link: Charmander (4) <-> Squirtle (7)
     state.handle_event("a", {"event": "area_enter", "area_id": "route_1"})
     state.handle_event("a", {"event": "capture", "key": "A5F3:1234:B4", "area_id": "route_1", "species_id": 4, "level": 5})
     state.handle_event("b", {"event": "area_enter", "area_id": "route_1"})
     state.handle_event("b", {"event": "capture", "key": "B2C1:5678:B1", "area_id": "route_1", "species_id": 7, "level": 5})
-    
+
     # Verify link formed
     assert len(state.links) == 1
-    
+
     # Now player A catches another Charmander on route_2 (different DVs)
     state.handle_event("a", {"event": "area_enter", "area_id": "route_2"})
     state.handle_event("a", {"event": "capture", "key": "C3D4:1234:B4", "area_id": "route_2", "species_id": 4, "level": 8})
-    
+
     # Player B catches a Charmeleon (5, same evo family as Charmander=4)
     state.handle_event("b", {"event": "area_enter", "area_id": "route_2"})
     cmds = state.handle_event("b", {"event": "capture", "key": "D4E5:5678:33", "area_id": "route_2", "species_id": 5, "level": 12})
-    
+
     # Species lock should reject: Charmeleon is same family as Charmander (already linked)
     # Check for force_faint command (violation)
     has_faint = any(c.get("cmd") == "force_faint" for c in cmds)
     # The link should NOT form with alive status OR a force_faint was issued
-    route2_links = [l for l in state.links if l.area_id == "route_2"]
+    route2_links = [ln for ln in state.links if ln.area_id == "route_2"]
     if route2_links:
         assert route2_links[0].status.value != "alive" or has_faint
     else:

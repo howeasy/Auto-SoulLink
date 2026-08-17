@@ -30,8 +30,8 @@
   control is the same file rather than a second one someone has to remember to run.
 
       python tools/gen1_ap_rom.py                                  # build the ROM
-      python tools/run_gen1_gate.py lua/tests/test_gen1_ap_gate.lua --rom red_ap
-      python tools/run_gen1_gate.py lua/tests/test_gen1_ap_gate.lua --rom red   # control
+      python tools/run_gb_gate.py lua/tests/test_gen1_ap_gate.lua --rom red_ap
+      python tools/run_gb_gate.py lua/tests/test_gen1_ap_gate.lua --rom red   # control
 
   Result file: patch/build/test_gen1_ap_gate_result.txt
 --]]

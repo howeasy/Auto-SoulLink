@@ -18,6 +18,7 @@ Per-species rates are summed across all slots the species occupies.
 Min/max levels are min/max across those slots.
 """
 from __future__ import annotations
+
 import json
 import os
 import re

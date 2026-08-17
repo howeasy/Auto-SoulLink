@@ -18,10 +18,10 @@ ISOLATION CONTRACT:
   never imported from server.py.
 """
 
-from abc import ABC, abstractmethod
 import json
 import logging
 import os
+from abc import ABC, abstractmethod
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def load_area_names_from_obj_map(json_path: str) -> "dict[str, str]":
     if not os.path.exists(json_path):
         log.warning("Area map not found: %s — area names will use fallback", json_path)
         return result
-    with open(json_path, "r") as f:
+    with open(json_path) as f:
         raw = json.load(f)
     entries = raw.values() if isinstance(raw, dict) else raw
     for entry in entries:

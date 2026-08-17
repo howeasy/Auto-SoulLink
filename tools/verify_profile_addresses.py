@@ -30,7 +30,6 @@ import json
 import pathlib
 import re
 import sys
-from typing import Optional
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PROFILE_GEN1 = REPO_ROOT / "lua" / "games" / "gen1_rby.lua"
@@ -46,16 +45,16 @@ PRET_SYMS = REPO_ROOT / "data" / "pret_syms.json"
 # Fields with NO expected pret symbol get an explicit None — they're either
 # derived offsets (dv_offset_1, party_struct_size), runtime sentinels
 # (is_egg_species), or placeholders we don't auto-verify.
-PROFILE_TO_PRET: dict[tuple[str, str], Optional[tuple[str, str]]] = {}
+PROFILE_TO_PRET: dict[tuple[str, str], tuple[str, str] | None] = {}
 
 
-def _add(variant: str, repo: str, mapping: dict[str, Optional[str]]) -> None:
+def _add(variant: str, repo: str, mapping: dict[str, str | None]) -> None:
     for field, sym in mapping.items():
         PROFILE_TO_PRET[(variant, field)] = (repo, sym) if sym else None
 
 
 # ── Red / Blue (pokered) ─────────────────────────────────────────────────────
-_RED_MAP: dict[str, Optional[str]] = {
+_RED_MAP: dict[str, str | None] = {
     "PARTY_COUNT_ADDR": "wPartyCount",
     "PARTY_SPECIES_ADDR": "wPartySpecies",
     "PARTY_BASE_ADDR": "wPartyMon1",
@@ -144,8 +143,11 @@ _RED_MAP: dict[str, Optional[str]] = {
     "enemy_battle_pp_encoding": None,
     "TRAINER_CLASS_ADDR": "wTrainerClass",
     "TRAINER_ID_ADDR": "wTrainerNo",
-    # SFX dispatch — game-engine constants, not pret WRAM symbols.
-    "SFX_DISPATCH_ADDR": None,  # wMusicID (0xD35B red/blue, 0xD35A yellow)
+    # SFX dispatch. This IS a pret WRAM symbol, so verify it rather than skipping.
+    # It was skipped, and that is how Gen 2 shipped 0xC2BD (wCryTracks) under a comment
+    # naming wMusicID. Gen 1's is nil (no RAM sound trigger exists there), and a nil profile
+    # value is skipped anyway, so mapping it costs Gen 1 nothing.
+    "SFX_DISPATCH_ADDR": "wMusicID",
     "capture":   None,
     "gift":      None,
     "faint":     None,
@@ -176,7 +178,7 @@ PROFILE_TO_PRET[("red_ap", "MOVEMENT_FLAGS_ADDR")] = ("alchav_pokered", "wd736")
 _add("yellow", "pokeyellow", _RED_MAP)
 
 # ── Crystal (pokecrystal) ─────────────────────────────────────────────────────
-_CRYSTAL_MAP: dict[str, Optional[str]] = {
+_CRYSTAL_MAP: dict[str, str | None] = {
     "PARTY_COUNT_ADDR": "wPartyCount",
     "PARTY_SPECIES_ADDR": "wPartySpecies",
     "PARTY_BASE_ADDR": "wPartyMon1",
@@ -219,6 +221,14 @@ _CRYSTAL_MAP: dict[str, Optional[str]] = {
     "maxhp_offset": None,
     "status_offset": None,
     "enemy_status_offset": None,
+    # Derived offsets into party_struct, not addresses. Gen 2 SPLIT Special, so spdef_offset
+    # is a distinct field rather than Gen 1's alias of spAtk.
+    "stats_offset": None,
+    "spdef_offset": None,
+    "CURRENT_BOX_NUM_ADDR": "wCurBox",
+    # Gen 2 has no wJoyIgnore. The measured equivalent is wScriptRunning — see the
+    # profile comment for the three candidates that looked right and were not.
+    "JOY_IGNORE_ADDR": "wScriptRunning",
     "box_species_offset": None,
     "box_held_item_offset": None,
     "box_otid_offset": None,
@@ -241,8 +251,8 @@ _CRYSTAL_MAP: dict[str, Optional[str]] = {
     "enemy_battle_pp_encoding": None,
     "TRAINER_CLASS_ADDR": "wOtherTrainerClass",
     "TRAINER_ID_ADDR": "wOtherTrainerID",
-    # SFX dispatch — game-engine constants (wMusicID 0xC2BD), not pret WRAM symbols.
-    "SFX_DISPATCH_ADDR": None,
+    # SFX dispatch — a real symbol, verified. See the Gen 1 table for why this is not skipped.
+    "SFX_DISPATCH_ADDR": "wMusicID",
     "capture":   None,
     "gift":      None,
     "faint":     None,
@@ -312,7 +322,7 @@ def _extract_variant_addresses(lua_path: pathlib.Path) -> dict[str, dict[str, in
     out: dict[str, dict[str, int]] = {}
     depth = 0
     i = brace_open
-    current_variant: Optional[str] = None
+    current_variant: str | None = None
     current_fields: dict[str, int] = {}
     variant_block_start = -1
 

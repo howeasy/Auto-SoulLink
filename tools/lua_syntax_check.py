@@ -7,6 +7,7 @@ parse-load every file (no execution) and reports any errors.
 Exit 0 on clean, 1 on any syntax error.
 """
 from __future__ import annotations
+
 import sys
 from pathlib import Path
 

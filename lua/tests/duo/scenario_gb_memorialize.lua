@@ -1,8 +1,11 @@
--- scenario_gen1_memorialize.lua — a dead pair is buried in the Gen 1 memorial box.
+-- scenario_gb_memorialize.lua — a dead pair is buried in the GB memorial box.
 --
 -- The rule: once BOTH halves of a pair are dead, the server queues `memorialize` to each
 -- player, and the client moves the corpse out of the party into the dedicated graveyard
--- box — Gen 1's Box 12, written straight to SRAM at a fixed CartRAM offset.
+-- box, written straight to SRAM at a fixed CartRAM offset. WHICH box is the generation's
+-- own business — Box 12 on Gen 1, Box 14 on Gen 2 — so this scenario never names one: it
+-- asks the profile via M.getMemorialBoxCount() and would silently pass on the wrong box if
+-- it hardcoded an index here.
 --
 -- Worth an end-to-end test for three reasons:
 --
@@ -15,7 +18,7 @@
 --     replies memorialize_done, and a missing ack means an empty Memorial page forever plus
 --     a command that re-queues on every reconnect.
 --
--- Both sides carry a filler (see duo_gen1_main) because a mon cannot be moved out of a
+-- Both sides carry a filler (see duo_gb_main) because a mon cannot be moved out of a
 -- one-mon party.
 return function(ctx)
     local log = ctx.log
@@ -39,7 +42,7 @@ return function(ctx)
 
     -- The corpse must LEAVE THE PARTY. That is the observable end of the whole chain:
     -- faint -> server marks the pair dead -> memorialize queued -> deferred until a safe
-    -- overworld frame -> depositMemorialMon writes Box 12 -> memorialize_done acked.
+    -- overworld frame -> depositMemorialMon writes the memorial box -> memorialize_done acked.
     local gone = ctx.wait_until(function()
         return ctx.find_slot_by_key(key0) == nil or nil
     end, 14400, "memorialize to remove the corpse from the party")
@@ -47,8 +50,8 @@ return function(ctx)
         return false, "dead mon never left the party (memorialize never applied)"
     end
 
-    -- And it must be STORED, not deleted. Gen 1's memorial box is Box 12, written directly
-    -- to SRAM rather than through the active-box path, so the active box count may not move
+    -- And it must be STORED, not deleted. The memorial box is written directly to SRAM
+    -- rather than through the active-box path, so the active box count may not move
     -- — read the memorial box itself.
     local buried = ctx.wait_until(function()
         local n = M.getMemorialBoxCount and M.getMemorialBoxCount() or nil
@@ -58,7 +61,7 @@ return function(ctx)
     -- FATAL. This was a warning, which made the scenario pass whenever the corpse merely
     -- left the party — a condition depositMemorialMon's fall back to depositPartyMon also
     -- satisfies, i.e. the mon going to the ordinary box instead of the graveyard. "Buried in
-    -- Box 12" is the rule under test; if we cannot confirm it, we have not tested it.
+    -- the graveyard box" is the rule under test; if we cannot confirm it, we have not tested it.
     if not buried then
         return false, "corpse left the party but never appeared in the memorial box"
     end

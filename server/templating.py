@@ -13,12 +13,10 @@ from __future__ import annotations
 
 import mimetypes
 import os
-from typing import Optional
 
 import aiohttp_jinja2
 import jinja2
-from aiohttp import web
-from aiohttp import web_fileresponse
+from aiohttp import web, web_fileresponse
 
 # Python's mimetypes db doesn't know font-related types out of the box on
 # every platform. Register the ones we vendor on both the global registry
@@ -76,7 +74,7 @@ def resolve_theme(request: web.Request) -> str:
     The return value is safe to embed in a ``<body class="theme-{theme}">``
     and as a filename ``/static/themes/{theme}.css``.
     """
-    def _normalize(raw: str) -> Optional[str]:
+    def _normalize(raw: str) -> str | None:
         v = (raw or "").strip().lower()
         v = _THEME_ALIASES.get(v, v)
         return v if v in VALID_THEMES else None

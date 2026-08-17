@@ -1,20 +1,25 @@
--- duo_gen1_main.lua — Gen 1 wrapper for the TWO-INSTANCE headless E2E harness.
+-- duo_gb_main.lua — Game Boy wrapper for the TWO-INSTANCE headless E2E harness.
 --
--- The Gen 1 counterpart to duo_main.lua. tools/e2e_duo.py generates a per-instance stub
+-- Covers Gen 1 (RBY) and Gen 2 (Crystal). tools/e2e_duo.py generates a per-instance stub
 -- (patch/build/duo_{a,b}.lua) that sets the production client globals plus SLINK_DUO, then
--- dofiles this file.
+-- dofiles this file. SLINK_DUO.game selects the generation; everything that differs is a
+-- table entry in lua/tests/gatelib.lua, not a branch here.
 --
 -- TWO REAL DIFFERENCES FROM THE GEN 3 WRAPPER:
 --
---  1. NO SAVESTATE. Gen 3 loads a version-locked slink_*.State; Gen 1 boots from a battery
---     save (tests/fixtures/gen1/*.SaveRAM), which never goes stale. The boot has to be
+--  1. NO SAVESTATE. Gen 3 loads a version-locked slink_*.State; these boot from a battery
+--     save (tests/fixtures/<gen>/*.SaveRAM), which never goes stale. The boot has to be
 --     PROVEN rather than assumed — the CONTINUE menu loads the save preview into the same
---     WRAM the party lives in, so a party-count check alone passes while the emulator is
---     still sitting on the title screen. Require the party AND actual movement.
+--     WRAM the party lives in, so a party-count check alone passes while the emulator sits
+--     on the title screen. This file used to carry its own copy of that proof, in its
+--     weakest form; it now calls the shared Lib.prove_booted, which needs a walked ROUND
+--     TRIP that PERSISTS across an idle. See that function for the two versions of the
+--     claim that were measured passing on a title screen and on a blank screen.
 --
---  2. A IS RED AND B IS BLUE — genuinely different cartridges, which is closer to how the
---     feature is played than Gen 3's same-ROM duo, and it means the two instances cannot
---     collide over BizHawk's SaveRAM (it names saves per gamedb entry).
+--  2. THE TWO INSTANCES MAY SHARE A CARTRIDGE. Gen 1 pairs Red with Blue, but Gen 2 has one
+--     dump, so e2e_duo gives each instance its own SaveRAM directory — BizHawk names saves
+--     from its gamedb entry, keyed on ROM hash, so two instances of one cartridge would
+--     otherwise stamp on each other's save.
 --
 -- Result protocol is identical: incremental log lines, "MYKEY <slot> <key>" so the runner
 -- can link A slot0 <-> B slot0, and a final "RESULT: PASS|FAIL ...".
@@ -41,23 +46,27 @@ console.log = function(s)
     if logf then logf:write("[client] " .. tostring(s) .. "\n"); logf:flush() end
 end
 
+local Lib  = dofile(D.wt .. "/lua/tests/gatelib.lua")
+local GAME = D.game or "gen1_rby"
+local SPEC = Lib.GAMES[GAME]
+assert(SPEC, "unknown SLINK_DUO.game " .. tostring(GAME))
+
 package.path = D.wt .. "/lua/?.lua;" .. D.wt .. "/lua/games/?.lua;"
-            .. D.wt .. "/data/games/gen1_rby/?.lua;" .. package.path
+            .. D.wt .. "/data/games/" .. SPEC.data_dir .. "/?.lua;" .. package.path
 package.loaded["memory_gb"] = nil
-package.loaded["games.gen1_rby"] = nil
+package.loaded[SPEC.module] = nil
 local M = require("memory_gb")
-local G = require("games.gen1_rby")
+local G = require(SPEC.module)
 
 log("duo instance " .. D.player .. " scenario=" .. D.scenario)
 pcall(function() client.speedmode(400) end)
 
 local variant = G.detect_variant()
-if not variant then finish(false, "not a Gen 1 ROM") end
+if not variant then finish(false, "not a " .. SPEC.label .. " ROM") end
 M.initProfile(G, variant)
 log("variant=" .. variant)
 
 -- ── Boot from the battery save ───────────────────────────────────────────────
-local x_addr, y_addr = M.MAP_ID_ADDR + 4, M.MAP_ID_ADDR + 3
 local frame = 0
 local function step(b)
     if b then joypad.set(b) end
@@ -73,20 +82,7 @@ local function hold(btn, n, stop)
     return stop and stop() or false
 end
 
-local booted = false
-local dirs = {"Right", "Left"}   -- never up/down: that moves the title cursor onto NEW GAME
-for i = 1, 300 do
-    local pc = M.getPartyCount()
-    if pc >= 1 and pc <= 6 then
-        local x0, y0 = M.read_u8(x_addr), M.read_u8(y_addr)
-        hold(dirs[(i % 2) + 1], 20, function()
-            return M.read_u8(x_addr) ~= x0 or M.read_u8(y_addr) ~= y0
-        end)
-        if M.read_u8(x_addr) ~= x0 or M.read_u8(y_addr) ~= y0 then booted = true break end
-    end
-    hold("A", 6, nil)
-    for _ = 1, 16 do step(nil) end
-end
+local booted = Lib.prove_booted(M, GAME, step, hold)
 if not booted then finish(false, "never booted into the overworld from the battery save") end
 log(string.format("booted at frame %d party=%d", frame, M.getPartyCount()))
 
@@ -97,8 +93,10 @@ log(string.format("booted at frame %d party=%d", frame, M.getPartyCount()))
 if D.mutate_otid then
     local base = M.PARTY_BASE_ADDR
     M.write_u16_be(base + M.OTID_OFFSET, 0x7B0B)
-    M.write_u8(base + 0x1B, 0xA5)      -- Atk/Def DVs
-    M.write_u8(base + 0x1C, 0x5A)      -- Spd/Spc DVs
+    -- Through the profile, never a literal: Gen 1 keeps DVs at +0x1B/+0x1C and Gen 2 at
+    -- +0x15/+0x16, so hardcoding Gen 1's would scribble over Gen 2's PP and happiness.
+    M.write_u8(base + M.DV_OFFSET_1, 0xA5)
+    M.write_u8(base + M.DV_OFFSET_2, 0x5A)
     M.write_u16_be(M.PLAYER_ID_ADDR, 0x7B0B)
     log("mutated OTID/DVs so B's keys cannot collide with A's")
 end
@@ -116,8 +114,8 @@ if D.fillers then
     for i = 0, struct - 1 do M.write_u8(dst + i, M.read_u8(src + i)) end
     -- Distinct DVs and level, or the filler shares slot 0's key and the server's flat key
     -- index links a mon to itself.
-    M.write_u8(dst + 0x1B, 0x24)
-    M.write_u8(dst + 0x1C, 0x42)
+    M.write_u8(dst + M.DV_OFFSET_1, 0x24)
+    M.write_u8(dst + M.DV_OFFSET_2, 0x42)
     M.write_u8(dst + M.LEVEL_OFFSET, 8)
     for i = 0, 10 do
         M.write_u8(M.PARTY_OT_NAMES_ADDR + 11 + i, M.read_u8(M.PARTY_OT_NAMES_ADDR + i))
@@ -137,7 +135,7 @@ end
 -- ── Load the REAL production client ──────────────────────────────────────────
 -- It registers event.onframeend rather than blocking, so control returns here and the
 -- scenario coroutine can run alongside it.
-local okc, errc = pcall(dofile, D.wt .. "/lua/clients/gen1_rby_client.lua")
+local okc, errc = pcall(dofile, D.wt .. "/lua/clients/" .. SPEC.client)
 log("client dofile ok=" .. tostring(okc) .. (okc and "" or (" err=" .. tostring(errc))))
 if not okc then finish(false, "client dofile error: " .. tostring(errc)) end
 
@@ -146,7 +144,7 @@ local ctx = {player = D.player, log = log, M = M, G = G}
 
 function ctx.frames(n) for _ = 1, n do coroutine.yield() end end
 
--- Input. Gen 1 needs a direction HELD to walk — a tap only turns the player — so scenarios
+-- Input. Both GB gens need a direction HELD to walk — a tap only turns the player — so scenarios
 -- that actually play the game (rather than poking RAM) need to drive the pad, not just wait.
 -- joypad.set is per-frame, so the hold has to be re-applied every frame it should last.
 function ctx.hold(btn, frames, stop)
@@ -215,7 +213,21 @@ function ctx.write_hp(slot, v)
 end
 
 -- ── Drive the scenario as a coroutine ────────────────────────────────────────
-local scen_fn = dofile(D.wt .. "/lua/tests/duo/scenario_gen1_" .. D.scenario .. ".lua")
+-- Scenario lookup: the generation's own file first, then the shared `gb` one. faint,
+-- boxsync and memorialize are written entirely against ctx and are identical for both
+-- generations, so they live under scenario_gb_*; anything that reaches into a specific
+-- engine (the Gen 1 wild-table hunts, the rival swap) keeps its own prefixed file.
+local function load_scenario()
+    for _, name in ipairs({"scenario_" .. SPEC.scenario_prefix .. D.scenario,
+                           "scenario_gb_" .. D.scenario}) do
+        local path = D.wt .. "/lua/tests/duo/" .. name .. ".lua"
+        local f = io.open(path, "r")
+        if f then f:close() return dofile(path), name end
+    end
+    finish(false, "no scenario file for " .. tostring(D.scenario) .. " (" .. GAME .. ")")
+end
+local scen_fn, scen_name = load_scenario()
+log("scenario file: " .. scen_name)
 local co = coroutine.create(function() return scen_fn(ctx) end)
 local timeout = D.timeout_frames or 36000
 for f = 1, timeout do

@@ -43,10 +43,8 @@ import re
 import shutil
 import subprocess
 import sys
-from typing import Optional
 
 from _build_tools_bootstrap import ensure_rgbds
-
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PRET_CACHE = REPO_ROOT / ".cache" / "pret"
@@ -163,7 +161,6 @@ def _build_trimmed_layout(repo: pathlib.Path, sections_in_o: set[str]) -> str:
     layout_path = repo / "layout.link"
     out: list[str] = []
     in_rom_region = False
-    kept_region_lines = 0  # count non-section lines inside the current region
 
     for raw_line in layout_path.read_text(encoding="utf-8").splitlines():
         line = raw_line.rstrip()
@@ -177,7 +174,6 @@ def _build_trimmed_layout(repo: pathlib.Path, sections_in_o: set[str]) -> str:
             if _REGION_HEADER_RE.match(stripped):
                 in_rom_region = False
                 out.append(line)
-                kept_region_lines = 0
                 continue
             # Unknown top-level → treat as ROM (drop)
             in_rom_region = True
@@ -301,7 +297,7 @@ def _parse_sym(sym_path: pathlib.Path) -> dict[str, int]:
         m = line_re.match(line)
         if not m:
             continue
-        bank_hex, addr_hex, name = m.group(1), m.group(2), m.group(3)
+        addr_hex, name = m.group(2), m.group(3)  # m.group(1) is the bank, unused
         addr = int(addr_hex, 16)
         # Filter: keep WRAM (0xC000-0xDFFF) + SRAM (0xA000-0xBFFF).
         is_wram = 0xC000 <= addr <= 0xDFFF

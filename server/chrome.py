@@ -12,7 +12,6 @@ render correctly — pages that include this chrome should link those.
 
 from __future__ import annotations
 
-
 # Each nav item: (slug, href, label, svg-path-d, item-classes)
 #
 # Order is intentional: Manager is the first slot so it's always reachable

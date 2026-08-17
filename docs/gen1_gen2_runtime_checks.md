@@ -1,18 +1,20 @@
 # Gen 1 / Gen 2 runtime verification
 
-**Gen 1 is automated. Gen 2 is not, yet.**
+**Both are automated now.** Gen 2 executed against a cartridge for the first time; before
+that its only evidence was a green `pytest`, which is exactly the evidence Gen 1 had while
+its client was crashing on the first `box_mon` it received.
 
 This file used to be a 30–60 minute manual checklist that nobody had ever executed — which
-is precisely why Gen 1 shipped with a client that crashed on the first `box_mon` it
-received. Everything it asked a human to click through is now a test.
+is precisely why that crash shipped. Everything it asked a human to click through is now a
+test.
 
 ## Gen 1 — run these
 
 ```bash
-pytest tests/unit/ -q                                    # 1528, no emulator needed
+pytest tests/unit/ -q                                    # 1595 passed, 5 skipped; no emulator
 python tools/verify_profile_addresses.py                 # every address vs pret decomps
-SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q     # 8 gates on real cartridges
-SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py -q         # 12: 6 rules x Red/Blue and Yellow/Red
+SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q     # 18: 4 gates x 3 cartridges, + patched + AP
+SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py -q         # 18: 9 scenarios x Red/Blue and Yellow/Red
 ```
 
 | Old manual step | Now |
@@ -39,6 +41,54 @@ with the partner's live team, and Explode Mode coercing Explosion.
 
 Unlike the Gen 3 gates, none of this uses savestates, so nothing goes stale when BizHawk is
 upgraded — a `.SaveRAM` is plain SRAM.
+
+## Gen 2 — run these
+
+```bash
+pytest tests/unit/ -q                                    # same suite; Gen 2 needs no emulator either
+python tools/verify_profile_addresses.py                 # Crystal + Gold/Silver vs pret decomps
+SLINK_LIVE=1 pytest tests/live/test_gen2_gates.py -q     # 2 gates, Crystal only
+SLINK_E2E=1 pytest tests/e2e/test_duo_gen2.py -q         # 3 duo scenarios, two Crystal instances
+```
+
+`--scenario all` is filtered by `--game` and names what it drops, so `--game gen2 --scenario
+all` runs exactly the three above. It did not always: the per-scenario `games` key sat in the
+runner declared, documented and read by nothing but `tests/e2e/test_duo.py`, so `all` expanded
+to the whole table and launched Gen 3-only scenarios against a Game Boy, where they died on a
+savestate no GB fixture has. `scenarios_for()` is now the single source of truth for that
+question and `tests/unit/test_e2e_duo_scenario_selection.py` pins it. To see the selection
+without booting anything:
+
+```bash
+python tools/e2e_duo.py --game gen2 --list
+```
+
+**Crystal only, and stated rather than silently skipped.** Gold, Silver and Archipelago
+Crystal have no dumps here, and a live matrix entry that skips reads exactly like one that
+passes. Their addresses are still pret-checked statically; the AP fork has no public repo, so
+only five of its addresses are provable and its profile stays flagged unverified.
+
+The two gates run against `tests/fixtures/gen2/crystal_town.SaveRAM` (rebuild with
+`python tools/gen2_playthrough.py`), whose contents are known exactly because the
+bootstrapper wrote them. The read gate's assertions are deliberately **Gen 2-specific** —
+the held-item byte, the map *group*, the Sp.Atk/Sp.Def split, 14 boxes — because a Gen
+1-shaped read of a Gen 2 cartridge still returns plausible-looking bytes. The writes gate
+mutates a live cartridge: `force_faint`, deposit, withdraw, memorial burial.
+
+The duo E2E runs **two Crystal instances against one dump**, which Gen 1 could not do:
+BizHawk names its SaveRAM file from the gamedb entry (ROM hash, not launch path), so two
+instances of one cartridge resolve to a single file and stamp on each other. Gen 1 dodged
+that by pairing Red with Blue — a constraint on what can be tested together, not a fix.
+Per-instance `saveram_dir` is the fix, and it is the only reason a same-cartridge pairing
+exists at all.
+
+Three scenarios pass, both sides: `faint`, `boxsync`, `memorialize` — the last burying the
+pair in Box 14 (`MEMORIAL_BOX_INDEX` 13, flat CartRAM `0x79E0`), which sits outside Gen 2's
+save checksum, so unlike Gen 1 there is no `EmptyAllSRAMBoxes` to defend against and
+`M.protectSramBoxes()` correctly no-ops.
+
+`playthrough`, `deadzone` and `dupes` do **not** run on Gen 2, and that is a decision, not an
+omission — see "Still open" below.
 
 ## Closed since
 
@@ -82,13 +132,20 @@ instruction bytes at the `ChangeBox` branch to confirm the game behaviour it def
 
 ## Still open
 
-- **Gen 2.** Three fixes landed here as a side effect of the Gen 1 work — the `play_sound`
-  handler was unreachable, `party_to_box` could never fire, and the shared `memory_gb.lua`
-  gained profile-keyed box helpers — but Gen 2 still has no live coverage of its own. The
-  Gen 1 harness generalises: it needs Crystal fixtures and a profile entry. Note Gen 2's SRAM
-  box layout and checksums differ, so `sram_box_layout` is deliberately absent there and the
-  guard above does not run.
-- **A playthrough.** The gates and duo scenarios prove mechanisms, not play. Concretely, with
+- **A Gen 2 playthrough — deliberately not bought.** Gen 2's fixture parks indoors, because
+  New Bark Town's west exit is script-locked until Elm hands over a starter; there is no grass
+  fixture and so no `playthrough`, `deadzone` or `dupes`. Those three prove encounter linking,
+  the dead zone and the species clause — all enforced **server-side and
+  generation-independently**, and all three already run on Gen 1. A Gen 2 grass fixture would
+  buy a second copy of coverage that exists, at the cost of driving Elm's whole intro script.
+  What it would *not* buy is anything Gen 2-specific: the parts that differ per-cartridge —
+  the 32-byte box struct, the split Special, the unchecksummed box banks — are exactly what
+  the writes gate and `boxsync` already cover.
+
+  Note Gen 2's SRAM box layout and checksums differ from Gen 1's, so `sram_box_layout` is
+  deliberately absent from its profiles and the `EmptyAllSRAMBoxes` guard above does not run —
+  the writes gate proves the memorial survives without it.
+- **A Gen 1 playthrough.** The gates and duo scenarios prove mechanisms, not play. Concretely, with
   numbers, so nobody has to re-derive this:
 
   | Never exercised live | Why it matters |

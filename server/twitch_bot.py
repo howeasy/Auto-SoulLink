@@ -231,13 +231,13 @@ class _ReplyHelper:
 
         if cmd == "runstats":
             links = d.get("links", [])
-            alive = sum(1 for l in links if l.get("status") == "alive")
-            dead = sum(1 for l in links if l.get("status") != "alive")
-            shinies = sum(1 for l in links if l.get("a_shiny") or l.get("b_shiny"))
+            alive = sum(1 for lk in links if lk.get("status") == "alive")
+            dead = sum(1 for lk in links if lk.get("status") != "alive")
+            shinies = sum(1 for lk in links if lk.get("a_shiny") or lk.get("b_shiny"))
             bk = d.get("bonus_keys", {})
             shinies += len(bk.get("a", [])) + len(bk.get("b", []))
             attempts = d.get("attempts_count", 0)
-            oldest = next((l for l in links if l.get("status") == "alive"), None)
+            oldest = next((lk for lk in links if lk.get("status") == "alive"), None)
             out = f"Attempt #{attempts} · {alive} alive · {dead} dead · {shinies} {'shiny' if shinies == 1 else 'shinies'}"
             if oldest:
                 o_name = oldest.get("a_nickname") or oldest.get("a_species_name") or "?"
@@ -262,9 +262,9 @@ class _ReplyHelper:
             best_alive = -1
             for run in runs:
                 links = await asyncio.to_thread(_load_run_links, runs_dir, run.get("run_id", ""))
-                alive = sum(1 for l in links if l.get("status") == "alive")
-                dead = sum(1 for l in links if l.get("status") != "alive")
-                shiny_count = sum(1 for l in links if l.get("a_shiny") or l.get("b_shiny"))
+                alive = sum(1 for lk in links if lk.get("status") == "alive")
+                dead = sum(1 for lk in links if lk.get("status") != "alive")
+                shiny_count = sum(1 for lk in links if lk.get("a_shiny") or lk.get("b_shiny"))
                 total_deaths += dead
                 total_shinies += shiny_count
                 if alive > best_alive:
@@ -282,8 +282,8 @@ class _ReplyHelper:
             last = past[-1]
             runs_dir = _get_runs_dir(self._data_dir)
             links = await asyncio.to_thread(_load_run_links, runs_dir, last.get("run_id", ""))
-            alive = sum(1 for l in links if l.get("status") == "alive")
-            dead = sum(1 for l in links if l.get("status") != "alive")
+            alive = sum(1 for lk in links if lk.get("status") == "alive")
+            dead = sum(1 for lk in links if lk.get("status") != "alive")
             name = _run_display_name(last)
             return f"{name}: {alive} alive links, {dead} dead"
 
@@ -381,18 +381,17 @@ class SLinkChatBot(_ReplyHelper):
         helper = self
 
         # ── Step 1: Validate token against Twitch and resolve bot user ID ──
-        async with _aiohttp.ClientSession() as _session:
-            async with _session.get(
-                "https://id.twitch.tv/oauth2/validate",
-                headers={"Authorization": f"OAuth {access_token}"},
-            ) as _resp:
-                if _resp.status != 200:
-                    body = await _resp.text()
-                    raise RuntimeError(
-                        f"Token rejected by Twitch ({_resp.status}): {body.strip()}. "
-                        "Ensure scopes user:read:chat user:write:chat user:bot channel:bot are granted."
-                    )
-                _data = await _resp.json()
+        async with _aiohttp.ClientSession() as _session, _session.get(
+            "https://id.twitch.tv/oauth2/validate",
+            headers={"Authorization": f"OAuth {access_token}"},
+        ) as _resp:
+            if _resp.status != 200:
+                body = await _resp.text()
+                raise RuntimeError(
+                    f"Token rejected by Twitch ({_resp.status}): {body.strip()}. "
+                    "Ensure scopes user:read:chat user:write:chat user:bot channel:bot are granted."
+                )
+            _data = await _resp.json()
 
         bot_user_id = str(_data.get("user_id", ""))
         bot_login = _data.get("login", self._nick or "?")

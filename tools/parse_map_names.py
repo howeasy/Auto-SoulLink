@@ -16,7 +16,6 @@ If no path given, looks for lua/map_names_results.txt in the project root.
 
 import json
 import os
-import re
 import sys
 
 
@@ -181,9 +180,8 @@ def main():
             rom_display = name_map[key]["name"]
             # Only suggest if different from auto-generated name
             auto_name = area_id.replace("_", " ").title()
-            if rom_display != auto_name:
-                if area_id not in area_display:
-                    area_display[area_id] = rom_display
+            if rom_display != auto_name and area_id not in area_display:
+                area_display[area_id] = rom_display
 
     for area_id in sorted(area_display):
         display = area_display[area_id]

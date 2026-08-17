@@ -15,7 +15,6 @@ This is a cross-client invariant test rather than a Gen 2 regression test, becau
 omission in a future client would be just as silent.
 """
 import os
-import re
 
 import pytest
 

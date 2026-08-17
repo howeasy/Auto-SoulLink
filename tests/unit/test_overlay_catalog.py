@@ -43,7 +43,7 @@ def test_entry_has_the_fields_the_launcher_renders(entry):
 
 def test_slugs_are_unique():
     slugs = [e["slug"] for e in OVERLAYS]
-    assert len(slugs) == len(set(slugs)), f"duplicate slugs: {sorted(set(s for s in slugs if slugs.count(s) > 1))}"
+    assert len(slugs) == len(set(slugs)), f"duplicate slugs: {sorted({s for s in slugs if slugs.count(s) > 1})}"
 
 
 @pytest.mark.parametrize("entry", [e for e in OVERLAYS if e["slug"] not in SYNTHETIC],
@@ -79,8 +79,11 @@ def test_every_default_on_filter_has_a_pill():
     satisfied. The roster is now single-sourced through the context."""
     import json
 
-    from server.overlay_catalog import (EVENT_FILTERS_DEFAULT_OFF, EVENT_FILTERS_DEFAULT_ON,
-                                        build_index_context)
+    from server.overlay_catalog import (
+        EVENT_FILTERS_DEFAULT_OFF,
+        EVENT_FILTERS_DEFAULT_ON,
+        build_index_context,
+    )
 
     class _Req:
         rel_url = type("U", (), {"query": {}})()

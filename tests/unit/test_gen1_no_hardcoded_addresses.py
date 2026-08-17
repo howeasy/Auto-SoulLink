@@ -38,6 +38,19 @@ ORACLE_SCRIPTS = {"test_gen1_ap_gate.lua"}
 SCRIPTS = sorted(
     p for p in (
         glob.glob(os.path.join(REPO, "lua", "tests", "duo", "scenario_gen1_*.lua"))
+        # The generation-agnostic scenarios and the shared duo wrapper. These were named
+        # scenario_gen1_* until Gen 2 became their second caller, and renaming them silently
+        # dropped three files out of this guard — the exact way coverage disappears without
+        # anything going red.
+        #
+        # WHAT THIS GUARD DOES NOT COVER, so nobody reads the glob above as more than it is:
+        # the banned set is derived from `red_profile != yellow_profile`, so it catches only
+        # literals that DIFFER between Red and Yellow. An address identical in both (wJoyIgnore
+        # 0xCD6B, wCurrentMenuItem 0xCC26) is explicitly allowed and is still wrong on Crystal.
+        # Adding these files closes the Yellow hole for shared code, not the Gen 2 one; the
+        # Gen 2 half is currently held by the shared files containing no WRAM literals at all.
+        + glob.glob(os.path.join(REPO, "lua", "tests", "duo", "scenario_gb_*.lua"))
+        + glob.glob(os.path.join(REPO, "lua", "tests", "duo", "duo_gb_main.lua"))
         # gen1_hunt.lua is not a scenario, but the scenarios delegate every cartridge read to
         # it — leaving it out would let the literals simply move one file over.
         + glob.glob(os.path.join(REPO, "lua", "tests", "duo", "gen1_*.lua"))

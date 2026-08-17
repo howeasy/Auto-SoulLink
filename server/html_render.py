@@ -11,7 +11,6 @@ module that renders HTML for the status page or stream overlays.
 
 import html
 
-
 # CSS color per type name (standard Pokémon type palette).
 TYPE_COLOR: dict[str, str] = {
     "Normal":   "#A8A878", "Fighting": "#C03028", "Flying":   "#A890F0",

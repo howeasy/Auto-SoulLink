@@ -164,7 +164,7 @@ def test_checksums_match_pokereds_algorithm(bank):
         return ram[off] or 0
 
     all_boxes = _calc_checksum(byte(base + i) for i in range(PER_BANK * BOX_LEN))
-    assert byte(base + CK_OFFSET) == all_boxes, "sBank{}AllBoxesChecksum wrong".format(bank)
+    assert byte(base + CK_OFFSET) == all_boxes, f"sBank{bank}AllBoxesChecksum wrong"
 
     for i in range(PER_BANK):
         expect = _calc_checksum(byte(base + i * BOX_LEN + j) for j in range(BOX_LEN))

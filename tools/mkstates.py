@@ -184,7 +184,10 @@ def _run_mkstate(kind, target, timeout, extra_env=None):
         subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True)
         if not done:
             print(f"[mkstates] TIMEOUT after {timeout}s")
-    text = open(result, encoding="utf-8", errors="replace").read() if os.path.exists(result) else ""
+    text = ""
+    if os.path.exists(result):
+        with open(result, encoding="utf-8", errors="replace") as f:
+            text = f.read()
     print(text.strip() or "(no result file)")
     return "RESULT: PASS" in text
 

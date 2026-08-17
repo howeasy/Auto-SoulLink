@@ -10,8 +10,8 @@ Source: https://funnotbun.github.io/ (RR Dex)
         -> data/species/species.h from the funnotbun repo
 """
 
-import re
 import json
+import re
 import urllib.request
 from pathlib import Path
 

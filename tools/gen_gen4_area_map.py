@@ -1336,7 +1336,7 @@ def main():
 
     # Summary
     areas = set()
-    for zid, (area_id, _) in ZONE_MAP.items():
+    for area_id, _ in ZONE_MAP.values():
         if not area_id.startswith("_"):
             areas.add(area_id)
     print(f"Unique area_ids (HGSS): {len(areas)}")
@@ -1350,13 +1350,13 @@ def main():
     print(f"Generated data/games/gen4_hgsspt/gen4_hgsspt_areas_pt.lua ({pt_count} entries)")
     print(f"Generated data/games/gen4_hgsspt/gen4_hgsspt_locations_pt.lua ({pt_count} entries)")
     pt_areas = set()
-    for zid, (area_id, _) in ZONE_MAP_PT.items():
+    for area_id, _ in ZONE_MAP_PT.values():
         if not area_id.startswith("_"):
             pt_areas.add(area_id)
     print(f"Unique area_ids (Platinum): {len(pt_areas)}")
 
     # ── area_map_platinum.json ────────────────────────────────────────────────
-    import json, collections
+    import json
     area_map: dict[str, dict] = {}
     for zid, (area_id, display) in ZONE_MAP_PT.items():
         if area_id.startswith("_"):

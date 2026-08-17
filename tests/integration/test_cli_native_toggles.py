@@ -138,6 +138,7 @@ def test_hello_config_carries_native_toggles(tmp_path, monkeypatch):
 def _captured_spawn_cmd(run: dict) -> list:
     """Run manager._spawn_run with the subprocess swapped for a capture stub; return the cmd."""
     import asyncio
+
     import server.manager as manager
 
     captured = {}

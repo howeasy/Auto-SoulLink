@@ -14,7 +14,8 @@ callnative. Cross-checked: Task_InGameTrade's address is the literal loaded just
 call (its own literal pool then points at CB2_InitInGameTrade).
 """
 import sys
-from capstone import Cs, CS_ARCH_ARM, CS_MODE_THUMB
+
+from capstone import CS_ARCH_ARM, CS_MODE_THUMB, Cs
 
 ROM_BASE = 0x08000000
 CREATE_TASK = 0x0807741C
@@ -42,7 +43,7 @@ def main():
             bls[insn.address] = tgt
     # Find a CreateTask BL followed within 24 bytes by a BeginNormalPaletteFade BL.
     ct = sorted(a for a, t in bls.items() if t == CREATE_TASK)
-    bf = set(a for a, t in bls.items() if t == BEGIN_FADE)
+    bf = {a for a, t in bls.items() if t == BEGIN_FADE}
     hits = []
     for a in ct:
         for d in range(4, 28, 2):

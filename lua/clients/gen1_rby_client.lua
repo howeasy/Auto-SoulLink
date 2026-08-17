@@ -377,8 +377,16 @@ local function dispatch_commands(cmds)
                 end
             end
             pending_sync_cmds = filtered
-            pending_sync_cmds[#pending_sync_cmds + 1] = {cmd = "party_mon", key = c.key}
-            console.log("[SLink-RBY]   ↳ party_mon QUEUED: " .. c.key:sub(1, 8))
+            -- CARRY c.stats THROUGH. This enqueued only {cmd, key}, so the `cmd.stats` the
+            -- executor reads was ALWAYS nil and the server's mon_stats block never reached
+            -- retrieveBoxMon. The box struct does not carry maxHP or the five stats, so the
+            -- only surviving source was the in-process _party_tail_cache — which dies with
+            -- the client. Since retrieveBoxMon now refuses rather than returning a zeroed
+            -- mon, that made party_mon fail outright after any restart.
+            pending_sync_cmds[#pending_sync_cmds + 1] =
+                {cmd = "party_mon", key = c.key, stats = c.stats}
+            console.log(fmt("[SLink-RBY]   ↳ party_mon QUEUED: %s (stats=%s)",
+                            c.key:sub(1, 8), c.stats and "yes" or "no"))
         elseif c.cmd == "memorialize" and c.key then
             -- Deduplicate: skip if already queued
             local already_queued = false
@@ -1311,6 +1319,49 @@ local function on_frame()
                 end
             end
         elseif cmd.cmd == "party_mon" then
+            -- DO NOT WITHDRAW INTO A PARTY THAT IS ENTIRELY FAINTED.
+            --
+            -- That is the exact window in which the cartridge is deciding whether to black
+            -- out, and handing it a living mon cancels the decision. Measured on the duo
+            -- whiteout scenario: A's last mon died of poison, the client emitted `whiteout`,
+            -- the server answered with the auto-rebuild's party_mon, the withdraw landed
+            -- while the "fainted!" text box was between frames, AnyPartyAlive then returned
+            -- nonzero and HandleBlackOut never ran. No blackout, no money loss, no warp.
+            --
+            -- The scenario had been PASSING on the bug this guard now covers: party_mon
+            -- dropped its stats block, retrieveBoxMon refused, and the party stayed dead by
+            -- accident. Fixing the drop is what exposed the race.
+            --
+            -- IT WAITS OUT THE RACE, THEN PROCEEDS — it never refuses. HandleBlackOut ends
+            -- in HealParty, so a machine that IS blacking out revives within a few frames
+            -- and the withdraw lands immediately after, in the order it was always meant to
+            -- happen in. But the PARTNER machine reaches the same all-fainted state by
+            -- force_faint, where nothing will ever resolve it: the cartridge never noticed
+            -- the HP write, so no blackout runs. A guard that refused would strand exactly
+            -- the mon the rebuild exists to restore — measured, as B failing this same
+            -- scenario from the other side.
+            --
+            -- Its own counter, not keep_queued's: the retry budget below belongs to "party
+            -- full", and sharing one would let a long blackout eat the other's attempts.
+            local function party_all_fainted()
+                local n = M.getPartyCount()
+                if n < 1 or n > 6 then return false end
+                for s = 0, n - 1 do
+                    local m = M.readPartySlot(s)
+                    if m and m.hp and m.hp > 0 then return false end
+                end
+                return true
+            end
+            local BLACKOUT_WAIT = 300      -- ~5s at 60fps; a blackout resolves in far less
+            if party_all_fainted() and (cmd._blackout_waits or 0) < BLACKOUT_WAIT then
+                cmd._blackout_waits = (cmd._blackout_waits or 0) + 1
+                handled = false
+                if cmd._blackout_waits == 1 then
+                    console.log("[SLink-RBY]   ↳ party_mon deferred: whole party is fainted, "
+                                .. "letting the blackout resolve first")
+                end
+                goto party_mon_done
+            end
             local count = M.getPartyCount()
             -- Check if already in party
             local already = false
@@ -1356,6 +1407,7 @@ local function on_frame()
                          "sync_retrieve_failed:" .. cmd.key:sub(1, 8), true)
                 end
             end
+            ::party_mon_done::
         elseif cmd.cmd == "memorialize" then
             -- Memorialize: deposit dead mon to current box (Gen 1 graveyard)
             local count = M.getPartyCount()

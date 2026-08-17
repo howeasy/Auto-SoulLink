@@ -19,6 +19,7 @@ Class display names are NOT changed by this script — see the existing
 "classes" map for the canonical labels. Only personal names per instance.
 """
 from __future__ import annotations
+
 import json
 import os
 import re

@@ -22,8 +22,7 @@ import re
 import shutil
 import signal
 import sys
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 try:
     import psutil
@@ -40,9 +39,10 @@ except ImportError:
     print("ERROR: aiohttp required. Run: pip install aiohttp", file=sys.stderr)
     sys.exit(1)
 
-from server.templating import setup_templating, resolve_theme
-from server.overlay_catalog import build_index_context as _build_stream_index_context
 import aiohttp_jinja2
+
+from server.overlay_catalog import build_index_context as _build_stream_index_context
+from server.templating import resolve_theme, setup_templating
 
 log = logging.getLogger("slink.manager")
 
@@ -99,7 +99,7 @@ def _save_registry(runs: list[dict]):
         json.dump({"runs": runs}, f, indent=2)
 
 
-def _find_run(runs: list[dict], run_id: str) -> Optional[dict]:
+def _find_run(runs: list[dict], run_id: str) -> dict | None:
     for r in runs:
         if r["run_id"] == run_id:
             return r
@@ -207,7 +207,7 @@ def _build_launcher(run: dict, player: str, host: str) -> str:
 
 # ── Subprocess management ───────────────────────────────────────────────────
 
-def _is_alive(pid: Optional[int]) -> bool:
+def _is_alive(pid: int | None) -> bool:
     if pid is None:
         return False
     if PSUTIL_AVAILABLE:
@@ -265,7 +265,8 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
     # as stopped.
     _spawn_log = os.path.join(data_dir, "spawn.log")
     try:
-        _errf = open(_spawn_log, "ab", buffering=0)   # data_dir was created above
+        # Not a context manager: the handle is owned by the subprocess below and must outlive us.
+        _errf = open(_spawn_log, "ab", buffering=0)   # noqa: SIM115
     except OSError:
         _errf = asyncio.subprocess.DEVNULL
     proc = await asyncio.create_subprocess_exec(
@@ -347,9 +348,9 @@ def _adopt_orphans(runs: list[dict]) -> bool:
 
         # --- derive creation time ---
         try:
-            ctime = datetime.fromtimestamp(entry.stat().st_ctime, tz=timezone.utc).isoformat()
+            ctime = datetime.fromtimestamp(entry.stat().st_ctime, tz=UTC).isoformat()
         except OSError:
-            ctime = datetime.now(timezone.utc).isoformat()
+            ctime = datetime.now(UTC).isoformat()
 
         # --- derive name ---
         name = run_id  # fallback
@@ -440,7 +441,7 @@ class RunManager:
     def __init__(self, bind_host: str, manager_port: int = MANAGER_HTTP_PORT):
         self.bind_host = bind_host
         self.manager_port = manager_port
-        self._stream_pin_id: Optional[str] = None  # run_id pinned for stream overlays
+        self._stream_pin_id: str | None = None  # run_id pinned for stream overlays
 
     def _get(self) -> list[dict]:
         runs = _load_registry()
@@ -448,7 +449,7 @@ class RunManager:
             _save_registry(runs)
         return runs
 
-    def _active_stream_run(self) -> Optional[dict]:
+    def _active_stream_run(self) -> dict | None:
         """Return the run that stream overlays should proxy to.
 
         Priority:
@@ -536,7 +537,7 @@ class RunManager:
             return web.json_response({"ok": False, "error": "name is required"}, status=400)
 
         runs = _load_registry()
-        run_id = "run_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        run_id = "run_" + datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         # Handle collision (unlikely but possible)
         existing_ids = {r["run_id"] for r in runs}
         suffix = 0
@@ -549,7 +550,7 @@ class RunManager:
         run = {
             "run_id":     run_id,
             "name":       name,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "tcp_port":   tcp_port,
             "http_port":  http_port,
             "status":     "stopped",
@@ -794,7 +795,7 @@ class RunManager:
             ) as resp:
                 data = await resp.json(content_type=None)
                 return web.json_response(data)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return web.json_response({"error": "timeout"}, status=504)
         except Exception as e:
             log.debug(f"Proxy /api/runs/{run_id}/live failed: {e}")

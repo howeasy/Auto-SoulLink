@@ -24,6 +24,34 @@ function M.toNatDex(species_id)
     return 0
 end
 
+-- ═══ Ball item IDs ═══
+-- DERIVED, not transcribed: these are exactly the items pret files in the BALL pocket
+-- (data/items/attributes.asm, whose row N is item N+1 — the table starts at MASTER_BALL).
+-- Identical in pokecrystal and pokegold, so all three profiles share one list.
+--
+-- The previous list had the Apricorn balls at 0xA9-0xAF, which are really SUN_STONE,
+-- POLKADOT_BOW, UP_GRADE, BERRY, GOLD_BERRY and SQUIRTBOTTLE, and Park Ball at 0xB2
+-- instead of 0xB1. Since the Balls pocket can only ever hold real balls, that produced no
+-- false positives — it produced SILENCE: a player carrying only Kurt's Apricorn balls read
+-- as having none, so the Nuzlocke gate never opened and no rule was enforced all run.
+--
+-- LIGHT_BALL (0xA3) is deliberately absent. It is Pikachu's held item, not a ball, and it
+-- is filed in the ITEM pocket — the one entry that name-matching would get wrong.
+local BALL_ITEM_IDS = {
+    0x01,   -- MASTER_BALL
+    0x02,   -- ULTRA_BALL
+    0x04,   -- GREAT_BALL
+    0x05,   -- POKE_BALL
+    0x9D,   -- HEAVY_BALL
+    0x9F,   -- LEVEL_BALL
+    0xA0,   -- LURE_BALL
+    0xA1,   -- FAST_BALL
+    0xA4,   -- FRIEND_BALL
+    0xA5,   -- MOON_BALL
+    0xA6,   -- LOVE_BALL
+    0xB1,   -- PARK_BALL (unobtainable in Gold/Silver, but in their pocket table too)
+}
+
 -- ═══ Memory Profiles ═══
 -- Crystal US (CGB-BYTE-0). Addresses from pret/pokecrystal wram.asm.
 -- Crystal has no variants — one profile covers all US ROMs.
@@ -39,13 +67,30 @@ M.PROFILES = {
         party_struct_size    = 48,
 
         -- Enemy party (wOTPartyCount / wOTPartyMons)
-        ENEMY_COUNT_ADDR     = 0xD280,  -- TODO: verify in BizHawk
-        ENEMY_BASE_ADDR      = 0xD288,  -- TODO: verify in BizHawk
+        ENEMY_COUNT_ADDR     = 0xD280,  -- verified vs pret by tools/verify_profile_addresses.py
+        ENEMY_BASE_ADDR      = 0xD288,  -- verified vs pret by tools/verify_profile_addresses.py
 
         -- Current active box in SRAM (wBoxCount / wBoxMons)
         -- These addresses are System Bus view (0xA000+offset). Accessed via CartRAM domain.
         -- Layout: count(1) + species(21) + mons(20*32=640) + OT_names(20*11=220) + nicks(20*11=220)
         BOX_COUNT_ADDR       = 0xAD10,
+        -- wCurBox: the active PC box, 0-based. Gen 1 packs a "changed boxes"
+        -- flag into bit 7 of its equivalent; Gen 2's is a plain index, and the
+        -- shared mask is harmless on 0..13.
+        CURRENT_BOX_NUM_ADDR = 0xDB72,
+        -- The safe-state predicate: nonzero while a script or a full-screen menu owns the
+        -- game. Named JOY_IGNORE_ADDR because that is the shared key memory_gb's
+        -- isInOverworld() reads; Gen 1's equivalent really is wJoyIgnore.
+        --
+        -- MEASURED, not chosen by name (lua/tests/probe_gen2_safestate.lua on real Crystal):
+        --   wScriptRunning  00 overworld -> FF with the START menu open -> 00 closed   USABLE
+        --   wJoypadDisable  00 in BOTH — the obvious Gen 1 analogue, and it does not fire
+        --   wTextboxFlags   01 in both — it is text-SPEED config, not "a box is open"
+        --   wMapEventStatus differs but does not return to its overworld value
+        -- Gating writes on `not in_battle` alone is what this replaces: that is also true in
+        -- the PC box UI, the party menu and the naming screen, where the open UI holds its
+        -- own copy of the data and writes it back over ours.
+        JOY_IGNORE_ADDR      = 0xD438,
         BOX_SPECIES_ADDR     = 0xAD11,                  -- ends at 0xAD25
         BOX_BASE_ADDR        = 0xAD26,                  -- ends at 0xAFA5 (20*32=640 bytes)
         BOX_OT_NAMES_ADDR    = 0xAFA6,                  -- ends at 0xB081 (20*11=220 bytes)
@@ -62,7 +107,7 @@ M.PROFILES = {
         bag_max_items        = 12,      -- ball pocket max size
 
         -- Battle (wBattleMode: 0=overworld, 1=wild, 2=trainer)
-        BATTLE_FLAG_ADDR     = 0xD22D,  -- TODO: verify in BizHawk
+        BATTLE_FLAG_ADDR     = 0xD22D,  -- verified vs pret by tools/verify_profile_addresses.py
 
         -- Active enemy battle mon (wEnemyMon / wBattleMon structure)
         -- Source: DataCrystal RAM map — battle struct is NOT the same as party struct
@@ -72,7 +117,7 @@ M.PROFILES = {
         ENEMY_MON_MAXHP_ADDR   = 0xD218,  -- max HP (2 bytes BE)
 
         -- Enemy species list
-        ENEMY_SPECIES_LIST_ADDR = 0xD281, -- TODO: verify in BizHawk
+        ENEMY_SPECIES_LIST_ADDR = 0xD281, -- verified vs pret by tools/verify_profile_addresses.py
 
         -- Map (2-byte group:number addressing)
         MAP_GROUP_ADDR       = 0xDCB5,   -- wMapGroup
@@ -95,7 +140,12 @@ M.PROFILES = {
         level_offset         = 0x1F,    -- actual level (party-calculated)
         hp_offset            = 0x22,    -- current HP (2 bytes big-endian)
         maxhp_offset         = 0x24,    -- max HP (2 bytes big-endian)
-        status_offset        = 0x20,    -- non-volatile status (u8: bits 0-2 SLP, 3 PSN, 4 BRN, 5 FRZ, 6 PAR, 7 TOX)
+        status_offset        = 0x20,
+        -- party_struct tail (pret macros/ram.asm): Atk +0x26, Def +0x28, Spd +0x2A,
+        -- SpclAtk +0x2C, SpclDef +0x2E. Gen 2 SPLIT Special, so spdef_offset is a
+        -- real address here rather than the alias of spAtk it is in Gen 1.
+        stats_offset         = 0x26,
+        spdef_offset         = 0x2E,    -- SpclDef, per the macro tail above
         -- wEnemyMon is a battle_struct (NOT party_struct). Offsets confirmed by the
         -- profile's other battle-struct addresses: ENEMY_MON_LEVEL_ADDR-SPECIES = 0x0D,
         -- ENEMY_MON_HP_ADDR-SPECIES = 0x10, MaxHP at 0x12 → Status sits at 0x0E.
@@ -109,23 +159,7 @@ M.PROFILES = {
         box_dv_offset_2      = 0x16,
         box_level_offset     = 0x1F,    -- box level (level at time of deposit)
 
-        -- Ball item IDs (Crystal)
-        -- Source: pret/pokecrystal constants/item_constants.asm
-        ball_item_ids        = {
-            0x01,   -- Master Ball
-            0x02,   -- Ultra Ball
-            0x04,   -- Great Ball
-            0x05,   -- Poké Ball
-            -- Apricorn balls (0xA9-0xAF)
-            0xA9,   -- Fast Ball
-            0xAA,   -- Level Ball
-            0xAB,   -- Lure Ball
-            0xAC,   -- Heavy Ball
-            0xAD,   -- Love Ball
-            0xAE,   -- Friend Ball
-            0xAF,   -- Moon Ball
-            0xB2,   -- Park Ball (Bug Catching Contest)
-        },
+        ball_item_ids        = BALL_ITEM_IDS,
 
         -- Gen 2 uses same text encoding as Gen 1
         generation = 2,
@@ -176,7 +210,22 @@ M.PROFILES = {
         -- Phase 7: Sound-effect dispatch. wMusicID at 0xC2BD per pret/pokecrystal.
         -- The audio engine consumes the byte on the next audio frame.
         -- SFX IDs from constants/sfx_constants.asm.
-        SFX_DISPATCH_ADDR       = 0xC2BD,
+        -- LEFT DISABLED ON PURPOSE. This said 0xC2BD, which is wCryTracks — the comment named
+        -- the right symbol and the value was a different one, exactly the shape of the Gen 1
+        -- SFX bug (that one pointed at wMapMusicSoundID and corrupted the map's BGM on every
+        -- capture and faint). wMusicID is 0xC29D and is the value to try.
+        --
+        -- But Gen 1 also taught that the right-looking symbol need not be a trigger at all —
+        -- wNewSoundID turned out to be PlaySound's internal scratch, so NO address would have
+        -- worked. An unproven dispatch address is not a cosmetic risk: it is a blind byte
+        -- written into the live audio engine on every capture, faint and whiteout, and Gen 2
+        -- has just earned live verification everywhere else. Shipping a guess alongside that
+        -- would be the one unmeasured write in an otherwise measured generation.
+        --
+        -- nil = M.playSfx() is a no-op (memory_gb.lua guards on it). To enable: run
+        -- `lua/tests/test_gen2_sfx.lua`, confirm wChannelSoundIDs actually changes, then set
+        -- this to 0xC29D. sfx_ids below are already correct per constants/sfx_constants.asm.
+        SFX_DISPATCH_ADDR       = nil,
         sfx_ids                 = {
             capture   = 0x44,   -- SFX_CAUGHT_MON
             gift      = 0x44,   -- SFX_CAUGHT_MON
@@ -216,6 +265,23 @@ M.PROFILES = {
 
         -- Current active box (SRAM bank 1)
         BOX_COUNT_ADDR       = 0xAD6C,  -- sBoxCount
+        -- wCurBox: the active PC box, 0-based. Gen 1 packs a "changed boxes"
+        -- flag into bit 7 of its equivalent; Gen 2's is a plain index, and the
+        -- shared mask is harmless on 0..13.
+        CURRENT_BOX_NUM_ADDR = 0xD8BC,
+        -- The safe-state predicate: nonzero while a script or a full-screen menu owns the
+        -- game. Named JOY_IGNORE_ADDR because that is the shared key memory_gb's
+        -- isInOverworld() reads; Gen 1's equivalent really is wJoyIgnore.
+        --
+        -- MEASURED, not chosen by name (lua/tests/probe_gen2_safestate.lua on real Crystal):
+        --   wScriptRunning  00 overworld -> FF with the START menu open -> 00 closed   USABLE
+        --   wJoypadDisable  00 in BOTH — the obvious Gen 1 analogue, and it does not fire
+        --   wTextboxFlags   01 in both — it is text-SPEED config, not "a box is open"
+        --   wMapEventStatus differs but does not return to its overworld value
+        -- Gating writes on `not in_battle` alone is what this replaces: that is also true in
+        -- the PC box UI, the party menu and the naming screen, where the open UI holds its
+        -- own copy of the data and writes it back over ours.
+        JOY_IGNORE_ADDR      = 0xD15F,
         BOX_SPECIES_ADDR     = 0xAD6D,  -- sBoxSpecies
         BOX_BASE_ADDR        = 0xAD82,  -- sBoxMons (20 × 32 bytes)
         BOX_OT_NAMES_ADDR    = 0xB002,  -- sBoxMonOTs
@@ -263,7 +329,14 @@ M.PROFILES = {
         hp_offset            = 0x22,
         maxhp_offset         = 0x24,
         status_offset        = 0x20,
-        enemy_status_offset  = 0x20,
+        -- party_struct tail (pret macros/ram.asm): Atk +0x26, Def +0x28, Spd +0x2A,
+        -- SpclAtk +0x2C, SpclDef +0x2E. Gen 2 SPLIT Special, so spdef_offset is a
+        -- real address here rather than the alias of spAtk it is in Gen 1.
+        stats_offset         = 0x26,
+        spdef_offset         = 0x2E,
+        -- battle_struct, not party_struct: wEnemyMonStatus(0xD0FD) - wEnemyMon(0xD0EF) = 0x0E.
+        -- Was 0x20 (the party_struct offset). Crystal was fixed and these two were missed.
+        enemy_status_offset  = 0x0E,
 
         -- Box struct offsets (32-byte truncated party_struct)
         box_species_offset   = 0x00,
@@ -273,22 +346,7 @@ M.PROFILES = {
         box_dv_offset_2      = 0x16,
         box_level_offset     = 0x1F,
 
-        -- Ball item IDs — Gold/Silver have the same Apricorn ball constants as
-        -- Crystal, except no Park Ball (introduced in Crystal's Bug Catching
-        -- Contest only).
-        ball_item_ids        = {
-            0x01,  -- Master Ball
-            0x02,  -- Ultra Ball
-            0x04,  -- Great Ball
-            0x05,  -- Poké Ball
-            0xA9,  -- Fast Ball
-            0xAA,  -- Level Ball
-            0xAB,  -- Lure Ball
-            0xAC,  -- Heavy Ball
-            0xAD,  -- Love Ball
-            0xAE,  -- Friend Ball
-            0xAF,  -- Moon Ball
-        },
+        ball_item_ids        = BALL_ITEM_IDS,
 
         generation     = 2,
         uses_map_group = true,
@@ -330,6 +388,23 @@ M.PROFILES = {
         ENEMY_SPECIES_LIST_ADDR = 0xDD56,
         ENEMY_BASE_ADDR      = 0xDD5D,
         BOX_COUNT_ADDR       = 0xAD6C,
+        -- wCurBox: the active PC box, 0-based. Gen 1 packs a "changed boxes"
+        -- flag into bit 7 of its equivalent; Gen 2's is a plain index, and the
+        -- shared mask is harmless on 0..13.
+        CURRENT_BOX_NUM_ADDR = 0xD8BC,
+        -- The safe-state predicate: nonzero while a script or a full-screen menu owns the
+        -- game. Named JOY_IGNORE_ADDR because that is the shared key memory_gb's
+        -- isInOverworld() reads; Gen 1's equivalent really is wJoyIgnore.
+        --
+        -- MEASURED, not chosen by name (lua/tests/probe_gen2_safestate.lua on real Crystal):
+        --   wScriptRunning  00 overworld -> FF with the START menu open -> 00 closed   USABLE
+        --   wJoypadDisable  00 in BOTH — the obvious Gen 1 analogue, and it does not fire
+        --   wTextboxFlags   01 in both — it is text-SPEED config, not "a box is open"
+        --   wMapEventStatus differs but does not return to its overworld value
+        -- Gating writes on `not in_battle` alone is what this replaces: that is also true in
+        -- the PC box UI, the party menu and the naming screen, where the open UI holds its
+        -- own copy of the data and writes it back over ours.
+        JOY_IGNORE_ADDR      = 0xD15F,
         BOX_SPECIES_ADDR     = 0xAD6D,
         BOX_BASE_ADDR        = 0xAD82,
         BOX_OT_NAMES_ADDR    = 0xB002,
@@ -361,14 +436,21 @@ M.PROFILES = {
         hp_offset            = 0x22,
         maxhp_offset         = 0x24,
         status_offset        = 0x20,
-        enemy_status_offset  = 0x20,
+        -- party_struct tail (pret macros/ram.asm): Atk +0x26, Def +0x28, Spd +0x2A,
+        -- SpclAtk +0x2C, SpclDef +0x2E. Gen 2 SPLIT Special, so spdef_offset is a
+        -- real address here rather than the alias of spAtk it is in Gen 1.
+        stats_offset         = 0x26,
+        spdef_offset         = 0x2E,
+        -- battle_struct, not party_struct: wEnemyMonStatus(0xD0FD) - wEnemyMon(0xD0EF) = 0x0E.
+        -- Was 0x20 (the party_struct offset). Crystal was fixed and these two were missed.
+        enemy_status_offset  = 0x0E,
         box_species_offset   = 0x00,
         box_held_item_offset = 0x01,
         box_otid_offset      = 0x06,
         box_dv_offset_1      = 0x15,
         box_dv_offset_2      = 0x16,
         box_level_offset     = 0x1F,
-        ball_item_ids        = {0x01, 0x02, 0x04, 0x05, 0xA9, 0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF},
+        ball_item_ids        = BALL_ITEM_IDS,
         generation     = 2,
         uses_map_group = true,
         is_egg_species = 0xFD,
@@ -387,11 +469,49 @@ M.PROFILES = {
     },
 }
 
--- ═══ Archipelago variant (Phase 8) ═══════════════════════════════════════
--- Pokemon Crystal Archipelago (gerbiljames/Archipelago-Crystal fork) uses the
--- same RAM layout as vanilla Crystal — only the ROM title differs ("AP_CRYSTAL"
--- vs "PM_CRYSTAL"). The crystal_ap profile inherits all addresses from crystal.
-M.PROFILES.crystal_ap = setmetatable({variant_label = "Crystal (AP)"}, {__index = M.PROFILES.crystal})
+-- ═══ Archipelago variant ═════════════════════════════════════════════════
+-- THE "SAME LAYOUT AS VANILLA" ASSUMPTION IS FALSE, and it is falsifiable without a ROM.
+--
+-- The shipped pokemon_crystal.apworld carries its own `ram_addresses` table
+-- (pokemon_crystal/data/data.json, WRAM-domain offsets that add 0xC000). Diffed against
+-- data/pret_syms.json's vanilla pokecrystal, the fork moves things by FOUR different amounts
+-- and in both directions:
+--
+--     wMapEventStatus  0xD433 -> 0xD437   +4
+--     wMapGroup        0xDCB5 -> 0xDCC0  +11
+--     wMapNumber       0xDCB6 -> 0xDCC1  +11
+--     wEventFlags      0xDA72 -> 0xDA8F  +29
+--     wStatusFlags     0xD84C -> 0xD827  -37
+--
+-- So a blanket `setmetatable(..., {__index = crystal})` served WRONG addresses for anything
+-- past an insertion point. Gen 1's red_ap had exactly this bug (+88 / -18 / +216).
+--
+-- WHAT IS AND IS NOT KNOWN. Only those five vanilla symbols appear in the apworld's table,
+-- and there is no public fork repo to build a full symbol set from (the URL the docs used to
+-- name is gone), so tools/build_pret_syms.py cannot do for AP Crystal what it does for
+-- alchav_pokered. The five below are overridden because they are PROVEN wrong. Every other
+-- address is still inherited and is therefore UNVERIFIED — it may well be right, and there is
+-- no evidence either way.
+--
+-- Consequently AP Crystal is NOT claimed as supported. Treat this profile as "vanilla plus
+-- the five corrections we can prove" until a live gate on a generated AP ROM says otherwise.
+-- tests/unit/test_gen2_ap_addresses.py pins these five against the apworld's own data so the
+-- profile cannot silently drift from what AP itself declares.
+M.PROFILES.crystal_ap = setmetatable({
+    variant_label  = "Crystal (AP)",
+    -- Proven from the apworld's ram_addresses (see above).
+    MAP_GROUP_ADDR  = 0xDCC0,   -- wMapGroup,  vanilla 0xDCB5 (+11)
+    MAP_NUMBER_ADDR = 0xDCC1,   -- wMapNumber, vanilla 0xDCB6 (+11)
+    -- Recorded for the address checker and for whoever builds the live gate. The profile has
+    -- no key for these today; they are the only other fork addresses we can prove.
+    ap_known_addresses = {
+        wMapEventStatus = 0xD437,
+        wStatusFlags    = 0xD827,
+        wEventFlags     = 0xDA8F,
+    },
+    -- Everything else is inherited from vanilla Crystal and NOT verified.
+    ap_addresses_unverified = true,
+}, {__index = M.PROFILES.crystal})
 
 -- Lowercase alias for game_detect.lua compatibility
 M.profiles = M.PROFILES

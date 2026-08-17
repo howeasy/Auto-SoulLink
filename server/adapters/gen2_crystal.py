@@ -11,8 +11,9 @@ import logging
 import os
 import re
 
-from .base import GameAdapter, load_area_names_from_obj_map
 from server.pokemon_data import base_form
+
+from .base import GameAdapter, load_area_names_from_obj_map
 
 log = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ _KEY_PATTERN = re.compile(r'^[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4}:[0-9A-Fa-f]{1,2}$')
 _SPECIES_DATA: dict[int, dict] = {}
 _species_types_path = os.path.join(_DATA_DIR, "species_types.json")
 if os.path.exists(_species_types_path):
-    with open(_species_types_path, "r") as _f:
+    with open(_species_types_path) as _f:
         _raw = json.load(_f)
         for _k, _v in _raw.items():
             _SPECIES_DATA[int(_k)] = _v
@@ -86,7 +87,7 @@ else:
 _GENDER_RATIOS: dict[int, int] = {}
 _gender_path = os.path.join(_DATA_DIR, "gender_ratios.json")
 if os.path.exists(_gender_path):
-    with open(_gender_path, "r") as _f:
+    with open(_gender_path) as _f:
         _raw = json.load(_f)
         for _k, _v in _raw.items():
             _GENDER_RATIOS[int(_k)] = int(_v)
@@ -97,7 +98,7 @@ else:
 _ITEM_NAMES: dict[int, str] = {}
 _items_path = os.path.join(_DATA_DIR, "item_names.json")
 if os.path.exists(_items_path):
-    with open(_items_path, "r") as _f:
+    with open(_items_path) as _f:
         _raw = json.load(_f)
         for _k, _v in _raw.items():
             _ITEM_NAMES[int(_k)] = _v
@@ -112,7 +113,7 @@ _AREA_DISPLAY_NAMES: dict[str, str] = load_area_names_from_obj_map(
 _GEN2_MOVES: dict[int, dict] = {}
 _moves_path = os.path.join(_DATA_DIR, "moves.json")
 if os.path.exists(_moves_path):
-    with open(_moves_path, "r") as _f:
+    with open(_moves_path) as _f:
         for _entry in json.load(_f).get("moves", []):
             _GEN2_MOVES[int(_entry["id"])] = _entry
 else:
@@ -122,7 +123,7 @@ else:
 _GEN2_ENCOUNTERS: dict[str, dict[str, list[dict]]] = {}
 _enc_path = os.path.join(_DATA_DIR, "encounter_tables.json")
 if os.path.exists(_enc_path):
-    with open(_enc_path, "r") as _f:
+    with open(_enc_path) as _f:
         _GEN2_ENCOUNTERS = json.load(_f)
 else:
     log.warning("Gen 2 encounter_tables.json not found: %s", _enc_path)
@@ -150,6 +151,20 @@ class Gen2CrystalAdapter(GameAdapter):
     def supports_abilities(self) -> bool:
         """This generation predates abilities — the party table must not render the column."""
         return False
+
+    def party_blob_size(self) -> int:
+        """48-byte party struct + 11-byte OT name + 11-byte nickname.
+
+        Like Gen 1, Gen 2 keeps OT names and nicknames in arrays PARALLEL to the mon struct
+        rather than inside it (pret/pokecrystal ram/wram.asm: wPartyMons, then wPartyMonOTs,
+        then wPartyMonNicknames), so a faithful copy is this composite and not just the
+        struct. The struct itself is 48 bytes here against Gen 1's 44 — Gen 2 added a held
+        item, happiness, pokerus and caught data, and split Special into SpAtk/SpDef.
+
+        This returned the base default of 0 until now, which made `_ingest_party_blobs`
+        discard every Gen 2 blob it was ever sent.
+        """
+        return 48 + 11 + 11
 
     def is_gift_area(self, area_id: str) -> bool:
         return area_id in _GIFT_AREAS or area_id.startswith("gift_")

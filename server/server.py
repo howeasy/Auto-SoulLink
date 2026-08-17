@@ -15,18 +15,19 @@ Run:
     python -m server.server [--host 0.0.0.0] [--port 54321] [--http-port 8080]
 """
 
+import argparse
 import asyncio
+import contextlib
+import html
 import json
 import logging
 import logging.handlers
-import argparse
+import mimetypes
 import os
 import re
-import html
 import shutil
-import mimetypes
-from collections import deque
 import time
+from collections import deque
 from datetime import datetime
 
 from server.overlay_catalog import build_index_context as _build_stream_index_context
@@ -38,33 +39,37 @@ except ImportError:
     AIOHTTP_AVAILABLE = False
 
 try:
-    from .state import SoulLinkState, LINKS_PATH, DATA_DIR
     from .pokemon_data import (
         GENDER_SYMBOL as _GENDER_SYMBOL,
     )
+    from .state import DATA_DIR, LINKS_PATH, SoulLinkState
 except ImportError:
     import sys
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from server.state import SoulLinkState, LINKS_PATH, DATA_DIR
     from server.pokemon_data import (
         GENDER_SYMBOL as _GENDER_SYMBOL,
     )
+    from server.state import DATA_DIR, LINKS_PATH, SoulLinkState
 
 try:
     from .obs_controller import (
-        OBSController, obs_config_path, ALL_TRIGGER_EVENTS,
-        AREA_GROUPS, classify_area,
+        AREA_GROUPS,
+        OBSController,
+        classify_area,
+        obs_config_path,
     )
 except ImportError:
     from server.obs_controller import (
-        OBSController, obs_config_path, ALL_TRIGGER_EVENTS,
-        AREA_GROUPS, classify_area,
+        AREA_GROUPS,
+        OBSController,
+        classify_area,
+        obs_config_path,
     )
 
 try:
-    from .templating import setup_templating, resolve_theme, resolve_layout
+    from .templating import resolve_layout, resolve_theme, setup_templating
 except ImportError:
-    from server.templating import setup_templating, resolve_theme, resolve_layout
+    from server.templating import resolve_layout, resolve_theme, setup_templating
 
 import aiohttp_jinja2
 
@@ -108,16 +113,12 @@ def _configure_logging(data_dir: str | None, verbose: bool) -> None:
 
 
 
-from server.html_render import (
-    TYPE_COLOR as _TYPE_COLOR,
-    SPLIT_ICONS as _SPLIT_ICONS,
-    STAT_STAGE_LABELS as _STAT_STAGE_LABELS,
-    type_badges_html as _type_badges_html,
+from server.html_render import (  # noqa: E402
     move_table_html as _move_table_html,
-    status_icon_html as _status_icon_html,
     stat_stages_html as _stat_stages_html,
+    status_icon_html as _status_icon_html,
+    type_badges_html as _type_badges_html,
 )
-
 
 # ── Damage Calculator integration ────────────────────────────────────────────
 
@@ -1802,7 +1803,7 @@ class SLinkServer:
                     continue
                 nm = (g[0][1].get("name") or "").title() or "?"
                 by_name.setdefault(nm, []).append(g)
-            for nm, buckets in by_name.items():
+            for _nm, buckets in by_name.items():
                 if len(buckets) < 2:
                     continue
                 ordered = sorted(buckets, key=_bucket_cap)
@@ -1918,9 +1919,10 @@ class SLinkServer:
                     else:
                         lv_text = "Lv?"
                     meta_bits = []
-                    if ability: meta_bits.append(f'<span class="tr-ability">{ability}</span>')
-                    if item:    meta_bits.append(f'<span class="tr-item">@ {item}</span>')
-                    if nature:  meta_bits.append(f'<span class="tr-nature dim">{nature}</span>')
+                    # Column-aligned table of optional meta chips — kept on one line each.
+                    if ability: meta_bits.append(f'<span class="tr-ability">{ability}</span>')   # noqa: E701
+                    if item:    meta_bits.append(f'<span class="tr-item">@ {item}</span>')       # noqa: E701
+                    if nature:  meta_bits.append(f'<span class="tr-nature dim">{nature}</span>') # noqa: E701
                     meta_html = (' · '.join(meta_bits)) if meta_bits else ''
                     # Built outside the f-string: a backslash inside an f-string expression
                     # is Python 3.12+ syntax and would not parse on 3.11.
@@ -2095,14 +2097,11 @@ class SLinkServer:
             return
         for q in self._sse_clients:
             # Drain any unconsumed item, then put the new sentinel.
-            try:
+            with contextlib.suppress(asyncio.QueueEmpty):
                 q.get_nowait()
-            except asyncio.QueueEmpty:
-                pass
-            try:
+            # QueueFull should not happen after the drain, but be safe.
+            with contextlib.suppress(asyncio.QueueFull):
                 q.put_nowait(True)
-            except asyncio.QueueFull:
-                pass  # should not happen after drain, but be safe
 
     async def _sse_heartbeat_loop(self):
         """Send SSE keepalive comments every 15 seconds to detect dead clients."""
@@ -2153,8 +2152,7 @@ class SLinkServer:
             try:
                 await asyncio.wait_for(resp.write(data), timeout=10.0)
                 return True
-            except (asyncio.TimeoutError, ConnectionResetError, ConnectionAbortedError,
-                    asyncio.CancelledError):
+            except (TimeoutError, ConnectionResetError, ConnectionAbortedError, asyncio.CancelledError):
                 return False
             except Exception as e:
                 log.debug(f"SSE write error: {e}")
@@ -2178,7 +2176,7 @@ class SLinkServer:
                 # the heartbeats finally noticed the disconnects.
                 try:
                     await asyncio.wait_for(q.get(), timeout=3.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Proactive disconnect detection: if the transport has
                     # already closed, exit immediately without attempting a
                     # write. Saves up to one heartbeat cycle of latency.
@@ -2466,7 +2464,7 @@ class SLinkServer:
     def _load_events(self):
         """Load persisted recent events from events.json on startup."""
         try:
-            with open(self._events_path, "r", encoding="utf-8") as f:
+            with open(self._events_path, encoding="utf-8") as f:
                 events = json.load(f)
             self._recent_events = deque(events[:_EVENTS_MAX], maxlen=_EVENTS_MAX)
         except (FileNotFoundError, json.JSONDecodeError):
@@ -2524,7 +2522,7 @@ class SLinkServer:
             if msg.get("_rejected"):
                 # Identity mismatch — log it, surface error, but don't update display data.
                 self._log_event(player_id, "hello",
-                                f"REJECTED — wrong save/slot", area or loc)
+                                "REJECTED — wrong save/slot", area or loc)
                 return cmds
 
             self._log_event(player_id, "hello",
@@ -3493,15 +3491,15 @@ class SLinkServer:
             return (
                 f'<div class="lp-mon-cell {cls_mc}">'
                 + (f'<div class="lp-mon-spr">{sprite_html}</div>' if sprite_html else '')
-                + f'<div class="lp-mon-txt">'
+                + '<div class="lp-mon-txt">'
                 + f'<div class="lp-nick">{active_pfx}{name_html}</div>'
                 + sub_line
                 + partner_html
                 + item_html
                 + abl_html
                 + moves_block
-                + f'</div>'
-                + f'</div>'
+                + '</div>'
+                + '</div>'
             )
 
         def _resolve_box_level(bentry: dict) -> int:
@@ -3651,10 +3649,10 @@ class SLinkServer:
                     abl_html = (f'<span class="ability" title="{html.escape(eadesc)}">{html.escape(eabl)}</span>'
                                 if eabl else '<span class="dim">—</span>')
                     foe_mon_cell = (
-                        f'<div style="display:inline-flex;align-items:center;gap:4px">'
+                        '<div style="display:inline-flex;align-items:center;gap:4px">'
                         + (f'<div style="flex-shrink:0">{esprite}</div>' if esprite else '')
                         + f'<div>{active_marker}{ename}{eitem_html}</div>'
-                        + f'</div>'
+                        + '</div>'
                     )
                     chunks.append(
                         f'<tr class="{foe_cls}" data-key="{html.escape(foe_key)}">'
@@ -4588,7 +4586,7 @@ class SLinkServer:
                          + mon_label(a_info["key"], a_info.get("nickname", ""), cap_sid, cap_gender))
                 a_lv = a_info.get("level") or "?"
             else:
-                a_lbl = f'<span class="dim">waiting…</span>'
+                a_lbl = '<span class="dim">waiting…</span>'
                 a_lv = "—"
             if b_info:
                 cap_sid = b_info.get("species", 0)
@@ -4597,7 +4595,7 @@ class SLinkServer:
                          + mon_label(b_info["key"], b_info.get("nickname", ""), cap_sid, cap_gender))
                 b_lv = b_info.get("level") or "?"
             else:
-                b_lbl = f'<span class="dim">waiting…</span>'
+                b_lbl = '<span class="dim">waiting…</span>'
                 b_lv = "—"
             state_val = d["area_states"].get(area, "unseen")
             # Determine per-player state for progress bar:
@@ -4769,8 +4767,8 @@ class SLinkServer:
         # Phase resolution — read run lifecycle signals from the state machine.
         s = self.state
         po = s.pokeballs_obtained or {}
-        alive = sum(1 for l in s.links if (l.status.value if hasattr(l.status, "value") else l.status) == "alive")
-        dead  = sum(1 for l in s.links if (l.status.value if hasattr(l.status, "value") else l.status) in ("dead", "memorial"))
+        alive = sum(1 for lk in s.links if (lk.status.value if hasattr(lk.status, "value") else lk.status) == "alive")
+        dead  = sum(1 for lk in s.links if (lk.status.value if hasattr(lk.status, "value") else lk.status) in ("dead", "memorial"))
         if getattr(s, "run_over", False):
             phase_slug, phase_label = "game_over", "Game over"
         elif not (po.get("a") and po.get("b")):
@@ -4867,7 +4865,7 @@ class SLinkServer:
         if not os.path.isfile(abs_path):
             raise aiohttp_web.HTTPNotFound()
         if safe.endswith('.html'):
-            with open(abs_path, 'r', encoding='utf-8') as fh:
+            with open(abs_path, encoding='utf-8') as fh:
                 full = fh.read()
             # Slice the calc body inner. Regex-matched rather than
             # `text.find('<body')` so HEAD comments that mention `<body>`
@@ -5626,10 +5624,7 @@ class SLinkServer:
         trainer_name = p.get("trainer_name") or f"Player {player_id.upper()}"
         badges = []
         for i, pair in enumerate(slugs):
-            if i < 8:
-                earned = bool((primary >> i) & 1)
-            else:
-                earned = bool((kanto >> (i - 8)) & 1)
+            earned = bool((primary >> i) & 1) if i < 8 else bool((kanto >> (i - 8)) & 1)
             badges.append({
                 "slug": pair[0] if isinstance(pair, (list, tuple)) else str(pair),
                 "name": pair[1] if isinstance(pair, (list, tuple)) and len(pair) > 1 else "",
@@ -5644,9 +5639,9 @@ class SLinkServer:
     def _build_encounters_overlay_context(self) -> dict:
         d = self._build_status_dict()
         links = d.get("links", []) or []
-        linked = sum(1 for l in links if l.get("status") == "alive")
-        dead   = sum(1 for l in links if l.get("status") != "alive")
-        shinies = sum(1 for l in links if l.get("a_shiny") or l.get("b_shiny"))
+        linked = sum(1 for lk in links if lk.get("status") == "alive")
+        dead   = sum(1 for lk in links if lk.get("status") != "alive")
+        shinies = sum(1 for lk in links if lk.get("a_shiny") or lk.get("b_shiny"))
         bonus = d.get("bonus_keys", {}) or {}
         shinies += len(bonus.get("a", []) or []) + len(bonus.get("b", []) or [])
         last = links[-1] if links else None
@@ -5763,9 +5758,9 @@ class SLinkServer:
         state = d.get("area_states", {}).get(focus, "unseen")
         # Find a link for this area
         linked_entry = None
-        for l in d.get("links", []) or []:
-            if l.get("area_id") == focus:
-                linked_entry = l
+        for lk in d.get("links", []) or []:
+            if lk.get("area_id") == focus:
+                linked_entry = lk
                 break
         pending = d.get("pending_captures", {}).get(focus, {}) or {}
 
@@ -7131,7 +7126,7 @@ class SLinkServer:
             if not os.path.exists(_map_path):
                 _map_path = os.path.join(_base_dir, "data", "games", "gen3_frlge", "area_map.json")
             with open(_map_path) as _mf:
-                _all_area_ids = sorted(set(v for v in json.load(_mf).values() if v))
+                _all_area_ids = sorted({v for v in json.load(_mf).values() if v})
         except Exception:
             _all_area_ids = []
         all_area_set = set(_all_area_ids)
@@ -7501,7 +7496,7 @@ class SLinkServer:
                     }
                     # Read backup JSON for summary stats
                     try:
-                        with open(fp, "r") as fh:
+                        with open(fp) as fh:
                             data = json.loads(fh.read())
                         links = data.get("links", [])
                         alive = sum(1 for lnk in links if lnk.get("status") == "alive")
@@ -7564,7 +7559,8 @@ class SLinkServer:
             shutil.copy2(backup_events, self._events_path)
         else:
             # No events backup for this slot — clear the ring buffer so it stays in sync.
-            open(self._events_path, "w").write("[]")
+            with open(self._events_path, "w") as _ef:
+                _ef.write("[]")
         self._load_events()
         log.warning(f"⚠  Rolled back to backup slot {slot}")
         self._notify_sse()
@@ -7847,7 +7843,7 @@ class SLinkServer:
             return aiohttp_web.json_response(
                 {"ok": False, "error": "a_key and b_key are required"}, status=400)
 
-        from server.state import LinkEntry, MonInfo, LinkStatus, AreaStatus
+        from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo
 
         s = self.state
 
@@ -7914,7 +7910,7 @@ class SLinkServer:
         s.area_states[area] = AreaStatus.LINKED
 
         # Clean up pending_captures for both mons
-        for pid, key, pend_area in [("a", a_key, a_pend_area), ("b", b_key, b_pend_area)]:
+        for pid, _key, pend_area in [("a", a_key, a_pend_area), ("b", b_key, b_pend_area)]:
             if pend_area and pend_area in s.pending_captures:
                 s.pending_captures[pend_area].pop(pid, None)
                 if not s.pending_captures[pend_area]:

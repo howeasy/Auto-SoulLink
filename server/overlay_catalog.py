@@ -260,6 +260,7 @@ def build_index_context(request) -> dict[str, Any]:
     the per-run dashboard (port 8080+) and the manager (port 8090).
     """
     import json
+
     # Lazy import keeps this module free of an aiohttp dependency at
     # import time, so tests that only need the catalog stay light.
     from server.templating import resolve_theme

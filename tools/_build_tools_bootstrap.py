@@ -24,7 +24,6 @@ Usage:
 from __future__ import annotations
 
 import hashlib
-import os
 import pathlib
 import platform
 import shutil
@@ -32,7 +31,6 @@ import subprocess
 import sys
 import urllib.request
 import zipfile
-from typing import Optional
 
 # Pinned RGBDS release — change here if upgrading.
 RGBDS_VERSION = "v1.0.1"
@@ -54,12 +52,12 @@ def _binary_name(name: str) -> str:
     return f"{name}.exe" if platform.system() == "Windows" else name
 
 
-def _which_in_dir(dir_path: pathlib.Path, name: str) -> Optional[pathlib.Path]:
+def _which_in_dir(dir_path: pathlib.Path, name: str) -> pathlib.Path | None:
     candidate = dir_path / _binary_name(name)
     return candidate if candidate.exists() else None
 
 
-def _check_existing_path(binary: str) -> Optional[pathlib.Path]:
+def _check_existing_path(binary: str) -> pathlib.Path | None:
     """Return path to `binary` on PATH if found and executable, else None."""
     found = shutil.which(binary)
     return pathlib.Path(found) if found else None

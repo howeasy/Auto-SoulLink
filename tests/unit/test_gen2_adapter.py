@@ -1,6 +1,7 @@
 """Tests for the Gen 2 Crystal adapter."""
 
 import pytest
+
 from server.adapters.gen2_crystal import Gen2CrystalAdapter
 
 
@@ -573,7 +574,7 @@ def test_encounter_table_unknown_area(adapter):
 
 def test_encounter_table_entry_schema(adapter):
     enc = adapter.encounter_table("route_29")
-    for method, entries in enc.items():
+    for entries in enc.values():
         for entry in entries:
             assert "species_id" in entry
             assert "name" in entry
@@ -619,7 +620,8 @@ def test_encounter_table_endgame_coverage(adapter, area_id, expected_substr):
 
 def test_named_trainers_coverage():
     """Every class+instance in pret/data/trainers/parties.asm should resolve."""
-    import json, os
+    import json
+    import os
     here = os.path.dirname(os.path.abspath(__file__))
     path = os.path.normpath(os.path.join(here, "..", "..",
                                           "data", "games", "gen2_crystal", "trainers.json"))
@@ -642,7 +644,8 @@ def test_named_trainers_coverage():
     ("67", "1", "Eusine"),     # Mysticalman class — Eusine
 ])
 def test_named_trainer_lookup(class_id, instance_id, expected_name):
-    import json, os
+    import json
+    import os
     here = os.path.dirname(os.path.abspath(__file__))
     path = os.path.normpath(os.path.join(here, "..", "..",
                                           "data", "games", "gen2_crystal", "trainers.json"))
@@ -672,7 +675,8 @@ def test_adapter_registered_returns_instance():
 # SoulLinkState integration tests with Gen 2 adapter
 # ══════════════════════════════════════════════════════════════════════════
 
-from server.state import SoulLinkState
+# Integration section — import kept here, below the adapter unit tests.
+from server.state import SoulLinkState  # noqa: E402
 
 
 def _make_gen2_state(tmp_path, monkeypatch):
@@ -696,7 +700,7 @@ def test_integration_capture_linking(tmp_path, monkeypatch):
                              "area_id": "route_29", "species": 155,
                              "nickname": "CYNDAQUIL", "level": 5})
 
-    link = next((l for l in state.links if l.area_id == "route_29"), None)
+    link = next((ln for ln in state.links if ln.area_id == "route_29"), None)
     assert link is not None
     assert link.a.key == "A5F3:1234:98"
     assert link.b.key == "B2C1:5678:9B"
@@ -768,7 +772,8 @@ def test_integration_gender_lock_rejects_same_gender(tmp_path, monkeypatch):
     # Should get force_faint (gender clause violation)
     has_faint = any(c.get("cmd") == "force_faint" for c in cmds)
     # Link should NOT form as alive
-    alive_links = [l for l in state.links if l.area_id == "route_29" and l.status.value == "alive"]
+    alive_links = [ln for ln in state.links
+                   if ln.area_id == "route_29" and ln.status.value == "alive"]
     assert has_faint or len(alive_links) == 0
 
 
@@ -789,7 +794,7 @@ def test_integration_gender_lock_allows_opposite(tmp_path, monkeypatch):
                              "area_id": "route_29", "species_id": 172, "level": 5})
 
     # Link should form
-    link = next((l for l in state.links if l.area_id == "route_29"), None)
+    link = next((ln for ln in state.links if ln.area_id == "route_29"), None)
     assert link is not None
     assert link.status.value == "alive"
 
@@ -821,10 +826,7 @@ def test_integration_identity_lock(tmp_path, monkeypatch):
 # ══════════════════════════════════════════════════════════════════════════
 
 def _has_cmd(cmds, cmd_name, key=None):
-    for c in cmds:
-        if c.get("cmd") == cmd_name and (key is None or c.get("key") == key):
-            return True
-    return False
+    return any(c.get("cmd") == cmd_name and (key is None or c.get("key") == key) for c in cmds)
 
 
 def test_egg_capture_on_route_30_treated_as_gift(tmp_path, monkeypatch):

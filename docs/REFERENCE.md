@@ -30,23 +30,49 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
   Both duo battles are staged by poking `wIsInBattle`, and the battle engine has never executed
   a turn. Rival swap and Explode Mode need **no ROM patch** on Gen 1 (no encryption, no
   checksums); the optional Red/Blue companion patch adds sound only.
-- **Gen 2** — Crystal, Gold, Silver (GB/GBC) — ⚠️ **Experimental** — feature parity with Gen 3, pending live verification. Archipelago Crystal (gerbiljames fork) auto-detected. Gold/Silver added in Phase 11 with pret-authoritative addresses via [tools/build_pret_syms.py](../tools/build_pret_syms.py).
+- **Gen 2** — Crystal (GB/GBC) — 🟡 **Partially verified.** Same shape as Gen 1: the
+  *mechanisms* are proven against a running cartridge, a *playthrough* is not.
+  - **Proven live** — faint propagation, party→box sync and memorialize into Box 14
+    (`MEMORIAL_BOX_INDEX` 13, flat CartRAM `0x79E0`, outside Gen 2's save checksum), all three
+    across **two Crystal instances** through a real server. Plus the read gate, whose
+    assertions are deliberately Gen 2-specific — held item, map *group*, the Sp.Atk/Sp.Def
+    split, 14 boxes — because a Gen 1-shaped read of a Gen 2 cartridge still returns
+    plausible-looking bytes; and the writes gate: `force_faint`, deposit, withdraw, memorial
+    burial. Two instances share one dump via per-instance SaveRAM directories, which is why
+    Gen 2 needs no second cartridge the way Gen 1 needed Blue alongside Red.
+  - **NOT proven live** — anything needing tall grass: encounter linking from play, the dead
+    zone, the clauses. Gen 2's fixture parks indoors because New Bark Town's west exit is
+    script-locked until Elm hands over a starter, so there is no grass fixture. Those rules are
+    enforced server-side and are generation-independent, and Gen 1 runs all three — a Gen 2
+    grass fixture would buy a second copy of coverage that already exists.
+  - **Gold, Silver and Archipelago Crystal remain ⚠️ Experimental.** They are supported for
+    correctness — adapter routing, profile keys, per-variant addresses checked against pret via
+    [tools/build_pret_syms.py](../tools/build_pret_syms.py) — but there are no dumps here to run
+    them against, and a live matrix entry that silently skips reads exactly like one that
+    passes. The AP Crystal fork (gerbiljames) is auto-detected but has no public repo, so only
+    five of its addresses are provable and its profile stays flagged unverified.
 - **Gen 4** — HeartGold, SoulSilver, Platinum — ⚠️ **Experimental**
 - **Gen 5** — Black, White, Black 2, White 2 — ⚠️ **Experimental**
 
-> **Note:** Gen 1 has live coverage of its mechanisms, not of a run — see the per-generation
-> caveats above before trusting it. Gen 3 has extensive live-play coverage. Gens 2, 4 and 5 have full feature pipelines
+> **Note:** Gen 1 and Gen 2 have live coverage of their mechanisms, not of a run — see the
+> per-generation caveats above before trusting either. Gen 3 has extensive live-play coverage.
+> Gens 4 and 5 have full feature pipelines
 > (moves+PP, stat stages, enemy moves+PP, trainer names, encounter tables, AP detection) and pass
 > their unit-test suites; static profile addresses are verified by
 > [tools/verify_profile_addresses.py](../tools/verify_profile_addresses.py) against pret decomps.
 > They remain ⚠️ Experimental because nothing has run them against a cartridge.
 >
-> That distinction is not academic. Bringing Gen 1 up found defects no static check could reach —
-> a deferred-command queue that bound to a nil global and crashed the client on the first box or
-> memorialize command; a `party_to_box` debounce that could never complete, so party/box sync was
-> silently dead; a box level read from an offset past the end of the box struct; Archipelago
-> detection reading HRAM instead of ROM. All of those passed the unit suite and the Lua syntax
-> gate. Treat "unit tests pass" as necessary, not sufficient.
+> That distinction is not academic, and Gen 2 proved it twice. Bringing Gen 1 up found defects no
+> static check could reach — a deferred-command queue that bound to a nil global and crashed the
+> client on the first box or memorialize command; a `party_to_box` debounce that could never
+> complete, so party/box sync was silently dead; a box level read from an offset past the end of
+> the box struct; Archipelago detection reading HRAM instead of ROM. Gen 2 then went in with a
+> larger unit suite than Gen 1 ever had and everything the static suite could not see was wrong:
+> Gold, Silver and AP Crystal routed to the **Gen 3** adapter, `party_blob_size()` inherited 0 so
+> every Gen 2 party blob was discarded, no profile declared `stats_offset` so every box deposit
+> dropped the stat block, and the Apricorn ball IDs pointed at SUN_STONE, which left the Nuzlocke
+> gate shut for anyone carrying balls Kurt made. All of it passed the unit suite and the Lua
+> syntax gate. Treat "unit tests pass" as necessary, not sufficient.
 
 ---
 
@@ -812,7 +838,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 ### Unit tests (no emulator required)
 
 ```bash
-pytest tests/unit/ -v          # 1528 tests, no emulator needed
+pytest tests/unit/ -v          # 1595 passed, 5 skipped; no emulator needed
 pytest tests/unit/test_state.py -v             # 318 state machine tests (incl. tick reconciliation)
 pytest tests/unit/test_gen3_adapter.py -v      # 216 Gen 3 adapter tests
 pytest tests/unit/test_gen4_adapter.py -v      # 100 Gen 4 adapter tests
@@ -856,17 +882,30 @@ pytest tests/unit/test_phase1_comms.py -v
 
 **Gen 3** is a manual procedure: see `tests/TESTING.md` for the full 9-step end-to-end test. Load `lua/slink.lua` on both instances and run through Steps 1–9 in order. Its automated pieces are `SLINK_LIVE=1 pytest tests/live/test_lua_gates.py` (savestate-driven; rebuild states with `tools/mkstates.py` after a BizHawk upgrade) and `SLINK_E2E=1 pytest tests/e2e/test_duo.py` (six scenarios on the patched RR ROM).
 
-**Gen 1** has no manual procedure — all of it is automated and skips cleanly when EmuHawk, a cartridge dump or a fixture is missing:
+**Gen 1 and Gen 2** have no manual procedure — all of it is automated and skips cleanly when EmuHawk, a cartridge dump or a fixture is missing:
 
 ```bash
-SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 8 gates
-SLINK_E2E=1  pytest tests/e2e/test_duo_gen1.py -q      # 5 duo scenarios
+SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 18: 4 gates x 3 cartridges, + patched + AP
+SLINK_E2E=1  pytest tests/e2e/test_duo_gen1.py -q      # 18: 9 scenarios x Red/Blue and Yellow/Red
 python tools/e2e_duo.py --game gen1 --scenario all     # the same duo run, directly
+
+SLINK_LIVE=1 pytest tests/live/test_gen2_gates.py -q   # 2 gates, Crystal only
+SLINK_E2E=1  pytest tests/e2e/test_duo_gen2.py -q      # 3 duo scenarios, two Crystal instances
 ```
 
-The gates (`test_gen1_memory_gate.lua`, `test_gen1_writes_gate.lua`) run on **all three cartridges** — Yellow shifts nearly every WRAM address by −1, so a Red-only run would skip the profile most likely to be wrong — plus the companion-patch gate on the two patched builds. The duo scenarios (`faint`, `boxsync`, `memorialize`, `rivalswap`, `explode_g1`) run **Red as player A and Blue as player B**, and need no patched ROM.
+> `--scenario all` is **Gen 1 / Gen 3 only.** It expands to every entry in the runner's
+> `SCENARIOS` dict, and the per-scenario `games` key is read by `tests/e2e/test_duo.py`, not by
+> `e2e_duo.py` — so `--game gen2 --scenario all` would launch Gen 3-only scenarios and fail for
+> reasons unrelated to Gen 2. Use the pytest wrapper, or name them: `--game gen2 --scenario faint`
+> (likewise `boxsync`, `memorialize`).
 
-Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and are committed. They are battery saves, not savestates, so they are not BizHawk-version-locked and never go stale. Rebuild from a cold boot with `python tools/gen1_playthrough.py --rom red --target town` (`town` = encounter-free ground for the overworld gates, `battle` = tall grass for the battle gates).
+The Gen 1 gates (`test_gen1_memory_gate.lua`, `test_gen1_writes_gate.lua`, plus box-roundtrip and evolution) run on **all three cartridges** — Yellow shifts nearly every WRAM address by −1, so a Red-only run would skip the profile most likely to be wrong — plus the companion-patch gate on the two patched builds and the Archipelago detection checks. Every Gen 1 duo scenario is parameterised over **two pairings**, Red/Blue and Yellow/Red, and needs no patched ROM.
+
+The Gen 2 gates (`test_gen2_memory_gate.lua`, `test_gen2_writes_gate.lua`) run on **Crystal only** — see the Supported Games caveat above for why a silently-skipping Gold/Silver entry would be worse than none. Its three duo scenarios (`faint`, `boxsync`, `memorialize`) run **two instances of the same Crystal dump**. That is only possible because `write_run_config(saveram_dir=…)` gives each instance its own SaveRAM directory: BizHawk names the file from its gamedb entry (keyed on ROM hash, not the path launched), so without it two instances of one dump resolve to a single file and stamp on each other. Gen 1 sidestepped that by pairing Red with Blue — a constraint on what can be tested together, not a fix.
+
+The duo Lua is shared: `lua/tests/duo/duo_gb_main.lua` resolves each scenario as `scenario_<prefix><name>` and then falls back to `scenario_gb_<name>`, so `faint` / `boxsync` / `memorialize` come from one set of files that both generations run. Genuinely Gen 1-specific scenarios (`whiteout`, `playthrough`, `deadzone`, `dupes`, `rivalswap`, `explode_g1`) keep the `scenario_gen1_` prefix.
+
+Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/crystal_town.SaveRAM` and are committed. They are battery saves, not savestates, so they are not BizHawk-version-locked and never go stale. Rebuild from a cold boot with `python tools/gen1_playthrough.py --rom red --target town` (`town` = encounter-free ground for the overworld gates, `battle` = tall grass for the battle gates) or `python tools/gen2_playthrough.py`. Gen 2 has an **indoor `town` target only** — New Bark Town's west exit is script-locked until Elm hands over a starter, so there is no Gen 2 grass fixture and therefore no `playthrough`, `deadzone` or `dupes` on Gen 2.
 
 ---
 

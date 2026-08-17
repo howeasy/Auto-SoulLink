@@ -713,15 +713,23 @@ Covers the core `SoulLinkState` FSM in `server/state.py`. Key helper: `make_stat
 
 ```bash
 python tools/e2e_duo.py --scenario faint      # one scenario
-python tools/e2e_duo.py --scenario all        # all six
+python tools/e2e_duo.py --scenario all        # all six that apply to the default game
+python tools/e2e_duo.py --list                # print exactly what `all` would run, then exit
 ```
+
+`--scenario all` means "all scenarios that apply to `--game`", not "every key in `SCENARIOS`" —
+the dict now holds Gen 1 and Gen 2 entries too. `scenarios_for()` in `tools/e2e_duo.py` is the
+single source of truth for that question (a scenario with no `games` key applies to every title),
+and `tests/e2e/test_duo.py` imports it rather than hand-rolling a second copy — the two answers
+had drifted apart when it did. `all` **names** what it filtered out rather than silently
+narrowing, because "all passed" over an empty selection is the worst way to report no coverage.
 
 Scenarios: `faint`, `boxsync`, `trade`, `ghost` (runs with `--overworld-presence`), `explode` (runs with `--explode-mode`), `infopanel` (three injected pairs, then drives the native SOULLINK menu end to end: the `link_panel` payload crosses the wire, renders as pairs, opens from the START menu, pages on A and closes on B). Each instance loads a generated stub (`patch/build/duo_{a,b}.lua`) that runs the **real production client** plus a scenario coroutine from `lua/tests/duo/`. Windows-only; needs `E:/Howard/Bizhawk` and the patched ROM.
 
-The pytest wrapper `tests/e2e/test_duo.py` parametrizes the same six scenarios but is skipped unless explicitly requested (each takes minutes and spawns EmuHawk twice):
+The pytest wrapper `tests/e2e/test_duo.py` parametrizes the same six scenarios (it derives them from `scenarios_for("gen3_rr")`, so the list cannot drift from the runner's) but is skipped unless explicitly requested (each takes minutes and spawns EmuHawk twice):
 
 ```bash
-SLINK_E2E=1 pytest tests/e2e/ -q
+SLINK_E2E=1 pytest tests/e2e/test_duo.py -q   # Gen 3 only; `tests/e2e/` also picks up Gen 1 + Gen 2
 ```
 
 ### Desync Audit Findings (Gen 3)
@@ -749,47 +757,123 @@ A comprehensive audit of the Gen 3 sync codebase verified that all high-risk des
 
 ---
 
-## Automated Gen 1 Verification (no manual steps, no patch)
+## Automated Game Boy Verification — Gen 1 and Gen 2 (no manual steps, no patch)
 
-Everything above for Gen 3 is a human clicking through BizHawk. Gen 1 is not — there is
-nothing to run by hand.
+Everything above for Gen 3 is a human clicking through BizHawk. The Game Boy generations are
+not — there is nothing to run by hand.
 
 ```bash
-SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 8 gates
-SLINK_E2E=1  pytest tests/e2e/test_duo_gen1.py -q      # 5 duo scenarios
-python tools/e2e_duo.py --game gen1 --scenario all     # the same duo run, directly
+SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 18 cases: 4 gates × 3 carts, + patch + AP
+SLINK_LIVE=1 pytest tests/live/test_gen2_gates.py -q   # 2 gates, Crystal only
+SLINK_E2E=1  pytest tests/e2e/test_duo_gen1.py -q      # 18 cases: 9 scenarios × 2 pairings
+SLINK_E2E=1  pytest tests/e2e/test_duo_gen2.py -q      # faint, boxsync, memorialize
 ```
 
-**Gates** (`tests/live/test_gen1_gates.py`) — each boots a fixture, asserts against the
-running game, and writes `RESULT: PASS|FAIL`:
+The same runs can be driven directly. `--scenario all` is filtered by `--game`, so it will not
+try to run Gen 3's savestate scenarios on a Game Boy cartridge — check what you are about to get
+with `--list` first, and note that a single scenario that does not apply fails immediately with
+the reason rather than after two emulators have booted:
+
+```bash
+python tools/e2e_duo.py --game gen2 --list             # faint, boxsync, memorialize
+python tools/e2e_duo.py --game gen2 --scenario memorialize
+python tools/e2e_duo.py --game gen1_yellow --scenario all
+```
+
+### Gen 1 gates
+
+`tests/live/test_gen1_gates.py` — each boots a fixture, asserts against the running game, and
+writes `RESULT: PASS|FAIL`:
 
 | Gate | Runs on | Covers |
 |---|---|---|
 | `test_gen1_memory_gate.lua` | red, blue, yellow | mon keys, party/box reads, PP with its PP-Up mask, stat stages, enemy struct, the Pokéball nuzlocke gate |
-| `test_gen1_writes_gate.lua` | red, blue, yellow | `force_faint`, the box round-trip, the ~404-byte enemy-party write, Explosion into the move slot |
+| `test_gen1_writes_gate.lua` | red, blue, yellow | `force_faint`, the deposit half of party sync, the ~404-byte enemy-party write, Explosion into the move slot |
+| `test_gen1_boxroundtrip_gate.lua` | red, blue, yellow | the withdraw half — the writes gate only deposits, so without this a corrupt restore would never show up |
+| `test_gen1_evolution_gate.lua` | red, blue, yellow | a Gen 1 key is DVs:OTID:SPECIES, so evolving rewrites it. Drives a real Moon Stone through the real bag menus (no battle, no encounter RNG, uncancellable) |
 | `test_gen1_patch_gate.lua` | red, blue (patched) | the companion-patch spike — see [patch/gen1/README.md](../patch/gen1/README.md) |
+| `test_gen1_ap_gate.lua` | red/blue AP **and** red/blue vanilla | Archipelago detection. The vanilla pair is the negative control: without it, a detector stuck at "yes" would pass on its own |
 
 Parametrised over all three cartridges deliberately: **Yellow shifts nearly every WRAM
 address by −1**, so a Red-only run would never exercise the profile most likely to be wrong.
 
-**Duo scenarios** (`lua/tests/duo/scenario_gen1_*.lua`) — two emulators, a real server,
-**Red as player A and Blue as player B**: `faint`, `boxsync`, `memorialize`, `rivalswap`,
-`explode_g1`. Unlike Gen 3, none of this needs a patched ROM — Gen 1's enemy party is
-plaintext, so the rival swap and Explode Mode run on stock cartridges.
+### Gen 2 gates
+
+`tests/live/test_gen2_gates.py` — same shape, **Crystal only**:
+
+| Gate | Runs on | Covers |
+|---|---|---|
+| `test_gen2_memory_gate.lua` | crystal | reads only: mon key shape, the held-item byte Gen 1 does not have, the Sp.Atk/Sp.Def split (probed by writing one and re-reading, so an alias cannot pass), PP-Up masking, the ball pocket, the map **group + number** pair, 14 boxes, the memorial box count |
+| `test_gen2_writes_gate.lua` | crystal | everything that mutates a cartridge: `force_faint`, deposit, withdraw, memorial burial |
+
+One cartridge, and stated rather than silently absent. Gold, Silver and AP Crystal are supported
+for correctness — routing, profile keys, per-variant addresses, all checked against pret by
+`tools/verify_profile_addresses.py` — but there are no dumps to run them against, and **a live
+matrix entry that silently skips reads exactly like one that passes.**
+
+Every address in the Gen 2 profile had already been checked against pret. What that cannot see is
+whether the numbers mean anything on a running cartridge: a correct address read through the
+wrong *domain*, or a struct offset applied to the wrong base, still returns plausible-looking
+bytes. That gap is where every bug Gen 1's live bring-up found was hiding, and Gen 2's was no
+different — Gold/Silver/AP Crystal routing to the Gen 3 adapter, `party_blob_size()` inheriting
+`0`, no `stats_offset` so every deposit dropped the stat block, Apricorn ball IDs pointing at
+SUN_STONE and friends, and a box HP read landing two bytes past the end of the 32-byte slot.
+`pytest` was green throughout.
+
+### Duo scenarios
+
+Two emulators, a real server, the real production client on both sides. `lua/tests/duo/` splits
+by what is actually shared:
+
+| Files | Used by | Scenarios |
+|---|---|---|
+| `duo_gb_main.lua`, `scenario_gb_{faint,boxsync,memorialize}.lua` | Gen 1 **and** Gen 2 | `faint`, `boxsync`, `memorialize` |
+| `scenario_gen1_{whiteout,playthrough,deadzone,dupes,rivalswap,explode_g1}.lua` | Gen 1 only | the rest |
+
+**Gen 1** runs all nine, across two cartridge pairings — Red/Blue and Yellow/Red. Yellow is not
+a formality: pairing it with Red rather than a second Yellow means a −1 shift bug shows up as an
+asymmetry between the halves instead of cancelling out. Unlike Gen 3, none of this needs a
+patched ROM — Gen 1's enemy party is plaintext, so the rival swap and Explode Mode run on stock
+cartridges.
+
+**Gen 2** runs three, and the choice is deliberate rather than "what happened to work":
+
+| Scenario | Why it is the one that matters |
+|---|---|
+| `faint` | the core Soul Link rule. One linked mon dies; the partner's must die on the other machine, through the real server |
+| `boxsync` | party sync with **nothing injected** — A deposits its half and the server must mirror `box_mon` to B, so a broken rule cannot be masked by the harness doing the work itself. Exercises the 32-byte box struct with no HP field and a withdraw that needs the server's cached stats block |
+| `memorialize` | both halves die and the pair is buried in **Box 14** (`sBox14`, flat CartRAM `0x79E0`), which lives outside Gen 2's save checksum |
+
+**Not run on Gen 2, and stated rather than silently absent:** `playthrough`, `deadzone` and
+`dupes`. Those need tall grass, and Gen 2's fixture parks indoors (see Fixtures below). The rules
+they cover — encounter linking, the dead zone, the species clause — are enforced server-side and
+are generation-independent, and Gen 1 runs all three. A Gen 2 grass fixture would buy a second
+copy of coverage that already exists.
+
+**Two Crystals share one cartridge dump.** BizHawk names a SaveRAM file from its own gamedb
+entry, keyed on ROM hash rather than the path launched, so two instances of one dump resolve to a
+single file and stamp on each other. Gen 1 sidesteps that by pairing Red with Blue — a constraint
+on which cartridges can be tested together, not a fix. `write_run_config(saveram_dir=…)` gives
+each instance its own directory, and since there is exactly one Crystal dump, that is the only
+reason this pairing is possible at all.
 
 ### Fixtures
 
-`tests/fixtures/gen1/{red,blue,yellow}_{town,battle}.SaveRAM`, committed. Rebuild from a cold
-boot with:
+Committed, both generations:
 
-```bash
-python tools/gen1_playthrough.py --rom red --target town
-```
+| Fixture | Rebuild |
+|---|---|
+| `tests/fixtures/gen1/{red,blue,yellow}_{town,battle}.SaveRAM` | `python tools/gen1_playthrough.py --rom red --target town` |
+| `tests/fixtures/gen2/crystal_town.SaveRAM` | `python tools/gen2_playthrough.py` |
 
 These are **battery saves, not savestates**. A `.SaveRAM` is plain SRAM and is not
 version-locked, so unlike the Gen 3 `.State` files they never rot when BizHawk is upgraded —
-`tools/mkstates.py` exists precisely because the Gen 3 ones do. Two targets because the
-overworld gates need encounter-free ground (a town) and the battle gates need tall grass.
+`tools/mkstates.py` exists precisely because the Gen 3 ones do.
+
+Gen 1 has two targets because the overworld gates need encounter-free ground (a town) and the
+battle gates need tall grass. **Gen 2 has only `town`**: New Bark Town's west exit is
+script-locked until Elm hands over a starter, so the bootstrapper cannot reach grass at all.
+Everything Gen 2 does not test traces back to that one fact.
 
 Every gate skips — never hangs — when EmuHawk, a cartridge dump (gitignored) or a fixture is
 missing.

@@ -18,11 +18,10 @@ Usage (inside SLinkServer):
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
-import uuid
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -158,13 +157,13 @@ class OBSController:
     def __init__(self, config_path: str):
         self._config_path = config_path
         self._config: dict = {}
-        self._clients: dict[str, Optional["simpleobsws.WebSocketClient"]] = {"a": None, "b": None}
+        self._clients: dict[str, simpleobsws.WebSocketClient | None] = {"a": None, "b": None}
         self._queues: dict[str, asyncio.Queue] = {
             "a": asyncio.Queue(maxsize=1),
             "b": asyncio.Queue(maxsize=1),
         }
-        self._workers: dict[str, Optional[asyncio.Task]] = {"a": None, "b": None}
-        self._reconnect_tasks: dict[str, Optional[asyncio.Task]] = {"a": None, "b": None}
+        self._workers: dict[str, asyncio.Task | None] = {"a": None, "b": None}
+        self._reconnect_tasks: dict[str, asyncio.Task | None] = {"a": None, "b": None}
         self._status: dict[str, str] = {"a": "disconnected", "b": "disconnected"}
         self.load_config()
 
@@ -243,10 +242,8 @@ class OBSController:
         for pid in ("a", "b"):
             c = self._clients.get(pid)
             if c:
-                try:
+                with contextlib.suppress(Exception):
                     await c.disconnect()
-                except Exception:
-                    pass
                 self._clients[pid] = None
                 self._status[pid] = "disconnected"
         self._config = new_config
@@ -263,14 +260,10 @@ class OBSController:
     def _push_scene(self, player_id: str, scene: str):
         """Internal: push a resolved scene onto the coalescing queue for one player."""
         q = self._queues[player_id]
-        try:
+        with contextlib.suppress(asyncio.QueueEmpty):
             q.get_nowait()
-        except asyncio.QueueEmpty:
-            pass
-        try:
+        with contextlib.suppress(asyncio.QueueFull):
             q.put_nowait(scene)
-        except asyncio.QueueFull:
-            pass
 
     def submit_fired(self, fired_list: list):
         """Priority-resolve multiple simultaneous triggers; submit at most one scene per target.
@@ -496,10 +489,8 @@ class OBSController:
             rt.cancel()
         c = self._clients.get(player_id)
         if c:
-            try:
+            with contextlib.suppress(Exception):
                 await c.disconnect()
-            except Exception:
-                pass
             self._clients[player_id] = None
         self._status[player_id] = "disconnected"
 

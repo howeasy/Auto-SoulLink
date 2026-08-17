@@ -10,9 +10,10 @@ import logging
 import os
 import re
 
-from .base import GameAdapter, load_area_names_from_obj_map
 from server.data.items.gen1 import ITEM_NAMES as _ITEM_NAMES
 from server.pokemon_data import base_form, species_name as _species_name
+
+from .base import GameAdapter, load_area_names_from_obj_map
 
 log = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ _GEN1_DATA_DIR = os.path.join(
 _GEN1_MOVES: dict[int, dict] = {}
 _moves_path = os.path.join(_GEN1_DATA_DIR, "moves.json")
 if os.path.exists(_moves_path):
-    with open(_moves_path, "r") as _f:
+    with open(_moves_path) as _f:
         for _entry in json.load(_f).get("moves", []):
             _GEN1_MOVES[int(_entry["id"])] = _entry
 else:
@@ -65,7 +66,7 @@ else:
 _GEN1_ENCOUNTERS: dict[str, dict[str, list[dict]]] = {}
 _enc_path = os.path.join(_GEN1_DATA_DIR, "encounter_tables.json")
 if os.path.exists(_enc_path):
-    with open(_enc_path, "r") as _f:
+    with open(_enc_path) as _f:
         _GEN1_ENCOUNTERS = json.load(_f)
 else:
     log.warning("Gen 1 encounter_tables.json not found: %s", _enc_path)
@@ -243,7 +244,7 @@ _species_index_path = os.path.join(
     "data", "games", "gen1_rby", "species_index.json"
 )
 if os.path.exists(_species_index_path):
-    with open(_species_index_path, "r") as _f:
+    with open(_species_index_path) as _f:
         _raw_index = json.load(_f)
         for k, v in _raw_index.get("index_to_national", {}).items():
             _INDEX_TO_NATIONAL[int(k)] = int(v)
