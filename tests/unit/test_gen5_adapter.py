@@ -1,6 +1,7 @@
 """Tests for the Gen 5 BW/BW2 adapter."""
 
 import pytest
+
 from server.adapters.gen5_bw import Gen5Adapter
 
 
@@ -294,7 +295,7 @@ def test_area_display_name_known(adapter):
 def test_area_display_name_unknown(adapter):
     """Unknown area IDs fall back to title-cased slug."""
     name = adapter.area_display_name("some_unknown_area")
-    assert "Some Unknown Area" == name
+    assert name == "Some Unknown Area"
 
 
 # ── Gym badges ────────────────────────────────────────────────────────────
@@ -396,7 +397,7 @@ def _read_gen5_bw_lua() -> str:
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "lua", "games", "gen5_bw.lua",
     )
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return f.read()
 
 
@@ -675,8 +676,8 @@ def test_encounter_table_version_exclusive_pinwheel_black():
     # Throh should appear; Sawk should NOT in the Shaking Grass list
     shaking = enc.get("Shaking Grass", [])
     species = {e["species_id"] for e in shaking}
-    assert 538 in species, f"Throh (538) missing from Black Pinwheel Forest"
-    assert 539 not in species, f"Sawk (539) leaked into Black Pinwheel Forest"
+    assert 538 in species, "Throh (538) missing from Black Pinwheel Forest"
+    assert 539 not in species, "Sawk (539) leaked into Black Pinwheel Forest"
 
 
 def test_encounter_table_version_exclusive_pinwheel_white():
@@ -686,8 +687,8 @@ def test_encounter_table_version_exclusive_pinwheel_white():
     assert enc is not None
     shaking = enc.get("Shaking Grass", [])
     species = {e["species_id"] for e in shaking}
-    assert 539 in species, f"Sawk (539) missing from White Pinwheel Forest"
-    assert 538 not in species, f"Throh (538) leaked into White Pinwheel Forest"
+    assert 539 in species, "Sawk (539) missing from White Pinwheel Forest"
+    assert 538 not in species, "Throh (538) leaked into White Pinwheel Forest"
 
 
 def test_encounter_table_bw2_only_area():

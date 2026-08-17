@@ -1726,12 +1726,13 @@ _NATDEX_SPECIES_TYPES: dict[int, tuple[int, int]] = {
 # RR-specific type overrides (loaded from data/rr_types.json at import time).
 # Covers all 1328 RR species including type changes from vanilla.
 import os as _os
+
 _RR_TYPES: dict[int, tuple[int, int]] = {}
 _rr_types_path = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
                                "data", "games", "gen3_frlge", "rr_types.json")
 if _os.path.exists(_rr_types_path):
     import json as _json
-    with open(_rr_types_path, "r") as _f:
+    with open(_rr_types_path) as _f:
         _raw_t = _json.load(_f)
         _RR_TYPES = {int(k): tuple(v) for k, v in _raw_t.items()}
     del _json, _f, _raw_t

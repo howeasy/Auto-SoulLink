@@ -1356,7 +1356,7 @@ def main():
     print(f"Unique area_ids (Platinum): {len(pt_areas)}")
 
     # ── area_map_platinum.json ────────────────────────────────────────────────
-    import json, collections
+    import json
     area_map: dict[str, dict] = {}
     for zid, (area_id, display) in ZONE_MAP_PT.items():
         if area_id.startswith("_"):

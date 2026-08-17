@@ -2,6 +2,7 @@
 """Montage a list of PNGs into a labeled grid (so a reviewer can read many shots in one image).
 Usage: montage.py <out.png> <cols> <label1> <img1> [<label2> <img2> ...]"""
 import sys
+
 from PIL import Image, ImageDraw
 
 out, cols = sys.argv[1], int(sys.argv[2])
@@ -11,7 +12,7 @@ imgs = []
 for label, path in pairs:
     try:
         im = Image.open(path).convert("RGB")
-    except Exception as e:
+    except Exception:
         im = Image.new("RGB", (240, 160), (40, 0, 0))
         ImageDraw.Draw(im).text((4, 70), "MISSING", fill=(255, 80, 80))
     imgs.append((label, im))

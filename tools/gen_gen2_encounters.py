@@ -22,6 +22,7 @@ canonical area_id (e.g. "union_cave") via the area_map. First-wins: the first
 floor encountered is the one we publish.
 """
 from __future__ import annotations
+
 import json
 import os
 import re

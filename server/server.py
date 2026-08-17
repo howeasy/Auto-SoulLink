@@ -15,18 +15,18 @@ Run:
     python -m server.server [--host 0.0.0.0] [--port 54321] [--http-port 8080]
 """
 
+import argparse
 import asyncio
+import html
 import json
 import logging
 import logging.handlers
-import argparse
+import mimetypes
 import os
 import re
-import html
 import shutil
-import mimetypes
-from collections import deque
 import time
+from collections import deque
 from datetime import datetime
 
 from server.overlay_catalog import build_index_context as _build_stream_index_context
@@ -38,33 +38,38 @@ except ImportError:
     AIOHTTP_AVAILABLE = False
 
 try:
-    from .state import SoulLinkState, LINKS_PATH, DATA_DIR
     from .pokemon_data import (
         GENDER_SYMBOL as _GENDER_SYMBOL,
     )
+    from .state import DATA_DIR, LINKS_PATH, SoulLinkState
 except ImportError:
     import sys
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from server.state import SoulLinkState, LINKS_PATH, DATA_DIR
     from server.pokemon_data import (
         GENDER_SYMBOL as _GENDER_SYMBOL,
     )
+    from server.state import DATA_DIR, LINKS_PATH, SoulLinkState
 
 try:
     from .obs_controller import (
-        OBSController, obs_config_path, ALL_TRIGGER_EVENTS,
-        AREA_GROUPS, classify_area,
+        ALL_TRIGGER_EVENTS,
+        AREA_GROUPS,
+        OBSController,
+        classify_area,
+        obs_config_path,
     )
 except ImportError:
     from server.obs_controller import (
-        OBSController, obs_config_path, ALL_TRIGGER_EVENTS,
-        AREA_GROUPS, classify_area,
+        AREA_GROUPS,
+        OBSController,
+        classify_area,
+        obs_config_path,
     )
 
 try:
-    from .templating import setup_templating, resolve_theme, resolve_layout
+    from .templating import resolve_layout, resolve_theme, setup_templating
 except ImportError:
-    from server.templating import setup_templating, resolve_theme, resolve_layout
+    from server.templating import resolve_layout, resolve_theme, setup_templating
 
 import aiohttp_jinja2
 
@@ -109,15 +114,11 @@ def _configure_logging(data_dir: str | None, verbose: bool) -> None:
 
 
 from server.html_render import (
-    TYPE_COLOR as _TYPE_COLOR,
-    SPLIT_ICONS as _SPLIT_ICONS,
-    STAT_STAGE_LABELS as _STAT_STAGE_LABELS,
-    type_badges_html as _type_badges_html,
     move_table_html as _move_table_html,
-    status_icon_html as _status_icon_html,
     stat_stages_html as _stat_stages_html,
+    status_icon_html as _status_icon_html,
+    type_badges_html as _type_badges_html,
 )
-
 
 # ── Damage Calculator integration ────────────────────────────────────────────
 
@@ -2153,8 +2154,7 @@ class SLinkServer:
             try:
                 await asyncio.wait_for(resp.write(data), timeout=10.0)
                 return True
-            except (asyncio.TimeoutError, ConnectionResetError, ConnectionAbortedError,
-                    asyncio.CancelledError):
+            except (TimeoutError, ConnectionResetError, ConnectionAbortedError, asyncio.CancelledError):
                 return False
             except Exception as e:
                 log.debug(f"SSE write error: {e}")
@@ -2178,7 +2178,7 @@ class SLinkServer:
                 # the heartbeats finally noticed the disconnects.
                 try:
                     await asyncio.wait_for(q.get(), timeout=3.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # Proactive disconnect detection: if the transport has
                     # already closed, exit immediately without attempting a
                     # write. Saves up to one heartbeat cycle of latency.
@@ -2466,7 +2466,7 @@ class SLinkServer:
     def _load_events(self):
         """Load persisted recent events from events.json on startup."""
         try:
-            with open(self._events_path, "r", encoding="utf-8") as f:
+            with open(self._events_path, encoding="utf-8") as f:
                 events = json.load(f)
             self._recent_events = deque(events[:_EVENTS_MAX], maxlen=_EVENTS_MAX)
         except (FileNotFoundError, json.JSONDecodeError):
@@ -2524,7 +2524,7 @@ class SLinkServer:
             if msg.get("_rejected"):
                 # Identity mismatch — log it, surface error, but don't update display data.
                 self._log_event(player_id, "hello",
-                                f"REJECTED — wrong save/slot", area or loc)
+                                "REJECTED — wrong save/slot", area or loc)
                 return cmds
 
             self._log_event(player_id, "hello",
@@ -3493,15 +3493,15 @@ class SLinkServer:
             return (
                 f'<div class="lp-mon-cell {cls_mc}">'
                 + (f'<div class="lp-mon-spr">{sprite_html}</div>' if sprite_html else '')
-                + f'<div class="lp-mon-txt">'
+                + '<div class="lp-mon-txt">'
                 + f'<div class="lp-nick">{active_pfx}{name_html}</div>'
                 + sub_line
                 + partner_html
                 + item_html
                 + abl_html
                 + moves_block
-                + f'</div>'
-                + f'</div>'
+                + '</div>'
+                + '</div>'
             )
 
         def _resolve_box_level(bentry: dict) -> int:
@@ -3651,10 +3651,10 @@ class SLinkServer:
                     abl_html = (f'<span class="ability" title="{html.escape(eadesc)}">{html.escape(eabl)}</span>'
                                 if eabl else '<span class="dim">—</span>')
                     foe_mon_cell = (
-                        f'<div style="display:inline-flex;align-items:center;gap:4px">'
+                        '<div style="display:inline-flex;align-items:center;gap:4px">'
                         + (f'<div style="flex-shrink:0">{esprite}</div>' if esprite else '')
                         + f'<div>{active_marker}{ename}{eitem_html}</div>'
-                        + f'</div>'
+                        + '</div>'
                     )
                     chunks.append(
                         f'<tr class="{foe_cls}" data-key="{html.escape(foe_key)}">'
@@ -4588,7 +4588,7 @@ class SLinkServer:
                          + mon_label(a_info["key"], a_info.get("nickname", ""), cap_sid, cap_gender))
                 a_lv = a_info.get("level") or "?"
             else:
-                a_lbl = f'<span class="dim">waiting…</span>'
+                a_lbl = '<span class="dim">waiting…</span>'
                 a_lv = "—"
             if b_info:
                 cap_sid = b_info.get("species", 0)
@@ -4597,7 +4597,7 @@ class SLinkServer:
                          + mon_label(b_info["key"], b_info.get("nickname", ""), cap_sid, cap_gender))
                 b_lv = b_info.get("level") or "?"
             else:
-                b_lbl = f'<span class="dim">waiting…</span>'
+                b_lbl = '<span class="dim">waiting…</span>'
                 b_lv = "—"
             state_val = d["area_states"].get(area, "unseen")
             # Determine per-player state for progress bar:
@@ -4867,7 +4867,7 @@ class SLinkServer:
         if not os.path.isfile(abs_path):
             raise aiohttp_web.HTTPNotFound()
         if safe.endswith('.html'):
-            with open(abs_path, 'r', encoding='utf-8') as fh:
+            with open(abs_path, encoding='utf-8') as fh:
                 full = fh.read()
             # Slice the calc body inner. Regex-matched rather than
             # `text.find('<body')` so HEAD comments that mention `<body>`
@@ -7501,7 +7501,7 @@ class SLinkServer:
                     }
                     # Read backup JSON for summary stats
                     try:
-                        with open(fp, "r") as fh:
+                        with open(fp) as fh:
                             data = json.loads(fh.read())
                         links = data.get("links", [])
                         alive = sum(1 for lnk in links if lnk.get("status") == "alive")
@@ -7847,7 +7847,7 @@ class SLinkServer:
             return aiohttp_web.json_response(
                 {"ok": False, "error": "a_key and b_key are required"}, status=400)
 
-        from server.state import LinkEntry, MonInfo, LinkStatus, AreaStatus
+        from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo
 
         s = self.state
 

@@ -19,9 +19,8 @@ Absolute paths are fine INSIDE Lua.  A per-run --config copy avoids the shared c
 write race when gates run back to back.
 """
 import argparse
-import glob
-import re
 import os
+import re
 import shutil
 import subprocess
 import sys

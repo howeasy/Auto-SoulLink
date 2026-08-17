@@ -16,7 +16,6 @@ If no path given, looks for lua/map_names_results.txt in the project root.
 
 import json
 import os
-import re
 import sys
 
 

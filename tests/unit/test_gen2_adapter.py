@@ -1,6 +1,7 @@
 """Tests for the Gen 2 Crystal adapter."""
 
 import pytest
+
 from server.adapters.gen2_crystal import Gen2CrystalAdapter
 
 
@@ -619,7 +620,8 @@ def test_encounter_table_endgame_coverage(adapter, area_id, expected_substr):
 
 def test_named_trainers_coverage():
     """Every class+instance in pret/data/trainers/parties.asm should resolve."""
-    import json, os
+    import json
+    import os
     here = os.path.dirname(os.path.abspath(__file__))
     path = os.path.normpath(os.path.join(here, "..", "..",
                                           "data", "games", "gen2_crystal", "trainers.json"))
@@ -642,7 +644,8 @@ def test_named_trainers_coverage():
     ("67", "1", "Eusine"),     # Mysticalman class — Eusine
 ])
 def test_named_trainer_lookup(class_id, instance_id, expected_name):
-    import json, os
+    import json
+    import os
     here = os.path.dirname(os.path.abspath(__file__))
     path = os.path.normpath(os.path.join(here, "..", "..",
                                           "data", "games", "gen2_crystal", "trainers.json"))

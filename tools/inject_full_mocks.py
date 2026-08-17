@@ -18,8 +18,6 @@ widgets still show "no data", call /api/reset first.
 import asyncio
 import json
 import urllib.request
-from urllib.parse import urlencode
-
 
 TCP_HOST = "127.0.0.1"
 TCP_PORT = 54321
@@ -35,7 +33,7 @@ async def send_tcp(events: list[dict]) -> None:
             # The server replies with newline-JSON; consume the response to
             # keep the connection clean.
             await asyncio.wait_for(r.readline(), timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
     w.close()
     await w.wait_closed()

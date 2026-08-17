@@ -8,13 +8,11 @@ Tests:
 - stat_stages flows through _enrich_battle_state() for enemy party
 - Offset constant M.BATTLE_MON_STAT_STAGES_OFF = 0x19 (cannot read CFRU type3)
 """
-import pytest
 from server.html_render import (
-    stat_stages_html as _stat_stages_html,
     STAT_STAGE_LABELS as _STAT_STAGE_LABELS,
+    stat_stages_html as _stat_stages_html,
     status_icon_html as _status_icon_html,
 )
-
 
 # ── _stat_stages_html: None / empty / all-neutral ────────────────────────────
 
@@ -133,7 +131,6 @@ class TestPartyDetailsPassthrough:
 
     def _make_server(self, tmp_path):
         """Create a minimal SLinkServer instance."""
-        import asyncio
         from server.server import SLinkServer
         srv = SLinkServer.__new__(SLinkServer)
         srv.data_dir = str(tmp_path)
@@ -148,8 +145,9 @@ class TestPartyDetailsPassthrough:
         from server.adapters import get_adapter
         srv.adapter  = get_adapter("gen3_frlge")
 
-        from server.state import SoulLinkState
         import unittest.mock as mock
+
+        from server.state import SoulLinkState
         with mock.patch("server.state.LINKS_PATH", str(tmp_path / "links.json")):
             srv.state = SoulLinkState()
 
@@ -259,7 +257,8 @@ class TestOffsetConstant:
     def test_stat_stages_offset_is_0x19(self):
         """Read the constant directly from the memory_gba module source to ensure
         it hasn't been changed back to 0x18 (which would read CFRU type3 as a stage)."""
-        import re, pathlib
+        import pathlib
+        import re
         src = pathlib.Path("lua/memory_gba.lua").read_text(encoding="utf-8")
         match = re.search(
             r"M\.BATTLE_MON_STAT_STAGES_OFF\s*=\s*(0x[0-9a-fA-F]+|\d+)", src
@@ -409,8 +408,9 @@ class TestDoublesPassthrough:
     """Verify is_doubles is stored, cleared, and left alone by the tick handler."""
 
     def _make_server(self, tmp_path):
-        from server.server import SLinkServer
         import unittest.mock as mock
+
+        from server.server import SLinkServer
         srv = SLinkServer.__new__(SLinkServer)
         srv.data_dir = str(tmp_path)
         srv.run_id   = "test"

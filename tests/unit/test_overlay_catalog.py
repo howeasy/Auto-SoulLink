@@ -79,8 +79,11 @@ def test_every_default_on_filter_has_a_pill():
     satisfied. The roster is now single-sourced through the context."""
     import json
 
-    from server.overlay_catalog import (EVENT_FILTERS_DEFAULT_OFF, EVENT_FILTERS_DEFAULT_ON,
-                                        build_index_context)
+    from server.overlay_catalog import (
+        EVENT_FILTERS_DEFAULT_OFF,
+        EVENT_FILTERS_DEFAULT_ON,
+        build_index_context,
+    )
 
     class _Req:
         rel_url = type("U", (), {"query": {}})()

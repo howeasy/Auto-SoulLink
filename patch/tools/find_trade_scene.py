@@ -14,7 +14,8 @@ callnative. Cross-checked: Task_InGameTrade's address is the literal loaded just
 call (its own literal pool then points at CB2_InitInGameTrade).
 """
 import sys
-from capstone import Cs, CS_ARCH_ARM, CS_MODE_THUMB
+
+from capstone import CS_ARCH_ARM, CS_MODE_THUMB, Cs
 
 ROM_BASE = 0x08000000
 CREATE_TASK = 0x0807741C

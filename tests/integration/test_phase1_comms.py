@@ -7,6 +7,7 @@ on a dynamically-allocated port exposed via the server_port fixture.
 """
 import asyncio
 import json
+
 import pytest
 
 pytestmark = pytest.mark.usefixtures("live_server")

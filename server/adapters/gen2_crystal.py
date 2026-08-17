@@ -11,8 +11,9 @@ import logging
 import os
 import re
 
-from .base import GameAdapter, load_area_names_from_obj_map
 from server.pokemon_data import base_form
+
+from .base import GameAdapter, load_area_names_from_obj_map
 
 log = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ _KEY_PATTERN = re.compile(r'^[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4}:[0-9A-Fa-f]{1,2}$')
 _SPECIES_DATA: dict[int, dict] = {}
 _species_types_path = os.path.join(_DATA_DIR, "species_types.json")
 if os.path.exists(_species_types_path):
-    with open(_species_types_path, "r") as _f:
+    with open(_species_types_path) as _f:
         _raw = json.load(_f)
         for _k, _v in _raw.items():
             _SPECIES_DATA[int(_k)] = _v
@@ -86,7 +87,7 @@ else:
 _GENDER_RATIOS: dict[int, int] = {}
 _gender_path = os.path.join(_DATA_DIR, "gender_ratios.json")
 if os.path.exists(_gender_path):
-    with open(_gender_path, "r") as _f:
+    with open(_gender_path) as _f:
         _raw = json.load(_f)
         for _k, _v in _raw.items():
             _GENDER_RATIOS[int(_k)] = int(_v)
@@ -97,7 +98,7 @@ else:
 _ITEM_NAMES: dict[int, str] = {}
 _items_path = os.path.join(_DATA_DIR, "item_names.json")
 if os.path.exists(_items_path):
-    with open(_items_path, "r") as _f:
+    with open(_items_path) as _f:
         _raw = json.load(_f)
         for _k, _v in _raw.items():
             _ITEM_NAMES[int(_k)] = _v
@@ -112,7 +113,7 @@ _AREA_DISPLAY_NAMES: dict[str, str] = load_area_names_from_obj_map(
 _GEN2_MOVES: dict[int, dict] = {}
 _moves_path = os.path.join(_DATA_DIR, "moves.json")
 if os.path.exists(_moves_path):
-    with open(_moves_path, "r") as _f:
+    with open(_moves_path) as _f:
         for _entry in json.load(_f).get("moves", []):
             _GEN2_MOVES[int(_entry["id"])] = _entry
 else:
@@ -122,7 +123,7 @@ else:
 _GEN2_ENCOUNTERS: dict[str, dict[str, list[dict]]] = {}
 _enc_path = os.path.join(_DATA_DIR, "encounter_tables.json")
 if os.path.exists(_enc_path):
-    with open(_enc_path, "r") as _f:
+    with open(_enc_path) as _f:
         _GEN2_ENCOUNTERS = json.load(_f)
 else:
     log.warning("Gen 2 encounter_tables.json not found: %s", _enc_path)

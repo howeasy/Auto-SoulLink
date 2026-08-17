@@ -7,12 +7,15 @@ Run:
     pytest tests/unit/test_state.py -v
 """
 
-import pytest
-from server.state import (
-    SoulLinkState, LinkEntry, MonInfo, LinkStatus, AreaStatus, _partner, is_shiny
-)
 from server.adapters.gen3_frlge import Gen3Adapter
-
+from server.state import (
+    AreaStatus,
+    LinkEntry,
+    LinkStatus,
+    MonInfo,
+    SoulLinkState,
+    is_shiny,
+)
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -1538,7 +1541,7 @@ def test_whiteout_does_not_pull_pending_captures(tmp_path, monkeypatch):
     assert not has_cmd(cmds_a, "party_mon", "A:pending")
     assert state.rebuild_pending["a"] is None
     # The pending capture is still quarantined (still in pending_captures).
-    assert "A:pending" == state.pending_captures["route_2"]["a"].key
+    assert state.pending_captures["route_2"]["a"].key == "A:pending"
 
 
 def test_sync_retrieve_done_clears_rebuild_pending(tmp_path, monkeypatch):
@@ -3480,7 +3483,7 @@ def test_evo_family_gen3_cfru_ids():
 
 def test_evo_family_cross_gen():
     """Cross-generation evolutions must link to original base form."""
-    from server.pokemon_data import base_form, SPECIES_NAMES
+    from server.pokemon_data import SPECIES_NAMES, base_form
     # Electivire → Elekid (cross-gen: Gen4 evo of Gen1 mon)
     electivire_id = next(k for k, v in SPECIES_NAMES.items() if v == "Electivire")
     elekid_id = next(k for k, v in SPECIES_NAMES.items() if v == "Elekid")
@@ -4296,7 +4299,7 @@ def test_wildcard_B_can_pull_linked_mon_when_A_party_full_with_shiny(tmp_path, m
     """When A's party is full because of a shiny, B pulling a linked mon from box
     should be BLOCKED (no wildcard exemption) — strict sync applies."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
-    from server.state import MonInfo, LinkEntry, LinkStatus
+    from server.state import LinkEntry, LinkStatus, MonInfo
     state = SoulLinkState()
     state.pokeballs_obtained = {"a": True, "b": True}
 
@@ -4337,7 +4340,7 @@ def test_wildcard_B_linked_mon_boxed_when_A_shiny_faints(tmp_path, monkeypatch):
     """When A's shiny faints, no wildcard revocation occurs — the wildcard system is removed.
     B's extra linked mon was never moved to party (B was blocked), so nothing needs boxing."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
-    from server.state import MonInfo, LinkEntry, LinkStatus
+    from server.state import LinkEntry, LinkStatus, MonInfo
     state = SoulLinkState()
     state.pokeballs_obtained = {"a": True, "b": True}
 
@@ -5027,8 +5030,6 @@ def test_memorialize_failed_still_transitions(tmp_path, monkeypatch):
 
 def test_save_load_round_trip(tmp_path, monkeypatch):
     """State saved to links.json and loaded back preserves all fields."""
-    import json as _json
-    from collections import deque
     links_path = str(tmp_path / "links.json")
     monkeypatch.setattr("server.state.LINKS_PATH", links_path)
     monkeypatch.setattr("server.state.MEMORIAL_PATH", str(tmp_path / "memorial.json"))
@@ -5079,7 +5080,7 @@ def test_save_load_round_trip(tmp_path, monkeypatch):
     assert loaded.mon_stats.get("AA:11", {}).get("level") == 10
     assert "SHINY:1111" in loaded.bonus_keys["a"]
     assert list(loaded.pending_bonus["b"]) == ["SHINY:1111"]
-    assert "CC:33" == loaded.pending_captures["route_6"]["a"].key
+    assert loaded.pending_captures["route_6"]["a"].key == "CC:33"
     assert "DEAD:KEY" in loaded.pending_memorials["a"]
 
 

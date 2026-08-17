@@ -7,9 +7,7 @@ accounting for RR's custom numbering (Gen 9 in gaps, Sevii forms, etc.).
 """
 
 import re
-import json
 import urllib.request
-from pathlib import Path
 
 SPECIES_H_URL = "https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/species.h"
 

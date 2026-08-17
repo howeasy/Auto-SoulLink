@@ -40,7 +40,6 @@ table is safe — overlays just omit the encounter panel for unmapped areas.
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 

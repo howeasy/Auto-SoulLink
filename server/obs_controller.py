@@ -21,8 +21,6 @@ import asyncio
 import json
 import logging
 import os
-import uuid
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -158,13 +156,13 @@ class OBSController:
     def __init__(self, config_path: str):
         self._config_path = config_path
         self._config: dict = {}
-        self._clients: dict[str, Optional["simpleobsws.WebSocketClient"]] = {"a": None, "b": None}
+        self._clients: dict[str, simpleobsws.WebSocketClient | None] = {"a": None, "b": None}
         self._queues: dict[str, asyncio.Queue] = {
             "a": asyncio.Queue(maxsize=1),
             "b": asyncio.Queue(maxsize=1),
         }
-        self._workers: dict[str, Optional[asyncio.Task]] = {"a": None, "b": None}
-        self._reconnect_tasks: dict[str, Optional[asyncio.Task]] = {"a": None, "b": None}
+        self._workers: dict[str, asyncio.Task | None] = {"a": None, "b": None}
+        self._reconnect_tasks: dict[str, asyncio.Task | None] = {"a": None, "b": None}
         self._status: dict[str, str] = {"a": "disconnected", "b": "disconnected"}
         self.load_config()
 

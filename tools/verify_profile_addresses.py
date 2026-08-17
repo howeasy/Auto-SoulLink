@@ -30,7 +30,6 @@ import json
 import pathlib
 import re
 import sys
-from typing import Optional
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PROFILE_GEN1 = REPO_ROOT / "lua" / "games" / "gen1_rby.lua"
@@ -46,16 +45,16 @@ PRET_SYMS = REPO_ROOT / "data" / "pret_syms.json"
 # Fields with NO expected pret symbol get an explicit None — they're either
 # derived offsets (dv_offset_1, party_struct_size), runtime sentinels
 # (is_egg_species), or placeholders we don't auto-verify.
-PROFILE_TO_PRET: dict[tuple[str, str], Optional[tuple[str, str]]] = {}
+PROFILE_TO_PRET: dict[tuple[str, str], tuple[str, str] | None] = {}
 
 
-def _add(variant: str, repo: str, mapping: dict[str, Optional[str]]) -> None:
+def _add(variant: str, repo: str, mapping: dict[str, str | None]) -> None:
     for field, sym in mapping.items():
         PROFILE_TO_PRET[(variant, field)] = (repo, sym) if sym else None
 
 
 # ── Red / Blue (pokered) ─────────────────────────────────────────────────────
-_RED_MAP: dict[str, Optional[str]] = {
+_RED_MAP: dict[str, str | None] = {
     "PARTY_COUNT_ADDR": "wPartyCount",
     "PARTY_SPECIES_ADDR": "wPartySpecies",
     "PARTY_BASE_ADDR": "wPartyMon1",
@@ -179,7 +178,7 @@ PROFILE_TO_PRET[("red_ap", "MOVEMENT_FLAGS_ADDR")] = ("alchav_pokered", "wd736")
 _add("yellow", "pokeyellow", _RED_MAP)
 
 # ── Crystal (pokecrystal) ─────────────────────────────────────────────────────
-_CRYSTAL_MAP: dict[str, Optional[str]] = {
+_CRYSTAL_MAP: dict[str, str | None] = {
     "PARTY_COUNT_ADDR": "wPartyCount",
     "PARTY_SPECIES_ADDR": "wPartySpecies",
     "PARTY_BASE_ADDR": "wPartyMon1",
@@ -323,7 +322,7 @@ def _extract_variant_addresses(lua_path: pathlib.Path) -> dict[str, dict[str, in
     out: dict[str, dict[str, int]] = {}
     depth = 0
     i = brace_open
-    current_variant: Optional[str] = None
+    current_variant: str | None = None
     current_fields: dict[str, int] = {}
     variant_block_start = -1
 

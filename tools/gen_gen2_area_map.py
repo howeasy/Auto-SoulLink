@@ -24,7 +24,7 @@ LOCATIONS_LUA_PATH = os.path.join(ROOT, "lua", "gen2_crystal_locations.lua")
 
 
 def main():
-    with open(AREA_MAP_PATH, "r") as f:
+    with open(AREA_MAP_PATH) as f:
         area_map = json.load(f)
 
     # ── gen2_crystal_areas.lua ──

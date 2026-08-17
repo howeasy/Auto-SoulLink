@@ -22,7 +22,6 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-import urllib.request
 from pathlib import Path
 
 # Reuse parsers from the sibling ability-name generator.

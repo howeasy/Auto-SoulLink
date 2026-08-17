@@ -9,24 +9,22 @@ import json
 import logging
 import os
 
-from .base import GameAdapter
 from server.data.items.gen4 import ITEM_NAMES as _GEN4_ITEM_NAMES
 from server.pokemon_data import (
     GENDER_RATIO,
     GENDER_SYMBOL,
     NATIONAL_SPECIES_NAMES,
-    NATIONAL_TO_CFRU,
-    EVO_FAMILY,
-    CFRU_TO_NATIONAL,
-    ability_name as _ability_name,
-    ability_description as _ability_description,
-    species_types as _species_types,
-    type_name as _type_name,
-    to_cfru as _to_cfru,
-    natdex_base_form as _natdex_base_form,
     _parse_pid_otid_key,
+    ability_description as _ability_description,
+    ability_name as _ability_name,
+    natdex_base_form as _natdex_base_form,
     pid_otid_shiny,
+    species_types as _species_types,
+    to_cfru as _to_cfru,
+    type_name as _type_name,
 )
+
+from .base import GameAdapter
 
 log = logging.getLogger(__name__)
 
@@ -106,7 +104,7 @@ _data_dir = os.path.join(
 for _map_file in ("area_map_hgss.json", "area_map_platinum.json"):
     _area_map_path = os.path.join(_data_dir, _map_file)
     if os.path.exists(_area_map_path):
-        with open(_area_map_path, "r") as _f:
+        with open(_area_map_path) as _f:
             _raw_areas = json.load(_f)
             for _area_id, _entry in _raw_areas.items():
                 if isinstance(_entry, dict) and "display" in _entry:
@@ -119,7 +117,7 @@ def _load_trainer_table(filename: str) -> dict:
     if not os.path.exists(path):
         return {"trainers": {}, "classes": {}}
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         log.warning("Failed to load %s: %s", filename, e)
@@ -136,7 +134,7 @@ def _load_encounters(filename: str) -> dict:
     if not os.path.exists(path):
         return {}
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     except (OSError, json.JSONDecodeError) as e:
         log.warning("Failed to load %s: %s", filename, e)

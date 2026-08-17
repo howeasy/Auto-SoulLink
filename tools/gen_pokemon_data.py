@@ -1155,7 +1155,7 @@ def main() -> None:
     import json
     cfru_to_national: dict[int, int] | None = None
     if os.path.isfile(args.natdex_map):
-        with open(args.natdex_map, "r") as f:
+        with open(args.natdex_map) as f:
             cfru_to_national = {int(k): v for k, v in json.load(f).items()}
         print(f"Loaded {len(cfru_to_national)} CFRU→NatDex mappings "
               f"from {args.natdex_map}", file=sys.stderr)

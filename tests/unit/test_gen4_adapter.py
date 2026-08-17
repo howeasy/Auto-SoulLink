@@ -1,6 +1,7 @@
 """Tests for the Gen 4 HGSS/Pt adapter."""
 
 import pytest
+
 from server.adapters.gen4_hgsspt import Gen4Adapter
 
 

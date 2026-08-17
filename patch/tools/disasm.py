@@ -12,7 +12,7 @@ Usage:
 import argparse
 import sys
 
-from capstone import Cs, CS_ARCH_ARM, CS_MODE_ARM, CS_MODE_THUMB
+from capstone import CS_ARCH_ARM, CS_MODE_ARM, CS_MODE_THUMB, Cs
 
 ROM_BASE = 0x08000000
 

@@ -5,7 +5,7 @@ Each supported game family provides an adapter implementing GameAdapter.
 The registry maps game_id strings to adapter classes.
 """
 
-from .base import GameAdapter, GameRulesAdapter, GamePresentationAdapter
+from .base import GameAdapter, GamePresentationAdapter, GameRulesAdapter
 
 # Registry: game_id -> adapter class
 _REGISTRY: dict[str, type[GameAdapter]] = {}
@@ -101,11 +101,13 @@ def variant_label(rom_type: str) -> str:
 
 # Auto-register built-in adapters on import
 from .gen3_frlge import Gen3Adapter  # noqa: E402
+
 register_adapter("gen3_frlge", Gen3Adapter)
 # Backward compat: "frlg" was the old game_id; alias to gen3_frlge
 register_adapter("frlg", Gen3Adapter)
 
 from .gen4_hgsspt import Gen4Adapter  # noqa: E402
+
 register_adapter("gen4_hgsspt", Gen4Adapter)
 
 try:
@@ -119,7 +121,9 @@ except ImportError:
     pass
 
 from .gen1_rby import Gen1Adapter  # noqa: E402
+
 register_adapter("gen1_rby", Gen1Adapter)
 
 from .gen2_crystal import Gen2CrystalAdapter  # noqa: E402
+
 register_adapter("gen2_crystal", Gen2CrystalAdapter)

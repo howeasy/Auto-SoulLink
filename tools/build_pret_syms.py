@@ -43,10 +43,8 @@ import re
 import shutil
 import subprocess
 import sys
-from typing import Optional
 
 from _build_tools_bootstrap import ensure_rgbds
-
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PRET_CACHE = REPO_ROOT / ".cache" / "pret"

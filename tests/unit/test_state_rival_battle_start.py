@@ -7,8 +7,8 @@ Run:
     pytest tests/unit/test_state_rival_battle_start.py -v
 """
 
-from server.state import SoulLinkState
 from server.adapters.gen3_frlge import Gen3Adapter
+from server.state import SoulLinkState
 
 
 def _state_with_rr_adapter() -> SoulLinkState:

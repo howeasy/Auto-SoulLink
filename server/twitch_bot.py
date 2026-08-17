@@ -381,18 +381,17 @@ class SLinkChatBot(_ReplyHelper):
         helper = self
 
         # ── Step 1: Validate token against Twitch and resolve bot user ID ──
-        async with _aiohttp.ClientSession() as _session:
-            async with _session.get(
-                "https://id.twitch.tv/oauth2/validate",
-                headers={"Authorization": f"OAuth {access_token}"},
-            ) as _resp:
-                if _resp.status != 200:
-                    body = await _resp.text()
-                    raise RuntimeError(
-                        f"Token rejected by Twitch ({_resp.status}): {body.strip()}. "
-                        "Ensure scopes user:read:chat user:write:chat user:bot channel:bot are granted."
-                    )
-                _data = await _resp.json()
+        async with _aiohttp.ClientSession() as _session, _session.get(
+            "https://id.twitch.tv/oauth2/validate",
+            headers={"Authorization": f"OAuth {access_token}"},
+        ) as _resp:
+            if _resp.status != 200:
+                body = await _resp.text()
+                raise RuntimeError(
+                    f"Token rejected by Twitch ({_resp.status}): {body.strip()}. "
+                    "Ensure scopes user:read:chat user:write:chat user:bot channel:bot are granted."
+                )
+            _data = await _resp.json()
 
         bot_user_id = str(_data.get("user_id", ""))
         bot_login = _data.get("login", self._nick or "?")
