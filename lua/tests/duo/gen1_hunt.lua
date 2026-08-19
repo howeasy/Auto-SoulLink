@@ -258,7 +258,14 @@ return function(ctx)
             -- again before this call returns. Every latch placed downstream of the throw
             -- therefore saw nothing and reported a correctly-enforced rule as "it got away".
             if not H.caught_mon and pc > (H.party_at_hunt_start or 0) then
-                H.caught_mon = M.readPartySlot(pc - 1)
+                -- Retry until the struct is READABLE, not just counted. wPartyCount is
+                -- incremented before the mon's bytes are written, so a read taken on the
+                -- frame the count rises returns nil or a zeroed struct -- this file already
+                -- says so where it waits for the overworld before reading the party.
+                local m = M.readPartySlot(pc - 1)
+                if m and m.key and #m.key == 12 and m.species_index ~= 0 then
+                    H.caught_mon = m
+                end
             end
             if u8(H.BAG_QTY0) < before then return true, "ball consumed" end
             -- Distinguish these two: "the battle ended while we were throwing" is a very

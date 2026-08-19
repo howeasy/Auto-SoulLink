@@ -124,3 +124,39 @@ that reads as endless bad luck rather than as a bug.
 * Species forcing via `wGrassMons` does not work and four hypotheses for why are recorded
   dead in `lua/tests/probe_gen1_wildtable.lua`. Neither scenario needs it; Route 1 holds only
   PIDGEY and RATTATA, so both sides converge on a shared species naturally.
+
+## Still open: the duo `deadzone` B half
+
+The catch loop itself is fixed and proven — standalone, the probe catches on both
+cartridges. The duo B half still fails, and the cause is now **measured rather than
+suspected**, which is the part worth writing down.
+
+B *is* catching. Per run: 11–13 `capture(battle)` events sent, each answered by the
+server with `force_faint`, and the hunt's own watcher reports
+
+```
+max_party_seen=3, party_now=2      x22 of 24 hunts
+```
+
+So the party genuinely gains the mon and is back to its original size before
+`H.throw()` even returns. The dead-zone rule is working *correctly* — the server
+force-faints the illegal capture and memorialises it — and the harness reports that
+correct enforcement as "it got away".
+
+**Why every latch so far has missed it.** Two independent windows, both short:
+
+* `wPartyCount` is incremented **before** the mon's struct is written, so a read taken
+  on the frame the count rises returns nil or a zeroed struct. This file already knew
+  that — it is why the post-battle path waits for the overworld before reading.
+* By the time `throw()` returns, the server round-trip has completed and the mon is
+  gone.
+
+**The recommendation is to stop polling RAM for this.** The harness is trying to
+observe a transient that the server is designed to erase, and every fix in that
+direction is a race with a shrinking window. The scenario already has a
+non-racy source of truth: the **server**. `H.wait_retired()` and
+`assert_dead_zone_refusal` already query it. B's success signal should be "the server
+recorded a capture for B in route_1 and then retired it", not "did the party grow".
+
+That is a change to `scenario_gen1_deadzone.lua`, not to `gen1_hunt.lua`, and it is
+the next thing to do here. `deadzone` and `dupes` stay `xfail` until it is done.
