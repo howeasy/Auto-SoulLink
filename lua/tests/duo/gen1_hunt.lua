@@ -363,6 +363,15 @@ return function(ctx)
                 end
             else
                 local throws, attempts = 0, 0
+                -- Declared here, not after the battle: the client runs diff_party EVERY
+                -- frame, so it sees the new party mon and reports the capture while the
+                -- battle is still up. In a dead zone the server answers force_faint
+                -- immediately and the memorialize that follows REMOVES the mon, so by the
+                -- time the post-battle settle runs the count is back where it started.
+                -- Sampling only after the battle therefore reported a correctly-enforced
+                -- dead zone as "it got away" -- verified against the client's own event
+                -- stream, which shows capture(battle) -> force_faint on every hunt.
+                local caught
                 -- KEEP THROWING. Giving up ends the battle without a catch, which is a
                 -- no_catch — and that locks the area for both players, which is a different
                 -- rule than the one this mode is for.
@@ -385,6 +394,13 @@ return function(ctx)
                     if not threw then
                         ctx.log(fmt("  attempt %d: throw failed (%s) %s",
                                     attempts, tostring(why), H.state()))
+                    end
+                    if not caught and ctx.party_count() > party0 then
+                        caught = M.readPartySlot(ctx.party_count() - 1)
+                        if caught then
+                            ctx.log(fmt("  attempt %d: CAUGHT %s", attempts,
+                                        caught.key:sub(1, 9)))
+                        end
                     end
                     if threw then
                         throws = throws + 1
@@ -410,7 +426,6 @@ return function(ctx)
             -- times in a row, while the ball count fell by only two per hunt because every
             -- catch was in fact succeeding. Latch the mon the moment it appears; whether the
             -- server then retires it is the SCENARIO's question, not this primitive's.
-            local caught
             for _ = 1, 120 do
                 press("B", 3, 12)
                 if not caught and ctx.party_count() > party0 then

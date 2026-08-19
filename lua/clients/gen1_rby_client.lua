@@ -826,11 +826,22 @@ local function on_new_mon(mon, slot, is_gift)
 
     send(evt, "capture(" .. (is_gift and "gift" or "battle") .. "):" .. mon.key:sub(1, 9), true)
     captured_this_battle = true
-    -- Self-terminate the battle state: wIsInBattle (0xD057) can linger at 0xFF
-    -- (IN_BATTLE_LOST) after a successful catch in some sequences. Don't trust
-    -- the RAM byte alone — the moment we see a new mon, the battle is over.
-    in_battle = false
-    battle_is_wild = false
+    -- DO NOT self-terminate the battle state here. The removed lines set
+    -- `in_battle = false` / `battle_is_wild = false` on the theory that wIsInBattle
+    -- "can linger at 0xFF after a successful catch". It does not: ItemUseBall never
+    -- touches wIsInBattle (pokered engine/items/item_effects.asm), the flag is cleared
+    -- in engine/battle/end_of_battle.asm:50 after the whole caught-it sequence, and
+    -- 0xFF is written only by the blackout path (home/overworld.asm:355-356).
+    --
+    -- Clearing it early did two things, both measured in a live duo run:
+    --   * the next frame saw cur_in_battle=1 with in_battle=false and re-fired
+    --     "Battle START", which resets captured_this_battle and replays the NEW ENC
+    --     banner -- and then emitted a bogus no_catch for an area we had just caught in;
+    --   * isInOverworld() started returning true WHILE THE BATTLE WAS STILL UP, so the
+    --     deferred queue ran mid-battle. In a dead zone that executed the memorialize
+    --     immediately, writing box SRAM during a battle and removing the mon before the
+    --     battle had ended.
+    -- The real battle end is detected from wIsInBattle by step 5 as it always was.
     -- Phase 7: optional SFX play. No-op until profile.SFX_DISPATCH_ADDR is set.
     M.playSfx(is_gift and "gift" or "capture")
 end
