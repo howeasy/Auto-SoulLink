@@ -295,6 +295,35 @@ return function(ctx)
         return false
     end
 
+    --- Leave a wild battle by actually RUNNING.
+    ---
+    --- B does not flee a wild battle in Gen 1 -- there is no cancel, you must select RUN
+    --- (right column, row 1). Assuming otherwise is what invalidated the wild-table probe
+    --- for four rounds, so this exists as a primitive rather than as ad-hoc B-mashing.
+    function H.leave_battle()
+        for _ = 1, 30 do
+            if u8(H.IN_BATTLE) == 0 then return true end
+            for _ = 1, 60 do
+                if u8(H.MAX_MENU) == 1 or u8(H.IN_BATTLE) == 0 then break end
+                press("B", 4, 8)
+            end
+            if u8(H.IN_BATTLE) == 0 then return true end
+            if not press_in_battle("Right") then return u8(H.IN_BATTLE) == 0 end
+            for _ = 1, 6 do
+                if u8(H.CUR_MENU) == 1 then break end
+                local was = u8(H.CUR_MENU)
+                if not press_in_battle("Down") then break end
+                if u8(H.CUR_MENU) == was then press("B", 4, 8) end
+            end
+            press("A", 10, 40)                      -- confirm RUN
+            for _ = 1, 40 do                        -- dismiss "Got away safely!"
+                if u8(H.IN_BATTLE) == 0 then return true end
+                press("B", 3, 8)
+            end
+        end
+        return u8(H.IN_BATTLE) == 0
+    end
+
     --- Pace grass until something jumps us. Left/Right only: Route 1's ledges run
     --- horizontally and are one-way, so Up/Down pacing eventually hops one southward and the
     --- player can never climb back. ALTERNATE every step — holding one direction just walks
@@ -338,6 +367,20 @@ return function(ctx)
             if mode == "catch" and u8(H.BAG_QTY0) == 0 then
                 return nil, "out of Poke Balls after " .. hunt .. " hunts"
             end
+            -- FLUSH ANY BATTLE FIRST. A forced table only decides encounters that have not
+            -- been committed yet, and gatelib's boot proves the game is live by WALKING --
+            -- on a grass fixture that starts an encounter more often than not. Forcing on
+            -- top of a battle that is already up measures the table the GAME loaded, which
+            -- is exactly how probe_gen1_wildtable.lua talked itself into "forcing does not
+            -- work" for four rounds.
+            if H.forced_species and u8(H.IN_BATTLE) ~= 0 then
+                ctx.log("hunt: flushing a pre-existing battle before forcing the table")
+                if not H.leave_battle() then
+                    return nil, "could not leave the battle that was already in progress, "
+                             .. "so the forced wild table could not take effect"
+                end
+                ctx.frames(60)
+            end
             -- The previous hunt's battle ended through EnterMap, which reloaded the wild
             -- table from ROM and undid any forcing. Put it back before walking.
             local forced_ok, forced_err = H.reforce_wild()
@@ -356,18 +399,21 @@ return function(ctx)
             -- The probe's own control. A forced species that never shows up means the
             -- wGrassMons write is not doing what this file claims — say that, loudly, rather
             -- than quietly testing a rule against the wrong Pokemon.
-            -- Forcing is ADVISORY. Writing wGrassMons does not change what the game
-            -- serves: four hypotheses were tested and killed (wrong address, reload between
-            -- write and encounter, leftover boot battle, encounter committed before the
-            -- write) — see lua/tests/probe_gen1_wildtable.lua. The address is provably right
-            -- and the bytes are provably forced at encounter time, and the game still hands
-            -- back the route's own slots. Nobody has explained it.
+            -- FORCING WORKS. This comment used to say the opposite -- that writing
+            -- wGrassMons does not change what the game serves, with four hypotheses
+            -- recorded dead. One of those four was "leftover boot battle", and it was the
+            -- right answer: probe_gen1_wildtable.lua cleared a pre-existing battle by
+            -- mashing B, and B does not flee a wild battle in Gen 1, so its clear silently
+            -- failed and every measurement described a species latched BEFORE the write.
+            -- With a leave_battle() that really runs away, the forced species is served:
+            --     at flip: curPartySpecies=0x85 enemyMonSpecies2=0x85 enemyMon=0x85
+            -- i.e. the MAGIKARP we asked for, at the level we asked for.
             --
-            -- Neither scenario actually needs a chosen species: the dead zone wants a FAILED
-            -- encounter, and the species clause only needs both sides to catch the SAME
-            -- species, which Route 1 delivers on its own (it holds nothing but PIDGEY and
-            -- RATTATA). So a mismatch is now logged and ignored rather than aborting a
-            -- 1500-second run over a convenience that never worked.
+            -- So a mismatch is a real failure again, not a shrug -- unless the caller opts
+            -- into H.forced_advisory. The requirement the probe exposed is that you must be
+            -- in the OVERWORLD when you force: an encounter already committed reads the
+            -- table the game loaded, not the one you just wrote. H.hunt flushes any
+            -- pre-existing battle before forcing for exactly that reason.
             if H.forced_species and met ~= H.forced_species and not H.forced_advisory then
                 return nil, fmt("met species 0x%02X but the wild table was forced to 0x%02X "
                                 .. "— the wGrassMons write did not take", met, H.forced_species)

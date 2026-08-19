@@ -1,11 +1,17 @@
 --[[
   probe_gen1_wildtable.lua — is wGrassMons where we think it is?
 
-  The dead-zone and species-clause scenarios force the wild table so both instances meet a
-  chosen species. The write lands (a readback confirms it) and the encounter still produces
-  Route 1's real slot 0. That is the signature of a wrong address agreeing with itself: the
-  write and the readback use the same expression, so they concur whether or not the game
-  reads those bytes.
+  ANSWER: yes, and forcing WORKS. This probe previously said otherwise, and it was wrong.
+
+  The old version "cleared" any pre-existing battle by mashing B -- but B does not flee a
+  wild battle in Gen 1, there is no cancel, you have to select RUN. Its own log line read
+  `in_battle=1` immediately after claiming the clear succeeded. So every measurement it took
+  described the battle gatelib's boot walk had already started, whose species was latched
+  BEFORE the table was written. Four hypotheses were recorded dead against that false
+  negative; all four were answering a question the experiment never actually asked.
+
+  With a leave_battle() that really runs away, the forced species is served:
+      at flip: curPartySpecies=0x85 enemyMonSpecies2=0x85 enemyMon=0x85  (MAGIKARP, level 5)
 
   So verify against something the GAME put there, not something we wrote. Route 1's ROM data
   (data/wild/maps/Route1.asm) is:
@@ -68,28 +74,12 @@ t.check("slot 1 is Route 1's (level 3, RATTATA)",
 --    in_battle set on its first check — measuring a battle that predates the experiment.
 local IN_BATTLE = M.BATTLE_FLAG_ADDR
 local ENEMY_SP  = M.ENEMY_MON_SPECIES_ADDR
-t.check("not already in a battle when the table is forced",
-        M.read_u8(IN_BATTLE) == 0,
-        fmt("in_battle=%d enemy=0x%02X — the boot walk started one, so anything measured "
-            .. "below is about THAT battle, not the forced table",
-            M.read_u8(IN_BATTLE), M.read_u8(ENEMY_SP)))
+-- Informational, not a failure: gatelib's boot proves the game is live by WALKING, and on
+-- a grass fixture that starts an encounter more often than not. What matters is that we
+-- leave it before forcing, which the hard check below enforces.
+t.log(fmt("on entry: in_battle=%d enemy=0x%02X",
+          M.read_u8(IN_BATTLE), M.read_u8(ENEMY_SP)))
 
--- Clear it if so, then re-check, so the experiment starts from the overworld either way.
-if M.read_u8(IN_BATTLE) ~= 0 then
-    for _ = 1, 400 do
-        t.hold("B", 3, nil)
-        if M.read_u8(IN_BATTLE) == 0 then break end
-    end
-    t.log(fmt("cleared the pre-existing battle: in_battle=%d", M.read_u8(IN_BATTLE)))
-end
-
--- 4. Force it, walk, and take the SECOND encounter.
---
--- `wIsInBattle == 0` is NOT the same as "no encounter pending". TryDoWildEncounter picks the
--- slot on a step, but the flag does not flip until several frames later (fade, music), so an
--- encounter committed by gen1_gatelib's boot movement probe is already decided while
--- in_battle still reads 0. A table forced inside that gap applies to the NEXT encounter, not
--- the one about to appear — which is exactly the (3, PIDGEY) we kept measuring.
 local function force()
     for slot = 0, 9 do
         M.write_u8(mons_addr + slot * 2, 5)
@@ -104,14 +94,76 @@ local function walk_to_battle()
     end
     return false
 end
+--- Leave a wild battle by actually RUNNING.
+---
+--- THE FLAW THAT INVALIDATED EVERY EARLIER RUN OF THIS PROBE. The old version mashed B,
+--- and B does not flee a wild battle in Gen 1 -- there is no cancel, you have to select
+--- RUN. So the "cleared the pre-existing battle" step never cleared anything: its own log
+--- line read `in_battle=1` right after claiming success. Every measurement below it was
+--- therefore taken on the battle gatelib's boot walk had already started, whose species was
+--- latched BEFORE the table was forced. That is why forcing looked broken, and it is why
+--- the four hypotheses recorded dead in this file were all answering the wrong question.
+---
+--- The battle menu is two columns: >FIGHT PKMN / ITEM RUN. RUN is the right column, row 1.
+--- Drive the cursor by READING wCurrentMenuItem rather than counting presses -- each column
+--- is a two-item WRAPPING menu, so a blind Up/Down lands on the wrong row exactly when the
+--- cursor already sat where you wanted it.
+local CUR_MENU, MAX_MENU = 0xCC26, 0xCC28
 local function leave_battle()
-    for _ = 1, 600 do
-        t.hold("B", 3, nil)
+    for _ = 1, 30 do
         if M.read_u8(IN_BATTLE) == 0 then return true end
+        -- Advance any text until an interactive menu is up.
+        for _ = 1, 60 do
+            if M.read_u8(MAX_MENU) == 1 or M.read_u8(IN_BATTLE) == 0 then break end
+            t.hold("B", 4, nil)
+            for _ = 1, 8 do t.step(nil) end
+        end
+        if M.read_u8(IN_BATTLE) == 0 then return true end
+        t.hold("Right", 10, nil)
+        for _ = 1, 12 do t.step(nil) end
+        for _ = 1, 6 do
+            if M.read_u8(CUR_MENU) == 1 then break end
+            local was = M.read_u8(CUR_MENU)
+            t.hold("Down", 10, nil)
+            for _ = 1, 12 do t.step(nil) end
+            if M.read_u8(CUR_MENU) == was then
+                t.hold("B", 4, nil)
+                for _ = 1, 8 do t.step(nil) end
+            end
+        end
+        t.hold("A", 10, nil)                     -- confirm RUN
+        for _ = 1, 40 do t.step(nil) end
+        for _ = 1, 40 do                          -- dismiss "Got away safely!"
+            if M.read_u8(IN_BATTLE) == 0 then return true end
+            t.hold("B", 3, nil)
+            for _ = 1, 8 do t.step(nil) end
+        end
     end
-    return false
+    return M.read_u8(IN_BATTLE) == 0
 end
 
+
+-- Clear it if so, then re-check, so the experiment starts from the overworld either way.
+if M.read_u8(IN_BATTLE) ~= 0 then
+    local left = leave_battle()
+    t.log(fmt("cleared the pre-existing battle: ok=%s in_battle=%d",
+              tostring(left), M.read_u8(IN_BATTLE)))
+    -- HARD STOP if we could not. Continuing would measure the species of a battle that
+    -- started before the force, which is precisely the mistake that made this probe report
+    -- a false negative for four rounds.
+    t.check("reached the overworld before forcing the table", left,
+            "still in the boot-walk battle; every measurement below would be about THAT "
+            .. "battle, whose species was chosen before anything was written")
+    if not left then t.finish("could not leave the pre-existing battle") return end
+end
+
+-- 4. Force it, walk, and take the SECOND encounter.
+--
+-- `wIsInBattle == 0` is NOT the same as "no encounter pending". TryDoWildEncounter picks the
+-- slot on a step, but the flag does not flip until several frames later (fade, music), so an
+-- encounter committed by gen1_gatelib's boot movement probe is already decided while
+-- in_battle still reads 0. A table forced inside that gap applies to the NEXT encounter, not
+-- the one about to appear — which is exactly the (3, PIDGEY) we kept measuring.
 force()
 -- Flush anything already committed. If nothing is pending this simply meets a wild mon from
 -- the forced table, which is the answer we want either way.
@@ -133,18 +185,32 @@ if entered then
     -- chosen slot's species into; wEnemyMon (0xCFE5) is the battle struct that
     -- LoadEnemyMonData builds from it a few frames later. Reading the struct the instant
     -- wIsInBattle flips can catch it before it is populated.
+    -- MEASURE WHAT THE SLOT READ ACTUALLY WRITES. The earlier version asserted on
+    -- wCurOpponent, which TryDoWildEncounter never touches -- it is set for TRAINER
+    -- battles, so reading 0x00 in a wild battle is correct and told us nothing. pokered
+    -- engine/battle/wild_encounters.asm:74-79 is explicit:
+    --     add hl, bc / ld a,[hli] / ld [wCurEnemyLevel],a
+    --     ld a,[hl]  / ld [wCurPartySpecies],a / ld [wEnemyMonSpecies2],a
+    -- so wCurPartySpecies and wEnemyMonSpecies2 are the two bytes that carry the chosen
+    -- slot, and wEnemyMon is only built from them later by LoadEnemyMonData. If those two
+    -- hold MAGIKARP and wEnemyMon holds PIDGEY, the table IS being read and something
+    -- downstream overrides. If they hold PIDGEY, the read never saw our bytes.
+    -- Derived from wGrassRate so Yellow's -1 shift follows: 0xD887 -> 0xCF91 / 0xCFD8.
+    local CUR_SPECIES = M.GRASS_RATE_ADDR - 0x8F6   -- wCurPartySpecies
+    local ENEMY_SP2   = M.GRASS_RATE_ADDR - 0x8AF   -- wEnemyMonSpecies2
     local CUR_OPPONENT = M.CUR_OPPONENT_ADDR
-    t.log(fmt("at flip: curOpponent=0x%02X enemyMon=0x%02X",
-              CUR_OPPONENT and M.read_u8(CUR_OPPONENT) or 0, M.read_u8(ENEMY_SP)))
+    t.log(fmt("at flip: curPartySpecies=0x%02X enemyMonSpecies2=0x%02X enemyMon=0x%02X curOpponent=0x%02X",
+              M.read_u8(CUR_SPECIES), M.read_u8(ENEMY_SP2), M.read_u8(ENEMY_SP),
+              CUR_OPPONENT and M.read_u8(CUR_OPPONENT) or 0))
     for _ = 1, 120 do t.step(nil) end
-    t.log(fmt("after 120f: curOpponent=0x%02X enemyMon=0x%02X level=%d",
-              CUR_OPPONENT and M.read_u8(CUR_OPPONENT) or 0, M.read_u8(ENEMY_SP),
+    t.log(fmt("after 120f: curPartySpecies=0x%02X enemyMonSpecies2=0x%02X enemyMon=0x%02X level=%d",
+              M.read_u8(CUR_SPECIES), M.read_u8(ENEMY_SP2), M.read_u8(ENEMY_SP),
               M.read_u8(M.ENEMY_MON_LEVEL_ADDR)))
     local met = M.read_u8(ENEMY_SP)
-    t.check("wCurOpponent holds the forced species",
-            CUR_OPPONENT and M.read_u8(CUR_OPPONENT) == MAGIKARP,
-            fmt("curOpponent=0x%02X want 0x%02X — this is what the slot read writes",
-                CUR_OPPONENT and M.read_u8(CUR_OPPONENT) or 0, MAGIKARP))
+    t.check("wCurPartySpecies holds the forced species",
+            M.read_u8(CUR_SPECIES) == MAGIKARP,
+            fmt("curPartySpecies=0x%02X want 0x%02X — THIS is the byte the slot read "
+                .. "writes (wild_encounters.asm:78)", M.read_u8(CUR_SPECIES), MAGIKARP))
     t.log(fmt("met 0x%02X; table now reads slot0=(%d,0x%02X) rate=%d",
               met, M.read_u8(mons_addr), M.read_u8(mons_addr + 1), M.read_u8(rate_addr)))
     t.check("the forced species is what we actually met", met == MAGIKARP,

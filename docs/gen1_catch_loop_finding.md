@@ -121,9 +121,11 @@ that reads as endless bad luck rather than as a bug.
 * `wait_for_menu` must test **before** pressing — an A at a live battle menu confirms FIGHT,
   and a level-5 starter one-shots a level-3 wild mon.
 * Never press a direction unless `wIsInBattle` is nonzero — outside battle they are movement.
-* Species forcing via `wGrassMons` does not work and four hypotheses for why are recorded
-  dead in `lua/tests/probe_gen1_wildtable.lua`. Neither scenario needs it; Route 1 holds only
-  PIDGEY and RATTATA, so both sides converge on a shared species naturally.
+* Species forcing via `wGrassMons` **does** work — see `lua/tests/probe_gen1_wildtable.lua`.
+  It was believed broken for four rounds because that probe cleared a pre-existing battle by
+  mashing `B`, and `B` does not flee a wild battle in Gen 1. Its clear silently failed, so
+  every measurement described a species latched before the write. One of the four hypotheses
+  it recorded dead was literally "leftover boot battle", which was the right answer.
 
 ## Resolved: the duo `deadzone` B half
 

@@ -16,8 +16,9 @@
 --      same grass, catches a real Pokemon, and must have it taken away.
 --
 -- Whatever Route 1 offers is fine: a failed encounter is a failed encounter, so this needs
--- no chosen species. It once forced the wild table to a MAGIKARP for convenience; that never
--- worked, and four hypotheses for why are recorded dead in lua/tests/probe_gen1_wildtable.lua.
+-- no chosen species. It once forced the wild table to a MAGIKARP for convenience and then
+-- stopped, on the belief that forcing did not work. Forcing DOES work
+-- (lua/tests/probe_gen1_wildtable.lua) -- this scenario simply has no use for it.
 return function(ctx)
     local log, M = ctx.log, ctx.M
     local H = dofile(SLINK_DUO.wt .. "/lua/tests/duo/gen1_hunt.lua")(ctx)
@@ -29,10 +30,9 @@ return function(ctx)
     end
     local ok, err = H.stock_balls(40)
     if not ok then return false, err end
-    -- NO SPECIES FORCING. This scenario wants a FAILED encounter, and any species fails
-    -- just as well as a chosen one. Forcing wGrassMons demonstrably does not change what the
-    -- game serves (four hypotheses killed in lua/tests/probe_gen1_wildtable.lua), so
-    -- depending on it only added a way to lose.
+    -- NO SPECIES FORCING. Not because it does not work -- it does -- but because this
+    -- scenario wants a FAILED encounter and any species fails just as well as a chosen one.
+    -- Depending on a convenience it does not need only adds a way to lose.
 
     -- The runner reads this to check both cartridges are on ONE map: Soul Link pairs and
     -- locks by area, so two fixtures on different routes share nothing to test.
