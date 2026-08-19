@@ -119,6 +119,49 @@ return function(ctx)
 
     function H.balls() return u8(H.BAG_QTY0) end
 
+    --- One-line battle state. The fields are the ones probe_gen1_catchloop.lua showed
+    --- actually discriminate: wNumRunAttempts and wEscapedFromBattle are what ruled out
+    --- the long-standing "the cursor lands on RUN" theory, and our own HP is what finally
+    --- explained it. Addresses derived from wIsInBattle so Yellow's -1 shift follows.
+    function H.state()
+        local mon = M.readPartySlot(0)
+        local hp  = mon and mon.hp or -1
+        local mx  = mon and mon.maxHP or -1
+        return fmt("in_battle=%d our=%d/%d enemy=%d balls=%d party=%d maxMenu=%d curMenu=%d run=%d escaped=%d",
+                   u8(H.IN_BATTLE), hp, mx, M.read_u16_be(H.ENEMY_HP), u8(H.BAG_QTY0),
+                   ctx.party_count(), u8(H.MAX_MENU), u8(H.CUR_MENU),
+                   u8(H.IN_BATTLE + 0xC9), u8(H.IN_BATTLE + 0x21))
+    end
+
+    --- Keep the active battler alive for the length of a catch hunt.
+    ---
+    --- THE REASON deadzone's B half and dupes looked like bad luck for 18 hunts. The fixture
+    --- carries a level-5 starter with 20 max HP; a Route 1 Pidgey does ~3 a turn, so our mon
+    --- FAINTS after about seven throws. The battle menu then never returns, every subsequent
+    --- attempt fails to reach ITEM, and the loop burns its whole budget on a dead mon --
+    --- which from outside reads exactly like "spent 33 balls and caught nothing".
+    --- Measured frame by frame in lua/tests/probe_gen1_catchloop.lua.
+    ---
+    --- This is scaffolding of the same kind as stock_balls(): the rules under test are the
+    --- dead zone and the species clause, not whether a Squirtle can outlast a Pidgey.
+    ---
+    --- MUST write the BATTLE struct. MainInBattleLoop opens every turn with
+    --- ReadPlayerMonCurHPAndStatus, which copies wBattleMonHP INTO the party struct
+    --- (pokered engine/battle/core.asm:280, :1798-1809) -- so a party-only write is erased
+    --- before the next turn. Same reason force_faint had to move.
+    function H.keep_alive()
+        if u8(H.IN_BATTLE) == 0 then return false end
+        local mon = M.readPartySlot(0)
+        if not (mon and mon.maxHP and mon.maxHP > 0) then return false end
+        if mon.hp > math.floor(mon.maxHP / 2) then return false end
+        if M.BATTLE_MON_HP_ADDR then
+            M.write_u16_be(M.BATTLE_MON_HP_ADDR, mon.maxHP)
+        end
+        M.write_u16_be(M.PARTY_BASE_ADDR + M.HP_OFFSET, mon.maxHP)
+        ctx.log(fmt("hunt: topped the active mon up from %d/%d HP", mon.hp, mon.maxHP))
+        return true
+    end
+
     -- ── input ────────────────────────────────────────────────────────────────
     local function press(btn, hold_frames, settle)
         ctx.hold(btn, hold_frames or 10)
@@ -153,27 +196,61 @@ return function(ctx)
         return false
     end
 
+    -- MEASURED, not reasoned: lua/tests/probe_gen1_catchloop.lua.
+    --
+    -- The old sequence was a blind Left / Up / (Down) that assumed Up always lands on row 0.
+    -- Each column is a TWO-item WRAPPING menu, so Up from row 0 wraps to row 1 and the
+    -- following Down wraps straight back to row 0. Whenever the cursor already sat on the
+    -- row we wanted, this returned the OTHER row while reporting success.
+    --
+    -- For throw() that burned half of every attempt budget on "could not reach ITEM". For
+    -- fight() it is worse than wasteful: left_column(0) starting from ITEM ends on ITEM, so
+    -- the following A opens the bag — a ball leaving the bag during a KILL hunt is exactly
+    -- what the dead-zone scenario must never do, and what its own guard exists to catch.
     function H.left_column(row)
         if not press_in_battle("Left") then return false end
-        if not press_in_battle("Up") then return false end
-        if row == 1 and not press_in_battle("Down") then return false end
+        -- The cursor must be VERIFIED to move, not assumed to. wMaxMenuItem reads 1 in
+        -- states that are not an interactive battle menu, so wait_for_menu can return true
+        -- while the game is still holding a text box -- and a text box ignores Down entirely.
+        -- Measured: on Blue that produced ONE throw followed by 59 consecutive "could not
+        -- reach ITEM", because the loop pressed Down forever at text that only B dismisses.
+        -- Red happened to get past it, which is why this looked cartridge-specific rather
+        -- than like a missing state check.
+        for _ = 1, 8 do
+            if u8(H.CUR_MENU) == row then return true end
+            local was = u8(H.CUR_MENU)
+            if not press_in_battle("Down") then return false end
+            if u8(H.CUR_MENU) == was then
+                -- Down did nothing: not a live menu. Advance the text and retry.
+                if not press_in_battle("B") then return false end
+            end
+        end
         return u8(H.CUR_MENU) == row
     end
 
     --- Throw one ball. True once a ball has actually LEFT THE BAG, which no mis-pressed menu
     --- can fake.
     function H.throw()
-        if u8(H.IN_BATTLE) == 0 then return false end
+        if u8(H.IN_BATTLE) == 0 then return false, "not in battle" end
         local before = u8(H.BAG_QTY0)
-        if not H.left_column(1) then return false end   -- ITEM
+        if not H.left_column(1) then return false, "could not reach ITEM" end   -- ITEM
         press("A", 10, 45)                              -- open the bag
         press("A", 10, 45)                              -- use slot 0 = POKe BALL
+        -- PRESS B WHILE WAITING. Gen 1 blocks on the "Aww! It appeared to be caught!" text
+        -- box waiting for input, and only decrements the bag in RemoveItemFromInventory at
+        -- the END of the ball routine. Idling here meant the count never dropped inside our
+        -- own window -- it dropped later, when the CALLER's corrective presses dismissed the
+        -- text -- so every attempt was finishing the PREVIOUS attempt's throw and throw()
+        -- returned false every time. See docs/gen1_catch_loop_finding.md.
         for _ = 1, 60 do
-            ctx.frames(10)
-            if u8(H.BAG_QTY0) < before then return true end
-            if u8(H.IN_BATTLE) == 0 then return true end
+            press("B", 3, 9)
+            if u8(H.BAG_QTY0) < before then return true, "ball consumed" end
+            -- Distinguish these two: "the battle ended while we were throwing" is a very
+            -- different fact from "a ball left the bag", and collapsing them into one
+            -- `true` is what hid the real ending last time.
+            if u8(H.IN_BATTLE) == 0 then return true, "battle ended during throw" end
         end
-        return false
+        return false, "bag count never dropped"
     end
 
     --- Attack once. The cursor is NOT reliably on FIGHT to begin with: the battle menu
@@ -291,9 +368,25 @@ return function(ctx)
                 -- rule than the one this mode is for.
                 while u8(H.IN_BATTLE) ~= 0 and throws < 30 and attempts < 60 do
                     attempts = attempts + 1
-                    if not H.wait_for_menu() then break end
+                    -- Before anything else: a fainted mon cannot open the bag, and the loop
+                    -- would otherwise spend its entire budget discovering that.
+                    H.keep_alive()
+                    -- LOG EVERY ATTEMPT. The absence of exactly this is why the catch loop
+                    -- took eighteen hunts to not-diagnose: from outside, "spent 33 balls and
+                    -- caught nothing" is indistinguishable from bad luck. Cheap, and it is
+                    -- the only thing that turns a timeout into a cause.
+                    ctx.log(fmt("  attempt %d: %s", attempts, H.state()))
+                    if not H.wait_for_menu() then
+                        ctx.log("  attempt " .. attempts .. ": no battle menu — " .. H.state())
+                        break
+                    end
                     if u8(H.BAG_QTY0) == 0 then break end
-                    if H.throw() then
+                    local threw, why = H.throw()
+                    if not threw then
+                        ctx.log(fmt("  attempt %d: throw failed (%s) %s",
+                                    attempts, tostring(why), H.state()))
+                    end
+                    if threw then
                         throws = throws + 1
                         for _ = 1, 80 do
                             press("B", 3, 12)
@@ -308,17 +401,35 @@ return function(ctx)
 
             -- Back to the overworld before reading the party: mid-catch the count is already
             -- incremented while the struct is still all zeroes.
+            --
+            -- SNAPSHOT THE CATCH WHILE IT EXISTS. Sampling party_count() only at the END of
+            -- this settle races the server, and in a dead zone the server always wins: it
+            -- force-faints the illegal capture and then memorialises it, which REMOVES it
+            -- from the party. The count is back to where it started by the time we look, so
+            -- a correctly-enforced dead zone was being reported as "it got away" -- twenty
+            -- times in a row, while the ball count fell by only two per hunt because every
+            -- catch was in fact succeeding. Latch the mon the moment it appears; whether the
+            -- server then retires it is the SCENARIO's question, not this primitive's.
+            local caught
             for _ = 1, 120 do
                 press("B", 3, 12)
+                if not caught and ctx.party_count() > party0 then
+                    caught = M.readPartySlot(ctx.party_count() - 1)
+                end
                 if u8(H.IN_BATTLE) == 0 then break end
             end
-            ctx.frames(120)
+            for _ = 1, 120 do
+                if not caught and ctx.party_count() > party0 then
+                    caught = M.readPartySlot(ctx.party_count() - 1)
+                end
+                ctx.frames(1)
+            end
 
             if mode == "kill" then
                 if u8(H.IN_BATTLE) ~= 0 then
                     return nil, "could not end the battle in 20 turns"
                 end
-                if ctx.party_count() ~= party0 then
+                if caught or ctx.party_count() ~= party0 then
                     return nil, "party grew during a kill hunt — we caught something"
                 end
                 if u8(H.BAG_QTY0) ~= balls0 then
@@ -328,8 +439,8 @@ return function(ctx)
                 return true
             end
 
-            if ctx.party_count() > party0 then
-                local mon = M.readPartySlot(ctx.party_count() - 1)
+            if caught or ctx.party_count() > party0 then
+                local mon = caught or M.readPartySlot(ctx.party_count() - 1)
                 if not (mon and mon.key and #mon.key == 12 and mon.species_index ~= 0) then
                     return nil, "caught mon is malformed"
                 end
