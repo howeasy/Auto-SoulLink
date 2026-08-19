@@ -2393,6 +2393,11 @@ class SLinkServer:
         alive = sum(1 for e in s.links if e.status == LinkStatus.ALIVE)
         rows.append(f"Pairs alive|{alive}/{npairs}")
         rows.append(f"Dead zones|{len(dead_zones)}")
+        # NOTE for the Gen 1 native panel (Phase 5): this reads SoulLinkState.player_badges,
+        # which is a COUNT set only by the `status` event -- a different attribute from
+        # SLinkServer.player_badges, which holds the BITMASK from hello/tick. Gen 1 never
+        # sends `status`, so this row would read 0/8 there. Correct for Gen 3 as written;
+        # switch it to popcount(self.player_badges[...]) when Gen 1 gets the panel.
         rows.append(f"Badges|{s.player_badges.get(player_id, 0)}/8")
         # NAME the dead zones. A count tells a player a number; the names tell them where they can
         # no longer catch, which is the part they can act on. Pagination carries the overflow.

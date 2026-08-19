@@ -603,7 +603,10 @@ local MEMORIAL_BOX_INDEX = 11  -- Gen 1: Box 12 (last box), 0-indexed
 
 local function build_box_snapshot()
     local entries = {}
-    -- Active box (in WRAM)
+    -- Active box (in WRAM). Fall back to 0 only if the profile cannot tell us which box is
+    -- open -- a wrong-but-stable index is still better than crashing the snapshot.
+    local ok_box, cur_box = pcall(M.getCurrentBoxNum)
+    local active_box = (ok_box and cur_box) or 0
     local ok, bcount = pcall(M.getBoxCount)
     if ok and bcount and bcount <= M.BOX_MAX_MONS then
         for i = 0, bcount - 1 do
@@ -615,7 +618,16 @@ local function build_box_snapshot()
                     local ok3, n = pcall(M.readBoxNickname, i)
                     if ok3 and n then nick = n end
                     entries[#entries + 1] = {
-                        box          = 0,  -- active box (Gen 1 only knows active box index)
+                        -- The ACTIVE box index, not a constant 0. Gen 1 mirrors only one
+                        -- box in WRAM, but it knows which one -- getCurrentBoxNum() masks
+                        -- BIT_HAS_CHANGED_BOXES off wCurrentBoxNum and this file already
+                        -- uses it for the memorial-box safety check. Reporting 0 made the
+                        -- dashboard label every boxed mon "Box 1", and worse: when the
+                        -- player made Box 12 active, its mons were reported BOTH as box 0
+                        -- here and as box 11 by the memorial read below, so the server saw
+                        -- dead keys sitting in a regular box and re-queued memorialize
+                        -- every tick.
+                        box          = active_box,
                         slot         = i,
                         key          = slot.key,
                         nickname     = nick,
@@ -673,7 +685,12 @@ local function send_hello()
         area_id = area_id,
         has_pokeballs = M.hasPokeballs(),
         ball_count = M.countPokeballs(),
-        badges = M.readBadgeCount(),
+        -- A BITMASK, not a count. Every other generation sends the raw byte
+        -- (gen2 readJohtoBadges, gen3 readBadges' bm, gen4/5 readBadges1) and the
+        -- server decodes it bit by bit -- server.py:3772 for the dashboard strip and
+        -- :5627 for /stream/badges-*. Sending readBadgeCount() here meant three badges
+        -- lit Boulder+Cascade and eight lit only Rainbow, wrong on stream all run.
+        badges = M.readBadgeMask(),
         in_battle = cur_in_battle,
         is_trainer_battle = M.isTrainerBattle(),
         party = snap,
@@ -725,7 +742,12 @@ local function send_tick()
     local evt = {
         event = "tick",
         ball_count = M.countPokeballs(),
-        badges = M.readBadgeCount(),
+        -- A BITMASK, not a count. Every other generation sends the raw byte
+        -- (gen2 readJohtoBadges, gen3 readBadges' bm, gen4/5 readBadges1) and the
+        -- server decodes it bit by bit -- server.py:3772 for the dashboard strip and
+        -- :5627 for /stream/badges-*. Sending readBadgeCount() here meant three badges
+        -- lit Boulder+Cascade and eight lit only Rainbow, wrong on stream all run.
+        badges = M.readBadgeMask(),
         has_pokeballs = nuzlocke_active,
         in_battle = in_battle,
         is_trainer_battle = not battle_is_wild and in_battle,

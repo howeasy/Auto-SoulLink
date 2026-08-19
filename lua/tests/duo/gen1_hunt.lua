@@ -244,6 +244,22 @@ return function(ctx)
         -- returned false every time. See docs/gen1_catch_loop_finding.md.
         for _ = 1, 60 do
             press("B", 3, 9)
+            -- Watch the party ACROSS the throw, not after it. This is the window in which
+            -- the catch actually lands: the client runs diff_party every frame, reports the
+            -- capture, and the server can answer force_faint before the throw call returns.
+            -- If this never rises, the caught mon is not entering the party at all -- which
+            -- is a different fault from "we caught it and it was retired", and the two were
+            -- indistinguishable from outside.
+            local pc = ctx.party_count()
+            if pc > (H.max_party_seen or 0) then H.max_party_seen = pc end
+            -- LATCH THE MON HERE, not after throw() returns. Measured: max_party_seen=3
+            -- with party_now=2 on 22 of 24 hunts -- the party really does gain the mon,
+            -- and in a dead zone the server has already force-fainted and memorialised it
+            -- again before this call returns. Every latch placed downstream of the throw
+            -- therefore saw nothing and reported a correctly-enforced rule as "it got away".
+            if not H.caught_mon and pc > (H.party_at_hunt_start or 0) then
+                H.caught_mon = M.readPartySlot(pc - 1)
+            end
             if u8(H.BAG_QTY0) < before then return true, "ball consumed" end
             -- Distinguish these two: "the battle ended while we were throwing" is a very
             -- different fact from "a ball left the bag", and collapsing them into one
@@ -362,7 +378,10 @@ return function(ctx)
                     if H.fight() then turns = turns + 1 else press("B", 4, 12) end
                 end
             else
-                local throws, attempts = 0, 0
+                local throws, attempts, logged_catch = 0, 0, false
+                H.max_party_seen = ctx.party_count()
+                H.party_at_hunt_start = party0
+                H.caught_mon = nil
                 -- Declared here, not after the battle: the client runs diff_party EVERY
                 -- frame, so it sees the new party mon and reports the capture while the
                 -- battle is still up. In a dead zone the server answers force_faint
@@ -395,12 +414,14 @@ return function(ctx)
                         ctx.log(fmt("  attempt %d: throw failed (%s) %s",
                                     attempts, tostring(why), H.state()))
                     end
+                    if not caught then caught = H.caught_mon end
                     if not caught and ctx.party_count() > party0 then
                         caught = M.readPartySlot(ctx.party_count() - 1)
-                        if caught then
-                            ctx.log(fmt("  attempt %d: CAUGHT %s", attempts,
-                                        caught.key:sub(1, 9)))
-                        end
+                    end
+                    if caught and not logged_catch then
+                        logged_catch = true
+                        ctx.log(fmt("  attempt %d: CAUGHT %s", attempts,
+                                    caught.key:sub(1, 9)))
                     end
                     if threw then
                         throws = throws + 1
@@ -454,6 +475,7 @@ return function(ctx)
                 return true
             end
 
+            caught = caught or H.caught_mon
             if caught or ctx.party_count() > party0 then
                 local mon = caught or M.readPartySlot(ctx.party_count() - 1)
                 if not (mon and mon.key and #mon.key == 12 and mon.species_index ~= 0) then
@@ -486,7 +508,8 @@ return function(ctx)
                                 .. "fires no_catch and dead-zones the area, which would "
                                 .. "invalidate the rule under test", hunt, u8(H.BAG_QTY0))
             end
-            ctx.log(fmt("hunt %d: it got away (balls=%d) — back to the grass", hunt, u8(H.BAG_QTY0)))
+            ctx.log(fmt("hunt %d: it got away (balls=%d, max_party_seen=%s, party_now=%d) — back to the grass",
+                        hunt, u8(H.BAG_QTY0), tostring(H.max_party_seen), ctx.party_count()))
         end
         return nil, "hunt budget exhausted"
     end

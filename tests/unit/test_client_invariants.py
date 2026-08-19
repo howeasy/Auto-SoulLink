@@ -195,3 +195,24 @@ def test_gen1_nacks_a_failed_sync_command_before_dropping_it():
         assert evt in body, (
             f"the executor's error path does not emit {evt}; the server would keep the "
             f"command in flight forever")
+
+
+@pytest.mark.parametrize("path", CLIENTS, ids=lambda p: os.path.basename(p))
+def test_badges_are_sent_as_a_bitmask_not_a_count(path):
+    """`badges` is decoded bit by bit by the server, so a count renders as gibberish.
+
+    server.py:3772 lights the dashboard strip with `badge_mask & (1 << i)` and
+    server.py:5627 does the same for /stream/badges-*. Gen 1 sent
+    `M.readBadgeCount()` -- a 0-8 popcount -- so three badges lit Boulder+Cascade and
+    eight lit only Rainbow, wrong on stream for a whole run.
+
+    Every client must therefore send a raw byte here. The GB helper is
+    `readBadgeMask` (aliased as `readJohtoBadges` for Gen 2's call sites);
+    Gen 3 sends its `badge_bm`; Gen 4/5 use `readBadges1`.
+    """
+    src = _strip_comments(_src(path))
+    for m in re.finditer(r"badges\s*=\s*([^,\n]+)", src):
+        expr = m.group(1)
+        assert "readBadgeCount" not in expr, (
+            f"{os.path.basename(path)} sends `badges = {expr.strip()}` -- that is a COUNT. "
+            f"The server decodes this field as a bitmask.")

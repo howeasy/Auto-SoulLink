@@ -416,12 +416,69 @@ class Gen1Adapter(GameAdapter):
             return ""
         # Use Gen 1 Red/Blue sprites from PokeAPI, cropped 5px on each edge via overflow
         url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/{species_id}.png"
+        # `class="mon-sprite"` and `data-species` are NOT decoration -- shared code keys off
+        # both, and Gen 1 rendered without them:
+        #   * server.py:1659 rewrites the class to `enc-sprite` to shrink encounter icons to
+        #     20px; with no class to rewrite that is a silent no-op and the icons render at
+        #     40px in a list sized for 20;
+        #   * every responsive rule is written against `.mon-sprite` (slink.css:381,
+        #     dashboard.css:1159/1161), so party, foe and overlay sprites ignored theme
+        #     sizing entirely and stayed locked at 40px;
+        #   * the greyscale rules for a fainted mon (`slink.css:450`) and a dead link row
+        #     (`:487`) never matched, so KO'd Pokemon never greyed out;
+        #   * dashboard.js:70 / overlay-helpers.js:65 select `img.mon-sprite, img.enc-sprite`
+        #     for the chroma-key pass and skipped Gen 1 entirely.
+        # `onerror` collapses a 404 instead of showing the browser's broken-image glyph.
         return (
             f'<span style="display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle">'
-            f'<img src="{url}" width="52" height="52" loading="lazy" '
+            f'<img class="mon-sprite" data-species="{species_id}" src="{url}" '
+            f'width="52" height="52" loading="lazy" '
+            f'onerror="this.style.visibility=&#39;hidden&#39;" '
             f'style="image-rendering:pixelated;margin:-6px">'
             f'</span>'
         )
+
+    def sprite_src(self, species_id: int) -> str:
+        """Bare sprite URL, used by _enc_table_for_status() for the JSON payload.
+
+        Without this the base default serves modern PokeAPI artwork, so the encounter
+        table showed Gen 8-era renders next to the 8-bit Red/Blue sprites `sprite_html`
+        returns everywhere else -- on the same stream layout. Gen 2 already overrides this
+        for the same reason (gen2_crystal.py).
+        """
+        if not species_id or species_id < 1:
+            return ""
+        return ("https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/"
+                f"versions/generation-i/red-blue/transparent/{species_id}.png")
+
+    def status_token(self, status_cond: int) -> str:
+        """SLP/PSN/BRN/FRZ/PAR for Gen 1's status byte, or "".
+
+        Inherited the base "" until now, which cost the partner column on the dashboard its
+        status pill (server.py:3901) -- "is my linked partner asleep?" was unanswerable. The
+        player's OWN party was unaffected: html_render.status_icon_html decodes the bitfield
+        directly and its layout happens to be right for Gen 1.
+
+        Layout from pret/pokered constants/status_constants.asm: sleep is a COUNTER in bits
+        0-2 (any nonzero value means asleep, so it must be masked, not compared), then
+        PSN 3, BRN 4, FRZ 5, PAR 6. Bit 7 is unused -- Gen 1 has no Toxic status, it is a
+        volatile that lasts only for the battle, so there is deliberately no TOX branch.
+        Checked in the same order as the Gen 3 adapter so a mon with two bits set reports
+        the same one on both.
+        """
+        if not status_cond:
+            return ""
+        if status_cond & 0x07:
+            return "SLP"
+        if status_cond & 0x08:
+            return "PSN"
+        if status_cond & 0x10:
+            return "BRN"
+        if status_cond & 0x20:
+            return "FRZ"
+        if status_cond & 0x40:
+            return "PAR"
+        return ""
 
     def ability_name(self, ability_id: int, species_id: int = 0) -> str:
         # Gen 1 has no abilities

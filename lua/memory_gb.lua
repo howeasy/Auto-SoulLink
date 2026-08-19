@@ -848,11 +848,18 @@ function M.readBadgeCount()
     return count
 end
 
---- Read the primary badge bitmask (Johto for Gen 2, all 8 for Gen 1).
-function M.readJohtoBadges()
+--- Read the primary badge bitmask: all 8 badges on Gen 1, the Johto 8 on Gen 2.
+---
+--- This is what every client sends as `badges`, because the server decodes it bit by bit
+--- (server.py:3772 dashboard strip, :5627 /stream/badges-*). Do not send a COUNT here --
+--- Gen 1 did, and three badges lit Boulder+Cascade while eight lit only Rainbow.
+function M.readBadgeMask()
     if not M.BADGES_ADDR then return 0 end
     return M.read_u8(M.BADGES_ADDR)
 end
+
+-- Gen 2's call sites name it for Johto; same byte, same meaning.
+M.readJohtoBadges = M.readBadgeMask
 
 --- Read the Kanto badge bitmask (Gen 2 only; returns 0 for Gen 1).
 function M.readKantoBadges()
