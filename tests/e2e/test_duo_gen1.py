@@ -84,21 +84,16 @@ SAME_MAP_ONLY = ("playthrough", "deadzone", "dupes")
 # worth keeping, and xfail flags loudly (XPASS) the moment either starts working, whereas a
 # commented-out entry rots silently. Do not "fix" these by removing them.
 KNOWN_FAILING = {
-    "deadzone": (
-        "A's half PASSES on a cartridge — it loses a real encounter and the SERVER locks "
-        "route_1, which is the dead-zone rule proven from real play. B's half does not: over "
-        "18 hunts it spent 33 balls without a capture, ~1.8 per battle against a per-battle "
-        "cap of 30, so something ends each battle after about two throws. Not our mon picking "
-        "FIGHT (wait_for_menu checks before pressing) and Pidgey/Rattata do not flee. Next "
-        "step is instrumentation — log wIsInBattle and both HP values across ONE battle — "
-        "not another hypothesis."
-    ),
     "dupes": (
-        "Blocked behind the same capture problem as deadzone's B half: the species clause "
-        "cannot be exercised until both sides can reliably land a catch. The scenario no "
-        "longer forces the wild table (four hypotheses for why that never worked are recorded "
-        "dead in lua/tests/probe_gen1_wildtable.lua); Route 1 holds only PIDGEY and RATTATA, "
-        "so both sides converge on a shared species naturally once catching works."
+        "Needs BOTH cartridges to catch the SAME evolution family, and the species clause "
+        "is what is under test. Route 1 serves PIDGEY and RATTATA, which are different "
+        "families, so an unforced run only fires the clause by luck. The scenario forces "
+        "wGrassMons to MAGIKARP, and that demonstrably does not change what the game "
+        "serves -- four hypotheses are recorded dead in lua/tests/probe_gen1_wildtable.lua. "
+        "Being picky is not an option either: skipping a non-target encounter ends a wild "
+        "battle without a capture, which fires no_catch and dead-zones route_1, destroying "
+        "the very area the test needs open. Unblocking this means either explaining the "
+        "wGrassMons write or finding a fixture whose route holds one family."
     ),
 }
 

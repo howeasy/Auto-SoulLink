@@ -65,17 +65,53 @@ if ctx.player == "a" then
     end
 
     -- B. The go-file only exists because the server already reported this area dead.
-    local mon, merr = H.hunt("catch", 20)
-    if not mon then return false, merr end
-    log(string.format("CAUGHT %s species=0x%02X level=%d in a DEAD area",
-                      mon.key, mon.species_index, mon.level))
+    --
+    -- DO NOT REQUIRE H.hunt TO HAND BACK THE MON. Inside a dead zone the server retires the
+    -- capture the instant it hears about it, and the client reports it from diff_party on
+    -- the very frame the party grows -- so the mon is force-fainted and memorialised before
+    -- H.throw() has even returned. Measured over 24 hunts: max_party_seen=3 with
+    -- party_now=2 on 22 of them, alongside 11-13 capture(battle) events each answered
+    -- force_faint. Asking "did the party grow and stay grown" made a correctly-enforced
+    -- rule look like eighteen consecutive failed catches. Two compounding races defeat any
+    -- RAM poll here: wPartyCount is incremented BEFORE the mon's struct is written, and the
+    -- server round-trip completes inside the throw.
+    --
+    -- So assert on the DURABLE consequence instead. The memorial box is where a retired
+    -- capture ends up and it does not un-grow, which makes it the one signal that cannot be
+    -- raced. A ball leaving the bag proves a real throw happened; the memorial box growing
+    -- proves the server took the catch away. Together that is exactly the rule under test.
+    local mem0   = (M.getMemorialBoxCount and M.getMemorialBoxCount()) or 0
+    local balls0 = H.balls()
 
-    local how = H.wait_retired(mon.key, 7200)
-    if not how then
-        return false, "caught inside a dead zone and the mon is still alive and ours — "
-                   .. "the area lock did not reach this cartridge"
+    -- The return value is a bonus, not a requirement: if the latch happened to win the race
+    -- we get a key to name in the log, and if it did not the assertions below still hold.
+    local mon = H.hunt("catch", 20)
+    local spent = balls0 - H.balls()
+    if spent <= 0 then
+        return false, "B never threw a ball, so nothing about the dead zone was tested"
     end
-    log("REFUSED " .. mon.key .. " (" .. how .. ")")
+    log(string.format("THREW %d ball(s) in a DEAD area (max_party_seen=%s)",
+                      spent, tostring(H.max_party_seen)))
+
+    local how = ctx.wait_until(function()
+        local mem = (M.getMemorialBoxCount and M.getMemorialBoxCount()) or 0
+        if mem > mem0 then return "memorialized" end
+        -- Still worth watching: if the latch DID win the race we can also catch the
+        -- force_faint, which arrives before the burial.
+        if mon and mon.key then
+            local slot = ctx.find_slot_by_key(mon.key)
+            if slot and ctx.read_hp(slot) == 0 then return "force_faint" end
+        end
+        return nil
+    end, 7200, "the server to retire the dead-zone capture")
+
+    if not how then
+        return false, string.format(
+            "threw %d ball(s) inside a dead zone and nothing was ever retired — the "
+            .. "memorial box stayed at %d, so the area lock did not reach this cartridge",
+            spent, mem0)
+    end
+    log(string.format("REFUSED %s (%s)", mon and mon.key or "<retired before we could read it>", how))
     ctx.wait_partner_done(9000)
-    return true, "dead-zone refusal: " .. mon.key
+    return true, "dead-zone refusal via " .. how
 end

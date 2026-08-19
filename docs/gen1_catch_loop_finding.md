@@ -125,7 +125,7 @@ that reads as endless bad luck rather than as a bug.
   dead in `lua/tests/probe_gen1_wildtable.lua`. Neither scenario needs it; Route 1 holds only
   PIDGEY and RATTATA, so both sides converge on a shared species naturally.
 
-## Still open: the duo `deadzone` B half
+## Resolved: the duo `deadzone` B half
 
 The catch loop itself is fixed and proven — standalone, the probe catches on both
 cartridges. The duo B half still fails, and the cause is now **measured rather than
@@ -158,5 +158,25 @@ non-racy source of truth: the **server**. `H.wait_retired()` and
 `assert_dead_zone_refusal` already query it. B's success signal should be "the server
 recorded a capture for B in route_1 and then retired it", not "did the party grow".
 
-That is a change to `scenario_gen1_deadzone.lua`, not to `gen1_hunt.lua`, and it is
-the next thing to do here. `deadzone` and `dupes` stay `xfail` until it is done.
+That is a change to `scenario_gen1_deadzone.lua`, not to `gen1_hunt.lua` — and it is
+what fixed it.
+
+**The fix: assert on the durable consequence, not the transient.** A retired capture
+ends up in the memorial box, and the memorial box does not un-grow. A ball leaving the
+bag proves a real throw happened; the memorial box growing proves the server took the
+catch away. Together that is exactly the rule under test, and neither signal can be
+raced.
+
+`deadzone` now passes, both halves, twice in a row:
+
+```
+A  RESULT: PASS (failed the encounter in route_1)
+B  THREW 40 ball(s) in a DEAD area (max_party_seen=3)
+B  REFUSED <retired before we could read it> (memorialized)
+B  RESULT: PASS (dead-zone refusal via memorialized)
+```
+
+Note what B's log says: it never managed to read the mon it caught. That is fine, and
+it is the point — the scenario no longer needs to.
+
+`dupes` remains `xfail` for an unrelated reason; see `tests/e2e/test_duo_gen1.py`.
