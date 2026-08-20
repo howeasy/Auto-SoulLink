@@ -85,15 +85,25 @@ SAME_MAP_ONLY = ("playthrough", "deadzone", "dupes")
 # commented-out entry rots silently. Do not "fix" these by removing them.
 KNOWN_FAILING = {
     "dupes": (
-        "Needs BOTH cartridges to catch the SAME evolution family, and the species clause "
-        "is what is under test. Route 1 serves PIDGEY and RATTATA, which are different "
-        "families, so an unforced run only fires the clause by luck. The scenario forces "
-        "wGrassMons to MAGIKARP, and that demonstrably does not change what the game "
-        "serves -- four hypotheses are recorded dead in lua/tests/probe_gen1_wildtable.lua. "
-        "Being picky is not an option either: skipping a non-target encounter ends a wild "
-        "battle without a capture, which fires no_catch and dead-zones route_1, destroying "
-        "the very area the test needs open. Unblocking this means either explaining the "
-        "wGrassMons write or finding a fixture whose route holds one family."
+        "Blocked on the FIXTURE, not on the catch loop and not on species forcing -- "
+        "both of those now work. Forcing is proven live "
+        "(lua/tests/probe_gen1_wildtable.lua: curPartySpecies=0x85 "
+        "enemyMonSpecies2=0x85, a MAGIKARP at the level asked for), and in the last "
+        "run both cartridges forced MAGIKARP and both caught one. "
+        "The problem is that the duo boot proves the game is live by WALKING, and on "
+        "the `battle` fixture that starts a wild encounter more often than not. A "
+        "forced table only decides encounters that have not been committed yet, so "
+        "that first battle is whatever the ROM served -- and there is no way to end "
+        "it that leaves the area usable: running and KOing both end a wild battle "
+        "without a capture, which fires no_catch and DEAD-ZONES route_1, while "
+        "catching it consumes the area's single slot. A flush that ran away was "
+        "tried and did exactly that: the run's own links.json read area_states "
+        "{'route_1': 'dead_zone'} and both captures were then retired on arrival, "
+        "so the species clause never fired. "
+        "The fix is a fixture that does not boot into a battle -- the `town` save "
+        "sits in Pallet Town, whose encounter rate is 0, and Route 1 is one map "
+        "transition south over the boundary tile at x=10 the fixtures already "
+        "stand on."
     ),
 }
 

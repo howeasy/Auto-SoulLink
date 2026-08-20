@@ -41,7 +41,17 @@ return function(ctx)
 
     local mon, merr = H.hunt("catch", 20)
     if not mon then return false, merr end
-    log(string.format("CAUGHT %s species=0x%02X level=%d", mon.key, mon.species_index, mon.level))
+    -- species_index/level are -1 when the key was recovered from the box or the memorial
+    -- rather than witnessed in the party: the server can quarantine, force-faint or bury a
+    -- capture before the party slot is readable, and all three are the rule working. Say so
+    -- instead of formatting -1 through %02X, which printed 0xFFFFFFFFFFFFFFFF.
+    if mon.species_index and mon.species_index >= 0 then
+        log(string.format("CAUGHT %s species=0x%02X level=%d",
+                          mon.key, mon.species_index, mon.level))
+    else
+        log(string.format("CAUGHT %s (recovered from the %s; the server moved it before "
+                          .. "the party slot was readable)", mon.key, mon.where or "save"))
+    end
 
     -- Exactly one of the two catches is the later one and gets retired. The other is merely
     -- QUARANTINED to the box until a link forms, which also empties its party slot — so the

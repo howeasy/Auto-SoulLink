@@ -119,6 +119,49 @@ return function(ctx)
 
     function H.balls() return u8(H.BAG_QTY0) end
 
+    --- Every mon key the save currently holds: party, active box, memorial box.
+    ---
+    --- A caught mon does NOT reliably stay in the party long enough to be read. The server
+    --- decides where it belongs the moment it hears about the capture, and the client runs
+    --- diff_party every frame, so by the time a throw returns the mon may already have been
+    --- quarantined to the box (an accepted-but-unlinked capture -- state.py's
+    --- "quarantine: ... -> box (pending link)"), force-fainted, or memorialised. All three
+    --- empty the party slot, and all three are the rule WORKING.
+    ---
+    --- So do not ask "did the party grow". Ask "is there a key here that was not here
+    --- before", and look everywhere it could have landed.
+    function H.all_keys()
+        local keys = {}
+        local n = ctx.party_count()
+        for i = 0, n - 1 do
+            local mon = M.readPartySlot(i)
+            if mon and mon.key then keys[mon.key] = "party" end
+        end
+        local ok_b, bcount = pcall(M.getBoxCount)
+        if ok_b and bcount then
+            for i = 0, bcount - 1 do
+                local ok_s, slot = pcall(M.readBoxSlot, i)
+                if ok_s and slot and slot.key then keys[slot.key] = "box" end
+            end
+        end
+        local ok_m, mcount = pcall(M.getMemorialBoxCount)
+        if ok_m and mcount then
+            for i = 0, mcount - 1 do
+                local ok_s, slot = pcall(M.readMemorialBoxSlot, i)
+                if ok_s and slot and slot.key then keys[slot.key] = "memorial" end
+            end
+        end
+        return keys
+    end
+
+    --- The first key present now that was absent in `before`, or nil.
+    function H.new_key_since(before)
+        for key, where in pairs(H.all_keys()) do
+            if not before[key] then return key, where end
+        end
+        return nil
+    end
+
     --- One-line battle state. The fields are the ones probe_gen1_catchloop.lua showed
     --- actually discriminate: wNumRunAttempts and wEscapedFromBattle are what ruled out
     --- the long-standing "the cursor lands on RUN" theory, and our own HP is what finally
@@ -373,13 +416,23 @@ return function(ctx)
             -- top of a battle that is already up measures the table the GAME loaded, which
             -- is exactly how probe_gen1_wildtable.lua talked itself into "forcing does not
             -- work" for four rounds.
-            if H.forced_species and u8(H.IN_BATTLE) ~= 0 then
-                ctx.log("hunt: flushing a pre-existing battle before forcing the table")
-                if not H.leave_battle() then
-                    return nil, "could not leave the battle that was already in progress, "
-                             .. "so the forced wild table could not take effect"
-                end
-                ctx.frames(60)
+            -- DO NOT FLUSH IT. Running away ends a wild battle without a capture, which is
+            -- a genuine failed encounter -- the client fires no_catch and the SERVER
+            -- dead-zones the area. I added a flush here and it locked route_1 before either
+            -- side had caught anything, so both captures were then retired on arrival and
+            -- the species clause never got the chance to fire. Verified from the run's own
+            -- links.json: area_states {"route_1": "dead_zone"}.
+            --
+            -- There is no way to end this battle that does not resolve the area: running
+            -- and KOing both fire no_catch, and catching consumes the area's one slot. So
+            -- fail loudly instead, and let the caller pick a fixture that does not boot
+            -- into a battle.
+            if H.forced_species and u8(H.IN_BATTLE) ~= 0 and hunt == 1 then
+                return nil, "a wild battle was already in progress when the table was "
+                         .. "forced, so this encounter was committed before the write. "
+                         .. "Ending it would dead-zone the area (running or KOing fires "
+                         .. "no_catch; catching consumes the slot), so the fixture must not "
+                         .. "boot into a battle -- see the dupes note in test_duo_gen1.py"
             end
             -- The previous hunt's battle ended through EnterMap, which reloaded the wild
             -- table from ROM and undid any forcing. Put it back before walking.
@@ -420,6 +473,7 @@ return function(ctx)
             end
 
             local party0, balls0 = ctx.party_count(), u8(H.BAG_QTY0)
+            local keys0 = H.all_keys()
             if mode == "kill" then
                 -- Count ATTEMPTS, not just landed turns. A menu press that misses leaves
                 -- `turns` where it was, so bounding the loop on turns alone spins forever
@@ -529,10 +583,25 @@ return function(ctx)
             end
 
             caught = caught or H.caught_mon
+            -- Last resort, and the one that does not race: a key that exists now and did
+            -- not before. Covers the mon being quarantined to the box or buried before we
+            -- could read it out of the party.
+            if not caught then
+                local key, where = H.new_key_since(keys0)
+                if key then
+                    ctx.log(fmt("hunt %d: new key %s found in the %s", hunt, key:sub(1, 9), where))
+                    caught = {key = key, species_index = -1, level = -1, where = where}
+                end
+            end
             if caught or ctx.party_count() > party0 then
                 local mon = caught or M.readPartySlot(ctx.party_count() - 1)
-                if not (mon and mon.key and #mon.key == 12 and mon.species_index ~= 0) then
+                if not (mon and mon.key and #mon.key == 12) then
                     return nil, "caught mon is malformed"
+                end
+                -- species_index is -1 for a key recovered from the box or memorial, where
+                -- we have the identity but did not witness the struct in the party.
+                if mon.species_index == 0 then
+                    return nil, "caught mon is malformed (species 0)"
                 end
                 if u8(H.BAG_QTY0) >= balls0 then
                     return nil, fmt("party grew but no ball was consumed (%d -> %d) — not a "
