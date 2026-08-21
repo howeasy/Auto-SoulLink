@@ -1,29 +1,59 @@
 --[[
   lua/tests/probe_gen1_warp.lua — can we put the player on an arbitrary map, for real?
 
-  Needed by two things: the `dupes` duo scenario, which must start on Route 1 without the
-  boot walk committing an encounter first, and the all-areas sweep, which has to visit every
-  encounter map. Walking there does not work — the town fixture parks at (5,6), directly
-  below Red's own front door, so Up goes indoors and exiting drops you back on the same
-  tile (six east-shifted lanes all re-entered it).
+  VERDICT, so nobody re-derives it:
 
-  THE MECHANISM, and why it is not a cheat. pokered's own scripts warp this way:
+    * The SCRIPTED warp CANNOT be driven from Lua. Not "is awkward" — cannot.
+    * The FLY warp CAN, and lands on a destination we CHOOSE, with the real ROM table.
+    * Its price is a fixed list of 13 destinations, two of which have wild encounters.
+    * `dupes` no longer needs either. It was blocked by the boot walk starting an
+      encounter, and that is fixed at the source (see below).
+
+  ── why the scripted warp is a dead end ──────────────────────────────────────────────
   home/overworld.asm:57-60 checks BIT_WARP_FROM_CUR_SCRIPT (bit 3) in wStatusFlags3 every
   overworld frame and jumps to WarpFound2, which runs the complete real chain
-  WarpFound2 -> EnterMap -> LoadMapData -> LoadMapHeader -> LoadWildData. So the destination
-  map's header, connections, warps, tileset AND wild table all come from ROM exactly as they
-  would if the player had walked in. Nothing we wrote is echoed back.
+  WarpFound2 -> EnterMap -> LoadMapData -> LoadMapHeader -> LoadWildData. That part works:
+  this probe poisons the wild table with 0x77 first (not a valid rate for any Gen 1 map, and
+  a MissingNo index) and the poison IS replaced by genuine ROM data, so the map really does
+  load.
 
-  Setting wCurMap alone does NOT do this — nothing in OverworldLoop watches that byte, so
-  LoadWildData never re-runs and the previous map's wild table stays in WRAM. That is a
-  self-referential fake and is the trap this probe exists to avoid.
+  The DESTINATION never arrives, because WarpFound2 reads it from hWarpDestinationMap at
+  0xFF81 (home/overworld.asm:495 and :509 — there is no other source) and that address is a
+  UNION: ram/hram.asm:8-17 shares it with hBaseTileID, hDexWeight, hOAMTile, hROMBankTemp,
+  hPreviousTileset and hRLEByteValue. The renderer rewrites it WITHIN the frame, so a value
+  written from a frame boundary is already gone when WarpFound2 reads it. Measured three
+  ways, all still exercised below:
+    * the write lands and reads back (0x0C before and after the hop), and is still ignored;
+    * rewriting it every frame does not help, and actively corrupts the RLE map decode by
+      clobbering hRLEByteValue during EnterMap;
+    * the wCurMap trace goes straight 0x00 -> 0x15 without ever passing through the map that
+      was asked for — which also kills the "it arrived and CheckMapConnections moved us"
+      theory, since arriving would have to show up in that sequence.
+  Lua cannot win a race that is decided inside a frame, so this vector is closed.
 
-  WHAT MAKES THE RESULT TRUSTWORTHY: the wild table is POISONED with 0x77 before the warp.
-  0x77 is not a valid encounter rate for any Gen 1 map and is a MissingNo index, so if the
-  warp were fake the readback would still be poison and the probe fails by name. A real
-  LoadWildData overwrites it with the destination's ROM data.
+  ── the vector that works ────────────────────────────────────────────────────────────
+  HandleFlyWarpOrDungeonWarp (home/overworld.asm:783-799) takes its destination from
+  wDestinationMap, an ordinary WRAM byte nothing else touches per frame, gated on
+  BIT_FLY_WARP in wStatusFlags6. It runs the same real chain through LoadWildData. Proven
+  below by asking for ROUTE_4 — a map this probe has never landed on by accident, unlike
+  ROUTE_10 — and checking the table against data/wild/maps/Route4.asm: rate 20, slot 0
+  (level 10, RATTATA 0xA5).
+
+  The limit is FlyWarpDataPtr (data/maps/special_warps.asm:64-77): 13 destinations, the 11
+  fly-able towns plus ROUTE_4 and ROUTE_10. Only those last two carry wild encounters, so
+  this vector alone does NOT cover the all-areas sweep — that needs walking the map
+  connections out from a flown-to route, or another mechanism entirely. Say so rather than
+  planning the sweep around a warp that reaches three of its maps.
+
+  ── what `dupes` actually needed ─────────────────────────────────────────────────────
+  Not this. The blocker was the boot walk starting a wild encounter on the Route 1 grass
+  fixture, which committed a species before one could be forced. Fixed by closing the
+  engine's own NewBattle gate across the boot (BIT_NO_BATTLES in wStatusFlags4,
+  home/overworld.asm:362-373) — see M.setNoBattles and lua/tests/duo/duo_gb_main.lua.
 
       python tools/run_gb_gate.py lua/tests/probe_gen1_warp.lua --rom red --target town
+
+  Not a gate. It asserts only what it has established and logs the rest as findings.
 --]]
 
 local G = dofile((SLINK_ROOT or os.getenv("SLINK_ROOT")) .. "/lua/tests/gen1_gatelib.lua")
