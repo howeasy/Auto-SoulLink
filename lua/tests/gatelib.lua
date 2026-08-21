@@ -144,12 +144,24 @@ function Lib.prove_booted(M, game_key, step, hold)
                 return true, x_addr, y_addr
             end
         end
-        if pc >= 1 and pc <= 6 and round_trip((i % 2 == 0) and "Right" or "Left") then
+        -- BOTH round trips go the SAME way. They used to go opposite ways, which quietly
+        -- required the fixture to have open ground on BOTH sides -- and the Gen 1 `battle`
+        -- fixture does not: measured at Route 1 (10,35), Left moved the player 0 times in
+        -- 185 attempts and Right 183 times in 186 (lua/tests/probe_gen1_bootwalk.lua). The
+        -- first round trip would succeed going Right and the second would then be asked to
+        -- set off Left into a wall, so the full proof could never complete there and the
+        -- boot only ever finished by way of the wild-battle exception above. Alternating
+        -- `out` across iterations still tries both directions, so a fixture walled in on
+        -- the other side is equally well served; nothing about the proof is weakened,
+        -- because a there-and-back plus an idle plus another there-and-back is the same
+        -- claim whichever side it is measured on.
+        local out = (i % 2 == 0) and "Right" or "Left"
+        if pc >= 1 and pc <= 6 and round_trip(out) then
             local xa, ya = pos()
             for _ = 1, 90 do step(nil) end        -- press NOTHING and watch
             local xb, yb = pos()
             if xa == xb and ya == yb
-               and round_trip((i % 2 == 0) and "Left" or "Right")
+               and round_trip(out)
                and M.getPartyCount() == pc then
                 return true, x_addr, y_addr
             end

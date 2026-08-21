@@ -80,35 +80,35 @@ SCENARIOS = ("faint", "boxsync", "memorialize", "rivalswap", "explode_g1", "whit
 # with a reason.
 SAME_MAP_ONLY = ("playthrough", "deadzone", "dupes")
 
-# Registered but NOT passing. xfail rather than deletion: the scenarios and their evidence are
-# worth keeping, and xfail flags loudly (XPASS) the moment either starts working, whereas a
-# commented-out entry rots silently. Do not "fix" these by removing them.
-KNOWN_FAILING = {
-    "dupes": (
-        "Blocked on the FIXTURE. Not the catch loop and not species forcing -- both "
-        "work now. Forcing is proven live (lua/tests/probe_gen1_wildtable.lua: "
-        "curPartySpecies=0x85 enemyMonSpecies2=0x85, a MAGIKARP at the level asked "
-        "for), and in a full duo run both cartridges forced MAGIKARP and both caught "
-        "one. "
-        "The blocker: the duo boot proves the game is live by WALKING, and the "
-        "`battle` fixture stands in Route 1 grass, so it starts a wild encounter more "
-        "often than not -- committing a species before the table can be forced. No "
-        "way of ending that battle leaves the area usable: running and KOing fire "
-        "no_catch and dead-zone route_1 (measured -- a flush that ran away produced "
-        "area_states {'route_1': 'dead_zone'} in the run's own links.json, after "
-        "which both captures were retired on arrival and the clause never fired), and "
-        "catching consumes the area's single slot. "
-        "NEXT STEP, and do not repeat what was already tried: boot dupes from the "
-        "`town` fixture (Pallet Town, encounter rate 0, so the boot walk is harmless) "
-        "and reach Route 1 with the SCRIPTED WARP -- hWarpDestinationMap (0xFF81) plus "
-        "BIT_WARP_FROM_CUR_SCRIPT in wStatusFlags3, which runs the real "
-        "WarpFound2 -> EnterMap -> LoadMapHeader -> LoadWildData chain "
-        "(home/overworld.asm:57-60). WALKING there does not work: the fixture parks at "
-        "(5,6), directly below Red's own front door, so Up enters the house (map "
-        "0x25), and exiting drops you back on the same door tile -- six lanes of "
-        "east-shifted retries all re-entered it."
-    ),
-}
+# Scenarios registered but NOT passing, mapped to the reason. EMPTY, and keeping it empty is
+# the point: every Gen 1 duo scenario now passes. Entries here are xfail rather than deletion
+# so that a scenario starting to work reports XPASS instead of rotting silently -- and a
+# scenario that stops working belongs in a fix, not in here.
+KNOWN_FAILING = {}
+# `dupes` USED to live here. It now passes, and what unblocked it was not the catch loop and
+# not species forcing -- both of those already worked. Three things were wrong, each found by
+# measuring rather than reasoning, and each is worth not re-deriving:
+#
+#   1. The `battle` fixture stands in Route 1 grass, so the walk that proves the game is live
+#      started a wild encounter and committed a species before one could be forced -- and no
+#      way of ending that battle leaves the area usable. Fixed by closing the engine's own
+#      NewBattle gate (BIT_NO_BATTLES in wStatusFlags4, home/overworld.asm:362-373) across
+#      the boot and reopening it in gen1_hunt.force_wild once the species is chosen.
+#   2. That write has to be RE-ASSERTED EVERY FRAME. duo_gb_main runs before the ROM boots,
+#      and the ~1000 frames spent reaching the overworld are the game initialising its own
+#      WRAM, which wipes it. A single write read back set and the encounter still happened.
+#   3. prove_booted could never complete its full proof on this fixture: its two round trips
+#      set off in OPPOSITE directions, and Route 1 (10,35) has a wall to the Left -- measured
+#      0 moves in 185 attempts Left against 183 in 186 Right
+#      (lua/tests/probe_gen1_bootwalk.lua). It only ever "booted" there by way of the
+#      wild-battle exception, which is the very encounter (1) removes. Both round trips now
+#      go the same way, and the boot got FASTER: frame 1092 against the old 1053, and 1053
+#      was the frame a battle started rather than a walk completing.
+#
+# A fourth bug was in the scenario's verdict, not the rule: H.wait_retired watched the
+# memorial box's SIZE, which cannot see a burial that already happened, so the rejected side
+# reported KEPT while the server log showed the clause firing correctly. It now asks whether
+# that specific key is in the memorial.
 
 
 def _subprocess_timeout(scenario: str) -> int:

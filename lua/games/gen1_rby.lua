@@ -50,6 +50,12 @@ M.PROFILES = {
         GRASS_TILE_ADDR    = 0xD535,
         GRASS_RATE_ADDR    = 0xD887,
         MOVEMENT_FLAGS_ADDR = 0xD736,
+        -- wStatusFlags4. BIT_NO_BATTLES (bit 4) is checked by NewBattle
+        -- (home/overworld.asm:362-373), which gates BOTH wild and trainer battles. The
+        -- engine only ever clears it in ChooseFlyDestination, the Fly submenu and two
+        -- scripts, so a walk cannot clear it -- which is what makes it usable as a
+        -- suppression window. Address from data/pret_syms.json, not derived.
+        STATUS_FLAGS_4_ADDR = 0xD72E,
         -- Party
         PARTY_COUNT_ADDR   = 0xD163,
         PARTY_SPECIES_ADDR = 0xD164,  -- 6 bytes + 0xFF terminator
@@ -222,6 +228,7 @@ M.PROFILES = {
         GRASS_TILE_ADDR    = 0xD534,
         GRASS_RATE_ADDR    = 0xD886,
         MOVEMENT_FLAGS_ADDR = 0xD735,
+        STATUS_FLAGS_4_ADDR = 0xD72D,   -- Yellow's -1 shift; pret_syms.json
         PARTY_COUNT_ADDR   = 0xD162,
         PARTY_SPECIES_ADDR = 0xD163,
         PARTY_BASE_ADDR    = 0xD16A,
@@ -415,6 +422,10 @@ local AP_UNVERIFIED = {
     -- Added for the in-battle force_faint fix. wBattleMonHP sits in the 0xD0xx
     -- block, which the AP fork moves; do not inherit Red's 0xD015.
     "BATTLE_MON_HP_ADDR",
+    -- wStatusFlags4 has NO symbol at all in the Alchav fork (checked against
+    -- data/pret_syms.json: alchav_pokered has no wStatusFlags4 entry), so there is
+    -- nothing to inherit and Red's 0xD72E would be a guess.
+    "STATUS_FLAGS_4_ADDR",
 }
 for _, field in ipairs(AP_UNVERIFIED) do
     M.PROFILES.red_ap[field] = false

@@ -642,13 +642,31 @@ return function(ctx)
     --- "left the party" on its own is NOT a rejection: an accepted-but-unlinked capture is
     --- quarantined to the ordinary box (state.py `quarantine: ... -> box (pending link)`),
     --- which also empties the slot. Watching for that alone would call every catch rejected.
+    ---
+    --- ASK WHETHER THIS KEY IS BURIED, NOT WHETHER THE MEMORIAL GREW. A count snapshotted
+    --- here cannot see a burial that already happened, and by the time this is called it
+    --- very often has: the server can reject, force-faint and memorialise a capture before
+    --- the throw returns, which is why H.hunt has to recover the key by scanning the
+    --- memorial in the first place (mon.where == "memorial"). Measured -- a dupes run where
+    --- the rejected side's MAGIKARP sat in box 11 slot 0 from the moment it was caught, the
+    --- count never moved, and the run failed with BOTH sides reporting KEPT while the
+    --- server log showed the clause had fired correctly. Presence is the durable signal;
+    --- growth is a transient this can arrive too late to observe.
     function H.wait_retired(key, max_frames)
-        local mem_before = (M.getMemorialBoxCount and M.getMemorialBoxCount()) or 0
+        local function buried()
+            local ok, mcount = pcall(M.getMemorialBoxCount)
+            if not ok or not mcount then return false end
+            for i = 0, mcount - 1 do
+                local ok_s, slot = pcall(M.readMemorialBoxSlot, i)
+                if ok_s and slot and slot.key == key then return true end
+            end
+            return false
+        end
+        if buried() then return "memorialized" end
         return ctx.wait_until(function()
             local slot = ctx.find_slot_by_key(key)
             if slot and ctx.read_hp(slot) == 0 then return "force_faint" end
-            local mem = (M.getMemorialBoxCount and M.getMemorialBoxCount()) or 0
-            if mem > mem_before then return "memorialized" end
+            if buried() then return "memorialized" end
             return nil
         end, max_frames or 5400, "the server to retire " .. key)
     end

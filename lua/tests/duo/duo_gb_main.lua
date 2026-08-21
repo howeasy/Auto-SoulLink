@@ -82,7 +82,55 @@ local function hold(btn, n, stop)
     return stop and stop() or false
 end
 
-local booted = Lib.prove_booted(M, GAME, step, hold)
+-- ── Do not let the boot walk start a battle ──────────────────────────────────
+-- prove_booted walks to prove the emulator is live, and a fixture parked in tall grass
+-- answers that walk with a wild encounter -- which commits a species before the scenario
+-- can force one, and dead-zones the area whichever way the battle is then ended (measured:
+-- a flush that ran away produced area_states {"route_1": "dead_zone"}). Closing the
+-- engine's own NewBattle gate for the duration of the boot makes a grass fixture behave
+-- like a town one. Scenarios that want battles reopen it -- gen1_hunt.force_wild does so as
+-- soon as it has chosen the species, so the window is only ever open before that choice.
+--
+-- Advisory, not fatal: Gen 2 has no such address wired and AP disowns it, and neither of
+-- those should stop a scenario that never walks into grass. prove_booted still accepts a
+-- battle as proof, so a fixture that does encounter one is no worse off than before.
+--
+-- RE-ASSERT IT EVERY FRAME, do not set it once. This script runs BEFORE the ROM has
+-- booted: the ~1000 frames prove_booted spends getting from the title screen into the
+-- overworld are the game initialising its own WRAM, which wipes wStatusFlags4 along with
+-- everything else. Measured -- a single write here read back set, and Route 1 still
+-- answered the boot walk with a wild battle. Wrapping the frame primitives is what makes
+-- the suppression outlive the initialisation that erases it.
+local nb_step, nb_hold = step, hold
+if M.setNoBattles then
+    nb_step = function(btns) M.setNoBattles(true) step(btns) end
+    nb_hold = function(btn, n, stop)
+        for _ = 1, n do
+            if stop and stop() then return true end
+            nb_step({[btn] = true})
+        end
+        nb_step(nil)
+        return stop and stop() or false
+    end
+end
+
+local booted = Lib.prove_booted(M, GAME, nb_step, nb_hold)
+if M.setNoBattles then
+    -- THE WINDOW CLOSES HERE, and it covers the boot walk and nothing else. Scenarios walk
+    -- in wildly different ways -- gen1_hunt.H.hunt, or a hand-rolled loop as in
+    -- `playthrough` -- so any boundary further in has to be repeated per scenario and will
+    -- be missed: reopening inside force_wild stranded `playthrough` and `deadzone`, which
+    -- hunt without forcing, and reopening inside H.hunt still stranded `playthrough`, which
+    -- does not use it ("no wild encounter in 600 steps", both times).
+    -- Closing it here needs no such knowledge and is safe, because a Gen 1 encounter is
+    -- rolled per STEP (TryDoWildEncounter, called from the overworld step handler) and
+    -- nothing between this line and a scenario's first walk presses a direction -- the
+    -- filler mon, hello and wait_go all idle. So the species a scenario forces is still
+    -- chosen before anything can walk into an encounter.
+    local reopened = M.setNoBattles(false)
+    log(string.format("boot: battles suppressed for the walk, reopened=%s (in_battle=%s)",
+                      tostring(reopened), tostring(M.isInBattle())))
+end
 if not booted then finish(false, "never booted into the overworld from the battery save") end
 log(string.format("booted at frame %d party=%d", frame, M.getPartyCount()))
 

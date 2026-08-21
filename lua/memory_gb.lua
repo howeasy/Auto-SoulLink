@@ -258,6 +258,7 @@ function M.initProfile(game_module, variant)
     M.TILE_MAP_ADDR           = prof.TILE_MAP_ADDR
     M.GRASS_TILE_ADDR         = prof.GRASS_TILE_ADDR
     M.GRASS_RATE_ADDR         = prof.GRASS_RATE_ADDR
+    M.STATUS_FLAGS_4_ADDR     = prof.STATUS_FLAGS_4_ADDR
     M.MOVEMENT_FLAGS_ADDR     = prof.MOVEMENT_FLAGS_ADDR
     M.SFX_DISPATCH_ADDR       = prof.SFX_DISPATCH_ADDR
     M.SFX_IDS                 = prof.sfx_ids or {}
@@ -1396,6 +1397,40 @@ end
 function M.hasWildEncounters()
     if not M.GRASS_RATE_ADDR then return nil end
     return M.read_u8(M.GRASS_RATE_ADDR) ~= 0
+end
+
+--- Suppress or re-enable EVERY battle, using the engine's own switch.
+---
+--- NewBattle (home/overworld.asm:362-373) reads wStatusFlags4 and returns "no battle" when
+--- BIT_NO_BATTLES is set, before it can reach InitBattle. That gate covers wild encounters
+--- AND trainers, and pokered uses it for exactly this purpose in its own scripts -- Mt. Moon
+--- B2F sets it around the fossil choice and Pokemon Tower 5F around the Rocket fight
+--- (scripts/MtMoonB2F.asm:14, scripts/PokemonTower5F.asm:32).
+---
+--- Nothing an ordinary walk does clears it. The only engine clears are ChooseFlyDestination
+--- (home/reload_tiles.asm:32-34), the Fly submenu (engine/menus/start_sub_menus.asm:222),
+--- one item effect (engine/items/item_effects.asm:1512) and those two scripts -- so a
+--- suppression window opened here stays open until it is closed here.
+---
+--- WHY A TEST WANTS THIS: a fixture parked in tall grass starts an encounter during the
+--- boot walk that proves the game is live, which commits a species before the scenario can
+--- choose one, and no way of ending that battle leaves the area usable (running and KOing
+--- both dead-zone it, catching consumes its only slot). Suppressing battles across the boot
+--- makes the grass fixture behave like a town fixture for as long as the window is open.
+---
+--- Returns false when the profile has no verified address (AP), so callers can say so
+--- rather than silently walking into the encounter they meant to prevent.
+local BIT_NO_BATTLES = 4            -- constants/ram_constants.asm:98
+function M.setNoBattles(on)
+    if not M.STATUS_FLAGS_4_ADDR then return false end
+    local v = M.read_u8(M.STATUS_FLAGS_4_ADDR)
+    M.write_u8(M.STATUS_FLAGS_4_ADDR,
+               on and (v | (1 << BIT_NO_BATTLES)) or (v & ~(1 << BIT_NO_BATTLES)))
+    -- Read back: this is a WRAM byte the engine also writes, and an assumed write is what
+    -- this repo has been burned by before.
+    local got = M.read_u8(M.STATUS_FLAGS_4_ADDR)
+    local set = (got & (1 << BIT_NO_BATTLES)) ~= 0
+    return set == (on and true or false)
 end
 
 --- True while the player is mid-ledge-hop, exiting a door, or fishing.

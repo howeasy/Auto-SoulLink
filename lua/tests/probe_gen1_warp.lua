@@ -47,6 +47,11 @@ local BIT_WARP_FROM_CUR_SCRIPT = 3    -- constants/ram_constants.asm:86
 local BIT_NO_BATTLES           = 4    -- constants/ram_constants.asm:98
 
 local ROUTE_1, PALLET = 0x0C, 0x00
+local ROUTE_4 = 0x0F
+-- wDestinationMap 0xD71A (+0x3BC) and wStatusFlags6 0xD732 (+0x3D4); both deltas are the
+-- same in pokered and pokeyellow.
+local DEST_MAP = CUR_MAP + 0x3BC
+local STATUS6  = CUR_MAP + 0x3D4
 local ROUTE_1_WIDTH   = 10            -- blocks; data/maps/headers/Route1.asm
 
 local function u8(a) return M.read_u8(a) end
@@ -77,25 +82,74 @@ local function warp_to(map, width)
     -- them from the destination's warp_to table (engine/overworld/tilesets.asm:45-47),
     -- which for a map with no warp events is filler.
     M.write_u8(DEST_WARP, 0xFF)
-    -- REWRITE THE DESTINATION EVERY FRAME. hWarpDestinationMap (0xFF81) is a UNION member
-    -- (ram/hram.asm:8-17): it shares that byte with hOAMTile, hBaseTileID, hDexWeight,
-    -- hROMBankTemp, hPreviousTileset and hRLEByteValue, several of which the rendering code
-    -- touches every single frame. pokered's own scripts get away with one write because
-    -- they set the byte and the flag in the same uninterrupted routine
-    -- (scripts/PokemonTower7F.asm:75-82); a Lua write has to survive a frame boundary, and
-    -- it does not. Measured: asking for Route 1 (0x0C) landed on Route 10 (0x15) -- a real
-    -- map load, of whatever value rendering happened to leave behind.
+    -- WRITE THE DESTINATION ONCE, then leave 0xFF81 alone.
+    --
+    -- Rewriting it every frame was actively harmful, not merely useless: 0xFF81 is a UNION
+    -- (ram/hram.asm:8-17) shared with hOAMTile, hBaseTileID, hDexWeight, hROMBankTemp,
+    -- hPreviousTileset AND hRLEByteValue -- and hRLEByteValue is what DecodeRLEList uses to
+    -- decompress the map blocks during EnterMap. Hammering that byte corrupts the very map
+    -- load we are trying to perform.
+    M.write_u8(0xFF81, map)
     M.write_u8(STATUS3, u8(STATUS3) | (1 << BIT_WARP_FROM_CUR_SCRIPT))
-    -- Write through the dedicated HRAM domain as well as the System Bus. The System Bus
-    -- readback agrees with itself, which proves nothing if it is a mirror the CPU does not
-    -- see -- and the destination arriving wrong twice, from a byte the renderer rewrites
-    -- constantly, is exactly what that would look like.
+
+    -- Trace every distinct wCurMap the hop passes through. "asked for 0x0C, ended on 0x15"
+    -- cannot distinguish "the destination never arrived" from "we arrived and were then
+    -- moved again", and those want completely different fixes.
+    local seq, last = {}, nil
     for _ = 1, 240 do
-        M.write_u8(0xFF81, map)
-        pcall(memory.write_u8, 0x01, map, "HRAM")
         t.step(nil)
-        if u8(CUR_MAP) == map then return true end
+        local m = u8(CUR_MAP)
+        if m ~= last then
+            seq[#seq + 1] = fmt("0x%02X", m)
+            last = m
+        end
+        if m == map and #seq > 0 then
+            -- Let it settle: arriving is not the same as staying.
+            for _ = 1, 60 do
+                t.step(nil)
+                local m2 = u8(CUR_MAP)
+                if m2 ~= last then seq[#seq + 1] = fmt("0x%02X", m2) last = m2 end
+            end
+            t.log("[probe] wCurMap sequence: " .. table.concat(seq, " -> "))
+            return u8(CUR_MAP) == map
+        end
     end
+    t.log("[probe] wCurMap sequence: " .. table.concat(seq, " -> "))
+    return false
+end
+
+--- Warp via the FLY vector, which reads a STABLE WRAM byte.
+---
+--- The scripted warp is unusable from Lua: its destination is hWarpDestinationMap at
+--- 0xFF81, a UNION shared with hOAMTile, hBaseTileID, hDexWeight, hROMBankTemp,
+--- hPreviousTileset and hRLEByteValue (ram/hram.asm:8-17). The renderer rewrites that byte
+--- within the frame, so whatever we put there is gone before WarpFound2 reads it -- measured
+--- three ways: the write lands and reads back, rewriting it every frame does not help (and
+--- corrupts the RLE map decode), and the wCurMap trace goes straight 0x00 -> 0x15 without
+--- ever passing through the map we asked for.
+---
+--- HandleFlyWarpOrDungeonWarp (home/overworld.asm:61-63) takes its destination from
+--- wDestinationMap in ordinary WRAM instead, which nothing else touches per frame. Its
+--- price is a fixed destination list -- FlyWarpDataPtr, 13 entries
+--- (data/maps/special_warps.asm:64-77) -- but two of those, ROUTE_4 and ROUTE_10, are real
+--- wild-encounter areas, and an encounter area is all the scenarios need.
+local BIT_FLY_WARP = 3                 -- constants/ram_constants.asm:119
+local function fly_to(map)
+    M.write_u8(STATUS4, u8(STATUS4) | (1 << BIT_NO_BATTLES))
+    M.write_u8(DEST_MAP, map)
+    M.write_u8(STATUS6, u8(STATUS6) | (1 << BIT_FLY_WARP))
+    local seq, last = {}, nil
+    for _ = 1, 300 do
+        t.step(nil)
+        local m = u8(CUR_MAP)
+        if m ~= last then seq[#seq + 1] = fmt("0x%02X", m) last = m end
+        if m == map then
+            for _ = 1, 60 do t.step(nil) end
+            t.log("[probe] fly sequence: " .. table.concat(seq, " -> "))
+            return u8(CUR_MAP) == map
+        end
+    end
+    t.log("[probe] fly sequence: " .. table.concat(seq, " -> "))
     return false
 end
 
@@ -138,8 +192,6 @@ t.log(fmt("[probe] after poison: grassRate=0x%02X slot0=(0x%02X,0x%02X)",
 --   wDestinationMap 0xD71A (+0x3BC) is what the FLY/DUNGEON path uses, and it lives in
 --   stable WRAM rather than in the HRAM union -- note Route 10 is IN pokered's fly table
 --   (data/maps/special_warps.asm), which is suspicious given what we keep landing on.
-local DEST_MAP  = CUR_MAP + 0x3BC
-local STATUS6   = CUR_MAP + 0x3D4          -- wStatusFlags6 0xD732
 t.log(fmt("[probe] before warp: wDestinationMap=0x%02X wStatusFlags3=0x%02X "
           .. "wStatusFlags6=0x%02X hWarpDest=0x%02X",
           u8(DEST_MAP), u8(STATUS3), u8(STATUS6), u8(0xFF81)))
@@ -182,4 +234,42 @@ local x0, y0 = u8(X_COORD), u8(Y_COORD)
 t.hold("Down", 16, function() return u8(X_COORD) ~= x0 or u8(Y_COORD) ~= y0 end)
 t.log(fmt("[probe] moved from (%d,%d) to (%d,%d)", x0, y0, u8(X_COORD), u8(Y_COORD)))
 
-t.finish(fmt("warped Pallet -> Route 1, rate=%d", rate))
+-- ── second experiment: the fly vector, and a destination we have never hit by accident ──
+-- Route 4, not Route 10: we keep LANDING on Route 10 by accident, so arriving there would
+-- prove nothing. Route 4's ROM data is rate 20, slot 0 = (level 10, RATTATA 0xA5)
+-- (data/wild/maps/Route4.asm), and the table is poisoned again first.
+t.check("re-poisoned the wild table", poison())
+local flew = fly_to(ROUTE_4)
+t.check("fly warp reached ROUTE_4", flew,
+        fmt("map=0x%02X after 300 frames", u8(CUR_MAP)))
+
+local r4, l4, s4 = u8(M.GRASS_RATE_ADDR), u8(M.GRASS_RATE_ADDR + 1), u8(M.GRASS_RATE_ADDR + 2)
+t.log(fmt("[probe] after fly: map=0x%02X rate=%d slot0=(%d,0x%02X) pos=(%d,%d)",
+          u8(CUR_MAP), r4, l4, s4, u8(X_COORD), u8(Y_COORD)))
+t.check("Route 4's table was loaded, not the poison", r4 ~= 0x77,
+        "grassRate still 0x77 — LoadWildData did not run")
+t.check("Route 4's real rate (20) was loaded", r4 == 20, fmt("got %d", r4))
+t.check("Route 4's real slot 0 (level 10, RATTATA) was loaded",
+        l4 == 10 and s4 == 0xA5, fmt("got (%d, 0x%02X) want (10, 0xA5)", l4, s4))
+local area4 = t.G and t.G.resolve_area and t.G.resolve_area(u8(CUR_MAP)) or ""
+t.check("it resolves to route_4", area4 == "route_4", fmt("got %q", area4))
+
+-- Playable, not just present. "Can move" means SOME direction works: a fly destination is
+-- a fixed tile chosen by the game, and Route 4's is up against the Pokemon Center wall, so
+-- asserting on one direction tests the map's geometry rather than the warp. Each attempt
+-- gets a generous hold because a direction the player is not already facing spends the
+-- first press turning.
+local fx, fy = u8(X_COORD), u8(Y_COORD)
+local moved_dir
+for _, dir in ipairs({"Down", "Left", "Right", "Up"}) do
+    local x0, y0 = u8(X_COORD), u8(Y_COORD)
+    t.hold(dir, 40, function() return u8(X_COORD) ~= x0 or u8(Y_COORD) ~= y0 end)
+    if u8(X_COORD) ~= x0 or u8(Y_COORD) ~= y0 then moved_dir = dir break end
+end
+t.log(fmt("[probe] movement after fly: start=(%d,%d) now=(%d,%d) via %s",
+          fx, fy, u8(X_COORD), u8(Y_COORD), tostring(moved_dir)))
+t.check("the player can move after the fly warp", moved_dir ~= nil,
+        fmt("no direction moved the player off (%d,%d) — the warp landed but left the "
+            .. "engine holding the joypad", fx, fy))
+
+t.finish(fmt("fly -> route_4 rate=%d", r4))

@@ -95,6 +95,7 @@ _RED_MAP: dict[str, str | None] = {
     "TILE_MAP_ADDR": "wTileMap",
     "GRASS_TILE_ADDR": "wGrassTile",
     "GRASS_RATE_ADDR": "wGrassRate",
+    "STATUS_FLAGS_4_ADDR": "wStatusFlags4",
     "MOVEMENT_FLAGS_ADDR": "wMovementFlags",
 
     # ── Memorial-box SRAM guard (see M.protectSramBoxes) ──────────────────────
