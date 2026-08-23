@@ -375,3 +375,223 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+# ── the client's payload ─────────────────────────────────────────────────────────────────
+# The Lua client reads the same tables out of the ROM it is running and ships them as raw
+# hex. It deliberately does NOT interpret them: the layout rules -- ten slots per method, a
+# block present only when its rate is non-zero, Yellow's reversed super-rod fields -- live
+# here and nowhere else, so a ROM file and a client payload cannot be read differently.
+MAX_CLIENT_MAPS = 512               # 249 real entries; a payload larger than this is hostile
+
+
+def _hex_to_bytes(hexstr: str, what: str) -> bytes:
+    if not isinstance(hexstr, str):
+        raise RomScanError(f"{what}: expected a hex string, got {type(hexstr).__name__}")
+    try:
+        return bytes.fromhex(hexstr)
+    except ValueError as exc:
+        raise RomScanError(f"{what}: not valid hex ({exc})") from exc
+
+
+def parse_wild_record(buf: bytes, what: str = "record") -> dict:
+    """One map's grass+water record, from exactly the bytes the ROM holds."""
+    entry: dict[str, dict | None] = {}
+    cur = 0
+    for method in ("grass", "water"):
+        if cur >= len(buf):
+            raise RomScanError(f"{what}: ran out of bytes before the {method} rate")
+        rate = buf[cur]
+        cur += 1
+        if rate == 0:
+            entry[method] = None
+            continue
+        if cur + 2 * WILD_SLOTS > len(buf):
+            raise RomScanError(
+                f"{what}: {method} claims rate {rate} but only {len(buf) - cur} bytes remain")
+        entry[method] = {"rate": rate, "slots": _read_slots(buf, cur)}
+        cur += 2 * WILD_SLOTS
+    if cur != len(buf):
+        raise RomScanError(f"{what}: {len(buf) - cur} trailing bytes after the record")
+    return entry
+
+
+def _validate_slots(block, what: str) -> None:
+    if block is None:
+        return
+    for s in block["slots"]:
+        if not 1 <= s["level"] <= 100:
+            raise RomScanError(f"{what}: level {s['level']} outside 1-100")
+        if s["species_index"] == 0:
+            raise RomScanError(f"{what}: species index 0 is NO_MON")
+
+
+def parse_client_content(payload: dict) -> dict:
+    """Validate and decode what a client sent, into the same shape ``scan`` produces.
+
+    Everything here is untrusted input from a process we do not control, so it is checked
+    rather than assumed: hex validity, record length, slot count, level range, species != 0,
+    map-id range and a cap on how many maps may be declared. A payload that fails ANY of
+    these raises -- and the caller's correct response is to mark the encounter data
+    unavailable, never to fall back to the decomp tables, because vanilla species shown
+    beside a randomized cartridge is the exact misinformation this exists to remove.
+    """
+    if not isinstance(payload, dict):
+        raise RomScanError("rom_content payload is not an object")
+    variant = payload.get("variant")
+    if variant not in _SYMS_TO_VARIANT.values():
+        raise RomScanError(f"rom_content declares unknown variant {variant!r}")
+
+    raw_wild = payload.get("wild")
+    if not isinstance(raw_wild, dict) or not raw_wild:
+        raise RomScanError("rom_content carries no wild tables")
+    if len(raw_wild) > MAX_CLIENT_MAPS:
+        raise RomScanError(f"rom_content declares {len(raw_wild)} maps")
+
+    wild: dict[int, dict] = {}
+    for key, hexstr in raw_wild.items():
+        try:
+            map_id = int(key)
+        except (TypeError, ValueError):
+            raise RomScanError(f"rom_content wild key {key!r} is not a map id") from None
+        if not 0 <= map_id <= 0xFF:
+            raise RomScanError(f"rom_content wild map id {map_id} outside 0-255")
+        label = f"map 0x{map_id:02X}"
+        rec = parse_wild_record(_hex_to_bytes(hexstr, label), label)
+        _validate_slots(rec["grass"], label + " grass")
+        _validate_slots(rec["water"], label + " water")
+        if rec["grass"] or rec["water"]:
+            wild[map_id] = rec
+
+    fishing: dict = {}
+    old = _hex_to_bytes(payload.get("old_rod") or "", "old_rod")
+    if len(old) == 2:
+        fishing["old_rod"] = [{"species_index": old[0], "level": old[1]}]
+    good = _hex_to_bytes(payload.get("good_rod") or "", "good_rod")
+    if len(good) == 4:
+        fishing["good_rod"] = [{"level": good[0], "species_index": good[1]},
+                               {"level": good[2], "species_index": good[3]}]
+
+    super_rod: dict[int, list[dict]] = {}
+    raw_super = payload.get("super_rod") or {}
+    if not isinstance(raw_super, dict):
+        raise RomScanError("rom_content super_rod is not an object")
+    if len(raw_super) > MAX_CLIENT_MAPS:
+        raise RomScanError(f"rom_content declares {len(raw_super)} super rod maps")
+    for key, hexstr in raw_super.items():
+        try:
+            map_id = int(key)
+        except (TypeError, ValueError):
+            raise RomScanError(f"super_rod key {key!r} is not a map id") from None
+        label = f"super_rod map 0x{map_id:02X}"
+        buf = _hex_to_bytes(hexstr, label)
+        if variant == "yellow":
+            # Flat 4 x (species, level) -- species FIRST, the opposite order from R/B.
+            if len(buf) != 8:
+                raise RomScanError(
+                    f"{label}: Yellow records are 8 bytes, got {len(buf)}")
+            entries = [{"species_index": buf[2 * i], "level": buf[2 * i + 1]}
+                       for i in range(4)]
+        else:
+            count = buf[0] if buf else 0
+            if not 1 <= count <= 10 or len(buf) != 1 + 2 * count:
+                raise RomScanError(
+                    f"{label}: count {count} does not match {len(buf)} bytes")
+            entries = [{"level": buf[1 + 2 * i], "species_index": buf[2 + 2 * i]}
+                       for i in range(count)]
+        for e in entries:
+            if not 1 <= e["level"] <= 100 or e["species_index"] == 0:
+                raise RomScanError(f"{label}: implausible entry {e}")
+        super_rod[map_id] = entries
+    fishing["super_rod"] = super_rod
+
+    return {"variant": variant, "wild": wild, "fishing": fishing}
+
+
+# ── turning slots into what the UI shows ─────────────────────────────────────────────────
+def aggregate_slots(slots: list[dict]) -> list[dict]:
+    """Ten slots -> per-species percentage and level range.
+
+    A species occupying several slots owns the SUM of their probabilities
+    (data/wild/probabilities.asm), so the result sums to 100 per method.
+    """
+    by_species: dict[int, dict] = {}
+    for i, slot in enumerate(slots):
+        sid = slot["species_index"]
+        rec = by_species.setdefault(
+            sid, {"species_index": sid, "rate": 0,
+                  "min_level": slot["level"], "max_level": slot["level"]})
+        rec["rate"] += _SLOT_RATES[i]
+        rec["min_level"] = min(rec["min_level"], slot["level"])
+        rec["max_level"] = max(rec["max_level"], slot["level"])
+    # First-appearance order here, deliberately: the ordering the UI shows is applied one
+    # stage later, in build_encounter_tables, because it sorts by NATIONAL DEX number and
+    # that is not known until the internal index has been mapped. Sorting on the internal
+    # index instead puts Dodrio before Venomoth in Cerulean Cave, where the shipped table
+    # has Venomoth first.
+    return list(by_species.values())
+
+
+def _pad_to_slots(entries: list[dict]) -> list[dict]:
+    """Fishing groups hold 2-4 entries, not 10, and are picked with uniform probability.
+
+    aggregate_slots weights by SLOT_RATES, which is the grass/water distribution and wrong
+    here, so repeat each entry until ten slots are filled: that makes every entry equally
+    likely and keeps one percentage model for the whole UI.
+    """
+    if not entries:
+        return []
+    return [entries[i % len(entries)] for i in range(WILD_SLOTS)]
+
+
+def build_encounter_tables(content: dict, map_to_area, index_to_natdex,
+                           species_name) -> dict:
+    """area_id -> method -> entries, in exactly the shape encounter_tables.json uses.
+
+    FIRST-WINS BY MAP ID, matching tools/gen_gen1_encounters.py: several floors of one
+    dungeon share an area_id and only the lowest map id contributes. That is a real
+    limitation -- it is why some wild tables are unreachable in the UI today -- but
+    mirroring it here means a CLEAN ROM reproduces the shipped tables exactly, which is a
+    control worth more than a partial improvement. Sub-area ids are the proper fix and are
+    a separate piece of work.
+    """
+    out: dict = {}
+
+    def add(area_id: str, method: str, slots: list[dict]) -> None:
+        block = out.setdefault(area_id, {})
+        if method in block:
+            return                          # first-wins
+        entries = []
+        for agg in aggregate_slots(slots):
+            natdex = index_to_natdex.get(agg["species_index"])
+            if natdex is None:
+                continue                    # a randomizer can emit an unused index
+            entries.append({
+                "species_id": natdex,
+                "name": species_name(natdex),
+                "rate": agg["rate"],
+                "min_level": agg["min_level"],
+                "max_level": agg["max_level"],
+            })
+        if entries:
+            # Matches tools/gen_gen1_encounters.py exactly: most likely first, ties broken
+            # by national dex number. Any other tiebreak silently reorders rows the UI and
+            # its tests already pin.
+            entries.sort(key=lambda e: (-e["rate"], e["species_id"]))
+            block[method] = entries
+
+    for map_id in sorted(content["wild"]):
+        area_id = map_to_area.get(map_id)
+        if not area_id:
+            continue
+        rec = content["wild"][map_id]
+        for method, key in (("Grass", "grass"), ("Water", "water")):
+            if rec[key]:
+                add(area_id, method, rec[key]["slots"])
+
+    fishing = content.get("fishing") or {}
+    for map_id, entries in sorted((fishing.get("super_rod") or {}).items()):
+        area_id = map_to_area.get(map_id)
+        if area_id:
+            add(area_id, "Super Rod", _pad_to_slots(entries))
+    return out

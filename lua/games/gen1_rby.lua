@@ -476,6 +476,160 @@ end
 -- offset 0x5F22 (`Title_Seed`), and the slot name to 0x5F42 — confirmed against the AP
 -- world's rom.py and the shipped basepatch, whose unrandomized placeholder decodes to
 -- "(NOT RANDOMIZED)".
+-- ── Reading the cartridge's own encounter tables ─────────────────────────────────────────
+-- A run may be played on a ROM randomized with UPR ZX, where the wild tables bear no
+-- relation to the ones SLink ships from the decomps. Showing the decomp data beside such a
+-- ROM does not merely look stale -- it tells a player Route 1 holds Pidgey when it holds
+-- Koffing. So the client reads the tables out of the ROM it is actually running and sends
+-- them at hello.
+--
+-- FLAT ROM OFFSETS, NOT BUS ADDRESSES. Everything below indexes BizHawk's "ROM" domain.
+-- On the System Bus 0x4000-0x7FFF is a window onto whichever bank happens to be mapped,
+-- which is how an earlier version of detect_archipelago() ended up reading HRAM scratch.
+--
+-- These offsets are cross-checked two ways: they are what data/pret_rom_syms.json resolves
+-- to (WildDataPointers, GoodRodMons, SuperRodData / SuperRodFishingSlots, and the
+-- `ld bc, level, species` immediate inside ItemUseOldRod), and they are the same values
+-- UPR ZX's own config/gen1_offsets.ini uses to find these tables. Two readers, two
+-- sources, same answers.
+--
+-- Bank 3 holds the wild data and the R/B super-rod groups; the 2-byte pointers stored there
+-- are bank-local (0x4000-0x7FFF) and resolve to flat = bank*0x4000 + (ptr - 0x4000).
+M.ROM_TABLES = {
+    red = {
+        wild_ptr = 0x0CEEB, wild_bank = 3,
+        old_rod  = 0x0E252,          -- the 0x01 `ld bc,nn` opcode; species +1, level +2
+        good_rod = 0x0E27F,          -- 2 x (level, species)
+        super_rod = 0x0E919, super_bank = 3, super_format = "rb",
+    },
+    yellow = {
+        wild_ptr = 0x0CB95, wild_bank = 3,
+        old_rod  = 0x0E0FF,
+        good_rod = 0x0E12C,
+        -- Yellow shares no code with R/B here: flat 9-byte records of
+        -- map, (species, level) x 4 -- SPECIES FIRST, the opposite order from every other
+        -- Gen 1 table. Read the other way the values stay in plausible ranges.
+        super_rod = 0xF5EDA, super_format = "yellow",
+    },
+}
+M.ROM_TABLES.blue = M.ROM_TABLES.red
+
+local function _has_rom_domain()
+    for _, d in ipairs(memory.getmemorydomainlist()) do
+        if d == "ROM" then return true end
+    end
+    return false
+end
+
+--- Read `n` bytes from the flat ROM domain as an uppercase hex string, or nil on failure.
+--- Raw bytes rather than parsed values: the SERVER owns the interpretation, so there is one
+--- parser for both a ROM file and a client payload instead of two that can disagree.
+local function _rom_hex(offset, n)
+    local out = {}
+    for i = 0, n - 1 do
+        local ok, b = pcall(memory.read_u8, offset + i, "ROM")
+        if not ok or type(b) ~= "number" then return nil end
+        out[#out + 1] = string.format("%02X", b)
+    end
+    return table.concat(out)
+end
+
+local function _rom_u8(offset)
+    local ok, b = pcall(memory.read_u8, offset, "ROM")
+    if ok and type(b) == "number" then return b end
+    return nil
+end
+
+--- The wild-encounter records this cartridge actually holds: { [map_id] = hex }.
+---
+--- Only maps that HAVE encounters are returned. The pointer table is terminated by 0xFFFF
+--- (pret writes `dw -1 ; end` after `assert_table_length NUM_MAPS`), and a block of ten
+--- slots is present only when its rate byte is non-zero, so an empty map is two zero bytes.
+local function _read_wild(spec)
+    local out, count = {}, 0
+    for map_id = 0, 255 do
+        local lo = _rom_u8(spec.wild_ptr + 2 * map_id)
+        local hi = _rom_u8(spec.wild_ptr + 2 * map_id + 1)
+        if not lo or not hi then return nil end
+        local ptr = lo + hi * 256
+        if ptr == 0xFFFF then break end
+        if ptr < 0x4000 or ptr > 0x7FFF then return nil end
+        local rec = spec.wild_bank * 0x4000 + (ptr - 0x4000)
+        -- Measure the record before reading it, so the hex we ship is exactly as long as
+        -- the data and a truncated read cannot masquerade as an empty method.
+        local len, cur = 0, rec
+        for _ = 1, 2 do
+            local rate = _rom_u8(cur)
+            if not rate then return nil end
+            len = len + 1
+            cur = cur + 1
+            if rate ~= 0 then len = len + 20 cur = cur + 20 end
+        end
+        if len > 2 then
+            local hex = _rom_hex(rec, len)
+            if not hex then return nil end
+            out[tostring(map_id)] = hex
+            count = count + 1
+        end
+    end
+    if count == 0 then return nil end
+    return out
+end
+
+local function _read_super_rod(spec)
+    local out = {}
+    if spec.super_format == "yellow" then
+        local cur = spec.super_rod
+        while true do
+            local map_id = _rom_u8(cur)
+            if not map_id or map_id == 0xFF then break end
+            local hex = _rom_hex(cur + 1, 8)      -- 4 x (species, level)
+            if not hex then return nil end
+            out[tostring(map_id)] = hex
+            cur = cur + 9
+        end
+    else
+        local cur = spec.super_rod
+        while true do
+            local map_id = _rom_u8(cur)
+            if not map_id or map_id == 0xFF then break end
+            local lo, hi = _rom_u8(cur + 1), _rom_u8(cur + 2)
+            if not lo or not hi then return nil end
+            local ptr = lo + hi * 256
+            if ptr < 0x4000 or ptr > 0x7FFF then return nil end
+            local grp = spec.super_bank * 0x4000 + (ptr - 0x4000)
+            local n = _rom_u8(grp)
+            if not n or n < 1 or n > 10 then return nil end
+            local hex = _rom_hex(grp, 1 + 2 * n)  -- count, then n x (level, species)
+            if not hex then return nil end
+            out[tostring(map_id)] = hex
+            cur = cur + 3
+        end
+    end
+    return out
+end
+
+--- Everything the server needs to render this ROM's encounters, or nil if it cannot be read.
+--- Returning nil is a real answer: the server must then say the encounter data is
+--- unavailable rather than fall back to the decomp tables, because vanilla species shown
+--- beside a randomized cartridge is precisely the misinformation this exists to remove.
+function M.readRomContent(variant)
+    if not _has_rom_domain() then return nil end
+    local spec = M.ROM_TABLES[variant]
+    if not spec then return nil end
+    local wild = _read_wild(spec)
+    if not wild then return nil end
+    local super = _read_super_rod(spec)
+    if not super then return nil end
+    return {
+        variant = variant,
+        wild = wild,
+        old_rod = _rom_hex(spec.old_rod + 1, 2),    -- species, level
+        good_rod = _rom_hex(spec.good_rod, 4),      -- 2 x (level, species)
+        super_rod = super,
+    }
+end
+
 M.AP_SEED_ROM_OFFSET = 0x5F22
 M.AP_SEED_LEN = 16
 
