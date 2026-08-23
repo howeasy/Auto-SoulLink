@@ -366,3 +366,148 @@ def test_profile_hash_ignores_identity_but_not_content():
     base = sym_to_offset(_load_syms()["pokered"]["symbols"]["BaseStats"])
     rom[base + 1] = (rom[base + 1] + 1) & 0xFF    # Bulbasaur's HP
     assert profile_hash(scan(bytes(rom))) != before, "a real content change did not move it"
+
+
+# ── the case the scanner actually exists for ─────────────────────────────────────────────
+class TestRandomizedRoms:
+    """Drive the real UPR ZX jar and scan what comes out.
+
+    A scanner that has only ever read clean cartridges is untested where it matters, so
+    this generates genuinely randomized ROMs rather than simulating them. UPR validates the
+    settings file's CRC32 on load, so the run succeeding is also proof that
+    server/upr_settings.py encodes the format correctly.
+
+    Needs a jar, so it skips without one -- set SLINK_UPR_JAR, or drop PokeRandoZX.jar
+    beside the repo. Phase 8's release gate is where a missing jar becomes a failure rather
+    than a skip; here it would only stop the rest of the file running.
+    """
+
+    CATEGORIES = {"wild", "starters", "statics", "trainers", "tms", "field_items"}
+
+    @staticmethod
+    def _jar() -> str:
+        import shutil
+        env = os.environ.get("SLINK_UPR_JAR")
+        if env and os.path.exists(env):
+            return env
+        for cand in (os.path.join(_REPO, "PokeRandoZX.jar"),
+                     os.path.join(_REPO, "tools", "PokeRandoZX.jar")):
+            if os.path.exists(cand):
+                return cand
+        pytest.skip("PokeRandoZX.jar not found — set SLINK_UPR_JAR to run this")
+        raise AssertionError  # unreachable; keeps type checkers quiet
+        del shutil
+
+    @classmethod
+    def _randomize(cls, tmp_path, title: str, tag: str) -> bytes:
+        import shutil
+        import subprocess
+        from server.upr_settings import build_categories
+        if not shutil.which("java"):
+            pytest.skip("java not on PATH")
+        jar = cls._jar()
+        settings = tmp_path / "slink.rnqs"
+        settings.write_bytes(build_categories(cls.CATEGORIES))
+        src = _ROMS[title]
+        if not os.path.exists(src):
+            pytest.skip(f"{src} not present")
+        # UPR appends .gbc to anything not already ending in it (FileFunctions.fixFilename),
+        # so asking for .gb would silently produce out.gb.gbc.
+        out = tmp_path / f"{title}_{tag}.gbc"
+        proc = subprocess.run(
+            ["java", "-jar", jar, "cli", "-s", str(settings), "-i", src, "-o", str(out), "-l"],
+            capture_output=True, text=True, timeout=600)
+        assert proc.returncode == 0 and out.exists(), (
+            f"UPR failed for {title}/{tag}: rc={proc.returncode}\n"
+            f"stdout={proc.stdout}\nstderr={proc.stderr}")
+        return out.read_bytes()
+
+    def test_a_randomized_rom_is_identified_and_scanned(self, tmp_path):
+        rom = self._randomize(tmp_path, "red", "a")
+        ident = identify(rom)
+        assert ident["variant"] == "red", "the header title survives randomization"
+        assert ident["clean"] is False
+        assert scan_wild(rom), "no wild tables came back"
+
+    def test_two_seeds_share_structure_and_differ_in_content(self, tmp_path):
+        clean = scan_wild(_rom("red"))
+        a = scan_wild(self._randomize(tmp_path, "red", "a"))
+        b = scan_wild(self._randomize(tmp_path, "red", "b"))
+
+        assert set(a) == set(b) == set(clean), (
+            "randomizing species must not change WHICH maps have encounters")
+        for map_id in clean:
+            for method in ("grass", "water"):
+                if clean[map_id][method] is None:
+                    assert a[map_id][method] is None and b[map_id][method] is None
+                    continue
+                assert a[map_id][method]["rate"] == clean[map_id][method]["rate"], (
+                    f"map 0x{map_id:02X} {method}: encounter RATE was randomized")
+                # Levels are a separate setting and it is off, so they must survive.
+                assert ([s["level"] for s in a[map_id][method]["slots"]]
+                        == [s["level"] for s in clean[map_id][method]["slots"]]), (
+                    f"map 0x{map_id:02X} {method}: levels changed")
+
+        def species(scanned):
+            return [s["species_index"] for m in sorted(scanned)
+                    for meth in ("grass", "water") if scanned[m][meth]
+                    for s in scanned[m][meth]["slots"]]
+
+        sa, sb, sc = species(a), species(b), species(clean)
+        assert sa != sc and sb != sc, "the ROM was not actually randomized"
+        assert sa != sb, "two runs produced identical tables — seeds are not independent"
+        # Not merely "differs somewhere": a real randomization moves most of the table.
+        assert sum(x != y for x, y in zip(sa, sc)) > len(sc) // 2
+
+    def test_two_seeds_hash_differently_but_a_rescan_does_not(self, tmp_path):
+        a = scan(self._randomize(tmp_path, "red", "a"))
+        b = scan(self._randomize(tmp_path, "red", "b"))
+        assert profile_hash(a) != profile_hash(b)
+        assert profile_hash(a) == profile_hash(a)
+
+    def test_base_stats_and_types_stay_canonical_when_not_randomized(self, tmp_path):
+        """UPR rewrites every base-stat record on EVERY save, even a wild-only run
+        (Gen1RomHandler.savingRom -> savePokemonStats, unconditional).
+
+        Whether the BYTES change was the open question, and they do not: with base-stat
+        randomization off the rewrite is value-identical. That is what lets admission treat
+        "scanned types deviate from canonical" as proof someone enabled a forbidden
+        setting, rather than as normal randomizer noise.
+        """
+        clean = scan_base_stats(_rom("red"))
+        got = scan_base_stats(self._randomize(tmp_path, "red", "a"))
+        assert got == clean, "base stats or types moved without being randomized"
+
+    def test_yellow_randomizes_and_keeps_its_own_super_rod_format(self, tmp_path):
+        rom = self._randomize(tmp_path, "yellow", "c")
+        assert identify(rom)["variant"] == "yellow"
+        fish = scan_fishing(rom)
+        assert fish["super_rod"], "Yellow's SuperRodFishingSlots did not survive"
+        for entries in fish["super_rod"].values():
+            assert len(entries) == 4, "Yellow's records are fixed at four slots"
+            for e in entries:
+                assert 1 <= e["level"] <= 100, (
+                    "a level outside 1-100 means species and level were read swapped")
+
+    def test_the_settings_upr_applied_match_the_ones_we_asked_for(self, tmp_path):
+        """tweakForRom() mutates settings in place and the CLI never reports it.
+
+        Admission cannot trust the file a player hands us, so it has to read the EFFECTIVE
+        settings back out of the log. This pins what Gen 1 legitimately changes -- and that
+        none of it touches the allowlist.
+        """
+        from server.upr_settings import (
+            categories_enabled as cats, forbidden_enabled, parse_settings_string,
+        )
+        self._randomize(tmp_path, "red", "a")
+        log = next(p for p in tmp_path.iterdir() if p.name.endswith(".log"))
+        text = log.read_bytes().decode("utf-8-sig", "replace")
+        seed = next(ln for ln in text.splitlines() if ln.startswith("Random Seed: "))
+        applied = next(ln for ln in text.splitlines() if ln.startswith("Settings String: "))
+
+        assert 0 <= int(seed.split(": ", 1)[1]) < (1 << 48), "seeds are 48-bit"
+        effective = parse_settings_string(applied.split(": ", 1)[1])
+        assert cats(effective) == self.CATEGORIES, (
+            "tweakForRom changed which categories are randomized")
+        assert forbidden_enabled(effective) == [], (
+            "tweakForRom enabled something the rules cannot survive")
