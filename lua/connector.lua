@@ -39,6 +39,15 @@ local _sock           = nil
 local _connected      = false
 local _send_queue     = {}      -- {string} lines waiting to be sent
 local _line_queue     = {}      -- {string} complete received lines ready to read
+-- PARTIAL I/O STATE. With settimeout(0) LuaSocket may move only part of a line and reports
+-- how far it got in its THIRD return value. Both directions used to discard that: a partial
+-- send left the whole line queued and re-sent the bytes the peer already had, and a partial
+-- receive dropped the bytes LuaSocket had already taken off the socket. Neither ever fired,
+-- because a small JSON line crosses loopback in one piece -- but "small" was an assumption,
+-- and the ROM content payload is kilobytes.
+local _send_offset    = 0       -- bytes of _send_queue[1] the peer has already taken
+local _recv_buf       = ""      -- bytes of an incomplete inbound line, kept across frames
+local MAX_LINE        = 4 * 1024 * 1024   -- matches the server's own per-line cap
 local _fail_logged = false   -- one connect-failure message per outage
 local _reconnect_cd   = 0       -- frames remaining before next reconnect attempt
 
@@ -179,14 +188,21 @@ function M.pump()
     -- ── Send ──────────────────────────────────────────────────────────────────
     -- Sends lines from the queue one at a time.
     -- settimeout(0) means send() returns immediately if the OS buffer is full
-    -- (extremely rare for loopback; a single JSON line is never > 64 KB).
+    -- having written only PART of the line. That is handled rather than assumed
+    -- away: the comment here used to claim "a single JSON line is never > 64 KB",
+    -- which stopped being true the moment a ROM content payload was sent.
     while #_send_queue > 0 do
-        local line = _send_queue[1]
-        local bytes, err = _sock:send(line .. "\n")
+        local line = _send_queue[1] .. "\n"
+        -- Resume at the first byte the peer has NOT taken. send(data, i) is 1-based and
+        -- both success and timeout report the index of the last byte written, so the
+        -- offset survives however many frames the OS buffer stays full.
+        local bytes, err, lastindex = _sock:send(line, _send_offset + 1)
         if bytes then
             table.remove(_send_queue, 1)    -- sent successfully
+            _send_offset = 0
         elseif err == "timeout" then
-            break                           -- OS buffer full; retry next frame
+            _send_offset = lastindex or _send_offset
+            break                           -- OS buffer full; resume next frame
         else
             -- "closed" or other error
             console.log("[SLink] TCP send error: " .. tostring(err) .. " — disconnecting")
@@ -199,10 +215,25 @@ function M.pump()
     -- receive("*l") reads one complete line (up to \n, not including it).
     -- With settimeout(0) it returns nil,"timeout" immediately if no full line.
     while true do
-        local line, err = _sock:receive("*l")
+        local line, err, partial = _sock:receive("*l")
         if line then
-            table.insert(_line_queue, line)
+            -- Whatever earlier frames collected belongs in front of this tail.
+            table.insert(_line_queue, _recv_buf .. line)
+            _recv_buf = ""
         elseif err == "timeout" then
+            -- KEEP THE PARTIAL. LuaSocket has already consumed these bytes from the
+            -- socket; dropping them does not re-read them later, it loses them, and the
+            -- next complete line then arrives with its head missing.
+            if partial and #partial > 0 then
+                if #_recv_buf + #partial > MAX_LINE then
+                    console.log("[SLink] inbound line exceeded " .. MAX_LINE
+                                .. " bytes — discarding it rather than growing without "
+                                .. "bound")
+                    _recv_buf = ""
+                else
+                    _recv_buf = _recv_buf .. partial
+                end
+            end
             break                           -- no more complete lines right now
         else
             -- "closed" or other error
@@ -218,6 +249,10 @@ function M.disconnect()
     _safe_close(_sock)
     _sock = nil
     _connected = false
+    -- A new socket starts a new byte stream: resuming a half-written line or prepending a
+    -- half-read one would corrupt the first message of the next session.
+    _send_offset = 0
+    _recv_buf = ""
     _reconnect_cd = RECONNECT_FRAMES      -- first retry after ~0.5 s
     _reconnect_step = RECONNECT_FRAMES    -- reset backoff
 end
