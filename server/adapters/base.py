@@ -347,6 +347,24 @@ class GamePresentationAdapter(ABC):
         """
         return None
 
+    def ingest_rom_content(self, payload: dict) -> dict[str, dict[str, list[dict]]] | None:
+        """Turn a client's report of its own ROM into encounter tables, or None.
+
+        A run may be played on ROMs randomized per player -- same settings, different
+        seeds -- so the shipped tables, which describe the retail cartridge, are simply
+        wrong for that player. A client that can read its cartridge sends what it found and
+        this converts it into the same shape ``encounter_table`` returns.
+
+        Generic on purpose: server.py must not know which generation can do this. Adapters
+        that cannot return None and the caller keeps using the shipped tables.
+
+        MUST RAISE on a malformed payload rather than returning partial data. The caller's
+        correct response to a bad payload is to mark the encounter data unavailable, never
+        to fall back to the shipped tables -- retail species shown beside a randomized
+        cartridge is precisely the misinformation this exists to remove.
+        """
+        return None
+
     def encounter_table(self, area_id: str) -> dict[str, list[dict]] | None:
         """Return wild encounter data for an area, or None if unavailable.
 

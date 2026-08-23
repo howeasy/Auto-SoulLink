@@ -1545,6 +1545,11 @@ class SLinkServer:
         # Game adapter — shared with state machine for consistent behavior.
         # Provides both rules and presentation methods.
         self.adapter = self.state.adapter
+        # A run may be played on ROMs randomized per player -- same settings, different
+        # seeds -- so "what does this route hold" has a different answer for each of them.
+        # get_adapter() is not a singleton, so one adapter per player is cheap; absent an
+        # entry here a player simply uses the run-global adapter and the shipped tables.
+        self._player_adapters: dict[str, object] = {}
         # Track live connections: player_id → {rom_type, last_event, connected}
         self.connected_players: dict[str, dict] = {}
         # Per-player display data (updated from events, used only for status page)
@@ -1619,6 +1624,59 @@ class SLinkServer:
         "Super Rod":  "🎣 Super",
     }
 
+    def _ingest_rom_content(self, player_id: str, payload: dict) -> None:
+        """Adopt a player's own cartridge tables, or leave them without any.
+
+        Failure is NOT silent and NOT a fallback: a player whose payload we cannot read
+        keeps no ROM tables and the UI says the data is unavailable for them. Falling back
+        to the shipped tables would print retail species beside a randomized cartridge,
+        which is the exact misinformation this exists to remove.
+        """
+        from server.adapters import game_id_for_rom_type, get_adapter
+        failed = False
+        try:
+            tables = self.adapter.ingest_rom_content(payload)
+        except Exception as exc:                      # noqa: BLE001 - report, never adopt
+            log.warning("[%s] rom_content rejected — encounter data will be shown as "
+                        "unavailable for this player: %s", player_id, exc)
+            tables, failed = {}, True
+        if tables is None:
+            return                                    # this generation cannot read its ROM
+
+        rom_type = self.connected_players.get(player_id, {}).get("rom_type", "")
+        game_id = game_id_for_rom_type(rom_type) or self.adapter.game_id
+        adapter = get_adapter(game_id, is_rr=self.state.is_rr, rom_type=rom_type)
+        adopt = getattr(adapter, "use_rom_encounters", None)
+        if adopt is None:
+            return
+        # THREE STATES, and the middle one is the reason this is not a plain boolean:
+        #   no entry here  -> nobody reported a ROM; the shipped tables are all we have
+        #   {}             -> a client TRIED and we could not read it; show nothing
+        #   populated      -> this cartridge's own tables
+        # An unreadable payload must NOT fall back to the shipped tables: the client only
+        # sends this when it can see its ROM, so a failure is evidence something is unusual
+        # about that ROM, and retail species printed beside a randomized cartridge is the
+        # exact misinformation this whole path exists to remove.
+        adopt(tables)
+        self._player_adapters[player_id] = adapter
+        if failed:
+            log.info("[%s] encounter data marked unavailable", player_id)
+        else:
+            log.info("[%s] using this cartridge's own encounter tables (%d areas)",
+                     player_id, len(tables))
+
+    def adapter_for(self, player_id: str):
+        """The adapter that describes THIS player's cartridge.
+
+        Only content differs per player, never rules: the supported randomizer settings
+        deliberately exclude types, evolutions, movesets and base stats, so the species and
+        type clauses stay seed-independent and keep using the run-global adapter.
+        """
+        # getattr, not a plain attribute read: some tests build an SLinkServer without
+        # running __init__, and a lookup helper should answer for those rather than raise.
+        # A class-level dict would be shared across instances, which is worse.
+        return (getattr(self, "_player_adapters", None) or {}).get(player_id) or self.adapter
+
     def _encounter_html(self, area_id: str, player_id: str = "",
                         key_prefix: str = "") -> str:
         """Return collapsible encounter widget HTML for an area, or '' if none.
@@ -1629,8 +1687,13 @@ class SLinkServer:
         ``key_prefix`` lets callers further namespace the keys when the same
         widget is rendered in multiple views simultaneously (e.g. combined
         view passes "lp:" so its IDs don't collide with the split view's).
+
+        ``player_id`` also selects WHOSE tables these are. It used to namespace the DOM id
+        and nothing else, so both cards rendered one run-global table -- fine until two
+        players hold ROMs randomized with different seeds, when it means one of them is
+        shown the other's route.
         """
-        enc = self.adapter.encounter_table(area_id)
+        enc = self.adapter_for(player_id).encounter_table(area_id)
         if not enc:
             return ""
 
@@ -2035,7 +2098,7 @@ class SLinkServer:
             f'</details>'
         )
 
-    def _enc_table_for_status(self, area_id: str) -> dict | None:
+    def _enc_table_for_status(self, area_id: str, player_id: str = "") -> dict | None:
         """Return encounter table dict with sprite_src added to each entry.
 
         sprite_src is just the image URL — much smaller than sprite_html
@@ -2043,13 +2106,17 @@ class SLinkServer:
         <img> tag. CFRU→NatDex conversion is handled by the adapter.
 
         Returns None when no encounter data exists (non-RR or unmapped area).
+
+        ``player_id`` selects whose cartridge to describe; without it the run-global
+        adapter answers, which is right only while both players hold the same content.
         """
-        enc = self.adapter.encounter_table(area_id)
+        adapter = self.adapter_for(player_id)
+        enc = adapter.encounter_table(area_id)
         if not enc:
             return None
         return {
             method: [
-                {**e, "sprite_src": self.adapter.sprite_src(e.get("species_id", 0))}
+                {**e, "sprite_src": adapter.sprite_src(e.get("species_id", 0))}
                 for e in entries
             ]
             for method, entries in enc.items()
@@ -2556,6 +2623,8 @@ class SLinkServer:
                     log.info(f"Committed trainer name '{tname}' for player {player_id}")
             if _dirty:
                 self.state._save()
+            if msg.get("rom_content"):
+                self._ingest_rom_content(player_id, msg["rom_content"])
             if "pc_boxes" in msg:
                 self.pc_boxes[player_id] = msg["pc_boxes"]
                 for bentry in msg["pc_boxes"]:
@@ -3184,7 +3253,8 @@ class SLinkServer:
                     "battle_state":   _enrich_battle_state(pid),
                     "identity_error": s.identity_error.get(pid, ""),
                     "encounter_table": self._enc_table_for_status(
-                        self.player_area_id.get(pid, "") or self.player_area.get(pid, "")
+                        self.player_area_id.get(pid, "") or self.player_area.get(pid, ""),
+                        pid,
                     ),
                 }
                 for pid in ["a", "b"]
@@ -5817,7 +5887,7 @@ class SLinkServer:
         display string is derived here ("lvX" when min == max, else "lvX–Y")
         to match the pre-HTMX renderer's output. """
         area_id = self.player_area_id.get(player_id) or self.player_area.get(player_id) or ""
-        raw = self._enc_table_for_status(area_id) or {}
+        raw = self._enc_table_for_status(area_id, player_id) or {}
         methods = []
         for method_name, entries in raw.items():
             mlist = []

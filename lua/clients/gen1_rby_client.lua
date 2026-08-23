@@ -696,6 +696,25 @@ local function send_hello()
         party = snap,
         trainer_name = M.readPlayerName(),
     }
+    -- WHAT THIS CARTRIDGE ACTUALLY HOLDS. A run may be played on ROMs randomized with UPR
+    -- ZX -- same settings, different seeds -- so the encounter tables SLink ships, which
+    -- describe retail, are simply wrong for this player. Read them out of the ROM instead.
+    -- Sent once with hello because it cannot change while the ROM is loaded.
+    --
+    -- pcall because this is an optional enrichment: a BizHawk build without a flat "ROM"
+    -- domain, or a ROM whose tables do not parse, must not stop the client connecting. The
+    -- server treats a missing payload as "no ROM data" and says so, rather than showing
+    -- retail species beside a randomized cartridge.
+    local ok_rc, rc = pcall(G.readRomContent, variant)
+    if ok_rc and rc then
+        evt.rom_content = rc
+    else
+        -- No payload at all is different from a payload the server cannot read: with
+        -- nothing reported there is no evidence this ROM is unusual, so the server
+        -- keeps using the shipped tables. A payload it REJECTS marks the data
+        -- unavailable instead.
+        log("rom_content unavailable — the server keeps the shipped tables")
+    end
     if cur_in_battle then
         local ep = build_enemy_snapshot()
         if #ep > 0 then evt.enemy_party = ep end

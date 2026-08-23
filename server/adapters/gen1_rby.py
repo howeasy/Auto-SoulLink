@@ -286,6 +286,20 @@ _AREA_DISPLAY_NAMES: dict[str, str] = load_area_names_from_obj_map(os.path.join(
     "data", "games", "gen1_rby", "area_map.json"
 ))
 
+# map id -> area id. area_map.json is already read above for display names; this is the
+# same file read for the other half of what it carries, so a client that reports its ROM's
+# tables by MAP can have them collapsed into the AREAS the rest of SLink keys on.
+_MAP_ID_TO_AREA: dict[int, str] = {}
+_area_map_path = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "data", "games", "gen1_rby", "area_map.json"
+)
+if os.path.exists(_area_map_path):
+    with open(_area_map_path) as _f:
+        for _k, _v in json.load(_f).items():
+            if isinstance(_v, dict) and _v.get("area_id"):
+                _MAP_ID_TO_AREA[int(_k)] = _v["area_id"]
+
 # Load species index conversion table
 _INDEX_TO_NATIONAL: dict[int, int] = {}
 _species_index_path = os.path.join(
@@ -325,6 +339,9 @@ class Gen1Adapter(GameAdapter):
         rom_type = kwargs.get("rom_type") or ""
         self._enc_variant = self._ROM_TYPE_TO_ENC_VARIANT.get(
             rom_type, self._DEFAULT_ENC_VARIANT)
+        # None means "nobody has told us what this cartridge holds", which is different
+        # from an empty table and must keep the shipped data in use.
+        self._rom_encounters: dict[str, dict[str, list[dict]]] | None = None
 
     @property
     def game_id(self) -> str:
@@ -522,7 +539,31 @@ class Gen1Adapter(GameAdapter):
         genuinely different wild tables, and the generator used to blend Red's and Blue's
         into one set that matched neither.
         """
+        # A ROM-derived table wins when the client supplied one: it describes the
+        # cartridge actually being played, whereas the shipped file describes retail.
+        if self._rom_encounters is not None:
+            return self._rom_encounters.get(area_id)
         return _GEN1_ENCOUNTERS.get(self._enc_variant, {}).get(area_id)
+
+    def ingest_rom_content(self, payload: dict) -> dict[str, dict[str, list[dict]]] | None:
+        """Decode a client's report of its own cartridge into encounter tables.
+
+        Raises RomScanError on anything malformed -- see the base class for why refusing
+        beats returning partial data here.
+        """
+        from server.adapters.gen1_rom_scan import build_encounter_tables, parse_client_content
+        content = parse_client_content(payload)
+        return build_encounter_tables(
+            content, _MAP_ID_TO_AREA, _INDEX_TO_NATIONAL, self.species_name)
+
+    def use_rom_encounters(self, tables: dict[str, dict[str, list[dict]]] | None) -> None:
+        """Adopt ROM-derived tables for this adapter instance, or clear them.
+
+        Per INSTANCE rather than per class: two players in one run may hold ROMs randomized
+        with different seeds, so the run cannot have a single answer. get_adapter() builds a
+        fresh object every call, which is what makes one adapter per player affordable.
+        """
+        self._rom_encounters = tables
 
     def item_name(self, item_id: int) -> str:
         if not item_id:
