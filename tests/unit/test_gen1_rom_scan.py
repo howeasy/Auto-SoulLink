@@ -1,0 +1,368 @@
+"""The Gen 1 ROM scanner must reproduce the cartridge before it may report a randomized one.
+
+We own all three clean dumps and the decomps that describe them, so "does the scanner work"
+has an exact answer rather than a plausible one. That is the whole design of this file: the
+scan of a CLEAN ROM is compared against pret's own asm, parsed here INDEPENDENTLY of
+tools/gen_gen1_encounters.py. Reusing that generator's parsing would mean a bug in it could
+never be detected by the thing meant to validate against it.
+
+Two tiers, deliberately:
+
+  * ``TestAgainstPret`` walks every map in all three titles. It needs .cache/pret, so it
+    skips where the decomps are absent -- and says so rather than passing quietly.
+  * everything else needs only a ROM, so the structural invariants, the golden spot-checks
+    and the error handling keep running even without the decomps. The golden values are
+    transcribed from pret by hand and are exactly the cases most likely to expose a
+    misread: the first slot of a route, a shared water record, Yellow's reversed super-rod
+    field order, and the separately-stored Mew.
+"""
+from __future__ import annotations
+
+import hashlib
+import os
+import re
+
+import pytest
+
+from server.adapters.gen1_rom_scan import (
+    BASE_STATS_RECORD, RomScanError, identify, profile_hash, scan, scan_base_stats,
+    scan_fishing, scan_wild, sym_to_offset,
+)
+
+_REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+def _find_pret(name: str) -> str:
+    """Locate a decomp checkout, searching upward from the repo.
+
+    A git WORKTREE has no .cache of its own -- it lives under the main repo's
+    .claude/worktrees/, so the decomps are several directories up. Hardcoding _REPO made
+    every pret-backed test skip, which reads exactly like passing. Walk up instead.
+    """
+    d = _REPO
+    for _ in range(6):
+        cand = os.path.join(d, ".cache", "pret", name)
+        if os.path.isdir(cand):
+            return cand
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    return os.path.join(_REPO, ".cache", "pret", name)      # for the skip message
+
+
+_PRET = {
+    "red": _find_pret("pokered"),
+    "blue": _find_pret("pokered"),          # one decomp, two builds
+    "yellow": _find_pret("pokeyellow"),
+}
+_ROMS = {
+    "red": os.path.join(_REPO, "patch", "build", "gen1_red.gb"),
+    "blue": os.path.join(_REPO, "patch", "build", "gen1_blue.gb"),
+    "yellow": os.path.join(_REPO, "patch", "build", "gen1_yellow.gbc"),
+}
+TITLES = ("red", "blue", "yellow")
+
+
+def _rom(title: str) -> bytes:
+    path = _ROMS[title]
+    if not os.path.exists(path):
+        pytest.skip(f"{path} not present — the scanner has nothing to read")
+    with open(path, "rb") as f:
+        return f.read()
+
+
+def _need_pret(title: str) -> str:
+    d = _PRET[title]
+    if not os.path.isdir(d):
+        pytest.skip(f"{d} not present — cannot build the independent oracle")
+    return d
+
+
+# ── an independent reading of pret ───────────────────────────────────────────────────────
+def _species_index(pret: str) -> dict[str, int]:
+    """Species name -> internal index. A plain sequential const_def starting at NO_MON=0."""
+    out, i = {}, 0
+    with open(os.path.join(pret, "constants", "pokemon_constants.asm"), encoding="utf-8") as f:
+        for line in f:
+            stripped = line.strip()
+            # const_skip STILL ADVANCES THE COUNTER. Gen 1's internal index space is full of
+            # holes (the MissingNo slots), and ignoring them shifts every species after the
+            # first gap -- which reads as PIDGEY = 0x22 when the ROM and pret both say 0x24.
+            if stripped.startswith("const_skip"):
+                i += 1
+                continue
+            m = re.match(r"const\s+([A-Z0-9_]+)", stripped)
+            if m:
+                out[m.group(1)] = i
+                i += 1
+    return out
+
+
+def _wild_labels(pret: str) -> list[str]:
+    """map id -> WildMons label, in table order, stopping at pret's `dw -1 ; end`."""
+    out = []
+    with open(os.path.join(pret, "data", "wild", "grass_water.asm"), encoding="utf-8") as f:
+        for line in f:
+            if re.match(r"\s*dw\s+-1", line):
+                break
+            m = re.match(r"\s*dw\s+([A-Za-z0-9_]+)", line)
+            if m:
+                out.append(m.group(1))
+    return out
+
+
+def _parse_wild_files(pret: str, title: str, species: dict[str, int]) -> dict[str, dict]:
+    """label -> {"grass": {...}|None, "water": {...}|None}, honouring IF DEF(_RED)/_BLUE.
+
+    Red and Blue share one decomp and differ only inside those conditionals, so the build
+    define is what separates them. Yellow has no such conditionals.
+    """
+    want = {"red": "_RED", "blue": "_BLUE", "yellow": None}[title]
+    out: dict[str, dict] = {}
+    d = os.path.join(pret, "data", "wild", "maps")
+    for fn in sorted(os.listdir(d)):
+        if not fn.endswith(".asm"):
+            continue
+        label, cur, emit = None, None, True
+        rec: dict[str, dict | None] = {"grass": None, "water": None}
+        stack: list[bool] = []
+        with open(os.path.join(d, fn), encoding="utf-8") as f:
+            for line in f:
+                s = line.strip()
+                if m := re.match(r"^([A-Za-z0-9_]+):", s):
+                    label = m.group(1)
+                    continue
+                if m := re.match(r"^IF DEF\((_[A-Z]+)\)", s):
+                    stack.append(emit)
+                    emit = emit and (want == m.group(1))
+                    continue
+                if s == "ELSE":
+                    emit = stack[-1] and not emit
+                    continue
+                if s in ("ENDC", "ENDIF"):
+                    emit = stack.pop() if stack else True
+                    continue
+                if m := re.match(r"^def_(grass|water)_wildmons\s+(\d+)", s):
+                    cur = m.group(1)
+                    rate = int(m.group(2))
+                    rec[cur] = {"rate": rate, "slots": []} if rate else None
+                    continue
+                if m := re.match(r"^db\s+(\d+),\s*([A-Z0-9_]+)", s):
+                    if emit and cur and rec[cur] is not None:
+                        rec[cur]["slots"].append(
+                            {"level": int(m.group(1)),
+                             "species_index": species[m.group(2)]})
+                    continue
+        if label:
+            out[label] = rec
+    return out
+
+
+def _oracle_wild(title: str) -> dict[int, dict]:
+    pret = _need_pret(title)
+    species = _species_index(pret)
+    labels = _wild_labels(pret)
+    by_label = _parse_wild_files(pret, title, species)
+    out: dict[int, dict] = {}
+    for map_id, label in enumerate(labels):
+        rec = by_label.get(label)
+        if rec and (rec["grass"] or rec["water"]):
+            out[map_id] = rec
+    return out
+
+
+# ── identity ─────────────────────────────────────────────────────────────────────────────
+@pytest.mark.parametrize("title", TITLES)
+def test_identify_reports_the_right_clean_cartridge(title):
+    ident = identify(_rom(title))
+    assert ident["variant"] == title
+    assert ident["clean"] is True, (
+        f"{title} dump is not the revision the symbols describe — "
+        f"got {ident['sha1']}, symbols describe {ident['clean_sha1']}")
+    assert ident["sha1"] == hashlib.sha1(_rom(title)).hexdigest()
+
+
+def test_sym_to_offset_decodes_bank_and_address():
+    """bank<<16|addr, not a flat offset. Getting this wrong scans convincing garbage.
+
+    BaseStats really is 0x0E43DE as a symbol and 0x383DE in the file; MewBaseStats is
+    0x01425B and 0x0425B. Bank 0 is unbanked so its address IS the offset.
+    """
+    assert sym_to_offset(0x0E43DE) == 0x383DE
+    assert sym_to_offset(0x01425B) == 0x0425B
+    assert sym_to_offset(0x034EEB) == 0x0CEEB
+    assert sym_to_offset(0x0000FF) == 0xFF
+
+
+def test_a_non_gen1_rom_is_refused_rather_than_scanned():
+    with pytest.raises(RomScanError, match="bytes"):
+        identify(b"\x00" * 1024)
+    bogus = bytearray(b"\x00" * (1024 * 1024))
+    bogus[0x134:0x13F] = b"POKEMON GLD"
+    with pytest.raises(RomScanError, match="not a supported Gen 1 title"):
+        identify(bytes(bogus))
+
+
+# ── the full independent comparison ──────────────────────────────────────────────────────
+class TestAgainstPret:
+    @pytest.mark.parametrize("title", TITLES)
+    def test_every_wild_table_matches_the_decomp(self, title):
+        got = scan_wild(_rom(title))
+        want = _oracle_wild(title)
+        assert set(got) == set(want), (
+            f"{title}: maps with encounters differ — "
+            f"only in ROM {sorted(set(got) - set(want))}, "
+            f"only in pret {sorted(set(want) - set(got))}")
+        for map_id in sorted(want):
+            assert got[map_id] == want[map_id], (
+                f"{title} map 0x{map_id:02X} differs from pret")
+
+    @pytest.mark.parametrize("title", TITLES)
+    def test_the_comparison_is_not_vacuous(self, title):
+        """A green comparison against an EMPTY oracle would prove nothing."""
+        want = _oracle_wild(title)
+        assert len(want) >= 50, f"{title}: oracle only produced {len(want)} maps"
+        slots = sum(len(v[m]["slots"]) for v in want.values()
+                    for m in ("grass", "water") if v[m])
+        assert slots >= 500, f"{title}: oracle only produced {slots} slots"
+
+
+# ── structural invariants (ROM only) ─────────────────────────────────────────────────────
+@pytest.mark.parametrize("title", TITLES)
+def test_wild_records_are_well_formed(title):
+    for map_id, rec in scan_wild(_rom(title)).items():
+        for method in ("grass", "water"):
+            block = rec[method]
+            if block is None:
+                continue
+            assert 1 <= block["rate"] <= 255
+            assert len(block["slots"]) == 10, (
+                f"{title} map 0x{map_id:02X} {method} has {len(block['slots'])} slots")
+            for s in block["slots"]:
+                assert 1 <= s["level"] <= 100, f"{title} map 0x{map_id:02X}: {s}"
+                assert s["species_index"] != 0, (
+                    f"{title} map 0x{map_id:02X}: species index 0 is NO_MON")
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_base_stats_cover_every_species_with_sane_types(title):
+    stats = scan_base_stats(_rom(title))
+    # Yellow stores Mew in the main table, R/B keep it apart; both must end up complete
+    # for 1..150 at minimum, and R/B additionally expose 151.
+    assert set(range(1, 151)) <= set(stats), f"{title} is missing dex numbers"
+    for dex, rec in stats.items():
+        assert rec["dex"] == dex
+        assert 1 <= rec["hp"] <= 255
+        # Gen 1 type ids are two disjoint runs: 0x00-0x08 physical, 0x14-0x1A special.
+        for t in (rec["type1"], rec["type2"]):
+            assert t <= 0x08 or 0x14 <= t <= 0x1A, (
+                f"{title} dex {dex} has type id 0x{t:02X}, outside both Gen 1 runs")
+
+
+def test_base_stats_stride_is_enforced_not_assumed():
+    """The dex-order check must actually fire, or a wrong stride would pass silently."""
+    rom = bytearray(_rom("red"))
+    from server.adapters.gen1_rom_scan import _load_syms
+    base = sym_to_offset(_load_syms()["pokered"]["symbols"]["BaseStats"])
+    rom[base + BASE_STATS_RECORD] = 0x99          # corrupt record 1's dex number
+    with pytest.raises(RomScanError, match="expected 2"):
+        scan_base_stats(bytes(rom))
+
+
+# ── golden spot-checks, transcribed from pret by hand ────────────────────────────────────
+def test_golden_wild_values():
+    """The cases most likely to expose a misread, pinned to exact values.
+
+    Route 1 is the fixture every duo scenario stands on; Route 4 is what the live fly-warp
+    probe read out of WRAM, so this ties the static scan to a running cartridge; Routes
+    19/20/21 are the only water records in R/B and TWO of those three map ids share one
+    record, which is why counting files rather than map ids gives the wrong answer.
+    """
+    red = scan_wild(_rom("red"))
+    assert red[0x0C]["grass"]["rate"] == 25
+    assert red[0x0C]["grass"]["slots"][0] == {"level": 3, "species_index": 0x24}  # PIDGEY
+    assert red[0x0F]["grass"]["rate"] == 20
+    assert red[0x0F]["grass"]["slots"][0] == {"level": 10, "species_index": 0xA5}  # RATTATA
+    for map_id in (0x1E, 0x1F, 0x20):   # ROUTE_19, ROUTE_20, ROUTE_21
+        assert red[map_id]["water"]["rate"] == 5
+        assert red[map_id]["water"]["slots"][0]["species_index"] == 0x18  # TENTACOOL
+    assert red[0x1E]["water"] == red[0x1F]["water"], "SeaRoutes is one shared record"
+
+
+def test_golden_red_and_blue_differ_where_pret_says_they_do():
+    """Route 12 slot 0 is ODDISH in Red and BELLSPROUT in Blue (data/wild/maps/Route12.asm).
+
+    Without this, a scanner that silently read Red's data for both would look correct.
+    """
+    red, blue = scan_wild(_rom("red")), scan_wild(_rom("blue"))
+    assert red[0x17]["grass"]["slots"][0]["species_index"] == 0xB9   # ODDISH
+    assert blue[0x17]["grass"]["slots"][0]["species_index"] == 0xBC  # BELLSPROUT
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_golden_fishing(title):
+    fish = scan_fishing(_rom(title))
+    # Old Rod is an inline immediate, level 5 MAGIKARP, in all three titles.
+    assert fish["old_rod"] == [{"level": 5, "species_index": 0x85}]
+    # GoodRodMons: level 10 GOLDEEN then level 10 POLIWAG (data/wild/good_rod.asm).
+    assert fish["good_rod"] == [{"level": 10, "species_index": 0x9D},   # GOLDEEN
+                                {"level": 10, "species_index": 0x47}]   # POLIWAG
+    assert fish["super_rod"], f"{title} produced no super rod data"
+    for map_id, entries in fish["super_rod"].items():
+        assert 0 <= map_id <= 0xFF
+        for e in entries:
+            assert 1 <= e["level"] <= 100, f"{title} map 0x{map_id:02X}: {e}"
+            assert e["species_index"] != 0
+
+
+def test_yellow_super_rod_uses_its_own_reversed_format():
+    """Yellow stores (species, level); every other Gen 1 table stores (level, species).
+
+    Read in the wrong order the levels become species ids and vice versa -- which stays
+    inside plausible byte ranges, so only a value check catches it. Pallet Town's first
+    Yellow super-rod entry is STARYU (0x1B) at level 10 (data/wild/super_rod.asm:2).
+    """
+    fish = scan_fishing(_rom("yellow"))
+    pallet = fish["super_rod"][0x00]
+    assert len(pallet) == 4
+    assert pallet[0] == {"species_index": 0x1B, "level": 10}   # STARYU, not level 0x1B
+
+
+def test_red_super_rod_groups_are_shared_between_maps():
+    """R/B super rod is a (map -> group pointer) table, so maps genuinely share lists."""
+    sup = scan_fishing(_rom("red"))["super_rod"]
+    assert sup[0x00] == sup[0x01], "PALLET_TOWN and VIRIDIAN_CITY both use .Group1"
+    assert sup[0x00] == [{"level": 15, "species_index": 0x18},    # TENTACOOL
+                         {"level": 15, "species_index": 0x47}]    # POLIWAG
+
+
+def test_golden_mew_is_stored_apart_on_red_and_blue():
+    stats = scan_base_stats(_rom("red"))
+    assert stats[151]["dex"] == 151
+    assert stats[151]["type1"] == 0x18 and stats[151]["type2"] == 0x18  # PSYCHIC/PSYCHIC
+    assert stats[1]["hp"] == 45 and stats[1]["attack"] == 49            # Bulbasaur
+
+
+# ── the profile hash ─────────────────────────────────────────────────────────────────────
+def test_profile_hash_is_stable_and_distinguishes_content():
+    red, blue, yellow = (scan(_rom(t)) for t in TITLES)
+    assert profile_hash(red) == profile_hash(scan(_rom("red"))), "hash is not deterministic"
+    assert len({profile_hash(p) for p in (red, blue, yellow)}) == 3, (
+        "three cartridges with different tables must hash differently")
+
+
+def test_profile_hash_ignores_identity_but_not_content():
+    """Two ROMs differing only in bytes we do not read must hash the same.
+
+    That is what makes the hash usable as "do these two players hold the same content",
+    which has to stay true across a companion patch that changes the file's SHA-1 without
+    changing a single table.
+    """
+    rom = bytearray(_rom("red"))
+    before = profile_hash(scan(bytes(rom)))
+    rom[0x150] = (rom[0x150] + 1) & 0xFF          # a byte in no table we scan
+    assert profile_hash(scan(bytes(rom))) == before
+
+    from server.adapters.gen1_rom_scan import _load_syms
+    base = sym_to_offset(_load_syms()["pokered"]["symbols"]["BaseStats"])
+    rom[base + 1] = (rom[base + 1] + 1) & 0xFF    # Bulbasaur's HP
+    assert profile_hash(scan(bytes(rom))) != before, "a real content change did not move it"
