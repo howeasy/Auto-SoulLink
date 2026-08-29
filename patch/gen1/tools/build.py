@@ -45,6 +45,89 @@ HOOK_TARGET = 0x4000                            # bank $3F is mapped at $4000
 HOOK_SITE = 0x2094
 HOOK_ORIGINAL = bytes([0x06, 0x06, 0x21, 0xEE, 0x4D, 0xCD, 0xD6, 0x35])
 
+
+# ── The START-menu row ──────────────────────────────────────────────────────────────────
+# A declarative, bank-qualified manifest. Every span names the bytes it expects to find
+# BEFORE it writes, so a ROM that is not the exact dump these offsets were derived from
+# fails loudly rather than being silently corrupted -- the same posture as the hook site.
+#
+# Red and Blue are byte-identical across all of this, verified by reading both dumps, so
+# one manifest serves both.
+#
+# WHAT THIS INCREMENT DOES, AND DELIBERATELY DOES NOT. It adds a SLINK row to the START
+# menu and nothing else: selecting it falls through to CloseStartMenu exactly as EXIT does,
+# because the dispatch chain in the home bank ends after `cp 5` and everything past it
+# closes the menu. That is the point -- the risky structural change ships inert and
+# visible, and the panel it will eventually open is a separate step that cannot break the
+# menu if it goes wrong.
+#
+# WHY THE ROW GOES AFTER EXIT. The dispatch is a `cp N / jp z` chain over wCurrentMenuItem
+# (home/start_menu.asm), so inserting anywhere earlier would renumber every item below it
+# and silently re-point the menu. Appending leaves indices 0-6 exactly where they are.
+
+MENU_STUB_ADDR = 0x00BE      # ROM0 free space, always mapped, reachable from bank 1
+SLINK_TEXT_ADDR = 0x00D1     # immediately after the stub
+
+# Gen 1's charset puts 'A' at $80, so a letter is $80 + (c - 'A'); $50 terminates.
+# Cross-checked against the ROM's own "POKéDEX@" at 0x0718F, which reads 8F 8E 8A BA 83 84 97 50.
+SLINK_TEXT = bytes([0x92, 0x8B, 0x88, 0x8D, 0x8A, 0x50])          # "SLINK@"
+
+# The stub the DrawStartMenu tail is redirected into. It prints EXIT where EXIT already
+# went, advances one menu row (two tile rows), then prints SLINK -- so EXIT keeps its
+# position and its index, and SLINK becomes the new last item.
+MENU_STUB = bytes([
+    0xE5,                    # push hl              -- hl is where EXIT belongs
+    0x11, 0xAF, 0x71,        # ld de, StartMenuExitText ($71AF, bank 1: the caller's bank)
+    0xCD, 0x55, 0x19,        # call PlaceString ($1955, home)
+    0xE1,                    # pop hl
+    0x11, 0x28, 0x00,        # ld de, 40            -- SCREEN_WIDTH * 2, one menu row
+    0x19,                    # add hl, de
+    0x11, SLINK_TEXT_ADDR & 0xFF, SLINK_TEXT_ADDR >> 8,   # ld de, SlinkText
+    0xCD, 0x55, 0x19,        # call PlaceString
+    0xC9,                    # ret
+])
+
+# (offset, expected original, replacement, why)
+MENU_PATCHES = [
+    (0x00BE, bytes(len(MENU_STUB)), MENU_STUB,
+     "print stub in ROM0 free space (zero run 0x00BE-0x00FF, 66 bytes)"),
+    (SLINK_TEXT_ADDR, bytes(len(SLINK_TEXT)), SLINK_TEXT,
+     "the string SLINK@"),
+
+    # DrawStartMenu, bank 1. The box is drawn before the item count is known, so both the
+    # with-Pokedex and without-Pokedex heights need the extra menu row (two tile rows).
+    (0x7114, bytes([0x0E]), bytes([0x10]),
+     "TextBoxBorder height, with Pokedex: 14 -> 16 rows"),
+    (0x711D, bytes([0x0C]), bytes([0x0E]),
+     "TextBoxBorder height, without Pokedex: 12 -> 14 rows"),
+    (0x714D, bytes([0x06]), bytes([0x07]),
+     "wMaxMenuItem without Pokedex: 6 -> 7"),
+    (0x7157, bytes([0x07]), bytes([0x08]),
+     "wMaxMenuItem with Pokedex: 7 -> 8"),
+
+    # `ld de, StartMenuExitText` + `call PlaceString` -> `call MenuStub` + padding. The
+    # three trailing bytes become nops rather than being removed, because shortening the
+    # routine would move everything after it.
+    (0x7183, bytes([0x11, 0xAF, 0x71, 0xCD, 0x55, 0x19]),
+     bytes([0xCD, MENU_STUB_ADDR & 0xFF, MENU_STUB_ADDR >> 8, 0x00, 0x00, 0x00]),
+     "DrawStartMenu tail: print EXIT + SLINK via the stub"),
+
+    # home/start_menu.asm wraps the cursor with its own hardcoded item counts, separate
+    # from wMaxMenuItem. Without these the cursor cannot reach the new last row: it would
+    # wrap from OPTION back to the top and SLINK would be visible but unselectable.
+    (0x2B0C, bytes([0x06]), bytes([0x07]),
+     "up-wrap target index: 6 -> 7 (the `dec a` below still handles the no-Pokedex case)"),
+    (0x2B25, bytes([0x07]), bytes([0x08]),
+     "down-wrap item count: 7 -> 8 (the `dec c` below still handles no-Pokedex)"),
+]
+
+# Never written, at any offset, for any reason: the cartridge header carries the Nintendo
+# logo the boot ROM checks and the entrypoint at $0100. The free run found by scanning
+# runs 0x00BE-0x0100 INCLUSIVE, and that last byte is the entrypoint's `nop` -- so the
+# usable span stops at 0x00FF and this range exists to make that non-negotiable.
+PROTECTED_RANGE = (0x0100, 0x014F)
+
+
 ROMS = {
     "red": ("Pokemon - Red Version (USA, Europe) (SGB Enhanced).gb",
             "ea9bcae617fdf159b045185467ae58b2e4a48b9a"),
@@ -107,10 +190,28 @@ def patch_rom(rom_key: str, bank: bytes, verify_only: bool = False) -> str:
     if site != HOOK_ORIGINAL:
         raise SystemExit(f"{rom_key}: hook site {HOOK_SITE:#x} holds {site.hex()}, "
                          f"expected {HOOK_ORIGINAL.hex()}")
+    # 3. Every menu span must hold exactly what the manifest expects, and none may touch
+    #    the protected header. Checked for ALL spans before ANY is written, so a manifest
+    #    that is half-applicable leaves the ROM untouched rather than half-patched.
+    lo, hi = PROTECTED_RANGE
+    for off, original, new, why in MENU_PATCHES:
+        if not (off + len(new) <= lo or off > hi):
+            raise SystemExit(
+                f"{rom_key}: patch at {off:#06x} ({why}) overlaps the protected cartridge "
+                f"header {lo:#06x}-{hi:#06x}")
+        found = bytes(data[off:off + len(original)])
+        if found != original:
+            raise SystemExit(
+                f"{rom_key}: {off:#06x} holds {found.hex()}, expected {original.hex()} "
+                f"({why}) — this is not the dump these offsets were derived from")
+
     if verify_only:
-        return f"{rom_key}: clean ROM, hook site and target bank both as expected"
+        return (f"{rom_key}: clean ROM, hook site, target bank and "
+                f"{len(MENU_PATCHES)} menu spans all as expected")
 
     data[INJECT_OFFSET:INJECT_OFFSET + BANK_SIZE] = bank
+    for off, _original, new, _why in MENU_PATCHES:
+        data[off:off + len(new)] = new
     # Rewrite only the two immediates: `ld b, $3F` and `ld hl, $4000`. The
     # `call Bankswitch` after them is untouched, so control still flows the same way.
     data[HOOK_SITE + 1] = HOOK_BANK
@@ -128,6 +229,9 @@ def patch_rom(rom_key: str, bank: bytes, verify_only: bool = False) -> str:
     assert check[HOOK_SITE + 1] == HOOK_BANK
     assert check[HOOK_SITE + 3] | (check[HOOK_SITE + 4] << 8) == HOOK_TARGET
     assert check[INJECT_OFFSET:INJECT_OFFSET + 8] == bank[:8]
+    for off, _original, new, why in MENU_PATCHES:
+        assert bytes(check[off:off + len(new)]) == new, f"{why} did not land at {off:#06x}"
+    assert check[lo:hi + 1] == bytes(open(src, "rb").read()[lo:hi + 1]),         "the cartridge header changed"
     return (f"{rom_key}: {os.path.relpath(dst, REPO)}  "
             f"md5={hashlib.md5(check).hexdigest()}")
 

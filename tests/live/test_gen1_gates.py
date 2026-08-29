@@ -111,6 +111,30 @@ def test_gen1_companion_patch(rom, emuhawk):
                     f"result: {result_path}\n{text[-3000:]}")
 
 
+@pytest.mark.parametrize("rom", PATCH_ROMS)
+def test_gen1_menu_row(rom, emuhawk):
+    """The SLINK row the companion patch appends to the START menu.
+
+    Separate from the companion-patch gate because it tests a different thing: that gate
+    covers the VBlank hook and its mailbox, this one covers a structural edit to a menu the
+    player uses constantly. The row is INERT in this increment -- selecting it falls through
+    to CloseStartMenu exactly as EXIT does -- so what is under test is that it draws inside
+    a resized box, that the cursor can reach it, and that no existing menu index moved.
+    """
+    from run_gb_gate import PATCHED
+    base_key, rom_rel, _ = PATCHED[rom]
+    if not os.path.exists(os.path.join(REPO, rom_rel)):
+        pytest.skip(f"{rom_rel} not built — `python patch/gen1/tools/build.py`")
+    if not os.path.exists(os.path.join(play.FIXTURES, f"{base_key}_town.SaveRAM")):
+        pytest.skip("missing fixture — `python tools/gen1_playthrough.py`")
+
+    passed, result_path, text = run_gate("lua/tests/test_gen1_menu_row_gate.lua",
+                                         rom_key=rom, target="town",
+                                         timeout=300, quiet=True)
+    assert passed, (f"START-menu row gate on {rom} did not PASS\n"
+                    f"result: {result_path}\n{text[-3000:]}")
+
+
 # The Archipelago builds and their negative control. `red_cold`/`blue_cold` run the SAME
 # gate on the VANILLA cartridge, where every AP assertion has to come out the other way —
 # without that pair, a detection function stuck at "yes" would pass on its own.
