@@ -87,6 +87,38 @@ MENU_STUB = bytes([
     0xC9,                    # ret
 ])
 
+# ── Making the row do something ─────────────────────────────────────────────────────────
+# The dispatch is a `cp N / jp z` chain in the HOME bank ending in a fallthrough to
+# CloseStartMenu, and there is no room to insert a seventh comparison in place. So the last
+# comparison is replaced by a jump into ROM0's second free run, which re-does that
+# comparison, adds ours, and falls back to the same fallthrough.
+#
+# ONE COMPARISON COVERS BOTH MENU SHAPES. home/start_menu.asm does `inc a` before
+# dispatching when the player has no Pokedex, precisely so the handlers can use fixed
+# numbers -- so SLINK is index 7 at the dispatch whether it was drawn as 6 or 7.
+TRAMPOLINE_ADDR = 0x3FA6
+PANEL_ENTRY_ADDR = 0x3FB3
+SLINK_PANEL_ADDR = 0x4100        # pinned by the SECTION in slink.asm
+HOOK_BANK_BYTE = 0x3F
+
+TRAMPOLINE = bytes([
+    0xFE, 0x05,                  # cp 5
+    0xCA, 0xF6, 0x75,            # jp z, StartMenu_Option ($75F6, bank 4 is mapped here)
+    0xFE, 0x07,                  # cp 7                    -- SLINK, both menu shapes
+    0xCA, PANEL_ENTRY_ADDR & 0xFF, PANEL_ENTRY_ADDR >> 8,
+    0xC3, 0x70, 0x2B,            # jp CloseStartMenu       -- the original fallthrough
+])
+
+# Bankswitch saves the caller's bank on the stack and restores it when our code returns,
+# which is why the panel can live in bank $3F and still come back to a menu that expects
+# bank 4. The existing VBlank hook relies on the same property.
+PANEL_ENTRY = bytes([
+    0x06, HOOK_BANK_BYTE,        # ld b, $3F
+    0x21, SLINK_PANEL_ADDR & 0xFF, SLINK_PANEL_ADDR >> 8,
+    0xCD, 0xD6, 0x35,            # call Bankswitch
+    0xC3, 0xDF, 0x2A,            # jp RedisplayStartMenu   -- reopen the menu behind it
+])
+
 # (offset, expected original, replacement, why)
 MENU_PATCHES = [
     (0x00BE, bytes(len(MENU_STUB)), MENU_STUB,
@@ -119,6 +151,14 @@ MENU_PATCHES = [
      "up-wrap target index: 6 -> 7 (the `dec a` below still handles the no-Pokedex case)"),
     (0x2B25, bytes([0x07]), bytes([0x08]),
      "down-wrap item count: 7 -> 8 (the `dec c` below still handles no-Pokedex)"),
+
+    (TRAMPOLINE_ADDR, bytes(len(TRAMPOLINE)), TRAMPOLINE,
+     "dispatch trampoline in ROM0's second free run (0x3FA6-0x3FFF, 90 bytes)"),
+    (PANEL_ENTRY_ADDR, bytes(len(PANEL_ENTRY)), PANEL_ENTRY,
+     "bank-$3F entry for the panel, returning to the menu"),
+    (0x2B6B, bytes([0xFE, 0x05, 0xCA, 0xF6, 0x75]),
+     bytes([0xC3, TRAMPOLINE_ADDR & 0xFF, TRAMPOLINE_ADDR >> 8, 0x00, 0x00]),
+     "the last dispatch comparison -> jump to the trampoline"),
 ]
 
 # Never written, at any offset, for any reason: the cartridge header carries the Nintendo

@@ -1,11 +1,11 @@
 --[[
   lua/tests/test_gen1_menu_row_gate.lua — the SLINK row in the START menu, and nothing else.
 
-  The companion patch now appends a row to the START menu. That is a structural change to a
-  menu the player uses constantly, so it ships INERT first: selecting SLINK falls through to
-  CloseStartMenu exactly as EXIT does, because the dispatch chain in the home bank ends after
-  `cp 5` and everything past it closes the menu. The panel it will eventually open is a
-  separate step which cannot break the menu if it goes wrong.
+  The companion patch appends a row to the START menu and opens a full-screen panel from it.
+  The row landed inert first, on purpose, and this gate grew with it -- so it still checks
+  everything about the ROW (drawn, inside a resized box, reachable, no existing index moved)
+  and now also everything about the PANEL (opens, tells the client it may paint, times out
+  rather than hanging when no client is attached, and gives the screen back).
 
   WHAT HAS TO BE TRUE, and each of these is a way the change could go wrong rather than a
   restatement of the change:
@@ -140,14 +140,56 @@ t.check("the cursor can be moved onto the SLINK row", reached,
             .. "constants are separate from wMaxMenuItem and gate reachability",
             slink_index, M.read_u8(CUR_MENU)))
 
--- ── selecting it is harmless ─────────────────────────────────────────────────
+-- ── selecting it opens the panel, and the panel gives the screen back ────────
+-- The panel takes the whole screen using StartMenu_TrainerInfo's own sequence, so what is
+-- under test is both halves: that it appears at all, and that everything it borrowed comes
+-- back. A panel that draws correctly and then leaves the map screen wrecked is worse than
+-- no panel.
+local PANEL_STATE = 0xDEE2 + 9
 if reached then
     t.hold("A", 8)
-    for _ = 1, 60 do t.step(nil) end
-    t.check("selecting SLINK closes the menu instead of doing something",
-            menu_is_closed(),
-            "the row is meant to be INERT in this increment — it falls through to "
-            .. "CloseStartMenu exactly as EXIT does")
+    -- Give it long enough to clear the screen, miss the stage timeout (~90 frames) and
+    -- settle on the fallback.
+    local saw_panel = false
+    for _ = 1, 240 do
+        t.step(nil)
+        if find_row(screen_rows(), "SOUL LINK") then saw_panel = true break end
+    end
+    t.check("selecting SLINK opens the panel", saw_panel,
+            "no SOUL LINK title appeared — the dispatch trampoline did not reach bank $3F")
+
+    t.check("the panel announces itself to the client", M.read_u8(PANEL_STATE) ~= 0,
+            fmt("panel state is %d — the client is never told it may paint",
+                M.read_u8(PANEL_STATE)))
+
+    -- No client is attached in this gate, so the stage wait must TIME OUT rather than hang.
+    local fell_back = false
+    for _ = 1, 300 do
+        t.step(nil)
+        if find_row(screen_rows(), "NO CLIENT") then fell_back = true break end
+    end
+    t.check("with no client attached it falls back instead of hanging", fell_back,
+            "the stage wait never timed out")
+
+    -- Close it. PRESS UNTIL IT CLOSES rather than pressing once and hoping: the panel
+    -- spends up to 90 frames waiting for a client and another 20 settling before it will
+    -- look at the joypad, and a single early press lands in that window and is discarded.
+    -- The first version of this check pressed A about two frames after the panel opened
+    -- and then blamed the patch for not closing.
+    local closed = false
+    for _ = 1, 12 do
+        t.hold("A", 6)
+        for _ = 1, 40 do t.step(nil) end
+        if find_row(screen_rows(), "SOUL LINK") == nil then closed = true break end
+    end
+    t.check("a button press closes the panel", closed,
+            "still on screen after 12 presses")
+    t.check("the panel hands the screen back", find_row(screen_rows(), "SOUL LINK") == nil,
+            "the panel is still on screen after a button press")
+    t.check("the panel clears its state on the way out",
+            M.read_u8(PANEL_STATE) == 0,
+            fmt("panel state left at %d — a client would keep painting over the map",
+                M.read_u8(PANEL_STATE)))
 end
 
 -- ── EXIT still works, i.e. its index did not move ────────────────────────────

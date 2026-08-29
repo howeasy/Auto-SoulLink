@@ -102,8 +102,23 @@ local SFX_REQUEST      = MAILBOX + 7
 local CHANNEL_SOUND_IDS = 0xC026
 local SFX_TINK         = 0x8C   -- resolves identically in all three audio banks
 
-t.check("ABI version byte is 2 (SFX support)", M.read_u8(MAILBOX + 4) == 2,
+t.check("ABI version byte is 3", M.read_u8(MAILBOX + 4) == 3,
         fmt("got %d", M.read_u8(MAILBOX + 4)))
+
+-- CAPABILITIES ARE ADVERTISED, NOT INFERRED FROM THE ABI NUMBER. A build may ship the panel
+-- without SFX or the other way round, so a client that reasoned "ABI 3 therefore both"
+-- would be wrong the first time that happened. The bits say what this build can actually do.
+local CAPS = MAILBOX + 8
+local CAP_SFX, CAP_PANEL = 0x01, 0x02
+t.check("the capability byte advertises SFX", M.read_u8(CAPS) & CAP_SFX ~= 0,
+        fmt("caps=0x%02X", M.read_u8(CAPS)))
+t.check("the capability byte advertises the panel", M.read_u8(CAPS) & CAP_PANEL ~= 0,
+        fmt("caps=0x%02X", M.read_u8(CAPS)))
+
+-- The panel handshake byte must be CLOSED while the player is walking around. If it were
+-- not, a client would paint over the map.
+t.check("the panel handshake is closed outside the panel", M.read_u8(MAILBOX + 9) == 0,
+        fmt("panel state is %d in the overworld", M.read_u8(MAILBOX + 9)))
 
 local function sfx_channels()
     return fmt("%d/%d/%d/%d",

@@ -34,8 +34,9 @@
 ;   `WRAM0: TOTAL EMPTY: $001E` — thirty bytes, between wBoxDataEnd and the stack at $DF00.
 ;   Yellow has ZERO free WRAM, which is why the patch targets Red/Blue only.
 
+
 DEF SLINK_MAILBOX      EQU $DEE2
-DEF SLINK_ABI_VERSION  EQU 2
+DEF SLINK_ABI_VERSION  EQU 3
 
 ; Mailbox layout (30 bytes available, $DEE2-$DEFF):
 ;   +0..3  'SLNK' beacon, rewritten every frame
@@ -43,6 +44,20 @@ DEF SLINK_ABI_VERSION  EQU 2
 ;   +5..6  16-bit frame counter
 ;   +7     SFX request: Lua writes a sound id, we play it and zero the byte
 DEF SLINK_SFX_REQUEST  EQU SLINK_MAILBOX + 7
+;   +8     capability bits, so a client asks WHAT this build can do rather than inferring
+;          it from the ABI number -- which stops being true the moment one feature ships
+;          without another
+;   +9     panel state, the handshake between this code and the client
+DEF SLINK_CAPS         EQU SLINK_MAILBOX + 8
+DEF SLINK_PANEL_STATE  EQU SLINK_MAILBOX + 9
+
+DEF SLINK_CAP_SFX      EQU 1 << 0
+DEF SLINK_CAP_PANEL    EQU 1 << 1
+
+; Panel handshake. The client may paint only in AWAIT, and must stop at CLOSED.
+DEF SLINK_PANEL_CLOSED EQU 0
+DEF SLINK_PANEL_AWAIT  EQU 1
+DEF SLINK_PANEL_STAGED EQU 2
 
 ; Displaced call, from data/pret_rom_syms.json.
 DEF TrackPlayTime      EQU $4DEE
@@ -76,6 +91,8 @@ SlinkHook::
 	ld [SLINK_MAILBOX + 3], a
 	ld a, SLINK_ABI_VERSION
 	ld [SLINK_MAILBOX + 4], a
+	ld a, SLINK_CAP_SFX | SLINK_CAP_PANEL
+	ld [SLINK_CAPS], a
 
 	; 16-bit little-endian frame counter at +5. `inc [hl]` sets Z on wrap, so carry into
 	; the high byte only when the low byte rolled over to zero.
@@ -112,3 +129,165 @@ SlinkHook::
 	ld hl, TrackPlayTime
 	call Bankswitch
 	ret
+
+
+; ── The SLINK panel ──────────────────────────────────────────────────────────────────────
+; Opened from the START menu row. The whole screen-ownership sequence below is
+; StartMenu_TrainerInfo's (engine/menus/start_sub_menus.asm:453-475) with our draw
+; substituted for DrawTrainerInfo -- deliberately, because that routine already solves
+; every hazard this panel has:
+;
+;   * TEARING. GBPalWhiteOut before the draw and GBPalNormal after it means nothing
+;     half-drawn is ever visible, without needing to reason about auto-BG transfer timing.
+;   * TILE ANIMATIONS. hTileAnimations is pushed and restored, so the flower/water
+;     animation the overworld was running comes back.
+;   * SPRITES. ClearScreen + UpdateSprites on the way in, ReloadMapData on the way out.
+;     The plan's warning that UpdateSprites does not hide sprites is real; what hides them
+;     is that we are no longer on the map screen.
+;   * PALETTES and TILES. LoadFontTilePatterns, LoadScreenTilesFromBuffer2,
+;     RunDefaultPaletteCommand and LoadGBPal put back exactly what the menu had.
+;
+; Every routine it calls lives in the HOME bank, so there is no bank juggling inside the
+; panel at all -- the only Bankswitch is the one that got us here.
+;
+; hTileAnimations was MEASURED from the ROM rather than derived from hram.asm's ordering:
+; StartMenu_TrainerInfo assembles to `F0 D7 / F5 / AF / E0 D7`, so it is $FFD7.
+DEF GBPalWhiteOut                EQU $3DE5
+DEF ClearScreen                  EQU $190F
+DEF UpdateSprites                EQU $2429
+DEF GBPalNormal                  EQU $3DDC
+DEF Joypad                       EQU $019A
+DEF hJoyPressed                  EQU $FFB3
+DEF LoadFontTilePatterns         EQU $3680
+DEF LoadScreenTilesFromBuffer2   EQU $3701
+DEF RunDefaultPaletteCommand     EQU $3DED
+DEF ReloadMapData                EQU $3071
+DEF LoadGBPal                    EQU $20BA
+DEF PlaceString                  EQU $1955
+DEF DelayFrame                   EQU $20AF
+DEF Delay3                       EQU $3DD7
+DEF hTileAnimations              EQU $FFD7
+DEF wTileMap                     EQU $C3A0
+DEF SCREEN_WIDTH                 EQU 20
+
+; How long to wait for the client to paint a screen before giving up and showing the
+; fallback. ~1.5s at 60fps: long enough for a client that is running, short enough that a
+; player with no client attached is not left staring at a blank box.
+DEF SLINK_STAGE_TIMEOUT EQU 90
+
+SECTION "SLink Panel", ROMX[$4100], BANK[$3F]
+
+SlinkPanel::
+	call GBPalWhiteOut
+	call ClearScreen
+	call UpdateSprites
+	ldh a, [hTileAnimations]
+	push af
+	xor a
+	ldh [hTileAnimations], a
+
+	; Draw the fallback FIRST, so a timeout shows something that explains itself rather
+	; than an empty screen. A client that is attached simply paints over it.
+	call SlinkDrawFallback
+
+	; Hand the screen to the client and wait for it to say it has finished painting. The
+	; screen is already white at this point, so a client painting mid-wait cannot be seen
+	; doing it -- which is what makes a torn page impossible rather than unlikely.
+	ld a, SLINK_PANEL_AWAIT
+	ld [SLINK_PANEL_STATE], a
+	call SlinkWaitForStage
+
+	call Delay3                 ; let the auto-BG transfers carry wTileMap into VRAM
+	call GBPalNormal            ; reveal, once and whole
+	call SlinkWaitForButton
+
+	xor a
+	ld [SLINK_PANEL_STATE], a   ; closed: the client must stop painting
+
+	call GBPalWhiteOut
+	call LoadFontTilePatterns
+	call LoadScreenTilesFromBuffer2
+	call RunDefaultPaletteCommand
+	call ReloadMapData
+	call LoadGBPal
+	pop af
+	ldh [hTileAnimations], a
+	ret
+
+; Wait for the player to dismiss the panel.
+;
+; NOT WaitForTextScrollButtonPress, which is the obvious choice and does not work here: it
+; runs `predef CableClub_Run` and drives the down-arrow blink, and a panel built on it
+; opened and then never returned. It also cannot tell A from B, which pagination will need.
+; A local loop costs nine instructions and owns its own behaviour.
+;
+; hJoyPressed is EDGE-triggered, so the A press that opened the panel cannot immediately
+; close it; the settle loop covers the case where a client stages instantly and the button
+; is somehow still down. hJoyPressed's address was measured from CloseStartMenu's own bytes
+; (`call Joypad` then `ldh a, [$FFB3]`), and the A/B/START bits from wMenuWatchedKeys
+; reading 0xCB when the START menu is up.
+DEF SLINK_PAD_ANY EQU $01 | $02 | $08      ; A, B, START
+
+SlinkWaitForButton:
+	ld b, 20
+.settle
+	call DelayFrame
+	dec b
+	jr nz, .settle
+.wait
+	call DelayFrame
+	call Joypad
+	ldh a, [hJoyPressed]
+	and SLINK_PAD_ANY
+	ret nz
+	jr .wait
+
+; Poll the mailbox for up to SLINK_STAGE_TIMEOUT frames. Returns either way: a player
+; without a client still gets a panel, it just says so.
+; bc is pushed around DelayFrame because nothing documents it as preserved, and a counter
+; that silently stops counting would turn the timeout into a hang.
+SlinkWaitForStage:
+	ld b, SLINK_STAGE_TIMEOUT
+.loop
+	ld a, [SLINK_PANEL_STATE]
+	cp SLINK_PANEL_STAGED
+	ret z
+	push bc
+	call DelayFrame
+	pop bc
+	dec b
+	jr nz, .loop
+	ret
+
+SlinkDrawFallback:
+	ld hl, wTileMap + SCREEN_WIDTH * 2 + 2
+	ld de, .title
+	call PlaceString
+	ld hl, wTileMap + SCREEN_WIDTH * 5 + 2
+	ld de, .noData
+	call PlaceString
+	ret
+; ── Gen 1's text encoding, scoped to the strings that need it ────────────────────────────
+; rgbasm does not know it, so without a charmap `db "SLINK@"` emits ASCII -- and '@' is $40
+; in ASCII while the terminator PlaceString looks for is $50, so it walks off the end of the
+; string and paints memory until it finds one. Measured: the first panel build assembled
+; 53 4F 55 4C 20 4C 49 4E 4B 40 and hung the game.
+;
+; PUSHC/POPC rather than a file-wide charmap, because a charmap rewrites CHARACTER LITERALS
+; too. A global one turned `ld a, 'S'` in the beacon above into $92 and the mailbox stopped
+; reading as "SLNK" -- caught by the companion-patch gate, which is exactly what it is for.
+;
+; Letters are $80 + (c - 'A'), cross-checked against the ROM's own "POK<e>DEX@", which reads
+; 8F 8E 8A BA 83 84 97 50.
+	PUSHC
+	NEWCHARMAP slinktext
+	CHARMAP "@", $50
+	CHARMAP " ", $7F
+FOR I, 26
+	CHARMAP STRSUB("ABCDEFGHIJKLMNOPQRSTUVWXYZ", I + 1, 1), $80 + I
+ENDR
+.title
+	db "SOUL LINK@"
+.noData
+	db "NO CLIENT@"
+	POPC
