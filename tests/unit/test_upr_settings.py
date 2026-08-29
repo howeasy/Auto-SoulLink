@@ -167,3 +167,83 @@ def test_every_named_flag_fits_in_the_settings_block():
     for name, (idx, bit) in FLAGS.items():
         assert 0 <= idx < 51, f"{name} indexes byte {idx}"
         assert 0 <= bit < 8, f"{name} indexes bit {bit}"
+
+
+# ── the allowlist ────────────────────────────────────────────────────────────────────────
+# forbidden_enabled names the DANGEROUS domains, which can only ever reject what someone
+# thought to list. unexpected_settings inverts it: a file is admissible only if it is one
+# this project would itself produce. These tests exist because the blacklist demonstrably
+# waved through five real settings.
+
+@pytest.mark.parametrize("categories", [
+    set(), {"wild"}, {"wild", "tms"}, ALL_CATEGORIES,
+])
+@pytest.mark.parametrize("fastest", [True, False])
+def test_every_configuration_we_can_produce_is_accepted(categories, fastest):
+    """The envelope is computed from build_categories, so this is the check that it has not
+    become narrower than the pipeline it is meant to describe."""
+    from server.upr_settings import unexpected_settings
+    parsed = load(build_categories(categories, fastest_text=fastest))
+    assert unexpected_settings(parsed) == []
+
+
+def test_the_default_file_is_accepted():
+    from server.upr_settings import unexpected_settings
+    assert unexpected_settings(load(build())) == []
+
+
+@pytest.mark.parametrize("flag", [
+    # Every one of these passed forbidden_enabled. That is the point.
+    "randomizeTrainerNames",
+    "randomizeTrainerClassNames",
+    "trainersUsePokemonOfSimilarStrength",
+    "rivalCarriesStarterThroughout",
+    "useMinimumCatchRate",
+    "wildRestriction_CATCH_EM_ALL",
+    "wildRestriction_TYPE_THEME_AREAS",
+    "useTimeBasedEncounters",
+    "limitPokemon",
+    "standardizeEXPCurves",
+    "tmLevelUpMoveSanity",
+    "keepFieldMoveTMs",
+    "banBadRandomFieldItems",
+    "blockBrokenTMMoves",
+])
+def test_a_setting_outside_the_supported_set_is_named(flag):
+    from server.upr_settings import unexpected_settings
+    out = unexpected_settings(load(build({flag: True})))
+    assert out, f"{flag} was accepted"
+    assert any(flag in line for line in out), out
+
+
+def test_the_allowlist_also_catches_the_dangerous_domains():
+    """It is a superset of forbidden_enabled, so nothing got weaker by adding it."""
+    from server.upr_settings import unexpected_settings
+    for flag in ("types_UNCHANGED", "evolutions_UNCHANGED", "movesets_UNCHANGED",
+                 "baseStats_UNCHANGED"):
+        assert unexpected_settings(load(build({flag: False}))), f"{flag}=off was accepted"
+
+
+def test_an_unmodelled_byte_is_reported_by_index_rather_than_guessed_at():
+    """Level modifiers and percentages have no entry in FLAGS. They must still be refused,
+    and the message has to say which byte rather than inventing a name for it."""
+    import binascii
+    from server.upr_settings import unexpected_settings
+    raw = bytearray(build_categories({"wild"}))
+    length = struct.unpack(">i", raw[4:8])[0]
+    blob = bytearray(base64.b64decode(raw[8:8 + length]))
+    blob[38] = 0x80 | 60            # wildLevelsModified, +10 levels
+    body = bytes(blob[:-8])
+    blob[-8:-4] = struct.pack(">I", binascii.crc32(body) & 0xFFFFFFFF)
+    fixed = base64.b64encode(bytes(blob))
+    parsed = load(bytes(raw[:4]) + struct.pack(">i", len(fixed)) + fixed)
+    out = unexpected_settings(parsed)
+    assert any("byte 38" in line for line in out), out
+
+
+def test_the_envelope_covers_all_fifty_one_bytes():
+    """A short envelope would silently accept whatever it did not cover."""
+    from server.upr_settings import permitted_byte_values
+    env = permitted_byte_values()
+    assert len(env) == 51
+    assert all(v for v in env), "some byte has no permitted value at all"

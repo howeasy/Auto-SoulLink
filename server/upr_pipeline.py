@@ -38,6 +38,7 @@ import subprocess
 from server.adapters.gen1_rom_scan import RomScanError, identify, scan, scan_base_stats
 from server.upr_settings import (
     UprSettingsError, categories_enabled, forbidden_enabled, load, parse_settings_string,
+    unexpected_settings,
 )
 
 RANDOMIZE_TIMEOUT = 600
@@ -190,6 +191,15 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
     if bad := forbidden_enabled(declared):
         raise UprPipelineError(
             f"these settings change data the Soul Link rules read: {', '.join(bad)}")
+    # ALLOWLIST, not just the named dangers. forbidden_enabled can only reject what someone
+    # thought to list, and UPR has well over a hundred options; this requires the file to be
+    # one this project would itself produce. "Same settings, different seeds" is only
+    # meaningful if both files come from the same known set, so an option we have never
+    # reasoned about is outside it whether or not it turns out to matter.
+    if odd := unexpected_settings(declared):
+        raise UprPipelineError(
+            "these settings are outside the supported set — SLink only runs configurations "
+            "it can itself produce: " + "; ".join(odd))
 
     os.makedirs(out_dir, exist_ok=True)
     results: dict[str, dict] = {}

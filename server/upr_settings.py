@@ -372,3 +372,78 @@ def forbidden_enabled(parsed: dict) -> list[str]:
         if f.get(name):
             bad.append(name)
     return bad
+
+
+# ── the allowlist ────────────────────────────────────────────────────────────────────────
+# forbidden_enabled names the domains that are DANGEROUS, which is the wrong way round for a
+# settings file: it can only reject what someone thought to list, and UPR has well over a
+# hundred options. Measured -- randomizeTrainerNames, trainersUsePokemonOfSimilarStrength,
+# useMinimumCatchRate, CATCH_EM_ALL and limitPokemon all sailed through it.
+#
+# So the file is checked the other way round: a settings file is admissible only if it is
+# byte-for-byte one of the files THIS PROJECT would produce. The envelope is computed from
+# build_categories over every combination of the allowed categories and both Fastest Text
+# states, so it cannot drift from what the pipeline actually supports -- adding a category
+# to _CATEGORY_MODES widens the envelope automatically, and nothing else does.
+#
+# This applies to the FILE a player hands us, where their intent lives. It deliberately does
+# NOT apply to the effective settings echoed in UPR's log: tweakForRom legitimately rewrites
+# bytes there (the custom-starter slots become the ROM's own), so those are checked with
+# forbidden_enabled instead.
+_ENVELOPE_CACHE: list[set[int]] | None = None
+
+
+def permitted_byte_values() -> list[set[int]]:
+    """For each of the 51 settings bytes, every value an allowed configuration can hold."""
+    global _ENVELOPE_CACHE
+    if _ENVELOPE_CACHE is None:
+        cats = sorted(_CATEGORY_MODES)
+        envelope: list[set[int]] = [set() for _ in range(LENGTH_OF_SETTINGS_DATA)]
+        for mask in range(1 << len(cats)):
+            chosen = {c for i, c in enumerate(cats) if mask >> i & 1}
+            for fastest in (True, False):
+                data = load(build_categories(chosen, fastest_text=fastest))["data"]
+                for i, byte in enumerate(data):
+                    envelope[i].add(byte)
+        _ENVELOPE_CACHE = envelope
+    return _ENVELOPE_CACHE
+
+
+def _flags_in_byte(index: int) -> list[str]:
+    return sorted(name for name, (i, _bit) in FLAGS.items() if i == index)
+
+
+def unexpected_settings(parsed: dict) -> list[str]:
+    """Everything in this file that no allowed configuration would produce.
+
+    Empty means the file is one SLink could have generated itself. A non-empty result is a
+    refusal, not a warning: "same settings, different seeds" is only meaningful if both
+    players' files are drawn from the same known set, and a file carrying an option we have
+    never reasoned about is outside it whether or not that option turns out to matter.
+    """
+    envelope = permitted_byte_values()
+    data = parsed.get("data") or b""
+    if len(data) < LENGTH_OF_SETTINGS_DATA:
+        return [f"settings block is only {len(data)} bytes"]
+
+    out = []
+    for index in range(LENGTH_OF_SETTINGS_DATA):
+        if data[index] in envelope[index]:
+            continue
+        # Name the individual flags where the byte is one we model, so the message points
+        # at a setting the player can actually find in the GUI.
+        differing = []
+        for name in _flags_in_byte(index):
+            bit = FLAGS[name][1]
+            mine = bool(data[index] >> bit & 1)
+            if all(bool(v >> bit & 1) != mine for v in envelope[index]):
+                differing.append(f"{name}={'on' if mine else 'off'}")
+        if differing:
+            out.append(f"byte {index}: " + ", ".join(differing))
+        else:
+            # An unmodelled byte -- a level modifier, a percentage, a misc-tweak bit.
+            # Reported by index and value rather than guessed at.
+            out.append(
+                f"byte {index} is 0x{data[index]:02X}, not one of "
+                + "/".join(f"0x{v:02X}" for v in sorted(envelope[index])))
+    return out
