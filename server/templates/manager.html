@@ -343,6 +343,75 @@
             </div>
           </div>
         </template>
+
+        {# ── Randomized ROMs ───────────────────────────────────────────────
+           Once built, the pair is shown rather than the form: the seeds and hashes
+           recorded here are the only record of what each player is playing, because
+           UPR's CLI has no seed flag and writes the seed only to its log. #}
+        <template x-if="current && current.status !== 'archived'">
+          <div class="mgr-launcher-info">
+            <span class="mgr-section-label">
+              <svg class="mgr-badge-ico" aria-hidden="true"><use href="#i-script"/></svg>
+              Randomized ROMs
+              <span class="mgr-info" tabindex="0" role="note"
+                    data-tip="Builds one randomized ROM per player with the SAME settings and different seeds, using your own copy of Universal Pokemon Randomizer ZX. The run then only accepts events from those exact cartridges.">
+                <svg aria-hidden="true"><use href="#i-info"/></svg>
+              </span>
+            </span>
+
+            <template x-if="current.randomizer">
+              <div class="mgr-rand-summary">
+                <div class="mgr-detail-meta">
+                  <span>UPR <span x-text="current.randomizer.upr_version"></span></span>
+                  <span x-text="(current.randomizer.categories || []).join(', ')"></span>
+                </div>
+                <template x-for="pid in ['a','b']" :key="pid">
+                  <div class="mgr-rand-player">
+                    <strong x-text="'Player ' + pid.toUpperCase()"></strong>
+                    <code x-text="'seed ' + current.randomizer.players[pid].seed"></code>
+                    <code x-text="current.randomizer.players[pid].rom_sha1.slice(0, 12)"></code>
+                  </div>
+                </template>
+                <p class="mgr-rand-note">
+                  Each player must run their own file. The run rejects events from any other
+                  cartridge.
+                </p>
+              </div>
+            </template>
+
+            <template x-if="!current.randomizer">
+              <details class="mgr-new-disclosure">
+                <summary>Build a randomized pair</summary>
+                <div class="mgr-new-opts mgr-rand-form">
+                  <label>Randomizer jar
+                    <input type="text" x-model="rand.jar"
+                           placeholder="path to PokeRandoZX.jar">
+                  </label>
+                  <label>Settings file
+                    <input type="text" x-model="rand.settings"
+                           placeholder="path to your .rnqs">
+                  </label>
+                  <label>Player A clean ROM
+                    <input type="text" x-model="rand.rom_a" placeholder="path to a clean .gb">
+                  </label>
+                  <label>Player B clean ROM
+                    <input type="text" x-model="rand.rom_b" placeholder="path to a clean .gb">
+                  </label>
+                  <button class="mgr-btn" :disabled="rand.busy" @click="randomize()"
+                          x-text="rand.busy ? 'Randomizing…' : 'Build randomized pair'"></button>
+                  {# The refusals are the feature, so they are shown in full rather than
+                     collapsed to "failed": each one names the setting or file to fix. #}
+                  <p class="mgr-rand-error" x-show="rand.error" x-text="rand.error"></p>
+                  <p class="mgr-rand-note">
+                    You supply your own randomizer. SLink never bundles or modifies it.
+                    Your ROMs stay on this machine.
+                  </p>
+                </div>
+              </details>
+            </template>
+          </div>
+        </template>
+
       </section>
 
       <aside class="mgr-detail-preview">
@@ -791,6 +860,38 @@ function runManager() {
       await this.act('delete');
       // After delete, fall back to the next available run.
       this.active = (this.runs[0] && this.runs[0].run_id) || '';
+    },
+
+    // Paths rather than file pickers: the randomizer, the settings file and the clean
+    // ROMs all live on the machine running the manager, and a browser upload would mean
+    // sending ROMs to the server for no reason. Nothing here leaves this machine.
+    rand: { jar: '', settings: '', rom_a: '', rom_b: '', busy: false, error: '' },
+
+    async randomize() {
+      this.rand.error = '';
+      if (!this.current) return;
+      var missing = ['jar', 'settings', 'rom_a', 'rom_b'].filter(k => !this.rand[k].trim());
+      if (missing.length) { this.rand.error = 'Fill in: ' + missing.join(', '); return; }
+      this.rand.busy = true;
+      try {
+        var res = await fetch('/api/runs/' + this.current.run_id + '/randomize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            jar: this.rand.jar.trim(), settings: this.rand.settings.trim(),
+            rom_a: this.rand.rom_a.trim(), rom_b: this.rand.rom_b.trim(),
+          })
+        });
+        var j = await res.json();
+        // Surface the server's reason verbatim. Every refusal names the setting or the
+        // file that has to change, and collapsing them to "failed" throws that away.
+        if (!j.ok) { this.rand.error = j.error || 'Randomize failed'; return; }
+        await this.refreshRuns();
+      } catch (e) {
+        this.rand.error = String(e);
+      } finally {
+        this.rand.busy = false;
+      }
     },
 
     async createRun() {
