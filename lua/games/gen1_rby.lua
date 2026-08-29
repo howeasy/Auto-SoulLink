@@ -630,6 +630,120 @@ function M.readRomContent(variant)
     }
 end
 
+
+-- ── Rebuilding a boxed mon's stats from the ROM ──────────────────────────────────────────
+-- Gen 1's box struct is 33 bytes and stores no computed stats: Attack/Defence/Speed/Special
+-- live only in the party's 11-byte tail. Withdrawing therefore has to RECREATE them, and
+-- when the deposit-time cache is missing (a client restarted between deposit and withdraw)
+-- retrieveBoxMon used to refuse, because rebuilding "would also need a base-stat table we
+-- don't ship". We read the ROM now, so it does not need shipping.
+--
+-- Everything the formula needs is already in the box struct, which is why this is exact
+-- rather than an approximation: DVs at +0x1B and the five stat-exp words at
+-- +0x11/13/15/17/19 (macros/ram.asm box_struct), plus the level at +0x03 and the base
+-- stats from ROM.
+--
+-- CalcStat, home/move_mon.asm:
+--     stat = ((base + IV) * 2 + floor(ceil(sqrt(statexp)) / 4)) * level / 100
+--     non-HP:  + 5
+--     HP:      + level + 10
+--     capped at 999 (MAX_STAT_VALUE)
+-- Where the stat inputs live inside a box/party struct (macros/ram.asm box_struct).
+-- Declared here rather than in memory_gb because they are Gen 1's layout: the party struct
+-- is the box struct plus an 11-byte tail, so the same offsets serve both.
+M.BOX_STAT_OFFSETS = {
+    hp = 0x11, attack = 0x13, defense = 0x15, speed = 0x17, special = 0x19,
+    dvs = 0x1B,
+}
+
+M.ROM_BASE_STATS = {
+    -- Flat ROM offsets. 28-byte records ordered by POKEDEX number, so record i describes
+    -- dex i+1. Identical in all three titles; the difference is Mew.
+    red    = {base = 0x383DE, mew = 0x0425B},
+    yellow = {base = 0x383DE, mew = nil},   -- Yellow keeps Mew IN the table, at record 150
+}
+M.ROM_BASE_STATS.blue = M.ROM_BASE_STATS.red
+M.BASE_STATS_RECORD = 28
+
+--- ceil(sqrt(n)) the way the engine computes it: the smallest b >= 1 with b*b >= n, capped
+--- at 255. Integer arithmetic on purpose -- a float sqrt of a large perfect square can land
+--- a whole unit out, and this feeds a division whose result is a stored stat.
+local function _ceil_sqrt(n)
+    if n <= 0 then return 1 end
+    local b = math.floor(math.sqrt(n))
+    if b < 1 then b = 1 end
+    while b * b < n do b = b + 1 end
+    while b > 1 and (b - 1) * (b - 1) >= n do b = b - 1 end
+    if b > 255 then b = 255 end
+    return b
+end
+
+--- The five base stats for a national dex number, read from the cartridge.
+function M.readBaseStats(variant, dex)
+    local spec = M.ROM_BASE_STATS[variant]
+    if not spec or type(dex) ~= "number" or dex < 1 or dex > 151 then return nil end
+    local off
+    if dex == 151 and spec.mew then
+        off = spec.mew
+    else
+        off = spec.base + M.BASE_STATS_RECORD * (dex - 1)
+    end
+    local out, ok, b = {}, nil, nil
+    for i, field in ipairs({"hp", "attack", "defense", "speed", "special"}) do
+        ok, b = pcall(memory.read_u8, off + i, "ROM")
+        if not ok or type(b) ~= "number" then return nil end
+        out[field] = b
+    end
+    -- The record leads with its own dex number, so a wrong offset or a relocated table is
+    -- caught here instead of producing believable stats for the wrong species.
+    ok, b = pcall(memory.read_u8, off, "ROM")
+    if not ok or b ~= dex then return nil end
+    return out
+end
+
+--- Split Gen 1's packed DV word into the five IVs.
+--- byte0 = (Atk << 4) | Def, byte1 = (Spd << 4) | Spc, and HP is assembled from the low bit
+--- of each of the other four (CalcStat's .getHPIV path) rather than stored.
+function M.splitDVs(dv_word)
+    local hi, lo = math.floor(dv_word / 256) % 256, dv_word % 256
+    local atk, def = math.floor(hi / 16), hi % 16
+    local spd, spc = math.floor(lo / 16), lo % 16
+    local hp = (atk % 2) * 8 + (def % 2) * 4 + (spd % 2) * 2 + (spc % 2)
+    return {hp = hp, attack = atk, defense = def, speed = spd, special = spc}
+end
+
+--- Recompute the five party stats. `stat_exp` maps the same field names to 0..65535.
+function M.calcStats(base, level, dv_word, stat_exp)
+    if not base or type(level) ~= "number" or level < 1 or level > 100 then return nil end
+    local ivs = M.splitDVs(dv_word)
+    local out = {}
+    for _, field in ipairs({"hp", "attack", "defense", "speed", "special"}) do
+        local exp = (stat_exp and stat_exp[field]) or 0
+        local core = ((base[field] + ivs[field]) * 2
+                      + math.floor(_ceil_sqrt(exp) / 4)) * level
+        local stat = math.floor(core / 100)
+        if field == "hp" then
+            stat = stat + level + 10
+        else
+            stat = stat + 5
+        end
+        if stat > 999 then stat = 999 end          -- MAX_STAT_VALUE
+        out[field] = stat
+    end
+    return out
+end
+
+--- Everything retrieveBoxMon needs, straight from a box slot's own bytes.
+--- Returns nil rather than guessing when the ROM cannot be read or the species is unknown,
+--- so the caller keeps its refusal instead of writing stats it cannot justify.
+function M.rebuildBoxStats(variant, species_index, level, dv_word, stat_exp)
+    local dex = M.toNatDex and M.toNatDex(species_index) or nil
+    if not dex or dex < 1 or dex > 151 then return nil end
+    local base = M.readBaseStats(variant, dex)
+    if not base then return nil end
+    return M.calcStats(base, level, dv_word, stat_exp)
+end
+
 M.AP_SEED_ROM_OFFSET = 0x5F22
 M.AP_SEED_LEN = 16
 

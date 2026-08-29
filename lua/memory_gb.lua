@@ -139,6 +139,12 @@ function M.initProfile(game_module, variant)
         error("No profile for variant: " .. tostring(variant))
     end
     M.profile = prof
+    -- Retained so generic code can ASK the game module for help it may or may
+    -- not offer (see the stat rebuild in retrieveBoxMon). Nothing here branches
+    -- on which game it is -- the question is always "does this module provide
+    -- the function", which keeps memory_gb generic.
+    M._game = game_module
+    M.gb_variant = variant
     -- Copy key addresses to module level for fast access
     M.PARTY_COUNT_ADDR    = prof.PARTY_COUNT_ADDR
     M.PARTY_SPECIES_ADDR  = prof.PARTY_SPECIES_ADDR
@@ -1187,8 +1193,42 @@ function M.retrieveBoxMon(key, stats)
         reject_reason = "unusable stats block (no maxHP/level) for "
         cached = nil
     end
+    -- NO CACHE? REBUILD IT FROM THE CARTRIDGE BEFORE GIVING UP.
+    -- Everything Gen 1's stat formula needs is already in the box struct -- the DV word and
+    -- the five stat-exp words -- and the base-stat table is readable from ROM, so the "real
+    -- work" the refusal below used to defer is done. The result is exact, not an
+    -- approximation: lua/tests/test_gen1_stat_rebuild.lua recomputes every party mon on a
+    -- live cartridge and requires the GAME's own stored stats to match, on all three titles.
+    --
+    -- Asked of the game module rather than branched on: a generation that does not offer
+    -- the function simply keeps the old refusal. The offsets come from the module too,
+    -- because they are that game's struct layout and not memory_gb's business.
+    if not cached and M._game and M._game.rebuildBoxStats and M._game.BOX_STAT_OFFSETS then
+        local off = M._game.BOX_STAT_OFFSETS
+        local stat_exp = {}
+        for _, field in ipairs({"hp", "attack", "defense", "speed", "special"}) do
+            stat_exp[field] = M.read_u16_be(party_dst + off[field])
+        end
+        local rebuilt = M._game.rebuildBoxStats(
+            M.gb_variant, species, box_level,
+            M.read_u16_be(party_dst + off.dvs), stat_exp)
+        if rebuilt then
+            -- Gen 1 has one Special, and applyPartyStats writes spAtk and spDef to the same
+            -- address on this generation, so both carry it.
+            cached = {level = box_level, maxHP = rebuilt.hp, attack = rebuilt.attack,
+                      defense = rebuilt.defense, speed = rebuilt.speed,
+                      spAtk = rebuilt.special, spDef = rebuilt.special}
+            reject_reason = nil
+        end
+    end
     if cached then
         M.applyPartyStats(pcount, cached)
+        -- A rebuild recomputes maxHP, and the current HP carried over in the box struct may
+        -- now exceed it (a mon deposited before a stat change). Clamp rather than leave a
+        -- mon above its own maximum, which the engine treats as corrupt.
+        if M.read_u16_be(party_dst + M.HP_OFFSET) > (cached.maxHP or 0) then
+            M.write_u16_be(party_dst + M.HP_OFFSET, cached.maxHP)
+        end
         if not box_has_hp then
             -- pret SendGetMonIntoFromBox: MON_STATUS = 0, MON_HP = MON_MAXHP. Status is
             -- already 0 from the memzero above (Gen 2's +0x20 is outside the copied box

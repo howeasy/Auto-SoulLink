@@ -42,6 +42,10 @@ GATES = {
     "lua/tests/test_gen1_writes_gate.lua": "town",
     # The withdraw half of party sync. test_gen1_writes_gate only deposits.
     "lua/tests/test_gen1_boxroundtrip_gate.lua": "town",
+    # The stat formula behind the withdraw rebuild, checked against the GAME's own numbers:
+    # every party mon carries both the inputs and the answer, so recomputing and comparing
+    # is a real control rather than a self-consistency check.
+    "lua/tests/test_gen1_stat_rebuild.lua": "town",
     # Evolution: a Gen 1 key is DVs:OTID:SPECIES, so evolving rewrites it. Drives a real
     # Moon Stone through the real bag menus — no battle, no encounter RNG, and
     # uncancellable (wForceEvolution). Needs the town save, not the battle one:

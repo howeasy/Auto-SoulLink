@@ -256,6 +256,72 @@ do
 end
 
 -- ═════════════════════════════════════════════════════════════════════════════
+-- PHASE 1b — NO CACHE AT ALL: rebuild the stats from the cartridge
+-- The case a client restart produces. There is no deposit-time cache and the server
+-- has nothing to send, and the box's 33 bytes carry no computed stats -- so
+-- Attack/Defence/Speed/Special have to be recreated from the DVs and stat exp that
+-- ARE in the box, plus the base-stat table read out of the ROM.
+--
+-- This used to refuse, correctly: the behaviour it replaced left those four at zero
+-- and produced a mon that could not fight, which is silent permanent save corruption.
+-- Refusing is still right when the rebuild is impossible; this proves it is possible
+-- and, more importantly, EXACT -- the mon must come back with the same numbers the
+-- game itself had computed for it before the deposit.
+-- ═════════════════════════════════════════════════════════════════════════════
+t.log("── phase 1b: no cache, rebuilt from ROM ──")
+do
+    local slot = find_party_slot(real_key)
+    if not slot then
+        t.check("phase 1b needs the mon from phase 1", false)
+    else
+        local before = snap_party(slot)
+        local ok, err = M.depositPartyMon(slot)
+        t.check("deposited again for the no-cache case", ok, tostring(err))
+
+        -- Drop every trace of the deposit-time stats. Without this the cached path
+        -- answers and the rebuild is never reached -- the test would pass while
+        -- proving nothing about the code it names.
+        M._party_tail_cache = {}
+        t.check("the deposit-time cache really is empty",
+                next(M._party_tail_cache) == nil)
+
+        poison_party_slot(M.getPartyCount())
+        local rok, rerr = M.retrieveBoxMon(real_key)   -- stats=nil AND no cache
+        t.check("retrieveBoxMon succeeds with NO cache (it rebuilt)", rok, tostring(rerr))
+
+        local back = find_party_slot(real_key)
+        t.check("the mon came back", back ~= nil)
+        if back then
+            local after = snap_party(back)
+            -- The five stats are what the rebuild had to recreate; every other byte came
+            -- across in the box struct. Compare them against what the GAME computed.
+            local names = {"maxHP", "attack", "defense", "speed", "special"}
+            local offs  = {0x22, 0x24, 0x26, 0x28, 0x2A}
+            local bad = {}
+            for i, nm in ipairs(names) do
+                local b = before.struct[offs[i]] * 256 + before.struct[offs[i] + 1]
+                local a = after.struct[offs[i]] * 256 + after.struct[offs[i] + 1]
+                if a ~= b then
+                    bad[#bad + 1] = fmt("%s: was %d, came back %d", nm, b, a)
+                end
+            end
+            for _, m in ipairs(bad) do t.log("[rebuild] MISMATCH " .. m) end
+            t.check("every rebuilt stat equals what the game had computed", #bad == 0,
+                    fmt("%d of 5 stats differ", #bad))
+            t.check("no stat came back as zero",
+                    (function()
+                        for i = 1, #names do
+                            local a = after.struct[offs[i]] * 256 + after.struct[offs[i] + 1]
+                            if a == 0 then return false end
+                        end
+                        return true
+                    end)(),
+                    "a zeroed stat is the exact corruption the refusal existed to prevent")
+        end
+    end
+end
+
+-- ═════════════════════════════════════════════════════════════════════════════
 -- PHASE 2 — every field distinct, and the SERVER-supplied stat block
 -- The fixture starter's Atk/Def/Spd/Spc are all within a couple of points of each other at
 -- L5, so a bug that wrote Speed into Defense would sail through phase 1. Stamp values that
@@ -444,7 +510,7 @@ end
 -- The last check is the known-positive control: supplying stats must make the SAME withdraw
 -- succeed. Without it this phase would also pass if retrieveBoxMon were broken outright.
 -- ═════════════════════════════════════════════════════════════════════════════
-t.log("── phase 4: no cache -> refuse rather than corrupt ──")
+t.log("── phase 4: rebuild IMPOSSIBLE -> refuse rather than corrupt ──")
 do
     local slot = find_party_slot(real_key)
     t.check("the real mon is available for the fallback test", slot ~= nil)
@@ -460,8 +526,17 @@ do
         M._party_tail_cache = {}                 -- nothing cached anywhere
         poison_party_slot(party_after_deposit)
 
+        -- WHAT THIS PHASE TESTS CHANGED WHEN THE REBUILD LANDED. "No cache" alone is no
+        -- longer a refusal -- phase 1b proves it now rebuilds the stats from the ROM, and
+        -- exactly. The refusal still has to exist for when that is IMPOSSIBLE, which is what
+        -- is staged here by taking the rebuild away: a generation whose module does not
+        -- offer it, or a ROM that cannot be read, must land in the old safe behaviour rather
+        -- than writing stats it cannot justify.
+        local saved_rebuild = M._game.rebuildBoxStats
+        M._game.rebuildBoxStats = nil
         local ok, err = M.retrieveBoxMon(real_key, nil)
-        t.check("retrieveBoxMon REFUSES when it has no stats", ok == false,
+        M._game.rebuildBoxStats = saved_rebuild
+        t.check("retrieveBoxMon REFUSES when it can neither recall nor rebuild", ok == false,
                 fmt("returned %s (%s)", tostring(ok), tostring(err)))
         t.check("...and says why", type(err) == "string" and #err > 0, tostring(err))
 
