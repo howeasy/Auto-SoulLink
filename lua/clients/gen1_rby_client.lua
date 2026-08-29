@@ -118,6 +118,10 @@ local function json_encode(val)
 end
 
 -- ── Response parsing ──────────────────────────────────────────────────────────
+-- Last link_panel payload. The panel is opened from the START menu by the player, which may
+-- be long after the rows arrived, so they are kept rather than drawn on receipt.
+local panel_rows = nil
+
 local function parse_command_list(raw)
     local cmds = {}
     local arr = raw:match('"commands"%s*:%s*(%b[])')
@@ -126,6 +130,15 @@ local function parse_command_list(raw)
         local cmd     = obj:match('"cmd"%s*:%s*"([^"]+)"')
         local key     = obj:match('"key"%s*:%s*"([^"]+)"')
         local text    = obj:match('"text"%s*:%s*"([^"]*)"')
+        -- link_panel rows: a flat JSON array of strings. A naive quoted-string scrape is
+        -- safe here because the compact rows the server builds for a 20-column screen carry
+        -- only letters, digits, spaces and '-' — never a quote or a backslash.
+        local rows = nil
+        local rowsj = obj:match('"rows"%s*:%s*(%b[])')
+        if rowsj then
+            rows = {}
+            for r_ in rowsj:gmatch('"([^"]*)"') do rows[#rows + 1] = r_ end
+        end
         local r       = tonumber(obj:match('"r"%s*:%s*(%d+)'))
         local g       = tonumber(obj:match('"g"%s*:%s*(%d+)'))
         local b       = tonumber(obj:match('"b"%s*:%s*(%d+)'))
@@ -174,7 +187,7 @@ local function parse_command_list(raw)
                 cmd = cmd, key = key, text = text, fb = fb, sound = sound,
                 nickname = nickname, stats = stats, blobs_hex = blobs_hex,
                 r = r, g = g, b = b, frames = frames,
-                area_id = area_id, areas = areas,
+                area_id = area_id, areas = areas, rows = rows,
             }
         end
     end
@@ -427,6 +440,12 @@ local function dispatch_commands(cmds)
             if M.playSE then M.playSE(M.SE_GAME_OVER) end
             HUD.set_game_over()
             console.log("[SLink-RBY]   ↳ GAME OVER — SOUL LINK")
+        elseif c.cmd == "link_panel" and c.rows then
+            -- Held, not drawn. The panel is only allowed to touch the tile map while the
+            -- ROM patch says the screen is free; painting on arrival would scribble over
+            -- whatever the player is looking at.
+            panel_rows = c.rows
+            console.log(string.format("[SLink-RBY]   ↳ link_panel: %d rows held", #c.rows))
         elseif c.cmd == "rebuild_start" then
             rebuild_active = true
             HUD.set_rebuilding(c.text or "REBUILDING TEAM")
@@ -705,6 +724,18 @@ local function send_hello()
     -- domain, or a ROM whose tables do not parse, must not stop the client connecting. The
     -- server treats a missing payload as "no ROM data" and says so, rather than showing
     -- retail species beside a randomized cartridge.
+    -- Panel capability is per CARTRIDGE, not per generation: a patched and an unpatched ROM
+    -- can sit in the same run, so the server must be told which this is rather than assume
+    -- from the game. Reported from the mailbox's capability bits rather than the ABI number,
+    -- because a build may ship the panel without SFX or the reverse.
+    if M.panelSupported then
+        local ok_p, supported = pcall(M.panelSupported)
+        if ok_p then
+            evt.panel = supported and true or false
+            evt.panel_abi = M.panelAbi and select(2, pcall(M.panelAbi)) or 0
+        end
+    end
+
     local ok_rc, rc = pcall(G.readRomContent, variant)
     if ok_rc and rc then
         evt.rom_content = rc
@@ -1203,8 +1234,21 @@ local function check_fkeys_debounced()
 end
 
 -- ── Main frame handler ────────────────────────────────────────────────────────
+--- Paint the native panel when the ROM patch asks for it.
+---
+--- The handshake is the patch's: it blanks the screen, draws its own fallback, sets AWAIT,
+--- and waits. Painting only in that window is what makes a torn page impossible -- the
+--- display is white for all of it. Doing nothing here is a valid outcome: the patch times
+--- out and the player sees "NO CLIENT", which is the truth.
+local function service_panel()
+    if not M.panelIsAwaitingStage or not M.panelIsAwaitingStage() then return end
+    if not panel_rows or #panel_rows == 0 then return end
+    M.panelStage(panel_rows)
+end
+
 local function on_frame()
     frame_count = frame_count + 1
+    service_panel()
 
     -- Re-validate writes if previously disabled (save may load after script start)
     if not writes_enabled then

@@ -38,7 +38,13 @@ local WATCHED  = 0xCC29           -- wMenuWatchedKeys
 -- Gen 1 charset: 'A' is $80, so a letter is $80 + (c - 'A'). Verified against the ROM's
 -- own "POKéDEX@" which reads 8F 8E 8A BA 83 84 97 50.
 local function decode(byte)
-    if byte >= 0x80 and byte <= 0x99 then return string.char(byte - 0x80 + 65) end
+    if byte >= 0x80 and byte <= 0x99 then return string.char(byte - 0x80 + 65) end  -- A-Z
+    if byte >= 0xA0 and byte <= 0xB9 then return string.char(byte - 0xA0 + 97) end  -- a-z
+    -- Digits are the $F6-$FF block, NOT anywhere near the letters. Decoding only letters
+    -- made every number on the panel read as dots, and this gate then reported that the
+    -- staged rows had not appeared when they plainly had.
+    if byte >= 0xF6 and byte <= 0xFF then return string.char(byte - 0xF6 + 48) end  -- 0-9
+    if byte == 0xF3 then return "/" end
     if byte == 0x7F then return " " end
     return "."
 end
@@ -77,6 +83,20 @@ end
 --- nothing clears it -- so "watched ~= 0xCB" reports every closed menu as still open. The
 --- tile map is the honest signal: CloseStartMenu ends in CloseTextDisplay, which restores
 --- the map underneath, so the menu's own text stops being on screen.
+--- Make sure the START menu is up, WITHOUT toggling it if it already is.
+---
+--- Closing the panel returns to RedisplayStartMenu, so the menu is already open at that
+--- point and pressing START would close it. The first version of the staging test did
+--- exactly that and then reported that the patch never asked the client to paint.
+local function ensure_menu_open()
+    for _ = 1, 6 do
+        if find_row(screen_rows(), "EXIT") then return true end
+        t.hold("Start", 8)
+        for _ = 1, 40 do t.step(nil) end
+    end
+    return find_row(screen_rows(), "EXIT") ~= nil
+end
+
 local function menu_is_closed()
     local rows = screen_rows()
     return find_row(rows, "EXIT") == nil and find_row(rows, "SLINK") == nil
@@ -192,8 +212,64 @@ if reached then
                 M.read_u8(PANEL_STATE)))
 end
 
+-- ── the client can paint it ──────────────────────────────────────────────────
+-- The handshake is the whole feature: the patch blanks the screen and says AWAIT, the
+-- client paints the tile map, the patch reveals it. This gate stands in for the client,
+-- calling the SAME M.panelStage the real one does -- so what is under test is the painter
+-- and the handshake, not a re-implementation of them.
+t.check("the menu is up for the staging test", ensure_menu_open(),
+        "the START menu is not showing")
+do
+    for _ = 1, 12 do
+        if M.read_u8(CUR_MENU) == slink_index then break end
+        t.hold("Down", 6)
+        for _ = 1, 10 do t.step(nil) end
+    end
+    t.hold("A", 6)
+
+    -- Wait for the patch to hand the screen over, then paint through the real helper.
+    local awaited = false
+    for _ = 1, 120 do
+        t.step(nil)
+        if M.panelIsAwaitingStage() then awaited = true break end
+    end
+    t.check("the patch asks the client to paint", awaited,
+            "panel state never reached AWAIT")
+
+    if awaited then
+        M.panelStage({"SLINK TEST", "", "PAIRS 3/5", "BADGES 2/8", "DEAD ZONES 1",
+                      "", "-VIRIDIAN FOREST"})
+        t.check("staging sets the handshake to STAGED",
+                M.read_u8(PANEL_STATE) == 2,
+                fmt("state is %d after panelStage", M.read_u8(PANEL_STATE)))
+
+        -- The patch reveals whatever is in the tile map once staging completes.
+        local shown = false
+        for _ = 1, 200 do
+            t.step(nil)
+            if find_row(screen_rows(), "PAIRS 3/5") then shown = true break end
+        end
+        t.check("what the client painted is what the panel shows", shown,
+                "the staged rows never appeared")
+        t.check("the fallback was painted over", find_row(screen_rows(), "NO CLIENT") == nil,
+                "NO CLIENT is still visible under the staged page")
+        t.check("a later row landed too", find_row(screen_rows(), "VIRIDIAN FOREST") ~= nil,
+                "only the first rows were painted")
+
+        for r = 0, 8 do t.log(fmt("[staged] %2d |%s|", r, row_text(r))) end
+    end
+
+    -- Close it again so the checks below start from a menu, not a panel.
+    for _ = 1, 12 do
+        t.hold("A", 6)
+        for _ = 1, 40 do t.step(nil) end
+        if find_row(screen_rows(), "PAIRS") == nil then break end
+    end
+end
+
 -- ── EXIT still works, i.e. its index did not move ────────────────────────────
-t.check("the menu reopens", open_menu(), "could not reopen the START menu")
+t.check("the menu is up again", ensure_menu_open(),
+        "the START menu is not showing")
 local rows2 = screen_rows()
 local exit2 = find_row(rows2, "EXIT")
 if exit2 then

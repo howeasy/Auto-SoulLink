@@ -1434,6 +1434,79 @@ end
 -- connects to with no warp, and both of which HAVE grass tiles. So isInGrass() stays true
 -- while the rate is zero, which reads as "walking in grass forever with nothing happening".
 -- If you see that, check the map id before blaming the game.
+-- ── The native in-game panel ─────────────────────────────────────────────────────────────
+-- The companion patch owns the SCREEN: it takes over from the START menu, blanks the
+-- display, draws a fallback, and then sets a handshake byte meaning "the tile map is yours,
+-- paint now". We paint, set it to STAGED, and the patch reveals what we painted. Because
+-- the screen is white for the whole of that window, a half-painted page can never be seen.
+--
+-- WHY THE CLIENT DRAWS AND NOT THE PATCH. Red and Blue have thirty bytes of free WRAM
+-- between wBoxDataEnd and the stack; the panel's content is a few hundred. There is nowhere
+-- to put it in the ROM's own memory, so the text is written straight into wTileMap and the
+-- patch never has to store it.
+M.PANEL_MAILBOX = 0xDEE2
+M.PANEL_CAPS    = M.PANEL_MAILBOX + 8
+M.PANEL_STATE   = M.PANEL_MAILBOX + 9
+M.PANEL_CAP_BIT = 0x02
+
+M.PANEL_CLOSED, M.PANEL_AWAIT, M.PANEL_STAGED = 0, 1, 2
+
+M.TILEMAP = 0xC3A0
+M.PANEL_COLS, M.PANEL_ROWS = 20, 18
+
+--- ASCII -> Gen 1 tile ids.
+---
+--- Gen 1 has its own encoding and nothing else in the client needs it: the HUD overlay
+--- draws with BizHawk's own font and never touches the ROM's charset. Unmapped characters
+--- become spaces rather than guesses -- a wrong tile is a glyph the player cannot read and
+--- would have to interpret, and there is no punctuation here worth that risk.
+--- Ranges verified against the ROM: "POK<e>DEX@" is 8F 8E 8A BA 83 84 97 50, so 'A' is $80;
+--- $7F is the space the menu rows are padded with; digits are the $F6-$FF block.
+local function _tile_for(ch)
+    local b = string.byte(ch)
+    if b >= 65 and b <= 90  then return 0x80 + (b - 65) end   -- A-Z
+    if b >= 97 and b <= 122 then return 0xA0 + (b - 97) end   -- a-z
+    if b >= 48 and b <= 57  then return 0xF6 + (b - 48) end   -- 0-9
+    if b == 47 then return 0xF3 end                           -- '/'
+    return 0x7F                                               -- space, and anything unknown
+end
+
+--- Paint one row of the tile map, padded to the full width so no stale tile survives.
+function M.panelWriteRow(row, text)
+    if row < 0 or row >= M.PANEL_ROWS then return end
+    local base = M.TILEMAP + row * M.PANEL_COLS
+    for col = 0, M.PANEL_COLS - 1 do
+        local ch = text:sub(col + 1, col + 1)
+        M.write_u8(base + col, ch == "" and 0x7F or _tile_for(ch))
+    end
+end
+
+--- True when the ROM patch is waiting for us to paint.
+function M.panelIsAwaitingStage()
+    return M.read_u8(M.PANEL_STATE) == M.PANEL_AWAIT
+end
+
+--- Does THIS cartridge have the panel? Asked of the capability bits rather than inferred
+--- from the ABI number, because a build may ship one feature without the other.
+function M.panelSupported()
+    local caps = M.read_u8(M.PANEL_CAPS)
+    return caps ~= 0 and caps ~= 0xFF and (caps & M.PANEL_CAP_BIT) ~= 0
+end
+
+function M.panelAbi()
+    return M.read_u8(M.PANEL_MAILBOX + 4)
+end
+
+--- Paint `rows` and hand the screen back to the patch.
+--- Rows past the bottom are dropped rather than wrapped: the patch reveals whatever is in
+--- the tile map, so silently spilling would corrupt the page rather than truncate it.
+function M.panelStage(rows)
+    for i = 0, M.PANEL_ROWS - 1 do
+        M.panelWriteRow(i, rows[i + 1] or "")
+    end
+    M.write_u8(M.PANEL_STATE, M.PANEL_STAGED)
+end
+
 function M.hasWildEncounters()
     if not M.GRASS_RATE_ADDR then return nil end
     return M.read_u8(M.GRASS_RATE_ADDR) ~= 0

@@ -556,6 +556,17 @@ class Gen1Adapter(GameAdapter):
         return build_encounter_tables(
             content, _MAP_ID_TO_AREA, _INDEX_TO_NATIONAL, self.species_name)
 
+    def supports_info_panel(self) -> bool:
+        """Red and Blue only, and only with the companion patch — but the ADAPTER cannot
+        know which ROM a given player is running. This says the generation is capable; the
+        server gates the actual send on what each client reports at hello, because a
+        patched and an unpatched cartridge can sit in the same run.
+        """
+        return True
+
+    def info_panel_width(self) -> int:
+        return 20      # the Game Boy tile map is 20 columns
+
     def rom_content_fingerprint(self, payload: dict) -> str | None:
         from server.adapters.gen1_rom_scan import content_fingerprint, parse_client_content
         content = parse_client_content(payload)

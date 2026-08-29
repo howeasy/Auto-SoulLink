@@ -237,6 +237,16 @@ class GameRulesAdapter(ABC):
         """
         return ""
 
+    def info_panel_width(self) -> int:
+        """Columns the native panel can show, or 0 when there is no native panel.
+
+        The panel is drawn on the console's own screen, so its width is a property of the
+        hardware rather than a style choice: Gen 3 has 30 columns to lay out in and Gen 1
+        has 20, which is not enough for the same layout. Callers format to this rather
+        than branching on which game it is.
+        """
+        return 0
+
     def supports_info_panel(self) -> bool:
         """Whether this game's Lua client can render the native in-game info panel.
 

@@ -1743,6 +1743,26 @@ class SLinkServer:
         return (getattr(self, "admission", {}).get(player_id, {})
                 .get("state", "admitted")) == "admitted"
 
+    def _player_has_panel(self, player_id: str) -> bool:
+        """Does THIS player's cartridge have the native panel?
+
+        Per player, not per adapter. On Gen 1 the panel comes from the companion ROM patch,
+        so a patched and an unpatched cartridge can sit in the same run and the generation
+        alone cannot answer. A client that can render it says so at hello; one that says
+        nothing gets no panel payloads rather than a stream of unknown-command warnings.
+
+        The adapter still has a veto: a generation with no panel at all never sends one,
+        whatever a client claims.
+        """
+        if not self.adapter.supports_info_panel():
+            return False
+        reported = (self.connected_players.get(player_id) or {}).get("panel")
+        if reported is None:
+            # Generations whose clients predate the capability report keep working: they
+            # were already receiving the panel on the adapter's say-so.
+            return self.adapter.info_panel_width() == 0
+        return bool(reported)
+
     def adapter_for(self, player_id: str):
         """The adapter that describes THIS player's cartridge.
 
@@ -2400,6 +2420,12 @@ class SLinkServer:
                 }
                 if msg.get("event") == "hello":
                     self.connected_players[player_id]["rom_type"] = msg.get("rom_type", "?")
+                    # Panel capability is per CARTRIDGE: on Gen 1 it comes from the
+                    # companion ROM patch, so a patched and an unpatched cartridge can
+                    # sit in one run and the generation alone cannot answer.
+                    if "panel" in msg:
+                        self.connected_players[player_id]["panel"] = bool(msg.get("panel"))
+                        self.connected_players[player_id]["panel_abi"] = msg.get("panel_abi", 0)
                     # Resolve correct adapter from rom_type.
                     # Once rom_type is committed (set-once), the adapter is locked — ignore
                     # any later hello that carries a different rom_type (e.g. early-boot
@@ -2548,6 +2574,38 @@ class SLinkServer:
         # no longer catch, which is the part they can act on. Pagination carries the overflow.
         for area_id in dead_zones:
             rows.append("- " + self.adapter.area_display_name(area_id)[:28])
+
+        # A NARROW SCREEN GETS ITS OWN ROWS, not these truncated.
+        # The rows above are `label|field|field|...` for a client that lays them out in
+        # columns on a 30-wide screen. A Game Boy has 20, which is not enough for that
+        # layout at all, so chopping them would produce something that fits and says
+        # nothing. Compact rows are plain single-line text the client prints as-is.
+        width = self.adapter.info_panel_width()
+        if width and width <= 20:
+            npairs_alive = f"{alive}/{npairs}"
+            # popcount the BITMASK here. The row above uses SoulLinkState.player_badges,
+            # which is a count set only by the `status` event -- and Gen 1 never sends one,
+            # so it would always read 0/8. SLinkServer.player_badges holds the bitmask that
+            # hello and tick actually deliver.
+            mask = 0
+            try:
+                mask = int(self.player_badges.get(player_id, 0) or 0)
+            except (TypeError, ValueError):
+                mask = 0
+            badges = bin(mask).count("1")
+            compact = [
+                "SOUL LINK",
+                "",
+                f"PAIRS {npairs_alive}",
+                f"BADGES {badges}/8",
+                f"DEAD ZONES {len(dead_zones)}",
+            ]
+            if dead_zones:
+                compact.append("")
+                for area_id in dead_zones[:8]:
+                    compact.append(("-" + self.adapter.area_display_name(area_id))[:width])
+            return {"cmd": "link_panel", "rows": [r[:width] for r in compact]}
+
         return {"cmd": "link_panel", "rows": rows}
 
     def _cache_mon_info(self, key: str, detail: dict):
@@ -2992,7 +3050,7 @@ class SLinkServer:
         # Refresh the native in-game panel, but only when its content actually changed — this runs
         # on every tick, and the panel is a few hundred bytes. The client keeps the last one staged
         # in EWRAM so opening the menu needs no round-trip at all.
-        if self.adapter.supports_info_panel():
+        if self._player_has_panel(player_id):
             _panel = self._build_link_panel(player_id)
             _sig = json.dumps(_panel, sort_keys=True)
             if _sig != self._last_panel_sig.get(player_id):
