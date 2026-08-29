@@ -740,6 +740,23 @@ class RunManager:
         }
         _save_registry(runs)
         _write_run_meta(run)
+        # The server process learns about the contract through the run directory, which is
+        # the only thing the two already share (--data-dir). Written as its own file rather
+        # than folded into links.json so a run that is reset or rolled back keeps the
+        # contract: the ROMs did not change just because the links did.
+        contract = {
+            "upr_version": result["upr_version"],
+            "settings_sha256": result["settings_sha256"],
+            "categories": result["categories"],
+            "players": {p: {"fingerprint": v["fingerprint"], "seed": str(v["seed"]),
+                            "rom_sha1": v["sha1"]}
+                        for p, v in result["players"].items()},
+        }
+        try:
+            with open(os.path.join(MANAGER_DIR, run_id, "rom_contract.json"), "w") as f:
+                json.dump(contract, f, indent=2)
+        except OSError as exc:
+            log.warning("could not write rom_contract.json for %s: %s", run_id, exc)
         return web.json_response({"ok": True, "randomizer": run["randomizer"]})
 
     # ── Stream pin ─────────────────────────────────────────────────────────────

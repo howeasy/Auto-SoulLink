@@ -556,6 +556,11 @@ class Gen1Adapter(GameAdapter):
         return build_encounter_tables(
             content, _MAP_ID_TO_AREA, _INDEX_TO_NATIONAL, self.species_name)
 
+    def rom_content_fingerprint(self, payload: dict) -> str | None:
+        from server.adapters.gen1_rom_scan import content_fingerprint, parse_client_content
+        content = parse_client_content(payload)
+        return content_fingerprint(content["variant"], content["wild"], content["fishing"])
+
     def use_rom_encounters(self, tables: dict[str, dict[str, list[dict]]] | None) -> None:
         """Adopt ROM-derived tables for this adapter instance, or clear them.
 

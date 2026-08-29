@@ -1550,6 +1550,18 @@ class SLinkServer:
         # get_adapter() is not a singleton, so one adapter per player is cheap; absent an
         # entry here a player simply uses the run-global adapter and the shipped tables.
         self._player_adapters: dict[str, object] = {}
+
+        # ── Admission ─────────────────────────────────────────────────────────
+        # A run built from randomized ROMs records, per player, the fingerprint of the
+        # cartridge the Manager made for them. Until a client proves it is running that
+        # cartridge it is ADMITTED to connect and to say hello, and to nothing else --
+        # because every other event mutates rule state, and rule state built on the wrong
+        # ROM is worse than no run at all.
+        #
+        # A run with no contract has nothing to check and admits everyone, which is every
+        # vanilla run and the entire existing test suite.
+        self._rom_contract = self._load_rom_contract()
+        self.admission: dict[str, dict] = {}
         # Track live connections: player_id → {rom_type, last_event, connected}
         self.connected_players: dict[str, dict] = {}
         # Per-player display data (updated from events, used only for status page)
@@ -1664,6 +1676,72 @@ class SLinkServer:
         else:
             log.info("[%s] using this cartridge's own encounter tables (%d areas)",
                      player_id, len(tables))
+
+    def _load_rom_contract(self) -> dict | None:
+        """The randomized-ROM contract for this run, if the Manager wrote one."""
+        base = self._data_dir or DATA_DIR
+        path = os.path.join(base, "rom_contract.json")
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path) as f:
+                contract = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            # Fail CLOSED and say so. A contract we cannot read is not the same as no
+            # contract: the run was built from randomized ROMs and we have lost the only
+            # record of which ones, so admitting anyone would defeat the check entirely.
+            log.error("rom_contract.json is unreadable (%s) — every player will be "
+                      "rejected until it is fixed or removed", exc)
+            return {"unreadable": True, "players": {}}
+        log.info("run is bound to randomized ROMs (UPR %s, categories %s)",
+                 contract.get("upr_version", "?"), contract.get("categories", []))
+        return contract
+
+    def _decide_admission(self, player_id: str, msg: dict) -> dict:
+        """Re-run on EVERY hello, so a reconnect or a swapped ROM is re-checked.
+
+        Returns the admission record; never raises. A player who cannot be admitted is not
+        an error condition, it is a run that has not started for them yet.
+        """
+        if not self._rom_contract:
+            return {"state": "admitted", "reason": "no randomized-ROM contract for this run"}
+        if self._rom_contract.get("unreadable"):
+            return {"state": "rejected", "reason": "this run's rom_contract.json could not be read"}
+
+        expected = (self._rom_contract.get("players") or {}).get(player_id) or {}
+        want = expected.get("fingerprint")
+        if not want:
+            return {"state": "rejected",
+                    "reason": f"the contract names no cartridge for player {player_id}"}
+
+        payload = msg.get("rom_content")
+        if not payload:
+            return {"state": "rejected",
+                    "reason": "this run is bound to randomized ROMs, but the client did not "
+                              "report its cartridge — an older client, or a BizHawk build "
+                              "with no flat ROM domain"}
+        try:
+            got = self.adapter.rom_content_fingerprint(payload)
+        except Exception as exc:                      # noqa: BLE001
+            # Distinct from a mismatch on purpose: "unreadable report" and "wrong ROM" send
+            # whoever is debugging to different places.
+            return {"state": "rejected",
+                    "reason": f"the client's cartridge report could not be read: {exc}"}
+        if got is None:
+            return {"state": "admitted",
+                    "reason": "this generation cannot fingerprint its ROM; nothing to check"}
+        if got != want:
+            return {"state": "rejected",
+                    "reason": (f"this is not the cartridge built for player {player_id} "
+                               f"(reported {got[:12]}, expected {want[:12]})")}
+        return {"state": "admitted", "reason": "cartridge matches the contract"}
+
+    def is_admitted(self, player_id: str) -> bool:
+        # getattr for the same reason adapter_for uses it: some tests build an SLinkServer
+        # without running __init__, and the safe default for "no record" is admitted --
+        # a run with no contract must behave exactly as it always did.
+        return (getattr(self, "admission", {}).get(player_id, {})
+                .get("state", "admitted")) == "admitted"
 
     def adapter_for(self, player_id: str):
         """The adapter that describes THIS player's cartridge.
@@ -2581,7 +2659,21 @@ class SLinkServer:
         if event != "hello" and self.state.identity_error.get(player_id):
             return [{"cmd": "noop"}]
 
+        # Block everything but hello until the player's cartridge is admitted. Same shape as
+        # the identity gate above and for the same reason: only a hello can change the
+        # verdict, so letting anything else through would mutate rule state on evidence we
+        # have already decided not to trust. `tick` is NOT exempt -- it carries the party
+        # snapshot that diff_party turns into captures, which is exactly a semantic event.
+        if event != "hello" and not self.is_admitted(player_id):
+            return [{"cmd": "noop"}]
+
         if event == "hello":
+            verdict = self._decide_admission(player_id, msg)
+            if self.admission.get(player_id, {}).get("state") != verdict["state"]:
+                (log.info if verdict["state"] == "admitted" else log.warning)(
+                    "[%s] admission: %s — %s", player_id, verdict["state"], verdict["reason"])
+            self.admission[player_id] = verdict
+
             area    = msg.get("area_id", "")
             loc     = msg.get("loc_name", "")
             party_n = len(msg.get("party", []))
@@ -3252,6 +3344,13 @@ class SLinkServer:
                     "queued":         len(s.queued_commands.get(pid, [])),
                     "battle_state":   _enrich_battle_state(pid),
                     "identity_error": s.identity_error.get(pid, ""),
+                    # Surfaced rather than only logged: a player whose events are being
+                    # dropped needs to be told which cartridge the run expects, otherwise
+                    # the game simply appears not to be recording anything.
+                    "admission": getattr(self, "admission", {}).get(pid, {}).get(
+                        "state", "admitted"),
+                    "admission_reason": getattr(self, "admission", {}).get(pid, {}).get(
+                        "reason", ""),
                     "encounter_table": self._enc_table_for_status(
                         self.player_area_id.get(pid, "") or self.player_area.get(pid, ""),
                         pid,

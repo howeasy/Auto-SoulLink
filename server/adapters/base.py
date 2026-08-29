@@ -347,6 +347,20 @@ class GamePresentationAdapter(ABC):
         """
         return None
 
+    def rom_content_fingerprint(self, payload: dict) -> str | None:
+        """A digest of what a client reports about its own ROM, or None.
+
+        Used for admission: a run built from randomized ROMs records the fingerprint the
+        Manager computed when it made each one, and the server compares what the client
+        reports against it. Returning None means this generation cannot answer, and such a
+        run simply has nothing to check.
+
+        MUST RAISE on a malformed payload rather than returning a fingerprint of partial
+        data -- a value that happens to differ would read as "wrong ROM" when the truth is
+        "unreadable report", and those need different messages.
+        """
+        return None
+
     def ingest_rom_content(self, payload: dict) -> dict[str, dict[str, list[dict]]] | None:
         """Turn a client's report of its own ROM into encounter tables, or None.
 

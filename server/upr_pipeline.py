@@ -219,9 +219,14 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
             f"the two ROMs ended up with different categories randomized: "
             f"{results['a']['categories']} vs {results['b']['categories']}")
 
-    from server.adapters.gen1_rom_scan import profile_hash
+    from server.adapters.gen1_rom_scan import fingerprint_rom, profile_hash
     for player in ("a", "b"):
         results[player]["content_hash"] = profile_hash(results[player]["content_profile"])
+        # The fingerprint is the CLIENT-reproducible one: it covers only the tables a
+        # running client can read out of its own cartridge, which is what makes it usable
+        # as the admission check. content_hash is broader and no client could match it.
+        with open(results[player]["output"], "rb") as f:
+            results[player]["fingerprint"] = fingerprint_rom(f.read())
         del results[player]["content_profile"]        # large; the hash is what is kept
     if results["a"]["content_hash"] == results["b"]["content_hash"]:
         raise UprPipelineError(

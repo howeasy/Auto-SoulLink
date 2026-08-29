@@ -595,3 +595,39 @@ def build_encounter_tables(content: dict, map_to_area, index_to_natdex,
         if area_id:
             add(area_id, "Super Rod", _pad_to_slots(entries))
     return out
+
+
+def content_fingerprint(variant: str, wild: dict, fishing: dict) -> str:
+    """A digest of the tables a CLIENT can report, so both sides compute the same value.
+
+    Deliberately narrower than ``profile_hash``: it covers only wild encounters and fishing,
+    because that is all lua/games/gen1_rby.lua reads out of the cartridge. A hash that
+    included base stats could never be reproduced by a client and so could not be used to
+    answer the question this exists for -- "is the player running the ROM we made for them?"
+
+    Sensitive to species AND level in every slot, so a different seed produces a different
+    fingerprint. Insensitive to anything outside those tables, so a companion patch that
+    changes the file's SHA-1 without touching them still matches.
+    """
+    body = {
+        "variant": variant,
+        "wild": {str(k): v for k, v in sorted(wild.items())},
+        "fishing": {
+            "old_rod": fishing.get("old_rod") or [],
+            "good_rod": fishing.get("good_rod") or [],
+            "super_rod": {str(k): v for k, v in sorted((fishing.get("super_rod") or {}).items())},
+        },
+    }
+    return hashlib.sha256(
+        json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def fingerprint_rom(rom: bytes) -> str:
+    """The same fingerprint, computed from a ROM file rather than a client's report.
+
+    The Manager uses this when it builds a pair; the server uses ``content_fingerprint`` on
+    what the client sends. They must agree, which tests/unit/test_gen1_admission.py checks
+    by running both over the same ROM.
+    """
+    ident = identify(rom)
+    return content_fingerprint(ident["variant"], scan_wild(rom), scan_fishing(rom))
