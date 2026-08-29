@@ -676,6 +676,72 @@ class RunManager:
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
+    # ── Randomized ROM pairs ───────────────────────────────────────────────────
+
+    async def handle_randomize(self, request: web.Request) -> web.Response:
+        """POST /api/runs/{run_id}/randomize — build this run's pair of randomized ROMs.
+
+        Everything the players need to trust the pair is decided here and recorded on the
+        run: the settings file's hash, both seeds, both final ROM hashes and the scanned
+        content hashes. None of it is recoverable from the ROMs afterwards -- UPR's CLI has
+        no seed flag and writes the seed only to its log -- so if this step does not capture
+        it, nothing can.
+
+        Runs in a thread: the pipeline shells out to java twice and would otherwise block
+        the manager's event loop for several seconds.
+        """
+        run_id = request.match_info["run_id"]
+        runs = _load_registry()
+        run = _find_run(runs, run_id)
+        if run is None:
+            return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        try:
+            body = await request.json()
+        except Exception:
+            return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
+
+        jar = str(body.get("jar", "")).strip() or os.environ.get("SLINK_UPR_JAR", "")
+        settings = str(body.get("settings", "")).strip()
+        rom_a = str(body.get("rom_a", "")).strip()
+        rom_b = str(body.get("rom_b", "")).strip()
+        missing = [n for n, v in (("jar", jar), ("settings", settings),
+                                  ("rom_a", rom_a), ("rom_b", rom_b)) if not v]
+        if missing:
+            return web.json_response(
+                {"ok": False, "error": f"missing: {', '.join(missing)}"}, status=400)
+
+        out_dir = os.path.join(MANAGER_DIR, run_id, "roms")
+        from server.upr_pipeline import UprPipelineError, prepare_pair
+        try:
+            result = await asyncio.to_thread(
+                prepare_pair, jar, settings, {"a": rom_a, "b": rom_b}, out_dir)
+        except UprPipelineError as exc:
+            # A refusal is the feature, not a crash: say exactly what was wrong so the user
+            # can fix the settings or the ROMs rather than guessing.
+            log.warning("randomize %s refused: %s", run_id, exc)
+            return web.json_response({"ok": False, "error": str(exc)}, status=400)
+        except Exception as exc:                      # noqa: BLE001
+            log.exception("randomize %s failed", run_id)
+            return web.json_response({"ok": False, "error": f"unexpected: {exc}"}, status=500)
+
+        run["randomizer"] = {
+            "upr_version": result["upr_version"],
+            "settings_sha256": result["settings_sha256"],
+            "categories": result["categories"],
+            "created_at": datetime.now(UTC).isoformat(),
+            "players": {
+                p: {"seed": str(v["seed"]),      # 48-bit; a string so no JS float rounds it
+                    "rom_sha1": v["sha1"],
+                    "source_sha1": v["source_sha1"],
+                    "content_hash": v["content_hash"],
+                    "output": v["output"]}
+                for p, v in result["players"].items()
+            },
+        }
+        _save_registry(runs)
+        _write_run_meta(run)
+        return web.json_response({"ok": True, "randomizer": run["randomizer"]})
+
     # ── Stream pin ─────────────────────────────────────────────────────────────
 
     async def handle_stream_pin(self, request: web.Request) -> web.Response:
@@ -857,6 +923,7 @@ async def main(host: str, port: int):
     app.router.add_post("/api/runs/{run_id}/archive", manager.handle_archive)
     app.router.add_post("/api/runs/{run_id}/delete",  manager.handle_delete)
     app.router.add_get("/api/runs/{run_id}/launcher/{player}", manager.handle_launcher)
+    app.router.add_post("/api/runs/{run_id}/randomize", manager.handle_randomize)
     app.router.add_get("/api/runs/{run_id}/live",     manager.handle_run_live)
 
     # Stream pin API
