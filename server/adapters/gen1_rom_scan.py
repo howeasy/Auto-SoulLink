@@ -631,3 +631,37 @@ def fingerprint_rom(rom: bytes) -> str:
     """
     ident = identify(rom)
     return content_fingerprint(ident["variant"], scan_wild(rom), scan_fishing(rom))
+
+
+INTERNAL_POKEMON_COUNT = 190        # UPR's gen1_offsets.ini agrees; pret's table is 190 long
+
+
+def scan_pokedex_order(rom: bytes) -> dict[int, int]:
+    """internal species index -> national dex number, read from the cartridge.
+
+    EVERYTHING depends on this mapping. A wild slot, a party mon and a box mon all store the
+    INTERNAL index, and every species name, sprite and rule lookup goes through the
+    conversion to dex. data/games/gen1_rby/species_index.json ships it, and if a randomizer
+    ever reordered it every one of those would silently name the wrong Pokemon.
+
+    UPR reads PokedexOrder and never writes it -- there is no code path that does -- so the
+    shipped table stays correct for randomized ROMs. That is a claim about someone else's
+    software, so tests/unit/test_gen1_rom_scan.py checks it against real randomized output
+    rather than trusting it.
+
+    Entries of 0 are the MissingNo holes and are omitted.
+    """
+    _ident, syms = _syms_for(rom)
+    base = sym_to_offset(syms["PokedexOrder"])
+    if base + INTERNAL_POKEMON_COUNT > len(rom):
+        raise RomScanError("PokedexOrder runs past the end of the ROM")
+    out: dict[int, int] = {}
+    for i in range(INTERNAL_POKEMON_COUNT):
+        dex = rom[base + i]
+        if dex == 0:
+            continue                # an unused internal index
+        if dex > 151:
+            raise RomScanError(
+                f"PokedexOrder entry {i + 1} is {dex}, which is not a Gen 1 dex number")
+        out[i + 1] = dex            # the table is indexed from internal index 1
+    return out

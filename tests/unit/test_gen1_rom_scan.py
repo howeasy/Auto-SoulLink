@@ -26,7 +26,7 @@ import pytest
 
 from server.adapters.gen1_rom_scan import (
     BASE_STATS_RECORD, RomScanError, identify, profile_hash, scan, scan_base_stats,
-    scan_fishing, scan_wild, sym_to_offset,
+    scan_fishing, scan_pokedex_order, scan_wild, sym_to_offset,
 )
 
 _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
@@ -342,6 +342,30 @@ def test_golden_mew_is_stored_apart_on_red_and_blue():
     assert stats[1]["hp"] == 45 and stats[1]["attack"] == 49            # Bulbasaur
 
 
+# ── the index -> dex mapping everything else rests on ────────────────────────────────────
+@pytest.mark.parametrize("title", TITLES)
+def test_pokedex_order_matches_the_table_slink_ships(title):
+    """Wild slots, party mons and box mons all store the INTERNAL index, and every name,
+    sprite and rule lookup converts through this table. If the shipped copy were wrong,
+    everything would name the wrong Pokemon consistently enough to look deliberate."""
+    import json
+    with open(os.path.join(_REPO, "data", "games", "gen1_rby", "species_index.json"),
+              encoding="utf-8") as f:
+        shipped = {int(k): v for k, v in json.load(f)["index_to_national"].items()}
+    got = scan_pokedex_order(_rom(title))
+    assert got == shipped, f"{title}: the cartridge disagrees with species_index.json"
+    assert len(got) == 151
+
+
+def test_a_corrupt_pokedex_entry_is_refused():
+    from server.adapters.gen1_rom_scan import _load_syms
+    rom = bytearray(_rom("red"))
+    base = sym_to_offset(_load_syms()["pokered"]["symbols"]["PokedexOrder"])
+    rom[base] = 200                       # not a Gen 1 dex number
+    with pytest.raises(RomScanError, match="not a Gen 1 dex number"):
+        scan_pokedex_order(bytes(rom))
+
+
 # ── the profile hash ─────────────────────────────────────────────────────────────────────
 def test_profile_hash_is_stable_and_distinguishes_content():
     red, blue, yellow = (scan(_rom(t)) for t in TITLES)
@@ -488,6 +512,18 @@ class TestRandomizedRoms:
             for e in entries:
                 assert 1 <= e["level"] <= 100, (
                     "a level outside 1-100 means species and level were read swapped")
+
+    def test_the_index_to_dex_mapping_is_left_alone(self, tmp_path):
+        """The claim that makes species_index.json usable on a randomized cartridge.
+
+        UPR reads PokedexOrder and never writes it, but that is a statement about someone
+        else's software, so it is checked against real randomized output rather than
+        trusted. If it ever stopped holding, every species name and sprite in the UI would
+        be wrong on a randomized run, consistently enough to look intentional.
+        """
+        clean = scan_pokedex_order(_rom("red"))
+        for tag in ("a", "b"):
+            assert scan_pokedex_order(self._randomize(tmp_path, "red", tag)) == clean
 
     def test_the_settings_upr_applied_match_the_ones_we_asked_for(self, tmp_path):
         """tweakForRom() mutates settings in place and the CLI never reports it.
