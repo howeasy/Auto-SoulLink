@@ -440,6 +440,14 @@ M.PROFILES.blue_ap = setmetatable({variant_label = "Blue (AP)"},
 M.profiles = M.PROFILES
 
 -- ═══ Gift Areas ═══
+-- MUST MATCH server/adapters/gen1_rby.py's _GIFT_AREAS, name for name.
+-- The two halves do different jobs on the same set: Python decides dead-zoning, the ball
+-- gate and the three clauses; this one decides whether the client emits `no_catch` at all
+-- (and suppresses the new-encounter banner and the area HUD). They drifted, and the drift
+-- was silent -- `route_4` was dropped from the Python set as a real grass route, but left
+-- here, so Route 4 kept suppressing the only event that can dead-zone it and stayed
+-- re-attemptable forever. `tests/unit/test_gen1_gift_areas.py` now reads both files and
+-- requires them equal.
 M.GIFT_AREAS = {
     pallet_town = true,
     oaks_lab = true,
@@ -447,7 +455,8 @@ M.GIFT_AREAS = {
     saffron_city = true,
     silph_co = true,
     cinnabar_island = true,
-    route_4 = true,
+    mt_moon_pokecenter = true,    -- Magikarp salesman
+    celadon_mansion_roof = true,  -- Eevee
     celadon_game_corner = true,
     gift = true,
 }

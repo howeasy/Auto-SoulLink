@@ -1560,6 +1560,7 @@ class SLinkServer:
         #
         # A run with no contract has nothing to check and admits everyone, which is every
         # vanilla run and the entire existing test suite.
+        self._rom_contract_mtime: float | None = None
         self._rom_contract = self._load_rom_contract()
         self.admission: dict[str, dict] = {}
         # Track live connections: player_id → {rom_type, last_event, connected}
@@ -1678,10 +1679,18 @@ class SLinkServer:
                      player_id, len(tables))
 
     def _load_rom_contract(self) -> dict | None:
-        """The randomized-ROM contract for this run, if the Manager wrote one."""
+        """The randomized-ROM contract for this run, if the Manager wrote one.
+
+        Re-read rather than cached for the run's lifetime. The Manager writes this file from
+        `handle_randomize` while the server is already up, so a snapshot taken in __init__
+        made the gate depend on the ORDER the two were started in: a run whose server came
+        up first kept `_rom_contract = None` and admitted everyone, forever, with no way to
+        notice. The mtime check keeps it to one stat() per hello.
+        """
         base = self._data_dir or DATA_DIR
         path = os.path.join(base, "rom_contract.json")
         if not os.path.exists(path):
+            self._rom_contract_mtime = None
             return None
         try:
             with open(path) as f:
@@ -1696,6 +1705,18 @@ class SLinkServer:
         log.info("run is bound to randomized ROMs (UPR %s, categories %s)",
                  contract.get("upr_version", "?"), contract.get("categories", []))
         return contract
+
+    def _refresh_rom_contract(self) -> None:
+        """Pick up a contract the Manager wrote after this server started."""
+        base = self._data_dir or DATA_DIR
+        path = os.path.join(base, "rom_contract.json")
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            mtime = None
+        if mtime != getattr(self, "_rom_contract_mtime", "unset"):
+            self._rom_contract = self._load_rom_contract()
+            self._rom_contract_mtime = mtime
 
     def _decide_admission(self, player_id: str, msg: dict) -> dict:
         """Re-run on EVERY hello, so a reconnect or a swapped ROM is re-checked.
@@ -1737,11 +1758,24 @@ class SLinkServer:
         return {"state": "admitted", "reason": "cartridge matches the contract"}
 
     def is_admitted(self, player_id: str) -> bool:
-        # getattr for the same reason adapter_for uses it: some tests build an SLinkServer
-        # without running __init__, and the safe default for "no record" is admitted --
-        # a run with no contract must behave exactly as it always did.
-        return (getattr(self, "admission", {}).get(player_id, {})
-                .get("state", "admitted")) == "admitted"
+        """A player with no verdict yet is `contract_pending`, not admitted.
+
+        The default used to be "admitted" so that an uncontracted run behaved exactly as it
+        always had -- correct for that case, and wrong for the contracted one. Nothing
+        requires a hello before `_dispatch`: `handle_client` takes the player id from the
+        message itself, so a client whose first line is a `capture` (a reconnect after a
+        crash that lost the hello, or any client that reorders) found no record, took the
+        default, and mutated rule state on a cartridge nobody had checked.
+
+        The distinction is only meaningful when there IS something to check, so an
+        uncontracted run keeps the old behaviour exactly.
+        """
+        state = (getattr(self, "admission", {}).get(player_id) or {}).get("state")
+        if state is None:
+            # getattr for the same reason adapter_for uses it: some tests build an
+            # SLinkServer without running __init__.
+            return not getattr(self, "_rom_contract", None)
+        return state == "admitted"
 
     def _player_has_panel(self, player_id: str) -> bool:
         """Does THIS player's cartridge have the native panel?
@@ -2409,6 +2443,7 @@ class SLinkServer:
                     player_id_for_conn = player_id
 
                 # Update connection info
+                prev_conn = self.connected_players.get(player_id, {})
                 self.connected_players[player_id] = {
                     "connected":  True,
                     "last_event": msg.get("event", "?"),
@@ -2416,8 +2451,19 @@ class SLinkServer:
                     # `connected` only clears in the reader's finally block, so a crashed emulator
                     # or a slept laptop leaves the badge green forever. An age does not lie.
                     "last_seen_ts": time.time(),
-                    "rom_type":   self.connected_players.get(player_id, {}).get("rom_type", "?"),
+                    "rom_type":   prev_conn.get("rom_type", "?"),
                 }
+                # CARRY THE CARTRIDGE FACTS FORWARD. This dict is rebuilt from scratch on
+                # EVERY inbound message, but `panel`/`panel_abi` are written only on hello
+                # -- so the first tick after connecting erased them, `_player_has_panel`
+                # fell back to the adapter default, and Gen 1 (width 20, not 0) answered
+                # False. The panel payload therefore went out exactly once, at hello, and
+                # the cartridge showed the run frozen at connect time for the rest of the
+                # session. Gen 3 never noticed: it leaves info_panel_width at 0, so its
+                # fallback answered True.
+                for carried in ("panel", "panel_abi"):
+                    if carried in prev_conn:
+                        self.connected_players[player_id][carried] = prev_conn[carried]
                 if msg.get("event") == "hello":
                     self.connected_players[player_id]["rom_type"] = msg.get("rom_type", "?")
                     # Panel capability is per CARTRIDGE: on Gen 1 it comes from the
@@ -2726,11 +2772,25 @@ class SLinkServer:
             return [{"cmd": "noop"}]
 
         if event == "hello":
+            # Pick up a contract written after this server started, before deciding.
+            self._refresh_rom_contract()
             verdict = self._decide_admission(player_id, msg)
             if self.admission.get(player_id, {}).get("state") != verdict["state"]:
                 (log.info if verdict["state"] == "admitted" else log.warning)(
                     "[%s] admission: %s — %s", player_id, verdict["state"], verdict["reason"])
             self.admission[player_id] = verdict
+            if verdict["state"] != "admitted":
+                # STOP HERE. Recording the verdict was not enough: control used to fall
+                # straight into state.handle_event, which permanently locks
+                # player_identity, saves it, rebuilds party_keys from the rejected
+                # cartridge and QUEUES box_mon write commands back to the very client we
+                # just refused -- and then _ingest_rom_content adopted its encounter
+                # tables. Booting the wrong ROM once therefore did not merely fail to
+                # connect, it corrupted the run and wrote into the wrong save file.
+                self._log_event(player_id, "hello",
+                                f"REJECTED — {verdict['reason']}",
+                                msg.get("loc_name", "") or msg.get("area_id", ""))
+                return [{"cmd": "noop"}]
 
             area    = msg.get("area_id", "")
             loc     = msg.get("loc_name", "")

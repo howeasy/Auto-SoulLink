@@ -164,7 +164,7 @@ def test_empty_stats_block_is_refused():
     seed_boxed_mon(lua)
     ok, err = M.retrieveBoxMon(BOXED_KEY, _stats(lua))
     assert ok is False
-    assert "unusable stats block" in err, err
+    assert "incomplete stats block" in err, err
 
 
 def test_partial_stats_block_is_refused():
@@ -173,7 +173,7 @@ def test_partial_stats_block_is_refused():
     seed_boxed_mon(lua)
     ok, err = M.retrieveBoxMon(BOXED_KEY, _stats(lua, attack=30, defense=25))
     assert ok is False
-    assert "unusable stats block" in err, err
+    assert "incomplete stats block" in err, err
 
 
 def test_absent_stats_is_reported_differently_from_unusable():
@@ -185,7 +185,31 @@ def test_absent_stats_is_reported_differently_from_unusable():
     ok, err = M.retrieveBoxMon(BOXED_KEY, None)
     assert ok is False
     assert "no cached stats" in err, err
-    assert "unusable" not in err
+    assert "incomplete" not in err
+
+
+def test_the_level_and_maxhp_block_the_server_actually_sends_is_refused():
+    """THE shape that got past the first version of this guard.
+
+    server/state.py caches `{"level", "maxHP"}` for every Gen 1 capture -- the client's
+    capture event carries those two as top-level fields and no stats block at all. A guard
+    that asked only for maxHP and level therefore accepted it, applyPartyStats wrote those
+    two, and Attack/Defence/Speed/Special stayed at the 0 the memzero left: the exact
+    "silent, permanent save corruption" the refusal branch's own comment describes, arriving
+    through the guard meant to prevent it.
+
+    In this harness there is no ROM domain, so the cartridge rebuild cannot fire and the
+    call must refuse. On a real cartridge the rebuild fires instead and returns exact stats
+    -- proven by lua/tests/test_gen1_stat_rebuild.lua. Either way the mon never comes back
+    with zeroed stats, which is the whole invariant.
+    """
+    lua, M = runtime()
+    seed_boxed_mon(lua)
+    ok, err = M.retrieveBoxMon(BOXED_KEY, _stats(lua, level=27, maxHP=89))
+    assert ok is False, "a block with no fighting stats must not be accepted"
+    assert "incomplete stats block" in err, err
+    # And nothing half-written was left behind.
+    assert byte(lua, PARTY_BASE + 0x21) == 0, "level was written despite the refusal"
 
 
 def test_a_usable_stats_block_still_succeeds():

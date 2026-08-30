@@ -232,3 +232,98 @@ def test_the_dispatch_gate_blocks_everything_but_hello():
     # It has to run before the event handlers, not after them.
     assert src.index(guard) < src.index('elif event == "capture":')
     assert src.index(guard) < src.index('elif event == "tick":')
+
+
+# ── the gate has to hold before the hello, and stop the hello it refuses ──────────
+
+class TestTheGateItself:
+    """Three holes that made the gate inert or destructive, none of them in the
+    fingerprint comparison the rest of this file tests.
+
+    The comparison was right the whole time. What was wrong was everything around it:
+    when the verdict is consulted, what happens when there is no verdict yet, and what
+    happens after a verdict of `rejected`.
+    """
+
+    CONTRACT = {
+        "upr_version": "4.6.1",
+        "settings_sha256": "0" * 64,
+        "categories": ["wild"],
+        "players": {"a": {"fingerprint": "f" * 64, "seed": "1", "rom_sha1": "a" * 40},
+                    "b": {"fingerprint": "e" * 64, "seed": "2", "rom_sha1": "b" * 40}},
+    }
+
+    def _srv(self, tmp_path, contract=True):
+        from server.adapters.gen1_rby import Gen1Adapter
+        from server.server import SLinkServer
+        if contract:
+            with open(os.path.join(str(tmp_path), "rom_contract.json"), "w") as f:
+                json.dump(self.CONTRACT, f)
+        s = SLinkServer(data_dir=str(tmp_path))
+        s.state.adapter = s.adapter = Gen1Adapter(variant="red")
+        return s
+
+    def test_a_player_with_no_verdict_is_not_admitted_under_a_contract(self, tmp_path):
+        """Nothing requires a hello before _dispatch -- handle_client takes the player id
+        from the message itself. A client whose first line is a `capture` (a reconnect
+        after a crash that lost the hello) used to find no record, take the "admitted"
+        default and mutate rule state on an unchecked cartridge."""
+        s = self._srv(tmp_path)
+        assert s.is_admitted("a") is False
+
+    def test_an_uncontracted_run_is_completely_unchanged(self, tmp_path):
+        """The load-bearing control. Most runs have no contract and must behave exactly
+        as they always did -- a gate that fails closed on them would break every
+        vanilla run instead."""
+        s = self._srv(tmp_path, contract=False)
+        assert s.is_admitted("a") is True
+
+    def test_a_non_hello_event_from_an_unadmitted_player_is_dropped(self, tmp_path):
+        """Asserted on the rule state, not the return value: a capture that IS processed
+        also returns a noop when the partner has not caught yet, so the reply alone
+        cannot tell the two apart."""
+        s = self._srv(tmp_path)
+        s._dispatch("a", {"event": "capture", "key": "DEAD:BEEF:01",
+                          "area_id": "route_1", "species_id": 1, "level": 5})
+        assert not s.state.pending_captures.get("route_1"),             "the capture was recorded despite the player never being admitted"
+        assert not s.state.links
+
+    def test_a_rejected_hello_mutates_nothing_and_sends_no_write(self, tmp_path):
+        """THE severe one. Recording the verdict was not enough: control fell straight
+        into state.handle_event, which permanently locks player_identity, saves it,
+        rebuilds party_keys from the rejected cartridge and queues box_mon WRITE commands
+        back to the client we just refused -- and then _ingest_rom_content adopted its
+        encounter tables. Booting the wrong ROM once corrupted the run and wrote into
+        the wrong save file."""
+        s = self._srv(tmp_path)
+        cmds = s._dispatch("a", {
+            "event": "hello", "rom_type": "gen1_rby", "trainer_name": "RED",
+            "party": [{"key": "DEAD:BEEF:01", "species_id": 1, "level": 5}],
+            "rom_content": {"variant": "red", "wild": {}},
+        })
+        assert cmds == [{"cmd": "noop"}], "a rejected hello must return nothing to run"
+        assert not any(c.get("cmd") == "box_mon" for c in cmds)
+        assert s.state.player_identity.get("a") in (None, ""), \
+            "identity was locked to a cartridge we refused"
+        assert not s.state.trainer_names.get("a"), "trainer name was committed anyway"
+        assert not s.state.rom_type, "rom_type was committed from a refused cartridge"
+        assert s.admission["a"]["state"] == "rejected"
+
+    def test_an_admitted_hello_still_works(self, tmp_path):
+        """The other control: the early return must not swallow good helloes."""
+        s = self._srv(tmp_path, contract=False)
+        s._dispatch("a", {"event": "hello", "rom_type": "gen1_rby",
+                          "trainer_name": "RED", "party": []})
+        assert s.state.trainer_names.get("a") == "RED"
+
+    def test_a_contract_written_after_the_server_started_is_picked_up(self, tmp_path):
+        """_rom_contract was read once in __init__ and never again, while the Manager
+        writes it from handle_randomize with the server already up. Whether the gate
+        existed at all came down to which process started first."""
+        s = self._srv(tmp_path, contract=False)
+        assert s.is_admitted("a") is True          # no contract yet
+        with open(os.path.join(str(tmp_path), "rom_contract.json"), "w") as f:
+            json.dump(self.CONTRACT, f)
+        s._dispatch("a", {"event": "hello", "rom_type": "gen1_rby", "party": []})
+        assert s.admission["a"]["state"] == "rejected", \
+            "the contract written after startup was never noticed"

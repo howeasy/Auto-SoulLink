@@ -1186,11 +1186,19 @@ function M.retrieveBoxMon(key, stats)
     -- comment says "silent, permanent save corruption") was skipped entirely. The mon
     -- came back with maxHP 0 and every stat 0, then vanished from the party snapshot
     -- (filtered on maxHP > 0) while still occupying a slot.
-    -- maxHP and level are the two the caller cannot reconstruct from the 33-byte box
-    -- struct, so their presence is what makes a block usable at all.
+    -- ...AND THE CONTENT TEST HAS TO BE THE WHOLE BLOCK, NOT THE TWO OBVIOUS FIELDS.
+    -- Requiring only maxHP+level was still wrong, because that is exactly the shape the
+    -- server sends: state.py caches {"level", "maxHP"} for every Gen 1 capture and nothing
+    -- else. Such a block passes, applyPartyStats writes those two, and Attack/Defence/
+    -- Speed/Special stay at the 0 the memzero left -- the same corruption, through the
+    -- guard that was supposed to stop it. Demand every field the memzero wipes and the box
+    -- cannot supply; a partial block now falls through to the cartridge rebuild below,
+    -- which is exact.
     local reject_reason = nil
-    if cached and not (cached.maxHP and cached.level) then
-        reject_reason = "unusable stats block (no maxHP/level) for "
+    if cached and not (cached.maxHP and cached.level and cached.attack
+                       and cached.defense and cached.speed
+                       and (cached.spAtk or cached.spDef)) then
+        reject_reason = "incomplete stats block (need level, maxHP and all four stats) for "
         cached = nil
     end
     -- NO CACHE? REBUILD IT FROM THE CARTRIDGE BEFORE GIVING UP.
