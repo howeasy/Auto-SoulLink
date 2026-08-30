@@ -1916,8 +1916,15 @@ class SLinkServer:
         """
         if not area_id:
             return ""
+        # THIS PLAYER'S adapter, not the run-global one. Trainer parties and levels are an
+        # ALLOWED randomization category, so on a randomized pair the two cartridges can
+        # disagree about what a trainer fields -- and a widget built from whichever adapter
+        # the first hello happened to install would show one player the other's game.
+        # (Today only Gen 3 populates these, and Gen 1 returns [] so the widget renders
+        # nothing at all. The global lookup was still the wrong source to read from.)
+        adapter = self.adapter_for(player_id) if player_id else self.adapter
         try:
-            trainer_ids = self.adapter.trainers_for_area(area_id)
+            trainer_ids = adapter.trainers_for_area(area_id)
         except Exception:
             trainer_ids = []
         if not trainer_ids:
@@ -1926,7 +1933,7 @@ class SLinkServer:
         # Resolve briefs.
         briefs: list[tuple[int, dict]] = []
         for rt_id in trainer_ids:
-            brief = self.adapter.trainer_brief(rt_id)
+            brief = adapter.trainer_brief(rt_id)
             if brief:
                 briefs.append((rt_id, brief))
 
@@ -2647,13 +2654,39 @@ class SLinkServer:
                 f"BADGES {badges}/8",
                 f"DEAD ZONES {len(dead_zones)}",
             ]
+            # THE PAIRS THEMSELVES, which is what the screen is for. A count tells the
+            # player a number; the names and levels tell them which of their mons is tied
+            # to which of their partner's, and whether it is still alive -- the thing they
+            # opened the menu to find out.
+            live = [e for e in s.links if e.a and e.a.key and e.b and e.b.key]
+            if live:
+                compact.append("")
+                for e in live:
+                    mine = e.a if player_id == "a" else e.b
+                    theirs = e.b if player_id == "a" else e.a
+                    tag = "X" if e.status != LinkStatus.ALIVE else " "
+                    compact.append(f"{tag}{self._panel_name(mine)}-{self._panel_name(theirs)}"[:width])
+            # NAME the dead zones, all of them. They used to be capped at eight because a
+            # single screen holds eighteen rows and there was nowhere to put the rest; the
+            # panel pages now, so the cap only hid information the player can act on.
             if dead_zones:
                 compact.append("")
-                for area_id in dead_zones[:8]:
+                for area_id in dead_zones:
                     compact.append(("-" + self.adapter.area_display_name(area_id))[:width])
             return {"cmd": "link_panel", "rows": [r[:width] for r in compact]}
 
         return {"cmd": "link_panel", "rows": rows}
+
+    def _panel_name(self, mon) -> str:
+        """A mon's short name for the 20-column native panel.
+
+        Nickname when there is one, species otherwise, and never more than eight
+        characters: two of these plus a separator has to fit in twenty columns.
+        """
+        if mon is None:
+            return "?"
+        name = (mon.nickname or "").strip() or self.adapter.species_name(mon.species) or "?"
+        return name[:8]
 
     def _cache_mon_info(self, key: str, detail: dict):
         """Update the persistent per-monKey display cache from a detail dict.

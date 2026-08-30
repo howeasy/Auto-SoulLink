@@ -1516,6 +1516,11 @@ end
 M.PANEL_MAILBOX = 0xDEE2
 M.PANEL_CAPS    = M.PANEL_MAILBOX + 8
 M.PANEL_STATE   = M.PANEL_MAILBOX + 9
+-- +10 is the patch's: which page it wants. +11 is ours: how many there are, which only we
+-- can know because only we have seen how much text the server sent. The patch reads it to
+-- decide whether A turns a page or closes, so a one-page panel does not flicker.
+M.PANEL_PAGE    = M.PANEL_MAILBOX + 10
+M.PANEL_PAGES   = M.PANEL_MAILBOX + 11
 M.PANEL_CAP_BIT = 0x02
 
 M.PANEL_CLOSED, M.PANEL_AWAIT, M.PANEL_STAGED = 0, 1, 2
@@ -1574,9 +1579,29 @@ end
 --- Paint `rows` and hand the screen back to the patch.
 --- Rows past the bottom are dropped rather than wrapped: the patch reveals whatever is in
 --- the tile map, so silently spilling would corrupt the page rather than truncate it.
+--- How many screens `rows` needs. Always at least one, so an empty panel still opens.
+function M.panelPageCount(rows)
+    local n = rows and #rows or 0
+    if n <= 0 then return 1 end
+    return math.ceil(n / M.PANEL_ROWS)
+end
+
+--- Paint the page the patch asked for, and hand the screen back.
+---
+--- Rows past the bottom of a page are not dropped any more, they are the NEXT page: the
+--- patch owns a page number at +10 and we paint the slice it names. Every row is written
+--- even when the slice is short, because panelWriteRow pads to the full width -- so nothing
+--- of the previous page can survive into this one.
 function M.panelStage(rows)
+    local pages = M.panelPageCount(rows)
+    M.write_u8(M.PANEL_PAGES, math.min(pages, 255))
+
+    local page = M.read_u8(M.PANEL_PAGE)
+    if page >= pages then page = pages - 1 end      -- defensive: never index past the end
+    local first = page * M.PANEL_ROWS
+
     for i = 0, M.PANEL_ROWS - 1 do
-        M.panelWriteRow(i, rows[i + 1] or "")
+        M.panelWriteRow(i, (rows and rows[first + i + 1]) or "")
     end
     M.write_u8(M.PANEL_STATE, M.PANEL_STAGED)
 end

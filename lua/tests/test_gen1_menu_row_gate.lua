@@ -45,6 +45,7 @@ local function decode(byte)
     -- staged rows had not appeared when they plainly had.
     if byte >= 0xF6 and byte <= 0xFF then return string.char(byte - 0xF6 + 48) end  -- 0-9
     if byte == 0xF3 then return "/" end
+    if byte == 0xE3 then return "-" end
     if byte == 0x7F then return " " end
     return "."
 end
@@ -236,12 +237,22 @@ do
     t.check("the patch asks the client to paint", awaited,
             "panel state never reached AWAIT")
 
+    -- A TWO-PAGE PAYLOAD, so the page turn has somewhere to go. Rows past the first
+    -- eighteen used to be dropped on the floor by panelStage; they are page 2 now.
+    local PAGED = {"SLINK TEST", "", "PAIRS 3/5", "BADGES 2/8", "DEAD ZONES 1",
+                   "", "-VIRIDIAN FOREST"}
+    for i = #PAGED + 1, 26 do PAGED[i] = fmt("ROW %d", i) end
+    local LAST_ON_PAGE1 = fmt("ROW %d", 18)
+    local FIRST_ON_PAGE2 = fmt("ROW %d", 19)
+
     if awaited then
-        M.panelStage({"SLINK TEST", "", "PAIRS 3/5", "BADGES 2/8", "DEAD ZONES 1",
-                      "", "-VIRIDIAN FOREST"})
+        M.panelStage(PAGED)
         t.check("staging sets the handshake to STAGED",
                 M.read_u8(PANEL_STATE) == 2,
                 fmt("state is %d after panelStage", M.read_u8(PANEL_STATE)))
+        t.check("the client tells the patch how many pages there are",
+                M.read_u8(M.PANEL_PAGES) == 2,
+                fmt("published %d pages for 26 rows", M.read_u8(M.PANEL_PAGES)))
 
         -- The patch reveals whatever is in the tile map once staging completes.
         local shown = false
@@ -255,8 +266,71 @@ do
                 "NO CLIENT is still visible under the staged page")
         t.check("a later row landed too", find_row(screen_rows(), "VIRIDIAN FOREST") ~= nil,
                 "only the first rows were painted")
+        t.check("the whole first page is on screen",
+                find_row(screen_rows(), LAST_ON_PAGE1) ~= nil,
+                "row 18 did not land — the page is short")
+        t.check("page 2 is NOT on screen yet",
+                find_row(screen_rows(), FIRST_ON_PAGE2) == nil,
+                "a row from the next page leaked onto the first")
 
-        for r = 0, 8 do t.log(fmt("[staged] %2d |%s|", r, row_text(r))) end
+        for r = 0, 8 do t.log(fmt("[page 1] %2d |%s|", r, row_text(r))) end
+
+        -- ── A TURNS THE PAGE ────────────────────────────────────────────────────────
+        -- The patch whites the screen out, bumps its page byte and asks us to paint
+        -- again -- the same handshake as the first page, which is what makes a torn
+        -- page impossible on a turn as well as on an open.
+        -- PRESS UNTIL IT TAKES. SlinkWaitForButton settles for 20 frames before it looks
+        -- at the joypad, and the gate reaches this point ~1 frame after staging, so a
+        -- single press lands inside the settle and is discarded. This is the third time
+        -- that window has caught a test in this file; the close loop below already does
+        -- the same thing.
+        local re_awaited = false
+        for _ = 1, 12 do
+            t.hold("A", 6)
+            for _ = 1, 30 do
+                t.step(nil)
+                if M.panelIsAwaitingStage() then re_awaited = true break end
+            end
+            if re_awaited then break end
+        end
+        t.check("A asks for another page", re_awaited,
+                "the panel never came back to AWAIT after A")
+        t.check("the patch asked for page 2", M.read_u8(M.PANEL_PAGE) == 1,
+                fmt("page byte is %d", M.read_u8(M.PANEL_PAGE)))
+
+        if re_awaited then
+            M.panelStage(PAGED)
+            local turned = false
+            for _ = 1, 200 do
+                t.step(nil)
+                if find_row(screen_rows(), FIRST_ON_PAGE2) then turned = true break end
+            end
+            t.check("the second page is on screen", turned,
+                    "row 19 never appeared after the page turn")
+            t.check("the first page is gone", find_row(screen_rows(), "PAIRS 3/5") == nil,
+                    "page 1 is still showing underneath page 2")
+            for r = 0, 8 do t.log(fmt("[page 2] %2d |%s|", r, row_text(r))) end
+        end
+
+        -- ── B CLOSES ────────────────────────────────────────────────────────────────
+        -- On the LAST page A closes too, but B must close from anywhere; that
+        -- distinction is the whole reason this panel does not use
+        -- WaitForTextScrollButtonPress, which cannot tell the two apart.
+        local closed_by_b = false
+        for _ = 1, 12 do
+            t.hold("B", 6)
+            for _ = 1, 30 do
+                t.step(nil)
+                if find_row(screen_rows(), "ROW") == nil
+                   and find_row(screen_rows(), "PAIRS") == nil then closed_by_b = true break end
+            end
+            if closed_by_b then break end
+        end
+        t.check("B closes the panel from a page", closed_by_b,
+                "B did not close the panel")
+        t.check("closing resets the page for next time",
+                M.read_u8(M.PANEL_PAGE) == 0,
+                fmt("page byte left at %d", M.read_u8(M.PANEL_PAGE)))
     end
 
     -- Close it again so the checks below start from a menu, not a panel.

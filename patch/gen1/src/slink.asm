@@ -48,8 +48,14 @@ DEF SLINK_SFX_REQUEST  EQU SLINK_MAILBOX + 7
 ;          it from the ABI number -- which stops being true the moment one feature ships
 ;          without another
 ;   +9     panel state, the handshake between this code and the client
+;   +10    page number, ours to the client: which page it should paint
+;   +11    page COUNT, the client's to us: how many there are. We need it to know when A
+;          should close instead of advancing, and only the client knows how much text the
+;          server sent. 0 (never written) reads as one page.
 DEF SLINK_CAPS         EQU SLINK_MAILBOX + 8
 DEF SLINK_PANEL_STATE  EQU SLINK_MAILBOX + 9
+DEF SLINK_PANEL_PAGE   EQU SLINK_MAILBOX + 10
+DEF SLINK_PANEL_PAGES  EQU SLINK_MAILBOX + 11
 
 DEF SLINK_CAP_SFX      EQU 1 << 0
 DEF SLINK_CAP_PANEL    EQU 1 << 1
@@ -212,8 +218,16 @@ SlinkPanel::
 	xor a
 	ld [wUpdateSpritesEnabled], a
 
+	; Start at page 0, and clear the count so a stale one from a previous open cannot
+	; make A page into nothing.
+	xor a
+	ld [SLINK_PANEL_PAGE], a
+	ld [SLINK_PANEL_PAGES], a
+
+.page
 	; Draw the fallback FIRST, so a timeout shows something that explains itself rather
-	; than an empty screen. A client that is attached simply paints over it.
+	; than an empty screen. A client that is attached simply paints over it -- panelStage
+	; writes all eighteen rows, padded, so nothing of the previous page survives either.
 	call SlinkDrawFallback
 
 	; Hand the screen to the client and wait for it to say it has finished painting. The
@@ -221,14 +235,45 @@ SlinkPanel::
 	; doing it -- which is what makes a torn page impossible rather than unlikely.
 	ld a, SLINK_PANEL_AWAIT
 	ld [SLINK_PANEL_STATE], a
-	call SlinkWaitForStage
+	call SlinkWaitForStage      ; returns a = the state we gave up on
+	push af                     ; remember whether a client actually answered
 
 	call Delay3                 ; let the auto-BG transfers carry wTileMap into VRAM
 	call GBPalNormal            ; reveal, once and whole
-	call SlinkWaitForButton
+	call SlinkWaitForButton     ; returns a = the buttons that were pressed
+	ld c, a
+	pop af
 
+	; No client answered, so there are no pages to turn -- any button closes.
+	cp SLINK_PANEL_STAGED
+	jr nz, .close
+
+	; A advances, B and START close. This is the whole reason the panel does not use
+	; WaitForTextScrollButtonPress: that returns on A or B without saying which.
+	ld a, c
+	and SLINK_PAD_A
+	jr z, .close
+
+	; ...but only while there IS a next page. The client publishes the count, because only
+	; it knows how much text the server sent; a count of 0 means it never said, which we
+	; read as one page. Without this, A on a one-page panel would white out and repaint the
+	; same rows -- a flicker that looks like a fault.
+	ld a, [SLINK_PANEL_PAGE]
+	inc a
+	ld b, a
+	ld a, [SLINK_PANEL_PAGES]
+	cp b
+	jr c, .close                ; pages < page+1  -> that was the last one
+	jr z, .close                ; pages == page+1 -> ditto
+	ld a, b
+	ld [SLINK_PANEL_PAGE], a
+	call GBPalWhiteOut          ; hide the repaint, exactly as on the way in
+	jr .page
+
+.close
 	xor a
 	ld [SLINK_PANEL_STATE], a   ; closed: the client must stop painting
+	ld [SLINK_PANEL_PAGE], a
 
 	call GBPalWhiteOut
 	call LoadFontTilePatterns
@@ -254,6 +299,7 @@ SlinkPanel::
 ; is somehow still down. hJoyPressed's address was measured from CloseStartMenu's own bytes
 ; (`call Joypad` then `ldh a, [$FFB3]`), and the A/B/START bits from wMenuWatchedKeys
 ; reading 0xCB when the START menu is up.
+DEF SLINK_PAD_A   EQU $01                   ; bit 0, from wMenuWatchedKeys' 0xCB
 DEF SLINK_PAD_ANY EQU $01 | $02 | $08      ; A, B, START
 
 SlinkWaitForButton:
@@ -267,7 +313,7 @@ SlinkWaitForButton:
 	call Joypad
 	ldh a, [hJoyPressed]
 	and SLINK_PAD_ANY
-	ret nz
+	ret nz                      ; caller reads WHICH buttons out of a
 	jr .wait
 
 ; Poll the mailbox for up to SLINK_STAGE_TIMEOUT frames. Returns either way: a player
@@ -279,12 +325,13 @@ SlinkWaitForStage:
 .loop
 	ld a, [SLINK_PANEL_STATE]
 	cp SLINK_PANEL_STAGED
-	ret z
+	ret z                       ; a = STAGED: a client answered
 	push bc
 	call DelayFrame
 	pop bc
 	dec b
 	jr nz, .loop
+	ld a, [SLINK_PANEL_STATE]   ; a = whatever it still is: nobody answered
 	ret
 
 SlinkDrawFallback:
