@@ -454,9 +454,31 @@ class DuoRun:
         return extract_marks(read_result(self.scenario, inst) or "", tag)
 
     def _caught(self, inst):
-        for line in (read_result(self.scenario, inst) or "").splitlines():
+        """The key of a mon this instance caught, if it managed to name one.
+
+        TWO SOURCES, BECAUSE THE FIRST IS A RACE THE SCENARIO ALREADY GAVE UP ON.
+        `CAUGHT` is printed by the hunt only if it can still read the mon in the party --
+        and inside a dead zone the server force-faints and memorialises the capture so
+        quickly that it very often cannot. scenario_gen1_deadzone.lua says so in as many
+        words ("The return value is a bonus, not a requirement") and asserts on the ball
+        count and the memorial instead. This poller was left demanding the line the Lua
+        had stopped promising, so a run where the server won the race timed out after
+        1500s with both halves of the scenario reporting PASS.
+
+        `REFUSED <key> (<how>)` is the line the scenario does promise, and it carries the
+        full key whenever one was recovered at all.
+        """
+        text = read_result(self.scenario, inst) or ""
+        for line in text.splitlines():
             if "CAUGHT " in line:
                 return line.split("CAUGHT ", 1)[1].split()[0]
+        for line in text.splitlines():
+            if "REFUSED " in line:
+                key = line.split("REFUSED ", 1)[1].split()[0]
+                # "<retired before we could read it>" means no key was ever recovered.
+                if key.startswith("<"):
+                    return None
+                return key
         return None
 
     def _area(self, inst):
@@ -477,8 +499,10 @@ class DuoRun:
         if a != b:
             raise RuntimeError(
                 f"A is on {a} and B is on {b}. Soul Link pairs and locks BY AREA, so these "
-                f"scenarios need both fixtures on one encounter map — the Red/Blue battery "
-                f"saves share Route 1, the Yellow one sits on Route 3.")
+                f"scenarios need both fixtures on one encounter map. All six committed "
+                f"battery saves stand on Route 1 at (10,35) — Red, Blue AND Yellow, decoded "
+                f"in tests/unit/test_gen1_fixtures.py — so if these disagree the fixtures "
+                f"have been rebuilt somewhere else, not inherited from a title difference.")
         return a
 
     # ── assertions ───────────────────────────────────────────────────────────
@@ -502,20 +526,30 @@ class DuoRun:
         wait_for("B to report its area", lambda: self._area("b"), 900)
         self._shared_area()      # raises with a readable message if the fixtures disagree
 
-        b_key = wait_for("B to catch a wild mon inside the dead zone",
-                         lambda: self._caught("b"), self.cfg["timeout"])
+        # Wait on the RETIREMENT, not on B naming the mon. A ball leaving the bag plus the
+        # memorial growing is the rule under test; whether B could still read the mon it
+        # threw at is a race it does not need to win (see _caught).
+        wait_for("B to throw a ball inside the dead zone",
+                 lambda: "THREW " in (read_result(self.scenario, "b") or ""),
+                 self.cfg["timeout"])
         wait_for("B's client to retire the refused capture",
                  lambda: "REFUSED " in (read_result(self.scenario, "b") or ""), 900)
-        print(f"[duo] B caught {b_key} in the dead area and the client retired it")
+        b_key = self._caught("b")
+        print(f"[duo] B threw in the dead area and the client retired "
+              f"{b_key or 'a capture it could not read back'}")
 
         st = self._status() or {}
         got = (st.get("area_states") or {}).get(area)
         if got != "dead_zone":
             raise RuntimeError(f"{area} is {got!r} after B's capture, not dead_zone — the "
                                f"lock did not survive a capture attempt")
-        for link in st.get("links") or []:
-            if b_key in (link.get("a_key"), link.get("b_key")) and link.get("status") == "alive":
-                raise RuntimeError(f"B's dead-zone catch {b_key} formed a LIVE link")
+        # Key-specific check, only when B managed to name the mon. Every assertion around
+        # it is key-independent on purpose, so losing the race weakens the test by exactly
+        # one check instead of failing it.
+        if b_key:
+            for link in st.get("links") or []:
+                if b_key in (link.get("a_key"), link.get("b_key"))                         and link.get("status") == "alive":
+                    raise RuntimeError(f"B's dead-zone catch {b_key} formed a LIVE link")
         if ((st.get("pending_captures") or {}).get(area) or {}).get("b"):
             raise RuntimeError(f"B's dead-zone catch is pending in {area} — it was accepted")
         if not [lnk for lnk in (st.get("links") or [])
