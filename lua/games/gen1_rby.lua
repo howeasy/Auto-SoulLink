@@ -518,6 +518,36 @@ function M.is_uncatchable_battle(map_id, has_silph_scope)
     return not has_silph_scope
 end
 
+--- Is the CURRENT wild battle a SCRIPTED one (Snorlax, the birds, Mewtwo, the Ghost)?
+---
+--- From InitBattle (pokered/engine/battle/core.asm:6642):
+---     ld a, [wCurOpponent] / and a / jr z, DetermineWildOpponent
+--- so wCurOpponent == 0 means "roll one from the wild table" and any non-zero value is a
+--- battle a SCRIPT set up. InitBattleCommon then does `sub OPP_ID_OFFSET / jp c,
+--- InitWildBattle`, so under 200 is a species and 200+ is a trainer class. The field is
+--- zeroed at the end of every battle (engine/battle/end_of_battle.asm:53) alongside
+--- wIsInBattle, so it cannot go stale into the next encounter.
+---
+--- WHY THE RULES CARE. A static is not the route's wild encounter -- it is a fixed,
+--- one-off battle that happens to stand on that route. Counting it meant failing to catch
+--- Snorlax dead-zoned Route 12, spending the route's only encounter on a mon the route
+--- does not offer. Statics get their own area instead (see M.static_area_id) and are
+--- played under the ordinary rules there.
+function M.is_static_battle(cur_opponent)
+    if not cur_opponent then return false end
+    return cur_opponent > 0 and cur_opponent < 200
+end
+
+--- The area a scripted encounter belongs to: its map AND its species.
+---
+--- Both together, because neither alone is enough -- there are two Snorlax (Route 12 and
+--- Route 16), so species alone would merge them into one encounter, and a map can hold
+--- more than one scripted battle. Two players meeting the same scripted mon on the same
+--- map are meeting the same event, which is what makes them pair.
+function M.static_area_id(map_id, natdex)
+    return string.format("static_%d_%d", map_id or 0, natdex or 0)
+end
+
 function M.is_gift_area(area_id)
     if M.GIFT_AREAS[area_id] then return true end
     if area_id and area_id:sub(1, 5) == "gift_" then return true end

@@ -21,7 +21,8 @@
   │  whiteout       — all living party mons transition to HP = 0
   │  party_to_box   — party monKey disappears (deposited at PC)
   │  box_to_party   — previously known monKey returns to party from box
-  │  key_change     — evolution detected (species changes, DVs+OTID invariant)
+  │  key_change     — evolution (species changes, DVs+OTID invariant), or an
+  │                   in-game NPC trade (all three change) — the link MIGRATES
   │  tick           — automatic every 30 frames; carries ball_count
   └────────────────────────────────────────────────────────────────────────
 
@@ -499,6 +500,7 @@ local battle_area_id      = ""
 local battle_wild_species = nil   -- what the wild battle was, for no_catch
 local battle_wild_level   = nil
 local battle_uncatchable  = false -- the engine refuses capture (Tower ghosts, pre-Scope)
+local battle_static_area  = nil   -- a scripted encounter's own area, not the route's
 local captured_this_battle = false
 local post_battle_frames  = 0
 local POST_BATTLE_GRACE   = 15  -- frames to wait after battle before no_catch
@@ -911,7 +913,12 @@ local function on_new_mon(mon, slot, is_gift)
     local nickname = M.readPartyNickname(slot)
     if nickname ~= "" then nick_cache[mon.key] = nickname end
 
-    local area = last_area_id
+    -- A SCRIPTED encounter is caught in its OWN area, not the route's. The pair must be
+    -- consistent on both halves of the rule: if failing to catch Snorlax resolves
+    -- static_71_143 rather than route_12, then catching it has to link static_71_143 too --
+    -- otherwise catching it would consume Route 12's encounter, which is the very thing
+    -- this exists to prevent, just in the other direction.
+    local area = battle_static_area or last_area_id
     if is_gift and area == "" then
         -- PER-MAP, NOT A SHARED CONSTANT. This used to fall back to the literal
         -- "gift", so every scripted grant on a map that area_map.json did not
@@ -1001,6 +1008,37 @@ local function on_faint(mon)
     M.playSfx("faint")  -- Phase 7: no-op until profile.SFX_DISPATCH_ADDR set
 end
 
+-- ── In-game trade ─────────────────────────────────────────────────────────────
+--- The NPC took one of our mons and gave us another; the Soul Link pair MIGRATES.
+---
+--- A vanilla in-game trade removes a mon from the party and puts a different one in the
+--- same slot. If the outgoing mon was half of a link, the link has to follow the player --
+--- not be orphaned while the incoming mon is treated as a fresh wild catch. Read as a
+--- capture it would also consume the current route's encounter, for a mon the route never
+--- offered.
+---
+--- The server already migrates everything on a `key_change` -- the link, the key index,
+--- pending captures, party keys, the stats cache, bonus keys, pending memorials -- so all
+--- that was missing was noticing the trade at all.
+local function on_npc_trade(old_key, new_key, new_species_index, slot)
+    local natdex = G.toNatDex(new_species_index)
+    local nickname = M.readPartyNickname(slot)
+    all_known_keys[old_key] = nil
+    all_known_keys[new_key] = true
+    if nick_cache[old_key] then nick_cache[old_key] = nil end
+    if nickname ~= "" then nick_cache[new_key] = nickname end
+    send({
+        event = "key_change",
+        old_key = old_key,
+        new_key = new_key,
+        new_species = natdex,
+        new_nickname = nickname,
+        reason = "npc_trade",
+    }, "npc_trade:" .. old_key:sub(1, 9) .. "→" .. new_key:sub(1, 9), true)
+    console.log(fmt("[SLink-RBY] in-game trade: %s -> %s (link migrates)",
+                    old_key, new_key))
+end
+
 -- ── Evolution detection ───────────────────────────────────────────────────────
 local function on_evolution(old_key, new_key, new_species_index, slot)
     local natdex = G.toNatDex(new_species_index)
@@ -1054,15 +1092,24 @@ local function diff_party()
         end
     end
 
-    -- ── Evolution detection: same slot, different key, same DVs+OTID invariant
+    -- ── Slot occupant changed: evolution, or an in-game trade
+    -- Key format is DDDD:TTTT:II -- DVs, OT id, species index. Evolution keeps DVs and OT
+    -- and changes only the species, so the first nine characters are invariant. A trade
+    -- changes all three, because the mon is a different mon with a different original
+    -- trainer -- which is also how it is told apart from anything SLink itself wrote into
+    -- the slot (those keep our own OT id).
+    local my_ot = fmt("%04X", M.readPlayerId())
     for slot, cur in pairs(cur_party) do
         local prev = prev_party[slot]
-        if prev and prev.key ~= cur.key then
-            -- Compare invariant portion: "DDDD:TTTT" (first 9 chars)
+        if prev and prev.key ~= cur.key and not all_known_keys[cur.key] then
             local prev_inv = prev.key:sub(1, 9)
             local cur_inv  = cur.key:sub(1, 9)
-            if prev_inv == cur_inv and not all_known_keys[cur.key] then
+            if prev_inv == cur_inv then
                 on_evolution(prev.key, cur.key, cur.species_index, slot)
+            elseif cur.key:sub(6, 9) ~= my_ot and not sync_written_keys[cur.key] then
+                -- Someone else's mon appeared where ours was standing, and the server did
+                -- not put it there. That is an in-game trade.
+                on_npc_trade(prev.key, cur.key, cur.species_index, slot)
             end
         end
     end
@@ -1203,6 +1250,10 @@ local function diff_party()
 
     -- ── no_catch detection (on grace period expiry)
     if post_battle_frames == 1 and not captured_this_battle and battle_is_wild then
+        -- A scripted battle resolves ITS OWN area, never the route's -- otherwise failing
+        -- to catch Snorlax dead-zoned Route 12 and spent the route's only encounter on a
+        -- mon the route does not offer.
+        local battle_area_id = battle_static_area or battle_area_id
         if nuzlocke_active and battle_area_id ~= "" and not resolved_areas[battle_area_id]
                 -- A battle the engine would not let us catch is not a failed encounter.
                 -- Without this, every pre-Silph-Scope ghost in Pokemon Tower -- and there
@@ -1445,6 +1496,15 @@ local function on_frame()
         -- G.is_uncatchable_battle -- it is IsGhostBattle, transcribed.
         battle_uncatchable = battle_is_wild and G.is_uncatchable_battle
             and G.is_uncatchable_battle(cur_map, M.hasBagItem(G.ITEM_SILPH_SCOPE)) or false
+        -- A SCRIPTED encounter belongs to itself, not to the route it stands on. Read at
+        -- battle START because wCurOpponent is zeroed the moment the battle ends.
+        battle_static_area = nil
+        if battle_is_wild and G.is_static_battle and M.CUR_OPPONENT_ADDR then
+            local opp = M.read_u8(M.CUR_OPPONENT_ADDR)
+            if G.is_static_battle(opp) then
+                battle_static_area = G.static_area_id(cur_map, G.toNatDex(opp))
+            end
+        end
         captured_this_battle = false
         whiteout_sent = false
         console.log(fmt("[SLink-RBY] Battle START (%s) area=%s",
