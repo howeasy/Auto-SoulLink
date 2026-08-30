@@ -1277,7 +1277,15 @@ end
 --- and waits. Painting only in that window is what makes a torn page impossible -- the
 --- display is white for all of it. Doing nothing here is a valid outcome: the patch times
 --- out and the player sees "NO CLIENT", which is the truth.
+local panel_supported = nil   -- resolved once, from the capability bits
 local function service_panel()
+    -- ASK WHETHER THIS CARTRIDGE HAS A PANEL AT ALL, not just whether the byte says AWAIT.
+    -- On an unpatched ROM $DEEB is ordinary unallocated WRAM; if it ever happened to read 1
+    -- this would paint 360 tiles over whatever the player was looking at.
+    if panel_supported == nil then
+        panel_supported = (M.panelSupported and M.panelSupported()) or false
+    end
+    if not panel_supported then return end
     if not M.panelIsAwaitingStage or not M.panelIsAwaitingStage() then return end
     if not panel_rows or #panel_rows == 0 then return end
     M.panelStage(panel_rows)

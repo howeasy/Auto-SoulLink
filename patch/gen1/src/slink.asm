@@ -64,17 +64,38 @@ DEF TrackPlayTime      EQU $4DEE
 DEF TrackPlayTimeBank  EQU $06
 DEF Bankswitch         EQU $35D6
 
-; WHY THE SFX HOOK LIVES HERE. Gen 1 has NO RAM-writable sound trigger. `wNewSoundID`
-; ($C0EE) looks like one and is not: PlaySound takes the id in register `a` and only uses
-; that address as internal scratch (home/audio.asm:140-165), and nothing in the main loop
-; polls it. So a Lua-only SFX is impossible on Gen 1 — the id has to reach a `call`.
+; ── WHY THIS PATCH NO LONGER PLAYS SOUND ─────────────────────────────────────────────────
+; Gen 1 has NO RAM-writable sound trigger. `wNewSoundID` ($C0EE) looks like one and is not:
+; PlaySound takes the id in register `a` and uses that address only as internal scratch
+; (home/audio.asm:140-165), and nothing in the main loop polls it. So the id has to reach a
+; `call`, and VBlank was the obvious place — by the time VBlank reaches our hook it has
+; already switched to wAudioROMBank and run Audio1_UpdateMusic (home/vblank.asm:53-71).
 ;
-; VBlank is the ideal place for that call and costs us nothing extra, because by the time it
-; reaches our hook it has ALREADY switched to wAudioROMBank and run Audio1_UpdateMusic
-; (home/vblank.asm:53-71). We are in audio-bank context, immediately after the engine's own
-; per-frame audio work and before VBlank restores wVBlankSavedROMBank.
-DEF PlaySound          EQU $23B1   ; home bank, so directly callable
-DEF hSavedROMBank      EQU $FFB9   ; measured from the ROM, not from hram.asm ordering
+; Obvious, and wrong, for two reasons measured in the shipped ROM:
+;
+;   * SWALLOWED DURING FADES. PlaySound ($23B1) opens
+;         ld a,[wAudioFadeOutControl] / and a / jr z,.noFadeOut
+;         ld a,[wNewSoundID]          / and a / jr z,.done
+;     We pass the id in `a` and never set wNewSoundID, which is 0 in steady state — so
+;     during any fade the call returns without playing, and the request byte has already
+;     been cleared, so the event is simply lost. Fades run ~56-70 frames on map change and
+;     on battle start/end: precisely when capture, faint and whiteout fire.
+;
+;   * RE-ENTRANCY, in the ORDINARY case. `.noFadeOut` does `xor a / ld [wNewSoundID], a`
+;     and only calls the audio engine several instructions later. A VBlank landing anywhere
+;     in that window sees BOTH guard bytes clear, passes the guard, and re-enters a
+;     non-reentrant audio routine — corrupting wChannelSoundIDs and stamping our SFX id
+;     into wLastMusicSoundID. Our hook IS the VBlank handler, so we are the interrupt that
+;     lands there. No guard we can write on our side closes this: the window is inside
+;     PlaySound itself.
+;
+; Playing sound safely needs a main-thread dispatch point with its own displaced bytes and
+; queue-drain timing. Until one exists and passes a full state matrix, this build ships
+; PANEL ONLY and says so in the capability byte, rather than shipping audio that is silently
+; dropped a fifth of the time and corrupts the music the rest.
+;
+; The request byte is still CONSUMED (cleared) so a client that writes one does not leave
+; stale state in the mailbox; it simply never becomes a sound.
 
 SECTION "SLink Hook", ROMX[$4000], BANK[$3F]
 
@@ -91,7 +112,11 @@ SlinkHook::
 	ld [SLINK_MAILBOX + 3], a
 	ld a, SLINK_ABI_VERSION
 	ld [SLINK_MAILBOX + 4], a
-	ld a, SLINK_CAP_SFX | SLINK_CAP_PANEL
+	; Panel only. See the SFX note at the top of this file: the VBlank PlaySound path is
+	; not safe, so the capability it would advertise is not claimed. A client reads this
+	; byte rather than inferring features from the ABI number, which is why dropping a
+	; feature does not need an ABI bump.
+	ld a, SLINK_CAP_PANEL
 	ld [SLINK_CAPS], a
 
 	; 16-bit little-endian frame counter at +5. `inc [hl]` sets Z on wrap, so carry into
@@ -103,26 +128,11 @@ SlinkHook::
 	inc [hl]
 .noCarry
 
-	; ── SFX request ───────────────────────────────────────────────────────────────────
-	; Lua writes a sound id here; we consume it and play it. One-shot: the byte is cleared
-	; BEFORE the call, so a request can never be played twice even if PlaySound re-enters.
-	ld hl, SLINK_SFX_REQUEST
-	ld a, [hl]
-	and a
-	jr z, .noSfx
-	ld [hl], 0
-	ld b, a                     ; stash the id — PlaySound clobbers a
-
-	; PlaySound parks the caller's bank in hSavedROMBank. The main thread may itself be
-	; mid-PlaySound at the moment this interrupt fired, so save and restore that byte or we
-	; would corrupt its bank restore. PlaySound preserves hl/de/bc, so b survives the call.
-	ldh a, [hSavedROMBank]
-	push af
-	ld a, b
-	call PlaySound
-	pop af
-	ldh [hSavedROMBank], a
-.noSfx
+	; ── SFX request: drained, never played ────────────────────────────────────────────
+	; Clearing it keeps the mailbox honest for a client that still writes one. There is
+	; deliberately NO call here — see the note at the top of this file.
+	xor a
+	ld [SLINK_SFX_REQUEST], a
 
 	; Run the code the hook displaced, then hand control back to VBlank.
 	ld b, TrackPlayTimeBank
@@ -167,6 +177,7 @@ DEF PlaceString                  EQU $1955
 DEF DelayFrame                   EQU $20AF
 DEF Delay3                       EQU $3DD7
 DEF hTileAnimations              EQU $FFD7
+DEF wUpdateSpritesEnabled        EQU $CFCB
 DEF wTileMap                     EQU $C3A0
 DEF SCREEN_WIDTH                 EQU 20
 
@@ -185,6 +196,21 @@ SlinkPanel::
 	push af
 	xor a
 	ldh [hTileAnimations], a
+
+	; HIDE THE OVERWORLD SPRITES.
+	; UpdateSprites does not do this -- home/update_sprites.asm only RETURNS when the flag
+	; is not 1; it never clears OAM. So the player and every NPC stayed in the shadow OAM
+	; and GBPalNormal's rOBP0 restore drew them straight over the panel text, on any
+	; sprite-dense map. StartMenu_Pokemon (start_sub_menus.asm:16) shows the engine's own
+	; answer: write 0. PrepareOAMData (engine/gfx/sprite_oam.asm:5-12) reads 0, calls
+	; HideSprites once and latches $FF so it stops re-hiding. The Delay3 before the reveal
+	; is enough for that VBlank to run.
+	; Saved and restored rather than assumed to be 1, exactly as the item menu does
+	; (start_sub_menus.asm:409-422) -- the panel can be opened from states where it is not.
+	ld a, [wUpdateSpritesEnabled]
+	push af
+	xor a
+	ld [wUpdateSpritesEnabled], a
 
 	; Draw the fallback FIRST, so a timeout shows something that explains itself rather
 	; than an empty screen. A client that is attached simply paints over it.
@@ -209,6 +235,8 @@ SlinkPanel::
 	call LoadScreenTilesFromBuffer2
 	call RunDefaultPaletteCommand
 	call ReloadMapData
+	pop af
+	ld [wUpdateSpritesEnabled], a   ; sprites come back with the map
 	call LoadGBPal
 	pop af
 	ldh [hTileAnimations], a

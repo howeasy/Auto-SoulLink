@@ -88,16 +88,17 @@ t.check("the player can still walk on the patched ROM",
         M.read_u8(x_addr) ~= x0 or M.read_u8(y_addr) ~= y0,
         fmt("(%d,%d) -> (%d,%d)", x0, y0, M.read_u8(x_addr), M.read_u8(y_addr)))
 
--- 7. The SFX request byte actually plays a sound (ABI 2).
+-- 7. The mailbox advertises what this build can actually do — and does NOT claim SFX.
 --
--- This is the ONLY thing the patch does that a player can perceive, and the reason it exists:
--- Gen 1 has no RAM-writable sound trigger at all. wNewSoundID ($C0EE) is PlaySound's internal
--- scratch, not a polled mailbox, so writing it from Lua does nothing — the id has to reach a
--- `call`, which is what the VBlank hook does.
+-- This build ships PANEL ONLY. The VBlank PlaySound path that ABI 2 added is not safe, and
+-- the two reasons are both measurable in the shipped ROM (see the long note at the top of
+-- patch/gen1/src/slink.asm): PlaySound returns without playing whenever a music fade is
+-- running, and its `.noFadeOut` arm has a window where both guard bytes are clear, so a
+-- VBlank landing there re-enters a non-reentrant audio routine. Our hook IS that VBlank.
 --
--- Asserting on wChannelSoundIDs, not on the request byte: the request byte clearing only
--- proves our own code ran. The SFX channels changing proves the game's audio engine actually
--- accepted the sound. CHAN5-8 are the SFX channels (pret wChannelSoundIDs = $C026).
+-- So the assertions below are the inverse of what they used to be. The old ones fired from
+-- a quiescent overworld and were structurally blind to both failures: they could only ever
+-- see the case that works.
 local SFX_REQUEST      = MAILBOX + 7
 local CHANNEL_SOUND_IDS = 0xC026
 local SFX_TINK         = 0x8C   -- resolves identically in all three audio banks
@@ -105,13 +106,13 @@ local SFX_TINK         = 0x8C   -- resolves identically in all three audio banks
 t.check("ABI version byte is 3", M.read_u8(MAILBOX + 4) == 3,
         fmt("got %d", M.read_u8(MAILBOX + 4)))
 
--- CAPABILITIES ARE ADVERTISED, NOT INFERRED FROM THE ABI NUMBER. A build may ship the panel
--- without SFX or the other way round, so a client that reasoned "ABI 3 therefore both"
--- would be wrong the first time that happened. The bits say what this build can actually do.
+-- CAPABILITIES ARE ADVERTISED, NOT INFERRED FROM THE ABI NUMBER. This build dropping SFX
+-- while keeping ABI 3 is exactly the case that motivated the bits: a client reasoning
+-- "ABI 3 therefore both" would drive an audio path that is not there.
 local CAPS = MAILBOX + 8
 local CAP_SFX, CAP_PANEL = 0x01, 0x02
-t.check("the capability byte advertises SFX", M.read_u8(CAPS) & CAP_SFX ~= 0,
-        fmt("caps=0x%02X", M.read_u8(CAPS)))
+t.check("the capability byte does NOT advertise SFX", M.read_u8(CAPS) & CAP_SFX == 0,
+        fmt("caps=0x%02X — this build must not claim an unsafe audio path", M.read_u8(CAPS)))
 t.check("the capability byte advertises the panel", M.read_u8(CAPS) & CAP_PANEL ~= 0,
         fmt("caps=0x%02X", M.read_u8(CAPS)))
 
@@ -126,33 +127,23 @@ local function sfx_channels()
                M.read_u8(CHANNEL_SOUND_IDS + 6), M.read_u8(CHANNEL_SOUND_IDS + 7))
 end
 
-local before = sfx_channels()
+-- The request byte is still DRAINED, so a client that writes one leaves no stale state.
 M.write_u8(SFX_REQUEST, SFX_TINK)
-
--- The hook consumes the request on the next VBlank.
 local consumed = false
 for _ = 1, 10 do
     t.step(nil)
     if M.read_u8(SFX_REQUEST) == 0 then consumed = true break end
 end
-t.check("the SFX request byte is consumed by the hook", consumed,
+t.check("the SFX request byte is still consumed by the hook", consumed,
         fmt("still %#04x after 10 frames", M.read_u8(SFX_REQUEST)))
 
-local changed = false
-for _ = 1, 20 do
-    t.step(nil)
-    if sfx_channels() ~= before then changed = true break end
-end
-t.check("writing an SFX id actually starts a sound (wChannelSoundIDs changes)", changed,
-        fmt("CHAN5-8 %s -> %s", before, sfx_channels()))
-
--- A zero request must stay a no-op, or every frame would retrigger the last sound.
-M.write_u8(SFX_REQUEST, 0)
+-- ...and it must NOT reach the audio engine. This is the assertion that would have failed
+-- against the ABI-2 build, and it is the one that matters: no reachable PlaySound means no
+-- re-entrancy window to land in.
+local before = sfx_channels()
 for _ = 1, 30 do t.step(nil) end
-local idle = sfx_channels()
-for _ = 1, 30 do t.step(nil) end
-t.check("a zero request does not retrigger anything", sfx_channels() == idle,
-        fmt("%s -> %s", idle, sfx_channels()))
+t.check("a drained SFX request never starts a sound", sfx_channels() == before,
+        fmt("CHAN5-8 %s -> %s — the hook still reaches PlaySound", before, sfx_channels()))
 
 -- 8. And the game still runs normally afterwards — a botched `call` from inside an interrupt
 --    would corrupt the bank or the stack and the walk check below would hang or crash.

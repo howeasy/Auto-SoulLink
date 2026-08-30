@@ -1531,12 +1531,17 @@ M.PANEL_COLS, M.PANEL_ROWS = 20, 18
 --- would have to interpret, and there is no punctuation here worth that risk.
 --- Ranges verified against the ROM: "POK<e>DEX@" is 8F 8E 8A BA 83 84 97 50, so 'A' is $80;
 --- $7F is the space the menu rows are padded with; digits are the $F6-$FF block.
+---
+--- The whitelist and the PAYLOAD GENERATOR have to agree. '-' was missing here while
+--- server.py emitted dead-zone rows as "-" .. area_name, so every one of them silently
+--- lost its leading dash and rendered as an indented name.
 local function _tile_for(ch)
     local b = string.byte(ch)
     if b >= 65 and b <= 90  then return 0x80 + (b - 65) end   -- A-Z
     if b >= 97 and b <= 122 then return 0xA0 + (b - 97) end   -- a-z
     if b >= 48 and b <= 57  then return 0xF6 + (b - 48) end   -- 0-9
     if b == 47 then return 0xF3 end                           -- '/'
+    if b == 45 then return 0xE3 end                           -- '-' (charmap.asm:163)
     return 0x7F                                               -- space, and anything unknown
 end
 
@@ -1636,8 +1641,10 @@ end
 --
 -- Gen 1 has no RAM-writable sound trigger — `wNewSoundID` is PlaySound's internal scratch,
 -- not a polled mailbox — so an unpatched cartridge simply cannot play a sound from Lua and
--- SFX_DISPATCH_ADDR stays nil. The patched build adds a VBlank hook that consumes a sound id
--- from mailbox+7, which gives us a real dispatch register.
+-- SFX_DISPATCH_ADDR stays nil. ABI 2's patched build added a VBlank hook that consumed a
+-- sound id from mailbox+7; ABI 3 drains that byte without playing it, because the hook's
+-- PlaySound call was not safe. Whether a dispatch register exists is therefore a question
+-- for the capability bits, not the ABI number.
 --
 -- Profile-keyed on `companion_patch_mailbox`, so Gen 2 never runs this. Called once at
 -- startup; returns the detected ABI version, or nil when unpatched.
@@ -1648,8 +1655,18 @@ function M.detectCompanionPatch()
                             M.read_u8(mb + 2), M.read_u8(mb + 3))
     if tag ~= "SLNK" then return nil end
     local abi = M.read_u8(mb + 4)
-    -- ABI 1 was the beacon-only spike; the SFX request byte arrived in ABI 2.
-    if abi >= 2 then
+    -- ASK THE CAPABILITY BITS, NOT THE ABI NUMBER.
+    -- "ABI >= 2 therefore SFX" was true of every build that existed when it was written and
+    -- is false now: ABI 3 ships panel-only, because the VBlank PlaySound path it inherited
+    -- re-enters a non-reentrant audio routine (the long note in patch/gen1/src/slink.asm).
+    -- The bits exist precisely so a feature can be dropped without an ABI bump, and a client
+    -- that infers features from a version number cannot see that happen.
+    --
+    -- Cleared FIRST: redetection after a reset or a ROM reload must not leave a dispatch
+    -- address pointing into a layout that is no longer there.
+    M.SFX_DISPATCH_ADDR = nil
+    local caps = M.read_u8(mb + 8)
+    if abi >= 2 and caps ~= 0 and caps ~= 0xFF and (caps & 0x01) ~= 0 then
         M.SFX_DISPATCH_ADDR = mb + 7
     end
     return abi
@@ -1689,10 +1706,10 @@ end
 
 -- Read the active enemy battler's 4 moves + 4 PP bytes. Returns
 -- {moves=[id1..4], pp=[cur1..4]}, or nil if the profile doesn't declare
--- ENEMY_BATTLE_MOVES_ADDR. Used by build_enemy_snapshot in battle. Enemy PP
--- is treated as raw (no PP-Up encoding) regardless of party-struct encoding —
--- the active battler's PP byte holds the live current PP and PP-Up doesn't
--- need to be displayed for display-only enemy info.
+-- ENEMY_BATTLE_MOVES_ADDR. Used by build_enemy_snapshot in battle. The encoding is a
+-- separate profile key because the battle struct is not always laid out like the party
+-- one -- but on Gen 1 it IS: the engine copies PP straight across and masks with PP_MASK
+-- everywhere it reads it, so the PP-Up bits are present in both.
 function M.readEnemyBattleMovesAndPP()
     if not M.ENEMY_BATTLE_MOVES_ADDR or not M.ENEMY_BATTLE_PP_ADDR then return nil end
     local moves, pp = {}, {}
