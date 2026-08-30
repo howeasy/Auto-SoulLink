@@ -1834,7 +1834,10 @@ class SLinkServer:
         for method, entries in enc.items():
             if not entries:
                 continue
-            icon = self._METHOD_ICON.get(method, "")
+            # A multi-floor dungeon labels its methods "Grass B1F" / "Water B4F", so the
+            # icon is looked up on the BASE method. Without this a floor loses its icon
+            # and reads as a different kind of encounter from the one above it.
+            icon = self._METHOD_ICON.get(method.split(" ")[0], "")
             label = f"{icon} {method}" if icon else method
             rows = ""
             for e in entries:

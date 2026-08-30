@@ -151,7 +151,11 @@ def test_a_clean_rom_reproduces_the_shipped_tables(title):
     """
     built = _tables_from_rom(title)
     shipped = _shipped(title)
-    grass_water = {a: {m: v for m, v in b.items() if m in ("Grass", "Water")}
+    # `m.split(" ")[0]`, because a multi-floor dungeon's methods carry the floor:
+    # "Grass B1F", "Water B4F". An exact-name filter dropped every such area, which made
+    # this control quietly stop covering seven of them. Super Rod is still excluded --
+    # the shipped file has no fishing at all, which the two tests below pin.
+    grass_water = {a: {m: v for m, v in b.items() if m.split(" ")[0] in ("Grass", "Water")}
                    for a, b in built.items()}
     grass_water = {a: b for a, b in grass_water.items() if b}
 
@@ -177,21 +181,27 @@ def test_names_come_from_the_adapter_not_the_generator():
         "the shipped file changed; this test exists to document that it disagrees")
 
 
-def test_a_method_the_generator_drops_is_recovered():
-    """gen_gen1_encounters.py takes the first MAP per area and skips later floors whole, so
-    a method only later floors have disappears. Building per (area, method) keeps it.
+def test_later_floors_are_no_longer_dropped():
+    """This test used to assert that the SCANNER recovered a table the generator dropped.
 
-    Yellow's Seafoam Islands is the case: the first map id has grass only, and the surfing
-    table on a later floor is genuinely reachable in game.
+    It does not need to any more: gen_gen1_encounters.py took the first MAP per area and
+    skipped later floors whole, so twenty of the ROM's fifty-nine wild tables were
+    unreachable — including Yellow's Seafoam surfing tables, which live on B3F and B4F while
+    the first map has grass only. The generator now emits one method per floor, so the fix
+    is at the source and both paths agree (which `test_a_clean_rom_reproduces_the_shipped_tables`
+    checks in full).
+
+    What is pinned here is the property that made it worth doing: a multi-floor dungeon
+    exposes every floor, and a method that exists only on a later floor is present.
     """
-    built = _tables_from_rom("yellow")
-    assert "Water" in built["seafoam_islands"], "the recovered surfing table went missing"
-    assert "Water" not in _shipped("yellow")["seafoam_islands"], (
-        "the shipped file gained it; this test's premise is gone")
-    assert built["seafoam_islands"]["Grass"] == _shipped("yellow")["seafoam_islands"]["Grass"] \
-        or _strip_names({"x": built["seafoam_islands"]})["x"]["Grass"] == \
-        _strip_names({"x": _shipped("yellow")["seafoam_islands"]})["x"]["Grass"], (
-        "recovering Water must not disturb Grass")
+    shipped = _shipped("yellow")["seafoam_islands"]
+    floors = {m.split(" ", 1)[1] for m in shipped if " " in m}
+    assert floors == {"1F", "B1F", "B2F", "B3F", "B4F"}, f"got {sorted(floors)}"
+    assert any(m.startswith("Water") for m in shipped), (
+        "the surfing table that only exists on a later floor is missing again")
+
+    # And a single-map area keeps the plain, unsuffixed labels it always had.
+    assert set(_shipped("yellow")["route_1"]) == {"Grass"}
 
 
 @pytest.mark.parametrize("title", TITLES)
@@ -204,7 +214,8 @@ def test_percentages_sum_to_100_per_method(title):
 
 def test_super_rod_is_added_where_the_shipped_tables_have_no_fishing_at_all():
     """The shipped file only ever carries Grass and Water, so fishing is invisible today."""
-    assert all(set(b) <= {"Grass", "Water"} for b in _shipped("red").values())
+    assert all({m.split(" ")[0] for m in b} <= {"Grass", "Water"}
+               for b in _shipped("red").values())
     built = _tables_from_rom("red")
     assert sum(1 for b in built.values() if "Super Rod" in b) > 10
 

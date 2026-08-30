@@ -658,11 +658,18 @@ def build_encounter_tables(content: dict, map_to_area, index_to_natdex,
     a separate piece of work.
     """
     out: dict = {}
+    floors = _floor_labels()
 
-    def add(area_id: str, method: str, slots: list[dict]) -> None:
+    def add(area_id: str, method: str, slots: list[dict], map_id: int | None = None) -> None:
+        # ONE RULE AREA PER DUNGEON, BUT EVERY FLOOR'S TABLE -- the same split
+        # tools/gen_gen1_encounters.py performs, using the labels it publishes, because a
+        # clean ROM scanned here has to reproduce the shipped file exactly. That equality is
+        # the known-positive control for this whole scanner.
+        if map_id is not None:
+            method += floors.get(str(map_id), "")
         block = out.setdefault(area_id, {})
         if method in block:
-            return                          # first-wins
+            return                          # first-wins WITHIN a floor
         entries = []
         for agg in aggregate_slots(slots):
             natdex = index_to_natdex.get(agg["species_index"])
@@ -689,7 +696,7 @@ def build_encounter_tables(content: dict, map_to_area, index_to_natdex,
         rec = content["wild"][map_id]
         for method, key in (("Grass", "grass"), ("Water", "water")):
             if rec[key]:
-                add(area_id, method, rec[key]["slots"])
+                add(area_id, method, rec[key]["slots"], map_id)
 
     fishing = content.get("fishing") or {}
     for map_id, entries in sorted((fishing.get("super_rod") or {}).items()):
@@ -697,6 +704,27 @@ def build_encounter_tables(content: dict, map_to_area, index_to_natdex,
         if area_id:
             add(area_id, "Super Rod", _pad_to_slots(entries))
     return out
+
+
+_FLOOR_LABELS: dict[str, str] | None = None
+
+
+def _floor_labels() -> dict[str, str]:
+    """map id -> " B1F", as published by tools/gen_gen1_encounters.py.
+
+    Loaded lazily and cached. An absent file degrades to unsuffixed methods, which is the
+    pre-floor behaviour: worse, but not wrong.
+    """
+    global _FLOOR_LABELS
+    if _FLOOR_LABELS is None:
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "..", "data", "games", "gen1_rby", "floor_labels.json")
+        try:
+            with open(os.path.normpath(path), encoding="utf-8") as f:
+                _FLOOR_LABELS = json.load(f)
+        except (OSError, ValueError):
+            _FLOOR_LABELS = {}
+    return _FLOOR_LABELS
 
 
 def content_fingerprint(variant: str, wild: dict, fishing: dict) -> str:

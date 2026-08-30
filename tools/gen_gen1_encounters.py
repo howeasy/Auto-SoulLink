@@ -26,9 +26,32 @@ import sys
 
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO = os.path.normpath(os.path.join(_THIS_DIR, ".."))
-_PRET = os.path.join(_REPO, ".cache", "pret", "pokered")
-_PRET_YELLOW = os.path.join(_REPO, ".cache", "pret", "pokeyellow")
+def _find_pret(name: str) -> str:
+    """Locate a decomp checkout, searching upward from the repo.
+
+    A git WORKTREE has no .cache of its own — it lives under the main repo's
+    .claude/worktrees/, so the decomps are several directories up. Without this the
+    generator cannot run in a worktree at all.
+    """
+    env = os.environ.get("SLINK_PRET_DIR" if name == "pokered" else "SLINK_PRET_YELLOW_DIR")
+    if env:
+        return env
+    d = _REPO
+    for _ in range(6):
+        cand = os.path.join(d, ".cache", "pret", name)
+        if os.path.isdir(cand):
+            return cand
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    return os.path.join(_REPO, ".cache", "pret", name)
+
+
+_PRET = _find_pret("pokered")
+_PRET_YELLOW = _find_pret("pokeyellow")
 _OUT = os.path.join(_REPO, "data", "games", "gen1_rby", "encounter_tables.json")
+_FLOORS_OUT = os.path.join(_REPO, "data", "games", "gen1_rby", "floor_labels.json")
 _AREA_MAP = os.path.join(_REPO, "data", "games", "gen1_rby", "area_map.json")
 _SPECIES_INDEX = os.path.join(_REPO, "data", "games", "gen1_rby", "species_index.json")
 
@@ -94,6 +117,25 @@ def parse_wild_pointers(path: str) -> list[tuple[int, str]]:
                 out.append((idx, m.group(1)))
                 idx += 1
     return out
+
+
+def floor_label(label: str, area_id: str, map_id_to_area=None, map_id=None) -> str:
+    """A short floor name for a multi-map area, from the wild-data label.
+
+    The labels carry it already -- `MtMoonB1FWildMons`, `SeafoamIslandsB4FWildMons`,
+    `VictoryRoad2FWildMons` -- so this strips the `WildMons` suffix and the area's own
+    CamelCase prefix and keeps what is left. Falls back to the bare label when nothing
+    recognisable remains, which is still more informative than silently dropping the floor.
+    """
+    name = label[:-len("WildMons")] if label.endswith("WildMons") else label
+    # The area prefix is the label with the floor removed; comparing CamelCase to
+    # snake_case directly is fragile, so compare on letters only.
+    flat_area = area_id.replace("_", "").lower()
+    i = 0
+    while i < len(name) and name[:i + 1].lower() == flat_area[:i + 1]:
+        i += 1
+    rest = name[i:]
+    return rest or name
 
 
 def find_map_asm(label: str, repo: str = _PRET) -> str | None:
@@ -199,8 +241,32 @@ def build_variant(repo: str, defines: frozenset[str], index_to_natdex: dict[int,
     )
     pointers = parse_wild_pointers(os.path.join(repo, "data", "wild", "grass_water.asm"))
 
-    # First-wins: collapse multi-floor dungeons to canonical area_id
+    # ONE RULE AREA PER DUNGEON, BUT EVERY FLOOR'S TABLE.
+    # This used to be first-wins: a dungeon spans several maps, they all resolve to one
+    # area_id, and only the first map's table survived. Twenty of the fifty-nine tables in
+    # the ROM were therefore unreachable -- Mt. Moon's B1F and B2F, all four Seafoam
+    # basements, Victory Road 2F and 3F, both Rock Tunnel floors, and so on. A player
+    # standing on B2F was shown 1F's encounters, which is worse than showing none.
+    #
+    # The area_id is NOT split, deliberately: it is the unit the Soul Link rules lock and
+    # dead-zone, and splitting it would silently change what a run means. Instead the floor
+    # goes on the METHOD axis, which is already a display grouping -- "Grass" becomes
+    # "Grass B1F" for a multi-floor area and stays plain "Grass" for the 26 areas that are
+    # a single map. Nothing that looks a table up by area_id sees any change.
     areas: dict[str, dict] = {}
+    # map_id -> " B1F", published so the ROM SCANNER can label a randomized cartridge's
+    # floors the same way. Both paths have to agree exactly: a clean ROM scanned at runtime
+    # must reproduce this file byte for byte, which is the known-positive control that
+    # proves the scanner reads real structure rather than something plausible.
+    floor_suffix_by_map: dict[int, str] = {}
+    # area_id -> how many maps carry wild data, so single-map areas keep unsuffixed labels.
+    floors_per_area: dict[str, int] = {}
+    for _mid, _label in pointers:
+        if _label == "NothingWildMons":
+            continue
+        _aid = map_id_to_area.get(_mid)
+        if _aid:
+            floors_per_area[_aid] = floors_per_area.get(_aid, 0) + 1
     skipped_unknown_area: list[tuple[int, str]] = []
     skipped_unknown_species: set[str] = set()
 
@@ -211,18 +277,23 @@ def build_variant(repo: str, defines: frozenset[str], index_to_natdex: dict[int,
         if not area_id:
             skipped_unknown_area.append((map_id, label))
             continue
-        if area_id in areas:
-            # First-wins; later floors of the same area are skipped.
-            continue
         asm_path = find_map_asm(label, repo)
         if not asm_path:
             sys.stderr.write(f"WARN: no asm for label {label} (map_id {map_id})\n")
             continue
         grass_rate, grass, water_rate, water = parse_map_asm(asm_path, defines)
 
-        block: dict[str, list[dict]] = {}
-        for method, rate, entries in (("Grass", grass_rate, grass),
-                                       ("Water", water_rate, water)):
+        # The floor suffix comes from the wild-data label, which carries it already
+        # (MtMoonB1FWildMons, SeafoamIslandsB4FWildMons). Only used when the area has more
+        # than one map, so the common case reads exactly as it always did.
+        suffix = ""
+        if floors_per_area.get(area_id, 0) > 1:
+            suffix = " " + floor_label(label, area_id, map_id_to_area, map_id)
+            floor_suffix_by_map[map_id] = suffix
+
+        block: dict[str, list[dict]] = areas.setdefault(area_id, {})
+        for method, rate, entries in (("Grass" + suffix, grass_rate, grass),
+                                       ("Water" + suffix, water_rate, water)):
             if rate == 0 or not entries:
                 continue
             agg = aggregate(entries)
@@ -246,10 +317,10 @@ def build_variant(repo: str, defines: frozenset[str], index_to_natdex: dict[int,
             if method_entries:
                 method_entries.sort(key=lambda x: (-x["rate"], x["species_id"]))
                 block[method] = method_entries
-        if block:
-            areas[area_id] = block
+        if not block:
+            areas.pop(area_id, None)
 
-    return areas, skipped_unknown_area, skipped_unknown_species
+    return areas, skipped_unknown_area, skipped_unknown_species, floor_suffix_by_map
 
 
 # variant -> (repo path, rgbasm defines). Yellow is its own decomp and has no conditionals.
@@ -294,9 +365,11 @@ def main() -> int:
 
     out: dict[str, dict] = {}
     problems: list[str] = []
+    floor_suffixes: dict[int, str] = {}
     for variant, (repo, defines) in VARIANTS.items():
-        areas, skipped_area, skipped_species = build_variant(
+        areas, skipped_area, skipped_species, floors = build_variant(
             repo, defines, index_to_natdex, map_id_to_area)
+        floor_suffixes.update(floors)
         out[variant] = areas
         problems += _check_rates(variant, areas)
         print(f"{variant}: {len(areas)} areas")
@@ -318,6 +391,13 @@ def main() -> int:
         json.dump(out, f, indent=2, ensure_ascii=False)
         f.write("\n")
     print(f"Wrote {_OUT} (per-variant: {', '.join(out)})")
+
+    # Published for server/adapters/gen1_rom_scan.py, which labels a RANDOMIZED cartridge's
+    # floors and must produce identical keys -- the clean-ROM control asserts the two agree.
+    with open(_FLOORS_OUT, "w", encoding="utf-8") as f:
+        json.dump({str(k): v for k, v in sorted(floor_suffixes.items())}, f, indent=2)
+        f.write("\n")
+    print(f"Wrote {_FLOORS_OUT} ({len(floor_suffixes)} multi-floor maps)")
     return 0
 
 

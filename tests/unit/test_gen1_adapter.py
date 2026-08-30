@@ -685,3 +685,67 @@ def test_memorial_box_index_is_box_12(adapter):
     emits memorial entries with box=11.
     """
     assert adapter.memorial_box_index == 11
+
+
+# ── multi-floor dungeons ─────────────────────────────────────────────────────────────
+
+def _all_shipped():
+    import json as _json
+    import os as _os
+    repo = _os.path.normpath(_os.path.join(
+        _os.path.dirname(_os.path.abspath(__file__)), "..", ".."))
+    with open(_os.path.join(repo, "data", "games", "gen1_rby", "encounter_tables.json"),
+              encoding="utf-8") as f:
+        return _json.load(f)
+
+
+def test_every_floor_of_a_multi_floor_dungeon_is_reachable():
+    """Twenty of the ROM's fifty-nine wild tables used to be unreachable.
+
+    `gen_gen1_encounters.py` took the first MAP per area and skipped later floors whole, so
+    a player standing on Mt. Moon B2F was shown 1F's encounters — worse than showing none,
+    because it looks authoritative. The area_id is deliberately NOT split (it is the unit the
+    rules lock and dead-zone); the floor goes on the method axis instead.
+    """
+    red = _all_shipped()["red"]
+    expected = {
+        "mt_moon": {"1F", "B1F", "B2F"},
+        "seafoam_islands": {"1F", "B1F", "B2F", "B3F", "B4F"},
+        "victory_road": {"1F", "2F", "3F"},
+        "rock_tunnel": {"1F", "B1F"},
+        "cerulean_cave": {"1F", "2F", "B1F"},
+    }
+    for area, floors in expected.items():
+        got = {m.split(" ", 1)[1] for m in red[area] if " " in m}
+        assert got == floors, f"{area}: got {sorted(got)}, expected {sorted(floors)}"
+
+
+def test_single_map_areas_keep_their_plain_labels():
+    """The load-bearing control: 26 of the 39 areas are one map, and their method names
+    must be exactly what they always were or every consumer sees a gratuitous change."""
+    red = _all_shipped()["red"]
+    assert set(red["route_1"]) == {"Grass"}
+    assert set(red["route_4"]) == {"Grass"}
+    # A water-only single-map area, so the unsuffixed rule is shown to hold for Water and
+    # not just for Grass. (Route 19 is sea; Route 12 has no Water table at all. Both of my
+    # first guesses here were assumptions, and the data corrected them.)
+    assert set(red["route_19"]) == {"Water"}
+
+
+def test_the_rule_area_ids_did_not_change():
+    """Splitting the AREA would silently change what a run means — each floor would become
+    its own dead-zone unit. Only the display axis was split."""
+    red = _all_shipped()["red"]
+    assert len(red) == 39, f"the area count changed to {len(red)}"
+    for area in red:
+        assert ":" not in area and " " not in area, f"{area} looks like a sub-area id"
+
+
+def test_a_multi_floor_area_renders_every_floor():
+    import tempfile
+    from server.server import SLinkServer
+    srv = SLinkServer(data_dir=tempfile.mkdtemp())
+    srv.state.adapter = srv.adapter = Gen1Adapter(variant="red")
+    html = srv._encounter_html("mt_moon")
+    for floor in ("Grass 1F", "Grass B1F", "Grass B2F"):
+        assert floor in html, f"{floor} is missing from the rendered widget"
