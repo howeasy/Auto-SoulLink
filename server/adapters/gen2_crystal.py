@@ -320,7 +320,12 @@ class Gen2CrystalAdapter(GameAdapter):
         return (
             f'<span style="display:inline-block;width:40px;height:40px;'
             f'overflow:hidden;vertical-align:middle">'
-            f'<img src="{url}" width="52" height="52" loading="lazy" '
+            # class + data-species are what server.py's enc-sprite swap keys on, and what
+            # every CSS rule that greys out a fainted mon or crops a tombstone selects.
+            # Without them the swap silently no-ops and the rules never match -- Gen 1 had
+            # the identical defect.
+            f'<img class="mon-sprite" data-species="{species_id}" src="{url}" '
+            f'width="52" height="52" loading="lazy" '
             f'style="image-rendering:pixelated;margin:-6px">'
             f'</span>'
         )

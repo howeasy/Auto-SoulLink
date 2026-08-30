@@ -194,7 +194,10 @@ class Gen5Adapter(GameAdapter):
             nat = _to_national(species_id) if species_id >= 700 else species_id
             sid = nat if (nat and 1 <= nat <= 1025) else species_id
             url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/{sid}.png"
-        return f'<img src="{url}" width="40" height="40" loading="lazy">'
+        # class + data-species: the enc-sprite swap in server.py keys on them, as does
+        # every CSS rule that greys a fainted mon or crops a tombstone.
+        return (f'<img class="mon-sprite" data-species="{species_id}" src="{url}" '
+                f'width="40" height="40" loading="lazy">')
 
     def ability_name(self, ability_id: int, species_id: int = 0) -> str:
         return _ability_name(ability_id, is_rr=False)

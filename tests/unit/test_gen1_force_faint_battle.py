@@ -154,20 +154,40 @@ def test_both_wild_and_trainer_battles_count(flag):
 
 # ── the inheritance hazard ───────────────────────────────────────────────
 
-def test_archipelago_does_not_inherit_the_vanilla_address():
-    """red_ap/blue_ap inherit from red via __index, and the Alchav fork relocates the
-    0xD0xx block — so a *new* vanilla address is also a *wrong* AP address, silently.
-    AP is deferred, so the field is disowned rather than guessed."""
+def test_archipelago_inherits_the_address_because_it_did_not_move():
+    """This test used to assert the OPPOSITE, on a false premise.
+
+    It said the Alchav fork "relocates the 0xD0xx block", so BATTLE_MON_HP_ADDR was
+    disowned for red_ap/blue_ap. data/pret_syms.json disagrees: the fork gives
+    wBattleMonHP 0xD015, exactly Red's value, and of the 155 symbols the two checkouts
+    share in 0xD000-0xD0FF not one differs. The relocation starts higher (wPlayerID
+    0xD359 -> 0xD431). So force_faint was left a no-op against the active battler on every
+    AP cartridge for no reason, and a test enshrined it.
+
+    The inheritance hazard is real and stays real -- see AP_UNVERIFIED, which still
+    disowns STATUS_FLAGS_4_ADDR because the fork has no such symbol at all. The rule is
+    per address, verified, not per block, assumed.
+    """
     for variant in ("red_ap", "blue_ap"):
         _, M = runtime(variant)
-        assert not M.BATTLE_MON_HP_ADDR, (
-            f"{variant} inherited BATTLE_MON_HP_ADDR from red; the AP fork moves that "
-            f"block, so this would write into unrelated WRAM")
+        assert M.BATTLE_MON_HP_ADDR == 0xD015, (
+            f"{variant} should inherit BATTLE_MON_HP_ADDR: the AP fork puts wBattleMonHP "
+            f"at the same 0xD015 as vanilla")
 
 
-def test_archipelago_still_faints_through_the_party_struct():
-    """Disowning the address must degrade to the old behaviour, not break the rule."""
+def test_the_inheritance_hazard_is_still_enforced_where_it_is_real():
+    """The control for the change above: a field the fork genuinely does not have must
+    still be disowned rather than guessed."""
+    for variant in ("red_ap", "blue_ap"):
+        _, M = runtime(variant)
+        assert not M.STATUS_FLAGS_4_ADDR, (
+            f"{variant} inherited STATUS_FLAGS_4_ADDR; the Alchav fork has no "
+            f"wStatusFlags4 symbol at all, so Red's 0xD72E would be a guess")
+
+
+def test_archipelago_faints_the_active_battler_too():
+    """The point of restoring the address: the in-battle fix now applies to AP as well."""
     lua, M = runtime("red_ap")
-    set_party_hp(lua, "red", 0, 31)   # red_ap inherits PARTY_BASE_ADDR
-    assert M.forceFaint(0) is False
-    assert party_hp(lua, "red", 0) == 0
+    arm_battle(lua, "red", active_slot=0, battle_hp=57)
+    assert M.forceFaint(0) is True
+    assert peek16be(lua, BATTLE_MON_HP["red"]) == 0

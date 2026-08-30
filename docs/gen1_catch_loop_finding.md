@@ -1,6 +1,6 @@
 # Gen 1 catch loop — solved
 
-Status: **root-caused and fixed.** Four separate bugs, each hiding the next. All three
+Status: **root-caused and fixed.** Four separate bugs, each hiding the next. All four
 were found by instrumentation, not by hypothesis — the probe that found them is committed
 at `lua/tests/probe_gen1_catchloop.lua` so the next person does not have to rebuild it.
 
@@ -181,4 +181,8 @@ B  RESULT: PASS (dead-zone refusal via memorialized)
 Note what B's log says: it never managed to read the mon it caught. That is fine, and
 it is the point — the scenario no longer needs to.
 
-`dupes` remains `xfail` for an unrelated reason; see `tests/e2e/test_duo_gen1.py`.
+`dupes` passes now too. It was `xfail` here for an unrelated reason, and the three things
+that actually blocked it — a fixture standing in grass, a `BIT_NO_BATTLES` write that had to
+be re-asserted every frame, and a `prove_booted` whose two round trips set off in opposite
+directions into a wall — are written up in `tests/e2e/test_duo_gen1.py` beside the (now
+empty) `KNOWN_FAILING` table.

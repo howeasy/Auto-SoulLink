@@ -438,15 +438,23 @@ M.PROFILES.blue = M.PROFILES.red
 -- disposition is to disown the fields rather than guess their AP addresses:
 -- `false` is a real value, so `__index` never reaches `red`, and every consumer
 -- already guards on the field being falsy.
+--
+-- DISOWN WHAT MOVED, NOT WHAT MERELY LOOKS LIKE IT MIGHT HAVE. The rule is per address,
+-- checked against data/pret_syms.json, because "the fork relocates a lot" is a reason to
+-- verify each field and not a reason to drop them all: a needlessly disowned address is a
+-- feature silently dead on AP, which is its own kind of wrong.
 local AP_UNVERIFIED = {
-    -- Added for the in-battle force_faint fix. wBattleMonHP sits in the 0xD0xx
-    -- block, which the AP fork moves; do not inherit Red's 0xD015.
-    "BATTLE_MON_HP_ADDR",
     -- wStatusFlags4 has NO symbol at all in the Alchav fork (checked against
     -- data/pret_syms.json: alchav_pokered has no wStatusFlags4 entry), so there is
     -- nothing to inherit and Red's 0xD72E would be a guess.
     "STATUS_FLAGS_4_ADDR",
 }
+-- BATTLE_MON_HP_ADDR was in this list and should not have been. The stated reason -- that
+-- wBattleMonHP "sits in the 0xD0xx block, which the AP fork moves" -- is false: the fork
+-- gives wBattleMonHP 0xD015, exactly Red's value, and of the 155 symbols the two share in
+-- 0xD000-0xD0FF not one differs. The relocation starts higher up (wPlayerID 0xD359 ->
+-- 0xD431, wCurMap 0xD35E -> 0xD436). Disowning it left force_faint a no-op against the
+-- active battler on every AP cartridge, for no reason at all.
 for _, field in ipairs(AP_UNVERIFIED) do
     M.PROFILES.red_ap[field] = false
 end

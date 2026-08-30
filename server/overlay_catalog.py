@@ -222,7 +222,7 @@ OVERLAYS: list[dict[str, Any]] = [
     {
         "slug": "enc-table-a", "family": "misc",
         "title": "Wild Encounters — Player A",
-        "desc": "Encounter rates for Player A's current area (Radical Red only). Walking / Surfing / Fishing with species, rate %, level range.",
+        "desc": "Encounter rates for Player A's current area (Radical Red and Gen 1 R/B/Y). Walking / Surfing / Fishing with species, rate %, level range.",
         "sizes": ["Recommended: 280×320"],
         "layouts": [""],
         "speeds": SPEED_PILLS,
@@ -230,7 +230,7 @@ OVERLAYS: list[dict[str, Any]] = [
     {
         "slug": "enc-table-b", "family": "misc",
         "title": "Wild Encounters — Player B",
-        "desc": "Encounter rates for Player B's current area (Radical Red only). Walking / Surfing / Fishing with species, rate %, level range.",
+        "desc": "Encounter rates for Player B's current area (Radical Red and Gen 1 R/B/Y). Walking / Surfing / Fishing with species, rate %, level range.",
         "sizes": ["Recommended: 280×320"],
         "layouts": [""],
         "speeds": SPEED_PILLS,
