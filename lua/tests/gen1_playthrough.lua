@@ -803,12 +803,31 @@ idle(function() return in_field() end, 600)
 
 -- Put it back where it belongs, and prove that worked: the gates' walk budgets and the
 -- Route 1 / Pallet boundary crossing are written against the intended tile.
-if r8(a.x) ~= park_x or r8(a.y) ~= park_y then
-    walk_to(park_map, park_x, park_y, 2400, "back to the parking tile")
-    if r8(a.x) ~= park_x or r8(a.y) ~= park_y then
-        finish(false, fmt("certification displaced the fixture to (%d,%d) and it could not "
-                          .. "walk back to (%d,%d)", r8(a.x), r8(a.y), park_x, park_y))
-    end
+-- KNOWN: `--rom blue --target battle` cannot currently rebuild, reproducibly.
+-- The Right leg moves 10 -> 11 and the return leg never comes back: walk_to reports
+-- `tiles_moved=1 joyIgnore=0 status5=0x00` on every one of six attempts while the position
+-- stays (11,35), so Left from there is simply not a move, even though we arrived by going
+-- Right from (10,35). Red and Yellow certify and return cleanly on the same tile of the
+-- same map, so it is not terrain in any obvious sense. The committed blue_battle fixture is
+-- correct and verified (Route 1, (10,35), empty memorial box, all live gates pass) --
+-- it just has to be rebuilt on Red or Yellow's schedule rather than Blue's.
+--
+-- RETRY THE RETURN LEG, clearing battles between attempts and re-asserting the encounter
+-- suppression each time. A single walk_to was not enough: BIT_NO_BATTLES is wiped by the
+-- engine's own step handling, so a long walk through grass eventually meets something, and
+-- the walk then flails against a battle it cannot see. Measured on Blue -- displaced to
+-- (11,35) and unable to cover one tile back to (10,35), reproducibly.
+for _ = 1, 6 do
+    if r8(a.cur_map) == park_map and r8(a.x) == park_x and r8(a.y) == park_y then break end
+    if M.setNoBattles then M.setNoBattles(true) end
+    if r8(a.in_battle) ~= 0 then rig_battle(1800) end
+    idle(function() return in_field() end, 600)
+    walk_to(park_map, park_x, park_y, 900, "back to the parking tile")
+end
+if r8(a.x) ~= park_x or r8(a.y) ~= park_y or r8(a.cur_map) ~= park_map then
+    finish(false, fmt("certification displaced the fixture to (%d,%d) on 0x%02X and it "
+                      .. "could not walk back to (%d,%d) on 0x%02X",
+                      r8(a.x), r8(a.y), r8(a.cur_map), park_x, park_y, park_map))
 end
 emit(fmt("[gen1-play] parked at (%d,%d) on map 0x%02X: round trip verified",
          r8(a.x), r8(a.y), r8(a.cur_map)))

@@ -189,17 +189,29 @@ def run_one(rom_key: str, target: str, timeout: int = 600) -> tuple[bool, str]:
     # "Pokemon - Red Version (USA, Europe).SaveRAM". So snapshot the directory and find
     # whatever appears or changes during the run instead of predicting the name.
     before = {}
-    if os.path.isdir(SAVERAM_DIR):
-        for name in os.listdir(SAVERAM_DIR):
-            path = os.path.join(SAVERAM_DIR, name)
-            if name.endswith(".SaveRAM"):
-                before[path] = os.path.getmtime(path)
     if os.path.exists(RESULT):
         os.remove(RESULT)
 
+    # BUILD INTO AN EMPTY SAVERAM DIRECTORY, NOT BIZHAWK'S.
+    #
+    # The build used to run against BizHawk's shared SaveRAM folder, which means it started
+    # from whatever the last thing to touch that cartridge left behind -- and the live gates
+    # bury mons in Box 12. A rebuilt fixture then shipped with a memorial box that already
+    # had a resident, and `test_gen1_writes_gate` failed on Yellow with "memorial box gained
+    # a mon — 1 -> 1": the deposit worked, the count did not change, because the box was
+    # already populated before the gate started.
+    #
+    # A per-build directory makes that impossible rather than unlikely: SRAM starts empty,
+    # so everything in the finished fixture was put there by this run. It also stops the
+    # builder writing into the user's own save folder.
+    run_saveram = os.path.join(REPO, "patch", "build", f"saveram_play_{rom_key}_{target}")
+    if os.path.isdir(run_saveram):
+        shutil.rmtree(run_saveram, ignore_errors=True)
+    os.makedirs(run_saveram, exist_ok=True)
+
     cfg_rel = f"patch/build/play_cfg_{rom_key}_{target}.ini"
     if os.path.exists(BIZHAWK_CONFIG):
-        write_run_config(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel))
+        write_run_config(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel), run_saveram)
 
     env = dict(os.environ, SLINK_ROOT=REPO.replace("\\", "/"), SLINK_PLAY_TARGET=target)
     cmd = [EMUHAWK, "--lua=lua/tests/gen1_playthrough.lua"]
@@ -229,16 +241,18 @@ def run_one(rom_key: str, target: str, timeout: int = 600) -> tuple[bool, str]:
     if not verdict.startswith("RESULT: PASS"):
         return False, verdict or "script wrote no RESULT line"
 
+    # Everything in the per-build directory was written by THIS run, so any .SaveRAM in it
+    # is the artifact -- no mtime comparison needed.
     touched = []
-    if os.path.isdir(SAVERAM_DIR):
-        for name in os.listdir(SAVERAM_DIR):
-            path = os.path.join(SAVERAM_DIR, name)
+    if os.path.isdir(run_saveram):
+        for name in os.listdir(run_saveram):
+            path = os.path.join(run_saveram, name)
             if not name.endswith(".SaveRAM") or ".AutoSaveRAM" in name:
                 continue
             if path not in before or os.path.getmtime(path) > before[path]:
                 touched.append(path)
     if not touched:
-        return False, f"no SaveRAM written in {SAVERAM_DIR}"
+        return False, f"no SaveRAM written in {run_saveram}"
     saveram = max(touched, key=os.path.getmtime)
     if _is_blank(saveram):
         return False, "SaveRAM is blank — the in-game SAVE did not commit"
