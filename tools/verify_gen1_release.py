@@ -20,6 +20,13 @@ explains a failure later:
                             on a randomized+injected ROM
     7. duo-pairs          — every scenario on both pairings, through the real server
 
+GIVE IT THE MACHINE. The emulator lanes are wall-clock sensitive: the duo scenarios drive
+two EmuHawk instances against a real server and wait on real frame counts. Running anything
+heavy alongside them does not merely slow the gate down, it FAILS it — a `deadzone` run that
+finishes in 65 seconds idle has been observed timing out at its 1500-second budget with a
+unit-test run competing for the same cores. That is the emulator being starved, not a
+defect, but the gate cannot tell the two apart and should not pretend to.
+
     python tools/verify_gen1_release.py                # everything
     python tools/verify_gen1_release.py --quick        # stop before the emulator lanes
     python tools/verify_gen1_release.py --list         # show the lanes and exit
