@@ -329,6 +329,20 @@ class SoulLinkState:
                             "r": 255, "g": 200, "b": 60
                         })
                         log.info(f"[{partner}] re-boxing {partner_mon.key[:8]} — partner's retrieve failed")
+        elif event == "box_mon_failed":
+            # The deposit did not happen. The server has ALREADY discarded this key from
+            # party_keys and decremented party_size -- it does that the moment it queues
+            # the command, so a swap in flight does not read as a full party -- so silence
+            # here left the server's party model permanently one mon short of the
+            # cartridge. Put it back.
+            key = msg.get("key", "")
+            if key:
+                if key not in self.party_keys[player_id]:
+                    self.party_keys[player_id].add(key)
+                    self.party_size[player_id] = self.party_size.get(player_id, 0) + 1
+                log.warning("[%s] box_mon_failed key=%s reason=%s — party model restored",
+                            player_id, key[:8], msg.get("reason", "unknown"))
+                self._save()
         elif event == "memorialize_done":
             self._handle_memorialize_done(player_id, msg)
         elif event == "memorialize_failed":

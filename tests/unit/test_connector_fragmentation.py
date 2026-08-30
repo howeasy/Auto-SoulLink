@@ -214,3 +214,39 @@ def test_an_absurdly_long_inbound_line_is_dropped_rather_than_buffered_forever()
         c.pump()
     assert c.receive() is None
     assert any("exceeded" in x for x in logs), "no cap was applied and nothing was logged"
+
+
+def test_the_tail_of_an_over_long_line_is_not_delivered_as_a_line():
+    """Capping the buffer is not the same as resyncing the stream.
+
+    The cap discarded `_recv_buf` and logged, but set no "skip to the next newline" state,
+    so the REST of the oversized line re-accumulated from scratch and was handed to the
+    parser as a perfectly ordinary line. Measured before the fix: one "exceeded" log, then
+    two lines delivered -- a 1 MB run of Z, and only then the real one.
+
+    It looked harmless only because `parse_command_list` is a pattern scraper that returns
+    `{}` on no match rather than raising; it still consumed a pending_labels entry and
+    logged a bogus inbound message. The test above could not see any of it because it never
+    sends the terminating newline.
+    """
+    rt, c, mock, logs = _lua_env(chunk=4096)
+    assert _connect(c, mock)
+
+    good = '{"commands":[]}'
+    rt.execute("local m, g, nl = ...; "
+               "m.inbox = string.rep('Z', 5 * 1024 * 1024) .. nl .. g .. nl",
+               mock, good, "\n")
+    for _ in range(6000):
+        c.pump()
+
+    delivered = []
+    while True:
+        line = c.receive()
+        if line is None:
+            break
+        delivered.append(line)
+
+    assert any("exceeded" in x for x in logs), "no cap was applied"
+    assert delivered == [good], (
+        f"expected only the valid line to survive the resync, got "
+        f"{[(len(d), d[:20]) for d in delivered]}")

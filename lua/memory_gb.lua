@@ -490,6 +490,50 @@ function M.readMemorialBoxSlot(slot)
     return result
 end
 
+--- Every mon key held in the STORED PC boxes, read straight from SRAM.
+---
+--- The client seeded `all_known_keys` from the party and the ACTIVE box only, which is a
+--- keyset that changes the moment the player switches box in the PC. Reconnect with Box 5
+--- open, then switch to a Box 1 holding twenty mons from an earlier session, and the next
+--- lost battle made the box scanner emit twenty `capture` events -- each stamped with the
+--- route the player happened to be standing on, each forming a link. Box-switching after
+--- filling a box is ordinary play, so this was reachable rather than theoretical.
+---
+--- Layout comes from the profile, not from a generation check: the box count, stride and
+--- the SRAM banks they are spread across are that cartridge's business. A profile that
+--- does not describe them returns nil, and the caller keeps its old behaviour.
+---
+--- The stored copy of the CURRENT box is stale by design (the live one is in WRAM), so
+--- callers scan the active box as well -- which they already did.
+function M.storedBoxKeys()
+    local sb = M.profile and M.profile.stored_boxes
+    if not (sb and sb.count and sb.stride and sb.banks and sb.per_bank) then return nil end
+    local keys = {}
+    for b = 0, sb.count - 1 do
+        local bank = sb.banks[math.floor(b / sb.per_bank) + 1]
+        if bank then
+            local box_off = bank + (b % sb.per_bank) * sb.stride
+            local n = mem_r8(box_off, SRAM_DOMAIN)
+            if n <= M.BOX_MAX_MONS then
+                local structs = box_off + 1 + (M.BOX_MAX_MONS + 1)
+                for i = 0, n - 1 do
+                    local base = structs + i * M.BOX_STRUCT_SIZE
+                    local sp = mem_r8(base + M.SPECIES_OFFSET, SRAM_DOMAIN)
+                    if sp ~= 0 and sp ~= 0xFF then
+                        keys[string.format("%02X%02X:%04X:%02X",
+                            mem_r8(base + M.DV_OFFSET_1, SRAM_DOMAIN),
+                            mem_r8(base + M.DV_OFFSET_2, SRAM_DOMAIN),
+                            mem_r8(base + M.OTID_OFFSET, SRAM_DOMAIN) * 256
+                                + mem_r8(base + M.OTID_OFFSET + 1, SRAM_DOMAIN),
+                            sp)] = true
+                    end
+                end
+            end
+        end
+    end
+    return keys
+end
+
 -- ═══ Enemy Party Reading ═══
 
 function M.getEnemyCount()
@@ -655,9 +699,22 @@ function M.writeEnemyParty(blobs)
     if n > 6 then n = 6 end
     local struct = M.PARTY_STRUCT_SIZE
 
+    -- VALIDATE EVERY BLOB BEFORE WRITING ANY OF THEM.
+    -- The length check used to sit inside the write loop, so a payload whose third blob was
+    -- short returned false with blobs 1 and 2 already copied into wEnemyMons -- and with
+    -- neither the 0xFF terminator nor wEnemyPartyCount updated, because both are written
+    -- after the loop. The caller reported an error and the cartridge was left mid-battle
+    -- with a spliced enemy party: the engine sends out mon 3 from the stale list carrying
+    -- mon 1's struct. The payload is server-supplied, so a truncated line is enough.
+    for i = 1, n do
+        if #blobs[i] < struct + 22 then
+            return false, string.format("blob %d too short (%d < %d) — nothing written",
+                                        i, #blobs[i], struct + 22)
+        end
+    end
+
     for i = 1, n do
         local b = blobs[i]
-        if #b < struct + 22 then return false, "blob too short" end
         local dst = M.ENEMY_BASE_ADDR + (i - 1) * struct
         for j = 0, struct - 1 do M.write_u8(dst + j, b[j + 1]) end
         for j = 0, 10 do M.write_u8(M.ENEMY_OT_NAMES_ADDR + (i - 1) * 11 + j, b[struct + 1 + j]) end

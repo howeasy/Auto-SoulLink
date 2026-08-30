@@ -74,6 +74,13 @@ M.PROFILES = {
         BOX_NICKS_ADDR     = 0xDE06,  -- 20 × 11 bytes (pret wBoxMonNicks; Phase 10 fix from 0xDEB8)
         box_struct_size    = 33,
         box_max_mons       = 20,
+        -- The twelve STORED boxes, in CartRAM. pokered/ram/sram.asm puts sBox1-sBox6 in
+        -- SRAM bank 2 and sBox7-sBox12 in bank 3, each box being
+        -- wBoxDataEnd - wBoxDataStart = 1 + 21 + 20*33 + 20*11 + 20*11 = 1122 bytes.
+        -- BizHawk's CartRAM domain is flat, so bank n starts at n * 0x2000.
+        -- Cross-check: sBox12 = 0x6000 + 5*1122 = 0x75EA, which is exactly the memorial
+        -- box offset this file already used -- the memorial box IS Box 12.
+        stored_boxes = {count = 12, stride = 1122, per_bank = 6, banks = {0x4000, 0x6000}},
         -- Bag
         BAG_COUNT_ADDR     = 0xD31D,
         BAG_ITEMS_ADDR     = 0xD31E,  -- each item = 2 bytes (ID + quantity)
@@ -244,6 +251,13 @@ M.PROFILES = {
         BOX_NICKS_ADDR     = 0xDE05,  -- pret wBoxMonNicks; Phase 10 fix from 0xDEB7
         box_struct_size    = 33,
         box_max_mons       = 20,
+        -- The twelve STORED boxes, in CartRAM. pokered/ram/sram.asm puts sBox1-sBox6 in
+        -- SRAM bank 2 and sBox7-sBox12 in bank 3, each box being
+        -- wBoxDataEnd - wBoxDataStart = 1 + 21 + 20*33 + 20*11 + 20*11 = 1122 bytes.
+        -- BizHawk's CartRAM domain is flat, so bank n starts at n * 0x2000.
+        -- Cross-check: sBox12 = 0x6000 + 5*1122 = 0x75EA, which is exactly the memorial
+        -- box offset this file already used -- the memorial box IS Box 12.
+        stored_boxes = {count = 12, stride = 1122, per_bank = 6, banks = {0x4000, 0x6000}},
         BAG_COUNT_ADDR     = 0xD31C,
         BAG_ITEMS_ADDR     = 0xD31D,
         bag_max_items      = 20,

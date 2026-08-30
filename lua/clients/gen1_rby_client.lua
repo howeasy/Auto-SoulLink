@@ -204,6 +204,16 @@ local rom_type        = G.rom_type_for_variant(variant)
 local val_ok, val_err = M.validateROM()
 local writes_enabled  = val_ok
 
+-- THE GATE HAS TO BE REVOCABLE, not just deferred.
+-- `writes_enabled` was only ever flipped ON: nothing set it back. Soft-reset the console
+-- mid-run (A+B+Start+Select) and WRAM zeroes -- but M.isInOverworld() reads TRUE on all-zero
+-- memory (not in battle, no joypad ignore, font not loaded), so the deferred-sync executor
+-- kept running and wrote party structs and box SRAM against the title screen. Gen 2 has had
+-- the revoke since it shipped (gen2_crystal_client.lua:1082-1100); this is the same shape.
+-- The threshold is there because a single frame's read can glitch while menus open.
+local validate_fail_count = 0
+local VALIDATE_FAIL_THRESHOLD = 5
+
 -- Optional companion patch (vanilla Red/Blue only). Its one player-visible feature is sound:
 -- Gen 1 has no RAM-writable audio trigger, so an unpatched cartridge stays silent and every
 -- playSfx call is a no-op. Detection reads the beacon, so a wrong or absent patch is inert.
@@ -847,6 +857,20 @@ end
 
 -- Party tracking
 local all_known_keys = {}  -- set of all monKeys ever seen
+
+--- Seed all_known_keys from the live box AND all twelve stored ones.
+-- The stored copy of the open box is stale (the live one is WRAM), so both are read.
+local function seed_all_boxes()
+    local box_count = M.getBoxCount()
+    for i = 0, math.min(box_count, M.BOX_MAX_MONS) - 1 do
+        local bmon = M.readBoxSlot(i)
+        if bmon then all_known_keys[bmon.key] = true end
+    end
+    local stored = M.storedBoxKeys and M.storedBoxKeys()
+    if stored then
+        for k in pairs(stored) do all_known_keys[k] = true end
+    end
+end
 local prev_party     = {}  -- slot → {key, hp, maxHP, level, species_index}
 
 -- Tick timing
@@ -1257,6 +1281,24 @@ local function on_frame()
             writes_enabled = true
             console.log("[SLink-RBY] ✓ ROM validation passed — writes enabled")
         end
+    elseif frame_count % 60 == 0 then
+        -- ...and revoke it if the game goes away underneath us. See the declaration above.
+        local ok, reason = M.validateROM()
+        if not ok then
+            validate_fail_count = validate_fail_count + 1
+            if validate_fail_count >= VALIDATE_FAIL_THRESHOLD then
+                console.log(fmt("[SLink-RBY] validateROM FAILED x%d: %s — writes disabled",
+                                validate_fail_count, tostring(reason)))
+                writes_enabled, initialized = false, false
+                in_battle, prev_in_battle, nuzlocke_active = false, false, false
+                captured_this_battle = false
+                validate_fail_count = 0
+                -- Deferred writes were queued against a save that is no longer loaded.
+                pending_sync_cmds = {}
+            end
+            return
+        end
+        validate_fail_count = 0
     end
 
     -- 1. Drive TCP pump
@@ -1279,12 +1321,12 @@ local function on_frame()
                     if mon then all_known_keys[mon.key] = true end
                 end
             end
-            -- Seed all_known_keys from current box
-            local box_count = M.getBoxCount()
-            for i = 0, math.min(box_count, M.BOX_MAX_MONS) - 1 do
-                local bmon = M.readBoxSlot(i)
-                if bmon then all_known_keys[bmon.key] = true end
-            end
+            -- Seed all_known_keys from EVERY box, not just the open one.
+            -- Seeding the active box alone made the keyset depend on which box the player
+            -- happened to have selected: switch to a box filled in an earlier session and
+            -- the next lost battle emitted a `capture` for every mon in it, stamped with
+            -- the current route. See M.storedBoxKeys.
+            seed_all_boxes()
             -- Read current area
             local cur_map = M.getCurrentMap()
             last_map_id = cur_map
@@ -1399,7 +1441,12 @@ local function on_frame()
     local active_box = M.getCurrentBoxNum and M.getCurrentBoxNum()
     local box_safe = (active_box == nil) or (active_box ~= MEMORIAL_BOX_INDEX)
 
-    if writes_enabled and box_safe and M.isInOverworld() and #pending_sync_cmds > 0 then
+    -- AND ONLY WHILE WE CAN STILL ANSWER. `send` drops silently when the socket is down,
+    -- so running the executor mid-disconnect meant a command could fail, consume its
+    -- NACK into the void, and be removed from the queue -- the log-and-drop shape these
+    -- NACKs exist to avoid, narrowed to the reconnect window. The commands are already
+    -- queued; they simply wait.
+    if writes_enabled and box_safe and C.connected() and M.isInOverworld() and #pending_sync_cmds > 0 then
         local cmd = pending_sync_cmds[1]
         local handled = true
         local ok, err
@@ -1462,6 +1509,11 @@ local function on_frame()
                     console.log("[SLink-RBY]   ↳ box_mon DROPPED: still the last mon after "
                                 .. "600 safe frames")
                     hud_show("X Deposit failed!", 255, 80, 80, 240)
+                    -- NACK. The server discarded this key from party_keys and decremented
+                    -- party_size when it queued the command; without this it believes the
+                    -- deposit landed and its party model is permanently wrong.
+                    send({event = "box_mon_failed", key = cmd.key, reason = "last_mon"},
+                         "box_mon_failed:" .. cmd.key:sub(1, 8), true)
                 end
             else
                 -- Read the party-only stats BEFORE depositing — the box struct drops
@@ -1483,6 +1535,8 @@ local function on_frame()
                 else
                     console.log("[SLink-RBY]   ↳ box_mon FAIL (giving up): " .. (err or "?"))
                     hud_show("X Deposit failed!", 255, 80, 80, 240)
+                    send({event = "box_mon_failed", key = cmd.key, reason = err or "deposit failed"},
+                         "box_mon_failed:" .. cmd.key:sub(1, 8), true)
                 end
             end
         elseif cmd.cmd == "party_mon" then
@@ -1631,6 +1685,9 @@ local function on_frame()
             if cmd.cmd == "party_mon" then
                 send({event = "sync_retrieve_failed", key = cmd.key, reason = why},
                      "sync_retrieve_failed:" .. cmd.key:sub(1, 8), true)
+            elseif cmd.cmd == "box_mon" then
+                send({event = "box_mon_failed", key = cmd.key, reason = why},
+                     "box_mon_failed:" .. cmd.key:sub(1, 8), true)
             elseif cmd.cmd == "memorialize" then
                 send({event = "memorialize_failed", key = cmd.key, reason = why},
                      "memorialize_failed:" .. cmd.key:sub(1, 8), true)
@@ -1706,6 +1763,10 @@ if init_count <= 6 then
         end
     end
 end
+-- ...and from the boxes. Startup seeded the PARTY only -- not even the open box -- so a
+-- client started with mons already stored saw every one of them as a fresh capture the
+-- first time anything triggered a box scan.
+seed_all_boxes()
 
 -- An unguarded read during a screen transition would otherwise take the whole
 -- client down rather than dropping a single frame. Mirrors gen3's on_frame_safe.

@@ -47,6 +47,7 @@ local _line_queue     = {}      -- {string} complete received lines ready to rea
 -- and the ROM content payload is kilobytes.
 local _send_offset    = 0       -- bytes of _send_queue[1] the peer has already taken
 local _recv_buf       = ""      -- bytes of an incomplete inbound line, kept across frames
+local _drop_until_newline = false  -- true while skipping the tail of an over-long line
 local MAX_LINE        = 4 * 1024 * 1024   -- matches the server's own per-line cap
 local _fail_logged = false   -- one connect-failure message per outage
 local _reconnect_cd   = 0       -- frames remaining before next reconnect attempt
@@ -217,20 +218,34 @@ function M.pump()
     while true do
         local line, err, partial = _sock:receive("*l")
         if line then
-            -- Whatever earlier frames collected belongs in front of this tail.
-            table.insert(_line_queue, _recv_buf .. line)
+            if _drop_until_newline then
+                -- This `line` is the TAIL of the oversized line we abandoned, so its
+                -- terminator ends the garbage rather than starting anything. Without this
+                -- the cap bounded memory and then handed the tail to the parser as a
+                -- perfectly ordinary line -- megabytes of it -- which only looked harmless
+                -- because parse_command_list is a pattern scraper that returns {} instead
+                -- of raising. Resync properly: skip to the next newline and start clean.
+                _drop_until_newline = false
+            else
+                -- Whatever earlier frames collected belongs in front of this tail.
+                table.insert(_line_queue, _recv_buf .. line)
+            end
             _recv_buf = ""
         elseif err == "timeout" then
             -- KEEP THE PARTIAL. LuaSocket has already consumed these bytes from the
             -- socket; dropping them does not re-read them later, it loses them, and the
             -- next complete line then arrives with its head missing.
             if partial and #partial > 0 then
-                if #_recv_buf + #partial > MAX_LINE then
+                if _drop_until_newline then
+                    -- Still inside the abandoned line; keep throwing bytes away.
+                    partial = nil
+                elseif #_recv_buf + #partial > MAX_LINE then
                     console.log("[SLink] inbound line exceeded " .. MAX_LINE
-                                .. " bytes — discarding it rather than growing without "
-                                .. "bound")
+                                .. " bytes — discarding it and resyncing at the next "
+                                .. "newline")
                     _recv_buf = ""
-                else
+                    _drop_until_newline = true
+                elseif partial then
                     _recv_buf = _recv_buf .. partial
                 end
             end
@@ -253,6 +268,7 @@ function M.disconnect()
     -- half-read one would corrupt the first message of the next session.
     _send_offset = 0
     _recv_buf = ""
+    _drop_until_newline = false
     _reconnect_cd = RECONNECT_FRAMES      -- first retry after ~0.5 s
     _reconnect_step = RECONNECT_FRAMES    -- reset backoff
 end
