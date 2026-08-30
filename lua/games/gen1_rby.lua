@@ -489,6 +489,35 @@ M.GIFT_AREAS = {
     gift = true,
 }
 
+-- ═══ Uncatchable battles ═══
+-- POKEMON_TOWER_1F..7F are map ids $8E..$94 and SILPH_SCOPE is item $48 -- identical in
+-- pokered and pokeyellow (constants/map_constants.asm:228-234, item_constants.asm:84).
+M.GHOST_MAP_FIRST, M.GHOST_MAP_LAST = 0x8E, 0x94
+M.ITEM_SILPH_SCOPE = 0x48
+
+--- Is the CURRENT wild battle one the game will not let the player catch?
+---
+--- A straight transcription of IsGhostBattle (pokered/engine/battle/core.asm:3309-3324):
+---     wIsInBattle == 1  AND  POKEMON_TOWER_1F <= wCurMap <= POKEMON_TOWER_7F
+---     AND  the Silph Scope is NOT in the bag
+--- and ItemUseBall (engine/items/item_effects.asm:149-153) then loads the "can't be
+--- caught" value and jumps straight past the capture calculation. No ball can ever work.
+---
+--- WHY THIS MATTERS TO THE RULES. Pokemon Tower is a real encounter area -- it has a Grass
+--- table in encounter_tables.json -- so without this the client saw an ordinary wild battle
+--- end with no capture, emitted `no_catch`, and DEAD-ZONED POKEMON TOWER for both players.
+--- Every run, on both cartridges, for an encounter the game never offered them. Failing an
+--- encounter you were allowed to attempt is the rule; failing one the engine refuses to let
+--- you attempt is not the same thing.
+---
+--- The caller passes the readers rather than this module reaching for memory itself, so the
+--- game module stays free of a memory dependency and this stays unit-testable.
+function M.is_uncatchable_battle(map_id, has_silph_scope)
+    if not map_id then return false end
+    if map_id < M.GHOST_MAP_FIRST or map_id > M.GHOST_MAP_LAST then return false end
+    return not has_silph_scope
+end
+
 function M.is_gift_area(area_id)
     if M.GIFT_AREAS[area_id] then return true end
     if area_id and area_id:sub(1, 5) == "gift_" then return true end

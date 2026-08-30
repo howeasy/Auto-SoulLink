@@ -629,6 +629,18 @@ function M.countPokeballs()
     return total
 end
 
+--- Is a given item id in the bag at all? Quantity is not consulted -- key items like the
+--- Silph Scope are held as a single entry and some carry a quantity of 0.
+function M.hasBagItem(item_id)
+    if not (item_id and M.BAG_COUNT_ADDR and M.BAG_ITEMS_ADDR) then return false end
+    local count = M.read_u8(M.BAG_COUNT_ADDR)
+    if count > M.BAG_MAX_ITEMS then return false end     -- garbage protection
+    for i = 0, count - 1 do
+        if M.read_u8(M.BAG_ITEMS_ADDR + i * 2) == item_id then return true end
+    end
+    return false
+end
+
 -- ═══ Battle State ═══
 
 function M.isInBattle()

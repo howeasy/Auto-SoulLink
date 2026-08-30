@@ -498,6 +498,7 @@ local battle_is_wild      = false
 local battle_area_id      = ""
 local battle_wild_species = nil   -- what the wild battle was, for no_catch
 local battle_wild_level   = nil
+local battle_uncatchable  = false -- the engine refuses capture (Tower ghosts, pre-Scope)
 local captured_this_battle = false
 local post_battle_frames  = 0
 local POST_BATTLE_GRACE   = 15  -- frames to wait after battle before no_catch
@@ -1202,7 +1203,12 @@ local function diff_party()
 
     -- ── no_catch detection (on grace period expiry)
     if post_battle_frames == 1 and not captured_this_battle and battle_is_wild then
-        if nuzlocke_active and battle_area_id ~= "" and not resolved_areas[battle_area_id] then
+        if nuzlocke_active and battle_area_id ~= "" and not resolved_areas[battle_area_id]
+                -- A battle the engine would not let us catch is not a failed encounter.
+                -- Without this, every pre-Silph-Scope ghost in Pokemon Tower -- and there
+                -- is no way through the Tower without meeting one -- dead-zoned the whole
+                -- area for both players.
+                and not battle_uncatchable then
             if not G.is_gift_area(battle_area_id) then
                 send({event = "no_catch", area_id = battle_area_id,
                       species_id = battle_wild_species, level = battle_wild_level},
@@ -1434,6 +1440,11 @@ local function on_frame()
         -- and a Safari-Zone assertion has nothing to assert on. Read at battle START
         -- because by the time the grace period expires the battle struct is gone.
         battle_wild_species, battle_wild_level = nil, nil
+        -- Is this a battle the ENGINE refuses to let us catch? Read once at battle start,
+        -- because both inputs (the map and the bag) can change before it ends. See
+        -- G.is_uncatchable_battle -- it is IsGhostBattle, transcribed.
+        battle_uncatchable = battle_is_wild and G.is_uncatchable_battle
+            and G.is_uncatchable_battle(cur_map, M.hasBagItem(G.ITEM_SILPH_SCOPE)) or false
         captured_this_battle = false
         whiteout_sent = false
         console.log(fmt("[SLink-RBY] Battle START (%s) area=%s",
@@ -1442,6 +1453,7 @@ local function on_frame()
         -- Shortened text for GBC's 160×144 screen (~22-char HUD bar limit).
         if battle_is_wild and nuzlocke_active and battle_area_id ~= ""
                 and not resolved_areas[battle_area_id]
+                and not battle_uncatchable
                 and not G.is_gift_area(battle_area_id) then
             local short = battle_area_id:gsub("route_", "R"):gsub("_", " ")
                                         :gsub("(%a)([%w]*)", function(a, b) return a:upper() .. b end)
