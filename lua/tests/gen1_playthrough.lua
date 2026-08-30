@@ -437,6 +437,31 @@ local function give_pokeballs(n)
 end
 
 -- ── Save ─────────────────────────────────────────────────────────────────────
+--
+-- KNOWN BROKEN: `--target battle` cannot currently rebuild. `--target town` works.
+--
+-- The stricter post-conditions below found two real defects and then a third that is not
+-- yet fixed. Recorded here so the next person starts from measurements rather than from
+-- the same three hypotheses:
+--
+--   FIXED  SAVE's menu index was hardcoded to 3. That is right for `town` and wrong for
+--          `battle`, which calls mark_oak_errand_done() and therefore has the POKeDEX --
+--          seven entries, where index 3 is the player's NAME. The drive opened the trainer
+--          card instead of saving.
+--   FIXED  The A-press loop exited on `sram_party_count() ~= 0xFF`, i.e. on the existence
+--          of ANY save. The SaveRAM is shared between the two builds of one ROM, so that
+--          was almost always already true: the loop stopped after one press, before
+--          anything had been written, and reported success.
+--   OPEN   With both fixed, the `battle` build now presses A ten times on a correctly
+--          selected SAVE (cur=4 of a 7-entry menu, font=0x01) and the SRAM never changes.
+--          wMaxMenuItem stays 6 throughout and is never 1, so the "Would you like to SAVE
+--          the game?" YES/NO prompt is never reached -- A is not being taken as a
+--          selection. The cursor also resets from 4 to 0, which looks like the menu
+--          closing and reopening rather than a save starting.
+--
+-- The six committed fixtures are unaffected and correct: this is the builder, not the
+-- output, and a failed build leaves the existing file in place (verified).
+
 -- The START menu has NO POKeDEX entry before the parcel errand, so SAVE's index differs
 -- from every walkthrough. It is always THIRD FROM THE END, with or without the Pokedex.
 -- The SRAM copy of the party, so a save can be CONFIRMED rather than assumed. Gen 1's
@@ -445,6 +470,26 @@ local function sram_party_count()
     M.SRAM_BANK = 1
     local ok, v = pcall(M.sram_read_u8, 0xAF2C)
     return ok and v or 0xFF
+end
+
+--- The coordinates the SAVE actually committed, read back out of SRAM.
+---
+--- The gates boot from this file, so the tile that matters is the one in the SAVE, not the
+--- one in WRAM when the certification ran. Those turned out to differ: certification
+--- reported (5,6) and the committed fixture decoded to (7,6), because the save-menu drive
+--- moves the player whenever a press lands in the overworld instead of a menu -- exactly
+--- the hazard this fixture builder was flagged for.
+---
+--- Same derivation as tests/unit/test_gen1_fixtures.py: sGameData is SRAM bank 1 at
+--- 0xA598, sPlayerName is 11 bytes, and wCurMap - wPokedexOwned is 0x67, so sCurMap is
+--- 0xA60A with Y and X immediately after it.
+local function sram_position()
+    M.SRAM_BANK = 1
+    local ok_m, m = pcall(M.sram_read_u8, 0xA60A)
+    local ok_y, y = pcall(M.sram_read_u8, 0xA60D)
+    local ok_x, x = pcall(M.sram_read_u8, 0xA60E)
+    if not (ok_m and ok_y and ok_x) then return nil end
+    return m, x, y
 end
 
 local function save_game(max_frames)
@@ -466,14 +511,24 @@ local function save_game(max_frames)
              r8(a.joy_ignore)))
     client.screenshot(ROOT .. "/patch/build/save_startmenu.png")
 
-    -- SAVE is index 3.
+    -- SAVE is THIRD FROM THE END, which is `wMaxMenuItem - 2`.
     --
-    -- Do NOT compute this from wMaxMenuItem: it read 6 here while the menu on screen had
-    -- only six entries (max would be 5), and "third from the end" therefore selected
-    -- OPTION — confirmed by screenshotting the options screen. This fixture never obtains
-    -- the POKeDEX (it skips Oak entirely), so the menu is always:
+    -- This was hardcoded to 3 on the reasoning that the fixture never obtains the POKeDEX
+    -- (it skips Oak entirely), so the menu is always
     --     POKeMON(0) ITEM(1) <NAME>(2) SAVE(3) OPTION(4) EXIT(5)
-    local SAVE_INDEX = 3
+    -- That holds for the `town` target and NOT for `battle`, which calls
+    -- mark_oak_errand_done() and therefore has the Pokedex:
+    --     POKeDEX(0) POKeMON(1) ITEM(2) <NAME>(3) SAVE(4) OPTION(5) EXIT(6)
+    -- Index 3 there is the player's NAME, so the drive opened the trainer card and the save
+    -- never happened. Nothing caught it because the only post-condition was the SRAM party
+    -- COUNT, and a stale save from the town build has the same count of 1.
+    --
+    -- The old comment warned against computing this, having seen wMaxMenuItem read 6 for a
+    -- six-entry menu. That reading was right and the inference was wrong: the menu had
+    -- SEVEN entries, because that run had the Pokedex too.
+    local max_item = r8(a.max_menu)
+    local SAVE_INDEX = (max_item >= 5 and max_item <= 6) and (max_item - 2) or 3
+    emit(fmt("[gen1-play] menu has %d entries, SAVE at index %d", max_item + 1, SAVE_INDEX))
     while frame - start < max_frames do
         if r8(a.cur_menu) == SAVE_INDEX then break end
         hold_dir("Down", 6, nil)
@@ -482,13 +537,28 @@ local function save_game(max_frames)
     emit(fmt("[gen1-play] SAVE selected: cur=%d (want %d)", r8(a.cur_menu), SAVE_INDEX))
 
     -- A to pick SAVE, then A on the "already a file / would you like to save?" prompts.
+    --
+    -- STOP ON A FRESH SAVE, NOT ON THE EXISTENCE OF ONE. The exit condition used to be
+    -- `sram_party_count() ~= 0xFF`, which is satisfied by whatever save was already in the
+    -- file -- and the SaveRAM is shared between the `town` and `battle` builds of the same
+    -- ROM, so it almost always is. The loop therefore stopped after a single A press,
+    -- before the save had happened, and reported success. What proves a NEW save is the
+    -- committed COORDINATES matching where the player is standing now: the two builds park
+    -- on different maps, so a stale file cannot fake it.
+    local want_map, want_x, want_y = r8(a.cur_map), r8(a.x), r8(a.y)
+    local function committed_here()
+        local m, x, y = sram_position()
+        return m == want_map and x == want_x and y == want_y
+    end
     for i = 1, 10 do
         hold_dir("A", 4, nil)
         idle(nil, 40)
-        emit(fmt("[gen1-play] save A#%d: cur=%d max=%d font=0x%02X sram=%s",
+        local m, x, y = sram_position()
+        emit(fmt("[gen1-play] save A#%d: cur=%d max=%d font=0x%02X sram=%s at (%s,%s)/0x%s",
                  i, r8(a.cur_menu), r8(a.max_menu), r8(a.font_loaded),
-                 sram_party_count() == 0xFF and "empty" or tostring(sram_party_count())))
-        if sram_party_count() ~= 0xFF then break end
+                 sram_party_count() == 0xFF and "empty" or tostring(sram_party_count()),
+                 tostring(x), tostring(y), m and fmt("%02X", m) or "??"))
+        if committed_here() then break end
     end
     idle(function() return in_field() end, 900)
     return sram_party_count()
@@ -603,8 +673,23 @@ emit(fmt("[gen1-play] in bedroom, wOptions=0x%02X", r8(a.options)))
 -- 6-9. Bedroom -> 1F -> Pallet -> north edge, which fires Oak's stop script, -> lab.
 -- Warp tiles from pret data/maps/objects/: RedsHouse2F stairs (7,1); RedsHouse1F door
 -- (2,7); PalletTown -> OaksLab (12,11).
+-- CHECK THE OUTCOME, NOT EACH STEP.
+-- These two warps are best-effort on purpose: the intro often walks the player out of the
+-- house on its own, and by the time the script gets the joypad it is already standing in
+-- Pallet Town. Measured on a cold boot -- "walkable at frame 4819, map=0x00 pos=(7,7)",
+-- which is Pallet, not the bedroom. Both warps then "fail" while nothing is wrong, so
+-- failing the build on either of them individually is stricter than the truth.
+--
+-- What actually has to hold before anything downstream makes sense is simply: we are
+-- outside. Asserting that -- rather than discarding the verdicts entirely, which is what
+-- used to happen -- keeps the real precondition without inventing a false one.
 goto_warp(MAP.HOUSE_2F, 7, 1, MAP.HOUSE_1F, 4800, "bedroom stairs")
 goto_warp(MAP.HOUSE_1F, 2, 7, MAP.PALLET, 4800, "front door")
+if r8(a.cur_map) ~= MAP.PALLET then
+    finish(false, fmt("not in Pallet Town after the house warps — on map 0x%02X at (%d,%d); "
+                      .. "every step below assumes the overworld",
+                      r8(a.cur_map), r8(a.x), r8(a.y)))
+end
 -- Heading north out of Pallet trips Oak's stop script, which drives the player to the lab.
 -- Pallet's north edge is a map CONNECTION, not a warp_event: stepping onto it heads for
 -- Route 1, which is exactly what trips Oak's stop script. He then walks the player to his
@@ -633,7 +718,10 @@ if TARGET == "battle" then
              r8(a.event_flags), r8(a.event_flags + 4)))
     -- Step east of the doorway first, then north — otherwise the servo walks back inside.
     walk_to(MAP.PALLET, 10, 6, 4800, "east of the house")
-    goto_warp(MAP.PALLET, 10, 0, MAP.ROUTE_1, 12000, "Pallet -> Route 1")
+    if not goto_warp(MAP.PALLET, 10, 0, MAP.ROUTE_1, 12000, "Pallet -> Route 1") then
+        finish(false, "never reached Route 1 — a `battle` fixture that saves in Pallet has "
+                      .. "no tall grass, so every scenario that hunts would fail on it")
+    end
     emit(fmt("[gen1-play] on ROUTE_1 at (%d,%d)", r8(a.x), r8(a.y)))
 else
     walk_to(MAP.PALLET, 5, 6, 2400, "pallet home tile")
@@ -642,6 +730,99 @@ end
 
 if r8(a.party_count) < 1 then finish(false, "no party mon — starter phase failed") end
 
+-- ── Certify the tile this fixture parks on ────────────────────────────────────────────
+-- Every gate proves it has booted into a live game by WALKING there and back, because that
+-- is the only claim a title screen cannot fake: a CONTINUE preview loads the save into the
+-- very WRAM the party and coordinates live in, so party counts, map ids and safe-state
+-- flags all read correct on a blank screen.
+--
+-- Which makes where this fixture parks a hard requirement rather than a detail. Gen 2 hit
+-- exactly this and paid for it: ride_intro left the player between a bed and a desk, both
+-- horizontal moves were walls, and every gate hung for 17454 frames on a perfectly live
+-- game. Gen 1 has had no such check at all.
+--
+-- ONE direction is enough, deliberately. Lib.prove_booted tries Right and Left and accepts
+-- either, because the Route 1 battle fixture at (10,35) is walled on the Left -- measured,
+-- 0 moves in 185 attempts, against 183 in 186 going Right. Requiring both would reject a
+-- tile the gates are perfectly happy with.
+-- A WILD BATTLE IS ALSO PROOF, and on the `battle` fixture it is the likelier outcome.
+-- Lib.prove_booted says the same thing for the same reason: the walking that demonstrates
+-- the game is live is exactly what triggers an encounter, so demanding a COMPLETED round
+-- trip in tall grass rejects a tile the gates are perfectly happy with. Measured -- Route 1
+-- at (10,35) failed all three attempts here while every duo scenario boots from it.
+local function round_trip(out)
+    local back = (out == "Right") and "Left" or "Right"
+    local x0, y0 = r8(a.x), r8(a.y)
+    local function moved_or_battle()
+        return r8(a.x) ~= x0 or r8(a.y) ~= y0 or r8(a.in_battle) ~= 0
+    end
+    hold_dir(out, 20, moved_or_battle)
+    if r8(a.in_battle) ~= 0 then return true end     -- you cannot meet a wild mon standing still
+    if r8(a.x) == x0 and r8(a.y) == y0 then return false end
+    hold_dir(back, 20, function()
+        return (r8(a.x) == x0 and r8(a.y) == y0) or r8(a.in_battle) ~= 0
+    end)
+    if r8(a.in_battle) ~= 0 then return true end
+    return r8(a.x) == x0 and r8(a.y) == y0
+end
+
+-- Remember where the fixture is MEANT to sit. A round trip that cannot complete its return
+-- leg leaves the player displaced, and the certification would then quietly relocate the
+-- very fixture it was added to protect -- measured: red/town came out at (7,6) instead of
+-- the (5,6) the script walks to.
+local park_x, park_y, park_map = r8(a.x), r8(a.y), r8(a.cur_map)
+local parked = false
+for _ = 1, 3 do
+    if r8(a.in_battle) ~= 0 then rig_battle(1800) end
+    if in_field() and (round_trip("Right") or round_trip("Left")) then parked = true break end
+end
+if not parked then
+    finish(false, fmt("no horizontal round trip at (%d,%d) on map 0x%02X — every gate "
+                      .. "proves it booted by walking there and back, so a fixture parked "
+                      .. "between two walls hangs all of them",
+                      r8(a.x), r8(a.y), r8(a.cur_map)))
+end
+-- FROM HERE TO THE SAVE, NO MORE ENCOUNTERS.
+-- The `battle` fixture stands in tall grass, so every remaining step -- clearing the
+-- certification's battle, walking back to the parking tile, and the thousands of frames the
+-- save-menu drive spends holding buttons -- is another chance to meet a wild mon. Each one
+-- puts a battle menu in front of the drive, which then spins against it and never reaches
+-- SAVE. BIT_NO_BATTLES in wStatusFlags4 is the engine's own switch (home/overworld.asm),
+-- and it is cleared again once the save has committed so the fixture ships able to hunt.
+if M.setNoBattles then M.setNoBattles(true) end
+
+-- LEAVE NO BATTLE RUNNING. Accepting an encounter as proof is right -- it cannot happen
+-- without walking -- but the battle is still on screen afterwards, and everything below
+-- assumes the overworld: START does nothing in a battle, so the save-menu drive spun
+-- against a battle menu (measured: font=0x00, cur/max reading 0/2) and the save silently
+-- never committed.
+if r8(a.in_battle) ~= 0 then rig_battle(1800) end
+idle(function() return in_field() end, 600)
+
+-- Put it back where it belongs, and prove that worked: the gates' walk budgets and the
+-- Route 1 / Pallet boundary crossing are written against the intended tile.
+if r8(a.x) ~= park_x or r8(a.y) ~= park_y then
+    walk_to(park_map, park_x, park_y, 2400, "back to the parking tile")
+    if r8(a.x) ~= park_x or r8(a.y) ~= park_y then
+        finish(false, fmt("certification displaced the fixture to (%d,%d) and it could not "
+                          .. "walk back to (%d,%d)", r8(a.x), r8(a.y), park_x, park_y))
+    end
+end
+emit(fmt("[gen1-play] parked at (%d,%d) on map 0x%02X: round trip verified",
+         r8(a.x), r8(a.y), r8(a.cur_map)))
+
+-- SUPPRESS ENCOUNTERS ACROSS THE SAVE.
+-- The `battle` fixture parks in Route 1's tall grass, and the save-menu drive holds Down
+-- and A in a loop for thousands of frames. A wild battle interrupts that, the menu never
+-- reaches SAVE, and the save silently does not commit -- leaving whatever the SaveRAM
+-- already held. That is exactly how a stale fixture survives: the old check compared only
+-- the PARTY COUNT, and a stale save from the town build has the same count of 1.
+--
+-- BIT_NO_BATTLES in wStatusFlags4 is the engine's own switch (home/overworld.asm) and is
+-- what the duo harness uses to walk grass safely. Re-asserted per attempt because the
+-- engine rewrites that byte, and cleared afterwards so the fixture ships with encounters
+-- ON -- a fixture that cannot meet a wild mon would be useless to every hunting scenario.
+if M.setNoBattles then M.setNoBattles(true) end
 local saved_party = save_game(6000)
 -- CONFIRM the save reached SRAM. A 32KB SaveRAM file can exist and still be effectively
 -- empty (measured: 138 nonzero bytes, sPartyCount 0xFF) when the menu drive silently
@@ -650,6 +831,31 @@ if saved_party ~= r8(a.party_count) then
     finish(false, fmt("save did not commit: SRAM party=%s, WRAM party=%d",
                       saved_party == 0xFF and "0xFF(empty)" or saved_party, r8(a.party_count)))
 end
-emit(fmt("[gen1-play] saved at frame %d (party=%d confirmed in SRAM)", frame, saved_party))
+-- THE SAVE HAS TO LAND ON THE TILE WE CERTIFIED.
+-- The certification proves a tile allows the left/right round trip every gate uses to show
+-- it booted -- but it proves it about WRAM, and the gates boot from SRAM. The save-menu
+-- drive presses Down and A in a loop, and any press that lands in the overworld rather than
+-- a menu WALKS the player, so the two can disagree. Measured: certified (5,6), committed
+-- (7,6). Re-park and save once more rather than shipping a fixture whose actual tile
+-- nothing has checked.
+local smap, sx, sy = sram_position()
+if smap and (sx ~= park_x or sy ~= park_y or smap ~= park_map) then
+    emit(fmt("[gen1-play] save committed (%d,%d) on 0x%02X but the certified tile is "
+             .. "(%d,%d) on 0x%02X — re-parking and saving again",
+             sx, sy, smap, park_x, park_y, park_map))
+    if M.setNoBattles then M.setNoBattles(true) end
+    walk_to(park_map, park_x, park_y, 2400, "back to the parking tile")
+    if M.setNoBattles then M.setNoBattles(true) end
+    saved_party = save_game(6000)
+    smap, sx, sy = sram_position()
+end
+if smap and (sx ~= park_x or sy ~= park_y or smap ~= park_map) then
+    finish(false, fmt("the save keeps committing (%d,%d) on 0x%02X instead of the certified "
+                      .. "(%d,%d) on 0x%02X — the gates would boot onto an unproven tile",
+                      sx, sy, smap, park_x, park_y, park_map))
+end
+if M.setNoBattles then M.setNoBattles(false) end
+emit(fmt("[gen1-play] saved at frame %d (party=%d confirmed in SRAM, position %d,%d on 0x%02X)",
+         frame, saved_party, sx or -1, sy or -1, smap or 0))
 finish(true, fmt("variant=%s target=%s party=%d frames=%d",
                  variant, TARGET, r8(a.party_count), frame))

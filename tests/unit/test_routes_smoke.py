@@ -14,6 +14,7 @@ aiohttp = pytest.importorskip("aiohttp")
 pytest_asyncio = pytest.importorskip("pytest_asyncio")
 from aiohttp.test_utils import TestClient, TestServer  # noqa: E402
 
+from server.adapters.gen1_rby import Gen1Adapter
 from server.adapters.gen3_frlge import Gen3Adapter  # noqa: E402
 from server.server import SLinkServer, build_app  # noqa: E402
 from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo  # noqa: E402
@@ -40,27 +41,48 @@ def _get_routes(app):
     return sorted(set(out))
 
 
-@pytest.fixture
-def srv(tmp_path):
+# EVERY GENERATION, NOT JUST RADICAL RED.
+# This suite rendered one Gen 3 fixture, so every Gen 1 rendering defect the sweep found --
+# the missing sprite class, the badge bitmask read as a count, the duplicated Special stat --
+# went through it untouched. The key FORMAT differs per generation and adapters validate it
+# (`is_valid_mon_key`), so the fixture keys come from the generation under test.
+_GENERATIONS = {
+    "gen3_rr": {
+        "adapter": lambda: Gen3Adapter(is_rr=True),
+        "keys": ("A:1", "B:2", "A:3", "B:4"),
+    },
+    "gen1_rby": {
+        "adapter": lambda: Gen1Adapter(variant="red"),
+        # DDDD:TTTT:II -- DVs, OT id, species index. A key the adapter would reject renders
+        # blanks everywhere and would make this suite green on an empty page.
+        "keys": ("AABB:30B8:99", "CCDD:7B0B:B1", "EEFF:30B8:15", "1122:7B0B:20"),
+    },
+}
+
+
+@pytest.fixture(params=sorted(_GENERATIONS), ids=sorted(_GENERATIONS))
+def srv(request, tmp_path):
     """A server with one linked pair and a memorialized pair, so pages have rows to render."""
+    gen = _GENERATIONS[request.param]
+    ka, kb, kc, kd = gen["keys"]
     s = SLinkServer(data_dir=str(tmp_path))
     st = s.state
-    st.adapter = Gen3Adapter(is_rr=True)
+    st.adapter = s.adapter = gen["adapter"]()
     alive = LinkEntry(area_id="route_1",
-                      a=MonInfo(key="A:1", level=12, species=1, nickname="BULBA"),
-                      b=MonInfo(key="B:2", level=13, species=4, nickname="CHAR"),
+                      a=MonInfo(key=ka, level=12, species=1, nickname="BULBA"),
+                      b=MonInfo(key=kb, level=13, species=4, nickname="CHAR"),
                       status=LinkStatus.ALIVE)
     dead = LinkEntry(area_id="route_2",
-                     a=MonInfo(key="A:3", level=9, species=10),
-                     b=MonInfo(key="B:4", level=9, species=13),
+                     a=MonInfo(key=kc, level=9, species=10),
+                     b=MonInfo(key=kd, level=9, species=13),
                      status=LinkStatus.MEMORIAL)
     for e in (alive, dead):
         st.links.append(e)
         st._index_entry(e)
     st.area_states["route_1"] = AreaStatus.LINKED
     st.area_states["route_2"] = AreaStatus.LINKED
-    st.party_keys["a"].add("A:1")
-    st.party_keys["b"].add("B:2")
+    st.party_keys["a"].add(ka)
+    st.party_keys["b"].add(kb)
     st.pokeballs_obtained = {"a": True, "b": True}
     return s
 
@@ -140,3 +162,36 @@ async def test_no_alpine_x_init_calls_a_method_named_init(client, path):
 async def test_no_page_builds_an_undefined_theme_url(client, path):
     body = await (await client.get(path)).text()
     assert "themes/undefined" not in body
+
+
+# ── content, not just a status code ──────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_the_dashboard_actually_renders_the_pair(client):
+    """`status < 500` is what let a whole class of defect through.
+
+    Every Gen 1 rendering bug this sweep found — the sprite missing the class every CSS
+    rule selects on, the badge bitmask rendered as a count, one Special drawn as two stat
+    chips — produced a perfectly valid 200 with a page that said the wrong thing. A smoke
+    test that only checks for the absence of a stack trace cannot see any of them.
+
+    This asserts the linked pair reaches the page at all, which is the weakest claim worth
+    making and still strictly more than a status code.
+    """
+    resp = await client.get("/")
+    assert resp.status == 200
+    body = (await resp.read()).decode("utf-8", "replace")
+    assert "BULBA" in body, "the linked pair's nickname is not on the dashboard"
+    assert "CHAR" in body, "the partner half is not on the dashboard"
+
+
+@pytest.mark.asyncio
+async def test_sprites_carry_the_class_the_stylesheet_selects_on(client, srv):
+    """The defect that shipped: four of six adapters emitted a bare <img>, so the
+    enc-sprite swap silently no-opped and every rule keyed on it failed to match."""
+    resp = await client.get("/")
+    body = (await resp.read()).decode("utf-8", "replace")
+    if not srv.adapter.sprite_html(1):
+        pytest.skip("this generation renders no sprites")
+    assert 'class="mon-sprite"' in body or 'class="enc-sprite"' in body, (
+        "no sprite on the dashboard carries a class the stylesheet can select")

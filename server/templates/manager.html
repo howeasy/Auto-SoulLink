@@ -54,7 +54,7 @@
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-dna"/></svg>
             Species Clause
           </label>
-          <label data-tip="Reject links where both mons share a gender.">
+          <label data-tip="Reject links where both mons share a gender. Has no effect on Gen 1, which has no gender at all — the clause can never fire there.">
             <input type="checkbox" x-model="newOpts.gender_lock">
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-gender"/></svg>
             Gender Clause
@@ -68,9 +68,9 @@
       </div>
       <div class="mgr-new-opts-section">
         <div class="mgr-new-opts-head">
-          <span class="mgr-new-opts-label">ROM Patch</span>
+          <span class="mgr-new-opts-label">Battle extras</span>
           <span class="mgr-info" tabindex="0" role="note"
-                data-tip="These need the companion ROM patch applied to BOTH players' games.">
+                data-tip="On Gen 3 (Radical Red) these need the companion ROM patch applied to BOTH players' games. On Gen 1 (Red/Blue/Yellow) Explode Mode and Rival Swap need NO patch at all — the enemy party is plaintext and the move choice is a plain RAM write.">
             <svg aria-hidden="true"><use href="#i-info"/></svg>
           </span>
           <a class="mgr-new-opts-get" href="/patcher" target="_blank" rel="noopener"
@@ -79,17 +79,17 @@
           </a>
         </div>
         <div class="mgr-new-opts">
-          <label data-tip="On a partner's death, force the linked mon to auto-Explode (RR; Variant-3 menu-skip).">
+          <label data-tip="On a partner's death, force the linked mon to auto-Explode. Gen 3: needs the companion patch (RR; Variant-3 menu-skip). Gen 1: no patch needed.">
             <input type="checkbox" x-model="newOpts.explode_mode">
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-explode"/></svg>
             Explode Mode
           </label>
-          <label data-tip="Rival/trainer battles load your partner's exact team instead of the canned one.">
+          <label data-tip="Rival/trainer battles load your partner's exact team instead of the canned one. Gen 3: needs the companion patch (gEnemyParty is encrypted). Gen 1: no patch needed.">
             <input type="checkbox" x-model="newOpts.rival_team_swap">
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-rival-swap"/></svg>
             Rival Swap
           </label>
-          <label data-tip="See your partner walking in your overworld as a live peer ghost.">
+          <label data-tip="See your partner walking in your overworld as a live peer ghost. Gen 3 only (Radical Red).">
             <input type="checkbox" x-model="newOpts.overworld_presence">
             <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-presence"/></svg>
             Overworld Presence
@@ -104,22 +104,22 @@
             </span>
           </summary>
           <div class="mgr-new-opts">
-            <label data-tip="Draw field + battle notifications as native in-game text boxes instead of the Lua HUD overlay.">
+            <label data-tip="Draw field + battle notifications as native in-game text boxes instead of the Lua HUD overlay. Gen 3 only.">
               <input type="checkbox" x-model="newOpts.native_messages">
               <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-msgbox"/></svg>
               Native Messages
             </label>
-            <label data-tip="Play notification sounds through the game's own audio engine instead of the Lua m4a poke.">
+            <label data-tip="Play notification sounds through the game's own audio engine instead of the Lua m4a poke. Gen 3 only — the Gen 1 companion patch ships without audio, because its only available hook re-enters a non-reentrant sound routine.">
               <input type="checkbox" x-model="newOpts.native_sounds">
               <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-sound"/></svg>
               Native Sounds
             </label>
-            <label data-tip="Show the bundled in-battle damage / type-effectiveness calculator. Off hides it (on by default).">
+            <label data-tip="Show the bundled in-battle damage / type-effectiveness calculator. Off hides it (on by default). Gen 3 only — the calculator is pinned to modern mechanics and would misreport Gen 1 damage.">
               <input type="checkbox" x-model="newOpts.battle_calc">
               <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-calc"/></svg>
               Battle Calc
             </label>
-            <label data-tip="Spawn a Pokémon-Center trade NPC for trading (on by default; only used when Overworld Presence is off).">
+            <label data-tip="Spawn a Pokémon-Center trade NPC for trading (on by default; only used when Overworld Presence is off). Gen 3 only.">
               <input type="checkbox" x-model="newOpts.pc_trade_npc">
               <svg class="mgr-opt-ico" aria-hidden="true"><use href="#i-pcnpc"/></svg>
               PC Trade NPC
