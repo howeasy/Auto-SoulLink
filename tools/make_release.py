@@ -378,10 +378,21 @@ def build_release(
                 )
                 print(f"  [added]   {prefix}data/games/{gen}/{fname}")
 
-        # ── Companion patch (RR native features) — optional ───────────────────
+        # ── Companion patches — optional ──────────────────────────────────────
         if include_companion:
             zf.write(REPO_ROOT / _COMPANION_UPS, prefix + "companion/SLink-RR.ups")
             print(f"  [added]   {prefix}companion/SLink-RR.ups")
+            # The Game Boy pair. Red and Blue each get their own, because a UPS embeds
+            # the CRC32 of the exact dump it was diffed against. There is deliberately NO
+            # Yellow patch: its WRAM has no free bytes for the mailbox, so no build
+            # exists, and shipping one would advertise a capability that cannot be there.
+            for gb_ups in ("SLink-RB-Red.ups", "SLink-RB-Blue.ups"):
+                src = REPO_ROOT / "patch" / "dist" / gb_ups
+                if src.exists():
+                    zf.write(src, prefix + f"companion/{gb_ups}")
+                    print(f"  [added]   {prefix}companion/{gb_ups}")
+                else:
+                    print(f"  [SKIP]    {gb_ups} not built — run patch/tools/make_ups.py")
             readme = REPO_ROOT / _COMPANION_README
             if readme.exists():
                 zf.write(readme, prefix + "companion/COMPANION_PATCH.md")

@@ -281,7 +281,10 @@
         new Blob([out], { type: "application/octet-stream" })
       );
       downloadEl.href = blobUrl;
-      downloadEl.download = "Pokemon - Radical Red (SLink companion).gba";
+      // The target names its own output. Hardcoding the Radical Red filename meant a
+      // patched Pokemon Red downloaded as a .gba called "Radical Red", which is both
+      // confusing and the wrong extension for the emulator to associate.
+      downloadEl.download = cfg.outName || "Pokemon - Radical Red (SLink companion).gba";
       downloadEl.hidden = false;
 
       fpIn.textContent = inMd5;

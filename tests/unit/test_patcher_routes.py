@@ -36,20 +36,26 @@ def _make_app() -> web.Application:
 
 
 @pytest.mark.asyncio
-async def test_patch_file_served_with_download_headers(tmp_path, monkeypatch):
-    """When the UPS exists, the endpoint returns its exact bytes as a download."""
-    ups = tmp_path / "SLink-RR.ups"
-    payload = b"UPS1\x00fake-patch-bytes"
-    ups.write_bytes(payload)
-    monkeypatch.setattr(patcher, "PATCH_FILE", str(ups))
+@pytest.mark.parametrize("slug", list(patcher.TARGETS))
+async def test_every_target_is_served_with_download_headers(slug, tmp_path, monkeypatch):
+    """Each companion patch has its own route, because each is pinned to one dump.
+
+    A UPS carries the CRC32 of the exact source it was diffed against, so a single shared
+    file would refuse every user but one -- and that refusal would look like a corrupt
+    download rather than the wrong game.
+    """
+    name = patcher.TARGETS[slug]["patch"]
+    payload = b"UPS1" + slug.encode()
+    (tmp_path / name).write_bytes(payload)
+    monkeypatch.setattr(patcher, "_DIST", str(tmp_path))
 
     client = TestClient(TestServer(_make_app()))
     await client.start_server()
     try:
-        resp = await client.get("/companion/SLink-RR.ups")
+        resp = await client.get(f"/companion/{name}")
         assert resp.status == 200
         assert resp.headers["Content-Type"] == "application/octet-stream"
-        assert resp.headers["Content-Disposition"] == 'attachment; filename="SLink-RR.ups"'
+        assert resp.headers["Content-Disposition"] == f'attachment; filename="{name}"'
         assert resp.headers["Cache-Control"] == "no-cache"
         assert await resp.read() == payload
     finally:
@@ -59,16 +65,42 @@ async def test_patch_file_served_with_download_headers(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_patch_file_missing_is_404_with_hint(tmp_path, monkeypatch):
     """When the UPS hasn't been built, the endpoint 404s and says how to fix it."""
-    monkeypatch.setattr(patcher, "PATCH_FILE", str(tmp_path / "nope.ups"))
+    monkeypatch.setattr(patcher, "_DIST", str(tmp_path))
 
     client = TestClient(TestServer(_make_app()))
     await client.start_server()
     try:
         resp = await client.get("/companion/SLink-RR.ups")
         assert resp.status == 404
-        assert "build.py" in await resp.text()
+        assert "make_ups" in await resp.text()
     finally:
         await client.close()
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_patch_name_is_refused(tmp_path, monkeypatch):
+    """The route takes a filename, so it must not hand out arbitrary files from dist/."""
+    (tmp_path / "secrets.ups").write_bytes(b"UPS1")
+    monkeypatch.setattr(patcher, "_DIST", str(tmp_path))
+
+    client = TestClient(TestServer(_make_app()))
+    await client.start_server()
+    try:
+        resp = await client.get("/companion/secrets.ups")
+        assert resp.status == 404
+    finally:
+        await client.close()
+
+
+def test_no_yellow_companion_artifact_is_shipped():
+    """Yellow has arithmetically zero free WRAM for the mailbox, so there is no build to
+    ship -- and shipping one would advertise a capability that cannot exist."""
+    assert not any("yellow" in t["patch"].lower() for t in patcher.TARGETS.values())
+    dist = os.path.normpath(os.path.join(os.path.dirname(patcher.__file__), "..",
+                                         "patch", "dist"))
+    if os.path.isdir(dist):
+        assert not [f for f in os.listdir(dist) if "yellow" in f.lower()]
+
 
 
 def test_md5_constants_match_readme():
@@ -100,3 +132,68 @@ def test_md5_constants_match_build_tools():
     m = re.search(r'EXPECT_BASE_RR_MD5\s*=\s*"([0-9a-f]{32})"', calc_src)
     assert m and m.group(1) == patcher.BASE_ROM_MD5, \
         "make_battle_calc_patch.py EXPECT_BASE_RR_MD5 drifted from server/patcher.py BASE_ROM_MD5"
+
+
+class TestTheShippedPatchesActuallyApply:
+    """The apply path had NO coverage on either generation.
+
+    This file used `UPS1` followed by filler as its patch bytes, and patcher.js exports
+    `upsApply` "for tests" with nothing consuming it. A patch that downloads correctly and
+    produces the wrong ROM is the failure that matters, and nothing could see it. These run
+    the real codec over the real shipped files.
+    """
+
+    def _tools(self):
+        import importlib.util
+        path = os.path.normpath(os.path.join(os.path.dirname(patcher.__file__), "..",
+                                             "patch", "tools", "make_ups.py"))
+        spec = importlib.util.spec_from_file_location("make_ups", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def _bytes(self, *paths):
+        out = []
+        for path in paths:
+            if not os.path.exists(path):
+                pytest.skip(f"{os.path.basename(path)} not present (ROMs are gitignored)")
+            with open(path, "rb") as f:
+                out.append(f.read())
+        return out
+
+    def _clean(self, name):
+        return os.path.normpath(os.path.join(os.path.dirname(patcher.__file__), "..",
+                                             "patch", "build", name))
+
+    @pytest.mark.parametrize("slug,base", [("rb-red", "gen1_red.gb"),
+                                           ("rb-blue", "gen1_blue.gb")])
+    def test_applying_the_shipped_ups_reproduces_the_recorded_md5(self, slug, base):
+        import hashlib
+        src, patch_bytes = self._bytes(self._clean(base), patcher.patch_path(slug))
+        out = self._tools().ups_apply(src, patch_bytes)
+        assert hashlib.md5(out).hexdigest() == patcher.TARGETS[slug]["patched_md5"], (
+            "the shipped patch does not produce the ROM whose md5 the page advertises")
+
+    @pytest.mark.parametrize("slug,base", [("rb-red", "gen1_red.gb"),
+                                           ("rb-blue", "gen1_blue.gb")])
+    def test_the_patched_result_carries_the_companion_beacon(self, slug, base):
+        """Beyond the hash: the thing the patch exists to add is actually there.
+
+        A hash check proves the bytes match what was built; it cannot tell you the build
+        was right. The client detects the patch by reading 'SLNK' at the mailbox, so that
+        is what to assert.
+        """
+        src, patch_bytes = self._bytes(self._clean(base), patcher.patch_path(slug))
+        out = self._tools().ups_apply(src, patch_bytes)
+        bank = out[0x3F * 0x4000:0x40 * 0x4000]
+        assert b"\x3e\x53" in bank[:64], "the beacon writer is missing from bank $3F"
+        assert len(out) == len(src), "the patch changed the ROM size"
+
+    @pytest.mark.parametrize("slug,wrong", [("rb-red", "gen1_blue.gb"),
+                                            ("rb-blue", "gen1_red.gb")])
+    def test_applying_a_patch_to_the_wrong_dump_is_refused(self, slug, wrong):
+        """The CRC32 embedded in the UPS is the entire safety mechanism. A patcher that
+        ignored it would quietly hand the player a corrupt cartridge."""
+        src, patch_bytes = self._bytes(self._clean(wrong), patcher.patch_path(slug))
+        with pytest.raises(Exception):
+            self._tools().ups_apply(src, patch_bytes)

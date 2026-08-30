@@ -1,11 +1,11 @@
-# Gen 1 companion patch — the spike, and its verdict
+# Gen 1 companion patch — one feature, and one deliberately dropped
 
-**Status: the approach works, and it now carries exactly one feature — sound.**
+**Status: shipping. It carries the in-game SLINK panel, and it does NOT play sound.**
 
-This started as a two-day spike answering *can SLink inject code into Pokémon Red/Blue
-cleanly?* The answer was yes, so it grew the one capability that genuinely cannot be done
-any other way. 62 bytes of SM83. It enforces no Soul Link rule and the Lua client does not
-require it.
+This started as a spike answering *can SLink inject code into Pokémon Red/Blue cleanly?*
+The answer was yes. What it grew into is a START-menu row that opens a full-screen Soul
+Link panel the player can read without leaving the game. ~450 bytes of SM83. It enforces
+no Soul Link rule and the Lua client does not require it.
 
 ## Why so little
 
@@ -15,14 +15,54 @@ party is plaintext at a fixed address, so the swap, Explode Mode, memorialize an
 sync are all plain RAM writes on an unmodified cartridge — and they are live-tested that
 way (`tests/e2e/test_duo_gen1.py`).
 
-So the patch buys **zero additional rules**. What it does buy is the one thing Lua cannot
-reach at all: **sound**.
+So the patch buys **zero additional rules**. What it buys is a screen: pairs, badges and
+dead zones, on the Game Boy, paged with A and closed with B.
 
-`wNewSoundID` (`$C0EE`) looks like a sound mailbox and is not. `PlaySound` takes the id in
-register `a` and only uses that address as internal scratch (`home/audio.asm:140`), and
-nothing in the game loop polls it. There is no address you can write from Lua that makes
-Gen 1 play a sound — the id has to reach a `call`. That is the patch's entire justification,
-and it is why the feature list stops there.
+## Why there is no sound
+
+Earlier builds (ABI 2) played SFX from the VBlank hook. That was removed, not deferred,
+and the capability byte says so — a client asks the bits what this build can do rather
+than inferring it from the ABI number.
+
+Two failure modes, both measurable in the shipped ROM by disassembling `PlaySound`
+(`$23B1`):
+
+* **Swallowed during fades.** `PlaySound` opens
+  `ld a,[wAudioFadeOutControl] / and a / jr z,.noFadeOut` then
+  `ld a,[wNewSoundID] / and a / jr z,.done`. The patch passes the id in `a` and never sets
+  `wNewSoundID`, which is 0 in steady state — so during any fade the call returns without
+  playing, and the request byte was already cleared, so the event is simply lost. Fades run
+  ~56–70 frames on map change and on battle start/end: exactly when capture, faint and
+  whiteout fire.
+* **Re-entrancy, in the ordinary case.** `.noFadeOut` does `xor a / ld [wNewSoundID], a`
+  and calls the audio engine several instructions later. A VBlank landing anywhere in that
+  window sees **both** guard bytes clear, passes the guard, and re-enters a non-reentrant
+  routine — corrupting `wChannelSoundIDs` and stamping the SFX id into
+  `wLastMusicSoundID`. Our hook **is** that VBlank, so no guard on our side can close it.
+
+Playing sound safely needs a main-thread dispatch point with its own displaced bytes and
+queue-drain timing. Until one exists and passes a full state matrix, this build ships
+panel-only. The request byte is still drained so a client leaves no stale state in the
+mailbox; it simply never becomes a sound.
+
+## Distribution
+
+| | Base ROM md5 | Patched md5 |
+|---|---|---|
+| Red  | `3d45c1ee9abd5738df46d2bdda8b57dc` | `123cfcdff9f1ee5b5e53621874e22332` |
+| Blue | `50927e843568814f7ed45ec4f944bd8b` | `c3edad823f9a425edc129a187233758e` |
+
+`patch/dist/SLink-RB-Red.ups` and `-Blue.ups`, generated from the built ROMs:
+
+```bash
+python patch/tools/make_ups.py create patch/build/gen1_red.gb  patch/gen1/build/slink_red.gb  patch/dist/SLink-RB-Red
+python patch/tools/make_ups.py create patch/build/gen1_blue.gb patch/gen1/build/slink_blue.gb patch/dist/SLink-RB-Blue
+```
+
+Both are served by the in-browser patcher (`/patcher?game=rb-red`), applied client-side —
+no ROM is ever uploaded. **No Yellow patch is built or shipped**, and
+`tests/unit/test_patcher_routes.py` asserts its absence rather than leaving it to be
+noticed.
 
 ## Build and verify
 
@@ -89,7 +129,9 @@ reports `WRAM0: TOTAL EMPTY: $001E` — thirty bytes, between `wBoxDataEnd` and 
 ## Red and Blue only
 
 Yellow's map reads `WRAM0: TOTAL EMPTY: $0000`. There is nowhere to put a mailbox, and 21
-free home bytes against Red/Blue's 156. Yellow is Lua-only and loses nothing by it.
+free home bytes against Red/Blue's 156 — the CGB palette section took Red's gap and the
+stack was shortened `$100` → `$EB` (`pokeyellow/ram/wram.asm`). Yellow is Lua-only: the
+core Soul Link rules are unaffected, it simply has no in-game panel.
 
 Archipelago ROMs are also unpatched — the AP fork relocates WRAM and rebuilds the ROM, so
 the offsets here do not hold. AP gets full RAM-only support instead.
@@ -106,19 +148,29 @@ the offsets here do not hold. AP gets full RAM-only support instead.
 | …with the START menu open | 1024 → 1084 |
 | displaced `TrackPlayTime` still runs | play clock advances |
 | the game still plays | `(4,6)` → `(5,6)` |
-| ABI version byte | `2` (SFX support) |
-| the SFX request byte is consumed | cleared within 10 frames |
-| **a sound actually starts** | `wChannelSoundIDs` CHAN5-8 `0/0/0/0` → `140/0/0/0` |
-| a zero request does not retrigger | `0/0/0/0` → `0/0/0/0` |
-| the game still plays *after* the SFX hook fired | `(5,6)` → `(4,6)` |
+| ABI version byte | `3` |
+| capability bits **do not** claim SFX | `caps = 0x02`, panel only |
+| capability bits claim the panel | `caps & 0x02` |
+| the SFX request byte is still drained | cleared within 10 frames |
+| **a drained request never starts a sound** | `wChannelSoundIDs` unchanged over 30 frames |
+| the panel handshake is closed in the overworld | `0` |
+| the game still plays afterwards | `(5,6)` → `(4,6)` |
 
-The sound check asserts on `wChannelSoundIDs`, not on the request byte clearing — the byte
-clearing only proves our own code ran, whereas the channel changing proves the game's audio
-engine accepted the sound. `140` is `0x8C`, exactly the `SFX_TINK` id requested.
+The sound rows are the **inverse** of what they used to assert, and deliberately so. The
+old ones fired from a quiescent overworld — never during a music fade, never probing the
+instruction window inside `PlaySound` — so they were structurally blind to both ways the
+audio path failed, and could only ever observe the case that happens to work. What is
+asserted now is that no reachable `PlaySound` call remains: there is no window left to land
+in. `call PlaySound` (`CD B1 23`) does not appear anywhere in bank `$3F` of either build.
 
-The two "still plays" rows are there for the same reason: a patch that quietly breaks what it
-hooks is worse than no patch, and calling `PlaySound` from inside an interrupt is exactly the
-kind of thing that corrupts a bank or a stack without any other visible symptom.
+The menu-row gate (`lua/tests/test_gen1_menu_row_gate.lua`) covers the panel itself on both
+ROMs: the SLINK row draws and is reachable, selecting it opens the panel, the client's
+staged rows are what appear on screen, **A turns to page 2**, **B closes from a page**, the
+page byte resets, EXIT still closes the menu at its original index, and the player can still
+walk afterwards.
+
+The "still plays" rows exist because a patch that quietly breaks what it hooks is worse than
+no patch.
 
 ## If this ever gets more features
 

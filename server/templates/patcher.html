@@ -16,26 +16,47 @@
     <div class="patcher-wrap"
          data-base-md5="{{ base_rom_md5 }}"
          data-patched-md5="{{ patched_rom_md5 }}"
-         data-patch-url="/companion/SLink-RR.ups">
+         data-out-name="{{ target.out_name }}"
+         data-patch-url="/companion/{{ target.patch }}">
 
       <header class="patcher-head">
         <h1>Companion ROM Patcher</h1>
         <p class="patcher-lead">
-          Apply the SLink companion patch to your <strong>clean Radical Red</strong> ROM
+          Apply the SLink companion patch to your <strong>{{ target.base_hint }}</strong>
           right here — the patch runs entirely in your browser, nothing is uploaded.
           The patch is <strong>optional</strong>: without it the SLink Lua client falls
           back to its existing behaviour, and unpatched players are unaffected.
         </p>
+        {# One page, several games. A UPS carries the CRC32 of the exact dump it was
+           diffed against, so the target has to be chosen before the file is applied
+           rather than guessed from what the user drops in. #}
+        <nav class="patcher-games">
+          {% for t in targets %}
+            {% if t.slug == target.slug %}
+              <strong class="patcher-game is-active">{{ t.label }}</strong>
+            {% else %}
+              <a class="patcher-game" href="/patcher?game={{ t.slug }}">{{ t.label }}</a>
+            {% endif %}
+          {% endfor %}
+        </nav>
+        {% if target.slug != "rr" %}
+        <p class="patcher-muted">
+          Pokemon Yellow is not listed because there is no companion build for it: its
+          WRAM has no free bytes for the mailbox the patch needs. Yellow plays fine —
+          the core Soul Link rules need no patch on any Game Boy title — it simply has
+          no in-game panel.
+        </p>
+        {% endif %}
       </header>
 
       {# ── Patch-and-download ─────────────────────────────────────────── #}
       <section class="patcher-card">
         <h2>1 · Patch your ROM</h2>
         <label id="drop" class="patcher-drop" for="rom-input">
-          <input id="rom-input" type="file" accept=".gba,application/octet-stream" hidden>
+          <input id="rom-input" type="file" accept="{{ target.accept }}" hidden>
           <span class="patcher-drop-ico" aria-hidden="true">⬇</span>
           <span class="patcher-drop-text">
-            Drop your <code>Pokemon - Radical Red.gba</code> here, or click to choose
+            Drop your <code>{{ target.label }}</code> ROM here, or click to choose
           </span>
           <span id="rom-name" class="patcher-drop-name"></span>
         </label>
@@ -91,8 +112,8 @@
           <code>{{ patched_rom_md5 }}</code>.
         </p>
         <p>
-          <a class="patcher-btn patcher-btn-ghost" href="/companion/SLink-RR.ups" download>
-            Download SLink-RR.ups
+          <a class="patcher-btn patcher-btn-ghost" href="/companion/{{ target.patch }}" download>
+            Download {{ target.patch }}
           </a>
         </p>
       </section>

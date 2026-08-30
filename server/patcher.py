@@ -27,17 +27,68 @@ from server.templating import resolve_theme
 
 # ── Paths ───────────────────────────────────────────────────────────────────
 _SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
-# Repo-root-relative: server/ -> ../patch/dist/SLink-RR.ups
-PATCH_FILE = os.path.normpath(
-    os.path.join(_SERVER_DIR, "..", "patch", "dist", "SLink-RR.ups")
-)
+_DIST = os.path.normpath(os.path.join(_SERVER_DIR, "..", "patch", "dist"))
 
-# ── Fingerprints (single source of truth: patch/README.md) ──────────────────
-# Base clean Radical Red build the patch is pinned to, and the expected md5 of
-# the patched result. Surfaced to the page so it can echo the README's friendly
-# fingerprints; correctness is gated by the UPS-embedded CRC32 in patcher.js.
-BASE_ROM_MD5 = "8529f3a45d32bce4da637976fcf269d4"
-PATCHED_ROM_MD5 = "8dcffce7659be02474dfa0f876639f8a"
+# ── Targets ─────────────────────────────────────────────────────────────────
+# A REGISTRY, not a single file. There are three companion patches now and they are not
+# interchangeable: a UPS carries the CRC32 of the exact source it was diffed against, so
+# offering one file for several games means every user but one gets a refusal they cannot
+# act on.
+#
+# Each entry is one clean base dump -> one patched result. md5s are the friendly
+# fingerprints the page echoes; correctness is gated by the UPS-embedded CRC32 in
+# patcher.js, which is a property of the patch file rather than of this table.
+#
+# NO YELLOW ENTRY, deliberately. Yellow has arithmetically zero free WRAM
+# (pokeyellow/ram/wram.asm: the CGB palette section took Red's gap and the stack was
+# shortened $100 -> $EB), so there is no companion build to ship and shipping one would
+# imply a capability that cannot exist. tests/unit/test_patcher_routes.py asserts its
+# absence rather than leaving it to be noticed.
+TARGETS: dict[str, dict] = {
+    "rr": {
+        "slug":        "rr",
+        "label":       "Radical Red",
+        "patch":       "SLink-RR.ups",
+        "base_md5":    "8529f3a45d32bce4da637976fcf269d4",
+        "patched_md5": "8dcffce7659be02474dfa0f876639f8a",
+        "accept":      ".gba,application/octet-stream",
+        "out_name":    "Pokemon - Radical Red (SLink companion).gba",
+        "base_hint":   "a clean Radical Red 4.1 ROM",
+    },
+    "rb-red": {
+        "slug":        "rb-red",
+        "label":       "Pokemon Red",
+        "patch":       "SLink-RB-Red.ups",
+        "base_md5":    "3d45c1ee9abd5738df46d2bdda8b57dc",
+        "patched_md5": "123cfcdff9f1ee5b5e53621874e22332",
+        "accept":      ".gb,.gbc,application/octet-stream",
+        "out_name":    "Pokemon Red (SLink companion).gb",
+        "base_hint":   "a clean US/English Pokemon Red dump",
+    },
+    "rb-blue": {
+        "slug":        "rb-blue",
+        "label":       "Pokemon Blue",
+        "patch":       "SLink-RB-Blue.ups",
+        "base_md5":    "50927e843568814f7ed45ec4f944bd8b",
+        "patched_md5": "c3edad823f9a425edc129a187233758e",
+        "accept":      ".gb,.gbc,application/octet-stream",
+        "out_name":    "Pokemon Blue (SLink companion).gb",
+        "base_hint":   "a clean US/English Pokemon Blue dump",
+    },
+}
+
+DEFAULT_TARGET = "rr"
+
+
+def patch_path(slug: str) -> str:
+    """Absolute path to a target's UPS file."""
+    return os.path.join(_DIST, TARGETS[slug]["patch"])
+
+
+# Kept for callers that predate the registry; the RR patch is still the default.
+PATCH_FILE = os.path.join(_DIST, TARGETS[DEFAULT_TARGET]["patch"])
+BASE_ROM_MD5 = TARGETS[DEFAULT_TARGET]["base_md5"]
+PATCHED_ROM_MD5 = TARGETS[DEFAULT_TARGET]["patched_md5"]
 
 
 def setup_patcher_routes(
@@ -54,12 +105,18 @@ def setup_patcher_routes(
     """
 
     async def handle_patcher_page(request: web.Request) -> web.Response:
+        slug = request.query.get("game", DEFAULT_TARGET)
+        if slug not in TARGETS:
+            slug = DEFAULT_TARGET
+        target = TARGETS[slug]
         ctx = {
             "page_title":      "SLink Companion ROM Patcher",
             "theme":           resolve_theme(request),
             "sidebar_html":    sidebar_builder("patcher"),
-            "base_rom_md5":    BASE_ROM_MD5,
-            "patched_rom_md5": PATCHED_ROM_MD5,
+            "target":          target,
+            "targets":         list(TARGETS.values()),
+            "base_rom_md5":    target["base_md5"],
+            "patched_rom_md5": target["patched_md5"],
         }
         resp = aiohttp_jinja2.render_template("patcher.html", request, ctx)
         # The rendered theme depends on the slink-theme cookie; revalidate so a
@@ -69,18 +126,26 @@ def setup_patcher_routes(
         return resp
 
     async def handle_patch_file(request: web.Request) -> web.Response:
-        if not os.path.isfile(PATCH_FILE):
-            raise web.HTTPNotFound(text="SLink-RR.ups not built — run patch/tools/build.py")
-        with open(PATCH_FILE, "rb") as fh:
+        name = request.match_info["name"]
+        slug = next((s for s, t in TARGETS.items() if t["patch"] == name), None)
+        if slug is None:
+            raise web.HTTPNotFound(text=f"{name} is not a companion patch this build ships")
+        path = patch_path(slug)
+        if not os.path.isfile(path):
+            raise web.HTTPNotFound(
+                text=f"{name} not built — run patch/tools/make_ups.py (see patch/README.md)")
+        with open(path, "rb") as fh:
             body = fh.read()
         return web.Response(
             body=body,
             content_type="application/octet-stream",
             headers={
-                "Content-Disposition": 'attachment; filename="SLink-RR.ups"',
+                "Content-Disposition": f'attachment; filename="{name}"',
                 "Cache-Control": "no-cache",
             },
         )
 
     app.router.add_get("/patcher", handle_patcher_page)
-    app.router.add_get("/companion/SLink-RR.ups", handle_patch_file)
+    # One route for every target. The old fixed path still resolves, because it is just
+    # the RR entry's filename.
+    app.router.add_get("/companion/{name}", handle_patch_file)
