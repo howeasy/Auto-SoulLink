@@ -73,12 +73,18 @@ DUO_ROMS = DUO_GAMES["gen1"]
 SCENARIOS = ("faint", "boxsync", "memorialize", "rivalswap", "explode_g1", "whiteout",
              "playthrough", "deadzone", "dupes")
 
-# Scenarios that PLAY need BOTH cartridges standing on the SAME encounter map: Soul Link
-# pairs and locks by area, so two fixtures on different routes share nothing to test. The
-# Red/Blue battery saves both sit on Route 1; the Yellow one came out on Route 3, so the
-# Yellow pairing has no shared area and these would grind to a timeout instead of failing
-# with a reason.
-SAME_MAP_ONLY = ("playthrough", "deadzone", "dupes")
+# THE YELLOW FIXTURE IS NOT ON ROUTE 3. A SAME_MAP_ONLY tuple used to skip playthrough,
+# deadzone and dupes on the Yellow pairing, on the stated grounds that the Yellow battery
+# save "came out on Route 3" and so shared no encounter map with Red's. Decoding the
+# fixtures says otherwise: wCurMap sits at file offset 0x260A (0x2000 + 0x598 + 11, and
+# wCurMap - wPokedexOwned = 0x67 in both decomps), and ALL THREE battle fixtures read
+# map 0x0C -- Route 1 -- at (10, 35), byte for byte the same placement. All three town
+# fixtures read map 0x00, Pallet.
+#
+# The claim entered with the commit that FIXED Yellow's WRAM-shift bugs, which is the
+# giveaway: it was read off the wrong byte. Three real runs per pairing were being skipped,
+# and a skip reads exactly like a pass.
+# tests/unit/test_gen1_fixtures.py now pins the decoded maps so this cannot come back.
 
 # Scenarios registered but NOT passing, mapped to the reason. EMPTY, and keeping it empty is
 # the point: every Gen 1 duo scenario now passes. Entries here are xfail rather than deletion
@@ -128,18 +134,22 @@ def _subprocess_timeout(scenario: str) -> int:
 def test_gen1_duo(scenario, game):
     if scenario in KNOWN_FAILING:
         pytest.xfail(KNOWN_FAILING[scenario])
-    if scenario in SAME_MAP_ONLY and game != "gen1":
-        pytest.skip(f"{scenario} needs both cartridges on one encounter map; "
-                    f"{game}'s fixtures are on different routes")
     if not os.path.exists(play.EMUHAWK):
         pytest.skip(f"EmuHawk not found at {play.EMUHAWK}")
     for rom in DUO_GAMES[game]:
         if not os.path.exists(os.path.join(REPO, play.ROMS[rom])):
             pytest.skip(f"{play.ROMS[rom]} not present (ROMs are gitignored)")
-        fixture = os.path.join(play.FIXTURES, f"{rom}_town.SaveRAM")
+        # THE FIXTURE THE SCENARIO ACTUALLY LOADS, not always the town one. playthrough,
+        # deadzone and dupes declare `target: battle`; this pre-check looked for
+        # `_town.SaveRAM` regardless, so it could skip on a missing file the run would not
+        # have opened, and pass through a missing one it needed.
+        sys.path.insert(0, os.path.join(REPO, "tools"))
+        from e2e_duo import SCENARIOS as _RUNNER_SCENARIOS
+        target = _RUNNER_SCENARIOS[scenario].get("target", "town")
+        fixture = os.path.join(play.FIXTURES, f"{rom}_{target}.SaveRAM")
         if not os.path.exists(fixture):
             pytest.skip(f"missing fixture — build with "
-                        f"`python tools/gen1_playthrough.py --rom {rom} --target town`")
+                        f"`python tools/gen1_playthrough.py --rom {rom} --target {target}`")
 
     proc = subprocess.run(
         [sys.executable, os.path.join(REPO, "tools", "e2e_duo.py"),

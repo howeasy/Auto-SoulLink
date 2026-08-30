@@ -69,7 +69,8 @@ _HEADER_TITLE_TO_SYMS = {
 _SYMS_TO_VARIANT = {"pokered": "red", "pokeblue": "blue", "pokeyellow": "yellow"}
 
 BASE_STATS_RECORD = 28
-BASE_STATS_COUNT = 150            # Bulbasaur..Mewtwo by dex number; Mew is stored apart
+BASE_STATS_COUNT = 150            # R/B: Bulbasaur..Mewtwo; Mew is stored apart
+BASE_STATS_COUNT_YELLOW = 151     # Yellow keeps Mew IN the table, at record 150
 WILD_SLOTS = 10                   # both grass and water always carry exactly ten
 GEN1_ROM_SIZE = 1024 * 1024
 
@@ -293,7 +294,16 @@ def scan_base_stats(rom: bytes) -> dict[int, dict]:
             "type1": r[6], "type2": r[7], "catch_rate": r[8], "base_exp": r[9],
         }
 
-    for i in range(BASE_STATS_COUNT):
+    # HOW MANY RECORDS THE MAIN TABLE HOLDS DEPENDS ON THE TITLE.
+    # pokered/data/pokemon/base_stats.asm ends `assert_table_length NUM_POKEMON - 1 ;
+    # discount Mew` and stores Mew at its own symbol; pokeyellow's ends
+    # `assert_table_length NUM_POKEMON` with mew.asm included, so Yellow's Mew is record 150.
+    # Reading a flat 150 on Yellow silently dropped dex 151 from every Python scan -- while
+    # lua/games/gen1_rby.lua got it right, so the two disagreed -- and _check_content diffs
+    # the scan against itself, giving the pipeline's only rule-data guard a species-shaped
+    # hole on Yellow.
+    count = BASE_STATS_COUNT if "MewBaseStats" in syms else BASE_STATS_COUNT_YELLOW
+    for i in range(count):
         rec = read(base + BASE_STATS_RECORD * i)
         # The table is dex-ordered, so record i MUST describe dex i+1. If it does not, the
         # stride or the symbol is wrong and everything downstream is fiction.

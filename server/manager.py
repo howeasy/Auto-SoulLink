@@ -42,7 +42,19 @@ except ImportError:
 import aiohttp_jinja2
 
 from server.overlay_catalog import build_index_context as _build_stream_index_context
+from server.adapters import variant_label
 from server.templating import resolve_theme, setup_templating
+
+
+def _json_for_script(obj) -> str:
+    """json.dumps, safe to embed directly in a <script> element.
+
+    `<`, `>` and `&` become unicode escapes: still valid JSON, still the same string
+    once parsed, but no longer able to close the script element they sit inside.
+    """
+    return (json.dumps(obj)
+            .replace("<", "\\u003c").replace(">", "\\u003e")
+            .replace("&", "\\u0026"))
 
 log = logging.getLogger("slink.manager")
 
@@ -481,7 +493,14 @@ class RunManager:
                 "theme":        resolve_theme(request),
                 "is_stream":    False,
                 "hide_chrome":  False,
-                "runs_json":    json.dumps(augmented),
+                # ESCAPED, not just serialized. This lands inside a <script> block via
+                # `| safe`, and json.dumps does not escape "<" -- so a run NAME containing
+                # "</script>" closed the element and everything after it was parsed as
+                # markup. Run names reach here from the API as well as the UI, so this is
+                # stored XSS rather than a self-inflicted footgun. Escaping the three
+                # characters that can end or open a tag keeps the JSON valid (they are
+                # legal inside JS strings as unicode escapes) and inert as markup.
+                "runs_json":    _json_for_script(augmented),
                 "manager_port": self.manager_port,
             },
         )
@@ -502,7 +521,8 @@ class RunManager:
         try:
             with open(links_path) as f:
                 rom_type = json.load(f).get("rom_type", "")
-            r["game_label"] = rom_type.replace("_", " ").title() if rom_type else ""
+            # variant_label, not .title(): the latter renders gen1_rby as "Gen1 Rby".
+            r["game_label"] = variant_label(rom_type) if rom_type else ""
         except (json.JSONDecodeError, OSError, FileNotFoundError):
             r["game_label"] = ""
 

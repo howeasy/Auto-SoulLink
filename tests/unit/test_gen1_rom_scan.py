@@ -246,9 +246,16 @@ def test_wild_records_are_well_formed(title):
 @pytest.mark.parametrize("title", TITLES)
 def test_base_stats_cover_every_species_with_sane_types(title):
     stats = scan_base_stats(_rom(title))
-    # Yellow stores Mew in the main table, R/B keep it apart; both must end up complete
-    # for 1..150 at minimum, and R/B additionally expose 151.
-    assert set(range(1, 151)) <= set(stats), f"{title} is missing dex numbers"
+    # EVERY species, on every title -- 151, not 150.
+    # This assertion used to be `set(range(1, 151)) <= set(stats)` under a comment
+    # correctly explaining that Yellow keeps Mew in the main table while R/B store it
+    # apart. The comment was right and the assertion did not check it, so a scanner that
+    # read a flat 150 records dropped Yellow's Mew and this passed. pokered's table ends
+    # `assert_table_length NUM_POKEMON - 1 ; discount Mew`; pokeyellow's ends
+    # `assert_table_length NUM_POKEMON` with mew.asm included.
+    assert set(stats) == set(range(1, 152)), (
+        f"{title} is missing dex numbers: {sorted(set(range(1, 152)) - set(stats))}")
+    assert stats[151]["dex"] == 151, f"{title} has no Mew"
     for dex, rec in stats.items():
         assert rec["dex"] == dex
         assert 1 <= rec["hp"] <= 255
@@ -410,17 +417,12 @@ class TestRandomizedRoms:
 
     @staticmethod
     def _jar() -> str:
-        import shutil
-        env = os.environ.get("SLINK_UPR_JAR")
-        if env and os.path.exists(env):
-            return env
-        for cand in (os.path.join(_REPO, "PokeRandoZX.jar"),
-                     os.path.join(_REPO, "tools", "PokeRandoZX.jar")):
-            if os.path.exists(cand):
-                return cand
-        pytest.skip("PokeRandoZX.jar not found — set SLINK_UPR_JAR to run this")
-        raise AssertionError  # unreachable; keeps type checkers quiet
-        del shutil
+        from tests.conftest import find_upr_jar
+        jar = find_upr_jar()
+        if not jar:
+            pytest.skip("PokeRandoZX.jar not found — put it in .cache/upr/ or set "
+                        "SLINK_UPR_JAR")
+        return jar
 
     @classmethod
     def _randomize(cls, tmp_path, title: str, tag: str) -> bytes:

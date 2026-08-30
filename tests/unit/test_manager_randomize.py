@@ -28,11 +28,11 @@ ALL_CATEGORIES = {"wild", "starters", "statics", "trainers", "tms", "field_items
 
 
 def _jar() -> str:
-    env = os.environ.get("SLINK_UPR_JAR")
-    if env and os.path.exists(env):
-        return env
-    pytest.skip("PokeRandoZX.jar not found — set SLINK_UPR_JAR to run this")
-    raise AssertionError
+    from tests.conftest import find_upr_jar
+    jar = find_upr_jar()
+    if not jar:
+        pytest.skip("PokeRandoZX.jar not found — put it in .cache/upr/ or set SLINK_UPR_JAR")
+    return jar
 
 
 def _roms():

@@ -97,3 +97,39 @@ def live_server(server_port):
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
         proc.kill()
+
+
+# ── the UPR jar ──────────────────────────────────────────────────────────────────────
+# Three test files had three slightly different copies of this search, none of which
+# looked in .cache/. The result was fifteen tests -- every proof that the ROM scanner,
+# the settings codec and the Manager pipeline work on a GENUINELY randomized ROM --
+# quietly skipping on any machine where the jar was not in one of two hardcoded spots.
+# A skip reads exactly like a pass, and this is the set of skips that matters most.
+#
+# The jar is user-supplied and never redistributed (it is GPLv3 and not ours to ship),
+# so .cache/upr/ is the right home: gitignored, and shared by every worktree.
+def find_upr_jar() -> str | None:
+    """Absolute path to PokeRandoZX.jar, or None. Searches, in order:
+
+    $SLINK_UPR_JAR, then <repo>/PokeRandoZX.jar, <repo>/tools/, and .cache/upr/ walking
+    upward -- a git worktree has no .cache of its own, it lives under the main repo's
+    .claude/worktrees/.
+    """
+    env = os.environ.get("SLINK_UPR_JAR")
+    if env and os.path.exists(env):
+        return env
+    repo = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    for cand in (os.path.join(repo, "PokeRandoZX.jar"),
+                 os.path.join(repo, "tools", "PokeRandoZX.jar")):
+        if os.path.exists(cand):
+            return cand
+    d = repo
+    for _ in range(6):
+        cand = os.path.join(d, ".cache", "upr", "PokeRandoZX.jar")
+        if os.path.exists(cand):
+            return cand
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    return None
