@@ -732,6 +732,16 @@ local function send_hello()
         is_trainer_battle = M.isTrainerBattle(),
         party = snap,
         trainer_name = M.readPlayerName(),
+        -- THE REAL TRAINER ID, not one inferred from a mon.
+        -- The server locks player_identity from party[0]'s key when nothing better is
+        -- offered, which makes the lock depend on WHICH MON happens to be in slot 0 --
+        -- so an in-game-trade mon (a different OT by definition) in the lead slot locks
+        -- the run to the wrong trainer, permanently, and every later hello is rejected as
+        -- WRONG SAVE until someone hand-edits links.json. wPlayerID is the cartridge's own
+        -- answer and cannot be confused by what is in the party.
+        -- Formatted as four hex digits to match parse_ot_id's slice of the mon key, so the
+        -- two agree for a mon the player caught themselves.
+        ot_id = fmt("%04X", M.readPlayerId()),
     }
     -- WHAT THIS CARTRIDGE ACTUALLY HOLDS. A run may be played on ROMs randomized with UPR
     -- ZX -- same settings, different seeds -- so the encounter tables SLink ships, which

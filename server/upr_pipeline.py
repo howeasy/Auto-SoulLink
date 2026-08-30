@@ -35,7 +35,9 @@ import re
 import shutil
 import subprocess
 
-from server.adapters.gen1_rom_scan import RomScanError, identify, scan, scan_base_stats
+from server.adapters.gen1_rom_scan import (
+    RomScanError, evolution_graph, identify, scan, scan_base_stats,
+)
 from server.upr_settings import (
     UprSettingsError, categories_enabled, forbidden_enabled, load, parse_settings_string,
     unexpected_settings,
@@ -164,6 +166,21 @@ def _check_content(source_rom: str, output_rom: str) -> dict:
             raise UprPipelineError(
                 "base stats or types differ from the source — a setting that changes data "
                 "the Soul Link rules read was enabled")
+        # EVOLUTIONS, COMPARED AS A GRAPH RATHER THAN AS BYTES.
+        # UPR repacks and REPOINTS this whole region on every save (savingRom() ->
+        # savePokemonStats() -> writeEvosAndMovesLearnt), so the bytes and the offsets
+        # differ even on a wild-only run that changed nothing. Walking the pointer table
+        # and comparing the logical edges is the only way to tell repacked from altered.
+        #
+        # This matters because `evo_family` -- which the species clause is built on -- reads
+        # a table generated from the vanilla decomp. If a cartridge's evolutions were
+        # randomized, SLink would enforce families that cartridge no longer has: blocking a
+        # legal pair and permitting an illegal one, both silently.
+        if evolution_graph(out) != evolution_graph(src):
+            raise UprPipelineError(
+                "evolution targets differ from the source — evolution randomization was "
+                "enabled, and the species clause reads a vanilla family table, so the "
+                "rules would be enforced against a game nobody is playing")
     except RomScanError as exc:
         raise UprPipelineError(f"the randomized ROM could not be scanned: {exc}") from exc
     return profile

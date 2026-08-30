@@ -321,6 +321,98 @@ def scan_base_stats(rom: bytes) -> dict[int, dict]:
     return out
 
 
+# ── evolutions and learnsets ─────────────────────────────────────────────────────────────
+NUM_POKEMON_INDEXES = 190         # pointer table length; internal indexes, MissingNo included
+EVOLVE_LEVEL, EVOLVE_ITEM, EVOLVE_TRADE = 1, 2, 3     # pokemon_data_constants.asm:78-80
+
+
+def scan_evos_moves(rom: bytes) -> dict[int, dict]:
+    """internal species index -> {"evolutions": [...], "moves": [(level, move), ...]}.
+
+    WHY THIS EXISTS EVEN THOUGH WE DO NOT RANDOMIZE EVOLUTIONS. UPR repacks and repoints
+    these records on EVERY save -- `savingRom()` -> `savePokemonStats()` ->
+    `writeEvosAndMovesLearnt` -- so a wild-only run still rewrites the whole region and
+    moves every record. Comparing the bytes, or the offsets, would therefore report a
+    difference on a run that changed nothing. The only way to tell "repacked" from
+    "altered" is to walk the pointers and compare the LOGICAL graph, which is what this
+    returns.
+
+    Nothing read these tables at all before, so evolutions randomized outside the Manager
+    were invisible: `evo_family` went on enforcing vanilla families against a cartridge
+    that no longer had them, blocking a legal pair and permitting an illegal one.
+
+    Structure (evos_moves.asm:1-9), per species, in one bank:
+        db EVOLVE_LEVEL, level,      species
+        db EVOLVE_ITEM,  item, 1,    species
+        db EVOLVE_TRADE, 1,          species
+        db 0                      ; evolutions end
+        db level, move            ; learnset, ascending
+        db 0                      ; learnset ends
+
+    The pointer table is in INTERNAL index order (entry 0 is Rhydon), not dex order.
+    """
+    ident, syms = _syms_for(rom)
+    base = sym_to_offset(syms["EvosMovesPointerTable"])
+    bank_base = base & ~0x3FFF        # the records are bank-local to the pointer table
+
+    out: dict[int, dict] = {}
+    for i in range(NUM_POKEMON_INDEXES):
+        lo, hi = rom[base + 2 * i], rom[base + 2 * i + 1]
+        addr = lo | (hi << 8)
+        if not (0x4000 <= addr <= 0x7FFF):
+            raise RomScanError(
+                f"EvosMovesPointerTable entry {i} points outside the bank window "
+                f"(0x{addr:04X}) — the symbol or the table length is wrong")
+        off = bank_base + (addr - 0x4000)
+        evolutions, moves = [], []
+
+        # Evolutions, terminated by a 0 method byte.
+        guard = 0
+        while True:
+            guard += 1
+            if guard > 8:
+                raise RomScanError(f"species index {i}: evolution list has no terminator")
+            method = rom[off]
+            if method == 0:
+                off += 1
+                break
+            if method == EVOLVE_LEVEL:
+                evolutions.append(("level", rom[off + 1], rom[off + 2]))
+                off += 3
+            elif method == EVOLVE_ITEM:
+                evolutions.append(("item", rom[off + 1], rom[off + 3]))
+                off += 4
+            elif method == EVOLVE_TRADE:
+                evolutions.append(("trade", rom[off + 1], rom[off + 2]))
+                off += 3
+            else:
+                raise RomScanError(
+                    f"species index {i}: evolution method {method} is not one of "
+                    f"LEVEL/ITEM/TRADE — the record layout is wrong")
+
+        # Learnset: (level, move) pairs, terminated by a 0 level.
+        guard = 0
+        while rom[off] != 0:
+            guard += 1
+            if guard > 64:
+                raise RomScanError(f"species index {i}: learnset has no terminator")
+            moves.append((rom[off], rom[off + 1]))
+            off += 2
+
+        out[i + 1] = {"evolutions": evolutions, "moves": moves}
+    return out
+
+
+def evolution_graph(rom: bytes) -> dict[int, list]:
+    """Just the evolution edges, which is what the rules actually depend on.
+
+    Separated from the learnset so a moveset-only difference cannot be mistaken for an
+    evolution change, and so the comparison in upr_pipeline can name which of the two
+    drifted.
+    """
+    return {idx: rec["evolutions"] for idx, rec in scan_evos_moves(rom).items()}
+
+
 # ── profile ──────────────────────────────────────────────────────────────────────────────
 def scan(rom: bytes) -> dict:
     """The whole content profile for one ROM."""

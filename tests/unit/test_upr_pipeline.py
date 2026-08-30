@@ -15,7 +15,9 @@ import os
 import pytest
 
 from server import upr_pipeline
-from server.upr_pipeline import UprPipelineError, _parse_log, prepare_pair, randomize
+from server.upr_pipeline import (
+    UprPipelineError, _check_content, _parse_log, prepare_pair, randomize,
+)
 from server.upr_settings import build, build_categories
 
 _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
@@ -213,3 +215,71 @@ class TestAgainstTheRealJar:
         p.write_bytes(build_categories({"wild"}))
         res = prepare_pair(_jar(), str(p), _roms(), str(tmp_path / "out"))
         assert res["categories"] == ["wild"]
+
+
+# ── evolutions must survive the round trip unchanged ─────────────────────────────────
+
+class TestEvolutionDrift:
+    """UPR rewrites and REPOINTS the evolution region on every save, so the check that
+    catches a real change has to compare the logical graph rather than the bytes.
+
+    Both halves are load-bearing and pull in opposite directions:
+      * a wild-only randomization must PASS despite every record having moved;
+      * an actually-altered evolution target must FAIL.
+    A check that only did the second could be satisfied by comparing bytes, and would then
+    reject every legitimate run.
+    """
+
+    def _rom(self, path):
+        if not os.path.exists(path):
+            pytest.skip(f"{path} not present (ROMs are gitignored)")
+        with open(path, "rb") as f:
+            return f.read()
+
+    def _mutated(self, tmp_path, rom: bytes) -> str:
+        """Change one evolution TARGET, leaving the layout alone.
+
+        Deliberately not a byte-scramble: the point is to prove the check sees a semantic
+        change, not that it notices corruption.
+        """
+        from server.adapters.gen1_rom_scan import sym_to_offset, _syms_for
+        _, syms = _syms_for(rom)
+        base = sym_to_offset(syms["EvosMovesPointerTable"])
+        bank = base & ~0x3FFF
+        out = bytearray(rom)
+        for i in range(190):
+            lo, hi = rom[base + 2 * i], rom[base + 2 * i + 1]
+            off = bank + ((lo | (hi << 8)) - 0x4000)
+            if rom[off] == 1:                       # EVOLVE_LEVEL: method, level, species
+                out[off + 2] = (rom[off + 2] % 190) + 1
+                break
+        else:
+            pytest.fail("no level evolution found to mutate — the scan is wrong")
+        path = str(tmp_path / "mutated.gbc")
+        with open(path, "wb") as f:
+            f.write(bytes(out))
+        return path
+
+    def test_a_changed_evolution_target_is_refused(self, tmp_path):
+        rom = self._rom(_RED)
+        mutated = self._mutated(tmp_path, rom)
+        with pytest.raises(UprPipelineError, match="evolution targets differ"):
+            _check_content(_RED, mutated)
+
+    def test_the_mutation_is_actually_visible_in_the_graph(self, tmp_path):
+        """Control: if the mutation did not change the graph, the test above would be
+        asserting on something else entirely."""
+        from server.adapters.gen1_rom_scan import evolution_graph
+        rom = self._rom(_RED)
+        mutated = self._mutated(tmp_path, rom)
+        with open(mutated, "rb") as f:
+            assert evolution_graph(f.read()) != evolution_graph(rom)
+
+    def test_an_unmodified_copy_still_passes(self, tmp_path):
+        """The other control, and the one that matters most: repacking is not drift.
+        A check strict enough to fail here would reject every real randomized run."""
+        rom = self._rom(_RED)
+        same = str(tmp_path / "same.gbc")
+        with open(same, "wb") as f:
+            f.write(rom)
+        _check_content(_RED, same)      # must not raise

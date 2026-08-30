@@ -883,9 +883,14 @@ class SoulLinkState:
         self._ingest_party_blobs(player_id, party)
 
         # ── Identity lock ──
-        # Extract OT ID from first party mon's key via the adapter.
-        incoming_ot = None
-        if party:
+        # PREFER THE CARTRIDGE'S OWN TRAINER ID over one inferred from a mon.
+        # Deriving it from party[0]'s key makes the lock depend on which mon happens to be
+        # in the lead slot: an in-game-trade mon is a DIFFERENT OT by definition, so leading
+        # with one locked the run to the wrong trainer permanently and every later hello was
+        # rejected as WRONG SAVE. A client that reports `ot_id` is telling us what the save
+        # says; only fall back to the mon key for clients that do not.
+        incoming_ot = str(msg.get("ot_id") or "").strip() or None
+        if not incoming_ot and party:
             first_key = party[0].get("key", "")
             incoming_ot = self.adapter.parse_ot_id(first_key)
         incoming_name = msg.get("trainer_name", "")
@@ -2491,6 +2496,31 @@ class SoulLinkState:
 
     def _check_link_violation(self, a_mon: MonInfo, b_mon: MonInfo) -> tuple[str, str] | None:
         """Return (violation_message, violating_player_id) or None if the link is valid."""
+        # ── Key collision ─────────────────────────────────────────────────────────────
+        # CHECKED FIRST, and unconditionally: this is not a rule the player opted into, it
+        # is a correctness floor. A mon key is not guaranteed unique -- Gen 1's is
+        # DVs:OTID:species, and OT is the same for every mon a player caught themselves, so
+        # two of one species with identical DVs collide (about 1 in 65536 per same-species
+        # pair). `_key_index` is a plain dict, so the second link silently ALIASED the
+        # first: every later lookup by that key -- faint propagation above all -- resolved
+        # to the wrong pair, and killed the wrong mon on the partner's cartridge.
+        #
+        # Refusing is strictly better than aliasing, and refusing here rather than at
+        # _index_entry means it reuses the machinery a clause rejection already has: the
+        # capture is force-fainted and buried, the area stays open, and the player simply
+        # catches another one. A collision is rare enough that costing someone one
+        # encounter is a fair price for never silently mixing two mons up.
+        for mon, pid in ((a_mon, "a"), (b_mon, "b")):
+            if not (mon and mon.key):
+                continue
+            existing = self._key_index.get(mon.key)
+            if existing is not None and existing.status == LinkStatus.ALIVE:
+                return (f"Key collision: {mon.key} already identifies a live link in "
+                        f"{existing.area_id}", pid)
+        if a_mon and b_mon and a_mon.key and a_mon.key == b_mon.key:
+            # Both halves indexing one key would make the pair its own alias.
+            return (f"Key collision: both halves report the key {a_mon.key}", "")
+
         if self.species_lock and a_mon.species and b_mon.species:
             # Cross-player check: A and B can't be the same species/family
             a_base = self.adapter.evo_family(a_mon.species)
@@ -2616,10 +2646,25 @@ class SoulLinkState:
         self._save()
 
     def _index_entry(self, entry: LinkEntry):
-        if entry.a:
-            self._key_index[entry.a.key] = entry
-        if entry.b:
-            self._key_index[entry.b.key] = entry
+        """Index both halves by key.
+
+        The backstop for the collision check in `_check_link_violation`: that one refuses
+        a colliding CAPTURE, but links also arrive from disk, from a bonus pair and from a
+        rejection, and this dict is where an alias would actually take effect. Overwriting
+        silently is what made the original defect invisible, so a collision that reaches
+        here is reported loudly even though the write still happens -- a half-indexed link
+        would be worse than an aliased one.
+        """
+        for half in (entry.a, entry.b):
+            if not half:
+                continue
+            prev = self._key_index.get(half.key)
+            if prev is not None and prev is not entry:
+                log.error("KEY COLLISION: %s now indexes the link in %s, displacing the one "
+                          "in %s — two different mons share a key and lookups by it "
+                          "(faint propagation especially) will resolve to the wrong pair",
+                          half.key, entry.area_id, prev.area_id)
+            self._key_index[half.key] = entry
 
     def _queue_memorialize(self, player_id: str, key: str):
         """
