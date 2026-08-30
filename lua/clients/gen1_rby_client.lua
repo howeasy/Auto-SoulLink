@@ -961,12 +961,18 @@ local function scan_current_box()
             local nickname = M.readBoxNickname(i)
             if nickname ~= "" then nick_cache[bmon.key] = nickname end
 
+            -- in_box, because this mon is IN THE BOX. scan_current_box only ever runs on
+            -- the box, so every capture it reports is a full-party catch that GivePokemon
+            -- delivered straight to storage. Without the flag state.py accounted it as an
+            -- in-party capture -- wrong party_size, and it could queue a box_mon quarantine
+            -- for a mon that was already boxed. Gen 3 has always sent it.
             send({
                 event = "capture",
                 key = bmon.key,
                 area_id = last_area_id,
                 species_id = natdex,
                 nickname = nickname,
+                in_box = true,
             }, "capture(box):" .. bmon.key:sub(1, 9), true)
             captured_this_battle = true
         end

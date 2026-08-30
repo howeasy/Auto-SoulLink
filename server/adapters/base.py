@@ -513,6 +513,29 @@ class GamePresentationAdapter(ABC):
         ]
 
 
+def gb_status_token(status_cond: int) -> str:
+    """SLP/PSN/BRN/FRZ/PAR from a Game Boy status byte, or "".
+
+    Gen 1 and Gen 2 share this layout exactly: sleep is a COUNTER in bits 0-2, so it
+    must be MASKED rather than compared, then PSN 3, BRN 4, FRZ 5, PAR 6.
+    pokered/constants/status_constants.asm and pokecrystal/constants/battle_constants.asm:162
+    (`DEF SLP_MASK EQU %111`, then `const_def 3` / PSN / BRN / FRZ / PAR) agree bit
+    for bit. Bit 7 is unused in both -- neither has a persistent Toxic, it is a
+    volatile that lasts only for the battle -- so there is deliberately no TOX branch.
+
+    Checked in the same order as the Gen 3 adapter, so a mon carrying two bits reports
+    the same one whichever generation it is on.
+    """
+    if not status_cond:
+        return ""
+    if status_cond & 0x07:
+        return "SLP"
+    for bit, token in ((0x08, "PSN"), (0x10, "BRN"), (0x20, "FRZ"), (0x40, "PAR")):
+        if status_cond & bit:
+            return token
+    return ""
+
+
 class GameAdapter(GameRulesAdapter, GamePresentationAdapter):
     """Combined adapter interface — most games implement both layers.
 

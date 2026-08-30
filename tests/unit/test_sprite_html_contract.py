@@ -51,3 +51,35 @@ def test_the_enc_sprite_swap_actually_swaps(rom_type, adapter):
         pytest.skip(f"{rom_type} renders no sprite at all")
     swapped = html.replace('class="mon-sprite"', 'class="enc-sprite"')
     assert swapped != html, f"{rom_type}: the enc-sprite swap changed nothing"
+
+
+# ── the status pill ──────────────────────────────────────────────────────────────────
+
+_GB_ADAPTERS = ["gen1_rby", "gen2_crystal"]
+
+
+@pytest.mark.parametrize("rom_type", _GB_ADAPTERS)
+@pytest.mark.parametrize("cond,expected", [
+    (0x00, ""), (0x01, "SLP"), (0x07, "SLP"), (0x08, "PSN"),
+    (0x10, "BRN"), (0x20, "FRZ"), (0x40, "PAR"), (0x80, ""),
+])
+def test_game_boy_status_bytes_decode_the_same_on_both_generations(rom_type, cond, expected):
+    """Sleep is a COUNTER in bits 0-2, so it has to be masked rather than compared --
+    the mistake that makes `status_cond == 1` look right and fail at turn 2.
+
+    pokered/constants/status_constants.asm and pokecrystal's battle_constants.asm:162
+    (`DEF SLP_MASK EQU %111`, then `const_def 3` / PSN / BRN / FRZ / PAR) agree bit for
+    bit, so one decoder serves both. Bit 7 is unused: neither generation has a persistent
+    Toxic, so an empty string is correct rather than a missing branch.
+    """
+    assert get_adapter(rom_type).status_token(cond) == expected
+
+
+@pytest.mark.parametrize("rom_type", _GB_ADAPTERS)
+def test_the_status_token_is_actually_overridden(rom_type):
+    """The base class returns "" for everything, so a generation that forgets to
+    override looks exactly like a healthy party. Gen 2 did, and the partner column on
+    the dashboard silently lost its status pill."""
+    assert get_adapter(rom_type).status_token(0x08) == "PSN", (
+        f"{rom_type} still inherits the base status_token, which returns '' for every "
+        f"input — the partner's status pill will never render")

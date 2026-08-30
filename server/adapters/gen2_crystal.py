@@ -13,7 +13,7 @@ import re
 
 from server.pokemon_data import base_form
 
-from .base import GameAdapter, load_area_names_from_obj_map
+from .base import GameAdapter, gb_status_token, load_area_names_from_obj_map
 
 log = logging.getLogger(__name__)
 
@@ -329,6 +329,15 @@ class Gen2CrystalAdapter(GameAdapter):
             f'style="image-rendering:pixelated;margin:-6px">'
             f'</span>'
         )
+
+    def status_token(self, status_cond: int) -> str:
+        """SLP/PSN/BRN/FRZ/PAR, or "".
+
+        Gen 2 inherited the base "" until now, which cost the partner column on the
+        dashboard its status pill -- "is my linked partner asleep?" was unanswerable.
+        The bit layout is identical to Gen 1's; see base.gb_status_token.
+        """
+        return gb_status_token(status_cond)
 
     def sprite_src(self, species_id: int) -> str:
         """Return Crystal-style sprite URL for the enc-table overlay.

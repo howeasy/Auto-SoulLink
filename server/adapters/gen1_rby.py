@@ -13,7 +13,7 @@ import re
 from server.data.items.gen1 import ITEM_NAMES as _ITEM_NAMES
 from server.pokemon_data import species_name as _species_name
 
-from .base import GameAdapter, load_area_names_from_obj_map
+from .base import GameAdapter, gb_status_token, load_area_names_from_obj_map
 
 log = logging.getLogger(__name__)
 
@@ -476,26 +476,10 @@ class Gen1Adapter(GameAdapter):
         player's OWN party was unaffected: html_render.status_icon_html decodes the bitfield
         directly and its layout happens to be right for Gen 1.
 
-        Layout from pret/pokered constants/status_constants.asm: sleep is a COUNTER in bits
-        0-2 (any nonzero value means asleep, so it must be masked, not compared), then
-        PSN 3, BRN 4, FRZ 5, PAR 6. Bit 7 is unused -- Gen 1 has no Toxic status, it is a
-        volatile that lasts only for the battle, so there is deliberately no TOX branch.
-        Checked in the same order as the Gen 3 adapter so a mon with two bits set reports
-        the same one on both.
+        The bit layout is shared with Gen 2 byte for byte, so the decode lives in
+        base.gb_status_token with the citations for both.
         """
-        if not status_cond:
-            return ""
-        if status_cond & 0x07:
-            return "SLP"
-        if status_cond & 0x08:
-            return "PSN"
-        if status_cond & 0x10:
-            return "BRN"
-        if status_cond & 0x20:
-            return "FRZ"
-        if status_cond & 0x40:
-            return "PAR"
-        return ""
+        return gb_status_token(status_cond)
 
     def ability_name(self, ability_id: int, species_id: int = 0) -> str:
         # Gen 1 has no abilities
