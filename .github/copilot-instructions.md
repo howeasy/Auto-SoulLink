@@ -217,8 +217,8 @@ SLink-RR/
 │   │   ├── gen2_crystal.lua
 │   │   ├── gen3_frlge.lua
 │   │   ├── gen4_hgsspt.lua
-│   │   ├── gen1_rby.lua         # Stub (future)
-│   │   ├── gen2_gsc.lua         # Stub (future)
+│   │   ├── gen1_rby.lua         # Gen 1 game module (R/B/Y, + AP variants)
+│   │   ├── gen2_gsc.lua         # Gen 2 game module
 │   │   └── gen5_bw.lua          # Gen 5 game module
 │   ├── memory_gba.lua           # GBA memory read/write helpers (Gen 3)
 │   ├── memory_gb.lua            # GB/GBC memory read/write helpers (Gen 1 & Gen 2)
@@ -362,7 +362,7 @@ SLink-RR/
 - **`tests/unit/test_cli_rival_team_swap.py`** — 4 tests for the `--rival-team-swap` CLI flag (help, store_true, default false, explicit true).
 - **`tests/integration/test_cli_native_toggles.py`** — tests for the companion-patch per-run toggles (`--native-messages`, `--native-sounds`, `--no-battle-calc`, `--no-pc-trade-npc`).
 - **`tests/unit/test_cli_overworld_presence.py`** — 4 tests for the `--overworld-presence` CLI flag.
-- **`tests/unit/test_patcher_routes.py`** — 4 tests for the `/patcher` page + `/companion/SLink-RR.ups` routes (incl. md5 constants matching `patch/README.md`).
+- **`tests/unit/test_patcher_routes.py`** — the `/patcher` page + a `/companion/{name}` route per target. `server/patcher.py` holds a TARGETS registry (Radical Red, Pokemon Red, Pokemon Blue), because a UPS embeds the CRC32 of the exact dump it was diffed against and one shared file would refuse every user but one. Includes a real apply path: each shipped patch reproduces its recorded md5, the result carries the `SLNK` beacon, and applying Red's patch to a Blue dump raises. Asserts NO Yellow artifact is shipped — Yellow has no free WRAM for the mailbox, so no build exists.
 
 ---
 
@@ -1059,7 +1059,7 @@ The `patch/` directory holds a UPS companion patch for Radical Red that adds nat
 
 - **Mailbox protocol:** the Lua client talks to the injected code through an EWRAM mailbox — `lua/mailbox.lua` (client side) ↔ `patch/src/handlers.c` (in-ROM dispatch). The client stages args/blobs, writes an opcode, and polls for the ack status.
 - **Opcode table:** the authoritative enum lives in `patch/src/handlers.c` (~lines 31–49) — `OP_PING`=1 through `OP_MEMORIALIZE`=26. Opcodes **10–12** (`APPLY_DAMAGE`, `CURE_STATUS`, `SET_RULES`) are **removed** but their numbers stay reserved so 13+ keep their ABI slots (dispatch has no case for them → default `ST_FAIL` ack). Address reference: `patch/src/ADDRESSES.md`.
-- **Build & distribution:** `patch/tools/build.py` (gcc → ld → objcopy → inject → UPS/IPS, round-trip self-checked). `server/patcher.py` serves the in-browser patcher page at `GET /patcher` and the built patch at `GET /companion/SLink-RR.ups`, mounted on both the per-run server (8080) and the Manager (8090).
+- **Build & distribution:** `patch/tools/build.py` (gcc → ld → objcopy → inject → UPS/IPS, round-trip self-checked). `server/patcher.py` serves the in-browser patcher page at `GET /patcher` (`?game=` selects a target) and each built patch at `GET /companion/{name}`, mounted on both the per-run server (8080) and the Manager (8090). Gen 1 has its own toolchain: `patch/gen1/tools/build.py` builds from the two pinned CLEAN dumps, `patch/gen1/tools/inject.py` applies the SAME manifest structurally to a ROM whose hash cannot be known in advance (a randomized cartridge), and `patch/gen1/tools/manifest.py` is the single description both read so they cannot drift.
 - **Per-run toggles** (Manager new-run form / CLI flags; sent to the client in the `hello` reply's `config` command): `--overworld-presence`, `--native-messages`, `--native-sounds`, `--no-battle-calc`, `--no-pc-trade-npc`. None change Soul Link rules; unpatched ROMs fall back to the Lua paths where one exists.
 
 ### Area Normalization

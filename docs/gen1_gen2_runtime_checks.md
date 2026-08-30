@@ -23,7 +23,7 @@ SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py -q         # 18: 9 scenarios x Red
 | 2. Egg-gift classification | still manual for Gen 2; not applicable to Gen 1 (no eggs) |
 | 3. Status page rendering | party/enemy/moves/PP/stat-stage reads covered by `test_gen1_memory_gate.lua`; the HTML itself is unit-tested |
 | 4. Archipelago variant detection | `tests/unit/test_gen1_archipelago.py` — runs the real Lua against bytes measured from the actual AP basepatch, in **both** directions (AP detected, vanilla NOT misdetected) |
-| 5. SFX dispatch | still open — see below |
+| 5. SFX dispatch | CLOSED as "will not ship" — the only available hook is unsafe; see below |
 | 6. Encounter overlay | per-variant tables are generated from pret and asserted in `test_gen1_adapter.py` |
 | 7. Gen 3 regression | `/slink-test 3`, run before every change |
 
@@ -92,21 +92,34 @@ omission — see "Still open" below.
 
 ## Closed since
 
-**SFX dispatch.** Resolved, and the earlier note here was wrong. `wNewSoundID` (`0xC0EE`) is
-*not* a sound hook — `PlaySound` takes the id in register `a` and only uses that address as
-internal scratch (pokered `home/audio.asm:140`), and nothing in the game loop polls it.
-**Gen 1 has no RAM-writable sound trigger at all**, so no choice of address would ever have
-worked. The id has to reach a `call`.
+**SFX dispatch.** Investigated, built, and then REMOVED. The note that used to sit here
+described a working feature; it no longer is one, and the reason is worth keeping.
 
-The companion patch now provides one: a request byte at mailbox+7, consumed each VBlank at a
-point where the game has already switched to `wAudioROMBank` and run `Audio1_UpdateMusic`
-(`home/vblank.asm:53-71`). Ids are bank-relative in Gen 1, so the defaults are drawn from the
-64 SFX that resolve identically in all three audio banks — a capture or faint fired
-mid-battle cannot play the wrong sound. Proven live: `test_gen1_patch_gate.lua` asserts
-`wChannelSoundIDs` changes, not merely that the request byte cleared.
+`wNewSoundID` (`0xC0EE`) is not a sound hook — `PlaySound` takes the id in register `a` and
+uses that address only as internal scratch (pokered `home/audio.asm:140`), and nothing in the
+game loop polls it. **Gen 1 has no RAM-writable sound trigger at all**, so the id has to reach
+a `call`. ABI 2 of the companion patch made that call from the VBlank hook. ABI 3 does not,
+and the capability byte says so.
 
-Unpatched cartridges and Yellow stay silent by design, and `M.detectCompanionPatch()` gates
-on the beacon so that is a clean no-op rather than a stray write.
+Two failure modes, both measured by disassembling `PlaySound` (`$23B1`) in the shipped ROM:
+
+* **Swallowed during fades.** It opens `ld a,[wAudioFadeOutControl] / and a / jr z,.noFadeOut`
+  then `ld a,[wNewSoundID] / and a / jr z,.done`. The patch passes the id in `a` and never
+  sets `wNewSoundID`, which is 0 in steady state, so during any fade the call returns without
+  playing — and the request byte has already been cleared, so the event is simply lost. Fades
+  run ~56-70 frames on map change and on battle start/end: exactly when capture, faint and
+  whiteout fire.
+* **Re-entrancy, in the ordinary case.** `.noFadeOut` does `xor a / ld [wNewSoundID], a` and
+  calls the audio engine several instructions later. A VBlank landing anywhere in that window
+  sees *both* guard bytes clear, passes the guard, and re-enters a non-reentrant routine. Our
+  hook **is** that VBlank, so no guard on our side can close it.
+
+Playing sound safely needs a main-thread dispatch point with its own displaced bytes and
+queue-drain timing. Until one exists and passes a full state matrix, the patch ships
+panel-only. The request byte is still drained so a client leaves no stale state; it simply
+never becomes a sound. `test_gen1_patch_gate.lua` asserts the inverse of what it used to:
+that a drained request never starts a sound, and that `call PlaySound` appears nowhere in
+bank `$3F`.
 
 **Memorial-box SRAM.** Resolved, and the risk was real but not the one recorded here. The
 box-bank checksums are **write-only** in vanilla — every reference in the decomp is a store
@@ -161,4 +174,6 @@ instruction bytes at the `ChangeBox` branch to confirm the game behaviour it def
   Most live box/enemy assertions are also **self-referential** — SLink writes bytes and reads
   them back through the same profile constants — so a uniformly wrong base address would still
   pass. The exceptions, which do discriminate, are the box-level check (differential: level 9
-  vs 5), the Poké Ball count, the `ChangeBox` ROM-byte read, and the SFX channel check.
+  vs 5), the Poké Ball count, the `ChangeBox` ROM-byte read, and the panel gate — which reads
+  what the client painted back off the Game Boy's own tile map, so a wrong address shows up as
+  the wrong glyphs rather than as a value SLink handed itself.

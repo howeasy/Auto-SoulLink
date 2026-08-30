@@ -18,7 +18,8 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
     the client's own bag read). Plus faint propagation and party→box sync across two real
     cartridges; memorialize into Box 12; Explode Mode arming Explosion; the enemy-party
     write; `force_faint`; box level at `box+0x03`; Yellow's −1 WRAM shift (reads); the
-    companion patch's VBlank hook and SFX.
+    companion patch's VBlank hook, its START-menu row, and the in-game panel — including a
+    page turn and a close — on both a clean and a randomized+injected cartridge.
     All **nine** scenarios run on **two pairings** — Red/Blue and **Yellow/Red** — so Yellow's
     −1 WRAM shift is exercised through the server and against a partner, not just by
     single-instance gates.

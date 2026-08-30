@@ -77,27 +77,16 @@ symbol pipeline already uses. Both base ROMs are checked by SHA-1 and every writ
 verify-then-write, so a ROM that is not the exact expected dump fails loudly instead of
 being silently corrupted.
 
-## The SFX hook
+## What the mailbox carries
 
-Mailbox `+7` is a request byte. Lua writes a sound id; the next VBlank consumes it, zeroes the
-byte and calls `PlaySound`. One-shot by construction — the byte is cleared *before* the call,
-so a request can never fire twice.
+Mailbox `+7` is a sound-request byte, kept for compatibility and **drained without being
+played** — see "Why there is no sound" above. `+8` is the capability byte a client reads to
+learn what this build can actually do, rather than inferring it from the ABI number; `+9`,
+`+10` and `+11` are the panel handshake, the page the patch wants painted, and the page count
+the client publishes back.
 
-The placement is free rather than clever: by the time VBlank reaches our hook it has already
-switched to `wAudioROMBank` and run `Audio1_UpdateMusic` (`home/vblank.asm:53-71`), so we are
-in audio-bank context immediately after the engine's own per-frame audio work. The one hazard
-is that `PlaySound` parks the caller's bank in `hSavedROMBank` (`$FFB9`, measured from the ROM
-rather than inferred from `hram.asm` ordering) and the main thread may itself be mid-`PlaySound`
-when the interrupt fires — so the hook saves and restores that byte.
-
-**Sound ids are bank-relative.** The same number means a different sound depending on which
-audio bank is loaded. The profile defaults use only the 64 SFX that resolve identically in all
-three banks, so a capture or a faint fired mid-battle cannot play the wrong thing. Ids are
-derived from header label offsets in `data/pret_rom_syms.json`
-(`id = (SFX_X - SFX_Headers_N) / 3`), not guessed.
-
-`M.detectCompanionPatch()` reads the beacon and only enables SFX at ABI ≥ 2, so an unpatched
-cartridge is a clean no-op instead of a stray write.
+The client asks the capability bits, not the version: a build may ship one feature without
+another, and this one does exactly that.
 
 ## How it hooks
 

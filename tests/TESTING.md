@@ -763,7 +763,8 @@ Everything above for Gen 3 is a human clicking through BizHawk. The Game Boy gen
 not — there is nothing to run by hand.
 
 ```bash
-SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 18 cases: 4 gates × 3 carts, + patch + AP
+SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 24 cases: 5 gates x 3 carts, + patch/menu-row + AP
+python tools/verify_gen1_release.py                    # ALL of it, fail-closed (a skip is a failure)
 SLINK_LIVE=1 pytest tests/live/test_gen2_gates.py -q   # 2 gates, Crystal only
 SLINK_E2E=1  pytest tests/e2e/test_duo_gen1.py -q      # 18 cases: 9 scenarios × 2 pairings
 SLINK_E2E=1  pytest tests/e2e/test_duo_gen2.py -q      # faint, boxsync, memorialize
@@ -791,7 +792,10 @@ writes `RESULT: PASS|FAIL`:
 | `test_gen1_writes_gate.lua` | red, blue, yellow | `force_faint`, the deposit half of party sync, the ~404-byte enemy-party write, Explosion into the move slot |
 | `test_gen1_boxroundtrip_gate.lua` | red, blue, yellow | the withdraw half — the writes gate only deposits, so without this a corrupt restore would never show up |
 | `test_gen1_evolution_gate.lua` | red, blue, yellow | a Gen 1 key is DVs:OTID:SPECIES, so evolving rewrites it. Drives a real Moon Stone through the real bag menus (no battle, no encounter RNG, uncancellable) |
-| `test_gen1_patch_gate.lua` | red, blue (patched) | the companion-patch spike — see [patch/gen1/README.md](../patch/gen1/README.md) |
+| `test_gen1_stat_rebuild.lua` | red, blue, yellow | recomputes every party mon's stats from the cartridge's OWN base-stat table and requires the game's stored values to match — the withdraw path rebuilds stats rather than refusing |
+| `test_gen1_patch_gate.lua` | red, blue (patched) | the companion patch's VBlank hook and mailbox, and that it does **not** reach `PlaySound` — see [patch/gen1/README.md](../patch/gen1/README.md) |
+| `test_gen1_menu_row_gate.lua` | red, blue (patched) | the START-menu SLINK row and the panel it opens: the row draws and is reachable, the client's staged rows are what appears, **A turns to page 2**, **B closes**, EXIT keeps its original index, and the player can still walk |
+| the panel on a randomized cartridge | red (randomized + injected) | the structural injector's only real question — a ROM that patches "successfully" and then does not boot is a failure no hash comparison can see, so the whole panel gate runs on one |
 | `test_gen1_ap_gate.lua` | red/blue AP **and** red/blue vanilla | Archipelago detection. The vanilla pair is the negative control: without it, a detector stuck at "yes" would pass on its own |
 
 Parametrised over all three cartridges deliberately: **Yellow shifts nearly every WRAM
@@ -880,6 +884,47 @@ missing.
 
 ---
 
+## The Gen 1 release gate — a skip is a failure
+
+`python tools/verify_gen1_release.py` runs seven lanes in one command and refuses to call a
+lane that did not RUN a lane that PASSED.
+
+That rule is not pedantry. This generation kept shipping green suites that were not running:
+fifteen randomized-ROM proofs disabled by a missing UPR jar, nine duo scenarios disabled by an
+unset `SLINK_E2E`, three more disabled by a code comment that turned out to be false, and
+seven encounter areas dropped by a test filtering on exact method names. Every one of those
+looked like a pass.
+
+So skips, xfails, xpasses, deselections and errors all fail the gate. Ten skips are allowed,
+each argued for **by name** in `ALLOWED_SKIPS` with its reason — Gen 2 decomps, template
+partials, an optional overlay, and the deferred Archipelago ROMs. Anything not on that list
+fails and is printed.
+
+| Lane | What it proves |
+|---|---|
+| `unit` | the source oracles, the rules, and every table generated from the decomps |
+| `rom-layout` | every flat ROM offset and companion-patch span, against the real dumps |
+| `lua-parse` | every Lua file parses under the runtime the clients actually use |
+| `profile-addresses` | WRAM/SRAM symbols against pret |
+| `patch-build` | the clean dumps still hold what the manifest expects to displace |
+| `live-gates` | real engine behaviour on real cartridges, including the panel on a randomized+injected ROM |
+| `duo-pairs` | every scenario on both pairings, through the real server |
+
+`--quick` stops before the emulator lanes and says plainly that its result is not a release
+verdict. `--list` shows the lanes.
+
+**Give it the machine.** The emulator lanes wait on real frame counts, so running anything
+heavy alongside them does not merely slow the gate down — it fails it. A `deadzone` run that
+finishes in 65 seconds idle has been observed timing out at its 1500-second budget with a
+unit-test run competing for the same cores. That is the emulator being starved, not a defect,
+and the gate cannot tell the two apart.
+
+There is a second verifier the gate calls: `tools/verify_gen1_rom_layout.py`.
+`verify_profile_addresses.py` checks WRAM/SRAM symbols against pret and structurally *cannot*
+check a flat file offset or a patch span — different claims need different evidence. It runs
+29 checks across all three dumps, and a ROM that is absent is reported rather than counted as
+a pass.
+
 ## State Reset
 
 To start a fresh run without restarting the server:
@@ -911,3 +956,16 @@ This deletes `data/links.json` and clears all in-memory state. The Lua clients w
 | AP starter location varies | AP randomized start puts player in random town | Starter capture uses `"intro"` area_id — both players link even if they start in different towns |
 | Quarantine enforcement on reconnect | Server re-quarantines pending keys from hello party snapshot | Brief window (~1 tick) where quarantined mon may be in party before re-deposit |
 | `party_size` tracking ~1s stale | Updated from tick events, not real-time | Reactive `sync_retrieve_failed` catches cases where stale data caused incorrect proactive decisions |
+
+### Gen 1 specifically
+
+| Behaviour | Reason | Impact |
+|---|---|---|
+| Live play covers Route 1 only | The scripted warp is undrivable from Lua — `hWarpDestinationMap` at `$FF81` is shared HRAM the renderer overwrites within the frame (`lua/tests/probe_gen1_warp.lua` measures it three ways) — and the fly warp reaches thirteen destinations, two with encounters | The other 38 areas rest on the generated oracle and the ROM scanner, which agree via two independent paths. Area *resolution* elsewhere is untested by play |
+| No fishing rod has ever been cast in-engine | Rods are scanned from ROM on all three titles, including Yellow's distinct super-rod format, but never used | A rod encounter's area resolution is unproven live |
+| Stat rebuild has no stat-exp coverage on hardware | Every fixture is a level-5 mon that has never fought, so `ceil(sqrt(stat_exp))` is always 0 | The formula is verified in Python against `CalcStat` over levels 1-100 and the stat-exp boundaries; what is untested live is the Lua reading a trained mon's bytes |
+| The memorial box IS Box 12 | Gen 1 has no spare box — SRAM `0x75EA` decodes to exactly `sBox12` | Anything you ever stored there reads as contamination and logs an advisory warning (deduped per key). Nothing is corrupted; the checks do not act on it |
+| Whiteout and the gender/type clauses are injected, not played | The duo scenarios set the condition rather than losing a real battle into it | The rules are unit-tested and generation-independent; what is unproven is the client noticing the real engine transition |
+| Externally-randomized ROMs have no provenance tier | There is no import flow; a run with no `rom_contract.json` adopts client-reported tables unlabelled | A Manager-built pair is fully verified. An imported ROM is trusted structurally with nothing saying so in the UI |
+| `blue --target battle` cannot rebuild its fixture | The certification's Right leg moves 10 → 11 and the return never completes — `tiles_moved=1`, nothing blocking, reproducible. Red and Yellow certify and return on the same tile of the same map | The committed `blue_battle.SaveRAM` is correct and verified; it just has to be rebuilt from Red or Yellow's side |
+
