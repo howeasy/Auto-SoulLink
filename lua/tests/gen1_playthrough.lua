@@ -438,30 +438,24 @@ end
 
 -- ── Save ─────────────────────────────────────────────────────────────────────
 --
--- KNOWN BROKEN: `--target battle` cannot currently rebuild. `--target town` works.
+-- Three defects were found here by giving this step a post-condition it could fail.
+-- Until then the only check was the SRAM party COUNT, which a stale save satisfies.
 --
--- The stricter post-conditions below found two real defects and then a third that is not
--- yet fixed. Recorded here so the next person starts from measurements rather than from
--- the same three hypotheses:
+--   * SAVE's index is 3 and is NOT computable from wMaxMenuItem, which reads 6 here and
+--     is stale. Trusting it picks index 4 -- OPTION in the real six-entry menu, confirmed
+--     by screenshot. The original comment said exactly this; it was right.
+--   * The A-press loop exited on `sram_party_count() ~= 0xFF`, the existence of ANY save.
+--     Both builds of a ROM share one SaveRAM, so that was usually already true: the loop
+--     stopped before writing anything and reported success.
+--   * Choosing SAVE with BIT_LINK_CONNECTED set in wStatusFlags4 SOFT-RESETS the game
+--     (start_sub_menus.asm:641 -- `jp nz, Init`). Not the cause here, but it is why the
+--     flag byte is logged: a soft reset lands on the title screen, and the drive's next A
+--     presses select CONTINUE and load the PREVIOUS save, which then reads back as a
+--     perfectly plausible fixture on the wrong map.
 --
---   FIXED  SAVE's menu index was hardcoded to 3. That is right for `town` and wrong for
---          `battle`, which calls mark_oak_errand_done() and therefore has the POKeDEX --
---          seven entries, where index 3 is the player's NAME. The drive opened the trainer
---          card instead of saving.
---   FIXED  The A-press loop exited on `sram_party_count() ~= 0xFF`, i.e. on the existence
---          of ANY save. The SaveRAM is shared between the two builds of one ROM, so that
---          was almost always already true: the loop stopped after one press, before
---          anything had been written, and reported success.
---   OPEN   With both fixed, the `battle` build now presses A ten times on a correctly
---          selected SAVE (cur=4 of a 7-entry menu, font=0x01) and the SRAM never changes.
---          wMaxMenuItem stays 6 throughout and is never 1, so the "Would you like to SAVE
---          the game?" YES/NO prompt is never reached -- A is not being taken as a
---          selection. The cursor also resets from 4 to 0, which looks like the menu
---          closing and reopening rather than a save starting.
---
--- The six committed fixtures are unaffected and correct: this is the builder, not the
--- output, and a failed build leaves the existing file in place (verified).
-
+-- The post-condition is now the committed COORDINATES, read back out of SRAM and compared
+-- with the tile the certification proved. Two builds of one ROM park on different maps, so
+-- a stale file cannot fake it.
 -- The START menu has NO POKeDEX entry before the parcel errand, so SAVE's index differs
 -- from every walkthrough. It is always THIRD FROM THE END, with or without the Pokedex.
 -- The SRAM copy of the party, so a save can be CONFIRMED rather than assumed. Gen 1's
@@ -510,25 +504,33 @@ local function save_game(max_frames)
              r8(a.cur_menu), r8(a.max_menu), r8(a.top_menu_y), r8(a.top_menu_x),
              r8(a.joy_ignore)))
     client.screenshot(ROOT .. "/patch/build/save_startmenu.png")
+    -- StartMenu_SaveReset (engine/menus/start_sub_menus.asm:641) opens with
+    --     ld a, [wStatusFlags4] / bit BIT_LINK_CONNECTED, a / jp nz, Init
+    -- so choosing SAVE with bit 6 set SOFT-RESETS the game instead of saving.
+    if M.STATUS_FLAGS_4_ADDR then
+        emit(fmt("[gen1-play] wStatusFlags4=0x%02X (bit6 LINK_CONNECTED=%s)",
+                 M.read_u8(M.STATUS_FLAGS_4_ADDR),
+                 (M.read_u8(M.STATUS_FLAGS_4_ADDR) & 0x40) ~= 0 and "SET" or "clear"))
+    end
 
-    -- SAVE is THIRD FROM THE END, which is `wMaxMenuItem - 2`.
+    -- SAVE is index 3, and this is NOT computable from wMaxMenuItem. The original comment
+    -- said so; I overrode it and was wrong, so here is the evidence.
     --
-    -- This was hardcoded to 3 on the reasoning that the fixture never obtains the POKeDEX
-    -- (it skips Oak entirely), so the menu is always
+    -- This fixture never obtains the POKeDEX -- it skips Oak entirely, and
+    -- mark_oak_errand_done() sets story flags without granting it -- so the menu is always
     --     POKeMON(0) ITEM(1) <NAME>(2) SAVE(3) OPTION(4) EXIT(5)
-    -- That holds for the `town` target and NOT for `battle`, which calls
-    -- mark_oak_errand_done() and therefore has the Pokedex:
-    --     POKeDEX(0) POKeMON(1) ITEM(2) <NAME>(3) SAVE(4) OPTION(5) EXIT(6)
-    -- Index 3 there is the player's NAME, so the drive opened the trainer card and the save
-    -- never happened. Nothing caught it because the only post-condition was the SRAM party
-    -- COUNT, and a stale save from the town build has the same count of 1.
     --
-    -- The old comment warned against computing this, having seen wMaxMenuItem read 6 for a
-    -- six-entry menu. That reading was right and the inference was wrong: the menu had
-    -- SEVEN entries, because that run had the Pokedex too.
-    local max_item = r8(a.max_menu)
-    local SAVE_INDEX = (max_item >= 5 and max_item <= 6) and (max_item - 2) or 3
-    emit(fmt("[gen1-play] menu has %d entries, SAVE at index %d", max_item + 1, SAVE_INDEX))
+    -- wMaxMenuItem reads 6 at this point anyway, which looks like a seven-entry menu and
+    -- is stale: it is written by whichever menu ran last and is not re-initialised until
+    -- the START menu draws. Trusting it selects index 4, and index 4 in the real six-entry
+    -- menu is OPTION. Confirmed by screenshot -- patch/build/save_after_A1.png came back
+    -- showing TEXT SPEED / BATTLE ANIMATION / BATTLE STYLE, the options screen.
+    --
+    -- The save then silently never happened, which is exactly what the SRAM position check
+    -- below exists to catch.
+    local SAVE_INDEX = 3
+    emit(fmt("[gen1-play] SAVE at index %d (wMaxMenuItem reads %d and is not trusted)",
+             SAVE_INDEX, r8(a.max_menu)))
     while frame - start < max_frames do
         if r8(a.cur_menu) == SAVE_INDEX then break end
         hold_dir("Down", 6, nil)
