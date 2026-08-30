@@ -166,7 +166,7 @@ def status_icon_html(status_cond: int) -> str:
     return ""
 
 
-def stat_stages_html(stages) -> str:
+def stat_stages_html(stages, labels=None) -> str:
     """Return HTML badges for non-neutral stat stages.
 
     ``stages`` is a 7-element list (ATK–EVA), raw values 0–12 where 6 = neutral.
@@ -174,10 +174,14 @@ def stat_stages_html(stages) -> str:
     """
     if not isinstance(stages, (list, tuple)) or not stages:
         return ""
+    labels = labels or STAT_STAGE_LABELS
     parts = []
     for i, raw in enumerate(stages):
-        if i >= len(STAT_STAGE_LABELS):
+        if i >= len(labels):
             break
+        if not labels[i]:
+            # A slot this generation does not have. See GameAdapter.stat_stage_labels.
+            continue
         try:
             stage = int(raw) - 6
         except (TypeError, ValueError):
@@ -187,6 +191,6 @@ def stat_stages_html(stages) -> str:
         sign  = "+" if stage > 0 else "−"
         cls   = "ss-up" if stage > 0 else "ss-dn"
         parts.append(
-            f'<span class="stat-stage {cls}">{sign}{abs(stage)} {STAT_STAGE_LABELS[i]}</span>'
+            f'<span class="stat-stage {cls}">{sign}{abs(stage)} {labels[i]}</span>'
         )
     return "".join(parts)

@@ -1583,6 +1583,7 @@ class SLinkServer:
         self._mon_cache: dict[str, dict] = {}
         # Orphan keys already warned about — suppress repeat warnings on every tick.
         self._warned_orphan_keys: set[str] = set()
+        self._warned_memorial_keys: set[tuple[str, str]] = set()
         # Last `link_panel` payload sent to each player, so it is re-sent only on change.
         self._last_panel_sig: dict[str, str] = {"a": None, "b": None}
         # Battle state: in_battle flag + enemy team snapshot
@@ -3830,7 +3831,7 @@ class SLinkServer:
             # Stat-stage chips only render for the active mon and only when
             # there's at least one non-zero stage — _stat_stages_html returns
             # "" otherwise, so this is safe to include unconditionally.
-            stages_html = (_stat_stages_html(det.get("stat_stages"))
+            stages_html = (_stat_stages_html(det.get("stat_stages"), self.adapter.stat_stage_labels())
                            if det.get("active") else "")
             return (
                 f'<div class="hp-stack">'
@@ -3927,7 +3928,7 @@ class SLinkServer:
                         f'<div class="hp-stack-val">'
                         f'<span class="dim">{ehp}/{emaxHP}</span>'
                         + _status_icon_html(esc)
-                        + (active and _stat_stages_html(em.get("stat_stages")) or "")
+                        + (active and _stat_stages_html(em.get("stat_stages"), self.adapter.stat_stage_labels()) or "")
                         + f'</div>'
                         f'<div class="hp-bar-bg">'
                         f'<div class="hp-bar {bar_cls}" style="width:{pct}%"></div>'
@@ -7926,7 +7927,7 @@ class SLinkServer:
         if mem_idx < 0:
             return set()
         indices = {mem_idx}
-        mons_per_box = 30
+        mons_per_box = self.adapter.mons_per_box if self.adapter else 30
         # Count dead/memorial mons: each such link has one mon per player in memorial
         dead_count = sum(1 for e in self.state.links
                          if e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL))
@@ -7990,10 +7991,18 @@ class SLinkServer:
             if box == mem_idx:
                 # ── Check 1: non-dead mon in memorial box ──────────────────────
                 if key not in expected_in_memorial:
-                    log.warning(
-                        f"[{player_id}] ⚠ NON-DEAD mon in memorial box: {nick} [{key[:8]}] "
-                        f"(box {mem_idx} slot {bentry.get('slot', '?')})"
-                    )
+                    # Once per key, like Check 3 twenty lines below. Unguarded, this
+                    # re-logged on every event carrying pc_boxes -- roughly twice a
+                    # second, forever -- and the trigger is ordinary: the Gen 1
+                    # memorial box IS Box 12 (SRAM 0x75EA = sBox12), so anything the
+                    # player ever stored there, or any mon revived from the dashboard,
+                    # is permanently "unexpected".
+                    if (player_id, key) not in self._warned_memorial_keys:
+                        self._warned_memorial_keys.add((player_id, key))
+                        log.warning(
+                            f"[{player_id}] ⚠ NON-DEAD mon in memorial box: {nick} "
+                            f"[{key[:8]}] (box {mem_idx} slot {bentry.get('slot', '?')})"
+                        )
                     # Relocate if it is a quarantined pending capture.
                     for _area, players in s.pending_captures.items():
                         cap = players.get(player_id)

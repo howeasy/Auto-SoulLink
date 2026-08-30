@@ -159,7 +159,10 @@ M.PROFILES = {
         -- PP at +0x19 = 0xCFFE (DataCrystal RBY map). PP is raw (no PP-Ups).
         ENEMY_BATTLE_MOVES_ADDR = 0xCFED,
         ENEMY_BATTLE_PP_ADDR    = 0xCFFE,
-        enemy_battle_pp_encoding = "raw",
+        -- The battle struct copies PP straight from the party struct, and the engine
+        -- masks it with PP_MASK everywhere it reads it (core.asm:2649, 2729, 3947+),
+        -- so the PP-Up bits are present here too.
+        enemy_battle_pp_encoding = "ppup_packed",
         -- Trainer class + index (Phase 5 — wTrainerClass holds OPP_ID_OFFSET (200)
         -- + const_id per pret/pokered. wTrainerNo is 1-based index within the class.
         -- Working hypothesis 0xD031/0xD05D; Phase 9 diagnostic confirms.
@@ -312,7 +315,10 @@ M.PROFILES = {
         -- Yellow's wEnemyMon is shifted -1 like other battle addresses.
         ENEMY_BATTLE_MOVES_ADDR = 0xCFEC,
         ENEMY_BATTLE_PP_ADDR    = 0xCFFD,
-        enemy_battle_pp_encoding = "raw",
+        -- The battle struct copies PP straight from the party struct, and the engine
+        -- masks it with PP_MASK everywhere it reads it (core.asm:2649, 2729, 3947+),
+        -- so the PP-Up bits are present here too.
+        enemy_battle_pp_encoding = "ppup_packed",
         -- Yellow shift -1
         TRAINER_CLASS_ADDR      = 0xD030,
         TRAINER_ID_ADDR         = 0xD05C,

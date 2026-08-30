@@ -1380,9 +1380,9 @@ end
 --
 -- Returns a 7-element table {atk, def, spd, satk, sdef, acc, eva}:
 --   - Gen 2: 7 raw bytes read directly.
---   - Gen 1: 6 raw bytes (atk, def, spd, spc, acc, eva); the unified Special
---     stat is mirrored into both satk and sdef slots so the renderer shows
---     it consistently for both special stats.
+--   - Gen 1: 6 raw bytes (atk, def, spd, spc, acc, eva); the unified Special stat
+--     occupies the satk slot and the sdef slot stays neutral, because RBY has one
+--     Special and rendering it twice invents a stat.
 -- Returns nil if the profile doesn't declare stat-stage addresses.
 
 local function _read_stat_stages(base_addr)
@@ -1401,8 +1401,11 @@ local function _read_stat_stages(base_addr)
         for _, v in ipairs({atk, def, spd, spc, acc, eva}) do
             if v < 1 or v > 13 then return nil end
         end
-        -- Convert 1..13 (neutral 7) → 0..12 (neutral 6) and mirror Spc into SpA/SpD.
-        return {atk - 1, def - 1, spd - 1, spc - 1, spc - 1, acc - 1, eva - 1}
+        -- Convert 1..13 (neutral 7) → 0..12 (neutral 6). Special goes in the SpA slot and
+        -- the SpD slot is left NEUTRAL: mirroring it into both rendered one Special drop as
+        -- two chips, implying a stat this cartridge does not have. The adapter names the
+        -- fourth slot "SPC" and blanks the fifth (GameAdapter.stat_stage_labels).
+        return {atk - 1, def - 1, spd - 1, spc - 1, 6, acc - 1, eva - 1}
     end
     -- Gen 2 layout: 7 raw bytes
     local stages = {}
@@ -1426,7 +1429,8 @@ end
 -- Read 4 move IDs and 4 PP bytes from a party/box struct at the given base
 -- address. Returns {moves=[id1..id4], pp=[pp1..pp4], pp_ups=[u1..u4], max_pp=[m1..m4]}
 -- or nil if the profile doesn't declare offsets.
---   - Gen 1: pp_encoding="raw", current_pp = byte, pp_ups always 0.
+--   - Gen 1: pp_encoding="ppup_packed" (PP_UP_MASK %11000000, PP_MASK %00111111 --
+--     pokered/constants/pokemon_data_constants.asm:100).
 --   - Gen 2: pp_encoding="ppup_packed": current_pp = byte & 0x3F, pp_ups = byte >> 6.
 -- max_pp is computed from base PP (provided by caller via base_pp_table) + PP-Up bonus:
 --   max_pp = base_pp + (base_pp * pp_ups // 5)
@@ -1835,7 +1839,14 @@ function M.depositMemorialMon(slot)
         mbox_count = 0
     end
     if mbox_count >= M.BOX_MAX_MONS then
-        return M.depositPartyMon(slot)
+        -- FULL MEMORIAL: FAIL, do not fall back to depositPartyMon.
+        -- That fallback wrote into whatever box the player happened to have OPEN, and then
+        -- reported success -- so the corpse landed in a regular box, the server acked the
+        -- memorialize, and its very next pc_boxes scan saw a dead mon in a regular box and
+        -- re-queued the memorialize. Round and round, with a body in the player's storage.
+        -- Failing is honest: the caller NACKs, the pair still reaches MEMORIAL status via
+        -- _handle_memorialize_failed, and the mon stays where it was.
+        return false, "memorial box full"
     end
 
     local species_off = mem_off + 1

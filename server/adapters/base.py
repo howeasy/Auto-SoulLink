@@ -461,6 +461,27 @@ class GamePresentationAdapter(ABC):
         """
         return None
 
+    def stat_stage_labels(self) -> list[str]:
+        """Labels for the seven stat-stage slots, in order.
+
+        A generation with fewer stats than slots blanks the ones it does not have; a
+        blank label suppresses that badge entirely. Gen 1 needs this because it has a
+        single Special, and the shared renderer would otherwise have to be told about
+        generations, which is exactly what adapters exist to prevent.
+        """
+        return ["ATK", "DEF", "SPD", "SATK", "SDEF", "ACC", "EVA"]
+
+    @property
+    def mons_per_box(self) -> int:
+        """How many mons fit in one PC box on this generation.
+
+        Used to work out how many overflow boxes the memorial needs. It was a bare 30
+        in shared code -- the Gen 3 figure -- which on Gen 1 (MONS_PER_BOX = 20,
+        pokered/constants/pokemon_data_constants.asm) meant the first overflow box was
+        allocated ten corpses too late.
+        """
+        return 30
+
     @property
     def memorial_box_index(self) -> int:
         """Return the 0-based PC box index reserved for memorialized (dead) mons.

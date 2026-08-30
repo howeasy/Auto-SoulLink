@@ -609,6 +609,18 @@ class Gen1Adapter(GameAdapter):
         # No forms in Gen 1
         return None
 
+    def stat_stage_labels(self) -> list[str]:
+        # ONE Special, not two. RBY has no Sp.Atk/Sp.Def split (that arrives in Gen 2),
+        # so the fifth slot is blanked and the fourth is named for what it actually is.
+        # Mirroring Special into both Gen 3 slots made a single Psychic drop render as
+        # "-1 SATK -1 SDEF": two chips for one stat the cartridge does not have twice.
+        return ["ATK", "DEF", "SPD", "SPC", "", "ACC", "EVA"]
+
+    @property
+    def mons_per_box(self) -> int:
+        # pokered/constants/pokemon_data_constants.asm:60 — DEF MONS_PER_BOX EQU 20.
+        return 20
+
     @property
     def memorial_box_index(self) -> int:
         # Gen 1 R/B/Y: 12 boxes (0-indexed 0–11), memorial = Box 12 (index 11).

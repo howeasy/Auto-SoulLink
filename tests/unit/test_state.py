@@ -2923,6 +2923,7 @@ def _make_mock_server(state) -> object:
     class _MS:
         adapter = _MockAdapter()
         _warned_orphan_keys: set = set()
+        _warned_memorial_keys: set = set()
 
         def _check_memorial_box_contamination(self_inner, player_id, pc_boxes):
             return SLinkServer._check_memorial_box_contamination(self_inner, player_id, pc_boxes)

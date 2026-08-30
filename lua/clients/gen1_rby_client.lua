@@ -496,6 +496,8 @@ local trainer_stable_frames = 0
 local TRAINER_STABLE_GATE   = 3
 local battle_is_wild      = false
 local battle_area_id      = ""
+local battle_wild_species = nil   -- what the wild battle was, for no_catch
+local battle_wild_level   = nil
 local captured_this_battle = false
 local post_battle_frames  = 0
 local POST_BATTLE_GRACE   = 15  -- frames to wait after battle before no_catch
@@ -537,13 +539,19 @@ local function build_party_snapshot()
             local blob = M.readPartyBlob(slot)
             if blob then entry.blob_hex = M.bytesToHex(blob) end
             -- Phase 3: moves + PP from party struct. Server enriches into move_details.
-            -- Gen 1 has no PP-Up encoding; pp_bonuses stays 0.
+            -- PP UPS ARE REAL IN GEN 1. pokered/constants/pokemon_data_constants.asm:100
+            -- gives PP_UP_MASK %11000000 / PP_MASK %00111111 under the "PP in box_struct"
+            -- header, and the engine masks with PP_MASK everywhere it reads PP. The profile
+            -- already declares pp_encoding="ppup_packed" and readMovesAndPP already decodes
+            -- it -- the client simply threw the result away and hardcoded 0, so a move with
+            -- three PP Ups reported its packed byte as the current PP (33 became 97) and the
+            -- maximum was rendered from the unmodified base.
             local party_base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
             local mp = M.readMovesAndPP(party_base, nil)
             if mp then
-                entry.moves = mp.moves
-                entry.pp    = mp.pp
-                entry.pp_bonuses = 0
+                entry.moves  = mp.moves
+                entry.pp     = mp.pp
+                entry.pp_ups = mp.pp_ups     -- server accepts a list (gen4 shape)
             end
             if slot == active_slot and player_stages then
                 entry.active = true
@@ -583,7 +591,7 @@ local function build_enemy_snapshot()
             stat_stages = enemy_stages,
             moves = enemy_moves and enemy_moves.moves or nil,
             pp = enemy_moves and enemy_moves.pp or nil,
-            pp_bonuses = 0,
+            pp_ups = enemy_moves and enemy_moves.pp_ups or nil,
         }
     else
         -- Trainer: read species list for full team; use party_pos to mark active slot
@@ -605,7 +613,7 @@ local function build_enemy_snapshot()
                         stat_stages = enemy_stages,
                         moves = enemy_moves and enemy_moves.moves or nil,
                         pp = enemy_moves and enemy_moves.pp or nil,
-                        pp_bonuses = 0,
+                        pp_ups = enemy_moves and enemy_moves.pp_ups or nil,
                     }
                 else
                     -- Bench mons — only species known from list
@@ -1180,7 +1188,8 @@ local function diff_party()
     if post_battle_frames == 1 and not captured_this_battle and battle_is_wild then
         if nuzlocke_active and battle_area_id ~= "" and not resolved_areas[battle_area_id] then
             if not G.is_gift_area(battle_area_id) then
-                send({event = "no_catch", area_id = battle_area_id},
+                send({event = "no_catch", area_id = battle_area_id,
+                      species_id = battle_wild_species, level = battle_wild_level},
                      "no_catch:" .. battle_area_id, true)
                 resolved_areas[battle_area_id] = true
             end
@@ -1212,8 +1221,11 @@ local function check_fkeys()
         if mon then
             local nick = M.readPartyNickname(0)
             send({
+                -- species_id, not species: server.py reads msg["species_id"], so the old
+                -- key logged "Caught ? Lv12", stored species 0 and evaluated every clause
+                -- against species 0.
                 event = "capture", key = mon.key, area_id = last_area_id,
-                species = G.toNatDex(mon.species_index), level = mon.level,
+                species_id = G.toNatDex(mon.species_index), level = mon.level,
                 hp = mon.hp, maxHP = mon.maxHP, nickname = nick,
             }, "capture(manual):" .. mon.key:sub(1, 9), false)
         end
@@ -1227,7 +1239,8 @@ local function check_fkeys()
     end
     if keys["F4"] then
         if last_area_id ~= "" then
-            send({event = "no_catch", area_id = last_area_id},
+            send({event = "no_catch", area_id = last_area_id,
+                  species_id = battle_wild_species, level = battle_wild_level},
                  "no_catch(manual):" .. last_area_id, false)
         end
     end
@@ -1365,6 +1378,11 @@ local function on_frame()
         -- Battle started
         battle_area_id = cur_area_id ~= "" and cur_area_id or last_area_id
         battle_is_wild = M.isWildBattle()
+        -- Remember WHAT got away, for no_catch. The event carried only an area id, so the
+        -- dashboard could say a route was dead-zoned but never which encounter did it --
+        -- and a Safari-Zone assertion has nothing to assert on. Read at battle START
+        -- because by the time the grace period expires the battle struct is gone.
+        battle_wild_species, battle_wild_level = nil, nil
         captured_this_battle = false
         whiteout_sent = false
         console.log(fmt("[SLink-RBY] Battle START (%s) area=%s",
@@ -1378,6 +1396,18 @@ local function on_frame()
                                         :gsub("(%a)([%w]*)", function(a, b) return a:upper() .. b end)
             short = string.sub(short, 1, 8)
             hud_show("** NEW ENC ** " .. short, 255, 220, 60, 360)
+        end
+    elseif cur_in_battle and battle_is_wild and not battle_wild_species then
+        -- Remember WHAT got away, for no_catch. The event carried only an area id, so the
+        -- server's species-clause reroll (state.py reads msg["species_id"]) could never
+        -- fire on Gen 1, and the dashboard could say a route was dead-zoned without ever
+        -- saying by what. Read on the first frame the battle struct is actually populated
+        -- rather than on the transition frame, where it may not be yet -- and read it
+        -- during the battle, because by the time the grace period expires it is gone.
+        local foe = M.readActiveBattleMon and M.readActiveBattleMon()
+        if foe then
+            battle_wild_species = G.toNatDex(foe.species_index)
+            battle_wild_level = foe.level
         end
     elseif not cur_in_battle and in_battle then
         -- Battle ended
