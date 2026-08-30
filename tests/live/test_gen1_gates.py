@@ -164,3 +164,39 @@ def test_gen1_archipelago(rom, emuhawk):
                                          timeout=300, quiet=True)
     assert passed, (f"Archipelago gate on {rom} did not PASS\n"
                     f"result: {result_path}\n{text[-3000:]}")
+
+
+def test_gen1_panel_on_a_randomized_cartridge(emuhawk):
+    """THE structural injector's only real question, answered on hardware.
+
+    build.py is gated on the two pinned clean SHA-1s, which is right for a build tool and
+    useless for a randomized ROM: every seed is a different file, so there is no hash to
+    check and a UPS -- which embeds its source's CRC32 -- cannot apply at all. The injector
+    therefore verifies STRUCTURE: every span holds the bytes the manifest expects, the hook
+    site is untouched, bank $3F is empty, the header is protected.
+
+    That reasoning is only as good as the cartridge it produces, and the failure it would
+    hide is one no byte comparison can see: a ROM that patches "successfully" and then does
+    not boot. So this randomizes Red for real, injects, and runs the whole panel gate --
+    row, open, staging, page turn, close, walk away -- on the result.
+
+    The artifact is rebuilt rather than committed, because a randomized ROM is a ROM.
+    """
+    import subprocess
+    from run_gb_gate import PATCHED
+    _base, rom_rel, _sav = PATCHED["red_rand_patched"]
+    rom_path = os.path.join(REPO, rom_rel)
+
+    if not os.path.exists(rom_path):
+        proc = subprocess.run([sys.executable,
+                               os.path.join(REPO, "tools", "make_randomized_patched.py")],
+                              capture_output=True, text=True)
+        if proc.returncode != 0 or not os.path.exists(rom_path):
+            pytest.skip(f"could not build a randomized+patched ROM: "
+                        f"{(proc.stderr or '').strip()[-200:]}")
+
+    passed, result_path, text = run_gate("lua/tests/test_gen1_menu_row_gate.lua",
+                                         rom_key="red_rand_patched", target="town",
+                                         timeout=300, quiet=True)
+    assert passed, (f"the panel gate failed on a randomized+injected cartridge\n"
+                    f"result: {result_path}\n{text[-3000:]}")

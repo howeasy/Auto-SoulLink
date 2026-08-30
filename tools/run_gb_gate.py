@@ -70,6 +70,13 @@ GENS = {
         },
         "patched": {
             "red_patched": ("red", "patch/gen1/build/slink_red.gb", "slink red.SaveRAM"),
+            # The RANDOMIZED path's artifact. Built by
+            # `tests/live/make_randomized_patched.py` when a UPR jar is available, and
+            # deliberately a separate key: the whole question it answers is whether the
+            # structural injector produces a cartridge that boots and runs the panel, which
+            # a hash comparison against the clean build cannot tell you.
+            "red_rand_patched": ("red", "patch/gen1/build/slink_red_randomized.gb",
+                                 "slink red randomized.SaveRAM"),
             "blue_patched": ("blue", "patch/gen1/build/slink_blue.gb", "slink blue.SaveRAM"),
             "red_ap": (None, "patch/build/gen1_red_ap.gb", "gen1 red ap.SaveRAM"),
             "blue_ap": (None, "patch/build/gen1_blue_ap.gb", "gen1 blue ap.SaveRAM"),
