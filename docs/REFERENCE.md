@@ -19,17 +19,24 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
     cartridges; memorialize into Box 12; Explode Mode arming Explosion; the enemy-party
     write; `force_faint`; box level at `box+0x03`; Yellow's −1 WRAM shift (reads); the
     companion patch's VBlank hook and SFX.
-    All six scenarios run on **two pairings** — Red/Blue and **Yellow/Red** — so Yellow's −1
-    WRAM shift is exercised through the server and against a partner, not just by
+    All **nine** scenarios run on **two pairings** — Red/Blue and **Yellow/Red** — so Yellow's
+    −1 WRAM shift is exercised through the server and against a partner, not just by
     single-instance gates.
-  - **NOT proven live** — the dead zone, whiteout and the species/gender/type clauses; any
-    map *transition* (the playthrough stays on Route 1, so 1 of 39 encounter areas is
-    exercised, not 0 but not many); `party_mon`/`retrieveBoxMon`, which has still never
-    executed on a cartridge; evolution `key_change`; and the Archipelago variants, which have
-    never been launched.
-  Both duo battles are staged by poking `wIsInBattle`, and the battle engine has never executed
-  a turn. Rival swap and Explode Mode need **no ROM patch** on Gen 1 (no encryption, no
-  checksums); the optional Red/Blue companion patch adds sound only.
+  - **Proven live, without injection** — encounter linking, the ball gate, the dead zone and
+    the species clause: `playthrough`, `deadzone` and `dupes` walk Route 1's grass on both
+    cartridges, meet real wild Pokemon and throw real Poke Balls, and the server pairs the
+    captures by area.
+  - **NOT proven live** — whiteout and the gender/type clauses; any map *transition* (every
+    playing scenario stays on Route 1, so 1 of 39 encounter areas is exercised); evolution
+    `key_change`; and the Archipelago variants, which have never been launched. The scripted
+    warp that would reach the other 38 is undrivable from Lua — `hWarpDestinationMap` at
+    `$FF81` is shared HRAM the renderer overwrites within the frame
+    (`lua/tests/probe_gen1_warp.lua` measures it three ways) — and the fly warp reaches
+    thirteen destinations of which two carry encounters.
+  Rival swap and Explode Mode need **no ROM patch** on Gen 1 (no encryption, no checksums).
+  The optional Red/Blue companion patch adds the in-game SLINK panel and **no sound**: the
+  VBlank `PlaySound` path ABI 2 used is swallowed during music fades and re-enters a
+  non-reentrant audio routine, so ABI 3 ships panel-only and says so in its capability bits.
 - **Gen 2** — Crystal (GB/GBC) — 🟡 **Partially verified.** Same shape as Gen 1: the
   *mechanisms* are proven against a running cartridge, a *playthrough* is not.
   - **Proven live** — faint propagation, party→box sync and memorialize into Box 14

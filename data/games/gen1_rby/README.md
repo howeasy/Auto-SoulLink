@@ -10,21 +10,29 @@ is not. Every profile address is checked against the pret decomp .sym output by
 that:
 
 ```bash
-SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 8 gates: memory + writes x RBY, patch x 2
-SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py -q       # 12: 6 scenarios x 2 ROM pairings
+SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 24 gates across R/B/Y + patched + AP
+SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py -q       # 18: 9 scenarios x 2 ROM pairings
+python tools/verify_gen1_release.py                    # all of the above, fail-closed
 ```
 
-The duo E2E runs **Red as player A and Blue as player B** and proves faint propagation,
-party->box sync, memorialize to Box 12, the rival-team write and Explode Mode. Fixtures are
-battery saves (`tests/fixtures/gen1/*.SaveRAM`) built from a cold boot by
+The duo E2E runs two pairings — **Red/Blue** and **Yellow/Red** — over nine scenarios each.
+Fixtures are battery saves (`tests/fixtures/gen1/*.SaveRAM`) built from a cold boot by
 [tools/gen1_playthrough.py](../../../tools/gen1_playthrough.py); unlike the Gen 3 `.State` files
 they are not BizHawk-version-locked, so they never go stale.
 
-**What that does NOT cover.** Every duo pair is injected through `/api/inject_link` and the
-Nuzlocke gate is force-set, so encounter linking, the dead zone, whiteout and the three clauses
-have no live evidence. No live test has ever caught a Pokemon, changed maps, or let the battle
-engine execute a turn; both duo battles are staged by poking `wIsInBattle`. **0 of the 39
-encounter areas** in `encounter_tables.json` are ever visited — every test sits in Pallet Town.
+**What IS covered live.** `playthrough`, `deadzone` and `dupes` play for real: both cartridges
+walk Route 1's grass, meet real wild Pokemon, throw real Poke Balls, and the server pairs the
+captures by area. That covers encounter linking, the ball gate, the dead zone and the species
+clause with no injection at all. The other six inject the state they verify, which is the point
+— they isolate one rule each.
+
+**What that does NOT cover.** Route 1 is the only encounter area any live test visits: the
+scripted warp turned out to be undrivable from Lua (`lua/tests/probe_gen1_warp.lua` measures
+why — `hWarpDestinationMap` at `$FF81` is shared HRAM the renderer overwrites within the
+frame), and the fly warp reaches thirteen destinations of which only two carry wild
+encounters. So the remaining areas are covered by the source-derived oracle and the ROM
+scanner, not by play. Fishing is scanned from ROM on all three titles but no rod has ever
+been used in-engine.
 `retrieveBoxMon` (the withdraw half of party sync) has never run on a cartridge, and the
 Archipelago variants have never been launched. See
 [docs/gen1_gen2_runtime_checks.md](../../../docs/gen1_gen2_runtime_checks.md).

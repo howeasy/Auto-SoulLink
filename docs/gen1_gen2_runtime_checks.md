@@ -150,11 +150,11 @@ instruction bytes at the `ChangeBox` branch to confirm the game behaviour it def
 
   | Never exercised live | Why it matters |
   |---|---|
-  | Dead zone, whiteout, all three clauses | still injected. **Encounter linking and the ball gate are now covered** by the `playthrough` scenario, which injects nothing |
+  | Whiteout, gender/type clauses | still injected. **Encounter linking, the ball gate, the dead zone and the species clause are covered** by `playthrough`, `deadzone` and `dupes`, which inject nothing |
   | `area_enter` — **1 of 39** encounter areas | the playthrough resolves `route_1` from the real map, but never crosses a boundary, so no map *transition* is validated |
   | ~~Any real wild encounter or capture~~ | **COVERED.** The playthrough loads the `battle` fixture, hunts, and catches — the `*_battle.SaveRAM` files are no longer dead weight |
-  | `party_mon` / `retrieveBoxMon` | the withdraw half of party sync has **never executed on a cartridge** |
-  | A battle turn | both duo battles are staged by poking `wIsInBattle`; the engine never consumes our enemy-party or Explosion writes |
+  | ~~`party_mon` / `retrieveBoxMon`~~ | **COVERED.** `playthrough` withdraws a linked mon through the real path, and `test_gen1_stat_rebuild.lua` recomputes every party mon's stats from the cartridge's own base-stat table and requires the game's stored values to match |
+  | A battle turn | the injected scenarios stage battles by poking `wIsInBattle`; the three PLAYING scenarios run real wild battles, so the engine does consume real turns there — but not the enemy-party or Explosion writes, which are still staged |
   | Evolution / `key_change` | Gen 1 keys embed species, so every evolution rewrites the key |
   | `red_ap` / `blue_ap` | never launched under an emulator; the AP profile relocates exactly the addresses the box and rival writes target |
 

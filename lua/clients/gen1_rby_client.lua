@@ -217,7 +217,7 @@ local VALIDATE_FAIL_THRESHOLD = 5
 -- Optional companion patch (vanilla Red/Blue only). Its one player-visible feature is sound:
 -- Gen 1 has no RAM-writable audio trigger, so an unpatched cartridge stays silent and every
 -- playSfx call is a no-op. Detection reads the beacon, so a wrong or absent patch is inert.
-local patch_abi = M.detectCompanionPatch()
+local patch_abi = M.detectCompanionPatch()  -- re-read on revalidate/reconnect, see redetect_patch
 
 console.log(fmt("[SLink-RBY] Detected: %s (variant=%s) writes=%s patch=%s",
     G.display_name, variant, tostring(writes_enabled),
@@ -1293,7 +1293,20 @@ end
 --- and waits. Painting only in that window is what makes a torn page impossible -- the
 --- display is white for all of it. Doing nothing here is a valid outcome: the patch times
 --- out and the player sees "NO CLIENT", which is the truth.
-local panel_supported = nil   -- resolved once, from the capability bits
+local panel_supported = nil   -- resolved from the capability bits; cleared by redetect
+
+--- Re-read the companion patch and forget anything cached about it.
+---
+--- detectCompanionPatch ran ONCE at load while validateROM retried every frame, so the
+--- two disagreed the moment anything changed underneath: reset the console, or load a
+--- different ROM in the same BizHawk session, and the client kept the capabilities of a
+--- cartridge that is no longer in the slot. It clears M.SFX_DISPATCH_ADDR itself; the
+--- panel flag is ours, so it is cleared here.
+local function redetect_patch()
+    panel_supported = nil
+    return M.detectCompanionPatch()
+end
+
 local function service_panel()
     -- ASK WHETHER THIS CARTRIDGE HAS A PANEL AT ALL, not just whether the byte says AWAIT.
     -- On an unpatched ROM $DEEB is ordinary unallocated WRAM; if it ever happened to read 1
@@ -1316,7 +1329,11 @@ local function on_frame()
         local ok, _ = M.validateROM()
         if ok then
             writes_enabled = true
-            console.log("[SLink-RBY] ✓ ROM validation passed — writes enabled")
+            -- A game that has just become valid may be a DIFFERENT cartridge from the one
+            -- detected at load, so the patch is re-read rather than assumed.
+            patch_abi = redetect_patch()
+            console.log(fmt("[SLink-RBY] ✓ ROM validation passed — writes enabled, patch=%s",
+                            patch_abi and ("ABI " .. patch_abi) or "none"))
         end
     elseif frame_count % 60 == 0 then
         -- ...and revoke it if the game goes away underneath us. See the declaration above.
@@ -1329,6 +1346,11 @@ local function on_frame()
                 writes_enabled, initialized = false, false
                 in_battle, prev_in_battle, nuzlocke_active = false, false, false
                 captured_this_battle = false
+                -- The cartridge is gone; so are its capabilities. Holding a stale
+                -- SFX/panel address across a ROM swap is how a client ends up painting
+                -- into a layout that is no longer there.
+                panel_supported, patch_abi = nil, nil
+                M.SFX_DISPATCH_ADDR = nil
                 validate_fail_count = 0
                 -- Deferred writes were queued against a save that is no longer loaded.
                 pending_sync_cmds = {}
@@ -1358,6 +1380,11 @@ local function on_frame()
                     if mon then all_known_keys[mon.key] = true end
                 end
             end
+            -- Re-read the companion patch on every (re)connect: the server records the
+            -- capability from this hello, so a downgrade -- the player reloading an
+            -- unpatched ROM mid-run -- has to be visible here or the server keeps sending
+            -- panel payloads to a cartridge with no mailbox.
+            patch_abi = redetect_patch()
             -- Seed all_known_keys from EVERY box, not just the open one.
             -- Seeding the active box alone made the keyset depend on which box the player
             -- happened to have selected: switch to a box filled in an earlier session and
