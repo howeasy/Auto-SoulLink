@@ -23,13 +23,17 @@ import json
 import logging
 import logging.handlers
 import mimetypes
+import ntpath
 import os
 import re
 import shutil
 import time
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 
+from server.http_safety import csrf_protection, theme_cache
+from server.lua_literals import lua_comment, lua_string
 from server.overlay_catalog import build_index_context as _build_stream_index_context
 
 try:
@@ -4101,8 +4105,9 @@ class SLinkServer:
                 earned = "earned" if (badge_mask & (1 << i)) else ""
                 gym_html += f'<span class="gym-badge {earned}" style="background:{color}" title="{name}"></span>'
             gym_html += '</span>'
-            rom_lbl   = ROM_LABEL.get(p["rom_type"], p["rom_type"])
-            area_disp = self.adapter.area_display_name(p.get("current_area_id") or p["current_area"]) or '<span class="dim">unknown</span>'
+            rom_lbl   = html.escape(ROM_LABEL.get(p["rom_type"], p["rom_type"]))
+            area_name = self.adapter.area_display_name(p.get("current_area_id") or p["current_area"])
+            area_disp = html.escape(area_name) if area_name else '<span class="dim">unknown</span>'
             balls     = p["ball_count"]
             balls_cls = "yes" if balls > 0 else "warn"
             trainer   = html.escape(p.get("trainer_name", ""))
@@ -4136,7 +4141,7 @@ class SLinkServer:
                 f'<div class="info-row">'
                 f'<span>&#128205; <b class="area">{area_disp}</b></span>'
                 f'<span>&#9702; Pokéballs: <b class="{balls_cls}">{balls}</b></span>'
-                f'<span>Last: <b>{p["last_event"]}</b> {_age_label(p.get("last_seen_age"))}</span>'
+                f'<span>Last: <b>{html.escape(p["last_event"])}</b> {_age_label(p.get("last_seen_age"))}</span>'
                 f'</div>'
             )
             # Say so loudly when a client has gone quiet. Everything else on this card keeps
@@ -4598,7 +4603,7 @@ class SLinkServer:
             '<div class="lp-hdr-side lp-hdr-side-a">'
             f'<div class="lp-player-name">{_name_a} {_a_conn}</div>'
             '<div class="lp-hdr-meta">'
-            f'<span class="dim">{_rom_a}</span>'
+            f'<span class="dim">{html.escape(_rom_a)}</span>'
             f' &middot; &#128205; <b class="area">{html.escape(_area_a_lbl)}</b>'
             f' &middot; &#9702; <b class="{_bclass_a}">{_balls_a}</b>'
             '</div></div>'
@@ -4612,7 +4617,7 @@ class SLinkServer:
             '<div class="lp-hdr-meta">'
             f'<b class="{_bclass_b}">{_balls_b}</b> &#9702;'
             f' &middot; <b class="area">{html.escape(_area_b_lbl)}</b> &#128205;'
-            f' &middot; <span class="dim">{_rom_b}</span>'
+            f' &middot; <span class="dim">{html.escape(_rom_b)}</span>'
             '</div></div>'
             '</div>'
         )
@@ -5014,7 +5019,7 @@ class SLinkServer:
                 st_sort = _STATUS_SORT_VAL.get(r["cls"], "9")
                 is_bonus = r["area"].startswith("_bonus_")
                 row_cls = ' class="bonus-pair-row"' if is_bonus else ''
-                area_cell = area_disp
+                area_cell = html.escape(area_disp)
                 parts.append(
                     f'<tr{row_cls} data-status="{html.escape(r["cls"])}" data-key="{html.escape(r["area"])}">'
                     f'<td data-sort="{html.escape(area_disp)}">{area_cell}</td>'
@@ -5185,15 +5190,28 @@ class SLinkServer:
         from dist automatically.
         """
         path = request.match_info.get('path', '')
-        safe = os.path.normpath(path).lstrip('/\\')
-        if '..' in safe:
+        # URL paths must stay relative on Windows as well as POSIX. Normalizing
+        # first can hide traversal, and a drive-qualified join discards its base.
+        if (ntpath.splitdrive(path)[0] or path.startswith('/') or '\\' in path
+                or '\x00' in path or '..' in path.split('/')):
             raise aiohttp_web.HTTPForbidden()
-        src_path  = os.path.join(_CALC_SRC_DIR, safe)
-        dist_path = os.path.join(_CALC_DIST_DIR, safe)
-        abs_path  = src_path if os.path.isfile(src_path) else dist_path
-        if not os.path.isfile(abs_path):
+        abs_path = None
+        for directory in (_CALC_SRC_DIR, _CALC_DIST_DIR):
+            try:
+                root = Path(directory).resolve()
+                candidate = (root / path).resolve()
+                # resolve() follows symlinks and Windows junctions before the
+                # containment check; a textual prefix check is insufficient.
+                if not candidate.is_relative_to(root):
+                    raise aiohttp_web.HTTPForbidden()
+                if candidate.is_file():
+                    abs_path = candidate
+                    break
+            except (OSError, RuntimeError, ValueError):
+                raise aiohttp_web.HTTPForbidden() from None
+        if abs_path is None:
             raise aiohttp_web.HTTPNotFound()
-        if safe.endswith('.html'):
+        if path.endswith('.html'):
             with open(abs_path, encoding='utf-8') as fh:
                 full = fh.read()
             # Slice the calc body inner. Regex-matched rather than
@@ -5208,7 +5226,7 @@ class SLinkServer:
                 calc_body = full[body_open_match.end():body_close_match[-1].start()]
             else:
                 calc_body = full
-            is_hardcore = 'hardcore' in safe.lower()
+            is_hardcore = 'hardcore' in path.lower()
             ctx = {
                 "page_title":      "Pokémon Radical Red Damage Calculator",
                 "theme":           resolve_theme(request),
@@ -5230,8 +5248,7 @@ class SLinkServer:
             return resp
         mime, _ = mimetypes.guess_type(abs_path)
         ct = mime or 'application/octet-stream'
-        with open(abs_path, 'rb') as fh:
-            return aiohttp_web.Response(body=fh.read(), content_type=ct)
+        return aiohttp_web.FileResponse(abs_path, headers={"Content-Type": ct})
 
     async def handle_calc_mons(self, request):
         """Return live party + linked mons for both players as Showdown pastes."""
@@ -6174,9 +6191,9 @@ class SLinkServer:
         '-- Override: set SLINK_ROOT to skip auto-detection entirely:\n'
         'local SLINK_ROOT = nil  -- e.g. "C:/SLink/"\n'
         '\n'
-        'SLINK_HOST   = "{host}"\n'
+        'SLINK_HOST   = {host}\n'
         'SLINK_PORT   = {tcp_port}\n'
-        'SLINK_PLAYER = "{player}"\n'
+        'SLINK_PLAYER = {player}\n'
         '\n'
         '-- Config file lives next to this launcher and caches the project root path.\n'
         'local _launcher_dir = ((debug.getinfo(1, "S") or {{}}).source or ""):match("@(.+[\\\\/])") or ""\n'
@@ -6243,11 +6260,11 @@ class SLinkServer:
         connect_host = host_header.split(":")[0] or "127.0.0.1"
         run_name = self._run_name or self._run_id or "SLink"
         content = self._LAUNCHER_TEMPLATE.format(
-            run_name=run_name,
+            run_name=lua_comment(run_name),
             player_upper=player.upper(),
-            host=connect_host,
+            host=lua_string(connect_host),
             tcp_port=self._tcp_port,
-            player=player,
+            player=lua_string(player),
         )
         safe_name = re.sub(r'[^\w-]', '_', run_name).strip('_') or "SLink"
         filename = f"slink_{safe_name}_{player}.lua"
@@ -7626,6 +7643,8 @@ class SLinkServer:
         except Exception:
             return aiohttp_web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
         player = body.get("player", "a")
+        if player not in ("a", "b"):
+            return aiohttp_web.json_response({"ok": False, "error": "player must be 'a' or 'b'"}, status=400)
         value = bool(body.get("value", True))
         self.state.pokeballs_obtained[player] = value
         self.state._save()
@@ -8336,7 +8355,7 @@ def build_app(srv):
     Extracted from main() so tests can construct the SAME app and walk the SAME route
     table — a test that re-declared the routes would drift the moment one was added here.
     """
-    app = aiohttp_web.Application()
+    app = aiohttp_web.Application(middlewares=[csrf_protection, theme_cache])
     setup_templating(app)
     app.router.add_get("/",            srv.handle_status_html)
     app.router.add_get("/memorial",    srv.handle_memorial_html)

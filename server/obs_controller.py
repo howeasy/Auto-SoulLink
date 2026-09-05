@@ -165,6 +165,7 @@ class OBSController:
         self._workers: dict[str, asyncio.Task | None] = {"a": None, "b": None}
         self._reconnect_tasks: dict[str, asyncio.Task | None] = {"a": None, "b": None}
         self._status: dict[str, str] = {"a": "disconnected", "b": "disconnected"}
+        self._lifecycle_lock = asyncio.Lock()
         self.load_config()
 
     # ── config ──────────────────────────────────────────────────────────────────
@@ -225,35 +226,35 @@ class OBSController:
             return
         self._workers[player_id] = asyncio.ensure_future(self._worker(player_id))
 
-    def stop_workers(self):
-        """Cancel all worker tasks and disconnect cleanly."""
+    async def stop_workers(self):
+        """Wait for all workers and connection cleanup to finish."""
+        async with self._lifecycle_lock:
+            await self._stop_workers()
+
+    async def _stop_workers(self):
+        """Stop under the lifecycle lock, detaching workers before cancelling them."""
+        workers = [t for t in self._workers.values() if t is not None]
+        # Detached workers must not disconnect a replacement in their finally block.
+        self._workers = {"a": None, "b": None}
+        for task in workers:
+            if not task.done():
+                task.cancel()
         for pid in ("a", "b"):
-            t = self._workers.get(pid)
-            if t and not t.done():
-                t.cancel()
-            rt = self._reconnect_tasks.get(pid)
-            if rt and not rt.done():
-                rt.cancel()
+            await self._disconnect_player(pid)
+        await asyncio.gather(*workers, return_exceptions=True)
 
     async def apply_new_config(self, new_config: dict):
         """Hot-reload: stop workers, swap config, restart workers."""
-        self.stop_workers()
-        # Disconnect existing clients cleanly
-        for pid in ("a", "b"):
-            c = self._clients.get(pid)
-            if c:
-                with contextlib.suppress(Exception):
-                    await c.disconnect()
-                self._clients[pid] = None
-                self._status[pid] = "disconnected"
-        self._config = new_config
-        self.save_config()
-        # Re-initialise queues so no stale scenes carry over
-        self._queues = {
-            "a": asyncio.Queue(maxsize=1),
-            "b": asyncio.Queue(maxsize=1),
-        }
-        self.start_workers()
+        async with self._lifecycle_lock:
+            await self._stop_workers()
+            self._config = new_config
+            self.save_config()
+            # Re-initialise queues so no stale scenes carry over.
+            self._queues = {
+                "a": asyncio.Queue(maxsize=1),
+                "b": asyncio.Queue(maxsize=1),
+            }
+            self.start_workers()
 
     # ── trigger submission (synchronous, from _dispatch) ────────────────────────
 
@@ -338,19 +339,17 @@ class OBSController:
     async def _worker(self, player_id: str):
         """Per-player scene-change worker. Serialises all OBS I/O for one player."""
         log.debug(f"[OBS] Worker started for player {player_id}")
-        # Start background reconnect task
-        self._reconnect_tasks[player_id] = asyncio.ensure_future(
-            self._reconnect_loop(player_id))
         try:
+            await self.connect_player(player_id)
             while True:
                 scene = await self._queues[player_id].get()
                 await self._send_scene(player_id, scene)
         except asyncio.CancelledError:
             pass
         finally:
-            rt = self._reconnect_tasks.get(player_id)
-            if rt and not rt.done():
-                rt.cancel()
+            if self._workers.get(player_id) is asyncio.current_task():
+                await self.disconnect_player(player_id)
+                self._workers[player_id] = None
             log.debug(f"[OBS] Worker stopped for player {player_id}")
 
     async def _send_scene(self, player_id: str, scene: str):
@@ -380,55 +379,81 @@ class OBSController:
 
     async def _reconnect_loop(self, player_id: str):
         """Maintain a persistent connection to the player's OBS instance."""
+        if not _OBS_AVAILABLE:
+            return
         backoff = 5
-        while True:
-            try:
-                conn = self._config.get("connections", {}).get(player_id, {})
-                host = conn.get("host", "127.0.0.1")
-                port = conn.get("port", 4455)
-                password = conn.get("password", "")
+        try:
+            while True:
+                client = None
+                try:
+                    conn = self._config.get("connections", {}).get(player_id, {})
+                    host = conn.get("host", "127.0.0.1")
+                    port = conn.get("port", 4455)
+                    password = conn.get("password", "")
 
-                if not host:
-                    await asyncio.sleep(10)
-                    continue
+                    if not host:
+                        await asyncio.sleep(10)
+                        continue
 
-                url = f"ws://{host}:{port}"
-                log.info(f"[OBS] [{player_id}] Connecting to {url}")
-                self._status[player_id] = "connecting"
+                    url = f"ws://{host}:{port}"
+                    log.info(f"[OBS] [{player_id}] Connecting to {url}")
+                    self._status[player_id] = "connecting"
 
-                client = simpleobsws.WebSocketClient(url=url, password=password)
-                self._clients[player_id] = client
+                    client = simpleobsws.WebSocketClient(url=url, password=password)
+                    self._clients[player_id] = client
 
-                await client.connect()
-                identified = await asyncio.wait_for(
-                    client.wait_until_identified(), timeout=10.0)
-                if not identified:
-                    self._status[player_id] = "auth_failed"
-                    log.warning(f"[OBS] [{player_id}] Identification failed (wrong password?)")
-                    await asyncio.sleep(backoff)
-                    backoff = min(backoff * 2, 60)
-                    continue
+                    await client.connect()
+                    identified = await asyncio.wait_for(
+                        client.wait_until_identified(), timeout=10.0)
+                    if not identified:
+                        self._status[player_id] = "auth_failed"
+                        log.warning(f"[OBS] [{player_id}] Identification failed (wrong password?)")
+                    else:
+                        self._status[player_id] = "connected"
+                        backoff = 5
+                        log.info(f"[OBS] [{player_id}] Connected and identified")
 
-                self._status[player_id] = "connected"
-                backoff = 5
-                log.info(f"[OBS] [{player_id}] Connected and identified")
+                        # Wait until the connection drops.
+                        while client.is_identified():
+                            await asyncio.sleep(1)
 
-                # Wait until the connection drops
-                while client.is_identified():
-                    await asyncio.sleep(1)
+                        self._status[player_id] = "disconnected"
+                        log.info(f"[OBS] [{player_id}] Connection lost, reconnecting in {backoff}s")
+                except Exception as e:
+                    self._status[player_id] = "disconnected"
+                    log.debug(f"[OBS] [{player_id}] Connection error: {e}")
+                finally:
+                    if client is not None:
+                        await self._disconnect_client(player_id, client)
 
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, 60)
+        finally:
+            if (self._reconnect_tasks.get(player_id) is asyncio.current_task()
+                    and self._clients.get(player_id) is None):
                 self._status[player_id] = "disconnected"
-                log.info(f"[OBS] [{player_id}] Connection lost, reconnecting in {backoff}s")
 
-            except asyncio.CancelledError:
-                self._status[player_id] = "disconnected"
-                break
-            except Exception as e:
-                self._status[player_id] = "disconnected"
-                log.debug(f"[OBS] [{player_id}] Connection error: {e}")
-
-            await asyncio.sleep(backoff)
-            backoff = min(backoff * 2, 60)
+    async def _disconnect_client(self, player_id: str, client):
+        """Finish closing an attempt even when cancellation arrives during cleanup."""
+        cleanup = asyncio.ensure_future(client.disconnect())
+        cancelled = False
+        try:
+            while True:
+                try:
+                    await asyncio.shield(cleanup)
+                    break
+                except asyncio.CancelledError:
+                    if cleanup.cancelled():
+                        raise
+                    cancelled = True
+                except Exception as e:
+                    log.debug(f"[OBS] [{player_id}] Disconnect error: {e}")
+                    break
+        finally:
+            if self._clients.get(player_id) is client:
+                self._clients[player_id] = None
+        if cancelled:
+            raise asyncio.CancelledError
 
     # ── utility ─────────────────────────────────────────────────────────────────
 
@@ -475,23 +500,31 @@ class OBSController:
 
     async def connect_player(self, player_id: str):
         """Force (re)connect a player's OBS. Cancels existing reconnect loop and restarts."""
-        rt = self._reconnect_tasks.get(player_id)
-        if rt and not rt.done():
-            rt.cancel()
-        # Reset backoff by restarting the reconnect task
-        self._reconnect_tasks[player_id] = asyncio.ensure_future(
-            self._reconnect_loop(player_id))
+        async with self._lifecycle_lock:
+            await self._disconnect_player(player_id)
+            # Reset backoff only after the old loop has released its client.
+            self._reconnect_tasks[player_id] = asyncio.ensure_future(
+                self._reconnect_loop(player_id))
 
     async def disconnect_player(self, player_id: str):
         """Disconnect a player's OBS and cancel reconnect loop."""
+        async with self._lifecycle_lock:
+            await self._disconnect_player(player_id)
+
+    async def _disconnect_player(self, player_id: str):
+        """Disconnect under the lifecycle lock."""
         rt = self._reconnect_tasks.get(player_id)
-        if rt and not rt.done():
-            rt.cancel()
+        if rt is not None:
+            if not rt.done():
+                rt.cancel()
+            # An expected cancellation of rt is a result; cancellation of this
+            # caller must still propagate instead of starting a new connection.
+            await asyncio.gather(rt, return_exceptions=True)
+            if self._reconnect_tasks.get(player_id) is rt:
+                self._reconnect_tasks[player_id] = None
         c = self._clients.get(player_id)
-        if c:
-            with contextlib.suppress(Exception):
-                await c.disconnect()
-            self._clients[player_id] = None
+        if c is not None:
+            await self._disconnect_client(player_id, c)
         self._status[player_id] = "disconnected"
 
     async def test_scene(self, player_id: str, scene: str) -> dict:
