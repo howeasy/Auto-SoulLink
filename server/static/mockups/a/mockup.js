@@ -275,12 +275,14 @@ function mockup() {
       return (p.party_keys || []).map((k) => p.party_details[k] && { ...p.party_details[k], key: k }).filter(Boolean);
     },
     battle(pid) { return this.player(pid).battle_state || {}; },
-    /* The mon the player has out, when they are in battle — marked on its pair row. */
-    activeKey(pid) {
+    /* The mon the player has out, when they are in battle. Marked on its pair card, and
+     * shown in the Now card beside the foe — that is the fight the partner's mon is in
+     * too, whether or not the partner is looking. */
+    activeMon(pid) {
       if (!this.battle(pid).in_battle) return null;
-      const m = this.party(pid).find((x) => x.active);
-      return m ? m.key : null;
+      return this.party(pid).find((x) => x.active) || null;
     },
+    activeKey(pid) { const m = this.activeMon(pid); return m ? m.key : null; },
     wild(pid) { return Object.entries(this.player(pid).encounter_table || {}); },
     connected(pid) { return !!this.player(pid).connected; },
     /* Has this player ever said hello? Distinct from connected: a dropped client's last
