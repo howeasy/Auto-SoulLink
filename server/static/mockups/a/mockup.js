@@ -19,6 +19,16 @@ const FIXTURES = {
 
 /* Body-font candidates: [class, label, preview stack]. See fonts.css. */
 const FONTS = [
+  // Pixel-flavoured: Pixelify's character with more of the glyph left in.
+  ['ui-jersey15', 'Jersey 15', "'Jersey 15', monospace"],
+  ['ui-jersey20', 'Jersey 20', "'Jersey 20', monospace"],
+  ['ui-jersey10', 'Jersey 10', "'Jersey 10', monospace"],
+  ['ui-tiny5', 'Tiny5', "'Tiny5', monospace"],
+  ['ui-dotgothic', 'DotGothic16', "'DotGothic16', monospace"],
+  ['ui-handjet', 'Handjet', "'Handjet', monospace"],
+  ['ui-doto', 'Doto', "'Doto', monospace"],
+  ['ui-vt323', 'VT323', "'VT323', monospace"],
+  // Plain faces, for comparison.
   ['ui-plex', 'IBM Plex Sans', "'IBM Plex Sans', system-ui, sans-serif"],
   ['ui-inter', 'Inter', "'Inter', system-ui, sans-serif"],
   ['ui-grotesk', 'Space Grotesk', "'Space Grotesk', system-ui, sans-serif"],
@@ -119,7 +129,7 @@ function mockup() {
     dest: 'run',
     tab: 'board',
     theme: 'default',
-    font: 'ui-plex',
+    font: 'ui-jersey15',
     compact: false,
     debugOpen: false,
     launchersOpen: false,
@@ -142,7 +152,7 @@ function mockup() {
     async setup() {
       this.theme = localStorage.getItem('slink-theme') || 'default';
       this.applyTheme(this.theme);
-      this.applyFont(localStorage.getItem('slink-mockup-font') || 'ui-plex');
+      this.applyFont(localStorage.getItem('slink-mockup-font') || 'ui-jersey15');
       try {
         const [caps, runs] = await Promise.all([
           fetch('../fixtures/capabilities.json').then((r) => r.json()),

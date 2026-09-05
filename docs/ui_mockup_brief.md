@@ -221,9 +221,21 @@ share one viewport. There is far more small text per screen than either page had
 Candidates are vendored (`tools/vendor_fonts.py`, never fetched at runtime) and switchable
 live in the Track A mockup, so the choice gets made by looking:
 
+The brief for the font sharpened after the plain faces were seen in place: **Pixelify's
+character, more legible** — not a neutral sans. So the second round is pixel-flavoured
+faces that keep more of the glyph, and the mockup default moved to Jersey 15.
+
 | Option | Notes |
 |---|---|
-| **IBM Plex Sans** *(mockup default)* | Technical without being sterile, has a matching mono, tabular figures. |
+| **Jersey 15** *(mockup default)* | The same proportional pixel-sans idea as Pixelify at a finer grid; condensed, real x-height, names and figures hold at table size. Closest match to the brief. |
+| Jersey 20 | Jersey 15 one step smoother. Nearly interchangeable; pick by eye. |
+| Jersey 10 | The coarse end of the family — nearest to Pixelify's look, and to its legibility problem. |
+| DotGothic16 | The most legible pixel face here outright: round dots, generous width. Wide, and its Latin has a Japanese accent. |
+| Tiny5 | A 5px grid rendered chunky; charming, heavy, reads more "toy" than "tool". |
+| Handjet | Variable weight, pixel-shaped elements. Not judged: its capture came back identical to the previous one, so it was not seen rendered. |
+| Doto | Dot-matrix, variable weight. LED-sign flavour; likely better on overlays than on tables. |
+| VT323 | Terminal mono. Very legible, everything aligns, and everything looks like a terminal. |
+| IBM Plex Sans | The plain-face recommendation from round one. Technical without being sterile, tabular figures. |
 | Inter | The neutral standard. Safest, least character. |
 | Space Grotesk | Geometric with some quirk left in it. |
 | IBM Plex Mono | Everything aligns; heavy over a whole page. |

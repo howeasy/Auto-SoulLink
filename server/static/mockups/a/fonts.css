@@ -50,6 +50,89 @@
        url('/static/fonts/space-grotesk-latin-ext.woff2') format('woff2');
 }
 
+
+/* ── Pixel-flavoured candidates: Pixelify's character, more of the glyph left in ──
+ * Vendored by tools/vendor_fonts.py. Most ship one weight; Handjet and Doto are variable. */
+
+@font-face {
+  font-family: 'Jersey 10';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/jersey-10-latin.woff2') format('woff2'),
+       url('/static/fonts/jersey-10-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Jersey 15';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/jersey-15-latin.woff2') format('woff2'),
+       url('/static/fonts/jersey-15-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Jersey 20';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/jersey-20-latin.woff2') format('woff2'),
+       url('/static/fonts/jersey-20-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Tiny5';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/tiny5-latin.woff2') format('woff2'),
+       url('/static/fonts/tiny5-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'DotGothic16';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/dotgothic16-latin.woff2') format('woff2'),
+       url('/static/fonts/dotgothic16-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Handjet';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/static/fonts/handjet-latin.woff2') format('woff2'),
+       url('/static/fonts/handjet-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Doto';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/static/fonts/doto-latin.woff2') format('woff2'),
+       url('/static/fonts/doto-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'VT323';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/vt323-latin.woff2') format('woff2'),
+       url('/static/fonts/vt323-latin-ext.woff2') format('woff2');
+}
+
+body.ui-jersey10  { --font-ui: 'Jersey 10', 'Pixelify Sans', monospace; }
+body.ui-jersey15  { --font-ui: 'Jersey 15', 'Pixelify Sans', monospace; }
+body.ui-jersey20  { --font-ui: 'Jersey 20', 'Pixelify Sans', monospace; }
+body.ui-tiny5     { --font-ui: 'Tiny5', 'Pixelify Sans', monospace; }
+body.ui-dotgothic { --font-ui: 'DotGothic16', 'Pixelify Sans', monospace; }
+body.ui-handjet   { --font-ui: 'Handjet', 'Pixelify Sans', monospace; font-weight: 500; }
+body.ui-doto      { --font-ui: 'Doto', 'Pixelify Sans', monospace; font-weight: 600; }
+body.ui-vt323     { --font-ui: 'VT323', 'IBM Plex Mono', monospace; }
+
+/* Pixel faces are drawn to a grid; the Jersey family and Tiny5 sit at sizes that are not
+ * grid multiples on this page, so they are left antialiased -- unsmoothed they go jagged
+ * rather than crisp. Pixelify keeps the no-smoothing rule below because it is the one
+ * that was tuned for it. */
+
 /* Each option sets --font-ui only. --font-pixel is left alone throughout: Press Start 2P
  * still earns its place on the stream overlays, where the text is large, sparse and read
  * from across a room. The argument is about the dense UI, not about the brand. */

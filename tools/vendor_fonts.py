@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -45,12 +46,15 @@ def fetch(url: str) -> bytes:
 
 
 def vendor(family: str, weights: str = "400;500;600;700") -> list[str]:
-    css_url = (
-        "https://fonts.googleapis.com/css2?family="
-        + urllib.parse.quote(family).replace("%20", "+")
-        + f":wght@{weights}&display=swap"
-    )
-    css = fetch(css_url).decode("utf-8")
+    base = "https://fonts.googleapis.com/css2?family=" + urllib.parse.quote(family).replace("%20", "+")
+    try:
+        css = fetch(base + f":wght@{weights}&display=swap").decode("utf-8")
+    except urllib.error.HTTPError as e:
+        # A single-weight family (most pixel faces) rejects a weight axis it does not
+        # have with a 400. Ask for the family plain and take what it ships.
+        if e.code != 400:
+            raise
+        css = fetch(base + "&display=swap").decode("utf-8")
 
     # The CSS is emitted as a run of /* subset */ comments each followed by its @font-face.
     # Pair each url() back to the subset comment above it so the files can be named for
