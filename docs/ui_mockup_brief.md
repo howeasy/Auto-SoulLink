@@ -171,6 +171,39 @@ Two additions are in scope:
 - `calc/src/js/slink_bridge.js` carries a hardcoded `var C = {...}` hex palette and is the
   one surface that ignores the token system. Note it; do not fix it in a mockup.
 
+### 6a. The body font is an open question
+
+`--font-ui` currently resolves to **Pixelify Sans**, a pixel face. It is on-brand and it is
+the single hardest thing to read in the UI — and merging the two pages makes that worse,
+not better, because the run list, both parties, the links table and the event feed now
+share one viewport. There is far more small text per screen than either page had alone.
+
+Candidates are vendored (`tools/vendor_fonts.py`, never fetched at runtime) and switchable
+live in the Track A mockup, so the choice gets made by looking:
+
+| Option | Notes |
+|---|---|
+| **IBM Plex Sans** *(mockup default)* | Technical without being sterile, has a matching mono, tabular figures. |
+| Inter | The neutral standard. Safest, least character. |
+| Space Grotesk | Geometric with some quirk left in it. |
+| IBM Plex Mono | Everything aligns; heavy over a whole page. |
+| System UI | Zero bytes. Looks like the OS, not like the project. |
+| Pixelify Sans | What ships today, kept for comparison. |
+
+Whatever is chosen, `--font-pixel` (Press Start 2P) **stays** for the stream overlays,
+where text is large, sparse and read from across a room. The argument is about the dense
+UI, not about the brand — which lives in the sprites, the palette and the overlays.
+
+The detail that decides it is figures. A party table is mostly numbers — `26/26`, `Lv 11`,
+`2/8 badges` — and they only read as columns when the digits share a width. Pixelify has
+no tabular set, so HP values jitter row to row. Every other candidate has one.
+
+**Not changed in the mockups: `slink.css` itself.** `_funtastic-base.css` routes `html,
+body` through `--font-ui`, so flipping the default restyles all ~25 OBS overlays too, and
+those are laid out inside fixed-size browser sources where a wider glyph can overflow. The
+switch is a one-line change gated on re-checking the overlays; that belongs to the
+implementation plan, not here.
+
 Constraints inherited from OBS browser sources (`server/templates/stream/_base.html`): no
 CDN, no SSE, no fonts loaded at runtime. Anything added to `slink.css` ships to OBS too.
 

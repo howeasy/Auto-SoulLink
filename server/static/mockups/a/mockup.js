@@ -13,6 +13,18 @@ const FIXTURES = {
   gen1: { status: '../fixtures/gen1.json', label: 'Gen 1 — Red / Blue' },
 };
 
+/* Body-font candidates: [class, label, preview stack]. See fonts.css for why each is
+ * here. The preview stack is applied to the chip itself, so the picker shows you the
+ * face rather than describing it. */
+const FONTS = [
+  ['ui-plex', 'IBM Plex Sans', "'IBM Plex Sans', system-ui, sans-serif"],
+  ['ui-inter', 'Inter', "'Inter', system-ui, sans-serif"],
+  ['ui-grotesk', 'Space Grotesk', "'Space Grotesk', system-ui, sans-serif"],
+  ['ui-plex-mono', 'IBM Plex Mono', "'IBM Plex Mono', ui-monospace, monospace"],
+  ['ui-system', 'System UI', 'system-ui, sans-serif'],
+  ['ui-pixelify', 'Pixelify (today)', "'Pixelify Sans', monospace"],
+];
+
 const THEMES = [
   ['default', 'Default', '#070910'],
   ['light', 'Light', '#eef2fc'],
@@ -90,6 +102,7 @@ function mockup(initialLayout) {
     dest: 'run',
     tab: 'live',
     theme: 'default',
+    font: 'ui-plex',
     compact: false,
     debugOpen: false,
     loading: true,
@@ -100,6 +113,7 @@ function mockup(initialLayout) {
     activeRunId: '',
 
     THEMES,
+    FONTS,
     OPTION_LABELS,
     fixtureLabel() { return FIXTURES[this.gen].label; },
 
@@ -107,6 +121,7 @@ function mockup(initialLayout) {
     async setup() {
       this.theme = localStorage.getItem('slink-theme') || 'default';
       this.applyTheme(this.theme);
+      this.applyFont(localStorage.getItem('slink-mockup-font') || 'ui-plex');
       try {
         const [caps, runs] = await Promise.all([
           fetch('../fixtures/capabilities.json').then((r) => r.json()),
@@ -167,6 +182,16 @@ function mockup(initialLayout) {
     },
     syncDensity() {
       document.body.classList.toggle('density-compact', this.compact);
+    },
+
+    /* Only --font-ui moves. --font-pixel stays Press Start 2P for the stream overlays,
+     * where the text is large, sparse and read from across a room -- the argument is
+     * about the dense UI, not about the brand. */
+    applyFont(cls) {
+      this.font = cls;
+      document.body.classList.remove(...FONTS.map((f) => f[0]));
+      document.body.classList.add(cls);
+      localStorage.setItem('slink-mockup-font', cls);
     },
 
     // ── run + player accessors ───────────────────────────────────────────

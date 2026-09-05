@@ -19,13 +19,14 @@
   <link rel="stylesheet" href="/static/slink.css">
   <link rel="stylesheet" href="/static/themes/default.css" id="slink-theme">
   <link rel="stylesheet" href="mockup.css">
+  <link rel="stylesheet" href="fonts.css">
   <!-- Vendored, not reimplemented: overlay-helpers.js is what strips the solid background
        off funnotbun sprites, and slink.css keeps them invisible until it has. -->
   <script src="/static/vendor/overlay-helpers.js" defer></script>
   <script src="/static/vendor/alpine.min.js" defer></script>
   <script src="mockup.js"></script>
 </head>
-<body class="mk-body-root theme-default font-pixelify">
+<body class="mk-body-root theme-default ui-plex">
 
 <div class="mk" :class="'mk-' + layout" x-data="mockup()" x-init="setup()" x-cloak>
 
@@ -868,6 +869,12 @@
     <span class="mk-ctl-lbl">Density</span>
     <button class="mk-chip" :class="!compact ? 'active' : ''" @click="compact = false; syncDensity()">Comfortable</button>
     <button class="mk-chip" :class="compact ? 'active' : ''" @click="compact = true; syncDensity()">Compact</button>
+
+    <span class="mk-ctl-lbl">Body font</span>
+    <template x-for="f in FONTS" :key="f[0]">
+      <button class="mk-chip" :class="font === f[0] ? 'active' : ''" @click="applyFont(f[0])"
+              :style="'font-family:' + f[2]" x-text="f[1]"></button>
+    </template>
 
     <span class="mk-ctl-lbl">Theme</span>
     <template x-for="t in THEMES" :key="t[0]">
