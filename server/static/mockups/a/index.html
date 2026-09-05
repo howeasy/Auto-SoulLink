@@ -158,8 +158,9 @@
                           <b x-text="player(pid).trainer_name || 'not connected'"></b>
                           <span class="mk-pchip-game" x-show="player(pid).rom_type" x-text="player(pid).rom_type"></span>
                         </span>
-                        <span class="mk-pchip-badges" x-show="hasData(pid)" :title="badgeCount(pid) + ' badges'">
-                          <template x-for="i in badgeSlots(pid)" :key="i"><span class="mk-badge-pip" :class="i <= badgeCount(pid) ? 'on' : ''"></span></template>
+                        <span class="mk-badges" x-show="hasData(pid)">
+                          <span class="mk-pchip-badges"><template x-for="i in badgeSlots(pid)" :key="i"><span class="mk-badge-pip" :class="i <= badgeCount(pid) ? 'on' : ''"></span></template></span>
+                          <span x-text="badgeCount(pid) + '/' + badgeSlots(pid)"></span>
                         </span>
                       </div>
                       <template x-if="hasData(pid)">
@@ -185,7 +186,7 @@
                                 <div class="mk-fight-row mine">
                                   <span class="mk-spr" x-html="activeMon(pid).sprite_html"></span>
                                   <span class="mk-fight-txt">
-                                    <span x-text="activeMon(pid).nickname"></span>
+                                    <span><span class="mk-you">you</span> <span x-text="activeMon(pid).nickname"></span></span>
                                     <span class="mk-sub" x-text="activeMon(pid).species_name + ' · Lv ' + activeMon(pid).level"></span>
                                   </span>
                                   <span class="mk-hp"><span class="mk-hp-num" x-text="activeMon(pid).hp + '/' + activeMon(pid).maxHP"></span><span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(activeMon(pid))" :style="'width:' + hpPct(activeMon(pid)) + '%'"></span></span></span>
@@ -195,7 +196,7 @@
                           </template>
                           <div class="mk-wild" x-show="wild(pid).length">
                             <template x-for="[method, list] in wild(pid)" :key="method">
-                              <div class="mk-wild-row"><span class="mk-tag" x-text="method"></span><span x-text="[...new Set(list.map(e => e.name || e.species_name || e.species))].slice(0, 6).join(', ')"></span></div>
+                              <span class="mk-wild-row"><span class="mk-tag" x-text="method"></span><span x-text="[...new Set(list.map(e => e.name || e.species_name || e.species))].slice(0, 8).join(', ')"></span></span>
                             </template>
                           </div>
                         </div>
@@ -229,7 +230,12 @@
                           <div class="mk-half" :class="[pid, row[pid] ? '' : 'empty']" :style="pid === 'b' ? 'grid-column:3' : 'grid-column:1'">
                             <template x-if="row[pid]">
                               <div class="mk-half-in">
-                                <span class="mk-spr big" x-html="row[pid].sprite"></span>
+                                <!-- pending_captures carries no sprite_html (only species id and
+                                     name), so a pending half gets the dashed slot rather than a
+                                     blank that reads as a rendering bug. Sprites for pending
+                                     captures are a Phase 1 line in the brief. -->
+                                <span class="mk-spr big" x-show="row[pid].sprite" x-html="row[pid].sprite"></span>
+                                <span class="mk-slot" x-show="!row[pid].sprite" title="no sprite in the payload for a pending capture"></span>
                                 <span class="mk-half-txt">
                                   <span class="mk-half-nick"><span x-show="row[pid].active" class="mk-active" title="out in battle">⚔</span><span x-text="row[pid].nickname || row[pid].species_name"></span></span>
                                   <span class="mk-sub"><span x-text="row[pid].species_name"></span> · Lv <span x-text="row[pid].level"></span></span>

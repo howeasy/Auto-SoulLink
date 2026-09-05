@@ -16,7 +16,11 @@
   --mk-radius: 10px;
   --mk-pad: calc(var(--space-3) * var(--density));
   --mk-log: calc(var(--scale-step) * 14);
-  --mk-spr: clamp(48px, calc(var(--scale-step) * 2.2), 72px);
+  /* Sprite sizes, both tracking --scale-step. funnotbun sprites are 64px native and Gen
+   * 1's PokeAPI ones 56px, so the pair size sits at or above 1:1 on any real monitor and
+   * upscales pixelated past that; the small size is for the Now cards' fight rows. */
+  --mk-spr: clamp(60px, calc(var(--scale-step) * 3.1), 104px);
+  --mk-spr-s: clamp(44px, calc(var(--scale-step) * 2.2), 72px);
   /* The spine: the bond column between the two players, same width in every zone so the
    * halves line up straight down the page. */
   --mk-spine: calc(var(--scale-step) * 6.2);
@@ -108,7 +112,7 @@ body.mk-body-root { margin: 0; min-height: 100vh; font-family: var(--font-ui); c
   .mk-logcol { position: sticky; top: calc(var(--scale-step) * 3.2); }
   .mk-logcol .mk-feed { max-height: calc(100vh - var(--scale-step) * 6); }
 }
-.mk-zones { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
+.mk-zones { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
 .mk-zone { display: flex; flex-direction: column; gap: var(--space-3); }
 .mk-cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: var(--space-5); align-items: start; }
 
@@ -133,43 +137,58 @@ body.mk-body-root { margin: 0; min-height: 100vh; font-family: var(--font-ui); c
 .mk-side { font-size: 1.2em; font-weight: 700; color: var(--c-brand); }
 .mk-side.small { font-size: .85em; margin-right: var(--space-2); }
 
-/* ── NOW ───────────────────────────────────────────────────────────────── */
+/* ── NOW ───────────────────────────────────────────────────────────────
+ * The two player cards, in the two player columns, equal height. The head names the
+ * player and counts their badges; the body leads with where they are; a fight, when there
+ * is one, is a tinted box with the foe and their own mon; wild encounters flow as chips so
+ * they spend width, not height. */
 
-.mk-now { display: grid; grid-template-columns: minmax(0, 1fr) var(--mk-spine) minmax(0, 1fr); gap: var(--space-3); align-items: start; }
-.mk-nowcard { border-left: 4px solid var(--c-dim); }
+.mk-now { display: grid; grid-template-columns: minmax(0, 1fr) var(--mk-spine) minmax(0, 1fr); gap: var(--space-3); align-items: stretch; }
+.mk-nowcard { display: flex; flex-direction: column; border-left: 4px solid var(--c-dim); }
 .mk-nowcard.online { border-left-color: var(--c-alive); }
 .mk-nowcard.fighting { border-color: color-mix(in srgb, var(--c-dead) 40%, var(--c-edge)); border-left-color: var(--c-dead); }
-.mk-now-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--mk-pad) var(--mk-pad) var(--space-2); }
+.mk-now-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--mk-pad) var(--mk-pad) var(--space-2); border-bottom: 1px solid var(--c-sep); }
+.mk-now-head .mk-side { width: 1.6em; height: 1.6em; display: grid; place-items: center; border-radius: 6px; background: color-mix(in srgb, var(--c-brand) 18%, transparent); font-size: 1.05em; }
 .mk-now-name { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; flex: 1; }
-.mk-now-name b { font-weight: 500; font-size: 1.05em; }
+.mk-now-name b { font-weight: 600; font-size: 1.15em; }
 .mk-pchip-game { color: var(--c-info); font-size: .7em; }
+.mk-badges { display: flex; align-items: center; gap: var(--space-2); font-size: .72em; color: var(--c-dim); font-variant-numeric: tabular-nums; }
 .mk-pchip-badges { display: flex; gap: 3px; }
-.mk-badge-pip { width: 8px; height: 8px; border-radius: 2px; border: 1px solid var(--c-edge); }
+.mk-badge-pip { width: 9px; height: 9px; border-radius: 2px; border: 1px solid var(--c-edge); }
 .mk-badge-pip.on { background: var(--c-gold); border-color: var(--c-gold); }
-.mk-now-body { display: flex; flex-direction: column; gap: var(--space-3); padding: 0 var(--mk-pad) var(--mk-pad); }
-.mk-now-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); font-size: .82em; color: var(--c-dim); }
-.mk-now-line b { color: var(--c-txt); font-weight: 500; font-size: 1.1em; }
+.mk-now-body { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-3) var(--mk-pad) var(--mk-pad); flex: 1; }
+.mk-now-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); font-size: .82em; color: var(--c-dim); }
+.mk-now-line b { color: var(--c-txt); font-weight: 600; font-size: 1.25em; }
 
 .mk-fight { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border-radius: 8px; background: color-mix(in srgb, var(--c-dead) 9%, transparent); }
-.mk-fight-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); }
-.mk-fight-row.mine { opacity: .9; }
-.mk-fight-txt { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; font-size: .92em; }
-.mk-vs { color: var(--c-dead); font-size: .8em; letter-spacing: .08em; }
+.mk-fight-row { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.2fr); align-items: center; gap: var(--space-3); }
+.mk-fight-row .mk-hp { min-width: 0; }
+.mk-fight-row.mine { padding-top: var(--space-2); border-top: 1px dashed color-mix(in srgb, var(--c-dead) 30%, transparent); }
+.mk-fight-txt { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; font-size: .95em; }
+.mk-vs { color: var(--c-dead); font-size: .8em; letter-spacing: .1em; font-weight: 600; }
+.mk-you { color: var(--c-dim); font-size: .7em; letter-spacing: .1em; text-transform: uppercase; }
 
-.mk-wild { display: flex; flex-direction: column; gap: var(--space-1); }
-.mk-wild-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2); align-items: baseline; font-size: .76em; color: var(--c-dim); }
+.mk-wild { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); font-size: .76em; color: var(--c-dim); margin-top: auto; }
+.mk-wild-row { display: inline-flex; align-items: baseline; gap: var(--space-1); }
 .mk-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: .68em; letter-spacing: .06em; border: 1px solid var(--c-edge); color: var(--c-dim); white-space: nowrap; }
 .mk-tag.off { color: var(--c-dead); border-color: color-mix(in srgb, var(--c-dead) 45%, transparent); }
 
-/* ── Sprites + HP (shared) ─────────────────────────────────────────────── */
-
-.mk-spr { flex: none; line-height: 0; display: grid; place-items: center; width: 40px; height: 40px; }
-.mk-spr img.mon-sprite { width: 40px; height: 40px; object-fit: contain; image-rendering: pixelated; }
+/* ── Sprites (shared) ──────────────────────────────────────────────────
+ * Two shapes come out of the payload. Gen 3 is a bare <img class="mon-sprite">. Gen 1 is
+ * a 40px overflow-hidden <span> cropping a 52px <img> at margin:-6px, all inline styles.
+ * Scaling the second means scaling the wrapper AND its image by the same factor, in plain
+ * lengths -- `scale(calc(60px / 40px))` divides a length by a length, which CSS rejects,
+ * and that is why the previous attempt left Gen 1 at 40px. The inline styles need
+ * !important to lose; the proper fix is the server emitting a sprite that sizes itself,
+ * which is a Phase 1 line in the brief. */
+.mk-spr { flex: none; line-height: 0; display: grid; place-items: center; width: var(--mk-spr-s); height: var(--mk-spr-s); }
+.mk-spr img.mon-sprite { width: var(--mk-spr-s); height: var(--mk-spr-s); object-fit: contain; image-rendering: pixelated; }
+.mk-spr > span { width: var(--mk-spr-s) !important; height: var(--mk-spr-s) !important; }
+.mk-spr > span > img { width: calc(var(--mk-spr-s) * 1.3) !important; height: calc(var(--mk-spr-s) * 1.3) !important; margin: calc(var(--mk-spr-s) * -0.15) !important; image-rendering: pixelated; }
 .mk-spr.big { width: var(--mk-spr); height: var(--mk-spr); }
 .mk-spr.big img.mon-sprite { width: var(--mk-spr); height: var(--mk-spr); }
-/* Gen 1's PokeAPI sprite is a 52px image cropped by a 40px span; scale the wrapper, not
- * the inner image, so the crop stays a crop. */
-.mk-spr.big > span { transform: scale(calc(var(--mk-spr) / 40px)); transform-origin: center; }
+.mk-spr.big > span { width: var(--mk-spr) !important; height: var(--mk-spr) !important; }
+.mk-spr.big > span > img { width: calc(var(--mk-spr) * 1.3) !important; height: calc(var(--mk-spr) * 1.3) !important; margin: calc(var(--mk-spr) * -0.15) !important; }
 
 .mk-hp { display: flex; flex-direction: column; gap: 3px; min-width: calc(var(--scale-step) * 3.4); }
 .mk-hp-num { font-size: .74em; font-variant-numeric: tabular-nums; color: var(--c-dim); }
@@ -189,6 +208,11 @@ body.mk-body-root { margin: 0; min-height: 100vh; font-family: var(--font-ui); c
   display: grid; grid-template-columns: minmax(0, 1fr) var(--mk-spine) minmax(0, 1fr); align-items: center;
   border: 1px solid var(--c-edge); border-radius: var(--mk-radius); background: var(--c-card);
 }
+/* All three cells on one row. The halves are placed in columns 1 and 3 and the bond asks
+ * for column 2 after them; with an auto row, sparse placement will not step the cursor
+ * backwards, so the bond landed on a second row under the pair -- which read as "the
+ * route symbols don't line up" and doubled every row's height. */
+.mk-pair > * { grid-row: 1; }
 .mk-pair.at-risk { border-color: color-mix(in srgb, var(--c-pend) 60%, var(--c-edge)); background: color-mix(in srgb, var(--c-pend) 7%, var(--c-card)); }
 .mk-pair.fallen { background: color-mix(in srgb, var(--c-card) 50%, transparent); border-style: dashed; }
 .mk-pair.fallen .mk-spr { filter: grayscale(1); opacity: .55; }
@@ -229,10 +253,11 @@ body.mk-body-root { margin: 0; min-height: 100vh; font-family: var(--font-ui); c
 
 /* Compact rows for waiting / boxed. */
 .mk-pairs.compact .mk-half { padding: var(--space-2) var(--mk-pad); }
-.mk-pairs.compact .mk-spr.big { width: 40px; height: 40px; }
-.mk-pairs.compact .mk-spr.big img.mon-sprite { width: 40px; height: 40px; }
-.mk-pairs.compact .mk-spr.big > span { transform: none; }
-.mk-pairs.compact .mk-slot { width: 40px; height: 40px; }
+.mk-pairs.compact .mk-spr.big { width: var(--mk-spr-s); height: var(--mk-spr-s); }
+.mk-pairs.compact .mk-spr.big img.mon-sprite { width: var(--mk-spr-s); height: var(--mk-spr-s); }
+.mk-pairs.compact .mk-spr.big > span { width: var(--mk-spr-s) !important; height: var(--mk-spr-s) !important; }
+.mk-pairs.compact .mk-spr.big > span > img { width: calc(var(--mk-spr-s) * 1.3) !important; height: calc(var(--mk-spr-s) * 1.3) !important; margin: calc(var(--mk-spr-s) * -0.15) !important; }
+.mk-pairs.compact .mk-slot { width: var(--mk-spr-s); height: var(--mk-spr-s); }
 .mk-pairs.compact .mk-sub.faint { display: none; }
 
 .mk-unlinked { display: grid; grid-template-columns: minmax(0, 1fr) var(--mk-spine) minmax(0, 1fr); gap: var(--space-3); padding: var(--mk-pad); }

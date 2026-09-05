@@ -104,7 +104,7 @@ const OPTION_GROUPS = [
 const RISK_PCT = 35;
 
 const SECTION_LABELS = {
-  pending: 'Waiting for the other half',
+  pending: 'Pending link',
   linked: 'Linked',        // a stopped run: the bond is known, where each half sits is not
   party: 'In party',
   split: 'Split — one half boxed',
@@ -374,7 +374,8 @@ function mockup() {
 
     sections() {
       const rows = [...this.pendingRows(), ...this.pairs()];
-      const order = ['pending', 'party', 'split', 'boxed', 'linked', 'fallen'];
+      // The team first; what is waiting on it second. Then the shelf, then the graveyard.
+      const order = ['party', 'pending', 'split', 'boxed', 'linked', 'fallen'];
       return order.map((k) => [k, rows.filter((r) => r.section === k)]).filter(([, r]) => r.length);
     },
 
