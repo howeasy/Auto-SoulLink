@@ -72,10 +72,10 @@ first thing a partner does.
   its ends. A pair is tinted and labelled **at risk** when its *weaker* half is under 35%
   — both halves die if either faints, so the pair's health is its minimum, not its
   average. ⚔ marks whichever half is out in battle.
-- **Waiting** and **Boxed**, compact. Waiting: one half filled, the other a dashed slot
-  reading "waiting for Bob". Boxed: pairs on the shelf together, no HP. **Split** — one
-  half in the party and one boxed — gets its own zone when it happens, because the sync
-  rules will act on it.
+- **Pending link**, directly under the team: one half caught and quarantined, the other
+  a dashed slot reading "waiting for Bob". Then **Boxed**: pairs on the shelf together, no
+  HP. **Split** — one half in the party and one boxed — gets its own zone when it happens,
+  because the sync rules will act on it. Both compact.
 - **Fallen.** The graveyard, with presence rather than a dimmed table: dashed cards,
   greyed sprites, names struck, and the epitaph in the header — `fainted · wild Geodude`.
   Dead zones sit here too, both slots reading *missed*.
@@ -83,7 +83,13 @@ first thing a partner does.
 
 Scaling: the two player columns share the width, so each half gets more room on a wider
 monitor rather than more columns appearing; the log takes a column of its own from
-1400px. The page scrolls like a page; only the run header is sticky. An earlier draft
+1400px. Sprites track `--scale-step` too (`--mk-spr`, 60–104px), sitting at or above
+their native 56–64px on any real monitor and upscaling pixelated past that. Gen 1's
+sprite arrives as a 40px crop wrapper around a 52px image with inline styles, so its
+wrapper and image are scaled by the same factor in plain lengths — dividing a length by a
+length in `calc()` is invalid CSS and was silently dropped in an earlier draft, which is
+why Gen 1 stayed small. The proper fix is the server emitting a sprite that sizes
+itself; that is a Phase 1 line in §9. The page scrolls like a page; only the run header is sticky. An earlier draft
 locked the board into `100vh` and it read as cramped at every size.
 
 **The manager is the rail and the run header.** New run (name and the three option
@@ -316,15 +322,18 @@ browser before the next starts.
    template asks `caps.abilities`, not "is this RR". When the Gen 1 branch merges,
    `stat_stage_labels` / `mons_per_box` / `info_panel_width` stop being null and every
    consumer lights up without changing.
-2. **Put the mon key inside the party entry.** `party_details` is keyed by key and does
+2. **Give `pending_captures` entries `sprite_html` and `species_name`** the way link
+   halves get them, and emit sprites that size themselves (a class, not a 40px inline
+   crop) so the UI can scale them with `--scale-step` without `!important` overrides.
+3. **Put the mon key inside the party entry.** `party_details` is keyed by key and does
    not repeat it in the value. It cost the mockup its entire "linked to" column and it
    will cost the Jinja templates the same. One line in `_enrich_party`.
-3. **Make an unrecognised `rom_type` loud.** Today it leaves the server on whichever
+4. **Make an unrecognised `rom_type` loud.** Today it leaves the server on whichever
    adapter it already had — silently. That gave the first Gen 1 fixture Gen 3 genders and
    abilities, and the comment at `adapters/__init__.py:53` records the same thing
    happening to Gen 2 before. Reject the hello with an `identity_error` the UI already
    knows how to show, and log at WARNING. This is a correctness bug in shipped code, twice.
-4. **Reconcile `leafgreen_rr`.** `server.py:3397` labels it; nothing routes it; Radical Red
+5. **Reconcile `leafgreen_rr`.** `server.py:3397` labels it; nothing routes it; Radical Red
    has no LeafGreen build. Delete the label.
 
 ### Phase 2 — rendering (same pixels, new source)
