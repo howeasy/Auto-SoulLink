@@ -107,9 +107,14 @@ itself; that is a Phase 1 line in §9. The page scrolls like a page; only the ru
 locked the board into `100vh` and it read as cramped at every size.
 
 **The manager is the rail and the run header.** New run is a guided form beside a
-preview: name; the **game**, as chips, defaulting to *detect when players connect* (today's
-behaviour) but greying what a chosen cartridge cannot honour, with the reason, before
-anyone connects; the three option groups, each option carrying its one-line description
+preview: name; the **game family**, as chips — Red · Blue · Yellow, FireRed · LeafGreen,
+and so on — defaulting to *detect when players connect* (today's behaviour) but greying
+what a chosen family's cartridges cannot honour, with the reason, before anyone connects.
+The unit of compatibility is the family, not the cartridge: any two of Red, Blue and
+Yellow can link, because they share an adapter and an area map; what separates families
+is a different map (Radical Red from vanilla FireRed, Platinum from HGSS) or a reshuffled
+world (the Archipelago builds). The exact cartridge each player is on is read from their
+hello; the three option groups, each option carrying its one-line description
 in the manager's own words — on the board those were fluff, on the form that sets them
 they are the point; a randomized-ROM-pair toggle for Gen 1; and *what happens next* with
 the port the run will get. Then start / stop / pin / archive / delete, a launchers
@@ -368,7 +373,9 @@ browser before the next starts.
    abilities, and the comment at `adapters/__init__.py:53` records the same thing
    happening to Gen 2 before. Reject the hello with an `identity_error` the UI already
    knows how to show, and log at WARNING. This is a correctness bug in shipped code, twice.
-5. **Reconcile `leafgreen_rr`.** `server.py:3397` labels it; nothing routes it; Radical Red
+5. **Reconcile `leafgreen_rr`.** And reword the README's "both players must run the **same
+   game**" — it means the same *family*; Red and Blue link fine, and the mockup's chooser
+   says so. `server.py:3397` labels it; nothing routes it; Radical Red
    has no LeafGreen build. Delete the label.
 
 ### Phase 2 — rendering (same pixels, new source)

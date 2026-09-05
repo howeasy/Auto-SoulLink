@@ -102,17 +102,32 @@ const OPTION_DESC = {
   pc_trade_npc: 'A Pokémon-Center trade NPC, when Overworld Presence is off.',
 };
 
-/* The games a run can be created for. '' is the default and today's behaviour: the run
- * learns its cartridge from the first hello. Naming one up front lets the form grey what
- * that cartridge cannot honour right here, rather than after someone has connected. Both
- * players run the same game. */
+/* The game FAMILIES a run can be created for: [key, label, member rom_types].
+ *
+ * The unit of compatibility is the family, not the cartridge. Red, Blue and Yellow share
+ * an adapter and an area map, so any two of them can link; the same holds for FireRed and
+ * LeafGreen, Gold/Silver/Crystal, HeartGold/SoulSilver, Black/White. What separates
+ * families is a different map -- Radical Red from vanilla FireRed, Emerald, Platinum from
+ * HGSS, B2W2 from BW -- or a reshuffled world, which is what the Archipelago builds are.
+ *
+ * '' is the default and today's behaviour: the run learns its cartridges from the first
+ * hellos. Naming a family up front lets the form grey what its cartridges cannot honour
+ * right here, rather than after someone has connected. The check runs over every member
+ * so a family with mixed answers would show the stricter one. */
 const GAMES = [
-  ['', 'Detect when players connect'],
-  ['red', 'Red'], ['blue', 'Blue'], ['yellow', 'Yellow'],
-  ['crystal', 'Crystal'],
-  ['firered', 'FireRed'], ['leafgreen', 'LeafGreen'], ['firered_rr', 'Radical Red'], ['emerald', 'Emerald'],
-  ['heartgold', 'HeartGold'], ['soulsilver', 'SoulSilver'], ['platinum', 'Platinum'],
-  ['pokemon_black', 'Black'], ['pokemon_white', 'White'],
+  ['', 'Detect when players connect', []],
+  ['gen1', 'Red · Blue · Yellow', ['red', 'blue', 'yellow']],
+  ['gen1_ap', 'Red · Blue (Archipelago)', ['red_ap', 'blue_ap']],
+  ['gen2', 'Gold · Silver · Crystal', ['gold', 'silver', 'crystal']],
+  ['gen2_ap', 'Crystal (Archipelago)', ['crystal_ap']],
+  ['gen3', 'FireRed · LeafGreen', ['firered', 'leafgreen']],
+  ['gen3_ap', 'FireRed · LeafGreen (Archipelago)', ['firered_ap', 'leafgreen_ap']],
+  ['gen3_rr', 'Radical Red', ['firered_rr']],
+  ['gen3_e', 'Emerald', ['emerald']],
+  ['gen4_hgss', 'HeartGold · SoulSilver', ['heartgold', 'soulsilver']],
+  ['gen4_pt', 'Platinum · Renegade Platinum', ['platinum', 'renegade_platinum']],
+  ['gen5_bw', 'Black · White', ['pokemon_black', 'pokemon_white']],
+  ['gen5_bw2', 'Black 2 · White 2', ['pokemon_black_2', 'pokemon_white_2']],
 ];
 
 const OPTION_LABELS = {
@@ -270,8 +285,9 @@ function mockup() {
       this.draft = { name: '', game: '', opts: { battle_calc: true, pc_trade_npc: true }, randomize: false, rand: {} };
       this.dest = 'new';
     },
-    gameLabel(rt) { return (GAMES.find((g) => g[0] === rt) || [])[1] || rt; },
-    isGen1Game(rt) { return ((this.caps[rt] || {}).game_id) === 'gen1_rby'; },
+    gameLabel(key) { return (GAMES.find((g) => g[0] === key) || [])[1] || key; },
+    gameMembers(key) { return (GAMES.find((g) => g[0] === key) || [])[2] || []; },
+    isGen1Game(key) { return this.gameMembers(key).some((rt) => ((this.caps[rt] || {}).game_id) === 'gen1_rby'); },
     nextPorts() { const n = this.runs.length; return { tcp: 54321 + n, http: 8081 + n }; },
     /* Options the draft has turned on, for the preview. */
     draftOn() { return Object.keys(OPTION_LABELS).filter((k) => this.draft.opts[k] && this.draftOptionState(k).ok); },
@@ -462,7 +478,7 @@ function mockup() {
       const on = !!(this.status().rules || {})[key];
       return { on, ...this.supportFor(key, [this.player('a').rom_type || '', this.player('b').rom_type || '']) };
     },
-    draftOptionState(key) { return this.supportFor(key, [this.draft.game || '']); },
+    draftOptionState(key) { return this.supportFor(key, this.draft.game ? this.gameMembers(this.draft.game) : ['']); },
   };
 }
 
