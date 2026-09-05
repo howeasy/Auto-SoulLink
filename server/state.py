@@ -236,7 +236,7 @@ class SoulLinkState:
 
     # ── public API ───────────────────────────────────────────────────────────
 
-    def handle_event(self, player_id: str, msg: dict) -> list[dict]:
+    def handle_event(self, player_id: str, msg: dict, *, preserve_peer_session: bool = False) -> list[dict]:
         """
         Process one event from player_id.
         Returns commands to send back to player_id (including any queued cross-player commands).
@@ -247,7 +247,7 @@ class SoulLinkState:
         self._tick_pending_trade()    # free the single trade slot if a side abandoned it (link untouched)
 
         if event == "hello":
-            self._handle_hello(player_id, msg)
+            self._handle_hello(player_id, msg, preserve_peer_session=preserve_peer_session)
         elif event == "area_enter":
             self._handle_area_enter(player_id, msg)
         elif event == "ghost_pos":
@@ -721,118 +721,7 @@ class SoulLinkState:
         try:
             with open(state._links_path) as f:
                 data = json.load(f)
-            for ed in data.get("links", []):
-                a = MonInfo(**ed["a"]) if ed.get("a") else None
-                b = MonInfo(**ed["b"]) if ed.get("b") else None
-                enc_a = MonInfo(**ed["encounter_a"]) if ed.get("encounter_a") else None
-                enc_b = MonInfo(**ed["encounter_b"]) if ed.get("encounter_b") else None
-                entry = LinkEntry(
-                    area_id=ed["area_id"],
-                    a=a, b=b,
-                    status=LinkStatus(ed["status"]),
-                    encounter_a=enc_a,
-                    encounter_b=enc_b,
-                    killed_at=ed.get("killed_at"),
-                    cause=ed.get("cause", ""),
-                    killer=ed.get("killer"),
-                    initiating_player=ed.get("initiating_player", ""),
-                )
-                state.links.append(entry)
-                state._index_entry(entry)
-            for area_id, status_str in data.get("area_states", {}).items():
-                state.area_states[area_id] = AreaStatus(status_str)
-            for area_id, players in data.get("pending_captures", {}).items():
-                state.pending_captures[area_id] = {
-                    pid: MonInfo(**mon_data)
-                    for pid, mon_data in players.items()
-                }
-            state.mon_stats = data.get("mon_stats", {})
-            # Restore Pokéball gate; default True for both if any links exist
-            # (backwards-compat: old saves without this field).
-            saved_pb = data.get("pokeballs_obtained", {})
-            if saved_pb:
-                state.pokeballs_obtained["a"] = bool(saved_pb.get("a", False))
-                state.pokeballs_obtained["b"] = bool(saved_pb.get("b", False))
-            elif state.links or state.pending_captures:
-                # Old save without field but has game state → infer both had Pokéballs.
-                state.pokeballs_obtained = {"a": True, "b": True}
-            # Restore pending memorials (will be re-queued on next hello from each player).
-            saved_pm = data.get("pending_memorials", {})
-            state.pending_memorials["a"] = set(saved_pm.get("a", []))
-            state.pending_memorials["b"] = set(saved_pm.get("b", []))
-            # Restore lock rules from persisted state (CLI flags are initial defaults;
-            # saved values take precedence so mid-run restarts honor the original config).
-            saved_rules = data.get("rules", {})
-            if saved_rules:
-                state.species_lock = bool(saved_rules.get("species_lock", species_lock))
-                state.gender_lock = bool(saved_rules.get("gender_lock", gender_lock))
-                state.type_lock = bool(saved_rules.get("type_lock", type_lock))
-                state.explode_mode = bool(saved_rules.get("explode_mode", explode_mode))
-                state.rival_team_swap = bool(saved_rules.get("rival_team_swap", rival_team_swap))
-                state.overworld_presence = bool(saved_rules.get("overworld_presence", overworld_presence))
-                state.native_messages = bool(saved_rules.get("native_messages", native_messages))
-                state.native_sounds = bool(saved_rules.get("native_sounds", native_sounds))
-                state.battle_calc = bool(saved_rules.get("battle_calc", battle_calc))
-                state.pc_trade_npc = bool(saved_rules.get("pc_trade_npc", pc_trade_npc))
-            state.run_over = bool(data.get("run_over", False))
-            state.attempts_count = int(data.get("attempts_count", 0))
-            state.rom_type = data.get("rom_type", "")
-            # Infer is_rr from persisted rom_type (belt-and-suspenders with CLI flag)
-            if state.rom_type.endswith("_rr"):
-                state.is_rr = True
-            # Restore game_id — validate adapter matches if one was provided.
-            saved_game_id = data.get("game_id", "")
-            effective_rr = state.is_rr
-            if saved_game_id and state.adapter.game_id != saved_game_id:
-                log.warning(f"Saved game_id={saved_game_id!r} differs from adapter "
-                            f"game_id={state.adapter.game_id!r}; using saved game_id")
-                # Re-resolve adapter from registry if available
-                try:
-                    from server.adapters import get_adapter
-                    # rom_type is restored above and selects per-variant data inside the
-                    # adapter (e.g. Gen 1's Red/Blue/Yellow encounter tables).
-                    state.adapter = get_adapter(saved_game_id, is_rr=effective_rr,
-                                                rom_type=state.rom_type)
-                except (KeyError, ImportError):
-                    log.warning(f"No adapter for saved game_id={saved_game_id!r}; keeping current adapter")
-            elif effective_rr != getattr(state.adapter, '_is_rr', False):
-                # Adapter game_id matches but is_rr flag differs — recreate
-                try:
-                    from server.adapters import get_adapter
-                    state.adapter = get_adapter(state.adapter.game_id, is_rr=effective_rr,
-                                                rom_type=state.rom_type)
-                except (KeyError, ImportError):
-                    pass
-            saved_names = data.get("trainer_names", {})
-            if saved_names:
-                state.trainer_names["a"] = saved_names.get("a", "")
-                state.trainer_names["b"] = saved_names.get("b", "")
-            # Restore player identity lock
-            state.player_identity = data.get("player_identity", {})
-            # Restore lock-clause retry areas
-            saved_retry = data.get("retry_areas", {})
-            state.retry_areas["a"] = set(saved_retry.get("a", []))
-            state.retry_areas["b"] = set(saved_retry.get("b", []))
-            # Restore shiny clause bonus keys
-            saved_bonus = data.get("bonus_keys", {})
-            state.bonus_keys["a"] = set(saved_bonus.get("a", []))
-            state.bonus_keys["b"] = set(saved_bonus.get("b", []))
-            # Restore pending bonus encounters (FIFO queue per player)
-            saved_pending = data.get("pending_bonus", {})
-            state.pending_bonus["a"] = deque(saved_pending.get("a", []))
-            state.pending_bonus["b"] = deque(saved_pending.get("b", []))
-            # Restore in-flight auto-rebuild context.
-            saved_rebuild = data.get("rebuild_pending", {})
-            for pid in ("a", "b"):
-                rb = saved_rebuild.get(pid)
-                if rb:
-                    state.rebuild_pending[pid] = {
-                        "started_at":         rb.get("started_at", ""),
-                        "queued_keys":        list(rb.get("queued_keys", [])),
-                        "queued_partner_keys": list(rb.get("queued_partner_keys", [])),
-                        "restored_keys":      set(rb.get("restored_keys", [])),
-                    }
-            log.info(f"Loaded {len(state.links)} links from {state._links_path}")
+            state._restore_document(data)
         except Exception as e:
             log.error(f"Failed to load {state._links_path}: {e}")
         return state
@@ -853,25 +742,22 @@ class SoulLinkState:
             ctx = "  " + "  ".join(ctx_parts) if ctx_parts else ""
             log.debug(f"[AREA] {area_id}: {old.value} → {new_status.value}{ctx}")
 
-    def _handle_hello(self, player_id: str, msg: dict):
+    def _handle_hello(self, player_id: str, msg: dict, *, preserve_peer_session: bool = False):
         """
         Reconcile on reconnect.
         Only flags mons that are still IN the party with hp == 0 as newly fainted —
         missing-from-party mons may simply be boxed (do not treat as dead).
         """
         party = msg.get("party", [])
-        old_size = self.party_size.get(player_id, 0)
-        self.party_size[player_id] = len(party)
-        log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {len(party)}  (hello)")
-        # Rival Team Swap: refresh the per-player blob cache from the same
-        # snapshot.  Each party entry carries blob_hex (200 chars) from
-        # build_party_snapshot — see lua/clients/gen3_frlge_client.lua.
-        self._ingest_party_blobs(player_id, party)
-
         # ── Identity lock ──
-        # Extract OT ID from first party mon's key via the adapter.
-        incoming_ot = None
-        if party:
+        # PREFER THE CARTRIDGE'S OWN TRAINER ID over one inferred from a mon.
+        # Deriving it from party[0]'s key makes the lock depend on which mon happens to be
+        # in the lead slot: an in-game-trade mon is a DIFFERENT OT by definition, so leading
+        # with one locked the run to the wrong trainer permanently and every later hello was
+        # rejected as WRONG SAVE. A client that reports `ot_id` is telling us what the save
+        # says; only fall back to the mon key for clients that do not.
+        incoming_ot = str(msg.get("ot_id") or "").strip() or None
+        if not incoming_ot and party:
             first_key = party[0].get("key", "")
             incoming_ot = self.adapter.parse_ot_id(first_key)
         incoming_name = msg.get("trainer_name", "")
@@ -916,6 +802,12 @@ class SoulLinkState:
                 log.info(f"[{player_id}] Identity locked: {incoming_name or player_id.upper()} (OT {incoming_ot[:8]})")
                 self._save()
 
+        # The identity gate must run before a refused HELLO can replace party data.
+        old_size = self.party_size.get(player_id, 0)
+        self.party_size[player_id] = len(party)
+        log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {len(party)}  (hello)")
+        self._ingest_party_blobs(player_id, party)
+
         # Accept pokéballs status from Lua (M.hasPokeballs() reads actual bag).
         # If the field is absent (old client), fall back to non-empty party heuristic.
         has_pokeballs = msg.get("has_pokeballs")
@@ -928,7 +820,10 @@ class SoulLinkState:
         # Discard the partner from _has_helld so any events arriving before the partner's
         # hello use the optimistic path (exec_box_mon is idempotent if key not in party).
         # This prevents stale party_keys from the previous session blocking sync commands.
-        self._has_helld.discard(_partner(player_id))
+        # Only the trusted connection coordinator can preserve a verified peer;
+        # a client-supplied protocol name is not that authority.
+        if not preserve_peer_session:
+            self._has_helld.discard(_partner(player_id))
         self.party_keys[player_id] = {
             m["key"] for m in party if m.get("maxHP", 0) > 0
         }
@@ -2832,15 +2727,7 @@ class SoulLinkState:
                 data = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             data = {"retired_pairs": []}
-        data["retired_pairs"].append({
-            "area_id": entry.area_id,
-            "a": asdict(entry.a) if entry.a else None,
-            "b": asdict(entry.b) if entry.b else None,
-            "killed_at": entry.killed_at,
-            "cause": entry.cause,
-            "killer": entry.killer,
-            "initiating_player": entry.initiating_player,
-        })
+        data["retired_pairs"].append(self._memorial_record(entry))
         try:
             self._atomic_write_json(self._memorial_path, data)
         except OSError as e:
@@ -2908,6 +2795,164 @@ class SoulLinkState:
 
     def _save(self):
         os.makedirs(self._data_dir, exist_ok=True)
+        payload = self.to_document()
+        try:
+            self._atomic_write_json(self._links_path, payload)
+            self.save_failed = ""
+        except OSError as e:
+            # NOT fatal — losing the run in memory would be worse than losing the file. But it must
+            # not be silent either: this repo commonly lives in a synced folder (Google Drive),
+            # which is exactly the lock _atomic_write_json's retry loop exists for. If those
+            # retries are exhausted the run is no longer being persisted, and the player should
+            # find that out now rather than at the next restart.
+            self.save_failed = str(e)
+            log.warning(f"[SAVE] links.json write failed (non-fatal): {e}")
+
+    @classmethod
+    def from_document(cls, data: dict, **options) -> "SoulLinkState":
+        """Restore a complete state without filesystem reads; errors are fatal.
+
+        The legacy file loader retains its existing error policy. A durable
+        transaction must never accept its partially restored fallback state.
+        """
+        import copy
+        if not isinstance(data, dict):
+            raise ValueError("state document must be an object")
+        state = cls(**options)
+        state._restore_document(copy.deepcopy(data))
+        if data.get("game_id") and data["game_id"] != state.adapter.game_id:
+            raise ValueError("state document names an unsupported game")
+        return state
+
+    def _restore_document(self, data: dict):
+        for ed in data.get("links", []):
+            a = MonInfo(**ed["a"]) if ed.get("a") else None
+            b = MonInfo(**ed["b"]) if ed.get("b") else None
+            enc_a = MonInfo(**ed["encounter_a"]) if ed.get("encounter_a") else None
+            enc_b = MonInfo(**ed["encounter_b"]) if ed.get("encounter_b") else None
+            entry = LinkEntry(
+                area_id=ed["area_id"],
+                a=a, b=b,
+                status=LinkStatus(ed["status"]),
+                encounter_a=enc_a,
+                encounter_b=enc_b,
+                killed_at=ed.get("killed_at"),
+                cause=ed.get("cause", ""),
+                killer=ed.get("killer"),
+                initiating_player=ed.get("initiating_player", ""),
+            )
+            self.links.append(entry)
+            self._index_entry(entry)
+        for area_id, status_str in data.get("area_states", {}).items():
+            self.area_states[area_id] = AreaStatus(status_str)
+        for area_id, players in data.get("pending_captures", {}).items():
+            self.pending_captures[area_id] = {
+                pid: MonInfo(**mon_data)
+                for pid, mon_data in players.items()
+            }
+        self.mon_stats = data.get("mon_stats", {})
+        # Restore Pokéball gate; default True for both if any links exist
+        # (backwards-compat: old saves without this field).
+        saved_pb = data.get("pokeballs_obtained", {})
+        if saved_pb:
+            self.pokeballs_obtained["a"] = bool(saved_pb.get("a", False))
+            self.pokeballs_obtained["b"] = bool(saved_pb.get("b", False))
+        elif self.links or self.pending_captures:
+            # Old save without field but has game state → infer both had Pokéballs.
+            self.pokeballs_obtained = {"a": True, "b": True}
+        # Restore pending memorials (will be re-queued on next hello from each player).
+        saved_pm = data.get("pending_memorials", {})
+        self.pending_memorials["a"] = set(saved_pm.get("a", []))
+        self.pending_memorials["b"] = set(saved_pm.get("b", []))
+        # Restore lock rules from persisted state (CLI flags are initial defaults;
+        # saved values take precedence so mid-run restarts honor the original config).
+        saved_rules = data.get("rules", {})
+        if saved_rules:
+            self.species_lock = bool(saved_rules.get("species_lock", self.species_lock))
+            self.gender_lock = bool(saved_rules.get("gender_lock", self.gender_lock))
+            self.type_lock = bool(saved_rules.get("type_lock", self.type_lock))
+            self.explode_mode = bool(saved_rules.get("explode_mode", self.explode_mode))
+            self.rival_team_swap = bool(saved_rules.get("rival_team_swap", self.rival_team_swap))
+            self.overworld_presence = bool(saved_rules.get("overworld_presence", self.overworld_presence))
+            self.native_messages = bool(saved_rules.get("native_messages", self.native_messages))
+            self.native_sounds = bool(saved_rules.get("native_sounds", self.native_sounds))
+            self.battle_calc = bool(saved_rules.get("battle_calc", self.battle_calc))
+            self.pc_trade_npc = bool(saved_rules.get("pc_trade_npc", self.pc_trade_npc))
+        self.run_over = bool(data.get("run_over", False))
+        self.attempts_count = int(data.get("attempts_count", 0))
+        self.rom_type = data.get("rom_type", "")
+        # Infer is_rr from persisted rom_type (belt-and-suspenders with CLI flag)
+        if self.rom_type.endswith("_rr"):
+            self.is_rr = True
+        # Restore game_id — validate adapter matches if one was provided.
+        saved_game_id = data.get("game_id", "")
+        effective_rr = self.is_rr
+        if saved_game_id and self.adapter.game_id != saved_game_id:
+            log.warning(f"Saved game_id={saved_game_id!r} differs from adapter "
+                        f"game_id={self.adapter.game_id!r}; using saved game_id")
+            # Re-resolve adapter from registry if available
+            try:
+                from server.adapters import get_adapter
+                # rom_type is restored above and selects per-variant data inside the
+                # adapter (e.g. Gen 1's Red/Blue/Yellow encounter tables).
+                self.adapter = get_adapter(saved_game_id, is_rr=effective_rr,
+                                            rom_type=self.rom_type)
+            except (KeyError, ImportError):
+                log.warning(f"No adapter for saved game_id={saved_game_id!r}; keeping current adapter")
+        elif effective_rr != getattr(self.adapter, '_is_rr', False):
+            # Adapter game_id matches but is_rr flag differs — recreate
+            try:
+                from server.adapters import get_adapter
+                self.adapter = get_adapter(self.adapter.game_id, is_rr=effective_rr,
+                                            rom_type=self.rom_type)
+            except (KeyError, ImportError):
+                pass
+        saved_names = data.get("trainer_names", {})
+        if saved_names:
+            self.trainer_names["a"] = saved_names.get("a", "")
+            self.trainer_names["b"] = saved_names.get("b", "")
+        # Restore player identity lock
+        self.player_identity = data.get("player_identity", {})
+        # Restore lock-clause retry areas
+        saved_retry = data.get("retry_areas", {})
+        self.retry_areas["a"] = set(saved_retry.get("a", []))
+        self.retry_areas["b"] = set(saved_retry.get("b", []))
+        # Restore shiny clause bonus keys
+        saved_bonus = data.get("bonus_keys", {})
+        self.bonus_keys["a"] = set(saved_bonus.get("a", []))
+        self.bonus_keys["b"] = set(saved_bonus.get("b", []))
+        # Restore pending bonus encounters (FIFO queue per player)
+        saved_pending = data.get("pending_bonus", {})
+        self.pending_bonus["a"] = deque(saved_pending.get("a", []))
+        self.pending_bonus["b"] = deque(saved_pending.get("b", []))
+        # Restore in-flight auto-rebuild context.
+        saved_rebuild = data.get("rebuild_pending", {})
+        for pid in ("a", "b"):
+            rb = saved_rebuild.get(pid)
+            if rb:
+                self.rebuild_pending[pid] = {
+                    "started_at":         rb.get("started_at", ""),
+                    "queued_keys":        list(rb.get("queued_keys", [])),
+                    "queued_partner_keys": list(rb.get("queued_partner_keys", [])),
+                    "restored_keys":      set(rb.get("restored_keys", [])),
+                }
+        log.debug("Restored %d links from a state document", len(self.links))
+
+    @staticmethod
+    def _memorial_record(entry: LinkEntry):
+        return {
+            "area_id": entry.area_id,
+            "a": asdict(entry.a) if entry.a else None,
+            "b": asdict(entry.b) if entry.b else None,
+            "killed_at": entry.killed_at,
+            "cause": entry.cause,
+            "killer": entry.killer,
+            "initiating_player": entry.initiating_player,
+        }
+
+    def to_document(self) -> dict:
+        """Return the persisted rule-state representation without writing a file."""
+        import copy
         payload = {
             "game_id": self.adapter.game_id,
             "rules": {
@@ -2983,14 +3028,4 @@ class SoulLinkState:
                 for pid, rb in self.rebuild_pending.items()
             },
         }
-        try:
-            self._atomic_write_json(self._links_path, payload)
-            self.save_failed = ""
-        except OSError as e:
-            # NOT fatal — losing the run in memory would be worse than losing the file. But it must
-            # not be silent either: this repo commonly lives in a synced folder (Google Drive),
-            # which is exactly the lock _atomic_write_json's retry loop exists for. If those
-            # retries are exhausted the run is no longer being persisted, and the player should
-            # find that out now rather than at the next restart.
-            self.save_failed = str(e)
-            log.warning(f"[SAVE] links.json write failed (non-fatal): {e}")
+        return copy.deepcopy(payload)
