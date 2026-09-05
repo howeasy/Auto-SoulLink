@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SLink UI mockup — Track B (Svelte)</title>
+    <!-- The REAL design system. Absolute paths: /static is mounted by both apps,
+         and slink.css's @font-face src is itself /static/fonts/*, so the vendored
+         fonts resolve with no network. Never copied, never forked. -->
+    <link rel="stylesheet" href="/static/slink.css" />
+    <link rel="stylesheet" href="/static/themes/default.css" id="slink-theme" />
+    <!-- Vendored, not reimplemented: slink.css hides funnotbun sprites until this strips
+         their solid background. Its own DOMContentLoaded pass runs before Svelte has
+         rendered anything, so App.svelte re-runs SLinkOverlay.processSprites(). -->
+    <script src="/static/vendor/overlay-helpers.js" defer></script>
+    <script type="module" crossorigin src="./assets/index-5TuuXwQV.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DRlRYFlZ.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>
