@@ -7,7 +7,7 @@
   const fallen = $derived(app.status?.killfeed || []);
   const half = (l, s) => ({
     nickname: l[`${s}_nickname`], species_name: l[`${s}_species_name`],
-    species_id: l[`${s}_species`],
+    species_id: l[`${s}_species`], sprite_html: l[`${s}_sprite_html`],
   });
 </script>
 

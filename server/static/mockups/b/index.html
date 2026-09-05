@@ -9,10 +9,14 @@
          fonts resolve with no network. Never copied, never forked. -->
     <link rel="stylesheet" href="/static/slink.css" />
     <link rel="stylesheet" href="/static/themes/default.css" id="slink-theme" />
-    <script type="module" crossorigin src="./assets/index-CYLvEtxE.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-D0BVAhyA.css">
+    <!-- Vendored, not reimplemented: slink.css hides funnotbun sprites until this strips
+         their solid background. Its own DOMContentLoaded pass runs before Svelte has
+         rendered anything, so App.svelte re-runs SLinkOverlay.processSprites(). -->
+    <script src="/static/vendor/overlay-helpers.js" defer></script>
+    <script type="module" crossorigin src="./assets/index-5TuuXwQV.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DRlRYFlZ.css">
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app"></div>
   </body>
 </html>

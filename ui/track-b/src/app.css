@@ -187,6 +187,17 @@ table.grid tr:last-child td { border-bottom: 0; }
 }
 .mini-sprite small { display: block; font-size: 7px; opacity: .6; }
 
+/* Sprite markup comes from the payload. Gen 3 emits a bare img.mon-sprite at its native
+ * 64px and needs sizing; Gen 1 emits a self-cropping 40px <span> wrapper and must be left
+ * alone, or the wrapper's negative-margin crop trims the sprite instead of centring it —
+ * hence the direct-child selector rather than a descendant one. */
+.sprite-slot { flex-shrink: 0; display: inline-flex; align-items: center; }
+.sprite-slot > img {
+  width: var(--size-sprite-table, 34px); height: var(--size-sprite-table, 34px);
+  object-fit: contain; image-rendering: pixelated;
+}
+.sprite-slot > span { flex: none; }
+
 .nm-cell { display: flex; align-items: center; gap: var(--d-2); min-width: 0; }
 .nm-cell .txt { min-width: 0; }
 .nm-cell .txt b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

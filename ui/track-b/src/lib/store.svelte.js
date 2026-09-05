@@ -84,7 +84,6 @@ export function playerCtx(side) {
     romType,
     label: romLabel(romType),
     capsFound: cr.found,
-    capsInferred: cr.inferred,
     capsKey: cr.key,
     caps: cr.caps,
     abilities: tri(cr, 'abilities'),
