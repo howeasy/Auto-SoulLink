@@ -97,6 +97,30 @@ def test_fixtures_are_populated_enough_to_show_layout_bugs(name):
     )
 
 
+@pytest.mark.parametrize("name", STATUS_FIXTURES)
+def test_both_players_have_their_own_populated_encounter_table(name):
+    """Encounter data is per player, and the fixtures have to show that.
+
+    Two randomized cartridges do not share one table, so this is the payload's clearest
+    per-player claim -- and it only lands if BOTH sides are populated and they DIFFER. A
+    player parked somewhere with no wild encounters leaves that panel empty, which reads
+    as missing data rather than as the point being made.
+    """
+    f = _load(name)
+    tables = {}
+    for pid in ("a", "b"):
+        t = f["players"][pid]["encounter_table"] or {}
+        assert t, (
+            f"{name} players.{pid} has no encounter table -- move that player to an area "
+            "that has wild encounters (see _final_areas in tools/inject_full_mocks.py)."
+        )
+        tables[pid] = t
+    assert f["players"]["a"]["current_area_id"] != f["players"]["b"]["current_area_id"], (
+        f"{name} has both players in the same area, so the per-player tables are identical "
+        "and demonstrate nothing."
+    )
+
+
 def test_capabilities_cover_every_rom_type_the_status_fixtures_use():
     """Both players' cartridges must resolve, not just player A's.
 

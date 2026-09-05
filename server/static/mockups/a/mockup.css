@@ -116,7 +116,6 @@ body.mk-body-root {
 .mk-dot.stopped  { background: var(--c-dim); }
 .mk-dot.archived { background: none; border: 1px solid var(--c-dim); }
 
-.mk-rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--space-2); }
 
 /* ── Mockup controls — the strip that only exists because this is a mockup ──
  *
@@ -127,8 +126,10 @@ body.mk-body-root {
 
 .mk-ctl {
   position: fixed; left: var(--space-3); bottom: var(--space-3); z-index: 30;
-  width: calc(var(--scale-step) * 7.6);
-  max-height: 60vh; overflow-y: auto;
+  /* Wide enough to lay the chips out several per row. At rail width they stacked one
+   * per row and the panel grew tall enough to sit on top of the rail's own nav. */
+  width: min(calc(var(--scale-step) * 15), 44vw);
+  max-height: 46vh; overflow-y: auto;
   display: flex; flex-wrap: wrap; gap: var(--space-1);
   padding: var(--space-2);
   border: 1px dashed color-mix(in srgb, var(--c-brand) 55%, var(--c-edge));
@@ -140,8 +141,12 @@ body.mk-body-root {
   width: 100%; cursor: pointer; list-style: none;
   font-size: .62em; letter-spacing: .14em; text-transform: uppercase; color: var(--c-brand);
 }
-/* Room for the fixed strip so it never covers the last rail item. */
-.mk-rail { padding-bottom: calc(var(--scale-step) * 13); }
+/* The strip floats over the rail's lower half, which is empty: every rail item now sits
+ * in the top group. An earlier attempt reserved space with padding-bottom instead, and
+ * reserved nothing -- .mk-rail is content-box, so `height:100vh` plus padding made the
+ * rail TALLER than the viewport and just extended its scroll area. */
+.mk-ctl summary::-webkit-details-marker { display: none; }
+.mk-ctl:not([open]) { padding-bottom: var(--space-2); }
 .mk-ctl-lbl {
   width: 100%; font-size: .58em; letter-spacing: .14em;
   text-transform: uppercase; color: var(--c-dim);
