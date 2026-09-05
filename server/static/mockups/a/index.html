@@ -3,10 +3,15 @@
   Track A — the merged SLink UI, built on the stack the project already vendors:
   Alpine 3 for state, the real slink.css design tokens, no build step, no new dependency.
 
-  Three layouts live in this one file on purpose. They differ in ARRANGEMENT, not in what
-  they know, so they share one data model (mockup.js) and one stylesheet (mockup.css) and
-  you switch between them without a reload. Comparing arrangements is the whole exercise;
-  making you reload to do it would put the thing you are comparing behind a page load.
+  One layout. The earlier draft carried three, and building them settled it: the split
+  board was the best links view of the lot and became the Links tab; the deck was a
+  "second monitor during play" mode the OBS overlays already serve better. What is left is
+  the workspace shell with the board inside it.
+
+  The rule for chrome here is that nothing is labelled twice. The player chip under the
+  run name IS the header for that player's column, so the cards beneath it carry none;
+  and a party table has no <thead>, because a column of sprites and a column of HP bars
+  do not need captions telling you which is which.
 
   Everything rendered here comes from ../fixtures/, generated off a running server.
   See docs/ui_mockup_brief.md.
@@ -28,12 +33,11 @@
 </head>
 <body class="mk-body-root theme-default ui-plex">
 
-<div class="mk" :class="'mk-' + layout" x-data="mockup()" x-init="setup()" x-cloak>
+<div class="mk" x-data="mockup()" x-init="setup()" x-cloak>
 
   <!-- ══ Rail ══════════════════════════════════════════════════════════════
-       One rail for the whole product. It carries the run switcher (which used to
-       be an entire separate app on another port) above the three destinations
-       that replace nine. -->
+       One rail for the whole product: the run switcher that used to be a separate
+       app on another port, then the three destinations that replace nine. -->
   <aside class="mk-rail">
     <div class="mk-rail-brand">
       <svg viewBox="0 0 595.3 594.1" aria-hidden="true">
@@ -47,12 +51,12 @@
       </span>
     </div>
 
-    <!-- Runs. The manager's entire left rail, reduced to what you actually pick from. -->
-    <div class="mk-rail-section">Runs</div>
+    <hr class="mk-rail-sep">
+
     <template x-for="group in ['running', 'stopped', 'archived']" :key="group">
       <template x-for="r in runsByStatus(group)" :key="r.run_id">
         <button class="mk-rail-item"
-                :class="r.run_id === activeRunId ? 'active' : ''"
+                :class="r.run_id === activeRunId && dest === 'run' ? 'active' : ''"
                 @click="activeRunId = r.run_id; dest = 'run'">
           <span class="mk-dot" :class="r.status"></span>
           <span class="mk-rail-label" x-text="r.name"></span>
@@ -60,11 +64,8 @@
       </template>
     </template>
 
-    <div class="mk-rail-section">Go to</div>
-    <button class="mk-rail-item" :class="dest === 'run' ? 'active' : ''" @click="dest = 'run'">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M1 2h6v6H1zm8 0h6v6H9zM1 10h6v4H1zm8 0h6v4H9z"/></svg>
-      <span class="mk-rail-label">Run</span>
-    </button>
+    <hr class="mk-rail-sep">
+
     <button class="mk-rail-item" :class="dest === 'broadcast' ? 'active' : ''" @click="dest = 'broadcast'">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M5 1h2v2H5zM9 1h2v2H9zM1 4h14v10H1zM6 6v6l5-3z"/></svg>
       <span class="mk-rail-label">Broadcast</span>
@@ -77,7 +78,6 @@
       <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 1h12v14H2zM4 3v3h8V3zM4 7v2h2V7zm3 0v2h2V7zm3 0v2h2V7zM4 10v2h2v-2zm3 0v2h2v-2zm3 0v5h2v-5z"/></svg>
       <span class="mk-rail-label">Calc ↗</span>
     </a>
-
     <button class="mk-rail-item" @click="debugOpen = true">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6 1l1 2h2l1-2 1 1-1 2h1v1h2v2h-2v2h2v2h-2v1l-3 2-3-2v-1H3v-2h2V9H3V7h2V5h1L5 3z"/></svg>
       <span class="mk-rail-label">Debug <kbd>`</kbd></span>
@@ -97,426 +97,187 @@
         <!-- ── RUN ──────────────────────────────────────────────────────── -->
         <template x-if="dest === 'run'">
           <div>
+            <header class="mk-runhdr">
+              <h1 class="mk-runname" x-text="run().name"></h1>
+              <span class="mk-pill" :class="run().status" x-text="run().status"></span>
+              <span class="mk-hdr-spacer"></span>
+              <span class="mk-attempt">Attempt <b x-text="status.attempts_count"></b></span>
+              <button class="mk-btn primary">Stop</button>
+              <button class="mk-btn">Pin</button>
+              <button class="mk-btn">Launchers</button>
 
-            <!-- L1 / L2 share the run header. L3 replaces it with a denser
-                 situation bar, because the deck's whole premise is that you are
-                 glancing at it during play rather than reading it. -->
-            <template x-if="layout !== 'l3'">
-              <header class="mk-runhdr">
-                <h1 class="mk-runname" x-text="run().name"></h1>
-                <span class="mk-pill" :class="run().status" x-text="run().status"></span>
-                <span class="mk-hdr-spacer"></span>
-                <span style="font-size:.72em;color:var(--c-dim)">
-                  Attempt <b style="color:var(--c-gold)" x-text="status.attempts_count"></b>
-                </span>
-                <button class="mk-btn primary">Stop</button>
-                <button class="mk-btn">Pin</button>
-                <button class="mk-btn">Launchers</button>
-
-                <div class="mk-pchips">
-                  <template x-for="pid in ['a', 'b']" :key="pid">
-                    <div class="mk-pchip" :class="player(pid).connected ? 'online' : 'offline'">
-                      <span class="mk-pchip-side" x-text="pid.toUpperCase()"></span>
-                      <span class="mk-pchip-name">
-                        <span x-text="player(pid).trainer_name || '—'"></span>
-                        <!-- Game label sits on the PLAYER, not the run: the two halves of a
-                             randomized pair are different cartridges by design. -->
-                        <span class="mk-pchip-game" x-text="' · ' + (player(pid).rom_type || '?')"></span>
-                      </span>
-                      <span class="mk-pchip-badges" :title="badgeCount(pid) + ' badges'">
-                        <template x-for="i in badgeSlots(pid)" :key="i">
-                          <span class="mk-badge-pip" :class="i <= badgeCount(pid) ? 'on' : ''"></span>
-                        </template>
-                      </span>
-                      <span class="mk-pchip-meta">
-                        <span><b x-text="player(pid).current_area_display || '—'"></b></span>
-                        <span>Balls <b x-text="player(pid).ball_count"></b></span>
-                        <span>Party <b x-text="party(pid).length"></b></span>
-                        <template x-if="battle(pid).in_battle">
-                          <span class="mk-tag status">IN BATTLE</span>
-                        </template>
-                      </span>
-                    </div>
-                  </template>
-                </div>
-              </header>
-            </template>
-
-            <!-- ── L1 Workspace ─────────────────────────────────────────── -->
-            <template x-if="layout === 'l1'">
-              <div>
-                <nav class="mk-tabs">
-                  <template x-for="t in [['live','Live'],['links','Links'],['boxes','Boxes'],['memorial','Memorial'],['setup','Setup']]" :key="t[0]">
-                    <button class="mk-tab" :class="tab === t[0] ? 'active' : ''" @click="tab = t[0]">
-                      <span x-text="t[1]"></span>
-                      <span class="mk-tab-count" x-show="t[0] === 'links'" x-text="links().length"></span>
-                      <span class="mk-tab-count" x-show="t[0] === 'memorial'" x-text="killfeed().length"></span>
-                    </button>
-                  </template>
-                </nav>
-
-                <div class="mk-content">
-
-                  <!-- Live: both players side by side. Party, battle, and this player's
-                       own encounter table — which on a randomized pair is not the
-                       other player's. -->
-                  <template x-if="tab === 'live'">
-                    <div class="mk-grid2">
-                      <template x-for="pid in ['a', 'b']" :key="pid">
-                        <div style="display:flex;flex-direction:column;gap:var(--space-3)">
-
-                          <template x-if="battle(pid).in_battle">
-                            <div class="mk-card" style="border-color:color-mix(in srgb, var(--c-dead) 45%, transparent)">
-                              <div class="mk-card-hdr">
-                                <span class="mk-tag dead">IN BATTLE</span>
-                                <b x-text="battle(pid).is_trainer_battle ? (battle(pid).opponent_name || 'Trainer') : 'Wild'"></b>
-                              </div>
-                              <div class="mk-card-body flush">
-                                <table class="mk-tbl">
-                                  <tbody>
-                                    <template x-for="foe in (battle(pid).enemy_party || [])" :key="foe.key || foe.species_id">
-                                      <tr>
-                                        <td>
-                                          <div class="mk-mon">
-                                            <span x-html="foe.sprite_html"></span>
-                                            <span class="mk-mon-txt">
-                                              <span class="mk-mon-nick" x-text="foe.species_name"></span>
-                                              <span class="mk-mon-sub">Lv <span x-text="foe.level"></span></span>
-                                            </span>
-                                          </div>
-                                        </td>
-                                        <td style="width:1%">
-                                          <div class="mk-hp">
-                                            <span class="mk-hp-num" x-text="foe.hp + '/' + foe.maxHP"></span>
-                                            <span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(foe)" :style="'width:' + hpPct(foe) + '%'"></span></span>
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    </template>
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          </template>
-
-                          <div class="mk-card">
-                            <div class="mk-card-hdr">
-                              <span x-text="'Player ' + pid.toUpperCase()"></span>
-                              <b x-text="player(pid).trainer_name"></b>
-                              <span class="mk-hdr-spacer"></span>
-                              <span class="mk-tag area" x-text="player(pid).current_area_display"></span>
-                            </div>
-                            <div class="mk-card-body flush">
-                              <table class="mk-tbl">
-                                <thead>
-                                  <tr>
-                                    <th>Pokémon</th>
-                                    <th>HP</th>
-                                    <!-- Capability, not prose: the column is absent on a
-                                         cartridge that predates abilities. -->
-                                    <template x-if="capsFor(pid).abilities"><th>Ability</th></template>
-                                    <template x-if="anyHeldItems()"><th>Item</th></template>
-                                    <th>Linked to</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  <template x-for="m in party(pid)" :key="m.key || m.slot">
-                                    <tr>
-                                      <td>
-                                        <div class="mk-mon">
-                                          <span x-html="m.sprite_html"></span>
-                                          <span class="mk-mon-txt">
-                                            <span class="mk-mon-nick" x-text="m.nickname || m.species_name"></span>
-                                            <span class="mk-mon-sub">
-                                              <span x-text="m.species_name"></span> · Lv <span x-text="m.level"></span>
-                                            </span>
-                                          </span>
-                                        </div>
-                                      </td>
-                                      <td style="width:1%">
-                                        <div class="mk-hp">
-                                          <span class="mk-hp-num" x-text="m.hp + '/' + m.maxHP"></span>
-                                          <span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(m)" :style="'width:' + hpPct(m) + '%'"></span></span>
-                                        </div>
-                                      </td>
-                                      <template x-if="capsFor(pid).abilities">
-                                        <td x-text="m.ability_name || '—'"></td>
-                                      </template>
-                                      <template x-if="anyHeldItems()">
-                                        <td>
-                                          <span class="mk-tag item" x-show="m.held_item_id" x-text="'#' + m.held_item_id"></span>
-                                        </td>
-                                      </template>
-                                      <td>
-                                        <template x-if="partnerOf(pid, m.key)">
-                                          <span class="mk-tag" :class="partnerOf(pid, m.key).status"
-                                                x-text="partnerOf(pid, m.key).nickname + ' (' + partnerOf(pid, m.key).species_name + ')'"></span>
-                                        </template>
-                                        <template x-if="!partnerOf(pid, m.key)">
-                                          <span class="mk-tag pending">unlinked</span>
-                                        </template>
-                                      </td>
-                                    </tr>
-                                  </template>
-                                </tbody>
-                              </table>
-                            </div>
-                          </div>
-
-                          <!-- Per-player encounter table. Two randomized cartridges do not
-                               share one, so it cannot live at run level. -->
-                          <div class="mk-card">
-                            <div class="mk-card-hdr">
-                              <span>Encounters here</span>
-                              <b x-text="player(pid).current_area_display"></b>
-                              <span class="mk-hdr-spacer"></span>
-                              <span style="font-size:.9em" x-text="'from ' + (player(pid).rom_type || '?')"></span>
-                            </div>
-                            <div class="mk-card-body flush">
-                              <template x-if="Object.keys(player(pid).encounter_table || {}).length">
-                                <table class="mk-tbl">
-                                  <tbody>
-                                    <template x-for="[method, list] in Object.entries(player(pid).encounter_table || {})" :key="method">
-                                      <tr>
-                                        <td style="width:1%;white-space:nowrap"><span class="mk-tag" x-text="method"></span></td>
-                                        <td x-text="list.map(e => e.name || e.species_name || e.species).slice(0, 8).join(', ')"></td>
-                                      </tr>
-                                    </template>
-                                  </tbody>
-                                </table>
-                              </template>
-                              <template x-if="!Object.keys(player(pid).encounter_table || {}).length">
-                                <div class="mk-empty">No encounter data for this area on this cartridge.</div>
-                              </template>
-                            </div>
-                          </div>
-
-                        </div>
+              <!-- The player chip is the header for everything in that player's column
+                   below. Game label lives here because on a randomized pair the two
+                   cartridges differ by design. -->
+              <div class="mk-pchips">
+                <template x-for="pid in ['a', 'b']" :key="pid">
+                  <div class="mk-pchip" :class="player(pid).connected ? 'online' : 'offline'">
+                    <span class="mk-pchip-side" x-text="pid.toUpperCase()"></span>
+                    <span class="mk-pchip-name">
+                      <span x-text="player(pid).trainer_name || '—'"></span>
+                      <span class="mk-pchip-game" x-text="' · ' + (player(pid).rom_type || '?')"></span>
+                    </span>
+                    <span class="mk-pchip-badges" :title="badgeCount(pid) + ' badges'">
+                      <template x-for="i in badgeSlots(pid)" :key="i">
+                        <span class="mk-badge-pip" :class="i <= badgeCount(pid) ? 'on' : ''"></span>
                       </template>
-                    </div>
-                  </template>
+                    </span>
+                    <span class="mk-pchip-meta">
+                      <span><b x-text="player(pid).current_area_display || '—'"></b></span>
+                      <span><b x-text="player(pid).ball_count"></b> balls</span>
+                      <template x-if="battle(pid).in_battle">
+                        <span class="mk-tag status">in battle</span>
+                      </template>
+                    </span>
+                  </div>
+                </template>
+              </div>
+            </header>
 
-                  <!-- Links -->
-                  <template x-if="tab === 'links'">
-                    <div class="mk-card">
-                      <div class="mk-card-hdr">
-                        <b>Soul links</b>
-                        <span class="mk-hdr-spacer"></span>
-                        <span class="mk-tag alive" x-text="linksBy('alive').length + ' alive'"></span>
-                        <span class="mk-tag dead" x-text="killfeed().length + ' dead'"></span>
-                        <span class="mk-tag pending" x-text="deadZones().length + ' dead zones'"></span>
-                      </div>
-                      <div class="mk-card-body flush">
-                        <table class="mk-tbl">
-                          <thead><tr><th>Area</th><th x-text="player('a').trainer_name || 'A'"></th><th style="width:1%"></th><th x-text="player('b').trainer_name || 'B'"></th><th>State</th></tr></thead>
+            <nav class="mk-tabs">
+              <template x-for="t in [['live','Live'],['links','Links'],['boxes','Boxes'],['memorial','Memorial'],['setup','Setup']]" :key="t[0]">
+                <button class="mk-tab" :class="tab === t[0] ? 'active' : ''" @click="tab = t[0]">
+                  <span x-text="t[1]"></span>
+                  <span class="mk-tab-count" x-show="t[0] === 'links'" x-text="links().length"></span>
+                  <span class="mk-tab-count" x-show="t[0] === 'memorial'" x-text="killfeed().length"></span>
+                </button>
+              </template>
+            </nav>
+
+            <div class="mk-content">
+
+              <!-- ── Live: one card per player, no header — the chip above is the header.
+                   Battle first if there is one, then the party, then what is wild here. -->
+              <template x-if="tab === 'live'">
+                <div style="display:flex;flex-direction:column;gap:var(--space-4)">
+                  <div class="mk-grid2">
+                    <template x-for="pid in ['a', 'b']" :key="pid">
+                      <div class="mk-card">
+                        <table class="mk-tbl mk-party">
                           <tbody>
-                            <template x-for="l in links()" :key="l.area_id">
-                              <tr>
-                                <td><span class="mk-tag area" x-text="l.area_display || areaName(l.area_id)"></span></td>
-                                <td>
-                                  <div class="mk-mon" :class="l.status === 'alive' ? '' : 'dead'" x-show="l.a_key">
-                                    <span x-html="l.a_sprite_html"></span>
-                                    <span class="mk-mon-txt">
-                                      <span class="mk-mon-nick" x-text="l.a_nickname"></span>
-                                      <span class="mk-mon-sub" x-text="l.a_species_name + ' · Lv ' + l.a_level"></span>
-                                    </span>
-                                  </div>
-                                  <span class="mk-mon-sub" x-show="!l.a_key">missed</span>
-                                </td>
-                                <td class="mk-num" style="color:var(--c-dim)" x-text="bondGlyph(l.status)"></td>
-                                <td>
-                                  <div class="mk-mon" :class="l.status === 'alive' ? '' : 'dead'" x-show="l.b_key">
-                                    <span x-html="l.b_sprite_html"></span>
-                                    <span class="mk-mon-txt">
-                                      <span class="mk-mon-nick" x-text="l.b_nickname"></span>
-                                      <span class="mk-mon-sub" x-text="l.b_species_name + ' · Lv ' + l.b_level"></span>
-                                    </span>
-                                  </div>
-                                  <span class="mk-mon-sub" x-show="!l.b_key">missed</span>
-                                </td>
-                                <td><span class="mk-tag" :class="l.status" x-text="l.status"></span></td>
-                              </tr>
-                            </template>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </template>
-
-                  <!-- Boxes -->
-                  <template x-if="tab === 'boxes'">
-                    <div class="mk-grid2">
-                      <template x-for="pid in ['a', 'b']" :key="pid">
-                        <div class="mk-card">
-                          <div class="mk-card-hdr">
-                            <span x-text="'Player ' + pid.toUpperCase() + ' · PC'"></span>
-                            <span class="mk-hdr-spacer"></span>
-                            <!-- 20 on Gen 1, 30 on Gen 3. null when this checkout's adapter
-                                 cannot say, and unknown is shown as unknown. -->
-                            <span style="font-size:.9em"
-                                  x-text="monsPerBox(pid) ? monsPerBox(pid) + ' per box' : 'box size unknown'"></span>
-                          </div>
-                          <div class="mk-card-body flush">
-                            <table class="mk-tbl">
-                              <thead><tr><th style="width:1%">Box</th><th style="width:1%">Slot</th><th>Pokémon</th></tr></thead>
-                              <tbody>
-                                <template x-for="b in boxes(pid)" :key="b.key">
-                                  <tr>
-                                    <td class="mk-num" x-text="b.box + 1"></td>
-                                    <td class="mk-num" x-text="b.slot + 1"></td>
-                                    <td>
-                                      <div class="mk-mon">
-                                        <span class="mk-mon-txt">
-                                          <span class="mk-mon-nick" x-text="b.nickname"></span>
-                                          <span class="mk-mon-sub" x-text="'species #' + b.species_id"></span>
+                            <template x-if="battle(pid).in_battle">
+                              <template x-for="foe in (battle(pid).enemy_party || [])" :key="foe.key || foe.species_id">
+                                <tr class="mk-row-battle">
+                                  <td>
+                                    <div class="mk-mon">
+                                      <span x-html="foe.sprite_html"></span>
+                                      <span class="mk-mon-txt">
+                                        <span class="mk-mon-nick">
+                                          <span class="mk-vs">vs</span>
+                                          <span x-text="(battle(pid).is_trainer_battle ? (battle(pid).opponent_name || 'Trainer') + '’s ' : 'wild ') + foe.species_name"></span>
                                         </span>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                </template>
-                              </tbody>
-                            </table>
-                            <div class="mk-empty" x-show="!boxes(pid).length">Nothing stored.</div>
-                          </div>
-                        </div>
-                      </template>
-                    </div>
-                  </template>
-
-                  <!-- Memorial -->
-                  <template x-if="tab === 'memorial'">
-                    <div class="mk-card">
-                      <div class="mk-card-hdr"><b>Memorial</b><span class="mk-hdr-spacer"></span><span x-text="killfeed().length + ' pairs'"></span></div>
-                      <div class="mk-card-body flush">
-                        <table class="mk-tbl">
-                          <thead><tr><th>Area</th><th>Pair</th><th>Cause</th><th>Killer</th><th>When</th></tr></thead>
-                          <tbody>
-                            <template x-for="k in killfeed()" :key="k.area_id + k.killed_at">
-                              <tr>
-                                <td><span class="mk-tag area" x-text="k.area_display || areaName(k.area_id)"></span></td>
-                                <td>
-                                  <div class="mk-mon dead">
-                                    <span x-html="k.a_sprite_html"></span>
-                                    <span x-html="k.b_sprite_html"></span>
-                                    <span class="mk-mon-txt">
-                                      <span class="mk-mon-nick" x-text="(k.a_nickname || '—') + '  ><  ' + (k.b_nickname || '—')"></span>
-                                    </span>
-                                  </div>
-                                </td>
-                                <td><span class="mk-tag dead" x-text="k.cause"></span></td>
-                                <td x-text="(k.killer && (k.killer.trainer_name || k.killer.species_name)) || '—'"></td>
-                                <td class="mk-mon-sub" x-text="(k.killed_at || '').slice(0, 16).replace('T', ' ')"></td>
-                              </tr>
-                            </template>
-                          </tbody>
-                        </table>
-                        <div class="mk-empty" x-show="!killfeed().length">No losses yet.</div>
-                      </div>
-                    </div>
-                  </template>
-
-                  <!-- Setup -->
-                  <template x-if="tab === 'setup'">
-                    <div style="display:flex;flex-direction:column;gap:var(--space-4)">
-
-                      <div class="mk-card">
-                        <div class="mk-card-hdr"><b>Rules</b><span class="mk-hdr-spacer"></span><span>what this pair of cartridges can honour</span></div>
-                        <div class="mk-card-body">
-                          <div class="mk-opts">
-                            <template x-for="key in Object.keys(OPTION_LABELS)" :key="key">
-                              <label class="mk-opt"
-                                     :class="!optionState(key).ok ? 'off-unavailable' : (optionState(key).on ? 'on' : '')">
-                                <input type="checkbox" :checked="optionState(key).on && optionState(key).ok"
-                                       :disabled="!optionState(key).ok">
-                                <span x-text="OPTION_LABELS[key]"></span>
-                                <span class="mk-opt-why" x-show="!optionState(key).ok" x-text="optionState(key).why"></span>
-                              </label>
-                            </template>
-                          </div>
-                          <p class="mk-note" style="margin-top:var(--space-3)">
-                            An option this pair cannot honour is shown greyed <b>with its reason</b>, not
-                            hidden and not offered as a checkbox that silently does nothing. Note that
-                            Explode Mode and Rival Swap are <b>available on Gen 1 with no ROM patch at
-                            all</b> — switch the cartridge in the rail and watch this grid change.
-                          </p>
-                        </div>
-                      </div>
-
-                      <!-- Promoted out of a collapsed <details> at the bottom of the old
-                           manager's detail pane. The seeds recorded here are the only
-                           record of what each player is playing. -->
-                      <div class="mk-card">
-                        <div class="mk-card-hdr"><b>Randomized ROM pair</b><span class="mk-hdr-spacer"></span><span>same settings, different seeds</span></div>
-                        <div class="mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-3)">
-                          <div class="mk-opts">
-                            <label class="mk-field"><span>Randomizer jar</span><input type="text" placeholder="path to PokeRandoZX.jar"></label>
-                            <label class="mk-field"><span>Settings file</span><input type="text" placeholder="path to your .rnqs"></label>
-                            <label class="mk-field"><span>Player A clean ROM</span><input type="text" placeholder="path to a clean .gb"></label>
-                            <label class="mk-field"><span>Player B clean ROM</span><input type="text" placeholder="path to a clean .gb"></label>
-                          </div>
-                          <div><button class="mk-btn primary">Build randomized pair</button></div>
-                          <table class="mk-tbl">
-                            <thead><tr><th>Player</th><th>Cartridge</th><th>Seed</th><th>ROM SHA1</th></tr></thead>
-                            <tbody>
-                              <template x-for="pid in ['a', 'b']" :key="pid">
-                                <tr>
-                                  <td x-text="pid.toUpperCase() + ' · ' + (player(pid).trainer_name || '—')"></td>
-                                  <td><span class="mk-tag" x-text="player(pid).rom_type"></span></td>
-                                  <td><code x-text="pid === 'a' ? '4815162342' : '9081726354'"></code></td>
-                                  <td><code x-text="pid === 'a' ? 'a3f19c7d2e04' : 'c72b0e4a91f8'"></code></td>
+                                        <span class="mk-mon-sub">Lv <span x-text="foe.level"></span></span>
+                                      </span>
+                                    </div>
+                                  </td>
+                                  <td class="mk-cell-hp">
+                                    <div class="mk-hp">
+                                      <span class="mk-hp-num" x-text="foe.hp + '/' + foe.maxHP"></span>
+                                      <span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(foe)" :style="'width:' + hpPct(foe) + '%'"></span></span>
+                                    </div>
+                                  </td>
+                                  <td :colspan="1 + (capsFor(pid).abilities ? 1 : 0) + (anyHeldItems() ? 1 : 0)"></td>
                                 </tr>
                               </template>
-                            </tbody>
-                          </table>
-                          <p class="mk-note">
-                            Seeds and hashes are shown <b>per player</b> because that is what they are.
-                            The run then refuses events from any other cartridge.
-                          </p>
-                        </div>
+                            </template>
+
+                            <template x-for="m in party(pid)" :key="m.key || m.slot">
+                              <tr>
+                                <td>
+                                  <div class="mk-mon">
+                                    <span x-html="m.sprite_html"></span>
+                                    <span class="mk-mon-txt">
+                                      <span class="mk-mon-nick" x-text="m.nickname || m.species_name"></span>
+                                      <span class="mk-mon-sub">
+                                        <span x-text="m.species_name"></span> · Lv <span x-text="m.level"></span>
+                                      </span>
+                                    </span>
+                                  </div>
+                                </td>
+                                <td class="mk-cell-hp">
+                                  <div class="mk-hp">
+                                    <span class="mk-hp-num" x-text="m.hp + '/' + m.maxHP"></span>
+                                    <span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(m)" :style="'width:' + hpPct(m) + '%'"></span></span>
+                                  </div>
+                                </td>
+                                <!-- Capability, not prose: absent on a cartridge that predates abilities. -->
+                                <template x-if="capsFor(pid).abilities">
+                                  <td class="mk-cell-abil" x-text="m.ability_name || '—'"></td>
+                                </template>
+                                <!-- The payload carries the item id and not its name (the adapter
+                                     can resolve it; _enrich_party does not yet) — so a glyph with
+                                     the id on hover, rather than a bare number pretending to mean
+                                     something. Names are a Phase 1 item in the brief. -->
+                                <template x-if="anyHeldItems()">
+                                  <td class="mk-cell-item">
+                                    <span class="mk-item" x-show="m.held_item_id" :title="'item #' + m.held_item_id">◆</span>
+                                  </td>
+                                </template>
+                                <td class="mk-cell-link">
+                                  <template x-if="partnerOf(pid, m.key)">
+                                    <span class="mk-partner" :class="partnerOf(pid, m.key).status"
+                                          :title="partnerOf(pid, m.key).species_name"
+                                          x-text="partnerOf(pid, m.key).nickname"></span>
+                                  </template>
+                                  <template x-if="!partnerOf(pid, m.key)">
+                                    <span class="mk-partner none">unlinked</span>
+                                  </template>
+                                </td>
+                              </tr>
+                            </template>
+                          </tbody>
+                        </table>
+
+                        <!-- This player's own cartridge's encounter table for where they stand.
+                             Per player: two randomized cartridges do not share one. Absent when
+                             the area has none, rather than a card saying so. -->
+                        <template x-if="Object.keys(player(pid).encounter_table || {}).length">
+                          <div class="mk-wild">
+                            <span class="mk-cap">Wild · <span x-text="player(pid).current_area_display"></span></span>
+                            <template x-for="[method, list] in Object.entries(player(pid).encounter_table || {})" :key="method">
+                              <div class="mk-wild-row">
+                                <span class="mk-tag" x-text="method"></span>
+                                <span x-text="[...new Set(list.map(e => e.name || e.species_name || e.species))].slice(0, 7).join(', ')"></span>
+                              </div>
+                            </template>
+                          </div>
+                        </template>
                       </div>
-
-                      <div class="mk-card">
-                        <div class="mk-card-hdr"><b>BizHawk launchers</b></div>
-                        <div class="mk-card-body" style="display:flex;gap:var(--space-2)">
-                          <button class="mk-btn">Player A .lua</button>
-                          <button class="mk-btn">Player B .lua</button>
-                        </div>
-                      </div>
-
-                    </div>
-                  </template>
-
-                </div>
-              </div>
-            </template>
-
-            <!-- ── L2 Split Board ───────────────────────────────────────── -->
-            <template x-if="layout === 'l2'">
-              <div class="mk-content">
-                <div class="mk-card">
-                  <div class="mk-card-hdr">
-                    <b>The board</b>
-                    <span class="mk-hdr-spacer"></span>
-                    <span x-text="player('a').trainer_name + ' — ' + (player('a').rom_type || '?')"></span>
-                    <span style="color:var(--c-dim)">vs</span>
-                    <span x-text="player('b').trainer_name + ' — ' + (player('b').rom_type || '?')"></span>
+                    </template>
                   </div>
+
+                  <div class="mk-card">
+                    <div class="mk-feed">
+                      <template x-for="(e, i) in events(25)" :key="i">
+                        <div class="mk-ev">
+                          <span class="mk-ev-ts" x-text="shortTs(e.ts)"></span>
+                          <span class="mk-ev-who" x-text="(e.player || '').toUpperCase()"></span>
+                          <span class="mk-ev-txt" x-text="e.text"></span>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+              </template>
+
+              <!-- ── Links: the board. The page IS the soul link — two symmetric columns and
+                   a spine cell per pair carrying the area and the state of the bond. Colour
+                   and strikethrough say alive or dead; there is no State column repeating it. -->
+              <template x-if="tab === 'links'">
+                <div class="mk-card">
                   <div class="mk-card-body">
-                    <!-- The page IS the soul link. Two symmetric columns, one spine cell
-                         per pair carrying the area and the state of the bond. -->
                     <div class="mk-board">
                       <div class="mk-board-side a">
                         <template x-for="row in boardRows()" :key="'a' + row.area">
-                          <div class="mk-mon" :class="row.status === 'alive' ? '' : 'dead'" style="min-height:calc(var(--scale-step) * 1.9)">
+                          <div class="mk-mon mk-board-mon" :class="row.status === 'alive' ? '' : 'dead'">
                             <template x-if="row.a"><span x-html="row.a.sprite"></span></template>
                             <span class="mk-mon-txt">
                               <span class="mk-mon-nick" x-text="row.a ? row.a.nickname : 'missed'"></span>
-                              <span class="mk-mon-sub" x-text="row.a ? row.a.species_name + ' · Lv ' + row.a.level : '—'"></span>
+                              <span class="mk-mon-sub" x-text="row.a ? row.a.species_name + ' · Lv ' + row.a.level : ''"></span>
                             </span>
                           </div>
                         </template>
                       </div>
-
                       <div class="mk-spine">
                         <template x-for="row in boardRows()" :key="'s' + row.area">
                           <div class="mk-spine-cell">
@@ -525,14 +286,13 @@
                           </div>
                         </template>
                       </div>
-
                       <div class="mk-board-side b">
                         <template x-for="row in boardRows()" :key="'b' + row.area">
-                          <div class="mk-mon" :class="row.status === 'alive' ? '' : 'dead'" style="min-height:calc(var(--scale-step) * 1.9)">
+                          <div class="mk-mon mk-board-mon" :class="row.status === 'alive' ? '' : 'dead'">
                             <template x-if="row.b"><span x-html="row.b.sprite"></span></template>
                             <span class="mk-mon-txt">
                               <span class="mk-mon-nick" x-text="row.b ? row.b.nickname : 'missed'"></span>
-                              <span class="mk-mon-sub" x-text="row.b ? row.b.species_name + ' · Lv ' + row.b.level : '—'"></span>
+                              <span class="mk-mon-sub" x-text="row.b ? row.b.species_name + ' · Lv ' + row.b.level : ''"></span>
                             </span>
                           </div>
                         </template>
@@ -540,203 +300,132 @@
                     </div>
                   </div>
                 </div>
+              </template>
 
+              <!-- ── Boxes -->
+              <template x-if="tab === 'boxes'">
                 <div class="mk-grid2">
                   <template x-for="pid in ['a', 'b']" :key="pid">
                     <div class="mk-card">
-                      <div class="mk-card-hdr">
-                        <span x-text="'Player ' + pid.toUpperCase() + ' · party'"></span>
-                        <span class="mk-hdr-spacer"></span>
-                        <span class="mk-tag area" x-text="player(pid).current_area_display"></span>
-                      </div>
-                      <div class="mk-card-body flush">
-                        <table class="mk-tbl">
-                          <thead><tr><th>Pokémon</th><th>HP</th><template x-if="capsFor(pid).abilities"><th>Ability</th></template></tr></thead>
-                          <tbody>
-                            <template x-for="m in party(pid)" :key="m.key || m.slot">
-                              <tr>
-                                <td>
-                                  <div class="mk-mon">
-                                    <span x-html="m.sprite_html"></span>
-                                    <span class="mk-mon-txt">
-                                      <span class="mk-mon-nick" x-text="m.nickname"></span>
-                                      <span class="mk-mon-sub" x-text="m.species_name + ' · Lv ' + m.level"></span>
-                                    </span>
-                                  </div>
-                                </td>
-                                <td style="width:1%">
-                                  <div class="mk-hp">
-                                    <span class="mk-hp-num" x-text="m.hp + '/' + m.maxHP"></span>
-                                    <span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(m)" :style="'width:' + hpPct(m) + '%'"></span></span>
-                                  </div>
-                                </td>
-                                <template x-if="capsFor(pid).abilities">
-                                  <td x-text="m.ability_name || '—'"></td>
-                                </template>
-                              </tr>
-                            </template>
-                          </tbody>
-                        </table>
-                      </div>
+                      <table class="mk-tbl">
+                        <thead><tr><th class="mk-num">Box</th><th class="mk-num">Slot</th><th></th></tr></thead>
+                        <tbody>
+                          <template x-for="b in boxes(pid)" :key="b.key">
+                            <tr>
+                              <td class="mk-num" x-text="b.box + 1"></td>
+                              <td class="mk-num" x-text="b.slot + 1"></td>
+                              <td>
+                                <span class="mk-mon-nick" x-text="b.nickname"></span>
+                                <span class="mk-mon-sub" x-text="' · #' + b.species_id"></span>
+                              </td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                      <div class="mk-empty" x-show="!boxes(pid).length">Nothing stored.</div>
+                      <!-- 20 on Gen 1, 30 on Gen 3; null when this checkout's adapter cannot
+                           say, and unknown is shown as unknown. -->
+                      <div class="mk-wild"><span class="mk-cap" x-text="monsPerBox(pid) ? monsPerBox(pid) + ' per box' : 'box size unknown on this checkout'"></span></div>
                     </div>
                   </template>
                 </div>
-              </div>
-            </template>
+              </template>
 
-            <!-- ── L3 Deck ──────────────────────────────────────────────── -->
-            <template x-if="layout === 'l3'">
-              <div>
-                <div class="mk-situation">
-                  <span class="mk-sit-item"><b x-text="run().name"></b><span class="mk-pill" :class="run().status" x-text="run().status"></span></span>
-                  <template x-for="pid in ['a', 'b']" :key="pid">
-                    <span class="mk-sit-item">
-                      <span class="mk-dot" :class="player(pid).connected ? 'running' : 'stopped'"></span>
-                      <b x-text="player(pid).trainer_name"></b>
-                      <span x-text="player(pid).current_area_display"></span>
-                      <span x-text="'· ' + badgeCount(pid) + '/' + badgeSlots(pid) + ' badges'"></span>
-                      <span x-text="'· ' + player(pid).ball_count + ' balls'"></span>
-                      <template x-if="battle(pid).in_battle"><span class="mk-tag status">BATTLE</span></template>
-                    </span>
-                  </template>
-                  <span class="mk-hdr-spacer"></span>
-                  <span class="mk-sit-item">Attempt <b x-text="status.attempts_count"></b></span>
+              <!-- ── Memorial -->
+              <template x-if="tab === 'memorial'">
+                <div class="mk-card">
+                  <table class="mk-tbl">
+                    <thead><tr><th>Area</th><th>Pair</th><th>Cause</th><th>Killer</th><th>When</th></tr></thead>
+                    <tbody>
+                      <template x-for="k in killfeed()" :key="k.area_id + k.killed_at">
+                        <tr>
+                          <td><span class="mk-tag area" x-text="k.area_display || areaName(k.area_id)"></span></td>
+                          <td>
+                            <div class="mk-mon dead">
+                              <span x-html="k.a_sprite_html"></span>
+                              <span x-html="k.b_sprite_html"></span>
+                              <span class="mk-mon-txt">
+                                <span class="mk-mon-nick" x-text="(k.a_nickname || '—') + '  ><  ' + (k.b_nickname || '—')"></span>
+                              </span>
+                            </div>
+                          </td>
+                          <td><span class="mk-tag dead" x-text="k.cause"></span></td>
+                          <td x-text="(k.killer && (k.killer.trainer_name || k.killer.species_name)) || '—'"></td>
+                          <td class="mk-mon-sub" x-text="(k.killed_at || '').slice(0, 16).replace('T', ' ')"></td>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                  <div class="mk-empty" x-show="!killfeed().length">No losses yet.</div>
                 </div>
+              </template>
 
-                <div class="mk-deck">
-                  <div class="mk-deck-canvas">
-                    <template x-for="pid in ['a', 'b']" :key="pid">
-                      <details class="mk-card" open>
-                        <summary class="mk-card-hdr" style="cursor:pointer">
-                          <span x-text="'Party ' + pid.toUpperCase()"></span>
-                          <b x-text="player(pid).trainer_name"></b>
-                        </summary>
-                        <div class="mk-card-body flush">
-                          <table class="mk-tbl">
-                            <tbody>
-                              <template x-for="m in party(pid)" :key="m.key || m.slot">
-                                <tr>
-                                  <td>
-                                    <div class="mk-mon">
-                                      <span x-html="m.sprite_html"></span>
-                                      <span class="mk-mon-txt">
-                                        <span class="mk-mon-nick" x-text="m.nickname"></span>
-                                        <span class="mk-mon-sub" x-text="'Lv ' + m.level + (capsFor(pid).abilities && m.ability_name ? ' · ' + m.ability_name : '')"></span>
-                                      </span>
-                                    </div>
-                                  </td>
-                                  <td style="width:1%">
-                                    <div class="mk-hp">
-                                      <span class="mk-hp-num" x-text="m.hp + '/' + m.maxHP"></span>
-                                      <span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(m)" :style="'width:' + hpPct(m) + '%'"></span></span>
-                                    </div>
-                                  </td>
-                                </tr>
-                              </template>
-                            </tbody>
-                          </table>
-                        </div>
-                      </details>
-                    </template>
-
-                    <details class="mk-card" open>
-                      <summary class="mk-card-hdr" style="cursor:pointer"><b>Links</b><span class="mk-hdr-spacer"></span><span x-text="links().length"></span></summary>
-                      <div class="mk-card-body flush">
-                        <table class="mk-tbl">
-                          <tbody>
-                            <template x-for="l in links()" :key="l.area_id">
-                              <tr>
-                                <td><span class="mk-tag area" x-text="l.area_display || areaName(l.area_id)"></span></td>
-                                <td x-text="(l.a_nickname || '—') + ' ' + bondGlyph(l.status) + ' ' + (l.b_nickname || '—')"></td>
-                                <td style="width:1%"><span class="mk-tag" :class="l.status" x-text="l.status"></span></td>
-                              </tr>
-                            </template>
-                          </tbody>
-                        </table>
-                      </div>
-                    </details>
-
-                    <details class="mk-card" open>
-                      <summary class="mk-card-hdr" style="cursor:pointer"><b>Memorial</b><span class="mk-hdr-spacer"></span><span x-text="killfeed().length"></span></summary>
-                      <div class="mk-card-body flush">
-                        <table class="mk-tbl">
-                          <tbody>
-                            <template x-for="k in killfeed()" :key="k.area_id + k.killed_at">
-                              <tr>
-                                <td><span class="mk-tag area" x-text="k.area_display || areaName(k.area_id)"></span></td>
-                                <td x-text="(k.a_nickname || '—') + ' >< ' + (k.b_nickname || '—')"></td>
-                                <td style="width:1%"><span class="mk-tag dead" x-text="k.cause"></span></td>
-                              </tr>
-                            </template>
-                          </tbody>
-                        </table>
-                        <div class="mk-empty" x-show="!killfeed().length">No losses yet.</div>
-                      </div>
-                    </details>
-                  </div>
-
-                  <aside class="mk-deck-dock">
-                    <div class="mk-card">
-                      <div class="mk-card-hdr"><b>Events</b></div>
-                      <div class="mk-feed">
-                        <template x-for="(e, i) in events(30)" :key="i">
-                          <div class="mk-ev">
-                            <span class="mk-ev-ts" x-text="shortTs(e.ts)"></span>
-                            <span class="mk-ev-who" x-text="(e.player || '').toUpperCase()"></span>
-                            <span class="mk-ev-txt" x-text="e.text"></span>
-                          </div>
+              <!-- ── Setup -->
+              <template x-if="tab === 'setup'">
+                <div style="display:flex;flex-direction:column;gap:var(--space-4)">
+                  <div class="mk-card">
+                    <div class="mk-card-hdr"><b>Rules</b></div>
+                    <div class="mk-card-body">
+                      <!-- An option this pair cannot honour is shown in place, greyed, with its
+                           reason — not hidden, and not an enabled checkbox that does nothing. -->
+                      <div class="mk-opts">
+                        <template x-for="key in Object.keys(OPTION_LABELS)" :key="key">
+                          <label class="mk-opt"
+                                 :class="!optionState(key).ok ? 'off-unavailable' : (optionState(key).on ? 'on' : '')">
+                            <input type="checkbox" :checked="optionState(key).on && optionState(key).ok"
+                                   :disabled="!optionState(key).ok">
+                            <span x-text="OPTION_LABELS[key]"></span>
+                            <span class="mk-opt-why" x-show="!optionState(key).ok" x-text="optionState(key).why"></span>
+                          </label>
                         </template>
                       </div>
                     </div>
-                    <div class="mk-card">
-                      <div class="mk-card-hdr"><b>Quick actions</b></div>
-                      <div class="mk-card-body" style="display:flex;flex-wrap:wrap;gap:var(--space-2)">
-                        <button class="mk-btn">Attempts +1</button>
-                        <button class="mk-btn">Link by slot</button>
-                        <button class="mk-btn">Pin to stream</button>
-                        <button class="mk-btn" @click="debugOpen = true">Debug</button>
-                      </div>
-                    </div>
-                  </aside>
-                </div>
-              </div>
-            </template>
+                  </div>
 
-            <!-- The event feed lives in the dock on L3; L1 and L2 get it at the bottom. -->
-            <template x-if="layout !== 'l3'">
-              <div class="mk-content" style="padding-top:0">
-                <div class="mk-card">
-                  <div class="mk-card-hdr"><b>Recent events</b></div>
-                  <div class="mk-feed">
-                    <template x-for="(e, i) in events(25)" :key="i">
-                      <div class="mk-ev">
-                        <span class="mk-ev-ts" x-text="shortTs(e.ts)"></span>
-                        <span class="mk-ev-who" x-text="(e.player || '').toUpperCase()"></span>
-                        <span class="mk-ev-txt" x-text="e.text"></span>
+                  <!-- Promoted from a collapsed <details> at the bottom of the old manager's
+                       detail pane. The seeds recorded here are the only record of what each
+                       player is playing. -->
+                  <div class="mk-card">
+                    <div class="mk-card-hdr"><b>Randomized ROM pair</b></div>
+                    <div class="mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-3)">
+                      <div class="mk-opts">
+                        <label class="mk-field"><span>Randomizer jar</span><input type="text" placeholder="path to PokeRandoZX.jar"></label>
+                        <label class="mk-field"><span>Settings file</span><input type="text" placeholder="path to your .rnqs"></label>
+                        <label class="mk-field"><span>Player A clean ROM</span><input type="text" placeholder="path to a clean .gb"></label>
+                        <label class="mk-field"><span>Player B clean ROM</span><input type="text" placeholder="path to a clean .gb"></label>
                       </div>
-                    </template>
+                      <div><button class="mk-btn primary">Build randomized pair</button></div>
+                      <table class="mk-tbl">
+                        <thead><tr><th>Player</th><th>Cartridge</th><th>Seed</th><th>ROM SHA1</th></tr></thead>
+                        <tbody>
+                          <template x-for="pid in ['a', 'b']" :key="pid">
+                            <tr>
+                              <td x-text="pid.toUpperCase() + ' · ' + (player(pid).trainer_name || '—')"></td>
+                              <td><span class="mk-tag" x-text="player(pid).rom_type"></span></td>
+                              <td><code x-text="pid === 'a' ? '4815162342' : '9081726354'"></code></td>
+                              <td><code x-text="pid === 'a' ? 'a3f19c7d2e04' : 'c72b0e4a91f8'"></code></td>
+                            </tr>
+                          </template>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </template>
+              </template>
 
+            </div>
           </div>
         </template>
 
         <!-- ── BROADCAST — three former pages, one destination ───────────── -->
         <template x-if="dest === 'broadcast'">
           <div>
-            <header class="mk-runhdr">
-              <h1 class="mk-runname">Broadcast</h1>
-              <span class="mk-hdr-spacer"></span>
-              <span style="font-size:.72em;color:var(--c-dim)">was /stream + /twitch + /obs</span>
-            </header>
+            <header class="mk-runhdr"><h1 class="mk-runname">Broadcast</h1></header>
             <div class="mk-content mk-grid2">
               <div class="mk-card">
-                <div class="mk-card-hdr"><b>Overlays</b><span class="mk-hdr-spacer"></span><span>25 sources</span></div>
+                <div class="mk-card-hdr"><b>Overlays</b><span class="mk-hdr-spacer"></span><span x-text="'pinned: ' + run().name"></span></div>
                 <div class="mk-card-body">
-                  <p class="mk-note">Pinned run: <b x-text="run().name"></b> — overlay URLs stay stable across runs.</p>
-                  <div class="mk-opts" style="margin-top:var(--space-3)">
+                  <div class="mk-opts">
                     <template x-for="o in ['party-a','party-b','links','linked-party','deaths','encounters','badges-a','ticker']" :key="o">
                       <span class="mk-opt"><code x-text="'/stream/' + o"></code></span>
                     </template>
@@ -753,16 +442,14 @@
               </div>
               <div class="mk-card">
                 <div class="mk-card-hdr"><b>OBS scene triggers</b></div>
-                <div class="mk-card-body flush">
-                  <table class="mk-tbl">
-                    <thead><tr><th>Event</th><th>Player</th><th>Scene</th></tr></thead>
-                    <tbody>
-                      <template x-for="t in [['faint','any','Death Cam'],['capture','a','Player A Full'],['trainer_battle_start','any','Battle']]" :key="t[0]">
-                        <tr><td x-text="t[0]"></td><td x-text="t[1]"></td><td x-text="t[2]"></td></tr>
-                      </template>
-                    </tbody>
-                  </table>
-                </div>
+                <table class="mk-tbl">
+                  <thead><tr><th>Event</th><th>Player</th><th>Scene</th></tr></thead>
+                  <tbody>
+                    <template x-for="t in [['faint','any','Death Cam'],['capture','a','Player A Full'],['trainer_battle_start','any','Battle']]" :key="t[0]">
+                      <tr><td x-text="t[0]"></td><td x-text="t[1]"></td><td x-text="t[2]"></td></tr>
+                    </template>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -771,32 +458,20 @@
         <!-- ── TOOLS ────────────────────────────────────────────────────── -->
         <template x-if="dest === 'tools'">
           <div>
-            <header class="mk-runhdr">
-              <h1 class="mk-runname">Tools</h1>
-              <span class="mk-hdr-spacer"></span>
-              <span style="font-size:.72em;color:var(--c-dim)">was /patcher + the randomizer buried in the manager</span>
-            </header>
+            <header class="mk-runhdr"><h1 class="mk-runname">Tools</h1></header>
             <div class="mk-content mk-grid2">
               <div class="mk-card">
                 <div class="mk-card-hdr"><b>Companion ROM patch</b></div>
                 <div class="mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-2)">
-                  <p class="mk-note">
-                    Applies in your browser; the ROM never leaves this machine. Unlocks
-                    native messages, the in-game SOULLINK panel, and the trade scene.
-                    <b>Gen 1 needs no patch for Explode Mode or Rival Swap.</b>
-                  </p>
                   <label class="mk-field"><span>Base ROM</span><input type="file"></label>
                   <div><button class="mk-btn primary">Apply patch</button></div>
+                  <span class="mk-cap">Applies in your browser. The ROM never leaves this machine.</span>
                 </div>
               </div>
               <div class="mk-card">
                 <div class="mk-card-hdr"><b>Randomized pair</b></div>
                 <div class="mk-card-body">
-                  <p class="mk-note">
-                    Same settings, different seeds, one ROM per player. Lives here and in
-                    a run's Setup tab — it is a run-scoped step, not a global tool.
-                  </p>
-                  <div style="margin-top:var(--space-3)"><button class="mk-btn" @click="dest = 'run'; tab = 'setup'">Open in run setup</button></div>
+                  <button class="mk-btn" @click="dest = 'run'; tab = 'setup'">Open in run setup</button>
                 </div>
               </div>
             </div>
@@ -819,33 +494,26 @@
         <header class="mk-drawer-hdr">
           <b>Debug</b>
           <span class="mk-hdr-spacer"></span>
-          <span style="font-size:.7em;color:var(--c-dim)"><kbd>`</kbd> toggles · <kbd>Esc</kbd> closes</span>
+          <span class="mk-cap"><kbd>`</kbd> toggles · <kbd>Esc</kbd> closes</span>
           <button class="mk-btn" @click="debugOpen = false">Close</button>
         </header>
         <div class="mk-drawer-body">
-          <p class="mk-note">
-            A drawer, not a destination. It is opened during a run to unstick something and
-            closed again — it never deserved a permanent slot in the rail.
-          </p>
           <div class="mk-drawer-grid">
             <template x-for="a in ['Inject event','Queue command','Set Pokéballs','Set area state','Clear pending','Unlink','Revive','Rollback backup']" :key="a">
               <button class="mk-btn" x-text="a"></button>
             </template>
           </div>
           <div class="mk-card">
-            <div class="mk-card-hdr"><b>Raw state</b></div>
-            <div class="mk-card-body">
-              <table class="mk-tbl">
-                <tbody>
-                  <tr><td>game_id</td><td><code x-text="gameId('a') + ' / ' + gameId('b')"></code></td></tr>
-                  <tr><td>rom_type</td><td><code x-text="player('a').rom_type + ' / ' + player('b').rom_type"></code></td></tr>
-                  <tr><td>links</td><td x-text="links().length"></td></tr>
-                  <tr><td>dead zones</td><td x-text="deadZones().join(', ') || '—'"></td></tr>
-                  <tr><td>queued cmds</td><td x-text="player('a').queued + ' / ' + player('b').queued"></td></tr>
-                  <tr><td>save_failed</td><td x-text="status && status.save_failed ? status.save_failed : 'no'"></td></tr>
-                </tbody>
-              </table>
-            </div>
+            <table class="mk-tbl">
+              <tbody>
+                <tr><td>game_id</td><td><code x-text="gameId('a') + ' / ' + gameId('b')"></code></td></tr>
+                <tr><td>rom_type</td><td><code x-text="player('a').rom_type + ' / ' + player('b').rom_type"></code></td></tr>
+                <tr><td>links</td><td x-text="links().length"></td></tr>
+                <tr><td>dead zones</td><td x-text="deadZones().join(', ') || '—'"></td></tr>
+                <tr><td>queued cmds</td><td x-text="player('a').queued + ' / ' + player('b').queued"></td></tr>
+                <tr><td>save_failed</td><td x-text="status && status.save_failed ? status.save_failed : 'no'"></td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </aside>
@@ -855,11 +523,6 @@
   <!-- The dashed box is the only part of this page that would not ship. -->
   <details class="mk-ctl" open>
     <summary>Mockup controls</summary>
-    <span class="mk-ctl-lbl">Layout</span>
-    <button class="mk-chip" :class="layout === 'l1' ? 'active' : ''" @click="layout = 'l1'">L1 Workspace</button>
-    <button class="mk-chip" :class="layout === 'l2' ? 'active' : ''" @click="layout = 'l2'">L2 Split Board</button>
-    <button class="mk-chip" :class="layout === 'l3' ? 'active' : ''" @click="layout = 'l3'">L3 Deck</button>
-
     <span class="mk-ctl-lbl">Cartridge</span>
     <button class="mk-chip" :class="gen === 'gen3' ? 'active' : ''" @click="loadGen('gen3')">Gen 3 RR</button>
     <button class="mk-chip" :class="gen === 'gen1' ? 'active' : ''" @click="loadGen('gen1')">Gen 1 R/B</button>
@@ -877,8 +540,8 @@
     <span class="mk-ctl-lbl">Theme</span>
     <template x-for="t in THEMES" :key="t[0]">
       <button class="mk-chip sw" :class="theme === t[0] ? 'active' : ''" @click="applyTheme(t[0])" :title="t[1]">
-    <span class="sw-dot" :style="'background:' + t[2]"></span>
-    <span x-text="t[1]"></span>
+        <span class="sw-dot" :style="'background:' + t[2]"></span>
+        <span x-text="t[1]"></span>
       </button>
     </template>
   </details>

@@ -43,8 +43,18 @@ the pinned run at `server/manager.py:878-880` and needs only to take a run id.
 
 ## 3. Layouts
 
-Track A builds all three. Track B builds **L1 only** — it exists to answer "is an SPA
-better here?", and layout exploration is framework-independent.
+Three were sketched and built; one survived. Track A now ships **L1 with L2's board as
+its Links tab**, and L3 is gone — the reasoning is in §9. The three are kept below as the
+record of what was tried. Track B builds L1 only — it exists to answer "is an SPA better
+here?", and layout exploration is framework-independent.
+
+The chrome rule that came out of streamlining it: **nothing is labelled twice.** The
+player chip under the run name is the header for that player's column, so the cards
+beneath it carry none; a party table has no `<thead>`, because sprites and HP bars do not
+need captions; and every card header that captioned something the chip already said —
+"Player A · Alice", "Encounters here · Route 22 · from firered_rr", "Recent events" — is
+gone. Card headers survive only on Setup, Broadcast and Tools, where a page holds several
+distinct things that need telling apart.
 
 ### L1 "Workspace" — the recommended baseline
 
@@ -249,10 +259,9 @@ server/static/mockups/
   b/                  Track B — built Vite output, committed
 ```
 
-Track A's three layouts live in **one page**, switched without a reload, rather than in
-three files. They differ in arrangement and not in what they know, so they share one data
-model and one stylesheet; and comparing arrangements is the whole exercise, which putting
-each behind a page load would only get in the way of.
+Track A is one page and, after streamlining, one layout. The earlier draft switched
+between three without a reload; the board became the Links tab and the deck was dropped
+(§9), so the switcher went with them.
 
 Note the URLs need the explicit `index.html`. aiohttp's `add_static` is mounted without
 `show_index` (`server/templating.py:142`), so `/static/mockups/` itself returns 403.

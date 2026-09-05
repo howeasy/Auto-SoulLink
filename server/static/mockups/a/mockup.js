@@ -1,7 +1,8 @@
-/* mockup.js — Track A data model for the merged SLink UI mockups.
+/* mockup.js — Track A data model for the merged SLink UI mockup.
  *
- * One Alpine component drives all three layouts. The layouts differ in ARRANGEMENT, not
- * in what they know, so they share this model completely and diverge only in markup.
+ * One Alpine component drives the page. It used to drive three layouts; the board became
+ * the Links tab and the deck was dropped, and the model did not change, which is the
+ * point — arrangement was never what varied.
  *
  * Every value comes from a fixture generated off the running server (see
  * docs/ui_mockup_brief.md §7). Nothing here invents data. Where the mockup shows a
@@ -94,10 +95,9 @@ const OPTION_LABELS = {
   pc_trade_npc: 'PC Trade NPC',
 };
 
-function mockup(initialLayout) {
+function mockup() {
   return {
     // ── state ────────────────────────────────────────────────────────────
-    layout: initialLayout || 'l1',
     gen: 'gen3',
     dest: 'run',
     tab: 'live',

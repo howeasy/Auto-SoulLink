@@ -1,4 +1,4 @@
-/* mockup.css — Track A layout shell for the merged SLink UI mockups.
+/* mockup.css — Track A layout shell for the merged SLink UI mockup.
  *
  * Loaded AFTER /static/slink.css, and it redefines none of slink.css's tokens: every
  * colour, space and size below is a var() read of the design system that already ships.
@@ -17,7 +17,6 @@
   --density: 1;
 
   --mk-rail: calc(var(--scale-step) * 8.2);
-  --mk-rail-icon: calc(var(--scale-step) * 2.4);
   --mk-radius: 8px;
   --mk-row-pad: calc(var(--space-2) * var(--density));
 }
@@ -40,24 +39,18 @@ body.mk-body-root {
   align-items: start;
 }
 
-/* L3 collapses the rail to icons — the deck wants every pixel for cards. */
-.mk.mk-l3 { grid-template-columns: var(--mk-rail-icon) minmax(0, 1fr); }
-.mk.mk-l3 .mk-rail-label,
-.mk.mk-l3 .mk-rail-brandtext,
-.mk.mk-l3 .mk-rail-section { display: none; }
-.mk.mk-l3 .mk-rail-item { justify-content: center; padding-inline: 0; }
-
 /* ── Rail ──────────────────────────────────────────────────────────────── */
 
 .mk-rail {
   position: sticky;
   top: 0;
   align-self: start;
+  box-sizing: border-box;
   height: 100vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-1);
   padding: var(--space-3) var(--space-2);
   background: color-mix(in srgb, var(--c-card) 60%, var(--c-bg));
   border-right: 1px solid var(--c-edge);
@@ -67,20 +60,16 @@ body.mk-body-root {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding-inline: var(--space-2);
+  padding: 0 var(--space-2) var(--space-2);
 }
 .mk-rail-brand svg { width: calc(var(--scale-step) * 1.1); height: calc(var(--scale-step) * 1.1); flex: none; }
 .mk-rail-brandtext { display: flex; flex-direction: column; line-height: 1.05; min-width: 0; }
 .mk-rail-brandtext b { color: var(--c-brand); font-size: .95em; letter-spacing: .04em; }
 .mk-rail-brandtext span { color: var(--c-dim); font-size: .68em; }
 
-.mk-rail-section {
-  padding: 0 var(--space-2);
-  font-size: .62em;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--c-dim);
-}
+/* A rule, not a caption. "Runs" and "Go to" were labelling groups whose contents
+ * already say what they are. */
+.mk-rail-sep { border: none; border-top: 1px solid var(--c-sep); margin: var(--space-2) var(--space-2); }
 
 .mk-rail-item {
   display: flex;
@@ -98,7 +87,6 @@ body.mk-body-root {
   cursor: pointer;
 }
 .mk-rail-item:hover { background: var(--c-card); }
-.mk-rail-item[aria-current="page"],
 .mk-rail-item.active {
   background: color-mix(in srgb, var(--c-brand) 16%, transparent);
   border-color: color-mix(in srgb, var(--c-brand) 45%, transparent);
@@ -116,18 +104,14 @@ body.mk-body-root {
 .mk-dot.stopped  { background: var(--c-dim); }
 .mk-dot.archived { background: none; border: 1px solid var(--c-dim); }
 
-
 /* ── Mockup controls — the strip that only exists because this is a mockup ──
  *
- * Deliberately OUTSIDE the rail. It is not part of the product being mocked, and putting
- * it in the rail meant L3 — which collapses the rail to icons — squashed it into
- * unreadable stumps, including the control you switch back out of L3 with.
- */
+ * Deliberately OUTSIDE the rail: it is not part of the product being mocked. Wide enough
+ * to lay its chips out several per row, because at rail width it grew tall enough to sit
+ * on top of the rail's own nav. */
 
 .mk-ctl {
   position: fixed; left: var(--space-3); bottom: var(--space-3); z-index: 30;
-  /* Wide enough to lay the chips out several per row. At rail width they stacked one
-   * per row and the panel grew tall enough to sit on top of the rail's own nav. */
   width: min(calc(var(--scale-step) * 15), 44vw);
   max-height: 46vh; overflow-y: auto;
   display: flex; flex-wrap: wrap; gap: var(--space-1);
@@ -141,10 +125,6 @@ body.mk-body-root {
   width: 100%; cursor: pointer; list-style: none;
   font-size: .62em; letter-spacing: .14em; text-transform: uppercase; color: var(--c-brand);
 }
-/* The strip floats over the rail's lower half, which is empty: every rail item now sits
- * in the top group. An earlier attempt reserved space with padding-bottom instead, and
- * reserved nothing -- .mk-rail is content-box, so `height:100vh` plus padding made the
- * rail TALLER than the viewport and just extended its scroll area. */
 .mk-ctl summary::-webkit-details-marker { display: none; }
 .mk-ctl:not([open]) { padding-bottom: var(--space-2); }
 .mk-ctl-lbl {
@@ -182,6 +162,8 @@ body.mk-body-root {
 .mk-pill.stopped  { color: var(--c-dim); }
 .mk-pill.archived { color: var(--c-dim); opacity: .7; }
 .mk-hdr-spacer { flex: 1 1 auto; }
+.mk-attempt { font-size: .72em; color: var(--c-dim); }
+.mk-attempt b { color: var(--c-gold); font-weight: 400; }
 
 .mk-btn {
   display: inline-flex; align-items: center; gap: 5px;
@@ -192,11 +174,10 @@ body.mk-body-root {
 }
 .mk-btn:hover { border-color: var(--c-brand); }
 .mk-btn.primary { border-color: var(--c-brand); color: var(--c-brand); }
-.mk-btn svg { width: 1em; height: 1em; }
 
-/* Player chip — the run header's most important element. It carries the things that
- * differ per player, which on a randomized-pair run is nearly everything: which
- * cartridge, which seed, which area, how many badges. */
+/* Player chip — the header for everything in that player's column. It carries the things
+ * that differ per player, which on a randomized-pair run is nearly everything. Nothing
+ * beneath it repeats what it says. */
 .mk-pchips { display: flex; flex-wrap: wrap; gap: var(--space-3); width: 100%; }
 .mk-pchip {
   flex: 1 1 clamp(240px, 30%, 420px);
@@ -217,7 +198,7 @@ body.mk-body-root {
 }
 .mk-pchip-name { font-size: .9em; }
 .mk-pchip-game { color: var(--c-info); font-size: .68em; }
-.mk-pchip-meta { grid-column: 2 / span 2; display: flex; flex-wrap: wrap; gap: var(--space-2); font-size: .68em; color: var(--c-dim); }
+.mk-pchip-meta { grid-column: 2 / span 2; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: .68em; color: var(--c-dim); }
 .mk-pchip-meta b { color: var(--c-txt); font-weight: 400; }
 .mk-pchip-badges { grid-row: 1 / span 2; align-self: center; display: flex; gap: 2px; }
 .mk-badge-pip { width: 7px; height: 7px; border-radius: 2px; border: 1px solid var(--c-edge); }
@@ -250,24 +231,26 @@ body.mk-body-root {
   background: var(--c-card);
   overflow: hidden;
 }
+/* Kept only where a page holds several distinct things that need telling apart (Setup,
+ * Broadcast, Tools). A card that sits under a player chip has no header. */
 .mk-card-hdr {
   display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--c-sep);
-  font-size: .74em; letter-spacing: .12em; text-transform: uppercase; color: var(--c-dim);
+  font-size: .74em; color: var(--c-dim);
 }
-.mk-card-hdr b { color: var(--c-txt); letter-spacing: 0; text-transform: none; font-size: 1.16em; font-weight: 400; }
+.mk-card-hdr b { color: var(--c-txt); font-size: 1.16em; font-weight: 400; }
 .mk-card-hdr .mk-hdr-spacer { flex: 1; }
 .mk-card-body { padding: var(--space-3); }
-.mk-card-body.flush { padding: 0; }
+
+/* A muted caption: the one label a section is allowed. */
+.mk-cap { font-size: .68em; letter-spacing: .06em; color: var(--c-dim); }
 
 .mk-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: var(--space-4); }
 
 table.mk-tbl { width: 100%; border-collapse: collapse; font-size: .78em; }
 .mk-tbl th {
-  position: sticky; top: 0; z-index: 1;
   padding: var(--space-2) var(--space-3);
-  background: var(--c-sticky);
   border-bottom: 1px solid var(--c-edge);
   text-align: left; font-weight: 400;
   font-size: .82em; letter-spacing: .1em; text-transform: uppercase; color: var(--c-dim);
@@ -277,19 +260,30 @@ table.mk-tbl { width: 100%; border-collapse: collapse; font-size: .78em; }
 .mk-tbl tbody tr:hover { background: color-mix(in srgb, var(--c-txt) 4%, transparent); }
 .mk-num { text-align: right; font-variant-numeric: tabular-nums; }
 
+/* The party table has no <thead>. Sprites, HP bars and a partner's name do not need a
+ * caption saying which is which; the ability column reads as words. Widths are pinned
+ * so the two players' tables line up across the gap. */
+.mk-party .mk-cell-hp   { width: 1%; }
+.mk-party .mk-cell-abil { width: 22%; color: var(--c-dim); white-space: nowrap; }
+.mk-party .mk-cell-item { width: 1%; text-align: center; }
+.mk-party .mk-cell-link { width: 24%; }
+
+/* The foe sits as the first row of the same table, tinted, rather than as its own card
+ * with its own two-line header. */
+.mk-row-battle td { background: color-mix(in srgb, var(--c-dead) 9%, transparent); }
+.mk-vs { color: var(--c-dead); font-size: .8em; letter-spacing: .08em; margin-right: 4px; }
+
 /* ── Mon cell ──────────────────────────────────────────────────────────── */
 
 .mk-mon { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 
 /* Size ONLY the bare Gen 3 sprite. `.mk-mon img` also matched Gen 1's, which is a 52px
  * PokeAPI image sitting at margin:-6px inside a 40px overflow-hidden span — a deliberate
- * crop. Forcing that inner image to 40px leaves the negative margin trimming it instead
- * of centring it, so the sprite came out clipped rather than merely small. */
+ * crop. Forcing that inner image to 40px leaves the negative margin trimming it. */
 .mk-mon img.mon-sprite {
   width: var(--size-sprite-table); height: var(--size-sprite-table);
   object-fit: contain; image-rendering: pixelated;
 }
-/* The wrapper span, whichever generation is inside it. */
 .mk-mon > span:first-child { flex: none; line-height: 0; }
 .mk-mon-txt { min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
 .mk-mon-nick { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -299,8 +293,6 @@ table.mk-tbl { width: 100%; border-collapse: collapse; font-size: .78em; }
 
 .mk-hp { display: flex; flex-direction: column; gap: 3px; min-width: calc(var(--scale-step) * 3); }
 .mk-hp-num { font-size: .82em; font-variant-numeric: tabular-nums; }
-/* Both are <span>, so they need display:block — width and height do nothing on an inline
- * box, and the bar renders as a flat empty track that reads as "no data". */
 .mk-hp-bar {
   display: block;
   height: 5px; border-radius: 3px;
@@ -311,25 +303,37 @@ table.mk-tbl { width: 100%; border-collapse: collapse; font-size: .78em; }
 .mk-hp-fill.mid { background: var(--c-hp-mid); }
 .mk-hp-fill.low { background: var(--c-hp-low); }
 
+/* The partner's name, coloured by the state of the bond. Not a boxed tag — twelve boxes
+ * in a column was the loudest thing on the page, for the least new information. */
+.mk-partner { font-size: .9em; }
+.mk-partner.alive { color: var(--c-alive); }
+.mk-partner.dead, .mk-partner.memorial { color: var(--c-dead); text-decoration: line-through; }
+.mk-partner.none { color: var(--c-dim); font-style: italic; }
+
+.mk-item { color: var(--c-gold); font-size: .8em; cursor: help; }
+
 .mk-tag {
   display: inline-block; padding: 1px 6px; border-radius: 3px;
   font-size: .68em; letter-spacing: .06em;
   border: 1px solid var(--c-edge); color: var(--c-dim);
 }
-.mk-tag.item { color: var(--c-gold); border-color: color-mix(in srgb, var(--c-gold) 45%, transparent); }
 .mk-tag.status { color: var(--c-pend); border-color: color-mix(in srgb, var(--c-pend) 45%, transparent); }
-.mk-tag.alive { color: var(--c-alive); border-color: color-mix(in srgb, var(--c-alive) 45%, transparent); }
 .mk-tag.dead { color: var(--c-dead); border-color: color-mix(in srgb, var(--c-dead) 45%, transparent); }
-.mk-tag.pending { color: var(--c-pend); border-color: color-mix(in srgb, var(--c-pend) 45%, transparent); }
 .mk-tag.area { color: var(--c-info); border-color: color-mix(in srgb, var(--c-info) 45%, transparent); }
-
-/* A capability the run does not have. Shown, struck through, with the reason — the point
- * of the merged UI is that you can see what is off AND why without hunting a tooltip. */
-.mk-tag.unavailable { opacity: .5; text-decoration: line-through; }
 
 .mk-empty { padding: var(--space-5); text-align: center; color: var(--c-dim); font-size: .82em; }
 
-/* ── L2 Split Board ────────────────────────────────────────────────────── */
+/* Wild encounters, as a footer of the player's card. One caption, then a line per method. */
+.mk-wild {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border-top: 1px solid var(--c-sep);
+  font-size: .76em;
+}
+.mk-wild-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2); align-items: baseline; }
+.mk-wild-row .mk-tag { white-space: nowrap; }
+
+/* ── The board (Links tab) ─────────────────────────────────────────────── */
 
 .mk-board {
   display: grid;
@@ -337,12 +341,13 @@ table.mk-tbl { width: 100%; border-collapse: collapse; font-size: .78em; }
   gap: 0 var(--space-3);
   align-items: stretch;
 }
-.mk-board-side { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.mk-board-side { display: flex; flex-direction: column; min-width: 0; }
 .mk-board-side.b { direction: rtl; }
 .mk-board-side.b > * { direction: ltr; }
+.mk-board-mon { min-height: calc(var(--scale-step) * 1.9); padding: var(--mk-row-pad) 0; }
 
 /* The spine is the soul link made visible: one cell per pair, carrying the area the pair
- * was caught in and the state of the bond. It is the reason this layout exists. */
+ * was caught in and the state of the bond. */
 .mk-spine {
   display: flex; flex-direction: column;
   width: calc(var(--scale-step) * 5.2);
@@ -353,55 +358,18 @@ table.mk-tbl { width: 100%; border-collapse: collapse; font-size: .78em; }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 2px;
   padding: var(--mk-row-pad) 2px;
-  border-bottom: 1px solid var(--c-sep);
   text-align: center;
 }
-.mk-spine-cell:last-child { border-bottom: none; }
 .mk-spine-area { font-size: .62em; color: var(--c-info); line-height: 1.1; }
 .mk-spine-bond { font-size: .9em; letter-spacing: .1em; }
 .mk-spine-bond.alive { color: var(--c-alive); }
-.mk-spine-bond.dead { color: var(--c-dead); }
+.mk-spine-bond.dead, .mk-spine-bond.memorial { color: var(--c-dead); }
 .mk-spine-bond.pending { color: var(--c-pend); }
 
 @media (max-width: 900px) {
   .mk-board { grid-template-columns: minmax(0, 1fr); }
   .mk-spine { flex-direction: row; width: auto; border-inline: none; border-block: 1px solid var(--c-sep); }
-  .mk-spine-cell { border-bottom: none; border-right: 1px solid var(--c-sep); }
   .mk-board-side.b { direction: ltr; }
-}
-
-/* ── L3 Deck ───────────────────────────────────────────────────────────── */
-
-.mk-situation {
-  position: sticky; top: 0; z-index: 3;
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
-  background: var(--c-sticky);
-  border-bottom: 1px solid var(--c-edge);
-  font-size: .76em;
-}
-.mk-sit-item { display: flex; align-items: center; gap: 5px; color: var(--c-dim); }
-.mk-sit-item b { color: var(--c-txt); font-weight: 400; }
-
-.mk-deck { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; }
-.mk-deck-canvas {
-  padding: var(--space-4);
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr));
-  gap: var(--space-3);
-  align-content: start;
-}
-.mk-deck-dock {
-  position: sticky; top: calc(var(--scale-step) * 2);
-  width: calc(var(--scale-step) * 9);
-  max-height: calc(100vh - var(--scale-step) * 2);
-  overflow-y: auto;
-  padding: var(--space-3) var(--space-3) var(--space-3) 0;
-  display: flex; flex-direction: column; gap: var(--space-3);
-}
-@media (max-width: 1100px) {
-  .mk-deck { grid-template-columns: minmax(0, 1fr); }
-  .mk-deck-dock { position: static; width: auto; padding: 0 var(--space-4) var(--space-4); }
 }
 
 /* ── Event feed ────────────────────────────────────────────────────────── */
@@ -471,5 +439,4 @@ kbd {
   background: color-mix(in srgb, var(--c-info) 8%, transparent);
   font-size: .76em; color: var(--c-dim);
 }
-.mk-note b { color: var(--c-txt); font-weight: 400; }
 code { font-family: var(--font-mono); font-size: .92em; color: var(--c-link); }
