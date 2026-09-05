@@ -283,20 +283,10 @@ function mockup() {
       return this.party(pid).find((x) => x.active) || null;
     },
     activeKey(pid) { const m = this.activeMon(pid); return m ? m.key : null; },
-    anyBattle() { return !!(this.battle('a').in_battle || this.battle('b').in_battle); },
-
-    /* The partner of the mon this player has out. Battle is a player state, not a pair
-     * state: Alice can have Nidi out while Bob has Embo out, in two unrelated fights. What
-     * the soul link makes true is that when Embo is fighting, Sparky -- on the other
-     * cartridge, whatever Alice is doing -- is at stake. This is that half. */
-    atStake(pid) {
-      const key = this.activeKey(pid);
-      if (!key) return null;
-      const other = pid === 'a' ? 'b' : 'a';
-      const row = this.pairs().find((r) => r[pid] && r[pid].key === key);
-      if (!row || !row[other]) return null;
-      return { ...row[other], owner: this.player(other).trainer_name || other.toUpperCase(), area: row.areaName };
-    },
+    /* Who this player is fighting. Drawn beneath their own mon in their own half of the
+     * pair row -- position says whose mon, nesting says whose foe -- so there is no
+     * battle zone and no "you" label to get wrong. */
+    foes(pid) { return this.battle(pid).enemy_party || []; },
     wild(pid) { return Object.entries(this.player(pid).encounter_table || {}); },
     connected(pid) { return !!this.player(pid).connected; },
     /* Has this player ever said hello? Distinct from connected: a dropped client's last
