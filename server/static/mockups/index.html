@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SLink UI mockups</title>
+  <link rel="stylesheet" href="/static/slink.css">
+  <link rel="stylesheet" href="/static/themes/default.css" id="slink-theme">
+  <style>
+    body { margin: 0; padding: var(--space-6) var(--space-5); font-family: var(--font-ui); color: var(--c-txt); }
+    .wrap { max-width: var(--size-content-cap); margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-5); }
+    h1 { margin: 0; color: var(--c-brand); font-size: 1.7em; }
+    h2 { margin: 0 0 var(--space-2); font-size: 1em; }
+    p { margin: 0 0 var(--space-2); line-height: 1.55; font-size: .84em; color: var(--c-dim); }
+    p b, li b { color: var(--c-txt); font-weight: 400; }
+    .lede { font-size: .95em; color: var(--c-txt); max-width: 62ch; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: var(--space-4); }
+    .card {
+      display: flex; flex-direction: column; gap: var(--space-2);
+      padding: var(--space-4);
+      border: 1px solid var(--c-edge); border-radius: 10px; background: var(--c-card);
+      text-decoration: none; color: inherit;
+    }
+    a.card:hover { border-color: var(--c-brand); }
+    .card .tag {
+      align-self: flex-start; padding: 2px 8px; border-radius: 999px;
+      border: 1px solid var(--c-edge); font-size: .62em;
+      letter-spacing: .12em; text-transform: uppercase; color: var(--c-dim);
+    }
+    .card.pending { opacity: .55; }
+    ul { margin: 0; padding-left: 1.1em; font-size: .82em; color: var(--c-dim); line-height: 1.6; }
+    table { width: 100%; border-collapse: collapse; font-size: .8em; }
+    th, td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--c-sep); text-align: left; }
+    th { color: var(--c-dim); font-weight: 400; font-size: .85em; letter-spacing: .1em; text-transform: uppercase; }
+    .yes { color: var(--c-alive); } .no { color: var(--c-dead); }
+    code { font-family: var(--font-mono); color: var(--c-link); font-size: .92em; }
+  </style>
+</head>
+<body class="theme-default">
+<div class="wrap">
+
+  <header>
+    <h1>SLink UI mockups</h1>
+    <p class="lede">
+      The browser UI is two apps on two ports, built two different ways, with nine
+      destinations between them. These mockups merge the Run Manager and the run dashboard
+      into one workspace and collapse those nine down to three. Same design, built twice —
+      so the framework choice can be judged on evidence rather than on taste.
+    </p>
+  </header>
+
+  <div class="cards">
+    <a class="card" href="a/index.html">
+      <span class="tag">Track A</span>
+      <h2>Jinja + Alpine + htmx</h2>
+      <p>The stack the project already vendors. No build step, no new dependency, works
+      offline and inside an OBS browser source.</p>
+      <ul>
+        <li>All three layouts — <b>L1 Workspace</b>, <b>L2 Split Board</b>, <b>L3 Deck</b></li>
+        <li>Gen 3 ↔ Gen 1 toggle, all nine themes, comfortable/compact density</li>
+        <li>Debug as a drawer on <code>`</code>, not a rail item</li>
+      </ul>
+    </a>
+
+    <a class="card" href="b/index.html">
+      <span class="tag">Track B</span>
+      <h2>Vite + Svelte SPA</h2>
+      <p>The same L1 Workspace layout rebuilt as a client app over <code>/api/status</code>,
+      to see what a component framework and a build step would actually buy here.</p>
+      <ul>
+        <li>L1 only — the comparison is about the framework, not the layout</li>
+        <li>Built output committed, so it runs without Node installed</li>
+      </ul>
+    </a>
+  </div>
+
+  <section>
+    <h2>What changes</h2>
+    <table>
+      <thead><tr><th>Today</th><th>Proposed</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Manager (:8090) + Status (:8081+)</td><td><b>Run</b></td><td>The manager already embeds the dashboard in an iframe. One origin, run list as the rail.</td></tr>
+        <tr><td>Memorial</td><td>a tab inside <b>Run</b></td><td>It is run data, not a separate application.</td></tr>
+        <tr><td>Stream + Twitch + OBS</td><td><b>Broadcast</b></td><td>Three pages that are all "what the audience sees".</td></tr>
+        <tr><td>Patcher + randomizer</td><td><b>Tools</b> / run Setup</td><td>Run setup that is not live state. The randomizer stops being a collapsed detail.</td></tr>
+        <tr><td>Debug</td><td>a drawer</td><td>Opened to unstick something, then closed. Never needed a permanent rail slot.</td></tr>
+        <tr><td>Calc</td><td>unchanged, external</td><td>Vendored third-party app with its own chrome.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Prepared for Gen 1</h2>
+    <p>
+      Gen 1 is the next thoroughly-tested cartridge and it breaks the last shared
+      assumption: with randomized ROM pairs the two players are not playing the same
+      content as each other. Both tracks drive panel visibility off the adapters rather
+      than explaining differences in tooltip prose — <b>a panel a cartridge does not have
+      is absent, not empty</b>. Toggle the cartridge in either mockup and watch columns
+      disappear.
+    </p>
+    <table>
+      <thead><tr><th>rom_type</th><th>Abilities</th><th>Explode Mode</th><th>Native panel</th><th>Badges</th></tr></thead>
+      <tbody>
+        <tr><td><code>red</code></td><td class="no">✗</td><td class="yes">✓ no patch</td><td class="no">✗</td><td>8</td></tr>
+        <tr><td><code>crystal</code></td><td class="no">✗</td><td class="no">✗</td><td class="no">✗</td><td>16</td></tr>
+        <tr><td><code>firered</code></td><td class="yes">✓</td><td class="no">✗</td><td class="no">✗</td><td>8</td></tr>
+        <tr><td><code>firered_rr</code></td><td class="yes">✓</td><td class="yes">✓ patch</td><td class="yes">✓</td><td>8</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:var(--space-2)">
+      Note that <code>firered</code> and <code>firered_rr</code> differ on two rows.
+      Capability is a property of the cartridge in front of the player, not of the
+      generation — which is why it is read per <code>rom_type</code>.
+    </p>
+  </section>
+
+  <section>
+    <h2>The data is real</h2>
+    <p>
+      Every number in these mockups came out of a running server. The fixtures in
+      <code>fixtures/</code> were captured from <code>/api/status</code> after
+      <code>tools/inject_full_mocks.py</code>, once for Radical Red and once for Red/Blue,
+      and <code>capabilities.json</code> is read straight off the adapters by
+      <code>tools/gen_ui_capabilities.py</code>. Nothing is hand-written, because a
+      hand-written fixture drifts and then the mockup is designing for a payload that does
+      not exist. <code>tests/unit/test_mockup_fixtures.py</code> pins them to
+      <code>_build_status_dict</code>.
+    </p>
+    <p>Full spec: <code>docs/ui_mockup_brief.md</code>.</p>
+  </section>
+
+</div>
+</body>
+</html>

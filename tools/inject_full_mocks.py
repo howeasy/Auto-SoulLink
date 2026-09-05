@@ -143,14 +143,22 @@ GEN1_BOXED_B = (54, "5E6F:7B0B:36", "Quack",   10, 0)
 
 
 def _rom_type(player: str) -> str:
-    """Both players are on the same generation; Gen 3 deliberately differs by version so
-    the two player cards show different game labels."""
+    """What each player's client reports in its hello.
+
+    Must be a string _ROM_TYPE_TO_GAME_ID knows: an unrecognised rom_type leaves the
+    server on whichever adapter it already had, silently, and the run keeps going under
+    the wrong generation. Gen 1 was reporting "gen1_rby" -- an adapter game_id, which no
+    client ever sends -- and produced Gen 3 abilities and genders on Red/Blue mons.
+
+    Gen 1 uses Red and Blue, which is a real pair and exercises two different versions in
+    one run. Gen 3 uses firered_rr on BOTH sides, because Radical Red is a FireRed hack
+    and there is no LeafGreen build of it: "leafgreen_rr", which this script used to send,
+    is not a cartridge that exists. It is routed nowhere, though server.py:3397 does carry
+    a display label for it.
+    """
     if _is_gen1():
-        # The cartridge name, not the adapter's game_id: _ROM_TYPE_TO_GAME_ID keys on what
-        # the Lua client actually sends in its hello, and an unrecognised string leaves the
-        # server on whichever adapter it already had -- silently, and here that was Gen 3.
         return "red" if player == "a" else "blue"
-    return "firered_rr" if player == "a" else "leafgreen_rr"
+    return "firered_rr"
 
 
 def _pairs():

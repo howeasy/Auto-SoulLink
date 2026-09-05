@@ -26,22 +26,21 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from server.adapters import game_id_for_rom_type, get_adapter  # noqa: E402
+from server.adapters import _ROM_TYPE_TO_GAME_ID, get_adapter  # noqa: E402
 
-# The rom_types to report on, keyed by the label the UI shows. Capabilities are a
-# property of the CARTRIDGE, not of the generation: Gen 3's Explode Mode and native info
-# panel both come from the Radical Red companion patch, so vanilla FireRed and RR answer
-# differently through the same adapter class. Probing `get_adapter(game_id)` with no
-# rom_type asks a default-constructed instance, which answers "no" to both and would have
-# shipped a fixture claiming RR cannot explode.
-ROM_TYPES = [
-    "red",
-    "crystal",
-    "firered",
-    "firered_rr",
-    "heartgold",
-    "pokemon_black",
-]
+# EVERY rom_type the server will accept, taken from the routing table itself rather than
+# from a list kept here by hand. A curated list is one Soul Link run away from being
+# wrong: the two players are on different VERSIONS of the same game, so a fixture holding
+# "firered_rr" and not "leafgreen_rr" gives player B no capabilities at all -- which shows
+# up as player B mysteriously losing their Ability column, and reads as a layout bug
+# rather than as missing data.
+#
+# Capability is a property of the CARTRIDGE, not of the generation: Explode Mode and the
+# native info panel come from the Radical Red companion patch, so `firered` and
+# `firered_rr` answer differently through the same adapter class. Probing
+# `get_adapter(game_id)` with no rom_type asks a default-constructed instance, which
+# answers "no" to both and would ship a fixture claiming RR cannot explode.
+ROM_TYPES = sorted(_ROM_TYPE_TO_GAME_ID)
 
 # Adapter members the UI switches on. Each is (json key, member name, kind) where kind
 # says how to read it: a plain attribute, a no-argument call, or a call taking rom_type.
@@ -76,7 +75,7 @@ def probe(adapter, name: str, kind: str):
 def main() -> int:
     out = {}
     for rom_type in ROM_TYPES:
-        game_id = game_id_for_rom_type(rom_type)
+        game_id = _ROM_TYPE_TO_GAME_ID[rom_type]
         adapter = get_adapter(game_id, is_rr=rom_type.endswith("_rr"), rom_type=rom_type)
         caps = {key: probe(adapter, name, kind) for key, name, kind in PROBES}
         caps["game_id"] = game_id
