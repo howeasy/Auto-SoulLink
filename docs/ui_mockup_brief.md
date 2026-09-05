@@ -41,57 +41,38 @@ One origin. The Manager becomes the only UI server; per-run servers keep serving
 overlays. The UI reaches a run's state through a per-run proxy, which already exists for
 the pinned run at `server/manager.py:878-880` and needs only to take a run id.
 
-## 3. Layouts
+## 3. Layout — the board is the page
 
-Three were sketched and built; one survived. Track A now ships **L1 with L2's board as
-its Links tab**, and L3 is gone — the reasoning is in §9. The three are kept below as the
-record of what was tried. Track B builds L1 only — it exists to answer "is an SPA better
-here?", and layout exploration is framework-independent.
+Three layouts were sketched (they are kept in git history: `git show 7212e9f^:...`), and
+what survived is none of them exactly. Two rounds of looking at the result settled it:
 
-The chrome rule that came out of streamlining it: **nothing is labelled twice.** The
-player chip under the run name is the header for that player's column, so the cards
-beneath it carry none; a party table has no `<thead>`, because sprites and HP bars do not
-need captions; and every card header that captioned something the chip already said —
-"Player A · Alice", "Encounters here · Route 22 · from firered_rr", "Recent events" — is
-gone. Card headers survive only on Setup, Broadcast and Tools, where a page holds several
-distinct things that need telling apart.
+- **The pair is the unit.** A soul link binds two mons across two cartridges, and both die
+  if either faints. The first drafts showed each player's party as its own table with a
+  "linked to" footnote, which is the data the server hands back — the bond in `links`,
+  the live HP in each `party_details` — but not the thing the player thinks about. So
+  the board joins them: **one row per pair**, A's half, the bond, B's half, both HP bars
+  facing each other across it, the row tinted by the pair's *weaker* half (`min` of the
+  two HP%, at risk under 35%). Rows group by state — waiting for the other half · in
+  party · split (one half boxed, which the sync rules care about) · boxed · fallen — and
+  Boxes and Memorial stop being tabs, because they are sections of this.
+- **The manager is the rail and the header.** Not a run *list*: new run (name + rule
+  groups, nothing greyed because no cartridge is known yet), start / stop / pin /
+  archive / delete, a launchers popover, ports. A run nobody has connected to says so
+  instead of borrowing another run's data. A stopped run shows only what was persisted —
+  the links, no HP, no battle — which is exactly what the Manager has for it today.
+- **Fills the viewport.** The shell is a `100vh` grid: header, tabs, and a body that takes
+  the rest. The board scrolls inside it. Past ~1500px the side strip (each player's
+  battle and wild encounters, the event feed) moves beside the board rather than under it.
+  The first draft flowed top-to-bottom and left half a 1440p monitor empty.
+- **Nothing is labelled twice.** The player chip is the header for that player. Party
+  rows have no `<thead>`. Card headers survive only on Setup, Broadcast and Tools.
+- **Per player, not per run.** Game label, area, badges, balls, battle, wild encounters
+  all live on the chip or in that player's strip card. A dropped client keeps its last
+  state on screen with a *disconnected* tag rather than vanishing — the server keeps that
+  state across a reconnect, and the UI should agree with it.
 
-### L1 "Workspace" — the recommended baseline
-
-```
-┌────────────┬──────────────────────────────────────────────┐
-│ SOUL LINK  │  Kanto Duo          ● running    [Stop][Pin] │
-│ ─────────  │  A Alice  Red   ●2  Cerulean   B Bob  Blue ●1│
-│ ▸ RUNS     ├──────────────────────────────────────────────┤
-│  ● Kanto   │  Live │ Links │ Boxes │ Memorial │ Setup     │
-│  ○ RR Hard ├──────────────────────────────────────────────┤
-│  ⊘ Red/Blue│                                              │
-│            │            (the selected tab)                │
-│ ▸ BROADCAST│                                              │
-│ ▸ TOOLS    │                                              │
-│ ─────────  │                                              │
-│ [font][thm]│                                              │
-└────────────┴──────────────────────────────────────────────┘
-```
-
-Rail: brand → run switcher (status dots, grouped by state) → the three destinations →
-font and theme pickers. Main: a run header strip, then a tab row. Lowest risk; absorbs
-every existing surface without inventing anything.
-
-### L2 "Split Board"
-
-The page *is* the soul link. Two symmetric player columns with a centre spine carrying
-link status, area and pairing; global run state in a thin top bar. This generalises the
-dashboard's existing Split|Combined toggle (`dashboard.css:687`, `.lp-card`, the 5-column
-mirror table) from one widget to the whole page. Best fit for the Gen 1 reality of two
-different cartridges.
-
-### L3 "Deck"
-
-Icon-only rail. One scrolling canvas of collapsible cards (Situation · Party A · Party B ·
-Battle · Encounters · Links · Events · Boxes) under a sticky situation bar, with a
-right-hand dock for the event feed and quick actions. Maximum density for a second
-monitor during play.
+Track B built the earlier L1 Workspace draft only; it exists to answer "is an SPA better
+here?", and that answer (§9) does not depend on which arrangement won.
 
 ## 4. Capability-driven panels — the Gen 1 rule
 
@@ -259,9 +240,9 @@ server/static/mockups/
   b/                  Track B — built Vite output, committed
 ```
 
-Track A is one page and, after streamlining, one layout. The earlier draft switched
-between three without a reload; the board became the Links tab and the deck was dropped
-(§9), so the switcher went with them.
+Track A is one page and one layout — the board (§3). The mockup controls, bottom-left,
+switch cartridge, density, body font and theme; they are the only part of the page that
+would not ship.
 
 Note the URLs need the explicit `index.html`. aiohttp's `add_static` is mounted without
 `show_index` (`server/templating.py:142`), so `/static/mockups/` itself returns 403.
@@ -286,23 +267,19 @@ Written after building both tracks and reading most of the UI code. Ordered by t
 sequence I would actually do them in. Each phase ships on its own and is demoable in a
 browser before the next starts.
 
-### Decision: Track A, L1 shell, with L2's board as the Links tab. Drop L3.
+### Decision: Track A, the pair board as the page (§3).
 
 - **Track A.** Both Track B agents recommended against their own track and the reasoning
   holds: the SPA retires nothing. The ~25 OBS overlays still need server-rendered
   fragments, so Jinja stays either way, and the payload contract ends up consumed in two
   languages. The hard part of this brief is the capability model, which is a
   data-modelling problem and comes out identical in both stacks.
-- **L1 as the shell.** It absorbs every existing surface without inventing anything, and
-  the tab row is where Memorial, Boxes and Setup go without a fight.
-- **L2's split board becomes the Links tab.** Having built both, the board is a better
-  links view than the links table — the spine makes the pairing legible in a way a row
-  of two cells never does — and it is the direct descendant of the dashboard's existing
-  Combined view, so the `lp-view` toggle (`dashboard.js:702`) and the 5-column mirror
-  table can go.
-- **Drop L3.** The Deck is a "second monitor during play" mode, and the project already
-  has a better answer to that: the OBS overlays, which are pixel-tuned, per-widget, and
-  sized for exactly that use. A third rendering of the same panels is not worth owning.
+- **The pair board.** It is the direct descendant of the dashboard's existing Combined
+  view — the 5-column mirror table — generalised to the whole page and grouped by state,
+  so the `lp-view` toggle (`dashboard.js:702`) and the separate Boxes / Memorial pages go.
+- **The deck was dropped.** A "second monitor during play" mode is what the OBS overlays
+  already are, pixel-tuned and per-widget. A third rendering of the same panels is not
+  worth owning.
 
 ### Phase 1 — the data model (small, ships alone, fixes real bugs)
 
