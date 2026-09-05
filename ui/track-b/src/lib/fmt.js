@@ -33,10 +33,9 @@ export function areaLabel(id) {
   return id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// Sprites in the payload are `sprite_html` pointing at raw.githubusercontent.com.
-// The mockup must work with no network (brief §8.3), so we deliberately do NOT
-// inject that markup — a wall of broken-image icons is a worse mockup than an
-// honest offline placeholder. Species id is the identity the payload actually has.
+// Fallback for the one payload shape that carries no `sprite_html` at all: pc_boxes
+// entries, which hold species_id and nothing to draw it with. Everything else injects
+// the payload's own sprite markup — see MonCell.svelte.
 export function spriteInitials(name) {
   return (name || '?').slice(0, 3).toUpperCase();
 }

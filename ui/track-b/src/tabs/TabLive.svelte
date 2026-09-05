@@ -26,9 +26,7 @@
         <p class="card-sub">
           {c.p?.current_area_display || '—'}
           · {c.p?.connected ? 'connected' : `offline (last seen ${c.p?.last_seen || '—'})`}
-          {#if c.capsInferred}
-            · <span class="unk">capabilities inferred from “{c.capsKey}”</span>
-          {:else if !c.capsFound}
+          {#if !c.capsFound}
             · <span class="unk">no capability record for “{c.romType}”</span>
           {/if}
         </p>

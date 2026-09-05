@@ -12,6 +12,7 @@
     key: l[`${s}_key`], nickname: l[`${s}_nickname`],
     species_name: l[`${s}_species_name`], species_id: l[`${s}_species`],
     level: l[`${s}_level`], shiny: l[`${s}_shiny`],
+    sprite_html: l[`${s}_sprite_html`],
   });
 </script>
 

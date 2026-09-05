@@ -1,22 +1,10 @@
 // Capability resolution — brief §4. Capability is a property of the CARTRIDGE
 // (rom_type), not of the generation, and it is resolved PER PLAYER (brief §5).
 //
-// Gotcha the fixtures expose: capabilities.json is keyed by the canonical rom_type
-// of each family (`red`, `firered_rr`, …) but the status payload reports the version
-// the player actually holds (`blue`, `leafgreen_rr`). Same cartridge family, same
-// capabilities, different key. We alias to the family head and MARK the result as
-// inferred rather than silently pretending it was a direct hit.
-const FAMILY = {
-  blue: 'red',
-  green: 'red',
-  yellow: 'red',
-  gold: 'crystal',
-  silver: 'crystal',
-  leafgreen: 'firered',
-  leafgreen_rr: 'firered_rr',
-  soulsilver: 'heartgold',
-  pokemon_white: 'pokemon_black',
-};
+// capabilities.json enumerates every rom_type the client can send, so this is a
+// straight lookup: `blue` has its own row, not `red`'s borrowed. No aliasing, no
+// inference — a miss here means the client sent something the generator does not
+// know about, which is a real unknown and is rendered as one.
 
 // Human label for a cartridge. Per brief §5 the game label lives on the PLAYER chip,
 // because the two players can hold different versions of the same generation.
@@ -24,7 +12,8 @@ const LABEL = {
   red: 'Red', blue: 'Blue', green: 'Green', yellow: 'Yellow',
   crystal: 'Crystal', gold: 'Gold', silver: 'Silver',
   firered: 'FireRed', leafgreen: 'LeafGreen',
-  firered_rr: 'FireRed · Radical Red', leafgreen_rr: 'LeafGreen · Radical Red',
+  // No leafgreen_rr: Radical Red is a FireRed hack and has no LeafGreen build.
+  firered_rr: 'FireRed · Radical Red',
   heartgold: 'HeartGold', soulsilver: 'SoulSilver',
   pokemon_black: 'Black', pokemon_white: 'White',
 };
@@ -35,17 +24,12 @@ export function romLabel(romType) {
 }
 
 /**
- * @returns {{found:boolean, inferred:boolean, key:string|null, caps:object}}
+ * @returns {{found:boolean, key:string|null, caps:object}}
  * `found:false` means we genuinely do not know — render unknown, never false.
  */
 export function capsFor(capabilities, romType) {
-  if (!capabilities || !romType) return { found: false, inferred: false, key: null, caps: {} };
-  if (capabilities[romType]) return { found: true, inferred: false, key: romType, caps: capabilities[romType] };
-  const alias = FAMILY[romType];
-  if (alias && capabilities[alias]) {
-    return { found: true, inferred: true, key: alias, caps: capabilities[alias] };
-  }
-  return { found: false, inferred: false, key: null, caps: {} };
+  const caps = capabilities?.[romType];
+  return caps ? { found: true, key: romType, caps } : { found: false, key: null, caps: {} };
 }
 
 // Tri-state predicate: true / false / null(unknown). `null means unknown` — brief §4.

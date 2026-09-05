@@ -59,7 +59,6 @@
           <dd>
             {#if c.capsFound}
               <code>{c.capsKey}</code>
-              {#if c.capsInferred}<span class="unk">inferred — same family, no own row</span>{/if}
             {:else}
               <span class="unk">no row for “{c.romType}”</span>
             {/if}
@@ -74,13 +73,15 @@
         </dl>
 
         <h3 style="margin-top:1em">Encounter table</h3>
-        <!-- Per player. Randomized pairs mean these differ between the two
-             cartridges, so there is deliberately no shared table here (brief §5). -->
+        <!-- Per player, and the clearest demo of why (brief §5): in both fixtures A is
+             standing somewhere with no wild encounters while B is on a route, so one
+             player has a table and the other has none. A shared run-level table could
+             not represent this at all. -->
         {#if c.p?.encounter_table == null}
           <p class="absent-note">
-            <span class="unk">unknown</span> — <code>players.{c.side}.encounter_table</code>
-            is null in this fixture. Not the same as "no encounters": the client has not
-            reported one for {c.p?.current_area_display || 'this area'} yet.
+            None — {c.p?.current_area_display || 'this area'} has no wild encounter slots,
+            so <code>players.{c.side}.encounter_table</code> is null. The other player is
+            on a route and has one; that asymmetry is normal, not missing data.
           </p>
         {:else}
           <p class="card-sub">{c.p.current_area_display} · as reported by {c.p?.trainer_name}'s client</p>
