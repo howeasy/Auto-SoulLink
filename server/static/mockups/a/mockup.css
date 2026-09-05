@@ -146,7 +146,6 @@ body.mk-body-root { margin: 0; min-height: 100vh; font-family: var(--font-ui); c
 .mk-now { display: grid; grid-template-columns: minmax(0, 1fr) var(--mk-spine) minmax(0, 1fr); gap: var(--space-3); align-items: stretch; }
 .mk-nowcard { display: flex; flex-direction: column; border-left: 4px solid var(--c-dim); }
 .mk-nowcard.online { border-left-color: var(--c-alive); }
-.mk-nowcard.fighting { border-color: color-mix(in srgb, var(--c-dead) 40%, var(--c-edge)); border-left-color: var(--c-dead); }
 .mk-now-head { display: flex; align-items: center; gap: var(--space-3); padding: var(--mk-pad) var(--mk-pad) var(--space-2); border-bottom: 1px solid var(--c-sep); }
 .mk-now-head .mk-side { width: 1.6em; height: 1.6em; display: grid; place-items: center; border-radius: 6px; background: color-mix(in srgb, var(--c-brand) 18%, transparent); font-size: 1.05em; }
 .mk-now-name { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; flex: 1; }
@@ -160,18 +159,25 @@ body.mk-body-root { margin: 0; min-height: 100vh; font-family: var(--font-ui); c
 .mk-now-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); font-size: .82em; color: var(--c-dim); }
 .mk-now-line b { color: var(--c-txt); font-weight: 600; font-size: 1.25em; }
 
-.mk-fight { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border-radius: 8px; background: color-mix(in srgb, var(--c-dead) 9%, transparent); }
-.mk-fight-row { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.2fr); align-items: center; gap: var(--space-3); }
+/* ── BATTLE: a transient card in the fighting player's column ─────────── */
+.zone-battle .mk-h2-mid > span { color: var(--c-dead); }
+.mk-battle { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--mk-pad); border-color: color-mix(in srgb, var(--c-dead) 45%, var(--c-edge)); border-left: 4px solid var(--c-dead); background: color-mix(in srgb, var(--c-dead) 7%, var(--c-card)); }
+.mk-fight-row { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.1fr); align-items: center; gap: var(--space-3); }
 .mk-fight-row .mk-hp { min-width: 0; }
 .mk-fight-row.mine { padding-top: var(--space-2); border-top: 1px dashed color-mix(in srgb, var(--c-dead) 30%, transparent); }
+/* The partner on the other cartridge: pend-coloured, because it is the soul link's stake
+ * and not part of the fight itself. */
+.mk-fight-row.stake { padding-top: var(--space-2); border-top: 1px dashed color-mix(in srgb, var(--c-pend) 40%, transparent); }
 .mk-fight-txt { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; font-size: .95em; }
 .mk-vs { color: var(--c-dead); font-size: .8em; letter-spacing: .1em; font-weight: 600; }
 .mk-you { color: var(--c-dim); font-size: .7em; letter-spacing: .1em; text-transform: uppercase; }
+.mk-you.stake { color: var(--c-pend); }
 
 .mk-wild { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); font-size: .76em; color: var(--c-dim); margin-top: auto; }
 .mk-wild-row { display: inline-flex; align-items: baseline; gap: var(--space-1); }
 .mk-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: .68em; letter-spacing: .06em; border: 1px solid var(--c-edge); color: var(--c-dim); white-space: nowrap; }
 .mk-tag.off { color: var(--c-dead); border-color: color-mix(in srgb, var(--c-dead) 45%, transparent); }
+.mk-tag.fight { color: var(--c-dead); border-color: color-mix(in srgb, var(--c-dead) 45%, transparent); }
 
 /* ── Sprites (shared) ──────────────────────────────────────────────────
  * Two shapes come out of the payload. Gen 3 is a bare <img class="mon-sprite">. Gen 1 is
@@ -229,6 +235,12 @@ body.mk-body-root { margin: 0; min-height: 100vh; font-family: var(--font-ui); c
 .mk-half-txt .mk-hp-num { flex: none; }
 .mk-half.b .mk-half-txt .mk-hp { flex-direction: row-reverse; }
 .mk-active { color: var(--c-dead); font-size: .85em; margin-right: 3px; }
+/* Per half, never per row: battle is a player state. The fighting half gets a red outer
+ * edge; its partner -- the half the soul link puts at stake -- gets the tag. */
+.mk-half.fighting.a { box-shadow: inset 4px 0 0 var(--c-dead); }
+.mk-half.fighting.b { box-shadow: inset -4px 0 0 var(--c-dead); }
+.mk-stake { margin-left: var(--space-2); padding: 1px 6px; border-radius: 3px; font-size: .62em; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--c-pend); border: 1px solid color-mix(in srgb, var(--c-pend) 50%, transparent); vertical-align: middle; }
+.mk-half.b .mk-stake { margin-left: 0; margin-right: var(--space-2); }
 .mk-item { color: var(--c-gold); cursor: help; }
 .mk-half-in.slot { opacity: .7; }
 .mk-half.b .mk-half-in.slot { flex-direction: row-reverse; }

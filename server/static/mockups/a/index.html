@@ -151,7 +151,7 @@
                 <h2 class="mk-h2"><span>Now</span><i></i></h2>
                 <div class="mk-now">
                   <template x-for="pid in ['a', 'b']" :key="pid">
-                    <div class="mk-card mk-nowcard" :class="[connected(pid) ? 'online' : 'offline', battle(pid).in_battle ? 'fighting' : '']" :style="pid === 'b' ? 'grid-column:3' : 'grid-column:1'">
+                    <div class="mk-card mk-nowcard" :class="connected(pid) ? 'online' : 'offline'" :style="pid === 'b' ? 'grid-column:3' : 'grid-column:1'">
                       <div class="mk-now-head">
                         <span class="mk-side" x-text="pid.toUpperCase()"></span>
                         <span class="mk-now-name">
@@ -169,31 +169,8 @@
                             <b x-text="player(pid).current_area_display"></b>
                             <span><span x-text="player(pid).ball_count"></span> balls</span>
                             <span class="mk-tag off" x-show="!connected(pid) && isLive()">disconnected</span>
+                            <span class="mk-tag fight" x-show="battle(pid).in_battle">in battle</span>
                           </div>
-                          <template x-if="battle(pid).in_battle">
-                            <div class="mk-fight">
-                              <template x-for="foe in (battle(pid).enemy_party || [])" :key="foe.key || foe.species_id">
-                                <div class="mk-fight-row">
-                                  <span class="mk-spr" x-html="foe.sprite_html"></span>
-                                  <span class="mk-fight-txt">
-                                    <span><span class="mk-vs">vs</span> <span x-text="(battle(pid).is_trainer_battle ? (battle(pid).opponent_name || 'Trainer') + '’s ' : 'wild ') + foe.species_name"></span></span>
-                                    <span class="mk-sub">Lv <span x-text="foe.level"></span></span>
-                                  </span>
-                                  <span class="mk-hp"><span class="mk-hp-num" x-text="foe.hp + '/' + foe.maxHP"></span><span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(foe)" :style="'width:' + hpPct(foe) + '%'"></span></span></span>
-                                </div>
-                              </template>
-                              <template x-if="activeMon(pid)">
-                                <div class="mk-fight-row mine">
-                                  <span class="mk-spr" x-html="activeMon(pid).sprite_html"></span>
-                                  <span class="mk-fight-txt">
-                                    <span><span class="mk-you">you</span> <span x-text="activeMon(pid).nickname"></span></span>
-                                    <span class="mk-sub" x-text="activeMon(pid).species_name + ' · Lv ' + activeMon(pid).level"></span>
-                                  </span>
-                                  <span class="mk-hp"><span class="mk-hp-num" x-text="activeMon(pid).hp + '/' + activeMon(pid).maxHP"></span><span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(activeMon(pid))" :style="'width:' + hpPct(activeMon(pid)) + '%'"></span></span></span>
-                                </div>
-                              </template>
-                            </div>
-                          </template>
                           <div class="mk-wild" x-show="wild(pid).length">
                             <template x-for="[method, list] in wild(pid)" :key="method">
                               <span class="mk-wild-row"><span class="mk-tag" x-text="method"></span><span x-text="[...new Set(list.map(e => e.name || e.species_name || e.species))].slice(0, 8).join(', ')"></span></span>
@@ -202,6 +179,58 @@
                         </div>
                       </template>
                       <div class="mk-now-body" x-show="!hasData(pid)"><span class="mk-sub" x-text="isLive() ? 'waiting for hello' : 'not connected'"></span></div>
+                    </div>
+                  </template>
+                </div>
+              </section>
+
+              <!-- BATTLE: transient, like the old dashboard's panel above the party. One card
+                   in the fighting player's column; the other column stays empty, which says
+                   who is fighting by position alone. Battle is a player state, so there is
+                   one card per player and never a pair-wide one. -->
+              <section class="mk-zone zone-battle" x-show="anyBattle()">
+                <h2 class="mk-h2 split">
+                  <span class="mk-h2-side"><span class="mk-side small">A</span><span x-text="player('a').trainer_name || '—'"></span></span>
+                  <i></i><span class="mk-h2-mid"><span>In battle</span></span><i></i>
+                  <span class="mk-h2-side b"><span x-text="player('b').trainer_name || '—'"></span><span class="mk-side small">B</span></span>
+                </h2>
+                <div class="mk-now">
+                  <template x-for="pid in ['a', 'b']" :key="pid">
+                    <div class="mk-card mk-battle" x-show="battle(pid).in_battle" :style="pid === 'b' ? 'grid-column:3' : 'grid-column:1'">
+                      <template x-for="foe in (battle(pid).enemy_party || [])" :key="foe.key || foe.species_id">
+                        <div class="mk-fight-row foe">
+                          <span class="mk-spr" x-html="foe.sprite_html"></span>
+                          <span class="mk-fight-txt">
+                            <span><span class="mk-vs">vs</span> <span x-text="(battle(pid).is_trainer_battle ? (battle(pid).opponent_name || 'Trainer') + '’s ' : 'wild ') + foe.species_name"></span></span>
+                            <span class="mk-sub">Lv <span x-text="foe.level"></span></span>
+                          </span>
+                          <span class="mk-hp"><span class="mk-hp-num" x-text="foe.hp + '/' + foe.maxHP"></span><span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(foe)" :style="'width:' + hpPct(foe) + '%'"></span></span></span>
+                        </div>
+                      </template>
+                      <template x-if="activeMon(pid)">
+                        <div class="mk-fight-row mine">
+                          <span class="mk-spr" x-html="activeMon(pid).sprite_html"></span>
+                          <span class="mk-fight-txt">
+                            <span><span class="mk-you" x-text="player(pid).trainer_name"></span> <span x-text="activeMon(pid).nickname"></span></span>
+                            <span class="mk-sub" x-text="activeMon(pid).species_name + ' · Lv ' + activeMon(pid).level"></span>
+                          </span>
+                          <span class="mk-hp"><span class="mk-hp-num" x-text="activeMon(pid).hp + '/' + activeMon(pid).maxHP"></span><span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(activeMon(pid))" :style="'width:' + hpPct(activeMon(pid)) + '%'"></span></span></span>
+                        </div>
+                      </template>
+                      <!-- The partner, on the other cartridge. If the mon above faints, this one
+                           dies too -- whatever its owner is doing right now. -->
+                      <template x-if="atStake(pid)">
+                        <div class="mk-fight-row stake">
+                          <span class="mk-spr" x-html="atStake(pid).sprite"></span>
+                          <span class="mk-fight-txt">
+                            <span><span class="mk-you stake">at stake</span> <span x-text="atStake(pid).nickname"></span></span>
+                            <span class="mk-sub" x-text="atStake(pid).owner + '’s · linked at ' + atStake(pid).area"></span>
+                          </span>
+                          <template x-if="atStake(pid).hp != null">
+                            <span class="mk-hp"><span class="mk-hp-num" x-text="atStake(pid).hp + '/' + atStake(pid).maxHP"></span><span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(atStake(pid))" :style="'width:' + hpPct(atStake(pid)) + '%'"></span></span></span>
+                          </template>
+                        </div>
+                      </template>
                     </div>
                   </template>
                 </div>
@@ -227,7 +256,7 @@
                     <template x-for="row in rows" :key="row.area">
                       <article class="mk-pair" :class="[row.section, row.atRisk ? 'at-risk' : '']">
                         <template x-for="pid in ['a', 'b']" :key="pid">
-                          <div class="mk-half" :class="[pid, row[pid] ? '' : 'empty']" :style="pid === 'b' ? 'grid-column:3' : 'grid-column:1'">
+                          <div class="mk-half" :class="[pid, row[pid] ? '' : 'empty', row[pid] && row[pid].active ? 'fighting' : '', row[pid] && row[pid === 'a' ? 'b' : 'a'] && row[pid === 'a' ? 'b' : 'a'].active ? 'staked' : '']" :style="pid === 'b' ? 'grid-column:3' : 'grid-column:1'">
                             <template x-if="row[pid]">
                               <div class="mk-half-in">
                                 <!-- pending_captures carries no sprite_html (only species id and
@@ -237,7 +266,7 @@
                                 <span class="mk-spr big" x-show="row[pid].sprite" x-html="row[pid].sprite"></span>
                                 <span class="mk-slot" x-show="!row[pid].sprite" title="no sprite in the payload for a pending capture"></span>
                                 <span class="mk-half-txt">
-                                  <span class="mk-half-nick"><span x-show="row[pid].active" class="mk-active" title="out in battle">⚔</span><span x-text="row[pid].nickname || row[pid].species_name"></span></span>
+                                  <span class="mk-half-nick"><span x-show="row[pid].active" class="mk-active" title="out in battle">⚔</span><span x-text="row[pid].nickname || row[pid].species_name"></span><span class="mk-stake" x-show="row[pid === 'a' ? 'b' : 'a'] && row[pid === 'a' ? 'b' : 'a'].active">at stake</span></span>
                                   <span class="mk-sub"><span x-text="row[pid].species_name"></span> · Lv <span x-text="row[pid].level"></span></span>
                                   <template x-if="row[pid].hp != null">
                                     <span class="mk-hp"><span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(row[pid])" :style="'width:' + hpPct(row[pid]) + '%'"></span></span><span class="mk-hp-num" x-text="row[pid].hp + '/' + row[pid].maxHP"></span></span>
