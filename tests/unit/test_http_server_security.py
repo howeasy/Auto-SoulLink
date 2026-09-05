@@ -183,6 +183,16 @@ def test_dashboard_keeps_trusted_unknown_area_markup(srv):
     assert '<b class="area"><span class="dim">unknown</span></b>' in srv._build_status_html()
 
 
+@pytest.mark.parametrize("value", [None, 42, True])
+def test_escaping_preserves_rendering_of_non_text_legacy_metadata(srv, value):
+    # The legacy TCP handler records metadata before its dispatch validation.
+    # Output escaping must not turn formerly printable JSON scalars into 500s.
+    srv.connected_players["a"] = {"rom_type": value, "last_event": value}
+    rendered = srv._build_status_html()
+    assert f'Last: <b>{html.escape(str(value))}</b>' in rendered
+    assert srv._build_status_dict()["players"]["a"]["last_event"] is value
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("player", ["other", "", None, 3, [], {}])
 async def test_invalid_pokeball_player_has_no_side_effects(client, srv, monkeypatch, player):
