@@ -85,6 +85,28 @@ MOVES = {
     69:  [22, 71, 78, 51],   # Bellsprout: Vine Whip, Absorb, Sweet Scent, Acid
 }
 
+# One ability per species (Gen 3 FRLG ids, resolved by the adapter). Every mon used to
+# be sent ability_id 1, so the whole column read "Stench" twelve times and looked like
+# the lookup was broken. Radical Red renames some entries (51 is "Bad Company" there, 38
+# is "Dragon's Maw"), so these are chosen to read right under RR rather than vanilla.
+ABILITIES = {
+    25: 9,    # Pikachu: Static
+    4:  66,   # Charmander: Blaze
+    16: 50,   # Pidgey: Run Away
+    19: 62,   # Rattata: Guts
+    21: 22,   # Spearow: Intimidate
+    74: 69,   # Geodude: Rock Head
+    29: 39,   # Nidoran: Inner Focus
+    41: 39,   # Zubat: Inner Focus
+    27: 8,    # Sandshrew: Sand Veil
+    37: 18,   # Vulpix: Flash Fire
+    43: 34,   # Oddish: Chlorophyll
+    69: 34,   # Bellsprout: Chlorophyll
+    60: 11,   # Poliwag: Water Absorb
+    54: 6,    # Psyduck: Damp
+    10: 19,   # Caterpie (the wild foe): Shield Dust
+}
+
 # Dead-zone pair (Alice missed, Bob would have caught Caterpie)
 DEAD_ZONE_AREA = "route7"
 DEAD_ZONE_BOB = (10, "CATE007", "Cat",     8, 0)
@@ -202,7 +224,7 @@ def _wild_foe() -> dict:
                 "key": "1A2B:0000:0A", "status_cond": 0, "stat_stages": {},
                 "moves": [33, 81], "pp": [35, 40]}
     return {"species_id": 10, "level": 11, "hp": 28, "maxHP": 32, "active": True,
-            "ability_id": 19, "key": "WILD_CATE", "status_cond": 0, "stat_stages": {},
+            "ability_id": ABILITIES[10], "key": "WILD_CATE", "status_cond": 0, "stat_stages": {},
             "moves": [33, 81], "pp": [35, 40], "pp_bonuses": 0}
 
 
@@ -229,7 +251,7 @@ def _mon(species, key, nick, lv, item, *, gender, active):
          "species_id": species, "nickname": nick, "active": active,
          "moves": _moves().get(species, []), "pp": [25, 25, 25, 25]}
     if not _is_gen1():
-        d.update(ability_id=1, held_item_id=item, gender=gender, pp_bonuses=0)
+        d.update(ability_id=ABILITIES.get(species, 1), held_item_id=item, gender=gender, pp_bonuses=0)
     return d
 
 
@@ -266,7 +288,7 @@ async def main() -> None:
             "level": a_lv, "hp": 20 + a_lv, "maxHP": 20 + a_lv,
             "in_box": False,
             **({} if _is_gen1() else {"gender": "male" if a_lv % 2 else "female",
-                                      "ability_id": 1, "held_item_id": a_item}),
+                                      "ability_id": ABILITIES.get(a_sid, 1), "held_item_id": a_item}),
         })
         events.append({
             "event": "capture", "player": "b", "area_id": area,
@@ -274,7 +296,7 @@ async def main() -> None:
             "level": b_lv, "hp": 20 + b_lv, "maxHP": 20 + b_lv,
             "in_box": False,
             **({} if _is_gen1() else {"gender": "female" if b_lv % 2 else "male",
-                                      "ability_id": 1, "held_item_id": b_item}),
+                                      "ability_id": ABILITIES.get(b_sid, 1), "held_item_id": b_item}),
         })
 
     # Dead zone: Alice misses, Bob catches (but link won't form → dead_zone)
@@ -293,13 +315,13 @@ async def main() -> None:
         "event": "capture", "player": "a", "area_id": boxed_area,
         "species_id": a_sid, "key": a_key, "nickname": a_nick,
         "level": a_lv, "hp": 20 + a_lv, "maxHP": 20 + a_lv, "in_box": False,
-        **({} if _is_gen1() else {"gender": "male", "ability_id": 1, "held_item_id": a_item}),
+        **({} if _is_gen1() else {"gender": "male", "ability_id": ABILITIES.get(a_sid, 1), "held_item_id": a_item}),
     })
     events.append({
         "event": "capture", "player": "b", "area_id": boxed_area,
         "species_id": b_sid, "key": b_key, "nickname": b_nick,
         "level": b_lv, "hp": 20 + b_lv, "maxHP": 20 + b_lv, "in_box": False,
-        **({} if _is_gen1() else {"gender": "female", "ability_id": 1, "held_item_id": b_item}),
+        **({} if _is_gen1() else {"gender": "female", "ability_id": ABILITIES.get(b_sid, 1), "held_item_id": b_item}),
     })
 
     # Faint one of the linked party mons — the route3 pair becomes a Memorial
