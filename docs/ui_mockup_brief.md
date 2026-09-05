@@ -138,7 +138,9 @@ different *seeds*. The consequences the layout must carry:
 - **Native panel capability is per player**, because on Gen 1 it comes from the companion
   patch, which one player may have applied and the other not.
 - The two players can be on **different versions** of the same generation (`red` / `blue`,
-  `firered_rr` / `leafgreen_rr`), so the game label belongs on the player chip.
+  `firered` / `leafgreen`), so the game label belongs on the player chip. (Not
+  `leafgreen_rr` — Radical Red is a FireRed hack with no LeafGreen build; an RR run is
+  `firered_rr` on both sides.)
 
 The randomizer flow (jar, settings file, two clean ROMs → two seeded ROMs with recorded
 SHA1s) is a **first-class step in run setup**, not a collapsed `<details>` at the bottom
