@@ -266,3 +266,100 @@ Both tracks must:
 2. Offer a **Gen 3 / Gen 1 toggle** that reloads from the other fixture, so capability
    differences are one click apart.
 3. Work with no network access and no build tooling installed on the viewer's machine.
+
+---
+
+## 9. What comes next — recommendations for the implementation plan
+
+Written after building both tracks and reading most of the UI code. Ordered by the
+sequence I would actually do them in. Each phase ships on its own and is demoable in a
+browser before the next starts.
+
+### Decision: Track A, L1 shell, with L2's board as the Links tab. Drop L3.
+
+- **Track A.** Both Track B agents recommended against their own track and the reasoning
+  holds: the SPA retires nothing. The ~25 OBS overlays still need server-rendered
+  fragments, so Jinja stays either way, and the payload contract ends up consumed in two
+  languages. The hard part of this brief is the capability model, which is a
+  data-modelling problem and comes out identical in both stacks.
+- **L1 as the shell.** It absorbs every existing surface without inventing anything, and
+  the tab row is where Memorial, Boxes and Setup go without a fight.
+- **L2's split board becomes the Links tab.** Having built both, the board is a better
+  links view than the links table — the spine makes the pairing legible in a way a row
+  of two cells never does — and it is the direct descendant of the dashboard's existing
+  Combined view, so the `lp-view` toggle (`dashboard.js:702`) and the 5-column mirror
+  table can go.
+- **Drop L3.** The Deck is a "second monitor during play" mode, and the project already
+  has a better answer to that: the OBS overlays, which are pixel-tuned, per-widget, and
+  sized for exactly that use. A third rendering of the same panels is not worth owning.
+
+### Phase 1 — the data model (small, ships alone, fixes real bugs)
+
+1. **Emit capabilities in `/api/status`.** `players.{pid}.capabilities`, resolved through
+   `adapter_for(pid)` (`server.py:1801`, from the Gen 1 branch), carrying exactly what
+   `tools/gen_ui_capabilities.py` probes. This is what lets the tooltip prose die: a
+   template asks `caps.abilities`, not "is this RR". When the Gen 1 branch merges,
+   `stat_stage_labels` / `mons_per_box` / `info_panel_width` stop being null and every
+   consumer lights up without changing.
+2. **Put the mon key inside the party entry.** `party_details` is keyed by key and does
+   not repeat it in the value. It cost the mockup its entire "linked to" column and it
+   will cost the Jinja templates the same. One line in `_enrich_party`.
+3. **Make an unrecognised `rom_type` loud.** Today it leaves the server on whichever
+   adapter it already had — silently. That gave the first Gen 1 fixture Gen 3 genders and
+   abilities, and the comment at `adapters/__init__.py:53` records the same thing
+   happening to Gen 2 before. Reject the hello with an `identity_error` the UI already
+   knows how to show, and log at WARNING. This is a correctness bug in shipped code, twice.
+4. **Reconcile `leafgreen_rr`.** `server.py:3397` labels it; nothing routes it; Radical Red
+   has no LeafGreen build. Delete the label.
+
+### Phase 2 — rendering (same pixels, new source)
+
+5. **Delete `_build_status_html`** (`server.py:3279`, ~1465 lines) and render the dashboard
+   body from Jinja partials fed by `_build_status_dict`. The pattern is already proven
+   twenty times over in `templates/stream/`; `_macros.html` already has `hp_bar`,
+   `status_pill`, `stat_stages_row`, `mon_card`. Column presence comes from
+   `player.capabilities`, not from `if rr`. Ship this with the OLD chrome so the diff is
+   provably "same output, different generator" — the `_smoke.html` fixture is the check.
+6. **One chroma-keyer.** `dashboard.js:35` and `overlay-helpers.js:31` are the same
+   function. Keep the vendored one; delete the copy.
+
+### Phase 3 — the shell (the visible change)
+
+7. **Manager absorbs Status and Memorial.** One origin. Generalise
+   `handle_proxy_status` / `handle_proxy_events` (`manager.py:878`) to take a run id
+   instead of reading the pin. Delete the iframe preview and `_augment_for_template`'s
+   habit of scraping `links.json` / `events.json` off disk — it proxies the live run's
+   `/api/status` instead.
+8. **`chrome.py` `_NAV_ITEMS` 9 → 3** (+ Calc external, + Debug drawer). Delete
+   `_STATUS_HTML`, `_DEBUG_HTML`, `_TWITCH_PAGE_HTML`, `_OBS_PAGE_HTML` — four whole HTML
+   documents living as Python constants — and fold Twitch + OBS + Stream into one
+   Broadcast template, Patcher + Randomizer into Setup / Tools.
+9. **One poll.** Today there are six: htmx every 2s on the dashboard and every overlay,
+   `refreshRuns` every 10s and `_fetchLiveStatus` every 2.5s on the manager, `loadStatus`
+   every 5s on both Twitch and OBS, and an SSE fallback every 10s. The merged page polls
+   once. Do NOT reach for SSE to do it: `_STATUS_HTML` documents why (Chrome's 6-per-origin
+   connection cap, one held open per tab), and a single origin makes that worse, not
+   better. Keep htmx polling; just have one poller.
+10. **Delete `manager.css` (898) and `sidebar.css` (328).** One sidebar, one stylesheet
+    on top of `slink.css`. The calc keeps its own Bootstrap chrome behind its own page.
+11. **`python -m server.server` keeps working.** The single-server path is the README's
+    "simplest" option. It renders the same shell with one run in the rail — same
+    templates, no second code path.
+
+### Phase 4 — polish
+
+12. **Flip `--font-ui` to IBM Plex Sans**, after checking every overlay in
+    `overlay_catalog.py` at its recommended size. `_funtastic-base.css` routes
+    `html, body` through the token, so it is one line — gated on that check.
+13. **`slink_bridge.js`** (`calc/src/js/`, 2276 lines) reads its `var C = {...}` palette
+    from the tokens instead of hardcoding hex. Last, because it is the least visible.
+14. **`--density`** as a real user setting beside font and theme.
+
+### Things I would NOT do
+
+- Add `show_index` to the `/static/` mount to fix the mockup 403s. It exposes directory
+  listings for the whole static tree to fix a URL. Link `index.html`.
+- Move overlays to the new templates. They are pixel-tuned OBS sources with their own
+  base template and their own constraints; leave them on the pattern they already use.
+- Keep the Split | Combined toggle. L2's board is the combined view; the split view is
+  the Live tab. Two tabs, no toggle.
