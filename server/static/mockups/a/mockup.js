@@ -87,6 +87,34 @@ const OPTION_SUPPORT = {
   pc_trade_npc: { all: false, why: 'Radical Red only.', gen3_frlge_rr: { ok: true } },
 };
 
+/* What each option does, in the manager's own words. On the board these were fluff; on
+ * the form that sets them, they are the point. */
+const OPTION_DESC = {
+  species_lock: 'Reject links where both mons are in the same evolution family.',
+  gender_lock: 'Reject links where both mons share a gender.',
+  type_lock: 'Reject links where both mons share any type.',
+  explode_mode: "On a partner's death, force the linked mon to auto-Explode.",
+  rival_team_swap: "Rival battles load your partner's exact team instead of the canned one.",
+  overworld_presence: 'See your partner walking in your overworld as a live peer ghost.',
+  native_messages: 'Notifications as native in-game text boxes instead of the Lua HUD overlay.',
+  native_sounds: "Notification sounds through the game's own audio engine.",
+  battle_calc: 'The bundled in-battle damage and type-effectiveness calculator.',
+  pc_trade_npc: 'A Pokémon-Center trade NPC, when Overworld Presence is off.',
+};
+
+/* The games a run can be created for. '' is the default and today's behaviour: the run
+ * learns its cartridge from the first hello. Naming one up front lets the form grey what
+ * that cartridge cannot honour right here, rather than after someone has connected. Both
+ * players run the same game. */
+const GAMES = [
+  ['', 'Detect when players connect'],
+  ['red', 'Red'], ['blue', 'Blue'], ['yellow', 'Yellow'],
+  ['crystal', 'Crystal'],
+  ['firered', 'FireRed'], ['leafgreen', 'LeafGreen'], ['firered_rr', 'Radical Red'], ['emerald', 'Emerald'],
+  ['heartgold', 'HeartGold'], ['soulsilver', 'SoulSilver'], ['platinum', 'Platinum'],
+  ['pokemon_black', 'Black'], ['pokemon_white', 'White'],
+];
+
 const OPTION_LABELS = {
   species_lock: 'Species Clause',
   gender_lock: 'Gender Clause',
@@ -140,12 +168,14 @@ function mockup() {
     runs: [],
     activeRunId: '',
     pinnedRunId: '',
-    draft: { name: '', opts: {} },
+    draft: { name: '', game: '', opts: {}, randomize: false, rand: {} },
 
     THEMES,
     FONTS,
     OPTION_LABELS,
+    OPTION_DESC,
     OPTION_GROUPS,
+    GAMES,
     SECTION_LABELS,
 
     // ── boot ─────────────────────────────────────────────────────────────
@@ -237,9 +267,14 @@ function mockup() {
     selectRun(id) { this.activeRunId = id; this.dest = 'run'; this.tab = 'board'; this.launchersOpen = false; },
 
     newRun() {
-      this.draft = { name: '', opts: { battle_calc: true, pc_trade_npc: true } };
+      this.draft = { name: '', game: '', opts: { battle_calc: true, pc_trade_npc: true }, randomize: false, rand: {} };
       this.dest = 'new';
     },
+    gameLabel(rt) { return (GAMES.find((g) => g[0] === rt) || [])[1] || rt; },
+    isGen1Game(rt) { return ((this.caps[rt] || {}).game_id) === 'gen1_rby'; },
+    nextPorts() { const n = this.runs.length; return { tcp: 54321 + n, http: 8081 + n }; },
+    /* Options the draft has turned on, for the preview. */
+    draftOn() { return Object.keys(OPTION_LABELS).filter((k) => this.draft.opts[k] && this.draftOptionState(k).ok); },
     createRun() {
       const name = this.draft.name.trim();
       if (!name) return;
@@ -248,7 +283,7 @@ function mockup() {
         run_id: 'run_' + Date.now(), name, status: 'stopped', created_in_mock: true,
         tcp_port: 54321 + n, http_port: 8081 + n,
         created_short: new Date().toISOString().slice(0, 16).replace('T', ' '),
-        game_label: '', last_event: null, ...this.draft.opts,
+        game_label: this.draft.game ? this.gameLabel(this.draft.game) : '', last_event: null, ...this.draft.opts,
       };
       this.runs.unshift(r);
       this.selectRun(r.run_id);
@@ -407,21 +442,27 @@ function mockup() {
     deadZones() { return Object.entries(this.status().area_states || {}).filter(([, v]) => v === 'dead_zone').map(([k]) => k); },
     bondGlyph(status) { return status === 'alive' ? '<>' : status === 'pending' ? '<·' : '><'; },
 
-    optionState(key) {
-      const on = !!(this.status().rules || {})[key];
+    /* Can a run on these cartridges honour this option, and if not, why. A soul link is
+     * symmetric, so the more restrictive answer across the pair wins. An empty rom_type
+     * means "not known yet", and nothing is known to be impossible. */
+    supportFor(key, romTypes) {
       const rule = OPTION_SUPPORT[key] || { all: true };
       let ok = true, why = '';
-      for (const pid of ['a', 'b']) {
-        const gid = this.gameId(pid);
-        if (!gid) continue;                 // no cartridge yet: nothing is known to be impossible
-        const rr = (this.player(pid).rom_type || '').endsWith('_rr');
-        const specific = rule[gid + (rr ? '_rr' : '')] || rule[gid];
+      for (const rt of romTypes) {
+        const gid = (this.caps[rt] || {}).game_id;
+        if (!gid) continue;
+        const specific = rule[gid + (rt.endsWith('_rr') ? '_rr' : '')] || rule[gid];
         const decided = specific ? specific.ok : rule.all;
         if (!decided) { ok = false; why = (specific && specific.why) || rule.why || ''; break; }
         if (specific && specific.why && !why) why = specific.why;
       }
-      return { on, ok, why };
+      return { ok, why };
     },
+    optionState(key) {
+      const on = !!(this.status().rules || {})[key];
+      return { on, ...this.supportFor(key, [this.player('a').rom_type || '', this.player('b').rom_type || '']) };
+    },
+    draftOptionState(key) { return this.supportFor(key, [this.draft.game || '']); },
   };
 }
 

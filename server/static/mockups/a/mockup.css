@@ -321,6 +321,38 @@ table.mk-tbl { width: 100%; border-collapse: collapse; font-size: .9em; }
 code { font-family: var(--font-mono); font-size: .92em; color: var(--c-link); }
 kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2px; border-radius: 3px; background: var(--c-bg); font-family: var(--font-mono); font-size: .85em; }
 
+/* ── New run ───────────────────────────────────────────────────────────
+ * Form on the left, the run-to-be on the right. Options carry their description; a game
+ * chosen up front greys what it cannot honour, with the reason, before anyone connects. */
+.mk-newpage { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-5); align-items: start; }
+@media (min-width: 1100px) { .mk-newpage { grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); } }
+.mk-newpage .mk-form { max-width: none; gap: var(--space-5); }
+.mk-field.big input { font-size: 1.5em; padding: var(--space-3); }
+.mk-games { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.mk-gchip { padding: var(--space-2) var(--space-3); border: 1px solid var(--c-edge); border-radius: 999px; background: var(--c-card); color: var(--c-txt); font: inherit; font-size: .88em; cursor: pointer; }
+.mk-gchip:hover { border-color: var(--c-brand); }
+.mk-gchip.active { color: var(--c-bg); background: var(--c-brand); border-color: var(--c-brand); }
+.mk-gchip.detect { border-style: dashed; }
+.mk-gchip.detect.active { border-style: solid; }
+.mk-optgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: var(--space-3); }
+.mk-opt.described { align-items: flex-start; flex-wrap: nowrap; gap: var(--space-3); }
+.mk-opt.described input { margin-top: 3px; }
+.mk-opt-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.mk-opt-name { font-weight: 500; }
+.mk-opt-desc { font-size: .88em; color: var(--c-dim); line-height: 1.35; }
+.mk-opt.described .mk-opt-why { flex: none; color: var(--c-pend); }
+.mk-form-actions { display: flex; align-items: center; gap: var(--space-3); }
+.mk-btn.big { font-size: 1em; padding: var(--space-3) var(--space-5); }
+.mk-newside { display: flex; flex-direction: column; gap: var(--space-5); position: sticky; top: calc(var(--scale-step) * 3.2); }
+.mk-preview { padding: var(--space-2); }
+.mk-preview-body { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-2) var(--space-2); }
+.mk-preview-rules { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.mk-tag.on { color: var(--c-alive); border-color: color-mix(in srgb, var(--c-alive) 45%, transparent); }
+.mk-steps { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: var(--space-3); font-size: .92em; line-height: 1.4; color: var(--c-dim); }
+.mk-steps li::marker { color: var(--c-brand); font-weight: 600; }
+.mk-steps b { color: var(--c-txt); font-weight: 500; }
+.mk-steps em { color: var(--c-txt); font-style: normal; text-decoration: underline; text-decoration-color: var(--c-pend); }
+
 /* ── Debug drawer ──────────────────────────────────────────────────────── */
 
 .mk-drawer { position: fixed; inset: 0 0 0 auto; z-index: 40; width: min(520px, 92vw); display: flex; flex-direction: column; background: color-mix(in srgb, var(--c-card) 92%, var(--c-bg)); border-left: 1px solid var(--c-edge); box-shadow: -12px 0 40px rgba(0,0,0,.5); }

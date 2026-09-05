@@ -106,9 +106,14 @@ why Gen 1 stayed small. The proper fix is the server emitting a sprite that size
 itself; that is a Phase 1 line in §9. The page scrolls like a page; only the run header is sticky. An earlier draft
 locked the board into `100vh` and it read as cramped at every size.
 
-**The manager is the rail and the run header.** New run (name and the three option
-groups — nothing greyed, because no cartridge is known yet), start / stop / pin / archive
-/ delete, a launchers popover, ports. A run nobody has connected to says so instead of
+**The manager is the rail and the run header.** New run is a guided form beside a
+preview: name; the **game**, as chips, defaulting to *detect when players connect* (today's
+behaviour) but greying what a chosen cartridge cannot honour, with the reason, before
+anyone connects; the three option groups, each option carrying its one-line description
+in the manager's own words — on the board those were fluff, on the form that sets them
+they are the point; a randomized-ROM-pair toggle for Gen 1; and *what happens next* with
+the port the run will get. Then start / stop / pin / archive / delete, a launchers
+popover, ports. A run nobody has connected to says so instead of
 borrowing another run's data. A stopped run shows only what was persisted — the links, no
 HP, no battle, no Now cards — which is exactly what the Manager has for it today; its
 pairs sit under **Linked** rather than claiming to know who is in a party.
