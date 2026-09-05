@@ -243,9 +243,17 @@ fixture came out with Gen 3 genders and abilities because of exactly that.
 server/static/mockups/
   index.html          side-by-side entry point, links both tracks
   fixtures/*.json     shared, above
-  a/                  Track A — index.html, l1.html, l2.html, l3.html
+  a/                  Track A — index.html + mockup.css + mockup.js + fonts.css
   b/                  Track B — built Vite output, committed
 ```
+
+Track A's three layouts live in **one page**, switched without a reload, rather than in
+three files. They differ in arrangement and not in what they know, so they share one data
+model and one stylesheet; and comparing arrangements is the whole exercise, which putting
+each behind a page load would only get in the way of.
+
+Note the URLs need the explicit `index.html`. aiohttp's `add_static` is mounted without
+`show_index` (`server/templating.py:142`), so `/static/mockups/` itself returns 403.
 
 `/static/` is already mounted by both apps (`server/templating.py:142`), so this needs
 **zero new routes**. View with `python -m server.manager` at
