@@ -223,12 +223,16 @@ live in the Track A mockup, so the choice gets made by looking:
 
 The brief for the font sharpened after the plain faces were seen in place: **Pixelify's
 character, more legible** — not a neutral sans. So the second round is pixel-flavoured
-faces that keep more of the glyph, and the mockup default moved to Jersey 15.
+faces that keep more of the glyph. **Jersey 20 was chosen**, and the page's small-size
+tiers were retuned to it: it is condensed with a tall x-height and reads a size smaller
+than a plain sans at the same px, so the secondary tier (sub-lines, tags, bond state, HP
+figures, the log) now sits at ≥12px off a 16px body where it had computed to 9–11px.
+Jersey's narrowness is what pays for that.
 
 | Option | Notes |
 |---|---|
-| **Jersey 15** *(mockup default)* | The same proportional pixel-sans idea as Pixelify at a finer grid; condensed, real x-height, names and figures hold at table size. Closest match to the brief. |
-| Jersey 20 | Jersey 15 one step smoother. Nearly interchangeable; pick by eye. |
+| **Jersey 20** *(chosen; mockup default)* | The same proportional pixel-sans idea as Pixelify at a finer grid; condensed, real x-height, names and figures hold at table size. |
+| Jersey 15 | Jersey 20 one step coarser. Nearly interchangeable. |
 | Jersey 10 | The coarse end of the family — nearest to Pixelify's look, and to its legibility problem. |
 | DotGothic16 | The most legible pixel face here outright: round dots, generous width. Wide, and its Latin has a Japanese accent. |
 | Tiny5 | A 5px grid rendered chunky; charming, heavy, reads more "toy" than "tool". |
