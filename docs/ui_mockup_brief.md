@@ -61,21 +61,24 @@ flowed the cards in a grid; it was impossible to scan one player's side, which i
 first thing a partner does.
 
 - **Now.** One card per player — the header for that player. Who, on what cartridge,
-  where, badges, balls, and this cartridge's wild encounters for the area (per player:
-  two randomized ROMs do not share a table). Nothing transient lives here.
-- **Battle.** A zone that exists only while someone is fighting, with one card in the
-  fighting player's column — the other column stays empty, which says who is fighting by
-  position alone. The card shows the foe, the player's own mon, and **the partner at
-  stake**: the mon on the other cartridge that dies if this one does, with its owner and
-  the route they were linked at. This is the old dashboard's "battle panel above the
-  party" put back where it was; the draft before this one folded it into the player card
-  as a permanent slot, and that was the wrong shape.
+  where, badges, balls, and an *in battle · Embo* tag when they are fighting. The wild
+  encounters for the area are a collapsed line, as the old encounter widget was: they are
+  reference material, not status. Nothing transient lives here.
 
-  Battle is a **player** state, never a pair state. Alice can have Nidi out while Bob has
-  Embo out in two unrelated fights, so there is one battle card per player and the team
-  rows mark it **per half**: the fighting half gets a red outer edge and ⚔, and its
-  partner half — on the other side of the spine — gets an *at stake* tag. The only
-  pair-wide tint is at-risk, because HP risk genuinely is pair-wide.
+**Whose mon is whose.** The board cannot know which player is looking at it, so "you" and
+"ours" mean nothing on it. The only thing that says whose mon a mon is, unambiguously, is
+**which column it sits in** — and every later decision follows from that.
+
+**Battle is drawn in the pair row.** When Bob's Embo is out, the Sparky↔Embo row *is* the
+battle view: Bob's half shows Embo with the foe nested beneath it in a red strip — *vs
+wild Caterpie · Lv 11*, HP bar — and Alice's half, across the spine, shows Sparky tagged
+**at stake**. Position says whose mon it is, nesting says whose foe, and the spine says why
+the other half is in danger. Two players in two fights show as two rows with foes. Battle
+is a player state, never a pair state, so there is no pair-wide battle tint and no
+battle zone: a draft put a red card in the fighting player's column with the foe, the
+player's mon and the partner stacked under small labels, and it was not clear which of
+the three was theirs. The only pair-wide tint is at-risk, because HP risk genuinely is.
+
 - **The team** (`In party`). One row per linked pair, spanning both columns and
   card-styled: A's half, the spine, B's half, mirrored so the sprites sit at the outer
   edges and the text faces the bond; both HP bars, ability and item. The spine carries
