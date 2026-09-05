@@ -29,6 +29,13 @@ TCP_PORT = int(os.environ.get("SLINK_MOCK_TCP_PORT", "54321"))
 HTTP = os.environ.get("SLINK_MOCK_HTTP", "http://127.0.0.1:8080")
 
 
+# Seconds to keep the socket open after the last event. The server marks a socket's
+# owning player disconnected when it closes, so a capture from /api/status after this
+# script exits shows player A gone. A hold lets the capture happen while the run looks
+# the way a live one does.
+HOLD = float(os.environ.get("SLINK_MOCK_HOLD", "0"))
+
+
 async def send_tcp(events: list[dict]) -> None:
     r, w = await asyncio.open_connection(TCP_HOST, TCP_PORT)
     for m in events:
@@ -38,6 +45,8 @@ async def send_tcp(events: list[dict]) -> None:
         # keep the connection clean.
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(r.readline(), timeout=2.0)
+    if HOLD:
+        await asyncio.sleep(HOLD)
     w.close()
     await w.wait_closed()
 
@@ -107,6 +116,10 @@ ABILITIES = {
     10: 19,   # Caterpie (the wild foe): Shield Dust
 }
 
+# A capture waiting on the other player (see GEN1_PENDING_*).
+PENDING_AREA = "route9"
+PENDING_A = (58, "GROW009", "Flame", 14, 0)
+
 # Dead-zone pair (Alice missed, Bob would have caught Caterpie)
 DEAD_ZONE_AREA = "route7"
 DEAD_ZONE_BOB = (10, "CATE007", "Cat",     8, 0)
@@ -157,6 +170,9 @@ GEN1_MOVES = {
     23: [35, 40, 44],        # Ekans: Wrap, Poison Sting, Bite
 }
 
+# A capture waiting on the other player. Alice has caught here; Bob has not been here.
+GEN1_PENDING_AREA = "route_9"
+GEN1_PENDING_A = (58, "AB12:30B8:3A", "Flame", 14, 0)
 GEN1_DEAD_ZONE_AREA = "route_22"
 GEN1_DEAD_ZONE_BOB = (56, "7A8B:7B0B:38", "Mankey", 8, 0)
 GEN1_BOXED_AREA = "route_5"
@@ -206,6 +222,11 @@ def _final_areas() -> tuple[str, str]:
     return ("route_3", "route_24") if _is_gen1() else ("route_22", "cerulean_city")
 
 
+def _pending():
+    return ((GEN1_PENDING_AREA, GEN1_PENDING_A) if _is_gen1()
+            else (PENDING_AREA, PENDING_A))
+
+
 def _dead_zone():
     return ((GEN1_DEAD_ZONE_AREA, GEN1_DEAD_ZONE_BOB) if _is_gen1()
             else (DEAD_ZONE_AREA, DEAD_ZONE_BOB))
@@ -240,6 +261,13 @@ def _stored(tag: str, ot: str, species: int) -> str:
     return "STORED_" + tag
 
 
+# Party slot (0-based) whose mon is sent low on HP, and the HP to send. Slot 3 is Nidi /
+# Vampy on Gen 3 and Sparrow / Rocky on Gen 1 -- a linked pair either way, so the board
+# has one pair to tint as at risk.
+LOW_HP_SLOT = 3
+LOW_HP = 7
+
+
 def _mon(species, key, nick, lv, item, *, gender, active):
     """One party entry, with the fields this generation actually has.
 
@@ -249,6 +277,7 @@ def _mon(species, key, nick, lv, item, *, gender, active):
     """
     d = {"key": key, "level": lv, "hp": 20 + lv, "maxHP": 20 + lv,
          "species_id": species, "nickname": nick, "active": active,
+         "_slot": None,
          "moves": _moves().get(species, []), "pp": [25, 25, 25, 25]}
     if not _is_gen1():
         d.update(ability_id=ABILITIES.get(species, 1), held_item_id=item, gender=gender, pp_bonuses=0)
@@ -263,9 +292,14 @@ async def main() -> None:
         print(f"  reset failed: {e}")
 
     print("Sending hellos + initial tick...")
+    # ONE socket for the whole session. The server binds a socket to the first player who
+    # speaks on it and marks that player disconnected when it closes -- and `connected`
+    # only goes back to True on a hello. This used to be two sends on two sockets, so the
+    # first socket's close took player A offline before a single link had formed, and no
+    # later message could bring her back. Every fixture captured that way had A gone.
     # Use Radical Red ROM types so the Upcoming Trainers widget activates
     # (the trainers_for_area / encounter_table adapter methods are RR-gated).
-    await send_tcp([
+    events: list[dict] = [
         {"event": "hello", "player": "a", "rom_type": _rom_type("a"), "trainer_name": "Alice",
          "has_pokeballs": True, **({"ot_id": "30B8"} if _is_gen1() else {})},
         {"event": "hello", "player": "b", "rom_type": _rom_type("b"), "trainer_name": "Bob",
@@ -274,10 +308,9 @@ async def main() -> None:
         # We'll set proper parties after all captures.
         {"event": "tick", "player": "a", "has_pokeballs": True, "party": [{"key": ("0001:30B8:19" if _is_gen1() else "BOOT0001")}], "current_area_id": "starter"},
         {"event": "tick", "player": "b", "has_pokeballs": True, "party": [{"key": ("0002:7B0B:04" if _is_gen1() else "BOOT0002")}], "current_area_id": "starter"},
-    ])
+    ]
 
     print("Sending 6 paired captures + faint + shiny...")
-    events: list[dict] = []
     # 6 linked pairs
     for area, (a_sid, a_key, a_nick, a_lv, a_item), (b_sid, b_key, b_nick, b_lv, b_item) in _pairs():
         events.append({"event": "area_enter", "player": "a", "area_id": area})
@@ -324,6 +357,17 @@ async def main() -> None:
         **({} if _is_gen1() else {"gender": "female", "ability_id": ABILITIES.get(b_sid, 1), "held_item_id": b_item}),
     })
 
+    # Alice catches somewhere Bob has not been. Stays pending -- and quarantined to her
+    # box -- until Bob catches there too.
+    pend_area, (p_sid, p_key, p_nick, p_lv, p_item) = _pending()
+    events.append({"event": "area_enter", "player": "a", "area_id": pend_area})
+    events.append({
+        "event": "capture", "player": "a", "area_id": pend_area,
+        "species_id": p_sid, "key": p_key, "nickname": p_nick,
+        "level": p_lv, "hp": 20 + p_lv, "maxHP": 20 + p_lv, "in_box": True,
+        **({} if _is_gen1() else {"gender": "male", "ability_id": ABILITIES.get(p_sid, 1), "held_item_id": p_item}),
+    })
+
     # Faint one of the linked party mons — the route3 pair becomes a Memorial
     events.append({
         "event": "faint", "player": "a", "key": _pairs()[2][1][1],
@@ -346,6 +390,7 @@ async def main() -> None:
         _mon(*a_cap, gender="male", active=(i == 0))
         for i, (_, a_cap, _) in enumerate(_pairs())
     ]
+    alice_party[LOW_HP_SLOT]["hp"] = LOW_HP
     bob_party = [
         _mon(*b_cap, gender="female", active=(i == 0))
         for i, (_, _, b_cap) in enumerate(_pairs())
@@ -387,6 +432,8 @@ async def main() -> None:
         "pc_boxes": [
             {"box": 0, "slot": 0, "key": box_a[1], "nickname": box_a[2],
              "species_id": box_a[0], "held_item_id": box_a[4], "moves": _moves().get(box_a[0], [])},
+            {"box": 0, "slot": 2, "key": p_key, "nickname": p_nick,
+             "species_id": p_sid, "held_item_id": p_item, "moves": _moves().get(p_sid, [])},
             {"box": 0, "slot": 1, "key": _stored("A1", "30B8", 133), "nickname": "Spare",
              "species_id": 133, "held_item_id": 0, "moves": []},
             {"box": 1, "slot": 4, "key": _stored("A2", "30B8", 63), "nickname": "Bench",
@@ -404,13 +451,16 @@ async def main() -> None:
         ],
     })
 
-    await send_tcp(events)
-
+    # The attempt counter goes over HTTP and depends on nothing in the event stream, so
+    # it is set BEFORE the stream. That way the run is complete while the socket is still
+    # open (see HOLD), rather than only after it has closed and player A reads as gone.
     print("Bumping attempt counter via /api/attempts...")
     try:
         http_post("/api/attempts", {"count": 7})
     except Exception as e:
         print(f"  /api/attempts failed: {e}")
+
+    await send_tcp(events)
 
     print("Done. Refresh http://localhost:8080/ in the browser.")
 

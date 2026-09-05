@@ -1,201 +1,122 @@
 /* mockup.css — Track A layout shell for the merged SLink UI mockup.
  *
- * Loaded AFTER /static/slink.css, and it redefines none of slink.css's tokens: every
- * colour, space and size below is a var() read of the design system that already ships.
- * That is deliberate. The point of the mockup is to show a new arrangement of the same
- * material, and a mockup that quietly invents its own palette proves nothing about how
- * the real thing would look.
+ * Loaded AFTER /static/slink.css and redefines none of its tokens: every colour, space
+ * and size is a var() read of the design system that already ships. The one token added
+ * is --density.
  *
- * The one token added is --density, which the merged UI needs because it puts the run
- * list, the run header and the live board on one screen where each used to have its own.
+ * The shell is a 100vh grid. The old draft flowed top to bottom and left half of a
+ * 1440p monitor empty; here the board takes whatever height is left and scrolls inside
+ * it, and past ~1500px the side strip (battle, wild encounters, events) moves beside the
+ * board instead of under it. Width and height are both spent.
  */
 
 :root {
-  /* Multiplier applied to the vertical rhythm. `compact` is not a smaller font — the
-   * text stays readable — it only takes the air out from between rows, which is what
-   * actually runs out when the manager and the dashboard share a viewport. */
   --density: 1;
-
   --mk-rail: calc(var(--scale-step) * 8.2);
   --mk-radius: 8px;
   --mk-row-pad: calc(var(--space-2) * var(--density));
+  --mk-side: calc(var(--scale-step) * 15);
 }
-
 body.density-compact { --density: .58; }
 
 /* ── Shell ─────────────────────────────────────────────────────────────── */
 
-body.mk-body-root {
-  margin: 0;
-  min-height: 100vh;
-  font-family: var(--font-ui);
-  color: var(--c-txt);
-}
+body.mk-body-root { margin: 0; height: 100vh; overflow: hidden; font-family: var(--font-ui); color: var(--c-txt); }
 
 .mk {
   display: grid;
   grid-template-columns: var(--mk-rail) minmax(0, 1fr);
-  min-height: 100vh;
-  align-items: start;
+  height: 100vh;
 }
 
 /* ── Rail ──────────────────────────────────────────────────────────────── */
 
 .mk-rail {
-  position: sticky;
-  top: 0;
-  align-self: start;
-  box-sizing: border-box;
-  height: 100vh;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+  box-sizing: border-box; height: 100vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--space-1);
   padding: var(--space-3) var(--space-2);
   background: color-mix(in srgb, var(--c-card) 60%, var(--c-bg));
   border-right: 1px solid var(--c-edge);
 }
-
-.mk-rail-brand {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-2) var(--space-2);
-}
+.mk-rail-brand { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2) var(--space-2); }
 .mk-rail-brand svg { width: calc(var(--scale-step) * 1.1); height: calc(var(--scale-step) * 1.1); flex: none; }
 .mk-rail-brandtext { display: flex; flex-direction: column; line-height: 1.05; min-width: 0; }
 .mk-rail-brandtext b { color: var(--c-brand); font-size: .95em; letter-spacing: .04em; }
 .mk-rail-brandtext span { color: var(--c-dim); font-size: .68em; }
-
-/* A rule, not a caption. "Runs" and "Go to" were labelling groups whose contents
- * already say what they are. */
-.mk-rail-sep { border: none; border-top: 1px solid var(--c-sep); margin: var(--space-2) var(--space-2); }
+.mk-rail-sep { border: none; border-top: 1px solid var(--c-sep); margin: var(--space-2); }
 
 .mk-rail-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
+  display: flex; align-items: center; gap: var(--space-2); width: 100%;
   padding: var(--mk-row-pad) var(--space-2);
-  border: 1px solid transparent;
-  border-radius: var(--mk-radius);
-  background: none;
-  color: var(--c-txt);
-  font: inherit;
-  font-size: .84em;
-  text-align: left;
-  cursor: pointer;
+  border: 1px solid transparent; border-radius: var(--mk-radius);
+  background: none; color: var(--c-txt); font: inherit; font-size: .84em; text-align: left; cursor: pointer;
 }
 .mk-rail-item:hover { background: var(--c-card); }
-.mk-rail-item.active {
-  background: color-mix(in srgb, var(--c-brand) 16%, transparent);
-  border-color: color-mix(in srgb, var(--c-brand) 45%, transparent);
-}
+.mk-rail-item.active { background: color-mix(in srgb, var(--c-brand) 16%, transparent); border-color: color-mix(in srgb, var(--c-brand) 45%, transparent); }
+.mk-rail-item.new { color: var(--c-brand); border-style: dashed; border-color: color-mix(in srgb, var(--c-brand) 35%, transparent); }
 .mk-rail-item svg { width: 1.05em; height: 1.05em; flex: none; }
-.mk-rail-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-rail-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.mk-rail-pin { font-size: .7em; color: var(--c-gold); }
 
-/* Run rows carry a status dot rather than a word — the rail is a switcher, and the word
- * lives in the run header where there is room for it. */
-.mk-dot {
-  width: .6em; height: .6em; border-radius: 50%; flex: none;
-  background: var(--c-dim);
-}
+.mk-dot { width: .6em; height: .6em; border-radius: 50%; flex: none; background: var(--c-dim); }
 .mk-dot.running  { background: var(--c-alive); box-shadow: 0 0 6px var(--c-alive); }
-.mk-dot.stopped  { background: var(--c-dim); }
 .mk-dot.archived { background: none; border: 1px solid var(--c-dim); }
 
-/* ── Mockup controls — the strip that only exists because this is a mockup ──
- *
- * Deliberately OUTSIDE the rail: it is not part of the product being mocked. Wide enough
- * to lay its chips out several per row, because at rail width it grew tall enough to sit
- * on top of the rail's own nav. */
+/* ── Main column: header / tabs / body, body takes the rest ────────────── */
 
-.mk-ctl {
-  position: fixed; left: var(--space-3); bottom: var(--space-3); z-index: 30;
-  width: min(calc(var(--scale-step) * 15), 44vw);
-  max-height: 46vh; overflow-y: auto;
-  display: flex; flex-wrap: wrap; gap: var(--space-1);
-  padding: var(--space-2);
-  border: 1px dashed color-mix(in srgb, var(--c-brand) 55%, var(--c-edge));
-  border-radius: var(--mk-radius);
-  background: color-mix(in srgb, var(--c-card) 94%, var(--c-bg));
-  box-shadow: 0 6px 24px rgba(0, 0, 0, .45);
-}
-.mk-ctl summary {
-  width: 100%; cursor: pointer; list-style: none;
-  font-size: .62em; letter-spacing: .14em; text-transform: uppercase; color: var(--c-brand);
-}
-.mk-ctl summary::-webkit-details-marker { display: none; }
-.mk-ctl:not([open]) { padding-bottom: var(--space-2); }
-.mk-ctl-lbl {
-  width: 100%; font-size: .58em; letter-spacing: .14em;
-  text-transform: uppercase; color: var(--c-dim);
-}
-.mk-chip {
-  padding: 3px 7px;
-  border: 1px solid var(--c-edge);
-  border-radius: 999px;
-  background: var(--c-card);
-  color: var(--c-dim);
-  font: inherit; font-size: .7em; cursor: pointer;
-}
-.mk-chip.active { color: var(--c-bg); background: var(--c-brand); border-color: var(--c-brand); }
-.mk-chip.sw { display: inline-flex; align-items: center; gap: 5px; }
-.mk-chip .sw-dot { width: .7em; height: .7em; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); }
-
-/* ── Main column ───────────────────────────────────────────────────────── */
-
-.mk-main { min-width: 0; display: flex; flex-direction: column; }
+.mk-main { min-width: 0; height: 100vh; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
 
 .mk-runhdr {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3);
-  padding: var(--space-4) var(--space-4) var(--space-3);
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-2);
   border-bottom: 1px solid var(--c-sep);
 }
-.mk-runname { margin: 0; font-size: 1.35em; color: var(--c-txt); }
-.mk-pill {
-  padding: 2px 9px; border-radius: 999px; font-size: .62em;
-  letter-spacing: .1em; text-transform: uppercase;
-  border: 1px solid currentColor;
-}
+.mk-runname { margin: 0; font-size: 1.3em; }
+.mk-pill { padding: 2px 9px; border-radius: 999px; font-size: .62em; letter-spacing: .1em; text-transform: uppercase; border: 1px solid currentColor; }
 .mk-pill.running  { color: var(--c-alive); }
 .mk-pill.stopped  { color: var(--c-dim); }
 .mk-pill.archived { color: var(--c-dim); opacity: .7; }
 .mk-hdr-spacer { flex: 1 1 auto; }
-.mk-attempt { font-size: .72em; color: var(--c-dim); }
-.mk-attempt b { color: var(--c-gold); font-weight: 400; }
+.mk-meta { font-size: .68em; color: var(--c-dim); font-variant-numeric: tabular-nums; }
+.mk-meta b { color: var(--c-txt); font-weight: 400; }
+.mk-meta code { color: var(--c-dim); }
 
 .mk-btn {
   display: inline-flex; align-items: center; gap: 5px;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--c-edge); border-radius: var(--mk-radius);
-  background: var(--c-card); color: var(--c-txt);
-  font: inherit; font-size: .78em; cursor: pointer;
+  background: var(--c-card); color: var(--c-txt); font: inherit; font-size: .76em; cursor: pointer;
 }
 .mk-btn:hover { border-color: var(--c-brand); }
 .mk-btn.primary { border-color: var(--c-brand); color: var(--c-brand); }
+.mk-btn.danger:hover { border-color: var(--c-dead); color: var(--c-dead); }
+.mk-btn.active { background: color-mix(in srgb, var(--c-gold) 18%, transparent); border-color: var(--c-gold); color: var(--c-gold); }
+.mk-btn:disabled { opacity: .4; cursor: default; }
 
-/* Player chip — the header for everything in that player's column. It carries the things
- * that differ per player, which on a randomized-pair run is nearly everything. Nothing
- * beneath it repeats what it says. */
+/* Launchers popover: the one place the two per-player downloads live. */
+.mk-pop-anchor { position: relative; }
+.mk-pop {
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 20;
+  display: flex; flex-direction: column; gap: var(--space-1);
+  padding: var(--space-2); min-width: 220px;
+  border: 1px solid var(--c-edge); border-radius: var(--mk-radius);
+  background: color-mix(in srgb, var(--c-card) 96%, var(--c-bg));
+  box-shadow: 0 8px 28px rgba(0,0,0,.5);
+}
+.mk-pop .mk-cap { padding: 2px var(--space-2); }
+
+/* Player chip — the header for that player. Nothing beneath it repeats what it says. */
 .mk-pchips { display: flex; flex-wrap: wrap; gap: var(--space-3); width: 100%; }
 .mk-pchip {
-  flex: 1 1 clamp(240px, 30%, 420px);
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 2px var(--space-2);
+  flex: 1 1 clamp(240px, 30%, 520px);
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px var(--space-2);
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--c-edge);
-  border-left: 3px solid var(--c-dim);
-  border-radius: var(--mk-radius);
+  border: 1px solid var(--c-edge); border-left: 3px solid var(--c-dim); border-radius: var(--mk-radius);
   background: var(--c-card);
 }
 .mk-pchip.online { border-left-color: var(--c-alive); }
-.mk-pchip.offline { border-left-color: var(--c-dead); }
-.mk-pchip-side {
-  grid-row: 1 / span 2; align-self: center;
-  font-size: 1.3em; font-weight: 700; color: var(--c-brand);
-}
+.mk-pchip.offline { border-left-color: var(--c-dim); opacity: .75; }
+.mk-side { grid-row: 1 / span 2; align-self: center; font-size: 1.3em; font-weight: 700; color: var(--c-brand); }
 .mk-pchip-name { font-size: .9em; }
 .mk-pchip-game { color: var(--c-info); font-size: .68em; }
 .mk-pchip-meta { grid-column: 2 / span 2; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: .68em; color: var(--c-dim); }
@@ -206,237 +127,157 @@ body.mk-body-root {
 
 /* ── Tabs ──────────────────────────────────────────────────────────────── */
 
-.mk-tabs {
-  display: flex; gap: var(--space-1); flex-wrap: wrap;
-  padding: 0 var(--space-4);
-  border-bottom: 1px solid var(--c-sep);
-}
-.mk-tab {
-  padding: var(--space-2) var(--space-3);
-  border: none; border-bottom: 2px solid transparent;
-  background: none; color: var(--c-dim);
-  font: inherit; font-size: .82em; cursor: pointer;
-}
+.mk-tabs { display: flex; gap: var(--space-1); padding: 0 var(--space-4); border-bottom: 1px solid var(--c-sep); }
+.mk-tab { padding: var(--space-2) var(--space-3); border: none; border-bottom: 2px solid transparent; background: none; color: var(--c-dim); font: inherit; font-size: .82em; cursor: pointer; }
 .mk-tab:hover { color: var(--c-txt); }
 .mk-tab.active { color: var(--c-brand); border-bottom-color: var(--c-brand); }
 .mk-tab-count { opacity: .6; font-size: .8em; margin-left: 4px; }
 
-.mk-content { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+/* ── Body ──────────────────────────────────────────────────────────────── */
 
-/* ── Cards + tables ────────────────────────────────────────────────────── */
+.mk-body { min-height: 0; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
 
-.mk-card {
-  border: 1px solid var(--c-edge);
-  border-radius: var(--mk-radius);
-  background: var(--c-card);
-  overflow: hidden;
+/* The run body: board + side strip. Under 1500px the strip sits below the board; above
+ * it, beside. Both fill the height available. */
+.mk-runbody {
+  min-height: 0; height: 100%;
+  display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--space-4);
+  padding: var(--space-4);
 }
-/* Kept only where a page holds several distinct things that need telling apart (Setup,
- * Broadcast, Tools). A card that sits under a player chip has no header. */
-.mk-card-hdr {
-  display: flex; align-items: center; gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--c-sep);
-  font-size: .74em; color: var(--c-dim);
+@media (min-width: 1500px) {
+  .mk-runbody { grid-template-columns: minmax(0, 1fr) var(--mk-side); grid-template-rows: minmax(0, 1fr); }
+  .mk-strip { grid-template-columns: 1fr; overflow-y: auto; min-height: 0; }
 }
+
+.mk-card { border: 1px solid var(--c-edge); border-radius: var(--mk-radius); background: var(--c-card); overflow: hidden; }
+.mk-card-hdr { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--c-sep); font-size: .74em; color: var(--c-dim); }
 .mk-card-hdr b { color: var(--c-txt); font-size: 1.16em; font-weight: 400; }
-.mk-card-hdr .mk-hdr-spacer { flex: 1; }
 .mk-card-body { padding: var(--space-3); }
-
-/* A muted caption: the one label a section is allowed. */
 .mk-cap { font-size: .68em; letter-spacing: .06em; color: var(--c-dim); }
+.mk-empty { padding: var(--space-5); text-align: center; color: var(--c-dim); font-size: .82em; }
 
-.mk-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: var(--space-4); }
+/* ── The board ─────────────────────────────────────────────────────────── */
 
-table.mk-tbl { width: 100%; border-collapse: collapse; font-size: .78em; }
-.mk-tbl th {
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--c-edge);
-  text-align: left; font-weight: 400;
-  font-size: .82em; letter-spacing: .1em; text-transform: uppercase; color: var(--c-dim);
+.mk-board { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
+.mk-sect { display: flex; align-items: baseline; gap: var(--space-2); padding: var(--space-3) var(--space-3) var(--space-1); }
+.mk-sect .mk-cap { letter-spacing: .12em; text-transform: uppercase; }
+.mk-sect-n { font-size: .68em; color: var(--c-dim); opacity: .7; }
+
+/* One row per pair: A half | bond | B half. The B half is mirrored so both sprites sit at
+ * the outer edges and the two HP bars face each other across the bond. */
+.mk-pair {
+  display: grid; grid-template-columns: minmax(0, 1fr) calc(var(--scale-step) * 5.6) minmax(0, 1fr);
+  align-items: center; gap: var(--space-3);
+  padding: var(--mk-row-pad) var(--space-3);
+  border-top: 1px solid var(--c-sep);
 }
-.mk-tbl td { padding: var(--mk-row-pad) var(--space-3); border-bottom: 1px solid var(--c-sep); vertical-align: middle; }
-.mk-tbl tr:last-child td { border-bottom: none; }
-.mk-tbl tbody tr:hover { background: color-mix(in srgb, var(--c-txt) 4%, transparent); }
-.mk-num { text-align: right; font-variant-numeric: tabular-nums; }
+.mk-pair:hover { background: color-mix(in srgb, var(--c-txt) 3%, transparent); }
+.mk-pair.at-risk { background: color-mix(in srgb, var(--c-pend) 10%, transparent); }
+.mk-pair.at-risk:hover { background: color-mix(in srgb, var(--c-pend) 14%, transparent); }
+.mk-pair.fallen { opacity: .5; }
+.mk-pair.fallen .mk-half-nick { text-decoration: line-through; }
 
-/* The party table has no <thead>. Sprites, HP bars and a partner's name do not need a
- * caption saying which is which; the ability column reads as words. Widths are pinned
- * so the two players' tables line up across the gap. */
-.mk-party .mk-cell-hp   { width: 1%; }
-.mk-party .mk-cell-abil { width: 22%; color: var(--c-dim); white-space: nowrap; }
-.mk-party .mk-cell-item { width: 1%; text-align: center; }
-.mk-party .mk-cell-link { width: 24%; }
+.mk-half { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); min-width: 0; }
+.mk-half.b { direction: rtl; }
+.mk-half.b > * { direction: ltr; }
+.mk-half.b .mk-half-txt { text-align: right; }
+.mk-half.empty { color: var(--c-dim); font-style: italic; font-size: .8em; }
 
-/* The foe sits as the first row of the same table, tinted, rather than as its own card
- * with its own two-line header. */
-.mk-row-battle td { background: color-mix(in srgb, var(--c-dead) 9%, transparent); }
-.mk-vs { color: var(--c-dead); font-size: .8em; letter-spacing: .08em; margin-right: 4px; }
+.mk-half-sprite { flex: none; line-height: 0; width: var(--size-sprite-table); height: var(--size-sprite-table); display: grid; place-items: center; }
+.mk-half-sprite img.mon-sprite { width: var(--size-sprite-table); height: var(--size-sprite-table); object-fit: contain; image-rendering: pixelated; }
+.mk-half-txt { min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
+.mk-half-nick { font-size: .9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-half-sub { font-size: .72em; color: var(--c-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mk-half-sub .abil { color: color-mix(in srgb, var(--c-txt) 70%, var(--c-dim)); }
+.mk-where { font-size: .64em; letter-spacing: .08em; text-transform: uppercase; color: var(--c-dim); }
+.mk-active { color: var(--c-dead); font-size: .8em; margin-inline: 3px; }
+.mk-item { color: var(--c-gold); font-size: .75em; cursor: help; margin-inline: 3px; }
 
-/* ── Mon cell ──────────────────────────────────────────────────────────── */
-
-.mk-mon { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-
-/* Size ONLY the bare Gen 3 sprite. `.mk-mon img` also matched Gen 1's, which is a 52px
- * PokeAPI image sitting at margin:-6px inside a 40px overflow-hidden span — a deliberate
- * crop. Forcing that inner image to 40px leaves the negative margin trimming it. */
-.mk-mon img.mon-sprite {
-  width: var(--size-sprite-table); height: var(--size-sprite-table);
-  object-fit: contain; image-rendering: pixelated;
-}
-.mk-mon > span:first-child { flex: none; line-height: 0; }
-.mk-mon-txt { min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
-.mk-mon-nick { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mk-mon-sub { font-size: .82em; color: var(--c-dim); }
-.mk-mon.dead { opacity: .45; }
-.mk-mon.dead .mk-mon-nick { text-decoration: line-through; }
-
-.mk-hp { display: flex; flex-direction: column; gap: 3px; min-width: calc(var(--scale-step) * 3); }
-.mk-hp-num { font-size: .82em; font-variant-numeric: tabular-nums; }
-.mk-hp-bar {
-  display: block;
-  height: 5px; border-radius: 3px;
-  background: color-mix(in srgb, var(--c-txt) 12%, transparent);
-  overflow: hidden;
-}
+.mk-hp { display: flex; flex-direction: column; gap: 3px; width: calc(var(--scale-step) * 3.2); }
+.mk-hp-num { font-size: .74em; font-variant-numeric: tabular-nums; color: var(--c-dim); }
+.mk-half.b .mk-hp-num { text-align: left; }
+.mk-hp-bar { display: block; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--c-txt) 12%, transparent); overflow: hidden; }
 .mk-hp-fill { display: block; height: 100%; background: var(--c-hp-high); }
 .mk-hp-fill.mid { background: var(--c-hp-mid); }
 .mk-hp-fill.low { background: var(--c-hp-low); }
+/* B's bar fills from the right, toward the bond, so the two bars mirror. */
+.mk-half.b .mk-hp-bar { transform: scaleX(-1); }
 
-/* The partner's name, coloured by the state of the bond. Not a boxed tag — twelve boxes
- * in a column was the loudest thing on the page, for the least new information. */
-.mk-partner { font-size: .9em; }
-.mk-partner.alive { color: var(--c-alive); }
-.mk-partner.dead, .mk-partner.memorial { color: var(--c-dead); text-decoration: line-through; }
-.mk-partner.none { color: var(--c-dim); font-style: italic; }
+/* The bond: the area the pair was caught in and the state of the tie. */
+.mk-bond { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; text-align: center; min-width: 0; }
+.mk-bond-glyph { font-size: .95em; letter-spacing: .1em; font-family: var(--font-mono); }
+.mk-bond-glyph.alive { color: var(--c-alive); }
+.mk-bond-glyph.pending { color: var(--c-pend); }
+.mk-bond-glyph.dead, .mk-bond-glyph.memorial, .mk-bond-glyph.dead_zone { color: var(--c-dead); }
+.mk-bond-area { font-size: .64em; color: var(--c-info); line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.mk-bond-why { font-size: .6em; color: var(--c-dim); line-height: 1.1; }
+.mk-risk { font-size: .6em; color: var(--c-pend); letter-spacing: .08em; text-transform: uppercase; }
 
-.mk-item { color: var(--c-gold); font-size: .8em; cursor: help; }
+/* ── Side strip: per-player battle + wild, and the feed ────────────────── */
 
-.mk-tag {
-  display: inline-block; padding: 1px 6px; border-radius: 3px;
-  font-size: .68em; letter-spacing: .06em;
-  border: 1px solid var(--c-edge); color: var(--c-dim);
-}
+.mk-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: var(--space-3); }
+.mk-pstrip { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2) var(--space-3); padding: var(--space-3); }
+.mk-pstrip .mk-side { grid-row: 1 / span 9; align-self: start; font-size: 1.1em; }
+.mk-foe { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--space-2); padding: var(--space-2); margin: 0 0 var(--space-1); border-radius: 6px; background: color-mix(in srgb, var(--c-dead) 10%, transparent); }
+.mk-foe .mk-hp { width: calc(var(--scale-step) * 2.6); }
+.mk-wild-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2); align-items: baseline; font-size: .76em; }
+.mk-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: .68em; letter-spacing: .06em; border: 1px solid var(--c-edge); color: var(--c-dim); white-space: nowrap; }
 .mk-tag.status { color: var(--c-pend); border-color: color-mix(in srgb, var(--c-pend) 45%, transparent); }
-.mk-tag.dead { color: var(--c-dead); border-color: color-mix(in srgb, var(--c-dead) 45%, transparent); }
-.mk-tag.area { color: var(--c-info); border-color: color-mix(in srgb, var(--c-info) 45%, transparent); }
+.mk-tag.off { color: var(--c-dead); border-color: color-mix(in srgb, var(--c-dead) 45%, transparent); }
 
-.mk-empty { padding: var(--space-5); text-align: center; color: var(--c-dim); font-size: .82em; }
-
-/* Wild encounters, as a footer of the player's card. One caption, then a line per method. */
-.mk-wild {
-  display: flex; flex-direction: column; gap: var(--space-1);
-  padding: var(--space-2) var(--space-3) var(--space-3);
-  border-top: 1px solid var(--c-sep);
-  font-size: .76em;
-}
-.mk-wild-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-2); align-items: baseline; }
-.mk-wild-row .mk-tag { white-space: nowrap; }
-
-/* ── The board (Links tab) ─────────────────────────────────────────────── */
-
-.mk-board {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 0 var(--space-3);
-  align-items: stretch;
-}
-.mk-board-side { display: flex; flex-direction: column; min-width: 0; }
-.mk-board-side.b { direction: rtl; }
-.mk-board-side.b > * { direction: ltr; }
-.mk-board-mon { min-height: calc(var(--scale-step) * 1.9); padding: var(--mk-row-pad) 0; }
-
-/* The spine is the soul link made visible: one cell per pair, carrying the area the pair
- * was caught in and the state of the bond. */
-.mk-spine {
-  display: flex; flex-direction: column;
-  width: calc(var(--scale-step) * 5.2);
-  border-inline: 1px solid var(--c-sep);
-}
-.mk-spine-cell {
-  flex: 1;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 2px;
-  padding: var(--mk-row-pad) 2px;
-  text-align: center;
-}
-.mk-spine-area { font-size: .62em; color: var(--c-info); line-height: 1.1; }
-.mk-spine-bond { font-size: .9em; letter-spacing: .1em; }
-.mk-spine-bond.alive { color: var(--c-alive); }
-.mk-spine-bond.dead, .mk-spine-bond.memorial { color: var(--c-dead); }
-.mk-spine-bond.pending { color: var(--c-pend); }
-
-@media (max-width: 900px) {
-  .mk-board { grid-template-columns: minmax(0, 1fr); }
-  .mk-spine { flex-direction: row; width: auto; border-inline: none; border-block: 1px solid var(--c-sep); }
-  .mk-board-side.b { direction: ltr; }
-}
-
-/* ── Event feed ────────────────────────────────────────────────────────── */
-
-.mk-feed { display: flex; flex-direction: column; max-height: calc(var(--scale-step) * 12); overflow-y: auto; }
-.mk-ev {
-  display: grid; grid-template-columns: auto auto minmax(0, 1fr);
-  gap: var(--space-2); align-items: baseline;
-  padding: var(--mk-row-pad) var(--space-3);
-  border-bottom: 1px solid var(--c-sep);
-  font-size: .74em;
-}
+.mk-feed { display: flex; flex-direction: column; max-height: calc(var(--scale-step) * 11); overflow-y: auto; }
+@media (min-width: 1500px) { .mk-feed { max-height: none; flex: 1; } }
+.mk-ev { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: var(--space-2); align-items: baseline; padding: var(--mk-row-pad) var(--space-3); border-bottom: 1px solid var(--c-sep); font-size: .74em; }
 .mk-ev:last-child { border-bottom: none; }
 .mk-ev-ts { color: var(--c-dim); font-variant-numeric: tabular-nums; }
 .mk-ev-who { color: var(--c-brand); }
-.mk-ev-txt { color: var(--c-txt); }
+
+/* ── Tables (Setup, Broadcast, drawer) ─────────────────────────────────── */
+
+table.mk-tbl { width: 100%; border-collapse: collapse; font-size: .78em; }
+.mk-tbl th { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--c-edge); text-align: left; font-weight: 400; font-size: .82em; letter-spacing: .1em; text-transform: uppercase; color: var(--c-dim); }
+.mk-tbl td { padding: var(--mk-row-pad) var(--space-3); border-bottom: 1px solid var(--c-sep); vertical-align: middle; }
+.mk-tbl tr:last-child td { border-bottom: none; }
+
+/* ── Forms ─────────────────────────────────────────────────────────────── */
+
+.mk-form { max-width: calc(var(--scale-step) * 40); display: flex; flex-direction: column; gap: var(--space-4); }
+.mk-field { display: flex; flex-direction: column; gap: 4px; font-size: .76em; }
+.mk-field span { color: var(--c-dim); }
+.mk-field input { padding: var(--space-2); border: 1px solid var(--c-edge); border-radius: 5px; background: var(--c-bg); color: var(--c-txt); font: inherit; font-size: 1em; }
+.mk-field input.big { font-size: 1.3em; }
+.mk-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-2); }
+.mk-opt { display: flex; flex-wrap: wrap; align-items: center; align-content: start; gap: var(--space-1) var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--c-edge); border-radius: var(--mk-radius); font-size: .78em; cursor: pointer; }
+.mk-opt.on { border-color: color-mix(in srgb, var(--c-alive) 55%, transparent); }
+.mk-opt.off-unavailable { opacity: .5; cursor: default; }
+.mk-opt-why { flex: 1 1 100%; font-size: .78em; line-height: 1.4; color: var(--c-dim); }
+.mk-group { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.mk-note { padding: var(--space-3); border-left: 2px solid var(--c-info); background: color-mix(in srgb, var(--c-info) 8%, transparent); font-size: .76em; color: var(--c-dim); }
+code { font-family: var(--font-mono); font-size: .92em; color: var(--c-link); }
+kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2px; border-radius: 3px; background: var(--c-bg); font-family: var(--font-mono); font-size: .85em; }
 
 /* ── Debug drawer ──────────────────────────────────────────────────────── */
 
-.mk-drawer {
-  position: fixed; inset: 0 0 0 auto; z-index: 40;
-  width: min(520px, 92vw);
-  display: flex; flex-direction: column;
-  background: color-mix(in srgb, var(--c-card) 92%, var(--c-bg));
-  border-left: 1px solid var(--c-edge);
-  box-shadow: -12px 0 40px rgba(0, 0, 0, .5);
-}
-.mk-drawer-hdr {
-  display: flex; align-items: center; gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--c-sep);
-}
+.mk-drawer { position: fixed; inset: 0 0 0 auto; z-index: 40; width: min(520px, 92vw); display: flex; flex-direction: column; background: color-mix(in srgb, var(--c-card) 92%, var(--c-bg)); border-left: 1px solid var(--c-edge); box-shadow: -12px 0 40px rgba(0,0,0,.5); }
+.mk-drawer-hdr { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--c-sep); }
 .mk-drawer-body { padding: var(--space-4); overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-3); }
 .mk-drawer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-2); }
-.mk-scrim { position: fixed; inset: 0; z-index: 39; background: rgba(0, 0, 0, .45); }
+.mk-scrim { position: fixed; inset: 0; z-index: 39; background: rgba(0,0,0,.45); }
 
-kbd {
-  padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2px;
-  border-radius: 3px; background: var(--c-bg); font-family: var(--font-mono); font-size: .85em;
-}
+/* ── Mockup controls — the only part of this page that would not ship ──── */
 
-/* ── Forms (Setup / Tools) ─────────────────────────────────────────────── */
-
-.mk-field { display: flex; flex-direction: column; gap: 4px; font-size: .76em; }
-.mk-field span { color: var(--c-dim); }
-.mk-field input, .mk-field select {
-  padding: var(--space-2); border: 1px solid var(--c-edge); border-radius: 5px;
-  background: var(--c-bg); color: var(--c-txt); font: inherit; font-size: 1em;
+.mk-ctl {
+  position: fixed; left: var(--space-3); bottom: var(--space-3); z-index: 30;
+  width: min(calc(var(--scale-step) * 15), 44vw); max-height: 46vh; overflow-y: auto;
+  display: flex; flex-wrap: wrap; gap: var(--space-1); padding: var(--space-2);
+  border: 1px dashed color-mix(in srgb, var(--c-brand) 55%, var(--c-edge)); border-radius: var(--mk-radius);
+  background: color-mix(in srgb, var(--c-card) 94%, var(--c-bg)); box-shadow: 0 6px 24px rgba(0,0,0,.45);
 }
-.mk-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-2); }
-.mk-opt {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2);
-  align-content: start;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--c-edge); border-radius: var(--mk-radius);
-  font-size: .78em;
-}
-.mk-opt.on { border-color: color-mix(in srgb, var(--c-alive) 55%, transparent); }
-/* An option this cartridge cannot do is shown in place and greyed with its reason, not
- * hidden and not offered as a checkbox that silently does nothing. */
-.mk-opt.off-unavailable { opacity: .5; }
-.mk-opt-why { flex: 1 1 100%; font-size: .78em; line-height: 1.4; color: var(--c-dim); }
-
-.mk-note {
-  padding: var(--space-3);
-  border-left: 2px solid var(--c-info);
-  background: color-mix(in srgb, var(--c-info) 8%, transparent);
-  font-size: .76em; color: var(--c-dim);
-}
-code { font-family: var(--font-mono); font-size: .92em; color: var(--c-link); }
+.mk-ctl summary { width: 100%; cursor: pointer; list-style: none; font-size: .62em; letter-spacing: .14em; text-transform: uppercase; color: var(--c-brand); }
+.mk-ctl summary::-webkit-details-marker { display: none; }
+.mk-ctl-lbl { width: 100%; font-size: .58em; letter-spacing: .14em; text-transform: uppercase; color: var(--c-dim); }
+.mk-chip { padding: 3px 7px; border: 1px solid var(--c-edge); border-radius: 999px; background: var(--c-card); color: var(--c-dim); font: inherit; font-size: .7em; cursor: pointer; }
+.mk-chip.active { color: var(--c-bg); background: var(--c-brand); border-color: var(--c-brand); }
+.mk-chip.sw { display: inline-flex; align-items: center; gap: 5px; }
+.mk-chip .sw-dot { width: .7em; height: .7em; border-radius: 50%; border: 1px solid rgba(255,255,255,.25); }
