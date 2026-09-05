@@ -3776,7 +3776,7 @@ class SLinkServer:
                 earned = "earned" if (badge_mask & (1 << i)) else ""
                 gym_html += f'<span class="gym-badge {earned}" style="background:{color}" title="{name}"></span>'
             gym_html += '</span>'
-            rom_lbl   = html.escape(ROM_LABEL.get(p["rom_type"], p["rom_type"]))
+            rom_lbl   = html.escape(str(ROM_LABEL.get(p["rom_type"], p["rom_type"])))
             area_name = self.adapter.area_display_name(p.get("current_area_id") or p["current_area"])
             area_disp = html.escape(area_name) if area_name else '<span class="dim">unknown</span>'
             balls     = p["ball_count"]
@@ -3812,7 +3812,7 @@ class SLinkServer:
                 f'<div class="info-row">'
                 f'<span>&#128205; <b class="area">{area_disp}</b></span>'
                 f'<span>&#9702; Pokéballs: <b class="{balls_cls}">{balls}</b></span>'
-                f'<span>Last: <b>{html.escape(p["last_event"])}</b> {_age_label(p.get("last_seen_age"))}</span>'
+                f'<span>Last: <b>{html.escape(str(p["last_event"]))}</b> {_age_label(p.get("last_seen_age"))}</span>'
                 f'</div>'
             )
             # Say so loudly when a client has gone quiet. Everything else on this card keeps
@@ -4274,7 +4274,7 @@ class SLinkServer:
             '<div class="lp-hdr-side lp-hdr-side-a">'
             f'<div class="lp-player-name">{_name_a} {_a_conn}</div>'
             '<div class="lp-hdr-meta">'
-            f'<span class="dim">{html.escape(_rom_a)}</span>'
+            f'<span class="dim">{html.escape(str(_rom_a))}</span>'
             f' &middot; &#128205; <b class="area">{html.escape(_area_a_lbl)}</b>'
             f' &middot; &#9702; <b class="{_bclass_a}">{_balls_a}</b>'
             '</div></div>'
@@ -4288,7 +4288,7 @@ class SLinkServer:
             '<div class="lp-hdr-meta">'
             f'<b class="{_bclass_b}">{_balls_b}</b> &#9702;'
             f' &middot; <b class="area">{html.escape(_area_b_lbl)}</b> &#128205;'
-            f' &middot; <span class="dim">{html.escape(_rom_b)}</span>'
+            f' &middot; <span class="dim">{html.escape(str(_rom_b))}</span>'
             '</div></div>'
             '</div>'
         )

@@ -133,7 +133,7 @@ Completion requires the working board and refinements, reusable broadcast system
 | Stage | Status | Evidence |
 |---|---|---|
 | Plan recorded | Complete | This document; reviewed directly with the Gen1 and RR task owners. |
-| Track A | Implemented; phase PR awaiting CI/merge | `codex/ui-http-hardening`: 1802 unit/integration tests passed, 15 skipped; required Ruff passed; 178 Lua files parsed. Browser checks covered Gen 3/Gen 1 dashboards, manager, themes, escaped text, and corrupt-registry recovery on isolated HTTP-only fixtures. |
+| Track A | Implemented; phase PR awaiting CI/merge | `codex/ui-http-hardening`: 1805 unit/integration tests passed, 15 skipped; required Ruff passed; 178 Lua files parsed. Browser checks covered Gen 3/Gen 1 dashboards, manager, themes, escaped text, and corrupt-registry recovery on isolated HTTP-only fixtures. |
 | Consumer interface | Agreement published, producer not implemented | `docs/ui_projection_contract.md` freezes the additive consumer boundary; Phase 3 still owns the tested producer. |
 | Phase 0 | Waiting for external handoff | Gen1 foundation-only commit `654c7c7` does not open this gate. The integrated runtime/admission and authoritative API handoff remain unpublished. |
 | Phases 1-9 | Not started | Preserve Phase 0 gate; no speculative runtime migration. |
