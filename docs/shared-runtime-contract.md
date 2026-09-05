@@ -19,6 +19,7 @@ bindings keep their current behavior until explicitly integrated and validated.
 | `lua/platform_storage.lua` | Exclusive file ownership, UTF-8/SHA256, flush and atomic replacement | Caller selects an isolated local path |
 | `lua/state_store.lua` | Bound, checksummed/revisioned documents with publication readback | No cartridge knowledge |
 | `lua/client_journal.lua` | Durable semantic outbox, command inbox and receipt/floor bookkeeping | Executors provide verified outcomes |
+| `lua/command_executor.lua` | Persist preparation, classify recovery, execute and store verified receipts | Cartridge callbacks supply all memory policy |
 | `lua/client_session.lua` | Session state, sequence/operation envelopes and response validation | `gen1_session.lua` supplies RBY ROM/profile/capability checks |
 | `server/protocol.py` | Strict wire JSON, connection ownership, epochs and session-local retries | `gen1_admission.py` supplies the RBY HELLO validator |
 | `server/protocol_journal.py` | Atomic state + event + both-player command outboxes | Coordinator supplies staged state and verified receipts |
@@ -87,6 +88,35 @@ event together. The confirmed command floor advances only across a contiguous co
 inbox prefix, so an immediate HUD receipt cannot erase an earlier deferred operation.
 Storage failures latch the store until reopen; they never reset it to an empty outbox.
 These components have not yet replaced the production client's in-memory queues.
+
+`get_command(command_id)` returns a detached inbox record. `prepare_command(command_id,
+intent)` persists a versioned policy document before any physical effect. The intent
+must have a nonempty `schema` string; exact preparation retries are idempotent, while
+conflicting preparation refuses. `pending_commands()` includes that intent after reopen
+or repeated server delivery. Completion preserves it until the server confirms the receipt.
+This additive API retains the journal document schema; bindings requiring preparation
+must use the new executor interface and must not fall back to an older unprepared executor.
+
+`command_executor.new(journal, adapter)` requires four callbacks:
+
+- `prepare(body)` returns a versioned intent or nil plus a refusal reason, without effects.
+- `classify(body, intent)` freshly observes identity and physical state. It returns
+  `before` or `after` plus the observation, or `diverged` plus a reason. The cartridge
+  policy must also recheck the live admission and appropriate execution checkpoint.
+- `apply(body, intent)` rechecks preconditions and performs the effect. Its Boolean
+  return value is deliberately ignored; a separate readback must prove completion.
+- `receipt(body, intent, observation)` validates the exact poststate and returns a
+  nonempty receipt document for independent server validation.
+
+`step(command_id)` returns success plus an explicit outcome/receipt only after the
+receipt and outgoing ACK are persisted. An existing completed inbox record is replayed
+without execution. A prepared command whose poststate is already present also avoids
+another write. A before-state may be applied only when the cartridge classifier proves
+that forward recovery is safe. Partial/divergent states stay pending. Exceptions return
+failure plus a retryable NACK diagnostic (`phase`, `reason`); this is not a terminal
+receipt and callers must not dequeue the command. Storage failure requires reopening
+the checked store before retrying. Snapshot/rollback detection and gameplay suspension
+remain binding responsibilities; this engine does not authorize emulator advancement.
 
 ## Rule staging and binary caches
 

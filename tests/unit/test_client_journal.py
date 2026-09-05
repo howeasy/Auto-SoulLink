@@ -13,6 +13,7 @@ def start(lua):
         function append(text) return journal:append(assert(JSON.decode(text))) end
         function accept(id,text) return journal:accept_response(id,assert(JSON.decode(text))) end
         function complete(id,outcome,text) return journal:complete_command(id,outcome,assert(JSON.decode(text))) end
+        function prepare(id,text) return journal:prepare_command(id,assert(JSON.decode(text))) end
         function reopen() store:close();store=assert(open_store());journal=assert(Journal.open(store,new_id)) end
         function state() return (assert(store:read())) end
     """)
@@ -126,3 +127,35 @@ def test_outbox_bound_is_explicit_and_preserves_every_accepted_operation(runtime
     assert lua.globals().append('{"event":"tick"}')[0] is None
     lua.globals().reopen()
     assert [entry.operation_id for entry in lua.globals().state().outbox.values()] == ids
+
+
+def test_prepared_intent_is_immutable_and_survives_reopen_and_command_replay(runtime):  # noqa: F811
+    lua = runtime
+    start(lua)
+    event = lua.globals().append('{"event":"tick"}')
+    entry = command(1)
+    assert accepted(lua.globals().accept(event, json.dumps([entry])))
+    intent = '{"schema":"test-intent-v1","before":{"hp":20},"after":{"hp":0}}'
+    assert accepted(lua.globals().prepare(entry["command_id"], intent))
+    writes = lua.globals().writes
+    assert accepted(lua.globals().prepare(entry["command_id"], intent))
+    assert lua.globals().writes == writes
+    assert not accepted(lua.globals().prepare(entry["command_id"], intent.replace('20', '19')))
+    lua.globals().reopen()
+    event = lua.globals().append('{"event":"tick"}')
+    assert accepted(lua.globals().accept(event, json.dumps([entry])))
+    prepared = lua.globals().journal.get_command(lua.globals().journal, entry["command_id"])
+    assert prepared.intent.before.hp == 20 and prepared.intent.after.hp == 0
+    prepared.intent.before.hp = 100
+    assert lua.globals().state().inbox[1].intent.before.hp == 20
+
+
+@pytest.mark.parametrize("intent", [{}, [], {"schema": ""}, {"schema": 1}, {"before": 20}])
+def test_preparation_requires_versioned_policy_document(runtime, intent):  # noqa: F811
+    lua = runtime
+    start(lua)
+    event = lua.globals().append('{"event":"tick"}')
+    assert accepted(lua.globals().accept(event, json.dumps([command(1)])))
+    before = lua.globals().disk
+    assert not accepted(lua.globals().prepare(command(1)["command_id"], json.dumps(intent)))
+    assert lua.globals().disk == before

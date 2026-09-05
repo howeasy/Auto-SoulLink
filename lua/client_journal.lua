@@ -35,6 +35,11 @@ local function validate(state)
         end
         if entry.outcome~=nil and entry.outcome~="ACK" and entry.outcome~="NACK" then error("invalid command outcome",0) end
         if entry.outcome and JSON.kind(entry.receipt)~="object" then error("command outcome needs a receipt",0) end
+        if entry.intent~=nil and (JSON.kind(entry.intent)~="object"
+            or type(entry.intent.schema)~="string" or entry.intent.schema=="") then
+            error("prepared command needs a versioned intent",0)
+        end
+        if entry.confirmed~=nil and type(entry.confirmed)~="boolean" then error("invalid receipt confirmation",0) end
         if entry.confirmed and not entry.outcome then error("unapplied command cannot be confirmed",0) end
         command_ids[entry.command_id]=true;previous=entry.command_sequence
     end
@@ -73,6 +78,32 @@ function M.open(store,new_id)
         local commands=JSON.array()
         for _,entry in ipairs(state.inbox) do if not entry.outcome then commands[#commands+1]=entry end end
         return commands
+    end
+    function self:get_command(command_id)
+        local state,reason=store:read()
+        if not state then return nil,reason end
+        for _,entry in ipairs(state.inbox) do
+            if entry.command_id==command_id then return entry end
+        end
+        return nil,"unknown durable command"
+    end
+    function self:prepare_command(command_id,intent)
+        return mutate(function(state)
+            local entry
+            for _,candidate in ipairs(state.inbox) do if candidate.command_id==command_id then entry=candidate end end
+            if not entry then error("unknown durable command",0) end
+            local prepared=copy(intent)
+            if JSON.kind(prepared)~="object" or type(prepared.schema)~="string" or prepared.schema=="" then
+                error("versioned command intent required",0)
+            end
+            if entry.intent then
+                if encoded(entry.intent)~=encoded(prepared) then error("conflicting command preparation",0) end
+                return true
+            end
+            if entry.outcome then error("completed command cannot be prepared",0) end
+            entry.intent=prepared
+            return true
+        end)
     end
     function self:append(payload,observation)
         local id,reason=self.new_id()
