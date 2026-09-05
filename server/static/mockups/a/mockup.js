@@ -20,8 +20,8 @@ const FIXTURES = {
 /* Body-font candidates: [class, label, preview stack]. See fonts.css. */
 const FONTS = [
   // Pixel-flavoured: Pixelify's character with more of the glyph left in.
-  ['ui-jersey15', 'Jersey 15', "'Jersey 15', monospace"],
   ['ui-jersey20', 'Jersey 20', "'Jersey 20', monospace"],
+  ['ui-jersey15', 'Jersey 15', "'Jersey 15', monospace"],
   ['ui-jersey10', 'Jersey 10', "'Jersey 10', monospace"],
   ['ui-tiny5', 'Tiny5', "'Tiny5', monospace"],
   ['ui-dotgothic', 'DotGothic16', "'DotGothic16', monospace"],
@@ -129,7 +129,7 @@ function mockup() {
     dest: 'run',
     tab: 'board',
     theme: 'default',
-    font: 'ui-jersey15',
+    font: 'ui-jersey20',
     compact: false,
     debugOpen: false,
     launchersOpen: false,
@@ -152,7 +152,7 @@ function mockup() {
     async setup() {
       this.theme = localStorage.getItem('slink-theme') || 'default';
       this.applyTheme(this.theme);
-      this.applyFont(localStorage.getItem('slink-mockup-font') || 'ui-jersey15');
+      this.applyFont(localStorage.getItem('slink-mockup-font') || 'ui-jersey20');
       try {
         const [caps, runs] = await Promise.all([
           fetch('../fixtures/capabilities.json').then((r) => r.json()),
