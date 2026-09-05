@@ -104,7 +104,7 @@
             </label>
 
             <section class="mk-zone">
-              <h2 class="mk-h2"><span>Game</span><i></i><em>both players run the same game</em></h2>
+              <h2 class="mk-h2"><span>Game</span><i></i><em>any two cartridges of a family can link</em></h2>
               <div class="mk-games">
                 <template x-for="g in GAMES" :key="g[0]">
                   <button type="button" class="mk-gchip" :class="[draft.game === g[0] ? 'active' : '', g[0] === '' ? 'detect' : '']" @click="draft.game = g[0]" x-text="g[1]"></button>
@@ -166,6 +166,7 @@
                 </div>
                 <div class="mk-preview-body">
                   <div class="mk-now-line"><b x-text="draft.game ? gameLabel(draft.game) : 'Game detected on connect'"></b><span x-text="'tcp ' + nextPorts().tcp + ' · http ' + nextPorts().http"></span></div>
+                  <div class="mk-sub" x-show="draft.game && gameMembers(draft.game).length > 1">Each player may run any cartridge in the family; the exact one is read from their hello.</div>
                   <div class="mk-preview-rules">
                     <template x-for="k in draftOn()" :key="k"><span class="mk-tag on" x-text="OPTION_LABELS[k]"></span></template>
                     <span class="mk-sub" x-show="!draftOn().length">No clauses or extras — a plain soul link.</span>
