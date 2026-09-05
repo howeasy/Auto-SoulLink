@@ -78,13 +78,10 @@
       <span class="mk-rail-label">Calc ↗</span>
     </a>
 
-    <div class="mk-rail-foot">
-      <button class="mk-rail-item" @click="debugOpen = true">
-        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6 1l1 2h2l1-2 1 1-1 2h1v1h2v2h-2v2h2v2h-2v1l-3 2-3-2v-1H3v-2h2V9H3V7h2V5h1L5 3z"/></svg>
-        <span class="mk-rail-label">Debug <kbd>`</kbd></span>
-      </button>
-
-    </div>
+    <button class="mk-rail-item" @click="debugOpen = true">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M6 1l1 2h2l1-2 1 1-1 2h1v1h2v2h-2v2h2v2h-2v1l-3 2-3-2v-1H3v-2h2V9H3V7h2V5h1L5 3z"/></svg>
+      <span class="mk-rail-label">Debug <kbd>`</kbd></span>
+    </button>
   </aside>
 
   <!-- ══ Main ═════════════════════════════════════════════════════════════ -->
@@ -856,8 +853,9 @@
   </template>
 
   <!-- The dashed box is the only part of this page that would not ship. -->
-  <div class="mk-ctl">
-    <span class="mk-ctl-lbl">Mockup · layout</span>
+  <details class="mk-ctl" open>
+    <summary>Mockup controls</summary>
+    <span class="mk-ctl-lbl">Layout</span>
     <button class="mk-chip" :class="layout === 'l1' ? 'active' : ''" @click="layout = 'l1'">L1 Workspace</button>
     <button class="mk-chip" :class="layout === 'l2' ? 'active' : ''" @click="layout = 'l2'">L2 Split Board</button>
     <button class="mk-chip" :class="layout === 'l3' ? 'active' : ''" @click="layout = 'l3'">L3 Deck</button>
@@ -883,7 +881,7 @@
     <span x-text="t[1]"></span>
       </button>
     </template>
-  </div>
+  </details>
 
 </div>
 

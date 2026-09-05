@@ -170,7 +170,18 @@ def _moves():
 
 
 def _final_areas() -> tuple[str, str]:
-    return ("cerulean_city", "route_24") if _is_gen1() else ("pewter_museum", "route_25")
+    """Where each player is standing when the mocks finish.
+
+    BOTH must be areas with a wild encounter table, and they must DIFFER. Encounter data
+    is per player -- two randomized cartridges do not share one -- so a player parked
+    somewhere with no encounters leaves that panel empty, and an empty panel reads as
+    missing data rather than as the point being made.
+
+    Gen 3 also wants priority trainers so the Upcoming Trainers widget renders. This used
+    to say pewter_museum "so the widget renders (Falkner @ Pewter Museum)", which has one
+    priority trainer and no encounters at all; route_22 has seven and six.
+    """
+    return ("route_3", "route_24") if _is_gen1() else ("route_22", "cerulean_city")
 
 
 def _dead_zone():
