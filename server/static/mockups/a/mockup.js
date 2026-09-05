@@ -163,10 +163,14 @@ function mockup(initialLayout) {
     watchSprites() {
       const run = () => window.SLinkOverlay && window.SLinkOverlay.processSprites();
       let queued = false;
+      // setTimeout, not requestAnimationFrame. rAF does not fire in a background tab, so
+      // a mutation there would set the latch and wait for a frame that never comes --
+      // and every mutation after it returns early. Timers are throttled when hidden but
+      // they still run, so the latch always clears.
       new MutationObserver(() => {
         if (queued) return;
         queued = true;
-        requestAnimationFrame(() => { queued = false; run(); });
+        setTimeout(() => { queued = false; run(); }, 0);
       }).observe(document.body, { childList: true, subtree: true });
       run();
     },

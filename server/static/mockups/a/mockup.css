@@ -280,10 +280,17 @@ table.mk-tbl { width: 100%; border-collapse: collapse; font-size: .78em; }
 /* ── Mon cell ──────────────────────────────────────────────────────────── */
 
 .mk-mon { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-.mk-mon img, .mk-mon .mon-sprite {
+
+/* Size ONLY the bare Gen 3 sprite. `.mk-mon img` also matched Gen 1's, which is a 52px
+ * PokeAPI image sitting at margin:-6px inside a 40px overflow-hidden span — a deliberate
+ * crop. Forcing that inner image to 40px leaves the negative margin trimming it instead
+ * of centring it, so the sprite came out clipped rather than merely small. */
+.mk-mon img.mon-sprite {
   width: var(--size-sprite-table); height: var(--size-sprite-table);
-  object-fit: contain; image-rendering: pixelated; flex: none;
+  object-fit: contain; image-rendering: pixelated;
 }
+/* The wrapper span, whichever generation is inside it. */
+.mk-mon > span:first-child { flex: none; line-height: 0; }
 .mk-mon-txt { min-width: 0; display: flex; flex-direction: column; line-height: 1.15; }
 .mk-mon-nick { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mk-mon-sub { font-size: .82em; color: var(--c-dim); }
