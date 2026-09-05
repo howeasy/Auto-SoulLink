@@ -149,6 +149,17 @@ validation, not proof of the cartridge's encryption/checksum/semantic validity.
 `preserve_peer_session=True` is a trusted keyword to `SoulLinkState.handle_event`, supplied
 by an admitted coordinator. A protocol name in JSON cannot grant it.
 
+An admitted coordinator may also supply `save_identity=SaveIdentity(ot_id, trainer_name)`
+on HELLO, including through `DurableDispatcher.dispatch`. The binding validates the
+actual loaded save before constructing this immutable value; the rule engine does
+not construct it from a JSON `save_identity` field. It takes precedence over legacy
+payload/party-derived IDs. Legacy callers retain their existing explicit `ot_id`
+and party-key fallback. Identity validation precedes party/cache updates and legacy
+trade-watchdog progress; a rejected HELLO receives only its rejection notice while
+pre-existing command queues are retained. Persisted `player_identity` documents keep
+their existing `ot_id`/`trainer_name` shape. The session/admission gate must validate
+each delivery before durable replay; this value is not a substitute for that gate.
+
 Legacy `pending_trade` object graphs are refused. A new native coordinator should compose
 its JSON transaction document beside the staged rules document in the journal state:
 stable identities, phases, pre/post party data/digests and recovery obligations. Do not

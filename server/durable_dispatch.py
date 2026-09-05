@@ -9,6 +9,7 @@ import copy
 from dataclasses import dataclass
 
 from server.protocol_journal import JournalError, ProtocolJournal
+from server.save_identity import SaveIdentity
 from server.staged_state import StagedSoulLinkState
 
 
@@ -33,7 +34,11 @@ class DurableDispatcher:
     def state(self):
         return self.staged_type.restore(self.journal.snapshot().state, data_dir=self.data_dir)
 
-    def dispatch(self, player, operation_id, payload, *, preserve_peer_session=False):
+    def dispatch(self, player, operation_id, payload, *, preserve_peer_session=False,
+                 save_identity: SaveIdentity | None = None):
+        if save_identity is not None and (
+                not isinstance(save_identity, SaveIdentity) or payload.get("event") != "hello"):
+            raise JournalError("trusted save identity is supplied on admitted HELLO only")
         existing = self.journal.event(player, operation_id, payload)
         if existing is not None:
             return DispatchResult(existing.revision, existing.result, True)
@@ -59,7 +64,10 @@ class DurableDispatcher:
                     immediate.extend(staged.handle_event(player, event, preserve_peer_session=preserve_peer_session))
         else:
             self.validate_event(player, request, staged)
-            immediate = staged.handle_event(player, request, preserve_peer_session=preserve_peer_session)
+            immediate = staged.handle_event(player, request, preserve_peer_session=preserve_peer_session,
+                                            save_identity=save_identity)
+            if request.get("_rejected"):
+                raise JournalError("HELLO identity was rejected by the rule state")
         commands = staged.take_commands(player, immediate)
         # noop is the legacy transport's empty reply, not a game-side operation.
         commands = {p: [command for command in batch if command.get("cmd") != "noop"] for p, batch in commands.items()}

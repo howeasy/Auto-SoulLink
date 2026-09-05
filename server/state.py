@@ -26,6 +26,7 @@ from enum import Enum
 
 from server.adapters.base import GameRulesAdapter
 from server.pokemon_data import _parse_pid_otid_key, pid_otid_shiny
+from server.save_identity import SaveIdentity
 
 log = logging.getLogger(__name__)
 
@@ -236,7 +237,8 @@ class SoulLinkState:
 
     # ── public API ───────────────────────────────────────────────────────────
 
-    def handle_event(self, player_id: str, msg: dict, *, preserve_peer_session: bool = False) -> list[dict]:
+    def handle_event(self, player_id: str, msg: dict, *, preserve_peer_session: bool = False,
+                     save_identity: SaveIdentity | None = None) -> list[dict]:
         """
         Process one event from player_id.
         Returns commands to send back to player_id (including any queued cross-player commands).
@@ -244,10 +246,26 @@ class SoulLinkState:
         """
         event = msg.get("event", "unknown")
 
+        if save_identity is not None:
+            if not isinstance(save_identity, SaveIdentity):
+                raise TypeError("save_identity must be a trusted SaveIdentity value")
+            if event != "hello":
+                raise ValueError("save_identity is supplied on admitted HELLO only")
+        if event == "hello":
+            msg.pop("_rejected", None)
+            incoming_ot, incoming_name = self._hello_identity(msg, save_identity)
+            existing = self.player_identity.get(player_id)
+            if incoming_ot and existing and existing["ot_id"] != incoming_ot:
+                # A rejected client may receive its diagnostic, never pending game
+                # commands for the correctly admitted save. Do not even advance a
+                # legacy trade watchdog before this identity check succeeds.
+                return [self._reject_hello(player_id, msg, incoming_ot, incoming_name)]
+
         self._tick_pending_trade()    # free the single trade slot if a side abandoned it (link untouched)
 
         if event == "hello":
-            self._handle_hello(player_id, msg, preserve_peer_session=preserve_peer_session)
+            self._handle_hello(player_id, msg, preserve_peer_session=preserve_peer_session,
+                               save_identity=save_identity)
         elif event == "area_enter":
             self._handle_area_enter(player_id, msg)
         elif event == "ghost_pos":
@@ -742,7 +760,32 @@ class SoulLinkState:
             ctx = "  " + "  ".join(ctx_parts) if ctx_parts else ""
             log.debug(f"[AREA] {area_id}: {old.value} → {new_status.value}{ctx}")
 
-    def _handle_hello(self, player_id: str, msg: dict, *, preserve_peer_session: bool = False):
+    def _hello_identity(self, msg: dict, save_identity: SaveIdentity | None):
+        if save_identity is not None:
+            if not isinstance(save_identity, SaveIdentity):
+                raise TypeError("save_identity must be a trusted SaveIdentity value")
+            return save_identity.ot_id, save_identity.trainer_name
+        # Legacy bindings keep their explicit ot_id / party-key fallback. An
+        # ordinary JSON `save_identity` object never grants the trusted keyword.
+        incoming_ot = str(msg.get("ot_id") or "").strip() or None
+        party = msg.get("party", [])
+        if not incoming_ot and party:
+            incoming_ot = self.adapter.parse_ot_id(party[0].get("key", ""))
+        return incoming_ot, msg.get("trainer_name", "")
+
+    def _reject_hello(self, player_id: str, msg: dict, incoming_ot: str, incoming_name: str):
+        existing = self.player_identity[player_id]
+        err = (f"Identity mismatch for slot {player_id.upper()}: "
+               f"expected {existing['trainer_name']} (OT {existing['ot_id'][:8]}), "
+               f"got {incoming_name or '?'} (OT {incoming_ot[:8]})")
+        log.warning(f"[{player_id}] REJECTED: {err}")
+        self.identity_error[player_id] = err
+        msg["_rejected"] = True
+        return {"cmd": "hud_show", "text": f"[x] WRONG SAVE: slot {player_id.upper()}",
+                "color": [255, 0, 0], "duration": 600}
+
+    def _handle_hello(self, player_id: str, msg: dict, *, preserve_peer_session: bool = False,
+                      save_identity: SaveIdentity | None = None):
         """
         Reconcile on reconnect.
         Only flags mons that are still IN the party with hp == 0 as newly fainted —
@@ -756,32 +799,14 @@ class SoulLinkState:
         # with one locked the run to the wrong trainer permanently and every later hello was
         # rejected as WRONG SAVE. A client that reports `ot_id` is telling us what the save
         # says; only fall back to the mon key for clients that do not.
-        incoming_ot = str(msg.get("ot_id") or "").strip() or None
-        if not incoming_ot and party:
-            first_key = party[0].get("key", "")
-            incoming_ot = self.adapter.parse_ot_id(first_key)
-        incoming_name = msg.get("trainer_name", "")
+        incoming_ot, incoming_name = self._hello_identity(msg, save_identity)
 
         if incoming_ot:
             existing = self.player_identity.get(player_id)
             if existing:
                 if existing["ot_id"] != incoming_ot:
-                    err = (f"Identity mismatch for slot {player_id.upper()}: "
-                           f"expected {existing['trainer_name']} "
-                           f"(OT {existing['ot_id'][:8]}), "
-                           f"got {incoming_name or '?'} "
-                           f"(OT {incoming_ot[:8]})")
-                    log.warning(f"[{player_id}] REJECTED: {err}")
-                    self.identity_error[player_id] = err
-                    # Queue rejection commands — disconnect HUD + refuse processing
-                    self.queued_commands[player_id].append({
-                        "cmd": "hud_show",
-                        "text": f"[x] WRONG SAVE: slot {player_id.upper()}",
-                        "color": [255, 0, 0],
-                        "duration": 600,
-                    })
-                    # Signal the hello was rejected — caller checks this flag
-                    msg["_rejected"] = True
+                    self.queued_commands[player_id].append(
+                        self._reject_hello(player_id, msg, incoming_ot, incoming_name))
                     return
                 else:
                     # Identity matches — clear any previous error
