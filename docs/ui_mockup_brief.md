@@ -60,18 +60,29 @@ is drawn where it is: between them. An earlier draft put both halves inside one 
 flowed the cards in a grid; it was impossible to scan one player's side, which is the
 first thing a partner does.
 
-- **Now.** One card per player — the header for that player, and the live tension. Where
-  they are, badges, balls, and when they are fighting, a tinted box with the foe *and
-  their own active mon* side by side, both HP bars. That is the fight the partner's mon is
-  in too, whether or not the partner is looking. Below it, this cartridge's wild
-  encounters for the area (per player: two randomized ROMs do not share a table).
+- **Now.** One card per player — the header for that player. Who, on what cartridge,
+  where, badges, balls, and this cartridge's wild encounters for the area (per player:
+  two randomized ROMs do not share a table). Nothing transient lives here.
+- **Battle.** A zone that exists only while someone is fighting, with one card in the
+  fighting player's column — the other column stays empty, which says who is fighting by
+  position alone. The card shows the foe, the player's own mon, and **the partner at
+  stake**: the mon on the other cartridge that dies if this one does, with its owner and
+  the route they were linked at. This is the old dashboard's "battle panel above the
+  party" put back where it was; the draft before this one folded it into the player card
+  as a permanent slot, and that was the wrong shape.
+
+  Battle is a **player** state, never a pair state. Alice can have Nidi out while Bob has
+  Embo out in two unrelated fights, so there is one battle card per player and the team
+  rows mark it **per half**: the fighting half gets a red outer edge and ⚔, and its
+  partner half — on the other side of the spine — gets an *at stake* tag. The only
+  pair-wide tint is at-risk, because HP risk genuinely is pair-wide.
 - **The team** (`In party`). One row per linked pair, spanning both columns and
   card-styled: A's half, the spine, B's half, mirrored so the sprites sit at the outer
   edges and the text faces the bond; both HP bars, ability and item. The spine carries
   the route, the tie, and the state. The zone heading carries the two players' names at
   its ends. A pair is tinted and labelled **at risk** when its *weaker* half is under 35%
   — both halves die if either faints, so the pair's health is its minimum, not its
-  average. ⚔ marks whichever half is out in battle.
+  average.
 - **Pending link**, directly under the team: one half caught and quarantined, the other
   a dashed slot reading "waiting for Bob". Then **Boxed**: pairs on the shelf together, no
   HP. **Split** — one half in the party and one boxed — gets its own zone when it happens,
