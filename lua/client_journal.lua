@@ -24,7 +24,8 @@ local function validate(state)
             error("invalid or duplicate outbox operation",0)
         end
         event_ids[entry.operation_id]=true
-        if type(entry.payload.event)~="string" or entry.payload.event=="hello" then error("invalid journal event",0) end
+        if type(entry.payload.event)~="string" or #entry.payload.event<1 or #entry.payload.event>64
+            or entry.payload.event=="hello" then error("invalid journal event",0) end
         for key in pairs(transport) do if entry.payload[key]~=nil then error("delivery envelope in durable event",0) end end
     end
     local previous=state.command_floor
@@ -105,17 +106,48 @@ function M.open(store,new_id)
             return true
         end)
     end
-    function self:append(payload,observation)
-        local id,reason=self.new_id()
-        if not token(id) then return nil,reason or "operation identifier unavailable" end
+    function self:append_many(payloads,observation)
+        -- A frame may produce several observations. Publish all their IDs and
+        -- the next detector baseline together, so a crash cannot leave a new
+        -- baseline hiding an observation that never reached the durable outbox.
+        local prepared,proposal=pcall(function()
+            local batch=copy(payloads)
+            if JSON.kind(batch)~="array" or #batch>M.MAX_EVENTS then
+                error("bounded observation array required",0)
+            end
+            if #batch==0 and observation==nil then
+                error("empty observation batch requires an explicit baseline",0)
+            end
+            local entries,ids=JSON.array(),JSON.array()
+            for _,payload in ipairs(batch) do
+                local id,reason=self.new_id()
+                if not token(id) then error(reason or "operation identifier unavailable",0) end
+                entries[#entries+1]={operation_id=id,payload=payload}
+                ids[#ids+1]=id
+            end
+            local preview=M.initial()
+            preview.outbox=entries
+            if observation~=nil then preview.observation=copy(observation) end
+            validate(preview) -- payloads, IDs, duplicates and baseline shape, before publication
+            return {entries=entries,ids=ids,baseline=preview.observation}
+        end)
+        if not prepared then return nil,tostring(proposal) end
         local ok,result=mutate(function(state)
-            if #state.outbox>=M.MAX_EVENTS then error("durable event outbox is full",0) end
-            state.outbox[#state.outbox+1]={operation_id=id,payload=copy(payload)}
-            if observation then state.observation=copy(observation) end
-            return id
+            if #state.outbox+#proposal.entries>M.MAX_EVENTS then error("durable event outbox is full",0) end
+            for _,entry in ipairs(proposal.entries) do state.outbox[#state.outbox+1]=entry end
+            if observation~=nil then state.observation=proposal.baseline end
+            return proposal.ids
         end)
         if not ok then return nil,result end
         return result
+    end
+    function self:append(payload,observation)
+        -- Keep the single-observation API and its scalar identifier result.
+        -- A nil payload must not turn into an empty baseline-only batch.
+        if payload==nil then return nil,"observation payload required" end
+        local ids,reason=self:append_many(JSON.array({payload}),observation)
+        if not ids then return nil,reason end
+        return ids[1]
     end
     function self:accept_response(operation_id,commands)
         return mutate(function(state)

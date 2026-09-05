@@ -159,3 +159,119 @@ def test_preparation_requires_versioned_policy_document(runtime, intent):  # noq
     before = lua.globals().disk
     assert not accepted(lua.globals().prepare(command(1)["command_id"], json.dumps(intent)))
     assert lua.globals().disk == before
+
+
+def batch(lua, payloads, observation=None):
+    values = lua.globals().JSON.decode(json.dumps(payloads))
+    baseline = lua.globals().JSON.decode(json.dumps(observation)) if observation is not None else None
+    return lua.globals().journal.append_many(lua.globals().journal, values, baseline)
+
+
+def test_frame_observations_and_baseline_publish_once_and_survive_reopen(runtime):  # noqa: F811
+    lua = runtime
+    start(lua)
+    before = lua.globals().writes
+    ids = batch(lua, [{"event": "capture", "key": "one"}, {"event": "faint", "key": "two"}],
+                {"frame": 10, "party": ["one", "two"]})
+    assert lua.globals().writes == before + 1
+    assert len(set(ids.values())) == 2
+    lua.globals().reopen()
+    state = lua.globals().state()
+    assert [entry.operation_id for entry in state.outbox.values()] == list(ids.values())
+    assert [entry.payload.event for entry in state.outbox.values()] == ["capture", "faint"]
+    assert state.observation.frame == 10
+    assert list(state.observation.party.values()) == ["one", "two"]
+
+
+@pytest.mark.parametrize("mode,published", [("before", False), ("after", True)])
+def test_batch_publication_failure_never_leaves_a_partial_frame(runtime, mode, published):  # noqa: F811
+    lua = runtime
+    start(lua)
+    assert batch(lua, [], {"frame": 1}) is not None
+    lua.globals().mode = mode
+    result = batch(lua, [{"event": "capture"}, {"event": "faint"}], {"frame": 2})
+    assert accepted(result) is None
+    writes = lua.globals().writes
+    assert accepted(batch(lua, [{"event": "tick"}], {"frame": 3})) is None
+    assert lua.globals().writes == writes, "uncertain store stays latched until reopen"
+    lua.globals().mode = "ok"
+    lua.globals().reopen()
+    state = lua.globals().state()
+    assert state.observation.frame == (2 if published else 1)
+    assert len(state.outbox) == (2 if published else 0)
+    if published:
+        assert [entry.operation_id for entry in state.outbox.values()] == [f"{i:032x}" for i in (1, 2)]
+
+
+def test_batch_exceeding_remaining_capacity_keeps_prior_outbox_and_baseline(runtime):  # noqa: F811
+    lua = runtime
+    start(lua)
+    lua.globals().Journal.MAX_EVENTS = 3
+    assert accepted(batch(lua, [{"event": "capture"}, {"event": "faint"}], {"frame": 1})) is not None
+    before, writes = lua.globals().disk, lua.globals().writes
+    assert accepted(batch(lua, [{"event": "capture"}, {"event": "faint"}], {"frame": 2})) is None
+    assert (lua.globals().disk, lua.globals().writes) == (before, writes)
+    lua.globals().reopen()
+    assert len(lua.globals().state().outbox) == 2
+    assert lua.globals().state().observation.frame == 1
+
+
+@pytest.mark.parametrize("generator", [
+    "function() return string.rep('a',32) end",
+    "function() next_id=next_id+1;if next_id==2 then return nil,'failed ID' end;return string.format('%032x',next_id) end",
+    "function() next_id=next_id+1;if next_id==2 then error('ID source failed') end;return string.format('%032x',next_id) end",
+])
+def test_batch_identifier_failure_is_atomic(runtime, generator):  # noqa: F811
+    lua = runtime
+    start(lua)
+    lua.globals().journal.new_id = lua.eval(generator)
+    before, writes = lua.globals().disk, lua.globals().writes
+    assert accepted(batch(lua, [{"event": "capture"}, {"event": "faint"}], {"frame": 9})) is None
+    assert (lua.globals().disk, lua.globals().writes) == (before, writes)
+
+
+@pytest.mark.parametrize("payloads,observation", [
+    ({}, {"frame": 1}), ([], None), ([{"event": "capture"}, {"event": "hello"}], {"frame": 1}),
+    ([{"event": "capture"}, {"event": "faint", "seq": 2}], {"frame": 1}),
+    ([{"event": "capture"}, None], {"frame": 1}), ([{"event": "capture"}], []),
+    ([{"event": "capture"}], False),
+])
+def test_invalid_frame_shapes_do_not_publish(runtime, payloads, observation):  # noqa: F811
+    lua = runtime
+    start(lua)
+    before, writes = lua.globals().disk, lua.globals().writes
+    assert accepted(batch(lua, payloads, observation)) is None
+    assert (lua.globals().disk, lua.globals().writes) == (before, writes)
+
+
+def test_deliberate_empty_batch_updates_only_the_baseline(runtime):  # noqa: F811
+    lua = runtime
+    start(lua)
+    first = lua.globals().append('{"event":"capture"}')
+    ids = batch(lua, [], {"frame": 42})
+    assert len(ids) == 0
+    lua.globals().reopen()
+    assert lua.globals().state().outbox[1].operation_id == first
+    assert lua.globals().state().observation.frame == 42
+    assert accepted(lua.globals().journal.append(lua.globals().journal, None, lua.eval("{}"))) is None
+
+
+def test_batch_collision_with_existing_operation_preserves_the_entire_frame(runtime):  # noqa: F811
+    lua = runtime
+    start(lua)
+    first = lua.globals().append('{"event":"capture"}')
+    lua.globals().journal.new_id = lua.eval("function() return string.format('%032x',1) end")
+    before, writes = lua.globals().disk, lua.globals().writes
+    assert accepted(batch(lua, [{"event": "faint"}], {"frame": 2})) is None
+    assert (lua.globals().disk, lua.globals().writes) == (before, writes)
+    lua.globals().reopen()
+    assert lua.globals().state().outbox[1].operation_id == first
+
+
+@pytest.mark.parametrize("event", ["", "x" * 65])
+def test_batch_rejects_event_names_the_shared_wire_would_refuse(runtime, event):  # noqa: F811
+    lua = runtime
+    start(lua)
+    before, writes = lua.globals().disk, lua.globals().writes
+    assert accepted(batch(lua, [{"event": "capture"}, {"event": event}], {"frame": 2})) is None
+    assert (lua.globals().disk, lua.globals().writes) == (before, writes)

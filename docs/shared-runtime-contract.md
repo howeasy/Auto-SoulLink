@@ -89,6 +89,17 @@ inbox prefix, so an immediate HUD receipt cannot erase an earlier deferred opera
 Storage failures latch the store until reopen; they never reset it to an empty outbox.
 These components have not yet replaced the production client's in-memory queues.
 
+`client_journal.append_many(payloads, observation)` publishes a complete set of
+frame observations and their next detector baseline in one checked local commit.
+Every semantic event receives its own stable ID for individual server delivery;
+this does not introduce a server-side semantic batch. The method returns the ID
+array only after publication is confirmed. Invalid payloads/IDs, duplicate IDs,
+or insufficient remaining capacity publish none of the frame. An uncertain store
+publication stays latched; reopen and inspect the persisted outbox/baseline before
+resuming detection. An empty array may publish an explicitly supplied object
+baseline; an empty batch without a baseline is refused. `append` preserves its
+single-event/scalar-ID interface through the same implementation.
+
 `get_command(command_id)` returns a detached inbox record. `prepare_command(command_id,
 intent)` persists a versioned policy document before any physical effect. The intent
 must have a nonempty `schema` string; exact preparation retries are idempotent, while
