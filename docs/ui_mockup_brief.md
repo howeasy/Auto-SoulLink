@@ -41,35 +41,62 @@ One origin. The Manager becomes the only UI server; per-run servers keep serving
 overlays. The UI reaches a run's state through a per-run proxy, which already exists for
 the pinned run at `server/manager.py:878-880` and needs only to take a run id.
 
-## 3. Layout — the board is the page
+## 3. Layout — zones, and the pair is the unit
 
-Three layouts were sketched (they are kept in git history: `git show 7212e9f^:...`), and
-what survived is none of them exactly. Two rounds of looking at the result settled it:
+What a Soul Link is, per the rules the server enforces (`docs/REFERENCE.md` §"Soul Link
+Rules Enforced") and the community ruleset: two players, two games; the first catch per
+route on each side is **linked**; if either faints **both are dead** and go to the
+memorial box; if either fails the route it is a **dead zone for both**; linked pairs live
+**together** — both in the party or both boxed; one caught and the other not yet is
+**waiting**, quarantined to the box. The unit is the pair. Three drafts treated it as a
+footnote on each player's party, which is how the payload hands the data back and not how
+anyone thinks about it.
 
-- **The pair is the unit.** A soul link binds two mons across two cartridges, and both die
-  if either faints. The first drafts showed each player's party as its own table with a
-  "linked to" footnote, which is the data the server hands back — the bond in `links`,
-  the live HP in each `party_details` — but not the thing the player thinks about. So
-  the board joins them: **one row per pair**, A's half, the bond, B's half, both HP bars
-  facing each other across it, the row tinted by the pair's *weaker* half (`min` of the
-  two HP%, at risk under 35%). Rows group by state — waiting for the other half · in
-  party · split (one half boxed, which the sync rules care about) · boxed · fallen — and
-  Boxes and Memorial stop being tabs, because they are sections of this.
-- **The manager is the rail and the header.** Not a run *list*: new run (name + rule
-  groups, nothing greyed because no cartridge is known yet), start / stop / pin /
-  archive / delete, a launchers popover, ports. A run nobody has connected to says so
-  instead of borrowing another run's data. A stopped run shows only what was persisted —
-  the links, no HP, no battle — which is exactly what the Manager has for it today.
-- **Fills the viewport.** The shell is a `100vh` grid: header, tabs, and a body that takes
-  the rest. The board scrolls inside it. Past ~1500px the side strip (each player's
-  battle and wild encounters, the event feed) moves beside the board rather than under it.
-  The first draft flowed top-to-bottom and left half a 1440p monitor empty.
-- **Nothing is labelled twice.** The player chip is the header for that player. Party
-  rows have no `<thead>`. Card headers survive only on Setup, Broadcast and Tools.
-- **Per player, not per run.** Game label, area, badges, balls, battle, wild encounters
-  all live on the chip or in that player's strip card. A dropped client keeps its last
-  state on screen with a *disconnected* tag rather than vanishing — the server keeps that
-  state across a reconnect, and the UI should agree with it.
+The page is four zones, in the order a player cares during a run. Each is a real heading
+with a rule across the line and a count; the gap between zones does the dividing. And
+**every zone sits on the same three-track grid — Alice's column, the spine, Bob's
+column** — so a player's side reads straight down the page and the bond between two mons
+is drawn where it is: between them. An earlier draft put both halves inside one card and
+flowed the cards in a grid; it was impossible to scan one player's side, which is the
+first thing a partner does.
+
+- **Now.** One card per player — the header for that player, and the live tension. Where
+  they are, badges, balls, and when they are fighting, a tinted box with the foe *and
+  their own active mon* side by side, both HP bars. That is the fight the partner's mon is
+  in too, whether or not the partner is looking. Below it, this cartridge's wild
+  encounters for the area (per player: two randomized ROMs do not share a table).
+- **The team** (`In party`). One row per linked pair, spanning both columns and
+  card-styled: A's half, the spine, B's half, mirrored so the sprites sit at the outer
+  edges and the text faces the bond; both HP bars, ability and item. The spine carries
+  the route, the tie, and the state. The zone heading carries the two players' names at
+  its ends. A pair is tinted and labelled **at risk** when its *weaker* half is under 35%
+  — both halves die if either faints, so the pair's health is its minimum, not its
+  average. ⚔ marks whichever half is out in battle.
+- **Waiting** and **Boxed**, compact. Waiting: one half filled, the other a dashed slot
+  reading "waiting for Bob". Boxed: pairs on the shelf together, no HP. **Split** — one
+  half in the party and one boxed — gets its own zone when it happens, because the sync
+  rules will act on it.
+- **Fallen.** The graveyard, with presence rather than a dimmed table: dashed cards,
+  greyed sprites, names struck, and the epitaph in the header — `fainted · wild Geodude`.
+  Dead zones sit here too, both slots reading *missed*.
+- **Log**, a sticky column beside the zones from 1400px, under them below that.
+
+Scaling: the two player columns share the width, so each half gets more room on a wider
+monitor rather than more columns appearing; the log takes a column of its own from
+1400px. The page scrolls like a page; only the run header is sticky. An earlier draft
+locked the board into `100vh` and it read as cramped at every size.
+
+**The manager is the rail and the run header.** New run (name and the three option
+groups — nothing greyed, because no cartridge is known yet), start / stop / pin / archive
+/ delete, a launchers popover, ports. A run nobody has connected to says so instead of
+borrowing another run's data. A stopped run shows only what was persisted — the links, no
+HP, no battle, no Now cards — which is exactly what the Manager has for it today; its
+pairs sit under **Linked** rather than claiming to know who is in a party.
+
+**Per player, not per run.** Game label, area, badges, balls, battle and wild encounters
+live on that player's Now card. A dropped client keeps its last state on screen with a
+*disconnected* tag rather than vanishing — the server keeps that state across a
+reconnect, and the UI should agree with it.
 
 Track B built the earlier L1 Workspace draft only; it exists to answer "is an SPA better
 here?", and that answer (§9) does not depend on which arrangement won.

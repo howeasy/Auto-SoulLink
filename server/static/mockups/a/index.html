@@ -3,20 +3,20 @@
   Track A — the merged SLink UI, on the stack the project already vendors: Alpine 3, the
   real slink.css tokens, no build step, no new dependency.
 
-  The board is the page. A soul link's unit is the pair — two mons bound across two
-  cartridges, both of which die if either faints — so each row is a pair: A's half, the
-  bond, B's half, both HP bars facing each other, the row tinted by the pair's weaker
-  half. Rows group by state: waiting for the other half, in party, split (one half boxed,
-  which the sync rules care about), boxed, fallen. Boxes and the memorial are sections of
-  this, not other pages.
+  Four zones, in the order a player cares about them during a run:
 
-  The manager is the rail and the run header: new run, start, stop, pin, archive, delete,
-  launchers, ports. A run that has never had a player connect says so instead of showing
-  someone else's data; a stopped run shows only what was persisted — the links — which
-  is exactly what the Manager has for it today.
+    NOW        where each player is and what they are fighting — because that is where
+               the partner's mon dies too
+    THE TEAM   the linked pairs in play, as cards: two sprites facing each other, both HP
+               bars, the route they came from, flagged when either half is low
+    WAITING / BOXED   one half caught and quarantined until the other catches; pairs on
+               the shelf together, as the rules require
+    FALLEN     the graveyard, with presence — a pair dies as a pair
+    LOG        the event feed, beside the page on a wide screen
 
-  Everything rendered comes from ../fixtures/, generated off a running server.
-  See docs/ui_mockup_brief.md.
+  Boxes and the memorial are zones of this page, not other pages. The manager is the rail
+  and the run header. Everything rendered comes from ../fixtures/, generated off a running
+  server. See docs/ui_mockup_brief.md.
 -->
 <html lang="en">
 <head>
@@ -84,26 +84,22 @@
   <!-- ══ Main ═════════════════════════════════════════════════════════════ -->
   <main class="mk-main">
 
-    <template x-if="error"><div class="mk-body"><div class="mk-note" x-text="error"></div></div></template>
-    <template x-if="loading"><div class="mk-body"><div class="mk-empty">Loading fixtures…</div></div></template>
+    <template x-if="error"><div class="mk-page"><div class="mk-note" x-text="error"></div></div></template>
+    <template x-if="loading"><div class="mk-page"><div class="mk-empty">Loading fixtures…</div></div></template>
 
-    <!-- ── NEW RUN — the manager's creation form ────────────────────────── -->
+    <!-- ── NEW RUN ──────────────────────────────────────────────────────── -->
     <template x-if="!loading && !error && dest === 'new'">
-      <div style="display:contents">
+      <div>
         <header class="mk-runhdr"><h1 class="mk-runname">New run</h1></header>
-        <div></div>
-        <div class="mk-body">
+        <div class="mk-page">
           <div class="mk-form">
             <label class="mk-field"><span>Name</span><input class="big" type="text" x-model="draft.name" placeholder="Kanto Duo" @keydown.enter="createRun()"></label>
             <template x-for="[label, keys] in OPTION_GROUPS" :key="label">
               <div class="mk-group">
-                <span class="mk-cap" x-text="label"></span>
+                <h2 class="mk-h2"><span x-text="label"></span><i></i></h2>
                 <div class="mk-opts">
                   <template x-for="key in keys" :key="key">
-                    <label class="mk-opt" :class="draft.opts[key] ? 'on' : ''">
-                      <input type="checkbox" x-model="draft.opts[key]">
-                      <span x-text="OPTION_LABELS[key]"></span>
-                    </label>
+                    <label class="mk-opt" :class="draft.opts[key] ? 'on' : ''"><input type="checkbox" x-model="draft.opts[key]"><span x-text="OPTION_LABELS[key]"></span></label>
                   </template>
                 </div>
               </div>
@@ -116,13 +112,18 @@
 
     <!-- ── RUN ──────────────────────────────────────────────────────────── -->
     <template x-if="!loading && !error && dest === 'run' && run().run_id">
-      <div style="display:contents">
+      <div>
         <header class="mk-runhdr">
           <h1 class="mk-runname" x-text="run().name"></h1>
           <span class="mk-pill" :class="run().status" x-text="run().status"></span>
           <span class="mk-meta"><code x-text="'tcp ' + run().tcp_port + ' · http ' + run().http_port"></code></span>
+          <span class="mk-meta" x-show="status().attempts_count">· attempt <b x-text="status().attempts_count"></b></span>
           <span class="mk-hdr-spacer"></span>
-          <span class="mk-meta" x-show="status().attempts_count">Attempt <b x-text="status().attempts_count"></b></span>
+          <nav class="mk-tabs">
+            <button class="mk-tab" :class="tab === 'board' ? 'active' : ''" @click="tab = 'board'">Board</button>
+            <button class="mk-tab" :class="tab === 'setup' ? 'active' : ''" @click="tab = 'setup'">Setup</button>
+          </nav>
+          <span class="mk-hdr-spacer"></span>
           <button class="mk-btn primary" x-show="run().status !== 'running'" @click="act('start')">Start</button>
           <button class="mk-btn" x-show="run().status === 'running'" @click="act('stop')">Stop</button>
           <button class="mk-btn" :class="isPinned() ? 'active' : ''" x-show="run().status === 'running'" @click="act('pin')" x-text="isPinned() ? 'Pinned' : 'Pin'"></button>
@@ -132,177 +133,178 @@
               <span class="mk-cap">BizHawk Lua launchers</span>
               <button class="mk-btn" x-text="'Player A · slink_' + (run().safe_name || run().run_id) + '_a.lua'"></button>
               <button class="mk-btn" x-text="'Player B · slink_' + (run().safe_name || run().run_id) + '_b.lua'"></button>
-              <span class="mk-cap">Load the save first; then the script. It connects to <code x-text="'tcp ' + run().tcp_port"></code>.</span>
+              <span class="mk-cap">Load the save first, then the script. It connects to <code x-text="'tcp ' + run().tcp_port"></code>.</span>
             </div>
           </span>
           <button class="mk-btn" x-show="run().status !== 'archived'" @click="act('archive')">Archive</button>
           <button class="mk-btn danger" @click="act('delete')">Delete</button>
-
-          <div class="mk-pchips">
-            <template x-for="pid in ['a', 'b']" :key="pid">
-              <div class="mk-pchip" :class="connected(pid) ? 'online' : 'offline'">
-                <span class="mk-side" x-text="pid.toUpperCase()"></span>
-                <span class="mk-pchip-name">
-                  <span x-text="player(pid).trainer_name || 'not connected'"></span>
-                  <span class="mk-pchip-game" x-show="player(pid).rom_type" x-text="' · ' + player(pid).rom_type"></span>
-                </span>
-                <span class="mk-pchip-badges" x-show="hasData(pid)">
-                  <template x-for="i in badgeSlots(pid)" :key="i"><span class="mk-badge-pip" :class="i <= badgeCount(pid) ? 'on' : ''"></span></template>
-                </span>
-                <span class="mk-pchip-meta" x-show="hasData(pid)">
-                  <b x-text="player(pid).current_area_display"></b>
-                  <span><b x-text="player(pid).ball_count"></b> balls</span>
-                  <template x-if="battle(pid).in_battle"><span class="mk-tag status">in battle</span></template>
-                  <template x-if="!connected(pid) && isLive()"><span class="mk-tag off">disconnected</span></template>
-                </span>
-                <span class="mk-pchip-meta" x-show="!hasData(pid) && isLive()">waiting for hello</span>
-              </div>
-            </template>
-          </div>
         </header>
-
-        <nav class="mk-tabs">
-          <button class="mk-tab" :class="tab === 'board' ? 'active' : ''" @click="tab = 'board'">
-            Board <span class="mk-tab-count" x-text="counts().alive + (counts().fallen ? ' · ' + counts().fallen + ' fallen' : '')"></span>
-          </button>
-          <button class="mk-tab" :class="tab === 'setup' ? 'active' : ''" @click="tab = 'setup'">Setup</button>
-        </nav>
 
         <!-- ── Board ──────────────────────────────────────────────────── -->
         <template x-if="tab === 'board'">
-          <div class="mk-runbody">
-            <div class="mk-card mk-board">
-              <template x-if="!sections().length">
-                <div class="mk-empty">
-                  <template x-if="run().created_in_mock || !status().links.length">
-                    <span>No links yet. Download the launchers, load each save, then load the script — the first catch in a shared area starts the board.</span>
-                  </template>
-                </div>
-              </template>
+          <div class="mk-page mk-boardpage">
+            <div class="mk-zones">
 
-              <template x-for="[sect, rows] in sections()" :key="sect">
-                <div>
-                  <div class="mk-sect">
-                    <span class="mk-cap" x-text="SECTION_LABELS[sect]"></span>
-                    <span class="mk-sect-n" x-text="rows.length"></span>
-                  </div>
-                  <template x-for="row in rows" :key="row.area">
-                    <div class="mk-pair" :class="[row.section === 'fallen' ? 'fallen' : '', row.atRisk ? 'at-risk' : '']">
-
-                      <template x-for="pid in ['a', 'b']" :key="pid">
-                        <div class="mk-half" :class="[pid, row[pid] ? '' : 'empty']">
-                          <template x-if="row[pid]">
-                            <span class="mk-half-sprite" x-html="row[pid].sprite"></span>
+              <!-- NOW: one card per player. This is the header for that player, and the
+                   live tension: the partner's mon dies here too. -->
+              <section class="mk-zone">
+                <h2 class="mk-h2"><span>Now</span><i></i></h2>
+                <div class="mk-now">
+                  <template x-for="pid in ['a', 'b']" :key="pid">
+                    <div class="mk-card mk-nowcard" :class="[connected(pid) ? 'online' : 'offline', battle(pid).in_battle ? 'fighting' : '']" :style="pid === 'b' ? 'grid-column:3' : 'grid-column:1'">
+                      <div class="mk-now-head">
+                        <span class="mk-side" x-text="pid.toUpperCase()"></span>
+                        <span class="mk-now-name">
+                          <b x-text="player(pid).trainer_name || 'not connected'"></b>
+                          <span class="mk-pchip-game" x-show="player(pid).rom_type" x-text="player(pid).rom_type"></span>
+                        </span>
+                        <span class="mk-pchip-badges" x-show="hasData(pid)" :title="badgeCount(pid) + ' badges'">
+                          <template x-for="i in badgeSlots(pid)" :key="i"><span class="mk-badge-pip" :class="i <= badgeCount(pid) ? 'on' : ''"></span></template>
+                        </span>
+                      </div>
+                      <template x-if="hasData(pid)">
+                        <div class="mk-now-body">
+                          <div class="mk-now-line">
+                            <b x-text="player(pid).current_area_display"></b>
+                            <span><span x-text="player(pid).ball_count"></span> balls</span>
+                            <span class="mk-tag off" x-show="!connected(pid) && isLive()">disconnected</span>
+                          </div>
+                          <template x-if="battle(pid).in_battle">
+                            <div class="mk-fight">
+                              <template x-for="foe in (battle(pid).enemy_party || [])" :key="foe.key || foe.species_id">
+                                <div class="mk-fight-row">
+                                  <span class="mk-spr" x-html="foe.sprite_html"></span>
+                                  <span class="mk-fight-txt">
+                                    <span><span class="mk-vs">vs</span> <span x-text="(battle(pid).is_trainer_battle ? (battle(pid).opponent_name || 'Trainer') + '’s ' : 'wild ') + foe.species_name"></span></span>
+                                    <span class="mk-sub">Lv <span x-text="foe.level"></span></span>
+                                  </span>
+                                  <span class="mk-hp"><span class="mk-hp-num" x-text="foe.hp + '/' + foe.maxHP"></span><span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(foe)" :style="'width:' + hpPct(foe) + '%'"></span></span></span>
+                                </div>
+                              </template>
+                              <template x-if="activeMon(pid)">
+                                <div class="mk-fight-row mine">
+                                  <span class="mk-spr" x-html="activeMon(pid).sprite_html"></span>
+                                  <span class="mk-fight-txt">
+                                    <span x-text="activeMon(pid).nickname"></span>
+                                    <span class="mk-sub" x-text="activeMon(pid).species_name + ' · Lv ' + activeMon(pid).level"></span>
+                                  </span>
+                                  <span class="mk-hp"><span class="mk-hp-num" x-text="activeMon(pid).hp + '/' + activeMon(pid).maxHP"></span><span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(activeMon(pid))" :style="'width:' + hpPct(activeMon(pid)) + '%'"></span></span></span>
+                                </div>
+                              </template>
+                            </div>
                           </template>
-                          <template x-if="row[pid]">
-                            <span class="mk-half-txt">
-                              <span class="mk-half-nick">
-                                <span x-show="row[pid].active" class="mk-active" title="out in battle">⚔</span><span x-text="row[pid].nickname || row[pid].species_name"></span><span x-show="row[pid].item" class="mk-item" :title="'item #' + row[pid].item">◆</span>
-                              </span>
-                              <span class="mk-half-sub">
-                                <span x-text="row[pid].species_name"></span> · Lv <span x-text="row[pid].level"></span>
-                                <span class="abil" x-show="capsFor(pid).abilities && row[pid].ability" x-text="' · ' + row[pid].ability"></span>
-                                <span class="mk-where" x-show="row[pid].where === 'box'"> · boxed</span>
-                              </span>
-                            </span>
-                          </template>
-                          <template x-if="row[pid] && row[pid].hp != null">
-                            <span class="mk-hp">
-                              <span class="mk-hp-num" x-text="row[pid].hp + '/' + row[pid].maxHP"></span>
-                              <span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(row[pid])" :style="'width:' + hpPct(row[pid]) + '%'"></span></span>
-                            </span>
-                          </template>
-                          <template x-if="!row[pid]">
-                            <span x-text="row.status === 'dead_zone' ? 'missed' : row.section === 'pending' ? 'waiting for ' + (player(pid).trainer_name || pid.toUpperCase()) : '—'"></span>
-                          </template>
+                          <div class="mk-wild" x-show="wild(pid).length">
+                            <template x-for="[method, list] in wild(pid)" :key="method">
+                              <div class="mk-wild-row"><span class="mk-tag" x-text="method"></span><span x-text="[...new Set(list.map(e => e.name || e.species_name || e.species))].slice(0, 6).join(', ')"></span></div>
+                            </template>
+                          </div>
                         </div>
                       </template>
-
-                      <!-- The bond. Rendered between the halves by CSS grid order. -->
-                      <div class="mk-bond" style="grid-column:2;grid-row:1">
-                        <span class="mk-bond-glyph" :class="row.status" x-text="bondGlyph(row.status)"></span>
-                        <span class="mk-bond-area" x-text="row.areaName"></span>
-                        <span class="mk-risk" x-show="row.atRisk" x-text="row.risk + '% — at risk'"></span>
-                        <template x-if="row.death">
-                          <span class="mk-bond-why" x-text="row.death.cause + (row.death.killer ? ' · ' + (row.death.killer.trainer_name || row.death.killer.species_name) : '')"></span>
-                        </template>
-                        <span class="mk-bond-why" x-show="row.status === 'dead_zone'">dead zone</span>
-                      </div>
+                      <div class="mk-now-body" x-show="!hasData(pid)"><span class="mk-sub" x-text="isLive() ? 'waiting for hello' : 'not connected'"></span></div>
                     </div>
                   </template>
                 </div>
+              </section>
+
+              <template x-if="!sections().length">
+                <section class="mk-zone"><div class="mk-card mk-empty">No links yet. Download the launchers, load each save, then load the script — the first catch in a shared area starts the board.</div></section>
               </template>
 
-              <!-- Boxed mons that belong to no bond: one line per side, not pair rows,
-                   because there is no pair. -->
+              <!-- One zone per section. Every zone keeps the same geometry as the Now cards
+                   above it: Alice's column, the bond, Bob's column — so a player's side can
+                   be read straight down the page. -->
+              <template x-for="[sect, rows] in sections()" :key="sect">
+                <section class="mk-zone" :class="'zone-' + sect">
+                  <h2 class="mk-h2 split">
+                    <span class="mk-h2-side"><span class="mk-side small">A</span><span x-text="player('a').trainer_name || '—'"></span></span>
+                    <i></i>
+                    <span class="mk-h2-mid"><span x-text="SECTION_LABELS[sect]"></span><em x-text="rows.length + (rows.length === 1 ? ' pair' : ' pairs')"></em></span>
+                    <i></i>
+                    <span class="mk-h2-side b"><span x-text="player('b').trainer_name || '—'"></span><span class="mk-side small">B</span></span>
+                  </h2>
+                  <div class="mk-pairs" :class="sect === 'boxed' || sect === 'pending' ? 'compact' : ''">
+                    <template x-for="row in rows" :key="row.area">
+                      <article class="mk-pair" :class="[row.section, row.atRisk ? 'at-risk' : '']">
+                        <template x-for="pid in ['a', 'b']" :key="pid">
+                          <div class="mk-half" :class="[pid, row[pid] ? '' : 'empty']" :style="pid === 'b' ? 'grid-column:3' : 'grid-column:1'">
+                            <template x-if="row[pid]">
+                              <div class="mk-half-in">
+                                <span class="mk-spr big" x-html="row[pid].sprite"></span>
+                                <span class="mk-half-txt">
+                                  <span class="mk-half-nick"><span x-show="row[pid].active" class="mk-active" title="out in battle">⚔</span><span x-text="row[pid].nickname || row[pid].species_name"></span></span>
+                                  <span class="mk-sub"><span x-text="row[pid].species_name"></span> · Lv <span x-text="row[pid].level"></span></span>
+                                  <template x-if="row[pid].hp != null">
+                                    <span class="mk-hp"><span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(row[pid])" :style="'width:' + hpPct(row[pid]) + '%'"></span></span><span class="mk-hp-num" x-text="row[pid].hp + '/' + row[pid].maxHP"></span></span>
+                                  </template>
+                                  <span class="mk-sub faint" x-show="(capsFor(pid).abilities && row[pid].ability) || row[pid].item">
+                                    <span x-show="capsFor(pid).abilities && row[pid].ability" x-text="row[pid].ability"></span><span x-show="row[pid].item" class="mk-item" :title="'item #' + row[pid].item"> ◆</span>
+                                  </span>
+                                  <span class="mk-sub faint" x-show="row[pid].where === 'box' && row.section !== 'boxed'">in box</span>
+                                </span>
+                              </div>
+                            </template>
+                            <template x-if="!row[pid]">
+                              <div class="mk-half-in slot">
+                                <span class="mk-slot"></span>
+                                <span class="mk-sub" x-text="row.status === 'dead_zone' ? 'missed' : row.section === 'pending' ? 'waiting for ' + (player(pid).trainer_name || pid.toUpperCase()) : '—'"></span>
+                              </div>
+                            </template>
+                          </div>
+                        </template>
+                        <!-- The bond, between the halves: the route, the tie, and what state it is in. -->
+                        <div class="mk-bond" :class="row.status" style="grid-column:2">
+                          <span class="mk-bond-area" x-text="row.areaName"></span>
+                          <span class="mk-bond-glyph" x-text="bondGlyph(row.status)"></span>
+                          <span class="mk-bond-state">
+                            <template x-if="row.atRisk"><span class="risk">at risk · <b x-text="row.risk + '%'"></b></span></template>
+                            <!-- A dead zone has a killfeed entry too (cause "dead_zone"), so it
+                                 gets one label, not the cause and the label both. -->
+                            <template x-if="row.status === 'dead_zone'"><span>dead zone</span></template>
+                            <template x-if="row.status !== 'dead_zone' && row.section === 'fallen' && row.death"><span x-text="row.death.cause.replace(/_/g, ' ') + (row.death.killer ? ' · ' + (row.death.killer.trainer_name || row.death.killer.species_name) : '')"></span></template>
+                            <template x-if="row.section === 'pending'"><span>waiting</span></template>
+                            <template x-if="row.section === 'boxed'"><span>boxed together</span></template>
+                            <template x-if="row.section === 'split'"><span>split</span></template>
+                          </span>
+                        </div>
+                      </article>
+                    </template>
+                  </div>
+                </section>
+              </template>
+
               <template x-if="unlinkedBoxed('a').length || unlinkedBoxed('b').length">
-                <div>
-                  <div class="mk-sect"><span class="mk-cap">Boxed, unlinked</span></div>
-                  <div class="mk-pair" style="align-items:start">
+                <section class="mk-zone">
+                  <h2 class="mk-h2"><span>Boxed, unlinked</span><i></i></h2>
+                  <div class="mk-card mk-unlinked">
                     <template x-for="pid in ['a', 'b']" :key="pid">
-                      <div class="mk-half" :class="pid" style="grid-template-columns:minmax(0,1fr)">
-                        <span class="mk-half-txt">
-                          <template x-for="b in unlinkedBoxed(pid)" :key="b.key">
-                            <span class="mk-half-sub"><span style="color:var(--c-txt)" x-text="b.nickname"></span> · box <span x-text="b.box + 1"></span>·<span x-text="b.slot + 1"></span></span>
-                          </template>
-                        </span>
+                      <div :class="pid" :style="pid === 'b' ? 'grid-column:3' : 'grid-column:1'"><span class="mk-side small" x-text="pid.toUpperCase()"></span>
+                        <template x-for="b in unlinkedBoxed(pid)" :key="b.key"><span class="mk-sub"><b x-text="b.nickname"></b> box <span x-text="b.box + 1"></span>·<span x-text="b.slot + 1"></span></span></template>
+                        <span class="mk-sub" x-show="!unlinkedBoxed(pid).length">—</span>
                       </div>
                     </template>
-                    <div class="mk-bond" style="grid-column:2;grid-row:1"><span class="mk-bond-glyph" style="color:var(--c-dim)">··</span></div>
                   </div>
-                </div>
+                </section>
               </template>
             </div>
 
-            <!-- Side strip: what each player is doing right now, and the feed. Absent
-                 entirely when nothing is live — a stopped run has none of this. -->
-            <div class="mk-strip" x-show="isLive() && anyData()">
-              <template x-for="pid in ['a', 'b']" :key="pid">
-                <div class="mk-card mk-pstrip" x-show="hasData(pid)">
-                  <span class="mk-side" x-text="pid.toUpperCase()"></span>
-                  <div>
-                    <template x-if="battle(pid).in_battle">
-                      <div>
-                        <template x-for="foe in (battle(pid).enemy_party || [])" :key="foe.key || foe.species_id">
-                          <div class="mk-foe">
-                            <span class="mk-half-sprite" x-html="foe.sprite_html"></span>
-                            <span class="mk-half-txt">
-                              <span class="mk-half-nick" x-text="(battle(pid).is_trainer_battle ? (battle(pid).opponent_name || 'Trainer') + '’s ' : 'wild ') + foe.species_name"></span>
-                              <span class="mk-half-sub" x-text="'Lv ' + foe.level"></span>
-                            </span>
-                            <span class="mk-hp">
-                              <span class="mk-hp-num" x-text="foe.hp + '/' + foe.maxHP"></span>
-                              <span class="mk-hp-bar"><span class="mk-hp-fill" :class="hpClass(foe)" :style="'width:' + hpPct(foe) + '%'"></span></span>
-                            </span>
-                          </div>
-                        </template>
-                      </div>
-                    </template>
-                    <span class="mk-cap" x-show="wild(pid).length">Wild here</span>
-                    <template x-for="[method, list] in wild(pid)" :key="method">
-                      <div class="mk-wild-row">
-                        <span class="mk-tag" x-text="method"></span>
-                        <span x-text="[...new Set(list.map(e => e.name || e.species_name || e.species))].slice(0, 7).join(', ')"></span>
-                      </div>
-                    </template>
-                  </div>
-                </div>
-              </template>
+            <!-- LOG: beside the zones on a wide screen, under them otherwise. -->
+            <aside class="mk-logcol" x-show="isLive() && anyData()">
+              <h2 class="mk-h2"><span>Log</span><i></i></h2>
               <div class="mk-card mk-feed">
-                <template x-for="(e, i) in events(40)" :key="i">
+                <template x-for="(e, i) in events(60)" :key="i">
                   <div class="mk-ev"><span class="mk-ev-ts" x-text="shortTs(e.ts)"></span><span class="mk-ev-who" x-text="(e.player || '').toUpperCase()"></span><span x-text="e.text"></span></div>
                 </template>
               </div>
-            </div>
+            </aside>
           </div>
         </template>
 
         <!-- ── Setup ──────────────────────────────────────────────────── -->
         <template x-if="tab === 'setup'">
-          <div class="mk-body">
-            <div class="mk-card">
-              <div class="mk-card-hdr"><b>Rules</b><span class="mk-hdr-spacer"></span><span x-show="!gameId('a')" class="mk-cap">what each can honour is known once a cartridge connects</span></div>
-              <div class="mk-card-body mk-opts">
+          <div class="mk-page" style="display:flex;flex-direction:column;gap:var(--space-6)">
+            <section class="mk-zone">
+              <h2 class="mk-h2"><span>Rules</span><i></i><em x-show="!gameId('a')">what each can honour is known once a cartridge connects</em></h2>
+              <div class="mk-opts">
                 <template x-for="key in Object.keys(OPTION_LABELS)" :key="key">
                   <label class="mk-opt" :class="!optionState(key).ok ? 'off-unavailable' : (optionState(key).on ? 'on' : '')">
                     <input type="checkbox" :checked="optionState(key).on && optionState(key).ok" :disabled="!optionState(key).ok">
@@ -311,10 +313,10 @@
                   </label>
                 </template>
               </div>
-            </div>
-            <div class="mk-card">
-              <div class="mk-card-hdr"><b>Randomized ROM pair</b></div>
-              <div class="mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-3)">
+            </section>
+            <section class="mk-zone">
+              <h2 class="mk-h2"><span>Randomized ROM pair</span><i></i></h2>
+              <div class="mk-card mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-3)">
                 <div class="mk-opts">
                   <label class="mk-field"><span>Randomizer jar</span><input type="text" placeholder="path to PokeRandoZX.jar"></label>
                   <label class="mk-field"><span>Settings file</span><input type="text" placeholder="path to your .rnqs"></label>
@@ -326,92 +328,71 @@
                   <thead><tr><th>Player</th><th>Cartridge</th><th>Seed</th><th>ROM SHA1</th></tr></thead>
                   <tbody>
                     <template x-for="pid in ['a', 'b']" :key="pid">
-                      <tr>
-                        <td x-text="pid.toUpperCase() + ' · ' + (player(pid).trainer_name || '—')"></td>
-                        <td><span class="mk-tag" x-text="player(pid).rom_type"></span></td>
-                        <td><code x-text="pid === 'a' ? '4815162342' : '9081726354'"></code></td>
-                        <td><code x-text="pid === 'a' ? 'a3f19c7d2e04' : 'c72b0e4a91f8'"></code></td>
-                      </tr>
+                      <tr><td x-text="pid.toUpperCase() + ' · ' + (player(pid).trainer_name || '—')"></td><td><span class="mk-tag" x-text="player(pid).rom_type"></span></td><td><code x-text="pid === 'a' ? '4815162342' : '9081726354'"></code></td><td><code x-text="pid === 'a' ? 'a3f19c7d2e04' : 'c72b0e4a91f8'"></code></td></tr>
                     </template>
                   </tbody>
                 </table>
               </div>
-            </div>
-            <div class="mk-card">
-              <div class="mk-card-hdr"><b>Run</b></div>
-              <table class="mk-tbl"><tbody>
+            </section>
+            <section class="mk-zone">
+              <h2 class="mk-h2"><span>Run</span><i></i></h2>
+              <div class="mk-card"><table class="mk-tbl"><tbody>
                 <tr><td>Created</td><td x-text="run().created_short"></td></tr>
                 <tr><td>Ports</td><td><code x-text="'tcp ' + run().tcp_port + ' · http ' + run().http_port"></code></td></tr>
                 <tr><td>Data</td><td><code x-text="'data/runs/' + run().run_id + '/'"></code></td></tr>
-              </tbody></table>
-            </div>
+              </tbody></table></div>
+            </section>
           </div>
         </template>
       </div>
     </template>
 
     <template x-if="!loading && !error && dest === 'run' && !run().run_id">
-      <div class="mk-body"><div class="mk-empty">No runs. Create one.</div></div>
+      <div class="mk-page"><div class="mk-empty">No runs. Create one.</div></div>
     </template>
 
     <!-- ── BROADCAST ────────────────────────────────────────────────────── -->
     <template x-if="!loading && !error && dest === 'broadcast'">
-      <div style="display:contents">
+      <div>
         <header class="mk-runhdr"><h1 class="mk-runname">Broadcast</h1><span class="mk-hdr-spacer"></span>
           <span class="mk-meta" x-show="pinnedRun()">overlays show <b x-text="pinnedRun() && pinnedRun().name"></b></span>
           <span class="mk-meta" x-show="!pinnedRun()">no run pinned — overlays are blank</span>
         </header>
-        <div></div>
-        <div class="mk-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr));align-content:start">
-          <div class="mk-card">
-            <div class="mk-card-hdr"><b>Overlays</b><span class="mk-hdr-spacer"></span><span>25 sources</span></div>
-            <div class="mk-card-body mk-opts">
-              <template x-for="o in ['party-a','party-b','links','linked-party','boxed-links','deaths','encounters','badges-a','badges-b','ticker']" :key="o">
-                <span class="mk-opt"><code x-text="'/stream/' + o"></code></span>
-              </template>
-            </div>
-          </div>
-          <div class="mk-card">
-            <div class="mk-card-hdr"><b>Twitch bot</b></div>
-            <div class="mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-2)">
+        <div class="mk-page mk-cards3">
+          <section class="mk-zone"><h2 class="mk-h2"><span>Overlays</span><i></i><em>25 sources</em></h2>
+            <div class="mk-opts"><template x-for="o in ['party-a','party-b','links','linked-party','boxed-links','deaths','encounters','badges-a','badges-b','ticker']" :key="o"><span class="mk-opt"><code x-text="'/stream/' + o"></code></span></template></div>
+          </section>
+          <section class="mk-zone"><h2 class="mk-h2"><span>Twitch bot</span><i></i></h2>
+            <div class="mk-card mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-2)">
               <label class="mk-field"><span>Channel</span><input type="text" value="howeasy"></label>
               <label class="mk-field"><span>Command prefix</span><input type="text" value="!"></label>
               <div><button class="mk-btn primary">Enable</button></div>
             </div>
-          </div>
-          <div class="mk-card">
-            <div class="mk-card-hdr"><b>OBS scene triggers</b></div>
-            <table class="mk-tbl">
-              <thead><tr><th>Event</th><th>Player</th><th>Scene</th></tr></thead>
-              <tbody>
-                <template x-for="t in [['faint','any','Death Cam'],['capture','a','Player A Full'],['trainer_battle_start','any','Battle']]" :key="t[0]">
-                  <tr><td x-text="t[0]"></td><td x-text="t[1]"></td><td x-text="t[2]"></td></tr>
-                </template>
-              </tbody>
-            </table>
-          </div>
+          </section>
+          <section class="mk-zone"><h2 class="mk-h2"><span>OBS scene triggers</span><i></i></h2>
+            <div class="mk-card"><table class="mk-tbl"><thead><tr><th>Event</th><th>Player</th><th>Scene</th></tr></thead><tbody>
+              <template x-for="t in [['faint','any','Death Cam'],['capture','a','Player A Full'],['trainer_battle_start','any','Battle']]" :key="t[0]"><tr><td x-text="t[0]"></td><td x-text="t[1]"></td><td x-text="t[2]"></td></tr></template>
+            </tbody></table></div>
+          </section>
         </div>
       </div>
     </template>
 
     <!-- ── TOOLS ────────────────────────────────────────────────────────── -->
     <template x-if="!loading && !error && dest === 'tools'">
-      <div style="display:contents">
+      <div>
         <header class="mk-runhdr"><h1 class="mk-runname">Tools</h1></header>
-        <div></div>
-        <div class="mk-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr));align-content:start">
-          <div class="mk-card">
-            <div class="mk-card-hdr"><b>Companion ROM patch</b></div>
-            <div class="mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-2)">
+        <div class="mk-page mk-cards3">
+          <section class="mk-zone"><h2 class="mk-h2"><span>Companion ROM patch</span><i></i></h2>
+            <div class="mk-card mk-card-body" style="display:flex;flex-direction:column;gap:var(--space-2)">
               <label class="mk-field"><span>Base ROM</span><input type="file"></label>
               <div><button class="mk-btn primary">Apply patch</button></div>
               <span class="mk-cap">Applies in your browser. The ROM never leaves this machine.</span>
             </div>
-          </div>
-          <div class="mk-card">
-            <div class="mk-card-hdr"><b>Randomized pair</b></div>
-            <div class="mk-card-body"><button class="mk-btn" @click="dest = 'run'; tab = 'setup'">Open in run setup</button></div>
-          </div>
+          </section>
+          <section class="mk-zone"><h2 class="mk-h2"><span>Randomized pair</span><i></i></h2>
+            <div class="mk-card mk-card-body"><button class="mk-btn" @click="dest = 'run'; tab = 'setup'">Open in run setup</button></div>
+          </section>
         </div>
       </div>
     </template>
@@ -424,9 +405,7 @@
       <aside class="mk-drawer">
         <header class="mk-drawer-hdr"><b>Debug</b><span class="mk-hdr-spacer"></span><span class="mk-cap"><kbd>`</kbd> toggles · <kbd>Esc</kbd> closes</span><button class="mk-btn" @click="debugOpen = false">Close</button></header>
         <div class="mk-drawer-body">
-          <div class="mk-drawer-grid">
-            <template x-for="a in ['Inject event','Queue command','Set Pokéballs','Set area state','Clear pending','Unlink','Revive','Rollback backup']" :key="a"><button class="mk-btn" x-text="a"></button></template>
-          </div>
+          <div class="mk-drawer-grid"><template x-for="a in ['Inject event','Queue command','Set Pokéballs','Set area state','Clear pending','Unlink','Revive','Rollback backup']" :key="a"><button class="mk-btn" x-text="a"></button></template></div>
           <div class="mk-card"><table class="mk-tbl"><tbody>
             <tr><td>run</td><td><code x-text="run().run_id"></code></td></tr>
             <tr><td>game_id</td><td><code x-text="(gameId('a') || '—') + ' / ' + (gameId('b') || '—')"></code></td></tr>
@@ -441,7 +420,6 @@
     </div>
   </template>
 
-  <!-- The dashed box is the only part of this page that would not ship. -->
   <details class="mk-ctl" open>
     <summary>Mockup controls</summary>
     <span class="mk-ctl-lbl">Cartridge</span>
