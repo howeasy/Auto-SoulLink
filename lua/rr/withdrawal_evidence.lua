@@ -69,9 +69,11 @@ function Evidence.new(io, revision)
             local loaded=io.getromhash()
             assert(type(loaded)=="string" and loaded:lower():gsub("^sha1:","")==expected.rom_sha1,
                 "loaded withdrawal ROM changed")
-            assert(hash(current.binding_digest,64) and type(current.context_generation)=="number"
-                and current.context_generation%1==0 and current.context_generation>=1
-                and current.context_generation<=0xFFFFFFFF,"unverified withdrawal context generation")
+            -- Same opaque host generation used by MB.set_context_generation;
+            -- this is not a native wire sequence or a new numeric epoch counter.
+            assert(hash(current.binding_digest,64) and type(current.context_generation)=="string"
+                and #current.context_generation>=1 and #current.context_generation<=128,
+                "unverified withdrawal context generation")
             out.binding_digest=current.binding_digest;out.context_generation=current.context_generation
             return out
         end

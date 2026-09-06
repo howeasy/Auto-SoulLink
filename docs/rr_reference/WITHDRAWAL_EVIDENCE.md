@@ -51,13 +51,17 @@ Every service in `local_io` is a trusted local host/loader dependency:
 | `read_u8(address)` | Current RR mode flags from the owned emulator. Errors/missing bytes refuse evidence. |
 | `sha256(binary_string)` | SHA256 of the actual bytes, returned as lowercase hex. Do not UTF8-reencode binary data. |
 | `getromhash()` | Current host-reported cartridge SHA1, compared with the locally admitted manifest. |
-| `verified_binding()` | Current locally verified ROM/build/layout identity, binding digest and positive u32 context generation; nil when revoked. |
+| `verified_binding()` | Current locally verified ROM/build/layout identity, binding digest and opaque context generation; nil when revoked. |
 
 `verified_binding` returns `rom_sha1`, `rom_sha256`, `build_id`, `layout_sha256`,
 `binding_digest` and `context_generation`. These are not fields to copy from a
 server command. Reset/load or admission revocation must invalidate that service
 before ordinary execution; constructing this object does not implement such an
 interlock.
+
+The generation is the same opaque host string used by
+`MB.set_context_generation` (1..128 bytes), not a separately invented counter or
+a truncated native mailbox sequence.
 
 The constructor hashes15 complete selected code/data regions against the pinned
 RR binary and copies the table bytes into private immutable strings. It checks

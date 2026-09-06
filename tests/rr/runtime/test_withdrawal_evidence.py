@@ -29,7 +29,7 @@ def binding(h, rom, *, mutate_region=None):
     h.lua.globals()._withdraw_revision = h.lua.table_from(revision)
     h.lua.globals()._withdraw_binding = h.lua.table_from(
         {**{k: v for k, v in revision.items() if k not in ("abi", "base_rom_sha256")},
-         "context_generation": 7, "binding_digest": "c" * 64}
+         "context_generation": "rr-context-7", "binding_digest": "c" * 64}
     )
     h.lua.globals()._withdraw_rom_hash = revision["rom_sha1"]
     reads = []
@@ -124,8 +124,8 @@ def test_exact_prepared_destination_survives_json_restart_and_receipt(rr_repo, r
     receipt = storage.receipt(body, restored, proof)
     assert receipt.schema == "rr-storage-receipt-v2" and receipt.durability == "live_ram_only"
     assert receipt.withdrawal.expected_party.lower() == expected.hex()
-    restored.withdrawal.context.context_generation = 999
-    assert receipt.withdrawal.context.context_generation == 7
+    restored.withdrawal.context.context_generation = "rr-context-999"
+    assert receipt.withdrawal.context.context_generation == "rr-context-7"
     assert len(reads) == 15  # Immutable ROM evidence is loaded once, not reread each frame.
     assert not h.events("sync_retrieve_done")  # Participant receipt is not server publication.
 
@@ -164,7 +164,7 @@ def test_changed_context_blocks_fresh_execution_and_completed_readback(rr_repo, 
         elif change == "rom":
             h.lua.globals()._withdraw_rom_hash = "d" * 40
         elif change == "epoch":
-            h.lua.globals()._withdraw_binding.context_generation = 8
+            h.lua.globals()._withdraw_binding.context_generation = "rr-context-8"
         elif change == "build":
             h.lua.globals()._withdraw_binding.build_id = "d" * 64
         else:
@@ -202,7 +202,7 @@ def test_serialized_intent_tampering_cannot_change_expected_result(rr_repo, rom,
     elif target == "digest":
         intent.withdrawal.party_sha256 = "e" * 64
     else:
-        intent.withdrawal.context.context_generation = 8
+        intent.withdrawal.context.context_generation = "rr-context-8"
     assert storage.classify(body, intent)[0] == "diverged", target
     assert storage.apply(body, intent)[0] is None
     assert h.pending_native()["opcode"] == 0
