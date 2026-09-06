@@ -761,10 +761,6 @@ export function calculateBasePowerSMSSSV(
     basePower = move.bp * (defender.status || defender.hasAbility('Comatose') ? 2 : 1);
     desc.moveBP = basePower;
     break;
-  case 'Barb Barrage':
-    basePower = move.bp * (defender.hasStatus('psn', 'tox') ? 2 : 1);
-    desc.moveBP = basePower;
-    break;
   case 'Heavy Slam':
   case 'Heat Crash':
     const wr =
