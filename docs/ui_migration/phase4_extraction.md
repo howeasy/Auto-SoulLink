@@ -61,11 +61,16 @@ not promoted to emulator-sample freshness.
   privilege cases. Canonical private input verification passed before the run.
 - Exact portable inventory: **3463 passed, 308 unchanged named deferrals**;
   no selected skips or xfails. Eight new Python cases were individually reviewed.
-- Four Node tests execute real Debug rendering functions with hostile text and
+- Five Node tests execute real Debug rendering functions with hostile text and
   the actual browser calculator bundle without Node `require`/`exports` globals.
   CI builds that bundle and runs these tests with a provisioned Node runtime.
 - Required Ruff checks passed; all 216 Lua files parsed; extracted scripts pass
   JavaScript syntax checks.
+- Hosted CI exposed a platform-dependent asset-copy bug: Windows path separators
+  skipped the JSON-set optimization, while Linux tried to parse the executable
+  `slink_priority.js` extension as JSON. The copier now normalizes the path and
+  minifies only complete SETDEX JSON assignments. An isolated build regression
+  verifies JSON compaction and byte-preserved executable extensions on both hosts.
 - Browser inspection verified the actual synthetic damage output, a correct
   `?slink=` link, preserved disclosure state across completed refreshes, and zero
   injected probe elements in Debug. The hostile labels remained visible as text.

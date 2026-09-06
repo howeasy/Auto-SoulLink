@@ -45,9 +45,11 @@ function cpdir(src, dest) {
 		} else if (file.endsWith('.js')) {
 			let contents = fs.readFileSync(path.join(src, file), 'utf8').replace(/^exports.* = void 0;$/gm, '');
 			// Minify the sets so we save bandwith
-			if (src === 'src/js/data/sets') {
-				const brkOpenIdx = contents.indexOf('{');
-				contents = `${contents.slice(0, brkOpenIdx)}${JSON.stringify(JSON.parse(contents.slice(brkOpenIdx, -2)))};`
+			if (path.normalize(src) === path.join('src', 'js', 'data', 'sets')) {
+				// Pure SETDEX assignments are JSON data. Extensions such as
+				// slink_priority.js are executable JavaScript and must stay intact.
+				const assignment = contents.match(/^((?:var\s+)?SETDEX_[A-Z0-9_]+\s*=\s*)(\{[\s\S]*\})\s*;\s*$/);
+				if (assignment) contents = assignment[1] + JSON.stringify(JSON.parse(assignment[2])) + ';';
 			}
 			fs.writeFileSync(path.join(dest, file), contents);
 		} else {
