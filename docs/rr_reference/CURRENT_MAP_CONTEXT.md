@@ -73,6 +73,38 @@ python -m pytest -q -p no:faulthandler tests/rr/native --rr-repo . --rr-rom 'E:/
 
 The two rival-stage CPU cases were added and passed separately afterward. The
 combined unit/runtime run passed2896 tests,15 existing skips and11 subtests. Those
-skips are not RR release evidence. Current07 has no gameplay/duo acceptance yet;
+skips are not RR release evidence. Current07 has the narrow live case below;
 the natural battle/ghost captures remain explicitly frozen03. Arena ownership,
 full scene generations, rollback reconciliation and production admission are open.
+
+## Live current-candidate follow-up
+
+Run59 independently booted the copied battery on07 as an **unverified fixture
+discovery**, then observed the exact player, party, mode and canonical pointers at
+frame1657. Root reviewed the actual field screenshot and froze a separate07
+fixture. The earlier03 fixture was not relabeled as07 evidence. Preparation58
+failed before launch because its explicit generated-layout source list was
+incomplete; that diagnostic is retained with the07 inputs.
+
+`connection_context_probe.lua` then traverses the observed Viridian connection
+using ordinary input. Only after reaching Route1 does it initialize the actual
+production `peer_ghost_npc` receiver and publish a synthetic same-avatar packet.
+Run60 retained a missing-`memory_gba` source-closure failure after traversal; the
+isolated process did not fall back to repository files. Runs61 and62 completed.
+
+Run62 has4676 structural assertions. Lua preparation and native ghost bookkeeping
+both report current map3:19 while the player's OE still reports spawn map3:1.
+The ghost has the expected512-byte allocation, allocated tile bits, private palette
+kind/count/tag, owner binding, callback, marker, image/animation pointers and
+matching OAM geometry. It remains owned through12 displayed frames. After clear,
+tile/refcount maps equal their original snapshots and no active ghost object,
+callback or marker remains. Every advanced frame checks field context, layout,
+SaveBlock1, party count/bytes and mailbox health. Root reviewed the14 screenshots;
+the ghost appears and disappears cleanly. The exact child exited normally and
+original config/SaveRAM hashes stayed unchanged.
+
+[Bound results and review](connection07_evidence.json) preserve each attempt.
+The durable PING preparation remains **unsubmitted**, demonstrating context
+sampling only. This case does not cover an existing ghost crossing the connection,
+the live map-clear barrier, production sender/network transport, storage execution,
+other avatars/MGM settings, or current07 battle behavior. Those gates remain open.

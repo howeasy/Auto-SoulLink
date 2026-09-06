@@ -1,0 +1,1090 @@
+{
+  "arena_ownership_proved": false,
+  "duo_proved": false,
+  "records": [
+    {
+      "assertions": 19,
+      "complete": true,
+      "error": null,
+      "execution": {
+        "created": 1788698805.757613,
+        "elapsed_seconds": 31.01600000000326,
+        "exit": 0,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 10768,
+        "terminated_exact_pids": []
+      },
+      "execution_sha256": "a81deff8156b75dd1e227cad2eeef284baf3d91c3cc41d8f3bc66b25c37b7aab",
+      "identity": {
+        "binding_sha256": "b4b984c7f139909240ec0e64595373a2c12a3122ee0d4c4da67912a2c1aa18f1",
+        "config_sha256": "dff420056030ffefc030fedaf35e1bde59d559036f6c727046244703ecd69435",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "6239872d31ac3e1181fa1ebac96fe41abd0a3b882ef4a5ec7af85eda17a76856",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 60,
+        "player": "a",
+        "probe_options_sha256": "c1d8c76ae87b99fb61a7f16e7d5757b7df2319a64c668984fdb00cf2b28ed602",
+        "purpose": "fixture_discovery",
+        "rom_sha1": "11CF27B7EE8B3B89EE27317D5639CE92336CB3A9",
+        "rom_sha256": "d77635218962ffe0ff0b44d7c797f514f896e6e54281f8d17a703f4e1ecc7c37",
+        "run_id": "fixture_candidate07_59",
+        "script_sha256": "3213d44a247a93b2272cecb21834c5c0a6567a8174676ba2da9197501e32e2b4",
+        "source_sha256": "a752e0a87e4532b44fac1505de760b8b626471a491ba4041faf29e286bf8cc43"
+      },
+      "preparation_sha256": "520ae933b85b12672f722052df4efb85932036dfe1a434b4fc6120f51d2dd33c",
+      "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\fixture_candidate07_59_a\\results\\result.json",
+      "result_sha256": "51bc457327e6da0fa049cd5c7cc4cf4622b80305932a7271de9e538e2dd7ecdf",
+      "run_id": "fixture_candidate07_59"
+    },
+    {
+      "assertions": 4377,
+      "complete": false,
+      "error": ".../runs/connection_candidate07_60_a/source/lua/mailbox.lua:123: module 'memory_gba' not found:\n\tno field package.preload['memory_gba']\n\tno file 'C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_60_a/source/lua/memory_gba.lua'\n\tno file 'C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_60_a/source/lua/memory_gba.lua'\n\tno file 'E:\\Howard\\Bizhawk\\lua\\memory_gba.lua'\n\tno file 'E:\\Howard\\Bizhawk\\lua\\memory_gba\\init.lua'\n\tno file 'E:\\Howard\\Bizhawk\\memory_gba.lua'\n\tno file 'E:\\Howard\\Bizhawk\\memory_gba\\init.lua'\n\tno file 'E:\\Howard\\Bizhawk\\..\\share\\lua\\5.4\\memory_gba.lua'\n\tno file 'E:\\Howard\\Bizhawk\\..\\share\\lua\\5.4\\memory_gba\\init.lua'\n\tno file '.\\memory_gba.lua'\n\tno file '.\\memory_gba\\init.lua'\n\tno file 'C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\connection_candidate07_60_a\\other_paths\\p7\\memory_gba.dll'\n\tno file 'C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\connection_candidate07_60_a\\other_paths\\p7\\loadall.dll'\n\tno file 'E:\\Howard\\Bizhawk\\memory_gba.dll'\n\tno file 'E:\\Howard\\Bizhawk\\..\\lib\\lua\\5.4\\memory_gba.dll'\n\tno file 'E:\\Howard\\Bizhawk\\loadall.dll'",
+      "execution": {
+        "created": 1788699482.4548275,
+        "elapsed_seconds": 35.34299999999348,
+        "exit": 0,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 20852,
+        "terminated_exact_pids": []
+      },
+      "execution_sha256": "357fbe98d0ed1aa073d058e9a0fb2a098b39f0654d67dd40bd6e6048fe9d737a",
+      "identity": {
+        "binding_sha256": "e308f39a6923455ec8bc711769b76788a4db48229e673a358db871b7dd4ae20b",
+        "config_sha256": "b156cc50ec2c68914facc8dd2168443b6db2bed858037b2052f12a2659f0a098",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "95221d35f7d10f64a6ebd009782e5421d7b652efc3a13c537909045f43cb9104",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 2400,
+        "player": "a",
+        "probe_options_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "purpose": "validation",
+        "rom_sha1": "11CF27B7EE8B3B89EE27317D5639CE92336CB3A9",
+        "rom_sha256": "d77635218962ffe0ff0b44d7c797f514f896e6e54281f8d17a703f4e1ecc7c37",
+        "run_id": "connection_candidate07_60",
+        "script_sha256": "9c7bb531a39526738a27709e33d2ce3dc32287c8cebb198ad5da21d5bf37110b",
+        "source_sha256": "4678838d5e3a21d2ca58936a21655bc1207c1dd24367c4f02a6b13ce2eeb223b"
+      },
+      "preparation_sha256": "79c6c8bd2d5bcab6d5334c661488e83a63c2146a4a929303c2ee5f44a01a8688",
+      "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\connection_candidate07_60_a\\results\\result.json",
+      "result_sha256": "953162152aa4de4fc37aa4776fe811e6282c917d0a715bdf6554478087fab704",
+      "run_id": "connection_candidate07_60"
+    },
+    {
+      "assertions": 4536,
+      "complete": true,
+      "error": null,
+      "execution": {
+        "created": 1788699672.7282372,
+        "elapsed_seconds": 36.01500000001397,
+        "exit": 0,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 31120,
+        "terminated_exact_pids": []
+      },
+      "execution_sha256": "99c1aef0691edbfda8fc5b96b5800e78018ff23145af860f218afa1b5343b2f0",
+      "identity": {
+        "binding_sha256": "72729ec4ac2003c20a3af24776542aba548101d11345b8c6ce98cb3725baa8ff",
+        "config_sha256": "cb829546a544a2471e18456f14bfd181870dd82af97b4ac6eecb14e19f3b6366",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "95221d35f7d10f64a6ebd009782e5421d7b652efc3a13c537909045f43cb9104",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 2400,
+        "player": "a",
+        "probe_options_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "purpose": "validation",
+        "rom_sha1": "11CF27B7EE8B3B89EE27317D5639CE92336CB3A9",
+        "rom_sha256": "d77635218962ffe0ff0b44d7c797f514f896e6e54281f8d17a703f4e1ecc7c37",
+        "run_id": "connection_candidate07_61",
+        "script_sha256": "9c7bb531a39526738a27709e33d2ce3dc32287c8cebb198ad5da21d5bf37110b",
+        "source_sha256": "c373baa2794d6d983e681aeb486943b96e00f6ad6a9ba4a4710cd3b64a26eaa3"
+      },
+      "owned": {
+        "object": "0500000001000000f013033311000700130007001300070011000000ff00000000000000",
+        "refs": "01010011060100110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "sprite": "388090801418000070343a081038eb08fc1c23080c7d00039c373a08b5a937085800400100000000f8f000000f0001000000000000000000000000024c53030800004088",
+        "tiles": "ffffffff0f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "preparation": {
+        "args": {},
+        "context": {
+          "callback2": 134571445,
+          "generation": "private-connection-07",
+          "layout": 137254348,
+          "map_group": 3,
+          "map_num": 19,
+          "player_id": 0,
+          "saveblock1": 33707308,
+          "script_lock": 0,
+          "swap_active": 0
+        },
+        "keep": true,
+        "native_id": "0000000000000060",
+        "op": 1,
+        "payload": {},
+        "token": 1,
+        "wire": 1
+      },
+      "preparation_sha256": "166d813608865123c541a9caba6e503b8a739c9f305514eda974f140efa642fc",
+      "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\connection_candidate07_61_a\\results\\result.json",
+      "result_sha256": "0921bfbd5f9421129009a9a273ac9207fe480e5e2e9103ea39095857782d19b5",
+      "run_id": "connection_candidate07_61",
+      "screenshots": [
+        {
+          "bytes": 5354,
+          "frame": 1931,
+          "label": "connection_before",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_61_a/results/result_connection_before.png",
+          "sha256": "5ab68c33413ae31f3ad5cf2db659e7ca33ddeab15ba2fbea73eaf2f706304ba5"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1935,
+          "label": "connection_visible_1",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_61_a/results/result_connection_visible_1.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1936,
+          "label": "connection_visible_2",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_61_a/results/result_connection_visible_2.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1937,
+          "label": "connection_visible_3",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_61_a/results/result_connection_visible_3.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1938,
+          "label": "connection_visible_4",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_61_a/results/result_connection_visible_4.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1939,
+          "label": "connection_visible_5",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_61_a/results/result_connection_visible_5.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1940,
+          "label": "connection_visible_6",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_61_a/results/result_connection_visible_6.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1941,
+          "label": "connection_visible_7",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_61_a/results/result_connection_visible_7.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1942,
+          "label": "connection_visible_8",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_61_a/results/result_connection_visible_8.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1943,
+          "label": "connection_visible_9",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_61_a/results/result_connection_visible_9.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1944,
+          "label": "connection_visible_10",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_61_a/results/result_connection_visible_10.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1945,
+          "label": "connection_visible_11",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_61_a/results/result_connection_visible_11.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1946,
+          "label": "connection_visible_12",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_61_a/results/result_connection_visible_12.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5346,
+          "frame": 1956,
+          "label": "connection_after",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_61_a/results/result_connection_after.png",
+          "sha256": "78ff6e684c68525cfef4ad2fbde4b161c8022e32c3471abacbb6a761e99fdbe0"
+        }
+      ],
+      "trace": [
+        {
+          "frame": 1932,
+          "ghost_id": 255,
+          "label": "spawn",
+          "native_map_group": 0,
+          "native_map_num": 0,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 255,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1933,
+          "ghost_id": 1,
+          "label": "spawn",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1934,
+          "ghost_id": 1,
+          "label": "spawn",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1935,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1936,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1937,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1938,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1939,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1940,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1941,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1942,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1943,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1944,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1945,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1946,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1947,
+          "ghost_id": 1,
+          "label": "clear",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1948,
+          "ghost_id": 255,
+          "label": "clear",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1949,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1950,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1951,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1952,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1953,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1954,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1955,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1956,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        }
+      ]
+    },
+    {
+      "assertions": 4676,
+      "complete": true,
+      "error": null,
+      "execution": {
+        "created": 1788701373.6531231,
+        "elapsed_seconds": 35.70299999997951,
+        "exit": 0,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 25020,
+        "terminated_exact_pids": []
+      },
+      "execution_sha256": "e634c1d922b34d7324f2e1e9041ec95c0076042607167b0fb1a6ea0f5223d45e",
+      "identity": {
+        "binding_sha256": "217e59dff411d9795da7bb1946ef0766d9cdc1ebb119eb42d0ff10a9c2bfc4e6",
+        "config_sha256": "2a3a766d757e44e873b94f7433d1c2f9d5e8e95f792e10800b097e507388e5fb",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "95221d35f7d10f64a6ebd009782e5421d7b652efc3a13c537909045f43cb9104",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 2400,
+        "player": "a",
+        "probe_options_sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+        "purpose": "validation",
+        "rom_sha1": "11CF27B7EE8B3B89EE27317D5639CE92336CB3A9",
+        "rom_sha256": "d77635218962ffe0ff0b44d7c797f514f896e6e54281f8d17a703f4e1ecc7c37",
+        "run_id": "connection_candidate07_62",
+        "script_sha256": "e0f67a3447485c0c8ef6fc5d5fc2c64c9c965b7f12b81c240053af794e36de32",
+        "source_sha256": "462a1f1f84e7833857745c4511c7926457eecd9a43a57d4d4fa5457e91345bf1"
+      },
+      "owned": {
+        "object": "0500000001000000f013033311000700130007001300070011000000ff00000000000000",
+        "refs": "01010011060100110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "sprite": "388090801418000070343a081038eb08fc1c23080c7d00039c373a08b5a937085800400100000000f8f000000f0001000000000000000000000000024c53030800004088",
+        "tiles": "ffffffff0f000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "preparation": {
+        "args": {},
+        "context": {
+          "callback2": 134571445,
+          "generation": "private-connection-07",
+          "layout": 137254348,
+          "map_group": 3,
+          "map_num": 19,
+          "player_id": 0,
+          "saveblock1": 33707308,
+          "script_lock": 0,
+          "swap_active": 0
+        },
+        "keep": true,
+        "native_id": "0000000000000060",
+        "op": 1,
+        "payload": {},
+        "token": 1,
+        "wire": 1
+      },
+      "preparation_sha256": "27df960feeea4fda3f443a15d99b24a38c24bbfbf5f196871e47d262db967b0e",
+      "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\connection_candidate07_62_a\\results\\result.json",
+      "result_sha256": "97c620da200d8ba0ce03ae8656a2999c4d37e39284ff539af49cba3b95cc61ee",
+      "run_id": "connection_candidate07_62",
+      "screenshots": [
+        {
+          "bytes": 5354,
+          "frame": 1931,
+          "label": "connection_before",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_62_a/results/result_connection_before.png",
+          "sha256": "5ab68c33413ae31f3ad5cf2db659e7ca33ddeab15ba2fbea73eaf2f706304ba5"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1935,
+          "label": "connection_visible_1",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_62_a/results/result_connection_visible_1.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1936,
+          "label": "connection_visible_2",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_62_a/results/result_connection_visible_2.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1937,
+          "label": "connection_visible_3",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_62_a/results/result_connection_visible_3.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1938,
+          "label": "connection_visible_4",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_62_a/results/result_connection_visible_4.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1939,
+          "label": "connection_visible_5",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_62_a/results/result_connection_visible_5.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1940,
+          "label": "connection_visible_6",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_62_a/results/result_connection_visible_6.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1941,
+          "label": "connection_visible_7",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_62_a/results/result_connection_visible_7.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1942,
+          "label": "connection_visible_8",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_62_a/results/result_connection_visible_8.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1943,
+          "label": "connection_visible_9",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_62_a/results/result_connection_visible_9.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1944,
+          "label": "connection_visible_10",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_62_a/results/result_connection_visible_10.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1945,
+          "label": "connection_visible_11",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_62_a/results/result_connection_visible_11.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5395,
+          "frame": 1946,
+          "label": "connection_visible_12",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_62_a/results/result_connection_visible_12.png",
+          "sha256": "3228907af3bdc8d35ff4393971da5fb776da2726ea5828a96aa29ff657240810"
+        },
+        {
+          "bytes": 5346,
+          "frame": 1956,
+          "label": "connection_after",
+          "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/connection_candidate07_62_a/results/result_connection_after.png",
+          "sha256": "78ff6e684c68525cfef4ad2fbde4b161c8022e32c3471abacbb6a761e99fdbe0"
+        }
+      ],
+      "trace": [
+        {
+          "frame": 1932,
+          "ghost_id": 255,
+          "label": "spawn",
+          "native_map_group": 0,
+          "native_map_num": 0,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 255,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1933,
+          "ghost_id": 1,
+          "label": "spawn",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1934,
+          "ghost_id": 1,
+          "label": "spawn",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1935,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1936,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1937,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1938,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1939,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1940,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1941,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1942,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1943,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1944,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1945,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1946,
+          "ghost_id": 1,
+          "label": "visible",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "oeId": 1,
+            "spawned": true
+          }
+        },
+        {
+          "frame": 1947,
+          "ghost_id": 1,
+          "label": "clear",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1948,
+          "ghost_id": 255,
+          "label": "clear",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1949,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1950,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1951,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1952,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1953,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1954,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1955,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        },
+        {
+          "frame": 1956,
+          "ghost_id": 255,
+          "label": "cleanup",
+          "native_map_group": 3,
+          "native_map_num": 19,
+          "pg": {
+            "map_clear_failed": false,
+            "map_clearing": false,
+            "map_unknown": false,
+            "spawned": false
+          }
+        }
+      ]
+    }
+  ],
+  "release_ready": false,
+  "schema": "slink-rr-connection07-evidence-v1",
+  "scope": "Ghost receiver initialized after completed ordinary connection; no ghost crossing, sender/transport, storage execution, or battle claim.",
+  "visual_review": "Root viewed61 before/visible/after. All14 candidate62 PNGs decode; their RGB content matches61 exactly. Ghost visible then absent."
+}
