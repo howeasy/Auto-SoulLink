@@ -3,6 +3,16 @@
 local Position = {}
 local OBJECTS, SPRITES = 0x02036E38, 0x0202063C
 
+-- Pinned RR profile pointer (games.gen3_frlge.profiles.radical_red.SB1_PTR_ADDR).
+-- The player's OE map fields identify its spawn map and can survive a connected
+-- map transition. Current location lives in SaveBlock1; invalid pointers are unknown.
+function Position.current_map(io)
+    local sb1 = io.read_u32_le(0x03003840)
+    if sb1 < 0x02000000 or sb1 + 6 > 0x02040000 or sb1 % 4 ~= 0 then return nil end
+    return {mg=io.read_u8(sb1 + 4), mn=io.read_u8(sb1 + 5),
+            layout=io.read_u32_le(0x02036DFC), saveblock1=sb1}
+end
+
 local function delta16(now, before)
     return ((now - before + 32768) % 65536) - 32768
 end
@@ -23,9 +33,10 @@ function Position.new(io)
             or io.read_u16_le(sprite + 46) ~= (oe - OBJECTS) // 36 then
             self.reset(); return nil
         end
+        local map = Position.current_map(io)
+        if not map then self.reset(); return nil end
         local p = {
-            oe=oe, sid=sid, mg=io.read_u8(oe + 10), mn=io.read_u8(oe + 9),
-            layout=io.read_u32_le(0x02036DFC),
+            oe=oe, sid=sid, mg=map.mg, mn=map.mn, layout=map.layout, saveblock1=map.saveblock1,
             gfx=io.read_u8(oe + 5) | (io.read_u8(oe + 35) << 8),
             imgs=io.read_u32_le(sprite + 12), anims=io.read_u32_le(sprite + 8),
             x=io.read_s16_le(oe + 16), y=io.read_s16_le(oe + 18),
@@ -34,7 +45,7 @@ function Position.new(io)
             idle=(flags & 0x80) ~= 0,
         }
         if anchor and (anchor.oe ~= p.oe or anchor.sid ~= p.sid or anchor.mg ~= p.mg
-            or anchor.mn ~= p.mn or anchor.layout ~= p.layout or anchor.gfx ~= p.gfx
+            or anchor.mn ~= p.mn or anchor.layout ~= p.layout or anchor.saveblock1 ~= p.saveblock1 or anchor.gfx ~= p.gfx
             or anchor.imgs ~= p.imgs or anchor.anims ~= p.anims) then self.reset() end
         -- currentCoords is the destination during a step, so never calibrate an
         -- unobserved midstep from it. Sprite.pos2 is a render effect, not ground motion.

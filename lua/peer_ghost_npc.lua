@@ -25,10 +25,14 @@ local PG = {}
 local interact_text = "Your partner is here!"   -- shown when YOU press A on the ghost
 local SNAP_PX = 48             -- world-px jump beyond this in one update -> snap, don't slide
 local S
+local Position -- RR-only helper, loaded after native field qualification
 
-function PG.init() S = { ghost = nil, enabled = true, spawned = false, pi_last = 0, interact_pending = false,
-                         last_w = nil, av_imgs = nil, av_anims = nil, av_pcol = nil,
-                         spawn_gfx = nil } end
+function PG.init()
+  if S then return end -- initialization is not authority to abandon a pending native receipt
+  S = { ghost = nil, enabled = true, spawned = false, pi_last = 0, interact_pending = false,
+        last_w = nil, av_imgs = nil, av_anims = nil, av_pcol = nil,
+        spawn_gfx = nil, local_map = nil, map_unknown = false, map_clear = nil }
+end
 function PG.present() return MB ~= nil and MB.present() end
 function PG.set_interact_text(s) if s and s ~= "" then interact_text = s end end
 
@@ -57,9 +61,12 @@ end
 
 function PG.on_ghost_clear()
   if not S then return end
-  S.ghost = nil
-  if S.spawned and MB then MB.ghost_clear() end
-  S.spawned = false; S.last_w = nil; S.av_imgs = nil; S.av_anims = nil; S.av_pcol = nil
+  S.ghost = nil; S.interact_pending = false
+  if not S.map_clear then
+    if S.spawned and MB then MB.ghost_clear() end
+    S.spawned = false
+  end -- a pending map clear remains the sole tracked cleanup operation
+  S.last_w = nil; S.av_imgs = nil; S.av_anims = nil; S.av_pcol = nil
   S.spawn_gfx = nil
 end
 
@@ -75,15 +82,55 @@ function PG.consume_interact()
   return false
 end
 
+local function reset_map(map)
+  S.spawned = false; S.spawn_gfx = nil; S.last_w = nil
+  S.av_imgs = nil; S.av_anims = nil; S.av_pcol = nil; S.interact_pending = false
+  S.pi_last = MB.peer_interact_count() -- qualified current field; old-map increments are not new interactions
+  S.local_map = map; S.map_unknown = false; S.map_clear = nil
+end
+
 function PG.on_frame()
-  if not S or not S.enabled or not PG.present() then return end
-  -- Only touch the ghost in the WALKABLE FIELD. Menus (party/bag/start), the trade scene, etc. reuse
-  -- gSprites for their own UI; the avatar re-assert below writes gSprites[ghost_sid], which corrupts
-  -- those screens (the party-menu "square"/sprite errors). is_overworld is TRUE in menus (only battle
-  -- flips it false), so gate on gMain.callback2 == CB2_Overworld (the field, incl. field dialogues).
+  -- Finish an already-owned cleanup while disabled, without publishing new state.
+  if not S or (not S.enabled and not S.map_clear) or not PG.present() then return end
+  -- Publish desired ghost state only in the WALKABLE FIELD. Menus/trade/battle reuse
+  -- sprite resources; C remains their sole owner. is_overworld includes menus, so
+  -- use the exact field callback (including ordinary field dialogues).
   if memory.read_u32_le(0x030030F4) ~= 0x080565B5 then return end
+  if not Position then Position = require("rr.peer_position") end
+  local map = Position.current_map(memory)
+  if not map then S.map_unknown = true; S.last_w = nil; S.interact_pending = false; return end
+  if S.map_clear then
+    if S.map_clear.failed then return end
+    if not S.map_clear.acked then
+      local status = MB.poll(S.map_clear.token)
+      if status == nil then return end
+      if status ~= MB.ST_OK then S.map_clear.failed = true; return end
+      S.map_clear.acked = true
+    end
+    -- CLEAR ACK sets active=0; actual native removal is a later field frame.
+    -- Both observations are required before another spawn or raw target update.
+    if MB.ghost_oe() ~= 0xFF then return end
+    reset_map(map)
+    return
+  end
+  local old = S.local_map
+  if S.map_unknown or (old and (old.mg ~= map.mg or old.mn ~= map.mn
+      or old.layout ~= map.layout or old.saveblock1 ~= map.saveblock1)) then
+    S.interact_pending = false
+    -- A connected map can rebase tiles without changing OE spawn-map fields.
+    -- Queue ordinary native cleanup before publishing targets for this map.
+    -- If the mailbox refuses, retain the obligation and retry only when qualified.
+    if S.spawned then
+      local token = MB.send(MB.OP_GHOST_CLEAR, {}, true) -- retain receipt across unrelated native completions
+      if token then S.map_clear = {token=token} end
+      return
+    end
+    reset_map(map)
+    return
+  end
+  S.local_map = map
   local poe = MB.player_oe()                                              -- player's actual slot
-  local pmg, pmn = memory.read_u8(poe + 0x0A), memory.read_u8(poe + 0x09) -- local player map
+  local pmg, pmn = map.mg, map.mn
   local g = S.ghost
   local same_map = g and g.mg == pmg and g.mn == pmn
 
@@ -96,15 +143,15 @@ function PG.on_frame()
   end
 
   if not same_map then
+    S.interact_pending = false
     if S.spawned then MB.ghost_clear(); S.spawned = false end
     S.last_w = nil; S.av_imgs = nil
     return
   end
 
   -- Spawn with the PARTNER's own graphicsId, so the engine allocates the OAM shape/size and tile
-  -- count that their sprite actually needs. This is what makes bike / surf / fishing work: those
-  -- frames are 32x32 / 16 tiles, and the old fixed 16x32 stand-in rendered them as a corrupted blob
-  -- because the avatar repoint only swaps the image POINTER, not the OAM geometry.
+  -- count that their sprite actually needs. This preserves geometry; bike cadence,
+  -- surf/fishing animations and effect ownership remain separate unproved features.
   --
   -- Never the LOCAL player's gfx: a custom local character can resolve to a different OAM size than
   -- the partner's, which is the bug the stand-in was working around. Both players run the same RR
@@ -181,7 +228,9 @@ function PG.on_frame()
 end
 
 function PG.debug()
-  return S and { oeId = (MB and S.spawned) and MB.ghost_oe() or nil, spawned = S.spawned } or {}
+  return S and { oeId = (MB and S.spawned) and MB.ghost_oe() or nil, spawned = S.spawned,
+                 map_unknown = S.map_unknown, map_clearing = S.map_clear ~= nil,
+                 map_clear_failed = S.map_clear and S.map_clear.failed or false } or {}
 end
 
 return PG

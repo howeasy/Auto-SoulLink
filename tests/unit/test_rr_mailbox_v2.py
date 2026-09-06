@@ -442,7 +442,9 @@ def receiver():
     h = MailboxHarness()
     h.lua.globals().console = h.table({"log": lambda *args: None})
     h.lua.execute("package.loaded.mailbox = MB")
+    h.lua.globals().package.loaded["rr.peer_position"] = h.lua.execute((ROOT / "lua/rr/peer_position.lua").read_text())
     h.write(0x030030F4, 0x080565B5, 4)
+    h.write(0x03003840, 0x0202572C, 4)
     h.write(0x02036E38, 0x81)
     h.write(h.mb.GH_OEID, 1)
     h.write(0x02036E38 + 0x24, 1)
@@ -524,6 +526,7 @@ def test_actual_sender_fragment_carries_gfx16_and_is_field_gated(field):
     h.write(0x02036E38, 0x81)
     h.write(0x02036E38 + 5, 3)
     h.write(0x02036E38 + 0x23, 2)
+    h.write(0x03003840, 0x0202572C, 4)
     h.write(0x0202063C + 62, 3)  # owned, coordinate-offset sprite
     captured = []
     h.lua.globals().IS_RR = True

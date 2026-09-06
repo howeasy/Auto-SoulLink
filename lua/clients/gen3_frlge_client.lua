@@ -288,7 +288,7 @@ local function parse_command_list(raw)
         local text    = obj:match('"text"%s*:%s*"([^"]*)"')
         if text then text = text:gsub("\\n", "\n") end   -- JSON-escaped newline -> real (FR line break)
         local fb      = obj:match('"fb"%s*:%s*"([^"]*)"')   -- msgbox fallback style: "prompt" or hud
-        -- ghost_pos (peer ghost) fields — x,y are TILE coords now; the patch interpolates.
+        -- ghost_pos (peer ghost) fields — x,y are WORLD PIXELS; the patch interpolates.
         local gmg  = tonumber(obj:match('"mg"%s*:%s*(%-?%d+)'))
         local gmn  = tonumber(obj:match('"mn"%s*:%s*(%-?%d+)'))
         local ggx  = tonumber(obj:match('"x"%s*:%s*(%-?%d+)'))
@@ -2276,7 +2276,7 @@ local function on_frame()
                 pcol = table.concat(t)
             end
             send({ event = "ghost_pos",
-                   mg = memory.read_u8(OE + 0x0A), mn = memory.read_u8(OE + 0x09),  -- group, num
+                   mg = position.mg, mn = position.mn, -- current SB1 map, not OE spawn map
                    x  = wx, y = wy,                  -- WORLD PIXELS (sub-pixel)
                    f  = f, mv = (moving and 1 or 0),
                    an = anim,                        -- live animNum (exact animation)
@@ -2286,7 +2286,7 @@ local function on_frame()
             if not pg_send_logged then
                 pg_send_logged = true
                 console.log(string.format("[peer-ghost] broadcasting our position: map(%d,%d) worldpx(%d,%d)",
-                    memory.read_u8(OE + 0x0A), memory.read_u8(OE + 0x09), wx, wy))
+                    position.mg, position.mn, wx, wy))
             end
         end
         if PG then

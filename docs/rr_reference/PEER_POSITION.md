@@ -103,3 +103,7 @@ map connection/hard reposition, and new avatar creation. Preserve raw pos1/pos2,
 camera total/pan/offset, OE current/previous and scene identity in the trace. Do not
 label a test "viewport clamp" from a fixed-offset synthetic fixture alone. The
 physical updated-client sender/peer-renderer pair remains untested in this slice.
+
+The later [current-map correction](PEER_CURRENT_MAP.md) uses SaveBlock1 location
+for map tags and calibration identity after a connected-map observation proved
+that the player's OE retains its spawn-map fields.

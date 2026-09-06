@@ -8,6 +8,7 @@ from tests.unit.test_rr_mailbox_v2 import MailboxHarness
 
 ROOT = Path(__file__).resolve().parents[2]
 OE, SPRITE = 0x02036E38, 0x0202063C
+SB1 = 0x0202572C
 
 
 class SenderHarness(MailboxHarness):
@@ -27,6 +28,9 @@ class SenderHarness(MailboxHarness):
         if helper.exists():
             env.pg_position = self.lua.execute(helper.read_text()).new(env.memory)
         self.write(0x030030F4, 0x080565B5, 4)
+        self.write(0x03003840, SB1, 4)
+        self.write(SB1 + 4, 3)
+        self.write(SB1 + 5, 1)
         self.write(OE, 0x81)
         self.write(OE + 9, 1)
         self.write(OE + 10, 3)
@@ -85,7 +89,7 @@ def test_changed_context_midstep_cannot_reuse_calibration(change):
     h = SenderHarness()
     h.tick()
     if change == "map":
-        h.write(OE + 9, 2)
+        h.write(SB1 + 5, 2)
     elif change == "sprite":
         h.write(OE + 4, 1)
         for offset in range(68):
