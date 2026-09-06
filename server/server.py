@@ -4082,10 +4082,10 @@ class SLinkServer:
                 # Python 3.12+ syntax and would not parse on 3.11.
                 abl_th = '<th class="col-abl">Ability</th>' if has_abilities else ''
                 chunks.append(
-                    f'<table class="foe-table"><tr><th>Foe</th>'
+                    f'<table class="foe-table"><thead><tr><th>Foe</th>'
                     f'<th class="col-lv">Lv</th><th class="col-hp">HP</th>'
                     f'<th class="col-type">Type</th>'
-                    f'{abl_th}</tr>'
+                    f'{abl_th}</tr></thead><tbody>'
                 )
                 for ei, em in enumerate(enemy_party):
                     esid   = em.get("species_id", 0)
@@ -4149,7 +4149,7 @@ class SLinkServer:
                             f'<tr class="foe-moves-row" data-key="{html.escape(foe_key)}:moves">'
                             f'<td colspan="{foe_cols}">{emove_html}</td></tr>'
                         )
-                chunks.append("</table>")
+                chunks.append("</tbody></table>")
             else:
                 chunks.append('<p class="empty">No foe data yet.</p>')
             # Calc preview data div (rendered by SLinkCalc JS) — RR only.
@@ -5299,6 +5299,7 @@ class SLinkServer:
         ctx = {
             "page_title":      self._page_title(),
             "theme":           resolve_theme(request),
+            "body_class":      "slink-dashboard",
             "is_stream":       False,
             "hide_chrome":     False,
             "content_html":    content_html,

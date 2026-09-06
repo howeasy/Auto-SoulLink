@@ -8,22 +8,29 @@ mid-stream) down and no test notices.
 The list of routes is not written out here; it is walked off `build_app()`'s real router, so a
 route added to the server is covered automatically instead of drifting away from a hand-kept copy.
 """
+import json
+from pathlib import Path
+
 import pytest
 
 aiohttp = pytest.importorskip("aiohttp")
 pytest_asyncio = pytest.importorskip("pytest_asyncio")
 from aiohttp.test_utils import TestClient, TestServer  # noqa: E402
 
-from server.adapters.gen1_rby import Gen1Adapter
+from server.adapters.gen1_rby import Gen1Adapter  # noqa: E402
 from server.adapters.gen3_frlge import Gen3Adapter  # noqa: E402
 from server.server import SLinkServer, build_app  # noqa: E402
 from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo  # noqa: E402
+from tests.ui_support import manager_app_without_startup  # noqa: E402
 
 # Routes with side effects or long-lived responses. /api/events is an SSE stream that never
 # completes; the calc catch-all serves files from a vendored bundle; the launcher needs a player.
 SKIP = {"/api/events"}
 DYNAMIC = {
-    "/calc/{path:.*}": "/calc/index.html",
+    "/calc/{path:.*}": "/calc/css/main.css",
+    "/calc/{path}": "/calc/css/main.css",
+    "/companion/{name}": "/companion/SLink-RR.ups",
+    "/static": "/static/slink.css",
     "/launcher/{player}": "/launcher/a",
     "/api/obs/scenes/{player}": "/api/obs/scenes/a",
 }
@@ -110,13 +117,40 @@ def _route_ids():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("path", _route_ids())
 async def test_get_route_renders(client, path):
-    resp = await client.get(path)
+    resp = await client.get(path, allow_redirects=False)
     ctype = resp.headers.get("Content-Type", "")
     raw = await resp.read()                     # bytes: /companion/*.ups serves a binary patch
-    assert resp.status < 500, f"{path} -> {resp.status}\n{raw[:1500]!r}"
+    expected = 302 if path in ("/calc", "/calc/") else 200
+    assert resp.status == expected, f"{path} -> {resp.status}\n{raw[:1500]!r}"
+    if expected == 302:
+        assert resp.headers["Location"] == "/calc/normal.html"
     # A 200 HTML page that came back empty means the template rendered to nothing.
     if resp.status == 200 and "text/html" in ctype:
         assert raw.decode("utf-8", "replace").strip(), f"{path} returned an empty HTML body"
+
+
+def test_registered_methods_and_paths_match_frozen_contract():
+    import types
+
+    stub = types.SimpleNamespace(**{name: getattr(SLinkServer, name) for name in dir(SLinkServer)
+                                   if name.startswith("handle_") or name == "_build_sidebar_html"})
+    app = build_app(stub)
+    path = Path(__file__).resolve().parents[1] / "fixtures/ui/routes-v1.json"
+    expected = json.loads(path.read_text(encoding="utf-8"))["run"]
+    actual = sorted([route.method, route.resource.canonical] for route in app.router.routes())
+    assert actual == expected, "Review route additions/removals explicitly; counts alone cannot preserve paths"
+    # Also pin the actual discovered GET test list, including exclusions and
+    # concrete replacements for parameterized paths. A 404 cannot count as smoke coverage.
+    assert _route_ids() == json.loads(path.read_text(encoding="utf-8"))["smoke_get_paths"]
+
+
+@pytest.mark.asyncio
+async def test_manager_routes_match_frozen_contract_without_starting_runs():
+    app = await manager_app_without_startup()
+    path = Path(__file__).resolve().parents[1] / "fixtures/ui/routes-v1.json"
+    expected = json.loads(path.read_text(encoding="utf-8"))["manager"]
+    actual = sorted([route.method, route.resource.canonical] for route in app.router.routes())
+    assert actual == expected, "Review manager route compatibility changes explicitly"
 
 
 @pytest.mark.asyncio

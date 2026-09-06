@@ -7,13 +7,33 @@ admission proofs or durable receipts; none are reconstructed or fabricated.
 import copy
 import json
 from collections import deque
+from contextlib import suppress
 from pathlib import Path
+from unittest.mock import patch
 
 from server.adapters import game_id_for_rom_type, get_adapter
 from server.server import SLinkServer
 from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo
 
 DERIVED_FIELDS = {"sprite_html", "sprite_src", "species_name", "ability_name", "move_details"}
+
+
+async def manager_app_without_startup():
+    """Capture actual route registration before any runner or lifecycle starts."""
+    from server import manager
+
+    captured = {}
+
+    class AppCaptured(Exception):
+        pass
+
+    def capture(app):
+        captured["app"] = app
+        raise AppCaptured
+
+    with patch.object(manager.web, "AppRunner", capture), suppress(AppCaptured):
+        await manager.main("127.0.0.1", 0)
+    return captured["app"]
 
 
 def _raw(mon):
@@ -68,6 +88,7 @@ def hydrate_capture(capture: dict, data_dir: Path) -> SLinkServer:
     srv = SLinkServer(data_dir=str(data_dir))
     state = srv.state
     srv.adapter = state.adapter = get_adapter(game_id, is_rr=variant.endswith("_rr"), rom_type=variant)
+    state.is_rr = variant.endswith("_rr")
     state.rom_type = variant
     for name, value in capture["rules"].items():
         setattr(state, name, value)

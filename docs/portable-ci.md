@@ -77,3 +77,12 @@ JAR, emulator, live run or application startup. They belong to `portable`.
 No existing node was removed or reclassified. The resulting Phase0 inventory
 contains 3694 nodes, with 3386 selected and 308 explicitly deferred on each
 supported profile. Later phase additions require their own inventory review.
+
+## Reviewed UI Phase 1 inventory change
+
+The dashboard contract suite adds ten synthetic rendering cases and two exact
+router-contract checks. Six existing smoke node IDs are replaced with their
+concrete calc/companion/static asset URLs; coverage is strengthened from arbitrary
+non-5xx status to expected success/redirect status. All remain portable. No local
+input or platform deferral changed. The Phase1 inventory contains 3706 nodes,
+with 3398 selected and 308 named deferrals.

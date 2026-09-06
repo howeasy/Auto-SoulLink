@@ -8,6 +8,7 @@ These tests are deliberately literal. They pin the specific regressions rather t
 express "looks nice", because the failure mode is someone adding one more hex literal.
 """
 import re
+from pathlib import Path
 
 import pytest
 
@@ -37,9 +38,7 @@ def test_readable_on_picks_the_higher_contrast_option():
 
 
 def _server_source() -> str:
-    import server.server as m
-    with open(m.__file__, encoding="utf-8") as f:
-        return f.read()
+    return _status_builder_source()
 
 
 @pytest.mark.parametrize("literal", [
@@ -57,21 +56,25 @@ def test_dashboard_builders_do_not_reintroduce_hardcoded_colours(literal):
 
 
 def _status_builder_source() -> str:
-    """Just `_build_status_html` — the dashboard. Scoping matters: the debug page, the launcher
-    and the manager also carry hex literals, but they are separate surfaces with their own
-    (single-theme) designs, and lumping them in would make this test claim more than it checks.
-    """
+    """Scan templates and remaining Python widgets through and after extraction."""
     import inspect
 
     from server.server import SLinkServer
-    return inspect.getsource(SLinkServer._build_status_html)
+    templates = sorted((Path(__file__).resolve().parents[2] / "server/templates").rglob("*.html"))
+    assert templates and any(path.name == "dashboard.html" for path in templates)
+    sources = [path.read_text(encoding="utf-8") for path in templates]
+    for name in ("_build_status_html", "_build_dashboard_context", "_encounter_html", "_trainer_panel_html"):
+        method = getattr(SLinkServer, name, None)
+        if method is not None:
+            sources.append(inspect.getsource(method))
+    return "\n".join(sources)
 
 
 def test_no_bare_hex_text_colours_left_in_the_dashboard_builder():
     """A backstop for the whole class, not just the five known instances above."""
-    leftovers = re.findall(r"color:#[0-9a-fA-F]{3,6}", _status_builder_source())
+    leftovers = re.findall(r"(?:color|background(?:-color)?)\s*:\s*#[0-9a-fA-F]{3,8}\b", _status_builder_source(), re.I)
     # #fff over an explicitly token-coloured banner background is deliberate.
-    leftovers = [x for x in leftovers if x.lower() not in ("color:#fff", "color:#ffffff")]
+    leftovers = [x for x in leftovers if re.sub(r"\s+", "", x.lower()) not in ("color:#fff", "color:#ffffff")]
     assert leftovers == [], f"hardcoded text colours remain: {sorted(set(leftovers))}"
 
 
