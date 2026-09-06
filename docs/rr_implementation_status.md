@@ -23,13 +23,15 @@ Work is isolated in `codex/rr-foundation`. Root/UI and Gen1 worktrees were not e
 | `e95902e` | Private native harness, host/fixture/resource probes and exact-address instrumentation |
 | `f9b52b2` | Game-heap reset/ownership/reservation research and CPU checks |
 | `231bf78` | Shared stable logical identities, acquisition deduplication and replay-validated migration bookkeeping |
+| `3d4a2bf` | Read-only route/terrain observation and grounded natural-battle probe preparation |
+| `e03ddcb` | Inactive pinned host actuator with explicit Lua ownership and emergency hold handling |
 
 The shared contributions were sent as separate dependency-closed handoffs to Gen1.
 They do not activate the production RR or Gen1 durable runtime by their existence.
 
 ## Verified at this checkpoint
 
-- Unit/integration compatibility: **2,476 passed, 15 existing skips, 11 subtests**.
+- Unit/integration compatibility: **2,513 passed, 15 existing skips, 11 subtests**.
   Those skips do not count as RR release evidence. Full Ruff passes.
 - Required explicit RR helper lanes: **138 runtime/reference tests** and **106
   native CPU/build tests** passed without skips or xfails. These counts are not the
@@ -59,6 +61,10 @@ They do not activate the production RR or Gen1 durable runtime by their existenc
   definitive DMA/source attribution remain outside that lane.
 - Gen1 reused the identity primitive unchanged: its 52 shared tests plus 13
   additional RBY ownership/evolution/pending-death contract cases passed.
+- The new reusable host adapter passes 31 component tests, including failed release
+  and external-clear emergency holds. Its actual semaphore/adapter lifecycle has
+  not yet been tested in the emulator; earlier manual MainForm hold evidence cannot
+  substitute for that verification. Production selection remains disabled.
 
 Frozen candidate03: ROM SHA-256
 `3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301`,
