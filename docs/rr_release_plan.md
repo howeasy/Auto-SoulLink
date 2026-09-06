@@ -48,6 +48,13 @@ neither is yet an ancestor of this RR branch. The reviewed board/manager handoff
 and shared runtime integration remain explicit dependencies, not implied by file
 existence or successful RR component probes.
 
+UI Phase6 is also published at `457afa2131ff86ddc9c4c769f166824294f2c38d`:
+shared manager/standalone board, allowlisted run proxy routes, loopback HTTP binding
+and serialized lifecycle actions. Its private board-context endpoint and
+`X-SLink-Run-Id` header serve presentation routing, not gameplay admission. The UI
+owner reports Phase5 PR12 green and is continuing Phase7 Broadcast/Tools work;
+this records the handoff without importing the moving UI stack into RR.
+
 Implementation lives only in the isolated `codex/rr-foundation` worktree. Preserve
 the root/UI and Gen1 worktrees. Recheck findings after each relevant handoff; reuse
 the published implementation rather than copy unfinished working files.
