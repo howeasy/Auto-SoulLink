@@ -1,0 +1,110 @@
+{
+  "cases": [
+    {
+      "ability": "Thick Fat",
+      "bp": 60,
+      "damage": [
+        46,
+        55
+      ],
+      "status": ""
+    },
+    {
+      "ability": "Thick Fat",
+      "bp": 120,
+      "damage": [
+        93,
+        109
+      ],
+      "status": "psn"
+    },
+    {
+      "ability": "Thick Fat",
+      "bp": 120,
+      "damage": [
+        93,
+        109
+      ],
+      "status": "tox"
+    },
+    {
+      "ability": "Thick Fat",
+      "bp": 120,
+      "damage": [
+        93,
+        109
+      ],
+      "status": "brn"
+    },
+    {
+      "ability": "Thick Fat",
+      "bp": 120,
+      "damage": [
+        93,
+        109
+      ],
+      "status": "par"
+    },
+    {
+      "ability": "Thick Fat",
+      "bp": 120,
+      "damage": [
+        93,
+        109
+      ],
+      "status": "slp"
+    },
+    {
+      "ability": "Thick Fat",
+      "bp": 120,
+      "damage": [
+        93,
+        109
+      ],
+      "status": "frz"
+    },
+    {
+      "ability": "Comatose",
+      "bp": 120,
+      "damage": [
+        93,
+        109
+      ],
+      "status": ""
+    }
+  ],
+  "change": "Removed only the unreachable later poison-only switch case; first any-status/Comatose branch unchanged.",
+  "node": "v23.11.0",
+  "original_source_sha256": "f62575109c7bd98ccbe708975ec1626ae86e05b51147c497ae9db6ceba8bacf4",
+  "replay_script_sha256": "1ca46ea4fa698e8316e5bfe7a85068b056d31d8d1a69ae5a3ae47a865c61073a",
+  "scope": "RR calculator-source regression; no native damage or live-input proof",
+  "sources": {
+    "calc\\calc\\src\\adaptable.ts": "9fb5aeb5552e57f42be4802c5b13019841c350772e7c32cb1df6480efa916887",
+    "calc\\calc\\src\\calc.ts": "8e8a14a9370656f8dd02c3aef6a45821f3e2e47b285a2bf74c99a675b2788f07",
+    "calc\\calc\\src\\data\\abilities.ts": "1f4062e2384cd4abda819d0a7abd66a26f8b8bd740a2ce420388f9ab09c6b28a",
+    "calc\\calc\\src\\data\\index.ts": "ff4b1dfc61e6c4fba8c6ca10a2e078c26a2de78ca8f272760c01dc4d1b32254a",
+    "calc\\calc\\src\\data\\interface.ts": "6221eaf1c89a1fb1878d5882351b14dd109f004a215c39c4eda4c5ab01d12ad6",
+    "calc\\calc\\src\\data\\items.ts": "5788ea2826255049adf3b9c000ce92467097c8a2c18ad87bef5c11e3f830c9c1",
+    "calc\\calc\\src\\data\\moves.ts": "d49beafc926b88adb1005c518a53a1c259fb1430b078033723e200bd54256c1a",
+    "calc\\calc\\src\\data\\natures.ts": "719eb9eeaa71c2de1d24e22f33f06dec0becccf8443fef5bb493f00c2e0b5dab",
+    "calc\\calc\\src\\data\\species.ts": "e0987392993605912fac3ac56dc361b4bf7e3f67387335a99c6276a28c5be779",
+    "calc\\calc\\src\\data\\types.ts": "03932612cae864a99aa369e721c59e87130fc24af836e7317535ba261d7ca504",
+    "calc\\calc\\src\\desc.ts": "d59a81da588c3af1b22dc5972a73197d1159e6e1861e48831fff18159bacb329",
+    "calc\\calc\\src\\field.ts": "be7b7f72b56e49d15947759743c5335fa6992ca4d162cd65e014d1c64d90e92e",
+    "calc\\calc\\src\\index.ts": "cc3bae66ac6fd829b0f76a1dc7f3a38786610303bab792c4dea110652b689a8b",
+    "calc\\calc\\src\\items.ts": "1ff8c2d88fe8647c90f6ec0dbb365a19a5b4fea4a9cce4d4dc3a7b30652aba8a",
+    "calc\\calc\\src\\mechanics\\gen12.ts": "eefb2d4897cbfe4a476ef82603eb75f0572527c1e82a68f528e42a525b2e117b",
+    "calc\\calc\\src\\mechanics\\gen3.ts": "a9ecb05a879889ddc09f117b3865fb491ce4e1ef0466be708d70429b9dc75679",
+    "calc\\calc\\src\\mechanics\\gen4.ts": "c917908037b188b6e6245b19ce27a4e854cb72aa19a94aeef65310c7bd0d88c6",
+    "calc\\calc\\src\\mechanics\\gen56.ts": "800de87f73ed294e5fbc975dd399953037a998d39b69d591f18aa810ca057972",
+    "calc\\calc\\src\\mechanics\\gen789.ts": "217d7266a2ab897d4de4a79ef08cf6d61794c515c8fa36128707a14f9ee6fd27",
+    "calc\\calc\\src\\mechanics\\util.ts": "1041e145788a497e54e97c9d759cee0891ec40f2b91f1dc3f71c15ef2b8068b9",
+    "calc\\calc\\src\\move.ts": "a802b7cbe7d0940c7f2caa1c6b3fbe46b5012e0fbe3ecb259424b74b63956ef5",
+    "calc\\calc\\src\\pokemon.ts": "efccac897437ba797dd4216560703a6820412c22e4527c3c8400bdf2cf25816e",
+    "calc\\calc\\src\\result.ts": "7c317e1a9517466d465a18a79860e41a18c4f38ca2fff6c811f6fe32efcc6ec0",
+    "calc\\calc\\src\\state.ts": "b84a73911f81846b4fc3f0edc6ad78c8003142824da09e0605c56212e61200f5",
+    "calc\\calc\\src\\stats.ts": "03df6da34241cd4ba6d801b552dafb7579351e4395a28c5807ce5b655486b323",
+    "calc\\calc\\src\\util.ts": "0a6da17881b6c9c22b1ccca9e2cbdd79c39063e607576dc64160d5e1ebc2f454"
+  },
+  "typescript": "4.9.5"
+}
