@@ -25,3 +25,9 @@ Process ownership is exact PID plus creation time, using the shared helper's des
 Local evidence is under `.cache/ui-gen1-full-e2e.log`, `.cache/ui-gen1-full-e2e-summary.json`, `.cache/ui-gen1-full-e2e-source.json`, and the per-invocation directories/results. Private ROM/save artifacts are not committed.
 
 The Gen 3 E2E suite still lacks an owner-qualified ROM/savestate provenance pair. Its referenced savestates report the installed BizHawk 2.11.1 version, but version agreement alone is not qualification. The root ROM is only an identified RR audit baseline; no full Gen 3 E2E verdict is claimed. Verified Gen 1 randomizer publication is a separate outstanding dependency.
+
+## Spawn-registration race follow-up
+
+RR reproduced a numeric PID reuse race before/during creation-time lookup. The inspected method/test correction from `b8ee44c` checks the original Popen handle before lookup and again before registering ownership. Both regression cases failed on the previous implementation and pass with the correction. No other RR harness or generation-policy changes were imported.
+
+Validation of this follow-up: **25 focused tests passed**; full unit/integration suite **3907 passed, 2 skipped**. The existing Gen 1 E2E cutoff is unchanged.

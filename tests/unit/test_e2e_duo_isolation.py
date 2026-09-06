@@ -167,3 +167,18 @@ def test_locked_temporary_directory_is_reported_with_results_preserved(isolated,
     assert (summary / "a-result.txt").read_text() == "RESULT: PASS"
     assert json.loads((summary / "input-verification.json").read_text())["unchanged"] is True
     assert json.loads((summary / "cleanup.json").read_text())["data_removed"] is False
+
+
+@pytest.mark.parametrize("exit_boundary", ["before_lookup", "during_lookup"])
+def test_exited_spawn_cannot_register_a_reused_pid_as_owned(tmp_path, monkeypatch, exit_boundary):
+    run = object.__new__(duo.DuoRun)
+    run._owned_processes = []
+    run._created_data_dir = tmp_path
+    statuses = iter([0] if exit_boundary == "before_lookup" else [None, 0])
+    original_handle = SimpleNamespace(pid=1234, poll=lambda: next(statuses))
+    # The OS reused the numeric PID after the original child's exit. Its Popen
+    # handle still identifies the exited original; psutil identifies the new PID.
+    monkeypatch.setattr(duo.psutil, "Process", lambda pid: SimpleNamespace(create_time=lambda: 2))
+    run._remember_process(original_handle)
+    assert run._owned_processes == []
+    assert not (tmp_path / "process-manifest.json").exists()

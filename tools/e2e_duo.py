@@ -435,13 +435,20 @@ class DuoRun:
         return Path(REPO) / self.gcfg["rom"][inst]
 
     def _remember_process(self, process):
+        if process.poll() is not None:
+            return
         try:
-            self._owned_processes.append(ProcessIdentity(process.pid, psutil.Process(process.pid).create_time()))
+            created = psutil.Process(process.pid).create_time()
+            # Popen retains the original process handle even after numeric PID
+            # reuse. Do not turn a replacement process into a cleanup target.
+            if process.poll() is not None:
+                return
+            self._owned_processes.append(ProcessIdentity(process.pid, created))
             (self._created_data_dir / "process-manifest.json").write_bytes(json_bytes(
                 [{"pid": item.pid, "created": item.created} for item in self._owned_processes]))
-        except psutil.NoSuchProcess:
+        except psutil.NoSuchProcess as error:
             if process.poll() is None:
-                raise RuntimeError("Cannot establish spawned process identity")
+                raise RuntimeError("Cannot establish spawned process identity") from error
 
     @staticmethod
     def _save_files(directory):
