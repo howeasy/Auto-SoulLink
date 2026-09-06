@@ -187,3 +187,10 @@ constructor and species accessor. All three unresolved IDs remain intact when
 explicitly constructed, while reviewed randomization pools omit them. That study
 rules out unconditional normalization on this path; it does not prove acquisition
 or justify an alias/unused classification. The catalog remains blocked.
+
+The [acquisition-source study](PRECURSOR_ACQUISITION_PATHS.md) checks 5,139
+referenced wild slots and executes the actual Tower loader for all five maps
+at every hour. With no override, it selects current tables containing normal
+Cubone. Five legacy Cubone_A slots remain selectable through an explicit
+override; campaign callers supplying that override are not yet established.
+These conditional results do not settle the three lineage assignments.
