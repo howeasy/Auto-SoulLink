@@ -107,3 +107,6 @@ body.slink-broadcast{line-height:1.25}
 .preset-ticker .bc-feed{width:max-content;min-width:100%}
 .bc-player-header{position:sticky;top:0;z-index:2;background:var(--c-card)}
 .theme-transparent .bc-player-header{background:rgb(10 15 24 / 95%)}
+
+.bc-offline{position:sticky;top:0;z-index:3}
+.theme-transparent .bc-offline{background:rgb(10 15 24 / 95%)}
