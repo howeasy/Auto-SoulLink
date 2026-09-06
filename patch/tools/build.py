@@ -175,6 +175,7 @@ def main():
     tracked_inputs = sorted(glob.glob(os.path.join(SRC, "*.c")) + glob.glob(os.path.join(SRC, "*.h"))
                             + [os.path.join(SRC, "slink.ld"), __file__,
                                os.path.join(PATCH, "..", "lua", "mailbox.lua"),
+                               os.path.join(PATCH, "..", "lua", "rr", "peer_position.lua"),
                                str(native_layout.ROOT / native_layout.SOURCE), native_layout.__file__,
                                str(native_layout.ROOT / "lua/rr/native_layout.lua")])
     def sha256_file(path):

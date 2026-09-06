@@ -24,6 +24,8 @@ class MailboxHarness:
         self.lua.execute('package.loaded.memory_gba={CHARSET_REV={A=1,B=2,C=3}}')
         self.lua.globals().package.loaded["rr.native_layout"] = self.lua.execute(
             (ROOT / "lua/rr/native_layout.lua").read_text(encoding="utf-8"))
+        self.lua.globals().package.loaded["rr.peer_position"] = self.lua.execute((ROOT / "lua/rr/peer_position.lua").read_text())
+        self.write(0x03005008, 0x0202572C, 4)
         self.mb = self.lua.execute((ROOT / "lua/mailbox.lua").read_text(encoding="utf-8"))
         self.lua.globals().MB = self.mb
         self.write(self.mb.BASE, self.mb.SIG, 4)
@@ -249,6 +251,31 @@ def test_durable_preparation_does_not_write_even_to_retire_existing_ack(h):
     assert [h.read(h.mb.BASE + 16 + 24 + i) for i in range(8)] == list(bytes.fromhex(prepared.native_id))
 
 
+def test_durable_context_tracks_canonical_map_not_oe_or_irq_alias(h):
+    h.mb.set_context_generation("map-generation")
+    h.write(0x03005008, 0x02010000, 4)
+    h.write(0x02010004, 3)
+    h.write(0x02010005, 19)
+    h.write(0x03003840, 0x02011000, 4)
+    h.write(0x02011004, 3)
+    h.write(0x02011005, 1)
+    h.write(h.mb.player_oe() + 9, 1)
+    entry = h.mb.prepare(19, h.table([25, 0]), "aaaaaaaaaaaaaaaa")
+    assert (entry.context.map_group, entry.context.map_num, entry.context.saveblock1) == (3, 19, 0x02010000)
+    h.write(0x02010005, 1)
+    assert h.mb.submit(entry) == (None, "native_context_changed")
+
+
+def test_missing_canonical_context_cannot_downgrade_durable_preparation(h):
+    h.mb.set_context_generation("map-generation")
+    h.write(0x03005008, 0, 4)
+    before = dict(h.ram)
+    assert h.mb.prepare(19, h.table([25, 0]), "aaaaaaaaaaaaaaaa") == (None, "native_context_unavailable")
+    assert h.ram == before
+    h.write(0x03005008, 0x02010000, 4)
+    assert h.mb.prepare(19, h.table([25, 0]), "aaaaaaaaaaaaaaaa").context.saveblock1 == 0x02010000
+
+
 def test_submit_rejects_modified_persisted_preparation(h):
     h.mb.set_context_generation("epoch-1")
     prepared = h.mb.prepare(19, h.table([25, 0]), "1111111111111111")
@@ -444,7 +471,7 @@ def receiver():
     h.lua.execute("package.loaded.mailbox = MB")
     h.lua.globals().package.loaded["rr.peer_position"] = h.lua.execute((ROOT / "lua/rr/peer_position.lua").read_text())
     h.write(0x030030F4, 0x080565B5, 4)
-    h.write(0x03003840, 0x0202572C, 4)
+    h.write(0x03005008, 0x0202572C, 4)
     h.write(0x02036E38, 0x81)
     h.write(h.mb.GH_OEID, 1)
     h.write(0x02036E38 + 0x24, 1)
@@ -526,7 +553,7 @@ def test_actual_sender_fragment_carries_gfx16_and_is_field_gated(field):
     h.write(0x02036E38, 0x81)
     h.write(0x02036E38 + 5, 3)
     h.write(0x02036E38 + 0x23, 2)
-    h.write(0x03003840, 0x0202572C, 4)
+    h.write(0x03005008, 0x0202572C, 4)
     h.write(0x0202063C + 62, 3)  # owned, coordinate-offset sprite
     captured = []
     h.lua.globals().IS_RR = True

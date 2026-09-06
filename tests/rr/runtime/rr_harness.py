@@ -111,7 +111,8 @@ class RRHarness:
         self.seed(0x080000AC, b"BPRE")
         self.seed(0x08000108, b"pokemon red version\0")
         # Static ROM discriminator, not a supplied copyrighted ROM.
-        self.seed_u32(0x080001BC, 0x08100000)
+        self.seed_u32(0x080001BC, 0x097B98EC)
+        self.seed_u32(0x08000144, 0x094042CC)
         self.M = self.lua.eval('require("memory_gba")')
         if isinstance(self.M, tuple):
             self.M = self.M[0]

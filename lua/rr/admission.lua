@@ -4,7 +4,7 @@
 -- IO contract: read_u8(address), read_u32_le(address), getromhash(). No writes.
 -- SB2 +0x0A is the save's own four-byte trainer ID, never the lead party OT.
 local A={PROTOCOL="slink-rr-durable-v1",SCHEMA="slink-rr-metadata-v1"}
-local SB2_PTR=0x03003838
+local SB2_PTR=0x0300500C -- canonical global, not an IRQ-code initial-base literal
 local flags={
     minimal_grinding={address=0x0203B25A,mask=0x04},
     easy={address=0x0203B25A,mask=0x08},

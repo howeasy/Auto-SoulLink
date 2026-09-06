@@ -3,11 +3,11 @@
 local Position = {}
 local OBJECTS, SPRITES = 0x02036E38, 0x0202063C
 
--- Pinned RR profile pointer (games.gen3_frlge.profiles.radical_red.SB1_PTR_ADDR).
+-- Canonical RR global from actual SetSaveBlocksPointers/LoadCurrentMapData.
 -- The player's OE map fields identify its spawn map and can survive a connected
 -- map transition. Current location lives in SaveBlock1; invalid pointers are unknown.
 function Position.current_map(io)
-    local sb1 = io.read_u32_le(0x03003840)
+    local sb1 = io.read_u32_le(0x03005008)
     if sb1 < 0x02000000 or sb1 + 6 > 0x02040000 or sb1 % 4 ~= 0 then return nil end
     return {mg=io.read_u8(sb1 + 4), mn=io.read_u8(sb1 + 5),
             layout=io.read_u32_le(0x02036DFC), saveblock1=sb1}

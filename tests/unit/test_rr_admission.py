@@ -204,7 +204,7 @@ def lua_provider(contract, *, mgm=False, trainer_id=0x12345678):
         return ram[address]
 
     runtime.globals().read8 = read8
-    runtime.globals().read32 = lambda address: pointer if address == 0x03003838 else -1
+    runtime.globals().read32 = lambda address: pointer if address == 0x0300500C else -1
     runtime.globals().romhash = lambda: "SHA1:" + contract["rom_sha1"].upper()
     runtime.globals().root = ROOT.as_posix()
     runtime.globals().native_json = json.dumps(contract["native_descriptor"])
@@ -212,7 +212,7 @@ def lua_provider(contract, *, mgm=False, trainer_id=0x12345678):
     runtime.execute("""
         package.path=root..'/lua/?.lua;'..root..'/lua/?/init.lua;'..package.path
         JSON=require('json_codec'); RR=require('rr.admission')
-        M={profile_name='radical_red',CFRU_NO_ENCRYPT=true,SB2_PTR_ADDR=0x03003838,
+        M={profile_name='radical_red',CFRU_NO_ENCRYPT=true,SB2_PTR_ADDR=0x0300500C,
             CHARSET={[0xBB]='A',[0xC6]='L',[0xC3]='I',[0xBD]='C',[0xBF]='E',[0]=' '}}
         IO={read_u8=function(a) return read8(a) end,
             read_u32_le=function(a) return read32(a) end,
@@ -259,7 +259,7 @@ def test_lua_provider_fails_missing_or_malformed_evidence(contract, change):
     edits = {"missing_bundle": "bundles=nil", "bad_bundle": "bundles.client_bundle_sha256=true",
              "missing_descriptor": "native=nil", "stale_abi": "native.abi=1",
              "bad_capability_bool": "native.capabilities.receipts_v2=1",
-             "wrong_profile": "M.SB2_PTR_ADDR=0x0300500C",
+             "wrong_profile": "M.SB2_PTR_ADDR=0x03003838",
              "bad_hash": "IO.getromhash=function() return 'unknown' end"}
     if change in edits:
         runtime.execute(edits[change])

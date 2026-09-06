@@ -28,7 +28,7 @@ class SenderHarness(MailboxHarness):
         if helper.exists():
             env.pg_position = self.lua.execute(helper.read_text()).new(env.memory)
         self.write(0x030030F4, 0x080565B5, 4)
-        self.write(0x03003840, SB1, 4)
+        self.write(0x03005008, SB1, 4)
         self.write(SB1 + 4, 3)
         self.write(SB1 + 5, 1)
         self.write(OE, 0x81)

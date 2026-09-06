@@ -134,6 +134,7 @@ def test_compiled_placement_refuses_stale_or_invalid_owner_without_any_ewram_wri
 
 def driver(image):
     native = NativeCPU(image)
+    native.w32(0x03005008, 0x0202552C)  # canonical save pointer; modeled map0:0
     native.w8(OBJECTS, 0x81)  # actual player OE0, idle, tile10,11
     native.w8(OBJECTS + 4, 0)
     native.w16(OBJECTS + 0x10, 10)

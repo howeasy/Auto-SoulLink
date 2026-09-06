@@ -11,17 +11,25 @@ from patch.tools import native_layout as layout
 from tests.rr.native.test_native_build import native_output  # noqa: F401
 
 
-def test_masked_entire_rom_diff_allows_only_two_fingerprint_strings(native_output):  # noqa: F811
+def test_preserved_layout_extraction_changed_only_two_fingerprint_strings():
+    # This historical equivalence proves the layout-only extraction. Later
+    # functional native candidates are checked by the remaining native suite;
+    # their code is expected to differ and cannot stand in for this artifact.
+    extraction = os.environ.get("SLINK_RR_LAYOUT_EQUIVALENCE_OUTPUT")
+    if not extraction:
+        pytest.fail("set SLINK_RR_LAYOUT_EQUIVALENCE_OUTPUT to preserved layout-contract-05-review", pytrace=False)
+    extraction_output = Path(extraction).resolve(strict=True)
     name = os.environ.get("SLINK_RR_NATIVE_BASELINE")
     if not name:
         pytest.fail("set SLINK_RR_NATIVE_BASELINE to the preserved frozen03 build directory", pytrace=False)
     baseline = Path(name).resolve(strict=True)
-    assert baseline != native_output
+    assert baseline != extraction_output
     original = bytearray((baseline / "slink_RR.gba").read_bytes())
     assert hashlib.sha256(original).hexdigest() == "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301"
-    candidate = bytearray((native_output / "slink_RR.gba").read_bytes())
+    candidate = bytearray((extraction_output / "slink_RR.gba").read_bytes())
+    assert hashlib.sha256(candidate).hexdigest() == "f497e6fc575b303b4c8ece83fa300b951e5741a987b29778941e8944054503a4"
     before = json.loads((baseline / "native_manifest.json").read_text())
-    after = json.loads((native_output / "native_manifest.json").read_text())
+    after = json.loads((extraction_output / "native_manifest.json").read_text())
     assert before["descriptor_address"] == after["descriptor_address"] == 0x0837BF04
     assert len(original) == len(candidate) == 0x02000000 and original != candidate
     offset = after["descriptor_address"] - 0x08000000

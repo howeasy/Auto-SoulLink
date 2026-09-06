@@ -576,10 +576,11 @@ local function same(a, b)
 end
 local function current_context()
     local player_id = memory.read_u8(MB.GPLAYER_AVATAR + 5)
-    local player = MB.player_oe()
+    local map = require("rr.peer_position").current_map(memory)
+    if not map then return nil end
     return {generation=context_generation, callback2=memory.read_u32_le(0x030030F4),
             script_lock=memory.read_u8(0x03000F9C), swap_active=memory.read_u8(MB.SW + F.SwapState.offsets.active),
-            map_group=memory.read_u8(player + 0x0A), map_num=memory.read_u8(player + 0x09),
+            map_group=map.mg, map_num=map.mn, saveblock1=map.saveblock1, layout=map.layout,
             player_id=player_id}
 end
 function MB.set_context_generation(value)
@@ -722,10 +723,12 @@ local function prepare(opcode, args, native_id, keep_receipt, durable)
     if prepared_count >= MAX_QUEUED then return nil, "preparation capacity exhausted" end
     if durable_ids[native_id] then return nil, "native_reservation_conflict" end
     if durable and durable_count >= MAX_RECEIPTS then return nil, "reservation_registry_full" end
+    local context = durable and current_context() or nil
+    if durable and not context then return nil, "native_context_unavailable" end
     next_token = next_token + 1
     local e = {op=opcode, args=copy_bytes(args), token=next_token, wire=next_token % 65536,
                native_id=native_id, keep=keep_receipt ~= false, payload=payload,
-               context=durable and current_context() or nil}
+               context=context}
     prepared_entries[e.token] = e; prepared_count = prepared_count + 1
     if durable then durable_ids[native_id] = {phase="prepared", entry=e}; durable_count = durable_count + 1 end
     return deep_copy(e)

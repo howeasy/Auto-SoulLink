@@ -10,7 +10,7 @@ SB1 = 0x0202572C
 
 
 def current_map(h, group, number, layout=0x082DE3E4):
-    h.write(0x03003840, SB1, 4)
+    h.write(0x03005008, SB1, 4)
     h.write(SB1 + 4, group)
     h.write(SB1 + 5, number)
     h.write(0x02036DFC, layout, 4)
@@ -41,7 +41,7 @@ def test_receiver_matches_current_map_not_retained_spawn_map(receiver, peer_map,
 @pytest.mark.parametrize("pointer", [0, 0x01FFFFFC, 0x02000001, 0x0203FFFC, 0x03000000])
 def test_invalid_current_map_pointer_suppresses_sender_without_zero_map_fallback(pointer):
     h = SenderHarness()
-    h.write(0x03003840, pointer, 4)
+    h.write(0x03005008, pointer, 4)
     assert h.tick() is None
 
 
@@ -66,7 +66,7 @@ def test_spawn_map_field_changes_do_not_retag_or_discard_current_map_motion():
 
 def test_receiver_unknown_map_does_not_write_any_native_or_avatar_state(receiver):  # noqa: F811
     h, pg = receiver
-    h.write(0x03003840, 0, 4)
+    h.write(0x03005008, 0, 4)
     pg.on_ghost_pos(packet(h))
     before = dict(h.ram)
     pg.on_frame()
@@ -125,7 +125,7 @@ def test_recorded_route40_current_map_differs_from_object_spawn_map():
     h = SenderHarness()
     reader = h.lua.execute((ROOT / "lua/rr/peer_position.lua").read_text()).current_map
     for sample in data["snapshots"]:
-        h.write(0x03003840, sample["saveblock1"], 4)
+        h.write(0x03005008, sample["saveblock1"], 4)
         h.write(sample["saveblock1"] + 4, sample["map_group"])
         h.write(sample["saveblock1"] + 5, sample["map_num"])
         h.write(OE + 10, sample["object_spawn_map_group"])

@@ -20,7 +20,9 @@ retained in `tests/rr/fixtures/route40_map_connection.json`.
 | 1914 | 3:19 (Route1) | 3:1 | `082E55CC` | 17,7; previous17,6 |
 | 1931 | 3:19 (Route1) | 3:1 | `082E55CC` | 17,7 aligned |
 
-SaveBlock1 was at `0202572C`, obtained through the RR profile pointer `03003840`.
+SaveBlock1 was at `0202552C`, observed through the former RR profile address `03003840`.
+That address was subsequently proven to be a copied IRQ-code initial-base literal;
+the canonical engine pointer is `03005008`. See [current context proof](CURRENT_MAP_CONTEXT.md).
 Its current group/number are bytes`+4/+5`, matching the existing
 `games.gen3_frlge.profiles.radical_red.SB1_PTR_ADDR` and `memory_gba.getCurrentMap`
 reader. At frame1931 the old position sampler correctly reconstructed pixels
@@ -72,10 +74,11 @@ positions. The intermediate recorded sample omitted raw sprite pixels because it
 old sampler rejected the midstep; the replay checks its map facts without inventing
 those missing pixels. No new emulator or duo run is claimed by this Lua correction.
 
-Native `drive_ghost` and native storage preparation context still read OE map
-fields. Their current-map/scene-generation migration requires a separate native
-candidate and validation; the Lua receiver cleanup does not establish their full
-safety. Peer packet freshness, battle/warp resources, surf/fishing effects and
+The initial Lua correction left native `drive_ghost` and storage preparation
+context reading OE map fields. The separate [candidate07 correction](CURRENT_MAP_CONTEXT.md)
+now uses canonical current-map evidence there; its physical candidate validation
+and full scene generations remain open. Lua receiver cleanup alone does not
+establish their full safety. Peer packet freshness, battle/warp resources, surf/fishing effects and
 physical corrected-client duo behavior also remain separate acceptance gates.
 
 Reproduce the selected checks from the RR worktree:

@@ -252,9 +252,10 @@ GEN3.profiles = {
         BATTLE_STRUCT_MOVE_TARGET_OFF      = 0x0C,  -- struct BattleStruct.moveTarget[4]
         BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF  = 0x80,  -- struct BattleStruct.chosenMovePositions[4]
         GMAIN_ADDR                 = nil,
-        -- IWRAM pointers
-        SB1_PTR_ADDR               = 0x03003840,
-        SB2_PTR_ADDR               = 0x03003838,
+        -- Canonical globals written by RR SetSaveBlocksPointers. The previous
+        -- 03003840/03003838 addresses are initial-base literals copied into IRQ code.
+        SB1_PTR_ADDR               = 0x03005008,
+        SB2_PTR_ADDR               = 0x0300500C,
         PSP_PTR_ADDR               = nil,         -- DPE does NOT use gPokemonStoragePtr
 
         -- ── CFRU Compressed Box Storage ──────────────────────────────────────
@@ -398,7 +399,7 @@ GEN3.profiles = {
 --   1. Read ROM offset 0x108 for "pokemon red/green version" (present in BOTH AP and RR)
 --   2. If found, disambiguate by checking IWRAM SaveBlock1 pointers:
 --      - AP:  SB1_PTR at 0x03004F58
---      - RR:  SB1_PTR at 0x03003840
+--      - RR:  canonical SB1_PTR at 0x03005008 (same global as vanilla)
 --   3. If 0x108 has ARM code (not ASCII), also try RR detection.
 --   4. Fallback: vanilla.
 
@@ -416,6 +417,10 @@ end
 local function _detectRR()
     local rr = GEN3.profiles.radical_red
     if not rr then return false end
+    -- A plausible vanilla SaveBlock cannot identify RR. The admitted RR4.1
+    -- ROM exposes these two immutable table pointers, also present after patching.
+    if memory.read_u32_le(0x080001BC) ~= 0x097B98EC
+        or memory.read_u32_le(0x08000144) ~= 0x094042CC then return false end
     if not _validateSB1Ptr(rr.SB1_PTR_ADDR) then return false end
     -- Cross-check: party count at SB1+0x0034 should be 0-6
     local ok, sb1 = pcall(memory.read_u32_le, rr.SB1_PTR_ADDR)
@@ -444,6 +449,11 @@ function GEN3.detect_variant()
     if code == "BPEE" then
         return "emerald"
     end
+
+    -- Recognize supported RR even before SaveBlocks exist. This only selects a
+    -- reader profile; exact build/save/mode admission remains a separate gate.
+    if memory.read_u32_le(0x080001BC) == 0x097B98EC
+        and memory.read_u32_le(0x08000144) == 0x094042CC then return "radical_red" end
 
     -- FRLG family: detect sub-variant
     -- Step 1: Read 32 bytes from ROM offset 0x108

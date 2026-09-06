@@ -116,3 +116,11 @@ outside the RR release harness also contain historical hardcoded addresses. They
 are not accepted as current/relocated evidence by this extraction. No relocation
 may proceed while any selected runtime or evidence consumer lacks an explicitly
 matched contract, and none of these checks establishes that the arena is free.
+
+After functional native edits, set `SLINK_RR_LAYOUT_EQUIVALENCE_OUTPUT` to the
+preserved `layout-contract-05-review` artifact for the historical extraction
+comparison and `SLINK_RR_NATIVE_BASELINE` to frozen03. `SLINK_RR_NATIVE_OUTPUT`
+selects the current functional candidate for all other artifact/CPU checks.
+The equivalence test pins both historical ROM hashes and still compares every
+byte after only the two original fingerprint masks; it never relabels changed
+native code as an equivalent layout-only extraction.

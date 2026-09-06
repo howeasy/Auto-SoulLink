@@ -518,6 +518,16 @@ static u32 player_oe(void)
  * sScriptContext2Enabled alone is NOT a sufficient gate: it's 0 inside those menu CB2s too. */
 static u8 on_field(void) { return R32(gMain + 0x04) == CB2_OVERWORLD; }
 
+/* Actual RR SetSaveBlocksPointers and LoadCurrentMapData use this canonical
+ * global. The former Lua addresses inside IntrMain_Buffer are copied literals. */
+static u8 rr_current_map(u8 *group, u8 *number)
+{
+    u32 sb1 = R32(0x03005008u);
+    if (sb1 < 0x02000000u || sb1 > 0x0203FFFAu || (sb1 & 3u)) return 0;
+    *group = R8(sb1 + 4); *number = R8(sb1 + 5);
+    return 1;
+}
+
 /* Field storage is a checked transaction against current engine state. */
 static u8 rr_storage_field_ready(void)
 {
@@ -526,8 +536,9 @@ static u8 rr_storage_field_ready(void)
     for (u32 i = 0; i < 16; i++)
         if (rr_postbattle_writer_active((volatile const u8 *)(gTasks + i * 0x28))) return 0;
     if (MB->args[SLINK_CONTEXT_GUARD_OFFSET] == SLINK_CONTEXT_GUARD_TAG) { /* durable preparation: recheck on the actual apply frame */
-        u32 player = player_oe();
-        if (R8(player + 0x0A) != MB->args[SLINK_CONTEXT_MAP_GROUP_OFFSET] || R8(player + 0x09) != MB->args[SLINK_CONTEXT_MAP_NUM_OFFSET]
+        u8 group, number;
+        if (!rr_current_map(&group, &number)
+            || group != MB->args[SLINK_CONTEXT_MAP_GROUP_OFFSET] || number != MB->args[SLINK_CONTEXT_MAP_NUM_OFFSET]
             || R32(gMain + 4) != rr_guard_word(MB->args + SLINK_CONTEXT_CALLBACK2_OFFSET)
             || R8(sScriptContext2Enabled) != MB->args[SLINK_CONTEXT_SCRIPT_LOCK_OFFSET] || SW->active != MB->args[SLINK_CONTEXT_SWAP_ACTIVE_OFFSET]
             || R8(gPlayerAvatar + 5) != MB->args[SLINK_CONTEXT_PLAYER_ID_OFFSET]) return 0;
@@ -1348,7 +1359,11 @@ static void drive_ghost(void)
     if (!GH->active) { if (GH->oeId != 0xFF) ghost_remove(); return; }
 
     u32 player = player_oe();                     /* the player's ACTUAL slot (not always 0) */
-    u8 pg = R8(player + 0x0A), pn = R8(player + 0x09);
+    u8 pg, pn;
+    if (!rr_current_map(&pg, &pn)) {
+        if (GH->oeId != 0xFF) ghost_remove();
+        return;
+    }
 
     /* (a) map change -> the warp rebuilt all OE slots; clean-remove ours and re-spawn on the new map. */
     if (GH->oeId != 0xFF && (pg != GH->pmapGroup || pn != GH->pmapNum)) { ghost_remove(); return; }
