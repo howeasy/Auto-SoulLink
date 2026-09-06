@@ -1,3 +1,5 @@
 # These generated documents contain hashes of exact JSON bytes.
 docs/rr_reference/generated/*.json text eol=lf
 tests/rr/release_inventory.json text eol=lf
+tests/rr/reference/fixtures/*.json text eol=lf
+data/games/gen3_frlge/rr_catalog*.json text eol=lf
