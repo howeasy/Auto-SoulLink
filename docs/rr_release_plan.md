@@ -41,6 +41,13 @@ runtime or release approval.
 - RR owns its admission binding, observations, execution/readback, native
   transactions, resources, exact-ROM data and cartridge evidence.
 
+Later published UI checkpoints are Phase4
+`cc8c5f5835560bedf85d4fb02a62b51f955305ba` and Phase5
+`a2553d40e092e4298e5b61e57d20a04a2acb693f`. Their commit identities were rechecked;
+neither is yet an ancestor of this RR branch. The reviewed board/manager handoff
+and shared runtime integration remain explicit dependencies, not implied by file
+existence or successful RR component probes.
+
 Implementation lives only in the isolated `codex/rr-foundation` worktree. Preserve
 the root/UI and Gen1 worktrees. Recheck findings after each relevant handoff; reuse
 the published implementation rather than copy unfinished working files.
@@ -228,3 +235,29 @@ LuaSocket, setup guide, manifest and UPS plus separate UPS asset; no ROMs.
 Final deliverables: findings ledger, shared/RR contracts, generated reference/build
 manifest, executable release verifier, immutable fixtures/replays/visual evidence,
 migration/recovery guide and exact supported-runtime documentation.
+
+## Current implementation checkpoint
+
+The 2026-09-06 code checkpoint `80425d94fae9f61d6f0b4b9ff3d6114d1db33242` passed
+the combined unit, RR runtime, reference and native selection:3268 tests,
+15 existing skips and11 subtests. Ruff and whitespace checks passed. The preserved
+JUnit is `patch/build/rr-combined-checkpoint.xml`, SHA256
+`1cb42fe849f5abe147c757eb43964c5558549a03fdb90e49aa0892b6bb67c1e8`.
+Skips include cross-generation inputs, unsupported local symlink creation and
+presentation partials/missing template coverage. They are not release acceptance.
+
+New evidence includes [current-map/SaveBlock repair](rr_reference/CURRENT_MAP_CONTEXT.md),
+[rival stage repair](rr_reference/RIVAL_STAT_STAGES.md),
+[held host-route guard](host-quarantine-contract.md),
+[actual metadata API binding](rr_reference/ADMISSION_IO_BINDING.md),
+[reviewed bounded ghost battle/return](rr_reference/NATURAL_BATTLE_COMPONENT.md),
+and [observed heap workload replay](rr_reference/HEAP_WORKLOAD_REPLAY.md).
+The replay fits the proposed reduced heap but does not select the inactive
+reservation or establish raw-memory ownership. [Precursor construction](rr_reference/PRECURSOR_CREATION.md)
+adds evidence without assigning the three unresolved catalog lineages.
+
+The full release inventory remains uncompleted. Native raw-access/capacity and
+reset ownership, paired durable runtime selection/recovery, complete native
+transactions, data-policy closure, full ghost variants, both MGM matrices,
+timing repetitions, soaks, paired campaigns/postgame and extracted distribution
+verification are still required. No release-ready flag is set by this checkpoint.

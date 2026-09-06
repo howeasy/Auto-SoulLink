@@ -1,6 +1,11 @@
 # RR game heap and proposed top-of-heap reservation
 
 Status: **candidate for further proof; no arena address or relocation is approved**.
+
+Later component evidence: the [live wrapper observer](HEAP_BATTLE_OBSERVATION.md)
+and [captured-workload CPU replay](HEAP_WORKLOAD_REPLAY.md) now cover one MGM-on
+boot/route/battle/return schedule. Its reduced replay succeeds while raw-access,
+other-scene capacity, host restoration and actual relocation gates stay open.
 The companion C/mailbox and frozen03 ROM are unchanged. All binary evidence below
 uses RR4.1 base SHA256
 `679d112cdfe699c2793d82c7e7999ac9dfca9e222ad5a85d4f8f1e457cd0283f`.
