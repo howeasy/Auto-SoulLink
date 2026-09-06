@@ -9,15 +9,16 @@ via the server's debug HTTP API and waits for both instances' result files.
     python tools/e2e_duo.py --scenario faint
     python tools/e2e_duo.py --scenario all --keep-alive
 
-Per instance: a generated stub (patch/build/duo_{a,b}.lua) bakes SLINK_HOST/PORT/PLAYER
+Per invocation and player: a private generated stub bakes SLINK_HOST/PORT/PLAYER
 plus the SLINK_DUO table and dofiles lua/tests/duo/duo_main.lua, which runs the REAL
 production client and the scenario coroutine (lua/tests/duo/scenario_<name>.lua).
-Result protocol: patch/build/e2e_<scenario>_{a,b}_result.txt — incremental log lines,
+Result protocol: patch/build/slink_duo_<scenario>_<unique>/duo_{a,b}/result.txt — incremental log lines,
 "MYKEY <slot> <key>" markers, final "RESULT: PASS|FAIL".
 
 Launch rules (hard-won): CWD = repo root with RELATIVE EmuHawk arg paths (absolute paths
 containing the "Google Drive" space break BizHawk's CLI parser); absolute paths are fine
-INSIDE Lua. Per-instance --config copies avoid the shared config.ini write race.
+INSIDE Lua. Private config, SaveRAM, fixtures and outputs prevent cross-run writes.
+Source identities and exact spawned process identities are checked before success.
 """
 import argparse
 import hashlib
@@ -32,6 +33,12 @@ import sys
 import tempfile
 import time
 import urllib.request
+import urllib.error
+import zipfile
+
+import psutil
+from emulator_sandbox import (ProcessIdentity, copy_verified, create_instance_root, hidden_process_kwargs,
+                              identity, isolated_config, json_bytes, capture_owned_tree, terminate_owned, verify_identity)
 from pathlib import Path
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -212,12 +219,20 @@ def api(http_port, method, path, body=None, timeout=10):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method,
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return json.loads(response.read().decode())
+    except urllib.error.HTTPError as error:
+        try:
+            detail = error.read().decode("utf-8", errors="replace")
+        finally:
+            error.close()
+        raise RuntimeError(f"HTTP {error.code} {method} {path}: {detail}") from error
 
 
-def read_result(scenario, inst):
-    path = os.path.join(BUILD, f"e2e_{scenario}_{inst}_result.txt")
+def read_result(scenario, inst, directory=None):
+    path = (os.path.join(directory, "duo_" + inst, "result.txt") if directory else
+            os.path.join(BUILD, f"e2e_{scenario}_{inst}_result.txt"))
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8", errors="replace") as f:
@@ -254,10 +269,10 @@ def extract_marks(text, tag):
     return out
 
 
-def require_no_failed_result(scenario):
+def require_no_failed_result(scenario, directory=None):
     """Stop orchestration as soon as either real emulator has failed."""
     for inst in ("a", "b"):
-        text = read_result(scenario, inst) or ""
+        text = read_result(scenario, inst, directory) or ""
         failures = [line for line in text.splitlines() if line.startswith("RESULT: FAIL")]
         if failures:
             raise RuntimeError(f"{scenario} instance {inst}: {failures[-1]}")
@@ -380,42 +395,81 @@ class DuoRun:
         self.data_dir = tempfile.mkdtemp(prefix=f"slink_duo_{scenario}_", dir=BUILD)
         self.server = None
         self.emus = []
-        self.go_files = {inst: os.path.join(BUILD, f"duo_go_{scenario}_{inst}.txt")
-                         for inst in ("a", "b")}
+        self._created_data_dir = Path(self.data_dir).resolve()
+        self.instance_dirs = {inst: create_instance_root(self._created_data_dir, "duo", inst,
+            [Path(BIZHAWK_CONFIG).parent, Path(REPO) / "tests/fixtures"]) for inst in ("a", "b")}
+        self.go_files = {inst: str(self.instance_dirs[inst] / "go.txt") for inst in ("a", "b")}
+        self._owned_processes = []
+        self._inputs = []
+        self._protected_save_dirs = {}
+
 
     # ── lifecycle ────────────────────────────────────────────────────────────
     def start_server(self):
         if self.is_gen1:
             from server.gen1_admission import clean_contract, write_contract
             write_contract(Path(self.data_dir) / "rom_contract.json", clean_contract({
-                player: Path(REPO) / path for player, path in self.gcfg["rom"].items()}))
+                player: self._source_rom(player) for player in ("a", "b")}))
         cmd = [sys.executable, "-m", "server.server",
                "--host", "127.0.0.1",
                "--port", str(self.tcp_port),
                "--http-port", str(self.http_port),
                "--data-dir", self.data_dir] + self.cfg["flags"] + self.args.server_flags
-        self.server = subprocess.Popen(
-            cmd, cwd=REPO,
-            # The handle is the server subprocess's stdout and must outlive this call —
-            # a `with` would close it out from under the still-running server.
-            stdout=open(os.path.join(self.data_dir, "server.log"), "w"),  # noqa: SIM115
-            stderr=subprocess.STDOUT)
+        with open(os.path.join(self.data_dir, "server.log"), "w") as output:
+            self.server = subprocess.Popen(cmd, cwd=REPO, stdout=output, stderr=subprocess.STDOUT,
+                                           **hidden_process_kwargs())
+        self._remember_process(self.server)
         wait_for("server HTTP up", lambda: self._status() is not None, 30)
         print(f"[duo] server up: tcp={self.tcp_port} http={self.http_port} data={self.data_dir}")
 
-    def _saveram_dir(self, inst: str) -> str:
-        """A SaveRAM directory unique to this SCENARIO and this instance.
+    def _saveram_dir(self, inst):
+        return str(self.instance_dirs[inst] / ("saveram_" + inst))
 
-        Per-instance is the load-bearing half: two instances of one cartridge (Gen 2 runs
-        Crystal on both sides) resolve to the same gamedb SaveRAM filename and would otherwise
-        share one file and stamp on each other.
+    def _read_result(self, inst):
+        return read_result(self.scenario, inst, self.data_dir)
 
-        Per-scenario, NOT per-run — the path is reused across invocations and nothing cleans
-        it. That is safe only because `seed_saveram` overwrites the file before every launch,
-        which is what actually prevents a crashed run's save leaking into the next one. Do not
-        weaken that copy on the assumption this directory is fresh; it isn't.
-        """
-        return os.path.join(BUILD, f"saveram_{self.scenario}_{inst}")
+    def _source_rom(self, inst):
+        if self.battery_boot:
+            play = importlib.import_module(self.gcfg["play"])
+            return Path(REPO) / play.ROMS[self.gcfg["fixture"][inst]]
+        return Path(REPO) / self.gcfg["rom"][inst]
+
+    def _remember_process(self, process):
+        try:
+            self._owned_processes.append(ProcessIdentity(process.pid, psutil.Process(process.pid).create_time()))
+            (self._created_data_dir / "process-manifest.json").write_bytes(json_bytes(
+                [{"pid": item.pid, "created": item.created} for item in self._owned_processes]))
+        except psutil.NoSuchProcess:
+            if process.poll() is None:
+                raise RuntimeError("Cannot establish spawned process identity")
+
+    @staticmethod
+    def _save_files(directory):
+        if not directory.exists():
+            return []
+        return sorted(path for path in directory.iterdir() if path.is_file()
+                      and path.name.lower().endswith((".saveram", ".saveram.bak")))
+
+    def _protect_user_saves(self, config):
+        entries = config["PathEntries"]["Paths"]
+        systems = ("GB_GBC_SGB", "GBL") if self.battery_boot else ("GBA",)
+        for system in systems:
+            saves = [entry for entry in entries if entry.get("System") == system and entry.get("Type") == "Save RAM"]
+            if not saves:
+                continue
+            bases = [entry for entry in entries if entry.get("System") == system and entry.get("Type") == "Base"]
+            if len(bases) != 1 or len(saves) != 1:
+                raise RuntimeError("Cannot attribute original emulator Save RAM paths")
+            base = Path(bases[0]["Path"])
+            if not base.is_absolute():
+                base = Path(EMUHAWK).resolve().parent / base
+            directory = Path(saves[0]["Path"])
+            if not directory.is_absolute():
+                directory = base / directory
+            directory = directory.resolve()
+            files = self._save_files(directory)
+            self._protected_save_dirs[directory] = [path.name for path in files]
+            self._inputs.extend(identity(path) for path in files)
 
     def _status(self):
         try:
@@ -424,89 +478,87 @@ class DuoRun:
             return None
 
     def start_instances(self):
-        if self.battery_boot:
-            play = importlib.import_module(self.gcfg["play"])
-            for key in self.gcfg["fixture"].values():
-                play.staged_rom(key)   # space-free copy; BizHawk's CLI splits on spaces
+        from server.lua_literals import lua_string
+        base_identity = identity(Path(BIZHAWK_CONFIG))
+        self._inputs.append(base_identity)
+        base = json.loads(Path(BIZHAWK_CONFIG).read_text(encoding="utf-8-sig"))
+        self._protect_user_saves(base)
+        launches = []
         for inst in ("a", "b"):
-            for f in (self._result_path(inst), self.go_files[inst]):
-                if os.path.exists(f):
-                    os.remove(f)
-        for inst in ("a", "b"):
-            cfg_ini = os.path.join(BUILD, f"duo_cfg_{inst}.ini")
+            private = self.instance_dirs[inst]
+            cfg_ini = private / f"duo_cfg_{inst}.ini"
+            config = base
             if self.battery_boot:
-                # Muted, on the second monitor: two emulators for several minutes each.
-                #
-                # Each instance also gets its OWN SaveRAM directory. BizHawk names a SaveRAM
-                # file from its gamedb entry, keyed on the ROM hash rather than the path we
-                # launched, so two instances of the SAME cartridge resolve to one file and
-                # stamp on each other. Gen 1 avoided that by pairing Red with Blue, which is
-                # a constraint on what can be tested together rather than a fix — and Gen 2
-                # has only one dump. Per-instance dirs make a same-cartridge duo work.
                 from gen1_playthrough import write_run_config
-                write_run_config(BIZHAWK_CONFIG, cfg_ini,
-                                 saveram_dir=self._saveram_dir(inst))
-            else:
-                shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
-            stub = os.path.join(BUILD, f"duo_{inst}.lua")
+                prepared = private / "prepared.ini"
+                write_run_config(BIZHAWK_CONFIG, str(prepared), saveram_dir=self._saveram_dir(inst))
+                config = json.loads(prepared.read_text(encoding="utf-8-sig"))
+            config = isolated_config(config, private, "mGBA")
+            if self.battery_boot:
+                for entry in config["PathEntries"]["Paths"]:
+                    if entry.get("Type") == "Save RAM" and entry.get("System") in ("GB_GBC_SGB", "GBL"):
+                        entry["Path"] = Path(self._saveram_dir(inst)).as_posix()
+            source_rom = self._source_rom(inst)
+            staged_rom = private / ("rom" + source_rom.suffix)
+            copied = copy_verified(source_rom, staged_rom)
+            self._inputs.append(copied["original"])
             fillers = self.cfg.get("fillers", True)
-            duo = {
-                "wt": WT_FWD, "player": inst, "scenario": self.scenario,
-                "game": self.gcfg.get("game", ""),
-                "fillers": fillers[inst] if isinstance(fillers, dict) else fillers,
-                "mutate_otid": inst == "b",
-                "result": f"{WT_FWD}/patch/build/e2e_{self.scenario}_{inst}_result.txt",
-                # So an instance can wait for its partner to finish before exiting —
-                # client.exit() kills the emulator, and a side that leaves early stops
-                # sending the very events the other side is waiting on.
-                "partner_result": (f"{WT_FWD}/patch/build/e2e_{self.scenario}_"
-                                   f"{'b' if inst == 'a' else 'a'}_result.txt"),
-                "go_file": self.go_files[inst].replace("\\", "/"),
-                # Scenarios that PLAY the game need a frame budget set by how long the game
-                # takes, not by the wall-clock timeout: at 400x, timeout*60 runs out mid-hunt.
-                "timeout_frames": self.cfg.get("frames", self.cfg["timeout"] * 60),
-            }
+            duo = {"wt": WT_FWD, "player": inst, "scenario": self.scenario,
+                   "game": self.gcfg.get("game", ""),
+                   "fillers": fillers[inst] if isinstance(fillers, dict) else fillers,
+                   "mutate_otid": inst == "b", "result": Path(self._result_path(inst)).as_posix(),
+                   "partner_result": Path(self._result_path("b" if inst == "a" else "a")).as_posix(),
+                   "go_file": Path(self.go_files[inst]).as_posix(),
+                   "timeout_frames": self.cfg.get("frames", self.cfg["timeout"] * 60)}
             if self.gcfg["uses_savestate"]:
-                ss = self.cfg["savestate"]
-                duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
+                state = self.cfg["savestate"]
+                source_state = Path(SAVESTATE_DIR) / (state[inst] if isinstance(state, dict) else state)
+                staged_state = private / "fixture.State"
+                self._inputs.append(copy_verified(source_state, staged_state)["original"])
+                with zipfile.ZipFile(staged_state) as archive:
+                    sync = json.loads(archive.read("SyncSettings.json"))["o"]
+                    if (sync.get("$type") != "BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk+SyncSettings, BizHawk.Emulation.Cores"
+                            or not {"Core.bin", "Core.bin.zst"}.intersection(archive.namelist())):
+                        raise RuntimeError("Unsupported duo savestate core; expected mGBA format")
+                config.setdefault("CoreSyncSettings", {})["BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk"] = sync
+                duo["savestate"] = staged_state.as_posix()
             else:
-                # Seed this instance's battery save into the SAME per-instance directory
-                # write_run_config redirected to, above. Seeding the shared directory instead
-                # would leave the emulator booting an empty save from the redirected one.
                 from run_gb_gate import seed_saveram
-                isolated = Path(self._saveram_dir(inst)).resolve()
-                if not isolated.is_relative_to(Path(BUILD).resolve()):
-                    raise RuntimeError("Refusing to seed saves outside this worktree build directory")
-                seeded = seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"),
-                                      dest_dir=str(isolated))
+                play = importlib.import_module(self.gcfg["play"])
+                target = self.cfg.get("target", "town")
+                self._inputs.append(identity(Path(play.fixture_path(self.gcfg["fixture"][inst], target))))
+                isolated = Path(self._saveram_dir(inst))
+                seeded = seed_saveram(self.gcfg["fixture"][inst], target, dest_dir=str(isolated))
                 if self.is_gen1 and inst == "b":
                     prepare_gen1_duo_saved_identity(seeded, self.gcfg["fixture"][inst], isolated)
-            with open(stub, "w") as f:
-                f.write('SLINK_HOST = "127.0.0.1"\n')
-                f.write(f"SLINK_PORT = {self.tcp_port}\n")
-                f.write(f'SLINK_PLAYER = "{inst}"\n')
-                f.write("SLINK_DUO = {\n")
-                for k, v in duo.items():
-                    if isinstance(v, str):
-                        f.write(f'  {k} = "{v}",\n')
-                    elif isinstance(v, bool):
-                        f.write(f"  {k} = {str(v).lower()},\n")
-                    else:
-                        f.write(f"  {k} = {v},\n")
-                f.write("}\n")
-                f.write(f'dofile("{WT_FWD}/{self.gcfg["main"]}")\n')
-            p = subprocess.Popen(
-                [EMUHAWK, f"--config=patch/build/duo_cfg_{inst}.ini",
-                 f"--lua=patch/build/duo_{inst}.lua", self.gcfg["rom"][inst]],
-                cwd=REPO)
-            self.emus.append(p)
-        print("[duo] two EmuHawk instances launched")
+            cfg_ini.write_bytes(json_bytes(config))
+            stub = private / f"duo_{inst}.lua"
+            values = []
+            for key, value in duo.items():
+                encoded = lua_string(value) if isinstance(value, str) else str(value).lower() if isinstance(value, bool) else str(value)
+                values.append(f"  {key} = {encoded},")
+            stub.write_text("SLINK_HOST = \"127.0.0.1\"\n" + f"SLINK_PORT = {self.tcp_port}\n" +
+                            "SLINK_PLAYER = " + lua_string(inst) + "\nSLINK_DUO = {\n" +
+                            "\n".join(values) + "\n}\n" + "dofile(" + lua_string(f"{WT_FWD}/{self.gcfg['main']}") + ")\n",
+                            encoding="utf-8")
+            relative = lambda path: path.relative_to(Path(REPO).resolve()).as_posix()
+            launches.append([EMUHAWK, "--config=" + relative(cfg_ini), "--lua=" + relative(stub), relative(staged_rom)])
+        # Preflight both players before either emulator starts.
+        for item in self._inputs:
+            verify_identity(item)
+        (self._created_data_dir / "input-manifest.json").write_bytes(json_bytes({"schema": 1, "files": self._inputs,
+            "save_directories": [{"path": str(path), "names": names} for path, names in self._protected_save_dirs.items()]}))
+        for command in launches:
+            process = subprocess.Popen(command, cwd=REPO, **hidden_process_kwargs())
+            self.emus.append(process)
+            self._remember_process(process)
+        print("[duo] two isolated EmuHawk instances launched")
 
     def wait_keys(self):
         """Both wrappers log MYKEY lines right after savestate+mutation."""
         def both():
-            ka = extract_keys(read_result(self.scenario, "a"))
-            kb = extract_keys(read_result(self.scenario, "b"))
+            ka = extract_keys(self._read_result("a"))
+            kb = extract_keys(self._read_result("b"))
             return (ka, kb) if ka and kb else None
         ka, kb = wait_for("MYKEY lines from both instances", both, 120)
         if set(ka.values()) & set(kb.values()):
@@ -545,10 +597,10 @@ class DuoRun:
         covers the rule SLink exists for.
         """
         def caught(inst):
-            return confirmed_capture(read_result(self.scenario, inst) or "")
+            return confirmed_capture(self._read_result(inst) or "")
 
         def both_caught():
-            require_no_failed_result(self.scenario)
+            require_no_failed_result(self.scenario, self.data_dir)
             a, b = caught("a"), caught("b")
             return (a, b) if a and b else None
 
@@ -557,7 +609,7 @@ class DuoRun:
         print(f"[duo] real captures: a={a_key} b={b_key}")
 
         def linked():
-            require_no_failed_result(self.scenario)
+            require_no_failed_result(self.scenario, self.data_dir)
             st = self._status() or {}
             for link in (st.get("links") or []):
                 keys = {link.get("a_key"), link.get("b_key")}
@@ -590,7 +642,7 @@ class DuoRun:
 
     # ── result-file readers ──────────────────────────────────────────────────
     def _marks(self, inst, tag):
-        return extract_marks(read_result(self.scenario, inst) or "", tag)
+        return extract_marks(self._read_result(inst) or "", tag)
 
     def _caught(self, inst):
         """The key of a mon this instance caught, if it managed to name one.
@@ -607,7 +659,7 @@ class DuoRun:
         `REFUSED <key> (<how>)` is the line the scenario does promise, and it carries the
         full key whenever one was recovered at all.
         """
-        text = read_result(self.scenario, inst) or ""
+        text = self._read_result(inst) or ""
         for line in text.splitlines():
             if "CAUGHT " in line:
                 return line.split("CAUGHT ", 1)[1].split()[0]
@@ -669,10 +721,10 @@ class DuoRun:
         # memorial growing is the rule under test; whether B could still read the mon it
         # threw at is a race it does not need to win (see _caught).
         wait_for("B to throw a ball inside the dead zone",
-                 lambda: "THREW " in (read_result(self.scenario, "b") or ""),
+                 lambda: "THREW " in (self._read_result("b") or ""),
                  self.cfg["timeout"])
         wait_for("B's client to retire the refused capture",
-                 lambda: "REFUSED " in (read_result(self.scenario, "b") or ""), 900)
+                 lambda: "REFUSED " in (self._read_result("b") or ""), 900)
         b_key = self._caught("b")
         print(f"[duo] B threw in the dead area and the client retired "
               f"{b_key or 'a capture it could not read back'}")
@@ -715,7 +767,7 @@ class DuoRun:
         def verdicts():
             out = {}
             for inst in ("a", "b"):
-                text = read_result(self.scenario, inst) or ""
+                text = self._read_result(inst) or ""
                 for tag in ("REJECTED", "KEPT"):
                     if any(ln.startswith(tag + " ") for ln in text.splitlines()):
                         out[inst] = tag
@@ -760,36 +812,63 @@ class DuoRun:
 
     def wait_results(self):
         def both():
-            require_no_failed_result(self.scenario)
-            ra = read_result(self.scenario, "a")
-            rb = read_result(self.scenario, "b")
+            require_no_failed_result(self.scenario, self.data_dir)
+            ra = self._read_result("a")
+            rb = self._read_result("b")
             if ra and "RESULT:" in ra and rb and "RESULT:" in rb:
                 return ra, rb
             return None
         return wait_for("both RESULT lines", both, self.cfg["timeout"])
 
     def _result_path(self, inst):
-        return os.path.join(BUILD, f"e2e_{self.scenario}_{inst}_result.txt")
+        return str(self.instance_dirs[inst] / "result.txt")
 
     def cleanup(self, passed):
-        for p in self.emus:
-            if p.poll() is None:
-                subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"],
-                               capture_output=True)
-        if self.server and self.server.poll() is None:
-            self.server.terminate()
+        data_dir, build_dir = Path(self.data_dir).resolve(), Path(BUILD).resolve()
+        if data_dir != self._created_data_dir or data_dir == build_dir or not data_dir.is_relative_to(build_dir):
+            raise RuntimeError("Refusing to remove duo data outside the worktree run directory")
+        cleanup_errors = []
+        for process in self._owned_processes:
             try:
-                self.server.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                self.server.kill()
-        for gf in self.go_files.values():
-            if os.path.exists(gf):
-                os.remove(gf)
+                terminate_owned(capture_owned_tree(process))
+            except Exception as error:
+                cleanup_errors.append(str(error))
+        for handle in ([self.server] if self.server else []) + self.emus:
+            try:
+                handle.wait(timeout=5)
+            except Exception as error:
+                cleanup_errors.append(str(error))
+        if cleanup_errors:
+            raise RuntimeError("Owned process cleanup failed: " + "; ".join(cleanup_errors))
+        for item in self._inputs:
+            verify_identity(item)
+        for directory, names in self._protected_save_dirs.items():
+            if [path.name for path in self._save_files(directory)] != names:
+                raise RuntimeError("Original emulator Save RAM directory changed during the run")
+        (data_dir / "input-verification.json").write_bytes(json_bytes({"unchanged": True,
+            "files_checked": len(self._inputs), "save_directories_checked": len(self._protected_save_dirs)}))
+        # Keep attributable results after successful ephemeral-state cleanup.
         if passed and not self.args.keep_data:
-            data_dir, build_dir = Path(self.data_dir).resolve(), Path(BUILD).resolve()
-            if data_dir == build_dir or not data_dir.is_relative_to(build_dir):
-                raise RuntimeError("Refusing to remove duo data outside the worktree build directory")
-            shutil.rmtree(data_dir, ignore_errors=True)
+            summary = build_dir / "duo-results" / data_dir.name
+            summary.mkdir(parents=True, exist_ok=False)
+            for inst in ("a", "b"):
+                result = Path(self._result_path(inst))
+                if result.exists():
+                    shutil.copy2(result, summary / (inst + "-result.txt"))
+            for filename in ("input-manifest.json", "input-verification.json", "process-manifest.json", "server.log"):
+                if (data_dir / filename).exists():
+                    shutil.copy2(data_dir / filename, summary / filename)
+            try:
+                shutil.rmtree(data_dir)
+            except OSError as error:
+                # Cloud-sync/AV directory locks are not emulator or input-integrity
+                # failures. Preserve the path and report incomplete file cleanup.
+                (summary / "cleanup.json").write_bytes(json_bytes({"data_removed": False,
+                    "retained_path": str(data_dir), "reason": str(error)}))
+                print(f"[duo] temporary files retained at {data_dir}: {error}")
+            else:
+                (summary / "cleanup.json").write_bytes(json_bytes({"data_removed": True}))
+            print(f"[duo] results kept: {summary}")
         else:
             print(f"[duo] data dir kept: {self.data_dir}")
 
@@ -838,7 +917,7 @@ class DuoRun:
             # B must be inside a LIVE battle before A's faint fires the force_explode (a
             # frozen battle savestate can't execute the coerced turn — foe never commits).
             wait_for("B inside a live battle",
-                     lambda: "IN_BATTLE" in (read_result(self.scenario, "b") or ""), 240)
+                     lambda: "IN_BATTLE" in (self._read_result("b") or ""), 240)
             self.go()
         elif self.scenario == "boxsync" and self.battery_boot:
             # The GB gens exercise the RULE, not the storage opcodes: link the pair, then let A
@@ -855,7 +934,7 @@ class DuoRun:
             self.queue_command("b", {"cmd": "box_mon", "key": kb[1]})
             for inst, key in (("a", ka[1]), ("b", kb[1])):
                 wait_for(f"{inst} deposit done",
-                         lambda i=inst: "DEPOSIT_DONE" in (read_result(self.scenario, i) or ""),
+                         lambda i=inst: "DEPOSIT_DONE" in (self._read_result(i) or ""),
                          180)
                 self.queue_command(inst, {"cmd": "party_mon", "key": key})
         elif self.scenario == "trade":
@@ -863,8 +942,8 @@ class DuoRun:
             # link whose halves swap owners behind the server's back would just feed the
             # reconciler). Cross-inject apply_trade with each side's slot-0 blob.
             def blobs():
-                ba = extract_marks(read_result(self.scenario, "a"), "MYBLOB")
-                bb = extract_marks(read_result(self.scenario, "b"), "MYBLOB")
+                ba = extract_marks(self._read_result("a"), "MYBLOB")
+                bb = extract_marks(self._read_result("b"), "MYBLOB")
                 return (ba[0], bb[0]) if ba and bb else None
             blob_a, blob_b = wait_for("MYBLOB from both", blobs, 120)
             self.queue_command("a", {"cmd": "apply_trade", "slot": 0, "blob_hex": blob_b,

@@ -49,6 +49,10 @@ def test_boxed_links_require_observed_box_membership_and_party_keeps_unlinked_mo
 
 
 def test_event_filters_can_explicitly_hide_all_events(tmp_path):
+    from types import SimpleNamespace
+    from server.broadcast_render import legacy_configuration
+    request = SimpleNamespace(query={"filter": "   "}, cookies={}, headers={})
+    assert legacy_configuration(request, "events")["controls"]["filter"] is None
     server = dashboard_scenario("gen3", tmp_path / "gen3")
     assert build_broadcast_context(server, "events", ["a", "b"], {"filter": None})["events"]
     assert not build_broadcast_context(server, "events", ["a", "b"], {"filter": []})["events"]

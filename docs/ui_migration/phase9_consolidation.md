@@ -1,6 +1,6 @@
 # Consolidation progress
 
-Working checkout: `E:\Google Drive\SLink`, branch `codex/ui-rework`. The UI phase branches and reviewed mockup branches are already ancestors. No active checkout was pruned. Gen 2 confirmed root ownership was released and its separate investigation caches must be preserved.
+Working checkout: `E:\Google Drive\SLink\.claude\worktrees\ui-phase7b-sources`, branch `codex/ui-rework`. Root switched externally back to `codex/gen2base`; no additional UI checkout was created. The UI phase branches and reviewed mockup branches are already ancestors. No active checkout was pruned. Gen 2 confirmed root ownership was released and its separate investigation caches must be preserved.
 
 ## Completed cleanup
 
@@ -27,3 +27,9 @@ Removed the obsolete overlay-family CSS while retaining markers still used by Py
 Latest full suite: **3897 passed, 2 skipped** in 58.81 seconds. Portable selection: **3591 passed, 308 explicit deferrals**. JavaScript: **16 passed**. Ruff is clean. An intermittent MutationObserver error appeared in browser-automation logs during navigation; a temporary main-page error listener did not receive it, and fresh-page polling/interaction checks stayed clean. Keep this observation for the final browser pass; no runtime-code workaround was added.
 
 The required emulator runs are still outstanding. Both owners released the bounded shared-runner isolation correction to this task: the existing Gen3 duo path copies the user's config unchanged, so SaveRAM and several generated test files can collide. Isolate those before launch; the frozen Gen1 default wire-v1 duo remains meaningful for its existing scope and does not need the unpublished configured durable route. Verified randomizer publication remains separately gated.
+
+## Shared duo runner and required E2E evidence
+
+The owner-approved isolation correction is documented in [duo_isolation.md](duo_isolation.md). Full unit/integration verification after this correction: **3905 passed, 2 skipped**. The complete Gen 1 E2E file ran with `SLINK_E2E=1`: **15 passed, 30 failed, zero skips/deselections**, 1150.27 seconds. All 30 failures report the frozen `rby_operation_interface_unavailable` refusal from `/api/debug/set_pokeballs`; the guard was not bypassed. Playthrough, deadzone and dupes passed for every required pair. All 135 recorded process identities had exited after the run.
+
+The Gen 3 E2E file is still outstanding. RR identified the local ROM SHA256 `1e8f6e8957c1e8eb7ce2d2e349a7c335e48f13b7dd44bf81350dc1ade1a1ec04` as its audit baseline but has no provenance binding it to the shared savestates. It must not be substituted for a qualified fixture set. The advertised patcher MD5 also differs; this remains RR's existing U05 finding. No Gen 3 E2E pass is claimed.
