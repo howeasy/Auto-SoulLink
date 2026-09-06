@@ -4,6 +4,9 @@
 -- Frame-boundary resource assertions and captured PNGs are not duo/visual approval.
 return function(ctx)
     local C,report,check=ctx.config,ctx.report,ctx.check
+    local L=dofile(C.source_root.."/lua/rr/native_layout.lua")
+    package.loaded["rr.native_layout"]=L -- exact private source closure, no cached foreign layout
+    local R,F=L.regions,L.structures
     local O=C.probe_options or {}
     local out={classification="synthetic_single_cartridge_component",release_ready=false,
         visual_review="pending",arena_ownership="unresolved",cycles={},screenshots={},frames=0,
@@ -21,7 +24,11 @@ return function(ctx)
     check("resource_visible_bound",integer(visible_frames,2,60),true)
     check("resource_quiet_bound",integer(quiet_frames,2,30),true)
     check("resource_total_bound",integer(C.frames,1,3600),true)
-    check("resource_descriptor_required",type(C.descriptor)=="table" and C.descriptor.size==156,true)
+    check("resource_descriptor_required",type(C.descriptor)=="table" and C.descriptor.size==F.NativeDescriptor.size,true)
+    local encoded_layout=L.sha256:gsub(".",function(c) return string.format("%02x",string.byte(c)) end).."00"
+    local layout_start=F.NativeDescriptor.offsets.layout_sha256*2+1
+    check("resource_layout_matches_selected_descriptor",
+        C.descriptor.hex:sub(layout_start,layout_start+F.NativeDescriptor.bytes.layout_sha256*2-1),encoded_layout)
     local contract=O.native_contract or {}
     check("resource_symbol_build_bound",type(contract.build_id)=="string" and #contract.build_id==64
         and contract.build_id==C.descriptor.build_id,true)
@@ -30,7 +37,7 @@ return function(ctx)
 
     local r8,r16,r32=memory.read_u8,memory.read_u16_le,memory.read_u32_le
     local s16=memory.read_s16_le
-    local OBJECTS,SPRITES,REFS,TILES,GH=0x02036E38,0x0202063C,0x0203B7D4,0x02021B48,0x0203F850
+    local OBJECTS,SPRITES,REFS,TILES,GH=0x02036E38,0x0202063C,0x0203B7D4,0x02021B48,R.ghost.address
     local function hex(address,n)
         local t={};for i=0,n-1 do t[#t+1]=string.format("%02x",r8(address+i)) end
         return table.concat(t)
@@ -39,8 +46,8 @@ return function(ctx)
     local MB=dofile(C.source_root.."/lua/mailbox.lua")
     local function primitive_field()
         if not MB.present() then return false end
-        if r32(0x030030F4)~=0x080565B5 or r8(0x03000F9C)~=0 or r8(0x0203F840)~=0
-            or r8(0x0203FC80)~=0 or r8(0x0203FD00)~=0 then return false end
+        if r32(0x030030F4)~=0x080565B5 or r8(0x03000F9C)~=0 or r8(R.swap.address)~=0
+            or r8(R.ui.address)~=0 or r8(R.battle_notif.address)~=0 then return false end
         for i=0,15 do
             local t=0x03005090+i*40
             if r8(t+4)~=0 and (r32(t)==0x09094295 or r32(t)==0x0909411D) then return false end
@@ -86,8 +93,8 @@ return function(ctx)
     end
     check("resource_field_prerequisite",primitive_field(),true)
     check("resource_mailbox_idle",r16(MB.BASE+6)==0 and r16(MB.BASE+10)==MB.ST_IDLE,true)
-    check("resource_no_existing_presence",r8(GH)==0 and r8(GH+1)==255
-        and r8(0x0203F8D4)==0 and r8(0x0203F8D1)==0,true)
+    check("resource_no_existing_presence",r8(GH+F.GhostState.offsets.active)==0 and r8(GH+F.GhostState.offsets.oeId)==255
+        and r8(R.trade_npc.address)==0 and r8(R.peer_interact.address+F.SlinkState.offsets.pi_armed)==0,true)
     for i=0,15 do
         local oe=OBJECTS+i*36
         check("resource_no_sentinel_"..i,(r8(oe)&1)==0 or (r8(oe+8)~=0xF0 and r8(oe+8)~=0xF1),true)
@@ -297,7 +304,7 @@ return function(ctx)
             check(label.."_position_posted",MB.ghost_set_pos((reference.x+2)*16,reference.y*16,reference.facing,false,reference.facing-1,false),true)
             check(label.."_snap_posted",MB.ghost_snap(),true)
             wait_for(label.."_avatar_acceptance",function()
-                return r8(GH+17)==0 and r32(sprite+12)==reference.images and r32(sprite+8)==reference.anims
+                return r8(GH+F.GhostState.offsets.avatarDirty)==0 and r32(sprite+12)==reference.images and r32(sprite+8)==reference.anims
                     and (r8(sprite+62)&5)==1
             end)
             advance(visible_frames,label.."_visible")
@@ -335,7 +342,7 @@ return function(ctx)
             existing_equal(label.."_restored",baseline,after,nil,nil,nil)
             check(label.."_all_refs_restored",after.ref_bytes,baseline.ref_bytes)
             check(label.."_all_tiles_restored",after.tile_bytes,baseline.tile_bytes)
-            check(label.."_interaction_disarmed",r8(0x0203F8D1),0)
+            check(label.."_interaction_disarmed",r8(R.peer_interact.address+F.SlinkState.offsets.pi_armed),0)
             row.after=after;requested=false
             screenshot(label.."_after")
         end

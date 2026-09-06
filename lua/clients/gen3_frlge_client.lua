@@ -2227,7 +2227,7 @@ local function on_frame()
             local m = table.remove(pending_battle_msgs, 1)
             if m.fb == "prompt" then prompt_show(m.text, m.r, m.g, m.b, m.frames or 300)
             else hud_show(m.text, m.r, m.g, m.b, m.frames or 300) end
-        elseif memory.read_u16_le(0x0203F806) == 0           -- mailbox opcode slot idle (MB.BASE+6)
+        elseif memory.read_u16_le(MB.OPCODE_ADDR) == 0       -- generated mailbox opcode address
            and memory.read_u8(MB.BATTLE_NOTIF) == 0 then     -- no notification currently showing
             local m = table.remove(pending_battle_msgs, 1)
             MB.show_battle_message(fit_battle_text(m.text), NATIVE_BATTLE_FRAMES, NATIVE_BATTLE_WIN, m.color)

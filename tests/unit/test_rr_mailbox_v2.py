@@ -22,6 +22,8 @@ class MailboxHarness:
         memory.write_s16_le = lambda address, value, *args: self.write(address, value, 2)
         self.lua.globals().memory = memory
         self.lua.execute('package.loaded.memory_gba={CHARSET_REV={A=1,B=2,C=3}}')
+        self.lua.globals().package.loaded["rr.native_layout"] = self.lua.execute(
+            (ROOT / "lua/rr/native_layout.lua").read_text(encoding="utf-8"))
         self.mb = self.lua.execute((ROOT / "lua/mailbox.lua").read_text(encoding="utf-8"))
         self.lua.globals().MB = self.mb
         self.write(self.mb.BASE, self.mb.SIG, 4)

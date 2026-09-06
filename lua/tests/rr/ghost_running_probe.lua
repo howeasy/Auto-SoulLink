@@ -13,6 +13,7 @@ return function(ctx)
     -- result and its settled mailbox owner. This also performs the reviewed boot.
     local control=dofile(C.source_root.."/lua/tests/rr/ghost_resource_probe.lua")(ctx)
     local MB,reference=control.mailbox,control.reference
+    local R,F=MB.LAYOUT.regions,MB.LAYOUT.structures -- control proved selected descriptor/layout match
     local out={classification="synthetic_single_cartridge_running_component",release_ready=false,
         visual_review="pending",resource_review="pending",natural_battle_tested=false,route=route,normal_control=report.evidence.runtime,
         trace={},recording={fps_numerator=262144,fps_denominator=4389,frames={}},native_requests={},
@@ -85,7 +86,7 @@ return function(ctx)
         for slot,key in ipairs(expected_party_keys) do
             check(label.."_party_identity_"..slot,hex(0x02024284+(slot-1)*100,8),key)
         end
-        check(label.."_no_native_ui",r8(0x0203FC80)==0 and r8(0x0203F840)==0 and r8(0x0203FD00)==0,true)
+        check(label.."_no_native_ui",r8(R.ui.address)==0 and r8(R.swap.address)==0 and r8(R.battle_notif.address)==0,true)
         check(label.."_row_bounds",p.y==route.row and p.x>=route.end_x and p.x<=route.start_x,true)
     end
     local function capture(p)
@@ -201,7 +202,7 @@ return function(ctx)
         wait_for("running_owned_spawn",function() return MB.ghost_oe()<16 end)
         check("running_avatar_posted",MB.ghost_set_avatar(reference.images,reference.anims,reference.colors),true)
         publish(sample("running_avatar"),true);check("running_snap_posted",MB.ghost_snap(),true)
-        wait_for("running_avatar_ready",function() return r8(MB.GH+17)==0 end)
+        wait_for("running_avatar_ready",function() return r8(MB.GH+F.GhostState.offsets.avatarDirty)==0 end)
         local p=advance({},"running_settle_0");p=advance({},"running_settle_1");owner(p,"running_ready")
         out.run_start=p;recording=true;capture(p)
         local consecutive=0
@@ -243,7 +244,7 @@ return function(ctx)
             check("running_no_orphan_"..id,(r8(a)&1)==0 or r8(a+8)~=0xF0,true)
             check("running_no_private_ref_"..id,r8(0x0203B7D4+id*4)~=6,true)
         end
-        check("running_interaction_disarmed",r8(0x0203F8D1),0)
+        check("running_interaction_disarmed",r8(R.peer_interact.address+F.SlinkState.offsets.pi_armed),0)
         check("running_native_motion_observed",out.max_consecutive_running>=route.minimum_consecutive_running_frames,true)
         check("running_ghost_animation_observed",out.ghost_running_frames>=route.minimum_consecutive_running_frames,true)
         check("running_recording_complete",#out.recording.frames>=route.minimum_consecutive_running_frames+1,true)

@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH = os.path.dirname(HERE)
@@ -29,6 +30,11 @@ BUILD = os.path.join(PATCH, "build")
 DIST = os.path.join(PATCH, "dist")
 SRC = os.path.join(PATCH, "src")
 EXE = ".exe" if os.name == "nt" else ""
+sys.path.insert(0, HERE)
+import native_layout  # noqa: E402
+
+LAYOUT = native_layout.load()
+LAYOUT_VIEW = native_layout.view(LAYOUT)
 
 
 def _toolchain_dir():
@@ -60,7 +66,7 @@ ROM_BASE = 0x08000000
 # 0x08378F70, not 0x08378CA8: the bundled RR4.1_Custom Battle Calc occupies
 # 0x08378CA8..0x08378F6F. SLink injects into the 0xFF run that resumes at 0x08378F70
 # (~0x14638 free; keep in sync with ORIGIN in slink.ld).
-CODE_BASE = 0x08378F70
+CODE_BASE = LAYOUT["rom"]["code_base"]
 HOOK_SITE = 0x0800051A
 # CFRU BackupParty's two party->backup-buffer memcpy BL sites. We redirect them to
 # slink_backup_wrap so the patch learns the EXACT frame a borrowed-party swap begins
@@ -148,6 +154,8 @@ def main():
                          "emitted UPS is byte-identical to the committed dist/SLink-RR.ups. "
                          "Touches nothing in the tree.")
     args = ap.parse_args()
+    # Refuse stale outputs before creating a build directory or touching a ROM.
+    native_layout.generate(check=True)
     if args.output_dir:
         BUILD = DIST = os.path.abspath(args.output_dir)
     committed_ups = os.path.join(DIST, "SLink-RR.ups")
@@ -166,7 +174,9 @@ def main():
         path for path in glob.glob(os.path.join(SRC, "*.c")) if os.path.basename(path) != "handlers.c")
     tracked_inputs = sorted(glob.glob(os.path.join(SRC, "*.c")) + glob.glob(os.path.join(SRC, "*.h"))
                             + [os.path.join(SRC, "slink.ld"), __file__,
-                               os.path.join(PATCH, "..", "lua", "mailbox.lua")])
+                               os.path.join(PATCH, "..", "lua", "mailbox.lua"),
+                               str(native_layout.ROOT / native_layout.SOURCE), native_layout.__file__,
+                               str(native_layout.ROOT / "lua/rr/native_layout.lua")])
     def sha256_file(path):
         with open(path, "rb") as stream:
             return hashlib.sha256(stream.read()).hexdigest()
@@ -181,9 +191,8 @@ def main():
     compiler_sha256 = sha256_file(compiler_path)
     build_id = hashlib.sha256(json.dumps({"inputs": canonical_hashes, "compiler": compiler_sha256,
                                          "flags": CFLAGS}, sort_keys=True).encode()).hexdigest()
-    layout_sha256 = canonical_hashes["src/native_mailbox.h"]
-    defines = [f'-DSLINK_NATIVE_BUILD_ID="{build_id}"',
-               f'-DSLINK_NATIVE_LAYOUT_SHA256="{layout_sha256}"']
+    layout_sha256 = native_layout.fingerprint(LAYOUT)
+    defines = [f'-DSLINK_NATIVE_BUILD_ID="{build_id}"']
     objects = [os.path.join(BUILD, os.path.basename(path).replace(".c", ".o")) for path in native_sources]
     elf = os.path.join(BUILD, "handlers.elf")
     binf = os.path.join(BUILD, "handlers.bin")
@@ -219,7 +228,7 @@ def main():
     with open(binf, "rb") as f:
         blob = f.read()
     print(f"      handlers.bin = {len(blob)} bytes")
-    MAX_CODE_SIZE = 0x14000  # slink.ld MEMORY rom LENGTH — keep the two in sync
+    MAX_CODE_SIZE = LAYOUT["rom"]["code_size"]
     if len(blob) > MAX_CODE_SIZE:
         sys.exit(f"handlers.bin {len(blob)} B exceeds slink.ld region LENGTH {MAX_CODE_SIZE:#x}")
 
@@ -291,6 +300,7 @@ def main():
                      "— Battle Calc layout changed; re-RE before re-pointing")
         data[bt_off:bt_off + 4] = thumb_bl(BT_DETOUR, bt_hook_addr)
         print(f"      re-pointed BattlePutTextOnWindow detour @ {BT_DETOUR:#x} -> shim {bt_hook_addr:#x}")
+    native_layout.verify_descriptor(bytes(data), sym["slink_native_descriptor"], build_id, LAYOUT)
     with open(out_rom, "wb") as f:
         f.write(data)
 
@@ -302,15 +312,18 @@ def main():
     with open(os.path.join(DIST, "SLink-RR.ups"), "wb") as f:
         f.write(ups)
     print(f"      SLink-RR.ups ({len(ups)} B) round-trip OK")
-    capabilities = {"receipts_v2": True, "payload_leases": True,
-                    "storage_guard_v2": True, "descriptor_v1": True, "reservation_echo_v2": True}
-    manifest = {"schema_version": 1, "abi": 2, "build_id": build_id,
+    capabilities = dict.fromkeys(LAYOUT["capabilities"], True)
+    descriptor_size = LAYOUT["structures"]["NativeDescriptor"]["size"]
+    manifest = {"schema_version": 1, "abi": LAYOUT["constants"]["abi"], "build_id": build_id,
                 "layout_sha256": layout_sha256, "descriptor_address": sym["slink_native_descriptor"],
-                "descriptor_size": 156, "descriptor_version": 1, "capability_mask": 31,
+                "descriptor_size": descriptor_size, "descriptor_version": LAYOUT["constants"]["descriptor_version"],
+                "capability_mask": LAYOUT_VIEW["capability_mask"],
                 "capabilities": capabilities,
                 "capabilities_sha256": hashlib.sha256(json.dumps(capabilities, sort_keys=True,
                                                                    separators=(",", ":")).encode()).hexdigest(),
-                "mailbox_address": 0x0203F800, "mailbox_size": 64, "storage_guard": 0xA2,
+                "mailbox_address": LAYOUT_VIEW["regions"]["mailbox"]["address"],
+                "mailbox_size": LAYOUT_VIEW["regions"]["mailbox"]["size"], "storage_guard": LAYOUT["constants"]["storage_guard"],
+                "layout_contract_schema": LAYOUT["schema"], "layout_fingerprint_kind": "canonical_complete_layout_json_v1",
                 "native_inputs": input_hashes, "native_inputs_canonical": canonical_hashes,
                 "text_eol_policy": "CRLF normalized to LF for embedded build/layout identity; raw native_inputs are provenance",
                 "compiler_sha256": compiler_sha256, "flags": CFLAGS,
@@ -319,7 +332,8 @@ def main():
                 "rom_md5": hashlib.md5(patched).hexdigest(), "rom_sha1": hashlib.sha1(patched).hexdigest(),
                 "rom_sha256": hashlib.sha256(patched).hexdigest(),
                 "patch_sha256": hashlib.sha256(ups).hexdigest(),
-                "arena_ownership": "UNRESOLVED: overlaps dormant libc allocator; live instrumentation required"}
+                "arena_ownership": LAYOUT["arena"]["ownership"]}
+    Path(BUILD, "native_layout.json").write_bytes(native_layout.canonical(LAYOUT) + b"\n")
     with open(os.path.join(BUILD, "native_manifest.json"), "w", encoding="utf-8") as stream:
         json.dump(manifest, stream, indent=2, sort_keys=True)
         stream.write("\n")

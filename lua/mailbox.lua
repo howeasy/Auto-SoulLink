@@ -2,24 +2,33 @@
 --
 -- When the Radical Red companion patch is applied, an injected frame hook maintains a
 -- mailbox at 0x0203F800 and writes the 'SLNK' signature every frame. This module lets
--- the Lua client detect that patch and dispatch native opcodes to it; callers fall back
--- to the existing RAM-poke path when MB.present() is false (plan §3-§4).
+-- the Lua client detect that patch and dispatch native opcodes to it. RR requires
+-- the supported companion; absence is not permission for storage RAM fallback.
 --
 -- Memory access mirrors memory_gba.lua: EWRAM is addressed with the bare full address
 -- and the default domain (System Bus is reserved for ROM reads).
 
-local MB = {}
+-- Resolve generated layout even when a private probe uses dofile(). No RAM reads.
+do
+    local dir = debug.getinfo(1, "S").source:match("^@(.*[/\\])")
+    if dir then package.path = dir .. "?.lua;" .. package.path end
+end
+local L = require("rr.native_layout")
+local R, F = L.regions, L.structures
+local MB = {LAYOUT=L}
 -- Lua owns immutable pending payloads; staging never touches a live native buffer.
 local staged = {text = {}, menu = {}, blob = {}}
 local function copy_bytes(t) local r = {}; for i = 1, #t do r[i] = t[i] end; return r end
 
-MB.BASE = 0x0203F800
-MB.SIG  = 0x4B4E4C53          -- 'SLNK' little-endian (bytes 53 4C 4E 4B)
-MB.ABI  = 2
+MB.BASE = R.mailbox.address
+MB.SIG  = L.constants.signature
+MB.ABI  = L.constants.abi
 
 -- ABI v2 field offsets (see patch/src/ADDRESSES.md)
+local O = F.Mailbox.offsets
 local O_SIG, O_ABI, O_OPCODE, O_SEQ, O_STATUS, O_ACKSEQ, O_REASON, O_ARGS, O_RESULT =
-      0, 4, 6, 8, 10, 12, 14, 16, 48
+      O.signature, O.abi_version, O.opcode, O.seq, O.status, O.ack_seq, O.reason, O.args, O.result
+MB.OPCODE_ADDR = MB.BASE + O_OPCODE
 
 -- This table mirrors the FULL opcode ABI implemented by patch/src/handlers.c — keep the two
 -- in sync (patch/src/ADDRESSES.md is the reference).  Several opcodes have no production
@@ -45,7 +54,7 @@ end
 -- (moves/IVs/EVs/PID/item). Args: {count}. The active-foe gBattleMons refresh stays in Lua
 -- (M.refreshActiveEnemyBattlers) — see the client's pending_enemy_party settle.
 MB.OP_SET_ENEMY_PARTY = 16
-MB.BLOB_BUF = 0x0203FA00     -- patch reads count*100 raw party-mon bytes from here (matches handlers.c)
+MB.BLOB_BUF = R.blob.address     -- patch reads count*100 raw party-mon bytes from here (matches handlers.c)
 
 -- Stage decoded blobs (a list of 100-byte arrays) into the patch's blob buffer.
 -- Errors loudly on a short row: writing row[j]=nil would throw mid-stage with a half-written
@@ -98,7 +107,7 @@ MB.OP_PLAY_FANFARE  = 9     -- args: {song_lo, song_hi} (jingle: link-formed / t
 MB.OP_SHOW_MENU     = 17    -- native YES/NO menu over the text buffer; ASYNC (poll, then menu_result)
 MB.OP_PLAY_SE       = 19    -- native sound effect via PlaySE: args {song_lo, song_hi}
 
-MB.TEXT_BUF = 0x0203F900    -- patch reads FR-encoded text from here for SHOW_MESSAGE
+MB.TEXT_BUF = R.text.address    -- patch reads FR-encoded text from here for SHOW_MESSAGE
 
 -- ASCII -> FireRed charmap, 0xFF-terminated. Uses memory_gba's exported CHARSET_REV as the
 -- single source of truth (a hand-rolled second copy here once drifted on 0xB8/0xB9).
@@ -128,7 +137,7 @@ end
 function MB.write_message(text, color)
     -- TEXT_BUF is 256 bytes (BLOB_BUF starts at +0x100): truncate rather than spill encoded
     -- text into the staged trade/rival mon blobs. Room = 256 - terminator - color prefix.
-    local limit = 255 - (color and 3 or 0)
+    local limit = R.text.size - 1 - (color and 3 or 0)
     if #text > limit then text = text:sub(1, limit) end
     local bytes = MB.fr_encode(text)
     local out = {}
@@ -158,7 +167,7 @@ function MB.menu_result() return MB.read_result_u8(0) end
 -- ASYNC like show_menu: poll the seq; on ST_OK read the chosen index with MB.menu_result()
 -- (0..n-1, or 127 = B-press/cancel). nil if absent.
 MB.OP_SHOW_CHOICES = 22
-MB.MENU_BUF = 0x0203FC90
+MB.MENU_BUF = R.choices.address
 function MB.show_choices(options, prompt)
     if not MB.present() then return nil end
     local n = #options
@@ -168,7 +177,7 @@ function MB.show_choices(options, prompt)
     -- a phantom EV_PLAYER_FAINT and force-faint the partner's linked mon.
     local total = 1
     for i = 1, n do total = total + #options[i] + 1 end   -- fr_encode is 1 byte/char + 0xFF
-    if total > 112 then return nil end
+    if total > R.choices.size then return nil end
     local out = {n}
     for i = 1, n do
         local bytes = MB.fr_encode(options[i])
@@ -205,7 +214,7 @@ end
 -- bakes the chosen default); `flags` ORs into the window arg (0x80 = don't clear the background). Sync ack.
 -- Returns the seq, or nil if the patch is absent.
 MB.OP_SHOW_BATTLE_MESSAGE = 23
-MB.BATTLE_NOTIF = 0x0203FD00   -- BattleNotif struct: active@0, win@1, flags@2, frames(u16)@4
+MB.BATTLE_NOTIF = R.battle_notif.address   -- BattleNotif struct: active@0, win@1, flags@2, frames(u16)@4
 function MB.show_battle_message(text, frames, win, color)
     if not MB.present() then return nil end
     MB.write_message(text, color)               -- `color` = FR text color id (themes the text to the event)
@@ -244,7 +253,7 @@ local function guarded_storage(op, a, b, c, guard, extra, prepare_only)
             return nil, "invalid storage guard " .. name
         end
     end
-    local args = {a, b, c, 0xA2}
+    local args = {a, b, c, L.constants.storage_guard}
     for _, value in ipairs({guard.pid, guard.otid}) do
         for i = 0, 3 do args[#args + 1] = (value >> (i * 8)) & 255 end
     end
@@ -287,7 +296,7 @@ end
 -- battle edges (faint-settled via the gBattleResults counters, end-of-battle outcome); Lua drains
 -- them here instead of re-deriving the same facts by polling. events_init() resyncs the read index
 -- on (re)load so stale events from before a Lua restart are skipped.
-MB.EVR        = 0x0203FD10
+MB.EVR        = R.events.address
 MB.EV_PLAYER_FAINT = 1   -- a = playerFaintCounter after the bump
 MB.EV_FOE_FAINT    = 2   -- a = foeFaintCounter after the bump
 MB.EV_OUTCOME      = 3   -- a = gBattleOutcome on the end-of-battle edge (1 won, 2 lost/whiteout, ...)
@@ -300,12 +309,12 @@ MB.EV_NAMES = { [1] = "player_faint", [2] = "foe_faint", [3] = "outcome",
 -- default (all-zero EWRAM) reproduce the pre-producer behaviour instead of firing a burst of
 -- spurious party events. Clearing it is how you force a re-prime (the patch does this itself while
 -- a borrowed party is installed).
-MB.EVR_PRIM = 0x0203FD16
+MB.EVR_PRIM = MB.EVR + F.EvRing.offsets.prim
 -- Legacy reset drops queued events; durable bootstrap must reconcile before using it.
 function MB.events_init()
     if not MB.present() then return false end
-    memory.write_u8(MB.EVR + 1, memory.read_u8(MB.EVR))   -- rd = wr (drop anything stale)
-    memory.write_u8(MB.EVR + 2, 0)                        -- clear overflow
+    memory.write_u8(MB.EVR + F.EvRing.offsets.rd, memory.read_u8(MB.EVR))   -- rd = wr (drop anything stale)
+    memory.write_u8(MB.EVR + F.EvRing.offsets.overflow, 0)                        -- clear overflow
     return true
 end
 -- Drain all pending events. Returns a list of {type=, a=, b=} (possibly empty) plus an overflow
@@ -313,15 +322,15 @@ end
 function MB.events_drain()
     if not MB.present() then return {}, false end
     local out = {}
-    local wr, rd = memory.read_u8(MB.EVR), memory.read_u8(MB.EVR + 1)
-    while rd ~= wr and #out < 8 do
-        local v = memory.read_u32_le(MB.EVR + 8 + (rd % 8) * 4)
+    local wr, rd = memory.read_u8(MB.EVR), memory.read_u8(MB.EVR + F.EvRing.offsets.rd)
+    while rd ~= wr and #out < F.EvRing.bytes.ev // 4 do
+        local v = memory.read_u32_le(MB.EVR + F.EvRing.offsets.ev + (rd % (F.EvRing.bytes.ev // 4)) * 4)
         out[#out + 1] = { type = v & 0xFF, a = (v >> 8) & 0xFF, b = (v >> 16) & 0xFFFF }
         rd = (rd + 1) % 256
     end
-    memory.write_u8(MB.EVR + 1, rd)
-    local ovf = memory.read_u8(MB.EVR + 2) ~= 0
-    if ovf then memory.write_u8(MB.EVR + 2, 0) end
+    memory.write_u8(MB.EVR + F.EvRing.offsets.rd, rd)
+    local ovf = memory.read_u8(MB.EVR + F.EvRing.offsets.overflow) ~= 0
+    if ovf then memory.write_u8(MB.EVR + F.EvRing.offsets.overflow, 0) end
     return out, ovf
 end
 
@@ -331,13 +340,13 @@ MB.OP_ARM_PEER_INTERACT = 13  -- talk-to-ghost: args {ghost_oeId, armed} (legacy
 MB.OP_GHOST_SPAWN = 14        -- engine-driven peer ghost: args {gfxId, localId}; hook spawns+drives
 MB.OP_GHOST_CLEAR = 15        -- hook cleanly removes the ghost
 -- SlinkState struct @ 0x0203F8D0: _rsvd0 (was enforce_rules), pi_armed, pi_oe, pi_count
-MB.PI_COUNT = 0x0203F8D3
+MB.PI_COUNT = R.peer_interact.address + F.SlinkState.offsets.pi_count
 function MB.peer_interact_count() return memory.read_u8(MB.PI_COUNT) end
 
 -- TradeNpcState struct @ 0x0203F8D4 (patch's drive_trade_npc): enable, oeId, mapG, mapN.
 -- The patch spawns/arms/despawns a Pokémon-Center trade NPC whenever `enable`=1 (set by the client
 -- when overworld presence is OFF). Mutually exclusive with the peer ghost (which owns pi_oe when ON).
-MB.TN_ENABLE = 0x0203F8D4
+MB.TN_ENABLE = R.trade_npc.address
 function MB.set_pc_npc(enable)
     if not MB.present() then return false end
     memory.write_u8(MB.TN_ENABLE, enable and 1 or 0)
@@ -346,8 +355,8 @@ end
 
 -- Battle-Calc display kill switch (one byte after TradeNpcState; matches handlers.c SLINK_CALC_OFF).
 -- INVERTED: 0 (EWRAM boot default — no Lua/config) = calc SHOWN; 1 = the battletext shim skips the
--- calc trampoline so the damage display never draws. Plain EWRAM write, safe before the beacon.
-MB.CALC_OFF = 0x0203F8D8
+-- calc trampoline so the damage display never draws. Writes require the ABI2 beacon.
+MB.CALC_OFF = R.calc_off.address
 function MB.set_battle_calc(enable)
     if not MB.present() then return false end
     memory.write_u8(MB.CALC_OFF, enable and 0 or 1)
@@ -359,16 +368,16 @@ end
 -- row is a config bit, not a command, and staging text through the single-slot mailbox would
 -- contend with ghost/trade/msgbox traffic for nothing.
 -- Boot default 0 = no SOULLINK row and the displaced row behaves as stock, so an unpatched-Lua
--- session is indistinguishable from today. Safe to write before the beacon.
-MB.INFO        = 0x0203FD44
-MB.INFO_ENABLE = MB.INFO + 0   -- u8: 1 = splice the SOULLINK row into the START menu
-MB.INFO_OPENED = MB.INFO + 1   -- u8: patch ++ when the row is chosen (poll for the edge)
-MB.INFO_DRAWN  = MB.INFO + 2   -- u8: patch's ack of OPENED
-MB.INFO_LINES  = MB.INFO + 3   -- u8: populated line count, 0..8 (0 = the screen refuses to open)
-MB.INFO_LINE   = MB.INFO + 8   -- u8[8][32]: FR-encoded, 0xFF-terminated
+-- session is indistinguishable from today. Writes require the ABI2 beacon.
+MB.INFO        = R.info.address
+MB.INFO_ENABLE = MB.INFO + F.SlinkInfo.offsets.enable   -- u8: 1 = splice the SOULLINK row into the START menu
+MB.INFO_OPENED = MB.INFO + F.SlinkInfo.offsets.opened   -- u8: patch ++ when the row is chosen (poll for the edge)
+MB.INFO_DRAWN  = MB.INFO + F.SlinkInfo.offsets.drawn   -- u8: patch's ack of OPENED
+MB.INFO_LINES  = MB.INFO + F.SlinkInfo.offsets.lines   -- u8: populated line count, 0..8 (0 = the screen refuses to open)
+MB.INFO_LINE   = MB.INFO + F.SlinkInfo.offsets.line   -- u8[8][32]: FR-encoded, 0xFF-terminated
 MB.OP_SHOW_INFO  = 27
 MB.INFO_MAXLINES = 6    -- body rows that fit at the panel's 13px pitch; the title is a ROM const
-MB.INFO_LINEW    = 32   -- bytes per slot; a line must fit encoded + terminator, so 31 chars max
+MB.INFO_LINEW    = F.SlinkInfo.dimensions.line[2] -- bytes per slot, including terminator
 MB.INFO_PAGESLOT = 7    -- the header's page indicator; `lines` never counts it
 function MB.set_info_enable(enable)
     if not MB.present() then return false end
@@ -429,8 +438,8 @@ function MB.write_info(lines, page, pages)
         local off = MB.INFO_LINE + (i - 1) * MB.INFO_LINEW
         for j = 1, #bytes do memory.write_u8(off + (j - 1), bytes[j]) end
     end
-    memory.write_u8(MB.INFO + 4, page or 0)
-    memory.write_u8(MB.INFO + 5, pages or 1)
+    memory.write_u8(MB.INFO + F.SlinkInfo.offsets.page, page or 0)
+    memory.write_u8(MB.INFO + F.SlinkInfo.offsets.pages, pages or 1)
     -- The page indicator goes in slot 7, which `lines` never counts and the row loop never reads —
     -- the patch draws it right-aligned in the header. Staging it as a slot rather than a new struct
     -- field keeps the EWRAM contract untouched, and an older Lua that never writes it simply leaves
@@ -441,7 +450,7 @@ function MB.write_info(lines, page, pages)
     -- lines LAST: it is the patch's "this panel is ready" gate, so publishing it before the text
     -- would let a frame-hook open race a half-written page.
     memory.write_u8(MB.INFO_LINES, n)
-    memory.write_u8(MB.INFO + 6, (memory.read_u8(MB.INFO + 6) + 1) % 256)   -- gen++
+    memory.write_u8(MB.INFO + F.SlinkInfo.offsets.gen, (memory.read_u8(MB.INFO + F.SlinkInfo.offsets.gen) + 1) % 256)   -- gen++
     return n
 end
 
@@ -454,20 +463,20 @@ function MB.info_result() return MB.read_result_u8(0) end
 
 -- GhostState @ 0x0203F850 (shared with the patch's drive_ghost). Lua writes target/gfx each tick;
 -- the frame hook walks a real object-event toward it natively. Offsets match handlers.c.
-MB.GH        = 0x0203F850
-MB.GH_OEID   = MB.GH + 1   -- u8: hook-owned object-event id (0xFF = not spawned)
-MB.GH_GFX    = MB.GH + 2   -- u8: stand-in graphicsId (avatar overridden after spawn)
-MB.GH_WX     = MB.GH + 6   -- s16: partner WORLD-PIXEL x (sub-pixel target; patch LERPs to it)
-MB.GH_WY     = MB.GH + 8   -- s16: partner WORLD-PIXEL y
-MB.GH_FACE   = MB.GH + 10  -- u8: partner facing 1=S 2=N 3=W 4=E (idle anim)
-MB.GH_MV     = MB.GH + 11  -- u8: 1 = partner moving (play walk/run anim), 0 = idle
-MB.GH_SNAP   = MB.GH + 14  -- u8: Lua sets 1 -> patch jumps the ghost straight to (wx,wy)
-MB.GH_AN     = MB.GH + 15  -- u8: partner's live animNum (exact animation)
-MB.GH_RUN    = MB.GH + 16  -- u8: partner running/biking (1 px/frame walk, 2 px/frame run)
-MB.GH_AVATARDIRTY = MB.GH + 17  -- u8: Lua sets when imgs/anims/palette changed; patch applies
-MB.GH_IMGS   = MB.GH + 20  -- u32: partner's live gSprites[sid].images ROM ptr
-MB.GH_ANIMS  = MB.GH + 24  -- u32: partner's live gSprites[sid].anims  ROM ptr
-MB.GHOST_PAL_BUF   = 0x0203FC60  -- u16[16] BGR555: partner's true OBJ palette (decoded from pcol)
+MB.GH        = R.ghost.address
+MB.GH_OEID   = MB.GH + F.GhostState.offsets.oeId   -- u8: hook-owned object-event id (0xFF = not spawned)
+MB.GH_GFX    = MB.GH + F.GhostState.offsets.gfxId   -- u8: stand-in graphicsId (avatar overridden after spawn)
+MB.GH_WX     = MB.GH + F.GhostState.offsets.wx   -- s16: partner WORLD-PIXEL x (sub-pixel target; patch LERPs to it)
+MB.GH_WY     = MB.GH + F.GhostState.offsets.wy   -- s16: partner WORLD-PIXEL y
+MB.GH_FACE   = MB.GH + F.GhostState.offsets.face  -- u8: partner facing 1=S 2=N 3=W 4=E (idle anim)
+MB.GH_MV     = MB.GH + F.GhostState.offsets.mv  -- u8: 1 = partner moving (play walk/run anim), 0 = idle
+MB.GH_SNAP   = MB.GH + F.GhostState.offsets.snap  -- u8: Lua sets 1 -> patch jumps the ghost straight to (wx,wy)
+MB.GH_AN     = MB.GH + F.GhostState.offsets.an  -- u8: partner's live animNum (exact animation)
+MB.GH_RUN    = MB.GH + F.GhostState.offsets.run  -- u8: partner running/biking (1 px/frame walk, 2 px/frame run)
+MB.GH_AVATARDIRTY = MB.GH + F.GhostState.offsets.avatarDirty  -- u8: Lua sets when imgs/anims/palette changed; patch applies
+MB.GH_IMGS   = MB.GH + F.GhostState.offsets.imgs  -- u32: partner's live gSprites[sid].images ROM ptr
+MB.GH_ANIMS  = MB.GH + F.GhostState.offsets.anims  -- u32: partner's live gSprites[sid].anims  ROM ptr
+MB.GHOST_PAL_BUF   = R.ghost_palette.address  -- u16[16] BGR555: partner's true OBJ palette (decoded from pcol)
 MB.LOCALID   = 0xF0
 -- The player is NOT always object-event slot 0; its slot is gPlayerAvatar.objectEventId.
 MB.GPLAYER_AVATAR = 0x02037078   -- CFRU; objectEventId @ +0x05
@@ -531,13 +540,13 @@ end
 -- real party up, which is frame-exact and threshold-free (replaces the client's >=3-PID-change
 -- overworld heuristic). real_pid = gPlayerParty[0]'s PID at begin (cross-check). Returns nil when the
 -- patch/beacon is absent so the caller falls back to the PID heuristic. Offsets match handlers.c.
-MB.SW = 0x0203F840
+MB.SW = R.swap.address
 function MB.read_swap_state()
     if not MB.present() then return nil end
     return {
-        active   = memory.read_u8(MB.SW + 0),
-        seq      = memory.read_u8(MB.SW + 1),
-        real_pid = memory.read_u32_le(MB.SW + 4),
+        active   = memory.read_u8(MB.SW + F.SwapState.offsets.active),
+        seq      = memory.read_u8(MB.SW + F.SwapState.offsets.seq),
+        real_pid = memory.read_u32_le(MB.SW + F.SwapState.offsets.real_pid),
     }
 end
 
@@ -569,7 +578,7 @@ local function current_context()
     local player_id = memory.read_u8(MB.GPLAYER_AVATAR + 5)
     local player = MB.player_oe()
     return {generation=context_generation, callback2=memory.read_u32_le(0x030030F4),
-            script_lock=memory.read_u8(0x03000F9C), swap_active=memory.read_u8(0x0203F840),
+            script_lock=memory.read_u8(0x03000F9C), swap_active=memory.read_u8(MB.SW + F.SwapState.offsets.active),
             map_group=memory.read_u8(player + 0x0A), map_num=memory.read_u8(player + 0x09),
             player_id=player_id}
 end
@@ -578,7 +587,7 @@ function MB.set_context_generation(value)
     context_generation = value; return true
 end
 local MAX_QUEUED, MAX_RECEIPTS = 128, 128
-local UI_STATE, SCRIPT_LOCK = 0x0203FC80, 0x03000F9C
+local UI_STATE, SCRIPT_LOCK = R.ui.address, 0x03000F9C
 function MB.present()
     local readable, signature = pcall(memory.read_u32_le, MB.BASE + O_SIG)
     if not readable or signature ~= MB.SIG then return false end
@@ -600,9 +609,9 @@ local function capture()
         if not MB.present() or memory.read_u16_le(MB.BASE + O_SEQ) ~= inflight.wire then
             fault = "native_session_changed"; return
         end
-        for i = 0, 7 do
+        for i = 0, L.constants.reservation_bytes - 1 do
             local expected = tonumber(inflight.native_id:sub(i * 2 + 1, i * 2 + 2), 16)
-            if memory.read_u8(MB.BASE + O_ARGS + 24 + i) ~= expected then
+            if memory.read_u8(MB.BASE + O_ARGS + L.constants.reservation_offset + i) ~= expected then
                 fault = "native_reservation_changed"; return
             end
         end
@@ -611,9 +620,9 @@ local function capture()
         if memory.read_u16_le(MB.BASE + O_ACKSEQ) ~= inflight.wire then
             fault = "native_receipt_mismatch"; return
         end
-        for i = 0, 7 do
+        for i = 0, L.constants.reservation_bytes - 1 do
             local expected = tonumber(inflight.native_id:sub(i * 2 + 1, i * 2 + 2), 16)
-            if memory.read_u8(MB.BASE + O_RESULT + 8 + i) ~= expected then
+            if memory.read_u8(MB.BASE + O_RESULT + L.constants.receipt_reservation_offset + i) ~= expected then
                 fault = "native_reservation_receipt_mismatch"; return
             end
         end
@@ -621,7 +630,7 @@ local function capture()
         local r = {token=inflight.token, native_id=inflight.native_id,
                    context_generation=inflight.context and inflight.context.generation or nil, status=st,
                    reason=memory.read_u16_le(MB.BASE + O_REASON), result={}}
-        for i = 0, 15 do r.result[i + 1] = memory.read_u8(MB.BASE + O_RESULT + i) end
+        for i = 0, F.Mailbox.bytes.result - 1 do r.result[i + 1] = memory.read_u8(MB.BASE + O_RESULT + i) end
         if inflight.keep then receipts[inflight.token] = r; receipt_count = receipt_count + 1 end
         last_completion = r
         if durable_ids[inflight.native_id] then durable_ids[inflight.native_id].phase = "completed" end
@@ -658,21 +667,21 @@ local function post(e)
         local base = name == "text" and MB.TEXT_BUF or name == "menu" and MB.MENU_BUF or MB.BLOB_BUF
         for i = 1, #bytes do memory.write_u8(base + i - 1, bytes[i]) end
     end
-    for i = 0, 31 do memory.write_u8(MB.BASE + O_ARGS + i, e.args[i + 1] or 0) end
+    for i = 0, F.Mailbox.bytes.args - 1 do memory.write_u8(MB.BASE + O_ARGS + i, e.args[i + 1] or 0) end
     if e.context then
         local c = e.context
-        memory.write_u8(MB.BASE + O_ARGS + 14, c.map_group)
-        memory.write_u8(MB.BASE + O_ARGS + 15, c.map_num)
-        memory.write_u32_le(MB.BASE + O_ARGS + 16, c.callback2)
-        memory.write_u8(MB.BASE + O_ARGS + 20, c.script_lock)
-        memory.write_u8(MB.BASE + O_ARGS + 21, c.swap_active)
-        memory.write_u8(MB.BASE + O_ARGS + 22, c.player_id)
-        memory.write_u8(MB.BASE + O_ARGS + 23, 0xC2)
+        memory.write_u8(MB.BASE + O_ARGS + L.context_fields.map_group, c.map_group)
+        memory.write_u8(MB.BASE + O_ARGS + L.context_fields.map_num, c.map_num)
+        memory.write_u32_le(MB.BASE + O_ARGS + L.context_fields.callback2, c.callback2)
+        memory.write_u8(MB.BASE + O_ARGS + L.context_fields.script_lock, c.script_lock)
+        memory.write_u8(MB.BASE + O_ARGS + L.context_fields.swap_active, c.swap_active)
+        memory.write_u8(MB.BASE + O_ARGS + L.context_fields.player_id, c.player_id)
+        memory.write_u8(MB.BASE + O_ARGS + L.context_fields.guard, L.constants.context_guard_tag)
     end
-    for i = 0, 7 do
-        memory.write_u8(MB.BASE + O_ARGS + 24 + i, tonumber(e.native_id:sub(i * 2 + 1, i * 2 + 2), 16))
+    for i = 0, L.constants.reservation_bytes - 1 do
+        memory.write_u8(MB.BASE + O_ARGS + L.constants.reservation_offset + i, tonumber(e.native_id:sub(i * 2 + 1, i * 2 + 2), 16))
     end
-    for i = 0, 15 do memory.write_u8(MB.BASE + O_RESULT + i, 0) end
+    for i = 0, F.Mailbox.bytes.result - 1 do memory.write_u8(MB.BASE + O_RESULT + i, 0) end
     memory.write_u16_le(MB.BASE + O_ACKSEQ, (e.wire + 0xFFFF) % 0x10000)
     memory.write_u16_le(MB.BASE + O_REASON, 0)
     memory.write_u16_le(MB.BASE + O_SEQ, e.wire)
@@ -689,7 +698,7 @@ local function prepare(opcode, args, native_id, keep_receipt, durable)
     end
     if fault then return nil, fault end
     args = args or {}
-    if #args > 14 then return nil, "too many native arguments" end
+    if #args > L.constants.argument_bytes then return nil, "too many native arguments" end
     for i = 1, #args do
         if type(args[i]) ~= "number" or args[i] % 1 ~= 0 or args[i] < 0 or args[i] > 255 then
             return nil, "native arguments must be bytes"
@@ -697,7 +706,7 @@ local function prepare(opcode, args, native_id, keep_receipt, durable)
     end
     local payload = snapshot_payload(opcode)
     for name, bytes in pairs(payload) do
-        local limit = name == "text" and 256 or name == "menu" and 112 or 600
+        local limit = name == "text" and R.text.size or name == "menu" and R.choices.size or R.blob.size
         if #bytes > limit then return nil, "oversized native " .. name .. " payload" end
         for i = 1, #bytes do
             local value = bytes[i]
@@ -804,7 +813,8 @@ function MB.read_descriptor(token)
     if status ~= MB.ST_OK then return nil, reason or "pending" end
     local ptr = 0
     for i = 0, 3 do ptr = ptr | (MB.read_result_u8(i) << (8 * i)) end
-    if ptr < 0x08000000 or ptr + 156 > 0x0A000000 then return nil, "invalid descriptor pointer" end
+    local D, DO = F.NativeDescriptor, F.NativeDescriptor.offsets
+    if ptr < L.rom.base or ptr + D.size > L.rom.limit then return nil, "invalid descriptor pointer" end
     local function u16(off) return memory.read_u16_le(ptr + off, "System Bus") end
     local function u32(off) return memory.read_u32_le(ptr + off, "System Bus") end
     local function hexstr(off)
@@ -814,14 +824,17 @@ function MB.read_descriptor(token)
         if not value:match("^[0-9a-f]+$") or memory.read_u8(ptr + off + 64, "System Bus") ~= 0 then return nil end
         return value
     end
-    if u32(0) ~= 0x32444C53 or u16(4) ~= 1 or u16(6) ~= MB.ABI or u32(8) ~= 156
-       or u32(16) ~= MB.BASE or u16(20) ~= 64 or u16(22) ~= 0xA2 then return nil, "descriptor contract mismatch" end
-    local build, layout = hexstr(24), hexstr(89)
+    if u32(DO.magic) ~= L.constants.descriptor_magic or u16(DO.descriptor_version) ~= L.constants.descriptor_version
+       or u16(DO.abi) ~= MB.ABI or u32(DO.size) ~= D.size or u32(DO.mailbox_address) ~= MB.BASE
+       or u16(DO.mailbox_size) ~= R.mailbox.size or u16(DO.storage_guard) ~= L.constants.storage_guard then
+        return nil, "descriptor contract mismatch"
+    end
+    local build, layout = hexstr(DO.build_id), hexstr(DO.layout_sha256)
     if not build or not layout then return nil, "invalid descriptor fingerprint" end
-    local caps = u32(12)
-    return {magic="SLD2", descriptor_version=1, abi=u16(6), build_id=build, layout_sha256=layout,
-            capability_mask=caps, mailbox_address=u32(16), mailbox_size=u16(20), storage_guard=u16(22),
-            capabilities={receipts_v2=(caps & 1) ~= 0, payload_leases=(caps & 2) ~= 0,
-                          storage_guard_v2=(caps & 4) ~= 0, descriptor_v1=(caps & 8) ~= 0, reservation_echo_v2=(caps & 16) ~= 0}}
+    local caps, capabilities = u32(DO.capability_mask), {}
+    for name, bit in pairs(L.capabilities) do capabilities[name] = (caps & bit) ~= 0 end
+    return {magic="SLD2", descriptor_version=L.constants.descriptor_version, abi=u16(DO.abi), build_id=build, layout_sha256=layout,
+            capability_mask=caps, mailbox_address=u32(DO.mailbox_address), mailbox_size=u16(DO.mailbox_size),
+            storage_guard=u16(DO.storage_guard), capabilities=capabilities}
 end
 return MB

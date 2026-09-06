@@ -6,14 +6,14 @@
 #error Native layout fingerprint is required.
 #endif
 const NativeDescriptor slink_native_descriptor = {
-    SLINK_DESCRIPTOR_MAGIC, 1, ABI_VER, sizeof(NativeDescriptor),
-    SLINK_CAPABILITIES, MAILBOX_ADDR, sizeof(Mailbox), 0xA2,
+    SLINK_DESCRIPTOR_MAGIC, SLINK_DESCRIPTOR_VERSION, ABI_VER, sizeof(NativeDescriptor),
+    SLINK_CAPABILITIES, MAILBOX_ADDR, sizeof(Mailbox), SLINK_STORAGE_GUARD,
     SLINK_NATIVE_BUILD_ID, SLINK_NATIVE_LAYOUT_SHA256
 };
 
 void native_mailbox_complete(volatile Mailbox *mailbox, u16 seq, u16 status, u16 reason)
 {
-    for (u32 i = 0; i < 8; i++)
+    for (u32 i = 0; i < SLINK_RESERVATION_BYTES; i++)
         mailbox->result[NATIVE_RECEIPT_RESERVATION_OFFSET + i] = mailbox->args[NATIVE_RESERVATION_OFFSET + i];
     mailbox->reason = reason;
     mailbox->ack_seq = seq;

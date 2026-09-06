@@ -6,7 +6,7 @@ enum {
     RR_STORAGE_IDENTITY = 23, RR_STORAGE_OCCUPIED = 24,
     RR_STORAGE_LAST_USABLE = 25, RR_STORAGE_NOT_DEAD = 26
 };
-#define RR_STORAGE_GUARD_TAG 0xA2u
+#define RR_STORAGE_GUARD_TAG SLINK_STORAGE_GUARD
 static inline u32 rr_guard_word(volatile const u8 *p)
 {
     return (u32)p[0] | ((u32)p[1] << 8) | ((u32)p[2] << 16) | ((u32)p[3] << 24);

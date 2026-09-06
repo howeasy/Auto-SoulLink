@@ -57,7 +57,7 @@ class ProbeHarness(MailboxHarness):
             self.write(0x020373F8 + index, index)
         for bit in range(16):
             self.tile(bit, 1)
-        descriptor = b"SLD2" + bytes(152)
+        descriptor = b"SLD2" + bytes(85) + self.mb.LAYOUT.sha256.encode() + bytes(3)
         for index, value in enumerate(descriptor):
             self.write(0x0837BF04 + index, value)
         self.lua.globals().emu = self.table({"framecount": lambda: self.frame, "frameadvance": self.advance})
@@ -170,6 +170,17 @@ def test_complete_probe_selftest_requires_resources_and_screenshots_without_rele
     assert "resource_normal_lifetime_complete" in harness.assertions
     for item in evidence.screenshots.values():
         assert Path(item.path).read_bytes().startswith(b"\x89PNG")
+
+
+def test_current_probe_refuses_a_legacy_or_different_selected_layout_before_native_requests(tmp_path):
+    harness = ProbeHarness(tmp_path)
+    descriptor = bytes.fromhex(harness.config.descriptor.hex)
+    descriptor = descriptor[:89] + b"0" * 64 + descriptor[153:]
+    harness.config.descriptor.hex = descriptor.hex()
+    before = dict(harness.ram)
+    with pytest.raises(AssertionError, match="resource_layout_matches_selected_descriptor"):
+        harness.run()
+    assert harness.posts == [] and harness.ram == before
 
 
 @pytest.mark.parametrize("fault,assertion", [

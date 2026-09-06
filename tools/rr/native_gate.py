@@ -29,6 +29,7 @@ import argparse
 import hashlib
 import json
 import os
+import posixpath
 import re
 import subprocess
 import zipfile
@@ -36,6 +37,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from patch.tools import native_layout
 from server.lua_literals import lua_string
 from tools.emulator_sandbox import (
     ProcessIdentity,
@@ -219,12 +221,62 @@ def validate_fixture(spec: GateSpec, emulator: dict, rom: dict) -> dict:
     return meta
 
 
+def _validate_generated_layout_closure(spec: GateSpec, native: dict, rom_bytes: bytes) -> None:
+    """New-era manifests opt in explicitly; historical frozen03 stays unchanged."""
+    schema = native.get("layout_contract_schema")
+    if schema is None:
+        generated = "layout_contract_schema" in native or "layout_fingerprint_kind" in native
+        # The linker and native_mailbox.h already existed in legacy builds; the
+        # following four files identify the generated-contract era. Normalize
+        # path spelling so aliases cannot bypass this classification.
+        indicators = {"layout/rr_v2.json", "lua/rr/native_layout.lua",
+                      "src/native_layout_generated.h", "tools/native_layout.py"}
+        for hash_field in ("native_inputs", "native_inputs_canonical"):
+            inputs = native.get(hash_field, {})
+            if not isinstance(inputs, dict):
+                raise SandboxError(f"Native {hash_field} must be a path-to-hash object")
+            for relative in inputs:
+                if not isinstance(relative, str):
+                    raise SandboxError("Native input path must be a string")
+                normalized = posixpath.normpath(relative.replace("\\", "/")).casefold()
+                if any(normalized == marker or normalized.endswith("/" + marker) for marker in indicators):
+                    generated = True
+        if generated:
+            raise SandboxError("Generated native inputs cannot omit their layout contract schema")
+        return
+    if schema != "slink-rr-native-layout-v1" or native.get("layout_fingerprint_kind") != "canonical_complete_layout_json_v1":
+        raise SandboxError("Unsupported generated native layout contract")
+    required = {"lua/rr/native_layout.lua": "../lua/rr/native_layout.lua", "patch/layout/rr_v2.json": "layout/rr_v2.json"}
+    if not required.keys() <= set(spec.source_files):
+        raise SandboxError("Generated layout requires explicit Lua and JSON source closure")
+    policy = "CRLF normalized to LF for embedded build/layout identity; raw native_inputs are provenance"
+    if native.get("text_eol_policy") != policy:
+        raise SandboxError("Generated layout EOL identity policy is missing or unsupported")
+    for relative, key in required.items():
+        raw = child_path(spec.source_root, relative).read_bytes()
+        for hash_field, payload in (("native_inputs", raw), ("native_inputs_canonical", raw.replace(b"\r\n", b"\n"))):
+            hashes = native.get(hash_field)
+            if not isinstance(hashes, dict) or hashes.get(key) != digest(payload):
+                raise SandboxError(f"Generated layout {hash_field} hash mismatch: {relative}")
+    try:
+        document = native_layout.load(child_path(spec.source_root, "patch/layout/rr_v2.json"))
+        if native_layout.fingerprint(document) != native.get("layout_sha256"):
+            raise SandboxError("Selected JSON layout fingerprint differs from manifest")
+        expected_lua = native_layout.render(document)[Path("lua/rr/native_layout.lua")]
+        if child_path(spec.source_root, "lua/rr/native_layout.lua").read_text(encoding="utf-8") != expected_lua:
+            raise SandboxError("Selected generated Lua layout differs from selected JSON")
+        native_layout.verify_descriptor(rom_bytes, native["descriptor_address"], native["build_id"], document)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise SandboxError(f"Generated native layout contract mismatch: {exc}") from exc
+
+
 def _native_descriptor(spec: GateSpec, rom_bytes: bytes) -> dict[str, Any] | None:
     if spec.native_manifest is None:
         return None
     native = _object_file(spec.native_manifest)
     if native.get("rom_sha256") != digest(rom_bytes):
         raise SandboxError("Native build manifest does not match selected ROM bytes")
+    _validate_generated_layout_closure(spec, native, rom_bytes)
     address, size = native.get("descriptor_address"), native.get("descriptor_size")
     if not isinstance(address, int) or not isinstance(size, int) or not 4 <= size <= 4096:
         raise SandboxError("Invalid native descriptor range")

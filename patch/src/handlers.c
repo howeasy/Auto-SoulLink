@@ -1,11 +1,11 @@
 /* SLink companion patch — injected handlers (Thumb, freestanding C).
  *
- * Compiled by arm-none-eabi-gcc and linked at CODE_BASE (0x08378CA8) by slink.ld, so
+ * Compiled by arm-none-eabi-gcc and linked at generated CODE_BASE by slink.ld, so
  * slink_hook() sits exactly where the CallCallbacks hook `bl`s to (build.py writes that
  * 4-byte BL). Runs every frame, all contexts, main-thread. Engine functions are called
  * through fixed-address function pointers (RR preserves base FireRed addresses).
  *
- * Mailbox ABI v1 — see patch/src/ADDRESSES.md.
+ * Mailbox ABI v2 — authoritative layout: patch/layout/rr_v2.json.
  */
 #include "native_mailbox.h"
 #include "rr_storage_guard.h"
@@ -42,7 +42,8 @@ typedef struct {
     volatile u8  armed, battler, move_pos, target;
     volatile u16 seq, frames;
 } ArmedMove;
-#define AM ((ArmedMove *)0x0203F8C0u)
+#define AM ((ArmedMove *)SLINK_ARMED_MOVE_ADDR)
+SLINK_ASSERT_ARMED_MOVE(ArmedMove);
 
 /* Persistent companion-patch state (peer interaction). */
 typedef struct {
@@ -51,7 +52,8 @@ typedef struct {
     volatile u8 pi_oe;           /* ghost object-event id to watch */
     volatile u8 pi_count;        /* ++ on each interact (Lua polls); also shows the box */
 } SlinkState;
-#define SS ((SlinkState *)0x0203F8D0u)
+#define SS ((SlinkState *)SLINK_PEER_INTERACT_ADDR)
+SLINK_ASSERT_SLINK_STATE(SlinkState);
 
 /* Pokémon-Center TRADE NPC (presence-OFF trade entry point). When overworld presence is toggled OFF
  * the peer ghost never spawns, so the talk-to-partner trade trigger disappears. This driver spawns a
@@ -68,13 +70,14 @@ typedef struct {
     volatile u8 mapG;     /* 2  map group the NPC is spawned on (map-change detection) */
     volatile u8 mapN;     /* 3  map num */
 } TradeNpcState;
-#define TN ((TradeNpcState *)0x0203F8D4u)
+#define TN ((TradeNpcState *)SLINK_TRADE_NPC_ADDR)
+SLINK_ASSERT_TRADE_NPC_STATE(TradeNpcState);
 
 /* Battle-Calc display kill switch (one byte right after TradeNpcState, still inside the free gap
  * before SLINK_SCRIPT_BUF 0x0203F8E0). INVERTED semantics: 0 (the EWRAM boot default — i.e. no Lua,
  * no config) = calc SHOWN exactly as today; 1 = the battletext shim skips the calc trampoline, so
  * the damage display never draws. Lua writes it from the server's per-run `battle_calc` toggle. */
-#define SLINK_CALC_OFF 0x0203F8D8u
+#define SLINK_CALC_OFF SLINK_CALC_OFF_ADDR
 #define TN_LOCALID 0xF1u   /* exclusive sentinel (ghost uses 0xF0) */
 
 /* Peer ghost with a native-owned object/sprite/palette. Lua publishes desired
@@ -116,8 +119,8 @@ typedef struct {
                               *    Boot-zero = no lead = the old reach-and-pause behavior. */
     volatile u8 paletteSlot, ownedSprite, lifecycle; /* 41..43: previous tail padding */
 } GhostState;
-#define GH ((GhostState *)0x0203F850u)
-_Static_assert(sizeof(GhostState) == 44, "ghost arena must not grow");
+#define GH ((GhostState *)SLINK_GHOST_ADDR)
+SLINK_ASSERT_GHOST_STATE(GhostState);
 #define GH_F_HAVE_C    0x01u
 #define GH_F_HAVE_DISP 0x02u
 #define GH_LIFE_OWNED 1u
@@ -125,7 +128,7 @@ _Static_assert(sizeof(GhostState) == 44, "ghost arena must not grow");
 #define GH_LIFE_DEFERRED 3u
 /* Partner's live 16-colour OBJ palette (BGR555), decoded by Lua from the `pcol` wire field. Above
  * SLINK_BLOB_BUF (ends 0x0203FC58), below EWRAM end 0x0203FFFF; 2-aligned for u16 colour writes. */
-#define GHOST_PAL_BUF 0x0203FC60u
+#define GHOST_PAL_BUF SLINK_GHOST_PALETTE_ADDR
 
 /* Async native-UI state. The talk-to-partner UI ops (yes/no menu, party chooser, trade scene) all run
  * a multi-frame field script; drive_ui polls until each finishes and acks. Above GHOST_PAL_BUF (16
@@ -142,8 +145,8 @@ typedef struct {
     volatile u8  _pad;
     volatile u32 fieldCb;   /* captured overworld field callback2 (gMain.callback2) */
 } UiState;
-#define MENU ((UiState *)0x0203FC80u)
-_Static_assert(sizeof(UiState) == 12, "UI arena must not grow");
+#define MENU ((UiState *)SLINK_UI_ADDR)
+SLINK_ASSERT_UI_STATE(UiState);
 
 /* In-battle notification state. The native FIELD message box (OP_SHOW_MESSAGE) can't open during a
  * battle, so SLink notifications that fire in battle (a linked mon KO'd, a shiny found mid-battle, ...)
@@ -161,7 +164,8 @@ typedef struct {
     volatile u16 frames;    /* frames left after first shown (counts down to 0 -> stop) */
     volatile u16 _pad2;
 } BattleNotif;
-#define BN ((BattleNotif *)0x0203FD00u)
+#define BN ((BattleNotif *)SLINK_BATTLE_NOTIF_ADDR)
+SLINK_ASSERT_BATTLE_NOTIF(BattleNotif);
 
 /* Event-push ring (native -> Lua). The frame hook OBSERVES battle state natively and pushes events;
  * Lua drains the ring instead of (eventually: in addition to) re-deriving the same facts with
@@ -183,7 +187,8 @@ typedef struct {
     volatile u32 ev[8];     /* 8.. packed events: type | (a << 8) | (b << 16) */
     volatile u16 spc[6];    /* 40.. producer latch: previous species per party slot (ends 0x0203FD44) */
 } EvRing;
-#define EV ((EvRing *)0x0203FD10u)
+#define EV ((EvRing *)SLINK_EVENTS_ADDR)
+SLINK_ASSERT_EV_RING(EvRing);
 #define EV_PLAYER_FAINT 1u  /* a = playerFaintCounter after the bump */
 #define EV_FOE_FAINT    2u  /* a = foeFaintCounter after the bump */
 #define EV_OUTCOME      3u  /* a = gBattleOutcome on its end-of-battle edge (1 won, 2 lost/whiteout, ...) */
@@ -195,11 +200,9 @@ typedef struct {
  * native info screen. This block is the DATA CONTRACT plus the menu hook; the screen itself is
  * a separate step and reads the same struct.
  *
- * ponytail: 0x0203FD44 is the LAST contiguous EWRAM this patch owns — it starts immediately
- * after EvRing (ends 0x0203FD44) and the 700-byte run to 0x0203FFFF is all that is left. This
- * struct takes 264 of it; 436 remain. The next feature reuses a buffer or fragments the interior
- * gaps. That the run is genuinely free is not inferred: lua/tests/test_live_ewramtail.lua paints it
- * and watches all 700 bytes across 7 savestates / 5,100 frames with a live detector self-check.
+ * This retains the historical 264-byte region after EvRing. The generated contract
+ * accounts for the remaining bytes as reserved/unassigned, not proved free. Neither
+ * previous zero-hit probes nor these bounds establish exclusive arena ownership.
  *
  * Every byte's ZERO value must reproduce pre-feature behaviour, because EWRAM boots zeroed and an
  * unpatched-Lua run never writes here:
@@ -218,7 +221,8 @@ typedef struct {
     volatile u8 fadephase;   /* +7 0 = still need to undo the engine's fade, 1 = faded back in */
     volatile u8 line[8][32]; /* +8 FR-encoded, 0xFF-terminated (ends 0x0203FE4C) */
 } SlinkInfo;
-#define SI ((SlinkInfo *)0x0203FD44u)
+#define SI ((SlinkInfo *)SLINK_INFO_ADDR)
+SLINK_ASSERT_SLINK_INFO(SlinkInfo);
 #define INFO_ROWS      6u   /* body rows that fit at the pitch below, in the 104px content area */
 #define INFO_PITCH    13u   /* row pitch = FONT_SMALL's own glyph height, so nothing clips */
 #define INFO_PAGE_SLOT 7u   /* slot 7 holds the header's page indicator; `lines` never counts it */
@@ -264,7 +268,8 @@ typedef struct {
     volatile u8  _pad;
     volatile u32 real_pid;  /* gPlayerParty[0] PID snapshot at begin (real party; Lua cross-check) */
 } SwapState;
-#define SW ((SwapState *)0x0203F840u)
+#define SW ((SwapState *)SLINK_SWAP_ADDR)
+SLINK_ASSERT_SWAP_STATE(SwapState);
 
 #define gMain          0x030030F0u   /* newKeys @ +0x2E (A = 0x0001) */
 #define KEY_A          0x0001u
@@ -456,8 +461,8 @@ typedef void (*FillWinPixRect_t)(u8 win, u8 fill, u16 x, u16 y, u16 w, u16 h);
 static const u8 sColBody[3]  = { 1, 2, 3 };   /* dark gray on white — body text */
 static const u8 sColTitle[3] = { 1, 8, 9 };   /* blue — headers and values */
 static const u8 sColAlert[3] = { 1, 4, 5 };   /* red — a dead mon */
-#define MENU_BUF_LEN   112u                 /* BattleNotif starts at +0x70 */
-#define SLINK_MENU_BUF 0x0203FC90u           /* [u8 count][FR str 0xFF-term]... staged for OP_SHOW_CHOICES */
+#define MENU_BUF_LEN   SLINK_CHOICES_SIZE   /* generated buffer extent */
+#define SLINK_MENU_BUF SLINK_CHOICES_ADDR           /* [u8 count][FR str 0xFF-term]... staged for OP_SHOW_CHOICES */
 /* void BattlePutTextOnWindow(const u8 *frText, u8 windowId) @0x080D87BE — the engine's IN-BATTLE text
  * draw (the bundled RR4.1 Battle Calc detours its prologue to inject damage numbers). General primitive:
  * the engine uses it for the bottom message window AND the move-select window. windowId low 6 bits =
@@ -475,10 +480,10 @@ typedef void (*BattlePutText_t)(const u8 *frText, u8 windowId);
 typedef void (*SetupScript_t)(const u8 *ptr);
 #define ScriptContext1_SetupScript ((SetupScript_t)0x08069AE5u)
 #define sScriptContext2Enabled 0x03000F9Cu   /* u8 != 0 while a field script/dialogue is active */
-#define SLINK_TEXT_BUF   0x0203F900u   /* Lua writes FR-encoded text here before SHOW_MESSAGE */
-#define SLINK_SCRIPT_BUF 0x0203F8E0u   /* EWRAM scratch for our field-script bytecode (largest user:
+#define SLINK_TEXT_BUF   SLINK_TEXT_ADDR   /* Lua writes FR-encoded text here before SHOW_MESSAGE */
+#define SLINK_SCRIPT_BUF SLINK_SCRIPT_ADDR   /* EWRAM scratch for our field-script bytecode (largest user:
                                           run_choices with_text = 18 B; 0x20 free to SLINK_TEXT_BUF) */
-#define SLINK_BLOB_BUF   0x0203FA00u   /* 600 bytes (6x100): Lua stages the partner's raw party-mon
+#define SLINK_BLOB_BUF   SLINK_BLOB_ADDR   /* 600 bytes (6x100): Lua stages the partner's raw party-mon
                                           blobs here before OP_SET_ENEMY_PARTY (Rival Team Swap).
                                           Above SLINK_TEXT_BUF (short field text) and below EWRAM
                                           end 0x0203FFFF (leaves >=0x100 for text, ends 0x0203FC58). */
@@ -520,12 +525,12 @@ static u8 rr_storage_field_ready(void)
     if (R8(gPlayerAvatar + 5) >= 16 || !(R8(player_oe()) & 1)) return 0;
     for (u32 i = 0; i < 16; i++)
         if (rr_postbattle_writer_active((volatile const u8 *)(gTasks + i * 0x28))) return 0;
-    if (MB->args[23] == 0xC2) { /* durable preparation: recheck on the actual apply frame */
+    if (MB->args[SLINK_CONTEXT_GUARD_OFFSET] == SLINK_CONTEXT_GUARD_TAG) { /* durable preparation: recheck on the actual apply frame */
         u32 player = player_oe();
-        if (R8(player + 0x0A) != MB->args[14] || R8(player + 0x09) != MB->args[15]
-            || R32(gMain + 4) != rr_guard_word(MB->args + 16)
-            || R8(sScriptContext2Enabled) != MB->args[20] || SW->active != MB->args[21]
-            || R8(gPlayerAvatar + 5) != MB->args[22]) return 0;
+        if (R8(player + 0x0A) != MB->args[SLINK_CONTEXT_MAP_GROUP_OFFSET] || R8(player + 0x09) != MB->args[SLINK_CONTEXT_MAP_NUM_OFFSET]
+            || R32(gMain + 4) != rr_guard_word(MB->args + SLINK_CONTEXT_CALLBACK2_OFFSET)
+            || R8(sScriptContext2Enabled) != MB->args[SLINK_CONTEXT_SCRIPT_LOCK_OFFSET] || SW->active != MB->args[SLINK_CONTEXT_SWAP_ACTIVE_OFFSET]
+            || R8(gPlayerAvatar + 5) != MB->args[SLINK_CONTEXT_PLAYER_ID_OFFSET]) return 0;
     }
     return 1;
 }
@@ -1596,7 +1601,7 @@ __attribute__((naked, used)) void slink_battletext_hook(void)
         "pop  {r1}                 \n"   /* restore windowId */
         "pop  {r3}                 \n"   /* r3 = saved lr (Thumb-1 POP can't target lr directly) */
         "mov  lr, r3               \n"   /* lr = 0x080D87C2 (so the trampoline returns into the body) */
-        "ldr  r2, =0x0203F8D8      \n"   /* SLINK_CALC_OFF: 1 = hide the Battle Calc display */
+        "ldr  r2, =" SLINK_STRINGIFY(SLINK_CALC_OFF_ADDR) " \n"   /* SLINK_CALC_OFF: 1 = hide the Battle Calc display */
         "ldrb r2, [r2]             \n"
         "cmp  r2, #0               \n"
         "bne  1f                   \n"

@@ -1,5 +1,12 @@
 # Cross-validated addresses — Radical Red (md5 8529f3a45d32bce4da637976fcf269d4)
 
+The authoritative **companion** layout is now [rr_v2.json](../layout/rr_v2.json),
+with generated C/Lua/linker definitions and enforced ABI checks. See
+[NATIVE_LAYOUT_CONTRACT.md](../../docs/rr_reference/NATIVE_LAYOUT_CONTRACT.md).
+Historical gap/tail observations below do not prove free memory; all reserved
+bytes and exclusive arena ownership remain unresolved. Engine addresses remain
+separate binary/source references and must be checked through any RR detours.
+
 Every entry is derived **two ways** (plan §5): a named **symbol source** and the
 **RR binary** itself (capstone via `patch/tools/disasm.py`). Both must agree.
 
@@ -79,7 +86,7 @@ document alone would have clobbered live state.
 | `0x0203FD08` | *8* | — gap |
 | `0x0203FD10` | 52 | `EvRing` |
 | `0x0203FD44` | 264 | `SlinkInfo` — §6 SOULLINK menu/info (see below) |
-| `0x0203FE4C` | *436* | — **free tail, the last contiguous run to `0x0203FFFF`** (what `test_live_ewramtail` now watches) |
+| `0x0203FE4C` | *436* | — reserved/unassigned tail; **not proved free** |
 
 **436 contiguous bytes remain**, plus 111 across seven interior gaps (largest 68 B). When the tail
 is gone the next feature must reuse a buffer or fragment; say so here rather than letting it be
