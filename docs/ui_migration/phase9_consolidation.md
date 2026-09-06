@@ -17,3 +17,13 @@ The root now has its own `.venv`, Calc dependencies and rebuilt browser bundle. 
 Full unit/integration suite: **3897 passed, 2 skipped**, 75.80 seconds. The collected inventory removes three obsolete stream-partial icon checks and retargets three page marker checks to `broadcast/source.html`; it does not remove route or gameplay cases. JavaScript: **13 passed**. Ruff is clean. Canonical input verification: **103 passed**.
 
 The original Phase 7B evidence remains in `phase7b_sources.md`. Final migration qualification still needs the verified Gen 1 randomizer publisher and both required emulator E2E paths. Remaining consolidation includes the shared image-processing utilities, final CSS/dependency review, and any owner-released checkout cleanup after private-input dependencies are resolved.
+
+## Shared assets and dependency follow-up
+
+The board, retained sidebar widgets and broadcast sources now load `images.js` for sprite chroma-key and badge alpha cleanup. The duplicate implementations and old auto-fit/marquee utility are removed. Browser checks observed 73 board sprites and all 16 representative Gen 2 badges processed, with no failed images. Tests cover cached pixels, CORS failures, the badge alpha threshold and temporary URL cleanup.
+
+Removed the obsolete overlay-family CSS while retaining markers still used by Python/Jinja widgets. Layout normalization retains whitespace/case compatibility. Runtime requirements no longer install pytest; development requirements include the runtime group and test/Lua/lint tools. The root Calc bundle rebuilds without the duplicate Barb Barrage warning after the owner-confirmed bounded import `9e315fe` (source `b70b62f`); its eight actual calculator-source regression cases pass.
+
+Latest full suite: **3897 passed, 2 skipped** in 58.81 seconds. Portable selection: **3591 passed, 308 explicit deferrals**. JavaScript: **16 passed**. Ruff is clean. An intermittent MutationObserver error appeared in browser-automation logs during navigation; a temporary main-page error listener did not receive it, and fresh-page polling/interaction checks stayed clean. Keep this observation for the final browser pass; no runtime-code workaround was added.
+
+The required emulator runs are still outstanding. Both owners released the bounded shared-runner isolation correction to this task: the existing Gen3 duo path copies the user's config unchanged, so SaveRAM and several generated test files can collide. Isolate those before launch; the frozen Gen1 default wire-v1 duo remains meaningful for its existing scope and does not need the unpublished configured durable route. Verified randomizer publication remains separately gated.

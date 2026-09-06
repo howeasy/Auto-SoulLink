@@ -1,6 +1,6 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ source_name }}</title><link rel="stylesheet" href="/static/slink.css"><link rel="stylesheet" href="/static/ui-fonts.css"><link rel="stylesheet" href="/static/themes/{{ theme }}.css"><link rel="stylesheet" href="/static/broadcast.css">
-<script src="/static/vendor/htmx.min.js" defer></script><script src="/static/vendor/idiomorph-ext.min.js" defer></script><script src="/static/vendor/overlay-helpers.js" defer></script><script src="/static/poll.js" defer></script><script src="/static/broadcast-source.js" defer></script>
+<script src="/static/vendor/htmx.min.js" defer></script><script src="/static/vendor/idiomorph-ext.min.js" defer></script><script src="/static/images.js" defer></script><script src="/static/poll.js" defer></script><script src="/static/broadcast-source.js" defer></script>
 </head><body class="stream slink-broadcast theme-{{ theme }}" data-fragment-url="{{ fragment_url }}" data-source-revision="{{ revision|default(0) }}" data-saved-source="{{ 'true' if saved_source else 'false' }}">
 {% include '_svg_icons.html' %}{% include 'broadcast/_source_root.html' %}
 <p id="source-error" role="status" hidden>Source temporarily unavailable</p>

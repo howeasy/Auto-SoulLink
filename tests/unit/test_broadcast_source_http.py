@@ -30,6 +30,8 @@ async def test_saved_source_retargets_with_revision_and_never_switches_when_run_
             assert (await client.head("/api/broadcast/sources")).status == 200
             assert (await client.head("/api/broadcast/sources/" + source["id"])).status == 200
             url = "/broadcast/sources/" + source["id"]
+            legacy = await client.get("/runs/run_one/stream/party-a/fragment?layout=%20H%20")
+            assert legacy.status == 200 and "layout-h" in await legacy.text()
             page = await client.get(url)
             assert page.status == 200 and 'data-availability="live"' in await page.text()
             # Calc's real SSE stream must not monopolize the origin while the

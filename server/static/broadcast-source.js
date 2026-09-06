@@ -37,7 +37,7 @@
       if(saved&&Number(incoming.dataset.revision)!==revision){location.reload();return;}
       Idiomorph.morph(root,incoming);
       document.getElementById('source-error').hidden=true;
-      if(window.SLinkOverlay){SLinkOverlay.processSprites();SLinkOverlay.processBadges();}
+      if(window.SLinkImages){SLinkImages.processSprites();SLinkImages.processBadges();}
       fit();
     }catch(_){document.getElementById('source-error').hidden=false;}
   });

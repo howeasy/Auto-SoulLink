@@ -112,7 +112,8 @@ async def serve():
                 server._manager_port = port
                 server.obs_bridge.manager_url = f"http://127.0.0.1:{port}"
             print(json.dumps({"manager": port, "obs": obs_port, "pid": os.getpid(), "fixtures_only": True}), flush=True)
-            await asyncio.Event().wait()
+            # Disposable review helpers clean up even if the caller disconnects.
+            await asyncio.sleep(30 * 60)
         finally:
             for server in servers.values():
                 await server.obs_bridge.close()

@@ -1,19 +1,6 @@
-/* dashboard.js — client-side glue for the per-run status dashboard.
- *
- * Loaded by server.py:_STATUS_HTML with `defer` so it runs after the body
- * markup parses. Refresh is owned by HTMX — the #content div declares
- *   hx-ext="morph" (2s poll; the SSE path was retired)
- *   hx-trigger="sse:ping" hx-swap="morph:outerHTML"
- * — idiomorph preserves <img> identity (data-species) and <details open>
- * state across swaps. This file just handles:
- *
- *   • Sprite background removal (funnotbun chroma-key)
- *   • Mouse-interaction pause via htmx:beforeSwap
- *   • Attempts +/- handler (delegates refresh to htmx.trigger)
- *   • Sort + filter re-application after each swap
- *
- * The calc-preview render is rendered separately by the inline {calc_js}
- * block in _STATUS_HTML because it consumes Python-injected state.
+/* Legacy sidebar/widget interactions retained by the macro smoke pages.
+ * Refresh belongs to HTMX. Image processing lives in images.js and is shared
+ * with the pair board and broadcast sources.
  */
 
 // Idempotence sentinel — base.html loads dashboard.js conditionally on
@@ -27,63 +14,6 @@ if (window._slinkDashInit) {
   window._slinkDashInit = true;
 
 (function() {
-  // Cache processed sprite data URLs by original src to avoid re-processing.
-  var spriteCache = {};
-
-  // Remove solid background from GBA-style sprite PNGs.
-  // Reads top-left pixel as bg color and sets all matching pixels transparent.
-  function removeSpriteBackground(img) {
-    if (img.dataset.bgRemoved || !img.naturalWidth) return;
-    var src = img.src;
-    // Only process funnotbun sprites (they have solid bg; PokeAPI are already transparent).
-    if (src.indexOf('funnotbun') === -1) return;
-    if (spriteCache[src]) {
-      img.src = spriteCache[src];
-      img.dataset.bgRemoved = '1';
-      return;
-    }
-    var c = document.createElement('canvas');
-    c.width = img.naturalWidth;
-    c.height = img.naturalHeight;
-    var ctx = c.getContext('2d');
-    ctx.drawImage(img, 0, 0);
-    try {
-      var data = ctx.getImageData(0, 0, c.width, c.height);
-      var px = data.data;
-      var bgR = px[0], bgG = px[1], bgB = px[2];
-      for (var i = 0; i < px.length; i += 4) {
-        if (px[i] === bgR && px[i + 1] === bgG && px[i + 2] === bgB) {
-          px[i + 3] = 0;
-        }
-      }
-      ctx.putImageData(data, 0, 0);
-      var dataUrl = c.toDataURL();
-      spriteCache[src] = dataUrl;
-      img.src = dataUrl;
-    } catch (e) {
-      // CORS or security error — leave original.
-    }
-    img.dataset.bgRemoved = '1';
-  }
-
-  function processAllSprites() {
-    document.querySelectorAll('img.mon-sprite, img.enc-sprite').forEach(function(img) {
-      if (img.dataset.bgRemoved) return;
-      var origSrc = img.getAttribute('src');
-      if (origSrc && spriteCache[origSrc]) {
-        img.src = spriteCache[origSrc];
-        img.dataset.bgRemoved = '1';
-        return;
-      }
-      if (img.complete && img.naturalWidth) {
-        removeSpriteBackground(img);
-      } else {
-        img.crossOrigin = 'anonymous';
-        img.addEventListener('load', function() { removeSpriteBackground(img); }, { once: true });
-      }
-    });
-  }
-
   // After HTMX swaps in new content, re-run sprite chroma-key + sort + filter
   // + calc-preview pipeline. (DOMContentLoaded covers the initial paint;
   // htmx:afterSettle covers every refresh.)
@@ -91,7 +21,6 @@ if (window._slinkDashInit) {
     if (window._slinkEncSort)   window._slinkEncSort();
     if (window._slinkEncFilter) window._slinkEncFilter();
     if (window._slinkSearch)    window._slinkSearch();
-    processAllSprites();
     if (window._slinkCalcRender) window._slinkCalcRender();
   }
   document.body.addEventListener('htmx:afterSettle', refreshClientUI);
@@ -140,12 +69,12 @@ if (window._slinkDashInit) {
       var rewritten = html.replace(
         /<img\b([^>]*?)\bsrc=(["'])([^"']*funnotbun[^"']*)\2([^>]*)>/g,
         function(match, before, q, src, after) {
-          if (!spriteCache[src]) return match;
+          if (!SLinkImages.cachedSprite(src)) return match;
           changed = true;
           // Drop any existing data-bg-removed in the before/after chunks
           // so we don't end up with duplicates, then re-add it cleanly.
           var clean = (before + after).replace(/\s*data-bg-removed=(["'])[^"']*\1/g, '');
-          return '<img' + clean + ' src=' + q + spriteCache[src] + q + ' data-bg-removed="1">';
+          return '<img' + clean + ' src=' + q + SLinkImages.cachedSprite(src) + q + ' data-bg-removed="1">';
         },
       );
       if (changed) ev.detail.serverResponse = rewritten;
@@ -153,7 +82,6 @@ if (window._slinkDashInit) {
   });
 
   // Initial paint.
-  processAllSprites();
 
   // Attempts +/- adjustor; posts the new count then asks HTMX to refresh.
 })();

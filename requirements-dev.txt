@@ -1,4 +1,10 @@
-# Development-only dependencies (NOT required to run the server).
+-r requirements.txt
+
+# Test runner and asynchronous HTTP tests.
+pytest
+pytest-asyncio
+
+# Development and test dependencies, including the runtime requirements.
 # Install with:  pip install -r requirements-dev.txt
 #
 # ruff — Python linter/formatter. Config lives in ruff.toml.

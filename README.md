@@ -110,29 +110,20 @@ Per-run **native UI & audio toggles** (also in the Run Manager's new-run form; a
 
 ## Web Pages
 
-| Path | Description |
-|------|-------------|
-| `/` | Live status — parties (split or combined linked-pair view), encounters, linked pairs, area states, enemy battle info, and an **Upcoming Key Trainers** panel (RR: next gym leaders/rivals vs party level, with an "Open in Calc" button). HTMX morph swap every 2 s preserves scroll/`<details open>` state. |
-| `/memorial` | Tombstone cards for dead pairs, polled via HTMX |
-| `/obs` | OBS scene trigger configuration — per-player WebSocket connections, draggable priority rules, area-group filter (`group:routes`, `group:caves`, …) |
-| `/twitch` | Twitch bot configuration and activity log |
-| `/debug` | Manual linking, event injection, state toggles, backup rollback |
-| `/stream/` | Stream overlay index — preview and configure all overlays |
-| `/stream/party-a`, `/stream/party-b` | Party cards with HP bars, moves, held item, status ailments, stat stage icons |
-| `/stream/links` | Linked pairs with both mons side-by-side |
-| `/stream/linked-party` | Party filtered to only linked mons |
-| `/stream/deaths` | Death feed with sprites and cause |
-| `/stream/encounters` | Encounter log per area |
-| `/stream/enc-table-a`, `/stream/enc-table-b` | Wild encounter rate table for current area (RR/CFRU) |
-| `/stream/areas` | Area link state grid |
-| `/stream/focus-a`, `/stream/focus-b` | Active battle mon — large sprite, moves, type matchups |
-| `/stream/enemy-focus-a`, `/stream/enemy-focus-b` | Active enemy mon(s) — large sprite, moves, live PP. Singles or doubles. |
-| `/stream/enemy-trainer-a`, `/stream/enemy-trainer-b` | Trainer's full team — PARTY-style autoscroll. |
-| `/stream/ticker` | Scrolling event ticker |
-| `/stream/badges` | Badge display |
-| `/stream/stream-memorial` | Memorial wall for stream |
-| `/calc/` | Radical Red damage calculator with live party bridge |
-| `/patcher` | In-browser companion-ROM patcher — applies `SLink-RR.ups` to a clean Radical Red ROM client-side (nothing uploaded). Also served on the Manager port (8090). |
+The manager brings **Run**, **Broadcast** and **Tools** onto one origin. Choose a run in the rail; its explicit address is `/runs/{run_id}/`. Calc opens in a separate tab with that run's real SSE connection, and Debug opens as a drawer.
+
+| Destination | What it shows |
+|---|---|
+| `/` | Pair board, encounter/trainer details, saved links, Fallen and Log; guided run setup |
+| `/broadcast` | Saved OBS sources and previews, manager-owned OBS rules, per-run Twitch controls |
+| `/tools` | Companion patcher and preparation status; verified Gen 1 randomizer publication remains gated |
+| `/calc/` | Damage calculator with the selected run's party bridge |
+
+In Broadcast, create a source with an explicit run, preset, players, layout and theme, then copy its stable `/broadcast/sources/{source_id}` URL into OBS. Editing or retargeting the source updates an already-open page. Stopped or deleted runs never cause it to select another run. Long lists scroll with speed/pause controls and respect reduced-motion preferences. Sources use transparent canvases and local IBM Plex Sans.
+
+Legacy `/stream/{slug}` pages, fragments and supported query controls remain available: party-a/b, links, linked-party, boxed-links, focus-a/b, enemy-focus-a/b, enemy-trainer-a/b, deaths, attempts, badges-a/b, areas, events, encounters, ticker, enc-table-a/b, area-encounter and stream-memorial. Prefix a legacy URL with `/runs/{run_id}` for explicit run access. `/stream`, `/obs`, `/twitch`, `/patcher`, `/debug` and `/memorial` redirect to their destinations in the shared UI. See [the HTTP reference](docs/REFERENCE.md#http-pages--api).
+
+For development and validation, install `requirements-dev.txt`; it includes runtime requirements, pytest, Ruff and the Lua tooling. Ordinary server installations need only `requirements.txt`.
 
 ## Companion Patch (Radical Red)
 
@@ -140,13 +131,13 @@ An optional UPS patch (`patch/`) injects native SLink support into the Radical R
 
 ## OBS Scene Triggers
 
-Automatically switch OBS scenes based on game events. Configure from the `/obs` page.
+Automatically switch OBS scenes based on game events. Configure them under **Broadcast → OBS automation** (`/obs` remains a compatibility redirect).
 
 ### Setup
 
 1. In OBS, enable **Tools → WebSocket Server Settings** (obs-websocket v5, OBS 28+). Set a port (default 4455) and optional password.
-2. Open `/obs` on the status page, enter the host/port/password for each player's OBS instance, and click **Connect**.
-3. Add trigger rules: choose an event, which player triggers it, which OBS to target, and the scene to switch to.
+2. Open Broadcast → OBS automation and enter the connection settings for the OBS endpoints.
+3. Each manager rule explicitly chooses its source run, triggering player/event, target OBS and scene. Imported legacy rules stay unassigned and disabled until you bind them. Saved overlay sources have independent run selections.
 
 ### Trigger Events
 
@@ -173,7 +164,7 @@ Automatically switch OBS scenes based on game events. Configure from the `/obs` 
 
 ### Priority
 
-Rules are evaluated **top to bottom** — when multiple events fire in the same frame, the highest-ranked rule wins per player. Drag the ⠿ handle to reorder. Changes save automatically.
+For managed runs, rule order resolves competing matches within an event batch for each OBS endpoint. Accepted batches execute in arrival order, serially per endpoint. Configuration revisions and application failures are visible in Broadcast. Runs perform the WebSocket execution; the manager owns the global settings and decisions.
 
 ## Twitch Bot
 

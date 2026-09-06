@@ -88,30 +88,6 @@ def resolve_theme(request: web.Request) -> str:
 
 
 # ── Overlay layout variants ──────────────────────────────────────────────
-# Stream overlays accept ?layout= to pick a body class that reshapes the
-# `#root` container — horizontal, thin-bottom strip, thin sidebar. The
-# class names (`lh` / `lth` / `ltv`) are referenced by the overlay CSS in
-# slink.css.
-
-_LAYOUT_MAP = {
-    "":       "",       # default — no body class
-    "h":      "lh",     # horizontal (party stretches across width)
-    "thin-h": "lth",    # thin horizontal — narrow bottom strip
-    "thin-v": "ltv",    # thin vertical — narrow sidebar
-}
-
-
-def resolve_layout(request: web.Request) -> str:
-    """Return the body-class suffix for the ``?layout=`` query parameter.
-
-    Empty for the default layout; ``lh`` / ``lth`` / ``ltv`` for the
-    horizontal / thin-horizontal / thin-vertical variants. Unknown values
-    fall through to the default (empty string).
-    """
-    requested = request.query.get("layout", "").strip().lower()
-    return _LAYOUT_MAP.get(requested, "")
-
-
 # ── App setup ─────────────────────────────────────────────────────────────────
 
 def setup_templating(app: web.Application) -> None:

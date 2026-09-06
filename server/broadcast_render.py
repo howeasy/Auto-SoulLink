@@ -24,7 +24,7 @@ def legacy_configuration(request, slug):
     if "filter" in controls:
         raw = request.query.get("filter", "")
         controls["filter"] = [item for item in raw.split(",") if item in EVENT_FILTERS] if raw else None
-    layout = request.query.get("layout", "")
+    layout = request.query.get("layout", "").strip().lower()
     return {**alias, "controls": controls, "layout": layout if layout in PRESETS[preset]["layouts"] else "",
             "theme": resolve_theme(request), "name": PRESETS[preset]["name"]}
 
