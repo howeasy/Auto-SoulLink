@@ -1,9 +1,10 @@
 # Inactive pinned execution-hold adapter
 
 `lua/platform_execution.lua` extracts the independently proved MainForm hold
-mechanism into a reusable actuator. **The new adapter and its semaphore have not
-yet been validated in the actual host.** Earlier manual MainForm/arena probes
-establish the underlying field behavior, not physical validation of this module.
+mechanism into a reusable actuator. Its scoped actual-host ownership, pause,
+emergency-hold and stopped-held-script checks are now recorded in
+[the private probe evidence](rr_reference/PLATFORM_EXECUTION_PROBE.md). Earlier
+manual MainForm/arena probes remain separate supporting evidence.
 No RR, RBY, shared state, UI or existing client selects it automatically.
 
 The initial capability is only
@@ -33,7 +34,8 @@ local actuator, reason = Execution.new({
 
 `new` claims an exclusive process lease but does not alter emulation's hold flag.
 It refuses an already-set `BlockFrameAdvance`; a replacement must never adopt
-such a flag merely because a previous Lua owner disappeared.
+such a flag merely because a previous Lua owner disappeared. Actual run29
+verified this refusal after stopping and reloading a separate owner LuaFile.
 
 | Method | Contract |
 |---|---|
@@ -96,7 +98,8 @@ held/failed instance is refused. On failure, the handle remains retained by the
 adapter rather than being silently released. The caller must keep the object
 alive while it owns the process. Host/script shutdown and managed GC may affect
 handle lifetime; a remaining pre-existing host flag still cannot be adopted by
-a replacement. Actual stopped-script behavior remains a required host check.
+a replacement. Stopped-while-held behavior passed the narrow actual run29;
+unheld-owner garbage-collection behavior remains unproved.
 
 ## Failure after release and emergency re-hold
 
@@ -137,7 +140,7 @@ Checking for an already active rewind/tool conflict does not prove interception
 of every future reset/load/debugger path. Admission, identity continuity,
 policy scheduling and native mutation prerequisites remain separate work.
 
-## Tests and remaining private-host validation
+## Tests, actual private-host validation and remaining limits
 
 `tests/unit/test_platform_execution.py` executes the actual Lua module with
 modeled .NET/UI/OS surfaces. It includes same-thread second-owner and same-token
@@ -145,8 +148,9 @@ refusal, independent module reloads, bad semaphore exclusion, identity/tool/core
 conflicts, both pause states, pause changes during holds, pre-existing flags,
 stale owners, lost flags/frames, setter/readback failure, post-release failure,
 unverifiable emergency-stop failure, and actual `control_service.lua` error-path
-integration. These modeled tests do not prove the real named semaphore works
-through the installed NLua/.NET binding.
+integration. These modeled tests alone do not prove the real named semaphore
+works through the installed NLua/.NET binding; actual runs21/23/24/29 supply
+the narrow physical evidence separately.
 
 ```powershell
 python -m pytest tests/unit/test_platform_execution.py tests/unit/test_control_service.py -q
@@ -155,8 +159,9 @@ python -m ruff check tests/unit/test_platform_execution.py
 
 Current result: **31 adapter tests;61 combined tests passed**, Ruff clean.
 
-Before any capability handoff, the validation owner should run a new private
-probe against the pinned actual binaries and freshly attributed fixture:
+The following private checks have now run against the pinned actual binaries and
+freshly attributed fixture. Exact source/result/execution hashes and the retained
+failed attempts are linked above; the adapter code itself did not change:
 
 1. Load this exact module with caller-supplied pins and a new owner nonce; record
    process ID, UI thread ID, module/source hashes and semaphore name.
@@ -176,6 +181,12 @@ probe against the pinned actual binaries and freshly attributed fixture:
 6. Check stopped-script/reload behavior with a retained flag in an isolated
    process. A replacement must refuse it; do not silently clean up an abandoned
    hold to make the test continue. Process teardown is the bound for this case.
+
+Runs21/23 cover the constructor/lease, pause and healthy lifecycle checks; run24
+covers the deliberately cleared flag; run29 covers stopping and reloading a
+separate owner LuaFile. Failed orchestration attempts25–28 remain failures.
+The success does not establish unheld garbage collection or arbitrary other-script
+cooperation. No production binding has selected the adapter.
 
 Use independent hard wall deadlines and preserve partial/failed artifacts. These
 checks validate only this actuator and lease. Reset/load/rewind/debugger barriers

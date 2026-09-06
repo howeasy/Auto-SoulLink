@@ -1,0 +1,238 @@
+{
+  "general_interlock_proved": false,
+  "independent_review": {
+    "all_recorded_assertions_passed": true,
+    "full_resource_release_acceptance": false,
+    "full_visual_release_acceptance": false,
+    "observation": "All61 frames reviewed in order. Running poses and palette remain coherent, with expected peer lag and normal camera scrolling. No obvious sprite corruption in this clip; ghost absent after clear. A new NPC and reflection enter from the left as the camera scrolls.",
+    "owned_cleanup": {
+      "object2_absent": true,
+      "palette3_unreferenced": true,
+      "sprite3_absent": true,
+      "tiles32_through47_free": true
+    },
+    "recording_review_complete": true,
+    "result_and_execution_hashes_checked": true,
+    "reviewer": "root",
+    "running_png_indices_visually_inspected": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60
+    ]
+  },
+  "producer_artifacts": {
+    "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\controlled_producer_30_a\\results\\controlled_load_artifacts\\experiment.json",
+    "sha256": "c966dde6d72fe79bab12445780df9da8343ef76f0f6bd8b85c0cc6fa4b41e924",
+    "size_bytes": 2166
+  },
+  "raw_late_load_return_note": "f243 source omits falsey after_load.returned; call_ok=true and non-success assertion retained. No artifact rewritten.",
+  "release_ready": false,
+  "running_video": {
+    "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\running_component_33_a\\results\\running.mp4",
+    "sha256": "0d7bfb56a6a9c209655f2427291f6a1a801803cc4afa6b2a1c5a64df08a8864c",
+    "size_bytes": 56756
+  },
+  "runs": [
+    {
+      "assertion_count": 61,
+      "classification": "controlled_busy_ping_state_producer",
+      "complete": true,
+      "execution": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\controlled_producer_30_a\\results\\execution.json",
+        "sha256": "6c232cd6fc1887a28f16b662066741e2710fd9e590cea9da87e87219f703cd61",
+        "size_bytes": 209
+      },
+      "identity": {
+        "binding_sha256": "780abc39a8a2c2450509146d588bf470b1c863706b80aa10826c2d158f24821d",
+        "config_sha256": "b5883c5430e1aae88429fe276c0be69cf676b88a1314865e3950a26326e78c04",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "75837c3f53b1fca7713d9277279d9c9d21d388d882fca636e1e60e06df6ad357",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 1659,
+        "player": "a",
+        "probe_options_sha256": "6262651dcffe2adbfda1b9762932135c07d89144d6a18c3069372389dc64f82f",
+        "purpose": "validation",
+        "rom_sha1": "65C6B2739BAB54F8FFDA590D79BA551A0B7BAEC8",
+        "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+        "run_id": "controlled_producer_30",
+        "script_sha256": "f2435ddc8d55e5a7a577e0163877554cc9a1360829b29a7bf521007b6b13fe9d",
+        "source_sha256": "07e6f1d13a471543f67b2e0fbe925a37145e56fede066396d11c45950007f9ad"
+      },
+      "release_ready": false,
+      "result": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\controlled_producer_30_a\\results\\result.json",
+        "sha256": "b65978e6d3350b189704bf1d569997fbea79d769b96875fd1bde19aa3cbe7df0",
+        "size_bytes": 12609
+      },
+      "run_id": "controlled_producer_30"
+    },
+    {
+      "assertion_count": 65,
+      "classification": "controlled_valid_load_preheld",
+      "complete": true,
+      "execution": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\controlled_valid_31_a\\results\\execution.json",
+        "sha256": "0fd3f093168aa4f3ae655bab563cb7966fd4608f398c9670f3e65f285d0dc297",
+        "size_bytes": 209
+      },
+      "identity": {
+        "binding_sha256": "2f8cc9f7da2f3d97c4093411205e5e1c2e1e4aeda3fe8459dbe21078e724049c",
+        "config_sha256": "013bf5d67078d02901e7f77ae9557d8fe0a8605588600ce87b1f8cc9967366f2",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "75837c3f53b1fca7713d9277279d9c9d21d388d882fca636e1e60e06df6ad357",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 1659,
+        "player": "a",
+        "probe_options_sha256": "8c5aec6f9ca467df5f84aa48a7d8e0c762d1719b3bc64dba346bb1710e7d2e91",
+        "purpose": "validation",
+        "rom_sha1": "65C6B2739BAB54F8FFDA590D79BA551A0B7BAEC8",
+        "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+        "run_id": "controlled_valid_31",
+        "script_sha256": "f2435ddc8d55e5a7a577e0163877554cc9a1360829b29a7bf521007b6b13fe9d",
+        "source_sha256": "c66117d2393ff666e463d334fed76aa1d4b8475e704291344006e27ec57a88ca"
+      },
+      "release_ready": false,
+      "result": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\controlled_valid_31_a\\results\\result.json",
+        "sha256": "49a8f9df2cf5b5fa5097479d9b4e72e389fe50cc80dfc5b6111c33907b226692",
+        "size_bytes": 14946
+      },
+      "run_id": "controlled_valid_31"
+    },
+    {
+      "assertion_count": 65,
+      "classification": "controlled_late_failed_load_preheld",
+      "complete": true,
+      "execution": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\controlled_late_failure_32_a\\results\\execution.json",
+        "sha256": "b3ebe29bf72692b8cf3c0b47b1b660816a1b48a471fb3f964bb4e68aaecbe024",
+        "size_bytes": 197
+      },
+      "identity": {
+        "binding_sha256": "0cc8b18a712223974985f3a573ea381dffb23087ea09246443cf9b782df2c861",
+        "config_sha256": "6d7392eb785a4fc911d2e4c68b56afcc22ba1444d5961765b0f2a031362719cd",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "75837c3f53b1fca7713d9277279d9c9d21d388d882fca636e1e60e06df6ad357",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 1659,
+        "player": "a",
+        "probe_options_sha256": "88e2baa38bed529b75a8415f13572b95d45b61a92e52b5a1d070b45b394254c1",
+        "purpose": "validation",
+        "rom_sha1": "65C6B2739BAB54F8FFDA590D79BA551A0B7BAEC8",
+        "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+        "run_id": "controlled_late_failure_32",
+        "script_sha256": "f2435ddc8d55e5a7a577e0163877554cc9a1360829b29a7bf521007b6b13fe9d",
+        "source_sha256": "c66117d2393ff666e463d334fed76aa1d4b8475e704291344006e27ec57a88ca"
+      },
+      "release_ready": false,
+      "result": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\controlled_late_failure_32_a\\results\\result.json",
+        "sha256": "bb58103174395a94055ee1a4bc46c072b4cb451327e24e5567e9b691ede9a7db",
+        "size_bytes": 14869
+      },
+      "run_id": "controlled_late_failure_32"
+    },
+    {
+      "assertion_count": 9213,
+      "classification": "synthetic_single_cartridge_running_component",
+      "complete": true,
+      "execution": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\running_component_33_a\\results\\execution.json",
+        "sha256": "7a0bc1aa6e6981cd9014fe1dfb80b3310b802387cd4200bfbac6e18aa79a50cc",
+        "size_bytes": 207
+      },
+      "identity": {
+        "binding_sha256": "60cf80ef7a814782465a429e4e0b70c1db302725be8bb0a1f9c0325d534e79ff",
+        "config_sha256": "abbac888b902b411ff2b7626e7e294f7f6880fb3bdb3b08ae334354401c22af8",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "75837c3f53b1fca7713d9277279d9c9d21d388d882fca636e1e60e06df6ad357",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 2200,
+        "player": "a",
+        "probe_options_sha256": "dc80504cbf46625ea0e237f0363ada154e2a03a6107a42075216382bec307f99",
+        "purpose": "validation",
+        "rom_sha1": "65C6B2739BAB54F8FFDA590D79BA551A0B7BAEC8",
+        "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+        "run_id": "running_component_33",
+        "script_sha256": "3c5a79c5bdee50a4959fc6b41436212064420f029a5061193d3a3735bb39c6f2",
+        "source_sha256": "5885e723060db948c324f1299cfe218ccb4fadf610dcdb9e8b738d71d23e8957"
+      },
+      "release_ready": false,
+      "result": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\running_component_33_a\\results\\result.json",
+        "sha256": "7070bf6a54867a4c6f4d6d5cacc1af90fe980d41b292299697904b880e72e862",
+        "size_bytes": 1140602
+      },
+      "run_id": "running_component_33"
+    }
+  ],
+  "schema": "slink-rr-controlled-load-running-evidence-v1",
+  "scope": [
+    "Pre-held controlled valid and late-failed load only",
+    "Synthetic single-cartridge running only; no naturalbattle",
+    "Running visual/resource acceptance pending root review"
+  ],
+  "source_index_sha256": "7982ae6ee2ef1e93a75a6d511f4ab644ce182f948a65a9597cb4b37d2c3c5170"
+}
