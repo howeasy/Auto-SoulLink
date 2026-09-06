@@ -18,10 +18,10 @@ allocations, reservations, gameplay/admission decisions or claim that GPU tiles 
 palettes are available. Both `capacity_proof` and `ownership_proof` remain false.
 It is currently selected only by diagnostic tests/probes.
 
-Nine controlled-RAM checks cover fragmentation and invalid/changed/bounded reads.
+Twelve controlled-RAM checks cover fragmentation and invalid/changed/bounded reads.
 An additional unstubbed exact-ROM CPU case runs InitHeap, Alloc and Free, verifies
 the reader against real split/coalesced headers, and checks reduced initialization.
-All10 cases pass. This is a parser/primitive result, not peak gameplay pressure or
+All13 cases pass. This is a parser/primitive result, not peak gameplay pressure or
 approval of the proposed heap-tail arena.
 
 ```powershell

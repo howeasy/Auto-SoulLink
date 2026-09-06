@@ -64,3 +64,28 @@ def test_frame_change_and_bounded_scan_are_unavailable_not_empty_heap():
     frames = iter([123, 124])
     assert heap.read(io, lambda: next(frames)) == (None, "context_changed")
     assert heap.read(io, lambda: 123, 2) == (None, "block_budget_exceeded")
+
+
+@pytest.mark.parametrize("address,value", [(0x03000A38, 0x02000100), (0x03000A3C, 128)])
+def test_heap_root_or_size_change_is_rejected_even_with_constant_frame(address, value):
+    heap, io, _, write = fixture()
+    original = io.read_u32_le
+
+    def read(location):
+        result = original(location)
+        if location == 0x0200005C:
+            write(address, value)
+        return result
+
+    io.read_u32_le = read
+    assert heap.read(io, lambda: 123) == (None, "context_changed")
+
+
+def test_io_failure_cannot_publish_partial_free_capacity():
+    heap, io, _, _ = fixture()
+
+    def failed_read(address):
+        raise RuntimeError("modeled memory read failure")
+
+    io.read_u16_le = failed_read
+    assert heap.read(io, lambda: 123) == (None, "read_failed")
