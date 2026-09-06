@@ -95,6 +95,7 @@ package.loaded["gen3_frlge_locations"] = nil
 package.loaded["hud"]               = nil
 package.loaded["mailbox"]           = nil
 package.loaded["peer_ghost_npc"]    = nil
+package.loaded["rr.peer_position"] = nil
 package.loaded["rr.context"]        = nil
 package.loaded["rr.storage"]        = nil
 package.loaded["rr.observations"]   = nil
@@ -141,8 +142,8 @@ local patch_logged = false   -- latch: log patch presence/absence once (beacon a
 -- PP.was (above) holds the previous frame's beacon state (nil = never sampled); it drives the
 -- config-byte re-assert when the beacon comes (back) up post-reset.
 local pg_send_logged = false -- one-shot: confirm we're broadcasting our overworld position
--- world-pixel calibration (sub-pixel position via the coordOffset delta, captured while idle)
-local pg_align_tx, pg_align_ty, pg_coff_ax, pg_coff_ay = nil, nil, 0, 0
+-- Ground displacement comes from the owned player sprite, independently of camera panning.
+local pg_position = nil -- RR-only helper, loaded on the first RR frame
 local pg_last_sent_wx, pg_last_sent_wy = nil, nil  -- last broadcast world-px (mv = advancing?)
 -- Engine-NPC peer ghost (companion-patch path; no-ops without the patch).
 local ok_pg, PG = pcall(require, "peer_ghost_npc")
@@ -2225,27 +2226,23 @@ local function on_frame()
     -- facing + moving + live animNum ~20 Hz, plus our AVATAR (live sprite images/anims ROM ptrs +
     -- true 16-colour palette) so the partner sees US as ourselves, moving exactly as we move. The
     -- partner's patch LERPs the ghost to our position + plays our animation. No-ops without the patch.
+    if IS_RR then
+        if not pg_position then pg_position = require("rr.peer_position").new(memory) end
+        if not is_overworld or not patch_present() then pg_position.reset() end
+    end
     if IS_RR and is_overworld and patch_present() then
         local OE = MB.player_oe()   -- the player's ACTUAL object-event (not always slot 0)
-        -- Calibrate sub-pixel: while the player is tile-aligned (idle), snapshot (tile, coordOffset);
-        -- world-px = alignTile*16 + (coffAtAlign - coffNow) tracks the smooth scroll between tiles.
-        local coffx = memory.read_s16_le(0x02021BC8)
-        local coffy = memory.read_s16_le(0x02021BCA)
-        local idle  = (memory.read_u8(OE + 0x00) & 0x80) ~= 0   -- heldMovementFinished set
         local ghost_field_active = memory.read_u32_le(0x030030F4) == 0x080565B5
-        if ghost_field_active and (idle or pg_align_tx == nil) then
-            pg_align_tx = memory.read_s16_le(OE + 0x10); pg_align_ty = memory.read_s16_le(OE + 0x12)
-            pg_coff_ax = coffx; pg_coff_ay = coffy
-        end
+        local position = pg_position.sample(OE, ghost_field_active)
+        local idle = position and position.idle
         -- 30 Hz while moving (fresher targets shrink the patch's lead-extrapolation window),
         -- 20 Hz idle (nothing changes; don't double the idle chatter).
-        if ghost_field_active and frame_count % (idle and 3 or 2) == 0 then
+        if position and frame_count % (idle and 3 or 2) == 0 then
             local f = memory.read_u8(OE + 0x18) & 0x0F
             if f < 1 or f > 4 then f = 1 end
             local sid  = memory.read_u8(OE + 0x04)
             local anim = (sid < 64) and memory.read_u8(0x0202063C + sid * 0x44 + 0x2A) or 0
-            local wx = pg_align_tx * 16 + (pg_coff_ax - coffx)   -- sub-pixel world position
-            local wy = pg_align_ty * 16 + (pg_coff_ay - coffy)
+            local wx, wy = position.wx, position.wy
             -- mv means "position actually ADVANCING", not "walk animation playing": a wall bump
             -- is a held movement (not idle) that never moves us, and broadcasting mv=1 for it
             -- makes the partner's ghost lead-extrapolate past us and hold there (the driver

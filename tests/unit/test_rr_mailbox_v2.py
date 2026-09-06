@@ -522,11 +522,13 @@ def test_actual_sender_fragment_carries_gfx16_and_is_field_gated(field):
     h.write(0x02036E38, 0x81)
     h.write(0x02036E38 + 5, 3)
     h.write(0x02036E38 + 0x23, 2)
+    h.write(0x0202063C + 62, 3)  # owned, coordinate-offset sprite
     captured = []
     h.lua.globals().IS_RR = True
     h.lua.globals().is_overworld = True
     h.lua.globals().frame_count = 3
     h.lua.globals().pg_send_logged = True
+    h.lua.globals().pg_position = h.lua.execute((ROOT / "lua/rr/peer_position.lua").read_text()).new(h.lua.globals().memory)
     h.lua.globals().patch_present = lambda: True
     h.lua.globals().send = lambda event, *args: captured.append(event)
     source = (ROOT / "lua/clients/gen3_frlge_client.lua").read_text(encoding="utf-8")
