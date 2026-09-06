@@ -248,3 +248,72 @@ def test_readback_factory_cannot_be_retargeted_by_editing_input_manifest(rr_repo
     h.lua.globals()._withdraw_binding.rom_sha1 = "d" * 40
     h.lua.globals()._withdraw_rom_hash = "d" * 40
     assert storage.classify(body, intent)[0] == "diverged"
+
+
+@pytest.mark.parametrize("change", ["count", "save", "borrowed", "script"])
+def test_receipt_resamples_physical_context_after_hash_work(rr_repo, rom, change):
+    h, storage, body, intent, raw, _ = prepared(rr_repo, rom)
+    assert storage.apply(body, intent)
+    h.engine_storage_effect(withdrawn_party=native_golden(rom, raw))
+    state, proof = storage.classify(body, intent)
+    assert state == "after" and proof.count == 2
+    address, value = {
+        "count": (int(h.M.PARTY_COUNT_ADDR), 1),
+        "save": (h.SB2 + 0xA, 1),
+        "borrowed": (0x0203F840, 1),
+        "script": (0x03000F9C, 1),
+    }[change]
+    h.lua.globals()._late_address, h.lua.globals()._late_value = address, value
+    h.lua.execute("""
+        local original=_withdraw_io.sha256
+        _withdraw_io.sha256=function(raw)
+            local result=original(raw)
+            _RR_RAM[_late_address]=_late_value
+            return result
+        end
+    """)
+    receipt = storage.receipt(body, intent, proof)
+    assert isinstance(receipt, tuple) and receipt[0] is None, change
+    assert storage.classify(body, intent)[0] == "diverged"
+    assert storage.apply(body, intent)[0] is None
+
+
+def test_changed_count_during_record_collection_invalidates_the_snapshot(rr_repo, rom):
+    h, storage, body, intent, raw, _ = prepared(rr_repo, rom)
+    assert storage.apply(body, intent)
+    h.engine_storage_effect(withdrawn_party=native_golden(rom, raw))
+    h.lua.globals()._last_party_byte = int(h.M.PARTY_BASE) + 599
+    h.lua.globals()._count_address = int(h.M.PARTY_COUNT_ADDR)
+    h.lua.execute("""
+        local original=memory.read_u8
+        memory.read_u8=function(address,domain)
+            local value=original(address,domain)
+            if address==_last_party_byte then _RR_RAM[_count_address]=1 end
+            return value
+        end
+    """)
+    state, reason = storage.classify(body, intent)
+    assert state == "diverged" and "during physical readback" in reason
+    assert storage.receipt(body, intent, None)[0] is None
+
+
+@pytest.mark.parametrize("change", ["revoke", "mgm"])
+def test_final_physical_read_does_not_hide_revoked_binding_or_changed_mode(rr_repo, rom, change):
+    h, storage, body, intent, raw, _ = prepared(rr_repo, rom)
+    assert storage.apply(body, intent)
+    h.engine_storage_effect(withdrawn_party=native_golden(rom, raw))
+    h.lua.globals()._last_party_byte = int(h.M.PARTY_BASE) + 599
+    h.lua.globals()._last_read_change = change
+    h.lua.execute("""
+        local original=memory.read_u8
+        memory.read_u8=function(address,domain)
+            local value=original(address,domain)
+            if address==_last_party_byte then
+                if _last_read_change=='revoke' then _withdraw_binding=nil
+                else _RR_RAM[0x0203B25A]=4 end
+            end
+            return value
+        end
+    """)
+    assert storage.classify(body, intent)[0] == "diverged"
+    assert storage.receipt(body, intent, None)[0] is None

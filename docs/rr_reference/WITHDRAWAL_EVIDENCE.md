@@ -94,6 +94,17 @@ expected byte or digest in the serialized intent cannot turn a corrupt record
 into success. A receipt copies its proof so subsequent mutation of the caller's
 intent cannot alter that receipt. Its durability remains `live_ram_only`.
 
+Independent review reproduced a stale-count boundary when a local SHA service
+changed the physical party count during receipt verification. The participant
+now re-samples count/save/ownership after evidence work and again after reading
+physical records. The receipt cannot reuse a count sampled before a yielding
+service. A final `evidence.check_context(proof)` rechecks local admission and mode
+after physical collection without rehashing or deriving another expectation.
+Raw memory and binding readers must be serialized and non-yielding. Raw memory
+collection still requires a non-yielding, exclusively owned
+snapshot or a verified hold; repeated reads cannot make arbitrary concurrent RAM
+writers safe. Local services must not independently advance or modify the game.
+
 An epoch change requires reconciliation and a fresh binding. It cannot silently
 retarget an old intent. This narrow component does not resolve that reconciliation,
 prove current physical ownership of an orphaned BUSY mailbox, validate every

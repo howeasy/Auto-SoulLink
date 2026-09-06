@@ -13,6 +13,10 @@ local function copy(value)
 end
 
 function Storage.new(M, MB, io, context, withdrawal)
+    if withdrawal and (type(withdrawal)~="table" or type(withdrawal.prepare)~="function"
+        or type(withdrawal.verify)~="function" or type(withdrawal.check_context)~="function") then
+        return nil,"complete local withdrawal evidence binding required"
+    end
     local self = {}
     -- Volatile native mailbox ownership only. The durable intent belongs to the
     -- shared command inbox; losing this lease never proves an earlier effect failed.
@@ -154,8 +158,27 @@ function Storage.new(M, MB, io, context, withdrawal)
                 return "diverged","prepared withdrawal destination differs from pinned evidence"
             end
         end
+        -- Local evidence/hash services may have yielded. Do not carry a count,
+        -- save binding or ownership sample across that work into a receipt.
+        current=context.sample()
+        ok,reason=context.storage_readback_prerequisite(current)
+        if not ok then return "diverged",reason end
+        if current.save_fingerprint~=intent.save_fingerprint or current.swap.seq~=intent.swap_seq then
+            return "diverged","save or borrowed-party epoch changed during verification"
+        end
         local actual,boxed=party(),hex_at(M.boxMonAddr(intent.box,intent.pos),58)
         local source_boxed=intent.source_box and hex_at(M.boxMonAddr(intent.source_box,intent.source_pos),58) or nil
+        local final=context.sample()
+        ok,reason=context.storage_readback_prerequisite(final)
+        if not ok then return "diverged",reason end
+        if final.count~=current.count or final.save_fingerprint~=current.save_fingerprint
+            or final.swap.seq~=current.swap.seq then
+            return "diverged","storage context changed during physical readback"
+        end
+        if withdrawal and kind=="withdraw" then
+            ok,reason=withdrawal.check_context(intent.withdrawal)
+            if not ok then return "diverged",reason end
+        end
         if current.count==intent.after_count and boxed==intent.after_box
             and (not source_boxed or source_boxed==EMPTY_BOX) then
             local matches=same(actual,intent.after_party)
@@ -217,7 +240,9 @@ end
 -- Keep legacy new() explicit until loader/admission integration is validated.
 function Storage.new_verified(M, MB, io, context, withdrawal)
     if type(withdrawal)~="table" or type(withdrawal.prepare)~="function"
-        or type(withdrawal.verify)~="function" then return nil,"verified withdrawal binding required" end
+        or type(withdrawal.verify)~="function" or type(withdrawal.check_context)~="function" then
+        return nil,"verified withdrawal binding required"
+    end
     return Storage.new(M, MB, io, context, withdrawal)
 end
 return Storage

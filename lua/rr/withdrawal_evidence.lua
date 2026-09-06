@@ -147,6 +147,16 @@ function Evidence.new(io, revision)
             if not same(proof,value) then return false,"withdrawal evidence/context differs from preparation" end
             return true
         end
+        function self.check_context(proof)
+            -- Cheap final readback boundary: no hashing or re-derivation. Local
+            -- raw readers/binding services must be serialized and non-yielding.
+            local checked,value=pcall(context)
+            if not checked then return false,tostring(value) end
+            if type(proof)~="table" or not same(proof.context,value) then
+                return false,"withdrawal context changed during physical readback"
+            end
+            return true
+        end
         return self
     end)
     if not ok then return nil,tostring(result) end
