@@ -19,7 +19,8 @@ def test_unparseable_config_does_not_fall_back_when_isolation_is_required(tmp_pa
     assert not destination.exists()
 
 
-def test_single_player_gate_redirects_saves_and_preserves_user_data(tmp_path, monkeypatch):
+@pytest.mark.parametrize("override", [False, True])
+def test_single_player_gate_redirects_saves_and_preserves_user_data(tmp_path, monkeypatch, override):
     repo = tmp_path / "worktree"
     build = repo / "patch/build"
     build.mkdir(parents=True)
@@ -28,9 +29,13 @@ def test_single_player_gate_redirects_saves_and_preserves_user_data(tmp_path, mo
     sentinel = user_saves / "Pokemon - Red Version (USA, Europe).SaveRAM"
     sentinel.write_bytes(b"user progress")
     config = tmp_path / "user-config.ini"
-    config.write_text(json.dumps({"PathEntries": {"Paths": [
+    config.write_text(json.dumps({"Rewind": {"Enabled": True}, "PathEntries": {"Paths": [
         {"System": "GB_GBC_SGB", "Type": "Save RAM", "Path": str(user_saves)}]}}))
     original_config = config.read_bytes()
+    private_config = tmp_path / "probe-config.ini"
+    private = json.loads(original_config)
+    private["Rewind"]["Enabled"] = False
+    private_config.write_text(json.dumps(private))
     emulator = tmp_path / "EmuHawk.exe"
     emulator.touch()
     monkeypatch.setattr(gate, "REPO", str(repo))
@@ -55,6 +60,7 @@ def test_single_player_gate_redirects_saves_and_preserves_user_data(tmp_path, mo
         def __init__(self, cmd, **kwargs):
             cfg_arg = next(arg for arg in cmd if arg.startswith("--config="))
             cfg = json.loads((repo / cfg_arg.split("=", 1)[1]).read_text())
+            assert cfg["Rewind"]["Enabled"] is not override
             assert cfg["PathEntries"]["Paths"][0]["Path"] == str(destinations[-1]).replace("\\", "/")
             result.write_text("RESULT: PASS proof\n")
 
@@ -63,7 +69,10 @@ def test_single_player_gate_redirects_saves_and_preserves_user_data(tmp_path, mo
 
     monkeypatch.setattr(gate.subprocess, "Popen", Process)
     for _ in range(2):
-        assert gate.run_gate("unused.lua", quiet=True)[0]
+        options = {"config_base": str(private_config)} if override else {}
+        assert gate.run_gate("unused.lua", quiet=True, **options)[0]
     assert destinations[0] != destinations[1]
     assert sentinel.read_bytes() == b"user progress"
     assert config.read_bytes() == original_config
+    assert json.loads(private_config.read_text()) == private
+    assert gate.BIZHAWK_CONFIG == str(config)

@@ -168,7 +168,7 @@ def seed_saveram(rom_key: str, target: str, dest_dir: str | None = None) -> str:
     return dst
 
 
-def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
+def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *, config_base=None):
     """Run one gate. Returns (passed, result_path, text)."""
     if not os.path.exists(EMUHAWK):
         raise FileNotFoundError(f"EmuHawk not found at {EMUHAWK} (set $SLINK_EMUHAWK)")
@@ -180,8 +180,9 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
     run_dir = tempfile.mkdtemp(prefix=f"gb-gate-{rom_key}-", dir=BUILD)
     run_saveram = os.path.join(run_dir, "SaveRAM")
     os.makedirs(run_saveram)
-    if not os.path.isfile(BIZHAWK_CONFIG):
-        raise FileNotFoundError(f"BizHawk config required for isolated SaveRAM: {BIZHAWK_CONFIG}")
+    base_config = BIZHAWK_CONFIG if config_base is None else config_base
+    if not os.path.isfile(base_config):
+        raise FileNotFoundError(f"BizHawk config required for isolated SaveRAM: {base_config}")
 
     if rom_key in spec["patched"]:
         base_key, rom_rel, saveram_name = spec["patched"][rom_key]
@@ -209,7 +210,7 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
 
     tag = os.path.splitext(os.path.basename(script))[0]
     cfg_rel = os.path.relpath(os.path.join(run_dir, "config.ini"), REPO)
-    write_run_config(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel), saveram_dir=run_saveram)
+    write_run_config(base_config, os.path.join(REPO, cfg_rel), saveram_dir=run_saveram)
 
     env = dict(os.environ, SLINK_ROOT=REPO.replace("\\", "/"))
     cmd = [EMUHAWK, f"--lua={script}"]
