@@ -51,6 +51,14 @@ They do not activate the production RR or Gen1 durable runtime by their existenc
 - Actual callback capability run19 demonstrated exact-address read/write/execute
   hooks and their overlap duplication. Wildcard registrations returned zero GUIDs
   and were correctly rejected before measurement.
+- Actual arena run20 installed and removed all **2,199 exact write-start hooks and
+  11 execution hooks**, measuring exactly one frame. Setup and cleanup holds were
+  verified, with no trace drops or outside-window callbacks. Its nine raw rows
+  include overlapping callback duplicates. Zero allocator-entry hits in that
+  single frame do not establish ownership; read/mirror/host-write coverage and
+  definitive DMA/source attribution remain outside that lane.
+- Gen1 reused the identity primitive unchanged: its 52 shared tests plus 13
+  additional RBY ownership/evolution/pending-death contract cases passed.
 
 Frozen candidate03: ROM SHA-256
 `3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301`,
@@ -63,6 +71,7 @@ Private capture root on the validation host:
 `C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/`.
 Important captures are `fixture_host_09`, `fixture_paused_11`,
 `fixture_candidate03_12`, `ghost_resource_18`, and `callback_capability_19`.
+The exact write-only arena measurement is `arena_exact_20`.
 Each has its own player directory, immutable inputs, result and provenance.
 The failed harness/oracle runs were retained; they were not relabeled as passes.
 
