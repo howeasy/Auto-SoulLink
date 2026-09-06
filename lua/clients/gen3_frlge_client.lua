@@ -100,6 +100,7 @@ package.loaded["rr.context"]        = nil
 package.loaded["rr.storage"]        = nil
 package.loaded["rr.observations"]   = nil
 package.loaded["rr.battle_snapshot"] = nil
+package.loaded["rr.explosion"]     = nil
 
 local M     = require("memory_gba")
 local C     = require("connector")
@@ -384,8 +385,9 @@ local RR = nil
 if IS_RR then
     local context = require("rr.context").new(M, MB, memory)
     RR = {context=context, storage=require("rr.storage").new(M, MB, memory, context),
-        battle_snapshot=require("rr.battle_snapshot")}
+        battle_snapshot=require("rr.battle_snapshot"), explosion=require("rr.explosion").new(M,memory,context)}
     RR.frame = context.sample()
+    RR.explosion.begin_frame(RR.frame,emu.framecount())
     RR.baseline_established = RR.frame.party_observable
 end
 local val_ok, val_err = M.validateROM()
@@ -505,7 +507,9 @@ local pending_battle_faints = {}  -- [monKey] → true
 -- elapses (in which case M.forceFaint is invoked as a safety net — covers the
 -- Damp ability, type immunities that no-op the move, or player stalling).
 local EXPLOSION_FALLBACK_FRAMES = 600  -- ~10s @ 60fps
-local pending_explosions = {}          -- [monKey] → {slot, battler, start_frame}
+-- RR entries retain immutable wire identity/save/observed battle continuity;
+-- non-RR compatibility entries retain the legacy {slot,battler,start_frame}.
+local pending_explosions = {}
 
 -- NOTE — there is deliberately NO native battle-control path here.  The patch's
 -- OP_FORCE_MOVE_SLOT controller-pointer swap failed in real two-sided play: the swap did not
@@ -738,6 +742,13 @@ local function dispatch_commands(cmds)
             -- may be sent the same frame, and the single-slot mailbox would otherwise clobber one opcode.
             if native_sfx_enabled and patch_present() and not M.isInBattle() then MB.play_se(c.sound)
             else M.playSE(c.sound) end
+        elseif c.cmd=="force_explode" and c.key and RR then
+            if c.nickname and c.nickname~="" then nick_cache[c.key]=c.nickname end
+            -- Local key deduplication only. It cannot recover semantic command
+            -- identity after a reload; the durable coordinator remains inactive.
+            if not pending_explosions[c.key] and not force_fainted_keys[c.key] then
+                pending_explosions[c.key]=RR.explosion.request(c.key)
+            end
         elseif (c.cmd == "force_faint" or c.cmd == "force_explode") and c.key then
             if RR and RR.suppressed_frame then RR.suppressed_frame[c.key]="external" end
             -- Populate nick_cache from server-provided nickname (for mons not in our party yet).
@@ -1957,6 +1968,7 @@ local function on_frame()
     M.refreshPartyAddrs()
     if RR then
         RR.frame = RR.context.sample()
+        RR.explosion.begin_frame(RR.frame,emu.framecount())
         if not RR.frame.patch_present then writes_enabled = false end
         RR.native_events={}
         RR.suppressed_frame={}
@@ -2464,6 +2476,28 @@ local function on_frame()
     --   • If the fallback timer elapsed and HP is still > 0 (Damp ability, type
     --     immunity, player stalling), fall back to the legacy deferred-faint path.
     if next(pending_explosions) and writes_enabled then
+        if RR then
+            for key,request in pairs(pending_explosions) do
+                local result=RR.explosion.advance(key,request,frame_count,
+                    pending_storage or pending_memorialize or pending_trade_apply)
+                if result and result.effect=="armed" then
+                    RR.suppressed_frame[key]="engine"
+                    M.playSE(M.SE_LINKED_KO)
+                    show_fallback("!! "..nick_label(key).." BOOM!","hud",255,80,80,360)
+                    console.log(string.format("[SLink-FRLGE] EXPLOSION armed key=%s slot=%d battler=%d",
+                        key,result.slot,result.battler))
+                elseif result and result.effect=="settled" then
+                    RR.suppressed_frame[key]=result.cause
+                    _battle_hp_cache[key]={hp=0,maxHP=mem_u16(result.base+M.OFF_MAX_HP),level=mem_u8(result.base+M.OFF_LEVEL)}
+                    force_fainted_keys[key]=true;pending_explosions[key]=nil
+                    console.log(string.format("[SLink-FRLGE] EXPLOSION settled key=%s slot=%d fallback=%s",
+                        key,result.slot,tostring(result.timeout)))
+                elseif request.blocked and request.blocked~=request.logged_block then
+                    request.logged_block=request.blocked
+                    console.log("[SLink-FRLGE] EXPLOSION pending key="..key..": "..request.blocked)
+                end
+            end
+        else
         local active_slot  = -1
         local active_slot2 = -1
         if in_battle and M.BATTLER_PARTY_INDEXES_ADDR then
@@ -2541,6 +2575,7 @@ local function on_frame()
                     st.slot, st.battler, key))
             end
         end
+        end -- legacy non-RR Explosion settlement
     end
 
     -- 4a-quater. Settle the native Rival Team Swap (OP_SET_ENEMY_PARTY).  The patch's blob copy is
@@ -3174,7 +3209,9 @@ local function on_frame()
         local suppressed={}
         for key in pairs(force_fainted_keys) do suppressed[key]="external" end
         for key in pairs(pending_battle_faints) do suppressed[key]="external" end
-        for key in pairs(pending_explosions) do suppressed[key]="engine" end
+        for key,request in pairs(pending_explosions) do
+            suppressed[key]=request.phase=="armed" and "engine" or "external"
+        end
         for key,cause in pairs(RR.suppressed_frame) do suppressed[key]=cause end
         local settled_zero={}
         local field_readback=observable and not in_battle and RR.context.storage_readback_prerequisite(RR.frame)
@@ -3203,7 +3240,7 @@ local function on_frame()
             borrowed_battle    = false
             _battle_hp_cache   = {}  -- discard borrowed mon HP
             pending_battle_faints = {}  -- discard any deferred faints from borrowed battle
-            pending_explosions    = {}  -- discard any coerced-Explosion state
+            if not RR then pending_explosions={} end -- RR obligations survive borrowed cleanup
             force_fainted_keys    = {}  -- clear battle-scoped guard
             pending_faint_debounce = {}  -- clear any debounce state
             battle_start_player_faints  = nil
@@ -3216,7 +3253,7 @@ local function on_frame()
         else
         _battle_hp_cache   = {}  -- clear cache
         pending_battle_faints = {}  -- all deferred faints should be flushed by now
-        pending_explosions    = {}  -- all coerced-Explosion entries settled by now
+        if not RR then pending_explosions={} end -- unresolved RR obligations must not be discarded
         force_fainted_keys    = {}  -- clear battle-scoped guard
         pending_faint_debounce = {}  -- clear any debounce state
         battle_start_player_faints  = nil
@@ -3782,7 +3819,10 @@ local function on_frame()
                             pending_battle_faints[new_k] = true
                             pending_battle_faints[old_k] = nil
                         end
-                        if pending_explosions[old_k] then
+                        -- A heuristic nature/PID match cannot retarget an RR
+                        -- death obligation. Preserve its original wire identity
+                        -- until an explicit identity reconciliation is available.
+                        if pending_explosions[old_k] and not RR then
                             pending_explosions[new_k] = pending_explosions[old_k]
                             pending_explosions[old_k] = nil
                         end

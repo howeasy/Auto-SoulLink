@@ -250,6 +250,8 @@ def test_engine_explosion_zero_consumes_native_ordinal_without_echo(rr_repo):
     h = RRHarness(rr_repo, party=(111, 333, 555))
     h.step()
     h.set_battle(True)
+    h.seed_u32(h.M.BATTLE_STRUCT_PTR_ADDR, 0x02018000)
+    h.seed_u32(h.M.BATTLE_MAIN_FUNC_ADDR, 0x08014041)
     h.step()
     h.command("force_explode", key=h.key(111))
     h.step()
