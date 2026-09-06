@@ -31,8 +31,12 @@ Optimistic state revision checks therefore cover record writes as well.
 record(namespace, key) returns a detached RecordSnapshot(revision, value), or
 None when absent. record_history(namespace, key, after_revision=0, limit=128)
 returns a bounded ascending list with the same checked objects.
-Reads validate canonical encoding, stored SHA-256, capability binding and that
-no record is newer than the current state snapshot.
+Returned documents are checked for canonical encoding and stored SHA-256.
+Both read APIs also validate capability binding and the complete scoped revision
+history. Every stored record revision must have SQLite
+integer type and lie in1..current snapshot revision. Validation precedes the
+effective pagination boundary, so a newer valid row or an after_revision filter
+cannot hide a zero, negative, fractional, text or future revision.
 
 Exact semantic operation replay returns the original event receipt without
 appending another record or command. A failed ACK, outbox-capacity check, record

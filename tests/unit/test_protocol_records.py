@@ -133,3 +133,27 @@ def test_invalid_record_writes_leave_snapshot_and_outbox_untouched(tmp_path, cha
         assert journal._db.execute("SELECT count(*) FROM records").fetchone()[0] == 0
     finally:
         journal.close()
+
+
+@pytest.mark.parametrize("revision", [-1, 0, 1.5, "invalid", 100])
+@pytest.mark.parametrize("hidden_by_newer_record", [False, True])
+def test_invalid_committed_revision_is_rejected_even_outside_requested_history(tmp_path, revision, hidden_by_newer_record):
+    journal = open_journal(tmp_path / "run.sqlite3")
+    try:
+        journal.bootstrap({"active": None})
+        commit(journal, "4"*32, revision=0, value="offered")
+        if hidden_by_newer_record:
+            commit(journal, "5"*32, revision=1, value="accepted")
+        else:
+            journal.commit("a", "5"*32, {"event": "unrelated"}, expected_revision=1,
+                state={"active": KEY}, commands={"a": [], "b": []}, result={"ack": "ACK"})
+        journal._db.execute("UPDATE records SET revision=? WHERE revision=1", (revision,))
+        before = journal.snapshot()
+        with pytest.raises(JournalError):
+            journal.record("native-trade", KEY)
+        for after in (0, 200):
+            with pytest.raises(JournalError):
+                journal.record_history("native-trade", KEY, after_revision=after, limit=1)
+        assert journal.snapshot() == before
+    finally:
+        journal.close()

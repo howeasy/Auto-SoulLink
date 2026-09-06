@@ -322,12 +322,33 @@ class ProtocolJournal:
             (namespace, key)).fetchone()
         if row is None:
             return None
-        capability = self._db.execute("SELECT value FROM metadata WHERE name='atomic_records'").fetchone()
-        if capability is None or capability[0] != "v1":
-            raise JournalError("atomic record capability marker is missing or unsupported")
-        if row["revision"] > self.snapshot().revision:
-            raise JournalError("component record is newer than its state snapshot")
+        current = self._record_revision_limit(namespace, key)
+        return self._checked_record(row, current)
+
+    @staticmethod
+    def _checked_record(row, current):
+        if type(row["revision"]) is not int or not 1 <= row["revision"] <= current:
+            raise JournalError("component record has an invalid committed revision")
         return RecordSnapshot(row["revision"], _decode(row["body"], row["digest"]))
+
+    def _record_revision_limit(self, namespace, key):
+        # Validate the entire scoped history before pagination can hide a bad
+        # revision. SQLite INTEGER affinity still permits REAL or TEXT values.
+        bounds = self._db.execute("""SELECT MAX(revision) AS latest,
+            MAX(CASE WHEN typeof(revision) != 'integer' OR revision < 1 THEN 1 ELSE 0 END) AS invalid
+            FROM records WHERE namespace=? AND record_key=?""", (namespace, key)).fetchone()
+        if bounds["invalid"]:
+            raise JournalError("component record has an invalid committed revision")
+        current = self.snapshot().revision
+        if type(current) is not int or current < 0:
+            raise JournalError("invalid committed state revision")
+        if bounds["latest"] is not None:
+            marker = self._db.execute("SELECT value FROM metadata WHERE name='atomic_records'").fetchone()
+            if marker is None or marker[0] != "v1":
+                raise JournalError("atomic record capability marker is missing or unsupported")
+            if bounds["latest"] > current:
+                raise JournalError("component record is newer than its state snapshot")
+        return current
 
     def record_history(self, namespace, key, *, after_revision=0, limit=128):
         """Bounded checked audit reads; never remove old component revisions."""
@@ -338,14 +359,8 @@ class ProtocolJournal:
         rows = self._db.execute(
             "SELECT * FROM records WHERE namespace=? AND record_key=? AND revision>? ORDER BY revision LIMIT ?",
             (namespace, key, after_revision, limit)).fetchall()
-        if rows:
-            marker = self._db.execute("SELECT value FROM metadata WHERE name='atomic_records'").fetchone()
-            if marker is None or marker[0] != "v1":
-                raise JournalError("atomic record capability marker is missing or unsupported")
-        current = self.snapshot().revision
-        if any(row["revision"] > current for row in rows):
-            raise JournalError("component record is newer than its state snapshot")
-        return [RecordSnapshot(row["revision"], _decode(row["body"], row["digest"])) for row in rows]
+        current = self._record_revision_limit(namespace, key)
+        return [self._checked_record(row, current) for row in rows]
 
     def pending(self, player, *, limit=128, max_bytes=MAX_JSON_BYTES):
         _player(player)
