@@ -6,6 +6,7 @@ on:
 
 jobs:
   test:
+    name: Portable unit + integration (not release validation)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +29,15 @@ jobs:
         run: ruff check . --statistics || true
       - name: Lua syntax (all lua/**/*.lua parse under 5.4)
         run: python tools/lua_syntax_check.py
-      # tests/live and tests/e2e need EmuHawk + a patched ROM, so they are not run here;
-      # their markers are registered in pytest.ini and they skip without SLINK_LIVE/SLINK_E2E.
-      - name: Unit + integration tests
-        run: pytest tests/unit tests/integration -q
+      # Every unit/integration node has an exact reviewed classification. Local
+      # ROM/source/JAR and platform cases are named deferrals, never CI passes.
+      # The strict local Gen 1 release runner remains a separate required gate.
+      - name: Portable unit + integration tests
+        run: python tools/verify_portable_ci.py
+      - name: Preserve coverage and deferral report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portable-ci-report
+          path: .cache/portable-ci/report.json
+          if-no-files-found: error
