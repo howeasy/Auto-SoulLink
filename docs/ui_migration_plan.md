@@ -139,7 +139,7 @@ Completion requires the working board and refinements, reusable broadcast system
 | Phase 1 | Guard rails implemented and locally verified | [Rendering contracts](ui_migration/phase1_guards.md): 3703 full-suite passes / 3 documented skips; portable lane 3398 selected passes / 308 named deferrals; browser checks preserved disclosure/filter state across completed refreshes. |
 | Phase 2 | Verified cleanup implemented | [Cleanup evidence](ui_migration/phase2_cleanup.md): unchanged hydrated render output; 3703 full-suite passes / 3 skips; portable 3398 selected passes / 308 named deferrals. |
 | Phase 3 | Projection implemented; owner patches integrated | [Projection evidence](ui_migration/phase3_projection.md): per-player capabilities and mon enrichment, detached nested containers, unchanged unknown lifecycle facts; owner commits `8f97ea0` and `dbad8d5` merged without conflicts. |
-| Phases 4-9 | Next: equivalent template extraction | Phase 8 and unavailable runtime mutation controls retain their separate gates; no release-readiness claim. |
+| Phases 4-9 | Next: equivalent template extraction | [Extraction acceptance](ui_migration/phase4_acceptance.md) retains RR-U01/U02 calculator browser/move-name requirements. Phase 8 and unavailable runtime mutation controls retain their separate gates; no release-readiness claim. |
 | Additional preparation | Prepared independently while waiting | [Preparation packet](ui_migration/prep.md), hashed route/overlay/mockup inventory, offline inventory comparison command, and acceptance scenarios agreed with Gen1/RR owners. No production behavior changes or Phase 1 dashboard guards. |
 
 Track A skips: three battery-save scenario exclusions, five SVG/template exclusions,
