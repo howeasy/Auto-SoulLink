@@ -494,6 +494,9 @@ class DuoRun:
                 write_run_config(BIZHAWK_CONFIG, str(prepared), saveram_dir=self._saveram_dir(inst))
                 config = json.loads(prepared.read_text(encoding="utf-8-sig"))
             config = isolated_config(config, private, "mGBA")
+            if getattr(self.args, "keep_alive", False):
+                config["MainWindowPosition"] = base.get("MainWindowPosition") or "100, 100"
+                config["MainWindowMaximized"] = bool(base.get("MainWindowMaximized", False))
             if self.battery_boot:
                 for entry in config["PathEntries"]["Paths"]:
                     if entry.get("Type") == "Save RAM" and entry.get("System") in ("GB_GBC_SGB", "GBL"):
@@ -549,7 +552,8 @@ class DuoRun:
         (self._created_data_dir / "input-manifest.json").write_bytes(json_bytes({"schema": 1, "files": self._inputs,
             "save_directories": [{"path": str(path), "names": names} for path, names in self._protected_save_dirs.items()]}))
         for command in launches:
-            process = subprocess.Popen(command, cwd=REPO, **hidden_process_kwargs())
+            process = subprocess.Popen(command, cwd=REPO,
+                **({} if getattr(self.args, "keep_alive", False) else hidden_process_kwargs()))
             self.emus.append(process)
             self._remember_process(process)
         print("[duo] two isolated EmuHawk instances launched")

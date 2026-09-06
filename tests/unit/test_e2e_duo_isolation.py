@@ -57,6 +57,7 @@ def test_two_invocations_cannot_share_config_saves_results_or_synchronization(is
     root, original_config, state, calls, create = isolated
     before = original_config.read_bytes(), state.read_bytes()
     first, second = create(), create()
+    first.args.keep_alive = True
     first.start_instances()
     second.start_instances()
     from lupa import LuaRuntime
@@ -70,6 +71,7 @@ def test_two_invocations_cannot_share_config_saves_results_or_synchronization(is
         for player, folder in run.instance_dirs.items():
             config = json.loads((folder / f"duo_cfg_{player}.ini").read_bytes())
             assert config["PreferredCores"]["GBA"] == "mGBA"
+            assert config["MainWindowPosition"] == ("100, 100" if getattr(run.args, "keep_alive", False) else "-32000, -32000")
             assert not config["CommonToolSettings"] and not config["LoadLastRom"]
             assert all(Path(entry["Path"]).is_relative_to(folder) for entry in config["PathEntries"]["Paths"])
             assert Path(run.go_files[player]).parent == folder
