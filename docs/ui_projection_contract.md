@@ -3,7 +3,9 @@
 This freezes the consumer boundary agreed by the UI, Gen1 Readiness, and RR task
 owners on 2026-09-05. It is an interface agreement, **not a claim that the new
 projection exists or has passed integration tests**. The producer is UI migration
-Phase 3 and remains gated on Gen 1's frozen shared/API handoff.
+Phase 3. Restricted runtime handoff `bc880025` has now been accepted; its detached
+readers are documented in [ui-runtime-handoff.md](ui-runtime-handoff.md). Unknown
+or restricted runtime features retain that status until their bindings are ready.
 
 Independent RR context/native-storage work does not depend on a completed board.
 RR presentation integration must wait for the tested projection commit and the

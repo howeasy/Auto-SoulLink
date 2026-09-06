@@ -1,9 +1,13 @@
 # UI migration preparation packet
 
-This packet prepares the approved migration while Phase 0 is closed. It adds no
+This packet was prepared while Phase 0 was closed. It adds no
 production behavior and does not import the mockup or an in-flight runtime into
 the UI checkout. See [the approved plan](../ui_migration_plan.md) and
 [the consumer agreement](../ui_projection_contract.md).
+
+The later [restricted handoff acceptance](phase0_acceptance.md) opens the early
+UI phases against `bc880025`; the historical baseline and checklist below remain
+useful evidence, not a statement that the gate is still closed.
 
 ## Baseline and repeatable inventory
 

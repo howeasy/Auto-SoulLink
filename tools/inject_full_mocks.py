@@ -146,12 +146,12 @@ def _is_gen1() -> bool:
 # (area, alice_capture, bob_capture); capture = (species, key, nickname, level, held_item)
 # held_item is always 0 — Gen 1 cartridges have no held-item slot.
 GEN1_PAIRS = [
-    ("route_1",  (25, "AABB:30B8:99", "Sparky",  6, 0),  (4,  "CCDD:7B0B:B0", "Embo",   6, 0)),
-    ("route_2",  (16, "1122:30B8:24", "Pidge",   8, 0),  (19, "3344:7B0B:A5", "Rattie", 8, 0)),
-    ("route_3",  (21, "5566:30B8:05", "Sparrow", 9, 0),  (74, "7788:7B0B:A6", "Rocky",  9, 0)),
-    ("route_4",  (29, "99AA:30B8:03", "Nidi",   11, 0),  (41, "BBCC:7B0B:6B", "Vampy", 11, 0)),
-    ("route_5",  (27, "DDEE:30B8:60", "Shrewd", 12, 0),  (37, "FF00:7B0B:04", "Flick", 12, 0)),
-    ("route_6",  (43, "0F1E:30B8:B9", "Smelly", 13, 0),  (69, "2D3C:7B0B:BC", "Twig",  13, 0)),
+    ('route_1', (25, 'AABB:30B8:54', 'Sparky', 6, 0), (4, 'CCDD:7B0B:B0', 'Embo', 6, 0)),
+    ('route_2', (16, '1122:30B8:24', 'Pidge', 8, 0), (19, '3344:7B0B:A5', 'Rattie', 8, 0)),
+    ('route_3', (21, '5566:30B8:05', 'Sparrow', 9, 0), (74, '7788:7B0B:A9', 'Rocky', 9, 0)),
+    ('route_4', (29, '99AA:30B8:0F', 'Nidi', 11, 0), (41, 'BBCC:7B0B:6B', 'Vampy', 11, 0)),
+    ('route_5', (27, 'DDEE:30B8:60', 'Shrewd', 12, 0), (37, 'FF00:7B0B:52', 'Flick', 12, 0)),
+    ('route_6', (43, '0F1E:30B8:B9', 'Smelly', 13, 0), (69, '2D3C:7B0B:BC', 'Twig', 13, 0)),
 ]
 
 # Gen 1 move ids (pokered constants/move_constants.asm). Same slot meaning as MOVES.
@@ -172,12 +172,12 @@ GEN1_MOVES = {
 
 # A capture waiting on the other player. Alice has caught here; Bob has not been here.
 GEN1_PENDING_AREA = "route_9"
-GEN1_PENDING_A = (58, "AB12:30B8:3A", "Flame", 14, 0)
+GEN1_PENDING_A = (58, 'AB12:30B8:21', 'Flame', 14, 0)
 GEN1_DEAD_ZONE_AREA = "route_22"
-GEN1_DEAD_ZONE_BOB = (56, "7A8B:7B0B:38", "Mankey", 8, 0)
+GEN1_DEAD_ZONE_BOB = (56, '7A8B:7B0B:39', 'Mankey', 8, 0)
 GEN1_BOXED_AREA = "route_5"
-GEN1_BOXED_A = (60, "6D7E:30B8:3C", "Bubbles", 10, 0)
-GEN1_BOXED_B = (54, "5E6F:7B0B:36", "Quack",   10, 0)
+GEN1_BOXED_A = (60, '6D7E:30B8:47', 'Bubbles', 10, 0)
+GEN1_BOXED_B = (54, '5E6F:7B0B:2F', 'Quack', 10, 0)
 
 
 def _rom_type(player: str) -> str:
@@ -246,7 +246,7 @@ def _wild_foe() -> dict:
     ability_id would be a lie the enemy panel would happily render."""
     if _is_gen1():
         return {"species_id": 10, "level": 11, "hp": 28, "maxHP": 32, "active": True,
-                "key": "1A2B:0000:0A", "status_cond": 0, "stat_stages": {},
+                "key": "1A2B:0000:7B", "status_cond": 0, "stat_stages": {},
                 "moves": [33, 81], "pp": [35, 40]}
     return {"species_id": 10, "level": 11, "hp": 28, "maxHP": 32, "active": True,
             "ability_id": ABILITIES[10], "key": "WILD_CATE", "status_cond": 0, "stat_stages": {},
@@ -261,7 +261,11 @@ def _stored(tag: str, ot: str, species: int) -> str:
     and leave the box table looking merely short rather than broken.
     """
     if _is_gen1():
-        return f"{ord(tag[0]):02X}{int(tag[1]):02X}:{ot}:{species:02X}"
+        from pathlib import Path
+        path = Path(__file__).resolve().parents[1] / "data/games/gen1_rby/species_index.json"
+        indices = json.loads(path.read_text(encoding="utf-8"))["index_to_national"]
+        internal = next(int(index) for index, dex in indices.items() if int(dex) == species)
+        return f"{ord(tag[0]):02X}{int(tag[1]):02X}:{ot}:{internal:02X}"
     return "STORED_" + tag
 
 
@@ -289,11 +293,13 @@ def _mon(species, key, nick, lv, item, *, gender, active):
 
 
 async def main() -> None:
+    if _is_gen1():
+        raise RuntimeError(
+            "Live RBY mock injection is unavailable under the restricted runtime boundary. "
+            "Use python tools/capture_ui_fixtures.py for isolated rendering fixtures."
+        )
     print("Resetting server state...")
-    try:
-        http_post("/api/reset", {})
-    except Exception as e:
-        print(f"  reset failed: {e}")
+    http_post("/api/reset", {})
 
     print("Sending hellos + initial tick...")
     # ONE socket for the whole session. The server binds a socket to the first player who
