@@ -34,13 +34,14 @@ Work is isolated in `codex/rr-foundation`. Root/UI and Gen1 worktrees were not e
 | `73313c7` | RR-only peer-position sampling independent of camera movement, with recorded replay and native CPU evidence |
 | `e0b611e` | Explosion identity, ownership, battle-lifetime, duplicate and action-selection guards; original mechanism retained |
 | `aa29fe6`, `75a1a81` | Bounded actual DPCM decoder interpretation of the extended-ROM arena-looking word |
+| `e7391b0` | Adopted reviewed Gen1 shared-profile actuator; mGBA default preserved, Gambatte explicitly selected |
 
 The shared contributions were sent as separate dependency-closed handoffs to Gen1.
 They do not activate the production RR or Gen1 durable runtime by their existence.
 
 ## Verified at this checkpoint
 
-- Unit/integration compatibility: **2,615 passed, 15 existing skips, 11 subtests**.
+- Unit/integration compatibility: **2,626 passed, 15 existing skips, 11 subtests**.
   Those skips do not count as RR release evidence. Full Ruff passes.
 - Required explicit RR helper lanes: **209 runtime/reference tests** and **174
   native CPU/build tests** passed without skips or xfails. These counts are not the
@@ -70,7 +71,7 @@ They do not activate the production RR or Gen1 durable runtime by their existenc
   definitive DMA/source attribution remain outside that lane.
 - Gen1 reused the identity primitive unchanged: its 52 shared tests plus 13
   additional RBY ownership/evolution/pending-death contract cases passed.
-- The reusable host adapter passes31 modeled component tests. Actual new-adapter
+- The original host adapter passed31 modeled component tests. Actual original-adapter
   runs21/23 refused12 competing owner/token/module claims each, proved healthy
   release/close/replacement, and serviced16 held yields at constant frame1657.
   The holds lasted252.6503ms unpaused and261.01ms paused; a further258.59ms after
@@ -81,6 +82,12 @@ They do not activate the production RR or Gen1 durable runtime by their existenc
   Actual stopped-script run29 retained its hold through the owner LuaFile's exit,
   then refused a reloaded owner. Frame1657 remained constant across18 observer
   yields/251.4801ms. This does not prove unheld-owner garbage-collection behavior.
+- The later shared-profile adapter has42 modeled tests/72 combined control cases.
+  Its exact14e981 source bytes passed fresh mGBA runs34–37 covering both pause
+  states, ownership/replacement, emergency hold and stopped-owner refusal. The
+  separately published Gambatte18-case matrix was independently reviewed; no
+  Gen1 runtime was imported. Detailed evidence/limits are in
+  `rr_reference/SHARED_PROFILE_HOLD.md`. Production selection remains off.
 - The explicitly selected v2 storage participant passes39 new tests. Independent
   review reproduced and then verified rejection of corrupt rebuilt records,
   hash-time stale physical context, and admission/mode changes at final readback.

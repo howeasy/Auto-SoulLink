@@ -9,7 +9,8 @@ The current explicit-profile module has separately recorded
 [Gambatte evidence](gen1_reference/GAMBATTE_EXECUTION_HOLD.md). Earlier manual
 MainForm/arena probes remain separate supporting evidence. Modeled compatibility
 checks do not turn the older mGBA physical results into an exact-byte verdict on
-the new module. Fresh mGBA checks on the adopted module remain a separate gate.
+the new module. Fresh mGBA checks on the adopted module are now recorded in
+[the RR shared-profile verification](rr_reference/SHARED_PROFILE_HOLD.md).
 No RR, RBY, shared state, UI or existing client selects it automatically.
 
 Two profiles are available: `mgba` and `gambatte`. Omitting a selection retains
@@ -187,6 +188,11 @@ python -m ruff check tests/unit/test_platform_execution.py
 Current modeled result: **42 adapter tests;72 combined control tests passed**,
 Ruff clean. The original 31 cases remain, with explicit selection/default/pin
 controls added. The separate Game Boy harness isolation tests also pass.
+
+The exact current module was also exercised by mGBA runs34–37: original/default
+profile, both pause states, ownership/replacement, deliberate emergency re-hold,
+and stopped-held-owner refusal. Their source/result hashes remain separate from
+the older runs below. These do not activate broader controls or production use.
 
 The following original mGBA private checks ran against the pinned actual binaries and
 freshly attributed fixture. Exact source/result/execution hashes and the retained
