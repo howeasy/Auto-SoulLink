@@ -398,7 +398,7 @@ M.BATTLE_MON_OTID_OFF        = 0x54        -- BattlePokemon.otId offset (u32)
 -- statStages[0..6] = ATK,DEF,SPD,SPATK,SPDEF,ACC,EVA (raw 0–12, neutral=6)
 -- Offset 0x19 is correct for BOTH vanilla (statStages[1]) and CFRU (statStages[0]);
 -- offset +0x18 must be skipped — it is the HP-stage placeholder in vanilla (always 6)
--- but is the type3 byte in CFRU (third type for Fairy support) — not a stat stage.
+-- but is the temporary type3 byte in CFRU — not a stat stage.
 M.BATTLE_MON_STAT_STAGES_OFF = 0x19        -- BattlePokemon.statStages offset for ATK (profile-independent)
 M.BATTLE_MON_MOVES_OFF       = 0x0C        -- BattlePokemon.moves[4] offset (4 × u16)
 M.BATTLE_MON_PP_OFF          = 0x24        -- BattlePokemon.pp[4]    offset (4 × u8)
@@ -1684,7 +1684,7 @@ local function _refreshBattleMonFromPartyAddr(battler_idx, pbase)
     memory.write_u32_le(bbase + 0x14, mem_r32(pbase + M.OFF_SUBSTRUCT + 3 * 12 + 4))
     -- Reset stat stages to neutral (6 = NORMAL) across all 7 slots.
     for i = 0, 6 do
-        mem_w8(bbase + 0x18 + i, 6)
+        mem_w8(bbase + M.BATTLE_MON_STAT_STAGES_OFF + i, 6)
     end
     -- Ability (SLink-verified offset +0x20 for RR/CFRU; same as the reader at
     -- gen3_frlge_client.lua tick code that pulls foe_ability from this byte).
