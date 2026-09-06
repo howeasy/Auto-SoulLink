@@ -275,6 +275,12 @@ Direct runtime SIO-driver inspection and scene/admission enforcement remain gate
 
 ## Capacity and the retained libc path
 
+The extended-ROM numeric match at `0x09EC112C` now has stronger bounded data
+classification in [PCM_LITERAL_REVIEW.md](PCM_LITERAL_REVIEW.md): two exact
+compressed-wave boundaries and actual RR decoder execution consume its bytes as
+DPCM data without dereferencing the EWRAM-looking word. The natural sample
+consumer remains unidentified; this does not close the global raw-access gate.
+
 The reservation removes 2 KiB, approximately 1.79% of the original heap. Fragmentation
 can make the practical cost larger than that fraction. Companion allocation success
 alone is insufficient: ordinary battle/menu/trade allocations must still succeed.
