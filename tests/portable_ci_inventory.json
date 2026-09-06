@@ -3975,7 +3975,17 @@
         "tests/unit/test_protocol_records.py::test_invalid_record_writes_leave_snapshot_and_outbox_untouched[value]",
         "tests/unit/test_protocol_records.py::test_invalid_record_writes_leave_snapshot_and_outbox_untouched[duplicate]",
         "tests/unit/test_protocol_records.py::test_invalid_record_writes_leave_snapshot_and_outbox_untouched[unknown]",
-        "tests/unit/test_protocol_records.py::test_invalid_record_writes_leave_snapshot_and_outbox_untouched[marker]"
+        "tests/unit/test_protocol_records.py::test_invalid_record_writes_leave_snapshot_and_outbox_untouched[marker]",
+        "tests/unit/test_protocol_records.py::test_invalid_committed_revision_is_rejected_even_outside_requested_history[False--1]",
+        "tests/unit/test_protocol_records.py::test_invalid_committed_revision_is_rejected_even_outside_requested_history[False-0]",
+        "tests/unit/test_protocol_records.py::test_invalid_committed_revision_is_rejected_even_outside_requested_history[False-1.5]",
+        "tests/unit/test_protocol_records.py::test_invalid_committed_revision_is_rejected_even_outside_requested_history[False-invalid]",
+        "tests/unit/test_protocol_records.py::test_invalid_committed_revision_is_rejected_even_outside_requested_history[False-100]",
+        "tests/unit/test_protocol_records.py::test_invalid_committed_revision_is_rejected_even_outside_requested_history[True--1]",
+        "tests/unit/test_protocol_records.py::test_invalid_committed_revision_is_rejected_even_outside_requested_history[True-0]",
+        "tests/unit/test_protocol_records.py::test_invalid_committed_revision_is_rejected_even_outside_requested_history[True-1.5]",
+        "tests/unit/test_protocol_records.py::test_invalid_committed_revision_is_rejected_even_outside_requested_history[True-invalid]",
+        "tests/unit/test_protocol_records.py::test_invalid_committed_revision_is_rejected_even_outside_requested_history[True-100]"
       ]
     }
   ]
