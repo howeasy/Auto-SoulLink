@@ -12,7 +12,7 @@
      stream). The calc page passes `sidebar_css: "sidebar"` to get the
      lighter sidebar.css instead — dashboard.css's Pixelify body font + the
      high-res font-size scaling clobber calc's em-based Bootstrap layout. #}
-  {% if sidebar_html %}
+  {% if sidebar_html and sidebar_assets|default(true) %}
     <link rel="stylesheet" href="/static/{{ sidebar_css|default('dashboard') }}.css">
     <script src="/static/dashboard.js" defer></script>
   {% endif %}

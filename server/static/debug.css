@@ -1,0 +1,92 @@
+/* Map the debug page's private design tokens to slink.css so themes flow
+   * through automatically (same pattern as the calc body theming). Anything
+   * inside this page's panels keeps its existing rules. */
+  :root {
+    --bg:     var(--c-bg);
+    --panel:  var(--c-card);
+    --border: var(--c-edge);
+    --text:   var(--c-txt);
+    --muted:  var(--c-dim);
+    --green:  var(--c-alive);
+    --red:    var(--c-dead);
+    --yellow: var(--c-gold);
+    --blue:   var(--c-link);
+    --orange: var(--c-pend);
+  }
+  * { box-sizing:border-box; }
+  /* The sidebar grid is set by dashboard.css. The debug-page body styles
+   * below apply to .dash-main where the page content lives. */
+  .dash-main { padding:1.2em 1.4em 2em; font-family:var(--font-heading); font-size:0.95em; }
+  h1 { color:var(--orange); margin-bottom:0.2em; font-size:1.3em; }
+  .nav { color:var(--muted); font-size:0.85em; margin-bottom:0.8em; }
+  .nav a { color:var(--blue); text-decoration:none; }
+  .nav a:hover { text-decoration:underline; }
+
+  /* ── Live status banner ── */
+  .live-bar { display:flex; gap:1.2em; flex-wrap:wrap; align-items:center;
+              background:#0d1117; border:1px solid var(--border); border-radius:6px;
+              padding:0.6em 1em; margin-bottom:1em; font-size:0.85em; }
+  .live-bar .sse-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
+  .live-bar .sse-ok { background:var(--green); box-shadow:0 0 4px var(--green); }
+  .live-bar .sse-off { background:var(--red); box-shadow:0 0 4px var(--red); }
+  .live-bar .player-pill { display:inline-flex; align-items:center; gap:4px; padding:2px 10px;
+                           border-radius:12px; font-weight:600; font-size:0.9em; }
+  .live-bar .player-pill.on { background:#14532d; color:var(--green); }
+  .live-bar .player-pill.off { background:#1c1c1c; color:var(--c-dim); }
+  .live-bar .stat { color:var(--muted); }
+  .live-bar .stat b { color:var(--text); font-variant-numeric:tabular-nums; }
+  .live-bar .event-log { flex:1; text-align:right; color:var(--c-dim); font-family:monospace; font-size:0.9em;
+                         overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:400px; }
+
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:1em; }
+  @media(max-width:900px) { .grid { grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:1em; }
+  .panel h2 { color:var(--orange); font-size:1em; margin-bottom:0.7em; border-bottom:1px solid var(--border); padding-bottom:0.4em;
+              display:flex; align-items:center; justify-content:space-between; }
+  .panel h2 .h2-left { display:flex; align-items:center; gap:0.3em; }
+  .panel.full { grid-column:1/-1; }
+  label { display:block; color:var(--muted); font-size:0.85em; margin-bottom:2px; }
+  input, select, textarea { background:#0d1b2a; border:1px solid var(--border); color:var(--text);
+    padding:5px 8px; border-radius:4px; font-size:0.88em; font-family:inherit; width:100%; }
+  select { cursor:pointer; }
+  textarea { min-height:100px; resize:vertical; }
+  .row { display:flex; gap:0.6em; margin-bottom:0.6em; }
+  .row > * { flex:1; }
+  .btn { padding:6px 14px; border-radius:5px; border:none; cursor:pointer; font-size:0.85em; font-weight:600;
+         transition:filter 0.15s; }
+  .btn-orange { background:#7c2d12; color:var(--orange); }
+  .btn-red { background:#7f1d1d; color:var(--red); }
+  .btn-green { background:#14532d; color:var(--green); }
+  .btn-blue { background:#1e3a5f; color:var(--blue); }
+  .btn:hover { filter:brightness(1.3); }
+  .btn:active { filter:brightness(0.9); }
+  .btn-sm { padding:3px 10px; font-size:0.8em; }
+  .result { margin-top:0.6em; padding:0.5em; background:#0d1b2a; border-radius:4px;
+    font-family:monospace; font-size:0.82em; white-space:pre-wrap; word-break:break-all;
+    max-height:300px; overflow-y:auto; color:var(--muted); display:none; }
+  .result.ok { border-left:3px solid var(--green); }
+  .result.err { border-left:3px solid var(--red); }
+  .flash { animation: flash-border 0.5s ease-out; }
+  @keyframes flash-border { 0% { border-color:#4af; } 100% { border-color:var(--border); } }
+  #raw-state { max-height:500px; overflow:auto; }
+  #raw-state pre { white-space:pre-wrap; word-break:break-all; color:var(--muted); font-size:0.82em; }
+  .backup-table { width:100%; font-size:0.9em; border-collapse:collapse; }
+  .backup-table th { text-align:left; color:var(--muted); padding:3px 6px; border-bottom:1px solid var(--border); }
+  .backup-table td { padding:3px 6px; }
+  .backup-table tr:hover { background:#1a1a2a; }
+  .backup-table .slot-link { color:var(--c-link); cursor:pointer; text-decoration:underline; }
+  .backup-table .slot-link:hover { color:#4cf; }
+  .ml-table { width:100%; font-size:0.85em; border-collapse:collapse; }
+  .ml-table th { text-align:left; color:var(--muted); padding:3px 6px; border-bottom:1px solid var(--border); font-weight:600; }
+  .ml-table td { padding:3px 6px; font-family:monospace; }
+  .ml-table tr:hover { background:#1a1a2a; }
+  .ml-table .st-alive { color:var(--green); }
+  .ml-table .st-dead { color:var(--red); }
+  .ml-table .st-memorial { color:var(--c-dim); }
+  .ml-table .btn-unlink { padding:2px 8px; font-size:0.8em; }
+  .ml-table .btn-revive { padding:2px 8px; font-size:0.8em; background:#2a6; color:#fff; border:none; border-radius:3px; cursor:pointer; }
+  .ml-table .btn-revive:hover { background:#3b7; }
+
+:focus-visible { outline: 2px solid var(--c-gold); outline-offset: 2px; }
+.debug-data-row { margin-bottom: .6em; }
+.debug-data-row > b { color: var(--text); }

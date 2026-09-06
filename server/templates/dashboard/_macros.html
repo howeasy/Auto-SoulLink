@@ -1,0 +1,124 @@
+{% macro icon(name, cls='inline-ico') -%}<svg class="{{ cls }}" aria-hidden="true"><use href="#i-{{ name }}"/></svg>{%- endmacro %}
+{% macro chain() -%}<svg class="bl-chain" viewBox="0 0 36 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M 18 4 A 9 5.5 0 1 1 18 12"/><ellipse cx="12" cy="8" rx="9" ry="5.5"/></svg>{%- endmacro %}
+{% macro label(m) -%}
+{%- if m.nickname or m.species -%}{{ m.nickname or m.species }}{% if m.shiny %} <span class="shiny-star">✦</span>{% endif %}{% if m.gender_symbol %} <span class="gender-{{ m.gender }}">{{ m.gender_symbol }}</span>{% endif %}{% if m.nickname and m.species %} <span class='mon-species-paren'>({{ m.species }})</span>{% endif %}
+{%- else -%}{{ m.fallback }}{%- endif -%}
+{%- endmacro %}
+{% macro connection(p) -%}{% if p.connected %}<span class="badge badge-online">&#9679; online</span>{% else %}<span class="badge badge-offline">&#9675; offline</span>{% endif %}{%- endmacro %}
+{% macro ability(a) -%}{% if a.name %}<span class="ability" title="{{ a.description }}">{{ a.name }}</span>{% else %}<span class="dim">—</span>{% endif %}{%- endmacro %}
+{% macro hp(h) -%}
+<div class="hp-stack">
+<div class="hp-stack-val"><span class="dim">{{ h.hp }}/{{ h.maximum }}</span>{{ h.status_html }}{{ h.stages_html }}
+</div>
+<div class="hp-bar-bg">
+<div class="hp-bar {{ h.class }}" style="width:{{ h.percent }}%">
+</div>
+</div>
+</div>{%- endmacro %}
+{% macro location(h) -%}
+{% if h.kind == 'hp' %}{{ hp(h) }}{% elif h.kind == 'box' %}
+<div class="lp-loc"><span class="dim">Box</span> <b>{{ h.box }}</b><br><span class="dim">slot</span> <b>{{ h.slot }}</b>
+</div>{% else %}
+<div class="lp-loc dim">—
+</div>{% endif %}
+{%- endmacro %}
+{% macro partner(p) -%}
+<div class="lp-partner-sub {{ p.class }}">{{ icon('link', 'inline-ico lp-partner-ico') }} {% if p.kind == 'mon' %}{{ label(p.label) }}{% if p.hp %} <span class="partner-hp {{ p.hp.class }}">{{ p.hp.hp }}/{{ p.hp.maximum }}</span>{% if p.token %} <span class="status-icon s-{{ p.token|lower }}">{{ p.token }}</span>{% endif %}{% endif %}{% elif p.kind == 'pending' %}waiting for <b>{{ p.name }}</b> @ {{ p.area }}{% elif p.kind == 'shiny' %}<span style="color:var(--c-gold)">★ Shiny Clause</span>{% else %}<span class="dim">{{ p.text }}</span>{% endif %}
+</div>{%- endmacro %}
+{% macro mon(m) -%}
+<div class="lp-mon-cell lp-mc-{{ 'b' if m.mirror else 'a' }}">{% if m.missing %}
+<div class="lp-mon-txt dim">— not on roster
+</div>{% else %}{% if m.sprite_html %}
+<div class="lp-mon-spr">{{ m.sprite_html }}
+</div>{% endif %}
+<div class="lp-mon-txt">
+<div class="lp-nick">{% if m.active %}{{ icon('swords') }} {% endif %}{{ label(m.label) }}
+</div>{% if m.level or m.types_html %}
+<div class="lp-mon-sub">{% if m.level %}<span class="lp-lv-inline">Lv {{ m.level }}</span>{% endif %}{% if m.level and m.types_html %}<span class="lp-sep">&middot;</span>{% endif %}{{ m.types_html }}
+</div>{% endif %}{% if m.partner %}{{ partner(m.partner) }}{% endif %}{% if m.item %}<span class="held-item">{{ m.item }}</span>{% endif %}{% if m.ability and m.ability.name %}<span class="lp-mon-abl" title="{{ m.ability.description }}">{{ m.ability.name }}</span>{% endif %}{% if m.moves_html %}
+<div class="lp-moves">{{ m.moves_html }}
+</div>{% endif %}
+</div>{% endif %}
+</div>
+{%- endmacro %}
+{% macro battle(p, has_abilities, prefix='') -%}
+{% set b = p.battle %}{% if b %}
+<div class="battle-panel">
+<h4 style="margin:0 0 0.3em">{{ icon('swords') }} IN BATTLE &mdash; {{ b.title }}{% if b.new_encounter %} <span style="color:var(--c-alive);font-weight:bold">★ NEW ENCOUNTER</span>{% endif %}{% if b.doubles %} <span class="dbl-chip">{{ icon('swords') }}{{ icon('swords') }}&nbsp;DOUBLES</span>{% endif %}
+</h4>
+{% if b.foes %}
+<table class="foe-table">
+<thead>
+<tr><th>Foe</th><th class="col-lv">Lv</th><th class="col-hp">HP</th><th class="col-type">Type</th>{% if has_abilities %}<th class="col-abl">Ability</th>{% endif %}
+</tr>
+</thead>
+<tbody>
+{% for f in b.foes %}
+<tr class="{{ f.class }}" data-key="{{ f.key }}">
+<td>
+<div style="display:inline-flex;align-items:center;gap:4px">{% if f.sprite_html %}
+<div style="flex-shrink:0">{{ f.sprite_html }}
+</div>{% endif %}
+<div>{% if f.active %}{{ icon('swords') }} {% endif %}{{ f.name }}{% if f.item %}<span class="held-item">{{ f.item }}</span>{% endif %}
+</div>
+</div>
+</td>
+<td>{{ f.level }}
+</td>
+<td>{{ hp(f.hp) }}
+</td>
+<td>{{ f.types_html }}
+</td>{% if has_abilities %}
+<td>{{ ability(f.ability) }}
+</td>{% endif %}
+</tr>
+{% if f.moves[prefix] %}
+<tr class="foe-moves-row" data-key="{{ f.key }}:moves">
+<td colspan="{{ 5 if has_abilities else 4 }}">{{ f.moves[prefix] }}
+</td>
+</tr>{% endif %}{% endfor %}
+</tbody>
+</table>{% else %}
+<p class="empty">No foe data yet.
+</p>{% endif %}
+{% if b.calc and not prefix %}
+<div id="calc-preview-{{ p.pid }}" class="calc-preview"{% for name, value in b.calc.items() %} data-{{ name }}="{{ value }}"{% endfor %} style="display:none">
+</div>{% endif %}
+</div>{% endif %}
+{%- endmacro %}
+{% macro pair_rows(rows) -%}{% for row in rows %}
+<tr class="{{ row.class }}">
+<td class="lp-mon lp-mon-a">{{ mon(row.a.mon) }}
+</td>
+<td class="lp-hp">{{ location(row.a.location) }}
+</td>
+<td class="lp-ctr">
+<div class="lp-center-cell">{{ chain() }}<span class="lp-area">{{ row.area }}</span>
+</div>
+</td>
+<td class="lp-hp lp-hp-b">{{ location(row.b.location) }}
+</td>
+<td class="lp-mon lp-mon-b">{{ mon(row.b.mon) }}
+</td>
+</tr>{% endfor %}{%- endmacro %}
+{% macro simple_header(players, title, fighting=false) -%}
+<div class="lp-card-hdr">
+<div class="lp-hdr-side lp-hdr-side-a">
+<div class="lp-player-name">{{ players.a.name }}
+</div>
+</div>
+<div class="lp-hdr-mid">{{ icon('swords') if fighting else chain() }}<span class="lp-hdr-label">{{ title }}</span>{{ icon('swords') if fighting else chain() }}
+</div>
+<div class="lp-hdr-side lp-hdr-side-b">
+<div class="lp-player-name">{{ players.b.name }}
+</div>
+</div>
+</div>{%- endmacro %}
+{% macro catch(c) -%}{% if c.kind == 'mon' %}{{ c.sprite_html }}{{ label(c.label) }}{% elif c.kind == 'failed' %}<span class="dim">{{ c.name }} <em>(fled/KO)</em></span>{% else %}<span class="dim">{{ c.text }}</span>{% endif %}{%- endmacro %}
+{% macro cause(c) -%}{% if c %}<br><span class="kf-inline">{% if c.text %}<span class="killfeed-cause {{ c.class }}">{{ icon(c.icon) }} {{ c.text }}</span>{% endif %}</span>{% endif %}{%- endmacro %}
+{% macro encounter_status(s, names) -%}
+{% if s.pending %}<span class="pending">{% for pid in ('a','b') %}{{ names[pid] }}: {{ icon({'caught':'check','entered':'hourglass','none':'x'}[s.pending[pid]]) }} {{ {'caught':'caught','entered':'pending capture','none':'not visited'}[s.pending[pid]] }}{% if pid == 'a' %}<br>{% endif %}{% endfor %}</span>
+{% elif s.kind == 'linked' %}<span class="{{ 'linked' if s.orphan else 'alive' }}">{{ icon('check') }} linked</span>
+{% elif s.kind in ('dead', 'memorial', 'dead_zone') %}<span class="{{ 'dead_zone' if s.kind == 'dead_zone' else 'dead' }}">{{ icon('skull') }} {{ 'dead zone' if s.kind == 'dead_zone' else 'dead' }}</span>{% if s.memorial %} <span class="dim" style="font-size:0.82em">· boxed</span>{% endif %}{{ cause(s.cause) }}
+{% else %}{{ s.kind }}{% endif %}
+{%- endmacro %}

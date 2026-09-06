@@ -1,0 +1,14 @@
+{
+  "source_commit": "5817e2616df2132b23403e13fe3de22d189bab5a",
+  "clock": 1000000.0,
+  "method_sha256": "29eae2fa7ed67b1105cb410f69547b225de1e8ba39761fda7d96fd5544a84e99",
+  "sha256": {
+    "empty": "d450a1dc746490afde3655f6c2f360186bab6a145f1e23b69eff3a5e9bbb5a8e",
+    "gen3": "77f1f881118ac4fcff3abe8cdd456665cf63790e5b8763b73573df9b205542a8",
+    "gen1": "345fff1d0ee49bd9406e4d2edb3c9b1c73ff3d6f74452f1bd4de19cb21fda913",
+    "warnings": "6ddc9b40449a78718a5b96a83de5879ffdce596b19d5c13b91d6c394c2cdbd83",
+    "split": "3191de6fe142c62407160c7c7a281ee1f6c99c82adc5a81fe1b391c401469f5d",
+    "doubles": "7d562ab672117b8768f29cadabc870f4c3e95485c832ecba7504aadb3c004bee",
+    "hp_boundaries": "554aa45f1d1f37f1d63bbc38cf6fcbb76d170b7d4c36bfd2006de07256a291e5"
+  }
+}

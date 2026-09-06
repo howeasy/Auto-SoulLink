@@ -150,9 +150,13 @@ class _AttackTags(HTMLParser):
     def __init__(self):
         super().__init__()
         self.markers = []
+        self.text = []
 
     def handle_starttag(self, tag, attrs):
         self.markers.extend(value for key, value in attrs if key == "data-attack")
+
+    def handle_data(self, data):
+        self.text.append(data)
 
 
 def test_dashboard_escapes_client_text_in_both_views_and_encounter_rows(srv):
@@ -171,12 +175,15 @@ def test_dashboard_escapes_client_text_in_both_views_and_encounter_rows(srv):
     parser = _AttackTags()
     parser.feed(rendered)
     assert parser.markers == []
+    # HTMLParser decodes equivalent named/numeric entities. Jinja and
+    # html.escape use different encodings for quotes, with the same safe DOM.
+    visible = "".join(parser.text)
     for player in ("a", "b"):
-        assert rendered.count(html.escape(attack("rom-" + player))) >= 2
-        assert html.escape(attack("event-" + player)) in rendered
+        assert visible.count(attack("rom-" + player)) >= 2
+        assert attack("event-" + player) in visible
         area_text = srv.adapter.area_display_name(attack("area-" + player))
-        assert rendered.count(html.escape(area_text)) >= 2
-    assert html.escape(srv.adapter.area_display_name(encounter_area)) in rendered
+        assert visible.count(area_text) >= 2
+    assert srv.adapter.area_display_name(encounter_area) in visible
 
 
 def test_dashboard_keeps_trusted_unknown_area_markup(srv):

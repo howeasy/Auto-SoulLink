@@ -1,0 +1,25 @@
+{
+  "complete": true,
+  "provenance": "synthetic",
+  "generation": 9,
+  "field": {"gameType": "Singles"},
+  "moves": ["Tackle"],
+  "attacker": {
+    "species": "Rattata",
+    "options": {
+      "level": 50, "nature": "Hardy", "ability": "Run Away", "item": "", "status": "", "curHP": 105,
+      "ivs": {"hp": 31, "atk": 31, "def": 31, "spa": 31, "spd": 31, "spe": 31},
+      "evs": {"hp": 0, "atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0},
+      "boosts": {"hp": 0, "atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0}
+    }
+  },
+  "defender": {
+    "species": "Rattata",
+    "options": {
+      "level": 50, "nature": "Hardy", "ability": "Run Away", "item": "", "status": "", "curHP": 10,
+      "ivs": {"hp": 31, "atk": 31, "def": 31, "spa": 31, "spd": 31, "spe": 31},
+      "evs": {"hp": 0, "atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0},
+      "boosts": {"hp": 0, "atk": 0, "def": 0, "spa": 0, "spd": 0, "spe": 0}
+    }
+  }
+}

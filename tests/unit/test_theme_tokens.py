@@ -63,6 +63,7 @@ def _status_builder_source() -> str:
     templates = sorted((Path(__file__).resolve().parents[2] / "server/templates").rglob("*.html"))
     assert templates and any(path.name == "dashboard.html" for path in templates)
     sources = [path.read_text(encoding="utf-8") for path in templates]
+    sources.append((Path(__file__).resolve().parents[2] / "server/dashboard.py").read_text(encoding="utf-8"))
     for name in ("_build_status_html", "_build_dashboard_context", "_encounter_html", "_trainer_panel_html"):
         method = getattr(SLinkServer, name, None)
         if method is not None:

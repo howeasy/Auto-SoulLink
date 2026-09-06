@@ -55,7 +55,7 @@ import * as A from './adaptable';
 // we can call that instead.
 //
 // This is obviously kludge, use a bundler kids.
-const Acalculate = exports.calculate;
+const Acalculate = typeof exports === 'undefined' ? undefined : exports.calculate;
 
 export function calculate(
   gen: I.GenerationNum | I.Generation,

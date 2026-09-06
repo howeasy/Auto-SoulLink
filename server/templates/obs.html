@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>OBS Triggers — Soul Link</title>
+  <link rel="stylesheet" href="/static/slink.css">
+  <link rel="stylesheet" href="/static/dashboard.css">
+  <link rel="stylesheet" href="/static/obs.css">
+</head>
+<body>
+<script src="/static/obs-bootstrap.js"></script>
+{{ sidebar_html }}
+<main class="dash-main">
+  <h1>&#128225; OBS Scene Triggers</h1>
+  <div id="msg"></div>
+
+  <div class="panel">
+    <h2>CONNECTIONS</h2>
+    <div class="grid2">
+      <div>
+        <div style="display:flex;align-items:center;gap:.5em;margin-bottom:.4em">
+          <strong style="font-size:.9em">Player A</strong>
+          <span id="status-a" class="sb sb-off">disconnected</span>
+        </div>
+        <label>Host<input id="host-a" type="text" placeholder="192.168.1.x"></label>
+        <label>Port<input id="port-a" type="number" value="4455" min="1" max="65535"></label>
+        <label>Password <small style="color:var(--c-dim)">(blank = keep current)</small>
+          <input id="pw-a" type="password" placeholder=""></label>
+        <div class="cbtns">
+          <button class="btn btn-g" onclick="connect('a')">Connect</button>
+          <button class="btn btn-r" onclick="disconnect('a')">Disconnect</button>
+          <button class="btn" onclick="testScene('a')">Test Scene</button>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;align-items:center;gap:.5em;margin-bottom:.4em">
+          <strong style="font-size:.9em">Player B</strong>
+          <span id="status-b" class="sb sb-off">disconnected</span>
+        </div>
+        <label>Host<input id="host-b" type="text" placeholder="192.168.1.x"></label>
+        <label>Port<input id="port-b" type="number" value="4455" min="1" max="65535"></label>
+        <label>Password <small style="color:var(--c-dim)">(blank = keep current)</small>
+          <input id="pw-b" type="password" placeholder=""></label>
+        <div class="cbtns">
+          <button class="btn btn-g" onclick="connect('b')">Connect</button>
+          <button class="btn btn-r" onclick="disconnect('b')">Disconnect</button>
+          <button class="btn" onclick="testScene('b')">Test Scene</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:1em;display:flex;align-items:center;gap:1em;flex-wrap:wrap">
+      <label style="margin:0;display:flex;align-items:center;gap:.4em;color:var(--c-txt);cursor:pointer">
+        <input type="checkbox" id="enabled"> Enable OBS integration
+      </label>
+      <button class="btn btn-s" onclick="saveConfig()">&#128190; Save Config</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>TRIGGER RULES</h2>
+    <p style="margin:0 0 .6em;color:var(--c-dim);font-size:.85em">Rules are evaluated <strong>top-to-bottom</strong> — when multiple events fire at once, the highest row wins per OBS player. Drag <span style="font-size:1em">⠿</span> to reorder.</p>
+    <table id="triggers-table">
+      <thead><tr><th style="width:1.6em"></th><th>#</th><th>Event</th><th>Player Filter</th><th>Target OBS</th><th>Scene</th><th>Area Filter</th><th></th></tr></thead>
+      <tbody id="triggers-body"></tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>ADD TRIGGER</h2>
+    <div class="frow">
+      <div>
+        <label>Event</label>
+        <select id="new-evt">
+          <option value="battle_start">battle_start</option>
+          <option value="wild_battle_start">wild_battle_start</option>
+          <option value="trainer_battle_start">trainer_battle_start</option>
+          <option value="battle_end">battle_end</option>
+          <option value="faint">faint (own mon)</option>
+          <option value="link_death">link_death (partner)</option>
+          <option value="whiteout">whiteout</option>
+          <option value="capture">capture</option>
+          <option value="shiny">shiny</option>
+          <option value="linked">linked (area linked)</option>
+          <option value="dead_zone">dead_zone</option>
+          <option value="area_enter">area_enter</option>
+          <option value="area_enter_new">area_enter_new (open slot)</option>
+          <option value="battle_start_new">battle_start_new (open slot)</option>
+          <option value="party_to_box">party_to_box</option>
+          <option value="box_to_party">box_to_party</option>
+          <option value="run_over">run_over</option>
+          <option value="memorialize_done">memorialize_done</option>
+        </select>
+      </div>
+      <div>
+        <label>Player Filter</label>
+        <select id="new-pf">
+          <option value="any">any</option>
+          <option value="a">Player A only</option>
+          <option value="b">Player B only</option>
+        </select>
+      </div>
+      <div>
+        <label>Target OBS</label>
+        <select id="new-tgt">
+          <option value="own">own (triggering player)</option>
+          <option value="a">Player A</option>
+          <option value="b">Player B</option>
+          <option value="both">both</option>
+        </select>
+      </div>
+      <div>
+        <label>Scene Name</label>
+        <input id="new-scene" type="text" list="scene-list-both" placeholder="e.g. Battle Scene">
+        <datalist id="scene-list-a"></datalist>
+        <datalist id="scene-list-b"></datalist>
+        <datalist id="scene-list-both"></datalist>
+      </div>
+      <div>
+        <label>Area Filter <small style="color:var(--c-dim)">(area_enter only)</small></label>
+        <select id="new-area">
+          <option value="">(any area)</option>
+        </select>
+      </div>
+      <button class="btn btn-g" onclick="addTrigger()">+ Add</button>
+    </div>
+  </div>
+
+  
+
+  <script src="/static/obs.js"></script>
+  <script src="/static/dashboard.js" defer></script>
+</main>
+</body>
+</html>

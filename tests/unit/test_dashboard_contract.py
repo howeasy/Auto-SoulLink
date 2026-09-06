@@ -108,6 +108,10 @@ async def test_calc_preview_is_unique_per_battling_rr_player(rendered):
         assert not [node for node in dom.root.descendants() if node.attrs.get("id", "").startswith("calc-preview-")]
         return
     assert dom.by_id("calc-preview-b").attrs["data-in-battle"] == "1"
+    moves = json.loads(dom.by_id("calc-preview-b").attrs["data-player-moves"])
+    assert moves and all(isinstance(move, str) and move for move in moves)
+    # No certified effective battle envelope exists in the frozen runtime.
+    assert "data-calc-input" not in dom.by_id("calc-preview-b").attrs
     srv.battle_state["a"] = copy.deepcopy(srv.battle_state["b"])
     both = Document(await (await client.get("/")).text())
     for pid in ("a", "b"):

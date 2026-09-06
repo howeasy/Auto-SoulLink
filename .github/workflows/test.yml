@@ -14,6 +14,13 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            calc/package-lock.json
+            calc/calc/package-lock.json
       - name: Install
         run: |
           pip install -r requirements.txt
@@ -29,6 +36,13 @@ jobs:
         run: ruff check . --statistics || true
       - name: Lua syntax (all lua/**/*.lua parse under 5.4)
         run: python tools/lua_syntax_check.py
+      - name: Build actual calculator browser bundle
+        run: |
+          npm --prefix calc ci --ignore-scripts --no-audit --no-fund
+          npm --prefix calc/calc ci --ignore-scripts --no-audit --no-fund
+          npm --prefix calc run build
+      - name: UI DOM safety and actual calculator execution
+        run: node --test tests/js/operator_dom.test.cjs tests/js/calc_preview.test.cjs
       # Every unit/integration node has an exact reviewed classification. Local
       # ROM/source/JAR and platform cases are named deferrals, never CI passes.
       # The strict local Gen 1 release runner remains a separate required gate.

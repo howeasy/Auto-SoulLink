@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<title>Debug — {{ page_title }}</title>
+<link rel="stylesheet" href="/static/slink.css">
+<link rel="stylesheet" href="/static/dashboard.css">
+<link rel="stylesheet" href="/static/debug.css">
+</head><body>
+<script src="/static/debug-bootstrap.js"></script>
+{{ sidebar_html }}
+<main class="dash-main">
+<h1>&#128295; Debug Console</h1>
+
+<!-- Live status banner -->
+<div class="live-bar">
+  <span id="sse-badge"><span class="sse-dot sse-off"></span> connecting…</span>
+  <span class="player-pill off" id="pill-a">A: offline</span>
+  <span class="player-pill off" id="pill-b">B: offline</span>
+  <span class="stat">Links: <b id="lb-links">0</b></span>
+  <span class="stat">Areas: <b id="lb-areas">0</b></span>
+  <span class="stat">Queued: <b id="lb-queued">0/0</b></span>
+  <span class="event-log" id="lb-last-event">—</span>
+</div>
+
+<div class="grid">
+
+  <!-- Inject Event -->
+  <div class="panel">
+    <h2><span class="h2-left">&#9889; Inject Event</span></h2>
+    <div class="row">
+      <div><label>Player</label><select id="ev-player"><option value="a">A</option><option value="b">B</option></select></div>
+      <div><label>Event</label><select id="ev-type">
+        <option value="area_enter">area_enter</option>
+        <option value="capture">capture</option>
+        <option value="faint">faint</option>
+        <option value="no_catch">no_catch</option>
+        <option value="whiteout">whiteout</option>
+        <option value="party_to_box">party_to_box</option>
+        <option value="box_to_party">box_to_party</option>
+        <option value="key_change">key_change</option>
+        <option value="hello">hello</option>
+        <option value="tick">tick</option>
+        <option value="stats_cache">stats_cache</option>
+        <option value="sync_retrieve_done">sync_retrieve_done</option>
+        <option value="sync_retrieve_failed">sync_retrieve_failed</option>
+        <option value="safe">safe</option>
+      </select></div>
+    </div>
+    <div class="row">
+      <div><label>Mon Key</label><input id="ev-key" placeholder="AABBCCDD:11223344" list="dl-keys"></div>
+      <div><label>Area ID</label><input id="ev-area" placeholder="route_1" list="dl-areas"></div>
+    </div>
+    <div class="row">
+      <div><label>Extra JSON fields</label><input id="ev-extra" placeholder='{"level":12,"species_id":25}'></div>
+    </div>
+    <button class="btn btn-orange" onclick="injectEvent()">Send Event</button>
+    <div class="result" id="ev-result"></div>
+  </div>
+
+  <!-- Queue Command -->
+  <div class="panel">
+    <h2><span class="h2-left">&#128228; Queue Command</span></h2>
+    <div class="row">
+      <div><label>Target Player</label><select id="cmd-player"><option value="a">A</option><option value="b">B</option></select></div>
+      <div><label>Command</label><select id="cmd-type">
+        <option value="force_faint">force_faint</option>
+        <option value="force_explode">force_explode</option>
+        <option value="box_mon">box_mon</option>
+        <option value="party_mon">party_mon</option>
+        <option value="memorialize">memorialize</option>
+        <option value="unresolve_area">unresolve_area</option>
+        <option value="hud_show">hud_show</option>
+        <option value="noop">noop</option>
+      </select></div>
+    </div>
+    <div class="row">
+      <div><label>Mon Key</label><input id="cmd-key" placeholder="AABBCCDD:11223344" list="dl-keys"></div>
+    </div>
+    <div class="row">
+      <div><label>Extra JSON fields</label><input id="cmd-extra" placeholder='{"text":"Hello","r":255,"g":0,"b":0}'></div>
+    </div>
+    <button class="btn btn-blue" onclick="queueCmd()">Queue Command</button>
+    <div class="result" id="cmd-result"></div>
+  </div>
+
+  <!-- Toggle State -->
+  <div class="panel">
+    <h2><span class="h2-left">&#9881; State Toggles</span></h2>
+    <div class="row">
+      <div><label>Player</label><select id="tog-player"><option value="a">A</option><option value="b">B</option></select></div>
+    </div>
+    <div class="row">
+      <button class="btn btn-green" onclick="toggleBalls(true)">Set Pokeballs &#10003;</button>
+      <button class="btn btn-red" onclick="toggleBalls(false)">Clear Pokeballs &#10007;</button>
+    </div>
+    <div class="result" id="tog-result"></div>
+    <h2 style="margin-top:1em"><span class="h2-left">&#128506; Area State</span></h2>
+    <div class="row">
+      <div><label>Area ID</label><input id="area-id" placeholder="route_1" list="dl-areas"></div>
+      <div><label>New State</label><select id="area-state">
+        <option value="unseen">unseen</option>
+        <option value="pending_a">pending_a</option>
+        <option value="pending_b">pending_b</option>
+        <option value="pending_both">pending_both</option>
+        <option value="linked">linked</option>
+        <option value="dead_zone">dead_zone</option>
+      </select></div>
+    </div>
+    <button class="btn btn-orange" onclick="setAreaState()">Set Area State</button>
+    <div class="result" id="area-result"></div>
+  </div>
+
+  <!-- Live State Info -->
+  <div class="panel">
+    <h2><span class="h2-left">&#128270; Live State</span>
+      <button class="btn btn-blue btn-sm" onclick="loadLiveState()">&#8635; Refresh</button></h2>
+    <div id="live-state-content" style="font-size:0.85em;color:var(--muted)">Loading…</div>
+  </div>
+
+  <!-- Danger Zone -->
+  <div class="panel">
+    <h2><span class="h2-left">&#9888; Danger Zone</span></h2>
+    <div class="row">
+      <button class="btn btn-red" onclick="resetRun()">&#128163; Reset Run</button>
+      <button class="btn btn-red" onclick="clearPending()">Clear All Pending</button>
+    </div>
+    <div class="row">
+      <div><label>Clear Pending for Area</label><input id="clear-area" placeholder="route_1" list="dl-areas"></div>
+      <button class="btn btn-orange" onclick="clearPendingArea()" style="flex:0 0 auto;align-self:flex-end">Clear</button>
+    </div>
+    <div class="result" id="danger-result"></div>
+    <h2 style="margin-top:1em"><span class="h2-left">&#128190; Rollback to Backup</span></h2>
+    <div id="backup-list" style="color:var(--c-dim)">Loading backups…</div>
+    <div class="result" id="rollback-result"></div>
+  </div>
+
+  <!-- Manual Link / Unlink -->
+  <div class="panel full">
+    <h2><span class="h2-left">&#128279; Link Management</span>
+      <button class="btn btn-blue btn-sm" onclick="mlRefresh()">&#8635; Refresh</button></h2>
+
+    <!-- Current links table -->
+    <div id="ml-links-table" style="margin-bottom:1em;max-height:250px;overflow-y:auto"></div>
+
+    <!-- Create new link -->
+    <h3 style="color:var(--green);font-size:0.9em;margin-bottom:0.5em">Create Link</h3>
+    <div class="row">
+      <div><label id="ml-label-a">Player A</label>
+        <select id="ml-a" onchange="mlMonChanged('a')" style="font-family:monospace;font-size:0.88em"></select></div>
+      <div><label id="ml-label-b">Player B</label>
+        <select id="ml-b" onchange="mlMonChanged('b')" style="font-family:monospace;font-size:0.88em"></select></div>
+    </div>
+    <div class="row">
+      <div><label>Area</label>
+        <select id="ml-area" style="font-family:monospace;font-size:0.88em"></select></div>
+      <div><label>Filter areas</label>
+        <input id="ml-area-filter" type="text" placeholder="type to filter…" oninput="mlFilterAreas()" style="font-family:monospace;font-size:0.85em"></div>
+    </div>
+    <div style="display:flex;gap:0.6em;align-items:center;margin-top:0.4em">
+      <button class="btn btn-green" onclick="doManualLink()">&#128279; Link</button>
+      <label style="display:inline;font-size:0.8em;cursor:pointer;color:var(--muted)">
+        <input type="checkbox" id="ml-override" style="width:auto"> Override existing links
+      </label>
+      <span id="ml-warn" style="font-size:0.85em;color:var(--yellow)"></span>
+    </div>
+    <div class="result" id="ml-result"></div>
+  </div>
+
+  <!-- Memorial Box Monitor -->
+  <div class="panel full">
+    <h2><span class="h2-left">&#129702; Memorial Box Monitor</span>
+      <button class="btn btn-blue btn-sm" onclick="loadMemorial()">&#8635; Refresh</button></h2>
+    <div id="memorial-content" style="font-size:0.85em;color:var(--muted)">Loading…</div>
+  </div>
+
+  <!-- Raw State -->
+  <div class="panel full" id="raw-state">
+    <h2><span class="h2-left">&#128196; Raw State</span>
+      <span>
+        <label style="display:inline;font-size:0.75em;cursor:pointer;color:var(--muted);margin-right:0.5em">
+          <input type="checkbox" id="raw-auto" checked style="width:auto"> auto
+        </label>
+        <button class="btn btn-blue btn-sm" onclick="loadRaw()">&#8635; Refresh</button>
+      </span>
+    </h2>
+    <pre id="raw-json">Loading…</pre>
+  </div>
+
+</div>
+
+<!-- Shared datalists for autofill -->
+<datalist id="dl-keys"></datalist>
+<datalist id="dl-areas"></datalist>
+
+<script src="/static/dom.js"></script>
+<script src="/static/debug.js"></script>
+<script src="/static/dashboard.js" defer></script>
+</main>
+</body></html>

@@ -11,6 +11,7 @@ class Element:
     tag: str
     attrs: dict = field(default_factory=dict)
     children: list = field(default_factory=list)
+    content: list = field(default_factory=list)
     parent: object = None
 
     def descendants(self, tag=None):
@@ -30,6 +31,16 @@ class Element:
     def has_class(self, name):
         return name in (self.attrs.get("class") or "").split()
 
+    def normalized(self):
+        """Keep element order, attributes and text; discard indentation only."""
+        content = []
+        for item in self.content:
+            if isinstance(item, Element):
+                content.append(item.normalized())
+            elif item.strip():
+                content.append(" ".join(item.split()))
+        return [self.tag, dict(sorted(self.attrs.items())), content]
+
 
 class Document(HTMLParser):
     def __init__(self, text):
@@ -41,6 +52,7 @@ class Document(HTMLParser):
     def handle_starttag(self, tag, attrs):
         node = Element(tag, dict(attrs), parent=self.stack[-1])
         node.parent.children.append(node)
+        node.parent.content.append(node)
         if tag not in VOID:
             self.stack.append(node)
 
@@ -48,6 +60,13 @@ class Document(HTMLParser):
         self.handle_starttag(tag, attrs)
         if tag not in VOID:
             self.handle_endtag(tag)
+
+    def handle_data(self, data):
+        content = self.stack[-1].content
+        if content and isinstance(content[-1], str):
+            content[-1] += data
+        else:
+            content.append(data)
 
     def handle_endtag(self, tag):
         for index in range(len(self.stack) - 1, 0, -1):
