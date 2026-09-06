@@ -1,3 +1,5 @@
+**Current working location (2026-09-06):** `E:\Google Drive\SLink`, branch `codex/ui-rework`. All UI phase and reviewed mockup branches are ancestors of this branch; Phase 7B is committed as `0d5ca74`. Older worktree instructions below are historical.
+
 # Phase 7B — reusable broadcast sources
 
 Implemented in the existing `ui-phase7b-sources` checkout on `codex/ui-phase7b-sources`, based on Phase 7 commit `7a38d5eaeab3375ab86935c5a2cb5202881fc318`. The user requested that further work remain in this checkout instead of adding more phase worktrees.

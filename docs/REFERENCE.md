@@ -268,28 +268,45 @@ Lua clients and the server speak newline-delimited JSON over one persistent TCP 
 
 The status server (default port 8080) exposes these pages and endpoints.
 
+### Managed runs and reusable OBS sources
+
+The manager serves Run, Broadcast and Tools on one origin. `/runs/{run_id}/…` explicitly selects a registered run through a route allowlist. Calc opens separately using that run's `?slink=` URL and real `/api/events` SSE stream. Debug is a drawer. Private runtime projection and OBS execution routes are excluded from the public run proxy.
+
+| Manager path | Methods | Purpose |
+|---|---|---|
+| `/api/broadcast/sources` | GET, HEAD, POST | List sources, preset controls and runs; create a source |
+| `/api/broadcast/sources/{source_id}` | GET, HEAD, PATCH, DELETE | Read, revise or delete one source |
+| `/broadcast/sources/{source_id}` | GET, HEAD | Stable OBS browser-source document |
+| `/broadcast/sources/{source_id}/fragment` | GET, HEAD | Poll the assigned source, with a configuration revision |
+
+A saved source explicitly names its run, preset, players, layout, theme and supported controls. PATCH and DELETE require the current `revision`. Editing or retargeting keeps the OBS URL unchanged; already-open pages reload their shell when the revision changes. Stopped or deleted run assignments never select another run. Records survive run archival. Long pair histories scroll at configurable speed, respect endpoint pauses and reduced-motion preferences, and retain explicit player ownership.
+
+Legacy `/stream/{slug}` pages and fragments remain supported. Prefix them with `/runs/{run_id}` for explicit run access; unprefixed manager legacy URLs retain their compatibility run-resolution behavior. The synthetic gallery entry `all` is not an overlay route. Route parity is checked against `tests/fixtures/ui/routes-v1.json`; `tools/ui_migration_inventory.py` generates a static inventory and tests compare it to the actual routers without starting runs.
+
 ### Quick Reference
 
 | Path | Method | Description |
 |---|---|---|
-| `/` | GET | Main status page |
-| `/memorial` | GET | Memorial wall — dead pairs |
-| `/obs` | GET | OBS scene trigger configuration |
-| `/debug` | GET | Debug console |
-| `/twitch` | GET | Twitch bot configuration and activity log |
-| `/stream` | GET | Stream overlay index |
+| `/` | GET | Pair board and run setup |
+| `/broadcast` | GET | Saved sources, OBS automation and per-run Twitch |
+| `/tools` | GET | Companion patcher and gated randomizer preparation |
+| `/memorial` | GET | Compatibility redirect to Fallen on the board |
+| `/obs` | GET | Compatibility redirect to Broadcast / OBS |
+| `/debug` | GET | Compatibility redirect opening the Debug drawer |
+| `/twitch` | GET | Compatibility redirect to Broadcast / Twitch |
+| `/stream` | GET | Compatibility redirect to Broadcast overlays |
 | `/stream/party-a` | GET | Overlay — Player A party |
 | `/stream/party-b` | GET | Overlay — Player B party |
 | `/stream/links` | GET | Overlay — linked pairs |
 | `/stream/linked-party` | GET | Overlay — both players' linked mons side-by-side |
 | `/stream/boxed-links` | GET | Overlay — boxed linked pairs |
-| `/stream/deaths` | GET | Overlay — death feed |
+| `/stream/deaths` | GET | Overlay — alive and fallen pair counters |
 | `/stream/attempts` | GET | Overlay — attempts counter |
 | `/stream/areas` | GET | Overlay — area states |
 | `/stream/events` | GET | Overlay — recent events log |
 | `/stream/badges-a` | GET | Overlay — Player A gym badges |
 | `/stream/badges-b` | GET | Overlay — Player B gym badges |
-| `/stream/encounters` | GET | Overlay — all encounter areas and states |
+| `/stream/encounters` | GET | Overlay — encounter counters and most recent linked pair |
 | `/stream/stream-memorial` | GET | Overlay — memorial wall |
 | `/stream/ticker` | GET | Overlay — scrolling text ticker |
 | `/stream/focus-a` | GET | Overlay — Player A focused mon view |

@@ -2,6 +2,8 @@
 
 Approved implementation plan, 2026-09-05. This document supersedes the mockup brief's section 9 once that branch is integrated.
 
+**Working-location update (2026-09-06):** Continue in `E:\Google Drive\SLink` on `codex/ui-rework`. All prior UI phase and reviewed mockup branches are already included. The user withdrew the need for further branch consolidation; preserve existing checkouts and use this current branch for remaining work.
+
 ## Summary and design direction
 
 Deliver one origin with **Run, Broadcast, and Tools**, retaining Calc in a new tab and Debug as a drawer.

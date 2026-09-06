@@ -67,7 +67,14 @@ def test_event_filter_pills_do_not_overlap():
 def test_event_filters_cover_every_dashboard_event_type():
     """A type the dashboard styles but the overlays never list is invisible on stream."""
     known = set(EVENT_FILTERS_DEFAULT_ON) | set(EVENT_FILTERS_DEFAULT_OFF)
-    styled = set(SLinkServer._EVENT_TYPE_CLASSES)
+    import ast
+    import inspect
+    tree = ast.parse(inspect.getsource(SLinkServer))
+    styled = {node.args[1].value for node in ast.walk(tree)
+              if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+              and node.func.attr == "_log_event" and len(node.args) > 1
+              and isinstance(node.args[1], ast.Constant) and isinstance(node.args[1].value, str)}
+    assert "command_nack" in styled  # tests actual emitted events, not obsolete CSS classes
     missing = styled - known
     assert not missing, f"event types with no overlay filter pill: {sorted(missing)}"
 
@@ -98,7 +105,7 @@ def test_every_default_on_filter_has_a_pill():
 def test_the_template_no_longer_carries_its_own_filter_list():
     import os
     tpl = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-                       "server", "templates", "stream_index.html")
+                       "server", "templates", "broadcast", "_gallery.html")
     with open(tpl, encoding="utf-8") as f:
         src = f.read()
     assert "'force_faint', 'whiteout'" not in src, "the hardcoded roster is back — it will drift again"

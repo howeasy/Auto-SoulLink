@@ -112,8 +112,8 @@ def test_queued_death_cmd_ignores_other_commands_and_keys():
 def test_force_explode_is_a_known_event_type_and_visible_by_default():
     """A death the dashboard/overlays would otherwise drop on the floor."""
     from server.overlay_catalog import EVENT_FILTERS_DEFAULT_ON
-    from server.server import SLinkServer
+    from server.broadcast_presets import EVENT_FILTERS
 
     for cmd in DEATH_COMMANDS:
-        assert cmd in SLinkServer._EVENT_TYPE_CLASSES, f"{cmd} has no dashboard CSS class"
+        assert cmd in EVENT_FILTERS, f"{cmd} has no broadcast filter"
         assert cmd in EVENT_FILTERS_DEFAULT_ON, f"{cmd} is not shown by default in overlays"

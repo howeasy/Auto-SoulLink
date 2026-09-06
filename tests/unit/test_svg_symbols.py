@@ -68,8 +68,8 @@ def test_icon_references_resolve(rel):
     # A partial rendered INTO another page inherits that page's sprite; only templates that are a
     # page in their own right (they extend a base) can be checked in isolation.
     src = _read(rel)
-    hosts = [rel] if EXTENDS_RE.search(src) else [
-        page for page in _templates() if EXTENDS_RE.search(_read(page)) and rel in _dependencies(page)]
+    hosts = [rel] if EXTENDS_RE.search(src) or "<!doctype html>" in src.lower() else [
+        page for page in _templates() if (EXTENDS_RE.search(_read(page)) or "<!doctype html>" in _read(page).lower()) and rel in _dependencies(page)]
     assert hosts, f"{rel} has no tested page composition"
     for page in hosts:
         missing = sorted(used - _symbols_reachable_from(page))
@@ -87,9 +87,9 @@ def test_every_referenced_icon_exists_somewhere():
 
 
 @pytest.mark.parametrize("page,icon", [
-    ("stream/links.html", "i-x"),              # dead pair
-    ("stream/encounters.html", "i-sparkle"),   # shiny
-    ("stream/stream_memorial.html", "i-cross"),  # actual memorial route template
+    ("broadcast/source.html", "i-x"),              # dead pair
+    ("broadcast/source.html", "i-sparkle"),   # shiny
+    ("broadcast/source.html", "i-cross"),  # actual memorial route template
 ])
 def test_the_stream_overlays_can_reach_their_markers(page, icon):
     """The specific regression, checked through the real composition.

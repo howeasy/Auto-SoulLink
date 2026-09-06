@@ -40,3 +40,16 @@ def render_legacy(server, request, slug):
     response = aiohttp_jinja2.render_template(template, request, context)
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+def register_legacy_routes(app, server):
+    """Register each real alias explicitly; the gallery is never a route."""
+    def handler_for(slug):
+        async def handle(request):
+            return render_legacy(server, request, slug)
+        return handle
+
+    for slug in ALIASES:
+        handler = handler_for(slug)
+        app.router.add_get("/stream/" + slug, handler)
+        app.router.add_get("/stream/" + slug + "/fragment", handler)

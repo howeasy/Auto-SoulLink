@@ -140,6 +140,27 @@ def snapshot(repo, mockup_repo=None):
             (repo / filename).read_text(encoding="utf-8"), filename)
         inputs.append(file_record(repo, filename))
         unresolved.extend(failures)
+    catalog_path = "server/overlay_catalog.py"
+    overlays = read_catalog((repo / catalog_path).read_text(encoding="utf-8"))
+    inputs.append(file_record(repo, catalog_path))
+    # This one reviewed table registration expands the literal catalog. Other
+    # dynamic registrations remain unresolved. Runtime parity below is tested
+    # against build_app, so a changed registry cannot silently lose routes.
+    run_source = (repo / ROUTE_FILES["run"]).read_text(encoding="utf-8")
+    registrations = [node for node in ast.walk(ast.parse(run_source))
+                     if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                     and node.func.id == "register_legacy_routes"]
+    if registrations:
+        inputs.append(file_record(repo, "server/broadcast_render.py"))
+    for call in registrations:
+        for overlay in overlays:
+            if overlay["slug"] == "all":
+                continue
+            for suffix in ("", "/fragment"):
+                parts["run"].append({"source": ROUTE_FILES["run"], "line": call.lineno,
+                                     "method": "GET", "served_methods": ["GET", "HEAD"],
+                                     "path": "/stream/" + overlay["slug"] + suffix,
+                                     "handler": "register_legacy_routes"})
     services = {}
     for service in ("run", "manager"):
         rows = parts[service] + parts["patcher"]
@@ -147,9 +168,6 @@ def snapshot(repo, mockup_repo=None):
         if len(set(identities)) != len(identities):
             raise ValueError(f"duplicate {service} route")
         services[service] = sorted(rows, key=lambda row: (row["path"], row["method"]))
-    catalog_path = "server/overlay_catalog.py"
-    overlays = read_catalog((repo / catalog_path).read_text(encoding="utf-8"))
-    inputs.append(file_record(repo, catalog_path))
     run_gets = {row["path"] for row in services["run"] if row["method"] == "GET"}
     overlay_pairs = []
     for overlay in overlays:

@@ -35,11 +35,10 @@ from pathlib import Path
 
 from server import gen1_admission
 from server import runtime_boundary
-from server.ui_projection import health, move_details, player_capabilities
+from server.ui_projection import move_details, player_capabilities
 from server.save_identity import SaveIdentity
 from server.http_safety import csrf_protection, local_operator, theme_cache
 from server.lua_literals import lua_comment, lua_string
-from server.overlay_catalog import build_index_context as _build_stream_index_context
 
 try:
     from aiohttp import web as aiohttp_web
@@ -70,9 +69,9 @@ except ImportError:
     )
 
 try:
-    from .templating import resolve_layout, resolve_theme, setup_templating
+    from .templating import resolve_theme, setup_templating
 except ImportError:
-    from server.templating import resolve_layout, resolve_theme, setup_templating
+    from server.templating import resolve_theme, setup_templating
 
 import aiohttp_jinja2
 
@@ -113,8 +112,6 @@ def _configure_logging(data_dir: str | None, verbose: bool) -> None:
         log.info(f"[--verbose] DEBUG logging enabled → {log_path}")
     else:
         log.info(f"Logging to {log_path}")
-
-
 
 
 # ── Damage Calculator integration ────────────────────────────────────────────
@@ -167,8 +164,6 @@ def _format_killed_at(raw: str | None) -> str:
     except ValueError:
         # Windows libc has no %- modifier; use %# instead for unpadded fields.
         return dt.strftime("%#m/%#d/%Y, %#I:%M:%S %p")
-
-
 
 
 def _build_mon_entry(key, detail, adapter):
@@ -226,11 +221,7 @@ def _build_mon_entry(key, detail, adapter):
 # Raw string so no {{ }} escaping needed.
 
 
-
-
-
 # ── Debug page ─────────────────────────────────────────────────────────────────
-
 
 
 def _bot_load_config(data_dir: str | None) -> dict:
@@ -248,7 +239,6 @@ def _bot_load_config(data_dir: str | None) -> dict:
         return cfg
     except Exception:
         return dict(defaults)
-
 
 
 def _bot_save_config(data_dir: str | None, cfg: dict):
@@ -2758,426 +2748,7 @@ class SLinkServer:
     async def handle_stream_index(self, request):
         from server.application import compatibility_location
         raise aiohttp_web.HTTPFound(compatibility_location(request, '/broadcast?tab=overlays'))
-        ctx = _build_stream_index_context(request)
-        ctx["sidebar_html"] = self._build_sidebar_html("stream")
-        return aiohttp_jinja2.render_template("stream_index.html", request, ctx)
 
-    async def handle_stream_party_a(self, request):
-        return await self._handle_stream_party_template(request, "a")
-
-    async def handle_stream_party_b(self, request):
-        return await self._handle_stream_party_template(request, "b")
-
-    # ── Templated party overlay ────────────────────────────────
-
-    def _build_party_overlay_context(self, player_id: str) -> dict:
-        """Slice and reshape `_build_status_dict()` into the template context
-        the party overlay expects. One full status-dict build per HTMX poll
-        (every 2 s) — acceptable at SLink's localhost-only scale.
-        """
-        d = self._build_status_dict()
-        p = d["players"].get(player_id, {})
-        keys = p.get("party_keys", [])
-        details = p.get("party_details", {})
-
-        mons = []
-        for key in keys:
-            det = details.get(key) or {}
-            mon = self._battle_mon_card(det)
-            mon.update(key=key, nickname=det.get("nickname") or det.get("species_name") or key[:8])
-            mons.append(mon)
-
-        return {
-            "player_id":    player_id,
-            "trainer_name": p.get("trainer_name", ""),
-            "mons":         mons,
-        }
-
-    async def _handle_stream_party_template(self, request, player_id: str):
-        """Render the templated party overlay. Two call sites:
-            * /stream/party-{a,b}         — full page (initial paint)
-            * /stream/party-{a,b}/fragment — #root only (HTMX poll target)
-        Both pull from `_build_party_overlay_context(player_id)`. The
-        fragment endpoint is wired in the router below.
-        """
-        is_fragment = request.match_info.get("fragment") == "fragment" \
-                      or request.path.endswith("/fragment")
-        ctx = self._build_party_overlay_context(player_id)
-        ctx["theme"]         = resolve_theme(request)
-        ctx["layout_class"]  = resolve_layout(request)
-        ctx["overlay_title"] = f"Party {player_id.upper()}"
-        # Fragment endpoint URL the body's hx-get points at — must preserve
-        # ?theme= / ?layout= so themed polls keep returning themed bodies.
-        query = request.url.query_string
-        ctx["fragment_url"]  = f"/stream/party-{player_id}/fragment" + (f"?{query}" if query else "")
-
-        template = "stream/_party_root.html" if is_fragment else "stream/party.html"
-        return aiohttp_jinja2.render_template(template, request, ctx)
-
-    async def handle_stream_party_a_fragment(self, request):
-        return await self._handle_stream_party_template(request, "a")
-
-    async def handle_stream_party_b_fragment(self, request):
-        return await self._handle_stream_party_template(request, "b")
-
-    async def handle_stream_enemy_focus_a(self, request):
-        return await self._battle_overlay(request, "enemy-focus-a", "enemy_focus", "a")
-
-    async def handle_stream_enemy_focus_b(self, request):
-        return await self._battle_overlay(request, "enemy-focus-b", "enemy_focus", "b")
-
-    async def handle_stream_enemy_focus_a_fragment(self, request):
-        return await self._battle_fragment(request, "enemy-focus-a", "enemy_focus", "a")
-
-    async def handle_stream_enemy_focus_b_fragment(self, request):
-        return await self._battle_fragment(request, "enemy-focus-b", "enemy_focus", "b")
-
-    async def handle_stream_enemy_trainer_a(self, request):
-        return await self._battle_overlay(request, "enemy-trainer-a", "enemy_trainer", "a")
-
-    async def handle_stream_enemy_trainer_b(self, request):
-        return await self._battle_overlay(request, "enemy-trainer-b", "enemy_trainer", "b")
-
-    async def handle_stream_enemy_trainer_a_fragment(self, request):
-        return await self._battle_fragment(request, "enemy-trainer-a", "enemy_trainer", "a")
-
-    async def handle_stream_enemy_trainer_b_fragment(self, request):
-        return await self._battle_fragment(request, "enemy-trainer-b", "enemy_trainer", "b")
-
-    # ── Battle overlay dispatch ──────────────────────────
-
-    async def _battle_overlay(self, request, slug: str, template_base: str,
-                              player_id: str):
-        ctx = self._build_battle_overlay_context(player_id, template_base)
-        self._apply_battle_body_class(ctx, template_base, request)
-        return await self._render_stream_overlay(
-            request, slug, ctx, template_base=template_base)
-
-    async def _battle_fragment(self, request, slug: str, template_base: str, player_id: str):
-        ctx = self._build_battle_overlay_context(player_id, template_base)
-        self._apply_battle_body_class(ctx, template_base, request)
-        return await self._render_stream_overlay(
-            request, slug, ctx, template_base=template_base, fragment=True)
-
-    @staticmethod
-    def _apply_battle_body_class(ctx: dict, template_base: str, request) -> None:
-        """Focus + enemy-focus need `body.ov-focus` for their shell scaling
-        rules to apply. The CSS extras are stitched onto `layout_class` so
-        the existing _render_stream_overlay plumbing stays untouched."""
-        if template_base not in ("focus", "enemy_focus"):
-            return
-        existing = resolve_layout(request)
-        ctx["layout_class"] = (existing + " ov-focus").strip()
-
-    def _build_battle_overlay_context(self, player_id: str, template_base: str) -> dict:
-        """Unified context builder for enemy_focus / enemy_trainer / focus.
-        Dispatches on template_base to assemble the right slice."""
-        d = self._build_status_dict()
-        p  = d.get("players", {}).get(player_id, {}) or {}
-        bs = p.get("battle_state", {}) or {}
-        ctx = {"player_id": player_id, "in_battle": bool(bs.get("in_battle"))}
-
-        if template_base == "enemy_focus":
-            return {**ctx, **self._enemy_focus_ctx(bs)}
-        if template_base == "enemy_trainer":
-            return {**ctx, **self._enemy_trainer_ctx(bs)}
-        if template_base == "focus":
-            return {**ctx, **self._focus_ctx(p, bs)}
-        return ctx
-
-    def _enemy_focus_ctx(self, bs: dict) -> dict:
-        if not bs.get("in_battle"):
-            return {"active_mons": [], "is_doubles": False, "is_trainer": False, "title": ""}
-        enemy_party = bs.get("enemy_party", []) or []
-        active = [m for m in enemy_party if m.get("active")]
-        if not active and enemy_party:
-            active = [enemy_party[0]]
-        is_doubles = bool(bs.get("is_doubles")) or len(active) > 1
-        is_trainer = bool(bs.get("is_trainer_battle"))
-        if is_trainer:
-            title = (bs.get("opponent_class") or "TRAINER")
-            if bs.get("opponent_name"):
-                title += " " + bs["opponent_name"]
-        else:
-            title = "WILD ENCOUNTER"
-        return {
-            "active_mons": [self._battle_slot(m) for m in active],
-            "is_doubles": is_doubles,
-            "is_trainer": is_trainer,
-            "title": title,
-        }
-
-    def _enemy_trainer_ctx(self, bs: dict) -> dict:
-        if not bs.get("in_battle") or not bs.get("is_trainer_battle"):
-            return {"mons": [], "trainer_label": ""}
-        team = bs.get("enemy_party", []) or []
-        label = (bs.get("opponent_class") or "Trainer")
-        if bs.get("opponent_name"):
-            label += " " + bs["opponent_name"]
-        return {
-            "mons": [self._battle_mon_card(m) for m in team],
-            "trainer_label": label,
-        }
-
-    def _focus_ctx(self, p: dict, bs: dict) -> dict:
-        keys = p.get("party_keys", []) or []
-        details = p.get("party_details", {}) or {}
-        active_slots = []
-        for k in keys:
-            det = details.get(k) or {}
-            if not det.get("active"):
-                continue
-            active_slots.append(self._battle_slot(det))
-        is_doubles = bool(bs.get("is_doubles")) or len(active_slots) > 1
-        return {
-            "active_mons": active_slots,
-            "is_doubles":  is_doubles,
-        }
-
-    def _battle_slot(self, det: dict) -> dict:
-        """Compose a {mon, moves} dict the focus/enemy-focus templates expect."""
-        return {
-            "mon":   self._battle_mon_card(det),
-            "moves": [self._battle_move(md) for md in det.get("move_details", []) or []],
-        }
-
-    def _battle_mon_card(self, det: dict) -> dict:
-        """Project a party_details / enemy_party entry into the shape mon_card expects."""
-        value = health(det)
-        hp, max_hp = value["hp"], value["maximum"]
-        fnt = value["known"] and hp == 0
-        tone = "fnt" if fnt else {"high": "bh", "mid": "bm", "low": "bl", "unknown": "bu"}[value["color"]]
-        return {
-            "species_id":   det.get("species_id", 0),
-            "species_name": det.get("species_name", ""),
-            "nickname":     det.get("nickname") or det.get("species_name") or "???",
-            "level":        det.get("level", 0),
-            "hp":           hp,
-            "maxHP":        max_hp,
-            "hp_known":     value["known"],
-            "sprite_html":  det.get("sprite_html", ""),
-            "status_tone":  tone,
-            "fainted":      fnt,
-            "status_cond":  det.get("status_cond", 0),
-            "stat_stages":  det.get("stat_stages", []) if det.get("active") else None,
-            "stat_stage_labels": self.adapter.stat_stage_labels(),
-            "active":       bool(det.get("active")),
-        }
-
-    def _battle_move(self, md: dict) -> dict:
-        """Project a move detail entry into the shape the moves-grid expects."""
-        max_pp = md.get("pp", 0) or 0
-        cur_pp = md.get("current_pp", 0) or 0
-        pct    = max(0, min(100, round(cur_pp / max_pp * 100))) if max_pp else 0
-        if pct > 50:
-            cls = "pp-h"
-        elif pct > 25:
-            cls = "pp-m"
-        else:
-            cls = "pp-l"
-        return {
-            "name":       md.get("name") or "?",
-            "type_name":  md.get("type_name") or "",
-            "current_pp": cur_pp,
-            "pp_max":     max_pp,
-            "pp_cls":     cls,
-        }
-
-    async def handle_stream_links(self, request):
-        return await self._render_stream_overlay(
-            request, "links", self._build_links_overlay_context())
-
-    async def handle_stream_links_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "links", self._build_links_overlay_context(), fragment=True)
-
-    async def handle_stream_linked_party(self, request):
-        return await self._render_stream_overlay(
-            request, "linked-party", self._build_linked_party_overlay_context())
-
-    async def handle_stream_linked_party_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "linked-party", self._build_linked_party_overlay_context(), fragment=True)
-
-    async def handle_stream_boxed_links(self, request):
-        return await self._render_stream_overlay(
-            request, "boxed-links", self._build_boxed_links_overlay_context())
-
-    async def handle_stream_boxed_links_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "boxed-links", self._build_boxed_links_overlay_context(), fragment=True)
-
-    # ── Links overlay context builders ───────────────────
-
-    def _build_links_overlay_context(self) -> dict:
-        """Alive + dead link cards for /stream/links."""
-        d = self._build_status_dict()
-        alive, dead = [], []
-        for lnk in d.get("links", []):
-            item = {
-                "area_display": lnk.get("area_display") or "",
-                "a": {
-                    "nickname":     lnk.get("a_nickname") or "",
-                    "species_name": lnk.get("a_species_name") or "",
-                    "sprite_html":  lnk.get("a_sprite_html") or "",
-                },
-                "b": {
-                    "nickname":     lnk.get("b_nickname") or "",
-                    "species_name": lnk.get("b_species_name") or "",
-                    "sprite_html":  lnk.get("b_sprite_html") or "",
-                },
-            }
-            (alive if lnk.get("status") == "alive" else dead).append(item)
-        return {"alive": alive, "dead": dead}
-
-    def _build_linked_party_overlay_context(self) -> dict:
-        """Linked pairs where BOTH mons are currently in party — full
-        sprite + HP card layout for /stream/linked-party."""
-        d = self._build_status_dict()
-        pa = d.get("players", {}).get("a", {}) or {}
-        pb = d.get("players", {}).get("b", {}) or {}
-        a_keys = set(pa.get("party_keys", []))
-        b_keys = set(pb.get("party_keys", []))
-        a_det  = pa.get("party_details", {}) or {}
-        b_det  = pb.get("party_details", {}) or {}
-
-        pairs = []
-        for lnk in d.get("links", []):
-            if lnk.get("status") != "alive":
-                continue
-            a_key = lnk.get("a_key")
-            b_key = lnk.get("b_key")
-            if a_key not in a_keys or b_key not in b_keys:
-                continue
-            ad = a_det.get(a_key) or {}
-            bd = b_det.get(b_key) or {}
-            a_health, b_health = health(ad), health(bd)
-            a_hp, a_mx, a_pct = a_health["hp"], a_health["maximum"], a_health["percent"]
-            b_hp, b_mx, b_pct = b_health["hp"], b_health["maximum"], b_health["percent"]
-            a_fnt = a_health["known"] and a_hp == 0
-            b_fnt = b_health["known"] and b_hp == 0
-            colors = {"high": "hp-h", "mid": "hp-m", "low": "hp-l", "unknown": "hp-unknown"}
-            pairs.append({
-                "area_display": lnk.get("area_display") or "",
-                "both_fainted": a_fnt and b_fnt,
-                "a": {
-                    "nickname":     ad.get("nickname") or lnk.get("a_nickname") or "",
-                    "species_name": lnk.get("a_species_name") or "",
-                    "sprite_html":  ad.get("sprite_html") or lnk.get("a_sprite_html") or "",
-                    "level":        ad.get("level") or lnk.get("a_level") or 0,
-                    "hp": a_hp, "max_hp": a_mx, "pct": a_pct,
-                    "hp_cls": colors[a_health["color"]], "fainted": a_fnt,
-                },
-                "b": {
-                    "nickname":     bd.get("nickname") or lnk.get("b_nickname") or "",
-                    "species_name": lnk.get("b_species_name") or "",
-                    "sprite_html":  bd.get("sprite_html") or lnk.get("b_sprite_html") or "",
-                    "level":        bd.get("level") or lnk.get("b_level") or 0,
-                    "hp": b_hp, "max_hp": b_mx, "pct": b_pct,
-                    "hp_cls": colors[b_health["color"]], "fainted": b_fnt,
-                },
-            })
-        return {"pairs": pairs}
-
-    def _build_boxed_links_overlay_context(self) -> dict:
-        """Alive pairs where at least one mon is in the box (not party)."""
-        d = self._build_status_dict()
-        pa = d.get("players", {}).get("a", {}) or {}
-        pb = d.get("players", {}).get("b", {}) or {}
-        a_keys = set(pa.get("party_keys", []))
-        b_keys = set(pb.get("party_keys", []))
-
-        pairs = []
-        for lnk in d.get("links", []):
-            if lnk.get("status") != "alive":
-                continue
-            a_in = lnk.get("a_key") in a_keys
-            b_in = lnk.get("b_key") in b_keys
-            if a_in and b_in:
-                continue  # both in party → belongs to linked-party overlay
-            pairs.append({
-                "area_display": lnk.get("area_display") or "",
-                "a": {
-                    "nickname":     lnk.get("a_nickname") or "",
-                    "species_name": lnk.get("a_species_name") or "",
-                    "sprite_html":  lnk.get("a_sprite_html") or "",
-                    "level":        lnk.get("a_level") or 0,
-                    "in_party":     a_in,
-                },
-                "b": {
-                    "nickname":     lnk.get("b_nickname") or "",
-                    "species_name": lnk.get("b_species_name") or "",
-                    "sprite_html":  lnk.get("b_sprite_html") or "",
-                    "level":        lnk.get("b_level") or 0,
-                    "in_party":     b_in,
-                },
-            })
-        return {"pairs": pairs}
-
-    async def handle_stream_deaths(self, request):
-        return await self._render_stream_overlay(
-            request, "deaths", self._build_deaths_overlay_context())
-
-    async def handle_stream_deaths_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "deaths", self._build_deaths_overlay_context(), fragment=True)
-
-    async def handle_stream_attempts(self, request):
-        return await self._render_stream_overlay(
-            request, "attempts", self._build_attempts_overlay_context())
-
-    async def handle_stream_attempts_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "attempts", self._build_attempts_overlay_context(), fragment=True)
-
-    # ── Shared template plumbing for stream overlays ─────────────
-
-    async def _render_stream_overlay(self, request, slug: str, ctx: dict, *,
-                                     fragment: bool = False, template_base: str | None = None):
-        """Render `stream/{base}.html` (or `stream/_{base}_root.html` for the
-        HTMX fragment endpoint). Shared by every stream overlay so the
-        theme + layout + fragment-url plumbing lives in exactly one place.
-
-        ``template_base`` lets two-player overlays (e.g. /stream/focus-a +
-        /stream/focus-b) share one template — pass ``template_base='focus'``
-        for both and the per-side context tells the template which player.
-        """
-        ctx = dict(ctx)
-        ctx.setdefault("overlay_title", slug.replace("-", " ").title())
-        ctx["theme"]        = resolve_theme(request)
-        # `setdefault` (not `=`) so handlers that already stitched extras onto
-        # layout_class — e.g. `_apply_battle_body_class` adding `ov-focus` to
-        # focus / enemy-focus — survive this plumbing. Otherwise body.ov-focus
-        # is silently dropped and the doubles flex-row split layout never
-        # activates, leaving both columns stacked vertically.
-        ctx.setdefault("layout_class", resolve_layout(request))
-        query = request.url.query_string
-        ctx["fragment_url"] = f"/stream/{slug}/fragment" + (f"?{query}" if query else "")
-        base = (template_base or slug).replace("-", "_")
-        template = f"stream/_{base}_root.html" if fragment else f"stream/{base}.html"
-        return aiohttp_jinja2.render_template(template, request, ctx)
-
-    def _build_deaths_overlay_context(self) -> dict:
-        """Alive vs dead link counts for the SOUL LINK overlay."""
-        alive = dead = 0
-        for lnk in self.state.links:
-            status = lnk.status.value if hasattr(lnk.status, "value") else lnk.status
-            if status == "alive":
-                alive += 1
-            elif status in ("dead", "memorial"):
-                dead += 1
-        return {"alive_count": alive, "dead_count": dead}
-
-    def _build_attempts_overlay_context(self) -> dict:
-        return {"attempts_count": self.state.attempts_count}
-
-    async def handle_stream_areas(self, request):
-        return await self._render_stream_overlay(
-            request, "areas", self._build_areas_overlay_context())
-
-    async def handle_stream_areas_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "areas", self._build_areas_overlay_context(), fragment=True)
 
     async def handle_api_attempts(self, request):
         """POST /api/attempts — set the manual attempts counter."""
@@ -3197,206 +2768,6 @@ class SLinkServer:
         self._notify_sse()
         return aiohttp_web.json_response({"ok": True, "attempts_count": count})
 
-    async def handle_stream_events(self, request):
-        return await self._render_stream_overlay(
-            request, "events", self._build_events_overlay_context(request))
-
-    async def handle_stream_events_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "events", self._build_events_overlay_context(request), fragment=True)
-
-    async def handle_stream_badges_a(self, request):
-        return await self._badges_overlay(request, "a")
-
-    async def handle_stream_badges_b(self, request):
-        return await self._badges_overlay(request, "b")
-
-    async def handle_stream_badges_a_fragment(self, request):
-        return await self._badges_fragment(request, "a")
-
-    async def handle_stream_badges_b_fragment(self, request):
-        return await self._badges_fragment(request, "b")
-
-    async def _badges_overlay(self, request, player_id: str):
-        return await self._render_stream_overlay(
-            request, f"badges-{player_id}",
-            self._build_badges_overlay_context(player_id),
-            template_base="badges")
-
-    async def _badges_fragment(self, request, player_id: str):
-        return await self._render_stream_overlay(
-            request, f"badges-{player_id}",
-            self._build_badges_overlay_context(player_id),
-            template_base="badges", fragment=True)
-
-    async def handle_stream_encounters(self, request):
-        return await self._render_stream_overlay(
-            request, "encounters", self._build_encounters_overlay_context())
-
-    async def handle_stream_encounters_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "encounters", self._build_encounters_overlay_context(), fragment=True)
-
-    async def handle_stream_stream_memorial(self, request):
-        return await self._render_stream_overlay(
-            request, "stream-memorial", self._build_memorial_scroll_context(),
-            template_base="stream_memorial")
-
-    async def handle_stream_stream_memorial_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "stream-memorial", self._build_memorial_scroll_context(),
-            template_base="stream_memorial", fragment=True)
-
-    async def handle_stream_ticker(self, request):
-        return await self._render_stream_overlay(
-            request, "ticker", self._build_ticker_overlay_context(request))
-
-    async def handle_stream_ticker_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "ticker", self._build_ticker_overlay_context(request), fragment=True)
-
-    async def handle_stream_focus_a(self, request):
-        return await self._battle_overlay(request, "focus-a", "focus", "a")
-
-    async def handle_stream_focus_b(self, request):
-        return await self._battle_overlay(request, "focus-b", "focus", "b")
-
-    async def handle_stream_focus_a_fragment(self, request):
-        return await self._battle_fragment(request, "focus-a", "focus", "a")
-
-    async def handle_stream_focus_b_fragment(self, request):
-        return await self._battle_fragment(request, "focus-b", "focus", "b")
-
-    async def handle_stream_area_encounter(self, request):
-        return await self._render_stream_overlay(
-            request, "area-encounter", self._build_area_encounter_overlay_context())
-
-    async def handle_stream_area_encounter_fragment(self, request):
-        return await self._render_stream_overlay(
-            request, "area-encounter", self._build_area_encounter_overlay_context(), fragment=True)
-
-    async def handle_stream_enc_table_a(self, request):
-        return await self._enc_table_overlay(request, "a")
-
-    async def handle_stream_enc_table_b(self, request):
-        return await self._enc_table_overlay(request, "b")
-
-    async def handle_stream_enc_table_a_fragment(self, request):
-        return await self._enc_table_fragment(request, "a")
-
-    async def handle_stream_enc_table_b_fragment(self, request):
-        return await self._enc_table_fragment(request, "b")
-
-    async def _enc_table_overlay(self, request, player_id: str):
-        return await self._render_stream_overlay(
-            request, f"enc-table-{player_id}",
-            self._build_enc_table_overlay_context(player_id),
-            template_base="enc_table")
-
-    async def _enc_table_fragment(self, request, player_id: str):
-        return await self._render_stream_overlay(
-            request, f"enc-table-{player_id}",
-            self._build_enc_table_overlay_context(player_id),
-            template_base="enc_table", fragment=True)
-
-    # ── Context builders for the remaining overlays ──
-
-    def _build_areas_overlay_context(self) -> dict:
-        linked = dead = pending = 0
-        for st in self.state.area_states.values():
-            sv = st.value if hasattr(st, "value") else str(st)
-            if sv == "linked":
-                linked += 1
-            elif sv == "dead_zone":
-                dead += 1
-            elif sv.startswith("pending"):
-                pending += 1
-        return {"linked": linked, "dead": dead, "pending": pending}
-
-    def _build_badges_overlay_context(self, player_id: str) -> dict:
-        d = self._build_status_dict()
-        p = d.get("players", {}).get(player_id, {}) or {}
-        slugs = d.get("badge_slugs", []) or []
-        primary = p.get("badges", 0) or 0
-        kanto = p.get("kanto_badges", 0) or 0
-        trainer_name = p.get("trainer_name") or f"Player {player_id.upper()}"
-        badges = []
-        for i, pair in enumerate(slugs):
-            earned = bool((primary >> i) & 1) if i < 8 else bool((kanto >> (i - 8)) & 1)
-            badges.append({
-                "slug": pair[0] if isinstance(pair, (list, tuple)) else str(pair),
-                "name": pair[1] if isinstance(pair, (list, tuple)) and len(pair) > 1 else "",
-                "earned": earned,
-            })
-        return {
-            "player_id":    player_id,
-            "trainer_name": trainer_name,
-            "badges":       badges,
-        }
-
-    def _build_encounters_overlay_context(self) -> dict:
-        d = self._build_status_dict()
-        links = d.get("links", []) or []
-        linked = sum(1 for lk in links if lk.get("status") == "alive")
-        dead   = sum(1 for lk in links if lk.get("status") != "alive")
-        shinies = sum(1 for lk in links if lk.get("a_shiny") or lk.get("b_shiny"))
-        bonus = d.get("bonus_keys", {}) or {}
-        shinies += len(bonus.get("a", []) or []) + len(bonus.get("b", []) or [])
-        last = links[-1] if links else None
-        last_ctx = None
-        if last:
-            last_ctx = {
-                "area_display": last.get("area_display") or "",
-                "a": {
-                    "nickname":     last.get("a_nickname") or "",
-                    "species_name": last.get("a_species_name") or "",
-                    "level":        last.get("a_level") or 0,
-                    "sprite_html":  last.get("a_sprite_html") or "",
-                    "shiny":        bool(last.get("a_shiny")),
-                },
-                "b": {
-                    "nickname":     last.get("b_nickname") or "",
-                    "species_name": last.get("b_species_name") or "",
-                    "level":        last.get("b_level") or 0,
-                    "sprite_html":  last.get("b_sprite_html") or "",
-                    "shiny":        bool(last.get("b_shiny")),
-                },
-            }
-        return {
-            "linked":  linked + dead,
-            "dead":    dead,
-            "shinies": shinies,
-            "last":    last_ctx,
-        }
-
-    def _build_memorial_scroll_context(self) -> dict:
-        """Killfeed for the streaming memorial scroll, oldest first."""
-        d = self._build_status_dict()
-        kf = sorted(d.get("killfeed", []) or [], key=lambda x: x.get("killed_at") or "")
-        entries = [{
-            "area_display": k.get("area_display") or "",
-            "a": {
-                "nickname":     k.get("a_nickname") or "",
-                "species_name": k.get("a_species_name") or "",
-                "sprite_html":  k.get("a_sprite_html") or "",
-            },
-            "b": {
-                "nickname":     k.get("b_nickname") or "",
-                "species_name": k.get("b_species_name") or "",
-                "sprite_html":  k.get("b_sprite_html") or "",
-            },
-        } for k in kf]
-        return {"entries": entries}
-
-    _EVENT_TYPE_CLASSES = {
-        "capture":      "ec", "faint":        "ef", "whiteout":   "ew",
-        "no_catch":     "en", "area_enter":   "ea", "linked":     "el",
-        "dead_zone":    "ed", "violation":    "ev", "key_change": "ek",
-        "force_faint":  "ef", "hello":        "eh", "shiny":      "es",
-        "force_explode": "ef",
-        "memorialize":  "em", "party_to_box": "ep", "box_to_party": "ep",
-        "reroll":       "er",
-    }
 
     @staticmethod
     def _format_event_ts(raw) -> str:
@@ -3410,128 +2781,6 @@ class SLinkServer:
         h12 = dt.hour % 12 or 12
         return f"{h12}:{dt.minute:02d}{'p' if dt.hour >= 12 else 'a'}"
 
-    def _build_events_overlay_context(self, request) -> dict:
-        return self._build_event_feed_context(request, top_n=16, list_mode="events")
-
-    def _build_ticker_overlay_context(self, request) -> dict:
-        return self._build_event_feed_context(request, top_n=16, list_mode="ticker")
-
-    def _build_event_feed_context(self, request, top_n: int, list_mode: str) -> dict:
-        d = self._build_status_dict()
-        events = (d.get("recent_events", []) or [])[:top_n]
-        # Filter by ?filter=type1,type2 if provided
-        flt = request.query.get("filter", "").strip()
-        if flt:
-            allow = {t for t in flt.split(",") if t}
-            events = [e for e in events if e.get("type") in allow]
-        pa = d.get("players", {}).get("a", {}) or {}
-        pb = d.get("players", {}).get("b", {}) or {}
-        name_a = pa.get("trainer_name") or "A"
-        name_b = pb.get("trainer_name") or "B"
-        rows = []
-        for ev in events:
-            rows.append({
-                "ts":   self._format_event_ts(ev.get("ts")),
-                "who":  name_a if ev.get("player") == "a" else name_b,
-                "type": ev.get("type") or "",
-                "text": ev.get("text") or ev.get("type") or "",
-                "cls":  self._EVENT_TYPE_CLASSES.get(ev.get("type"), ""),
-            })
-        key = "pills" if list_mode == "ticker" else "events"
-        return {key: rows}
-
-    def _build_area_encounter_overlay_context(self) -> dict:
-        """Current most-active area: linked / dead-zone / pending."""
-        d = self._build_status_dict()
-        # Pick the area both players are in, or the first pending area.
-        area_a = self.player_area_id.get("a") or self.player_area.get("a") or ""
-        area_b = self.player_area_id.get("b") or self.player_area.get("b") or ""
-        focus  = area_a if area_a == area_b else (area_a or area_b)
-        if not focus:
-            return {
-                "area_display": "", "status_tone": "dim", "status_label": "",
-                "side_a": {"sprite_html": "", "name": "", "level": 0, "tag": "", "tag_cls": ""},
-                "side_b": {"sprite_html": "", "name": "", "level": 0, "tag": "", "tag_cls": ""},
-            }
-        state = d.get("area_states", {}).get(focus, "unseen")
-        # Find a link for this area
-        linked_entry = None
-        for lk in d.get("links", []) or []:
-            if lk.get("area_id") == focus:
-                linked_entry = lk
-                break
-        pending = d.get("pending_captures", {}).get(focus, {}) or {}
-
-        def side(slot_id):
-            if linked_entry:
-                tag_cls = ("ae-tag-dead" if linked_entry.get("status") in ("dead", "memorial")
-                           else "ae-tag-caught")
-                tag = "DEAD" if linked_entry.get("status") in ("dead", "memorial") else "CAUGHT"
-                return {
-                    "sprite_html": linked_entry.get(f"{slot_id}_sprite_html") or "",
-                    "name":        linked_entry.get(f"{slot_id}_nickname")
-                                   or linked_entry.get(f"{slot_id}_species_name") or "",
-                    "level":       linked_entry.get(f"{slot_id}_level") or 0,
-                    "tag":         tag,
-                    "tag_cls":     tag_cls,
-                }
-            p = pending.get(slot_id) or {}
-            return {
-                "sprite_html": "",
-                "name":        p.get("nickname") or p.get("species_name") or "",
-                "level":       p.get("level") or 0,
-                "tag":         "WAITING" if p else "",
-                "tag_cls":     "ae-tag-waiting",
-            }
-
-        if state == "linked":
-            tone, label = "alive", "LINKED"
-        elif state == "dead_zone":
-            tone, label = "dead", "DEAD ZONE"
-        elif state.startswith("pending"):
-            tone, label = "pend", "PENDING"
-        else:
-            tone, label = "dim", "OPEN"
-        return {
-            "area_display": self._area_display(focus),
-            "status_tone":  tone,
-            "status_label": label,
-            "side_a":       side("a"),
-            "side_b":       side("b"),
-        }
-
-    def _build_enc_table_overlay_context(self, player_id: str) -> dict:
-        """Wild encounter rates for the player's current area, sourced
-        via _enc_table_for_status.
-
-        Source shape from `_enc_table_for_status` is `{method: [entry, ...]}`
-        directly (no `"methods"` wrapper); each entry carries `name`,
-        `species_id`, `rate`, `min_level`, `max_level`. The `level_range`
-        display string is derived here ("lvX" when min == max, else "lvX–Y")
-        to match the pre-HTMX renderer's output. """
-        area_id = self.player_area_id.get(player_id) or self.player_area.get(player_id) or ""
-        raw = self._enc_table_for_status(area_id, player_id) or {}
-        methods = []
-        for method_name, entries in raw.items():
-            mlist = []
-            for e in entries:
-                sid = e.get("species_id", 0)
-                lo, hi = e.get("min_level", 0), e.get("max_level", 0)
-                lv_range = f"lv{lo}" if lo == hi else f"lv{lo}–{hi}"
-                mlist.append({
-                    "species_id":   sid,
-                    "species_name": e.get("name") or e.get("species_name") or "?",
-                    "rate":         e.get("rate", 0),
-                    "level_range":  lv_range if lo or hi else "",
-                    "sprite_html":  self._get_sprite_html(sid) if sid else "",
-                })
-            if mlist:
-                methods.append({"name": method_name, "entries": mlist})
-        return {
-            "player_id":    player_id,
-            "area_display": self._area_display(area_id) if area_id else "",
-            "methods":      methods,
-        }
 
     # ── Launcher script download ─────────────────────────────────────────────
 
@@ -3632,11 +2881,6 @@ class SLinkServer:
     async def handle_twitch_page(self, request):
         from server.application import compatibility_location
         raise aiohttp_web.HTTPFound(compatibility_location(request, '/broadcast?tab=twitch'))
-        from markupsafe import Markup
-
-        context = {"sidebar_html": Markup(self._build_sidebar_html("twitch")),
-                   "page_title": self._page_title()}
-        return aiohttp_jinja2.render_template("twitch.html", request, context)
 
     # ── OBS integration page & API ────────────────────────────────────────────
 
@@ -3644,11 +2888,6 @@ class SLinkServer:
     async def handle_obs_page(self, request):
         from server.application import compatibility_location
         raise aiohttp_web.HTTPFound(compatibility_location(request, '/broadcast?tab=obs'))
-        from markupsafe import Markup
-
-        context = {"sidebar_html": Markup(self._build_sidebar_html("obs")),
-                   "page_title": self._page_title()}
-        return aiohttp_jinja2.render_template("obs.html", request, context)
 
     async def handle_obs_status(self, request):
         """GET /api/obs/status — connection status + config (passwords omitted)."""
@@ -4034,11 +3273,6 @@ class SLinkServer:
     async def handle_debug_html(self, request):
         from server.application import compatibility_location
         raise aiohttp_web.HTTPFound(compatibility_location(request, '/?debug=1'))
-        from markupsafe import Markup
-
-        context = {"sidebar_html": Markup(self._build_sidebar_html("debug")),
-                   "page_title": self._page_title()}
-        return aiohttp_jinja2.render_template("debug.html", request, context)
 
     async def handle_debug_manual_link_data(self, request):
         """GET /api/debug/manual_link_data — return mon options + area data for manual linking."""
@@ -5048,16 +4282,6 @@ def build_app(srv):
             return aiohttp_web.json_response({"ok": False, "error": "OBS settings and rules are managed on the manager Broadcast page."}, status=409)
         return await handler(request)
     app.middlewares.append(requested_run)
-    @aiohttp_web.middleware
-    async def shared_broadcast(request, handler):
-        from server.broadcast_presets import ALIASES
-        from server.broadcast_render import render_legacy
-        path = request.path.removesuffix("/fragment")
-        slug = path.removeprefix("/stream/") if path.startswith("/stream/") else None
-        if request.method in ("GET", "HEAD") and slug in ALIASES:
-            return render_legacy(srv, request, slug)
-        return await handler(request)
-    app.middlewares.append(shared_broadcast)
     async def identify_run(request, response):
         response.headers["X-SLink-Run-Id"] = getattr(srv, "_run_id", "") or "standalone"
     app.on_response_prepare.append(identify_run)
@@ -5079,56 +4303,9 @@ def build_app(srv):
     # Stream overlay routes
     app.router.add_get("/stream",          srv.handle_stream_index)
     app.router.add_get("/stream/",         srv.handle_stream_index)
-    app.router.add_get("/stream/party-a",          srv.handle_stream_party_a)
-    app.router.add_get("/stream/party-b",          srv.handle_stream_party_b)
-    # HTMX poll targets for the templated party overlay — return only the
-    # #root subtree so idiomorph swaps in place without re-rendering the
-    # vendored script tags.
-    app.router.add_get("/stream/party-a/fragment", srv.handle_stream_party_a_fragment)
-    app.router.add_get("/stream/party-b/fragment", srv.handle_stream_party_b_fragment)
-    app.router.add_get("/stream/enemy-focus-a/fragment",    srv.handle_stream_enemy_focus_a_fragment)
-    app.router.add_get("/stream/enemy-focus-b/fragment",    srv.handle_stream_enemy_focus_b_fragment)
-    app.router.add_get("/stream/enemy-trainer-a/fragment",  srv.handle_stream_enemy_trainer_a_fragment)
-    app.router.add_get("/stream/enemy-trainer-b/fragment",  srv.handle_stream_enemy_trainer_b_fragment)
-    app.router.add_get("/stream/focus-a/fragment",          srv.handle_stream_focus_a_fragment)
-    app.router.add_get("/stream/focus-b/fragment",          srv.handle_stream_focus_b_fragment)
-    app.router.add_get("/stream/enemy-focus-a",   srv.handle_stream_enemy_focus_a)
-    app.router.add_get("/stream/enemy-focus-b",   srv.handle_stream_enemy_focus_b)
-    app.router.add_get("/stream/enemy-trainer-a", srv.handle_stream_enemy_trainer_a)
-    app.router.add_get("/stream/enemy-trainer-b", srv.handle_stream_enemy_trainer_b)
-    app.router.add_get("/stream/links",                  srv.handle_stream_links)
-    app.router.add_get("/stream/links/fragment",         srv.handle_stream_links_fragment)
-    app.router.add_get("/stream/linked-party",           srv.handle_stream_linked_party)
-    app.router.add_get("/stream/linked-party/fragment",  srv.handle_stream_linked_party_fragment)
-    app.router.add_get("/stream/boxed-links",            srv.handle_stream_boxed_links)
-    app.router.add_get("/stream/boxed-links/fragment",   srv.handle_stream_boxed_links_fragment)
-    app.router.add_get("/stream/deaths",            srv.handle_stream_deaths)
-    app.router.add_get("/stream/deaths/fragment",   srv.handle_stream_deaths_fragment)
-    app.router.add_get("/stream/attempts",          srv.handle_stream_attempts)
-    app.router.add_get("/stream/attempts/fragment", srv.handle_stream_attempts_fragment)
-    app.router.add_post("/api/attempts",   srv.handle_api_attempts)
-    app.router.add_get("/stream/areas",             srv.handle_stream_areas)
-    app.router.add_get("/stream/areas/fragment",    srv.handle_stream_areas_fragment)
-    app.router.add_get("/stream/events",            srv.handle_stream_events)
-    app.router.add_get("/stream/events/fragment",   srv.handle_stream_events_fragment)
-    app.router.add_get("/stream/badges-a",          srv.handle_stream_badges_a)
-    app.router.add_get("/stream/badges-a/fragment", srv.handle_stream_badges_a_fragment)
-    app.router.add_get("/stream/badges-b",          srv.handle_stream_badges_b)
-    app.router.add_get("/stream/badges-b/fragment", srv.handle_stream_badges_b_fragment)
-    app.router.add_get("/stream/encounters",            srv.handle_stream_encounters)
-    app.router.add_get("/stream/encounters/fragment",   srv.handle_stream_encounters_fragment)
-    app.router.add_get("/stream/stream-memorial",           srv.handle_stream_stream_memorial)
-    app.router.add_get("/stream/stream-memorial/fragment",  srv.handle_stream_stream_memorial_fragment)
-    app.router.add_get("/stream/ticker",            srv.handle_stream_ticker)
-    app.router.add_get("/stream/ticker/fragment",   srv.handle_stream_ticker_fragment)
-    app.router.add_get("/stream/focus-a",         srv.handle_stream_focus_a)
-    app.router.add_get("/stream/focus-b",         srv.handle_stream_focus_b)
-    app.router.add_get("/stream/area-encounter",            srv.handle_stream_area_encounter)
-    app.router.add_get("/stream/area-encounter/fragment",   srv.handle_stream_area_encounter_fragment)
-    app.router.add_get("/stream/enc-table-a",               srv.handle_stream_enc_table_a)
-    app.router.add_get("/stream/enc-table-a/fragment",      srv.handle_stream_enc_table_a_fragment)
-    app.router.add_get("/stream/enc-table-b",               srv.handle_stream_enc_table_b)
-    app.router.add_get("/stream/enc-table-b/fragment",      srv.handle_stream_enc_table_b_fragment)
+    from server.broadcast_render import register_legacy_routes
+    register_legacy_routes(app, srv)
+    app.router.add_post("/api/attempts", srv.handle_api_attempts)
     app.router.add_get("/launcher/{player}", srv.handle_launcher)
     # Twitch bot routes
     app.router.add_get("/twitch",               srv.handle_twitch_page)

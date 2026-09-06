@@ -10,7 +10,7 @@ The launcher template renders the entire catalog as a master-detail UI; the
 overlay metadata is also serialised to JSON inside the page so the Alpine
 component can switch the right-pane preview without a round-trip.
 
-Adding a new overlay = appending one dict here + registering the route.
+Legacy aliases register from this catalog; each family uses the shared broadcast renderer.
 No copy-paste of HTML cards required.
 """
 
@@ -40,7 +40,7 @@ EVENT_FILTERS_DEFAULT_ON = [
     "area_enter", "no_catch", "linked", "dead_zone", "violation",
     "memorialize", "key_change", "hello", "reroll",
 ]
-EVENT_FILTERS_DEFAULT_OFF = ["party_to_box", "box_to_party"]
+EVENT_FILTERS_DEFAULT_OFF = ["party_to_box", "box_to_party", "command_nack"]
 
 
 OVERLAYS: list[dict[str, Any]] = [

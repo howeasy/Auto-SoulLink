@@ -4,7 +4,7 @@ Shared by both aiohttp apps (``server.py`` per-run dashboard + ``manager.py``)
 so the patcher page is reachable from either port. Registers two routes:
 
 * ``GET /patcher`` — the patcher page, wrapped in the standard SLink chrome
-  (sidebar / theme / font) via the ``patcher.html`` Jinja template.
+  (sidebar / theme / font) on the shared Tools page.
 * ``GET /companion/SLink-RR.ups`` — serves the built UPS patch bytes from
   ``patch/dist/SLink-RR.ups`` as a download. Used both by the in-browser fetch
   (the page applies it client-side) and by the "download .ups" link for users
@@ -20,10 +20,8 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 
-import aiohttp_jinja2
 from aiohttp import web
 
-from server.templating import resolve_theme
 
 # ── Paths ───────────────────────────────────────────────────────────────────
 _SERVER_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -107,25 +105,6 @@ def setup_patcher_routes(
     async def handle_patcher_page(request: web.Request) -> web.Response:
         from server.application import compatibility_location
         raise web.HTTPFound(compatibility_location(request, '/tools'))
-        slug = request.query.get("game", DEFAULT_TARGET)
-        if slug not in TARGETS:
-            slug = DEFAULT_TARGET
-        target = TARGETS[slug]
-        ctx = {
-            "page_title":      "SLink Companion ROM Patcher",
-            "theme":           resolve_theme(request),
-            "sidebar_html":    sidebar_builder("patcher"),
-            "target":          target,
-            "targets":         list(TARGETS.values()),
-            "base_rom_md5":    target["base_md5"],
-            "patched_rom_md5": target["patched_md5"],
-        }
-        resp = aiohttp_jinja2.render_template("patcher.html", request, ctx)
-        # The rendered theme depends on the slink-theme cookie; revalidate so a
-        # theme change on another page isn't masked by a heuristic-cached copy
-        # (same reasoning as the calc handler + the /static middleware).
-        resp.headers["Cache-Control"] = "no-cache"
-        return resp
 
     async def handle_patch_file(request: web.Request) -> web.Response:
         name = request.match_info["name"]
