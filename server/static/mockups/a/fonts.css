@@ -1,0 +1,173 @@
+/* fonts.css — the typeface candidates, so the choice is made by looking rather than by
+ * argument.
+ *
+ * The current body font is Pixelify Sans: a pixel face, on brand for a Game Boy tracker,
+ * and the thing the UI is hardest to read in. The merged workspace makes that worse, not
+ * better — it puts the run list, both parties, the links table and the event feed on one
+ * screen, so there is far more small text per viewport than either page had alone.
+ *
+ * Every candidate below is vendored (tools/vendor_fonts.py), never fetched at runtime:
+ * an OBS browser source caches CDN assets unpredictably and a stream overlay that loses
+ * its font mid-broadcast reflows on air. Same rule as server/static/vendor/VERSIONS.md.
+ *
+ * Applied by swapping --font-ui, which slink.css already routes every chrome, table and
+ * sidebar rule through. Nothing else has to know.
+ */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/static/fonts/inter-latin.woff2') format('woff2'),
+       url('/static/fonts/inter-latin-ext.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/static/fonts/ibm-plex-sans-latin.woff2') format('woff2'),
+       url('/static/fonts/ibm-plex-sans-latin-ext.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/static/fonts/ibm-plex-mono-latin.woff2') format('woff2'),
+       url('/static/fonts/ibm-plex-mono-latin-ext.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/static/fonts/space-grotesk-latin.woff2') format('woff2'),
+       url('/static/fonts/space-grotesk-latin-ext.woff2') format('woff2');
+}
+
+
+/* ── Pixel-flavoured candidates: Pixelify's character, more of the glyph left in ──
+ * Vendored by tools/vendor_fonts.py. Most ship one weight; Handjet and Doto are variable. */
+
+@font-face {
+  font-family: 'Jersey 10';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/jersey-10-latin.woff2') format('woff2'),
+       url('/static/fonts/jersey-10-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Jersey 15';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/jersey-15-latin.woff2') format('woff2'),
+       url('/static/fonts/jersey-15-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Jersey 20';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/jersey-20-latin.woff2') format('woff2'),
+       url('/static/fonts/jersey-20-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Tiny5';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/tiny5-latin.woff2') format('woff2'),
+       url('/static/fonts/tiny5-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'DotGothic16';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/dotgothic16-latin.woff2') format('woff2'),
+       url('/static/fonts/dotgothic16-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Handjet';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/static/fonts/handjet-latin.woff2') format('woff2'),
+       url('/static/fonts/handjet-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Doto';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('/static/fonts/doto-latin.woff2') format('woff2'),
+       url('/static/fonts/doto-latin-ext.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'VT323';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/static/fonts/vt323-latin.woff2') format('woff2'),
+       url('/static/fonts/vt323-latin-ext.woff2') format('woff2');
+}
+
+body.ui-jersey10  { --font-ui: 'Jersey 10', 'Pixelify Sans', monospace; }
+body.ui-jersey15  { --font-ui: 'Jersey 15', 'Pixelify Sans', monospace; }
+body.ui-jersey20  { --font-ui: 'Jersey 20', 'Pixelify Sans', monospace; }
+body.ui-tiny5     { --font-ui: 'Tiny5', 'Pixelify Sans', monospace; }
+body.ui-dotgothic { --font-ui: 'DotGothic16', 'Pixelify Sans', monospace; }
+body.ui-handjet   { --font-ui: 'Handjet', 'Pixelify Sans', monospace; font-weight: 500; }
+body.ui-doto      { --font-ui: 'Doto', 'Pixelify Sans', monospace; font-weight: 600; }
+body.ui-vt323     { --font-ui: 'VT323', 'IBM Plex Mono', monospace; }
+
+/* Pixel faces are drawn to a grid; the Jersey family and Tiny5 sit at sizes that are not
+ * grid multiples on this page, so they are left antialiased -- unsmoothed they go jagged
+ * rather than crisp. Pixelify keeps the no-smoothing rule below because it is the one
+ * that was tuned for it. */
+
+/* Each option sets --font-ui only. --font-pixel is left alone throughout: Press Start 2P
+ * still earns its place on the stream overlays, where the text is large, sparse and read
+ * from across a room. The argument is about the dense UI, not about the brand. */
+
+body.ui-pixelify   { --font-ui: 'Pixelify Sans', 'Press Start 2P', ui-monospace, monospace; }
+body.ui-inter      { --font-ui: 'Inter', system-ui, 'Segoe UI', sans-serif; }
+body.ui-plex       { --font-ui: 'IBM Plex Sans', system-ui, 'Segoe UI', sans-serif; }
+body.ui-plex-mono  { --font-ui: 'IBM Plex Mono', ui-monospace, Consolas, monospace; }
+body.ui-grotesk    { --font-ui: 'Space Grotesk', system-ui, 'Segoe UI', sans-serif; }
+body.ui-system     { --font-ui: system-ui, 'Segoe UI', Roboto, sans-serif; }
+
+/* Numbers are the reason this matters most.
+ *
+ * A party table is mostly figures — 28/32, Lv 11, 8 links, 2/8 badges — stacked in
+ * columns that only read as columns when the digits are the same width. Pixelify has no
+ * tabular set, so HP values jitter row to row and the eye cannot scan down them.
+ * Every proportional candidate here does have one, so ask for it explicitly wherever
+ * digits line up. */
+.mk-num,
+.mk-hp-num,
+.mk-ev-ts,
+.mk-tbl td {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Pixel faces are drawn on a grid and get muddy when the rasteriser tries to smooth them;
+ * outline faces get spindly and uneven without it. So antialiasing follows the choice
+ * rather than being set once for the page. */
+body.ui-pixelify { -webkit-font-smoothing: none; -moz-osx-font-smoothing: none; image-rendering: pixelated; }
+body:not(.ui-pixelify) { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+/* Sprites stay pixelated whatever the text does — they are 40px PNGs from a GBA and
+ * smoothing them turns them to mush. `image-rendering` is inherited, so the rule above
+ * would otherwise hand them bilinear scaling along with the text. */
+body:not(.ui-pixelify) img.mon-sprite,
+body:not(.ui-pixelify) .mk-mon img {
+  image-rendering: pixelated;
+}
