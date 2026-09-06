@@ -1,0 +1,2026 @@
+{
+  "schema": "slink-ui-migration-inventory-v1",
+  "source_commit": "965cc12664b1c9b5ee27d8fc4a97a5cf06a6b065",
+  "evidence": "static declarations; no app startup, rendering, or admission verification",
+  "composition": "Each service calls setup_patcher_routes and setup_templating; runtime parity is tested separately.",
+  "routes": {
+    "run": [
+      {
+        "source": "server/server.py",
+        "line": 8023,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/",
+        "handler": "srv.handle_status_html"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8060,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/attempts",
+        "handler": "srv.handle_api_attempts"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8087,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/bot/config",
+        "handler": "srv.handle_bot_config"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8090,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/bot/disable",
+        "handler": "srv.handle_bot_disable"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8089,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/bot/enable",
+        "handler": "srv.handle_bot_enable"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8091,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/bot/preview",
+        "handler": "srv.handle_bot_preview"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8088,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/bot/reload",
+        "handler": "srv.handle_bot_reload"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8086,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/bot/status",
+        "handler": "srv.handle_bot_status"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8119,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/calc/mons",
+        "handler": "srv.handle_calc_mons"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8113,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/debug/backups",
+        "handler": "srv.handle_debug_list_backups"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8110,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/debug/clear_pending",
+        "handler": "srv.handle_debug_clear_pending"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8106,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/debug/inject_event",
+        "handler": "srv.handle_debug_inject_event"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8105,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/debug/manual_link_data",
+        "handler": "srv.handle_debug_manual_link_data"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8107,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/debug/queue_command",
+        "handler": "srv.handle_debug_queue_command"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8104,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/debug/raw_state",
+        "handler": "srv.handle_debug_raw_state"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8112,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/debug/revive",
+        "handler": "srv.handle_debug_revive"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8114,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/debug/rollback",
+        "handler": "srv.handle_debug_rollback"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8109,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/debug/set_area_state",
+        "handler": "srv.handle_debug_set_area_state"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8108,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/debug/set_pokeballs",
+        "handler": "srv.handle_debug_set_pokeballs"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8111,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/debug/unlink",
+        "handler": "srv.handle_debug_unlink"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8026,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/events",
+        "handler": "srv.handle_sse"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8028,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/inject_link",
+        "handler": "srv.handle_inject_link_api"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8029,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/inject_link_by_slot",
+        "handler": "srv.handle_inject_link_by_slot_api"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8098,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/obs/areas",
+        "handler": "srv.handle_obs_areas"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8095,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/obs/config",
+        "handler": "srv.handle_obs_config"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8100,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/obs/connect",
+        "handler": "srv.handle_obs_connect"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8101,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/obs/disconnect",
+        "handler": "srv.handle_obs_disconnect"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8097,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/obs/scenes/{player}",
+        "handler": "srv.handle_obs_scenes"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8094,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/obs/status",
+        "handler": "srv.handle_obs_status"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8099,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/obs/test",
+        "handler": "srv.handle_obs_test"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8096,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/obs/triggers",
+        "handler": "srv.handle_obs_triggers"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8027,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/reset",
+        "handler": "srv.handle_reset_api"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8025,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/status",
+        "handler": "srv.handle_status_json"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8116,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/calc",
+        "handler": "srv.handle_calc_redirect"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8117,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/calc/",
+        "handler": "srv.handle_calc_redirect"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8118,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/calc/{path:.*}",
+        "handler": "srv.handle_calc_files"
+      },
+      {
+        "source": "server/patcher.py",
+        "line": 86,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/companion/SLink-RR.ups",
+        "handler": "handle_patch_file"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8103,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/debug",
+        "handler": "srv.handle_debug_html"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8083,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/launcher/{player}",
+        "handler": "srv.handle_launcher"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8024,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/memorial",
+        "handler": "srv.handle_memorial_html"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8093,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/obs",
+        "handler": "srv.handle_obs_page"
+      },
+      {
+        "source": "server/patcher.py",
+        "line": 85,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/patcher",
+        "handler": "handle_patcher_page"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8031,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream",
+        "handler": "srv.handle_stream_index"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8032,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/",
+        "handler": "srv.handle_stream_index"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8077,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/area-encounter",
+        "handler": "srv.handle_stream_area_encounter"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8078,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/area-encounter/fragment",
+        "handler": "srv.handle_stream_area_encounter_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8061,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/areas",
+        "handler": "srv.handle_stream_areas"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8062,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/areas/fragment",
+        "handler": "srv.handle_stream_areas_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8058,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/attempts",
+        "handler": "srv.handle_stream_attempts"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8059,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/attempts/fragment",
+        "handler": "srv.handle_stream_attempts_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8065,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/badges-a",
+        "handler": "srv.handle_stream_badges_a"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8066,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/badges-a/fragment",
+        "handler": "srv.handle_stream_badges_a_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8067,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/badges-b",
+        "handler": "srv.handle_stream_badges_b"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8068,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/badges-b/fragment",
+        "handler": "srv.handle_stream_badges_b_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8054,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/boxed-links",
+        "handler": "srv.handle_stream_boxed_links"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8055,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/boxed-links/fragment",
+        "handler": "srv.handle_stream_boxed_links_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8056,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/deaths",
+        "handler": "srv.handle_stream_deaths"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8057,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/deaths/fragment",
+        "handler": "srv.handle_stream_deaths_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8079,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/enc-table-a",
+        "handler": "srv.handle_stream_enc_table_a"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8080,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/enc-table-a/fragment",
+        "handler": "srv.handle_stream_enc_table_a_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8081,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/enc-table-b",
+        "handler": "srv.handle_stream_enc_table_b"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8082,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/enc-table-b/fragment",
+        "handler": "srv.handle_stream_enc_table_b_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8069,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/encounters",
+        "handler": "srv.handle_stream_encounters"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8070,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/encounters/fragment",
+        "handler": "srv.handle_stream_encounters_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8046,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/enemy-focus-a",
+        "handler": "srv.handle_stream_enemy_focus_a"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8040,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/enemy-focus-a/fragment",
+        "handler": "srv.handle_stream_enemy_focus_a_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8047,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/enemy-focus-b",
+        "handler": "srv.handle_stream_enemy_focus_b"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8041,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/enemy-focus-b/fragment",
+        "handler": "srv.handle_stream_enemy_focus_b_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8048,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/enemy-trainer-a",
+        "handler": "srv.handle_stream_enemy_trainer_a"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8042,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/enemy-trainer-a/fragment",
+        "handler": "srv.handle_stream_enemy_trainer_a_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8049,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/enemy-trainer-b",
+        "handler": "srv.handle_stream_enemy_trainer_b"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8043,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/enemy-trainer-b/fragment",
+        "handler": "srv.handle_stream_enemy_trainer_b_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8063,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/events",
+        "handler": "srv.handle_stream_events"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8064,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/events/fragment",
+        "handler": "srv.handle_stream_events_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8075,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/focus-a",
+        "handler": "srv.handle_stream_focus_a"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8044,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/focus-a/fragment",
+        "handler": "srv.handle_stream_focus_a_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8076,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/focus-b",
+        "handler": "srv.handle_stream_focus_b"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8045,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/focus-b/fragment",
+        "handler": "srv.handle_stream_focus_b_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8052,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/linked-party",
+        "handler": "srv.handle_stream_linked_party"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8053,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/linked-party/fragment",
+        "handler": "srv.handle_stream_linked_party_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8050,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/links",
+        "handler": "srv.handle_stream_links"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8051,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/links/fragment",
+        "handler": "srv.handle_stream_links_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8033,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/party-a",
+        "handler": "srv.handle_stream_party_a"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8038,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/party-a/fragment",
+        "handler": "srv.handle_stream_party_a_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8034,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/party-b",
+        "handler": "srv.handle_stream_party_b"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8039,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/party-b/fragment",
+        "handler": "srv.handle_stream_party_b_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8071,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/stream-memorial",
+        "handler": "srv.handle_stream_stream_memorial"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8072,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/stream-memorial/fragment",
+        "handler": "srv.handle_stream_stream_memorial_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8073,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/ticker",
+        "handler": "srv.handle_stream_ticker"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8074,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/ticker/fragment",
+        "handler": "srv.handle_stream_ticker_fragment"
+      },
+      {
+        "source": "server/server.py",
+        "line": 8085,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/twitch",
+        "handler": "srv.handle_twitch_page"
+      }
+    ],
+    "manager": [
+      {
+        "source": "server/manager.py",
+        "line": 881,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/",
+        "handler": "manager.handle_index"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 909,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/attempts",
+        "handler": "manager.handle_proxy_attempts"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 908,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/events",
+        "handler": "manager.handle_proxy_events"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 882,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/runs",
+        "handler": "manager.handle_list"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 883,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/runs/new",
+        "handler": "manager.handle_new"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 886,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/runs/{run_id}/archive",
+        "handler": "manager.handle_archive"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 887,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/runs/{run_id}/delete",
+        "handler": "manager.handle_delete"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 888,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/runs/{run_id}/launcher/{player}",
+        "handler": "manager.handle_launcher"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 889,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/runs/{run_id}/live",
+        "handler": "manager.handle_run_live"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 884,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/runs/{run_id}/start",
+        "handler": "manager.handle_start"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 885,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/runs/{run_id}/stop",
+        "handler": "manager.handle_stop"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 907,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/status",
+        "handler": "manager.handle_proxy_status"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 892,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/api/stream/pin",
+        "handler": "manager.handle_stream_pin_status"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 893,
+        "method": "POST",
+        "served_methods": [
+          "POST"
+        ],
+        "path": "/api/stream/pin",
+        "handler": "manager.handle_stream_pin"
+      },
+      {
+        "source": "server/patcher.py",
+        "line": 86,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/companion/SLink-RR.ups",
+        "handler": "handle_patch_file"
+      },
+      {
+        "source": "server/patcher.py",
+        "line": 85,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/patcher",
+        "handler": "handle_patcher_page"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 898,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream",
+        "handler": "manager.handle_stream_index"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 899,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/",
+        "handler": "manager.handle_stream_index"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 900,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/{name}",
+        "handler": "manager.handle_stream_overlay_proxy"
+      },
+      {
+        "source": "server/manager.py",
+        "line": 904,
+        "method": "GET",
+        "served_methods": [
+          "GET",
+          "HEAD"
+        ],
+        "path": "/stream/{name}/{suffix:fragment}",
+        "handler": "manager.handle_stream_overlay_proxy"
+      }
+    ]
+  },
+  "static_mounts": [
+    {
+      "source": "server/templating.py",
+      "line": 142,
+      "path": "/static/"
+    }
+  ],
+  "unresolved_routes": [],
+  "overlays": [
+    {
+      "slug": "all",
+      "family": "overview",
+      "title": "All Overlays",
+      "desc": "Live grid of every overlay at once. Useful for spot-checking which scenes are active before you start streaming.",
+      "sizes": [
+        "—"
+      ],
+      "layouts": [
+        ""
+      ]
+    },
+    {
+      "slug": "party-a",
+      "family": "party",
+      "title": "Player A Party",
+      "desc": "Sprites, HP bars, and levels. Tall side panel alongside the game.",
+      "sizes": [
+        "Vertical: 280×380",
+        "Horizontal: 580×130",
+        "Strip: 1200×150"
+      ],
+      "layouts": [
+        "",
+        "h",
+        "thin-h",
+        "thin-v"
+      ]
+    },
+    {
+      "slug": "party-b",
+      "family": "party",
+      "title": "Player B Party",
+      "desc": "Sprites, HP bars, and levels. Tall side panel alongside the game.",
+      "sizes": [
+        "Vertical: 280×380",
+        "Horizontal: 580×130",
+        "Strip: 1200×150"
+      ],
+      "layouts": [
+        "",
+        "h",
+        "thin-h",
+        "thin-v"
+      ]
+    },
+    {
+      "slug": "links",
+      "family": "links",
+      "title": "Linked Pairs",
+      "desc": "Alive pairs as full cards (area + sprites). Dead pairs as a dimmed list below.",
+      "sizes": [
+        "Vertical: 420×340",
+        "Horizontal: 900×200",
+        "Strip: 1400×180"
+      ],
+      "layouts": [
+        "",
+        "h",
+        "thin-h",
+        "thin-v"
+      ]
+    },
+    {
+      "slug": "linked-party",
+      "family": "links",
+      "title": "Linked Party ★",
+      "desc": "Linked pairs where both mons are currently in party — HP bars, levels, area. Primary overlay for active streaming.",
+      "sizes": [
+        "Standard: 500×320",
+        "Bottom strip: 1400×150",
+        "Sidebar: 160×500"
+      ],
+      "layouts": [
+        "",
+        "thin-h",
+        "thin-v"
+      ]
+    },
+    {
+      "slug": "boxed-links",
+      "family": "links",
+      "title": "Boxed Links",
+      "desc": "Alive linked pairs where one or both mons are currently in the PC box. Auto-scrolls when the list overflows the overlay height.",
+      "sizes": [
+        "Sidebar: 200×600",
+        "Standard: 420×340"
+      ],
+      "layouts": [
+        "",
+        "thin-v"
+      ],
+      "speeds": [
+        "0.5",
+        "1",
+        "1.5",
+        "2",
+        "3"
+      ],
+      "pauses": [
+        "0",
+        "1",
+        "2",
+        "4"
+      ]
+    },
+    {
+      "slug": "enemy-focus-a",
+      "family": "battle",
+      "title": "Enemy Focus · A",
+      "desc": "Active enemy(ies) for wild or trainer battles — sprite, HP, status, stat stages, 4-move grid with live PP.",
+      "sizes": [
+        "Recommended: 340×260",
+        "Doubles: 480×260"
+      ],
+      "layouts": [
+        ""
+      ]
+    },
+    {
+      "slug": "enemy-focus-b",
+      "family": "battle",
+      "title": "Enemy Focus · B",
+      "desc": "Active enemy(ies) for wild or trainer battles — sprite, HP, status, stat stages, 4-move grid with live PP.",
+      "sizes": [
+        "Recommended: 340×260",
+        "Doubles: 480×260"
+      ],
+      "layouts": [
+        ""
+      ]
+    },
+    {
+      "slug": "enemy-trainer-a",
+      "family": "battle",
+      "title": "Enemy Trainer · A",
+      "desc": "Trainer's full enemy team in compact PARTY-style rows. Auto-scrolls when the list overflows. Hidden during wild encounters.",
+      "sizes": [
+        "Recommended: 280×220"
+      ],
+      "layouts": [
+        ""
+      ],
+      "speeds": [
+        "0.5",
+        "1",
+        "1.5",
+        "2",
+        "3"
+      ],
+      "pauses": [
+        "0",
+        "1",
+        "2",
+        "4"
+      ]
+    },
+    {
+      "slug": "enemy-trainer-b",
+      "family": "battle",
+      "title": "Enemy Trainer · B",
+      "desc": "Trainer's full enemy team in compact PARTY-style rows. Auto-scrolls when the list overflows. Hidden during wild encounters.",
+      "sizes": [
+        "Recommended: 280×220"
+      ],
+      "layouts": [
+        ""
+      ],
+      "speeds": [
+        "0.5",
+        "1",
+        "1.5",
+        "2",
+        "3"
+      ],
+      "pauses": [
+        "0",
+        "1",
+        "2",
+        "4"
+      ]
+    },
+    {
+      "slug": "focus-a",
+      "family": "battle",
+      "title": "Focus Card — Player A",
+      "desc": "Active battle mon hero card: sprite, HP, status, stat stages, 4-move grid with PP bars.",
+      "sizes": [
+        "Recommended: 340×380"
+      ],
+      "layouts": [
+        ""
+      ]
+    },
+    {
+      "slug": "focus-b",
+      "family": "battle",
+      "title": "Focus Card — Player B",
+      "desc": "Active battle mon hero card: sprite, HP, status, stat stages, 4-move grid with PP bars.",
+      "sizes": [
+        "Recommended: 340×380"
+      ],
+      "layouts": [
+        ""
+      ]
+    },
+    {
+      "slug": "deaths",
+      "family": "death",
+      "title": "Death Counter",
+      "desc": "Alive / dead pair counts with glow. Scales to any size — great for a corner badge.",
+      "sizes": [
+        "Recommended: 280×160"
+      ],
+      "layouts": [
+        ""
+      ]
+    },
+    {
+      "slug": "attempts",
+      "family": "death",
+      "title": "Attempts Counter",
+      "desc": "Manual run attempt counter with glow. Set the number via the dashboard or API.",
+      "sizes": [
+        "Recommended: 200×160"
+      ],
+      "layouts": [
+        ""
+      ],
+      "attempts_input": true
+    },
+    {
+      "slug": "stream-memorial",
+      "family": "death",
+      "title": "Memorial Scroll",
+      "desc": "Chronological scrolling list of all dead pairs with sprites. Auto-scrolls when content exceeds height.",
+      "sizes": [
+        "Sidebar: 320×600"
+      ],
+      "layouts": [
+        ""
+      ],
+      "speeds": [
+        "0.5",
+        "1",
+        "1.5",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "slug": "badges-a",
+      "family": "badges",
+      "title": "Gym Badges — Player A",
+      "desc": "Player A's earned gym badges. Unearned badges are dimmed.",
+      "sizes": [
+        "Recommended: 340×80"
+      ],
+      "layouts": [
+        ""
+      ]
+    },
+    {
+      "slug": "badges-b",
+      "family": "badges",
+      "title": "Gym Badges — Player B",
+      "desc": "Player B's earned gym badges. Unearned badges are dimmed.",
+      "sizes": [
+        "Recommended: 340×80"
+      ],
+      "layouts": [
+        ""
+      ]
+    },
+    {
+      "slug": "areas",
+      "family": "misc",
+      "title": "Area Tracker",
+      "desc": "Linked / dead zone / pending area counts at a glance.",
+      "sizes": [
+        "Vertical: 220×160",
+        "Horizontal: 380×80"
+      ],
+      "layouts": [
+        "",
+        "h"
+      ]
+    },
+    {
+      "slug": "events",
+      "family": "misc",
+      "title": "Event Feed",
+      "desc": "Live feed of captures, faints, area entries, and soul link events.",
+      "sizes": [
+        "Recommended: 400×280"
+      ],
+      "layouts": [
+        ""
+      ],
+      "event_filters": true
+    },
+    {
+      "slug": "encounters",
+      "family": "misc",
+      "title": "Encounter Tracker",
+      "desc": "Total encounters, shiny count, and last linked encounter pair.",
+      "sizes": [
+        "Standard: 340×200",
+        "Wide: 560×120"
+      ],
+      "layouts": [
+        ""
+      ]
+    },
+    {
+      "slug": "ticker",
+      "family": "misc",
+      "title": "Event Ticker",
+      "desc": "Horizontally scrolling marquee of recent events. Place at the bottom of the stream.",
+      "sizes": [
+        "Bottom strip: 1920×60"
+      ],
+      "layouts": [
+        ""
+      ],
+      "speeds": [
+        "0.5",
+        "1",
+        "1.5",
+        "2",
+        "3"
+      ],
+      "event_filters": true
+    },
+    {
+      "slug": "enc-table-a",
+      "family": "misc",
+      "title": "Wild Encounters — Player A",
+      "desc": "Encounter rates for Player A's current area (Radical Red only). Walking / Surfing / Fishing with species, rate %, level range.",
+      "sizes": [
+        "Recommended: 280×320"
+      ],
+      "layouts": [
+        ""
+      ],
+      "speeds": [
+        "0.5",
+        "1",
+        "1.5",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "slug": "enc-table-b",
+      "family": "misc",
+      "title": "Wild Encounters — Player B",
+      "desc": "Encounter rates for Player B's current area (Radical Red only). Walking / Surfing / Fishing with species, rate %, level range.",
+      "sizes": [
+        "Recommended: 280×320"
+      ],
+      "layouts": [
+        ""
+      ],
+      "speeds": [
+        "0.5",
+        "1",
+        "1.5",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "slug": "area-encounter",
+      "family": "misc",
+      "title": "Area Encounter",
+      "desc": "Soul Link status for the current area: linked pair, pending captures, or dead zone. Auto-follows the most active area.",
+      "sizes": [
+        "Recommended: 380×160"
+      ],
+      "layouts": [
+        ""
+      ]
+    }
+  ],
+  "overlay_route_pairs": [
+    {
+      "slug": "party-a",
+      "page": "/stream/party-a",
+      "fragment": "/stream/party-a/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "party-b",
+      "page": "/stream/party-b",
+      "fragment": "/stream/party-b/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "links",
+      "page": "/stream/links",
+      "fragment": "/stream/links/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "linked-party",
+      "page": "/stream/linked-party",
+      "fragment": "/stream/linked-party/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "boxed-links",
+      "page": "/stream/boxed-links",
+      "fragment": "/stream/boxed-links/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "enemy-focus-a",
+      "page": "/stream/enemy-focus-a",
+      "fragment": "/stream/enemy-focus-a/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "enemy-focus-b",
+      "page": "/stream/enemy-focus-b",
+      "fragment": "/stream/enemy-focus-b/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "enemy-trainer-a",
+      "page": "/stream/enemy-trainer-a",
+      "fragment": "/stream/enemy-trainer-a/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "enemy-trainer-b",
+      "page": "/stream/enemy-trainer-b",
+      "fragment": "/stream/enemy-trainer-b/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "focus-a",
+      "page": "/stream/focus-a",
+      "fragment": "/stream/focus-a/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "focus-b",
+      "page": "/stream/focus-b",
+      "fragment": "/stream/focus-b/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "deaths",
+      "page": "/stream/deaths",
+      "fragment": "/stream/deaths/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "attempts",
+      "page": "/stream/attempts",
+      "fragment": "/stream/attempts/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "stream-memorial",
+      "page": "/stream/stream-memorial",
+      "fragment": "/stream/stream-memorial/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "badges-a",
+      "page": "/stream/badges-a",
+      "fragment": "/stream/badges-a/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "badges-b",
+      "page": "/stream/badges-b",
+      "fragment": "/stream/badges-b/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "areas",
+      "page": "/stream/areas",
+      "fragment": "/stream/areas/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "events",
+      "page": "/stream/events",
+      "fragment": "/stream/events/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "encounters",
+      "page": "/stream/encounters",
+      "fragment": "/stream/encounters/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "ticker",
+      "page": "/stream/ticker",
+      "fragment": "/stream/ticker/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "enc-table-a",
+      "page": "/stream/enc-table-a",
+      "fragment": "/stream/enc-table-a/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "enc-table-b",
+      "page": "/stream/enc-table-b",
+      "fragment": "/stream/enc-table-b/fragment",
+      "both_registered": true
+    },
+    {
+      "slug": "area-encounter",
+      "page": "/stream/area-encounter",
+      "fragment": "/stream/area-encounter/fragment",
+      "both_registered": true
+    }
+  ],
+  "inputs": [
+    {
+      "path": "server/server.py",
+      "sha256": "0069afc9a7e2ea48220dbf5e4495c95fbacbfe679497fd4ae61d70ca728c2e31",
+      "hash_format": "utf8-normalized-newlines",
+      "bytes": 414259
+    },
+    {
+      "path": "server/manager.py",
+      "sha256": "ada30941887d2b2a897b71029386de04065a2e48705fca3ce140e5ef6179d4eb",
+      "hash_format": "utf8-normalized-newlines",
+      "bytes": 40409
+    },
+    {
+      "path": "server/patcher.py",
+      "sha256": "0b63d4aee162325d515b4a93143f39c966e7cc2c1807a449221b86abdc709b16",
+      "hash_format": "utf8-normalized-newlines",
+      "bytes": 3841
+    },
+    {
+      "path": "server/templating.py",
+      "sha256": "2468b6df11f05a2a53201f268034a45866faca01c302fb158d45627985ab65a2",
+      "hash_format": "utf8-normalized-newlines",
+      "bytes": 7936
+    },
+    {
+      "path": "server/overlay_catalog.py",
+      "sha256": "fd6e0de4620e3ee5c337c8712c008bdf05a7a2f5da10b092e873cd72928b042f",
+      "hash_format": "utf8-normalized-newlines",
+      "bytes": 12490
+    }
+  ],
+  "modified_source_inputs": [],
+  "mockup": {
+    "source_commit": "121fb1c95b636e73e5e54315b41c2d5127c83244",
+    "inputs": [
+      {
+        "path": "docs/ui_mockup_brief.md",
+        "sha256": "f3814cefe19ecd3e316b2a7b638f841e4a82ab49fe7e969b71adad7e9ce8557c",
+        "hash_format": "utf8-normalized-newlines",
+        "bytes": 26249
+      },
+      {
+        "path": "server/static/mockups/a/index.html",
+        "sha256": "2b912556f4faec516d66a9884ef0a18c52a9a3473465d3c3939b9b11b013105a",
+        "hash_format": "utf8-normalized-newlines",
+        "bytes": 36620
+      },
+      {
+        "path": "server/static/mockups/a/mockup.css",
+        "sha256": "45c4680dacf1abd8fd34d69f1fa63339ff4a1e94187c1d1ec9c160f4a153bc8b",
+        "hash_format": "utf8-normalized-newlines",
+        "bytes": 30125
+      },
+      {
+        "path": "server/static/mockups/a/mockup.js",
+        "sha256": "1ffbab98f7850815e4092954ee98b9ad2b1b3f34c24e59aee6209eab1b0ca709",
+        "hash_format": "utf8-normalized-newlines",
+        "bytes": 25413
+      },
+      {
+        "path": "server/static/mockups/a/fonts.css",
+        "sha256": "2e19b5026308bd7a81ffd875592c8c6a7ce7765bc92306cbbe601322fc1a869b",
+        "hash_format": "utf8-normalized-newlines",
+        "bytes": 6997
+      },
+      {
+        "path": "server/static/mockups/fixtures/gen3.json",
+        "sha256": "402bb59d8bd77b23ae2273ee7389f38b7c05b0afb78c448b2f6c7c9bac17df61",
+        "hash_format": "utf8-normalized-newlines",
+        "bytes": 50592
+      },
+      {
+        "path": "server/static/mockups/fixtures/gen1.json",
+        "sha256": "2858b658b9e1c42b469cd099d3896337e65dd6922f54b5a4dd63237e76f27d62",
+        "hash_format": "utf8-normalized-newlines",
+        "bytes": 36283
+      },
+      {
+        "path": "server/static/mockups/fixtures/capabilities.json",
+        "sha256": "3549f92c6f1f8eea0600f7754f86e501ad07f6cfba8cbceed1fefb6563cc106c",
+        "hash_format": "utf8-normalized-newlines",
+        "bytes": 16480
+      },
+      {
+        "path": "server/static/mockups/fixtures/runs.json",
+        "sha256": "aaa8a02ac68484a8f23ab1876e3acb23f566850b3ca33f3b5aef0038fb72a0f3",
+        "hash_format": "utf8-normalized-newlines",
+        "bytes": 2147
+      },
+      {
+        "path": "tests/unit/test_mockup_fixtures.py",
+        "sha256": "f0eb67c1a707bdcf8f08a4eb3a3c352086034aba90e819f8ed16e9c8495ad5a9",
+        "hash_format": "utf8-normalized-newlines",
+        "bytes": 8027
+      },
+      {
+        "path": "tools/gen_ui_capabilities.py",
+        "sha256": "9b4cf5bc80799ae44ce606b23890e6bf8825171776d856b57d3e101535b5cb07",
+        "hash_format": "utf8-normalized-newlines",
+        "bytes": 4092
+      },
+      {
+        "path": "tools/inject_full_mocks.py",
+        "sha256": "84d3687c0b0a7c90143d78a4a8baa6ce0589aa96a10c6e47db4617a64cc88774",
+        "hash_format": "utf8-normalized-newlines",
+        "bytes": 23217
+      }
+    ],
+    "selected_fonts": [
+      {
+        "family": "IBM Plex Sans",
+        "path": "server/static/fonts/ibm-plex-sans-latin.woff2",
+        "sha256": "e2291e842cf5af167122a22881a740c7f2dda7716f1e8cd76680264f4a859470",
+        "hash_format": "bytes",
+        "bytes": 45712
+      },
+      {
+        "family": "IBM Plex Sans",
+        "path": "server/static/fonts/ibm-plex-sans-latin-ext.woff2",
+        "sha256": "d160e20920ae4d6556518d352d3af27a74e9b0de3d8fe17b1c1044fc75aa2f81",
+        "hash_format": "bytes",
+        "bytes": 30964
+      },
+      {
+        "family": "Jersey 20",
+        "path": "server/static/fonts/jersey-20-latin.woff2",
+        "sha256": "222e2b84bc00b0e31ec5354f17853e3478ee808a3d117ae59a9b9997e45f77da",
+        "hash_format": "bytes",
+        "bytes": 19268
+      },
+      {
+        "family": "Jersey 20",
+        "path": "server/static/fonts/jersey-20-latin-ext.woff2",
+        "sha256": "cdad422dfbf9eab3308dc2e63abaa91eb74db76128c9a1f432ade81321360113",
+        "hash_format": "bytes",
+        "bytes": 13688
+      }
+    ],
+    "fixture_shapes": {
+      "gen3": {
+        "top_level_keys": [
+          "area_states",
+          "attempts_count",
+          "badge_slugs",
+          "bonus_keys",
+          "killfeed",
+          "links",
+          "pending_bonus",
+          "pending_captures",
+          "players",
+          "recent_events",
+          "rules",
+          "run_over",
+          "save_failed"
+        ],
+        "players": {
+          "a": {
+            "keys": [
+              "badges",
+              "ball_count",
+              "battle_state",
+              "connected",
+              "current_area",
+              "current_area_display",
+              "current_area_id",
+              "encounter_table",
+              "identity_error",
+              "kanto_badges",
+              "last_event",
+              "last_seen",
+              "last_seen_age",
+              "nuzlocke_active",
+              "party_details",
+              "party_keys",
+              "pc_boxes",
+              "queued",
+              "rom_type",
+              "trainer_name"
+            ],
+            "rom_type": "firered_rr",
+            "party_details_count": 6,
+            "pc_boxes_count": 4
+          },
+          "b": {
+            "keys": [
+              "badges",
+              "ball_count",
+              "battle_state",
+              "connected",
+              "current_area",
+              "current_area_display",
+              "current_area_id",
+              "encounter_table",
+              "identity_error",
+              "kanto_badges",
+              "last_event",
+              "last_seen",
+              "last_seen_age",
+              "nuzlocke_active",
+              "party_details",
+              "party_keys",
+              "pc_boxes",
+              "queued",
+              "rom_type",
+              "trainer_name"
+            ],
+            "rom_type": "firered_rr",
+            "party_details_count": 6,
+            "pc_boxes_count": 2
+          }
+        }
+      },
+      "gen1": {
+        "top_level_keys": [
+          "area_states",
+          "attempts_count",
+          "badge_slugs",
+          "bonus_keys",
+          "killfeed",
+          "links",
+          "pending_bonus",
+          "pending_captures",
+          "players",
+          "recent_events",
+          "rules",
+          "run_over",
+          "save_failed"
+        ],
+        "players": {
+          "a": {
+            "keys": [
+              "badges",
+              "ball_count",
+              "battle_state",
+              "connected",
+              "current_area",
+              "current_area_display",
+              "current_area_id",
+              "encounter_table",
+              "identity_error",
+              "kanto_badges",
+              "last_event",
+              "last_seen",
+              "last_seen_age",
+              "nuzlocke_active",
+              "party_details",
+              "party_keys",
+              "pc_boxes",
+              "queued",
+              "rom_type",
+              "trainer_name"
+            ],
+            "rom_type": "red",
+            "party_details_count": 6,
+            "pc_boxes_count": 4
+          },
+          "b": {
+            "keys": [
+              "badges",
+              "ball_count",
+              "battle_state",
+              "connected",
+              "current_area",
+              "current_area_display",
+              "current_area_id",
+              "encounter_table",
+              "identity_error",
+              "kanto_badges",
+              "last_event",
+              "last_seen",
+              "last_seen_age",
+              "nuzlocke_active",
+              "party_details",
+              "party_keys",
+              "pc_boxes",
+              "queued",
+              "rom_type",
+              "trainer_name"
+            ],
+            "rom_type": "blue",
+            "party_details_count": 6,
+            "pc_boxes_count": 2
+          }
+        }
+      }
+    }
+  }
+}
