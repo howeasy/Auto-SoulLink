@@ -78,7 +78,7 @@ var triggers = [];
     }
 
     function autoSaveTriggers() {
-      fetch('/api/obs/triggers', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({triggers:triggers})})
+      SLinkRun.fetch('/api/obs/triggers', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({triggers:triggers})})
         .then(function(r){return r.json();}).then(function(d) {
           msg(d.ok ? '\u2714 Triggers saved' : 'Save error: '+(d.error||'unknown'), !d.ok);
         }).catch(function(e){ msg('Save failed: '+e, true); });
@@ -108,7 +108,7 @@ var triggers = [];
     }
 
     function loadStatus() {
-      fetch('/api/obs/status').then(function(r){return r.json();}).then(function(d) {
+      SLinkRun.fetch('/api/obs/status').then(function(r){return r.json();}).then(function(d) {
         ['a','b'].forEach(function(p) {
           var badge = document.getElementById('status-' + p);
           var cs = (d.connections && d.connections[p]) ? d.connections[p].status : 'disconnected';
@@ -138,7 +138,7 @@ var triggers = [];
 
     var _scenesCache = {a: [], b: []};
     function loadScenes(player) {
-      fetch('/api/obs/scenes/' + player).then(function(r){return r.json();}).then(function(d) {
+      SLinkRun.fetch('/api/obs/scenes/' + player).then(function(r){return r.json();}).then(function(d) {
         _scenesCache[player] = d.scenes || [];
         _updateSceneLists();
       }).catch(function(){});
@@ -191,7 +191,7 @@ var triggers = [];
         },
         triggers: triggers
       };
-      fetch('/api/obs/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)})
+      SLinkRun.fetch('/api/obs/config', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)})
         .then(function(r){return r.json();}).then(function(d) {
           if (d.ok) {
             msg('Config saved!', false);
@@ -207,7 +207,7 @@ var triggers = [];
       var pw   = document.getElementById('pw-'+player).value;
       var body = {player:player, host:host, port:port};
       if (pw) body.password = pw;
-      fetch('/api/obs/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      SLinkRun.fetch('/api/obs/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
         .then(function(r){return r.json();}).then(function(d){
           if (d.ok && pw) document.getElementById('pw-'+player).value='';
           msg(d.ok ? ('Connecting player '+player.toUpperCase()+'...') : ('Error: '+d.error), !d.ok);
@@ -216,7 +216,7 @@ var triggers = [];
     }
 
     function disconnect(player) {
-      fetch('/api/obs/disconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:player})})
+      SLinkRun.fetch('/api/obs/disconnect',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:player})})
         .then(function(r){return r.json();}).then(function(d){
           msg(d.ok ? ('Disconnected player '+player.toUpperCase()) : ('Error: '+d.error), !d.ok);
           setTimeout(loadStatus, 500);
@@ -226,7 +226,7 @@ var triggers = [];
     function testScene(player) {
       var scene = prompt('Scene name to switch to for Player ' + player.toUpperCase() + ':');
       if (!scene) return;
-      fetch('/api/obs/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:player,scene:scene})})
+      SLinkRun.fetch('/api/obs/test',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({player:player,scene:scene})})
         .then(function(r){return r.json();}).then(function(d){
           msg(d.ok ? ('\u2714 Scene changed to "'+scene+'"') : ('Error: '+d.error), !d.ok);
         });
@@ -241,7 +241,7 @@ var triggers = [];
     // free-text value), we add a "Custom" optgroup so the dropdown can still
     // round-trip it on re-render.
     function loadAreas() {
-      fetch('/api/obs/areas').then(function(r){return r.json();}).then(function(d){
+      SLinkRun.fetch('/api/obs/areas').then(function(r){return r.json();}).then(function(d){
         _areaGroups = d.groups || [];
         _areaList   = d.areas  || [];
         _areaNameById = {};

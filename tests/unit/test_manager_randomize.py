@@ -16,6 +16,8 @@ class Request:
     def __init__(self, run_id, body):
         self.match_info = {"run_id": run_id}
         self.body = body
+        self.remote = "127.0.0.1"
+        self.host = "localhost"
 
     async def json(self):
         if self.body is None:
@@ -40,7 +42,7 @@ def manager_dir(tmp_path, monkeypatch):
 
 
 async def post(body, run_id="run_test"):
-    manager = mgr.RunManager.__new__(mgr.RunManager)
+    manager = mgr.RunManager("127.0.0.1")
     response = await manager.handle_randomize(Request(run_id, body))
     return response.status, json.loads(response.text)
 

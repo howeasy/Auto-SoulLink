@@ -6,11 +6,33 @@ provenance must establish the same origin, including the port. Fetch Metadata
 alone is insufficient for the documented plain-HTTP LAN setup.
 """
 
+import ipaddress
 from urllib.parse import urlsplit
 
 from aiohttp import web
 
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def local_operator(request) -> bool:
+    """Local file access requires both a loopback peer and a local Host."""
+    try:
+        peer = ipaddress.ip_address(request.remote or "")
+        peer_local = peer.is_loopback or bool(getattr(peer, "ipv4_mapped", None) and peer.ipv4_mapped.is_loopback)
+        parsed = urlsplit("http://" + request.host)
+        host = parsed.hostname
+        if parsed.username is not None or parsed.password is not None or parsed.path or parsed.query or parsed.fragment:
+            return False
+        if parsed.port is not None and not 1 <= parsed.port <= 65535:
+            return False
+        if not peer_local or not host:
+            return False
+        if host.rstrip(".").lower() == "localhost":
+            return True
+        address = ipaddress.ip_address(host)
+        return address.is_loopback or bool(getattr(address, "ipv4_mapped", None) and address.ipv4_mapped.is_loopback)
+    except (ValueError, AttributeError):
+        return False
 
 
 def _origin(value: str, *, referer: bool = False) -> tuple[str, str, int] | None:

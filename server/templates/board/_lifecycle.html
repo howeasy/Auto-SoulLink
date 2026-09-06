@@ -1,0 +1,4 @@
+<div class="board-lifecycle" data-run-id="{{ selected_run.run_id }}">
+{% if selected_run.status == 'running' %}<button class="board-btn" type="button" data-run-action="stop">Stop</button>{% elif selected_run.status != 'archived' %}<button class="board-btn primary" type="button" data-run-action="start">Start</button>{% endif %}
+<details id="run-actions-{{ selected_run.run_id }}" data-details-key="run-actions-{{ selected_run.run_id }}"><summary class="board-btn">Manage</summary><div class="board-pop">{% if selected_run.status != 'archived' %}<button class="board-btn" type="button" data-run-action="archive">Archive run</button>{% endif %}<button class="board-btn" type="button" data-delete-review>Delete run…</button></div></details>
+</div>

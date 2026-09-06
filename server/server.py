@@ -37,7 +37,7 @@ from server import gen1_admission
 from server import runtime_boundary
 from server.ui_projection import health, move_details, player_capabilities
 from server.save_identity import SaveIdentity
-from server.http_safety import csrf_protection, theme_cache
+from server.http_safety import csrf_protection, local_operator, theme_cache
 from server.lua_literals import lua_comment, lua_string
 from server.overlay_catalog import build_index_context as _build_stream_index_context
 
@@ -2516,6 +2516,13 @@ class SLinkServer:
     async def handle_status_json(self, request):
         return aiohttp_web.json_response(self._build_status_dict())
 
+    async def handle_board_context(self, request):
+        # Internal presentation only. Not in the public manager run allowlist.
+        if not self._manager_port or not local_operator(request):
+            raise aiohttp_web.HTTPNotFound()
+        return aiohttp_web.json_response({"schema": 1, "run_id": self._run_id,
+                                          "context": self._build_board_context()})
+
     # ── RR Damage Calculator handlers ───────────────────────────────────────
 
     async def handle_calc_redirect(self, request):
@@ -4964,10 +4971,21 @@ def build_app(srv):
     table — a test that re-declared the routes would drift the moment one was added here.
     """
     app = aiohttp_web.Application(middlewares=[csrf_protection, theme_cache])
+    @aiohttp_web.middleware
+    async def requested_run(request, handler):
+        target = request.headers.get("X-SLink-Target-Run")
+        if target is not None and target != (getattr(srv, "_run_id", "") or "standalone"):
+            return aiohttp_web.json_response({"ok": False, "error": "Run identity does not match"}, status=409)
+        return await handler(request)
+    app.middlewares.append(requested_run)
+    async def identify_run(request, response):
+        response.headers["X-SLink-Run-Id"] = getattr(srv, "_run_id", "") or "standalone"
+    app.on_response_prepare.append(identify_run)
     setup_templating(app)
     app.router.add_get("/",            srv.handle_status_html)
     app.router.add_get("/memorial",    srv.handle_memorial_html)
     app.router.add_get("/api/status",  srv.handle_status_json)
+    app.router.add_get("/_ui/board-context", srv.handle_board_context)
     app.router.add_get("/api/events",  srv.handle_sse)
     app.router.add_post("/api/reset",              srv.handle_reset_api)
     app.router.add_post("/api/inject_link",        srv.handle_inject_link_api)
@@ -5075,7 +5093,7 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                rival_team_swap: bool = False, overworld_presence: bool = False,
                native_messages: bool = False, native_sounds: bool = False,
                battle_calc: bool = True, pc_trade_npc: bool = True,
-               manager_port: int = 0, verbose: bool = False):
+               manager_port: int = 0, verbose: bool = False, http_host: str | None = None):
     _configure_logging(data_dir, verbose)
     if reset:
         links_path = os.path.join(data_dir, "links.json") if data_dir else LINKS_PATH
@@ -5126,21 +5144,22 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         app = build_app(srv)
         runner = aiohttp_web.AppRunner(app)
         await runner.setup()
-        http_site = aiohttp_web.TCPSite(runner, host, http_port)
+        http_bind = http_host if http_host is not None else host
+        http_site = aiohttp_web.TCPSite(runner, http_bind, http_port)
         try:
             await http_site.start()
         except OSError as e:
             await runner.cleanup()
             tcp_server.close()
             raise SystemExit(
-                f"\nCannot listen on HTTP {host}:{http_port} — {e}\n"
+                f"\nCannot listen on HTTP {http_bind}:{http_port} — {e}\n"
                 "  The dashboard port is in use (the Run Manager uses 8090, and the runs\n"
                 "  it spawns start at 8081).\n"
                 f"  Use a different port:  python -m server.server --http-port {http_port + 10}\n"
             ) from None
         # Start Twitch bot if configured
         await srv._restart_bot()
-        log.info(f"SLink{run_label} status page at http://{host if host != '0.0.0.0' else 'localhost'}:{http_port}/")
+        log.info(f"SLink{run_label} status page at http://{http_bind if http_bind != '0.0.0.0' else 'localhost'}:{http_port}/")
     else:
         log.warning("aiohttp not installed — HTTP status page disabled. Run: pip install aiohttp")
         runner = None
@@ -5157,6 +5176,7 @@ if __name__ == "__main__":
     parser.add_argument("--host",      default="0.0.0.0",  help="Bind address (default: 0.0.0.0)")
     parser.add_argument("--port",      type=int, default=54321, help="TCP port (default: 54321)")
     parser.add_argument("--http-port", type=int, default=8080,  help="HTTP status port (default: 8080)")
+    parser.add_argument("--http-host", default=None, help="HTTP bind address (default: same as --host)")
     parser.add_argument("--reset",     action="store_true",     help="Clear all saved state and start a fresh run")
     parser.add_argument("--data-dir",  default=None,            help="Data directory for links/memorial JSON (default: data/)")
     parser.add_argument("--run-id",    default=None,            help="Optional run label (used in log output)")
@@ -5181,6 +5201,7 @@ if __name__ == "__main__":
     parser.add_argument("--verbose",      action="store_true",   help="Enable DEBUG-level logging to file and console (default: INFO only)")
     args = parser.parse_args()
     asyncio.run(main(args.host, args.port, args.http_port, args.reset, args.data_dir, args.run_id,
+                     http_host=args.http_host,
                      run_name=args.run_name,
                      species_lock=args.species_lock, gender_lock=args.gender_lock,
                      type_lock=args.type_lock,

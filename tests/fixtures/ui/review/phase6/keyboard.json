@@ -1,0 +1,35 @@
+{
+  "railAfterRepeatedPolls": {
+    "focus": "run-link-run_49189182a8f840b4837fda6734cc9159",
+    "poll": "#run-list:morph",
+    "tag": "A",
+    "width": 700
+  },
+  "encounterDisclosure": {
+    "focus": "SUMMARY",
+    "id": "d-board:review_gen1:enc:a:route_3",
+    "open": true
+  },
+  "debug": {
+    "generation": "gen1",
+    "disabledActions": 19,
+    "shiftTabStayedInside": true,
+    "escapeRestoredTrigger": true
+  },
+  "creation": {
+    "name": "Keyboard review",
+    "family": "gen1_rby",
+    "autoStart": false,
+    "openedSetup": true,
+    "cartridgeFields": [
+      "rom_a",
+      "rom_b"
+    ]
+  },
+  "stopped": {
+    "nowCards": 0,
+    "hpBars": 0,
+    "debugDisabled": true,
+    "selectedRunUnchanged": true
+  }
+}

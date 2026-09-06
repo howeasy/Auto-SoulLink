@@ -26,12 +26,12 @@ function loadDebug(responses, embedded = false) {
     createElement: tag => new Element(tag), querySelectorAll: () => [],
     getElementById(id) { if (!nodes.has(id)) nodes.set(id, new Element('div')); return nodes.get(id); }};
   const counts = {timers: 0, streams: 0};
-  const context = {document, console, SLinkDebugEmbedded: embedded, counts, setTimeout: () => 0, clearTimeout() {}, setInterval: () => { counts.timers++; return 0; },
+  const context = {document, console, location: {pathname: '/'}, SLinkDebugEmbedded: embedded, counts, setTimeout: () => 0, clearTimeout() {}, setInterval: () => { counts.timers++; return 0; },
     EventSource: class { constructor() { counts.streams++; } addEventListener() {} close() {} },
     fetch: async url => ({json: async () => responses[url] || {}})};
   context.window = context;
   vm.createContext(context);
-  for (const name of ['dom.js', 'debug.js']) {
+  for (const name of ['dom.js', 'run-http.js', 'debug.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../../server/static', name), 'utf8'), context, {filename: name});
   }
   return context;
@@ -85,5 +85,21 @@ test('debug backup, live state and memorial API text cannot become markup', asyn
   await context.loadMemorial();
   for (const id of ['backup-list', 'live-state-content', 'memorial-content']) {
     assert.ok(context.document.getElementById(id).textContent.includes(attack), id);
+  }
+});
+
+
+test('run HTTP calls keep their explicit prefix and reject remote targets', async () => {
+  for (const base of ['', '/runs/run_a', '/runs/run_b']) {
+    const calls = [];
+    const context = {location: {pathname: base + '/debug'}, fetch: async (...args) => { calls.push(args); return {}; }};
+    context.window = context;
+    vm.createContext(context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../../server/static/run-http.js'), 'utf8'), context);
+    await context.SLinkRun.fetch('/api/status?theme=light', {cache: 'no-store'});
+    assert.equal(calls[0][0], base + '/api/status?theme=light');
+    assert.equal(context.SLinkRun.url('/api/events'), base + '/api/events');
+    assert.throws(() => context.SLinkRun.url('//elsewhere.invalid/api/reset'));
+    assert.throws(() => context.SLinkRun.url('https://elsewhere.invalid/api/reset'));
   }
 });

@@ -7,6 +7,10 @@
     ],
     [
       "GET",
+      "/_ui/board-context"
+    ],
+    [
+      "GET",
       "/api/bot/status"
     ],
     [
@@ -284,6 +288,10 @@
     [
       "HEAD",
       "/"
+    ],
+    [
+      "HEAD",
+      "/_ui/board-context"
     ],
     [
       "HEAD",
@@ -728,10 +736,6 @@
     ],
     [
       "GET",
-      "/api/events"
-    ],
-    [
-      "GET",
       "/api/runs"
     ],
     [
@@ -757,6 +761,14 @@
     [
       "GET",
       "/patcher"
+    ],
+    [
+      "GET",
+      "/runs/{run_id}"
+    ],
+    [
+      "GET",
+      "/runs/{run_id}/{tail}"
     ],
     [
       "GET",
@@ -784,10 +796,6 @@
     ],
     [
       "HEAD",
-      "/api/events"
-    ],
-    [
-      "HEAD",
       "/api/runs"
     ],
     [
@@ -813,6 +821,14 @@
     [
       "HEAD",
       "/patcher"
+    ],
+    [
+      "HEAD",
+      "/runs/{run_id}"
+    ],
+    [
+      "HEAD",
+      "/runs/{run_id}/{tail}"
     ],
     [
       "HEAD",
@@ -869,6 +885,10 @@
     [
       "POST",
       "/api/stream/pin"
+    ],
+    [
+      "POST",
+      "/runs/{run_id}/{tail}"
     ]
   ]
 }

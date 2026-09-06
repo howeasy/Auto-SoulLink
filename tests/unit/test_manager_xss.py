@@ -51,14 +51,8 @@ def test_ordinary_names_are_still_readable_json():
     assert json.loads(out) == {"name": "Red vs Blue", "run_id": "abc"}
 
 
-def test_the_template_still_marks_it_safe():
-    """This escaping is only load-bearing because the template bypasses autoescaping.
-    If someone removes `| safe`, the double-escaping would show as literal \u003c on
-    screen -- a visible bug, not a silent one -- so this pins the coupling."""
-    import os
-    repo = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-    with open(os.path.join(repo, "server", "templates", "manager.html"), encoding="utf-8") as f:
-        src = f.read()
-    assert "runs_json | safe" in src, (
-        "manager.html no longer injects runs_json with | safe — _json_for_script's "
-        "escaping may now be double-applied")
+def test_manager_template_no_longer_embeds_a_registry_script():
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[2] / "server/templates/manager.html").read_text(encoding="utf-8")
+    assert "runs_json" not in src and "SLINK_RUNS" not in src
+    # Real hostile-name rendering is exercised in test_manager_board.

@@ -7,7 +7,7 @@ var _cfgLoaded = false;
       setTimeout(function(){if(t.parentNode)t.parentNode.removeChild(t);},2500);
     }
     function post(url, body) {
-      return fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}).then(function(r){return r.json();});
+      return SLinkRun.fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}).then(function(r){return r.json();});
     }
     var _cfgInputIds = ['cfg-channel','cfg-nick','cfg-prefix','cfg-cooldown','cfg-client-id'];
     function _anyConfigFocused() {
@@ -15,7 +15,7 @@ var _cfgLoaded = false;
       return a && _cfgInputIds.indexOf(a.id) !== -1;
     }
     function loadStatus(forceConfig) {
-      fetch('/api/bot/status').then(function(r){return r.json();}).then(function(j){
+      SLinkRun.fetch('/api/bot/status').then(function(r){return r.json();}).then(function(j){
         var badge = document.getElementById('status-badge');
         var chan  = document.getElementById('status-channel');
         var tBadge = document.getElementById('token-badge');

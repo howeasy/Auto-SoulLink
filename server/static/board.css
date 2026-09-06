@@ -451,3 +451,28 @@ body.slink-board { display: block; -webkit-font-smoothing: antialiased; }
   .board-notices { padding-inline: var(--space-3); }
   .board-optgrid { grid-template-columns: minmax(0, 1fr); }
 }
+/* Manager and standalone share the board rail and controls. */
+.slink-board .board-rail-brand {color:var(--c-txt);text-decoration:none;min-width:0}
+.slink-board #run-list {display:flex;flex-direction:column;gap:6px;min-height:0;overflow:auto;border-top:1px solid var(--c-edge);padding-top:12px}
+.slink-board .board-run-link {display:flex;gap:8px;align-items:center;color:var(--c-txt);text-decoration:none;padding:9px 6px;border:1px solid transparent;border-radius:7px;min-width:0}
+.slink-board .board-run-link>span:last-child {display:flex;flex-direction:column;min-width:0;overflow-wrap:anywhere}
+.slink-board .board-run-link small {color:var(--c-dim);font-size:.75em}
+.slink-board .board-run-link.active {border-color:var(--c-brand);background:var(--c-card)}
+.slink-board .board-new-run {justify-content:center}
+.slink-board .board-create {max-width:1150px}
+.slink-board .board-create h2 {margin-top:0}
+.slink-board .board-intro {margin-bottom:24px}
+.slink-board .board-field {display:flex;flex-direction:column;gap:6px;margin:18px 0;min-width:0}
+.slink-board .board-field input,.slink-board .board-field select {font:inherit;padding:10px;background:var(--c-bg);color:var(--c-txt);border:1px solid var(--c-edge);border-radius:6px;width:100%;box-sizing:border-box}
+.slink-board fieldset {border:1px solid var(--c-edge);border-radius:8px;min-width:0;margin:20px 0;padding:16px}
+.slink-board input[type=checkbox] {accent-color:var(--c-brand);width:18px;height:18px;flex-shrink:0}
+.slink-board .board-lifecycle {display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.slink-board .board-lifecycle details {position:relative}
+.slink-board .board-lifecycle .board-pop {right:0;z-index:20;min-width:180px}
+.slink-board .board-card-body>p {line-height:1.5}
+@media(max-width:640px){
+  .slink-board #run-list {flex-direction:row;flex-wrap:nowrap;width:100%;max-height:100px;border-top:0;padding-top:0;order:3;flex-basis:100%;overflow-x:auto}
+  .slink-board .board-run-link {flex-shrink:0;max-width:180px}
+  .slink-board .board-new-run {margin-left:auto}
+  .slink-board .board-rail:has(#run-list) {flex-wrap:wrap}
+}

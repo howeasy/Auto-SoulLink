@@ -25,7 +25,7 @@ from tests.ui_support import manager_app_without_startup  # noqa: E402
 
 # Routes with side effects or long-lived responses. /api/events is an SSE stream that never
 # completes; the calc catch-all serves files from a vendored bundle; the launcher needs a player.
-SKIP = {"/api/events"}
+SKIP = {"/api/events", "/_ui/board-context"}  # private loopback projection covered by test_manager_board
 DYNAMIC = {
     "/calc/{path:.*}": "/calc/css/main.css",
     "/calc/{path}": "/calc/css/main.css",

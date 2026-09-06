@@ -425,11 +425,11 @@
             <div class="overview-tile-hdr">
               <span class="overview-tile-title" x-text="ov.title"></span>
               <a class="overview-tile-pop" target="_blank" rel="noopener"
-                 :href="'/stream/' + ov.slug + '?theme=' + params.theme"
+                 :href="SLinkRun.url('/stream/' + ov.slug + '?theme=' + params.theme)"
                  title="Pop out">↗</a>
             </div>
             <iframe class="overview-tile-frame"
-                    :src="'/stream/' + ov.slug + '?theme=' + params.theme"
+                    :src="SLinkRun.url('/stream/' + ov.slug + '?theme=' + params.theme)"
                     :title="ov.title"></iframe>
           </div>
         </template>
@@ -633,7 +633,7 @@ function overlayLauncher() {
           q.push('filter=' + enabled.join(','));
         }
       }
-      return '/stream/' + cur.slug + (q.length ? '?' + q.join('&') : '');
+      return SLinkRun.url('/stream/' + cur.slug + (q.length ? '?' + q.join('&') : ''));
     },
 
     copy() {
@@ -645,7 +645,7 @@ function overlayLauncher() {
     },
 
     fetchAttempts() {
-      fetch('/api/status').then(r => r.json()).then(d => {
+      SLinkRun.fetch('/api/status').then(r => r.json()).then(d => {
         if (typeof d.attempts_count === 'number') this.attemptsValue = d.attempts_count;
       }).catch(() => {});
     },
@@ -653,7 +653,7 @@ function overlayLauncher() {
     setAttempts() {
       var val = parseInt(this.attemptsValue, 10);
       if (isNaN(val) || val < 0) return;
-      fetch('/api/attempts', {
+      SLinkRun.fetch('/api/attempts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ count: val }),

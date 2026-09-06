@@ -1,0 +1,108 @@
+{
+  "fixtures_only": true,
+  "live_admission_evidence": false,
+  "matrix": "matrix.json",
+  "keyboard": "keyboard.json",
+  "files": {
+    "gen1-default-1100.png": {
+      "sha256": "f5fadfe05f2d131b413056012bc1f8f16526454f6ca76fbbbf7187562a536ec6",
+      "bytes": 99817
+    },
+    "gen1-default-1600.png": {
+      "sha256": "51cf564fdf5b580c02ace1e89504f9eabcb0448db700843631fc41e1f6cebfe3",
+      "bytes": 155010
+    },
+    "gen1-default-700.png": {
+      "sha256": "b779cd68ce0a0dea3542b31606187dbc5f98bcf596e6ba8acadbf30386e61b79",
+      "bytes": 57604
+    },
+    "gen1-funtastic-grape-1100.png": {
+      "sha256": "73d8ce8ceec986073ab9894b21fda3da515c0749f91e5a6a488ae0a01f6458b3",
+      "bytes": 106925
+    },
+    "gen1-funtastic-grape-1600.png": {
+      "sha256": "6e6245cb0a35485c2d47eede276687aef936b0154c7e330754d123f41d289fa2",
+      "bytes": 167912
+    },
+    "gen1-funtastic-grape-700.png": {
+      "sha256": "6f9f61fadae46a55f222e313537a766925be0393af6a0846b68905426ef6a207",
+      "bytes": 62744
+    },
+    "gen1-light-1100.png": {
+      "sha256": "064aacb483d845b4bbf0a84a69eff6743c29d7dc8a9c98d9a8d177289def7724",
+      "bytes": 97539
+    },
+    "gen1-light-1600.png": {
+      "sha256": "300419eba79fc043745a9dadd9ba54ede7e3692f55bf6885e1a4965a4b4c346c",
+      "bytes": 150366
+    },
+    "gen1-light-700.png": {
+      "sha256": "15e1d32635966856f021b6b14a2e71cd4d34e5b8c7d33cdf4f190d06b07a1367",
+      "bytes": 57288
+    },
+    "gen3-default-1100.png": {
+      "sha256": "25d6bcdbaee5cefb9c191d5074dbc6d9928033bbbfdc03813e275ab8bb9c4726",
+      "bytes": 103841
+    },
+    "gen3-default-1600.png": {
+      "sha256": "adb8326d936371dbb9633506969ba2856d868454d92c3ac0b4c097e1e77557d9",
+      "bytes": 156928
+    },
+    "gen3-default-375.png": {
+      "sha256": "92830b4df97983388931f2bf519ad87a48a729dcd609ec4b33125677e94a23eb",
+      "bytes": 37968
+    },
+    "gen3-default-700.png": {
+      "sha256": "efb49d34c0aa32fa2a4c61b8f4f8ecf22a7ffde96a0c578cd23f3a48fba95e58",
+      "bytes": 58901
+    },
+    "gen3-funtastic-grape-1100.png": {
+      "sha256": "a20589175c872124836c6a176c15a8533f270bfb5d04e8582cdf598105599128",
+      "bytes": 110570
+    },
+    "gen3-funtastic-grape-1600.png": {
+      "sha256": "4d0bd1a1045fa4383d2d6edbb56628490b08f942a7a1604a62a1fab182a510af",
+      "bytes": 171659
+    },
+    "gen3-funtastic-grape-700.png": {
+      "sha256": "ed10f450069a3542045e0dfa08f0241729fe16348331fbbe05c19140055ef804",
+      "bytes": 64109
+    },
+    "gen3-light-1100.png": {
+      "sha256": "b6651093b602cfff07803f7308fe18062ed9a99f08b9fc56e62a84b396e0c452",
+      "bytes": 102668
+    },
+    "gen3-light-1600.png": {
+      "sha256": "1cc25ed4933137f14f8dc5f5a6addeb800cc2cd73b085948bb3bbbe8e7b7e21a",
+      "bytes": 153705
+    },
+    "gen3-light-700.png": {
+      "sha256": "ed584028d1db282ccf91dc66339e61150f51b0453ba4e63140bdb578dc5f44f0",
+      "bytes": 59158
+    },
+    "keyboard.json": {
+      "sha256": "6a41b137aa3b171f1178954685a7758ec65b34a8478e8f71fc4e0b615dbcdadd",
+      "bytes": 726
+    },
+    "matrix.json": {
+      "sha256": "81df6e9a7f04e2a07a4b09012d57fce31909ff6a668661e6be4089984eff4f17",
+      "bytes": 15891
+    },
+    "new-run-1600.png": {
+      "sha256": "21ba74fbd9932bd98a96d519f46a4b7c47ce8a31b309f5bc7fc451086fc665e6",
+      "bytes": 106689
+    },
+    "new-run-700.png": {
+      "sha256": "b6e17cd3f423f0d3f606ea1632872fb438231d7cd3f7f65d676ff143665c05d9",
+      "bytes": 66993
+    },
+    "setup-created-1600.png": {
+      "sha256": "cdacaa2dccd0f5264e28ca971bf1fbf7c3feef81472deb7189e13d750f1ba45c",
+      "bytes": 118814
+    },
+    "setup-created-700.png": {
+      "sha256": "4185402617b42a5b9370f4f52b3249dafde05cc0f25bef9a72aa99fcf9f9c606",
+      "bytes": 68802
+    }
+  }
+}

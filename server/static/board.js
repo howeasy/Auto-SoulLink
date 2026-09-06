@@ -133,6 +133,11 @@
   }
   document.addEventListener('htmx:afterSettle', function () {
     document.getElementById('board-connection-error').hidden = true;
+    var available = document.querySelector('[data-run-available]');
+    document.querySelectorAll('[data-debug-open]').forEach(function (button) {
+      button.disabled = available && available.dataset.runAvailable !== 'true';
+    });
+    if (available && available.dataset.runAvailable !== 'true' && dialog.open) dialog.close();
     restoreDetails();
     refreshDebug();
   });
@@ -148,8 +153,8 @@
   var theme = document.querySelector('.theme-switcher');
   if (theme) document.getElementById('board-theme-slot').append(theme);
   document.querySelectorAll('[data-calc-link]').forEach(function (link) {
-    var url = new URL(link.href), base = new URL('./', window.location.href);
-    url.searchParams.set('slink', base.href.replace(/\/$/, ''));
+    var url = new URL(link.href);
+    url.searchParams.set('slink', window.location.origin + SLinkRun.base);
     link.href = url.href;
   });
   restoreDetails();

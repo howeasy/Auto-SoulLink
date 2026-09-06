@@ -13,7 +13,7 @@ function showResult(el, ok, data) {
 async function api(method, path, body) {
   var opts = {method: method, headers: {'Content-Type':'application/json'}};
   if (body !== undefined) opts.body = JSON.stringify(body);
-  var r = await fetch(path, opts);
+  var r = await SLinkRun.fetch(path, opts);
   return await r.json();
 }
 function flashPanel(el) {
@@ -27,7 +27,7 @@ var _lastStatus = null;
 var _refreshQueued = false;
 
 function initSSE() {
-  var src = new EventSource('/api/events');
+  var src = new EventSource(SLinkRun.url('/api/events'));
   src.addEventListener('status', function(e) {
     _sseOk = true;
     updateSSEBadge(true);
@@ -155,7 +155,7 @@ function updateDataLists() {
 
 async function loadAllAreas() {
   try {
-    var r = await fetch('/api/debug/manual_link_data');
+    var r = await SLinkRun.fetch('/api/debug/manual_link_data');
     var ml = await r.json();
     _allAreas = {};
     var areas = ml.areas || {};
@@ -228,7 +228,7 @@ async function clearPendingArea() {
 
 // ── Backups ─────────────────────────────────────────────────────────────
 async function loadBackups() {
-  var response = await fetch('/api/debug/backups'), data = await response.json();
+  var response = await SLinkRun.fetch('/api/debug/backups'), data = await response.json();
   var target = document.getElementById('backup-list');
   if (!data.backups || !data.backups.length) {
     target.textContent = 'No backups yet — created every 5 min when both players connected.';
@@ -264,7 +264,7 @@ async function doRollback(slot) {
 // ── Raw State ───────────────────────────────────────────────────────────
 async function loadRaw() {
   try {
-    var r = await fetch('/api/debug/raw_state');
+    var r = await SLinkRun.fetch('/api/debug/raw_state');
     var j = await r.json();
     document.getElementById('raw-json').textContent = JSON.stringify(j, null, 2);
   } catch(e) {}
@@ -274,7 +274,7 @@ async function loadRaw() {
 async function loadLiveState() {
   var target = document.getElementById('live-state-content');
   try {
-    var response = await fetch('/api/debug/raw_state'), data = await response.json(), live = data._live || {};
+    var response = await SLinkRun.fetch('/api/debug/raw_state'), data = await response.json(), live = data._live || {};
     var rules = data.rules || {}, identity = data.player_identity || {}, errors = live.identity_errors || {};
     var rows = [], rulesText = ['species', 'gender', 'type'].filter(function (rule) { return rules[rule + '_lock']; });
     rows.push(_debugSection('Lock Rules:', rulesText.length ? rulesText.map(function (name) { return name[0].toUpperCase() + name.slice(1); }).join(' · ') : 'none'));
@@ -307,7 +307,7 @@ async function loadLiveState() {
 async function loadMemorial() {
   var target = document.getElementById('memorial-content');
   try {
-    var response = await fetch('/api/debug/raw_state'), data = await response.json(), memorial = data._memorial || {};
+    var response = await SLinkRun.fetch('/api/debug/raw_state'), data = await response.json(), memorial = data._memorial || {};
     var index = memorial.memorial_box_index, contents = memorial.memorial_box_contents || {}, pending = memorial.pending_memorials || {};
     var rows = [_debugSection('Memorial Box:', index >= 0 ? 'Box ' + (index + 1) + ' (index ' + index + ')' : 'No dedicated memorial box (Gen 1/2)')];
     var pendingCount = (pending.a || []).length + (pending.b || []).length;
@@ -345,7 +345,7 @@ var _mlForceLink = false;
 
 async function mlRefresh() {
   try {
-    var r = await fetch('/api/debug/manual_link_data');
+    var r = await SLinkRun.fetch('/api/debug/manual_link_data');
     _mlData = await r.json();
   } catch(e) { _mlData = {a_options:[], b_options:[], areas:{}, area_ids:[], name_a:"Player A", name_b:"Player B"}; }
   document.getElementById('ml-label-a').textContent = _mlData.name_a;
@@ -519,7 +519,7 @@ initSSE();
 // Fetch initial status to populate datalists immediately
 (async function() {
   try {
-    var r = await fetch('/api/status');
+    var r = await SLinkRun.fetch('/api/status');
     _lastStatus = await r.json();
     updateLiveBar();
     updateDataLists();
