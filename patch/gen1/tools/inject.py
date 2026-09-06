@@ -32,8 +32,15 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from manifest import (  # noqa: E402
-    BANK_SIZE, HOOK_BANK, HOOK_ORIGINAL, HOOK_SITE, HOOK_TARGET, INJECT_OFFSET,
-    MENU_PATCHES, PROTECTED_RANGE,
+    BANK_SIZE,
+    HOOK_BANK,
+    HOOK_ORIGINAL,
+    HOOK_SITE,
+    INJECT_OFFSET,
+    MENU_PATCHES,
+    PROTECTED_RANGE,
+    hook_replacement,
+    validated_spans,
 )
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -74,7 +81,7 @@ def _abi_in_bank(bank: bytes) -> int | None:
     return None
 
 
-def describe(rom: bytes) -> dict:
+def describe(rom: bytes, payload: bytes | None = None) -> dict:
     """What state is this ROM in? Never raises; the caller decides what to do."""
     out = {
         "size_ok": len(rom) == ROM_SIZE,
@@ -93,21 +100,23 @@ def describe(rom: bytes) -> dict:
     out["bank_empty"] = not any(bank)
     site = rom[HOOK_SITE:HOOK_SITE + len(HOOK_ORIGINAL)]
     out["hook_clean"] = site == HOOK_ORIGINAL
-    out["hook_ours"] = (site[1] == HOOK_BANK
-                        and (site[3] | (site[4] << 8)) == HOOK_TARGET)
+    out["hook_ours"] = site == hook_replacement()
     out["spans_ok"] = sum(1 for off, orig, _new, _why in MENU_PATCHES
                           if rom[off:off + len(orig)] == orig)
     out["spans_written"] = sum(1 for off, _orig, new, _why in MENU_PATCHES
                                if rom[off:off + len(new)] == new)
 
-    if out["hook_ours"] and not out["bank_empty"]:
+    if _abi_in_bank(bank) is not None:
         try:
-            payload = load_payload()
+            payload = payload if payload is not None else load_payload()
         except InjectError:
             payload = b""
         out["already"] = {
             "abi": _abi_in_bank(bank),
-            "identical": bool(payload) and bank[:len(payload)] == payload,
+            "identical": (bool(payload) and len(payload) <= BANK_SIZE
+                          and bank == payload.ljust(BANK_SIZE, b"\x00")
+                          and out["hook_ours"]
+                          and out["spans_written"] == out["spans_total"]),
         }
     return out
 
@@ -115,10 +124,17 @@ def describe(rom: bytes) -> dict:
 def inject(rom: bytes, payload: bytes | None = None) -> bytes:
     """Return the patched ROM, or raise InjectError having written nothing."""
     payload = payload if payload is not None else load_payload()
-    state = describe(rom)
+    try:
+        spans = validated_spans(payload)
+    except ValueError as exc:
+        raise InjectError(f"invalid manifest; nothing was written: {exc}") from exc
+    state = describe(rom, payload)
 
     if not state["size_ok"]:
         raise InjectError(f"expected a {ROM_SIZE}-byte Game Boy ROM, got {len(rom)} bytes")
+    title = rom[0x134:0x143].rstrip(b"\x00")
+    if title not in (b"POKEMON RED", b"POKEMON BLUE"):
+        raise InjectError("unsupported ROM title for the current Red/Blue manifest; nothing was written")
 
     # ── Already patched? Say which, and refuse the ones we cannot safely redo. ─────────
     # The reapply matrix, stated rather than discovered at runtime: an exact match is a
@@ -129,8 +145,7 @@ def inject(rom: bytes, payload: bytes | None = None) -> bytes:
     if state["already"] is not None:
         info = state["already"]
         if info["identical"]:
-            raise InjectError(
-                "this ROM already carries exactly this companion patch — nothing to do")
+            return rom
         raise InjectError(
             f"this ROM already carries a DIFFERENT SLink patch (ABI {info['abi']}). "
             f"Start again from the unpatched randomized ROM: the spans that patch "
@@ -160,12 +175,8 @@ def inject(rom: bytes, payload: bytes | None = None) -> bytes:
 
     # ── Write ─────────────────────────────────────────────────────────────────────────
     data = bytearray(rom)
-    data[INJECT_OFFSET:INJECT_OFFSET + len(payload)] = payload
-    for off, _original, new, _why in MENU_PATCHES:
+    for off, _original, new, _why in spans:
         data[off:off + len(new)] = new
-    data[HOOK_SITE + 1] = HOOK_BANK
-    data[HOOK_SITE + 3] = HOOK_TARGET & 0xFF
-    data[HOOK_SITE + 4] = HOOK_TARGET >> 8
     out = bytes(data)
 
     # ── Read back. The header and the size are the two things a bad patch destroys ────
@@ -201,10 +212,18 @@ def main() -> int:
         print(f"hook unpatched : {st['hook_clean']}")
         print(f"menu spans ok  : {st['spans_ok']}/{st['spans_total']}")
         print(f"already patched: {st['already']}")
+        try:
+            inject(rom)
+        except InjectError as exc:
+            print(f"[gen1-inject] {exc}", file=sys.stderr)
+            return 1
         return 0
 
     if not args.out:
         ap.error("an output path is required unless --check is given")
+    if os.path.realpath(args.rom) == os.path.realpath(args.out) or (
+            os.path.exists(args.out) and os.path.samefile(args.rom, args.out)):
+        ap.error("input and output must be different files")
     try:
         out = inject(rom)
     except InjectError as exc:

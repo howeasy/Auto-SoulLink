@@ -373,6 +373,11 @@ local function give_starter()
     w8(base + 0x08, MOVE_TACKLE)
     w8(base + 0x09, MOVE_TAIL_WHIP)
     M.write_u16_be(base + 0x0C, otid)         -- OT id must match the player's
+    local species_facts = assert(G.readBaseStats(variant, G.toNatDex(SQUIRTLE_INDEX)), "canonical starter facts unavailable")
+    local starter_xp = assert(G.experienceForLevel(species_facts.growth_rate, 5))
+    w8(base + 0x0E, math.floor(starter_xp / 65536))
+    w8(base + 0x0F, math.floor(starter_xp / 256) % 256)
+    w8(base + 0x10, starter_xp % 256)
     w8(base + 0x1B, 0x99)                     -- DVs: Atk 9 / Def 9
     w8(base + 0x1C, 0x99)                     -- DVs: Spd 9 / Spc 9
     w8(base + 0x1D, 35)                       -- PP Tackle

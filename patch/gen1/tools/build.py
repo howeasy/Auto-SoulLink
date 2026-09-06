@@ -38,10 +38,18 @@ DIST = os.path.join(REPO, "patch", "gen1", "dist")
 PAYLOAD_FILE = os.path.join(DIST, "slink_bank3f.bin")
 
 from manifest import (  # noqa: E402
-    BANK_SIZE, HOOK_BANK, HOOK_ORIGINAL, HOOK_SITE, HOOK_TARGET, INJECT_OFFSET,
-    MENU_PATCHES, PANEL_ENTRY, PANEL_ENTRY_ADDR, PROTECTED_RANGE, ROMS, SLINK_PANEL_ADDR,
-    TRAMPOLINE, TRAMPOLINE_ADDR,
+    BANK_SIZE,
+    HOOK_BANK,
+    HOOK_ORIGINAL,
+    HOOK_SITE,
+    HOOK_TARGET,
+    INJECT_OFFSET,
+    MENU_PATCHES,
+    PROTECTED_RANGE,
+    ROMS,
+    validated_spans,
 )
+
 
 def assemble() -> bytes:
     """rgbasm + rgblink the module; return the raw bytes of bank $3F."""
@@ -75,6 +83,12 @@ def code_length(bank: bytes) -> int:
 
 
 def patch_rom(rom_key: str, bank: bytes, verify_only: bool = False) -> str:
+    if len(bank) != BANK_SIZE:
+        raise SystemExit("assembled bank must be exactly 16384 bytes; nothing written")
+    try:
+        spans = validated_spans(bank)
+    except ValueError as exc:
+        raise SystemExit(f"invalid manifest; nothing written: {exc}") from exc
     name, sha1 = ROMS[rom_key]
     src = os.path.join(REPO, name)
     if not os.path.exists(src):
@@ -101,6 +115,7 @@ def patch_rom(rom_key: str, bank: bytes, verify_only: bool = False) -> str:
     #    the protected header. Checked for ALL spans before ANY is written, so a manifest
     #    that is half-applicable leaves the ROM untouched rather than half-patched.
     lo, hi = PROTECTED_RANGE
+    original_header = bytes(data[lo:hi + 1])
     for off, original, new, why in MENU_PATCHES:
         if not (off + len(new) <= lo or off > hi):
             raise SystemExit(
@@ -116,15 +131,8 @@ def patch_rom(rom_key: str, bank: bytes, verify_only: bool = False) -> str:
         return (f"{rom_key}: clean ROM, hook site, target bank and "
                 f"{len(MENU_PATCHES)} menu spans all as expected")
 
-    data[INJECT_OFFSET:INJECT_OFFSET + BANK_SIZE] = bank
-    for off, _original, new, _why in MENU_PATCHES:
+    for off, _original, new, _why in spans:
         data[off:off + len(new)] = new
-    # Rewrite only the two immediates: `ld b, $3F` and `ld hl, $4000`. The
-    # `call Bankswitch` after them is untouched, so control still flows the same way.
-    data[HOOK_SITE + 1] = HOOK_BANK
-    data[HOOK_SITE + 3] = HOOK_TARGET & 0xFF
-    data[HOOK_SITE + 4] = HOOK_TARGET >> 8
-
     os.makedirs(BUILD, exist_ok=True)
     dst = os.path.join(BUILD, f"slink_{rom_key}.gb")
     with open(dst, "wb") as f:
@@ -138,7 +146,7 @@ def patch_rom(rom_key: str, bank: bytes, verify_only: bool = False) -> str:
     assert check[INJECT_OFFSET:INJECT_OFFSET + 8] == bank[:8]
     for off, _original, new, why in MENU_PATCHES:
         assert bytes(check[off:off + len(new)]) == new, f"{why} did not land at {off:#06x}"
-    assert check[lo:hi + 1] == bytes(open(src, "rb").read()[lo:hi + 1]),         "the cartridge header changed"
+    assert check[lo:hi + 1] == original_header, "the cartridge header changed"
     return (f"{rom_key}: {os.path.relpath(dst, REPO)}  "
             f"md5={hashlib.md5(check).hexdigest()}")
 
@@ -150,6 +158,12 @@ def main():
     ap.add_argument("--verify-only", action="store_true",
                     help="check the base ROMs and hook site, build nothing")
     args = ap.parse_args()
+
+    if args.verify_only:
+        for rom_key in ([args.rom] if args.rom else sorted(ROMS)):
+            print("[gen1-patch] " + patch_rom(rom_key, bytes(BANK_SIZE), True),
+                  file=sys.stderr)
+        return 0
 
     bank = assemble()
     n = code_length(bank)

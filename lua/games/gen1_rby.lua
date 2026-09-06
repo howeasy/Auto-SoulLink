@@ -93,6 +93,16 @@ M.PROFILES = {
         JOY_IGNORE_ADDR    = 0xCD6B,  -- wJoyIgnore: nonzero while a script owns input
         FONT_LOADED_ADDR   = 0xCFC4,  -- wFontLoaded: bit 0 set while a text box is up
         CURRENT_BOX_NUM_ADDR = 0xD5A0,  -- wCurrentBoxNum (low 7 bits = active box index)
+        -- Source/byte-validated main-loop checkpoint, independently qualified live.
+        -- AP deliberately does not inherit this ROM/stack contract.
+        write_safe = {
+            version = "gen1-main-loop-v1", irq_vector = 0x40,
+            vblank_entry = 0x2024, delay_frame = 0x20AF,
+            overworld_loop = 0x03FF, overworld_loop_less_delay = 0x0402,
+            stack_min = 0xDF00, stack_end = 0xDFFF, vblank_flag = 0xFFD6,
+            link_state = 0xD12B, serial_status = 0xFFAA, entering_cable_club = 0xCC47,
+            disconnected_serial = 0xFF, link_none = 0,
+        },
 
         -- pokered's ChangeBox wipes every SRAM box the first time the player opens the box
         -- menu (engine/menus/save.asm:366). Box 12 is our memorial, so the client claims the
@@ -103,6 +113,16 @@ M.PROFILES = {
             box_len = 1122, boxes_per_bank = 6, banks = {2, 3},
             checksum_offset = 0x1A4C,
             changed_boxes_addr = 0xD5A0, changed_boxes_bit = 0x80,
+            main_save_start = 9624,
+            main_save_len = 3979,
+            main_checksum_offset = 13603,
+            saved_box_flag_offset = 10316,
+            player_id_addr = 54105, saved_player_id_offset = 9733,
+            save_party_dex_ranges = {
+                {src = 55936, dst = 12480, len = 1122},
+                {src = 53603, dst = 12076, len = 404},
+                {src = 54007, dst = 9635, len = 38},
+            },
         },
         -- Active enemy battle mon (wEnemyMon at CFE5, battle_struct layout)
         ENEMY_MON_SPECIES_ADDR = 0xCFE5,  -- internal species index (+0x00)
@@ -148,7 +168,7 @@ M.PROFILES = {
         stat_stages_layout      = "gen1",  -- {atk, def, spd, spc, acc, eva}
         -- Moves + PP within party struct (Phase 3 — pret/pokered macros, 4 bytes each).
         moves_offset            = 0x08,    -- 4 move IDs at +0x08..0x0B
-        pp_offset               = 0x1D,    -- 4 PP bytes at +0x1D..0x20 (simple counters, no PP-Up encoding in Gen 1)
+        pp_offset               = 0x1D,    -- 4 packed PP/PP-Up bytes at +0x1D..0x20
         -- pret/pokered constants/pokemon_data_constants.asm:101-102 define
         --   PP_UP_MASK EQU %11000000   PP_MASK EQU %00111111
         -- so Gen 1 packs PP-Ups in the top two bits exactly like Gen 2. This said "raw",
@@ -156,7 +176,7 @@ M.PROFILES = {
         pp_encoding             = "ppup_packed",
         -- Enemy battle struct moves + PP (Phase 4 — wEnemyMon is a battle_struct with the
         -- same layout as party_struct in Gen 1). wEnemyMon @ 0xCFE5; moves at +0x08 = 0xCFED;
-        -- PP at +0x19 = 0xCFFE (DataCrystal RBY map). PP is raw (no PP-Ups).
+        -- PP at +0x19 = 0xCFFE (pret battle_struct); upper bits retain PP-Ups.
         ENEMY_BATTLE_MOVES_ADDR = 0xCFED,
         ENEMY_BATTLE_PP_ADDR    = 0xCFFE,
         -- The battle struct copies PP straight from the party struct, and the engine
@@ -232,6 +252,13 @@ M.PROFILES = {
 
     -- Yellow has shifted WRAM addresses
     yellow = {
+        PIKACHU_OVERWORLD_FLAGS_ADDR = 54319, -- wPikachuOverworldStateFlags
+        PIKACHU_HAPPINESS_ADDR = 54383,       -- wPikachuHappiness
+        PIKACHU_MOOD_ADDR = 54384,            -- wPikachuMood
+        pikachu_starter_species = 84,        -- STARTER_PIKACHU
+        pikachu_ot_match_length = 5,         -- NAME_LENGTH_JP - 1, identity loop
+        pikachu_deposit_happiness = {-3, -3, -5},
+        pikachu_deposit_mood = 98,
         -- The game's own wild-encounter preconditions; see M.isInGrass().
         -- wTileMap is NOT shifted in Yellow (both 0xC3A0); the rest are.
         TILE_MAP_ADDR      = 0xC3A0,
@@ -268,6 +295,14 @@ M.PROFILES = {
         JOY_IGNORE_ADDR    = 0xCD6B,  -- not shifted (0xCDxx block is shared)
         FONT_LOADED_ADDR   = 0xCFC3,
         CURRENT_BOX_NUM_ADDR = 0xD59F,
+        write_safe = {
+            version = "gen1-main-loop-v1", irq_vector = 0x40,
+            vblank_entry = 0x1DE5, delay_frame = 0x1E64,
+            overworld_loop = 0x0242, overworld_loop_less_delay = 0x0245,
+            stack_min = 0xDF15, stack_end = 0xDFFF, vblank_flag = 0xFFD6,
+            link_state = 0xD12A, serial_status = 0xFFAA, entering_cable_club = 0xCC47,
+            disconnected_serial = 0xFF, link_none = 0, printer_open = 0xD499,
+        },
 
         -- pokered's ChangeBox wipes every SRAM box the first time the player opens the box
         -- menu (engine/menus/save.asm:366). Box 12 is our memorial, so the client claims the
@@ -278,6 +313,17 @@ M.PROFILES = {
             box_len = 1122, boxes_per_bank = 6, banks = {2, 3},
             checksum_offset = 0x1A4C,
             changed_boxes_addr = 0xD59F, changed_boxes_bit = 0x80,
+            main_save_start = 9624,
+            main_save_len = 3979,
+            main_checksum_offset = 13603,
+            saved_box_flag_offset = 10316,
+            player_id_addr = 54104, saved_player_id_offset = 9733,
+            save_party_dex_ranges = {
+                {src = 55935, dst = 12480, len = 1122},
+                {src = 53602, dst = 12076, len = 404},
+                {src = 54006, dst = 9635, len = 38},
+                {src = 54383, dst = 10012, len = 2},
+            },
         },
         ENEMY_MON_SPECIES_ADDR = 0xCFE4,
         ENEMY_MON_HP_ADDR      = 0xCFE5,
@@ -387,7 +433,10 @@ M.PROFILES = {
         -- one is pret's wStatusFlags5, not this.
         MOVEMENT_FLAGS_ADDR = 0xD724,
         -- The AP fork rebuilds the ROM, so vanilla ROM offsets do not carry over.
-        change_box_bit_test_rom_addr = false,
+        change_box_bit_test_rom_addr = nil,
+        companion_patch_mailbox = nil,
+        sfx_ids = nil,
+        bag_max_items = 128,  -- Alchav constants/menu_constants.asm BAG_ITEM_CAPACITY
         
         variant_label           = "Red (AP)",
         -- +216: AP's tracking block sits ahead of the player-data area.
@@ -416,6 +465,16 @@ M.PROFILES = {
             box_len = 1122, boxes_per_bank = 6, banks = {2, 3},
             checksum_offset = 0x1A4C,
             changed_boxes_addr = 0xD614, changed_boxes_bit = 0x80,
+            main_save_start = 9624,
+            main_save_len = 3983,
+            main_checksum_offset = 13607,
+            saved_box_flag_offset = 10432,
+            player_id_addr = 54321, saved_player_id_offset = 9949,
+            save_party_dex_ranges = {
+                {src = 55947, dst = 12484, len = 1122},
+                {src = 53603, dst = 12080, len = 404},
+                {src = 54007, dst = 9635, len = 38},
+            },
         },
         -- -18, with the rest of the enemy party block.
         ENEMY_OT_NAMES_ADDR     = 0xD99A,   -- wEnemyMonOT
@@ -428,44 +487,80 @@ M.PROFILES = {
 M.PROFILES.blue = M.PROFILES.red
 
 -- ═══ Archipelago variants ═════════════════════════════════════════════════
--- red_ap is declared INSIDE M.PROFILES above so tools/verify_profile_addresses.py can see
--- it — that parser only walks literal blocks within M.PROFILES. Inheritance of the ~19
--- unchanged fields is attached here, after the table exists.
--- INHERITANCE IS A HAZARD, NOT JUST A CONVENIENCE. Every address added to `red`
--- from now on is silently inherited by red_ap/blue_ap, where the Alchav fork has
--- relocated 861 of the 2171 shared symbols — so a field that is merely *new* is
--- also, for AP, *wrong*, with no error anywhere. AP is deferred, so the safe
--- disposition is to disown the fields rather than guess their AP addresses:
--- `false` is a real value, so `__index` never reaches `red`, and every consumer
--- already guards on the field being falsy.
---
--- DISOWN WHAT MOVED, NOT WHAT MERELY LOOKS LIKE IT MIGHT HAVE. The rule is per address,
--- checked against data/pret_syms.json, because "the fork relocates a lot" is a reason to
--- verify each field and not a reason to drop them all: a needlessly disowned address is a
--- feature silently dead on AP, which is its own kind of wrong.
-local AP_UNVERIFIED = {
-    -- wStatusFlags4 has NO symbol at all in the Alchav fork (checked against
-    -- data/pret_syms.json: alchav_pokered has no wStatusFlags4 entry), so there is
-    -- nothing to inherit and Red's 0xD72E would be a guess.
-    "STATUS_FLAGS_4_ADDR",
+-- Only independently verified fields may be copied into AP profiles. A new vanilla
+-- field must not silently become active on the relocated AP layout. The strict
+-- profile validator loads the effective Lua profiles and checks both AP variants
+-- against their own source and symbols. Unsupported patch fields and status flags
+-- remain nil; no metatable can resurrect them from the vanilla profile.
+local AP_VERIFIED_FIELDS = {
+    "TILE_MAP_ADDR", "GRASS_TILE_ADDR", "GRASS_RATE_ADDR",
+    "MOVEMENT_FLAGS_ADDR", "PARTY_COUNT_ADDR", "PARTY_SPECIES_ADDR",
+    "PARTY_BASE_ADDR", "PARTY_OT_NAMES_ADDR", "PARTY_NICKS_ADDR",
+    "party_struct_size", "ENEMY_COUNT_ADDR", "ENEMY_BASE_ADDR",
+    "BOX_COUNT_ADDR", "BOX_SPECIES_ADDR", "BOX_BASE_ADDR",
+    "BOX_OT_NAMES_ADDR", "BOX_NICKS_ADDR", "box_struct_size",
+    "box_max_mons", "stored_boxes", "BAG_COUNT_ADDR",
+    "BAG_ITEMS_ADDR", "bag_max_items", "BATTLE_FLAG_ADDR",
+    "JOY_IGNORE_ADDR", "FONT_LOADED_ADDR", "CURRENT_BOX_NUM_ADDR",
+    "sram_box_layout", "ENEMY_MON_SPECIES_ADDR", "ENEMY_MON_HP_ADDR",
+    "ENEMY_MON_LEVEL_ADDR", "ENEMY_MON_MAXHP_ADDR", "ENEMY_SPECIES_LIST_ADDR",
+    "MAP_ID_ADDR", "PLAYER_NAME_ADDR", "PLAYER_ID_ADDR",
+    "dv_offset_1", "dv_offset_2", "otid_offset",
+    "species_offset", "hp_offset", "maxhp_offset",
+    "level_offset", "stats_offset", "box_level_offset",
+    "status_offset", "enemy_status_offset", "ball_item_ids",
+    "BADGES_ADDR", "PLAYER_STAT_STAGES_ADDR", "ENEMY_STAT_STAGES_ADDR",
+    "stat_stages_count", "stat_stages_layout", "moves_offset",
+    "pp_offset", "pp_encoding", "ENEMY_BATTLE_MOVES_ADDR",
+    "ENEMY_BATTLE_PP_ADDR", "enemy_battle_pp_encoding", "TRAINER_CLASS_ADDR",
+    "TRAINER_ID_ADDR", "CUR_OPPONENT_ADDR", "ENEMY_OT_NAMES_ADDR",
+    "ENEMY_NICKS_ADDR", "PLAYER_SELECTED_MOVE_ADDR", "PLAYER_MOVE_LIST_INDEX_ADDR",
+    "PLAYER_MON_NUMBER_ADDR", "BATTLE_MON_MOVES_ADDR", "BATTLE_MON_PP_ADDR",
+    "BATTLE_MON_HP_ADDR",
 }
--- BATTLE_MON_HP_ADDR was in this list and should not have been. The stated reason -- that
--- wBattleMonHP "sits in the 0xD0xx block, which the AP fork moves" -- is false: the fork
--- gives wBattleMonHP 0xD015, exactly Red's value, and of the 155 symbols the two share in
--- 0xD000-0xD0FF not one differs. The relocation starts higher up (wPlayerID 0xD359 ->
--- 0xD431, wCurMap 0xD35E -> 0xD436). Disowning it left force_faint a no-op against the
--- active battler on every AP cartridge, for no reason at all.
-for _, field in ipairs(AP_UNVERIFIED) do
-    M.PROFILES.red_ap[field] = false
+for _, field in ipairs(AP_VERIFIED_FIELDS) do
+    if M.PROFILES.red_ap[field] == nil then
+        M.PROFILES.red_ap[field] = M.PROFILES.red[field]
+    end
 end
-
-setmetatable(M.PROFILES.red_ap, {__index = M.PROFILES.red})
--- Blue's AP build shares Red's layout, exactly as vanilla Blue shares vanilla Red's.
-M.PROFILES.blue_ap = setmetatable({variant_label = "Blue (AP)"},
-                                  {__index = M.PROFILES.red_ap})
+M.PROFILES.blue_ap = {}
+for field, value in pairs(M.PROFILES.red_ap) do
+    M.PROFILES.blue_ap[field] = value
+end
+M.PROFILES.blue_ap.variant_label = "Blue (AP)"
 
 -- Lowercase alias for game_detect.lua compatibility
 M.profiles = M.PROFILES
+
+-- Exact Yellow BillsPCDeposit policy: a starter identity with following DISABLED
+-- (bit 1 set; the sleeping-Pikachu state) cannot be deposited. Normal following
+-- (bit clear) is allowed. IsThisPartyMonStarterPikachu compares species, OTID and
+-- the first five OT-name bytes, not DVs. This is a read-only preparation step.
+function M.prepareDeposit(mem, slot)
+    if mem.gb_variant ~= "yellow" then return true end
+    local p = mem.profile
+    local base = mem.PARTY_BASE_ADDR + slot * mem.PARTY_STRUCT_SIZE
+    if mem.read_u8(base + mem.SPECIES_OFFSET) ~= p.pikachu_starter_species
+        or mem.read_u16_be(base + mem.OTID_OFFSET) ~= mem.readPlayerId() then return true end
+    for i = 0, p.pikachu_ot_match_length - 1 do
+        if mem.read_u8(mem.PARTY_OT_NAMES_ADDR + slot * 11 + i) ~= mem.read_u8(mem.PLAYER_NAME_ADDR + i) then
+            return true
+        end
+    end
+    if (mem.read_u8(p.PIKACHU_OVERWORLD_FLAGS_ADDR) & 2) ~= 0 then
+        return false, "sleeping starter Pikachu cannot be deposited"
+    end
+    local happiness = mem.read_u8(p.PIKACHU_HAPPINESS_ADDR)
+    local band = happiness < 100 and 1 or (happiness < 200 and 2 or 3)
+    return true, {happiness = math.max(0, happiness + p.pikachu_deposit_happiness[band]),
+                  mood = math.min(mem.read_u8(p.PIKACHU_MOOD_ADDR), p.pikachu_deposit_mood)}
+end
+
+function M.applyDepositEffect(mem, effect)
+    if not effect then return end
+    mem.write_u8(mem.profile.PIKACHU_HAPPINESS_ADDR, effect.happiness)
+    mem.write_u8(mem.profile.PIKACHU_MOOD_ADDR, effect.mood)
+end
 
 -- ═══ Gift Areas ═══
 -- MUST MATCH server/adapters/gen1_rby.py's _GIFT_AREAS, name for name.
@@ -794,7 +889,34 @@ function M.readBaseStats(variant, dex)
     -- caught here instead of producing believable stats for the wrong species.
     ok, b = pcall(memory.read_u8, off, "ROM")
     if not ok or b ~= dex then return nil end
+    ok, b = pcall(memory.read_u8, off + 19, "ROM") -- BASE_GROWTH_RATE (pret base-data struct)
+    if not ok or type(b) ~= "number" or b < 0 or b > 5 or b % 1 ~= 0 then return nil end
+    out.growth_rate = b
     return out
+end
+
+-- data/growth_rates.asm; CalcExperience divides the cubic term before adding
+-- the integer quadratic/linear terms. CalcLevelFromExperience starts at level 1.
+M.GROWTH_RATES = {{1,1,0,0,0}, {3,4,10,0,30}, {3,4,20,0,70},
+                  {6,5,-15,100,140}, {4,5,0,0,0}, {5,4,0,0,0}}
+function M.experienceForLevel(growth_rate, level)
+    if type(growth_rate) ~= "number" or growth_rate % 1 ~= 0 then return nil end
+    local c = M.GROWTH_RATES[growth_rate + 1]
+    if not c or type(level) ~= "number" or level % 1 ~= 0 or level < 1 or level > 100 then return nil end
+    return (math.floor(c[1] * level ^ 3 / c[2]) + c[3] * level ^ 2
+        + c[4] * level - c[5]) % 0x1000000
+end
+
+function M.levelFromExperience(growth_rate, experience)
+    if type(growth_rate) ~= "number" or growth_rate % 1 ~= 0 or not M.GROWTH_RATES[growth_rate + 1]
+        or type(experience) ~= "number" or experience % 1 ~= 0 or experience < 0 then return nil end
+    if experience > M.experienceForLevel(growth_rate, 100) then return nil end
+    local level = 1
+    for next_level = 2, 100 do
+        if M.experienceForLevel(growth_rate, next_level) > experience then break end
+        level = next_level
+    end
+    return level
 end
 
 --- Split Gen 1's packed DV word into the five IVs.
@@ -832,12 +954,15 @@ end
 --- Everything retrieveBoxMon needs, straight from a box slot's own bytes.
 --- Returns nil rather than guessing when the ROM cannot be read or the species is unknown,
 --- so the caller keeps its refusal instead of writing stats it cannot justify.
-function M.rebuildBoxStats(variant, species_index, level, dv_word, stat_exp)
+function M.rebuildBoxStats(variant, species_index, level, dv_word, stat_exp, experience)
     local dex = M.toNatDex and M.toNatDex(species_index) or nil
     if not dex or dex < 1 or dex > 151 then return nil end
     local base = M.readBaseStats(variant, dex)
     if not base then return nil end
-    return M.calcStats(base, level, dv_word, stat_exp)
+    if experience ~= nil then level = M.levelFromExperience(base.growth_rate, experience) end
+    local stats = M.calcStats(base, level, dv_word, stat_exp)
+    if stats then stats.level = level end
+    return stats
 end
 
 M.AP_SEED_ROM_OFFSET = 0x5F22

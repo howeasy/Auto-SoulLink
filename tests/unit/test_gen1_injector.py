@@ -105,6 +105,15 @@ def test_a_wrong_sized_file_is_refused(inj):
         inj.inject(b"\x00" * 4096)
 
 
+def test_matching_anchors_do_not_authorize_a_wrong_game(inj, clean):
+    wrong = bytearray(clean)
+    wrong[0x134:0x143] = b"POKEMON YELLOW".ljust(15, b"\x00")
+    before = bytes(wrong)
+    with pytest.raises(inj.InjectError, match="unsupported ROM title"):
+        inj.inject(before)
+    assert bytes(wrong) == before
+
+
 def test_a_rom_whose_hook_site_moved_is_refused(inj, clean, manifest):
     """The randomized path has no hash to lean on, so this check IS the safety."""
     broken = bytearray(clean)
@@ -148,8 +157,27 @@ def test_every_problem_is_reported_at_once(inj, clean, manifest):
 
 def test_reapplying_the_same_patch_is_a_named_no_op(inj, clean):
     once = inj.inject(clean)
-    with pytest.raises(inj.InjectError, match="already carries exactly this"):
-        inj.inject(once)
+    assert inj.inject(once) is once
+
+
+@pytest.mark.parametrize("damage", ["hook", "menu", "padding"])
+def test_partial_patch_cannot_masquerade_as_identical(inj, clean, manifest, damage):
+    broken = bytearray(inj.inject(clean))
+    off = {"hook": manifest.HOOK_SITE + 5,
+           "menu": manifest.MENU_PATCHES[2][0],
+           "padding": manifest.INJECT_OFFSET + manifest.BANK_SIZE - 1}[damage]
+    broken[off] ^= 1
+    before = bytes(broken)
+    assert not inj.describe(before)["already"]["identical"]
+    with pytest.raises(inj.InjectError, match="DIFFERENT SLink patch"):
+        inj.inject(before)
+    assert bytes(broken) == before
+
+
+@pytest.mark.parametrize("payload", [b"", b"x" * 16385])
+def test_invalid_payload_length_rejected_before_output(inj, clean, payload):
+    with pytest.raises(inj.InjectError, match="invalid manifest"):
+        inj.inject(clean, payload)
 
 
 def test_a_different_slink_patch_is_refused_with_a_way_forward(inj, clean, manifest):

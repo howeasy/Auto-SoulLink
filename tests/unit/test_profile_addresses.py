@@ -1,13 +1,9 @@
-"""Phase 10: every memory address in the Gen 1/2 Lua profile must match the
-pret-authoritative .sym output in data/pret_syms.json.
+"""Profile regressions against canonical symbols and strict Gen 1 evidence.
 
-Skipped if data/pret_syms.json doesn't exist (contributor hasn't run
-tools/build_pret_syms.py yet). When it does exist, every address with a known
-pret symbol mapping (see tools/verify_profile_addresses.py PROFILE_TO_PRET)
-is checked; mismatches surface as test failures with a clear "profile=X,
-pret=Y, delta=Z" message.
-
-This replaces the manual Phase 0 address-audit section of gen1_gen2_runtime_checks.md."""
+Gen 1 checks effective values, aliases, nested structures and nil dispositions.
+Missing canonical dependencies fail. The older Gen 2 hex-literal audit remains
+covered separately without claiming its constant-only skips as Gen 1 evidence.
+"""
 
 from __future__ import annotations
 
@@ -35,10 +31,7 @@ def _load_verifier():
 
 def _verifier_results():
     if not PRET_SYMS_PATH.exists():
-        pytest.skip(
-            "data/pret_syms.json missing; run `python tools/build_pret_syms.py` "
-            "from the repo root to generate it (requires RGBDS v1.0.1)."
-        )
+        pytest.fail("data/pret_syms.json missing; canonical symbols are required")
     mod = _load_verifier()
     pret_syms = json.loads(PRET_SYMS_PATH.read_text(encoding="utf-8"))
     profile_addrs = {
@@ -56,14 +49,7 @@ def results():
 def test_no_fail_addresses(results):
     """Hard gate: zero FAIL severity rows. Every profile address that maps to
     a known pret symbol must equal that symbol's authoritative address."""
-    fails = [
-        f"{r['variant']}.{r['field']}: "
-        f"profile=0x{r['profile_addr']:04X}, "
-        f"pret={r['pret_symbol']}=0x{r['pret_addr']:04X} "
-        f"(delta={r['profile_addr'] - r['pret_addr']:+d})"
-        for r in results
-        if r["severity"] == "FAIL"
-    ]
+    fails = [f"{r['variant']}.{r['field']}: {r['note']}" for r in results if r["severity"] == "FAIL"]
     assert not fails, (
         "Profile addresses diverge from pret authority:\n  " + "\n  ".join(fails)
         + "\n\nRun `python tools/verify_profile_addresses.py` for details, "
@@ -102,5 +88,5 @@ def test_no_unmapped_addresses(results):
         "Profile fields are mapped to pret symbols that no longer exist:\n  "
         + "\n  ".join(warns)
         + "\n\nEither rename the symbol in tools/verify_profile_addresses.py "
-        + "or mark the mapping as None if it's intentional."
+        + "or add a source-backed contract for the value."
     )

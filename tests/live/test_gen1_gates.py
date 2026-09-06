@@ -38,6 +38,13 @@ pytestmark = [
 # gate script -> which fixture it needs. Both currently want an encounter-free save; a gate
 # that needs a wild battle would ask for "battle" instead.
 GATES = {
+    "lua/tests/test_platform_storage_gate.lua": "town",
+    "lua/tests/test_gen1_session_metadata_gate.lua": "town",
+    # Execute canonical MoveMon/RemovePokemon on cloned emulator states and compare
+    # all active records, names, lists and dex bytes across every count/source slot.
+    "lua/tests/test_gen1_storage_differential.lua": "town",
+    "lua/tests/test_gen1_storage_persistence.lua": "town",
+    "lua/tests/test_gen1_stats_differential.lua": "town",
     "lua/tests/test_gen1_memory_gate.lua": "town",
     "lua/tests/test_gen1_writes_gate.lua": "town",
     # The withdraw half of party sync. test_gen1_writes_gate only deposits.
@@ -53,6 +60,170 @@ GATES = {
     "lua/tests/test_gen1_evolution_gate.lua": "town",
 }
 ROMS = ("red", "blue", "yellow")
+
+
+def test_gen1_luasocket_fragmentation_and_reconnect(emuhawk, monkeypatch):
+    """Real DLL wire fidelity, bounded flooding, oversize resync and stream isolation."""
+    import secrets
+    import socket
+    import threading
+    import time
+
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(2)
+    listener.settimeout(.2)
+    stop = threading.Event()
+    failures, seen = [], []
+    token = secrets.token_hex(16)
+    monkeypatch.setenv("SLINK_TRANSPORT_PORT", str(listener.getsockname()[1]))
+    monkeypatch.setenv("SLINK_TRANSPORT_TOKEN", token)
+
+    def accept():
+        deadline = time.monotonic() + 60
+        while not stop.is_set() and time.monotonic() < deadline:
+            try:
+                conn, _ = listener.accept()
+                conn.settimeout(20)
+                return conn
+            except TimeoutError:
+                continue
+        raise AssertionError("emulator did not connect to the local transport peer")
+
+    def peer():
+        try:
+            with accept() as first:
+                received = first.makefile("rb").readline(400000)
+                assert received == token.encode() + b":" + "é12345678".encode() * 30000 + b"\n"
+                seen.append("outbound")
+                first.sendall(b"".join(f"n:{i}\n".encode() for i in range(1000)))
+                long = b"R" + "éabc".encode() * 40000 + b"\n"
+                # Force multiple partial receives, including one-byte boundaries.
+                for start in range(0, len(long), 997):
+                    part = long[start:start + 997]
+                    first.sendall(part[:1])
+                    first.sendall(part[1:])
+                    time.sleep(.001)
+                first.sendall(b"X" * (5 * 1024 * 1024) + b"\nsurvived\nready\nstale\n")
+                assert first.recv(1) == b"", "first stream was not explicitly disconnected"
+            with accept() as second:
+                second.sendall(b"fresh:" + token.encode() + b"\n")
+                assert second.makefile("rb").readline(100) == b"ack:" + token.encode() + b"\n"
+                seen.append("reconnected")
+        except Exception as exc:
+            failures.append(repr(exc))
+
+    thread = threading.Thread(target=peer, daemon=True)
+    thread.start()
+    try:
+        passed, result_path, text = run_gate("lua/tests/test_gen1_transport_gate.lua",
+                                            rom_key="red", target="town", timeout=180, quiet=True)
+        thread.join(5)
+        assert passed, f"real transport gate failed\n{result_path}\n{text[-5000:]}"
+        assert not failures and seen == ["outbound", "reconnected"], (failures, seen)
+        assert not thread.is_alive(), "local transport peer did not finish"
+    finally:
+        stop.set()
+        listener.close()
+        thread.join(1)
+
+
+@pytest.mark.parametrize("rom", ROMS)
+@pytest.mark.parametrize("state,target", [("overworld", "town"), ("battle", "battle")])
+def test_gen1_write_checkpoint(rom, state, target, emuhawk):
+    """Independent cartridge execution contexts exercise the real runtime predicate."""
+    import hashlib
+    from pathlib import Path
+
+    passed, result_path, text = run_gate(f"lua/tests/test_gen1_write_safety_{state}.lua",
+                                        rom_key=rom, target=target, timeout=300, quiet=True)
+    assert passed, f"checkpoint gate {state}/{rom} failed\n{result_path}\n{text[-6000:]}"
+    expected = hashlib.sha1(Path(REPO, play.ROMS[rom]).read_bytes()).hexdigest()
+    assert f"rom_sha1={expected}" in text
+
+
+def test_yellow_pc_policy(emuhawk):
+    """Exercise the unmodified Yellow deposit permission branch, including starter identity."""
+    passed, result_path, text = run_gate("lua/tests/test_gen1_yellow_pc_policy.lua",
+                                        rom_key="yellow", target="town", timeout=300, quiet=True)
+    assert passed, f"Yellow PC policy did not PASS\nresult: {result_path}\n{text[-3000:]}"
+
+
+@pytest.mark.parametrize("rom", ROMS)
+def test_gen1_party_codec_cartridge(rom, emuhawk):
+    """Lua and Python consume a current-run cartridge-produced blob; PP uses the engine oracle."""
+    import hashlib
+    import json
+    from pathlib import Path
+
+    from server.gen1_party_codec import PartyCodec
+
+    evidence = Path(REPO, f".cache/gen1-codec-{rom}.json")
+    evidence.unlink(missing_ok=True)
+    passed, result_path, text = run_gate("lua/tests/test_gen1_party_codec_gate.lua",
+                                        rom_key=rom, target="town", timeout=300, quiet=True)
+    assert passed, f"codec gate {rom} did not PASS\nresult: {result_path}\n{text[-3000:]}"
+    result = json.loads(evidence.read_text())
+    expected_hash = hashlib.sha1(Path(REPO, play.ROMS[rom]).read_bytes()).hexdigest()
+    assert result["rom_sha1"].lower() == expected_hash
+    assert result["variant"] == rom and result["pp_cases"] == 660
+    decoded = PartyCodec(rom).validate_blob(result["blob"], expected_key=result["key"])
+    assert decoded.experience == 1000
+
+
+@pytest.mark.parametrize("rom", ROMS)
+def test_gen1_prepared_command_receipts(rom, emuhawk):
+    """Real RAM/file persistence and a separate Python validator verify current-run receipts."""
+    import hashlib
+    import json
+    from pathlib import Path
+
+    from server.gen1_command_receipts import verify_force_faint_receipt
+
+    evidence = Path(REPO, f".cache/gen1-command-receipts-{rom}.json")
+    evidence.unlink(missing_ok=True)
+    passed, result_path, text = run_gate("lua/tests/test_gen1_command_receipts_gate.lua",
+                                        rom_key=rom, target="town", timeout=300, quiet=True)
+    assert passed, f"prepared command gate {rom} failed\n{result_path}\n{text[-5000:]}"
+    result = json.loads(evidence.read_text(encoding="utf-8"))
+    assert result["variant"] == rom
+    assert result["rom_sha1"] == hashlib.sha1(Path(REPO, play.ROMS[rom]).read_bytes()).hexdigest()
+    assert [case["boundary"] for case in result["cases"]] == ["before_effect", "after_effect"]
+    for case in result["cases"]:
+        assert case["physical_writes"] == 2 and case["unrelated_wram_changes"] == 0
+        assert verify_force_faint_receipt(case["command"], case["receipt"], variant=rom,
+                                         identity=case["identity"])["slot"] == 0
+
+
+@pytest.mark.parametrize("rom", ROMS)
+def test_gen1_original_trade_animation(rom, emuhawk):
+    """Original source-derived scene order, rendering and return on each cartridge."""
+    import hashlib
+    import json
+    from pathlib import Path
+
+    evidence = Path(REPO, f".cache/gen1-native-trade-animation-{rom}.json")
+    evidence.unlink(missing_ok=True)
+    passed, result_path, text = run_gate("lua/tests/test_gen1_native_trade_animation.lua",
+                                        rom_key=rom, target="town", timeout=300, quiet=True)
+    assert passed, f"original trade animation {rom} failed\n{result_path}\n{text[-5000:]}"
+    result = json.loads(evidence.read_text(encoding="utf-8"))
+    assert result["variant"] == rom and result["native_entry"] == "InternalClockTradeAnim"
+    assert result["rom_sha1"] == hashlib.sha1(Path(REPO, play.ROMS[rom]).read_bytes()).hexdigest()
+    source = "pokeyellow" if rom == "yellow" else "pokered"
+    script = Path(REPO, f".cache/pret/{source}/engine/movie/trade.asm").read_text(encoding="utf-8")
+    sequence = script.split("\nInternalClockTradeFuncSequence:\n", 1)[1].split("\n\tdb -1", 1)[0]
+    expected = [line.strip().split()[1] for line in sequence.splitlines() if line.strip().startswith("tradefunc ")]
+    assert len(expected) == 16 and result["expected"] == expected
+    assert [entry["name"] for entry in result["trace"]] == expected
+    assert result["frames"] > 500 and result["font_bytes_verified"] > 0 and result["party_unchanged"] is True
+    samples = result["samples"]
+    assert [s["phase"] for s in samples] == ["Trade_ShowPlayerMon", "Trade_AnimLeftToRight", "Trade_ShowEnemyMon"]
+    assert len({s["vram_hex"] for s in samples}) == 3
+    for sample in samples:
+        screenshot = Path(sample["screenshot"]).resolve()
+        assert screenshot.is_relative_to(Path(REPO).resolve())
+        assert screenshot.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
 # The companion-patch spike, which only exists for Red and Blue — Yellow has no free WRAM
 # for a mailbox (pret's map: WRAM0 TOTAL EMPTY $0000).
@@ -183,6 +354,7 @@ def test_gen1_panel_on_a_randomized_cartridge(emuhawk):
     The artifact is rebuilt rather than committed, because a randomized ROM is a ROM.
     """
     import subprocess
+
     from run_gb_gate import PATCHED
     _base, rom_rel, _sav = PATCHED["red_rand_patched"]
     rom_path = os.path.join(REPO, rom_rel)

@@ -20,6 +20,7 @@ USE_RE = re.compile(r'href="#(i-[a-z0-9-]+)"')
 SYMBOL_RE = re.compile(r'<symbol[^>]*\bid="(i-[a-z0-9-]+)"')
 EXTENDS_RE = re.compile(r'{%-?\s*extends\s+"([^"]+)"')
 INCLUDE_RE = re.compile(r'{%-?\s*include\s+"([^"]+)"')
+IMPORT_RE = re.compile(r'{%-?\s*(?:from|import)\s+"([^"]+)"')
 
 
 def _templates():
@@ -47,6 +48,17 @@ def _symbols_reachable_from(rel, _seen=None):
     return out
 
 
+def _dependencies(rel, seen=None):
+    seen = seen if seen is not None else set()
+    if rel in seen:
+        return seen
+    seen.add(rel)
+    source = _read(rel)
+    for child in EXTENDS_RE.findall(source) + INCLUDE_RE.findall(source) + IMPORT_RE.findall(source):
+        _dependencies(child, seen)
+    return seen
+
+
 ALL_SYMBOLS = set(SYMBOL_RE.findall(_read("_svg_icons.html")))
 
 
@@ -56,14 +68,13 @@ def test_icon_references_resolve(rel):
     # A partial rendered INTO another page inherits that page's sprite; only templates that are a
     # page in their own right (they extend a base) can be checked in isolation.
     src = _read(rel)
-    if not EXTENDS_RE.search(src):
-        pytest.skip(f"{rel} is a partial — its sprite comes from whatever renders it")
-    available = _symbols_reachable_from(rel)
-    missing = sorted(used - available)
-    assert not missing, (
-        f"{rel} uses {missing} but its base does not include a <symbol> for them — "
-        f"they will render as empty space with no error"
-    )
+    hosts = [rel] if EXTENDS_RE.search(src) else [
+        page for page in _templates() if EXTENDS_RE.search(_read(page)) and rel in _dependencies(page)]
+    assert hosts, f"{rel} has no tested page composition"
+    for page in hosts:
+        missing = sorted(used - _symbols_reachable_from(page))
+        assert not missing, (
+            f"{rel} in {page} uses {missing} but its page does not include their symbols")
 
 
 def test_every_referenced_icon_exists_somewhere():
@@ -78,7 +89,7 @@ def test_every_referenced_icon_exists_somewhere():
 @pytest.mark.parametrize("page,icon", [
     ("stream/links.html", "i-x"),              # dead pair
     ("stream/encounters.html", "i-sparkle"),   # shiny
-    ("stream/memorial.html", "i-cross"),       # memorial
+    ("stream/stream_memorial.html", "i-cross"),  # actual memorial route template
 ])
 def test_the_stream_overlays_can_reach_their_markers(page, icon):
     """The specific regression, checked through the real composition.
@@ -87,8 +98,7 @@ def test_the_stream_overlays_can_reach_their_markers(page, icon):
     its own reaches nothing, which is correct and is why the per-template test skips partials.
     What matters is that the PAGE the route renders can resolve the icon.
     """
-    if not os.path.exists(os.path.join(TPL, page)):
-        pytest.skip(f"{page} not present")
+    assert os.path.exists(os.path.join(TPL, page)), f"required overlay {page} is missing"
     assert icon in ALL_SYMBOLS
     assert icon in _symbols_reachable_from(page), (
         f"{page} cannot reach {icon} — it renders as empty space in OBS"

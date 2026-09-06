@@ -1,0 +1,265 @@
+"""HTTP boundaries reject external paths and render client-controlled text safely."""
+
+import html
+import os
+from html.parser import HTMLParser
+from types import SimpleNamespace
+from unittest.mock import Mock
+from urllib.parse import quote
+
+import pytest
+import pytest_asyncio
+from aiohttp import web
+from aiohttp.test_utils import TestClient, TestServer
+from yarl import URL
+
+import server.server as server_module
+from server.adapters.gen3_frlge import Gen3Adapter
+from server.server import SLinkServer, build_app
+from server.state import AreaStatus
+
+
+@pytest.fixture
+def srv(tmp_path):
+    instance = SLinkServer(data_dir=str(tmp_path / "run"))
+    instance.state.adapter = instance.adapter = Gen3Adapter(is_rr=True)
+    return instance
+
+
+@pytest.fixture
+def calc_dirs(tmp_path, monkeypatch):
+    src, dist = tmp_path / "src", tmp_path / "dist"
+    src.mkdir()
+    dist.mkdir()
+    monkeypatch.setattr(server_module, "_CALC_SRC_DIR", str(src))
+    monkeypatch.setattr(server_module, "_CALC_DIST_DIR", str(dist))
+    (tmp_path / "outside.txt").write_text("PRIVATE FILE", encoding="utf-8")
+    return src, dist
+
+
+@pytest_asyncio.fixture
+async def client(srv, calc_dirs):
+    async with TestClient(TestServer(build_app(srv))) as test_client:
+        yield test_client
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", [
+    "../outside.txt", "assets/../../outside.txt", "/outside.txt",
+    "C:/Windows/win.ini", "C:outside.txt", "//server/share/file",
+    r"C:\Windows\win.ini", r"..\outside.txt", r"assets\..\outside.txt",
+    r"\\server\share\file", r"\\?\C:\Windows\win.ini", "null\x00.bin",
+])
+async def test_calc_rejects_non_relative_paths(srv, calc_dirs, path):
+    request = SimpleNamespace(match_info={"path": path})
+    with pytest.raises(web.HTTPForbidden):
+        await srv.handle_calc_files(request)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["../outside.txt", "C:/Windows/win.ini", r"..\outside.txt"])
+async def test_calc_rejects_url_encoded_paths(client, path):
+    response = await client.get(URL("/calc/" + quote(path, safe=""), encoded=True))
+    assert response.status == 403
+    assert "PRIVATE FILE" not in await response.text()
+
+
+@pytest.mark.asyncio
+async def test_calc_preserves_source_precedence_and_conditional_downloads(client, calc_dirs):
+    src, dist = calc_dirs
+    (src / "asset.css").write_text("body { color: red; }", encoding="utf-8")
+    (dist / "asset.css").write_text("DIST COPY", encoding="utf-8")
+    (dist / "fallback.bin").write_bytes(b"\x00\x01fallback")
+    (src / "version..txt").write_text("legitimate filename", encoding="utf-8")
+
+    response = await client.get("/calc/asset.css")
+    assert response.status == 200
+    assert response.content_type == "text/css"
+    assert await response.text() == "body { color: red; }"
+    etag = response.headers["ETag"]
+    cached = await client.get("/calc/asset.css", headers={"If-None-Match": etag})
+    assert cached.status == 304
+    assert await cached.read() == b""
+    head = await client.head("/calc/asset.css")
+    assert head.status == 200
+    assert head.headers["Content-Length"] == response.headers["Content-Length"]
+    assert await head.read() == b""
+    fallback = await client.get("/calc/fallback.bin")
+    assert await fallback.read() == b"\x00\x01fallback"
+    assert (await client.get("/calc/missing.bin")).status == 404
+    assert (await client.get("/calc/")).status == 404
+    assert await (await client.get("/calc/version..txt")).text() == "legitimate filename"
+
+
+@pytest.mark.asyncio
+async def test_calc_html_keeps_template_wrapping_and_theme(client, calc_dirs):
+    _, dist = calc_dirs
+    (dist / "hardcore.html").write_text(
+        "<html><head><title>ORIGINAL HEAD</title></head>"
+        '<body><section id="calc-test">Calculator body</section></body></html>',
+        encoding="utf-8",
+    )
+    response = await client.get("/calc/hardcore.html?theme=light")
+    body = await response.text()
+    assert response.status == 200
+    assert response.content_type == "text/html"
+    assert 'id="calc-test"' in body
+    assert "Hardcore Mode" in body
+    assert "themes/light.css" in body
+    assert "ORIGINAL HEAD" not in body
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("root_index", [0, 1])
+async def test_calc_rejects_symlink_escape(srv, calc_dirs, tmp_path, root_index):
+    link = calc_dirs[root_index] / "escaped.txt"
+    try:
+        link.symlink_to(tmp_path / "outside.txt")
+    except OSError as exc:
+        pytest.skip(f"Creating symlinks is unavailable: {exc}")
+    with pytest.raises(web.HTTPForbidden):
+        await srv.handle_calc_files(SimpleNamespace(match_info={"path": "escaped.txt"}))
+
+
+@pytest.mark.asyncio
+@pytest.mark.skipif(os.name != "nt", reason="Windows junction regression")
+@pytest.mark.parametrize("root_index", [0, 1])
+async def test_calc_rejects_windows_junction_escape(srv, calc_dirs, tmp_path, root_index):
+    # Junctions do not require the symlink privilege on Windows. Creation uses
+    # a fixed command with argv quoting, and pytest owns both temporary paths.
+    import subprocess
+
+    outside = tmp_path / "outside-dir"
+    outside.mkdir()
+    (outside / "private.txt").write_text("PRIVATE FILE", encoding="utf-8")
+    junction = calc_dirs[root_index] / "junction"
+    result = subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(junction), str(outside)],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    try:
+        with pytest.raises(web.HTTPForbidden):
+            await srv.handle_calc_files(SimpleNamespace(match_info={"path": "junction/private.txt"}))
+    finally:
+        # Remove only the junction itself, never recursively traverse its target.
+        junction.rmdir()
+
+
+class _AttackTags(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.markers = []
+
+    def handle_starttag(self, tag, attrs):
+        self.markers.extend(value for key, value in attrs if key == "data-attack")
+
+
+def test_dashboard_escapes_client_text_in_both_views_and_encounter_rows(srv):
+    def attack(label):
+        return f'<img data-attack="{label}" src=x onerror="alert(1)">'
+
+    for player in ("a", "b"):
+        srv.connected_players[player] = {
+            "connected": True, "rom_type": attack("rom-" + player),
+            "last_event": attack("event-" + player),
+        }
+        srv.player_area_id[player] = attack("area-" + player)
+    encounter_area = attack("encounter")
+    srv.state.area_states[encounter_area] = AreaStatus.DEAD_ZONE
+    rendered = srv._build_status_html()
+    parser = _AttackTags()
+    parser.feed(rendered)
+    assert parser.markers == []
+    for player in ("a", "b"):
+        assert rendered.count(html.escape(attack("rom-" + player))) >= 2
+        assert html.escape(attack("event-" + player)) in rendered
+        area_text = srv.adapter.area_display_name(attack("area-" + player))
+        assert rendered.count(html.escape(area_text)) >= 2
+    assert html.escape(srv.adapter.area_display_name(encounter_area)) in rendered
+
+
+def test_dashboard_keeps_trusted_unknown_area_markup(srv):
+    assert '<b class="area"><span class="dim">unknown</span></b>' in srv._build_status_html()
+
+
+@pytest.mark.parametrize("value", [None, 42, True])
+def test_escaping_preserves_rendering_of_non_text_legacy_metadata(srv, value):
+    # The legacy TCP handler records metadata before its dispatch validation.
+    # Output escaping must not turn formerly printable JSON scalars into 500s.
+    srv.connected_players["a"] = {"rom_type": value, "last_event": value}
+    rendered = srv._build_status_html()
+    assert f'Last: <b>{html.escape(str(value))}</b>' in rendered
+    assert srv._build_status_dict()["players"]["a"]["last_event"] is value
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("player", ["other", "", None, 3, [], {}])
+async def test_invalid_pokeball_player_has_no_side_effects(client, srv, monkeypatch, player):
+    before = dict(srv.state.pokeballs_obtained)
+    save, notify = Mock(), Mock()
+    monkeypatch.setattr(srv.state, "_save", save)
+    monkeypatch.setattr(srv, "_notify_sse", notify)
+    response = await client.post("/api/debug/set_pokeballs", json={"player": player})
+    assert response.status == 400
+    assert srv.state.pokeballs_obtained == before
+    save.assert_not_called()
+    notify.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("body,player,value", [
+    ({}, "a", True), ({"player": "a", "value": False}, "a", False),
+    ({"player": "b", "value": True}, "b", True),
+])
+async def test_valid_pokeball_player_still_persists(client, srv, monkeypatch, body, player, value):
+    save, notify = Mock(), Mock()
+    monkeypatch.setattr(srv.state, "_save", save)
+    monkeypatch.setattr(srv, "_notify_sse", notify)
+    response = await client.post("/api/debug/set_pokeballs", json=body)
+    assert response.status == 200
+    assert srv.state.pokeballs_obtained[player] is value
+    save.assert_called_once_with()
+    notify.assert_called_once_with()
+
+
+@pytest.mark.asyncio
+async def test_run_app_blocks_cross_origin_mutation(client, srv, monkeypatch):
+    save = Mock()
+    monkeypatch.setattr(srv.state, "_save", save)
+    response = await client.post(
+        "/api/debug/set_pokeballs", json={"player": "a"},
+        headers={"Sec-Fetch-Site": "cross-site", "Origin": "https://untrusted.example"},
+    )
+    assert response.status == 403
+    save.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("separator", ["\n", "\r", "\r\n", "\x00", "\u2028", "\u2029"])
+@pytest.mark.parametrize("player", ["a", "b"])
+async def test_standalone_launcher_keeps_untrusted_values_out_of_lua_code(srv, separator, player):
+    lupa = pytest.importorskip("lupa")
+    srv._run_name = f"Test{separator}SLINK_ATTACKED = true{separator}--"
+    srv._tcp_port = 54321
+    host = 'host"; SLINK_ATTACKED = true; --'
+    response = await srv.handle_launcher(SimpleNamespace(match_info={"player": player}, host=host))
+    assert response.status == 200
+    assert response.headers["Content-Disposition"].endswith(f'_{player}.lua"')
+
+    runtime = lupa.LuaRuntime(unpack_returned_tuples=True)
+    # Execute the real launcher with all filesystem and client-loading effects
+    # replaced, so a syntactically valid injected statement would be detected.
+    runtime.execute("""
+        io = {open = function()
+            return {read = function() return 'safe/' end,
+                    close = function() end, write = function() end}
+        end}
+        dofile = function(path) SLINK_LOADED_PATH = path end
+    """)
+    runtime.execute(response.text)
+    assert runtime.globals().SLINK_ATTACKED is None
+    assert runtime.globals().SLINK_HOST == host
+    assert runtime.globals().SLINK_PLAYER == player
+    assert runtime.globals().SLINK_PORT == 54321
+    assert runtime.globals().SLINK_LOADED_PATH == "safe/lua/slink.lua"

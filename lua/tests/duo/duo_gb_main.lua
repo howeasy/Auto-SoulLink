@@ -175,6 +175,26 @@ if D.fillers then
     log("added filler mon in slot 1 (party is now 2)")
 end
 
+-- Legacy fixtures/fillers were stamped with a level but zero experience. Make
+-- this test-only live party internally consistent before the production client
+-- serializes it; the source battery fixtures remain immutable.
+if GAME == "gen1_rby" and (variant == "red" or variant == "blue" or variant == "yellow") then
+    local Codec = require("gen1_party_codec")
+    for slot = 0, M.getPartyCount() - 1 do
+        local base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
+        local species, level = M.read_u8(base), M.read_u8(base + M.LEVEL_OFFSET)
+        local facts = assert(G.readBaseStats(variant, G.toNatDex(species)), "canonical fixture stats unavailable")
+        local xp = level == 1 and 0 or assert(Codec.experienceForLevel(facts.growth_rate, level))
+        local exp = base + M.OTID_OFFSET + 2
+        M.write_u8(exp, math.floor(xp / 65536))
+        M.write_u8(exp + 1, math.floor(xp / 256) % 256)
+        M.write_u8(exp + 2, xp % 256)
+        local valid, reason = Codec.validateBlob(M.readPartyBlob(slot), variant)
+        if not valid then finish(false, "invalid prepared party blob: " .. tostring(reason)) end
+    end
+    log("test fixture party XP normalized and all complete blobs validated")
+end
+
 for slot = 0, M.getPartyCount() - 1 do
     local mon = M.readPartySlot(slot)
     if mon then log(string.format("MYKEY %d %s", slot, mon.key)) end
@@ -221,6 +241,18 @@ function ctx.wait_go(max_frames)
         if f then f:close() return true end
         return nil
     end, max_frames or 14400, "go-file")
+end
+
+function ctx.wait_link_verified(key, max_frames)
+    return ctx.wait_until(function()
+        local f = io.open(D.go_file, "r")
+        if not f then return nil end
+        local text = f:read("*a"); f:close()
+        for line in text:gmatch("[^\r\n]+") do
+            if line == "LINK_VERIFIED " .. key then return true end
+        end
+        return nil
+    end, max_frames or 9000, "server to verify the exact encounter link")
 end
 
 --- Wait for the partner instance to write its verdict.

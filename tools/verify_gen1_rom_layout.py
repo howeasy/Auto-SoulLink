@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _REPO)
@@ -45,12 +46,25 @@ ROMS = {
 # The companion patch exists for Red and Blue only; Yellow has no free WRAM for a mailbox.
 PATCHABLE = ("red", "blue")
 
+CLEAN_SHA1 = {
+    "red": "ea9bcae617fdf159b045185467ae58b2e4a48b9a",
+    "blue": "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2",
+    "yellow": "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1",
+}
+
 
 def _rows_for(title: str, rom: bytes) -> list[tuple[str, bool, str]]:
     """(check, ok, detail) for one ROM."""
     from server.adapters.gen1_rom_scan import (
-        RomScanError, evolution_graph, identify, scan_base_stats, scan_fishing,
-        scan_pokedex_order, scan_wild, sym_to_offset, _syms_for,
+        RomScanError,
+        _syms_for,
+        evolution_graph,
+        identify,
+        scan_base_stats,
+        scan_fishing,
+        scan_pokedex_order,
+        scan_wild,
+        sym_to_offset,
     )
     rows: list[tuple[str, bool, str]] = []
 
@@ -60,8 +74,13 @@ def _rows_for(title: str, rom: bytes) -> list[tuple[str, bool, str]]:
         except Exception as exc:                       # noqa: BLE001
             rows.append((name, False, f"{type(exc).__name__}: {exc}"))
 
-    check("identified as a Gen 1 ROM",
-          lambda: f"{identify(rom)['variant']}, clean={identify(rom)['clean']}")
+    def _identity():
+        value = identify(rom)
+        if value["variant"] != title or value["sha1"] != CLEAN_SHA1[title]:
+            raise RomScanError(f"expected canonical {title} {CLEAN_SHA1[title]}, got "
+                               f"{value['variant']} {value['sha1']}")
+        return f"{title} SHA-1={value['sha1']}"
+    check("exact supported canonical ROM", _identity)
 
     def _symbols():
         _ident, syms = _syms_for(rom)
@@ -113,8 +132,23 @@ def _rows_for(title: str, rom: bytes) -> list[tuple[str, bool, str]]:
         return "151 entries"
     check("index-to-dex map parses", _dex)
 
+    from tools.gen1_patch_validation import verify_future_hook_anchors
+    check("canonical service/trade prerequisites (not feature proof)",
+          lambda: verify_future_hook_anchors(title, rom, _syms_for(rom)[1]))
+
     if title in PATCHABLE:
         import manifest
+
+        from tools.gen1_patch_validation import verify_anchors, verify_assembly_references
+
+        check("complete manifest geometry, source anchors and call banks",
+              lambda: verify_anchors(rom, _syms_for(rom)[1], manifest))
+
+        def _assembly():
+            source = Path(_REPO, "patch/gen1/src/slink.asm").read_text(encoding="utf-8")
+            ram = json.loads(Path(_REPO, "data/pret_syms.json").read_text(encoding="utf-8"))
+            return verify_assembly_references(source, _syms_for(rom)[1], ram["pokered"])
+        check("all external assembly addresses/banks resolve", _assembly)
 
         def _spans():
             lo, hi = manifest.PROTECTED_RANGE
@@ -182,6 +216,18 @@ def main() -> int:
         report[title] = rows
         ok_total += sum(1 for _n, ok, _d in rows if ok)
         fail_total += sum(1 for _n, ok, _d in rows if not ok)
+
+    import manifest
+
+    from tools.gen1_patch_validation import verify_generated_payload
+    try:
+        detail = verify_generated_payload(manifest)
+        report["generated_payload"] = [("fresh assembly matches published bytes", True, detail)]
+        ok_total += 1
+    except Exception as exc:
+        report["generated_payload"] = [("fresh assembly matches published bytes", False,
+                                        f"{type(exc).__name__}: {exc}")]
+        fail_total += 1
 
     if args.json:
         print(json.dumps({t: [{"check": n, "ok": o, "detail": d} for n, o, d in rows]

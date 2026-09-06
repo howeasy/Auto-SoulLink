@@ -1,56 +1,70 @@
-"""
-tools/build_pret_syms.py — Phase 10: extract authoritative WRAM addresses from pret
+"""Build pinned pret memory symbols and fully built, hash-verified R/B/Y ROM symbols.
 
-Drives RGBDS v1.0.1 directly (rgbasm + rgblink, no `make` / w64devkit):
-  1. Auto-installs RGBDS if missing (via _build_tools_bootstrap).
-  2. Clones pret/pokered, pret/pokeyellow, pret/pokecrystal into .cache/pret/<name>/.
-  3. For each repo, compiles ram.asm and links against a TRIMMED layout.link
-     (WRAM/VRAM/SRAM/HRAM only — no ROM banks, no engine .o files needed).
-  4. Parses each .sym file, filters to WRAM symbols, writes data/pret_syms.json.
+The source lock is data/pret_sources.lock.json. Cached source drift is an error;
+--update fetches only the locked commit. ROM symbols are never fetched from a moving
+symbols branch. --rom-syms (or --canonical) invokes the source Makefiles, checks all
+three complete binaries against legal local dumps, and publishes build provenance.
 
-Why drive rgbasm/rgblink directly instead of `make`:
-  - Eliminates the GNU-make + w64devkit dependency on Windows.
-  - ~3× faster — no graphics/audio/ROM-bank compilation we don't need.
-  - The .sym output is identical to a full ROM build for WRAM symbols.
-
-Usage:
-    python tools/build_pret_syms.py               # build with cached pret repos
-    python tools/build_pret_syms.py --update      # git pull each repo first
-    python tools/build_pret_syms.py --clean       # wipe .cache/pret/ and reclone
-    python tools/build_pret_syms.py --rom-syms    # ROM-space labels, no RGBDS needed
-
-Output: data/pret_syms.json          (WRAM/SRAM, this file's original job)
-        data/pret_rom_syms.json      (--rom-syms: ROM-space labels for patch work)
-
-RGBDS version note: the pin stays at v1.0.1 even though pret/pokered's INSTALL.md now
-asks for 1.0.2. That requirement is for a FULL ROM build; this script only assembles
-ram.asm against a trimmed layout, which 1.0.1 handles — verified by regenerating all four
-repos and diffing (no address used by any Lua profile moved). A full build is not needed
-at all now that --rom-syms fetches pret's own CI-built symbols.
-    {
-      "pokered":     {"wPartyCount": 53603, ...},
-      "pokeyellow":  {"wPartyCount": 53602, ...},
-      "pokecrystal": {"wPartyCount": 56535, ...}
-    }
+Usage: python tools/build_pret_syms.py --canonical --rom-dir <legal-ROM-directory>
+GNU make, gcc and sh must be on PATH or in .cache/build-tools/w64devkit/bin.
+RGBDS v1.0.1 satisfies the pinned sources' rgbdscheck.asm (>= 1.0.0).
+No ROM bytes are published; outputs under data/ contain symbols/hashes only.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 import pathlib
 import re
 import shutil
 import subprocess
 import sys
 
-from _build_tools_bootstrap import ensure_rgbds
+try:
+    from ._build_tools_bootstrap import ensure_rgbds
+except ImportError:
+    from _build_tools_bootstrap import ensure_rgbds
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PRET_CACHE = REPO_ROOT / ".cache" / "pret"
 BUILD_DIR = REPO_ROOT / ".cache" / "pret-build"
 DATA_DIR = REPO_ROOT / "data"
 OUT_FILE = DATA_DIR / "pret_syms.json"
+LOCK_FILE = DATA_DIR / "pret_sources.lock.json"
+PROVENANCE_FILE = DATA_DIR / "pret_build_provenance.json"
+
+
+def load_lock() -> dict:
+    lock = json.loads(LOCK_FILE.read_text(encoding="utf-8"))
+    if lock.get("schema_version") != 1:
+        raise ValueError("Unsupported pret source lock schema")
+    for name, spec in lock["sources"].items():
+        if not re.fullmatch(r"[0-9a-f]{40}", spec["commit"]):
+            raise ValueError(f"{name}: an exact 40-character source commit is required")
+    return lock
+
+
+def sha256(path: pathlib.Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def symbols_digest(symbols: dict) -> str:
+    return hashlib.sha256(json.dumps(symbols, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def git_output(repo: pathlib.Path, *args: str) -> str:
+    return subprocess.run(["git", "-C", str(repo), *args], check=True,
+                          capture_output=True, text=True).stdout.strip()
+
+
+def verify_source(repo: pathlib.Path, commit: str) -> None:
+    if git_output(repo, "rev-parse", "HEAD") != commit:
+        raise RuntimeError(f"Source commit drift: {repo}; expected {commit}")
+    if git_output(repo, "status", "--porcelain", "--untracked-files=normal"):
+        raise RuntimeError(f"Dirty canonical source checkout: {repo}")
 
 # Each pret repo we want to build.
 #   url:                git remote
@@ -121,21 +135,28 @@ def _git(repo: pathlib.Path, *args: str) -> None:
 
 
 def _clone_or_pull(name: str, url: str, *, update: bool) -> pathlib.Path:
+    """Obtain the locked revision without resetting or cleaning an existing checkout."""
+    pin = load_lock()["sources"][name]
+    if url != pin["url"]:
+        raise RuntimeError(f"{name}: source URL differs from lock")
     repo = PRET_CACHE / name
     if repo.exists():
+        verify_source(repo, pin["commit"])
         if update:
-            print(f"[pret] git pull {name}", file=sys.stderr)
-            _git(repo, "fetch", "--depth=1", "origin")
-            _git(repo, "reset", "--hard", "origin/HEAD")
+            _git(repo, "fetch", "--depth=1", url, pin["commit"])
         return repo
 
     PRET_CACHE.mkdir(parents=True, exist_ok=True)
-    print(f"[pret] git clone --depth=1 {url} → {repo}", file=sys.stderr)
+    print(f"[pret] fetch {name}@{pin['commit']}", file=sys.stderr)
     subprocess.run(
-        ["git", "clone", "--depth=1", url, str(repo)],
+        ["git", "init", str(repo)],
         check=True,
-        capture_output=False,  # show clone progress
+        capture_output=True,
     )
+    _git(repo, "remote", "add", "origin", url)
+    _git(repo, "fetch", "--depth=1", "origin", pin["commit"])
+    _git(repo, "checkout", "--detach", pin["commit"])
+    verify_source(repo, pin["commit"])
     return repo
 
 
@@ -232,6 +253,18 @@ def _build_repo_syms(name: str, spec: dict, rgbds_bin: pathlib.Path, *, update: 
         raise RuntimeError(f"No SECTION declarations found in {name} ram files")
     print(f"[{name}] {len(sections_in_o)} RAM sections", file=sys.stderr)
 
+    # The initial HRAM span is executable OAM DMA code emitted by a LOAD block
+    # in an engine file. Omitting it shifts every following HRAM label by ten
+    # bytes. Assemble the actual pinned block, rather than a guessed reservation.
+    dma_file = repo / "engine/gfx" / ("load_push_oam.asm" if name in ("pokecrystal", "pokegold") else "oam_dma.asm")
+    blocks = re.findall(r'^LOAD "OAM DMA", HRAM\s*\n.*?^ENDL\s*$',
+                        dma_file.read_text(encoding="utf-8"), re.MULTILINE | re.DOTALL)
+    if len(blocks) != 1:
+        raise RuntimeError(f"{name}: expected exactly one source OAM DMA HRAM LOAD block")
+    sections_in_o.add("OAM DMA")
+    ram_source = build / "ram_with_dma.asm"
+    ram_source.write_text('INCLUDE "ram.asm"\nSECTION "Verifier DMA backing", ROM0\n' + blocks[0] + "\n", encoding="utf-8")
+
     # Build a trimmed layout.link
     trimmed_layout = build / "ram_layout.link"
     trimmed_layout.write_text(_build_trimmed_layout(repo, sections_in_o), encoding="utf-8")
@@ -254,7 +287,7 @@ def _build_repo_syms(name: str, spec: dict, rgbds_bin: pathlib.Path, *, update: 
         rgbasm_cmd[3:3] = ["-P", spec["preinclude"]]
     if spec.get("variant_define"):
         rgbasm_cmd += ["-D", spec["variant_define"]]
-    rgbasm_cmd.append("ram.asm")
+    rgbasm_cmd.append(str(ram_source))
     print(f"[{name}] rgbasm ram.asm", file=sys.stderr)
     _run(rgbasm_cmd, cwd=str(repo))
 
@@ -284,9 +317,7 @@ def _parse_sym(sym_path: pathlib.Path) -> dict[str, int]:
     in SRAM at sBox); the SRAM bank context (which 8KB cartridge bank
     is mapped) lives in the Lua profile's `sram_bank` field.
 
-    Other regions (ROM 0x0000-0x7FFF, VRAM 0x8000-0x9FFF, OAM 0xFE00-0xFE9F,
-    HRAM 0xFF80-0xFFFE) are not tracked — we don't read those from the
-    tracker.
+    HRAM (0xFF80-0xFFFE) is also retained for native patch control validation.
     """
     out: dict[str, int] = {}
     line_re = re.compile(r'^([0-9A-Fa-f]+):([0-9A-Fa-f]+)\s+(\S+)\s*$')
@@ -302,7 +333,8 @@ def _parse_sym(sym_path: pathlib.Path) -> dict[str, int]:
         # Filter: keep WRAM (0xC000-0xDFFF) + SRAM (0xA000-0xBFFF).
         is_wram = 0xC000 <= addr <= 0xDFFF
         is_sram = 0xA000 <= addr <= 0xBFFF
-        if not (is_wram or is_sram):
+        is_hram = 0xFF80 <= addr <= 0xFFFE
+        if not (is_wram or is_sram or is_hram):
             continue
         # Last-write-wins on duplicates (a few pret symbols are unions/aliases at
         # the same address — `wPartyMon1Species` and `wPartyMon1` for example).
@@ -310,15 +342,7 @@ def _parse_sym(sym_path: pathlib.Path) -> dict[str, int]:
     return out
 
 
-# ── ROM-space symbols (the `symbols` branch) ─────────────────────────────────
-#
-# pret publishes CI-built .sym/.map artifacts on a `symbols` branch, generated from a
-# byte-identical ROM build. That means every ROM label — ~12.5k globals per game — is
-# available WITHOUT a local build, so no GNU make and no host C compiler for pret's
-# own tools/. The alternative was vendoring w64devkit to run one full build; this is
-# the same data, verified, for a git fetch.
-#
-# repo -> {output key: sym filename on the symbols branch}
+# Full local builds bind ROM symbols to an actually verified binary.
 ROM_SYM_SOURCES = {
     "pokered": {"pokered": "pokered.sym", "pokeblue": "pokeblue.sym"},
     "pokeyellow": {"pokeyellow": "pokeyellow.sym"},
@@ -371,76 +395,159 @@ def _expected_rom_sha1(repo: pathlib.Path) -> dict[str, str]:
     return out
 
 
-def build_rom_syms(*, update: bool) -> int:
-    """Fetch the `symbols` branch of each pret repo and write ROM_SYMS_OUT."""
-    all_syms: dict[str, dict] = {}
-    for repo_name, sym_files in ROM_SYM_SOURCES.items():
-        spec = PRET_REPOS[repo_name]
-        repo = _clone_or_pull(repo_name, spec["url"], update=update)
-        # A shallow clone has no `symbols` branch until asked for it by name.
-        _git(repo, "fetch", "--depth", "1", "origin", "symbols")
-        sha1s = _expected_rom_sha1(repo)
-        for out_key, fname in sym_files.items():
-            text = subprocess.run(
-                ["git", "-C", str(repo), "show", f"FETCH_HEAD:{fname}"],
-                capture_output=True, text=True, check=True,
-            ).stdout
-            symbols = _parse_rom_sym(text)
-            all_syms[out_key] = {
-                # The sha1 of the ROM these symbols describe. A consumer can hash the
-                # user's cartridge dump and refuse to apply addresses that were built
-                # against a different ROM — the whole safety property of using
-                # prebuilt symbols instead of building locally.
-                "rom_sha1": sha1s.get(out_key, ""),
-                "symbols": dict(sorted(symbols.items())),
-            }
-            print(f"[{out_key}] {len(symbols)} ROM symbols "
-                  f"(rom sha1 {all_syms[out_key]['rom_sha1'][:12] or '?'})", file=sys.stderr)
+def _tool_record(path: pathlib.Path) -> dict:
+    result = _run([str(path), "--version"])
+    version = (result.stdout or result.stderr).splitlines()[0].strip()
+    resolved = path.resolve()
+    return {"path": resolved.relative_to(REPO_ROOT).as_posix()
+            if resolved.is_relative_to(REPO_ROOT) else path.name,
+            "version": version, "sha256": sha256(resolved)}
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    ROM_SYMS_OUT.write_text(json.dumps(all_syms, indent=1, sort_keys=False) + "\n",
-                            encoding="utf-8")
-    total = sum(len(v["symbols"]) for v in all_syms.values())
-    print(f"\n[done] {total} ROM symbols across {len(all_syms)} games → {ROM_SYMS_OUT}",
-          file=sys.stderr)
-    return 0
+
+def _build_environment(rgbds_bin: pathlib.Path) -> dict[str, str]:
+    env = os.environ.copy()
+    portable = REPO_ROOT / ".cache" / "build-tools" / "w64devkit" / "bin"
+    env["PATH"] = os.pathsep.join([str(rgbds_bin), str(portable), env.get("PATH", "")])
+    env["CCACHE_DIR"] = str(REPO_ROOT / ".cache" / "ccache")
+    return env
+
+
+def _toolchain(rgbds_bin: pathlib.Path, *, full: bool) -> dict:
+    env = _build_environment(rgbds_bin)
+    names = ["rgbasm", "rgblink"] + (["rgbfix", "rgbgfx", "make", "gcc", "sh"] if full else [])
+    records = {}
+    for name in names:
+        found = shutil.which(name, path=env["PATH"])
+        if not found:
+            raise RuntimeError(f"Missing canonical build dependency: {name}")
+        # BusyBox sh does not support --version; hash its binary and query help.
+        if name == "sh":
+            path = pathlib.Path(found).resolve()
+            result = subprocess.run([str(path), "--help"], capture_output=True, text=True)
+            records[name] = {"path": path.relative_to(REPO_ROOT).as_posix()
+                             if path.is_relative_to(REPO_ROOT) else path.name,
+                             "version": (result.stdout or result.stderr).splitlines()[0],
+                             "sha256": sha256(path)}
+        else:
+            records[name] = _tool_record(pathlib.Path(found))
+    for name in ("rgbasm", "rgblink", "rgbfix", "rgbgfx"):
+        if name in records and records[name]["version"] != f"{name} {load_lock()['rgbds_version']}":
+            raise RuntimeError(f"Toolchain version drift: {records[name]['version']}")
+    return records
+
+
+def verify_clean_roms(rom_dir: pathlib.Path) -> dict[str, str]:
+    hashes = {}
+    for name, spec in load_lock()["clean_roms"].items():
+        path = rom_dir / spec["filename"]
+        if not path.is_file():
+            raise RuntimeError(f"Missing legal clean ROM: {path}")
+        actual = hashlib.sha1(path.read_bytes()).hexdigest()
+        if actual != spec["sha1"]:
+            raise RuntimeError(f"Clean ROM hash drift: {name}; expected {spec['sha1']}, got {actual}")
+        hashes[name] = actual
+    return hashes
+
+
+def build_rom_syms(*, update: bool, rom_dir: pathlib.Path,
+                   rgbds_bin: pathlib.Path, memory_syms: dict) -> tuple[dict, dict, dict]:
+    """Build all canonical binaries; publish nothing unless all hashes agree."""
+    lock = load_lock()
+    clean_hashes = verify_clean_roms(rom_dir)
+    toolchain = _toolchain(rgbds_bin, full=True)
+    env = _build_environment(rgbds_bin)
+    all_syms, records = {}, {}
+    make = shutil.which("make", path=env["PATH"])
+    for repo_name, sym_files in ROM_SYM_SOURCES.items():
+        repo = _clone_or_pull(repo_name, PRET_REPOS[repo_name]["url"], update=update)
+        # Force all inputs to be rebuilt. MAKE=make avoids an unquoted recursive
+        # make executable path when the workspace has spaces on Windows.
+        args = [make, "MAKE=make", "DEBUG=1", "-B", "-j4"]
+        args.extend(f"{name}.gbc" for name in sym_files)
+        _run(args, cwd=repo, env=env)
+        verify_source(repo, lock["sources"][repo_name]["commit"])
+        expected_source_hashes = _expected_rom_sha1(repo)
+        for name, filename in sym_files.items():
+            rom = repo / f"{name}.gbc"
+            actual = hashlib.sha1(rom.read_bytes()).hexdigest()
+            if not actual == clean_hashes[name] == expected_source_hashes.get(name):
+                raise RuntimeError(f"Canonical built ROM hash mismatch: {name}: {actual}")
+            sym = repo / filename
+            memory = _parse_sym(sym)
+            if memory != memory_syms[repo_name]:
+                raise RuntimeError(f"{name}: full-build and RAM-only symbol layout differ")
+            symbols = dict(sorted(_parse_rom_sym(sym.read_text(encoding="utf-8")).items()))
+            records[name] = {
+                "source": repo_name,
+                "source_commit": lock["sources"][repo_name]["commit"],
+                "build_mode": "full-local",
+                "built_rom_path": rom.relative_to(REPO_ROOT).as_posix(),
+                "built_rom_sha1": actual,
+                "clean_rom_sha1": clean_hashes[name],
+                "raw_symbols_path": sym.relative_to(REPO_ROOT).as_posix(),
+                "raw_symbols_sha256": sha256(sym),
+                "rom_symbols_sha256": symbols_digest(symbols),
+                "memory_symbols_sha256": symbols_digest(memory),
+            }
+            all_syms[name] = {"rom_sha1": actual, "symbols": symbols}
+            print(f"[{name}] verified full ROM {actual}; {len(symbols)} ROM labels", file=sys.stderr)
+    return all_syms, records, toolchain
+
+
+def _write_json(path: pathlib.Path, value: dict, *, indent: int = 2) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(value, indent=indent) + "\n", encoding="utf-8", newline="\n")
+    temporary.replace(path)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--update", action="store_true",
-                        help="git pull each cached pret repo before building")
+                        help="fetch only the exact locked source commits")
     parser.add_argument("--clean", action="store_true",
-                        help="wipe .cache/pret/ and reclone everything")
+                        help="deprecated; existing checkouts are never erased")
     parser.add_argument("--rom-syms", action="store_true",
-                        help="fetch ROM-space symbols from pret's `symbols` branch into "
-                             "data/pret_rom_syms.json (no RGBDS needed) and exit")
+                        help="full local canonical builds, including ROM symbols and provenance")
+    parser.add_argument("--canonical", action="store_true", help="same as --rom-syms")
+    parser.add_argument("--rom-dir", type=pathlib.Path, default=REPO_ROOT,
+                        help="directory containing the three user-supplied clean dumps")
     args = parser.parse_args()
 
-    if args.rom_syms:
-        return build_rom_syms(update=args.update)
-
-    if args.clean and PRET_CACHE.exists():
-        print(f"[clean] removing {PRET_CACHE}", file=sys.stderr)
-        shutil.rmtree(PRET_CACHE)
-    if BUILD_DIR.exists():
-        # Always wipe build dir to avoid stale .o files
-        shutil.rmtree(BUILD_DIR)
+    if args.clean:
+        parser.error("--clean no longer deletes source checkouts; resolve source drift explicitly")
 
     rgbds_bin = ensure_rgbds()
 
     all_syms: dict[str, dict[str, int]] = {}
+    lock = load_lock()
+    provenance = {"schema_version": 1, "source_lock_sha256": sha256(LOCK_FILE),
+                  "sources": {}, "roms": {}, "toolchain": _toolchain(rgbds_bin, full=False)}
     for name, spec in PRET_REPOS.items():
         sym = _build_repo_syms(name, spec, rgbds_bin, update=args.update)
         symbols = _parse_sym(sym)
         print(f"[{name}] {len(symbols)} WRAM symbols extracted", file=sys.stderr)
         all_syms[name] = dict(sorted(symbols.items()))
+        repo = PRET_CACHE / name
+        provenance["sources"][name] = {
+            "commit": lock["sources"][name]["commit"],
+            "tree": git_output(repo, "rev-parse", "HEAD^{tree}"),
+            "raw_memory_symbols_path": sym.relative_to(REPO_ROOT).as_posix(),
+            "raw_memory_symbols_sha256": sha256(sym),
+            "memory_symbols_sha256": symbols_digest(symbols),
+        }
 
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    OUT_FILE.write_text(
-        json.dumps(all_syms, indent=2, sort_keys=False) + "\n",
-        encoding="utf-8",
-    )
+    rom_syms = None
+    if args.canonical or args.rom_syms:
+        rom_syms, provenance["roms"], provenance["toolchain"] = build_rom_syms(
+            update=args.update, rom_dir=args.rom_dir, rgbds_bin=rgbds_bin, memory_syms=all_syms)
+    _write_json(OUT_FILE, all_syms)
+    if rom_syms is not None:
+        _write_json(ROM_SYMS_OUT, rom_syms, indent=1)
+    provenance["artifacts"] = {OUT_FILE.relative_to(REPO_ROOT).as_posix(): sha256(OUT_FILE)}
+    if rom_syms is not None:
+        provenance["artifacts"][ROM_SYMS_OUT.relative_to(REPO_ROOT).as_posix()] = sha256(ROM_SYMS_OUT)
+    _write_json(PROVENANCE_FILE, provenance)
     total = sum(len(s) for s in all_syms.values())
     print(f"\n[done] {total} symbols across {len(all_syms)} repos → {OUT_FILE}", file=sys.stderr)
     return 0

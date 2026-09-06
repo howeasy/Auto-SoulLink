@@ -1,172 +1,101 @@
-"""POST /api/runs/{id}/randomize — the Manager's side of the randomizer pipeline.
+"""The restricted RBY publisher refuses without altering existing run evidence.
 
-The route is thin on purpose; server/upr_pipeline.py owns the decisions and is tested
-directly. What is worth testing HERE is the part only the Manager can get wrong: that a
-refusal reaches the caller as a 400 with the reason intact rather than a 500 or a silent
-success, and that everything needed to trust the pair is persisted onto the run.
-
-Persisting it is not bookkeeping. UPR's CLI has no seed flag and writes the seed only to
-its log, so if this step does not record the seeds and hashes, nothing can reconstruct them
-afterwards.
+Legacy UPR subprocess/scanner component tests remain in test_upr_pipeline.py.
+Those components cannot authorize Manager publication before the full catalog,
+semantic scan and final-output contract are implemented.
 """
-from __future__ import annotations
-
+import copy
 import json
-import os
 
 import pytest
 
-pytest.importorskip("aiohttp", reason="the manager is an aiohttp app")
-
-from server import manager as mgr  # noqa: E402
-from server.upr_settings import build, build_categories  # noqa: E402
-
-_REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-_RED = os.path.join(_REPO, "patch", "build", "gen1_red.gb")
-_BLUE = os.path.join(_REPO, "patch", "build", "gen1_blue.gb")
-ALL_CATEGORIES = {"wild", "starters", "statics", "trainers", "tms", "field_items"}
+from server import manager as mgr
 
 
-def _jar() -> str:
-    from tests.conftest import find_upr_jar
-    jar = find_upr_jar()
-    if not jar:
-        pytest.skip("PokeRandoZX.jar not found — put it in .cache/upr/ or set SLINK_UPR_JAR")
-    return jar
-
-
-def _roms():
-    for path in (_RED, _BLUE):
-        if not os.path.exists(path):
-            pytest.skip(f"{path} not present")
-
-
-class _Request:
-    """The three things handle_randomize touches. The repo tests manager handlers by
-    calling them directly rather than over HTTP (see test_manager_launcher.py), which keeps
-    this independent of whether pytest-aiohttp happens to be installed."""
-
-    def __init__(self, run_id: str, body):
+class Request:
+    def __init__(self, run_id, body):
         self.match_info = {"run_id": run_id}
-        self._body = body
+        self.body = body
 
     async def json(self):
-        if self._body is None:
-            raise ValueError("no body")
-        return self._body
+        if self.body is None:
+            raise ValueError("invalid JSON")
+        return self.body
+
+
+_Request = Request  # Existing cartridge-binding tests reuse this request fixture.
 
 
 @pytest.fixture
 def manager_dir(tmp_path, monkeypatch):
-    """Point the manager's registry at a temp dir so no real run is touched."""
-    d = tmp_path / "runs"
-    d.mkdir()
-    monkeypatch.setattr(mgr, "MANAGER_DIR", str(d))
-    monkeypatch.setattr(mgr, "REGISTRY_PATH", str(d / "registry.json"))
-    os.makedirs(d / "run_test", exist_ok=True)
+    directory = tmp_path / "runs"
+    directory.mkdir()
+    monkeypatch.setattr(mgr, "MANAGER_DIR", str(directory))
+    monkeypatch.setattr(mgr, "REGISTRY_PATH", str(directory / "registry.json"))
+    (directory / "run_test").mkdir()
     mgr._save_registry([{"run_id": "run_test", "name": "test", "tcp_port": 1,
-                         "http_port": 2, "status": "stopped", "pid": None}])
-    return d
+                         "http_port": 2, "status": "stopped", "pid": None,
+                         "rules": {"explode_mode": True}}])
+    return directory
 
 
-async def _post(body, run_id="run_test"):
-    m = mgr.RunManager.__new__(mgr.RunManager)
-    m.bind_host, m.manager_port = "127.0.0.1", 0
-    resp = await m.handle_randomize(_Request(run_id, body))
-    return resp.status, json.loads(resp.text)
+async def post(body, run_id="run_test"):
+    manager = mgr.RunManager.__new__(mgr.RunManager)
+    response = await manager.handle_randomize(Request(run_id, body))
+    return response.status, json.loads(response.text)
 
 
-# ── refusals reach the caller ────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
-async def test_an_unknown_run_is_404(manager_dir):
-    status, body = await _post({}, run_id="nope")
+async def test_unknown_run_keeps_404(manager_dir):
+    status, body = await post({}, "missing")
     assert status == 404 and body["ok"] is False
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("payload", [None, [], "not an object"])
+async def test_invalid_request_keeps_400(manager_dir, payload):
+    status, body = await post(payload)
+    assert status == 400 and body["ok"] is False
+
+
+@pytest.mark.asyncio
 async def test_missing_arguments_are_named(manager_dir):
-    status, body = await _post({"jar": "x"})
-    assert status == 400
-    assert "settings" in body["error"] and "rom_a" in body["error"]
+    status, body = await post({"jar": "provided"})
+    assert status == 400 and "settings" in body["error"] and "rom_a" in body["error"]
 
 
 @pytest.mark.asyncio
-async def test_a_pipeline_refusal_is_a_400_with_its_reason(manager_dir, tmp_path):
-    """A refusal is the feature. It must not surface as a 500 or, worse, as ok:true.
+async def test_restricted_publisher_never_invokes_legacy_pipeline_or_records_success(manager_dir, monkeypatch):
+    from server import upr_pipeline
 
-    Types decide the type clause, so settings that randomize them cannot be used -- and the
-    caller has to be told which setting was the problem to be able to fix it.
-    """
-    bad = tmp_path / "bad.rnqs"
-    bad.write_bytes(build({"types_UNCHANGED": False}))
-    status, body = await _post({
-        "jar": __file__, "settings": str(bad), "rom_a": _RED, "rom_b": _BLUE})
-    assert status == 400, body
-    assert body["ok"] is False
-    assert "types" in body["error"]
+    def forbidden(*args, **kwargs):
+        pytest.fail("restricted publisher invoked Java or legacy scanner")
+    monkeypatch.setattr(upr_pipeline, "prepare_pair", forbidden)
+    before = (manager_dir / "registry.json").read_bytes()
+    status, body = await post({"jar": "user.jar", "settings": "settings.rnqs", "rom_a": "red.gb", "rom_b": "yellow.gb"})
+    assert status == 409 and body["available"] is False
+    assert body["reason_code"] == "rby_provenance_publisher_unavailable"
+    assert mgr.RunManager.randomization_availability()["reason"] == body["error"]
+    assert (manager_dir / "registry.json").read_bytes() == before
+    assert not (manager_dir / "run_test" / "roms").exists()
+    assert not (manager_dir / "run_test" / "rom_contract.json").exists()
 
 
 @pytest.mark.asyncio
-async def test_nothing_is_recorded_on_the_run_when_it_refuses(tmp_path, manager_dir):
-    bad = tmp_path / "bad.rnqs"
-    bad.write_bytes(build({"evolutions_UNCHANGED": False}))
-    await _post({"jar": __file__, "settings": str(bad),
-                 "rom_a": _RED, "rom_b": _BLUE})
-    run = mgr._find_run(mgr._load_registry(), "run_test")
-    assert "randomizer" not in run, "a refused pair was recorded as if it had worked"
+async def test_restriction_preserves_old_requested_settings_and_unverified_evidence(manager_dir):
+    runs = mgr._load_registry()
+    runs[0]["randomizer"] = {"settings_sha256": "old", "categories": ["wild"], "players": {"a": {"seed": "1"}}}
+    mgr._save_registry(runs)
+    before = copy.deepcopy(runs)
+    status, body = await post({"jar": "user.jar", "settings": "settings.rnqs", "rom_a": "red.gb", "rom_b": "blue.gb"})
+    assert status == 409 and body["ok"] is False
+    assert mgr._load_registry() == before
 
 
-# ── the real pipeline through the route ──────────────────────────────────────────────────
-class TestAgainstTheRealJar:
-    @pytest.mark.asyncio
-    async def test_a_successful_pair_is_recorded_on_the_run(self, tmp_path, manager_dir):
-        _roms()
-        settings = tmp_path / "s.rnqs"
-        settings.write_bytes(build_categories(ALL_CATEGORIES))
-        status, body = await _post({
-            "jar": _jar(), "settings": str(settings), "rom_a": _RED, "rom_b": _BLUE})
-        assert status == 200, body
-        rnd = body["randomizer"]
-        assert rnd["upr_version"] == "4.6.1"
-        assert set(rnd["categories"]) == ALL_CATEGORIES
-        a, b = rnd["players"]["a"], rnd["players"]["b"]
-        assert a["seed"] != b["seed"]
-        assert a["content_hash"] != b["content_hash"]
-        for side in (a, b):
-            assert os.path.exists(side["output"])
-            # A 48-bit seed exceeds JS's exact integer range only above 2^53, but it is
-            # carried as a STRING regardless so no consumer can round it.
-            assert isinstance(side["seed"], str) and side["seed"].isdigit()
-
-        # And it survives to the registry, which is the only place it can be recovered from.
-        run = mgr._find_run(mgr._load_registry(), "run_test")
-        assert run["randomizer"]["players"]["a"]["seed"] == a["seed"]
-        assert run["randomizer"]["settings_sha256"] == rnd["settings_sha256"]
-
-    @pytest.mark.asyncio
-    async def test_the_outputs_land_inside_the_run_directory(self, tmp_path, manager_dir):
-        _roms()
-        settings = tmp_path / "s.rnqs"
-        settings.write_bytes(build_categories({"wild"}))
-        status, body = await _post({
-            "jar": _jar(), "settings": str(settings), "rom_a": _RED, "rom_b": _BLUE})
-        assert status == 200, body
-        for side in body["randomizer"]["players"].values():
-            assert os.path.abspath(side["output"]).startswith(
-                os.path.abspath(str(manager_dir / "run_test"))), side["output"]
-
-    @pytest.mark.asyncio
-    async def test_the_recorded_hashes_describe_the_files_on_disk(self, tmp_path, manager_dir):
-        """The whole point of recording them is that they can be checked later."""
-        _roms()
-        import hashlib
-        settings = tmp_path / "s.rnqs"
-        settings.write_bytes(build_categories({"wild"}))
-        _status, body = await _post({
-            "jar": _jar(), "settings": str(settings), "rom_a": _RED, "rom_b": _BLUE})
-        for side in body["randomizer"]["players"].values():
-            with open(side["output"], "rb") as f:
-                assert hashlib.sha1(f.read()).hexdigest() == side["rom_sha1"]
-        with open(settings, "rb") as f:
-            assert hashlib.sha256(f.read()).hexdigest() == \
-                body["randomizer"]["settings_sha256"]
+@pytest.mark.asyncio
+async def test_bound_cartridge_run_still_requires_a_new_run(manager_dir):
+    runs = mgr._load_registry()
+    runs[0]["cartridges"] = {"a": {"variant": "red"}}
+    mgr._save_registry(runs)
+    status, body = await post({})
+    assert status == 400 and "new run" in body["error"]

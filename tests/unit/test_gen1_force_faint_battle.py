@@ -58,6 +58,7 @@ def runtime(variant="red"):
     M = lua.eval(f'dofile("{mem}")')
     G = lua.eval(f'dofile("{game}")')
     M.initProfile(G, variant)
+    lua.globals().bus[M.PARTY_COUNT_ADDR] = 3  # valid slots 0..2 in this controlled party
     return lua, M
 
 
@@ -191,3 +192,47 @@ def test_archipelago_faints_the_active_battler_too():
     arm_battle(lua, "red", active_slot=0, battle_hp=57)
     assert M.forceFaint(0) is True
     assert peek16be(lua, BATTLE_MON_HP["red"]) == 0
+
+
+@pytest.mark.parametrize("variant", ["red", "blue", "yellow", "red_ap", "blue_ap"])
+@pytest.mark.parametrize("method", ["forceFaint", "forceExplode"])
+@pytest.mark.parametrize("count", [0, 7, 255])
+def test_invalid_party_count_never_writes_any_hp_move_or_control_byte(variant, method, count):
+    lua, memory = runtime(variant)
+    arm_battle(lua, "yellow" if variant == "yellow" else "red", active_slot=0)
+    lua.globals().bus[memory.PARTY_COUNT_ADDR] = count
+    before = dict(lua.globals().bus)
+    ok, reason = memory[method](0)
+    assert ok is False and reason
+    assert dict(lua.globals().bus) == before
+
+
+@pytest.mark.parametrize("variant", ["red", "blue", "yellow", "red_ap", "blue_ap"])
+@pytest.mark.parametrize("method", ["forceFaint", "forceExplode"])
+@pytest.mark.parametrize("slot", [None, -1, 3, 6, 1.5, "0"])
+def test_invalid_slot_never_writes_before_rejecting(variant, method, slot):
+    lua, memory = runtime(variant)
+    arm_battle(lua, "yellow" if variant == "yellow" else "red", active_slot=0)
+    before = dict(lua.globals().bus)
+    ok, reason = memory[method](slot)
+    assert ok is False and reason
+    assert dict(lua.globals().bus) == before
+
+
+@pytest.mark.parametrize("method", ["forceFaint", "forceExplode"])
+def test_invalid_active_index_cannot_cause_a_partial_write(method):
+    lua, memory = runtime("red")
+    arm_battle(lua, "red", active_slot=255)
+    before = dict(lua.globals().bus)
+    ok, reason = memory[method](0)
+    assert ok is False and reason
+    assert dict(lua.globals().bus) == before
+
+
+def test_explode_cannot_target_a_benched_slot():
+    lua, memory = runtime("red")
+    arm_battle(lua, "red", active_slot=0)
+    before = dict(lua.globals().bus)
+    ok, reason = memory.forceExplode(1)
+    assert ok is False and "active" in reason
+    assert dict(lua.globals().bus) == before

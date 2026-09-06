@@ -7,7 +7,8 @@ validated as a running game and `writes_enabled` was turned on.
 
 Gen 2's branch has carried a second test since its bring-up (`PLAYER_ID != 0`),
 and Gen 1's profile has had `PLAYER_ID_ADDR` all along without using it. `wPlayerID`
-is assigned when the save is created, so 0 is a reliable "no game loaded yet".
+is assigned from two unfiltered RNG bytes, so 0000 alone is not a pregame marker.
+A matching valid save or a nonempty sane party must not be rejected for that ID.
 
 The consequence this closes is not cosmetic. `send_hello` was the ONLY party-snapshot
 caller in the client without a count gate, and the server locks
@@ -110,3 +111,11 @@ def test_send_hello_gates_its_party_snapshot():
     assert re.search(r"<=\s*6", body), (
         "send_hello builds its party snapshot without a party-count gate; garbage at "
         "the title screen can poison the server's identity lock permanently")
+
+
+@pytest.mark.parametrize("variant", ["red", "yellow"])
+def test_zero_player_id_with_a_real_party_is_not_rejected_as_pregame(variant):
+    lua, M = runtime(variant)
+    lua.execute(f"bus[{PARTY_COUNT[variant]}] = 1; bus[{PARTY_SPECIES[variant]}] = 0x99")
+    ok, reason = M.validateROM()
+    assert ok is True, reason

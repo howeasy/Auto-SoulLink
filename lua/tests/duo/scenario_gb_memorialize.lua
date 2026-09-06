@@ -54,18 +54,29 @@ return function(ctx)
     -- rather than through the active-box path, so the active box count may not move
     -- — read the memorial box itself.
     local buried = ctx.wait_until(function()
+        if M.GENERATION == 1 then
+            if M.verifyMemorialKey and M.verifyMemorialKey(key0) then return key0 end
+            return nil
+        end
         local n = M.getMemorialBoxCount and M.getMemorialBoxCount() or nil
-        if n and n > 0 then return n end
-        return nil
-    end, 3600, "the corpse to appear in the memorial box")
+        if not n or n <= 0 then return nil end
+        -- Gen 2 box structures do not carry HP; retain that generation's own
+        -- reader, but require this exact identity rather than any nonempty box.
+        local matches = 0
+        for slot = 0, n - 1 do
+            local mon = M.readMemorialBoxSlot and M.readMemorialBoxSlot(slot)
+            if mon and mon.key == key0 then matches = matches + 1 end
+        end
+        return matches == 1 and key0 or nil
+    end, 3600, "the exact corpse key to appear uniquely in the memorial box")
     -- FATAL. This was a warning, which made the scenario pass whenever the corpse merely
     -- left the party — a condition depositMemorialMon's fall back to depositPartyMon also
     -- satisfies, i.e. the mon going to the ordinary box instead of the graveyard. "Buried in
     -- the graveyard box" is the rule under test; if we cannot confirm it, we have not tested it.
     if not buried then
-        return false, "corpse left the party but never appeared in the memorial box"
+        return false, "corpse left the party but its exact key was not verified in the memorial box"
     end
-    log(string.format("memorial box now holds %d", buried))
+    log("verified exact memorial key: " .. buried)
 
     log("dead pair memorialized")
     ctx.wait_partner_done(7200)

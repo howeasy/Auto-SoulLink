@@ -20,9 +20,11 @@ containing the "Google Drive" space break BizHawk's CLI parser); absolute paths 
 INSIDE Lua. Per-instance --config copies avoid the shared config.ini write race.
 """
 import argparse
+import hashlib
 import importlib
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -30,14 +32,98 @@ import sys
 import tempfile
 import time
 import urllib.request
+from pathlib import Path
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if REPO not in sys.path:
+    sys.path.insert(0, REPO)
 EMUHAWK = "E:/Howard/Bizhawk/EmuHawk.exe"
 BIZHAWK_CONFIG = "E:/Howard/Bizhawk/config.ini"
 SAVESTATE_DIR = "E:/Howard/Bizhawk/GBA/State"
 ROM_REL = "patch/build/slink_RR.gba"
 BUILD = os.path.join(REPO, "patch", "build")
 WT_FWD = REPO.replace("\\", "/")
+
+
+def _gen1_saved_identity_layout(variant):
+    """Derive the main-save identity/checksum ranges from pinned full-build symbols."""
+    targets = {"red": ("pokered", "pokered"), "blue": ("pokered", "pokeblue"),
+               "yellow": ("pokeyellow", "pokeyellow")}
+    if variant not in targets:
+        raise ValueError(f"Unverified Gen 1 save layout: {variant}")
+    source, target = targets[variant]
+    root = Path(REPO)
+    lock = json.loads((root / "data/pret_sources.lock.json").read_text(encoding="utf-8"))
+    evidence = json.loads((root / "data/pret_build_provenance.json").read_text(encoding="utf-8"))
+    record = evidence["roms"][target]
+    path = root / ".cache/pret" / source / f"{target}.sym"
+    raw = path.read_bytes()
+    if (record["source_commit"] != lock["sources"][source]["commit"]
+            or hashlib.sha256(raw).hexdigest() != record["raw_symbols_sha256"]):
+        raise RuntimeError(f"Canonical symbol provenance drift: {target}")
+    required = {"sGameData", "sGameDataEnd", "sMainDataCheckSum", "sMainData",
+                "wPlayerID", "wMainDataStart"}
+    symbols = {}
+    for line in raw.decode("utf-8").splitlines():
+        match = re.fullmatch(r"([0-9a-fA-F]+):([0-9a-fA-F]+)\s+(\S+)", line.strip())
+        if match and match[3] in required:
+            if match[3] in symbols:
+                raise RuntimeError(f"Duplicate canonical save symbol: {match[3]}")
+            symbols[match[3]] = (int(match[1], 16), int(match[2], 16))
+    if set(symbols) != required:
+        raise RuntimeError(f"Missing canonical save symbols: {sorted(required - set(symbols))}")
+    def offset(name):
+        bank, address = symbols[name]
+        if not (0 <= bank < 4 and 0xA000 <= address < 0xC000):
+            raise RuntimeError(f"Invalid canonical SRAM symbol: {name}")
+        return bank * 0x2000 + address - 0xA000
+    if any(not 0xC000 <= symbols[name][1] < 0xE000 for name in ("wPlayerID", "wMainDataStart")):
+        raise RuntimeError("Invalid canonical WRAM player identity symbols")
+    start, end, checksum = (offset(name) for name in ("sGameData", "sGameDataEnd", "sMainDataCheckSum"))
+    player_id = offset("sMainData") + symbols["wPlayerID"][1] - symbols["wMainDataStart"][1]
+    if not (0 <= start <= player_id < player_id + 2 <= end == checksum < 0x8000):
+        raise RuntimeError("Invalid canonical Gen 1 main-save geometry")
+    return {"player_id": player_id, "start": start, "end": end, "checksum": checksum}
+
+
+def _gen1_duo_b_player_id():
+    """Use the wrapper's actual mutation value; fail rather than maintain a second ID."""
+    source = (Path(REPO) / "lua/tests/duo/duo_gb_main.lua").read_text(encoding="utf-8")
+    values = re.findall(r"^\s*M\.write_u16_be\(M\.PLAYER_ID_ADDR,\s*(0x[0-9a-fA-F]+|[0-9]+)\s*\)",
+                        source, re.MULTILINE)
+    if len(values) != 1:
+        raise RuntimeError("Expected exactly one verified GB duo player-ID mutation")
+    value = int(values[0], 0)
+    if not 1 <= value <= 0xFFFF:
+        raise RuntimeError("Invalid GB duo player ID")
+    return value
+
+
+def prepare_gen1_duo_saved_identity(save_path, variant, instance_dir):
+    """Change only an isolated copied save's ID and covering checksum before boot.
+
+    The Lua wrapper changes B's live player/party identity before HELLO. Its backing
+    save must already identify that same synthetic player; otherwise correct runtime
+    cross-save protections must refuse memorial writes. Source fixtures are read-only.
+    """
+    path, isolated = Path(save_path).resolve(), Path(instance_dir).resolve()
+    build = Path(BUILD).resolve()
+    if not isolated.is_relative_to(build) or isolated == build or path.parent != isolated:
+        raise RuntimeError("Refusing to alter save outside the isolated duo directory")
+    layout = _gen1_saved_identity_layout(variant)
+    player_id = _gen1_duo_b_player_id()
+    data = bytearray(path.read_bytes())
+    if len(data) != 0x8000:
+        raise RuntimeError(f"Expected 32768-byte Gen 1 SaveRAM, got {len(data)}")
+    checksum = (~sum(data[layout["start"]:layout["end"]])) & 0xFF
+    if data[layout["checksum"]] != checksum:
+        raise RuntimeError("Invalid source fixture main-save checksum; refusing to repair it")
+    data[layout["player_id"]:layout["player_id"] + 2] = player_id.to_bytes(2, "big")
+    data[layout["checksum"]] = (~sum(data[layout["start"]:layout["end"]])) & 0xFF
+    temporary = path.with_suffix(path.suffix + ".identity.tmp")
+    temporary.write_bytes(data)
+    temporary.replace(path)
+    return player_id
 
 # Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout
 # (seconds), fillers (default True; or {"a":…,"b":…} — explode keeps B at ONE mon so the
@@ -168,6 +254,23 @@ def extract_marks(text, tag):
     return out
 
 
+def require_no_failed_result(scenario):
+    """Stop orchestration as soon as either real emulator has failed."""
+    for inst in ("a", "b"):
+        text = read_result(scenario, inst) or ""
+        failures = [line for line in text.splitlines() if line.startswith("RESULT: FAIL")]
+        if failures:
+            raise RuntimeError(f"{scenario} instance {inst}: {failures[-1]}")
+
+
+def confirmed_capture(text):
+    """Only the scenario's complete capture record is an identity receipt."""
+    keys = set(re.findall(r"^CAUGHT ([0-9A-F]{4}:[0-9A-F]{4}:[0-9A-F]{2})(?:\s|$)", text, re.M))
+    if len(keys) > 1:
+        raise RuntimeError("scenario reported multiple different first captures")
+    return next(iter(keys), None)
+
+
 # ── Games ────────────────────────────────────────────────────────────────────
 # The duo harness was written for Radical Red and hardcoded to it. Gen 1 differs in three
 # ways that matter, so the per-game bits live here rather than being threaded through:
@@ -212,6 +315,33 @@ GAMES = {
         "fixture": {"a": "yellow", "b": "red"},
         "scenario_prefix": "gen1_",
     },
+    "gen1_blue_yellow": {
+        "main": "lua/tests/duo/duo_gb_main.lua",
+        "game": "gen1_rby",
+        "play": "gen1_playthrough",
+        "rom": {"a": "patch/build/gen1_blue.gb", "b": "patch/build/gen1_yellow.gbc"},
+        "uses_savestate": False,
+        "fixture": {"a": "blue", "b": "yellow"},
+        "scenario_prefix": "gen1_",
+    },
+    "gen1_red_red": {
+        "main": "lua/tests/duo/duo_gb_main.lua",
+        "game": "gen1_rby",
+        "play": "gen1_playthrough",
+        "rom": {"a": "patch/build/gen1_red.gb", "b": "patch/build/gen1_red.gb"},
+        "uses_savestate": False,
+        "fixture": {"a": "red", "b": "red"},
+        "scenario_prefix": "gen1_",
+    },
+    "gen1_yellow_yellow": {
+        "main": "lua/tests/duo/duo_gb_main.lua",
+        "game": "gen1_rby",
+        "play": "gen1_playthrough",
+        "rom": {"a": "patch/build/gen1_yellow.gbc", "b": "patch/build/gen1_yellow.gbc"},
+        "uses_savestate": False,
+        "fixture": {"a": "yellow", "b": "yellow"},
+        "scenario_prefix": "gen1_",
+    },
     # THE SAME CARTRIDGE ON BOTH SIDES. There is one Crystal dump, so this pairing only
     # works because write_run_config gives each instance its own SaveRAM directory: BizHawk
     # names a save from its gamedb entry, keyed on ROM hash rather than the path launched,
@@ -246,7 +376,8 @@ class DuoRun:
         self.is_gen1 = self.game.startswith("gen1")
         self.tcp_port = free_port()
         self.http_port = free_port()
-        self.data_dir = tempfile.mkdtemp(prefix=f"slink_duo_{scenario}_")
+        os.makedirs(BUILD, exist_ok=True)
+        self.data_dir = tempfile.mkdtemp(prefix=f"slink_duo_{scenario}_", dir=BUILD)
         self.server = None
         self.emus = []
         self.go_files = {inst: os.path.join(BUILD, f"duo_go_{scenario}_{inst}.txt")
@@ -254,6 +385,10 @@ class DuoRun:
 
     # ── lifecycle ────────────────────────────────────────────────────────────
     def start_server(self):
+        if self.is_gen1:
+            from server.gen1_admission import clean_contract, write_contract
+            write_contract(Path(self.data_dir) / "rom_contract.json", clean_contract({
+                player: Path(REPO) / path for player, path in self.gcfg["rom"].items()}))
         cmd = [sys.executable, "-m", "server.server",
                "--host", "127.0.0.1",
                "--port", str(self.tcp_port),
@@ -339,8 +474,13 @@ class DuoRun:
                 # write_run_config redirected to, above. Seeding the shared directory instead
                 # would leave the emulator booting an empty save from the redirected one.
                 from run_gb_gate import seed_saveram
-                seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"),
-                             dest_dir=self._saveram_dir(inst))
+                isolated = Path(self._saveram_dir(inst)).resolve()
+                if not isolated.is_relative_to(Path(BUILD).resolve()):
+                    raise RuntimeError("Refusing to seed saves outside this worktree build directory")
+                seeded = seed_saveram(self.gcfg["fixture"][inst], self.cfg.get("target", "town"),
+                                      dest_dir=str(isolated))
+                if self.is_gen1 and inst == "b":
+                    prepare_gen1_duo_saved_identity(seeded, self.gcfg["fixture"][inst], isolated)
             with open(stub, "w") as f:
                 f.write('SLINK_HOST = "127.0.0.1"\n')
                 f.write(f"SLINK_PORT = {self.tcp_port}\n")
@@ -405,13 +545,10 @@ class DuoRun:
         covers the rule SLink exists for.
         """
         def caught(inst):
-            txt = read_result(self.scenario, inst) or ""
-            for line in txt.splitlines():
-                if "CAUGHT " in line:
-                    return line.split("CAUGHT ", 1)[1].split()[0]
-            return None
+            return confirmed_capture(read_result(self.scenario, inst) or "")
 
         def both_caught():
+            require_no_failed_result(self.scenario)
             a, b = caught("a"), caught("b")
             return (a, b) if a and b else None
 
@@ -420,6 +557,7 @@ class DuoRun:
         print(f"[duo] real captures: a={a_key} b={b_key}")
 
         def linked():
+            require_no_failed_result(self.scenario)
             st = self._status() or {}
             for link in (st.get("links") or []):
                 keys = {link.get("a_key"), link.get("b_key")}
@@ -434,6 +572,7 @@ class DuoRun:
         if area in (None, "", "duo"):
             raise RuntimeError(f"link formed but area_id is {area!r} — expected a real "
                                f"encounter area resolved from the map, not a harness value")
+        self.go({"a": ["LINK_VERIFIED " + a_key], "b": ["LINK_VERIFIED " + b_key]})
 
     def go(self, lines_by_inst=None):
         """Write the per-instance go-files; lines_by_inst = {"a": [...], "b": [...]} or None."""
@@ -621,6 +760,7 @@ class DuoRun:
 
     def wait_results(self):
         def both():
+            require_no_failed_result(self.scenario)
             ra = read_result(self.scenario, "a")
             rb = read_result(self.scenario, "b")
             if ra and "RESULT:" in ra and rb and "RESULT:" in rb:
@@ -646,7 +786,10 @@ class DuoRun:
             if os.path.exists(gf):
                 os.remove(gf)
         if passed and not self.args.keep_data:
-            shutil.rmtree(self.data_dir, ignore_errors=True)
+            data_dir, build_dir = Path(self.data_dir).resolve(), Path(BUILD).resolve()
+            if data_dir == build_dir or not data_dir.is_relative_to(build_dir):
+                raise RuntimeError("Refusing to remove duo data outside the worktree build directory")
+            shutil.rmtree(data_dir, ignore_errors=True)
         else:
             print(f"[duo] data dir kept: {self.data_dir}")
 
@@ -769,7 +912,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--game", default="gen3_rr", choices=sorted(GAMES),
                     help="gen3_rr (Radical Red, default), gen1 (Red as A, Blue as B), "
-                         "gen1_yellow (Yellow as A, Red as B) or gen2 (Crystal both sides)")
+                         "gen1_yellow (Yellow/Red), gen1_blue_yellow (Blue/Yellow), "
+                         "gen1_red_red (Red/Red), gen1_yellow_yellow (Yellow/Yellow) "
+                         "or gen2 (Crystal both sides)")
     ap.add_argument("--scenario", default="faint",
                     choices=list(SCENARIOS) + ["all"])
     ap.add_argument("--keep-alive", action="store_true",

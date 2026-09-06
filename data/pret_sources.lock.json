@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "rgbds_version": "v1.0.1",
+  "sources": {
+    "pokered": {"url": "https://github.com/pret/pokered.git", "commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9"},
+    "pokeyellow": {"url": "https://github.com/pret/pokeyellow.git", "commit": "0a0851546ff65f65c4bb2af2b95e279e709a8653"},
+    "alchav_pokered": {"url": "https://github.com/Alchav/pokered.git", "commit": "2b02504c9b6cf83269ae4113b7d011a1ca580aeb"},
+    "pokecrystal": {"url": "https://github.com/pret/pokecrystal.git", "commit": "3438c7003a57fa2987fcb223d14b660761b33c64"},
+    "pokegold": {"url": "https://github.com/pret/pokegold.git", "commit": "e78abb8382a734fe325a16136fd779dbea9b0d47"}
+  },
+  "clean_roms": {
+    "pokered": {"source": "pokered", "filename": "Pokemon - Red Version (USA, Europe) (SGB Enhanced).gb", "sha1": "ea9bcae617fdf159b045185467ae58b2e4a48b9a"},
+    "pokeblue": {"source": "pokered", "filename": "Pokemon - Blue Version (USA, Europe) (SGB Enhanced).gb", "sha1": "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2"},
+    "pokeyellow": {"source": "pokeyellow", "filename": "Pokemon - Yellow Version (USA, Europe).gbc", "sha1": "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1"}
+  }
+}

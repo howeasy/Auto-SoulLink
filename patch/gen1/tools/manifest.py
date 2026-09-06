@@ -144,6 +144,55 @@ MENU_PATCHES = [
 # usable span stops at 0x00FF and this range exists to make that non-negotiable.
 PROTECTED_RANGE = (0x0100, 0x014F)
 
+# Each occupied-ROM edit is anchored to a canonical pret label, then checked against
+# its expected instruction bytes. Free-space reservations are checked separately.
+SOURCE_ANCHORS = {
+    HOOK_SITE: ("VBlank", 0x70),
+    0x7114: ("DrawStartMenu", 9),
+    0x711D: ("DrawStartMenu", 18),
+    0x714D: ("DrawStartMenu", 66),
+    0x7157: ("DrawStartMenu", 76),
+    0x7183: ("DrawStartMenu", 120),
+    0x2B0C: ("RedisplayStartMenu", 45),
+    0x2B25: ("RedisplayStartMenu", 70),
+    0x2B6B: ("RedisplayStartMenu", 140),
+}
+FREE_SPANS = ((0x00BE, 0x0100), (0x3FA6, 0x4000))  # exclusive ends
+
+
+def hook_replacement() -> bytes:
+    value = bytearray(HOOK_ORIGINAL)
+    value[1] = HOOK_BANK
+    value[3:5] = HOOK_TARGET.to_bytes(2, "little")
+    return bytes(value)
+
+
+def validated_spans(payload: bytes, rom_size: int = 0x100000) -> list[tuple]:
+    """Validate the complete write set before either delivery path changes a byte."""
+    if not isinstance(payload, bytes) or not 0 < len(payload) <= BANK_SIZE:
+        raise ValueError("payload must contain 1..16384 bytes")
+    if INJECT_OFFSET != HOOK_BANK * BANK_SIZE or HOOK_TARGET != 0x4000:
+        raise ValueError("payload bank/address disagree with its linked destination")
+    spans = [*MENU_PATCHES,
+             (HOOK_SITE, HOOK_ORIGINAL, hook_replacement(), "VBlank service hook"),
+             (INJECT_OFFSET, bytes(BANK_SIZE), payload.ljust(BANK_SIZE, b"\x00"),
+              "assembled companion bank")]
+    previous_end = 0
+    for off, before, after, why in sorted(spans):
+        if type(off) is not int or off < 0 or not before or len(before) != len(after):
+            raise ValueError(f"invalid or resizing patch span: {why}")
+        end = off + len(after)
+        if end > rom_size:
+            raise ValueError(f"patch span outside ROM: {why}")
+        if off < previous_end:
+            raise ValueError(f"overlapping patch span: {why}")
+        if off <= PROTECTED_RANGE[1] and end > PROTECTED_RANGE[0]:
+            raise ValueError(f"patch span overlaps protected cartridge header: {why}")
+        if off // BANK_SIZE != (end - 1) // BANK_SIZE:
+            raise ValueError(f"patch span crosses a ROM bank: {why}")
+        previous_end = end
+    return spans
+
 
 ROMS = {
     "red": ("Pokemon - Red Version (USA, Europe) (SGB Enhanced).gb",
@@ -151,5 +200,4 @@ ROMS = {
     "blue": ("Pokemon - Blue Version (USA, Europe) (SGB Enhanced).gb",
              "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2"),
 }
-
 

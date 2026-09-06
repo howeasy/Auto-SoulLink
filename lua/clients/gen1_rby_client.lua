@@ -67,6 +67,17 @@ package.path = _src .. "?.lua;"
 -- Force fresh module loads on script restart
 package.loaded["memory_gb"]            = nil
 package.loaded["connector"]            = nil
+package.loaded["json_codec"]           = nil
+package.loaded["gen1_party_codec"]     = nil
+package.loaded["gen1_party_codec_data"] = nil
+package.loaded["gen1_write_safety"]    = nil
+package.loaded["gen1_commands"]        = nil
+package.loaded["gen1_session"]         = nil
+package.loaded["client_session"]       = nil
+package.loaded["platform_identity"]    = nil
+package.loaded["command_validation"]   = nil
+package.loaded["wire_protocol"]        = nil
+package.loaded["gen1_admission_profiles"] = nil
 package.loaded["socket"]               = nil
 package.loaded["hud"]                  = nil
 package.loaded["games.gen1_rby"]       = nil
@@ -75,6 +86,10 @@ package.loaded["gen1_rby_areas"]       = nil
 
 local M   = require("memory_gb")
 local C   = require("connector")
+local JSON = require("json_codec")
+local Commands = require("gen1_commands")
+local Session = require("gen1_session")
+local Wire = require("wire_protocol")
 local HUD = require("hud")
 local G   = require("games.gen1_rby")
 local TRAINERS = require("games.gen1_rby_trainers")
@@ -98,7 +113,7 @@ local function json_encode(val)
         return '"' .. val:gsub('[\\"\n\r\t]', _json_esc) .. '"'
     elseif t == "table" then
         local n = #val
-        local is_arr = (n > 0)
+        local is_arr = (n > 0 or JSON.kind(val) == "array")
         if is_arr then
             local cnt = 0
             for _ in pairs(val) do cnt = cnt + 1; if cnt > n then is_arr = false; break end end
@@ -123,76 +138,11 @@ end
 -- be long after the rows arrived, so they are kept rather than drawn on receipt.
 local panel_rows = nil
 
-local function parse_command_list(raw)
-    local cmds = {}
-    local arr = raw:match('"commands"%s*:%s*(%b[])')
-    if not arr then return cmds end
-    for obj in arr:gmatch('%b{}') do
-        local cmd     = obj:match('"cmd"%s*:%s*"([^"]+)"')
-        local key     = obj:match('"key"%s*:%s*"([^"]+)"')
-        local text    = obj:match('"text"%s*:%s*"([^"]*)"')
-        -- link_panel rows: a flat JSON array of strings. A naive quoted-string scrape is
-        -- safe here because the compact rows the server builds for a 20-column screen carry
-        -- only letters, digits, spaces and '-' — never a quote or a backslash.
-        local rows = nil
-        local rowsj = obj:match('"rows"%s*:%s*(%b[])')
-        if rowsj then
-            rows = {}
-            for r_ in rowsj:gmatch('"([^"]*)"') do rows[#rows + 1] = r_ end
-        end
-        local r       = tonumber(obj:match('"r"%s*:%s*(%d+)'))
-        local g       = tonumber(obj:match('"g"%s*:%s*(%d+)'))
-        local b       = tonumber(obj:match('"b"%s*:%s*(%d+)'))
-        local frames  = tonumber(obj:match('"frames"%s*:%s*(%d+)'))
-        local fb      = obj:match('"fb"%s*:%s*"([^"]*)"')   -- msgbox fallback style (prompt/hud)
-        -- Numeric Gen 3 SE id (the server emits `"sound": 25`), mapped to a semantic
-        -- event name by playSfxFromGen3Id. Unquoted, so match digits — not a string.
-        local sound   = tonumber(obj:match('"sound"%s*:%s*(%d+)'))
-        -- Attached to force_faint by the server so the toast can name a mon we have
-        -- never held (state.py queues it in four places).
-        local nickname = obj:match('"nickname"%s*:%s*"([^"]*)"')
-        -- Cached party-only stats attached to party_mon. Gen 1's box struct drops level,
-        -- maxHP and the computed stats, so without these a withdrawn mon comes back
-        -- with maxHP equal to whatever HP it had when deposited.
-        local stats = nil
-        local sj = obj:match('"stats"%s*:%s*(%b{})')
-        if sj then
-            stats = {
-                level   = tonumber(sj:match('"level"%s*:%s*(%d+)')),
-                maxHP   = tonumber(sj:match('"maxHP"%s*:%s*(%d+)')),
-                attack  = tonumber(sj:match('"attack"%s*:%s*(%d+)')),
-                defense = tonumber(sj:match('"defense"%s*:%s*(%d+)')),
-                speed   = tonumber(sj:match('"speed"%s*:%s*(%d+)')),
-                spAtk   = tonumber(sj:match('"spAtk"%s*:%s*(%d+)')),
-                spDef   = tonumber(sj:match('"spDef"%s*:%s*(%d+)')),
-            }
-        end
-        -- replace_rival_team carries the partner's team as an array of hex blobs.
-        local blobs_hex = nil
-        local blobs_raw = obj:match('"blobs_hex"%s*:%s*(%b[])')
-        if blobs_raw then
-            blobs_hex = {}
-            for h in blobs_raw:gmatch('"([0-9A-Fa-f]*)"') do blobs_hex[#blobs_hex + 1] = h end
-        end
-        local area_id = obj:match('"area_id"%s*:%s*"([^"]*)"')
-        local areas   = nil
-        local areas_raw = obj:match('"areas"%s*:%s*(%b[])')
-        if areas_raw then
-            areas = {}
-            for a in areas_raw:gmatch('"([^"]+)"') do
-                areas[#areas + 1] = a
-            end
-        end
-        if cmd then
-            cmds[#cmds + 1] = {
-                cmd = cmd, key = key, text = text, fb = fb, sound = sound,
-                nickname = nickname, stats = stats, blobs_hex = blobs_hex,
-                r = r, g = g, b = b, frames = frames,
-                area_id = area_id, areas = areas, rows = rows,
-            }
-        end
-    end
-    return cmds
+local function parse_command_list(raw, with_packet)
+    local commands, error, packet = Wire.parse_commands(raw)
+    if error then return commands, error end
+    if with_packet then return commands, nil, packet end
+    return commands
 end
 
 -- ── ROM profile detection and validation ─────────────────────────────────────
@@ -202,8 +152,11 @@ if not variant then
 end
 M.initProfile(G, variant)
 local rom_type        = G.rom_type_for_variant(variant)
+-- AP retains its existing protocol. Vanilla RBY must complete cartridge admission.
+local session = (variant == "red" or variant == "blue" or variant == "yellow")
+                and Session.new(variant, PLAYER_ID) or nil
 local val_ok, val_err = M.validateROM()
-local writes_enabled  = val_ok
+local writes_enabled  = val_ok and not session
 
 -- THE GATE HAS TO BE REVOCABLE, not just deferred.
 -- `writes_enabled` was only ever flipped ON: nothing set it back. Soft-reset the console
@@ -248,15 +201,30 @@ local pending_labels = {}
 local function send(evt, label, is_auto)
     if not C.connected() then
         console.log("[SLink-RBY] NOT CONNECTED — dropped: " .. (label or evt.event))
-        return
+        return false, "not connected"
     end
-    seq = seq + 1; evt.seq = seq; evt.player = PLAYER_ID
-    C.send(json_encode(evt))
+    local next_seq = seq + 1
+    evt.seq = next_seq; evt.player = PLAYER_ID
+    if #pending_labels >= 128 then return false, "response-label limit" end
+    if session then
+        local ready, error = session:decorate(evt)
+        if not ready then return false, error end
+        next_seq = evt.seq
+    end
+    local queued, reason = C.send(json_encode(evt))
+    if not queued then
+        console.log("[SLink-RBY] NOT QUEUED: " .. tostring(reason))
+        hud_show("X Network send refused", 255, 80, 80, 240)
+        return false, reason
+    end
+    seq = next_seq
+    if session then session:queued(evt) end
     local prefix = is_auto and "AUTO" or "MANUAL"
     pending_labels[#pending_labels + 1] = prefix .. " " .. seq .. ": " .. (label or evt.event)
     if label ~= "tick" then
         console.log(fmt("[SLink-RBY] [→] seq=%d  %s: %s", seq, prefix, label or evt.event))
     end
+    return true
 end
 
 -- ── Command dispatcher ────────────────────────────────────────────────────────
@@ -272,8 +240,32 @@ local rebuild_active        = false  -- true between rebuild_start and rebuild_d
 local pending_sync_cmds = {}
 local sync_written_keys = {}  -- keys recently written to avoid re-triggering events
 
+local function faint_party_key(key)
+    if not writes_enabled then return false, "writes disabled" end
+    local valid, reason = M.validatePartySlot(0)
+    if not valid then return false, reason end
+    for slot = 0, M.getPartyCount() - 1 do
+        local mon = M.readPartySlot(slot)
+        if mon and mon.key == key then
+            local _mirrored, failure = M.forceFaint(slot)
+            if failure then return false, failure end
+            return true, slot
+        end
+    end
+    return false, "key is not in the party"
+end
+
 local function dispatch_commands(cmds)
     for _, c in ipairs(cmds) do
+        local checked, valid, why = pcall(Commands.validate, c, G.INDEX_TO_NATDEX, M.validatePartyStats)
+        if not checked then
+            console.log("[SLink-RBY] command validation ERROR: " .. tostring(valid))
+            valid, why = false, "command validation failed"
+        end
+        if not valid then
+            send(Commands.nack(c, why, G.INDEX_TO_NATDEX), "command refused", true)
+            goto next_command
+        end
         -- ONE MALFORMED COMMAND MUST NOT TAKE OUT THE BATCH. Gen 1 has more raise
         -- surface here than Gen 2 (gen2_crystal_client.lua:255 wraps the same loop):
         -- it also handles force_explode and replace_rival_team, and the latter runs
@@ -282,26 +274,19 @@ local function dispatch_commands(cmds)
         -- batch AND the rest of the frame.
         local cmd_ok, cmd_err = pcall(function()
         if c.cmd == "force_faint" and c.key then
+            local applied, slot = faint_party_key(c.key)
+            if not applied then
+                send(Commands.nack(c, slot, G.INDEX_TO_NATDEX), "faint refused", true)
+                return
+            end
             -- Seed the nickname cache from the server, which attaches it precisely so the
             -- toast can name a mon we have never held. Without this nick_label falls back
             -- to the raw key.
             if c.nickname and c.nickname ~= "" then
                 nick_cache[c.key] = c.nickname
             end
-            if writes_enabled then
-                local count = M.getPartyCount()
-                for slot = 0, count - 1 do
-                    local mon = M.readPartySlot(slot)
-                    if mon and mon.key == c.key then
-                        M.forceFaint(slot)
-                        console.log(fmt("[SLink-RBY]   ↳ DISPATCHED force_faint slot=%d key=%s", slot, c.key))
-                        hud_show("!! " .. nick_label(c.key) .. " DIED!", 255, 80, 80, 360)
-                        break
-                    end
-                end
-            else
-                console.log("[SLink-RBY]   ↳ force_faint skipped (writes off) key=" .. tostring(c.key))
-            end
+            console.log(fmt("[SLink-RBY]   ↳ DISPATCHED force_faint slot=%d key=%s", slot, c.key))
+            hud_show("!! " .. nick_label(c.key) .. " DIED!", 255, 80, 80, 360)
         elseif c.cmd == "force_explode" and c.key then
             -- Explode Mode: coerce the surviving partner into Explosion instead of the
             -- deferred force_faint. Gen 1 needs no ROM patch — the engine reads the chosen
@@ -309,6 +294,11 @@ local function dispatch_commands(cmds)
             -- benched mon falls back to the plain faint so the rule still lands.
             local done = false
             if writes_enabled and M.isInBattle() then
+                local valid, reason = M.validatePartySlot(0)
+                if not valid then
+                    send(Commands.nack(c, reason, G.INDEX_TO_NATDEX), "explode refused", true)
+                    return
+                end
                 local count = M.getPartyCount()
                 -- wPlayerMonNumber holds the party slot that is actually out; defaulting to
                 -- slot 0 would arm the wrong mon whenever the player has switched.
@@ -317,7 +307,11 @@ local function dispatch_commands(cmds)
                     local mon = M.readPartySlot(slot)
                     if mon and mon.key == c.key then
                         if slot == active then
-                            local ok = M.forceExplode(slot)
+                            local ok, why = M.forceExplode(slot)
+                            if not ok and why then
+                                send(Commands.nack(c, why, G.INDEX_TO_NATDEX), "explode refused", true)
+                                return
+                            end
                             if ok then
                                 done = true
                                 console.log("[SLink-RBY]   ↳ force_explode armed: " .. c.key:sub(1, 8))
@@ -330,43 +324,49 @@ local function dispatch_commands(cmds)
             end
             if not done then
                 -- Benched, not in battle, or writes off — fall back to the normal faint.
-                if writes_enabled then
-                    local count = M.getPartyCount()
-                    for slot = 0, count - 1 do
-                        local mon = M.readPartySlot(slot)
-                        if mon and mon.key == c.key then
-                            M.forceFaint(slot)
-                            hud_show("!! " .. nick_label(c.key) .. " DIED!", 255, 80, 80, 360)
-                            break
-                        end
-                    end
+                local applied, reason = faint_party_key(c.key)
+                if not applied then
+                    send(Commands.nack(c, reason, G.INDEX_TO_NATDEX), "explode fallback refused", true)
+                    return
                 end
+                hud_show("!! " .. nick_label(c.key) .. " DIED!", 255, 80, 80, 360)
                 console.log("[SLink-RBY]   ↳ force_explode fell back to force_faint")
             end
-        elseif c.cmd == "replace_rival_team" and c.blobs_hex then
+        elseif c.cmd == "replace_rival_team" then
             -- Rival Team Swap: byte-copy the partner's live party over the rival's.
             -- Gen 1's enemy party is plaintext at a fixed address, so unlike Gen 3 this
             -- needs no companion patch.
             local ok, err = false, "writes disabled"
             if writes_enabled then
                 local blobs = {}
-                for _, h in ipairs(c.blobs_hex) do
-                    local b = M.hexToBytes and M.hexToBytes(h)
-                    if b then blobs[#blobs + 1] = b end
+                local valid = type(c.blobs_hex) == "table" and #c.blobs_hex >= 1 and #c.blobs_hex <= 6
+                if valid then
+                    local count = 0
+                    for index, hex in pairs(c.blobs_hex) do
+                        if type(index) ~= "number" or index % 1 ~= 0 or index < 1 or index > #c.blobs_hex
+                            or type(hex) ~= "string" or #hex ~= 132 or not hex:match("^%x+$") then
+                            valid = false
+                            break
+                        end
+                        count = count + 1
+                        blobs[index] = M.hexToBytes and M.hexToBytes(hex)
+                        if not blobs[index] or #blobs[index] ~= 66 then valid = false; break end
+                    end
+                    if count ~= #c.blobs_hex then valid = false end
                 end
-                if #blobs > 0 then
+                if valid then
                     ok, err = M.writeEnemyParty(blobs)
                 else
-                    ok, err = false, "no decodable blobs"
+                    ok, err = false, "invalid complete rival payload; nothing written"
                 end
             end
             if ok then
                 console.log(fmt("[SLink-RBY]   ↳ replace_rival_team OK (%s mons)", tostring(err)))
                 hud_show("** RIVAL TEAM SWAP **", 255, 120, 255, 300)
-                send({event = "rival_team_replaced", n = err}, "rival_team_replaced", true)
+                send({event = "rival_team_replaced", n = err, ack = "ACK"}, "rival_team_replaced", true)
             else
                 console.log("[SLink-RBY]   ↳ replace_rival_team FAIL: " .. tostring(err))
-                send({event = "rival_team_replaced", error = tostring(err)},
+                send({event = "rival_team_replaced", error = tostring(err), ack = "NACK"},
                      "rival_team_replaced", true)
             end
         elseif c.cmd == "hud_show" and c.text then
@@ -472,7 +472,9 @@ local function dispatch_commands(cmds)
         if not cmd_ok then
             console.log("[SLink-RBY]   ↳ cmd ERROR (" .. tostring(c.cmd) .. "): "
                         .. tostring(cmd_err))
+            send(Commands.nack(c, "command handler failed", G.INDEX_TO_NATDEX), "command failed", true)
         end
+        ::next_command::
     end
 end
 
@@ -717,6 +719,7 @@ local function send_hello()
     -- save), so the guard is on the count being IMPOSSIBLE, not on it being zero.
     local raw_count = M.getPartyCount()
     local snap = (raw_count >= 0 and raw_count <= 6) and build_party_snapshot() or {}
+    if session and #snap == 0 then snap = JSON.decode("[]") end
     local cur_in_battle = M.isInBattle()
 
     local evt = {
@@ -731,6 +734,7 @@ local function send_hello()
         -- :5627 for /stream/badges-*. Sending readBadgeCount() here meant three badges
         -- lit Boulder+Cascade and eight lit only Rainbow, wrong on stream all run.
         badges = M.readBadgeMask(),
+        badge_count = M.readBadgeCount(),
         in_battle = cur_in_battle,
         is_trainer_battle = M.isTrainerBattle(),
         party = snap,
@@ -829,6 +833,7 @@ local function send_tick()
         -- :5627 for /stream/badges-*. Sending readBadgeCount() here meant three badges
         -- lit Boulder+Cascade and eight lit only Rainbow, wrong on stream all run.
         badges = M.readBadgeMask(),
+        badge_count = M.readBadgeCount(),
         has_pokeballs = nuzlocke_active,
         in_battle = in_battle,
         is_trainer_battle = not battle_is_wild and in_battle,
@@ -1365,6 +1370,7 @@ local function redetect_patch()
 end
 
 local function service_panel()
+    if session and (session.state ~= "admitted" or not C.connected() or not writes_enabled) then return end
     -- ASK WHETHER THIS CARTRIDGE HAS A PANEL AT ALL, not just whether the byte says AWAIT.
     -- On an unpatched ROM $DEEB is ordinary unallocated WRAM; if it ever happened to read 1
     -- this would paint 360 tiles over whatever the player was looking at.
@@ -1377,9 +1383,92 @@ local function service_panel()
     M.panelStage(panel_rows)
 end
 
+local function revoke_session(reason)
+    session:revoke(reason)
+    writes_enabled, initialized = false, false
+    pending_sync_cmds, pending_labels = {}, {}
+    panel_rows, panel_supported, patch_abi = nil, nil, nil
+    console.log("[SLink-RBY] Admission pending: " .. tostring(reason))
+end
+
+local function session_identity_valid()
+    local id, name = M.readPlayerId(), M.readPlayerName()
+    if id ~= session.save_id or name ~= session.save_name then return false end
+    -- InitPlayerData may assign 0000 before the starter exists. This identity was
+    -- established at a verified live overworld checkpoint; an unchanged name/ID
+    -- must survive the subsequent starter script. An all-zero title never binds it.
+    return M.validateROM() or (id == 0 and M.getPartyCount() == 0 and name ~= "")
+end
+
+local function session_network()
+    -- Recheck read-only identity before flushing bytes or applying responses. Reset,
+    -- ROM replacement and a different save revoke the old admission immediately.
+    if session.report then
+        local hash = gameinfo and gameinfo.getromhash and gameinfo.getromhash():lower()
+        if hash ~= session.report.final_rom_sha1 or not session_identity_valid() then
+            revoke_session("ROM or save changed; waiting for a verified overworld")
+            C.disconnect()
+        end
+    end
+    C.pump()
+    local connected = C.connected()
+    if connected ~= was_connected then
+        revoke_session(connected and "connected; waiting for a verified overworld" or "disconnected")
+        was_connected = connected
+    end
+    if connected and session.state == "contract_pending" and M.isPartyWriteSafe()
+        and M.readPlayerName() ~= "" then
+        local ready, reason = session:begin()
+        if ready then
+            session.save_id = M.readPlayerId()
+            session.save_name = M.readPlayerName()
+            send_hello()
+        else
+            session.state = "rejected"
+            hud_show("X " .. tostring(reason), 255, 80, 80, 600)
+        end
+    end
+    while true do
+        local line = C.receive()
+        if not line then break end
+        local commands, parse_error, packet = parse_command_list(line, true)
+        local was_admitted = session.state == "admitted"
+        if not parse_error then commands, parse_error = session:receive(packet) end
+        if parse_error then
+            revoke_session(parse_error)
+            session.state = "rejected"
+            hud_show("X " .. tostring(parse_error), 255, 80, 80, 600)
+            C.disconnect()
+            break
+        end
+        table.remove(pending_labels, 1)
+        if session.state == "admitted" and not was_admitted then
+            -- Observation baselines are established only after admission. The server
+            -- has already received the full HELLO snapshot for reconciliation.
+            prev_party, all_known_keys = {}, {}
+            local count = M.getPartyCount()
+            if count >= 0 and count <= 6 then
+                for slot = 0, count - 1 do
+                    local mon = M.readPartySlot(slot)
+                    if mon then prev_party[slot] = mon; all_known_keys[mon.key] = true end
+                end
+            end
+            seed_all_boxes()
+            last_map_id = M.getCurrentMap(); last_area_id = G.resolve_area(last_map_id)
+            nuzlocke_active = nuzlocke_active or M.hasPokeballs()
+            writes_enabled, initialized = true, true
+            console.log("[SLink-RBY] Cartridge admitted: " .. session.report.variant)
+        end
+        dispatch_commands(commands or {})
+    end
+end
+
 local function on_frame()
     frame_count = frame_count + 1
-    service_panel()
+    if session then
+        session_network()
+        if session.state ~= "admitted" or not C.connected() then return end
+    else
 
     -- Re-validate writes if previously disabled (save may load after script start)
     if not writes_enabled then
@@ -1466,7 +1555,11 @@ local function on_frame()
         local line = C.receive()
         if not line then break end
         local label = table.remove(pending_labels, 1) or "?"
-        local cmds = parse_command_list(line)
+        local cmds, parse_error = parse_command_list(line)
+        if parse_error then
+            console.log("[SLink-RBY] invalid response; no commands applied: " .. parse_error)
+            hud_show("X Invalid response", 255, 80, 80, 240)
+        end
         local resp_cmd = #cmds > 0 and cmds[1].cmd or "noop"
         if not (label:find("tick") and resp_cmd == "noop") then
             console.log("[SLink-RBY] [←] " .. label .. " → " .. resp_cmd)
@@ -1474,7 +1567,9 @@ local function on_frame()
         dispatch_commands(cmds)
     end
 
+    end -- legacy AP connection/validation path
     if not initialized then return end
+    service_panel()
 
     -- 4. Read current game state
     local cur_map = M.getCurrentMap()
@@ -1599,7 +1694,7 @@ local function on_frame()
     -- NACK into the void, and be removed from the queue -- the log-and-drop shape these
     -- NACKs exist to avoid, narrowed to the reconnect window. The commands are already
     -- queued; they simply wait.
-    if writes_enabled and box_safe and C.connected() and M.isInOverworld() and #pending_sync_cmds > 0 then
+    if writes_enabled and box_safe and C.connected() and #pending_sync_cmds > 0 and M.isPartyWriteSafe() then
         local cmd = pending_sync_cmds[1]
         local handled = true
         local ok, err
@@ -1783,7 +1878,7 @@ local function on_frame()
             end
             ::party_mon_done::
         elseif cmd.cmd == "memorialize" then
-            -- Memorialize: deposit dead mon to current box (Gen 1 graveyard)
+            -- Memorialize: move a dead mon into the dedicated graveyard.
             local count = M.getPartyCount()
             local found_slot = nil
             for s = 0, count - 1 do
@@ -1794,11 +1889,18 @@ local function on_frame()
                 end
             end
             if not found_slot then
-                -- Not in party — already deposited or gone. Treat as success.
-                console.log("[SLink-RBY]   ↳ memorialize: " .. cmd.key:sub(1, 8) .. " not in party (OK)")
-                send({event = "memorialize_done", key = cmd.key},
-                     "memorialize_done:" .. cmd.key:sub(1, 8), true)
-                sync_written_keys[cmd.key] = true
+                -- An ordinary box, missing mon or key collision is not a grave.
+                local verified, reason = M.verifyMemorialKey(cmd.key)
+                if verified then
+                    console.log("[SLink-RBY]   ↳ memorialize: exact grave verified for " .. cmd.key:sub(1, 8))
+                    send({event = "memorialize_done", key = cmd.key},
+                         "memorialize_done:" .. cmd.key:sub(1, 8), true)
+                    sync_written_keys[cmd.key] = true
+                else
+                    console.log("[SLink-RBY]   ↳ memorialize not verified: " .. (reason or "unknown"))
+                    send({event = "memorialize_failed", key = cmd.key, reason = reason or "memorial proof unavailable"},
+                         "memorialize_failed:" .. cmd.key:sub(1, 8), true)
+                end
             elseif count <= 1 then
                 -- Can't deposit last mon — report failure
                 console.log("[SLink-RBY]   ↳ memorialize skipped: last mon in party")
@@ -1806,10 +1908,8 @@ local function on_frame()
                 send({event = "memorialize_failed", key = cmd.key, reason = "last_mon"},
                      "memorialize_failed:" .. cmd.key:sub(1, 8), true)
             else
-                -- Memorialize = deposit to dedicated memorial box (Gen 1: Box 12, CartRAM
-                -- offset 0x75EA). depositMemorialMon falls back to depositPartyMon if the
-                -- memorial box is full or unconfigured.
                 ok, err = M.depositMemorialMon(found_slot)
+                if ok then ok, err = M.verifyMemorialKey(cmd.key) end
                 if ok then
                     sync_written_keys[cmd.key] = true
                     console.log("[SLink-RBY]   ↳ memorialize OK: " .. cmd.key:sub(1, 8))
@@ -1871,17 +1971,14 @@ local function on_frame()
         end
     end
 
-    -- 9c. safe — the first genuinely-overworld frame after a battle ends. The server
-    -- treats it as a tick that also means "deferred writes can run now", so it waits for
-    -- isInOverworld rather than just "not in battle": the post-battle frames still have a
-    -- text box up and a script holding the joypad.
-    if pending_safe and M.isInOverworld() and post_battle_frames == 0 then
-        pending_safe = false
+    -- 9c. safe uses the same verified execution checkpoint as deferred writes.
+    -- Keep it pending during disconnection so recovery does not lose the notice.
+    if pending_safe and C.connected() and post_battle_frames == 0 and M.isPartyWriteSafe() then
         if C.connected() then
             local evt = {event = "safe", has_pokeballs = nuzlocke_active, area_id = last_area_id}
             local raw_count = M.getPartyCount()
             if raw_count >= 1 and raw_count <= 6 then evt.party = build_party_snapshot() end
-            send(evt, "safe", true)
+            if send(evt, "safe", true) then pending_safe = false end
         end
     end
 
@@ -1898,15 +1995,15 @@ local function on_frame()
     check_fkeys_debounced()
 
     -- 12. HUD render
-    hud_render()
+    -- HUD rendering lives outside the event handler's exception boundary.
 end
 
 -- ── Initialize TCP connection ─────────────────────────────────────────────────
-C.init(SERVER_HOST, SERVER_PORT)
+C.init(SERVER_HOST, SERVER_PORT, {discard_on_disconnect = session ~= nil})
 console.log(fmt("[SLink-RBY] Started — player=%s target=%s:%d", PLAYER_ID, SERVER_HOST, SERVER_PORT))
 
 -- ── Initialize prev_party ─────────────────────────────────────────────────────
-local init_count = M.getPartyCount()
+local init_count = not session and M.getPartyCount() or 0
 if init_count <= 6 then
     for slot = 0, init_count - 1 do
         local mon = M.readPartySlot(slot)
@@ -1919,13 +2016,15 @@ end
 -- ...and from the boxes. Startup seeded the PARTY only -- not even the open box -- so a
 -- client started with mons already stored saw every one of them as a fresh capture the
 -- first time anything triggered a box scan.
-seed_all_boxes()
+if not session then seed_all_boxes() end
 
 -- An unguarded read during a screen transition would otherwise take the whole
 -- client down rather than dropping a single frame. Mirrors gen3's on_frame_safe.
 local function on_frame_safe()
     local ok, err = pcall(on_frame)
     if not ok then console.log("[SLink-RBY] ERROR (handler kept alive): " .. tostring(err)) end
+    local hud_ok, hud_error = pcall(hud_render)
+    if not hud_ok then console.log("[SLink-RBY] HUD error: " .. tostring(hud_error)) end
 end
 
 -- ── Main loop ─────────────────────────────────────────────────────────────────

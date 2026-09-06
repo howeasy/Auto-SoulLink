@@ -10,7 +10,7 @@
                          past the end of the 33-byte box struct and into the NEXT slot
     * writeEnemyParty  — the Rival Team Swap's 404-byte contiguous write
     * forceExplode     — Explode Mode's move injection
-    * safe-state gate  — isInOverworld must refuse while a menu/script owns the screen
+    * legacy state flags — a positive observation after verified overworld boot
 
   None of this had ever run against a real game: the unit tests exercise the Python adapter
   and never load the Lua, and the Lua syntax check cannot catch a wrong address.
@@ -25,15 +25,9 @@ local M = t.M
 local fmt = string.format
 
 -- ── Safe-state gate ──────────────────────────────────────────────────────────
--- Only the POSITIVE case is asserted live. Opening the START menu from a freshly loaded
--- battery save proved unreliable to stage here (wFontLoaded stayed 0x00 through a dozen
--- held Start presses, with and without walking first), and a gate that cannot reliably set
--- up its precondition tests the harness rather than the code.
---
--- The negative cases are not skipped, just tested somewhere better: tests/unit/
--- test_gen1_safe_state.py executes THIS SAME Lua under lupa and drives wJoyIgnore /
--- wFontLoaded / wIsInBattle directly, covering the menu, the text box, a script holding
--- the joypad, and the IN_BATTLE_LOST sentinel — every combination, deterministically.
+-- This is only a legacy flag observation. The production CPU checkpoint and its
+-- negative live menu, PC, printer, serial, battle, naming and reset cases are in
+-- test_gen1_write_safety_overworld.lua and test_gen1_write_safety_battle.lua.
 t.check("isInOverworld true while the player is walking around",
         M.isInOverworld() == true)
 
@@ -109,7 +103,16 @@ local blob = M.readPartyBlob(0)
 t.check("readPartyBlob returns 66 bytes (44 struct + 11 OT + 11 nick)",
         blob and #blob == 66, fmt("got %s", blob and #blob or "nil"))
 if blob then
-    local wrote, n = M.writeEnemyParty({blob, blob})
+    -- The committed bootstrap fixture predates XP initialization. Normalize the
+    -- test payload (not the fixture) before asking the strict codec to accept it.
+    local Codec = require("gen1_party_codec")
+    local facts = assert(t.G.readBaseStats(t.variant, t.G.toNatDex(blob[1])))
+    local xp = blob[34] == 1 and 0 or Codec.experienceForLevel(facts.growth_rate, blob[34])
+    blob[15], blob[16], blob[17] = math.floor(xp / 65536), math.floor(xp / 256) % 256, xp % 256
+    local second = {}
+    for i = 1, 66 do second[i] = blob[i] end
+    second[13] = (second[13] + 1) % 256
+    local wrote, n = M.writeEnemyParty({blob, second})
     t.check("writeEnemyParty succeeds", wrote, tostring(n))
     t.check("enemy party count is 2", M.read_u8(M.ENEMY_COUNT_ADDR) == 2,
             fmt("got %d", M.read_u8(M.ENEMY_COUNT_ADDR)))
@@ -162,14 +165,34 @@ t.check("fixture starts with BIT_HAS_CHANGED_BOXES clear (the dangerous state)",
             before_flag))
 
 -- The box test above deposited slot 1, so the party is back down to one mon and
--- depositMemorialMon would (correctly) refuse. Give it a second mon again.
-for i = 0, struct - 1 do
-    M.write_u8(M.PARTY_BASE_ADDR + struct + i, M.read_u8(M.PARTY_BASE_ADDR + i))
+-- depositMemorialMon would (correctly) refuse. Two distinct fillers let both
+-- memorial appends execute while retaining one living party mon.
+for slot = 1, 2 do
+    for i = 0, struct - 1 do
+        M.write_u8(M.PARTY_BASE_ADDR + slot * struct + i, M.read_u8(M.PARTY_BASE_ADDR + i))
+    end
+    for i = 0, 10 do
+        M.write_u8(M.PARTY_OT_NAMES_ADDR + slot * 11 + i, M.read_u8(M.PARTY_OT_NAMES_ADDR + i))
+        M.write_u8(M.PARTY_NICKS_ADDR + slot * 11 + i, M.read_u8(M.PARTY_NICKS_ADDR + i))
+    end
+    M.write_u8(M.PARTY_BASE_ADDR + slot * struct + M.DV_OFFSET_1, 0x40 + slot)
+    M.write_u8(M.PARTY_SPECIES_ADDR + slot, M.read_u8(M.PARTY_SPECIES_ADDR))
 end
-M.write_u8(M.PARTY_SPECIES_ADDR + 1, M.read_u8(M.PARTY_SPECIES_ADDR))
-M.write_u8(M.PARTY_SPECIES_ADDR + 2, 0xFF)
-M.write_u8(M.PARTY_COUNT_ADDR, 2)
-t.check("party topped back up to 2 for the memorial test", M.getPartyCount() == 2)
+M.write_u8(M.PARTY_SPECIES_ADDR + 3, 0xFF)
+M.write_u8(M.PARTY_COUNT_ADDR, 3)
+t.check("party topped up to 3 distinct mons for the memorial test", M.getPartyCount() == 3)
+
+local function storage_image()
+    local bytes = {}
+    for i = 0xC000, 0xDFFF do bytes[#bytes + 1] = string.char(memory.read_u8(i, "System Bus")) end
+    for i = 0, 0x7FFF do bytes[#bytes + 1] = string.char(memory.read_u8(i, "CartRAM")) end
+    return table.concat(bytes)
+end
+local living_before = storage_image()
+local living_ok, living_reason = M.depositMemorialMon(0)
+t.check("living Pokemon cannot be memorialized", living_ok == false, tostring(living_reason))
+t.check("living selection refusal writes zero WRAM/SRAM bytes", storage_image() == living_before)
+M.forceFaint(0)
 
 local mem_before = M.getMemorialBoxCount()
 local mem_ok, mem_err = M.depositMemorialMon(0)
@@ -214,12 +237,12 @@ if mem_ok then
             bad == nil, bad or "all count=0 / 0xFF")
 
     -- Idempotence on real hardware: a second memorial must not re-run the wipe.
-    local ok2 = M.depositMemorialMon(0)
-    if ok2 then
-        t.check("a second memorial does not erase the first",
-                M.getMemorialBoxCount() == mem_before + 2,
-                fmt("count is %d, expected %d", M.getMemorialBoxCount(), mem_before + 2))
-    end
+    M.forceFaint(0)
+    local ok2, why2 = M.depositMemorialMon(0)
+    t.check("second actual memorial succeeds", ok2, tostring(why2))
+    t.check("a second memorial does not erase the first",
+            M.getMemorialBoxCount() == mem_before + 2,
+            fmt("count is %d, expected %d", M.getMemorialBoxCount(), mem_before + 2))
 end
 
 t.finish(fmt("variant=%s", t.variant))

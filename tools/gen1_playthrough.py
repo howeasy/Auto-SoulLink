@@ -103,6 +103,8 @@ def write_run_config(src: str, dst: str, saveram_dir: str | None = None) -> None
         with open(src, encoding="utf-8-sig") as f:
             cfg = json.load(f)
     except (OSError, ValueError):
+        if saveram_dir:
+            raise RuntimeError(f"cannot parse {src}; refusing unisolated SaveRAM") from None
         shutil.copyfile(src, dst)          # unparseable: fall back to a plain copy
         return
 

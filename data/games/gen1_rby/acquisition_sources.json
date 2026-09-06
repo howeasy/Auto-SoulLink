@@ -1,0 +1,1761 @@
+{
+  "content_sha256": "b8b3a7d28431b59695773cb6c9407fadcc0a466473086aeefc1c88b40afbb5c9",
+  "limitation": "Source census only. Transaction predicates, settlement, pairing policy and durable ordinals still require runtime proof.",
+  "runtime_ready": false,
+  "schema": "gen1-rby-acquisition-sources-v1",
+  "titles": {
+    "blue": {
+      "grant_call_inventory": {
+        "engine/events/prize_menu.asm": 1,
+        "scripts/CeladonMansionRoofHouse.asm": 1,
+        "scripts/CinnabarLabFossilRoom.asm": 1,
+        "scripts/FightingDojo.asm": 2,
+        "scripts/MtMoonPokecenter.asm": 1,
+        "scripts/OaksLab.asm": 1,
+        "scripts/SilphCo7F.asm": 1
+      },
+      "provenance": {
+        "clean_sha1": "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2",
+        "full_symbols_sha256": "65d0f3216e23117336623d2df2f263b8cc9ea784c0d3d4124eacbd8345a45a7d",
+        "source_commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9"
+      },
+      "sources": [
+        {
+          "call": {
+            "address": 20272,
+            "bank": 23,
+            "rom_offset": 380720
+          },
+          "expected_call_hex": "cd483e",
+          "group": "dojo_choice",
+          "kind": "scripted_grant",
+          "map": "FIGHTING_DOJO",
+          "map_id": 177,
+          "return_address": 20275,
+          "scope_symbol": "FightingDojoHitmonleePokeBallText.GetMon",
+          "source_file": "scripts/FightingDojo.asm",
+          "source_id": "grant:dojo_choice:0",
+          "source_line": 245,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 20344,
+            "bank": 23,
+            "rom_offset": 380792
+          },
+          "expected_call_hex": "cd483e",
+          "group": "dojo_choice",
+          "kind": "scripted_grant",
+          "map": "FIGHTING_DOJO",
+          "map_id": 177,
+          "return_address": 20347,
+          "scope_symbol": "FightingDojoHitmonchanPokeBallText.GetMon",
+          "source_file": "scripts/FightingDojo.asm",
+          "source_id": "grant:dojo_choice:1",
+          "source_line": 279,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 23882,
+            "bank": 7,
+            "rom_offset": 122186
+          },
+          "expected_call_hex": "cd483e",
+          "group": "eevee",
+          "kind": "scripted_grant",
+          "map": "CELADON_MANSION_ROOF_HOUSE",
+          "map_id": 132,
+          "return_address": 23885,
+          "scope_symbol": "CeladonMansionRoofHouseEeveePokeballText",
+          "source_file": "scripts/CeladonMansionRoofHouse.asm",
+          "source_id": "grant:eevee:0",
+          "source_line": 16,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 23991,
+            "bank": 29,
+            "rom_offset": 482743
+          },
+          "expected_call_hex": "cd483e",
+          "group": "fossil_revival",
+          "kind": "scripted_grant",
+          "map": "CINNABAR_LAB_FOSSIL_ROOM",
+          "map_id": 170,
+          "return_address": 23994,
+          "scope_symbol": "CinnabarLabFossilRoomScientist1Text.done_reviving",
+          "source_file": "scripts/CinnabarLabFossilRoom.asm",
+          "source_id": "grant:fossil_revival:0",
+          "source_line": 80,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 26911,
+            "bank": 20,
+            "rom_offset": 338207
+          },
+          "expected_call_hex": "cd483e",
+          "group": "game_corner_purchase",
+          "kind": "scripted_grant",
+          "map": "GAME_CORNER_PRIZE_ROOM",
+          "map_id": 137,
+          "return_address": 26914,
+          "scope_symbol": "HandlePrizeChoice.giveMon",
+          "source_file": "engine/events/prize_menu.asm",
+          "source_id": "grant:game_corner_purchase:0",
+          "source_line": 225,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 23982,
+            "bank": 20,
+            "rom_offset": 335278
+          },
+          "expected_call_hex": "cd483e",
+          "group": "lapras",
+          "kind": "scripted_grant",
+          "map": "SILPH_CO_7F",
+          "map_id": 212,
+          "return_address": 23985,
+          "scope_symbol": "SilphCo7FSilphWorkerM1Text.give_lapras",
+          "source_file": "scripts/SilphCo7F.asm",
+          "source_id": "grant:lapras:0",
+          "source_line": 311,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 21281,
+            "bank": 18,
+            "rom_offset": 299809
+          },
+          "expected_call_hex": "cd483e",
+          "group": "magikarp_salesman",
+          "kind": "scripted_grant",
+          "map": "MT_MOON_POKECENTER",
+          "map_id": 68,
+          "return_address": 21284,
+          "scope_symbol": "MtMoonPokecenterMagikarpSalesmanText.enoughMoney",
+          "source_file": "scripts/MtMoonPokecenter.asm",
+          "source_id": "grant:magikarp_salesman:0",
+          "source_line": 48,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 21005,
+            "bank": 7,
+            "rom_offset": 119309
+          },
+          "expected_call_hex": "cd2739",
+          "group": "starter",
+          "kind": "scripted_grant",
+          "map": "OAKS_LAB",
+          "map_id": 40,
+          "return_address": 21008,
+          "scope_symbol": "OaksLabMonChoiceMenu.continue",
+          "source_file": "scripts/OaksLab.asm",
+          "source_id": "grant:starter:0",
+          "source_line": 931,
+          "target_symbol": "AddPartyMon",
+          "yellow_only": false
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "CERULEAN_TRADE_HOUSE",
+          "map_id": 63,
+          "received_species_index": 72,
+          "record_rom_offset": 465871,
+          "source_file": "scripts/CeruleanTradeHouse.asm",
+          "source_id": "npc:cerulean_trade_house:6",
+          "trade_constant": "TRADE_FOR_LOLA",
+          "trade_index": 6,
+          "wanted_species_index": 110
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "CINNABAR_LAB_FOSSIL_ROOM",
+          "map_id": 170,
+          "received_species_index": 58,
+          "record_rom_offset": 465829,
+          "source_file": "scripts/CinnabarLabFossilRoom.asm",
+          "source_id": "npc:cinnabar_lab_fossil_room:3",
+          "trade_constant": "TRADE_FOR_SAILOR",
+          "trade_index": 3,
+          "wanted_species_index": 163
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "CINNABAR_LAB_TRADE_ROOM",
+          "map_id": 168,
+          "received_species_index": 141,
+          "record_rom_offset": 465885,
+          "source_file": "scripts/CinnabarLabTradeRoom.asm",
+          "source_id": "npc:cinnabar_lab_trade_room:7",
+          "trade_constant": "TRADE_FOR_DORIS",
+          "trade_index": 7,
+          "wanted_species_index": 85
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "CINNABAR_LAB_TRADE_ROOM",
+          "map_id": 168,
+          "received_species_index": 30,
+          "record_rom_offset": 465899,
+          "source_file": "scripts/CinnabarLabTradeRoom.asm",
+          "source_id": "npc:cinnabar_lab_trade_room:8",
+          "trade_constant": "TRADE_FOR_CRINKLES",
+          "trade_index": 8,
+          "wanted_species_index": 65
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "ROUTE_11_GATE_2F",
+          "map_id": 86,
+          "received_species_index": 168,
+          "record_rom_offset": 465787,
+          "source_file": "scripts/Route11Gate2F.asm",
+          "source_id": "npc:route_11_gate_2f:0",
+          "trade_constant": "TRADE_FOR_TERRY",
+          "trade_index": 0,
+          "wanted_species_index": 167
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "ROUTE_18_GATE_2F",
+          "map_id": 191,
+          "received_species_index": 11,
+          "record_rom_offset": 465857,
+          "source_file": "scripts/Route18Gate2F.asm",
+          "source_id": "npc:route_18_gate_2f:5",
+          "trade_constant": "TRADE_FOR_MARC",
+          "trade_index": 5,
+          "wanted_species_index": 8
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "ROUTE_2_TRADE_HOUSE",
+          "map_id": 48,
+          "received_species_index": 42,
+          "record_rom_offset": 465801,
+          "source_file": "scripts/Route2TradeHouse.asm",
+          "source_id": "npc:route_2_trade_house:1",
+          "trade_constant": "TRADE_FOR_MARCEL",
+          "trade_index": 1,
+          "wanted_species_index": 148
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "UNDERGROUND_PATH_ROUTE_5",
+          "map_id": 71,
+          "received_species_index": 15,
+          "record_rom_offset": 465913,
+          "source_file": "scripts/UndergroundPathRoute5.asm",
+          "source_id": "npc:underground_path_route_5:9",
+          "trade_constant": "TRADE_FOR_SPOT",
+          "trade_index": 9,
+          "wanted_species_index": 3
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "VERMILION_TRADE_HOUSE",
+          "map_id": 196,
+          "received_species_index": 64,
+          "record_rom_offset": 465843,
+          "source_file": "scripts/VermilionTradeHouse.asm",
+          "source_id": "npc:vermilion_trade_house:4",
+          "trade_constant": "TRADE_FOR_DUX",
+          "trade_index": 4,
+          "wanted_species_index": 5
+        },
+        {
+          "entry": {
+            "address": 19250,
+            "bank": 24,
+            "rom_offset": 396082
+          },
+          "expected_assignment_hex": "3e91ea59d0",
+          "kind": "uncatchable_script_battle",
+          "map": "POKEMON_TOWER_6F",
+          "map_id": 147,
+          "opponent_species_rom_offset": 396083,
+          "scope_symbol": "PokemonTower6FDefaultScript",
+          "source_file": "scripts/PokemonTower6F.asm",
+          "source_id": "script-battle:ghost-marowak",
+          "source_line": 36,
+          "species_index": 145
+        },
+        {
+          "entry": {
+            "address": 20612,
+            "bank": 6,
+            "rom_offset": 102532
+          },
+          "expected_assignment_hex": "3e70ea59d0",
+          "kind": "uncatchable_script_battle",
+          "map": "VIRIDIAN_CITY",
+          "map_id": 1,
+          "opponent_species_rom_offset": 102533,
+          "scope_symbol": "ViridianCityOldManStartCatchTrainingScript",
+          "source_file": "scripts/ViridianCity.asm",
+          "source_id": "script-battle:old-man-tutorial",
+          "source_line": 79,
+          "species_index": 112
+        },
+        {
+          "condition": "random wild battle in the Tower without the Silph Scope",
+          "entry": {
+            "address": 22586,
+            "bank": 15,
+            "rom_offset": 251962
+          },
+          "exclude_source_ids": [
+            "script-battle:ghost-marowak"
+          ],
+          "kind": "uncatchable_script_battle",
+          "map_ids": [
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "source_id": "script-battle:unidentified-tower-ghost"
+        },
+        {
+          "kind": "catchable_static",
+          "level": 70,
+          "level_rom_offset": 286533,
+          "map": "CERULEAN_CAVE_B1F",
+          "map_id": 227,
+          "object_index": 1,
+          "object_symbol": "CeruleanCaveB1F_Object",
+          "source_file": "data/maps/objects/CeruleanCaveB1F.asm",
+          "source_id": "static:ceruleancaveb1f_mewtwo",
+          "species_index": 131,
+          "species_rom_offset": 286532,
+          "x": 27,
+          "y": 13
+        },
+        {
+          "kind": "catchable_static",
+          "level": 43,
+          "level_rom_offset": 123886,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 4,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_electrode1",
+          "species_index": 141,
+          "species_rom_offset": 123885,
+          "x": 25,
+          "y": 18
+        },
+        {
+          "kind": "catchable_static",
+          "level": 43,
+          "level_rom_offset": 123910,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 7,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_electrode2",
+          "species_index": 141,
+          "species_rom_offset": 123909,
+          "x": 21,
+          "y": 14
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 123862,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 1,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb1",
+          "species_index": 6,
+          "species_rom_offset": 123861,
+          "x": 9,
+          "y": 20
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 123870,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 2,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb2",
+          "species_index": 6,
+          "species_rom_offset": 123869,
+          "x": 32,
+          "y": 18
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 123878,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 3,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb3",
+          "species_index": 6,
+          "species_rom_offset": 123877,
+          "x": 21,
+          "y": 25
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 123894,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 5,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb4",
+          "species_index": 6,
+          "species_rom_offset": 123893,
+          "x": 23,
+          "y": 34
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 123902,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 6,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb5",
+          "species_index": 6,
+          "species_rom_offset": 123901,
+          "x": 26,
+          "y": 28
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 123918,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 8,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb6",
+          "species_index": 6,
+          "species_rom_offset": 123917,
+          "x": 37,
+          "y": 32
+        },
+        {
+          "kind": "catchable_static",
+          "level": 50,
+          "level_rom_offset": 123926,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 9,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_zapdos",
+          "species_index": 75,
+          "species_rom_offset": 123925,
+          "x": 4,
+          "y": 9
+        },
+        {
+          "entry": {
+            "address": 22063,
+            "bank": 22,
+            "rom_offset": 366127
+          },
+          "expected_assignment_hex": "3e84ea59d0",
+          "kind": "catchable_static",
+          "map": "ROUTE_12",
+          "map_id": 23,
+          "opponent_species_rom_offset": 366128,
+          "scope_symbol": "Route12DefaultScript",
+          "source_file": "scripts/Route12.asm",
+          "source_id": "static:route12_snorlax",
+          "source_line": 33,
+          "species_index": 132
+        },
+        {
+          "entry": {
+            "address": 22895,
+            "bank": 22,
+            "rom_offset": 366959
+          },
+          "expected_assignment_hex": "3e84ea59d0",
+          "kind": "catchable_static",
+          "map": "ROUTE_16",
+          "map_id": 27,
+          "opponent_species_rom_offset": 366960,
+          "scope_symbol": "Route16DefaultScript",
+          "source_file": "scripts/Route16.asm",
+          "source_id": "static:route16_snorlax",
+          "source_line": 33,
+          "species_index": 132
+        },
+        {
+          "kind": "catchable_static",
+          "level": 50,
+          "level_rom_offset": 289001,
+          "map": "SEAFOAM_ISLANDS_B4F",
+          "map_id": 162,
+          "object_index": 3,
+          "object_symbol": "SeafoamIslandsB4F_Object",
+          "source_file": "data/maps/objects/SeafoamIslandsB4F.asm",
+          "source_id": "static:seafoamislandsb4f_articuno",
+          "species_index": 74,
+          "species_rom_offset": 289000,
+          "x": 6,
+          "y": 1
+        },
+        {
+          "kind": "catchable_static",
+          "level": 50,
+          "level_rom_offset": 334180,
+          "map": "VICTORY_ROAD_2F",
+          "map_id": 194,
+          "object_index": 6,
+          "object_symbol": "VictoryRoad2F_Object",
+          "source_file": "data/maps/objects/VictoryRoad2F.asm",
+          "source_id": "static:victoryroad2f_moltres",
+          "species_index": 73,
+          "species_rom_offset": 334179,
+          "x": 11,
+          "y": 5
+        }
+      ],
+      "unused_trade_rows": [
+        {
+          "constant": "TRADE_FOR_CHIKUCHIKU",
+          "index": 2,
+          "reason": "no map script invokes this trade index"
+        }
+      ]
+    },
+    "red": {
+      "grant_call_inventory": {
+        "engine/events/prize_menu.asm": 1,
+        "scripts/CeladonMansionRoofHouse.asm": 1,
+        "scripts/CinnabarLabFossilRoom.asm": 1,
+        "scripts/FightingDojo.asm": 2,
+        "scripts/MtMoonPokecenter.asm": 1,
+        "scripts/OaksLab.asm": 1,
+        "scripts/SilphCo7F.asm": 1
+      },
+      "provenance": {
+        "clean_sha1": "ea9bcae617fdf159b045185467ae58b2e4a48b9a",
+        "full_symbols_sha256": "5142424dd1e85f00f7193655a0a6c5f0b6366163c74280e5d55990ef8c6b3db9",
+        "source_commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9"
+      },
+      "sources": [
+        {
+          "call": {
+            "address": 20272,
+            "bank": 23,
+            "rom_offset": 380720
+          },
+          "expected_call_hex": "cd483e",
+          "group": "dojo_choice",
+          "kind": "scripted_grant",
+          "map": "FIGHTING_DOJO",
+          "map_id": 177,
+          "return_address": 20275,
+          "scope_symbol": "FightingDojoHitmonleePokeBallText.GetMon",
+          "source_file": "scripts/FightingDojo.asm",
+          "source_id": "grant:dojo_choice:0",
+          "source_line": 245,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 20344,
+            "bank": 23,
+            "rom_offset": 380792
+          },
+          "expected_call_hex": "cd483e",
+          "group": "dojo_choice",
+          "kind": "scripted_grant",
+          "map": "FIGHTING_DOJO",
+          "map_id": 177,
+          "return_address": 20347,
+          "scope_symbol": "FightingDojoHitmonchanPokeBallText.GetMon",
+          "source_file": "scripts/FightingDojo.asm",
+          "source_id": "grant:dojo_choice:1",
+          "source_line": 279,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 23882,
+            "bank": 7,
+            "rom_offset": 122186
+          },
+          "expected_call_hex": "cd483e",
+          "group": "eevee",
+          "kind": "scripted_grant",
+          "map": "CELADON_MANSION_ROOF_HOUSE",
+          "map_id": 132,
+          "return_address": 23885,
+          "scope_symbol": "CeladonMansionRoofHouseEeveePokeballText",
+          "source_file": "scripts/CeladonMansionRoofHouse.asm",
+          "source_id": "grant:eevee:0",
+          "source_line": 16,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 23990,
+            "bank": 29,
+            "rom_offset": 482742
+          },
+          "expected_call_hex": "cd483e",
+          "group": "fossil_revival",
+          "kind": "scripted_grant",
+          "map": "CINNABAR_LAB_FOSSIL_ROOM",
+          "map_id": 170,
+          "return_address": 23993,
+          "scope_symbol": "CinnabarLabFossilRoomScientist1Text.done_reviving",
+          "source_file": "scripts/CinnabarLabFossilRoom.asm",
+          "source_id": "grant:fossil_revival:0",
+          "source_line": 80,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 26911,
+            "bank": 20,
+            "rom_offset": 338207
+          },
+          "expected_call_hex": "cd483e",
+          "group": "game_corner_purchase",
+          "kind": "scripted_grant",
+          "map": "GAME_CORNER_PRIZE_ROOM",
+          "map_id": 137,
+          "return_address": 26914,
+          "scope_symbol": "HandlePrizeChoice.giveMon",
+          "source_file": "engine/events/prize_menu.asm",
+          "source_id": "grant:game_corner_purchase:0",
+          "source_line": 225,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 23982,
+            "bank": 20,
+            "rom_offset": 335278
+          },
+          "expected_call_hex": "cd483e",
+          "group": "lapras",
+          "kind": "scripted_grant",
+          "map": "SILPH_CO_7F",
+          "map_id": 212,
+          "return_address": 23985,
+          "scope_symbol": "SilphCo7FSilphWorkerM1Text.give_lapras",
+          "source_file": "scripts/SilphCo7F.asm",
+          "source_id": "grant:lapras:0",
+          "source_line": 311,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 21281,
+            "bank": 18,
+            "rom_offset": 299809
+          },
+          "expected_call_hex": "cd483e",
+          "group": "magikarp_salesman",
+          "kind": "scripted_grant",
+          "map": "MT_MOON_POKECENTER",
+          "map_id": 68,
+          "return_address": 21284,
+          "scope_symbol": "MtMoonPokecenterMagikarpSalesmanText.enoughMoney",
+          "source_file": "scripts/MtMoonPokecenter.asm",
+          "source_id": "grant:magikarp_salesman:0",
+          "source_line": 48,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 21005,
+            "bank": 7,
+            "rom_offset": 119309
+          },
+          "expected_call_hex": "cd2739",
+          "group": "starter",
+          "kind": "scripted_grant",
+          "map": "OAKS_LAB",
+          "map_id": 40,
+          "return_address": 21008,
+          "scope_symbol": "OaksLabMonChoiceMenu.continue",
+          "source_file": "scripts/OaksLab.asm",
+          "source_id": "grant:starter:0",
+          "source_line": 931,
+          "target_symbol": "AddPartyMon",
+          "yellow_only": false
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "CERULEAN_TRADE_HOUSE",
+          "map_id": 63,
+          "received_species_index": 72,
+          "record_rom_offset": 465871,
+          "source_file": "scripts/CeruleanTradeHouse.asm",
+          "source_id": "npc:cerulean_trade_house:6",
+          "trade_constant": "TRADE_FOR_LOLA",
+          "trade_index": 6,
+          "wanted_species_index": 110
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "CINNABAR_LAB_FOSSIL_ROOM",
+          "map_id": 170,
+          "received_species_index": 58,
+          "record_rom_offset": 465829,
+          "source_file": "scripts/CinnabarLabFossilRoom.asm",
+          "source_id": "npc:cinnabar_lab_fossil_room:3",
+          "trade_constant": "TRADE_FOR_SAILOR",
+          "trade_index": 3,
+          "wanted_species_index": 163
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "CINNABAR_LAB_TRADE_ROOM",
+          "map_id": 168,
+          "received_species_index": 141,
+          "record_rom_offset": 465885,
+          "source_file": "scripts/CinnabarLabTradeRoom.asm",
+          "source_id": "npc:cinnabar_lab_trade_room:7",
+          "trade_constant": "TRADE_FOR_DORIS",
+          "trade_index": 7,
+          "wanted_species_index": 85
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "CINNABAR_LAB_TRADE_ROOM",
+          "map_id": 168,
+          "received_species_index": 30,
+          "record_rom_offset": 465899,
+          "source_file": "scripts/CinnabarLabTradeRoom.asm",
+          "source_id": "npc:cinnabar_lab_trade_room:8",
+          "trade_constant": "TRADE_FOR_CRINKLES",
+          "trade_index": 8,
+          "wanted_species_index": 65
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "ROUTE_11_GATE_2F",
+          "map_id": 86,
+          "received_species_index": 168,
+          "record_rom_offset": 465787,
+          "source_file": "scripts/Route11Gate2F.asm",
+          "source_id": "npc:route_11_gate_2f:0",
+          "trade_constant": "TRADE_FOR_TERRY",
+          "trade_index": 0,
+          "wanted_species_index": 167
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "ROUTE_18_GATE_2F",
+          "map_id": 191,
+          "received_species_index": 11,
+          "record_rom_offset": 465857,
+          "source_file": "scripts/Route18Gate2F.asm",
+          "source_id": "npc:route_18_gate_2f:5",
+          "trade_constant": "TRADE_FOR_MARC",
+          "trade_index": 5,
+          "wanted_species_index": 8
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "ROUTE_2_TRADE_HOUSE",
+          "map_id": 48,
+          "received_species_index": 42,
+          "record_rom_offset": 465801,
+          "source_file": "scripts/Route2TradeHouse.asm",
+          "source_id": "npc:route_2_trade_house:1",
+          "trade_constant": "TRADE_FOR_MARCEL",
+          "trade_index": 1,
+          "wanted_species_index": 148
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "UNDERGROUND_PATH_ROUTE_5",
+          "map_id": 71,
+          "received_species_index": 15,
+          "record_rom_offset": 465913,
+          "source_file": "scripts/UndergroundPathRoute5.asm",
+          "source_id": "npc:underground_path_route_5:9",
+          "trade_constant": "TRADE_FOR_SPOT",
+          "trade_index": 9,
+          "wanted_species_index": 3
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "VERMILION_TRADE_HOUSE",
+          "map_id": 196,
+          "received_species_index": 64,
+          "record_rom_offset": 465843,
+          "source_file": "scripts/VermilionTradeHouse.asm",
+          "source_id": "npc:vermilion_trade_house:4",
+          "trade_constant": "TRADE_FOR_DUX",
+          "trade_index": 4,
+          "wanted_species_index": 5
+        },
+        {
+          "entry": {
+            "address": 19250,
+            "bank": 24,
+            "rom_offset": 396082
+          },
+          "expected_assignment_hex": "3e91ea59d0",
+          "kind": "uncatchable_script_battle",
+          "map": "POKEMON_TOWER_6F",
+          "map_id": 147,
+          "opponent_species_rom_offset": 396083,
+          "scope_symbol": "PokemonTower6FDefaultScript",
+          "source_file": "scripts/PokemonTower6F.asm",
+          "source_id": "script-battle:ghost-marowak",
+          "source_line": 36,
+          "species_index": 145
+        },
+        {
+          "entry": {
+            "address": 20612,
+            "bank": 6,
+            "rom_offset": 102532
+          },
+          "expected_assignment_hex": "3e70ea59d0",
+          "kind": "uncatchable_script_battle",
+          "map": "VIRIDIAN_CITY",
+          "map_id": 1,
+          "opponent_species_rom_offset": 102533,
+          "scope_symbol": "ViridianCityOldManStartCatchTrainingScript",
+          "source_file": "scripts/ViridianCity.asm",
+          "source_id": "script-battle:old-man-tutorial",
+          "source_line": 79,
+          "species_index": 112
+        },
+        {
+          "condition": "random wild battle in the Tower without the Silph Scope",
+          "entry": {
+            "address": 22586,
+            "bank": 15,
+            "rom_offset": 251962
+          },
+          "exclude_source_ids": [
+            "script-battle:ghost-marowak"
+          ],
+          "kind": "uncatchable_script_battle",
+          "map_ids": [
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "source_id": "script-battle:unidentified-tower-ghost"
+        },
+        {
+          "kind": "catchable_static",
+          "level": 70,
+          "level_rom_offset": 286533,
+          "map": "CERULEAN_CAVE_B1F",
+          "map_id": 227,
+          "object_index": 1,
+          "object_symbol": "CeruleanCaveB1F_Object",
+          "source_file": "data/maps/objects/CeruleanCaveB1F.asm",
+          "source_id": "static:ceruleancaveb1f_mewtwo",
+          "species_index": 131,
+          "species_rom_offset": 286532,
+          "x": 27,
+          "y": 13
+        },
+        {
+          "kind": "catchable_static",
+          "level": 43,
+          "level_rom_offset": 123886,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 4,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_electrode1",
+          "species_index": 141,
+          "species_rom_offset": 123885,
+          "x": 25,
+          "y": 18
+        },
+        {
+          "kind": "catchable_static",
+          "level": 43,
+          "level_rom_offset": 123910,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 7,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_electrode2",
+          "species_index": 141,
+          "species_rom_offset": 123909,
+          "x": 21,
+          "y": 14
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 123862,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 1,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb1",
+          "species_index": 6,
+          "species_rom_offset": 123861,
+          "x": 9,
+          "y": 20
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 123870,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 2,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb2",
+          "species_index": 6,
+          "species_rom_offset": 123869,
+          "x": 32,
+          "y": 18
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 123878,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 3,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb3",
+          "species_index": 6,
+          "species_rom_offset": 123877,
+          "x": 21,
+          "y": 25
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 123894,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 5,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb4",
+          "species_index": 6,
+          "species_rom_offset": 123893,
+          "x": 23,
+          "y": 34
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 123902,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 6,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb5",
+          "species_index": 6,
+          "species_rom_offset": 123901,
+          "x": 26,
+          "y": 28
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 123918,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 8,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb6",
+          "species_index": 6,
+          "species_rom_offset": 123917,
+          "x": 37,
+          "y": 32
+        },
+        {
+          "kind": "catchable_static",
+          "level": 50,
+          "level_rom_offset": 123926,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 9,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_zapdos",
+          "species_index": 75,
+          "species_rom_offset": 123925,
+          "x": 4,
+          "y": 9
+        },
+        {
+          "entry": {
+            "address": 22063,
+            "bank": 22,
+            "rom_offset": 366127
+          },
+          "expected_assignment_hex": "3e84ea59d0",
+          "kind": "catchable_static",
+          "map": "ROUTE_12",
+          "map_id": 23,
+          "opponent_species_rom_offset": 366128,
+          "scope_symbol": "Route12DefaultScript",
+          "source_file": "scripts/Route12.asm",
+          "source_id": "static:route12_snorlax",
+          "source_line": 33,
+          "species_index": 132
+        },
+        {
+          "entry": {
+            "address": 22895,
+            "bank": 22,
+            "rom_offset": 366959
+          },
+          "expected_assignment_hex": "3e84ea59d0",
+          "kind": "catchable_static",
+          "map": "ROUTE_16",
+          "map_id": 27,
+          "opponent_species_rom_offset": 366960,
+          "scope_symbol": "Route16DefaultScript",
+          "source_file": "scripts/Route16.asm",
+          "source_id": "static:route16_snorlax",
+          "source_line": 33,
+          "species_index": 132
+        },
+        {
+          "kind": "catchable_static",
+          "level": 50,
+          "level_rom_offset": 289001,
+          "map": "SEAFOAM_ISLANDS_B4F",
+          "map_id": 162,
+          "object_index": 3,
+          "object_symbol": "SeafoamIslandsB4F_Object",
+          "source_file": "data/maps/objects/SeafoamIslandsB4F.asm",
+          "source_id": "static:seafoamislandsb4f_articuno",
+          "species_index": 74,
+          "species_rom_offset": 289000,
+          "x": 6,
+          "y": 1
+        },
+        {
+          "kind": "catchable_static",
+          "level": 50,
+          "level_rom_offset": 334180,
+          "map": "VICTORY_ROAD_2F",
+          "map_id": 194,
+          "object_index": 6,
+          "object_symbol": "VictoryRoad2F_Object",
+          "source_file": "data/maps/objects/VictoryRoad2F.asm",
+          "source_id": "static:victoryroad2f_moltres",
+          "species_index": 73,
+          "species_rom_offset": 334179,
+          "x": 11,
+          "y": 5
+        }
+      ],
+      "unused_trade_rows": [
+        {
+          "constant": "TRADE_FOR_CHIKUCHIKU",
+          "index": 2,
+          "reason": "no map script invokes this trade index"
+        }
+      ]
+    },
+    "yellow": {
+      "grant_call_inventory": {
+        "engine/events/prize_menu.asm": 1,
+        "scripts/CeladonMansionRoofHouse.asm": 1,
+        "scripts/CeruleanMelaniesHouse.asm": 1,
+        "scripts/CinnabarLabFossilRoom.asm": 1,
+        "scripts/FightingDojo.asm": 2,
+        "scripts/MtMoonPokecenter_2.asm": 1,
+        "scripts/OaksLab.asm": 1,
+        "scripts/Route24.asm": 1,
+        "scripts/SilphCo7F.asm": 1,
+        "scripts/VermilionCity_2.asm": 1
+      },
+      "provenance": {
+        "clean_sha1": "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1",
+        "full_symbols_sha256": "f97ce33581421ae31171cd66205daec7d3951464f577109bf5bda674207832e4",
+        "source_commit": "0a0851546ff65f65c4bb2af2b95e279e709a8653"
+      },
+      "sources": [
+        {
+          "call": {
+            "address": 20006,
+            "bank": 23,
+            "rom_offset": 380454
+          },
+          "expected_call_hex": "cd593e",
+          "group": "dojo_choice",
+          "kind": "scripted_grant",
+          "map": "FIGHTING_DOJO",
+          "map_id": 177,
+          "return_address": 20009,
+          "scope_symbol": "FightingDojoHitmonleePokeBallText.GetMon",
+          "source_file": "scripts/FightingDojo.asm",
+          "source_id": "grant:dojo_choice:0",
+          "source_line": 245,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 20078,
+            "bank": 23,
+            "rom_offset": 380526
+          },
+          "expected_call_hex": "cd593e",
+          "group": "dojo_choice",
+          "kind": "scripted_grant",
+          "map": "FIGHTING_DOJO",
+          "map_id": 177,
+          "return_address": 20081,
+          "scope_symbol": "FightingDojoHitmonchanPokeBallText.GetMon",
+          "source_file": "scripts/FightingDojo.asm",
+          "source_id": "grant:dojo_choice:1",
+          "source_line": 279,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 22099,
+            "bank": 7,
+            "rom_offset": 120403
+          },
+          "expected_call_hex": "cd593e",
+          "group": "eevee",
+          "kind": "scripted_grant",
+          "map": "CELADON_MANSION_ROOF_HOUSE",
+          "map_id": 132,
+          "return_address": 22102,
+          "scope_symbol": "CeladonMansionRoofHouseEeveePokeballText",
+          "source_file": "scripts/CeladonMansionRoofHouse.asm",
+          "source_id": "grant:eevee:0",
+          "source_line": 17,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 22065,
+            "bank": 29,
+            "rom_offset": 480817
+          },
+          "expected_call_hex": "cd593e",
+          "group": "fossil_revival",
+          "kind": "scripted_grant",
+          "map": "CINNABAR_LAB_FOSSIL_ROOM",
+          "map_id": 170,
+          "return_address": 22068,
+          "scope_symbol": "CinnabarLabFossilRoomScientist1Text.done_reviving",
+          "source_file": "scripts/CinnabarLabFossilRoom.asm",
+          "source_id": "grant:fossil_revival:0",
+          "source_line": 80,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 26751,
+            "bank": 20,
+            "rom_offset": 338047
+          },
+          "expected_call_hex": "cd593e",
+          "group": "game_corner_purchase",
+          "kind": "scripted_grant",
+          "map": "GAME_CORNER_PRIZE_ROOM",
+          "map_id": 137,
+          "return_address": 26754,
+          "scope_symbol": "HandlePrizeChoice.giveMon",
+          "source_file": "engine/events/prize_menu.asm",
+          "source_id": "grant:game_corner_purchase:0",
+          "source_line": 226,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 24023,
+            "bank": 20,
+            "rom_offset": 335319
+          },
+          "expected_call_hex": "cd593e",
+          "group": "lapras",
+          "kind": "scripted_grant",
+          "map": "SILPH_CO_7F",
+          "map_id": 212,
+          "return_address": 24026,
+          "scope_symbol": "SilphCo7FSilphWorkerM1Text.give_lapras",
+          "source_file": "scripts/SilphCo7F.asm",
+          "source_id": "grant:lapras:0",
+          "source_line": 297,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 25025,
+            "bank": 60,
+            "rom_offset": 991681
+          },
+          "expected_call_hex": "cd593e",
+          "group": "magikarp_salesman",
+          "kind": "scripted_grant",
+          "map": "MT_MOON_POKECENTER",
+          "map_id": 68,
+          "return_address": 25028,
+          "scope_symbol": "MagikarpSalesman.enoughMoney",
+          "source_file": "scripts/MtMoonPokecenter_2.asm",
+          "source_id": "grant:magikarp_salesman:0",
+          "source_line": 24,
+          "target_symbol": "GivePokemon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 19309,
+            "bank": 7,
+            "rom_offset": 117613
+          },
+          "expected_call_hex": "cd1c39",
+          "group": "starter",
+          "kind": "scripted_grant",
+          "map": "OAKS_LAB",
+          "map_id": 40,
+          "return_address": 19312,
+          "scope_symbol": "OaksLabPlayerReceivedMonText",
+          "source_file": "scripts/OaksLab.asm",
+          "source_id": "grant:starter:0",
+          "source_line": 1036,
+          "target_symbol": "AddPartyMon",
+          "yellow_only": false
+        },
+        {
+          "call": {
+            "address": 20365,
+            "bank": 7,
+            "rom_offset": 118669
+          },
+          "expected_call_hex": "cd593e",
+          "group": "yellow_bulbasaur",
+          "kind": "scripted_grant",
+          "map": "CERULEAN_MELANIES_HOUSE",
+          "map_id": 63,
+          "return_address": 20368,
+          "scope_symbol": "CeruleanMelanieHouseMelanieText",
+          "source_file": "scripts/CeruleanMelaniesHouse.asm",
+          "source_id": "grant:yellow_bulbasaur:0",
+          "source_line": 38,
+          "target_symbol": "GivePokemon",
+          "yellow_only": true
+        },
+        {
+          "call": {
+            "address": 21936,
+            "bank": 20,
+            "rom_offset": 333232
+          },
+          "expected_call_hex": "cd593e",
+          "group": "yellow_charmander",
+          "kind": "scripted_grant",
+          "map": "ROUTE_24",
+          "map_id": 35,
+          "return_address": 21939,
+          "scope_symbol": "Route24CooltrainerM4Text",
+          "source_file": "scripts/Route24.asm",
+          "source_id": "grant:yellow_charmander:0",
+          "source_line": 302,
+          "target_symbol": "GivePokemon",
+          "yellow_only": true
+        },
+        {
+          "call": {
+            "address": 23110,
+            "bank": 60,
+            "rom_offset": 989766
+          },
+          "expected_call_hex": "cd593e",
+          "group": "yellow_squirtle",
+          "kind": "scripted_grant",
+          "map": "VERMILION_CITY",
+          "map_id": 5,
+          "return_address": 23113,
+          "scope_symbol": "VermilionCityPrintOfficerJennyText.asm_f1a24",
+          "source_file": "scripts/VermilionCity_2.asm",
+          "source_id": "grant:yellow_squirtle:0",
+          "source_line": 25,
+          "target_symbol": "GivePokemon",
+          "yellow_only": true
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "CINNABAR_LAB_FOSSIL_ROOM",
+          "map_id": 170,
+          "received_species_index": 136,
+          "record_rom_offset": 465991,
+          "source_file": "scripts/CinnabarLabFossilRoom.asm",
+          "source_id": "npc:cinnabar_lab_fossil_room:3",
+          "trade_constant": "TRADE_FOR_STICKY",
+          "trade_index": 3,
+          "wanted_species_index": 2
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "CINNABAR_LAB_TRADE_ROOM",
+          "map_id": 168,
+          "received_species_index": 1,
+          "record_rom_offset": 466047,
+          "source_file": "scripts/CinnabarLabTradeRoom.asm",
+          "source_id": "npc:cinnabar_lab_trade_room:7",
+          "trade_constant": "TRADE_FOR_BUFFY",
+          "trade_index": 7,
+          "wanted_species_index": 128
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "CINNABAR_LAB_TRADE_ROOM",
+          "map_id": 168,
+          "received_species_index": 120,
+          "record_rom_offset": 466061,
+          "source_file": "scripts/CinnabarLabTradeRoom.asm",
+          "source_id": "npc:cinnabar_lab_trade_room:8",
+          "trade_constant": "TRADE_FOR_CEZANNE",
+          "trade_index": 8,
+          "wanted_species_index": 33
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "ROUTE_11_GATE_2F",
+          "map_id": 86,
+          "received_species_index": 118,
+          "record_rom_offset": 465949,
+          "source_file": "scripts/Route11Gate2F.asm",
+          "source_id": "npc:route_11_gate_2f:0",
+          "trade_constant": "TRADE_FOR_GURIO",
+          "trade_index": 0,
+          "wanted_species_index": 11
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "ROUTE_18_GATE_2F",
+          "map_id": 191,
+          "received_species_index": 46,
+          "record_rom_offset": 466019,
+          "source_file": "scripts/Route18Gate2F.asm",
+          "source_id": "npc:route_18_gate_2f:5",
+          "trade_constant": "TRADE_FOR_SPIKE",
+          "trade_index": 5,
+          "wanted_species_index": 30
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "ROUTE_2_TRADE_HOUSE",
+          "map_id": 48,
+          "received_species_index": 42,
+          "record_rom_offset": 465963,
+          "source_file": "scripts/Route2TradeHouse.asm",
+          "source_id": "npc:route_2_trade_house:1",
+          "trade_constant": "TRADE_FOR_MILES",
+          "trade_index": 1,
+          "wanted_species_index": 4
+        },
+        {
+          "completion_note": "completion flag is set BEFORE animation and party replacement; flag alone is not delivery proof",
+          "kind": "npc_exchange",
+          "map": "UNDERGROUND_PATH_ROUTE_5",
+          "map_id": 71,
+          "received_species_index": 41,
+          "record_rom_offset": 466075,
+          "source_file": "scripts/UndergroundPathRoute5.asm",
+          "source_id": "npc:underground_path_route_5:9",
+          "trade_constant": "TRADE_FOR_RICKY",
+          "trade_index": 9,
+          "wanted_species_index": 17
+        },
+        {
+          "entry": {
+            "address": 19233,
+            "bank": 24,
+            "rom_offset": 396065
+          },
+          "expected_assignment_hex": "3e91ea58d0",
+          "kind": "uncatchable_script_battle",
+          "map": "POKEMON_TOWER_6F",
+          "map_id": 147,
+          "opponent_species_rom_offset": 396066,
+          "scope_symbol": "PokemonTower6FDefaultScript",
+          "source_file": "scripts/PokemonTower6F.asm",
+          "source_id": "script-battle:ghost-marowak",
+          "source_line": 36,
+          "species_index": 145
+        },
+        {
+          "entry": {
+            "address": 20248,
+            "bank": 6,
+            "rom_offset": 102168
+          },
+          "expected_assignment_hex": "3e54ea58d0",
+          "kind": "uncatchable_script_battle",
+          "map": "PALLET_TOWN",
+          "map_id": 0,
+          "opponent_species_rom_offset": 102169,
+          "scope_symbol": "PalletTownPikachuBattleScript",
+          "source_file": "scripts/PalletTown.asm",
+          "source_id": "script-battle:oak-pikachu",
+          "source_line": 145,
+          "species_index": 84
+        },
+        {
+          "entry": {
+            "address": 20713,
+            "bank": 6,
+            "rom_offset": 102633
+          },
+          "expected_assignment_hex": "3ea5ea58d0",
+          "kind": "uncatchable_script_battle",
+          "map": "VIRIDIAN_CITY",
+          "map_id": 1,
+          "opponent_species_rom_offset": 102634,
+          "scope_symbol": "ViridianCityOldManStartCatchTrainingScript.SetupBattle",
+          "source_file": "scripts/ViridianCity.asm",
+          "source_id": "script-battle:old-man-tutorial",
+          "source_line": 105,
+          "species_index": 165
+        },
+        {
+          "condition": "random wild battle in the Tower without the Silph Scope",
+          "entry": {
+            "address": 22956,
+            "bank": 15,
+            "rom_offset": 252332
+          },
+          "exclude_source_ids": [
+            "script-battle:ghost-marowak"
+          ],
+          "kind": "uncatchable_script_battle",
+          "map_ids": [
+            142,
+            143,
+            144,
+            145,
+            146,
+            147,
+            148
+          ],
+          "source_id": "script-battle:unidentified-tower-ghost"
+        },
+        {
+          "kind": "catchable_static",
+          "level": 70,
+          "level_rom_offset": 287142,
+          "map": "CERULEAN_CAVE_B1F",
+          "map_id": 227,
+          "object_index": 1,
+          "object_symbol": "CeruleanCaveB1F_Object",
+          "source_file": "data/maps/objects/CeruleanCaveB1F.asm",
+          "source_id": "static:ceruleancaveb1f_mewtwo",
+          "species_index": 131,
+          "species_rom_offset": 287141,
+          "x": 27,
+          "y": 13
+        },
+        {
+          "kind": "catchable_static",
+          "level": 43,
+          "level_rom_offset": 122104,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 4,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_electrode1",
+          "species_index": 141,
+          "species_rom_offset": 122103,
+          "x": 25,
+          "y": 18
+        },
+        {
+          "kind": "catchable_static",
+          "level": 43,
+          "level_rom_offset": 122128,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 7,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_electrode2",
+          "species_index": 141,
+          "species_rom_offset": 122127,
+          "x": 21,
+          "y": 14
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 122080,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 1,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb1",
+          "species_index": 6,
+          "species_rom_offset": 122079,
+          "x": 9,
+          "y": 20
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 122088,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 2,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb2",
+          "species_index": 6,
+          "species_rom_offset": 122087,
+          "x": 32,
+          "y": 18
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 122096,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 3,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb3",
+          "species_index": 6,
+          "species_rom_offset": 122095,
+          "x": 21,
+          "y": 25
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 122112,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 5,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb4",
+          "species_index": 6,
+          "species_rom_offset": 122111,
+          "x": 23,
+          "y": 34
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 122120,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 6,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb5",
+          "species_index": 6,
+          "species_rom_offset": 122119,
+          "x": 26,
+          "y": 28
+        },
+        {
+          "kind": "catchable_static",
+          "level": 40,
+          "level_rom_offset": 122136,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 8,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_voltorb6",
+          "species_index": 6,
+          "species_rom_offset": 122135,
+          "x": 37,
+          "y": 32
+        },
+        {
+          "kind": "catchable_static",
+          "level": 50,
+          "level_rom_offset": 122144,
+          "map": "POWER_PLANT",
+          "map_id": 83,
+          "object_index": 9,
+          "object_symbol": "PowerPlant_Object",
+          "source_file": "data/maps/objects/PowerPlant.asm",
+          "source_id": "static:powerplant_zapdos",
+          "species_index": 75,
+          "species_rom_offset": 122143,
+          "x": 4,
+          "y": 9
+        },
+        {
+          "entry": {
+            "address": 21707,
+            "bank": 22,
+            "rom_offset": 365771
+          },
+          "expected_assignment_hex": "3e84ea58d0",
+          "kind": "catchable_static",
+          "map": "ROUTE_12",
+          "map_id": 23,
+          "opponent_species_rom_offset": 365772,
+          "scope_symbol": "Route12DefaultScript",
+          "source_file": "scripts/Route12.asm",
+          "source_id": "static:route12_snorlax",
+          "source_line": 33,
+          "species_index": 132
+        },
+        {
+          "entry": {
+            "address": 22539,
+            "bank": 22,
+            "rom_offset": 366603
+          },
+          "expected_assignment_hex": "3e84ea58d0",
+          "kind": "catchable_static",
+          "map": "ROUTE_16",
+          "map_id": 27,
+          "opponent_species_rom_offset": 366604,
+          "scope_symbol": "Route16DefaultScript",
+          "source_file": "scripts/Route16.asm",
+          "source_id": "static:route16_snorlax",
+          "source_line": 33,
+          "species_index": 132
+        },
+        {
+          "kind": "catchable_static",
+          "level": 50,
+          "level_rom_offset": 289627,
+          "map": "SEAFOAM_ISLANDS_B4F",
+          "map_id": 162,
+          "object_index": 3,
+          "object_symbol": "SeafoamIslandsB4F_Object",
+          "source_file": "data/maps/objects/SeafoamIslandsB4F.asm",
+          "source_id": "static:seafoamislandsb4f_articuno",
+          "species_index": 74,
+          "species_rom_offset": 289626,
+          "x": 6,
+          "y": 1
+        },
+        {
+          "kind": "catchable_static",
+          "level": 50,
+          "level_rom_offset": 334246,
+          "map": "VICTORY_ROAD_2F",
+          "map_id": 194,
+          "object_index": 6,
+          "object_symbol": "VictoryRoad2F_Object",
+          "source_file": "data/maps/objects/VictoryRoad2F.asm",
+          "source_id": "static:victoryroad2f_moltres",
+          "species_index": 73,
+          "species_rom_offset": 334245,
+          "x": 11,
+          "y": 5
+        }
+      ],
+      "unused_trade_rows": [
+        {
+          "constant": "TRADE_FOR_STINGER",
+          "index": 2,
+          "reason": "no map script invokes this trade index"
+        },
+        {
+          "constant": "TRADE_FOR_BART",
+          "index": 4,
+          "reason": "no map script invokes this trade index"
+        },
+        {
+          "constant": "TRADE_FOR_MARTY",
+          "index": 6,
+          "reason": "no map script invokes this trade index"
+        }
+      ]
+    }
+  }
+}

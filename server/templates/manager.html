@@ -344,6 +344,36 @@
           </div>
         </template>
 
+        <template x-if="current && current.status !== 'archived'">
+          <div class="mgr-launcher-info">
+            <span class="mgr-section-label">Red / Blue / Yellow cartridges</span>
+            <template x-if="current.cartridges">
+              <div>
+                <template x-for="pid in ['a','b']" :key="pid">
+                  <div class="mgr-rand-player">
+                    <strong x-text="'Player ' + pid.toUpperCase()"></strong>
+                    <span x-text="current.cartridges[pid].variant"></span>
+                    <code x-text="current.cartridges[pid].final_rom_sha1"></code>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="!current.cartridges">
+              <details class="mgr-new-disclosure">
+                <summary>Set up clean RBY cartridges</summary>
+                <div class="mgr-new-opts mgr-rand-form">
+                  <label>Player A ROM<input type="text" x-model="cartridges.rom_a" placeholder="Local .gb or .gbc path"></label>
+                  <label>Player B ROM<input type="text" x-model="cartridges.rom_b" placeholder="Local .gb or .gbc path"></label>
+                  <button class="mgr-btn" :disabled="cartridges.busy" @click="bindCartridges()"
+                          x-text="cartridges.busy ? 'Verifying…' : 'Verify and bind cartridges'"></button>
+                  <p class="mgr-rand-error" x-show="cartridges.error" x-text="cartridges.error"></p>
+                  <p class="mgr-rand-note">Each player may choose Red, Blue or Yellow. This setup currently accepts clean US-English cartridges. Players connect after loading their save.</p>
+                </div>
+              </details>
+            </template>
+          </div>
+        </template>
+
         {# ── Randomized ROMs ───────────────────────────────────────────────
            Once built, the pair is shown rather than the form: the seeds and hashes
            recorded here are the only record of what each player is playing, because
@@ -865,6 +895,23 @@ function runManager() {
     // Paths rather than file pickers: the randomizer, the settings file and the clean
     // ROMs all live on the machine running the manager, and a browser upload would mean
     // sending ROMs to the server for no reason. Nothing here leaves this machine.
+    cartridges: {rom_a: '', rom_b: '', busy: false, error: ''},
+    async bindCartridges() {
+      if (!this.current || this.cartridges.busy) return;
+      const runId = this.current.run_id;
+      this.cartridges.busy = true;
+      this.cartridges.error = '';
+      try {
+        const response = await fetch('/api/runs/' + runId + '/cartridges', {
+          method: 'POST', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({rom_a: this.cartridges.rom_a.trim(), rom_b: this.cartridges.rom_b.trim()})
+        });
+        const result = await response.json();
+        if (!result.ok) { this.cartridges.error = result.error || 'Cartridge setup failed'; return; }
+        await this.refreshRuns();
+      } catch (error) { this.cartridges.error = String(error); }
+      finally { this.cartridges.busy = false; }
+    },
     rand: { jar: '', settings: '', rom_a: '', rom_b: '', busy: false, error: '' },
 
     async randomize() {

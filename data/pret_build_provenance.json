@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "source_lock_sha256": "29fc92aa6ea58e402c50eb889737659fc7bb5d131805258cd3f6e28b8dc98366",
+  "sources": {
+    "pokered": {
+      "commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9",
+      "tree": "c30cb66a4fd4db0f3c3a710f277001d8a8736a77",
+      "raw_memory_symbols_path": ".cache/pret-build/pokered/pokered.sym",
+      "raw_memory_symbols_sha256": "54e4ecfb2f84e6ff6fdb581db99a15e99c0f6530fe0957104834940374747eff",
+      "memory_symbols_sha256": "5031101ed1a35045c34edf7ef342b48b5ee8bd44829aec0899ce3d80cf433092"
+    },
+    "pokeyellow": {
+      "commit": "0a0851546ff65f65c4bb2af2b95e279e709a8653",
+      "tree": "596f7b396d8f1694998b8a136319b6cde608e620",
+      "raw_memory_symbols_path": ".cache/pret-build/pokeyellow/pokeyellow.sym",
+      "raw_memory_symbols_sha256": "51793a133b7b31d0b764f0b4af09442969566316d3061566f7117f128ac7b7a3",
+      "memory_symbols_sha256": "b331f3ce865450200a1c20c4934f7f7ee3bd16e26f7613201f4570e3a2270adb"
+    },
+    "alchav_pokered": {
+      "commit": "2b02504c9b6cf83269ae4113b7d011a1ca580aeb",
+      "tree": "7a9d3afc7149a1c2092cebc451f88349f5000772",
+      "raw_memory_symbols_path": ".cache/pret-build/alchav_pokered/alchav_pokered.sym",
+      "raw_memory_symbols_sha256": "62831665939cf13faef500aaa67ee7bcdbfb913132f50051d33c401cdbad1d9f",
+      "memory_symbols_sha256": "b4d4e6aa65d93a522a79d29608862733e0590eb980d79dbfd8955d9ce0ee8545"
+    },
+    "pokecrystal": {
+      "commit": "3438c7003a57fa2987fcb223d14b660761b33c64",
+      "tree": "e3d2ee4764f6cdeb989616e01e90daefcd8abc56",
+      "raw_memory_symbols_path": ".cache/pret-build/pokecrystal/pokecrystal.sym",
+      "raw_memory_symbols_sha256": "6623bd2aced4c7df70c43487cf5d16532170f5aebcc2a734f10ed504ded56c59",
+      "memory_symbols_sha256": "066e1e247107128f9105815ea744c75b621c5121b1465b8170817dfee2fb4247"
+    },
+    "pokegold": {
+      "commit": "e78abb8382a734fe325a16136fd779dbea9b0d47",
+      "tree": "897b1a83f13cfcbbe060350e6bbfc5aa7d972e57",
+      "raw_memory_symbols_path": ".cache/pret-build/pokegold/pokegold.sym",
+      "raw_memory_symbols_sha256": "be09f19e3aa15c759330a05042044287064dd71949080b5a5ab6662ca5367857",
+      "memory_symbols_sha256": "b7b9c6e59af3fdb5df954c2d1ae0bf201b141bfc733f06bda9d2253972186079"
+    }
+  },
+  "roms": {
+    "pokered": {
+      "source": "pokered",
+      "source_commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9",
+      "build_mode": "full-local",
+      "built_rom_path": ".cache/pret/pokered/pokered.gbc",
+      "built_rom_sha1": "ea9bcae617fdf159b045185467ae58b2e4a48b9a",
+      "clean_rom_sha1": "ea9bcae617fdf159b045185467ae58b2e4a48b9a",
+      "raw_symbols_path": ".cache/pret/pokered/pokered.sym",
+      "raw_symbols_sha256": "5142424dd1e85f00f7193655a0a6c5f0b6366163c74280e5d55990ef8c6b3db9",
+      "rom_symbols_sha256": "e53b0b09c9b9341779f33dfa85aefc14d13cfd3a790022ea3db278ce1754fc0f",
+      "memory_symbols_sha256": "5031101ed1a35045c34edf7ef342b48b5ee8bd44829aec0899ce3d80cf433092"
+    },
+    "pokeblue": {
+      "source": "pokered",
+      "source_commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9",
+      "build_mode": "full-local",
+      "built_rom_path": ".cache/pret/pokered/pokeblue.gbc",
+      "built_rom_sha1": "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2",
+      "clean_rom_sha1": "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2",
+      "raw_symbols_path": ".cache/pret/pokered/pokeblue.sym",
+      "raw_symbols_sha256": "65d0f3216e23117336623d2df2f263b8cc9ea784c0d3d4124eacbd8345a45a7d",
+      "rom_symbols_sha256": "37cf7d6df22675131bed1650023f080e62356581f18f2983f88897b27850747f",
+      "memory_symbols_sha256": "5031101ed1a35045c34edf7ef342b48b5ee8bd44829aec0899ce3d80cf433092"
+    },
+    "pokeyellow": {
+      "source": "pokeyellow",
+      "source_commit": "0a0851546ff65f65c4bb2af2b95e279e709a8653",
+      "build_mode": "full-local",
+      "built_rom_path": ".cache/pret/pokeyellow/pokeyellow.gbc",
+      "built_rom_sha1": "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1",
+      "clean_rom_sha1": "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1",
+      "raw_symbols_path": ".cache/pret/pokeyellow/pokeyellow.sym",
+      "raw_symbols_sha256": "f97ce33581421ae31171cd66205daec7d3951464f577109bf5bda674207832e4",
+      "rom_symbols_sha256": "63c7f82b4835ac411d08aef007ab07414ca4eee1eae14d1f0abfe6c17c78f9cd",
+      "memory_symbols_sha256": "b331f3ce865450200a1c20c4934f7f7ee3bd16e26f7613201f4570e3a2270adb"
+    }
+  },
+  "toolchain": {
+    "rgbasm": {
+      "path": ".cache/build-tools/rgbds-v1.0.1/rgbasm.exe",
+      "version": "rgbasm v1.0.1",
+      "sha256": "537fc582a669aa8e625910df776c76a015be0a850a803a383c4c3cdb07c0dfab"
+    },
+    "rgblink": {
+      "path": ".cache/build-tools/rgbds-v1.0.1/rgblink.exe",
+      "version": "rgblink v1.0.1",
+      "sha256": "76c82e1c1f80a32e856fd16fb6b7ffe8e536855e3750e8f7fc152510792cc7b1"
+    },
+    "rgbfix": {
+      "path": ".cache/build-tools/rgbds-v1.0.1/rgbfix.exe",
+      "version": "rgbfix v1.0.1",
+      "sha256": "f7a9523678db9030bb3e7660526baa490b8a16d648523f3113a06658ba645dbb"
+    },
+    "rgbgfx": {
+      "path": ".cache/build-tools/rgbds-v1.0.1/rgbgfx.exe",
+      "version": "rgbgfx v1.0.1",
+      "sha256": "210e8e73d287606fc8c4bf3c0e5be1a1d76713992a3aa675aabdb0ca5f79e8d1"
+    },
+    "make": {
+      "path": ".cache/build-tools/w64devkit/bin/make.exe",
+      "version": "GNU Make 4.4.1",
+      "sha256": "e92e4f5ff2c226574b1af024a41a7c6db8c945e70c22e51e9a4c1a7f5501fbe8"
+    },
+    "gcc": {
+      "path": ".cache/build-tools/w64devkit/bin/gcc.exe",
+      "version": "gcc.EXE (GCC) 16.2.0",
+      "sha256": "b5cd6fb78e8b1c6b3df9d7d8310675fa8490aac8c1adab94fb32d1e8a39e83a8"
+    },
+    "sh": {
+      "path": ".cache/build-tools/w64devkit/bin/sh.exe",
+      "version": "BusyBox v1.38.0.git-6075-g169694ebd (2026-08-07 21:01:27 UTC)",
+      "sha256": "e6b21ce0c5a7f519db3e28763a70751f8628150d26e0af8a0b721180d6af5939"
+    }
+  },
+  "artifacts": {
+    "data/pret_syms.json": "0c6d63a29256af8f4b55254fafb8c74e728a4dea0b5452b96d690e09de014cbd",
+    "data/pret_rom_syms.json": "d137763955e50bef64334ec5880a8f0241a75e7380f0305fd38b6dfe06618a03"
+  }
+}

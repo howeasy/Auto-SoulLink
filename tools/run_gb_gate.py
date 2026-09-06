@@ -29,6 +29,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -69,6 +70,11 @@ GENS = {
             "yellow": "Pokemon - Yellow Version (USA, Europe).SaveRAM",
         },
         "patched": {
+            # Isolated foreground trade-engine artifacts; no public companion
+            # capability or receptionist dispatch is advertised by these builds.
+            "red_native_trade": ("red", "patch/gen1/build/native_trade_red.gb", "native trade red.SaveRAM"),
+            "blue_native_trade": ("blue", "patch/gen1/build/native_trade_blue.gb", "native trade blue.SaveRAM"),
+            "yellow_native_trade": ("yellow", "patch/gen1/build/native_trade_yellow.gb", "native trade yellow.SaveRAM"),
             "red_patched": ("red", "patch/gen1/build/slink_red.gb", "slink red.SaveRAM"),
             # The RANDOMIZED path's artifact. Built by
             # `tests/live/make_randomized_patched.py` when a UPR jar is available, and
@@ -168,6 +174,14 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
         raise FileNotFoundError(f"EmuHawk not found at {EMUHAWK} (set $SLINK_EMUHAWK)")
     spec = GENS[gen_for(rom_key)]
     play = spec["play"]
+    os.makedirs(BUILD, exist_ok=True)
+    # Never seed or delete the user's emulator SaveRAM. A fresh directory also prevents
+    # a same-hash cartridge or a previous failed gate from supplying this gate's save.
+    run_dir = tempfile.mkdtemp(prefix=f"gb-gate-{rom_key}-", dir=BUILD)
+    run_saveram = os.path.join(run_dir, "SaveRAM")
+    os.makedirs(run_saveram)
+    if not os.path.isfile(BIZHAWK_CONFIG):
+        raise FileNotFoundError(f"BizHawk config required for isolated SaveRAM: {BIZHAWK_CONFIG}")
 
     if rom_key in spec["patched"]:
         base_key, rom_rel, saveram_name = spec["patched"][rom_key]
@@ -177,21 +191,16 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
             builder = ("python tools/gen1_ap_rom.py" if base_key is None
                        else "python patch/gen1/tools/build.py")
             raise FileNotFoundError(f"{rom_rel} missing — build it with `{builder}`")
-        os.makedirs(SAVERAM_DIR, exist_ok=True)
         if base_key is None:
-            # Cold boot. A leftover save from an earlier run would put the title screen on
-            # CONTINUE and quietly change what the gate is booting into.
-            stale = os.path.join(SAVERAM_DIR, saveram_name)
-            if os.path.exists(stale):
-                os.remove(stale)
+            pass  # Fresh isolated directory is empty, including for cold-boot controls.
         else:
             fixture = os.path.join(play.FIXTURES, f"{base_key}_{target}.SaveRAM")
             if not os.path.exists(fixture):
                 raise FileNotFoundError(f"missing fixture {os.path.relpath(fixture, REPO)}")
-            shutil.copyfile(fixture, os.path.join(SAVERAM_DIR, saveram_name))
+            shutil.copyfile(fixture, os.path.join(run_saveram, saveram_name))
     else:
         rom_rel = play.staged_rom(rom_key)
-        seed_saveram(rom_key, target)
+        seed_saveram(rom_key, target, dest_dir=run_saveram)
     os.makedirs(BUILD, exist_ok=True)
 
     result = _result_path_for(script)
@@ -199,9 +208,8 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
         os.remove(result)          # a leftover verdict must never be read as this run's
 
     tag = os.path.splitext(os.path.basename(script))[0]
-    cfg_rel = f"patch/build/gate_cfg_{tag}_{rom_key}.ini"
-    if os.path.exists(BIZHAWK_CONFIG):
-        write_run_config(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel))
+    cfg_rel = os.path.relpath(os.path.join(run_dir, "config.ini"), REPO)
+    write_run_config(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel), saveram_dir=run_saveram)
 
     env = dict(os.environ, SLINK_ROOT=REPO.replace("\\", "/"))
     cmd = [EMUHAWK, f"--lua={script}"]

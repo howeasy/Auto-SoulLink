@@ -113,21 +113,31 @@ def test_retrieve_is_called_with_cached_stats(path):
 
 @pytest.mark.parametrize("path", GB_CLIENTS, ids=lambda p: os.path.basename(p))
 def test_deferred_writes_are_gated_on_the_overworld(path):
-    """`not in_battle` is not a safe-state gate.
+    """The actual guard expression must honor the generation's safety predicate."""
+    from lupa import LuaRuntime
 
-    It is also true in the PC box UI, the party menu and the naming screen, where the open
-    UI holds its own copy of the data and writes it back over ours. isInOverworld() adds the
-    per-generation "something else owns the game" address — wJoyIgnore/wFontLoaded in Gen 1,
-    wScriptRunning in Gen 2 (measured, not chosen by name: wJoypadDisable reads 0 with a
-    Crystal menu open, and wTextboxFlags is text-speed configuration).
-    """
     src = _strip_comments(_src(path))
-    m = re.search(r"if\s+writes_enabled\s+and\s+([^\n]*?)#pending_sync_cmds\s*>\s*0", src)
+    m = re.search(r"if\s+(writes_enabled\s+and[^\n]*#pending_sync_cmds\s*>\s*0[^\n]*?)\s+then", src)
     assert m, f"{os.path.basename(path)}: could not find the pending_sync_cmds gate"
     guard = m.group(1)
-    assert "isInOverworld" in guard, (
-        f"{os.path.basename(path)} gates deferred writes on `{guard.strip()}` rather than "
-        f"M.isInOverworld() — writes can land while a menu owns the data")
+    predicate = "isPartyWriteSafe" if os.path.basename(path) == "gen1_rby_client.lua" else "isInOverworld"
+    assert predicate in guard
+    lua = LuaRuntime()
+    lua.execute(f"""
+        writes_enabled=true; box_safe=true; pending_sync_cmds={{{{cmd='box_mon'}}}}
+        connected=true; safe=true
+        C={{connected=function() return connected end}}
+        M={{{predicate}=function() return safe end}}
+    """)
+    check = lua.eval(f"function() return {guard} end")
+    assert check() is True
+    variables = ("safe", "writes_enabled")
+    if predicate == "isPartyWriteSafe":
+        variables += ("connected", "box_safe")
+    for variable in variables:
+        lua.globals()[variable] = False
+        assert check() is False, variable
+        lua.globals()[variable] = True
 
 
 @pytest.mark.parametrize("path", CLIENTS, ids=lambda p: os.path.basename(p))
@@ -161,7 +171,7 @@ def test_deferred_sync_executor_is_fault_contained(path):
     quiet. Gen 1 shipped this way; Gen 2 did not.
     """
     src = _strip_comments(_src(path))
-    m = re.search(r"if\s+writes_enabled\s+and[^\n]*#pending_sync_cmds\s*>\s*0\s*then(.*?)"
+    m = re.search(r"if\s+writes_enabled\s+and[^\n]*#pending_sync_cmds\s*>\s*0[^\n]*?\s*then(.*?)"
                   r"if\s+handled\s+then\s+table\.remove", src, flags=re.S)
     assert m, f"{os.path.basename(path)}: could not find the deferred executor block"
     assert "pcall(" in m.group(1), (

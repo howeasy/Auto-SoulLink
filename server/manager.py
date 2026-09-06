@@ -15,6 +15,7 @@ Run dirs:  data/runs/<run_id>/links.json
 
 import argparse
 import asyncio
+import html
 import json
 import logging
 import os
@@ -41,8 +42,13 @@ except ImportError:
 
 import aiohttp_jinja2
 
-from server.overlay_catalog import build_index_context as _build_stream_index_context
 from server.adapters import variant_label
+from server import runtime_boundary
+from server.http_safety import csrf_protection, theme_cache
+from server.json_files import atomic_write_json
+from server.lua_literals import lua_comment, lua_string
+from server.overlay_catalog import build_index_context as _build_stream_index_context
+from server.status_payload import empty_status_payload
 from server.templating import resolve_theme, setup_templating
 
 
@@ -70,45 +76,65 @@ TCP_PORT_BASE  = 54321
 HTTP_PORT_BASE = 8081   # 8090 reserved for manager
 
 # Schema-compatible empty /api/status returned when no run is active.
-_EMPTY_STATUS: dict = {
-    "players": {
-        "a": {"connected": False, "status": "disconnected", "area": "", "ball_count": 0,
-              "last_event": "", "last_event_ts": "", "party": [], "nuzlocke_active": False,
-              "trainer_name": "", "identity_error": None},
-        "b": {"connected": False, "status": "disconnected", "area": "", "ball_count": 0,
-              "last_event": "", "last_event_ts": "", "party": [], "nuzlocke_active": False,
-              "trainer_name": "", "identity_error": None},
-    },
-    "links": [],
-    "area_states": {},
-    "pending_captures": {},
-    "recent_events": [],
-    "killfeed": [],
-    "party_details": {"a": [], "b": []},
-    "badge_slugs": {"a": [], "b": []},
-    "attempts_count": 0,
-    "rules": {},
-    "rom_type": "",
-    "run_name": "",
-}
+_EMPTY_STATUS: dict = empty_status_payload()
 
 
 # ── Registry helpers ────────────────────────────────────────────────────────
 
-def _load_registry() -> list[dict]:
-    if not os.path.exists(REGISTRY_PATH):
-        return []
+class RegistryError(RuntimeError):
+    """The registry must be repaired before the Manager can change runs."""
+
+
+@web.middleware
+async def registry_errors(request: web.Request, handler):
+    """Surface a damaged registry without replacing it or hiding every run."""
     try:
-        with open(REGISTRY_PATH) as f:
-            return json.load(f).get("runs", [])
-    except (json.JSONDecodeError, OSError):
+        return await handler(request)
+    except RegistryError as exc:
+        message = str(exc) + ". Restore or repair registry.json, then retry."
+        if request.path.startswith("/api/"):
+            return web.json_response({"ok": False, "error": message}, status=503,
+                                     headers={"Cache-Control": "no-store"})
+        return web.Response(
+            text="<!doctype html><title>Run registry unavailable</title>"
+                 "<h1>Run registry unavailable</h1><p>" + html.escape(message) + "</p>",
+            status=503, content_type="text/html", headers={"Cache-Control": "no-store"},
+        )
+
+
+def _registry_runs(document) -> list[dict]:
+    if not isinstance(document, dict) or not isinstance(document.get("runs"), list):
+        raise ValueError("expected an object containing a runs list")
+    runs = document["runs"]
+    seen = set()
+    for run in runs:
+        if not isinstance(run, dict) or not isinstance(run.get("run_id"), str) or not run["run_id"]:
+            raise ValueError("every run must have a non-empty run_id")
+        if run["run_id"] in seen:
+            raise ValueError("duplicate run_id")
+        seen.add(run["run_id"])
+    return runs
+
+
+def _load_registry() -> list[dict]:
+    try:
+        with open(REGISTRY_PATH, encoding="utf-8") as f:
+            return _registry_runs(json.load(f))
+    except FileNotFoundError:
         return []
+    except (ValueError, OSError) as exc:
+        message = f"Run registry could not be read; preserved {REGISTRY_PATH}: {exc}"
+        log.error(message)
+        raise RegistryError(message) from exc
 
 
 def _save_registry(runs: list[dict]):
-    os.makedirs(MANAGER_DIR, exist_ok=True)
-    with open(REGISTRY_PATH, "w") as f:
-        json.dump({"runs": runs}, f, indent=2)
+    # A file may have become unreadable since the caller's last load (including
+    # across a subprocess await). Never replace that evidence with a fresh list.
+    _load_registry()
+    document = {"runs": runs}
+    _registry_runs(document)
+    atomic_write_json(REGISTRY_PATH, document)
 
 
 def _find_run(runs: list[dict], run_id: str) -> dict | None:
@@ -141,7 +167,7 @@ _LAUNCHER_TEMPLATE = """\
 -- Override: set SLINK_ROOT to skip auto-detection entirely:
 local SLINK_ROOT = nil  -- e.g. "C:/SLink/"
 
-SLINK_HOST   = "{host}"
+SLINK_HOST   = {host}
 SLINK_PORT   = {tcp_port}
 SLINK_PLAYER = "{player}"
 
@@ -209,9 +235,9 @@ dofile(SLINK_ROOT .. "lua/slink.lua")
 def _build_launcher(run: dict, player: str, host: str) -> str:
     """Return launcher Lua source with the given connect host."""
     return _LAUNCHER_TEMPLATE.format(
-        run_name=run.get("name") or run["run_id"],
+        run_name=lua_comment(str(run.get("name") or run["run_id"])),
         player_upper=player.upper(),
-        host=host,
+        host=lua_string(host),
         tcp_port=run["tcp_port"],
         player=player,
     )
@@ -277,17 +303,21 @@ async def _spawn_run(run: dict, host: str, manager_port: int = 0) -> int:
     # as stopped.
     _spawn_log = os.path.join(data_dir, "spawn.log")
     try:
-        # Not a context manager: the handle is owned by the subprocess below and must outlive us.
+        # The child inherits its own handle during process creation.
         _errf = open(_spawn_log, "ab", buffering=0)   # noqa: SIM115
     except OSError:
         _errf = asyncio.subprocess.DEVNULL
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=_errf,
-        # Detach from our process group so CTRL-C on the manager doesn't kill runs
-        creationflags=0x00000008 if sys.platform == "win32" else 0,  # DETACHED_PROCESS on Windows
-    )
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=_errf,
+            # Detach from our process group so CTRL-C on the manager doesn't kill runs
+            creationflags=0x00000008 if sys.platform == "win32" else 0,  # DETACHED_PROCESS on Windows
+        )
+    finally:
+        if _errf != asyncio.subprocess.DEVNULL:
+            _errf.close()
     log.info(f"Spawned run {run['run_id']} (PID {proc.pid}) TCP={run['tcp_port']} HTTP={run['http_port']}")
     return proc.pid
 
@@ -696,6 +726,45 @@ class RunManager:
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
+    async def handle_cartridges(self, request: web.Request) -> web.Response:
+        """Bind each RBY player to an inspected local cartridge before admission."""
+        from pathlib import Path
+
+        from server.gen1_admission import AdmissionError, clean_contract, write_contract
+
+        run_id = request.match_info["run_id"]
+        runs = _load_registry()
+        run = _find_run(runs, run_id)
+        if run is None:
+            return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        try:
+            body = await request.json()
+            if not isinstance(body, dict) or set(body) != {"rom_a", "rom_b"}:
+                raise AdmissionError("provide rom_a and rom_b local file paths")
+            contract = await asyncio.to_thread(clean_contract, {"a": body["rom_a"], "b": body["rom_b"]})
+            write_contract(Path(MANAGER_DIR) / run_id / "rom_contract.json", contract)
+            run["cartridges"] = contract["players"]
+            _save_registry(runs)
+        except (AdmissionError, ValueError, TypeError) as exc:
+            return web.json_response({"ok": False, "error": str(exc)}, status=400)
+        except OSError as exc:
+            return web.json_response({"ok": False, "error": f"cartridge setup could not be saved: {exc}"}, status=500)
+        return web.json_response({"ok": True, "cartridges": run["cartridges"]})
+
+    def read_saved_run(self, run_id: str) -> dict:
+        """Read-only source for stopped-run summaries; never starts/restores a run."""
+        from pathlib import Path
+        if not isinstance(run_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}", run_id):
+            raise ValueError("invalid run identifier")
+        directory = (Path(MANAGER_DIR) / run_id).resolve()
+        if not directory.is_relative_to(Path(MANAGER_DIR).resolve()):
+            raise ValueError("run directory leaves manager storage")
+        return runtime_boundary.read_saved_run(directory)
+
+    @staticmethod
+    def randomization_availability() -> dict:
+        return runtime_boundary.randomization_decision()
+
     # ── Randomized ROM pairs ───────────────────────────────────────────────────
 
     async def handle_randomize(self, request: web.Request) -> web.Response:
@@ -715,11 +784,15 @@ class RunManager:
         run = _find_run(runs, run_id)
         if run is None:
             return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        if run.get("cartridges"):
+            return web.json_response({"ok": False, "error": "this run is already bound to cartridges; use a new run"}, status=400)
         try:
             body = await request.json()
         except Exception:
             return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
 
+        if not isinstance(body, dict):
+            return web.json_response({"ok": False, "error": "JSON object required"}, status=400)
         jar = str(body.get("jar", "")).strip() or os.environ.get("SLINK_UPR_JAR", "")
         settings = str(body.get("settings", "")).strip()
         rom_a = str(body.get("rom_a", "")).strip()
@@ -729,6 +802,11 @@ class RunManager:
         if missing:
             return web.json_response(
                 {"ok": False, "error": f"missing: {', '.join(missing)}"}, status=400)
+
+        availability = self.randomization_availability()
+        if not availability["available"]:
+            return web.json_response({"ok": False, "error": availability["reason"],
+                "reason_code": availability["reason_code"], "available": False}, status=409)
 
         out_dir = os.path.join(MANAGER_DIR, run_id, "roms")
         from server.upr_pipeline import UprPipelineError, prepare_pair
@@ -869,7 +947,7 @@ class RunManager:
         """GET /api/status — proxy to the active run or return empty status."""
         active = self._active_stream_run()
         if active is None:
-            return web.json_response(_EMPTY_STATUS)
+            return web.json_response(empty_status_payload())
         url = f"http://127.0.0.1:{active['http_port']}/api/status"
         try:
             async with request.app["proxy_session"].get(
@@ -879,7 +957,7 @@ class RunManager:
                 return web.json_response(data)
         except Exception as e:
             log.debug(f"Proxy /api/status → run {active['run_id']} failed: {e}")
-            return web.json_response(_EMPTY_STATUS)
+            return web.json_response(empty_status_payload())
 
     async def handle_run_live(self, request: web.Request) -> web.Response:
         """GET /api/runs/{run_id}/live — same-origin proxy to a specific run's
@@ -948,7 +1026,7 @@ class RunManager:
 
 async def main(host: str, port: int):
     manager = RunManager(bind_host=host, manager_port=port)
-    app = web.Application()
+    app = web.Application(middlewares=[csrf_protection, theme_cache, registry_errors])
     setup_templating(app)
 
     # Run-management routes
@@ -961,6 +1039,7 @@ async def main(host: str, port: int):
     app.router.add_post("/api/runs/{run_id}/delete",  manager.handle_delete)
     app.router.add_get("/api/runs/{run_id}/launcher/{player}", manager.handle_launcher)
     app.router.add_post("/api/runs/{run_id}/randomize", manager.handle_randomize)
+    app.router.add_post("/api/runs/{run_id}/cartridges", manager.handle_cartridges)
     app.router.add_get("/api/runs/{run_id}/live",     manager.handle_run_live)
 
     # Stream pin API

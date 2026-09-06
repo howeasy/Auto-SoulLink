@@ -37,9 +37,12 @@ pytestmark = [
                        reason="two-instance E2E only runs with SLINK_E2E=1 (spawns EmuHawk twice)"),
 ]
 
-# Two duo configurations, see GAMES in tools/e2e_duo.py:
+# Required ordered pairs, including the user's Yellow/Yellow extension:
 #   gen1         A=Red,    B=Blue
 #   gen1_yellow  A=Yellow, B=Red
+#   gen1_blue_yellow A=Blue, B=Yellow
+#   gen1_red_red A=Red, B=Red (independent SaveRAM directories)
+#   gen1_yellow_yellow A=Yellow, B=Yellow (independent SaveRAM directories)
 #
 # Yellow is not a formality. It shifts nearly every WRAM address by -1, and until this
 # parametrisation existed it only ever ran SINGLE-instance gates — so no Yellow address had
@@ -51,6 +54,9 @@ pytestmark = [
 DUO_GAMES = {
     "gen1": ("red", "blue"),
     "gen1_yellow": ("yellow", "red"),
+    "gen1_blue_yellow": ("blue", "yellow"),
+    "gen1_red_red": ("red", "red"),
+    "gen1_yellow_yellow": ("yellow", "yellow"),
 }
 DUO_ROMS = DUO_GAMES["gen1"]
 

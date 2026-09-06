@@ -17,6 +17,7 @@ parse error.
 Cross-client rather than a Gen 1 regression test: the same mistake in any future client
 would be just as silent, and only one of the five had it.
 """
+import json
 import os
 import re
 
@@ -138,6 +139,24 @@ def test_dispatcher_only_reads_fields_the_parser_extracts(client):
     used = set()
     for ln in (_code_only(x) for x in lines[start + 1:end]):
         used.update(re.findall(r"\bc\.(\w+)", ln))
+
+    if "JSON.decode(raw)" in parser or "Wire.parse_commands(raw)" in parser:
+        # A full decoder preserves fields instead of enumerating assignments.
+        # Execute that production parser for every dispatcher field.
+        from lupa import LuaRuntime
+        runtime = LuaRuntime(unpack_returned_tuples=True)
+        with open(os.path.join(REPO, "lua", "json_codec.lua"), encoding="utf-8") as stream:
+            runtime.globals().JSON = runtime.execute(stream.read())
+        runtime.globals().root = REPO.replace("\\", "/")
+        runtime.execute("package.path=root..'/lua/?.lua;'..package.path; package.loaded.json_codec=JSON; Wire=require('wire_protocol')")
+        source = "\n".join(lines[pspan[0]:pspan[1] + 1])
+        parse = runtime.execute(source + "\nreturn parse_command_list")
+        expected = {field: "field-" + field for field in used}
+        expected["cmd"] = "noop"
+        commands = parse(json.dumps({"commands": [expected]}))
+        assert len(commands) == 1
+        assert dict(commands[1].items()) == expected
+        return
 
     missing = sorted(used - built)
     assert not missing, (

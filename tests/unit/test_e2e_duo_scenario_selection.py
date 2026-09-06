@@ -42,7 +42,13 @@ def test_savestate_games_are_never_given_a_batteryless_scenario(game):
     scenario with no savestate, so selecting one for Gen 3 breaks collection of the whole
     module rather than failing a single test."""
     if not GAMES[game]["uses_savestate"]:
-        pytest.skip(f"{game} boots from a battery save")
+        # Battery-boot games need an explicit fixture for BOTH instances. Test that
+        # contract rather than reporting their intended launch path as skipped.
+        from run_gb_gate import ROM_TO_GEN
+        fixtures = GAMES[game]["fixture"]
+        assert set(fixtures) == {"a", "b"}
+        assert all(key in ROM_TO_GEN for key in fixtures.values())
+        return
     offenders = [n for n in scenarios_for(game) if "savestate" not in SCENARIOS[n]]
     assert not offenders, (
         f"{game} loads savestates but would be given scenario(s) that declare none: "
@@ -70,6 +76,16 @@ def test_a_games_entry_matches_the_whole_family():
     """
     assert scenarios_for("gen1_yellow") == scenarios_for("gen1")
     assert scenario_applies("rivalswap", "gen1_yellow")
+
+
+def test_all_required_gen1_pairs_run_the_entire_gameplay_selection():
+    sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
+    from test_duo_gen1 import DUO_GAMES
+    assert set(DUO_GAMES.values()) == {("red", "blue"), ("blue", "yellow"),
+                                       ("yellow", "red"), ("red", "red"), ("yellow", "yellow")}
+    for game, pair in DUO_GAMES.items():
+        assert tuple(GAMES[game]["fixture"][p] for p in ("a", "b")) == pair
+        assert scenarios_for(game) == scenarios_for("gen1")
 
 
 def test_family_matching_does_not_leak_across_generations():

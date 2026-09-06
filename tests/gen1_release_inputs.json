@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "files": {
+    "tests/fixtures/gen1/blue_battle.SaveRAM": "5811bcde99523e51c5ebdea01f72bf7cc1a85474d85282b6235628cf06d6655f",
+    "tests/fixtures/gen1/blue_town.SaveRAM": "ba0b3997d80b73006ee9d4fe2080344f2d3c53fa3007d4efd0bbcd0f7470bcf8",
+    "tests/fixtures/gen1/red_battle.SaveRAM": "55a23f7a7c809acecf17362f1a118d3149f622f55160406007ba09f8aa469264",
+    "tests/fixtures/gen1/red_town.SaveRAM": "897f86f98bd8465411b16dcf75d3b9c6a25d1129d6e918c70744bbef5c5bc5f7",
+    "tests/fixtures/gen1/yellow_battle.SaveRAM": "0df70b9c33e995d95046cf7f1d5669d670681c1b93747955db0b0b8d30ac43ac",
+    "tests/fixtures/gen1/yellow_town.SaveRAM": "5d4655dee2f7f299e208ca8918492999cd7ad50fa1e74163431b529836c16786",
+    "patch/build/gen1_red_ap.gb": "78969ad9d213c3121af84571dc4fcad94672d91f1134f4f294026725c95eb18b",
+    "patch/build/gen1_blue_ap.gb": "f41eab0f66d94c55ab2f766fd3c76cdce9381b09238f1147e5164f2434dabb11"
+  },
+  "derived_inputs": {
+    "patch/build/gen1_red_ap.gb": {
+      "base_input": "Pokemon - Red Version (USA, Europe) (SGB Enhanced).gb",
+      "base_sha1": "ea9bcae617fdf159b045185467ae58b2e4a48b9a",
+      "archive_member": "pokemon_rb/basepatch_red.bsdiff4",
+      "patch_sha256": "48639d85ddce109b08d7f509244e93d7731876c5a0a81b324b15447011e935b1",
+      "sha256": "78969ad9d213c3121af84571dc4fcad94672d91f1134f4f294026725c95eb18b",
+      "sha1": "4789c6a7126c268c77caa8a280033f7989c99b00",
+      "size": 1048576,
+      "source_prerequisite": "archipelago-world",
+      "derivation": "bsdiff4.patch(clean input, installed AP base patch), reproduced byte-for-byte during this review; no ROM/package redistribution"
+    },
+    "patch/build/gen1_blue_ap.gb": {
+      "base_input": "Pokemon - Blue Version (USA, Europe) (SGB Enhanced).gb",
+      "base_sha1": "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2",
+      "archive_member": "pokemon_rb/basepatch_blue.bsdiff4",
+      "patch_sha256": "169a2b685ea2d3fff56736b172849b0aa3eab03dad339a71eece92f8ca6328b9",
+      "sha256": "f41eab0f66d94c55ab2f766fd3c76cdce9381b09238f1147e5164f2434dabb11",
+      "sha1": "4d3f8c07f3e6c2cf0df46db35b5fec7002da12ac",
+      "size": 1048576,
+      "source_prerequisite": "archipelago-world",
+      "derivation": "bsdiff4.patch(clean input, installed AP base patch), reproduced byte-for-byte during this review; no ROM/package redistribution"
+    }
+  }
+}

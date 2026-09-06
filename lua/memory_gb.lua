@@ -503,32 +503,40 @@ end
 --- the SRAM banks they are spread across are that cartridge's business. A profile that
 --- does not describe them returns nil, and the caller keeps its old behaviour.
 ---
---- The stored copy of the CURRENT box is stale by design (the live one is in WRAM), so
---- callers scan the active box as well -- which they already did.
+--- The current box's SRAM slot is intentionally empty. Read that box from WRAM
+--- and the other eleven from SRAM; before first ChangeBox only the current box exists.
 function M.storedBoxKeys()
     local sb = M.profile and M.profile.stored_boxes
     if not (sb and sb.count and sb.stride and sb.banks and sb.per_bank) then return nil end
+    local current = M.getCurrentBoxNum()
+    if current == nil then return nil, "invalid current box" end
+    -- Before first ChangeBox, no inactive SRAM box has been initialized.
+    local initialized = not M.profile.sram_box_layout or M.read_u8(M.CURRENT_BOX_NUM_ADDR) >= 0x80
     local keys = {}
     for b = 0, sb.count - 1 do
+        local active = b == current
+        if active or initialized then
         local bank = sb.banks[math.floor(b / sb.per_bank) + 1]
-        if bank then
-            local box_off = bank + (b % sb.per_bank) * sb.stride
-            local n = mem_r8(box_off, SRAM_DOMAIN)
-            if n <= M.BOX_MAX_MONS then
-                local structs = box_off + 1 + (M.BOX_MAX_MONS + 1)
-                for i = 0, n - 1 do
-                    local base = structs + i * M.BOX_STRUCT_SIZE
-                    local sp = mem_r8(base + M.SPECIES_OFFSET, SRAM_DOMAIN)
-                    if sp ~= 0 and sp ~= 0xFF then
-                        keys[string.format("%02X%02X:%04X:%02X",
-                            mem_r8(base + M.DV_OFFSET_1, SRAM_DOMAIN),
-                            mem_r8(base + M.DV_OFFSET_2, SRAM_DOMAIN),
-                            mem_r8(base + M.OTID_OFFSET, SRAM_DOMAIN) * 256
-                                + mem_r8(base + M.OTID_OFFSET + 1, SRAM_DOMAIN),
-                            sp)] = true
-                    end
-                end
+        if not bank then return nil, "missing stored box bank" end
+        local box_off = bank + (b % sb.per_bank) * sb.stride
+        local read = active and M.box_read_u8 or function(addr) return mem_r8(addr, SRAM_DOMAIN) end
+        local count_addr = active and M.BOX_COUNT_ADDR or box_off
+        local species_addr = active and M.BOX_SPECIES_ADDR or box_off + 1
+        local structs = active and M.BOX_BASE_ADDR or box_off + 1 + M.BOX_MAX_MONS + 1
+        local n = read(count_addr)
+        if n > M.BOX_MAX_MONS then return nil, "invalid box count" end
+        if read(species_addr + n) ~= 0xFF then return nil, "invalid box species terminator" end
+        for i = 0, n - 1 do
+            local base = structs + i * M.BOX_STRUCT_SIZE
+            local sp = read(base + M.SPECIES_OFFSET)
+            if sp == 0 or sp == 0xFF or read(species_addr + i) ~= sp then
+                return nil, "invalid box species list"
             end
+            local key = string.format("%02X%02X:%04X:%02X", read(base + M.DV_OFFSET_1),
+                read(base + M.DV_OFFSET_2), read(base + M.OTID_OFFSET) * 256 + read(base + M.OTID_OFFSET + 1), sp)
+            if keys[key] then return nil, "duplicate stored Pokemon key" end
+            keys[key] = true
+        end
         end
     end
     return keys
@@ -656,19 +664,9 @@ function M.isWildBattle()
     return M.read_u8(M.BATTLE_FLAG_ADDR) == 1
 end
 
--- Is it safe to write party/box memory right now?
---
--- `not isInBattle()` is NOT enough on its own: it is equally true in the PC box UI, the
--- party menu, the naming screen and mid-cutscene — every place where the open UI holds
--- its own copy of the data and writes it back over ours. Two cheap predicates close the
--- windows that actually corrupt state:
---   wJoyIgnore  — nonzero while a script owns the joypad (cutscene, forced movement)
---   wFontLoaded — bit 0 set while a text box / menu font is loaded, i.e. a UI is up
---
--- Profile-gated: a profile that declares neither address keeps the old battle-only
--- behaviour, so Gen 2 opts in by adding the addresses rather than by this changing under
--- it. Gen 1 has no task/callback system to gate on, so a Gen 3-style multi-predicate
--- check is not available here — these two are the ones worth having.
+-- Legacy state flags. These alone do not certify a write: live RBY gates show
+-- clear flags on the title/CONTINUE screen and during parts of nickname entry.
+-- Kept for observations and existing Gen 2/AP behavior.
 function M.isInOverworld()
     if M.isInBattle() then return false end
     if M.JOY_IGNORE_ADDR and M.read_u8(M.JOY_IGNORE_ADDR) ~= 0 then return false end
@@ -679,7 +677,10 @@ end
 -- Active PC box index (0-based). The high bit of wCurrentBoxNum is a "changed box" flag.
 function M.getCurrentBoxNum()
     if not M.CURRENT_BOX_NUM_ADDR then return nil end
-    return M.read_u8(M.CURRENT_BOX_NUM_ADDR) % 0x80
+    local current = M.read_u8(M.CURRENT_BOX_NUM_ADDR) % 0x80
+    local count = M.profile and M.profile.stored_boxes and M.profile.stored_boxes.count
+    if count and current >= count then return nil end
+    return current
 end
 
 -- ═══ Rival Team Swap ═══
@@ -701,14 +702,51 @@ end
 -- and level (+0x21). Stats and DVs are NOT taken from here — LoadEnemyMonData recomputes
 -- them from the species header with fixed trainer DVs — so the swapped team fights at the
 -- partner's levels with the partner's moves and HP, but with trainer-standard DVs.
+local gen1_party_codec
+local function load_gen1_party_codec()
+    if gen1_party_codec then return gen1_party_codec end
+    local ok, module = pcall(require, "gen1_party_codec")
+    if not ok then
+        local root = rawget(_G, "SLINK_ROOT") or os.getenv("SLINK_ROOT")
+        ok, module = pcall(dofile, (root and (root .. "/") or "") .. "lua/gen1_party_codec.lua")
+    end
+    if not ok or type(module) ~= "table" or module.VERSION ~= "gen1-rby-party-v1" then
+        return nil, "verified Gen1 party codec unavailable"
+    end
+    gen1_party_codec = module
+    return module
+end
+
+-- Positive CPU checkpoint for vanilla RBY party/box operations. This is only
+-- execution safety; admission, operation ownership and payload checks are separate.
+local gen1_write_safety
+function M.isPartyWriteSafe()
+    if M.gb_variant == "red_ap" or M.gb_variant == "blue_ap" then
+        -- AP's existing behavior is retained explicitly. No vanilla ROM or stack
+        -- address is inherited into these relocated profiles.
+        return M.isInOverworld(), "legacy AP state flags"
+    end
+    if not gen1_write_safety then
+        local ok, module = pcall(require, "gen1_write_safety")
+        if not ok then return false, "write checkpoint module unavailable" end
+        gen1_write_safety = module
+    end
+    return gen1_write_safety.check(M.profile, {
+        domains = memory.getmemorydomainlist,
+        read_u8 = mem_r8,
+        register = function(name) return emu.getregister(name) end,
+    })
+end
+
 function M.writeEnemyParty(blobs)
     if not (M.ENEMY_COUNT_ADDR and M.ENEMY_BASE_ADDR and M.ENEMY_SPECIES_LIST_ADDR
             and M.ENEMY_OT_NAMES_ADDR and M.ENEMY_NICKS_ADDR) then
         return false, "profile lacks enemy party addresses"
     end
+    if type(blobs) ~= "table" or getmetatable(blobs) ~= nil then return false, "invalid party payload" end
     local n = #blobs
     if n < 1 then return false, "no blobs" end
-    if n > 6 then n = 6 end
+    if n > 6 then return false, "party count exceeds six; nothing written" end
     local struct = M.PARTY_STRUCT_SIZE
 
     -- VALIDATE EVERY BLOB BEFORE WRITING ANY OF THEM.
@@ -718,15 +756,44 @@ function M.writeEnemyParty(blobs)
     -- after the loop. The caller reported an error and the cartridge was left mid-battle
     -- with a spliced enemy party: the engine sends out mon 3 from the stale list carrying
     -- mon 1's struct. The payload is server-supplied, so a truncated line is enough.
-    for i = 1, n do
-        if #blobs[i] < struct + 22 then
-            return false, string.format("blob %d too short (%d < %d) — nothing written",
-                                        i, #blobs[i], struct + 22)
+    local entries = 0
+    for key in pairs(blobs) do
+        if type(key) ~= "number" or key % 1 ~= 0 or key < 1 or key > n then
+            return false, "invalid party index; nothing written"
+        end
+        entries = entries + 1
+    end
+    if entries ~= n then return false, "missing party entry; nothing written" end
+    local validated = {}
+    if M.GENERATION == 1 and (M.gb_variant == "red" or M.gb_variant == "blue" or M.gb_variant == "yellow") then
+        local codec, reason = load_gen1_party_codec()
+        if not codec then return false, reason end
+        local party, error = codec.validateParty(blobs, M.gb_variant)
+        if not party then return false, error .. "; nothing written" end
+        for i, mon in ipairs(party) do validated[i] = mon.blob end
+    else
+        -- AP/other GB layouts retain their own semantics. Enforce a complete byte
+        -- envelope without guessing vanilla ROM facts for a relocated profile.
+        for i = 1, n do
+            local blob = blobs[i]
+            if type(blob) ~= "table" or getmetatable(blob) ~= nil or #blob ~= struct + 22 then
+                return false, "invalid blob length; nothing written"
+            end
+            local copied, size = {}, 0
+            for key, value in pairs(blob) do
+                if type(key) ~= "number" or key % 1 ~= 0 or key < 1 or key > struct + 22
+                    or type(value) ~= "number" or value % 1 ~= 0 or value < 0 or value > 255 then
+                    return false, "invalid blob byte; nothing written"
+                end
+                copied[key], size = value, size + 1
+            end
+            if size ~= struct + 22 then return false, "missing blob byte; nothing written" end
+            validated[i] = copied
         end
     end
 
     for i = 1, n do
-        local b = blobs[i]
+        local b = validated[i]
         local dst = M.ENEMY_BASE_ADDR + (i - 1) * struct
         for j = 0, struct - 1 do M.write_u8(dst + j, b[j + 1]) end
         for j = 0, 10 do M.write_u8(M.ENEMY_OT_NAMES_ADDR + (i - 1) * 11 + j, b[struct + 1 + j]) end
@@ -755,11 +822,26 @@ function M.getActivePartySlot()
     return M.read_u8(M.PLAYER_MON_NUMBER_ADDR)
 end
 
+function M.validatePartySlot(slot)
+    local count = M.getPartyCount()
+    if type(count) ~= "number" or count % 1 ~= 0 or count < 1 or count > 6 then
+        return false, "invalid party count"
+    end
+    if type(slot) ~= "number" or slot % 1 ~= 0 or slot < 0 or slot >= count then
+        return false, "invalid party slot"
+    end
+    return true
+end
+
 function M.forceExplode(slot)
-    if not (M.BATTLE_MON_MOVES_ADDR and M.PLAYER_SELECTED_MOVE_ADDR) then
+    if not (M.BATTLE_MON_MOVES_ADDR and M.PLAYER_SELECTED_MOVE_ADDR and M.PLAYER_MON_NUMBER_ADDR) then
         return false, "profile lacks explode addresses"
     end
     if not M.isInBattle() then return false, "not in battle" end
+    local active = M.getActivePartySlot()
+    local valid, reason = M.validatePartySlot(slot)
+    if not valid then return false, reason end
+    if slot ~= active then return false, "not the active battler" end
     local mv = M.MOVE_EXPLOSION
     -- ALL FOUR SLOTS, not just the first. wPlayerSelectedMove is set here, but the
     -- engine RE-DERIVES it from the move the player confirms:
@@ -834,6 +916,24 @@ end
 -- in-memory table cannot.
 --
 -- Returns nil on profiles that don't declare the stat offsets, so callers can skip.
+function M.validatePartyStats(stats)
+    if type(stats) ~= "table" or not (stats.maxHP and stats.level and stats.attack
+        and stats.defense and stats.speed and (stats.spAtk or stats.spDef)) then
+        return false, "incomplete stats block (need level, maxHP and all four stats)"
+    end
+    for _, name in ipairs({"level", "maxHP", "attack", "defense", "speed", "spAtk", "spDef"}) do
+        local value = stats[name]
+        local limit = name == "level" and 100 or (M.GENERATION == 1 and 999 or 65535)
+        if value ~= nil and (type(value) ~= "number" or value % 1 ~= 0 or value < 1 or value > limit) then
+            return false, "out-of-range stats block"
+        end
+    end
+    if M.GENERATION == 1 and stats.spAtk and stats.spDef and stats.spAtk ~= stats.spDef then
+        return false, "inconsistent Gen 1 Special stats"
+    end
+    return true
+end
+
 function M.readPartyStats(slot)
     if not (M.STATS_OFFSET and M.MAXHP_OFFSET and M.LEVEL_OFFSET) then return nil end
     local base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
@@ -967,15 +1067,20 @@ end
 --- Returns true when the battle struct was also written, for callers that want
 --- to assert the in-battle path really ran.
 function M.forceFaint(slot)
+    local valid, reason = M.validatePartySlot(slot)
+    if not valid then return false, reason end
+    local in_battle = M.BATTLE_MON_HP_ADDR and M.isInBattle and M.isInBattle()
+    local active
+    if in_battle then
+        active = M.getActivePartySlot and M.getActivePartySlot()
+        if not M.validatePartySlot(active) then return false, "invalid active battler" end
+    end
     local base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
     M.write_u16_be(base + M.HP_OFFSET, 0)
 
     -- Only the active battler has a battle struct, and only in battle. Gen 2
     -- leaves BATTLE_MON_HP_ADDR unset, so this is a no-op there.
-    if not M.BATTLE_MON_HP_ADDR then return false end
-    if not (M.isInBattle and M.isInBattle()) then return false end
-    local active = M.getActivePartySlot and M.getActivePartySlot()
-    if active ~= slot then return false end
+    if not in_battle or active ~= slot then return false end
     M.write_u16_be(M.BATTLE_MON_HP_ADDR, 0)
     return true
 end
@@ -1012,16 +1117,14 @@ function M.validateROM()
         if mapId > 0xF7 and mapId ~= 0xFF then
             return false, "Map ID out of range: " .. mapId
         end
-        -- This branch used to be the map check ALONE, which is barely a gate: party
-        -- count 0 passes, and map 0 passes too — map 0 is Pallet Town, the fixture's own
-        -- map. So uninitialised WRAM at the title screen validated as a live game.
-        -- Gen 2's branch has always carried this second test; Gen 1's profile has had
-        -- PLAYER_ID_ADDR all along and simply never used it. wPlayerID is assigned when
-        -- the save is created, so 0 is a reliable "no game loaded yet".
+        -- InitPlayerData copies two RNG bytes without excluding 0000. A real
+        -- nonempty party may therefore belong to player 0000. The all-zero
+        -- title-screen shape still fails; this is a profile sanity check, not
+        -- the separate, release-blocking proof of a safe write state.
         if M.PLAYER_ID_ADDR then
             local pid = M.read_u16_be(M.PLAYER_ID_ADDR)
-            if pid == 0 then
-                return false, "Player ID is 0 (pre-game)"
+            if pid == 0 and partyCount == 0 then
+                return false, "Player ID is 0 and party is empty (pre-game state)"
             end
         end
     end
@@ -1050,19 +1153,32 @@ end
 -- Returns box_slot (0-based) or nil.
 function M.scanBoxForKey(key)
     local count = M.getBoxCount()
+    if M.GENERATION == 1 then
+        if count > M.BOX_MAX_MONS then return nil, "invalid box count" end
+        if M.box_read_u8(M.BOX_SPECIES_ADDR + count) ~= 0xFF then
+            return nil, "invalid box species terminator"
+        end
+    end
+    local found, keys = nil, {}
     for i = 0, math.min(count, M.BOX_MAX_MONS) - 1 do
         local base = M.BOX_BASE_ADDR + i * M.BOX_STRUCT_SIZE
         local sp = M.box_read_u8(base + M.SPECIES_OFFSET)
+        if M.GENERATION == 1 and (sp == 0 or sp == 0xFF
+            or M.box_read_u8(M.BOX_SPECIES_ADDR + i) ~= sp
+            or (M._game and M._game.toNatDex and M._game.toNatDex(sp) == 0)) then
+            return nil, "invalid box species list"
+        end
         if sp ~= 0 and sp ~= 0xFF then
-            -- Build monKey using box domain reads
             local dv1 = M.box_read_u8(base + M.DV_OFFSET_1)
             local dv2 = M.box_read_u8(base + M.DV_OFFSET_2)
-            local otid = M.box_read_u8(base + M.OTID_OFFSET) * 256 + M.box_read_u8(base + M.OTID_OFFSET + 1)
+            local otid = M.box_read_u16_be(base + M.OTID_OFFSET)
             local k = string.format("%02X%02X:%04X:%02X", dv1, dv2, otid, sp)
-            if k == key then return i end
+            if M.GENERATION == 1 and keys[k] then return nil, "duplicate current-box key" end
+            keys[k] = true
+            if k == key then found = i end
         end
     end
-    return nil
+    return found
 end
 
 -- ═══ Party/Box Transfer (Quarantine & Sync) ═══
@@ -1112,16 +1228,24 @@ end
 --- Deposit party slot to the current PC box.
 -- Returns true on success, false + error string on failure.
 function M.depositPartyMon(slot)
+    if M.GENERATION == 1 and M.getCurrentBoxNum() == nil then return false, "invalid current box" end
     local pcount = M.getPartyCount()
     if pcount <= 1 then
         return false, "last mon in party"
     end
-    if slot < 0 or slot >= pcount then
+    if pcount > 6 then return false, "invalid party count" end
+    if type(slot) ~= "number" or slot % 1 ~= 0 or slot < 0 or slot >= pcount then
         return false, "invalid slot"
     end
     local bcount = M.getBoxCount()
     if bcount >= M.BOX_MAX_MONS then
         return false, "box full"
+    end
+    local deposit_effect
+    if M._game and M._game.prepareDeposit then
+        local allowed, effect = M._game.prepareDeposit(M, slot)
+        if not allowed then return false, effect end
+        deposit_effect = effect
     end
 
     local party_base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
@@ -1129,6 +1253,7 @@ function M.depositPartyMon(slot)
 
     -- 1. Write mon into box slot (box struct = first BOX_STRUCT_SIZE bytes of party struct)
     local box_dst = M.BOX_BASE_ADDR + bcount * M.BOX_STRUCT_SIZE
+    if deposit_effect then M._game.applyDepositEffect(M, deposit_effect) end
     memcpy_party_to_box(box_dst, party_base, M.BOX_STRUCT_SIZE)
 
     -- Refresh the stored box level from the LIVE party level. Gen 1's BoxLevel (+0x03) is
@@ -1192,153 +1317,88 @@ end
 
 --- Retrieve a mon from the current box by key and add to party.
 -- Returns true on success, false + error string on failure.
--- `stats` (optional) is the server's cached stat block for this key, from the party_mon
--- command. Without it the mon comes back with maxHP = its stored HP and zeroed stats.
+-- `stats` (optional) is validated before writes. Gen 1 rebuilds the party-only
+-- tail from ROM/experience/DVs/stat experience even when a complete cache is supplied.
 function M.retrieveBoxMon(key, stats)
+    if M.GENERATION == 1 and M.getCurrentBoxNum() == nil then return false, "invalid current box" end
     local pcount = M.getPartyCount()
-    if pcount >= 6 then
-        return false, "party full"
-    end
-    -- Find the mon in the box
-    local box_slot = M.scanBoxForKey(key)
-    if not box_slot then
-        return false, "not found in box"
-    end
-
+    if pcount >= 6 then return false, "party full" end
     local bcount = M.getBoxCount()
+    if bcount > M.BOX_MAX_MONS then return false, "invalid box count" end
+    local box_slot, scan_error = M.scanBoxForKey(key)
+    if box_slot == nil then return false, scan_error or "not found in box" end
+    if M.GENERATION == 1 then
+        local known, reason = M.storedBoxKeys()
+        if not known then return false, reason or "storage identity unavailable" end
+        if M.read_u8(M.PARTY_SPECIES_ADDR + pcount) ~= 0xFF then
+            return false, "invalid party species terminator"
+        end
+        local party_keys = {}
+        for i = 0, pcount - 1 do
+            local base = M.PARTY_BASE_ADDR + i * M.PARTY_STRUCT_SIZE
+            local species = M.read_u8(base + M.SPECIES_OFFSET)
+            if M.read_u8(M.PARTY_SPECIES_ADDR + i) ~= species or M._game.toNatDex(species) == 0 then
+                return false, "invalid party species list"
+            end
+            local existing = M.monKey(base)
+            if party_keys[existing] or known[existing] then return false, "storage key collision" end
+            party_keys[existing] = true
+        end
+    end
     local box_base = M.BOX_BASE_ADDR + box_slot * M.BOX_STRUCT_SIZE
     local species = M.box_read_u8(box_base + M.SPECIES_OFFSET)
+    for i = 0, pcount - 1 do
+        if M.monKey(M.PARTY_BASE_ADDR + i * M.PARTY_STRUCT_SIZE) == key then
+            return false, "party key collision"
+        end
+    end
 
-    -- 1. Copy box struct into party slot (first BOX_STRUCT_SIZE bytes of party struct)
-    local party_dst = M.PARTY_BASE_ADDR + pcount * M.PARTY_STRUCT_SIZE
-    memzero(party_dst, M.PARTY_STRUCT_SIZE)  -- zero full party struct first
-    memcpy_box_to_party(party_dst, box_base, M.BOX_STRUCT_SIZE)
-
-    -- 2. Restore the party-only tail, which the box struct does not carry.
-    -- The box holds only the first BOX_STRUCT_SIZE bytes, so level (Gen 1: BoxLevel at
-    -- +0x03, NOT the party's +0x21) comes from BOX_LEVEL_OFFSET, and maxHP/stats have to
-    -- come from the deposit-time cache. The engine would recalculate them from
-    -- DVs+StatExp via CalcStats; replaying what we saved is the same answer without
-    -- reimplementing RBY's stat formula, which would also need a base-stat table we
-    -- don't ship.
+    -- Validate supplied cache data before the first write, even on a cartridge
+    -- that can rebuild stats. Partial/out-of-range payloads are retryable NACKs.
+    local cached = stats
+    if cached == nil then cached = M._party_tail_cache and M._party_tail_cache[key] end
+    if cached ~= nil then
+        local valid, reason = M.validatePartyStats(cached)
+        if not valid then return false, reason .. " for " .. tostring(key) end
+    end
     local box_level = M.box_read_u8(box_base + M.BOX_LEVEL_OFFSET)
-    M.write_u8(party_dst + M.LEVEL_OFFSET, box_level)
-
-    -- DOES THE BOX STRUCT EVEN CONTAIN HP?
-    --
-    -- Gen 1's does: 33 bytes, current HP at +0x01, so a deposit preserves it. Gen 2's does
-    -- NOT — its box_struct is 32 bytes and ends at Level +0x1F, while the party's HP lives
-    -- at +0x22 in the party-only tail. Reading HP_OFFSET off a Gen 2 box base therefore
-    -- lands two bytes into the NEXT box slot and returns that mon's move ids as an HP value.
-    --
-    -- The test is derived rather than declared, because "HP_OFFSET falls outside the box
-    -- struct" IS the condition, and a separate profile flag could disagree with the offsets
-    -- it describes.
-    --
-    -- What to do instead is not a guess: pret's SendGetMonIntoFromBox (move_mon.asm) shows
-    -- that on withdrawal Gen 2 clears MON_STATUS and copies MON_MAXHP into MON_HP. The mon
-    -- comes back healthy and full, because the cartridge has nowhere to have kept anything
-    -- else. maxHP arrives with the cached stats below, so the copy happens after them.
-    local box_has_hp = (M.HP_OFFSET + 2) <= M.BOX_STRUCT_SIZE
-    if box_has_hp then
-        M.write_u16_be(party_dst + M.HP_OFFSET, M.box_read_u16_be(box_base + M.HP_OFFSET))
-    end
-
-    -- `stats` comes from the server's stats_cache, recorded at deposit time; it survives a
-    -- client restart, unlike anything held in Lua. The in-process table is only a fallback
-    -- for a deposit+withdraw inside one session before the server has echoed anything back.
-    local cached = stats or (M._party_tail_cache and M._party_tail_cache[key])
-    -- CONTENT, NOT TRUTHINESS. server.py queues `"stats": s.mon_stats.get(key, {})`
-    -- unconditionally, and `{}` is a TRUTHY table in Lua — so an empty block sailed
-    -- past this guard, applyPartyStats matched none of its `if stats.X` branches and
-    -- wrote nothing, the memzero above stood, and the refusal branch below (whose own
-    -- comment says "silent, permanent save corruption") was skipped entirely. The mon
-    -- came back with maxHP 0 and every stat 0, then vanished from the party snapshot
-    -- (filtered on maxHP > 0) while still occupying a slot.
-    -- ...AND THE CONTENT TEST HAS TO BE THE WHOLE BLOCK, NOT THE TWO OBVIOUS FIELDS.
-    -- Requiring only maxHP+level was still wrong, because that is exactly the shape the
-    -- server sends: state.py caches {"level", "maxHP"} for every Gen 1 capture and nothing
-    -- else. Such a block passes, applyPartyStats writes those two, and Attack/Defence/
-    -- Speed/Special stay at the 0 the memzero left -- the same corruption, through the
-    -- guard that was supposed to stop it. Demand every field the memzero wipes and the box
-    -- cannot supply; a partial block now falls through to the cartridge rebuild below,
-    -- which is exact.
-    local reject_reason = nil
-    if cached and not (cached.maxHP and cached.level and cached.attack
-                       and cached.defense and cached.speed
-                       and (cached.spAtk or cached.spDef)) then
-        reject_reason = "incomplete stats block (need level, maxHP and all four stats) for "
-        cached = nil
-    end
-    -- NO CACHE? REBUILD IT FROM THE CARTRIDGE BEFORE GIVING UP.
-    -- Everything Gen 1's stat formula needs is already in the box struct -- the DV word and
-    -- the five stat-exp words -- and the base-stat table is readable from ROM, so the "real
-    -- work" the refusal below used to defer is done. The result is exact, not an
-    -- approximation: lua/tests/test_gen1_stat_rebuild.lua recomputes every party mon on a
-    -- live cartridge and requires the GAME's own stored stats to match, on all three titles.
-    --
-    -- Asked of the game module rather than branched on: a generation that does not offer
-    -- the function simply keeps the old refusal. The offsets come from the module too,
-    -- because they are that game's struct layout and not memory_gb's business.
-    if not cached and M._game and M._game.rebuildBoxStats and M._game.BOX_STAT_OFFSETS then
-        local off = M._game.BOX_STAT_OFFSETS
-        local stat_exp = {}
+    if M.GENERATION == 1 and M.gb_variant ~= "red_ap" and M.gb_variant ~= "blue_ap" then
+        -- _MoveMon calls CalcLevelFromExperience, then CalcStats. BoxLevel and
+        -- cached party tails are not authoritative on withdrawal. Read every
+        -- input from the box before writes; absent ROM evidence leaves it intact.
+        local game = M._game
+        if not (game and game.rebuildBoxStats and game.BOX_STAT_OFFSETS) then
+            return false, "no canonical stat rebuild available"
+        end
+        local off, stat_exp = game.BOX_STAT_OFFSETS, {}
         for _, field in ipairs({"hp", "attack", "defense", "speed", "special"}) do
-            stat_exp[field] = M.read_u16_be(party_dst + off[field])
+            stat_exp[field] = M.box_read_u16_be(box_base + off[field])
         end
-        local rebuilt = M._game.rebuildBoxStats(
-            M.gb_variant, species, box_level,
-            M.read_u16_be(party_dst + off.dvs), stat_exp)
-        if rebuilt then
-            -- Gen 1 has one Special, and applyPartyStats writes spAtk and spDef to the same
-            -- address on this generation, so both carry it.
-            cached = {level = box_level, maxHP = rebuilt.hp, attack = rebuilt.attack,
-                      defense = rebuilt.defense, speed = rebuilt.speed,
-                      spAtk = rebuilt.special, spDef = rebuilt.special}
-            reject_reason = nil
-        end
+        local experience = M.box_read_u8(box_base + M.OTID_OFFSET + 2) * 65536
+            + M.box_read_u8(box_base + M.OTID_OFFSET + 3) * 256
+            + M.box_read_u8(box_base + M.OTID_OFFSET + 4)
+        local rebuilt = game.rebuildBoxStats(M.gb_variant, species, box_level,
+            M.box_read_u16_be(box_base + off.dvs), stat_exp, experience)
+        if not rebuilt then return false, "no cached stats fallback: canonical ROM/stat evidence unavailable for " .. tostring(key) end
+        cached = {level = rebuilt.level, maxHP = rebuilt.hp, attack = rebuilt.attack,
+            defense = rebuilt.defense, speed = rebuilt.speed, spAtk = rebuilt.special, spDef = rebuilt.special}
+    elseif not cached then
+        -- AP keeps the established fully validated cache path until its own
+        -- base-stat ROM layout is independently verified. Never inherit RBY roots.
+        return false, "no cached stats for " .. tostring(key)
     end
-    if cached then
-        M.applyPartyStats(pcount, cached)
-        -- A rebuild recomputes maxHP, and the current HP carried over in the box struct may
-        -- now exceed it (a mon deposited before a stat change). Clamp rather than leave a
-        -- mon above its own maximum, which the engine treats as corrupt.
-        if M.read_u16_be(party_dst + M.HP_OFFSET) > (cached.maxHP or 0) then
-            M.write_u16_be(party_dst + M.HP_OFFSET, cached.maxHP)
-        end
-        if not box_has_hp then
-            -- pret SendGetMonIntoFromBox: MON_STATUS = 0, MON_HP = MON_MAXHP. Status is
-            -- already 0 from the memzero above (Gen 2's +0x20 is outside the copied box
-            -- struct), so only HP needs writing.
-            M.write_u16_be(party_dst + M.HP_OFFSET,
-                           M.read_u16_be(party_dst + M.MAXHP_OFFSET))
-        end
-        if M._party_tail_cache then M._party_tail_cache[key] = nil end
-    else
-        -- NO CACHE: REFUSE, do not improvise.
-        --
-        -- The old behaviour was to set maxHP = stored HP and carry on. That is worse than it
-        -- looks: line 1064 zeroes the whole 44-byte party struct and the box only carries 33
-        -- of them, so Attack/Defence/Speed/Special are left at **0**. A player who restarts
-        -- the client and then withdraws gets a mon that cannot fight — silent, permanent save
-        -- corruption, and the mon is out of the box so there is nothing to undo it from.
-        --
-        -- Rebuilding them properly means RBY's stat formula plus the base-stat table, which
-        -- is readable from ROM but is real work; until that exists, returning false is
-        -- correct. The caller (gen1_rby_client.lua) already reports sync_retrieve_failed on
-        -- false, so the server learns the withdraw did not happen and the pair stays
-        -- consistent instead of quietly diverging.
-        --
-        -- This path had NEVER executed on a cartridge, which is why it survived this long.
-        memzero(party_dst, M.PARTY_STRUCT_SIZE)   -- leave no half-written mon behind
-        -- Name WHICH failure it was: "absent" is a cold client that never saw the
-        -- deposit and may recover on the next stats_cache; "unusable" means the server
-        -- sent a block it could not fill. The caller turns this into
-        -- sync_retrieve_failed, and a run log that cannot tell the two apart sends
-        -- whoever debugs it to the wrong side of the wire.
-        return false, (reject_reason or "no cached stats for ") .. tostring(key)
-            .. " — refusing to withdraw a mon with zeroed stats"
+
+    -- All failure paths above are read-only. Preserve Gen 1 HP/status exactly,
+    -- including HP above recomputed maxHP: canonical _MoveMon does not clamp it.
+    local party_dst = M.PARTY_BASE_ADDR + pcount * M.PARTY_STRUCT_SIZE
+    memzero(party_dst, M.PARTY_STRUCT_SIZE)
+    memcpy_box_to_party(party_dst, box_base, M.BOX_STRUCT_SIZE)
+    M.applyPartyStats(pcount, cached)
+    local box_has_hp = (M.HP_OFFSET + 2) <= M.BOX_STRUCT_SIZE
+    if not box_has_hp then
+        M.write_u16_be(party_dst + M.HP_OFFSET, M.read_u16_be(party_dst + M.MAXHP_OFFSET))
     end
+    if M._party_tail_cache then M._party_tail_cache[key] = nil end
 
     -- 3. Copy OT name from box (SRAM) to party (WRAM)
     local box_ot = M.BOX_OT_NAMES_ADDR + box_slot * 11
@@ -1794,6 +1854,13 @@ local function sram_box_geometry()
         ck_offset = L.checksum_offset or 0x1A4C,
         flag_addr = L.changed_boxes_addr,   -- wCurrentBoxNum
         flag_bit  = L.changed_boxes_bit or 0x80,
+        save_start = L.main_save_start,
+        save_len = L.main_save_len,
+        save_checksum = L.main_checksum_offset,
+        saved_flag = L.saved_box_flag_offset,
+        save_ranges = L.save_party_dex_ranges,
+        player_id = L.player_id_addr,
+        saved_player_id = L.saved_player_id_offset,
     }
 end
 
@@ -1804,6 +1871,12 @@ local function sram_sum(off, len)
         d = (d + mem_r8(off + i, SRAM_DOMAIN)) % 256
     end
     return d
+end
+
+local function sram_fingerprint(off, len)
+    local bytes = {}
+    for i = 0, len - 1 do bytes[#bytes + 1] = string.char(mem_r8(off + i, SRAM_DOMAIN)) end
+    return table.concat(bytes)
 end
 
 --- Recompute one bank's all-boxes checksum and its 6 per-box checksums.
@@ -1826,25 +1899,65 @@ end
 
 --- Run the game's one-time SRAM box init ourselves, if it has not happened yet.
 -- Returns true when it actually did the init (so the caller knows both banks changed).
+local function preflight_sram_boxes(g)
+    if not (g and g.flag_addr and g.save_start and g.save_len and g.save_checksum and g.saved_flag
+        and g.player_id and g.saved_player_id) then
+        return false, "missing verified main-save geometry"
+    end
+    local flag = M.read_u8(g.flag_addr)
+    local saved_flag = mem_r8(g.saved_flag, SRAM_DOMAIN)
+    local player_id = M.read_u16_be(g.player_id)
+    local saved_id = mem_r8(g.saved_player_id, SRAM_DOMAIN) * 256
+        + mem_r8(g.saved_player_id + 1, SRAM_DOMAIN)
+    -- InitPlayerData stores both RNG bytes verbatim; 0000 is a legal identity.
+    if player_id ~= saved_id then
+        return false, "saved/live player identity differs; save this game before memorializing"
+    end
+    -- CheckPreviousSaveFile first requires a nonempty saved player name. The
+    -- verified save geometry places sPlayerName exactly at sGameData/save_start.
+    if mem_r8(g.save_start, SRAM_DOMAIN) == 0 then
+        return false, "no saved player name; save this game before memorializing"
+    end
+    local count = g.per_bank * #g.banks
+    if flag % g.flag_bit >= count or saved_flag % g.flag_bit >= count then
+        return false, "invalid current box in memory/save"
+    end
+    if saved_flag >= g.flag_bit and flag < g.flag_bit then
+        return false, "saved/live box initialization conflict"
+    end
+    if mem_r8(g.save_checksum, SRAM_DOMAIN) ~= (255 - sram_sum(g.save_start, g.save_len)) % 256 then
+        return false, "main save checksum invalid; save in game before memorializing"
+    end
+    return true
+end
+
 function M.protectSramBoxes()
     local g = sram_box_geometry()
     if not g or not g.flag_addr then return false end
-
+    local valid, reason = preflight_sram_boxes(g)
+    if not valid then return false, reason end
     local flag = M.read_u8(g.flag_addr)
-    if flag % (g.flag_bit * 2) >= g.flag_bit then
-        return false                          -- already initialised, by us or by the game
-    end
-
-    -- EmptySRAMBox: count = 0, then the 0xFF species terminator (save.asm:572).
-    for _, bank in ipairs(g.banks) do
-        for i = 0, g.per_bank - 1 do
-            local box = bank * SRAM_BANK_SIZE + i * g.box_len
-            mem_w8(box, 0, SRAM_DOMAIN)
-            mem_w8(box + 1, 0xFF, SRAM_DOMAIN)
+    local initialize = flag % (g.flag_bit * 2) < g.flag_bit
+    if initialize then
+        -- EmptySRAMBox changes count and list terminator; unused tails are preserved.
+        for _, bank in ipairs(g.banks) do
+            for i = 0, g.per_bank - 1 do
+                local box = bank * SRAM_BANK_SIZE + i * g.box_len
+                mem_w8(box, 0, SRAM_DOMAIN)
+                mem_w8(box + 1, 0xFF, SRAM_DOMAIN)
+            end
+            recompute_bank_checksums(g, bank)
         end
     end
-    M.write_u8(g.flag_addr, flag + g.flag_bit)
-    return true
+    -- Keep the saved current-box index: the save may predate a live box change.
+    -- Persist the initialization flag and its covering checksum before any grave data.
+    local saved_flag = mem_r8(g.saved_flag, SRAM_DOMAIN)
+    if saved_flag % (g.flag_bit * 2) < g.flag_bit then
+        mem_w8(g.saved_flag, saved_flag + g.flag_bit, SRAM_DOMAIN)
+        mem_w8(g.save_checksum, (255 - sram_sum(g.save_start, g.save_len)) % 256, SRAM_DOMAIN)
+    end
+    if initialize then M.write_u8(g.flag_addr, flag + g.flag_bit) end
+    return initialize
 end
 
 --- Refresh the checksums for whichever banks we touched.
@@ -1862,6 +1975,145 @@ function M.refreshSramBoxChecksums(all_banks)
     end
 end
 
+-- Read-only proof for a Gen 1 memorial ACK. Absence from the party alone says
+-- nothing about where a Pokemon went. Verify its exact dead key in the actual
+-- memorial box, then require uniqueness across the party and all twelve boxes.
+-- The current box is authoritative in WRAM, including when Box 12 is active.
+function M.verifyMemorialKey(key)
+    if M.GENERATION ~= 1 then return false, "memorial proof unsupported for this generation" end
+    if type(key) ~= "string" or not key:match("^%x%x%x%x:%x%x%x%x:%x%x$") then
+        return false, "invalid memorial key"
+    end
+    local geometry = sram_box_geometry()
+    local valid, save_error = preflight_sram_boxes(geometry)
+    if not valid then return false, save_error end
+    local p = M.profile
+    local boxes = p and p.stored_boxes
+    local layout = p and p.sram_box_layout
+    local offset = M.getMemorialBoxOffset()
+    if not (boxes and boxes.banks and boxes.count and boxes.stride and boxes.per_bank
+        and layout and layout.changed_boxes_addr and layout.changed_boxes_bit and offset) then
+        return false, "missing verified memorial geometry"
+    end
+    local memorial_index
+    for index = 0, boxes.count - 1 do
+        local bank = boxes.banks[math.floor(index / boxes.per_bank) + 1]
+        if bank and bank + (index % boxes.per_bank) * boxes.stride == offset then
+            if memorial_index ~= nil then return false, "ambiguous memorial geometry" end
+            memorial_index = index
+        end
+    end
+    if memorial_index == nil then return false, "memorial offset is not a verified box" end
+    local current = M.getCurrentBoxNum()
+    if current == nil then return false, "invalid current box" end
+    local active = current == memorial_index
+    local saved_flag = mem_r8(geometry.saved_flag, SRAM_DOMAIN)
+    if M.read_u8(layout.changed_boxes_addr) < layout.changed_boxes_bit
+        or saved_flag < layout.changed_boxes_bit then
+        return false, "memorial initialization is not persisted"
+    end
+    if saved_flag % layout.changed_boxes_bit ~= current then
+        return false, "saved/live current box differs; memorial save proof unavailable"
+    end
+    local read = active and M.box_read_u8 or function(address) return mem_r8(address, SRAM_DOMAIN) end
+    local count_addr = active and M.BOX_COUNT_ADDR or offset
+    local species_addr = active and M.BOX_SPECIES_ADDR or offset + 1
+    local structs = active and M.BOX_BASE_ADDR or offset + 1 + M.BOX_MAX_MONS + 1
+    local count = read(count_addr)
+    if count > M.BOX_MAX_MONS then return false, "invalid memorial count" end
+    if read(species_addr + count) ~= 0xFF then return false, "invalid memorial species terminator" end
+    local found, seen = false, {}
+    for slot = 0, count - 1 do
+        local base = structs + slot * M.BOX_STRUCT_SIZE
+        local species = read(base + M.SPECIES_OFFSET)
+        if not M._game or not M._game.toNatDex or M._game.toNatDex(species) == 0
+            or read(species_addr + slot) ~= species then
+            return false, "invalid memorial species list"
+        end
+        local identity = string.format("%02X%02X:%04X:%02X", read(base + M.DV_OFFSET_1),
+            read(base + M.DV_OFFSET_2), read(base + M.OTID_OFFSET) * 256
+                + read(base + M.OTID_OFFSET + 1), species)
+        if seen[identity] then return false, "duplicate memorial key" end
+        seen[identity] = true
+        if read(base + M.HP_OFFSET) * 256 + read(base + M.HP_OFFSET + 1) ~= 0 then
+            return false, "memorial contains a live Pokemon"
+        end
+        if identity == key then found = true end
+    end
+    if not found then return false, "exact key not present in memorial" end
+
+    local party_count = M.getPartyCount()
+    if party_count > 6 then return false, "invalid party count" end
+    if M.read_u8(M.PARTY_SPECIES_ADDR + party_count) ~= 0xFF then
+        return false, "invalid party species terminator"
+    end
+    for slot = 0, party_count - 1 do
+        local base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
+        local species = M.read_u8(base + M.SPECIES_OFFSET)
+        if M._game.toNatDex(species) == 0 or M.read_u8(M.PARTY_SPECIES_ADDR + slot) ~= species then
+            return false, "invalid party species list"
+        end
+        if M.monKey(base) == key then return false, "memorial key also exists in party" end
+    end
+    -- storedBoxKeys validates the actual active WRAM box and all other SRAM
+    -- boxes, rejecting duplicate identities and malformed count/species lists.
+    local stored, reason = M.storedBoxKeys()
+    if not stored then return false, reason or "storage identity unavailable" end
+    if not stored[key] then return false, "memorial identity missing from verified storage" end
+
+    -- A complete-looking grave is insufficient if resetting loads its old copy
+    -- from sPartyData, or if the saved ordinary current box duplicates the key.
+    -- Read only the exact SaveCurrentBoxData/SavePartyAndDexData profile ranges.
+    local function saved_keys(count_source, species_source, struct_source, stride, capacity, dead_only)
+        local range
+        for _, candidate in ipairs(geometry.save_ranges or {}) do
+            if candidate.src == count_source then
+                if range then return nil, "ambiguous saved storage range" end
+                range = candidate
+            end
+        end
+        if not range or not range.len or not range.dst or range.dst < geometry.save_start
+            or range.dst + range.len > geometry.save_start + geometry.save_len
+            or struct_source - count_source + capacity * stride > range.len then
+            return nil, "missing verified saved storage range"
+        end
+        local n = mem_r8(range.dst, SRAM_DOMAIN)
+        if n > capacity then return nil, "invalid saved storage count" end
+        local list = range.dst + species_source - count_source
+        local base = range.dst + struct_source - count_source
+        if mem_r8(list + n, SRAM_DOMAIN) ~= 0xFF then return nil, "invalid saved species terminator" end
+        local keys = {}
+        for slot = 0, n - 1 do
+            local mon = base + slot * stride
+            local sp = mem_r8(mon + M.SPECIES_OFFSET, SRAM_DOMAIN)
+            if M._game.toNatDex(sp) == 0 or mem_r8(list + slot, SRAM_DOMAIN) ~= sp then
+                return nil, "invalid saved species list"
+            end
+            local identity = string.format("%02X%02X:%04X:%02X",
+                mem_r8(mon + M.DV_OFFSET_1, SRAM_DOMAIN), mem_r8(mon + M.DV_OFFSET_2, SRAM_DOMAIN),
+                mem_r8(mon + M.OTID_OFFSET, SRAM_DOMAIN) * 256
+                    + mem_r8(mon + M.OTID_OFFSET + 1, SRAM_DOMAIN), sp)
+            if keys[identity] then return nil, "duplicate saved storage key" end
+            if dead_only and mem_r8(mon + M.HP_OFFSET, SRAM_DOMAIN) * 256
+                + mem_r8(mon + M.HP_OFFSET + 1, SRAM_DOMAIN) ~= 0 then
+                return nil, "saved memorial contains a live Pokemon"
+            end
+            keys[identity] = true
+        end
+        return keys
+    end
+    local saved_party, party_error = saved_keys(M.PARTY_COUNT_ADDR, M.PARTY_SPECIES_ADDR,
+        M.PARTY_BASE_ADDR, M.PARTY_STRUCT_SIZE, 6, false)
+    if not saved_party then return false, party_error end
+    if saved_party[key] then return false, "saved party still contains memorial key" end
+    local saved_box, box_error = saved_keys(M.BOX_COUNT_ADDR, M.BOX_SPECIES_ADDR,
+        M.BOX_BASE_ADDR, M.BOX_STRUCT_SIZE, M.BOX_MAX_MONS, active)
+    if not saved_box then return false, box_error end
+    if active and not saved_box[key] then return false, "active memorial key is not saved" end
+    if not active and saved_box[key] then return false, "saved ordinary box duplicates memorial key" end
+    return true
+end
+
 function M.depositMemorialMon(slot)
     local mem_off = M.profile and M.profile.memorial_box_cartram_offset
     if not mem_off then
@@ -1875,23 +2127,64 @@ function M.depositMemorialMon(slot)
         return M.depositPartyMon(slot)
     end
 
-    -- Before anything is written: claim the SRAM box banks so the game's first-ChangeBox
-    -- wipe can never run and erase the memorial. Must precede the count read below, since
-    -- the init resets that count to 0.
-    local did_init = M.protectSramBoxes()
-
     local pcount = M.getPartyCount()
     if pcount <= 1 then
         return false, "last mon in party"
     end
-    if slot < 0 or slot >= pcount then
+    if pcount > 6 then return false, "invalid party count" end
+    if type(slot) ~= "number" or slot % 1 ~= 0 or slot < 0 or slot >= pcount then
         return false, "invalid slot"
     end
-
-    local mbox_count = mem_r8(mem_off, SRAM_DOMAIN)
-    if mbox_count > M.BOX_MAX_MONS then
-        mbox_count = 0
+    local deposit_effect
+    local selected_base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
+    local selected_level = M.read_u8(selected_base + M.LEVEL_OFFSET)
+    if selected_level < 1 or selected_level > 100 then return false, "invalid memorial selection level" end
+    if M.read_u16_be(selected_base + M.HP_OFFSET) ~= 0 then
+        return false, "memorial selection is still alive"
     end
+    if M._game and M._game.prepareDeposit then
+        local allowed, effect = M._game.prepareDeposit(M, slot)
+        if not allowed then return false, effect end
+        deposit_effect = effect
+    end
+    local geometry = sram_box_geometry()
+    local initializing = false
+    if geometry then
+        local _, box_error = M.scanBoxForKey("")
+        if box_error then return false, box_error end
+        if M.read_u8(M.PARTY_SPECIES_ADDR + pcount) ~= 0xFF then
+            return false, "invalid party species terminator"
+        end
+        for i = 0, pcount - 1 do
+            local sp = M.read_u8(M.PARTY_BASE_ADDR + i * M.PARTY_STRUCT_SIZE + M.SPECIES_OFFSET)
+            if M._game.toNatDex(sp) == 0 or M.read_u8(M.PARTY_SPECIES_ADDR + i) ~= sp then
+                return false, "invalid party species list"
+            end
+        end
+        local valid, reason = preflight_sram_boxes(geometry)
+        if not valid then return false, reason end
+        if not geometry.save_ranges then return false, "missing verified party/dex save ranges" end
+        for _, range in ipairs(geometry.save_ranges) do
+            if not (range.src and range.dst and range.len and range.len > 0
+                and range.src >= 0xC000 and range.src + range.len <= 0xE000
+                and range.dst >= geometry.save_start
+                and range.dst + range.len <= geometry.save_start + geometry.save_len) then
+                return false, "invalid party/dex save range"
+            end
+        end
+        local current = M.getCurrentBoxNum()
+        if current == nil then return false, "invalid current box" end
+        if current ~= mem_r8(geometry.saved_flag, SRAM_DOMAIN) % geometry.flag_bit then
+            return false, "saved/live box index differs; save in game before memorializing"
+        end
+        if current == geometry.per_bank * #geometry.banks - 1 then
+            return false, "memorial box is active; change to another box first"
+        end
+        initializing = M.read_u8(geometry.flag_addr) % (geometry.flag_bit * 2) < geometry.flag_bit
+    end
+    local mbox_count = mem_r8(mem_off, SRAM_DOMAIN)
+    if initializing then mbox_count = 0 end
+    if mbox_count > M.BOX_MAX_MONS then return false, "invalid memorial box count" end
     if mbox_count >= M.BOX_MAX_MONS then
         -- FULL MEMORIAL: FAIL, do not fall back to depositPartyMon.
         -- That fallback wrote into whatever box the player happened to have OPEN, and then
@@ -1908,13 +2201,52 @@ function M.depositMemorialMon(slot)
     local ots_off     = structs_off + M.BOX_MAX_MONS * M.BOX_STRUCT_SIZE
     local nicks_off   = ots_off + M.BOX_MAX_MONS * 11
 
+    local reservation_key
+    if geometry then
+        M._memorial_reservations = M._memorial_reservations or {}
+        reservation_key = tostring(M.readPlayerId()) .. ":" .. tostring(mem_off)
+        local previous = M._memorial_reservations[reservation_key]
+        if previous ~= nil and previous ~= sram_fingerprint(mem_off, geometry.box_len) then
+            return false, "memorial contents changed since verified reservation"
+        end
+        if previous == nil then
+            if mbox_count ~= 0 then return false, "memorial box not empty; reservation unverified" end
+        end
+        if not initializing then
+            if mem_r8(species_off + mbox_count, SRAM_DOMAIN) ~= 0xFF then
+                return false, "invalid memorial species terminator"
+            end
+            -- Reservation is not permission to overwrite arbitrary later contents.
+            -- Revalidate every use, including hidden live records outside the count.
+            for i = 0, M.BOX_MAX_MONS - 1 do
+                local base = structs_off + i * M.BOX_STRUCT_SIZE
+                local sp = mem_r8(base + M.SPECIES_OFFSET, SRAM_DOMAIN)
+                local hp = mem_r8(base + M.HP_OFFSET, SRAM_DOMAIN) * 256
+                    + mem_r8(base + M.HP_OFFSET + 1, SRAM_DOMAIN)
+                if sp ~= 0 and sp ~= 0xFF and hp > 0 then
+                    return false, "memorial box contains a live Pokemon"
+                end
+                if i < mbox_count and (sp == 0 or sp == 0xFF
+                    or mem_r8(species_off + i, SRAM_DOMAIN) ~= sp
+                    or M._game.toNatDex(sp) == 0) then
+                    return false, "invalid memorial species list"
+                end
+            end
+        end
+        local did_init, reason = M.protectSramBoxes()
+        if reason then return false, reason end
+        initializing = did_init
+    end
+
     local party_base = M.PARTY_BASE_ADDR + slot * M.PARTY_STRUCT_SIZE
     local species = M.read_u8(party_base + M.SPECIES_OFFSET)
 
     local struct_dst = structs_off + mbox_count * M.BOX_STRUCT_SIZE
+    if deposit_effect then M._game.applyDepositEffect(M, deposit_effect) end
     for i = 0, M.BOX_STRUCT_SIZE - 1 do
         mem_w8(struct_dst + i, M.read_u8(party_base + i), SRAM_DOMAIN)
     end
+    mem_w8(struct_dst + M.BOX_LEVEL_OFFSET, selected_level, SRAM_DOMAIN)
 
     local ot_dst   = ots_off + mbox_count * 11
     local party_ot = M.PARTY_OT_NAMES_ADDR + slot * 11
@@ -1952,7 +2284,22 @@ function M.depositMemorialMon(slot)
     M.write_u8(M.PARTY_SPECIES_ADDR + new_pcount, 0xFF)
     M.write_u8(M.PARTY_COUNT_ADDR, new_pcount)
 
-    M.refreshSramBoxChecksums(did_init)
+    M.refreshSramBoxChecksums(initializing)
+    if geometry then
+        -- Match SaveCurrentBoxData then SavePartyAndDexData copy ranges, including
+        -- Yellow happiness/mood. Party and active box must be persisted together:
+        -- saving a party after an ordinary unsaved deposit would otherwise lose
+        -- that boxed mon on reset. Preflight requires the saved/live box indices
+        -- to agree, so sCurBoxData cannot be attributed to a different box.
+        for _, range in ipairs(geometry.save_ranges) do
+            for i = 0, range.len - 1 do
+                mem_w8(range.dst + i, M.read_u8(range.src + i), SRAM_DOMAIN)
+            end
+        end
+        mem_w8(geometry.save_checksum,
+            (255 - sram_sum(geometry.save_start, geometry.save_len)) % 256, SRAM_DOMAIN)
+        M._memorial_reservations[reservation_key] = sram_fingerprint(mem_off, geometry.box_len)
+    end
     return true
 end
 

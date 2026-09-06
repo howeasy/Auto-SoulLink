@@ -21,6 +21,7 @@ import os
 import pytest
 
 from server.adapters import get_adapter
+from server.gen1_party_codec import PartyCodec
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 MEMORY_GB = os.path.join(REPO, "lua", "memory_gb.lua")
@@ -59,17 +60,29 @@ def mem():
     with open(GEN1, encoding="utf-8") as f:
         G = load(f.read())
     M.initProfile(G, "red")
+    L.globals().RAM[M.PARTY_COUNT_ADDR] = 1
     return L, M
 
 
 def _blob(species, level, hp, tag):
-    """A 66-byte Gen 1 blob: 44-byte struct + 11 OT + 11 nickname."""
-    b = [tag] * STRUCT
+    """A complete codec-valid record with distinct transport-test fields."""
+    codec = PartyCodec("red")
+    facts = codec.profile["species"][str(species)]
+    b = [0] * STRUCT
     b[0] = species
     b[HP_OFF] = hp >> 8
     b[HP_OFF + 1] = hp & 0xFF
+    b[5:7] = facts["types"]
+    b[8] = 1
+    b[12:14] = [tag, tag]
+    xp = codec.experience_for_level(facts["growth_rate"], level) if level > 1 else 0
+    b[14:17] = list(xp.to_bytes(3, "big"))
+    b[27:29] = [tag, tag]
+    b[29] = codec.max_pp(1, 0)
     b[LEVEL_OFF] = level
-    return b + [0xA0 + tag] * 11 + [0xB0 + tag] * 11
+    for offset in range(34, 44, 2):
+        b[offset:offset + 2] = list((200 + tag).to_bytes(2, "big"))
+    return b + [0xA0 + tag, 0x50] + [tag] * 9 + [0xB0 + tag, 0x50] + [tag + 1] * 9
 
 
 def _write(L, M, blobs):
@@ -111,11 +124,24 @@ def test_swap_writes_the_parallel_name_arrays(mem):
     assert R[ENEMY_NICKS] == 0xB1 and R[ENEMY_NICKS + 11] == 0xB2
 
 
+def test_every_validated_blob_byte_reaches_its_canonical_enemy_array(mem):
+    lua, mem = mem
+    blobs = [_blob(0x10 + i, 20 + i, 40, i + 1) for i in range(6)]
+    assert _write(lua, mem, blobs) == (True, 6)
+    ram = lua.globals().RAM
+    for slot, expected in enumerate(blobs):
+        actual = ([ram[ENEMY_BASE + slot * 44 + offset] for offset in range(44)]
+                  + [ram[ENEMY_OT + slot * 11 + offset] for offset in range(11)]
+                  + [ram[ENEMY_NICKS + slot * 11 + offset] for offset in range(11)])
+        assert actual == expected
+
+
 def test_swap_stays_inside_the_enemy_block(mem):
     """The whole region is 0x194 bytes from wEnemyPartyCount; a full 6-mon team must not
     run past it into whatever lives next."""
     L, M = mem
-    _write(L, M, [_blob(0x10 + i, 20 + i, 40, i + 1) for i in range(6)])
+    ok, count = _write(L, M, [_blob(0x10 + i, 20 + i, 40, i + 1) for i in range(6)])
+    assert ok and count == 6
     R = L.globals().RAM
     end_of_block = ENEMY_NICKS + 6 * 11
     assert all(R[a] is None for a in range(end_of_block, end_of_block + 16)), \
@@ -124,16 +150,44 @@ def test_swap_stays_inside_the_enemy_block(mem):
 
 def test_swap_caps_at_six_mons(mem):
     L, M = mem
-    ok, n = _write(L, M, [_blob(0x10 + i, 20, 40, 1) for i in range(8)])
-    assert (ok, n) == (True, 6)
-    assert L.globals().RAM[ENEMY_COUNT] == 6
+    before = dict(L.globals().RAM)
+    ok, reason = _write(L, M, [_blob(0x10 + i, 20, 40, i + 1) for i in range(8)])
+    assert ok is False and "six" in reason
+    assert dict(L.globals().RAM) == before
 
 
 def test_swap_rejects_a_short_blob_rather_than_writing_garbage(mem):
     L, M = mem
     short = _blob(0x99, 42, 100, 1)[:40]
     ok, err = _write(L, M, [short])
-    assert ok is False and "short" in str(err)
+    assert ok is False and "exactly 66" in str(err)
+
+
+@pytest.mark.parametrize("damage", ["name", "species", "level", "pp", "status", "byte", "long", "duplicate"])
+def test_entire_rival_payload_is_validated_before_first_write(mem, damage):
+    lua, mem = mem
+    first = _blob(0x99, 42, 100, 1)
+    second = _blob(0x15, 37, 55, 2)
+    if damage == "name":
+        second[55:66] = [0x80] * 11
+    elif damage == "species":
+        second[0] = 31
+    elif damage == "level":
+        second[33] = 101
+    elif damage == "pp":
+        second[29] = 63
+    elif damage == "status":
+        second[4] = 0x18
+    elif damage == "byte":
+        second[20] = 256
+    elif damage == "long":
+        second.append(0)
+    else:
+        second = first[:]
+    before = dict(lua.globals().RAM)
+    ok, reason = _write(lua, mem, [first, second])
+    assert ok is False, reason
+    assert dict(lua.globals().RAM) == before
 
 
 def test_swap_rejects_an_empty_team(mem):

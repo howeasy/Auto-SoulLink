@@ -37,8 +37,9 @@ end
 local _host, _port
 local _sock           = nil
 local _connected      = false
-local _send_queue     = {}      -- {string} lines waiting to be sent
+local _send_queue     = {}      -- {string} complete wire frames, including LF
 local _line_queue     = {}      -- {string} complete received lines ready to read
+local _send_bytes, _line_bytes = 0, 0
 -- PARTIAL I/O STATE. With settimeout(0) LuaSocket may move only part of a line and reports
 -- how far it got in its THIRD return value. Both directions used to discard that: a partial
 -- send left the whole line queued and re-sent the bytes the peer already had, and a partial
@@ -46,15 +47,82 @@ local _line_queue     = {}      -- {string} complete received lines ready to rea
 -- because a small JSON line crosses loopback in one piece -- but "small" was an assumption,
 -- and the ROM content payload is kilobytes.
 local _send_offset    = 0       -- bytes of _send_queue[1] the peer has already taken
-local _recv_buf       = ""      -- bytes of an incomplete inbound line, kept across frames
+local _recv_parts, _recv_size = {}, 0
+local _recv_pending   = ""      -- bounded remainder of the last socket chunk
+local _ready_line     = nil     -- one complete frame waiting for receive-queue space
 local _drop_until_newline = false  -- true while skipping the tail of an over-long line
 local MAX_LINE        = 4 * 1024 * 1024   -- matches the server's own per-line cap
+local MAX_QUEUE_BYTES = 8 * 1024 * 1024
+local MAX_QUEUE_LINES = 128
+local READ_CHUNK      = 8192
+local IO_BUDGET       = 65536   -- maximum socket bytes per direction, per pump
 local _fail_logged = false   -- one connect-failure message per outage
 local _reconnect_cd   = 0       -- frames remaining before next reconnect attempt
 
 local RECONNECT_FRAMES = 30     -- ~0.5 s at 60 fps (initial retry interval)
 local RECONNECT_MAX   = 1800   -- ~30 s cap (exponential backoff)
 local _reconnect_step = RECONNECT_FRAMES  -- current backoff interval
+local _discard_on_disconnect = false
+
+local function _clear_receive()
+    _line_queue, _line_bytes = {}, 0
+    _recv_parts, _recv_size = {}, 0
+    _recv_pending, _ready_line = "", nil
+    _drop_until_newline = false
+end
+
+local function _queue_line(line)
+    if #_line_queue >= MAX_QUEUE_LINES or _line_bytes + #line > MAX_QUEUE_BYTES then
+        return false
+    end
+    _line_queue[#_line_queue + 1] = line
+    _line_bytes = _line_bytes + #line
+    return true
+end
+
+local function _append_receive(part)
+    if _drop_until_newline or #part == 0 then return end
+    if _recv_size + #part > MAX_LINE then
+        console.log("[SLink] inbound line exceeded " .. MAX_LINE
+                    .. " bytes — discarding it and resyncing at the next newline")
+        _recv_parts, _recv_size = {}, 0
+        _drop_until_newline = true
+        return
+    end
+    -- Coalesce small fragments. Repeated one-byte receives must not create
+    -- millions of table entries or repeatedly copy the entire growing frame.
+    local n = #_recv_parts
+    if n > 0 and #_recv_parts[n] + #part <= READ_CHUNK then
+        _recv_parts[n] = _recv_parts[n] .. part
+    else
+        _recv_parts[n + 1] = part
+    end
+    _recv_size = _recv_size + #part
+end
+
+local function _feed_receive(chunk)
+    local start = 1
+    while start <= #chunk do
+        local newline = chunk:find("\n", start, true)
+        _append_receive(chunk:sub(start, newline and newline - 1 or #chunk))
+        if not newline then return end
+        if _drop_until_newline then
+            _drop_until_newline = false
+        else
+            local line = table.concat(_recv_parts)
+            -- Allow CRLF framing without deleting illegal CR bytes inside JSON.
+            if line:sub(-1) == "\r" then line = line:sub(1, -2) end
+            if not _queue_line(line) then
+                _ready_line = line
+                _recv_pending = chunk:sub(newline + 1)
+                _recv_parts, _recv_size = {}, 0
+                return
+            end
+        end
+        _recv_parts, _recv_size = {}, 0
+        start = newline + 1
+    end
+end
 
 -- ── Internal: connect attempt ─────────────────────────────────────────────────
 -- Non-blocking connect: settimeout(0) so BizHawk never stalls.
@@ -115,7 +183,12 @@ end
 -- ── Public API ────────────────────────────────────────────────────────────────
 
 --- Call once at script startup. Attempts an initial connection (non-blocking).
-function M.init(host, port)
+function M.init(host, port, options)
+    -- Explicit initialization starts a different stream/run. In particular, a
+    -- partial outgoing frame must not be delivered to a newly selected server.
+    _send_queue, _send_bytes, _send_offset = {}, 0, 0
+    _discard_on_disconnect = options and options.discard_on_disconnect == true or false
+    _clear_receive()
     _host, _port = host, port
     local ok, err = _do_connect()
     if ok then
@@ -138,13 +211,42 @@ end
 --- Queue a JSON string to be sent on the next pump().
 --- The caller must NOT append \n — pump() does that.
 function M.send(json_str)
-    table.insert(_send_queue, json_str)
+    local reason
+    if type(json_str) ~= "string" or #json_str == 0 then
+        reason = "outbound frame must be a nonempty string"
+    elseif #json_str > MAX_LINE then
+        reason = "outbound frame exceeded " .. MAX_LINE .. " bytes"
+    elseif json_str:find("[\r\n]") then
+        reason = "outbound frame contains an unescaped line ending"
+    elseif #_send_queue >= MAX_QUEUE_LINES or _send_bytes + #json_str + 1 > MAX_QUEUE_BYTES then
+        reason = "outbound queue is full"
+    end
+    if reason then
+        console.log("[SLink] send refused: " .. reason)
+        return false, reason
+    end
+    local line = json_str .. "\n"
+    _send_queue[#_send_queue + 1] = line
+    _send_bytes = _send_bytes + #line
+    return true
 end
 
 --- Return the next complete received line (without \n), or nil if none ready.
 function M.receive()
-    if #_line_queue == 0 then return nil end
-    return table.remove(_line_queue, 1)
+    if not _connected or #_line_queue == 0 then return nil end
+    local line = table.remove(_line_queue, 1)
+    _line_bytes = _line_bytes - #line
+    return line
+end
+
+--- Diagnostic snapshot; returned values cannot alter the internal limits.
+function M.queue_status()
+    return {send_lines = #_send_queue, send_bytes = _send_bytes, send_offset = _send_offset,
+            receive_lines = #_line_queue, receive_bytes = _line_bytes,
+            partial_receive_bytes = _recv_size, pending_receive_bytes = #_recv_pending,
+            ready_receive_bytes = _ready_line and #_ready_line or 0,
+            max_line = MAX_LINE, max_queue_bytes = MAX_QUEUE_BYTES,
+            max_queue_lines = MAX_QUEUE_LINES, io_budget = IO_BUDGET, read_chunk = READ_CHUNK}
 end
 
 --- Call once per frame. Drives:
@@ -192,70 +294,69 @@ function M.pump()
     -- having written only PART of the line. That is handled rather than assumed
     -- away: the comment here used to claim "a single JSON line is never > 64 KB",
     -- which stopped being true the moment a ROM content payload was sent.
-    while #_send_queue > 0 do
-        local line = _send_queue[1] .. "\n"
+    local send_budget = IO_BUDGET
+    while #_send_queue > 0 and send_budget > 0 do
+        local line = _send_queue[1]
         -- Resume at the first byte the peer has NOT taken. send(data, i) is 1-based and
         -- both success and timeout report the index of the last byte written, so the
         -- offset survives however many frames the OS buffer stays full.
-        local bytes, err, lastindex = _sock:send(line, _send_offset + 1)
-        if bytes then
-            table.remove(_send_queue, 1)    -- sent successfully
-            _send_offset = 0
-        elseif err == "timeout" then
-            _send_offset = lastindex or _send_offset
-            break                           -- OS buffer full; resume next frame
-        else
+        local last_requested = math.min(#line, _send_offset + send_budget)
+        local bytes, err, lastindex = _sock:send(line, _send_offset + 1, last_requested)
+        if not bytes and err ~= "timeout" then
             -- "closed" or other error
             console.log("[SLink] TCP send error: " .. tostring(err) .. " — disconnecting")
             M.disconnect()
             return
         end
+        local progress = bytes or lastindex or _send_offset
+        if type(progress) ~= "number" or progress % 1 ~= 0
+            or progress < _send_offset or progress > last_requested then
+            console.log("[SLink] invalid socket send offset — disconnecting")
+            M.disconnect()
+            return
+        end
+        local advanced = progress - _send_offset
+        _send_offset = progress
+        send_budget = send_budget - advanced
+        if _send_offset == #line then
+            _send_bytes = _send_bytes - #line
+            table.remove(_send_queue, 1)
+            _send_offset = 0
+        end
+        if not bytes or advanced == 0 then break end
     end
 
     -- ── Receive ───────────────────────────────────────────────────────────────
-    -- receive("*l") reads one complete line (up to \n, not including it).
-    -- With settimeout(0) it returns nil,"timeout" immediately if no full line.
-    while true do
-        local line, err, partial = _sock:receive("*l")
-        if line then
-            if _drop_until_newline then
-                -- This `line` is the TAIL of the oversized line we abandoned, so its
-                -- terminator ends the garbage rather than starting anything. Without this
-                -- the cap bounded memory and then handed the tail to the parser as a
-                -- perfectly ordinary line -- megabytes of it -- which only looked harmless
-                -- because parse_command_list is a pattern scraper that returns {} instead
-                -- of raising. Resync properly: skip to the next newline and start clean.
-                _drop_until_newline = false
-            else
-                -- Whatever earlier frames collected belongs in front of this tail.
-                table.insert(_line_queue, _recv_buf .. line)
-            end
-            _recv_buf = ""
-        elseif err == "timeout" then
-            -- KEEP THE PARTIAL. LuaSocket has already consumed these bytes from the
-            -- socket; dropping them does not re-read them later, it loses them, and the
-            -- next complete line then arrives with its head missing.
-            if partial and #partial > 0 then
-                if _drop_until_newline then
-                    -- Still inside the abandoned line; keep throwing bytes away.
-                    partial = nil
-                elseif #_recv_buf + #partial > MAX_LINE then
-                    console.log("[SLink] inbound line exceeded " .. MAX_LINE
-                                .. " bytes — discarding it and resyncing at the next "
-                                .. "newline")
-                    _recv_buf = ""
-                    _drop_until_newline = true
-                elseif partial then
-                    _recv_buf = _recv_buf .. partial
-                end
-            end
-            break                           -- no more complete lines right now
-        else
+    -- Fixed-size reads bound allocation inside LuaSocket itself. A *l read can
+    -- allocate an unlimited complete line before a Lua-side size check sees it.
+    if _ready_line then
+        if not _queue_line(_ready_line) then return end
+        _ready_line = nil
+    end
+    if #_recv_pending > 0 then
+        local pending = _recv_pending
+        _recv_pending = ""
+        _feed_receive(pending)
+    end
+    local receive_budget = IO_BUDGET
+    while not _ready_line and #_line_queue < MAX_QUEUE_LINES and receive_budget > 0 do
+        local requested = math.min(READ_CHUNK, receive_budget)
+        local data, err, partial = _sock:receive(requested)
+        local chunk = data or partial or ""
+        if type(chunk) ~= "string" or #chunk > requested then
+            console.log("[SLink] invalid socket receive size — disconnecting")
+            M.disconnect()
+            return
+        end
+        receive_budget = receive_budget - #chunk
+        if #chunk > 0 then _feed_receive(chunk) end
+        if not data and err ~= "timeout" then
             -- "closed" or other error
             console.log("[SLink] TCP receive error: " .. tostring(err) .. " — disconnecting")
             M.disconnect()
-            break
+            return
         end
+        if not data or #chunk == 0 then break end
     end
 end
 
@@ -267,8 +368,10 @@ function M.disconnect()
     -- A new socket starts a new byte stream: resuming a half-written line or prepending a
     -- half-read one would corrupt the first message of the next session.
     _send_offset = 0
-    _recv_buf = ""
-    _drop_until_newline = false
+    if _discard_on_disconnect then _send_queue, _send_bytes = {}, 0 end
+    -- Completed responses belong to the old stream too. They must not execute
+    -- after disconnect or after a different save/client session reconnects.
+    _clear_receive()
     _reconnect_cd = RECONNECT_FRAMES      -- first retry after ~0.5 s
     _reconnect_step = RECONNECT_FRAMES    -- reset backoff
 end

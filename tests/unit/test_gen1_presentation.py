@@ -103,8 +103,9 @@ def _client_src():
 def test_badges_are_sent_as_a_mask():
     """A count here lit the wrong badges: 3 badges lit Boulder+Cascade, 8 lit Rainbow."""
     src = _client_src()
-    assert "readBadgeCount" not in src, "badges must be the raw bitmask, not a popcount"
-    assert src.count("readBadgeMask()") >= 2, "expected hello and tick to send the mask"
+    assert len(re.findall(r"\bbadges\s*=\s*M\.readBadgeMask\(\)", src)) >= 2
+    assert not re.search(r"\bbadges\s*=\s*M\.readBadgeCount", src)
+    assert len(re.findall(r"\bbadge_count\s*=\s*M\.readBadgeCount\(\)", src)) >= 2
 
 
 def test_box_snapshot_reports_the_active_box():

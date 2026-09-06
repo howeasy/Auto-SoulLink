@@ -1,0 +1,5 @@
+# Hash-pinned canonical metadata must retain identical bytes on every checkout.
+data/pret_sources.lock.json text eol=lf
+data/pret_build_provenance.json text eol=lf
+data/pret_syms.json text eol=lf
+data/pret_rom_syms.json text eol=lf

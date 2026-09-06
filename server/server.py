@@ -23,13 +23,20 @@ import json
 import logging
 import logging.handlers
 import mimetypes
+import ntpath
 import os
 import re
 import shutil
 import time
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 
+from server import gen1_admission
+from server import runtime_boundary
+from server.save_identity import SaveIdentity
+from server.http_safety import csrf_protection, theme_cache
+from server.lua_literals import lua_comment, lua_string
 from server.overlay_catalog import build_index_context as _build_stream_index_context
 
 try:
@@ -1531,6 +1538,8 @@ class SLinkServer:
         self._tcp_port = tcp_port
         self._manager_port = manager_port
         self._last_seq: dict[str, int] = {}
+        self._connection_owners: dict[str, object] = {}
+        self._gen1_sessions = gen1_admission.SessionGate()
         self.state = SoulLinkState.load(data_dir=data_dir,
                                         species_lock=species_lock,
                                         gender_lock=gender_lock,
@@ -1694,20 +1703,23 @@ class SLinkServer:
             self._rom_contract_mtime = None
             return None
         try:
-            with open(path) as f:
-                contract = json.load(f)
-        except (OSError, json.JSONDecodeError) as exc:
+            with open(path, "rb") as f:
+                raw = f.read(131073)
+            if len(raw) > 131072:
+                raise ValueError("cartridge contract exceeds 128 KiB")
+            contract = gen1_admission.decode_frame(raw)
+        except (OSError, ValueError) as exc:
             # Fail CLOSED and say so. A contract we cannot read is not the same as no
             # contract: the run was built from randomized ROMs and we have lost the only
             # record of which ones, so admitting anyone would defeat the check entirely.
             log.error("rom_contract.json is unreadable (%s) — every player will be "
                       "rejected until it is fixed or removed", exc)
             return {"unreadable": True, "players": {}}
-        log.info("run is bound to randomized ROMs (UPR %s, categories %s)",
+        log.debug("loaded cartridge contract (UPR %s, categories %s)",
                  contract.get("upr_version", "?"), contract.get("categories", []))
         return contract
 
-    def _refresh_rom_contract(self) -> None:
+    def _refresh_rom_contract(self, *, force=False) -> None:
         """Pick up a contract the Manager wrote after this server started."""
         base = self._data_dir or DATA_DIR
         path = os.path.join(base, "rom_contract.json")
@@ -1715,7 +1727,7 @@ class SLinkServer:
             mtime = os.path.getmtime(path)
         except OSError:
             mtime = None
-        if mtime != getattr(self, "_rom_contract_mtime", "unset"):
+        if force or mtime != getattr(self, "_rom_contract_mtime", "unset"):
             self._rom_contract = self._load_rom_contract()
             self._rom_contract_mtime = mtime
 
@@ -1789,13 +1801,14 @@ class SLinkServer:
         The adapter still has a veto: a generation with no panel at all never sends one,
         whatever a client claims.
         """
-        if not self.adapter.supports_info_panel():
+        adapter = self.adapter_for(player_id)
+        if not adapter.supports_info_panel():
             return False
         reported = (self.connected_players.get(player_id) or {}).get("panel")
         if reported is None:
             # Generations whose clients predate the capability report keep working: they
             # were already receiving the panel on the adapter's say-so.
-            return self.adapter.info_panel_width() == 0
+            return adapter.info_panel_width() == 0
         return bool(reported)
 
     def adapter_for(self, player_id: str):
@@ -2407,10 +2420,75 @@ class SLinkServer:
             self._sse_clients.discard(q)
         return resp
 
+    def _gen1_wire_response(self, player_id, msg, owner):
+        """The RBY TCP boundary. No caller-supplied flag can bypass admission."""
+        self._refresh_rom_contract(force=True)
+        gate = self._gen1_sessions
+        if gate.refresh(self._rom_contract):
+            for player in ("a", "b"):
+                self.admission[player] = {"state": "contract_pending", "reason": "cartridge contract changed"}
+                self.state._has_helld.discard(player)
+                if player in self.connected_players:
+                    self.connected_players[player]["connected"] = False
+        hello = msg.get("event") == "hello"
+        try:
+            if hello:
+                session = gate.admit(self._rom_contract, player_id, msg, owner,
+                                     self.state.player_identity.get(player_id))
+                # Facts become visible only after ALL cartridge/identity checks pass.
+                from server.adapters import get_adapter
+                variant = session.metadata["variant"]
+                adapter = get_adapter("gen1_rby", rom_type=variant)
+                if self.state.adapter.game_id != "gen1_rby":
+                    if self.state.rom_type:
+                        gate.close(player_id, owner)
+                        raise gen1_admission.AdmissionError("run already belongs to a different game generation")
+                    self.state.adapter = self.adapter = adapter
+                    self.state.is_rr = False
+                self._player_adapters[player_id] = adapter
+                self._connection_owners[player_id] = owner
+                self.admission[player_id] = {"state": "admitted", "reason": "verified complete cartridge contract",
+                                             "admission_epoch": gate.epoch, "session_id": session.session_id}
+                self.connected_players[player_id] = {
+                    "rom_type": variant, "panel": session.metadata["capabilities"]["panel"],
+                    "panel_abi": session.metadata["patch_version"], **session.metadata}
+            else:
+                retry = gate.accept(player_id, msg, owner)
+                if retry is not None:
+                    return retry
+                session = gate.sessions[player_id]
+            info = self.connected_players[player_id]
+            info.update(connected=True, last_event=msg.get("event", "?"),
+                        last_seen=datetime.now().strftime("%H:%M:%S"), last_seen_ts=time.time())
+            commands = self._dispatch(player_id, msg, _gen1_session=session)
+            return gate.response(player_id, msg, commands, hello=hello)
+        except gen1_admission.AdmissionError as exc:
+            # A rejected second socket must not revoke the verified socket's ownership.
+            owned = gate.close(player_id, owner)
+            if owned or player_id not in gate.sessions:
+                self.admission[player_id] = {"state": "contract_pending" if not self._rom_contract else "rejected",
+                                             "reason": str(exc)}
+                self.state._has_helld.discard(player_id)
+                if player_id in self.connected_players:
+                    self.connected_players[player_id]["connected"] = False
+            return gen1_admission.nack(msg, str(exc), pending=not self._rom_contract)
+        except Exception:
+            # A partial handler failure is ambiguous. Never replay it as a new event.
+            log.exception("[%s] RBY dispatcher failed; session revoked", player_id)
+            gate.close(player_id, owner)
+            self.admission[player_id] = {"state": "rejected", "reason": "dispatcher failure requires recovery"}
+            self.state._has_helld.discard(player_id)
+            if player_id in self.connected_players:
+                self.connected_players[player_id]["connected"] = False
+            return gen1_admission.nack(msg, "dispatcher failure requires recovery")
+
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         peer = writer.get_extra_info("peername")
         log.info(f"Client connected: {peer}")
         player_id_for_conn: str | None = None
+        owner = object()
+        gen1_connection = False
+        dropping_line = False
         try:
             while True:
                 try:
@@ -2424,23 +2502,24 @@ class SLinkServer:
                     # of letting asyncio tear it down.
                     log.warning(f"Oversized line from {peer} ({e.consumed} bytes consumed before limit) — dropping")
                     try:
-                        # Drain until next newline so the buffer is realigned.
+                        # Consume only the reported prefix. readuntil preserves any
+                        # following frame in its buffer, including a coalesced HELLO.
                         await reader.readexactly(e.consumed)
-                        while True:
-                            chunk = await reader.read(65536)
-                            if not chunk or b"\n" in chunk:
-                                break
-                    except (asyncio.IncompleteReadError, asyncio.LimitOverrunError):
+                        dropping_line = True
+                    except asyncio.IncompleteReadError:
                         break
                     continue
-                line = raw.decode("utf-8", errors="replace").strip()
-                if not line:
+                if dropping_line:
+                    dropping_line = False
+                    await self._respond_packet(writer, gen1_admission.nack({}, "oversized protocol frame"))
+                    continue
+                if not raw.strip():
                     continue
                 try:
-                    msg = json.loads(line)
-                except json.JSONDecodeError as e:
+                    msg = gen1_admission.decode_frame(raw)
+                except gen1_admission.AdmissionError as e:
                     log.warning(f"Bad JSON from {peer}: {e}")
-                    await self._respond(writer, [{"cmd": "noop"}])
+                    await self._respond_packet(writer, gen1_admission.nack({}, "invalid JSON frame"))
                     continue
 
                 player_id = msg.get("player", "")
@@ -2451,7 +2530,31 @@ class SLinkServer:
 
                 # Track which player owns this connection.
                 if player_id_for_conn is None:
+                    if msg.get("event") != "hello":
+                        await self._respond_packet(writer, gen1_admission.nack(msg, "HELLO is required before events", pending=True))
+                        continue
                     player_id_for_conn = player_id
+                elif player_id != player_id_for_conn:
+                    await self._respond_packet(writer, gen1_admission.nack(msg, "a connection cannot change player slots"))
+                    continue
+
+                self._refresh_rom_contract()
+                rom_type = str(msg.get("rom_type", "")).lower()
+                gen1_connection = (gen1_connection or msg.get("protocol") == gen1_admission.PROTOCOL
+                    or rom_type in gen1_admission.VARIANTS | {"gen1_rby"}
+                    or self.state.rom_type.lower() in gen1_admission.VARIANTS | {"gen1_rby"}
+                    or (self._rom_contract or {}).get("schema") == gen1_admission.CONTRACT_SCHEMA)
+                if gen1_connection:
+                    packet = self._gen1_wire_response(player_id, msg, owner)
+                    await self._respond_packet(writer, packet)
+                    self._notify_sse()
+                    continue
+                # A legacy peer may not claim a slot currently owned by an admitted
+                # RBY socket, even by announcing a different game in its HELLO.
+                if player_id in self._gen1_sessions.sessions:
+                    await self._respond_packet(writer, gen1_admission.nack(msg, "slot belongs to an admitted RBY session"))
+                    continue
+                self._connection_owners[player_id] = owner
 
                 # Update connection info
                 prev_conn = self.connected_players.get(player_id, {})
@@ -2541,16 +2644,25 @@ class SLinkServer:
             pass
         finally:
             log.info(f"Client disconnected: {peer}")
-            if player_id_for_conn:
+            if player_id_for_conn and self._connection_owners.get(player_id_for_conn) is owner:
                 info = self.connected_players.get(player_id_for_conn, {})
                 info["connected"] = False
                 self.connected_players[player_id_for_conn] = info
+                self._connection_owners.pop(player_id_for_conn, None)
+                if self._gen1_sessions.close(player_id_for_conn, owner):
+                    self.admission[player_id_for_conn] = {"state": "contract_pending", "reason": "client disconnected"}
+                    self.state._has_helld.discard(player_id_for_conn)
                 self._notify_sse()  # Push disconnect status to browsers
             try:
                 writer.close()
                 await writer.wait_closed()
             except Exception:
                 pass
+
+    @staticmethod
+    async def _respond_packet(writer: asyncio.StreamWriter, packet: dict):
+        writer.write((json.dumps(packet, ensure_ascii=True, allow_nan=False) + "\n").encode("utf-8"))
+        await writer.drain()
 
     @staticmethod
     async def _respond(writer: asyncio.StreamWriter, commands: list):
@@ -2784,7 +2896,11 @@ class SLinkServer:
         })
         self._save_events()
 
-    def _dispatch(self, player_id: str, msg: dict) -> list:
+    def _dispatch(self, player_id: str, msg: dict, *, _gen1_session=None) -> list:
+        # The Python session object is never deserialized from a client frame.
+        if (msg.get("protocol") == gen1_admission.PROTOCOL and
+                (_gen1_session is None or self._gen1_sessions.sessions.get(player_id) is not _gen1_session)):
+            return [{"cmd": "noop"}]
         event = msg.get("event", "unknown")
         # Snapshot area state before the event so we can detect outcome transitions.
         _pre_area_state = self.state.area_states.get(msg.get("area_id", ""))
@@ -2811,7 +2927,8 @@ class SLinkServer:
         if event == "hello":
             # Pick up a contract written after this server started, before deciding.
             self._refresh_rom_contract()
-            verdict = self._decide_admission(player_id, msg)
+            verdict = (self.admission[player_id] if _gen1_session is not None
+                       else self._decide_admission(player_id, msg))
             if self.admission.get(player_id, {}).get("state") != verdict["state"]:
                 (log.info if verdict["state"] == "admitted" else log.warning)(
                     "[%s] admission: %s — %s", player_id, verdict["state"], verdict["reason"])
@@ -2836,7 +2953,13 @@ class SLinkServer:
             log.info(f"[{player_id}] hello rom={rom} area='{area or loc}' party={party_n}")
 
             # Run state machine first (handles identity lock check).
-            cmds = self.state.handle_event(player_id, msg)
+            identity_options = {}
+            if _gen1_session is not None:
+                # The RBY gate verified these save fields before this dispatch.
+                # Trading a foreign-OT mon into the lead slot cannot redefine them.
+                identity_options["save_identity"] = SaveIdentity(msg["ot_id"], msg["trainer_name"])
+            cmds = self.state.handle_event(player_id, msg, preserve_peer_session=_gen1_session is not None,
+                                           **identity_options)
 
             if msg.get("_rejected"):
                 # Identity mismatch — log it, surface error, but don't update display data.
@@ -2870,7 +2993,9 @@ class SLinkServer:
                     log.info(f"Committed trainer name '{tname}' for player {player_id}")
             if _dirty:
                 self.state._save()
-            if msg.get("rom_content"):
+            # Clean admission already proves every ROM domain canonical. Never
+            # replace that profile with a partial client-reported encounter table.
+            if msg.get("rom_content") and _gen1_session is None:
                 self._ingest_rom_content(player_id, msg["rom_content"])
             if "pc_boxes" in msg:
                 self.pc_boxes[player_id] = msg["pc_boxes"]
@@ -3108,6 +3233,15 @@ class SLinkServer:
             # Talk-to-ghost: handled in state.handle_event (_handle_peer_interact),
             # which notifies the partner. Low-frequency; no enrichment needed here.
             pass
+        elif event == "command_nack":
+            # Diagnostic refusal only. In particular, do not tick the old trade
+            # watchdog or infer any physical poststate from an unrecognized ACK.
+            command = msg.get("command")
+            reason = msg.get("reason")
+            command = command[:64] if isinstance(command, str) else "invalid"
+            reason = reason[:256] if isinstance(reason, str) else "command refused"
+            self._log_event(player_id, "command_nack", f"Command refused ({command}): {reason}")
+            return [{"cmd": "noop"}]
         elif event in ("trade_request", "mon_chosen", "menu_result", "trade_done", "status"):
             # Talk-to-partner trade flow (request → pick → confirm → trade scene → done) + periodic
             # badge status: handled in state.handle_event. User-paced (or ~0.2 Hz for status); no
@@ -3362,6 +3496,19 @@ class SLinkServer:
         sv = state.value if hasattr(state, "value") else str(state)
         return sv not in ("linked", "dead_zone")
 
+    def read_rule_state(self) -> dict:
+        return runtime_boundary.read_rule_state(self)
+
+    def read_runtime_facts(self, *, now=None) -> dict:
+        return runtime_boundary.read_runtime_facts(self, now=now)
+
+    def _restricted_operation_response(self, operation):
+        decision = runtime_boundary.operation_decision(self, operation)
+        if not decision["available"]:
+            return aiohttp_web.json_response({"ok": False, "error": decision["reason"],
+                "reason_code": decision["reason_code"], "operation": operation, "available": False}, status=409)
+        return None
+
     def _build_status_dict(self) -> dict:
         """Serialize current server state to a JSON-safe dict."""
         s = self.state
@@ -3503,7 +3650,7 @@ class SLinkServer:
                     # dropped needs to be told which cartridge the run expects, otherwise
                     # the game simply appears not to be recording anything.
                     "admission": getattr(self, "admission", {}).get(pid, {}).get(
-                        "state", "admitted"),
+                        "state", "contract_pending"),
                     "admission_reason": getattr(self, "admission", {}).get(pid, {}).get(
                         "reason", ""),
                     "encounter_table": self._enc_table_for_status(
@@ -4101,8 +4248,9 @@ class SLinkServer:
                 earned = "earned" if (badge_mask & (1 << i)) else ""
                 gym_html += f'<span class="gym-badge {earned}" style="background:{color}" title="{name}"></span>'
             gym_html += '</span>'
-            rom_lbl   = ROM_LABEL.get(p["rom_type"], p["rom_type"])
-            area_disp = self.adapter.area_display_name(p.get("current_area_id") or p["current_area"]) or '<span class="dim">unknown</span>'
+            rom_lbl   = html.escape(str(ROM_LABEL.get(p["rom_type"], p["rom_type"])))
+            area_name = self.adapter.area_display_name(p.get("current_area_id") or p["current_area"])
+            area_disp = html.escape(area_name) if area_name else '<span class="dim">unknown</span>'
             balls     = p["ball_count"]
             balls_cls = "yes" if balls > 0 else "warn"
             trainer   = html.escape(p.get("trainer_name", ""))
@@ -4136,7 +4284,7 @@ class SLinkServer:
                 f'<div class="info-row">'
                 f'<span>&#128205; <b class="area">{area_disp}</b></span>'
                 f'<span>&#9702; Pokéballs: <b class="{balls_cls}">{balls}</b></span>'
-                f'<span>Last: <b>{p["last_event"]}</b> {_age_label(p.get("last_seen_age"))}</span>'
+                f'<span>Last: <b>{html.escape(str(p["last_event"]))}</b> {_age_label(p.get("last_seen_age"))}</span>'
                 f'</div>'
             )
             # Say so loudly when a client has gone quiet. Everything else on this card keeps
@@ -4598,7 +4746,7 @@ class SLinkServer:
             '<div class="lp-hdr-side lp-hdr-side-a">'
             f'<div class="lp-player-name">{_name_a} {_a_conn}</div>'
             '<div class="lp-hdr-meta">'
-            f'<span class="dim">{_rom_a}</span>'
+            f'<span class="dim">{html.escape(str(_rom_a))}</span>'
             f' &middot; &#128205; <b class="area">{html.escape(_area_a_lbl)}</b>'
             f' &middot; &#9702; <b class="{_bclass_a}">{_balls_a}</b>'
             '</div></div>'
@@ -4612,7 +4760,7 @@ class SLinkServer:
             '<div class="lp-hdr-meta">'
             f'<b class="{_bclass_b}">{_balls_b}</b> &#9702;'
             f' &middot; <b class="area">{html.escape(_area_b_lbl)}</b> &#128205;'
-            f' &middot; <span class="dim">{_rom_b}</span>'
+            f' &middot; <span class="dim">{html.escape(str(_rom_b))}</span>'
             '</div></div>'
             '</div>'
         )
@@ -5014,7 +5162,7 @@ class SLinkServer:
                 st_sort = _STATUS_SORT_VAL.get(r["cls"], "9")
                 is_bonus = r["area"].startswith("_bonus_")
                 row_cls = ' class="bonus-pair-row"' if is_bonus else ''
-                area_cell = area_disp
+                area_cell = html.escape(area_disp)
                 parts.append(
                     f'<tr{row_cls} data-status="{html.escape(r["cls"])}" data-key="{html.escape(r["area"])}">'
                     f'<td data-sort="{html.escape(area_disp)}">{area_cell}</td>'
@@ -5185,15 +5333,28 @@ class SLinkServer:
         from dist automatically.
         """
         path = request.match_info.get('path', '')
-        safe = os.path.normpath(path).lstrip('/\\')
-        if '..' in safe:
+        # URL paths must stay relative on Windows as well as POSIX. Normalizing
+        # first can hide traversal, and a drive-qualified join discards its base.
+        if (ntpath.splitdrive(path)[0] or path.startswith('/') or '\\' in path
+                or '\x00' in path or '..' in path.split('/')):
             raise aiohttp_web.HTTPForbidden()
-        src_path  = os.path.join(_CALC_SRC_DIR, safe)
-        dist_path = os.path.join(_CALC_DIST_DIR, safe)
-        abs_path  = src_path if os.path.isfile(src_path) else dist_path
-        if not os.path.isfile(abs_path):
+        abs_path = None
+        for directory in (_CALC_SRC_DIR, _CALC_DIST_DIR):
+            try:
+                root = Path(directory).resolve()
+                candidate = (root / path).resolve()
+                # resolve() follows symlinks and Windows junctions before the
+                # containment check; a textual prefix check is insufficient.
+                if not candidate.is_relative_to(root):
+                    raise aiohttp_web.HTTPForbidden()
+                if candidate.is_file():
+                    abs_path = candidate
+                    break
+            except (OSError, RuntimeError, ValueError):
+                raise aiohttp_web.HTTPForbidden() from None
+        if abs_path is None:
             raise aiohttp_web.HTTPNotFound()
-        if safe.endswith('.html'):
+        if path.endswith('.html'):
             with open(abs_path, encoding='utf-8') as fh:
                 full = fh.read()
             # Slice the calc body inner. Regex-matched rather than
@@ -5208,7 +5369,7 @@ class SLinkServer:
                 calc_body = full[body_open_match.end():body_close_match[-1].start()]
             else:
                 calc_body = full
-            is_hardcore = 'hardcore' in safe.lower()
+            is_hardcore = 'hardcore' in path.lower()
             ctx = {
                 "page_title":      "Pokémon Radical Red Damage Calculator",
                 "theme":           resolve_theme(request),
@@ -5230,8 +5391,7 @@ class SLinkServer:
             return resp
         mime, _ = mimetypes.guess_type(abs_path)
         ct = mime or 'application/octet-stream'
-        with open(abs_path, 'rb') as fh:
-            return aiohttp_web.Response(body=fh.read(), content_type=ct)
+        return aiohttp_web.FileResponse(abs_path, headers={"Content-Type": ct})
 
     async def handle_calc_mons(self, request):
         """Return live party + linked mons for both players as Showdown pastes."""
@@ -5815,6 +5975,9 @@ class SLinkServer:
 
     async def handle_api_attempts(self, request):
         """POST /api/attempts — set the manual attempts counter."""
+        restriction = self._restricted_operation_response("attempts_edit")
+        if restriction is not None:
+            return restriction
         try:
             body = await request.json()
         except Exception:
@@ -6174,9 +6337,9 @@ class SLinkServer:
         '-- Override: set SLINK_ROOT to skip auto-detection entirely:\n'
         'local SLINK_ROOT = nil  -- e.g. "C:/SLink/"\n'
         '\n'
-        'SLINK_HOST   = "{host}"\n'
+        'SLINK_HOST   = {host}\n'
         'SLINK_PORT   = {tcp_port}\n'
-        'SLINK_PLAYER = "{player}"\n'
+        'SLINK_PLAYER = {player}\n'
         '\n'
         '-- Config file lives next to this launcher and caches the project root path.\n'
         'local _launcher_dir = ((debug.getinfo(1, "S") or {{}}).source or ""):match("@(.+[\\\\/])") or ""\n'
@@ -6243,11 +6406,11 @@ class SLinkServer:
         connect_host = host_header.split(":")[0] or "127.0.0.1"
         run_name = self._run_name or self._run_id or "SLink"
         content = self._LAUNCHER_TEMPLATE.format(
-            run_name=run_name,
+            run_name=lua_comment(run_name),
             player_upper=player.upper(),
-            host=connect_host,
+            host=lua_string(connect_host),
             tcp_port=self._tcp_port,
-            player=player,
+            player=lua_string(player),
         )
         safe_name = re.sub(r'[^\w-]', '_', run_name).strip('_') or "SLink"
         filename = f"slink_{safe_name}_{player}.lua"
@@ -7574,6 +7737,9 @@ class SLinkServer:
 
     async def handle_debug_inject_event(self, request):
         """POST /api/debug/inject_event — send a synthetic event through the state machine."""
+        restriction = self._restricted_operation_response("debug_mutation")
+        if restriction is not None:
+            return restriction
         try:
             body = await request.json()
         except Exception:
@@ -7598,6 +7764,9 @@ class SLinkServer:
 
     async def handle_debug_queue_command(self, request):
         """POST /api/debug/queue_command — manually queue a command for a player."""
+        restriction = self._restricted_operation_response("debug_mutation")
+        if restriction is not None:
+            return restriction
         try:
             body = await request.json()
         except Exception:
@@ -7621,11 +7790,16 @@ class SLinkServer:
 
     async def handle_debug_set_pokeballs(self, request):
         """POST /api/debug/set_pokeballs — toggle pokeballs_obtained."""
+        restriction = self._restricted_operation_response("debug_mutation")
+        if restriction is not None:
+            return restriction
         try:
             body = await request.json()
         except Exception:
             return aiohttp_web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
         player = body.get("player", "a")
+        if player not in ("a", "b"):
+            return aiohttp_web.json_response({"ok": False, "error": "player must be 'a' or 'b'"}, status=400)
         value = bool(body.get("value", True))
         self.state.pokeballs_obtained[player] = value
         self.state._save()
@@ -7637,6 +7811,9 @@ class SLinkServer:
 
     async def handle_debug_set_area_state(self, request):
         """POST /api/debug/set_area_state — manually set an area's state."""
+        restriction = self._restricted_operation_response("debug_mutation")
+        if restriction is not None:
+            return restriction
         try:
             body = await request.json()
         except Exception:
@@ -7661,6 +7838,9 @@ class SLinkServer:
 
     async def handle_debug_clear_pending(self, request):
         """POST /api/debug/clear_pending — clear pending captures (all or by area)."""
+        restriction = self._restricted_operation_response("debug_mutation")
+        if restriction is not None:
+            return restriction
         try:
             body = await request.json()
         except Exception:
@@ -7685,6 +7865,9 @@ class SLinkServer:
         Uses index as tiebreaker if multiple links share an area (shouldn't happen
         but be safe). Removes the link entry, cleans up _key_index and area_states.
         """
+        restriction = self._restricted_operation_response("debug_mutation")
+        if restriction is not None:
+            return restriction
         try:
             body = await request.json()
         except Exception:
@@ -7752,6 +7935,9 @@ class SLinkServer:
         Sets status back to alive, clears death metadata, removes from pending_memorials,
         and re-adds keys to party_keys. User must manually restore mons in-game.
         """
+        restriction = self._restricted_operation_response("debug_mutation")
+        if restriction is not None:
+            return restriction
         try:
             body = await request.json()
         except Exception:
@@ -7846,6 +8032,9 @@ class SLinkServer:
 
     async def handle_debug_rollback(self, request):
         """POST /api/debug/rollback — restore links.json (and events.json) from a backup slot."""
+        restriction = self._restricted_operation_response("restore")
+        if restriction is not None:
+            return restriction
         try:
             body = await request.json()
         except Exception:
@@ -7900,6 +8089,9 @@ class SLinkServer:
 
     async def handle_reset_api(self, request):
         """POST /api/reset — wipe all Soul Link state and start a fresh run."""
+        restriction = self._restricted_operation_response("reset")
+        if restriction is not None:
+            return restriction
         links_path = self.state._links_path
         if os.path.exists(links_path):
             os.remove(links_path)
@@ -7916,6 +8108,9 @@ class SLinkServer:
                                    pc_trade_npc=self.state.pc_trade_npc)
         self.adapter = self.state.adapter
         self._last_seq.clear()
+        self._gen1_sessions = gen1_admission.SessionGate()
+        self._connection_owners.clear()
+        self.admission.clear()
         self.connected_players.clear()
         # Clear derived display caches so SSE doesn't broadcast stale data.
         self.player_area = {"a": "", "b": ""}
@@ -8167,6 +8362,9 @@ class SLinkServer:
         and force is not set, returns a warning with requires_force=true.
         On success, cleans up pending_captures and updates area_states.
         """
+        restriction = self._restricted_operation_response("manual_link")
+        if restriction is not None:
+            return restriction
         try:
             body = await request.json()
         except Exception:
@@ -8291,6 +8489,9 @@ class SLinkServer:
         Body (JSON): {"a_slot": 0, "b_slot": 0, "area_id": "test"}
         Resolves slot indices to keys, then delegates to handle_inject_link_api.
         """
+        restriction = self._restricted_operation_response("manual_link")
+        if restriction is not None:
+            return restriction
         try:
             body = await request.json()
         except Exception:
@@ -8336,7 +8537,7 @@ def build_app(srv):
     Extracted from main() so tests can construct the SAME app and walk the SAME route
     table — a test that re-declared the routes would drift the moment one was added here.
     """
-    app = aiohttp_web.Application()
+    app = aiohttp_web.Application(middlewares=[csrf_protection, theme_cache])
     setup_templating(app)
     app.router.add_get("/",            srv.handle_status_html)
     app.router.add_get("/memorial",    srv.handle_memorial_html)

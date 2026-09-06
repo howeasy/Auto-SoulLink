@@ -1,18 +1,8 @@
-"""Deferred writes must wait for a genuinely safe frame, not merely "not in battle".
+"""Legacy observation flags and AP behavior, independent of RBY write permission.
 
-SLink writes party and box memory directly. `not isInBattle()` was the only gate, but it is
-equally true in the PC box UI, the party menu, the naming screen and mid-cutscene — every
-place where the open UI holds its own copy of that memory and writes it back over ours.
-
-Two cheap pret-verified predicates close the windows that actually corrupt state:
-  wJoyIgnore  — nonzero while a script owns the joypad (cutscene, forced movement)
-  wFontLoaded — bit 0 set while a text box / menu font is loaded, i.e. a UI is up
-
-Gen 1 has no task/callback system, so a Gen 3-style multi-predicate gate is not available;
-these two are the ones worth having. The check is profile-gated, so a profile that declares
-neither address keeps the old battle-only behaviour rather than silently changing.
-
-These run the REAL Lua from lua/memory_gb.lua against a stubbed address space.
+Live cartridge evidence shows these flags alone can be clear during title and
+nickname screens. RBY deferred writes use isPartyWriteSafe; its source/CPU tests
+are in test_gen1_write_checkpoint.py and the separate live checkpoint gates.
 """
 import os
 
