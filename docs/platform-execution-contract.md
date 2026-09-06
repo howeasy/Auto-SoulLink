@@ -1,23 +1,29 @@
 # Inactive pinned execution-hold adapter
 
 `lua/platform_execution.lua` extracts the independently proved MainForm hold
-mechanism into a reusable actuator. Its scoped actual-host ownership, pause,
-emergency-hold and stopped-held-script checks are now recorded in
-[the private probe evidence](rr_reference/PLATFORM_EXECUTION_PROBE.md). Earlier
-manual MainForm/arena probes remain separate supporting evidence.
+mechanism into a reusable actuator. The original mGBA physical evidence is bound
+to the `e03ddcb` module bytes and recorded in
+[the RR private probe evidence](rr_reference/PLATFORM_EXECUTION_PROBE.md)
+(`4ece9fc`/`476be3f`).
+The current explicit-profile module has separately recorded
+[Gambatte evidence](gen1_reference/GAMBATTE_EXECUTION_HOLD.md). Earlier manual
+MainForm/arena probes remain separate supporting evidence. Modeled compatibility
+checks do not turn the older mGBA physical results into an exact-byte verdict on
+the new module. Fresh mGBA checks on the adopted module remain a separate gate.
 No RR, RBY, shared state, UI or existing client selects it automatically.
 
-The initial capability is only
-`bizhawk-2.11.1-mgba-exclusive-hold-v1`. The module checks actual installed
-executable/core/native files against explicit caller-selected pins. Other cores,
-host versions or builds are refused. A shared interface does not imply an
-unperformed Gambatte/RBY proof.
+Two profiles are available: `mgba` and `gambatte`. Omitting a selection retains
+exactly the original mGBA default and six pin fields. Gambatte requires an
+explicit selection and reports `bizhawk-2.11.1-gambatte-exclusive-hold-v1`.
+The module checks actual installed executable/core/native files against explicit
+caller-selected pins. Other cores, host versions or builds are refused. This
+actuator evidence does not qualify cartridge admission or native game commands.
 
 ## Selection and API
 
 The caller must provide a32-character lowercase hexadecimal `owner_id`,
 `exclusive_ownership="emulator_process"`, `control_context="between_frames"`,
-and an `expected_host` containing every field returned by `supported_profile()`.
+and an `expected_host` containing every field returned by `supported_profile(profile)`.
 These declarations are required but are not accepted as sufficient proof by
 themselves: the module checks live host identity, process ownership, UI surfaces,
 rewind state, flag/pause readback, and the original core object.
@@ -25,12 +31,19 @@ rewind state, flag/pause readback, and the original core object.
 ```lua
 local Execution = require("platform_execution")
 local actuator, reason = Execution.new({
+    profile = caller_chosen_profile, -- nil/mgba retains the mGBA default; gambatte is explicit
     owner_id = caller_owned_nonce,
     exclusive_ownership = "emulator_process",
     control_context = "between_frames",
     expected_host = caller_selected_and_reviewed_host_pins,
 })
 ```
+
+`supported_profile()` and `supported_profile("mgba")` return independent copies
+of the original mGBA fields. `supported_profile("gambatte")` returns the measured
+Gambatte pins. Supplying Gambatte pins without `profile="gambatte"` is refused;
+identity fields never silently select a core. Unknown or non-string selections
+are refused without a fallback or host mutation.
 
 `new` claims an exclusive process lease but does not alter emulation's hold flag.
 It refuses an already-set `BlockFrameAdvance`; a replacement must never adopt
@@ -53,6 +66,8 @@ execution authority or decide whether a game command is safe.
 
 ## Exact pinned scope
 
+The mGBA default remains:
+
 | Evidence | Required value |
 |---|---|
 | Host | BizHawk2.11.1 |
@@ -60,6 +75,18 @@ execution authority or decide whether a game command is safe.
 | Core type | `BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk` |
 | Core assembly SHA-256 | `444bc157418e9b5df5d07e987fc7ad1d2d1c6993676f5b864368027cb4f054d5` |
 | Single loaded `mgba.dll` SHA-256 | `ba398a56e62ce1e4280fe96834cbbe4e6469b7070f34da313ec3d4637c4979e1` |
+
+Gambatte uses the same pinned executable, core assembly and host version, with:
+
+| Evidence | Required value |
+|---|---|
+| Core type | `BizHawk.Emulation.Cores.Nintendo.Gameboy.Gameboy` |
+| Single loaded `libgambatte.dll` SHA-256 | `320d615454af44bbe586bcb53afa14a64e834a4156c0d4a731d59cda30ce0722` |
+
+DLL names are checked without case sensitivity; the observed filename is
+`libgambatte.DLL`. Each selection checks its own native module family and requires
+exactly one matching native module. Both profiles use the same process lease and
+hold implementation.
 
 The constructor hashes actual process/core/module files and requires one
 MainForm and one LuaConsole, without other open tool forms. Subsequent control
@@ -157,11 +184,14 @@ python -m pytest tests/unit/test_platform_execution.py tests/unit/test_control_s
 python -m ruff check tests/unit/test_platform_execution.py
 ```
 
-Current result: **31 adapter tests;61 combined tests passed**, Ruff clean.
+Current modeled result: **42 adapter tests;72 combined control tests passed**,
+Ruff clean. The original 31 cases remain, with explicit selection/default/pin
+controls added. The separate Game Boy harness isolation tests also pass.
 
-The following private checks have now run against the pinned actual binaries and
+The following original mGBA private checks ran against the pinned actual binaries and
 freshly attributed fixture. Exact source/result/execution hashes and the retained
-failed attempts are linked above; the adapter code itself did not change:
+failed attempts are linked above; the older module did not change between those
+original cases:
 
 1. Load this exact module with caller-supplied pins and a new owner nonce; record
    process ID, UI thread ID, module/source hashes and semaphore name.

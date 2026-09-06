@@ -67,8 +67,9 @@ local types={
     end}},
     ['System.Diagnostics.Process']={GetCurrentProcess=function()
         return {Id=T.pid,MainModule={FileName='host.exe'},Modules={GetEnumerator=function()
-            local items={{ModuleName='mgba.dll',FileName='mgba.dll'}}
-            if T.extra_native then items[#items+1]={ModuleName='libmgba.dll.so',FileName='mgba.dll'} end
+            local native=T.native_name or 'mgba.dll'
+            local items={{ModuleName=native,FileName=native}}
+            if T.extra_native then items[#items+1]={ModuleName=native..'.so',FileName=native} end
             return enumerator(items)
         end}}
     end},
@@ -95,7 +96,7 @@ memory=setmetatable({}, {__index=function() error('no game memory capability') e
 function setup(profile)
     T.core_type=profile.core_type
     T.hashes={['host.exe']=profile.emulator_sha256,['core.dll']=profile.core_assembly_sha256,
-        ['mgba.dll']=profile.native_module_sha256}
+        [T.native_name or 'mgba.dll']=profile.native_module_sha256}
     return {owner_id=string.rep('a',32),expected_host=profile,exclusive_ownership='emulator_process',control_context='between_frames'}
 end
 """
@@ -350,3 +351,66 @@ def test_shared_control_emergency_rehold_uses_the_failed_actuator_safely():
     assert control.status(control).held and not control.status(control).ordinary_execution
     assert owner.status().failed and owner.status().physical_stop_verified
     assert lua.globals().T.blocked and lua.globals().T.pause_writes == 0
+
+
+def test_existing_default_profile_fields_are_unchanged_and_copied():
+    _, module, _ = make()
+    profile = dict(module.supported_profile())
+    assert profile == {
+        "capability_id": "bizhawk-2.11.1-mgba-exclusive-hold-v1", "emulator_version": "2.11.1",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "core_type": "BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk",
+        "core_assembly_sha256": "444bc157418e9b5df5d07e987fc7ad1d2d1c6993676f5b864368027cb4f054d5",
+        "native_module_sha256": "ba398a56e62ce1e4280fe96834cbbe4e6469b7070f34da313ec3d4637c4979e1",
+    }
+    assert dict(module.supported_profile("mgba")) == profile
+    changed = module.supported_profile("gambatte")
+    changed.core_type = "untrusted"
+    assert module.supported_profile("gambatte").core_type == "BizHawk.Emulation.Cores.Nintendo.Gameboy.Gameboy"
+
+
+@pytest.mark.parametrize("selection", ["", "unknown", False, 7, []])
+def test_invalid_explicit_profile_selection_never_falls_back(selection):
+    lua, module, options = make()
+    assert module.supported_profile(selection)[0] is None
+    options.profile = selection
+    owner, reason = module.new(options)
+    assert owner is None and "unproved host profile selection" in reason
+    assert lua.globals().T.flag_writes == 0 and not list(lua.globals().T.handles.values())
+
+
+def test_gambatte_requires_explicit_selection_and_uses_its_own_native_module():
+    lua, module, options = make()
+    profile = module.supported_profile("gambatte")
+    options.expected_host = profile
+    assert module.new(options)[0] is None  # Pins cannot silently select a different core.
+    lua.globals().T.native_name = "libgambatte.dll"
+    options = lua.globals().setup(profile)
+    options.profile = "gambatte"
+    owner = module.new(options)
+    assert owner.set_held(True, "Gambatte model") is True
+    assert owner.yield_held() is True and owner.status().physical_stop_verified
+    assert owner.status().capability_id == profile.capability_id
+    assert owner.status().capabilities.full_execution_safety is False
+    assert owner.status().capabilities.native_recovery_execution is False
+    assert owner.set_held(False, "model complete") is True and owner.close() is True
+
+
+@pytest.mark.parametrize("drift", ["core", "module", "native-hash", "host-version"])
+def test_gambatte_selection_still_requires_every_live_identity_pin(drift):
+    lua, module, _ = make()
+    state = lua.globals().T
+    state.native_name = "libgambatte.dll"
+    options = lua.globals().setup(module.supported_profile("gambatte"))
+    options.profile = "gambatte"
+    if drift == "core":
+        state.core_type = "BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk"
+    elif drift == "module":
+        state.native_name = "mgba.dll"
+    elif drift == "native-hash":
+        state.hashes["libgambatte.dll"] = "0" * 64
+    else:
+        state.version = "2.12"
+    owner, reason = module.new(options)
+    assert owner is None and reason
+    assert state.flag_writes == 0 and not list(state.handles.values())

@@ -1,11 +1,17 @@
 -- Inactive pinned host actuator. No game-memory, network or frame-advance API.
 -- Use only from the exclusive between-frame Lua control loop, never a bus callback.
 local M={}
-local PROFILE={capability_id="bizhawk-2.11.1-mgba-exclusive-hold-v1",emulator_version="2.11.1",
+local PROFILES={mgba={capability_id="bizhawk-2.11.1-mgba-exclusive-hold-v1",emulator_version="2.11.1",
     emulator_sha256="f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
     core_type="BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk",
     core_assembly_sha256="444bc157418e9b5df5d07e987fc7ad1d2d1c6993676f5b864368027cb4f054d5",
-    native_module_sha256="ba398a56e62ce1e4280fe96834cbbe4e6469b7070f34da313ec3d4637c4979e1"}
+    native_module_sha256="ba398a56e62ce1e4280fe96834cbbe4e6469b7070f34da313ec3d4637c4979e1"},
+    gambatte={capability_id="bizhawk-2.11.1-gambatte-exclusive-hold-v1",emulator_version="2.11.1",
+    emulator_sha256="f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+    core_type="BizHawk.Emulation.Cores.Nintendo.Gameboy.Gameboy",
+    core_assembly_sha256="444bc157418e9b5df5d07e987fc7ad1d2d1c6993676f5b864368027cb4f054d5",
+    native_module_sha256="320d615454af44bbe586bcb53afa14a64e834a4156c0d4a731d59cda30ce0722"}}
+local NATIVE={mgba={fragment="mgba",filename="mgba.dll"},gambatte={fragment="gambatte",filename="libgambatte.dll"}}
 local function copy(source)
     local result={};for key,value in pairs(source) do result[key]=value end;return result
 end
@@ -15,12 +21,22 @@ end
 local function owner_id(value)
     return type(value)=="string" and #value==32 and value:match("^[0-9a-f]+$")~=nil
 end
-function M.supported_profile() return copy(PROFILE) end
+function M.supported_profile(selection)
+    if selection==nil then selection="mgba" end
+    if type(selection)~="string" or not PROFILES[selection] then return nil,"unproved host profile selection" end
+    return copy(PROFILES[selection])
+end
 
 function M.new(options)
     local semaphore,lease_acquired
     local ok,result=pcall(function()
         assert(type(options)=="table" and owner_id(options.owner_id),"explicit32-hex owner_id required")
+        -- Existing callers retain exactly the mGBA default and pin fields. A
+        -- different core requires an explicit selection, never inferred pins.
+        local selection=options.profile
+        if selection==nil then selection="mgba" end
+        assert(type(selection)=="string" and PROFILES[selection],"unproved host profile selection")
+        local PROFILE,native=PROFILES[selection],NATIVE[selection]
         assert(options.exclusive_ownership=="emulator_process" and options.control_context=="between_frames",
             "explicit exclusive between-frame control ownership required")
         assert(type(options.expected_host)=="table","exact expected host/core evidence required")
@@ -75,9 +91,9 @@ function M.new(options)
         local native_count=0
         while modules:MoveNext() do
             local module=modules.Current
-            if tostring(module.ModuleName):lower():find("mgba",1,true) then
+            if tostring(module.ModuleName):lower():find(native.fragment,1,true) then
                 native_count=native_count+1
-                assert(tostring(module.ModuleName):lower()=="mgba.dll" and
+                assert(tostring(module.ModuleName):lower()==native.filename and
                     fingerprint(module.FileName)==PROFILE.native_module_sha256,"live native module mismatch")
             end
         end
