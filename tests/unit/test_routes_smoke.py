@@ -127,6 +127,12 @@ async def test_get_route_renders(client, path):
     # A 200 HTML page that came back empty means the template rendered to nothing.
     if resp.status == 200 and "text/html" in ctype:
         assert raw.decode("utf-8", "replace").strip(), f"{path} returned an empty HTML body"
+        page = raw.decode("utf-8", "replace")
+        for asset in ("debug.js", "obs.js", "twitch.js"):
+            marker = 'src="/static/' + asset + '"'
+            if marker in page:
+                assert 'src="/static/run-http.js"' in page
+                assert page.index('src="/static/run-http.js"') < page.index(marker)
 
 
 def test_registered_methods_and_paths_match_frozen_contract():
