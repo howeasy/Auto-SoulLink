@@ -3,7 +3,14 @@ import hashlib
 import struct
 
 from unicorn import UC_HOOK_MEM_READ, UC_HOOK_MEM_WRITE
-from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R1, UC_ARM_REG_R3, UC_ARM_REG_R4, UC_ARM_REG_SP
+from unicorn.arm_const import (
+    UC_ARM_REG_LR,
+    UC_ARM_REG_PC,
+    UC_ARM_REG_R1,
+    UC_ARM_REG_R3,
+    UC_ARM_REG_R4,
+    UC_ARM_REG_SP,
+)
 
 from tests.rr.native.test_game_heap_cpu import cpu
 from tests.rr.reference.test_withdrawal_oracle import ROM_SHA256
@@ -46,8 +53,8 @@ def test_ambiguous_tail_word_is_consumed_as_bounded_dpcm_bytes_by_actual_decoder
         machine.w32(channel + 0x24, header)
         machine.w32(channel + 0x3C, 0xFFFFFFFF)
         reads, writes = [], []
-        machine.cpu.hook_add(UC_HOOK_MEM_READ, lambda c, a, p, n, v, u: reads.append((p, n)))
-        machine.cpu.hook_add(UC_HOOK_MEM_WRITE, lambda c, a, p, n, v, u: writes.append((p, n)))
+        machine.cpu.hook_add(UC_HOOK_MEM_READ, lambda c, a, p, n, v, u, log=reads: log.append((p, n)))
+        machine.cpu.hook_add(UC_HOOK_MEM_WRITE, lambda c, a, p, n, v, u, log=writes: log.append((p, n)))
         machine.cpu.reg_write(UC_ARM_REG_SP, stack)
         machine.cpu.reg_write(UC_ARM_REG_LR, stop)
         machine.cpu.reg_write(UC_ARM_REG_R3, block * 64)
