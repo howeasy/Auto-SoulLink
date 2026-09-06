@@ -1,8 +1,6 @@
-"""Contracts consumed by dashboard.js survive changes to the HTML generator."""
+"""HTTP/DOM contracts for the reviewed pair board and its shared drawer."""
 
-import copy
 import json
-import re
 from collections import Counter
 from pathlib import Path
 
@@ -20,9 +18,9 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.fixture(params=["gen3", "gen1"])
 def populated(request, tmp_path):
     capture = json.loads((ROOT / f"tests/fixtures/ui/source/{request.param}.json").read_text(encoding="utf-8"))
-    srv = hydrate_capture(capture, tmp_path / request.param)
-    srv.battle_state["b"]["enemy_party"][0]["stat_stages"] = [7, 6, 6, 8, 9, 6, 6]
-    return srv
+    server = hydrate_capture(capture, tmp_path / request.param)
+    server.battle_state["b"]["enemy_party"][0]["stat_stages"] = [7, 6, 6, 8, 9, 6, 6]
+    return server
 
 
 @pytest_asyncio.fixture
@@ -34,39 +32,31 @@ async def rendered(populated):
         yield populated, text, Document(text), client
 
 
-def filter_values():
-    source = (ROOT / "server/static/dashboard.js").read_text(encoding="utf-8")
-    groups = re.search(r"var FILTER_GROUPS = \{(.*?)\};", source, re.S)
-    assert groups, "the filter contract moved; update its explicit consumer guard"
-    arrays = re.findall(r"\[([^]]+)\]", groups[1])
-    return set(re.findall(r"'([^']+)'", " ".join(arrays)))
+def owner(node):
+    while node is not None:
+        if "data-player" in node.attrs:
+            return node.attrs["data-player"]
+        node = node.parent
+    return None
 
 
 @pytest.mark.asyncio
-async def test_encounter_table_sort_filter_and_search_contract(rendered):
-    _, _, dom, _ = rendered
-    table = dom.by_id("enc-table")
-    dom.by_id("enc-filters")
-    assert dom.by_id("dash-search-input").tag == "input"
-    headers = list(table.descendants("th"))
-    assert len(headers) == 4
-    for column, header in enumerate(headers):
-        assert header.has_class("sortable")
-        assert int(header.attrs["data-col"]) == column
-        assert header.closest("thead") is not None
-    rows = [row for row in table.descendants("tr") if "data-status" in row.attrs]
+async def test_pair_rows_have_explicit_ownership_and_keep_every_party_member(rendered):
+    server, _, dom, _ = rendered
+    rows = [node for node in dom.root.descendants("article") if node.has_class("board-pair")]
     assert len(rows) >= 8
-    assert {row.attrs["data-status"] for row in rows} <= filter_values()
     for row in rows:
-        cells = [cell for cell in row.children if cell.tag == "td"]
-        assert len(cells) == 4
-        assert "data-sort" in cells[0].attrs and "data-sort" in cells[3].attrs
-    events = [table for table in dom.root.descendants("table") if "data-no-search" in table.attrs]
-    assert len(events) == 1 and events[0].has_class("events-table")
+        cells = [child for child in row.children if child.tag == "div"]
+        assert cells[0].attrs["data-player"] == "a" and cells[1].has_class("board-bond") and cells[2].attrs["data-player"] == "b"
+    members = [(owner(node), node.attrs["data-mon-key"]) for node in dom.root.descendants("div") if "data-mon-key" in node.attrs]
+    assert len(members) == len(set(members))
+    for pid in ("a", "b"):
+        assert all((pid, key) in members for key in server.state.party_keys[pid])
+    assert not list(dom.root.descendants("iframe"))
 
 
 @pytest.mark.asyncio
-async def test_disclosure_ids_and_source_header_structure(rendered):
+async def test_disclosure_ids_and_table_structure_survive_the_port(rendered):
     _, _, dom, _ = rendered
     details = [node for node in dom.root.descendants("details") if "data-details-key" in node.attrs]
     assert len(details) >= 10
@@ -75,47 +65,59 @@ async def test_disclosure_ids_and_source_header_structure(rendered):
         assert len([child for child in node.children if child.tag == "summary"]) == 1
     ids = Counter(node.attrs["id"] for node in dom.root.descendants() if node.attrs.get("id"))
     assert not {key: count for key, count in ids.items() if count > 1}
-    for header in dom.root.descendants("th"):
-        head = header.closest("thead")
-        assert head is not None and head.closest("table") is header.closest("table")
+    for header in dom.by_id("content").descendants("th"):
+        assert header.closest("thead") is not None
 
 
 @pytest.mark.asyncio
-async def test_sprite_html_is_not_escaped_and_poll_contract_survives(rendered):
-    srv, text, dom, _ = rendered
-    sprites = [img for img in dom.root.descendants("img") if img.has_class("mon-sprite")]
-    assert len(sprites) >= 12
-    assert all(img.attrs.get("data-species") for img in sprites)
-    assert srv._get_sprite_html(25) in text
+async def test_sprites_polling_and_generation_specific_stages_survive(rendered):
+    server, text, dom, _ = rendered
+    sprites = [node for node in dom.root.descendants("img") if node.has_class("mon-sprite")]
+    assert len(sprites) >= 12 and all(node.attrs.get("data-species") for node in sprites)
+    assert server._get_sprite_html(25) in text
     content = dom.by_id("content")
-    assert content.attrs["hx-get"] == "/"
-    assert "every 2s" in content.attrs["hx-trigger"]
+    assert content.attrs["hx-get"] == "/" and content.attrs["hx-trigger"] == "every 2s"
     assert "morph" in content.attrs["hx-swap"]
-    # Exercise real generation-specific stat labels through the page, so a
-    # later macro reuse cannot silently split Gen1 Special into two stats.
-    labels = srv.adapter.stat_stage_labels()
     for index, amount in ((0, 1), (3, 2), (4, 3)):
-        if labels[index]:
-            assert f">+{amount} {labels[index]}</span>" in text
+        label = server.adapter.stat_stage_labels()[index]
+        if label:
+            assert f">+{amount} {label}</span>" in text
         else:
             assert f">+{amount} " not in text
 
 
 @pytest.mark.asyncio
-async def test_calc_preview_is_unique_per_battling_rr_player(rendered):
-    srv, _, dom, client = rendered
-    if not srv.state.is_rr:
-        assert not [node for node in dom.root.descendants() if node.attrs.get("id", "").startswith("calc-preview-")]
-        return
-    assert dom.by_id("calc-preview-b").attrs["data-in-battle"] == "1"
-    moves = json.loads(dom.by_id("calc-preview-b").attrs["data-player-moves"])
-    assert moves and all(isinstance(move, str) and move for move in moves)
-    # No certified effective battle envelope exists in the frozen runtime.
-    assert "data-calc-input" not in dom.by_id("calc-preview-b").attrs
-    srv.battle_state["a"] = copy.deepcopy(srv.battle_state["b"])
-    both = Document(await (await client.get("/")).text())
-    for pid in ("a", "b"):
-        assert both.by_id("calc-preview-" + pid).attrs["data-in-battle"] == "1"
+async def test_foes_stay_with_fighting_player_and_calc_opens_separately(rendered):
+    _, _, dom, _ = rendered
+    foes = [node for node in dom.root.descendants("div") if "data-foe-owner" in node.attrs]
+    assert foes and all(node.attrs["data-foe-owner"] == "b" and owner(node) == "b" for node in foes)
+    stakes = [node for node in dom.root.descendants("span") if node.has_class("board-stake")]
+    assert stakes and all(owner(node) == "a" for node in stakes)
+    calc = [node for node in dom.root.descendants("a") if "data-calc-link" in node.attrs]
+    assert len(calc) == 1 and calc[0].attrs["target"] == "_blank" and "noopener" in calc[0].attrs["rel"]
+
+
+@pytest.mark.asyncio
+async def test_setup_uses_friendly_names_and_current_states(rendered):
+    _, _, _, client = rendered
+    response = await client.get("/?view=setup")
+    assert response.status == 200
+    text = await response.text()
+    dom = Document(text)
+    assert "Game family" in text and "Load each player's save first" in text
+    current = [node for node in dom.root.descendants("a") if node.attrs.get("aria-current") == "page"]
+    assert any(node.attrs.get("href") == "/?view=setup" for node in current)
+    assert any(node.has_class("board-opt-why") for node in dom.root.descendants("span"))
+
+
+@pytest.mark.asyncio
+async def test_debug_dialog_is_outside_the_refresh_target(rendered):
+    _, _, dom, _ = rendered
+    dialog = dom.by_id("debug-dialog")
+    assert dialog.tag == "dialog" and dialog.attrs["aria-modal"] == "true"
+    dom.by_id(dialog.attrs["aria-labelledby"])
+    assert dom.by_id("debug-close").closest("dialog") is dialog
+    assert not list(dom.by_id("content").descendants("dialog"))
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,93 @@
+{
+  "description": "Isolated rendering fixtures, not live cartridge evidence",
+  "files": [
+    {
+      "path": "debug-keyboard.json",
+      "sha256": "d58795a1f0f3aa25af69eec43b053ade36c7d1b1c6c60b9ab6c9227c8955a2d8"
+    },
+    {
+      "path": "gen1-default-1100.png",
+      "sha256": "fa5393526ae347dfc47232bc9a10104ad44ae4563f4ad24a457b4a345115abee"
+    },
+    {
+      "path": "gen1-default-1600.png",
+      "sha256": "e124e3eee5b4393d6a2c1593c4f26aada4e7674a2a36cebf73ea9d2b6c8c91c1"
+    },
+    {
+      "path": "gen1-default-700.png",
+      "sha256": "6779e1e81bae181e98bf9f3b32e0a55113c1a351267ef0af33dc276b38ca3865"
+    },
+    {
+      "path": "gen1-funtastic-grape-1100.png",
+      "sha256": "d79606aeb12e4ee7e4c6068bdc5d1d022fbdeb2faf7a12141416aa1045a9106a"
+    },
+    {
+      "path": "gen1-funtastic-grape-1600.png",
+      "sha256": "af8d18a52856a33b2e02738e5d1e88186edfee5fcd76cae6c2dfdd0576e28818"
+    },
+    {
+      "path": "gen1-funtastic-grape-700.png",
+      "sha256": "795a0b62466f4e7e6636c77a194e4aeb00b8e3c832e4512d59f9a0023a6d02bf"
+    },
+    {
+      "path": "gen1-light-1100.png",
+      "sha256": "52cc870250fab273b201ff1115e109ae3e9f73246255a908f64798bc1f65f868"
+    },
+    {
+      "path": "gen1-light-1600.png",
+      "sha256": "bc94787532d6d32b0dceecc668d75eda8636622dfa373d59c68af74b01a119b7"
+    },
+    {
+      "path": "gen1-light-700.png",
+      "sha256": "288b5af44eb3b9bdedef02ffbaa80553535c3715c0b15a63e516677898dff394"
+    },
+    {
+      "path": "gen1-setup-light-1100.png",
+      "sha256": "21e415e594b271f4e9bd0091554f9dc49cce18347eea00464fcb9d135aa26c43"
+    },
+    {
+      "path": "gen3-default-1100.png",
+      "sha256": "98e34a426c4eebbabf4c773d0311e2fe8ea3b553e9c1a2c37b1646fb2a5c0440"
+    },
+    {
+      "path": "gen3-default-1600.png",
+      "sha256": "74e0cd9e3203954692fce7e490fa15fd959d7af6e6d080df333a9103d3b50ea6"
+    },
+    {
+      "path": "gen3-default-700.png",
+      "sha256": "199da46d16a1950db11f86527c32bff44c7961256ec1aaf8bfd0db2a983d7b27"
+    },
+    {
+      "path": "gen3-funtastic-grape-1100.png",
+      "sha256": "a7ca104b7c421c7612f1862a29df3ecf6e4e63a1899cb9d88587a653d69b6471"
+    },
+    {
+      "path": "gen3-funtastic-grape-1600.png",
+      "sha256": "4a700e5383acd9c683bb1344a533d937573cb47e89af23f9d7fe4bae8d5d1b1f"
+    },
+    {
+      "path": "gen3-funtastic-grape-700.png",
+      "sha256": "0871941763cb3e6de1571c1220f1ac90da84c8fecdcc1f9e6225d8d1f0b4bdff"
+    },
+    {
+      "path": "gen3-light-1100.png",
+      "sha256": "9a6359be57b14e6e1552b8173d3cf3223a7dcebd02b56769da19c5c1b198759f"
+    },
+    {
+      "path": "gen3-light-1600.png",
+      "sha256": "9357e78d35df6c4847351ab1040af8d67c05c8596b3a7a05713472fadcec75bf"
+    },
+    {
+      "path": "gen3-light-700.png",
+      "sha256": "371f6c47f273a39db72cd868dd7bc390b1bb38c33ada6d59100c5e89881f59d4"
+    },
+    {
+      "path": "matrix.json",
+      "sha256": "ce0f75efaa40648a1d8650968ceb7a4c0ad22d7e6c763e1872ac1c31696971ae"
+    },
+    {
+      "path": "states.json",
+      "sha256": "b449cb38dc2d3776a0f469bc94a7e1242a08ed3e2a535e94a384be9541fd6f39"
+    }
+  ]
+}

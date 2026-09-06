@@ -105,6 +105,15 @@ def test_move_enrichment_copies_adapter_data_and_preserves_pp_inputs():
     assert mon == original and shared == {"name": "Move", "pp": 20}
 
 
+def test_status_party_membership_does_not_follow_the_details_cache(tmp_path):
+    server = SLinkServer(data_dir=str(tmp_path))
+    server.party_details["a"] = {"boxed": {"slot": 0}, "known": {"slot": 2}}
+    server.state.party_keys["a"] = {"known", "missing"}
+    player = server._build_status_dict()["players"]["a"]
+    assert player["party_keys"] == ["known", "missing"]
+    assert "boxed" in player["party_details"]  # Retained observation, not membership.
+
+
 def test_gen1_display_pp_matches_its_existing_codec_for_all_moves_and_ups():
     from server.adapters.gen1_rby import Gen1Adapter
     from server.gen1_party_codec import PartyCodec

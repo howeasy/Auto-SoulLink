@@ -447,6 +447,8 @@ img.bdg-img[src*="funnotbun"]:not([data-bg-removed]) {
 .mc.fnt  { border-left-color: var(--c-dead); }
 .mc.fnt  { opacity: .45; }
 .mc.fnt .mon-sprite { filter: grayscale(60%); }
+.mc.bu { border-left-color: var(--c-dim); }
+.hp-unknown { color: var(--c-dim); font-size: .85em; }
 .m-info  { flex: 1; min-width: 0; }
 .m-name  { font-size: 1em; font-weight: 700; white-space: nowrap;
            overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }

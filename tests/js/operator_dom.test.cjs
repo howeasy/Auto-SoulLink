@@ -20,13 +20,14 @@ class Element {
   get options() { return this.children.filter(child => child instanceof Element && child.tagName === 'OPTION'); }
 }
 
-function loadDebug(responses) {
+function loadDebug(responses, embedded = false) {
   const nodes = new Map();
   const document = {body: new Element('body'), activeElement: null,
     createElement: tag => new Element(tag), querySelectorAll: () => [],
     getElementById(id) { if (!nodes.has(id)) nodes.set(id, new Element('div')); return nodes.get(id); }};
-  const context = {document, console, setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0,
-    EventSource: class { addEventListener() {} close() {} },
+  const counts = {timers: 0, streams: 0};
+  const context = {document, console, SLinkDebugEmbedded: embedded, counts, setTimeout: () => 0, clearTimeout() {}, setInterval: () => { counts.timers++; return 0; },
+    EventSource: class { constructor() { counts.streams++; } addEventListener() {} close() {} },
     fetch: async url => ({json: async () => responses[url] || {}})};
   context.window = context;
   vm.createContext(context);
@@ -35,6 +36,16 @@ function loadDebug(responses) {
   }
   return context;
 }
+
+test('embedded Debug uses the board coordinator without another timer or SSE connection', async () => {
+  const context = loadDebug({}, true);
+  assert.equal(context.counts.timers, 0);
+  assert.equal(context.counts.streams, 0);
+  await context.SLinkDebug.refresh({players: {a: {queued: 0}, b: {queued: 0}}, links: [], area_states: {}, pending_captures: {}});
+  assert.equal(context.document.getElementById('sse-badge').textContent, 'Board refresh');
+  assert.equal(context.counts.timers, 0);
+  assert.equal(context.counts.streams, 0);
+});
 
 test('debug dynamic labels, keys and attributes remain literal text', async () => {
   const attack = '<img data-ui-probe="unsafe" onerror="bad()">';

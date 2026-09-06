@@ -15,7 +15,7 @@ whether it knows any item names measures the bag, which Gen 1 has, and not the h
 slot, which Gen 1 lacks. A consumer should decide that column from the data it was given:
 if no mon in the payload carries a held_item_id, there is nothing for the column to show.
 
-    python tools/gen_ui_capabilities.py > server/static/mockups/fixtures/capabilities.json
+    python tools/gen_ui_capabilities.py > tests/fixtures/ui/status/capabilities.json
 """
 
 from __future__ import annotations

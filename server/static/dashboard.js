@@ -529,7 +529,16 @@ if (window._slinkDashInit) {
   var FONTS = [
     { slug: 'pixelify', label: 'Pixelify',   sample: 'Aa' },
     { slug: 'classic',  label: 'Classic',    sample: 'Aa' },
+    { slug: 'jersey',   label: 'Jersey 20',  sample: 'Aa' },
+    { slug: 'plex',     label: 'IBM Plex Sans', sample: 'Aa' },
   ];
+
+  function fontFamily(name) {
+    return name === 'classic' ? 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+      : name === 'jersey' ? "'Jersey 20', monospace"
+      : name === 'plex' ? "'IBM Plex Sans', system-ui, sans-serif"
+      : "'Pixelify Sans', 'Press Start 2P', monospace";
+  }
 
   function currentFont() {
     var b = document.body || {};
@@ -539,7 +548,7 @@ if (window._slinkDashInit) {
   }
 
   function applyFont(name) {
-    if (name !== 'classic') name = 'pixelify';
+    if (!FONTS.some(function(f) { return f.slug === name; })) name = 'pixelify';
     var b = document.body;
     var wantClass = 'font-' + name;
     if (!b.classList.contains(wantClass)) {
@@ -562,9 +571,7 @@ if (window._slinkDashInit) {
     // pattern where the summary swatch shows the active palette colour).
     var summarySample = root.querySelector('summary .font-sample');
     if (summarySample) {
-      summarySample.style.fontFamily = active === 'classic'
-        ? 'ui-monospace, \'SFMono-Regular\', Menlo, Consolas, monospace'
-        : '\'Pixelify Sans\', \'Press Start 2P\', monospace';
+      summarySample.style.fontFamily = fontFamily(active);
     }
     Array.prototype.forEach.call(root.querySelectorAll('.font-pill'), function(btn) {
       btn.classList.toggle('active', btn.getAttribute('data-font') === active);
@@ -587,9 +594,7 @@ if (window._slinkDashInit) {
       // preview "Pixelify Sans" vs the pre-rework monospace face without
       // applying the choice. Strings match the slink.css --font-mono /
       // --font-heading tokens so the preview tracks the actual swap.
-      var sampleFont = f.slug === 'classic'
-        ? 'ui-monospace, \'SFMono-Regular\', Menlo, Consolas, monospace'
-        : '\'Pixelify Sans\', \'Press Start 2P\', monospace';
+      var sampleFont = fontFamily(f.slug);
       html += '<button type="button" class="font-pill" data-font="' + f.slug + '" title="' + f.label + '">'
             +   '<span class="font-sample" style="font-family:' + sampleFont + '">Aa</span>'
             +   '<span class="font-label">' + f.label + '</span>'
@@ -632,7 +637,7 @@ if (window._slinkDashInit) {
   // correctly for the sidebar (which DOES flip even on calc).
   try {
     var saved = localStorage.getItem('slink-font');
-    if (saved === 'classic' || saved === 'pixelify') {
+    if (FONTS.some(function(f) { return f.slug === saved; })) {
       if (!document.body.classList.contains('font-' + saved)) {
         applyFont(saved);
       }

@@ -22,7 +22,7 @@
               <div class="lp-info">
                 <div class="lp-nm">{{ pr.a.nickname or pr.a.species_name or '—' }}{% if pr.a.fainted %}<span class="fnt-tag">FNT</span>{% endif %}</div>
                 <div class="hp-row">
-                  <div class="hp-trk"><div class="hp-fill {{ pr.a.hp_cls }}" style="width:{{ pr.a.pct }}%"></div></div>
+                  {% if pr.a.pct is not none %}<div class="hp-trk"><div class="hp-fill {{ pr.a.hp_cls }}" style="width:{{ pr.a.pct }}%"></div></div>{% else %}<span class="hp-unknown">HP unknown</span>{% endif %}
                   {% if pr.a.level %}<span class="lv">Lv&nbsp;{{ pr.a.level }}</span>{% endif %}
                 </div>
               </div>
@@ -37,7 +37,7 @@
                 <div class="lp-nm">{% if pr.b.fainted %}<span class="fnt-tag">FNT</span>{% endif %}{{ pr.b.nickname or pr.b.species_name or '—' }}</div>
                 <div class="hp-row">
                   {% if pr.b.level %}<span class="lv">Lv&nbsp;{{ pr.b.level }}</span>{% endif %}
-                  <div class="hp-trk"><div class="hp-fill {{ pr.b.hp_cls }}" style="width:{{ pr.b.pct }}%"></div></div>
+                  {% if pr.b.pct is not none %}<div class="hp-trk"><div class="hp-fill {{ pr.b.hp_cls }}" style="width:{{ pr.b.pct }}%"></div></div>{% else %}<span class="hp-unknown">HP unknown</span>{% endif %}
                 </div>
               </div>
               {{ pr.b.sprite_html | safe }}

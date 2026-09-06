@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ page_title }}{% endblock %}</title>
   <link rel="stylesheet" href="/static/slink.css">
+  <link rel="stylesheet" href="/static/ui-fonts.css">
   <link rel="stylesheet" href="/static/themes/{{ theme }}.css" id="slink-theme">
   {# Pages that include the dashboard sidebar pull in their sidebar CSS + .js
      so the rail / collapse toggle / theme picker all wire up. Defaults to
@@ -25,7 +26,7 @@
      sidebar renders at its final width on first paint. Without this, the
      sidebar would flash full-width while dashboard.js (defer) waits for
      parse to complete. #}
-  <script>try{if(localStorage.getItem('slink-sidebar-collapsed')==='1')document.body.classList.add('dash-collapsed');if(localStorage.getItem('slink-lp-view')==='1')document.body.classList.add('lp-view');var f=localStorage.getItem('slink-font');document.body.classList.add('font-'+(f==='classic'?'classic':'pixelify'));}catch(_){}</script>
+  <script>try{if(localStorage.getItem('slink-sidebar-collapsed')==='1')document.body.classList.add('dash-collapsed');if(localStorage.getItem('slink-lp-view')==='1')document.body.classList.add('lp-view');var f=localStorage.getItem('slink-font')||{{ default_font|default('pixelify')|tojson }};document.body.classList.add('font-'+(['classic','pixelify','jersey','plex'].includes(f)?f:'pixelify'));}catch(_){}</script>
   {# Shared inline-SVG sprite — defines every <symbol id="i-..."/> the rest
      of the page references via <use href="#i-..."/>. Loaded once per page
      so dashboard / manager / memorial / overlay templates all have the

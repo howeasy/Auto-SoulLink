@@ -1,6 +1,21 @@
 """Detached presentation normalization; never a gameplay permission engine."""
 
+import math
+
 from server.adapters import game_id_for_rom_type
+
+
+def health(mon):
+    """One raw-ratio HP policy for the board and reusable renderers."""
+    hp, maximum = mon.get("hp"), mon.get("maxHP")
+    known = all(type(value) in (int, float) and math.isfinite(value) for value in (hp, maximum))
+    known = known and hp >= 0 and maximum > 0 and hp <= maximum
+    if not known:
+        return {"known": False, "hp": None, "maximum": None, "ratio": None, "percent": None, "bar": None, "color": "unknown"}
+    ratio = hp / maximum
+    return {"known": True, "hp": hp, "maximum": maximum, "ratio": ratio,
+            "percent": math.floor(ratio * 100 + .5), "bar": round(max(0, min(100, ratio * 100)), 3),
+            "color": "high" if ratio > .5 else "mid" if ratio > .2 else "low"}
 
 # name, adapter fact, existing backend gate, configurable rule, verified patch fact
 FEATURES = (

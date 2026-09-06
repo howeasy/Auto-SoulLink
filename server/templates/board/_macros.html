@@ -1,0 +1,26 @@
+{% macro icon(name) -%}<svg class="inline-ico" aria-hidden="true"><use href="#i-{{ name }}"/></svg>{%- endmacro %}
+{% macro hp(value, label='Last observed HP') -%}
+{% if value.known %}<span class="board-hp"><span class="board-hp-bar" role="progressbar" aria-label="{{ label }}" aria-valuemin="0" aria-valuemax="{{ value.maximum }}" aria-valuenow="{{ value.hp }}"><span class="board-hp-fill {{ value.color }}" style="width:{{ value.bar }}%"></span></span><span class="board-hp-num">{{ value.hp }}/{{ value.maximum }}</span></span>{% else %}<span class="board-hp-unknown">HP unknown</span>{% endif %}
+{%- endmacro %}
+{% macro foes(list, player) -%}
+{% if list %}<div class="board-foes" data-foe-owner="{{ player.pid }}">{% if player.doubles or player.opponent != 'Wild encounter' %}<span class="board-cap">{{ 'Doubles · opposing side' if player.doubles else player.opponent or 'Observed opponent' }}</span>{% endif %}
+{% for foe in list %}<div class="board-foe"><span class="board-spr">{{ foe.sprite_html }}</span><span class="board-foe-txt"><span class="board-vs">vs</span> {{ 'wild ' if player.opponent == 'Wild encounter' else '' }}{{ foe.species_name or 'Unknown Pokémon' }} · Lv {{ foe.level or '?' }}{% if not foe.active and list|length > 1 %}<small> · observed team</small>{% endif %}</span>{{ hp(foe.health, 'Last observed enemy HP') }}{{ foe.status_html }}{{ foe.stages_html }}</div>{% if foe.moves_html %}<div class="board-foe-moves">{{ foe.moves_html }}</div>{% endif %}{% endfor %}
+</div>{% endif %}
+{%- endmacro %}
+{% macro half(row, pid, players) -%}
+{% set mon = row[pid] %}{% set player = players[pid] %}
+<div class="board-half {{ pid }}{% if not mon %} empty{% elif mon.active %} fighting{% endif %}{% if mon and mon.at_stake %} staked{% endif %}" data-player="{{ pid }}" aria-label="Player {{ pid|upper }} · {{ player.name }}">
+<span class="board-player-label">Player {{ pid|upper }} · {{ player.name }}</span>
+{% if mon %}<div class="board-half-in" id="{{ mon.id }}" data-mon-key="{{ mon.key }}">
+{% if mon.sprite_html %}<span class="board-spr big">{{ mon.sprite_html }}</span>{% else %}<span class="board-slot" aria-hidden="true"></span>{% endif %}
+<div class="board-half-txt"><span class="board-half-nick">{% if mon.active %}<span class="board-active" title="Last observed in battle">⚔</span>{% endif %}<span>{{ mon.nickname or mon.species_name }}</span>{% if mon.at_stake %}<span class="board-stake">at stake</span>{% endif %}{% if mon.shiny %}<span class="shiny-star" title="Shiny">✦</span>{% endif %}</span>
+<span class="board-sub">{{ mon.species_name }}{% if mon.level %} · Lv {{ mon.level }}{% endif %}</span>
+{% if mon.show_hp %}{{ hp(mon.health) }}{{ mon.status_html }}{{ mon.stages_html }}{% endif %}
+{% if mon.ability_name or mon.held_item_name %}<span class="board-sub">{% if mon.ability_name %}{{ mon.ability_name }}{% endif %}{% if mon.held_item_name %}<span class="board-item">{% if mon.ability_name %} · {% endif %}◆ {{ mon.held_item_name }}</span>{% endif %}</span>{% endif %}
+{% if mon.where == 'box' %}<span class="board-sub">Box {{ mon.box + 1 if mon.box is defined else '?' }}{% if mon.slot is defined %} · slot {{ mon.slot + 1 }}{% endif %}</span>{% elif not mon.where and row.zone != 'fallen' %}<span class="board-sub">Location not observed</span>{% endif %}
+{% if mon.last_observation and mon.where %}<span class="board-last-observation">Last observation</span>{% endif %}
+{% if mon.moves_html %}<div class="board-moves">{{ mon.moves_html }}</div>{% endif %}
+</div></div>{{ foes(mon.foes, player) }}
+{% else %}<div class="board-half-in slot"><span class="board-slot" aria-hidden="true"></span><span class="board-sub">{% if row.zone == 'fallen' %}Missed catch{% elif row.zone == 'unlinked' %}No partner linked{% elif row.zone == 'pending' %}Waiting for {{ player.name }}{% else %}No recorded Pokémon{% endif %}</span></div>{% endif %}
+</div>
+{%- endmacro %}

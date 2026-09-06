@@ -1,5 +1,12 @@
 # UI mockup brief
 
+The approved Track A composition is now ported to the production run board.
+See [the migration plan](ui_migration_plan.md) and
+[Phase 5 evidence](ui_migration/phase5_board.md). Mockup assets and Track B were
+retired after their required fonts and fixtures were promoted. The sections below
+record the reviewed design and framework comparison; historical demo URLs no
+longer describe the production tree.
+
 The brief both mockup tracks build against. Track A (Jinja + Alpine + htmx, no build) and
 Track B (Vite + Svelte SPA) implement the *same* design from this document, so that
 comparing them compares the frameworks and not two different designers' taste.

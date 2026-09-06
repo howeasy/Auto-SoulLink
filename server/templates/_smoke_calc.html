@@ -1,0 +1,4 @@
+{% extends 'base.html' %}
+{% block head_extra %}<link rel="stylesheet" href="/static/dashboard.css">{% endblock %}
+{% block content %}<main><h1>Synthetic calculator fixture</h1><p>This fixture proves browser engine execution. It is not a live battle observation.</p><div id="calc-preview-b" class="calc-preview" data-in-battle="1" data-calc-input="{{ calc_input }}"></div></main>{% endblock %}
+{% block scripts %}<script src="/static/dom.js" defer></script><script src="/static/calc-preview.js" defer></script>{% endblock %}

@@ -487,6 +487,34 @@ document.body.addEventListener('click', function(ev) {
   else if (act === 'revive') doRevive(area, idx);
 });
 
+var _embeddedRefreshBusy = false;
+window.SLinkDebug = {
+  refresh: async function(status) {
+    if (_embeddedRefreshBusy || !status) return;
+    _embeddedRefreshBusy = true;
+    try {
+      _lastStatus = status;
+      updateLiveBar();
+      document.getElementById('sse-badge').textContent = 'Board refresh';
+      var focused = document.activeElement;
+      var interacting = focused && ['SELECT', 'INPUT', 'TEXTAREA'].includes(focused.tagName);
+      var jobs = [];
+      if (!interacting) {
+        updateDataLists();
+        renderLinksTable();
+        jobs.push(mlRefresh(), loadBackups());
+        if (!_allAreas) jobs.push(loadAllAreas());
+      }
+      if (document.getElementById('raw-auto').checked) jobs.push(loadRaw(), loadLiveState(), loadMemorial());
+      await Promise.all(jobs);
+    } finally {
+      _embeddedRefreshBusy = false;
+      if (document.dispatchEvent) document.dispatchEvent(new CustomEvent('slink:debug-rendered'));
+    }
+  }
+};
+
+if (!window.SLinkDebugEmbedded) {
 initSSE();
 // Fetch initial status to populate datalists immediately
 (async function() {
@@ -505,3 +533,4 @@ mlRefresh();
 loadBackups();
 // Fallback poll in case SSE disconnects
 setInterval(function() { if (!_sseOk) refreshAll(); }, 10000);
+}

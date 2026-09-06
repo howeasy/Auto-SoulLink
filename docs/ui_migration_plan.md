@@ -140,7 +140,8 @@ Completion requires the working board and refinements, reusable broadcast system
 | Phase 2 | Verified cleanup implemented | [Cleanup evidence](ui_migration/phase2_cleanup.md): unchanged hydrated render output; 3703 full-suite passes / 3 skips; portable 3398 selected passes / 308 named deferrals. |
 | Phase 3 | Projection implemented; owner patches integrated | [Projection evidence](ui_migration/phase3_projection.md): per-player capabilities and mon enrichment, detached nested containers, unchanged unknown lifecycle facts; owner commits `8f97ea0` and `dbad8d5` merged without conflicts. |
 | Phase 4 | Equivalent extraction and Calc browser fixes implemented | [Extraction evidence](ui_migration/phase4_extraction.md): 3768 full-suite passes / 3 documented skips; portable 3463 passes / 308 named deferrals; five Node cases plus actual browser checks. RR effective battle data remains unavailable. |
-| Phases 5-9 | Next: reviewed pair board | Phase 8 and unavailable runtime mutation controls retain their separate gates; no release-readiness claim. |
+| Phase 5 | Pair board and refinements implemented | [Board evidence](ui_migration/phase5_board.md): authoritative membership, stopped/disconnected distinctions, raw HP boundaries, Debug focus and one coordinator; 18 width/theme captures preserved. |
+| Phases 6-9 | Next: one origin and run rail | Phase 8 and unavailable runtime mutation controls retain their separate gates; no release-readiness claim. |
 | Additional preparation | Prepared independently while waiting | [Preparation packet](ui_migration/prep.md), hashed route/overlay/mockup inventory, offline inventory comparison command, and acceptance scenarios agreed with Gen1/RR owners. No production behavior changes or Phase 1 dashboard guards. |
 
 Track A skips: three battery-save scenario exclusions, five SVG/template exclusions,

@@ -19,15 +19,10 @@
 {# ── hp_bar ────────────────────────────────────────────────────────────────
    Compact dashboard-style HP bar: a 70x7 track with a coloured fill.
    `cur` and `max_` are integers; colour bucket follows the same thresholds
-   the dashboard JS uses (≥50 = high, ≥20 = mid, else low).               #}
+   the shared projection uses (>50% = high, >20% = mid, else low).       #}
 {% macro hp_bar(cur, max_) %}
-  {%- set ratio = (cur / max_) if max_ else 0 -%}
-  {%- set pct = ((ratio * 100) | round | int) -%}
-  {%- if pct >= 50 -%}{%- set tone = 'hp-high' -%}
-  {%- elif pct >= 20 -%}{%- set tone = 'hp-mid' -%}
-  {%- else -%}{%- set tone = 'hp-low' -%}
-  {%- endif -%}
-  <span class="hp-bar-bg"><span class="hp-bar {{ tone }}" style="width:{{ pct }}%"></span></span>
+  {%- set value = {'hp': cur, 'maxHP': max_}|health -%}
+  {% if value.known %}<span class="hp-bar-bg"><span class="hp-bar hp-{{ value.color }}" style="width:{{ value.bar }}%"></span></span>{% else %}<span class="hp-unknown">HP unknown</span>{% endif %}
 {%- endmacro %}
 
 
@@ -52,13 +47,13 @@
    Inline ATK/DEF/SPD/SATK/SDEF/ACC/EVA chips for the active mon. `stages`
    is the raw 7-tuple where 6 == neutral. Anything outside [-6, +6] is
    dropped.                                                               #}
-{% macro stat_stages_row(stages) -%}
+{% macro stat_stages_row(stages, labels=None) -%}
   {%- if stages -%}
-    {%- set labels = ['ATK', 'DEF', 'SPD', 'SATK', 'SDEF', 'ACC', 'EVA'] -%}
+    {%- set labels = labels or ['ATK', 'DEF', 'SPD', 'SATK', 'SDEF', 'ACC', 'EVA'] -%}
     {%- set ns = namespace(any=false) -%}
     {%- for raw in stages[:7] -%}
       {%- set s = (raw | int) - 6 -%}
-      {%- if s != 0 and s >= -6 and s <= 6 -%}
+      {%- if s != 0 and s >= -6 and s <= 6 and labels[loop.index0] -%}
         {%- if not ns.any %}<div class="stat-stages-row">{%- endif -%}
         {%- set ns.any = true -%}
         {%- set cls = 'ss-up' if s > 0 else 'ss-dn' -%}
@@ -86,7 +81,8 @@
        stat_stages: [7]int (optional, active mon only)
    }                                                                      #}
 {% macro mon_card(mon, partner=None, extra_class='') %}
-  {%- set tone = mon.status_tone or 'bh' -%}
+  {%- set health_value = {'hp': mon.hp, 'maxHP': mon.maxHP}|health -%}
+  {%- set tone = {'high':'bh', 'mid':'bm', 'low':'bl'}[health_value.color] if health_value.known else mon.status_tone or 'bu' -%}
   {%- set fainted = ' fnt' if mon.fainted else '' -%}
   {%- set is_active = (mon.active or false) -%}
   <div class="mc {{ tone }}{{ fainted }}{% if is_active %} active-mon{% endif %}{% if extra_class %} {{ extra_class }}{% endif %}">
@@ -96,25 +92,21 @@
         {%- if mon.species_name and mon.nickname and mon.nickname != mon.species_name %} <span class="sp">({{ mon.species_name }})</span>{%- endif %}
         {%- if mon.fainted %} <span class="fnt-tag">FNT</span>{%- endif %}
       </div>
-      {% if mon.maxHP %}
-        {%- set hp_val = mon.hp | default(0) | int -%}
-        {%- set max_val = mon.maxHP | int -%}
-        {%- set pct = 0 if mon.fainted or max_val <= 0 else ((hp_val / max_val * 100) | round | int) -%}
-        {%- if pct > 50 -%}{%- set hp_cls = 'hp-h' -%}
-        {%- elif pct > 20 -%}{%- set hp_cls = 'hp-m' -%}
-        {%- else -%}{%- set hp_cls = 'hp-l' -%}
-        {%- endif -%}
+      {% if health_value.known %}
+        {%- set pct = health_value.percent -%}
+        {%- set hp_cls = {'high':'hp-h', 'mid':'hp-m', 'low':'hp-l'}[health_value.color] -%}
         <div class="hp-row">
           <span class="hp-lbl">HP</span>
-          <div class="hp-trk"><div class="hp-fill {{ hp_cls }}" style="width:{{ pct }}%"></div></div>
+          <div class="hp-trk"><div class="hp-fill {{ hp_cls }}" style="width:{{ health_value.bar }}%"></div></div>
           <span class="hp-pct">{% if mon.fainted %}—{% else %}{{ pct }}%{% endif %}</span>
           {{ status_pill(mon.status_cond) }}
           {% if mon.level %}<span class="lv">Lv {{ mon.level }}</span>{% endif %}
         </div>
       {% else %}
+        {% if mon.hp_known is defined and not mon.hp_known %}<span class="hp-unknown">HP unknown</span>{% endif %}
         {% if mon.level %}<div class="hp-row"><span class="lv">Lv {{ mon.level }}</span></div>{% endif %}
       {% endif %}
-      {{ stat_stages_row(mon.stat_stages) }}
+      {{ stat_stages_row(mon.stat_stages, mon.stat_stage_labels) }}
     </div>
   </div>
 {% endmacro %}

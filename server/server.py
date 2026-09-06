@@ -35,7 +35,7 @@ from pathlib import Path
 
 from server import gen1_admission
 from server import runtime_boundary
-from server.ui_projection import move_details, player_capabilities
+from server.ui_projection import health, move_details, player_capabilities
 from server.save_identity import SaveIdentity
 from server.http_safety import csrf_protection, theme_cache
 from server.lua_literals import lua_comment, lua_string
@@ -2495,21 +2495,23 @@ class SLinkServer:
             "badge_slugs": self.adapter.gym_badge_slugs(s.rom_type or ""),
         })
 
-    def _build_dashboard_context(self) -> dict:
-        from server.dashboard import build_dashboard_context
-        return build_dashboard_context(self)
-
     def _build_status_html(self) -> str:
-        from server.dashboard import render_dashboard
-        return render_dashboard(self._build_dashboard_context())
+        from server.board import render_board
+        return render_board(self._build_board_context())
+
+    def _build_board_context(self) -> dict:
+        from server.board import build_board_context
+        return build_board_context(self)
 
     async def handle_status_html(self, request):
         return await self._handle_dashboard_template(request)
 
     async def _handle_dashboard_template(self, request):
-        context = self._build_dashboard_context()
+        context = self._build_board_context()
         context["theme"] = resolve_theme(request)
-        return aiohttp_jinja2.render_template("dashboard.html", request, context)
+        context["view"] = "setup" if request.query.get("view") == "setup" else "board"
+        context["board_url"] = str(request.rel_url)
+        return aiohttp_jinja2.render_template("board.html", request, context)
 
     async def handle_status_json(self, request):
         return aiohttp_web.json_response(self._build_status_dict())
@@ -2737,34 +2739,9 @@ class SLinkServer:
         mons = []
         for key in keys:
             det = details.get(key) or {}
-            hp = det.get("hp", 0) or 0
-            max_hp = det.get("maxHP", 0) or 0
-            fainted = (hp == 0)
-            if fainted or max_hp <= 0:
-                tone = "fnt" if fainted else "bl"
-            else:
-                pct = (hp / max_hp) * 100
-                if pct > 50:
-                    tone = "bh"
-                elif pct > 20:
-                    tone = "bm"
-                else:
-                    tone = "bl"
-            mons.append({
-                "key":          key,
-                "species_id":   det.get("species_id", 0),
-                "species_name": det.get("species_name", ""),
-                "nickname":     det.get("nickname", "") or det.get("species_name", "") or key[:8],
-                "level":        det.get("level", 0),
-                "hp":           hp,
-                "maxHP":        max_hp,
-                "sprite_html":  det.get("sprite_html", ""),
-                "status_tone":  tone,
-                "fainted":      fainted,
-                "status_cond":  det.get("status_cond", 0),
-                "stat_stages":  det.get("stat_stages", []) if det.get("active") else None,
-                "active":       det.get("active", False),
-            })
+            mon = self._battle_mon_card(det)
+            mon.update(key=key, nickname=det.get("nickname") or det.get("species_name") or key[:8])
+            mons.append(mon)
 
         return {
             "player_id":    player_id,
@@ -2922,18 +2899,10 @@ class SLinkServer:
 
     def _battle_mon_card(self, det: dict) -> dict:
         """Project a party_details / enemy_party entry into the shape mon_card expects."""
-        hp     = det.get("hp", 0) or 0
-        max_hp = det.get("maxHP", 0) or 0
-        fnt    = hp == 0
-        pct    = self._hp_pct(hp, max_hp)
-        if fnt:
-            tone = "fnt"
-        elif pct > 50:
-            tone = "bh"
-        elif pct > 20:
-            tone = "bm"
-        else:
-            tone = "bl"
+        value = health(det)
+        hp, max_hp = value["hp"], value["maximum"]
+        fnt = value["known"] and hp == 0
+        tone = "fnt" if fnt else {"high": "bh", "mid": "bm", "low": "bl", "unknown": "bu"}[value["color"]]
         return {
             "species_id":   det.get("species_id", 0),
             "species_name": det.get("species_name", ""),
@@ -2941,11 +2910,13 @@ class SLinkServer:
             "level":        det.get("level", 0),
             "hp":           hp,
             "maxHP":        max_hp,
+            "hp_known":     value["known"],
             "sprite_html":  det.get("sprite_html", ""),
             "status_tone":  tone,
             "fainted":      fnt,
             "status_cond":  det.get("status_cond", 0),
             "stat_stages":  det.get("stat_stages", []) if det.get("active") else None,
+            "stat_stage_labels": self.adapter.stat_stage_labels(),
             "active":       bool(det.get("active")),
         }
 
@@ -2994,16 +2965,6 @@ class SLinkServer:
 
     # ── Links overlay context builders ───────────────────
 
-    @staticmethod
-    def _hp_class(pct: int) -> str:
-        return "hp-h" if pct > 50 else ("hp-m" if pct > 20 else "hp-l")
-
-    @staticmethod
-    def _hp_pct(hp: int, max_hp: int) -> int:
-        if max_hp <= 0 or hp <= 0:
-            return 0
-        return max(0, min(100, round(hp / max_hp * 100)))
-
     def _build_links_overlay_context(self) -> dict:
         """Alive + dead link cards for /stream/links."""
         d = self._build_status_dict()
@@ -3046,12 +3007,12 @@ class SLinkServer:
                 continue
             ad = a_det.get(a_key) or {}
             bd = b_det.get(b_key) or {}
-            a_hp, a_mx = ad.get("hp", 0) or 0, ad.get("maxHP", 0) or 0
-            b_hp, b_mx = bd.get("hp", 0) or 0, bd.get("maxHP", 0) or 0
-            a_pct = self._hp_pct(a_hp, a_mx)
-            b_pct = self._hp_pct(b_hp, b_mx)
-            a_fnt = a_hp == 0
-            b_fnt = b_hp == 0
+            a_health, b_health = health(ad), health(bd)
+            a_hp, a_mx, a_pct = a_health["hp"], a_health["maximum"], a_health["percent"]
+            b_hp, b_mx, b_pct = b_health["hp"], b_health["maximum"], b_health["percent"]
+            a_fnt = a_health["known"] and a_hp == 0
+            b_fnt = b_health["known"] and b_hp == 0
+            colors = {"high": "hp-h", "mid": "hp-m", "low": "hp-l", "unknown": "hp-unknown"}
             pairs.append({
                 "area_display": lnk.get("area_display") or "",
                 "both_fainted": a_fnt and b_fnt,
@@ -3061,7 +3022,7 @@ class SLinkServer:
                     "sprite_html":  ad.get("sprite_html") or lnk.get("a_sprite_html") or "",
                     "level":        ad.get("level") or lnk.get("a_level") or 0,
                     "hp": a_hp, "max_hp": a_mx, "pct": a_pct,
-                    "hp_cls": self._hp_class(a_pct), "fainted": a_fnt,
+                    "hp_cls": colors[a_health["color"]], "fainted": a_fnt,
                 },
                 "b": {
                     "nickname":     bd.get("nickname") or lnk.get("b_nickname") or "",
@@ -3069,7 +3030,7 @@ class SLinkServer:
                     "sprite_html":  bd.get("sprite_html") or lnk.get("b_sprite_html") or "",
                     "level":        bd.get("level") or lnk.get("b_level") or 0,
                     "hp": b_hp, "max_hp": b_mx, "pct": b_pct,
-                    "hp_cls": self._hp_class(b_pct), "fainted": b_fnt,
+                    "hp_cls": colors[b_health["color"]], "fainted": b_fnt,
                 },
             })
         return {"pairs": pairs}
@@ -4019,7 +3980,7 @@ class SLinkServer:
             seen_keys = set()
             # Party mons
             for key in self._get_party_ordered(pid):
-                det = self.party_details[pid][key]
+                det = self.party_details.get(pid, {}).get(key, {})
                 nick = det.get("nickname", "")
                 sid = det.get("species_id", 0)
                 sp_name = self.adapter.species_name(sid) if sid else "?"
@@ -4735,12 +4696,18 @@ class SLinkServer:
     def _get_party_ordered(self, pid: str) -> list:
         """Return monKeys for player `pid` sorted by party slot order.
 
-        Uses the ``slot`` field stored in party_details (populated from the Lua
-        snapshot's ``slot=i`` field).  Falls back to 999 for old clients that
-        don't send slot info, which puts them at the end in original order.
+        Membership comes from state.party_keys. The details cache supplies only
+        slot order; a stale detail must not turn a boxed mon back into party.
+        Unknown details remain represented after the known slots.
         """
         pd = self.party_details.get(pid, {})
-        return sorted(pd.keys(), key=lambda k: pd[k].get("slot", 999))
+        observed_order = {key: index for index, key in enumerate(pd)}
+
+        def order(key):
+            slot = pd.get(key, {}).get("slot", 999)
+            return (slot if type(slot) is int else 999, observed_order.get(key, len(pd)), key)
+
+        return sorted(self.state.party_keys.get(pid, set()), key=order)
 
     def _resolve_level(self, player_id: str, mi) -> int:
         """Return the best available level for a MonInfo.

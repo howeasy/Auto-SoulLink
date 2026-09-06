@@ -1,0 +1,126 @@
+[
+  {
+    "scenario": "stopped",
+    "doubles": false,
+    "hp": 0,
+    "lastObservations": 0,
+    "now": 0,
+    "rejected": 0,
+    "unknownHP": 0,
+    "zones": [
+      "linked",
+      "fallen"
+    ]
+  },
+  {
+    "scenario": "disconnected",
+    "doubles": false,
+    "hp": 11,
+    "lastObservations": 10,
+    "now": 2,
+    "rejected": 0,
+    "unknownHP": 0,
+    "zones": [
+      "party",
+      "pending",
+      "boxed",
+      "unlinked",
+      "fallen"
+    ]
+  },
+  {
+    "scenario": "stale",
+    "doubles": false,
+    "hp": 11,
+    "lastObservations": 10,
+    "now": 2,
+    "rejected": 0,
+    "unknownHP": 0,
+    "zones": [
+      "party",
+      "pending",
+      "boxed",
+      "unlinked",
+      "fallen"
+    ]
+  },
+  {
+    "scenario": "rejected",
+    "doubles": false,
+    "hp": 11,
+    "lastObservations": 0,
+    "now": 2,
+    "rejected": 1,
+    "unknownHP": 0,
+    "zones": [
+      "party",
+      "pending",
+      "boxed",
+      "unlinked",
+      "fallen"
+    ]
+  },
+  {
+    "scenario": "unknown_hp",
+    "doubles": false,
+    "hp": 6,
+    "lastObservations": 0,
+    "now": 2,
+    "rejected": 0,
+    "unknownHP": 5,
+    "zones": [
+      "party",
+      "pending",
+      "boxed",
+      "unlinked",
+      "fallen"
+    ]
+  },
+  {
+    "scenario": "split",
+    "doubles": false,
+    "hp": 11,
+    "lastObservations": 0,
+    "now": 2,
+    "rejected": 0,
+    "unknownHP": 0,
+    "zones": [
+      "party",
+      "pending",
+      "split",
+      "boxed",
+      "unlinked",
+      "fallen"
+    ]
+  },
+  {
+    "scenario": "doubles",
+    "doubles": true,
+    "hp": 14,
+    "lastObservations": 0,
+    "now": 2,
+    "rejected": 0,
+    "unknownHP": 0,
+    "zones": [
+      "party",
+      "pending",
+      "boxed",
+      "unlinked",
+      "fallen"
+    ]
+  },
+  {
+    "scenario": "persisted",
+    "doubles": false,
+    "hp": 0,
+    "lastObservations": 0,
+    "now": 2,
+    "rejected": 0,
+    "unknownHP": 0,
+    "zones": [
+      "pending",
+      "linked",
+      "fallen"
+    ]
+  }
+]

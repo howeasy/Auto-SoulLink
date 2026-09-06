@@ -18,6 +18,8 @@ import aiohttp_jinja2
 import jinja2
 from aiohttp import web, web_fileresponse
 
+from server.ui_projection import health
+
 # Python's mimetypes db doesn't know font-related types out of the box on
 # every platform. Register the ones we vendor on both the global registry
 # and aiohttp's private CONTENT_TYPES table so aiohttp's StaticResource
@@ -131,6 +133,7 @@ def setup_templating(app: web.Application) -> None:
         except (TypeError, ValueError):
             return 0
     env.filters["bitand"] = _bitand
+    env.filters["health"] = health
 
     # Expose resolve_theme to templates as the ``current_theme`` global.
     app["templating"] = {"resolve_theme": resolve_theme}

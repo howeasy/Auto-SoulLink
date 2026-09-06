@@ -15,6 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import aiohttp_jinja2  # noqa: E402
 from aiohttp import web  # noqa: E402
 
 from server.server import build_app  # noqa: E402
@@ -23,22 +24,14 @@ from tests.dashboard_scenarios import SCENARIOS, dashboard_scenario  # noqa: E40
 PROBE = '<img data-ui-probe="unsafe">'
 
 
-def add_synthetic_calc(server):
-    build = server._build_dashboard_context
-    sample = (ROOT / "tests/fixtures/ui/calc_synthetic.json").read_text(encoding="utf-8")
-
-    def context():
-        result = build()
-        result["players"]["b"]["battle"]["calc"]["calc-input"] = sample
-        return result
-
-    server._build_dashboard_context = context
-
-
 @web.middleware
 async def readonly(request, handler):
     if request.method not in ("GET", "HEAD", "OPTIONS"):
         return web.json_response({"error": "Read-only rendering fixture"}, status=405)
+    if request.app["ui_scenario"] == "calc" and request.path == "/":
+        return aiohttp_jinja2.render_template("_smoke_calc.html", request,
+            {"page_title": "Synthetic Calc fixture", "theme": "default", "hide_chrome": True,
+             "calc_input": (ROOT / "tests/fixtures/ui/calc_synthetic.json").read_text(encoding="utf-8")})
     if request.app["ui_scenario"] == "security":
         if request.path == "/api/debug/backups":
             return web.json_response({"backups": [{"slot": 1, "modified": PROBE, "size": 1024}]})
@@ -63,8 +56,6 @@ async def serve(scenarios):
             for name in scenarios:
                 server = dashboard_scenario("gen3" if name in ("calc", "security") else name, Path(temporary) / name)
                 server._run_name = name.upper() + " rendering fixture"
-                if name == "calc":
-                    add_synthetic_calc(server)
                 if name == "security":
                     server.trainer_name["a"] = PROBE
                     for mon in server.party_details["a"].values():

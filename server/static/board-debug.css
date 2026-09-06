@@ -1,0 +1,85 @@
+#debug-dialog {
+    --bg:     var(--c-bg);
+    --panel:  var(--c-card);
+    --border: var(--c-edge);
+    --text:   var(--c-txt);
+    --muted:  var(--c-dim);
+    --green:  var(--c-alive);
+    --red:    var(--c-dead);
+    --yellow: var(--c-gold);
+    --blue:   var(--c-link);
+    --orange: var(--c-pend);
+  }
+#debug-dialog * { box-sizing:border-box; }
+#debug-dialog .debug-content { padding:1.2em 1.4em 2em; font-family:var(--font-heading); font-size:0.95em; }
+#debug-dialog h1 { color:var(--orange); margin-bottom:0.2em; font-size:1.3em; }
+#debug-dialog .nav { color:var(--muted); font-size:0.85em; margin-bottom:0.8em; }
+#debug-dialog .nav a { color:var(--blue); text-decoration:none; }
+#debug-dialog .nav a:hover { text-decoration:underline; }
+#debug-dialog .live-bar { display:flex; gap:1.2em; flex-wrap:wrap; align-items:center;
+              background:var(--c-bg); border:1px solid var(--border); border-radius:6px;
+              padding:0.6em 1em; margin-bottom:1em; font-size:0.85em; }
+#debug-dialog .live-bar .sse-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; }
+#debug-dialog .live-bar .sse-ok { background:var(--green); box-shadow:0 0 4px var(--green); }
+#debug-dialog .live-bar .sse-off { background:var(--red); box-shadow:0 0 4px var(--red); }
+#debug-dialog .live-bar .player-pill { display:inline-flex; align-items:center; gap:4px; padding:2px 10px;
+                           border-radius:12px; font-weight:600; font-size:0.9em; }
+#debug-dialog .live-bar .player-pill.on { background:color-mix(in srgb, var(--c-alive) 15%, var(--c-card)); color:var(--green); }
+#debug-dialog .live-bar .player-pill.off { background:var(--c-card); color:var(--c-dim); }
+#debug-dialog .live-bar .stat { color:var(--muted); }
+#debug-dialog .live-bar .stat b { color:var(--text); font-variant-numeric:tabular-nums; }
+#debug-dialog .live-bar .event-log { flex:1; text-align:right; color:var(--c-dim); font-family:monospace; font-size:0.9em;
+                         overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:400px; }
+#debug-dialog .grid { display:grid; grid-template-columns:1fr 1fr; gap:1em; }
+@media(max-width:900px) {
+#debug-dialog .grid { grid-template-columns:1fr; }
+}
+#debug-dialog .panel { background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:1em; }
+#debug-dialog .panel h2 { color:var(--orange); font-size:1em; margin-bottom:0.7em; border-bottom:1px solid var(--border); padding-bottom:0.4em;
+              display:flex; align-items:center; justify-content:space-between; }
+#debug-dialog .panel h2 .h2-left { display:flex; align-items:center; gap:0.3em; }
+#debug-dialog .panel.full { grid-column:1/-1; }
+#debug-dialog label { display:block; color:var(--muted); font-size:0.85em; margin-bottom:2px; }
+#debug-dialog input, #debug-dialog select, #debug-dialog textarea { background:var(--c-bg); border:1px solid var(--border); color:var(--text);
+    padding:5px 8px; border-radius:4px; font-size:0.88em; font-family:inherit; width:100%; }
+#debug-dialog select { cursor:pointer; }
+#debug-dialog textarea { min-height:100px; resize:vertical; }
+#debug-dialog .row { display:flex; gap:0.6em; margin-bottom:0.6em; }
+#debug-dialog .row > * { flex:1; }
+#debug-dialog .btn { padding:6px 14px; border-radius:5px; border:none; cursor:pointer; font-size:0.85em; font-weight:600;
+         transition:filter 0.15s; }
+#debug-dialog .btn-orange { background:color-mix(in srgb, var(--c-pend) 15%, var(--c-card)); color:var(--orange); }
+#debug-dialog .btn-red { background:color-mix(in srgb, var(--c-dead) 15%, var(--c-card)); color:var(--red); }
+#debug-dialog .btn-green { background:color-mix(in srgb, var(--c-alive) 15%, var(--c-card)); color:var(--green); }
+#debug-dialog .btn-blue { background:color-mix(in srgb, var(--c-link) 15%, var(--c-card)); color:var(--blue); }
+#debug-dialog .btn:hover { filter:brightness(1.3); }
+#debug-dialog .btn:active { filter:brightness(0.9); }
+#debug-dialog .btn-sm { padding:3px 10px; font-size:0.8em; }
+#debug-dialog .result { margin-top:0.6em; padding:0.5em; background:var(--c-bg); border-radius:4px;
+    font-family:monospace; font-size:0.82em; white-space:pre-wrap; word-break:break-all;
+    max-height:300px; overflow-y:auto; color:var(--muted); display:none; }
+#debug-dialog .result.ok { border-left:3px solid var(--green); }
+#debug-dialog .result.err { border-left:3px solid var(--red); }
+#debug-dialog .flash { animation: board-debug-flash 0.5s ease-out; }
+@keyframes board-debug-flash { 0% { border-color:var(--c-link); } 100% { border-color:var(--border); } }
+#debug-dialog #raw-state { max-height:500px; overflow:auto; }
+#debug-dialog #raw-state pre { white-space:pre-wrap; word-break:break-all; color:var(--muted); font-size:0.82em; }
+#debug-dialog .backup-table { width:100%; font-size:0.9em; border-collapse:collapse; }
+#debug-dialog .backup-table th { text-align:left; color:var(--muted); padding:3px 6px; border-bottom:1px solid var(--border); }
+#debug-dialog .backup-table td { padding:3px 6px; }
+#debug-dialog .backup-table tr:hover { background:var(--c-card); }
+#debug-dialog .backup-table .slot-link { color:var(--c-link); cursor:pointer; text-decoration:underline; }
+#debug-dialog .backup-table .slot-link:hover { color:var(--c-link); }
+#debug-dialog .ml-table { width:100%; font-size:0.85em; border-collapse:collapse; }
+#debug-dialog .ml-table th { text-align:left; color:var(--muted); padding:3px 6px; border-bottom:1px solid var(--border); font-weight:600; }
+#debug-dialog .ml-table td { padding:3px 6px; font-family:monospace; }
+#debug-dialog .ml-table tr:hover { background:var(--c-card); }
+#debug-dialog .ml-table .st-alive { color:var(--green); }
+#debug-dialog .ml-table .st-dead { color:var(--red); }
+#debug-dialog .ml-table .st-memorial { color:var(--c-dim); }
+#debug-dialog .ml-table .btn-unlink { padding:2px 8px; font-size:0.8em; }
+#debug-dialog .ml-table .btn-revive { padding:2px 8px; font-size:0.8em; background:var(--c-card); color:var(--c-txt); border:none; border-radius:3px; cursor:pointer; }
+#debug-dialog .ml-table .btn-revive:hover { background:var(--c-card); }
+#debug-dialog :focus-visible { outline: 2px solid var(--c-gold); outline-offset: 2px; }
+#debug-dialog .debug-data-row { margin-bottom: .6em; }
+#debug-dialog .debug-data-row > b { color: var(--text); }

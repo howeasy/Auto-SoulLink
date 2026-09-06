@@ -18,9 +18,9 @@ TPL = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 USE_RE = re.compile(r'href="#(i-[a-z0-9-]+)"')
 SYMBOL_RE = re.compile(r'<symbol[^>]*\bid="(i-[a-z0-9-]+)"')
-EXTENDS_RE = re.compile(r'{%-?\s*extends\s+"([^"]+)"')
-INCLUDE_RE = re.compile(r'{%-?\s*include\s+"([^"]+)"')
-IMPORT_RE = re.compile(r'{%-?\s*(?:from|import)\s+"([^"]+)"')
+EXTENDS_RE = re.compile(r'''{%-?\s*extends\s+["']([^"']+)["']''')
+INCLUDE_RE = re.compile(r'''{%-?\s*include\s+["']([^"']+)["']''')
+IMPORT_RE = re.compile(r'''{%-?\s*(?:from|import)\s+["']([^"']+)["']''')
 
 
 def _templates():

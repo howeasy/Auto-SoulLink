@@ -50,7 +50,7 @@ def test_a_silent_client_is_called_out_even_though_it_still_reads_connected(srv)
     assert srv._build_status_dict()["players"]["a"]["connected"] is True
     html = srv._build_status_html()
     assert "stale-warn" in html
-    assert "No data for" in html
+    assert "Connection is stale" in html and "last received" in html
 
 
 def test_a_live_client_gets_no_warning(srv):

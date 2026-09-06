@@ -19,7 +19,7 @@ from tests.ui_support import hydrate_capture  # noqa: E402
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, default=ROOT / "tests/fixtures/ui/source")
-    parser.add_argument("--output", type=Path, default=ROOT / "server/static/mockups/fixtures")
+    parser.add_argument("--output", type=Path, default=ROOT / "tests/fixtures/ui/status")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="slink-ui-fixtures-") as scratch:

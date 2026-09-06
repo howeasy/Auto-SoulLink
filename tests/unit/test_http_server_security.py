@@ -159,7 +159,7 @@ class _AttackTags(HTMLParser):
         self.text.append(data)
 
 
-def test_dashboard_escapes_client_text_in_both_views_and_encounter_rows(srv):
+def test_board_escapes_client_text_in_player_mon_and_area_fields(srv):
     def attack(label):
         return f'<img data-attack="{label}" src=x onerror="alert(1)">'
 
@@ -169,6 +169,10 @@ def test_dashboard_escapes_client_text_in_both_views_and_encounter_rows(srv):
             "last_event": attack("event-" + player),
         }
         srv.player_area_id[player] = attack("area-" + player)
+        srv.trainer_name[player] = attack("trainer-" + player)
+        key = "fixture-" + player
+        srv.state.party_keys[player] = {key}
+        srv.party_details[player] = {key: {"nickname": attack("mon-" + player), "species_id": 25, "hp": 5, "maxHP": 10}}
     encounter_area = attack("encounter")
     srv.state.area_states[encounter_area] = AreaStatus.DEAD_ZONE
     rendered = srv._build_status_html()
@@ -179,24 +183,25 @@ def test_dashboard_escapes_client_text_in_both_views_and_encounter_rows(srv):
     # html.escape use different encodings for quotes, with the same safe DOM.
     visible = "".join(parser.text)
     for player in ("a", "b"):
-        assert visible.count(attack("rom-" + player)) >= 2
-        assert attack("event-" + player) in visible
+        assert attack("trainer-" + player) in visible
+        assert attack("mon-" + player) in visible
         area_text = srv.adapter.area_display_name(attack("area-" + player))
-        assert visible.count(area_text) >= 2
+        assert area_text in visible
     assert srv.adapter.area_display_name(encounter_area) in visible
 
 
-def test_dashboard_keeps_trusted_unknown_area_markup(srv):
-    assert '<b class="area"><span class="dim">unknown</span></b>' in srv._build_status_html()
+def test_board_does_not_invent_a_location_before_an_observation(srv):
+    assert "Waiting for game" in srv._build_status_html()
+    assert not srv._build_board_context()["players"]["a"]["observed"]
 
 
 @pytest.mark.parametrize("value", [None, 42, True])
-def test_escaping_preserves_rendering_of_non_text_legacy_metadata(srv, value):
+def test_legacy_metadata_scalars_do_not_break_board_rendering(srv, value):
     # The legacy TCP handler records metadata before its dispatch validation.
     # Output escaping must not turn formerly printable JSON scalars into 500s.
     srv.connected_players["a"] = {"rom_type": value, "last_event": value}
     rendered = srv._build_status_html()
-    assert f'Last: <b>{html.escape(str(value))}</b>' in rendered
+    assert "<!DOCTYPE html>" in rendered and "Waiting for game" in rendered
     assert srv._build_status_dict()["players"]["a"]["last_event"] is value
 
 
