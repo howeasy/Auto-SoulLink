@@ -1614,7 +1614,6 @@ class SLinkServer:
         # SSE: set of asyncio.Queue (one per connected browser).
         # Each queue holds at most 1 item (coalescing — latest snapshot wins).
         self._sse_clients: set[asyncio.Queue] = set()
-        self._sse_heartbeat_task: asyncio.Task | None = None
         # Rolling backup: copy links.json every 5 min when both players connected.
         self._backup_task: asyncio.Task | None = None
         self._backup_interval = 300  # seconds
@@ -1633,9 +1632,7 @@ class SLinkServer:
         Optional `form` byte (default 0) is the alt-form discriminator from Block B
         (Gen 4+). Adapters that ignore it still produce correct base-form sprites.
         """
-        if self.adapter and hasattr(self.adapter, "sprite_html"):
-            return self.adapter.sprite_html(species_id, form)
-        return ""  # Dead fallback
+        return self.adapter.sprite_html(species_id, form)
 
     _METHOD_ICON: dict[str, str] = {
         "Day":        "☀",
@@ -2326,14 +2323,6 @@ class SLinkServer:
             with contextlib.suppress(asyncio.QueueFull):
                 q.put_nowait(True)
 
-    async def _sse_heartbeat_loop(self):
-        """Send SSE keepalive comments every 15 seconds to detect dead clients."""
-        try:
-            while True:
-                await asyncio.sleep(15)
-                # Heartbeat is handled inside handle_sse via a timeout on queue.get
-        except asyncio.CancelledError:
-            pass
 
     # ── Rolling backups ───────────────────────────────────────────────────────
 
@@ -3621,7 +3610,7 @@ class SLinkServer:
 
         return {
             # "" when the last save succeeded; the error text when it did not.
-            "save_failed": getattr(s, "save_failed", ""),
+            "save_failed": s.save_failed,
             "players": {
                 pid: {
                     "connected":      self.connected_players.get(pid, {}).get("connected", False),
@@ -4155,7 +4144,7 @@ class SLinkServer:
             # Calc preview data div (rendered by SLinkCalc JS) — RR only.
             # Skipped in suppress_calc mode (combined-view battle card) to
             # avoid a duplicate calc-preview-{pid} id elsewhere in the DOM.
-            if getattr(s, 'is_rr', False) and not suppress_calc:
+            if s.is_rr and not suppress_calc:
                 _pkeys = p.get("party_keys", [])
                 _pdetails = p.get("party_details", {})
                 _atk = None
@@ -4224,7 +4213,6 @@ class SLinkServer:
             # Per-player Nuzlocke status badges removed — the top-of-page
             # phase banner is the single source for run lifecycle state
             # ("Waiting for Pokéballs" / "Run in progress" / "Game over").
-            nuz_badge = ""
             pending_bonus_cnt = len(s.pending_bonus.get(pid, []))
             pending_bonus_badge = (
                 f'<span class="badge badge-bonus">&#10022; {pending_bonus_cnt} bonus pending</span>'
@@ -4277,7 +4265,7 @@ class SLinkServer:
                 highest_party_level=_hi_lv)
             parts.append(
                 f'<div class="card-hdr">'
-                f'<h3>{trainer_str}Player {pid.upper()} &mdash; {rom_lbl}{conn_badge}{nuz_badge}{pending_bonus_badge}{gym_html}</h3>'
+                f'<h3>{trainer_str}Player {pid.upper()} &mdash; {rom_lbl}{conn_badge}{pending_bonus_badge}{gym_html}</h3>'
                 f'<div class="card-hdr-right">{dl_icon}</div></div>'
             )
             parts.append(
@@ -5244,9 +5232,9 @@ class SLinkServer:
         # Phase resolution — read run lifecycle signals from the state machine.
         s = self.state
         po = s.pokeballs_obtained or {}
-        alive = sum(1 for lk in s.links if (lk.status.value if hasattr(lk.status, "value") else lk.status) == "alive")
-        dead  = sum(1 for lk in s.links if (lk.status.value if hasattr(lk.status, "value") else lk.status) in ("dead", "memorial"))
-        if getattr(s, "run_over", False):
+        alive = sum(1 for lk in s.links if lk.status.value == "alive")
+        dead  = sum(1 for lk in s.links if lk.status.value in ("dead", "memorial"))
+        if s.run_over:
             phase_slug, phase_label = "game_over", "Game over"
         elif not (po.get("a") and po.get("b")):
             phase_slug, phase_label = "pre", "Waiting for Pokéballs"
@@ -5259,7 +5247,7 @@ class SLinkServer:
         # since it can't reach into the sliced body markup's main pane.
         # The page title lives in the main pane (not the sidebar) so long
         # run names like "Pokémon Soul Link" aren't truncated.
-        attempts_count = getattr(s, "attempts_count", 0) or 0
+        attempts_count = s.attempts_count or 0
         stats_html = ""
         if alive or dead:
             stats_html = (
@@ -5307,7 +5295,7 @@ class SLinkServer:
             "phase_label":     phase_label,
             "alive_links":     alive,
             "dead_links":      dead,
-            "attempts_count":  getattr(s, "attempts_count", 0) or 0,
+            "attempts_count":  s.attempts_count or 0,
         }
         return aiohttp_jinja2.render_template("dashboard.html", request, ctx)
 

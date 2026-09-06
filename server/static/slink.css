@@ -224,7 +224,6 @@ body:not(.dark-theme) {
 }
 .phase-banner.phase-pre       { border-left-color: var(--c-pend);  }
 .phase-banner.phase-running   { border-left-color: var(--c-alive); }
-.phase-banner.phase-whiteout  { border-left-color: var(--c-pend); }
 .phase-banner.phase-game_over { border-left-color: var(--c-dead); opacity: .85; }
 .phase-banner .phase-dot {
   width: 10px; height: 10px; border-radius: 50%;
@@ -233,7 +232,6 @@ body:not(.dark-theme) {
 }
 .phase-banner.phase-pre       .phase-dot { background: var(--c-pend); }
 .phase-banner.phase-running   .phase-dot { background: var(--c-alive); }
-.phase-banner.phase-whiteout  .phase-dot { background: var(--c-pend); }
 .phase-banner.phase-game_over .phase-dot { background: var(--c-dead); }
 .phase-banner .phase-label { font-weight: 700; letter-spacing: .04em;
                               color: var(--c-txt); text-transform: uppercase; font-size: .9em; }
@@ -242,28 +240,10 @@ body:not(.dark-theme) {
 .phase-banner .phase-dead  { color: var(--c-dead);  font-weight: 600; }
 
 
-/* ── Shared chrome utilities ─────────────────────────────────
- * `.chrome-card` is the base treatment that dashboard `.player-card` and
- * manager `.card` both extend. Same chrome as Funtastic Funtastic-base
- * decorations (without the shimmer overlay, which `_funtastic-base.css`
- * opts in via `body:not(.stream):not(.theme-default):not(.theme-light)`).
- * `.slink-logo` adds a brand-color drop-shadow on the SLink SVG mark.
- * `.heading-glow` gives `<h1>` / `<h2>` a soft brand-tinted glow.
- */
-.chrome-card {
-  background: var(--c-card);
-  border: 1px solid var(--c-edge);
-  border-radius: 6px;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, .04),
-    0 2px 8px rgba(0, 0, 0, .25);
-}
+/* Shared brand treatment for the SLink SVG mark. */
 .slink-logo {
   filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c-brand) 60%, transparent));
   transition: filter .25s;
-}
-.heading-glow {
-  text-shadow: 0 0 8px color-mix(in srgb, var(--c-brand) 55%, transparent);
 }
 
 /* ── Calc page slink-header strip ────────────────────────────────
@@ -1002,9 +982,6 @@ body.ov-focus .focus-mons.doubles .move-name { line-height: 1.15; }
 .et-list   { display: flex; flex-direction: column; gap: 0; }
 .et-entry  { display: flex; align-items: center; gap: clamp(5px, 1vmin, 9px);
              padding: clamp(2px, .3vmin, 4px) 0; }
-.et-sprite { width: clamp(30px, 5.5vmin, 42px); height: clamp(30px, 5.5vmin, 42px);
-             image-rendering: pixelated; image-rendering: crisp-edges;
-             flex-shrink: 0; object-fit: contain; }
 .et-name   { flex: 1; min-width: 0; font-size: clamp(13px, 2.4vmin, 18px);
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .et-rate   { font-family: var(--font-pixel); font-size: clamp(11px, 1.9vmin, 14px);

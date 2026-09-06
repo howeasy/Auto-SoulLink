@@ -137,7 +137,8 @@ Completion requires the working board and refinements, reusable broadcast system
 | Consumer interface | Agreement published, producer not implemented | `docs/ui_projection_contract.md` freezes the additive consumer boundary; Phase 3 still owns the tested producer. |
 | Phase 0 | Integrated in isolated phase branch | [Acceptance evidence](ui_migration/phase0_acceptance.md): `bc880025` plus Track A/prep and reviewed mockups; 159 committed hashes verified, 662 focused tests without skips, then 3665 full-suite passes / 3 documented skips. Required Ruff and 216 Lua parses passed. Verified UPR publication and unfinished RBY operations retain separate gates. |
 | Phase 1 | Guard rails implemented and locally verified | [Rendering contracts](ui_migration/phase1_guards.md): 3703 full-suite passes / 3 documented skips; portable lane 3398 selected passes / 308 named deferrals; browser checks preserved disclosure/filter state across completed refreshes. |
-| Phases 2-9 | Next: verified deletions | Early UI work may use the frozen read seam. Phase 8 and unavailable runtime mutation controls remain gated; no release-readiness claim. |
+| Phase 2 | Verified cleanup implemented | [Cleanup evidence](ui_migration/phase2_cleanup.md): unchanged hydrated render output; 3703 full-suite passes / 3 skips; portable 3398 selected passes / 308 named deferrals. |
+| Phases 3-9 | Next: presentation projection | Early UI work may use the frozen read seam. Phase 8 and unavailable runtime mutation controls remain gated; no release-readiness claim. |
 | Additional preparation | Prepared independently while waiting | [Preparation packet](ui_migration/prep.md), hashed route/overlay/mockup inventory, offline inventory comparison command, and acceptance scenarios agreed with Gen1/RR owners. No production behavior changes or Phase 1 dashboard guards. |
 
 Track A skips: three battery-save scenario exclusions, five SVG/template exclusions,

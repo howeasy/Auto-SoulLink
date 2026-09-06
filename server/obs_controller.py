@@ -12,7 +12,7 @@ Usage (inside SLinkServer):
     self.obs = OBSController(config_path)
     self.obs.start_workers()           # call after asyncio loop starts
     ...
-    self.obs.submit_trigger("battle_start", "a")   # non-blocking, from _dispatch
+    self.obs.submit_fired([("battle_start", "a", {})])   # non-blocking, from _dispatch
 """
 
 from __future__ import annotations
@@ -43,28 +43,6 @@ _DEFAULT_CONFIG: dict = {
     },
     "triggers": [],
 }
-
-# All recognized trigger names (for UI dropdowns and validation)
-ALL_TRIGGER_EVENTS = [
-    "battle_start",
-    "wild_battle_start",
-    "trainer_battle_start",
-    "battle_end",
-    "faint",
-    "link_death",
-    "whiteout",
-    "capture",
-    "shiny",
-    "linked",
-    "dead_zone",
-    "area_enter",
-    "area_enter_new",
-    "battle_start_new",
-    "party_to_box",
-    "box_to_party",
-    "run_over",
-    "memorialize_done",
-]
 
 # ── area groups ─────────────────────────────────────────────────────────────
 #
@@ -148,7 +126,7 @@ class OBSController:
     """Manages OBS WebSocket connections and game-event-driven scene switching.
 
     Thread/coroutine model:
-    - submit_trigger() is SYNCHRONOUS — safe to call from _dispatch() without await.
+    - submit_fired() is SYNCHRONOUS — safe to call from _dispatch() without await.
     - One asyncio worker task per player serialises all OBS I/O.
     - Workers include a reconnect loop; OBS failures never propagate to the caller.
     - Coalescing queues (maxsize=1): only the latest pending scene matters.
@@ -202,16 +180,6 @@ class OBSController:
         except Exception as e:
             log.warning(f"[OBS] Failed to save config: {e}")
 
-    def get_config_safe(self) -> dict:
-        """Return config with passwords redacted (for API responses)."""
-        cfg = dict(self._config)
-        conns = {}
-        for pid, conn in cfg.get("connections", {}).items():
-            c = dict(conn)
-            c["password"] = ""  # never expose passwords
-            conns[pid] = c
-        cfg["connections"] = conns
-        return cfg
 
     # ── worker lifecycle ─────────────────────────────────────────────────────────
 
@@ -330,9 +298,6 @@ class OBSController:
         for tgt, scene in winners.items():
             self._push_scene(tgt, scene)
 
-    def submit_trigger(self, trigger_name: str, player_id: str, metadata: dict = None):
-        """Convenience wrapper: submit a single fired event for priority resolution."""
-        self.submit_fired([(trigger_name, player_id, metadata or {})])
 
     # ── worker ──────────────────────────────────────────────────────────────────
 
@@ -549,7 +514,7 @@ class OBSController:
 
 
 def obs_config_path(data_dir: str = None) -> str:
-    """Return the path to obs_config.json (always at global DATA_DIR, not per-run)."""
+    """Resolve shared manager config, preserving a standalone custom data path."""
     from server.state import DATA_DIR as _DATA_DIR
     base = data_dir or _DATA_DIR
     # Walk up to find the root data dir when in manager mode (data/runs/<id>/ → data/)
@@ -557,7 +522,4 @@ def obs_config_path(data_dir: str = None) -> str:
     # Heuristic: if data_dir ends with /runs/<something>, go up two levels.
     if base and os.path.basename(os.path.dirname(base)) == "runs":
         base = os.path.dirname(os.path.dirname(base))
-    elif base and os.path.basename(base) != "data":
-        # If it's a custom path that isn't obviously a run dir, use it as-is
-        pass
     return os.path.join(base, "obs_config.json")
