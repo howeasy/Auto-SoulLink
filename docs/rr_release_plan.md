@@ -52,8 +52,18 @@ UI Phase6 is also published at `457afa2131ff86ddc9c4c769f166824294f2c38d`:
 shared manager/standalone board, allowlisted run proxy routes, loopback HTTP binding
 and serialized lifecycle actions. Its private board-context endpoint and
 `X-SLink-Run-Id` header serve presentation routing, not gameplay admission. The UI
-owner reports Phase5 PR12 green and is continuing Phase7 Broadcast/Tools work;
-this records the handoff without importing the moving UI stack into RR.
+owner reports Phase5 PR12 green. This records the handoff without importing the
+moving UI stack into RR.
+
+UI Phase7 is published at `7a38d5eaeab3375ab86935c5a2cb5202881fc318`:
+shared Broadcast/Tools/Debug destinations, explicit run targeting and manager
+OBS arbitration. The published contract keeps OBS acknowledgements separate
+from gameplay receipts and documents its process-local recovery limits. Its
+dependency change requires `websockets>=14.0` for the selected simpleobsws API.
+The commit and contract were read directly; the RR environment was not changed.
+Named saved sources/presets and the final dependency-closed UI handoff remain
+pending. Final RR packaging must verify the merged dependencies from an isolated
+extracted package.
 
 Implementation lives only in the isolated `codex/rr-foundation` worktree. Preserve
 the root/UI and Gen1 worktrees. Recheck findings after each relevant handoff; reuse
