@@ -50,6 +50,8 @@ from server.adapters import variant_label
 from server.board import FAMILIES, OPTION_LABELS
 from server.manager_board import shell_context, stopped_context, trusted_context
 from server.manager_obs import ManagerOBSMixin
+from server.manager_sources import ManagerSourcesMixin
+from server.broadcast_sources import SourceStore
 from server.obs_arbitration import OBSConfigError
 from server.run_proxy import allowed, relay, run_base, upstream
 from server import runtime_boundary
@@ -558,7 +560,7 @@ _STATUS_BADGE = {
 }
 
 
-class RunManager(ManagerOBSMixin):
+class RunManager(ManagerOBSMixin, ManagerSourcesMixin):
     def __init__(self, bind_host: str, manager_port: int = MANAGER_HTTP_PORT):
         self.bind_host = bind_host
         self.manager_port = manager_port
@@ -569,6 +571,7 @@ class RunManager(ManagerOBSMixin):
         self._registry_cache = None
         self._registry_signature = None
         self.initialize_obs(MANAGER_DIR)
+        self.sources = SourceStore(Path(MANAGER_DIR) / "broadcast_sources.json", lambda run_id: _find_run(self._get(), run_id))
 
     def _signature(self):
         try:
@@ -1127,6 +1130,13 @@ def build_app(manager):
     app.router.add_post("/api/obs/resume", manager.handle_global_obs_resume)
     app.router.add_post("/api/obs/test", manager.handle_global_obs_test)
     app.router.add_post("/_internal/obs/events", manager.handle_obs_events)
+    app.router.add_get("/api/broadcast/sources", manager.handle_sources)
+    app.router.add_post("/api/broadcast/sources", manager.handle_sources)
+    app.router.add_get("/api/broadcast/sources/{source_id}", manager.handle_sources)
+    app.router.add_patch("/api/broadcast/sources/{source_id}", manager.handle_sources)
+    app.router.add_delete("/api/broadcast/sources/{source_id}", manager.handle_sources)
+    app.router.add_get("/broadcast/sources/{source_id}", manager.handle_source_page)
+    app.router.add_get("/broadcast/sources/{source_id}/fragment", manager.handle_source_page)
 
     # Run-management routes
     app.router.add_get("/", manager.handle_index)

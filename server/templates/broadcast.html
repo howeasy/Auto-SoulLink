@@ -4,11 +4,12 @@
 {% endblock %}
 {% block application_content %}
 <nav class="board-tabs application-tabs" aria-label="Broadcast settings">{% for key, label in [('overlays','Overlays'),('obs','OBS automation'),('twitch','Twitch')] %}<a class="board-tab{% if tab == key %} active{% endif %}" href="{{ run_base|default('') }}/broadcast?tab={{ key }}"{% if tab == key %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}</nav>
-{% if tab == 'overlays' %}<section class="broadcast-gallery">{% include 'broadcast/_gallery.html' %}</section>
+{% if tab == 'overlays' %}{% if manager %}{% include 'broadcast/_sources.html' %}<details class="source-legacy-gallery"><summary class="board-btn">Browse legacy preset URLs</summary><section class="broadcast-gallery">{% include 'broadcast/_gallery.html' %}</section></details>{% else %}<section class="broadcast-gallery">{% include 'broadcast/_gallery.html' %}</section>{% endif %}
 {% elif tab == 'twitch' %}{% if not manager or selected_run %}<section class="broadcast-twitch">{% include 'broadcast/_twitch.html' %}</section>{% else %}<p class="board-note">Select a run from the rail to configure its Twitch bot.</p>{% endif %}
 {% elif manager %}{% include 'broadcast/_manager_obs.html' %}
 {% else %}<section class="broadcast-obs">{% include 'broadcast/_obs.html' %}</section>{% endif %}
 {% endblock %}
 {% block application_scripts %}
+{% if tab == 'overlays' and manager %}<script src="/static/broadcast-sources.js" defer></script>{% endif %}
 {% if tab == 'twitch' and (not manager or selected_run) %}<script src="/static/twitch.js" defer></script>{% elif tab == 'obs' %}<script src="/static/{{ 'manager-obs' if manager else 'obs' }}.js" defer></script>{% endif %}
 {% endblock %}

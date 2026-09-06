@@ -2539,6 +2539,22 @@ class SLinkServer:
         return aiohttp_web.json_response({"schema": 1, "run_id": self._run_id,
                                           "context": self._build_board_context()})
 
+    async def handle_broadcast_context(self, request):
+        from server.broadcast_presets import PRESETS
+        from server.broadcast_projection import build_broadcast_context
+        if not self._manager_port or not local_operator(request) or request.headers.get("X-SLink-Target-Run") != self._run_id:
+            raise aiohttp_web.HTTPNotFound()
+        try:
+            body = await request.json()
+            if not isinstance(body, dict) or body.get("preset") not in PRESETS:
+                raise ValueError("Unknown broadcast preset")
+            if body.get("players") not in PRESETS[body["preset"]]["player_choices"] or not isinstance(body.get("controls"), dict):
+                raise ValueError("Invalid preset configuration")
+            context = build_broadcast_context(self, body["preset"], body["players"], body["controls"])
+            return aiohttp_web.json_response({"schema": 1, "run_id": self._run_id, "context": context})
+        except (ValueError, TypeError) as error:
+            return aiohttp_web.json_response({"error": str(error)}, status=400)
+
     # ── RR Damage Calculator handlers ───────────────────────────────────────
 
     async def handle_calc_redirect(self, request):
@@ -5032,6 +5048,16 @@ def build_app(srv):
             return aiohttp_web.json_response({"ok": False, "error": "OBS settings and rules are managed on the manager Broadcast page."}, status=409)
         return await handler(request)
     app.middlewares.append(requested_run)
+    @aiohttp_web.middleware
+    async def shared_broadcast(request, handler):
+        from server.broadcast_presets import ALIASES
+        from server.broadcast_render import render_legacy
+        path = request.path.removesuffix("/fragment")
+        slug = path.removeprefix("/stream/") if path.startswith("/stream/") else None
+        if request.method in ("GET", "HEAD") and slug in ALIASES:
+            return render_legacy(srv, request, slug)
+        return await handler(request)
+    app.middlewares.append(shared_broadcast)
     async def identify_run(request, response):
         response.headers["X-SLink-Run-Id"] = getattr(srv, "_run_id", "") or "standalone"
     app.on_response_prepare.append(identify_run)
@@ -5043,6 +5069,7 @@ def build_app(srv):
     app.router.add_get("/api/status",  srv.handle_status_json)
     app.router.add_get("/api/ui-state", srv.handle_ui_state)
     app.router.add_get("/_ui/board-context", srv.handle_board_context)
+    app.router.add_post("/_ui/broadcast-context", srv.handle_broadcast_context)
     app.router.add_get("/_internal/obs/{action}", srv.handle_private_obs)
     app.router.add_post("/_internal/obs/{action}", srv.handle_private_obs)
     app.router.add_get("/api/events",  srv.handle_sse)

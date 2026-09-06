@@ -147,6 +147,7 @@
   // the current one by more than half a percent. Below that threshold the
   // visual difference is imperceptible and any churn just costs us a frame.
   function autoFit() {
+    if (document.body.classList.contains('slink-broadcast')) return;
     var root = document.getElementById('root');
     if (!root) return;
     var sh = root.scrollHeight;

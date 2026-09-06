@@ -80,7 +80,7 @@ def prefix_url(value, base):
 
 class _PrefixHTML(HTMLParser):
     """Rewrite URL attributes only; never edit script, JSON or text contents."""
-    ATTRS = frozenset(("href", "src", "action", "formaction", "hx-get", "hx-post", "hx-put", "hx-delete"))
+    ATTRS = frozenset(("href", "src", "action", "formaction", "hx-get", "hx-post", "hx-put", "hx-delete", "data-fragment-url"))
 
     def __init__(self, base):
         super().__init__(convert_charrefs=False)

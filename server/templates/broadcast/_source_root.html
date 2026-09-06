@@ -1,0 +1,18 @@
+{% import 'broadcast/components.html' as component %}
+<main id="root" class="bc-root preset-{{ preset }} layout-{{ layout or 'default' }}" data-revision="{{ revision|default(0) }}" data-availability="{{ availability }}" data-scroll-enabled="{{ 'true' if 'speed' in controls else 'false' }}" data-scroll-speed="{{ controls.speed|default(1) }}" data-scroll-pause="{{ controls.pause|default(2) }}">
+<div class="bc-canvas">
+{% if availability != 'live' %}<div class="bc-offline"><strong>{{ availability_label }}</strong><span>{{ run_name }}</span></div>{% if pairs %}<h2>Saved links</h2>{% for row in pairs %}{{ component.pair(row) }}{% endfor %}{% endif %}
+{% else %}
+{% if preset in ['party','focus','enemy-focus','enemy-trainer','badges','enc-table'] %}<div class="bc-players">{% for player in players %}<section class="bc-player" data-player="{{ player.pid }}">{{ component.player_header(player) }}
+{% if preset == 'party' %}<div class="bc-list">{% for item in player.mons %}{{ component.mon(item) }}{% else %}<span class="bc-muted">Party not observed</span>{% endfor %}</div>
+{% elif preset in ['focus','enemy-focus','enemy-trainer'] %}{% if preset != 'focus' %}<h2>{{ player.opponent if player.in_battle else 'Waiting for battle' }}{% if player.doubles %} · Doubles{% endif %}</h2>{% endif %}{% set mons = player.active_mons if preset == 'focus' else player.enemies if preset == 'enemy-trainer' and player.is_trainer else player.active_enemies if preset == 'enemy-focus' else [] %}<div class="bc-battle{% if player.doubles %} doubles{% endif %}">{% for item in mons %}{{ component.mon(item, moves=preset != 'enemy-trainer') }}{% else %}<span class="bc-muted">{{ 'Active Pokémon not identified' if preset == 'focus' else 'No trainer team observed' if preset == 'enemy-trainer' else 'Active opponent not identified' if player.in_battle else 'Not in battle' }}</span>{% endfor %}</div>
+{% elif preset == 'badges' %}{{ component.badges(player) }}{% else %}<h2>{{ player.area or 'Location not observed' }}</h2>{{ component.encounters(player) }}{% endif %}</section>{% endfor %}</div>
+{% elif preset in ['links','linked-party','boxed-links','stream-memorial','area-encounter'] %}<header class="bc-pair-players">{% for player in players %}<b>Player {{ player.pid|upper }} · {{ player.name }}</b>{% else %}<b>Player A</b><b>Player B</b>{% endfor %}</header>{% if preset == 'area-encounter' %}<h2>{{ area or 'Location not observed' }} · {{ area_state|replace('_',' ') }}</h2>{% endif %}<div class="bc-list bc-pairs">{% for row in pairs %}{{ component.pair(row) }}{% else %}<span class="bc-muted">No pairs observed for this view</span>{% endfor %}</div>
+{% elif preset in ['events','ticker'] %}{{ component.feed(events) }}
+{% elif preset == 'attempts' %}{{ component.counter('Attempts', attempts) }}
+{% elif preset == 'deaths' %}<div class="bc-counters">{{ component.counter('Alive pairs',alive) }}{{ component.counter('Fallen pairs',dead) }}</div>
+{% elif preset == 'areas' %}<div class="bc-counters">{{ component.counter('Linked areas',areas.linked) }}{{ component.counter('Pending',areas.pending) }}{{ component.counter('Failed encounters',areas.failed) }}</div>
+{% elif preset == 'encounters' %}<div class="bc-counters">{{ component.counter('Encounters',encounters) }}{{ component.counter('Fallen pairs',dead) }}{{ component.counter('Shinies',shinies) }}</div>{% if last_pair %}{{ component.pair(last_pair) }}{% endif %}
+{% endif %}
+{% endif %}
+</div></main>

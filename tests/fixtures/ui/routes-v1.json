@@ -607,6 +607,10 @@
     ],
     [
       "POST",
+      "/_ui/broadcast-context"
+    ],
+    [
+      "POST",
       "/api/attempts"
     ],
     [
@@ -770,8 +774,20 @@
   ],
   "manager": [
     [
+      "DELETE",
+      "/api/broadcast/sources/{source_id}"
+    ],
+    [
       "GET",
       "/"
+    ],
+    [
+      "GET",
+      "/api/broadcast/sources"
+    ],
+    [
+      "GET",
+      "/api/broadcast/sources/{source_id}"
     ],
     [
       "GET",
@@ -804,6 +820,14 @@
     [
       "GET",
       "/broadcast"
+    ],
+    [
+      "GET",
+      "/broadcast/sources/{source_id}"
+    ],
+    [
+      "GET",
+      "/broadcast/sources/{source_id}/fragment"
     ],
     [
       "GET",
@@ -851,6 +875,14 @@
     ],
     [
       "HEAD",
+      "/api/broadcast/sources"
+    ],
+    [
+      "HEAD",
+      "/api/broadcast/sources/{source_id}"
+    ],
+    [
+      "HEAD",
       "/api/obs/scenes/{player}"
     ],
     [
@@ -880,6 +912,14 @@
     [
       "HEAD",
       "/broadcast"
+    ],
+    [
+      "HEAD",
+      "/broadcast/sources/{source_id}"
+    ],
+    [
+      "HEAD",
+      "/broadcast/sources/{source_id}/fragment"
     ],
     [
       "HEAD",
@@ -920,6 +960,10 @@
     [
       "HEAD",
       "/tools"
+    ],
+    [
+      "PATCH",
+      "/api/broadcast/sources/{source_id}"
     ],
     [
       "POST",
@@ -928,6 +972,10 @@
     [
       "POST",
       "/api/attempts"
+    ],
+    [
+      "POST",
+      "/api/broadcast/sources"
     ],
     [
       "POST",

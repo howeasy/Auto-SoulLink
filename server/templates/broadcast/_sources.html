@@ -1,0 +1,13 @@
+<section id="saved-sources" class="board-card board-card-body">
+<div class="source-toolbar"><h2>Saved broadcast sources</h2><button class="board-btn primary" id="source-new" type="button">+ New source</button></div>
+<p>Save a reusable OBS URL. Each source keeps its own run, preset, players, layout, and theme. Retargeting updates an already-open source.</p>
+<p id="sources-message" class="board-note" role="status" hidden></p>
+<div class="source-workspace"><nav id="source-list" aria-label="Saved broadcast sources"></nav><div>
+<form id="source-editor" hidden>
+<div class="source-fields"><label class="board-field">Source name<input id="source-name" required maxlength="120"></label><label class="board-field">Source run<select id="source-run" required></select></label><label class="board-field">Preset<select id="source-preset"></select></label><label class="board-field">Players<select id="source-players"></select></label><label class="board-field">Layout<select id="source-layout"></select></label><label class="board-field">Theme<select id="source-theme"></select></label></div>
+<p id="source-player-reason" class="board-sub"></p><div id="source-controls"></div>
+<div class="source-toolbar"><button class="board-btn primary" type="submit">Save source</button><button class="board-btn" type="button" id="source-delete">Delete source</button><button class="board-btn" type="button" id="source-reset">Discard changes</button><span id="source-revision" class="board-sub"></span></div>
+</form>
+<div id="source-output" hidden><label class="board-field">Stable OBS URL<input id="source-url" readonly></label><div class="source-toolbar"><button class="board-btn" type="button" id="source-copy">Copy URL</button><a class="board-btn" id="source-open" target="_blank" rel="noopener">Open source ↗</a></div><p id="source-dimensions" class="board-sub"></p><div class="source-preview"><iframe id="source-preview" title="Saved source preview"></iframe></div></div>
+<p id="sources-empty" class="board-sub">Choose a source, or create one for your next scene.</p>
+</div></div></section>
