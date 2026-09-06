@@ -72,8 +72,10 @@ after copying hash-verified ignored build/tool inputs and creating independent
 checkouts of the pinned local source repositories. No expected hashes were
 changed to accommodate missing inputs, and no ROM/tool binaries were committed.
 
-The upstream handoff PR's public CI lacks the required private/canonical inputs.
-The runtime owner is coordinating an explicit portable-CI classification; the
-unchanged local full-release runner remains authoritative for its complete gate.
-Do not present partial public CI as full RBY validation or suppress its missing
-prerequisites silently.
+The runtime owner's CI policy commit `2a8c700` now explicitly separates portable
+verification from private/canonical-input gates. UI reviewed and added exactly
+28 tracked/synthetic fixture, hydration and inventory cases to the portable
+group; no existing deferral classification changed. The isolated portable run
+passed **3386 selected tests**, with **308 named deferrals** and
+`release_approved: false`. The unchanged local full-release runner remains
+authoritative for its complete gate. Public CI is not full RBY validation.

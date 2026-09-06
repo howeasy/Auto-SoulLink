@@ -66,3 +66,14 @@ cartridge lanes. Missing inputs, hash drift, skips, XFAIL/XPASS or deselection
 remain failures. `--quick` is still not a release verdict. Passing public CI
 does not qualify the native trade path, UPR publication or durable production
 bindings.
+
+## Reviewed UI Phase 0 inventory addition
+
+UI integration adds 28 exact nodes: 14 archived-fixture shape/content checks,
+5 isolated hydration/refusal/key-index checks, and 9 offline inventory/parser/
+router-parity checks. Their inputs are tracked data, synthetic state, temporary
+directories, the Git checkout and existing Python dependencies; none need a ROM,
+JAR, emulator, live run or application startup. They belong to `portable`.
+No existing node was removed or reclassified. The resulting Phase0 inventory
+contains 3694 nodes, with 3386 selected and 308 explicitly deferred on each
+supported profile. Later phase additions require their own inventory review.
