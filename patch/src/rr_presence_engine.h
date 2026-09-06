@@ -31,5 +31,7 @@ u8 rr_remove_presence(u8 oe_id, u8 local_id, u32 owned_callback, u8 *released_pr
 void rr_release_private_orphan(u8 slot);
 u8 rr_adopt_ghost_sprite(u8 oe_id, u8 local_id, u32 owned_callback, u8 *palette_slot);
 u8 rr_ghost_sprite_owned(u8 oe_id, u8 local_id, u32 owned_callback);
+u8 rr_place_ghost(u8 oe_id, u8 local_id, u32 owned_callback,
+                  s16 x, s16 y, u8 elevation, u8 visible);
 u8 rr_avatar_fits(u32 images, u32 anims, u8 animation, u16 allocated_size);
 #endif

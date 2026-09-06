@@ -77,14 +77,11 @@ typedef struct {
 #define SLINK_CALC_OFF 0x0203F8D8u
 #define TN_LOCALID 0xF1u   /* exclusive sentinel (ghost uses 0xF0) */
 
-/* Engine-driven peer ghost. The peer is ANOTHER real player; we reproduce THEIR avatar + THEIR
- * exact sub-pixel motion + animation. This is the proven Lua-"clone" model ported into the patch
- * (the engine spawns a real object-event for the sprite slot / collision / palette slot; we then
- * NEUTRALIZE its sprite callback and drive pos1 / animNum / palette ourselves each frame). The
- * partner broadcasts a WORLD-PIXEL position (sub-pixel, derived from currentCoords*16 + coordOffset
- * delta) at ~20 Hz; we LERP toward it so the ghost slides continuously and SPEED-AGNOSTICALLY (no
- * tile-quantized "walk-stop-walk-stop"). Placed in the free EWRAM gap between the mailbox (ends
- * 0x0203F840) and AM (0x0203F8C0); u32/s32 fields 4-aligned. */
+/* Peer ghost with a native-owned object/sprite/palette. Lua publishes desired
+ * world-pixel samples; C drives the sprite under an inert movement callback.
+ * The current 1/2-pixel motion model and stationary-animation choice are incomplete
+ * for RR bike/surf/fishing; see NATIVE_GHOST_MOTION.md. The existing 44-byte arena
+ * is not expanded here. Its exclusive ownership remains an unresolved live gate. */
 #define GHOST_LERP_NUM   128           /* 0.5 follow gain toward the sampled target (128/256) */
 #define GHOST_SNAP_PX    48            /* >this many px off -> snap (warp/desync), don't slide */
 #define GHOST_LEAD_CAP_PX 12           /* max px to extrapolate past a stale target while the
@@ -1288,11 +1285,9 @@ static void ghost_depth(u32 sprite, u8 elevation)
     R16(sprite + 4) = (u16)((R16(sprite + 4) & (u16)~0x0C00u) | ((u16)priority[elevation] << 10));
 }
 
-/* Engine-driven peer ghost (proven Lua-clone model, in C): spawn a real OE for the sprite slot /
- * collision / palette, NEUTRALIZE its callback, then each frame drive pos1 (sub-pixel LERP toward
- * the partner's broadcast world-pixel position) + animNum + the partner's avatar. The engine still
- * adds gSpriteCoordOffset (so the ghost scrolls with the map) and runs AnimateSprite (so the walk
- * cycle plays). Speed-agnostic + continuous => no tile-quantized stutter. Owns map/gfx lifecycle. */
+/* Native presentation owns the OE lifecycle and sampled placement. The engine
+ * still applies coordOffset and AnimateSprite. Bike cadence, stationary special
+ * animations and effect children remain separate defects; N08 fixes collision. */
 static void drive_ghost(void)
 {
     /* SUSPEND during battle. The battle engine REUSES gSprites for battle sprites, so touching the
@@ -1357,17 +1352,17 @@ static void drive_ghost(void)
     /* (b) gfx change (partner mounted bike / surfed / fished) -> re-spawn with the new sprite. */
     if (GH->oeId != 0xFF && (GH->gfxId != GH->curGfx || GH->gfxHi != GH->curGfxHi)) { ghost_remove(); return; }
 
-    /* (c) spawn once, adjacent to the player; neutralize the callback so we own pos1. */
+    /* (c) spawn hidden on the player's occupied tile; own pos1 after adoption. */
     if (GH->oeId == 0xFF) {
         if (R8(sScriptContext2Enabled)) return;  /* not mid-dialogue/warp fade */
         s16 px = (s16)R16(player + 0x10), py = (s16)R16(player + 0x12);
-        /* Spawn the stand-in at a MISMATCHED elevation -> PASS-THROUGH, so the spawn tile (one south of
-         * the player) never leaves an invisible wall before the ghost starts tracking. The drive loop
-         * makes it solid (matching the player's elevation) only once it's on-screen + actually following. */
+        /* An invisible adjacent object can block the player: RR treats elevation
+         * zero as compatible with every elevation. Park on existing occupancy
+         * until a valid avatar and camera baseline permit visible placement. */
         u8  pelev = R8(player + 0x0B) & 0x0F;
-        u8  elev  = (u8)(pelev == 0x0F ? 0x0E : 0x0F);
+        SS->pi_armed = 0;
         int oe = rr_spawn_presence((u16)(GH->gfxId | ((u16)GH->gfxHi << 8)), /*MOVEMENT_TYPE_NONE*/0,
-                                                      GH->localId, px, (s16)(py + 1), elev);
+                                                      GH->localId, px, py, pelev);
         if (oe >= 16) { GH->lifecycle = GH_LIFE_DEFERRED; return; }
         GH->oeId = (u8)oe; GH->curGfx = GH->gfxId; GH->curGfxHi = GH->gfxHi;
         u8 sid = R8(gObjectEvents + (u32)oe * OE_STRIDE + 0x04);
@@ -1388,6 +1383,7 @@ static void drive_ghost(void)
             ghost_remove(); GH->lifecycle = GH_LIFE_DEFERRED; return;
         }
         GH->paletteSlot = palette; GH->ownedSprite = sid; GH->lifecycle = GH_LIFE_OWNED;
+        if (!rr_place_ghost(GH->oeId, 0xF0, (u32)&ghost_cb, px, py, pelev, 0)) ghost_remove();
         return;
     }
 
@@ -1410,11 +1406,9 @@ static void drive_ghost(void)
     }
     GH->paletteSlot = palette; GH->ownedSprite = gsid; GH->lifecycle = GH_LIFE_OWNED;
     if (!apply_avatar(g)) {
-        R8(gspr + 0x3E) |= 0x04;
-        u8 pe = R8(player + 0x0B) & 15;
-        u8 hidden_elevation = pe == 15 ? 14 : 15;
-        R8(g + 0x0B) = hidden_elevation | (hidden_elevation << 4);
         SS->pi_armed = 0;
+        rr_place_ghost(GH->oeId, 0xF0, (u32)&ghost_cb,
+            (s16)R16(player + 0x10), (s16)R16(player + 0x12), R8(player + 0x0B) & 15, 0);
         return;
     }
 
@@ -1428,7 +1422,12 @@ static void drive_ghost(void)
         GH->cy = (s16)((s16)R16(pspr + 0x22) - (s16)(R16(player + 0x12) * 16));
         GH->flags |= GH_F_HAVE_C;
     }
-    if (!(GH->flags & GH_F_HAVE_C)) return;       /* need a baseline before we can place the ghost */
+    if (!(GH->flags & GH_F_HAVE_C)) { /* local movement can defer calibration for multiple frames */
+        SS->pi_armed = 0;
+        rr_place_ghost(GH->oeId, 0xF0, (u32)&ghost_cb,
+            (s16)R16(player + 0x10), (s16)R16(player + 0x12), R8(player + 0x0B) & 15, 0);
+        return;
+    }
 
     /* (disp) follow the partner's broadcast world-px at a CONSTANT velocity that matches the engine's
      * own NPC speeds — exactly 1 px/frame walking, 2 px/frame running — so the ghost moves with the
@@ -1495,29 +1494,23 @@ static void drive_ghost(void)
         R8(gspr + 0x2C) &= (u8)~0x40u;   /* animPaused = 0 (auto-advance frames) */
     }
 
-    /* Collision + visibility. ON-SCREEN: the ghost is SOLID at exactly the tile it's drawn on
-     * (matching the player's elevation) so you bump it and can talk to it (menu/interaction) — and
-     * the collision is never "invisible" because it sits under the visible sprite. OFF-SCREEN: hide
-     * the sprite (its OAM coord would wrap + paint garbage) AND park the collision tile on the player
-     * with a MISMATCHED elevation so it is NOT culled (RemoveObjectEventIfOutsideView culls by
-     * currentCoords) yet creates NO phantom wall around the player. The instant it's back on-screen
-     * it becomes solid at its own tile again. */
+    /* Keep both RR collision coordinate pairs at the drawn tile. Hidden objects
+     * park both pairs on the player's current occupancy, with interaction disarmed.
+     * An elevation mismatch alone is not pass-through when either elevation is zero. */
     s16 sx = (s16)(wpx + GH->cx + (s16)R16(gSpriteCoordOffsetX));
     s16 sy = (s16)(wpy + GH->cy + (s16)R16(gSpriteCoordOffsetY));
     int onscreen = (sx >= -16 && sx <= 256 && sy >= -16 && sy <= 176);
     u8 pelev = (u8)(R8(player + 0x0B) & 0x0F);
+    SS->pi_armed = 0;
     if (onscreen) {
-        R8(gspr + 0x3E) &= (u8)~0x04u;                /* visible */
         s16 gtx = (s16)((wpx + 8) >> 4), gty = (s16)((wpy + 8) >> 4);
-        R16(g + 0x10) = (u16)gtx; R16(g + 0x12) = (u16)gty;   /* collision/interact tile = drawn tile */
-        R8(g + 0x0B) = (u8)(pelev | (pelev << 4));    /* match player elevation -> SOLID */
-        ghost_depth(gspr, pelev);
-        SS->pi_oe = GH->oeId; SS->pi_armed = 1;
+        if (rr_place_ghost(GH->oeId, 0xF0, (u32)&ghost_cb, gtx, gty, pelev, 1)) {
+            ghost_depth(gspr, pelev);
+            SS->pi_oe = GH->oeId; SS->pi_armed = 1;
+        }
     } else {
-        u8 ge = (u8)(pelev == 0x0F ? 0x0E : 0x0F);    /* mismatched, nonzero -> pass-through */
-        R8(gspr + 0x3E) |= 0x04;                      /* invisible */
-        R16(g + 0x10) = R16(player + 0x10); R16(g + 0x12) = R16(player + 0x12);  /* park (avoid cull) */
-        R8(g + 0x0B) = (u8)(ge | (ge << 4));          /* no phantom wall while off-screen */
+        rr_place_ghost(GH->oeId, 0xF0, (u32)&ghost_cb,
+            (s16)R16(player + 0x10), (s16)R16(player + 0x12), pelev, 0);
     }
 }
 

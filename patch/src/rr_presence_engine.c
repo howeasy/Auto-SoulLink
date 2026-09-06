@@ -131,6 +131,24 @@ u8 rr_ghost_sprite_owned(u8 oe_id, u8 local_id, u32 callback)
     return sid;
 }
 
+u8 rr_place_ghost(u8 oe_id, u8 local_id, u32 callback,
+                  s16 x, s16 y, u8 elevation, u8 visible)
+{
+    /* RR checks previousCoords even when an object is not moving. Updating
+     * currentCoords alone leaves collision at the old spawn/placement tile. */
+    if (R32(0x030030F4u) != 0x080565B5u || elevation > 15 || visible > 1) return 0;
+    u8 sid = rr_ghost_sprite_owned(oe_id, local_id, callback);
+    if (sid >= NO_SPRITE) return 0;
+    u32 oe = OBJECTS + (u32)oe_id * 0x24;
+    u32 sprite = SPRITES + (u32)sid * 0x44;
+    R16(oe + 0x10) = (u16)x; R16(oe + 0x12) = (u16)y;
+    R16(oe + 0x14) = (u16)x; R16(oe + 0x16) = (u16)y;
+    R8(oe + 0x0B) = (u8)(elevation | (elevation << 4));
+    if (visible) R8(sprite + 0x3E) &= (u8)~0x04u;
+    else R8(sprite + 0x3E) |= 0x04u;
+    return 1;
+}
+
 u8 rr_adopt_ghost_sprite(u8 oe_id, u8 local_id, u32 callback, u8 *palette_slot)
 {
     u8 sid = rr_object_sprite(oe_id, local_id);
