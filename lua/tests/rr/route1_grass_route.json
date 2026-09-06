@@ -1,0 +1,152 @@
+{
+  "schema": "slink-rr-route1-grass-v1",
+  "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+  "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+  "observation_sha256": "4addaa88d7e3a72d0302ef23b8f3342cd6f19d773acd68887173331c281f5f4c",
+  "map_group": 3,
+  "map_num": 19,
+  "layout": 137254348,
+  "grid_width": 39,
+  "grid_height": 54,
+  "tiles": [
+    {
+      "x": 17,
+      "y": 7,
+      "word": 12507,
+      "attribute": 0
+    },
+    {
+      "x": 17,
+      "y": 8,
+      "word": 12507,
+      "attribute": 0
+    },
+    {
+      "x": 17,
+      "y": 9,
+      "word": 12507,
+      "attribute": 0
+    },
+    {
+      "x": 17,
+      "y": 10,
+      "word": 12507,
+      "attribute": 0
+    },
+    {
+      "x": 18,
+      "y": 10,
+      "word": 12508,
+      "attribute": 0
+    },
+    {
+      "x": 19,
+      "y": 10,
+      "word": 12508,
+      "attribute": 0
+    },
+    {
+      "x": 20,
+      "y": 10,
+      "word": 12547,
+      "attribute": 0
+    },
+    {
+      "x": 21,
+      "y": 10,
+      "word": 12500,
+      "attribute": 0
+    },
+    {
+      "x": 22,
+      "y": 10,
+      "word": 12500,
+      "attribute": 0
+    },
+    {
+      "x": 23,
+      "y": 10,
+      "word": 12500,
+      "attribute": 0
+    },
+    {
+      "x": 23,
+      "y": 11,
+      "word": 12516,
+      "attribute": 0
+    },
+    {
+      "x": 23,
+      "y": 12,
+      "word": 12304,
+      "attribute": 0
+    },
+    {
+      "x": 23,
+      "y": 13,
+      "word": 12301,
+      "attribute": 16777730
+    },
+    {
+      "x": 24,
+      "y": 13,
+      "word": 12301,
+      "attribute": 16777730
+    }
+  ],
+  "waypoints": [
+    {
+      "button": "Down",
+      "x": 17,
+      "y": 10
+    },
+    {
+      "button": "Right",
+      "x": 23,
+      "y": 10
+    },
+    {
+      "button": "Down",
+      "x": 23,
+      "y": 13
+    }
+  ],
+  "grass_pair": [
+    [
+      23,
+      13
+    ],
+    [
+      24,
+      13
+    ]
+  ],
+  "max_grass_steps": 32,
+  "max_post_arrival_frames": 1600,
+  "peer_tiles": [
+    {
+      "x": 25,
+      "y": 12,
+      "word": 12515,
+      "attribute": 0
+    },
+    {
+      "x": 26,
+      "y": 12,
+      "word": 12516,
+      "attribute": 0
+    },
+    {
+      "x": 25,
+      "y": 13,
+      "word": 12301,
+      "attribute": 16777730
+    },
+    {
+      "x": 26,
+      "y": 13,
+      "word": 12301,
+      "attribute": 16777730
+    }
+  ]
+}
