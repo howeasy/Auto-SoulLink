@@ -1,0 +1,561 @@
+{
+  "general_interlock_proved": false,
+  "interop_reproduction": {
+    "named_repeat_failed_before_call": true,
+    "scope": "Standalone actual NLua, no emulator",
+    "signature_calls": 100,
+    "sources": [
+      {
+        "path": "tests\\host\\NLuaBindingSmoke.cs",
+        "sha256": "b4600529cde573643d8f4743cdf99d7692437349d548dcfb2a51beca7ab50861",
+        "size_bytes": 2624
+      },
+      {
+        "path": "patch\\build\\nlua-binding-01\\NLuaBindingSmoke.exe",
+        "sha256": "6867d8571a7ecacccee6d80fabbea19731ff44c2f1a94753dab977e7323e8a2f",
+        "size_bytes": 7168
+      },
+      {
+        "path": "patch\\build\\nlua-binding-01\\execution.json",
+        "sha256": "b3e32bb2fd1b9d833cc6c6a68cd47ffa38e0b2b5f8da3bdafa67955fd6042152",
+        "size_bytes": 90
+      },
+      {
+        "path": "E:\\Howard\\Bizhawk\\dll\\NLua.dll",
+        "sha256": "f413017bfc7a37dfcaeb6e6c24812fd12ceb2b4b107a066512ed28c13010b234",
+        "size_bytes": 102912
+      },
+      {
+        "path": "E:\\Howard\\Bizhawk\\dll\\lua54.dll",
+        "sha256": "4786e0df4caf120e3bedf0b6dda260525df2187c66ded220a21a53ace76b0501",
+        "size_bytes": 505344
+      }
+    ]
+  },
+  "passing_cases": [
+    {
+      "assertions": 1903,
+      "complete": true,
+      "error": null,
+      "execution": {
+        "created": 1788695380.762234,
+        "elapsed_seconds": 31.405999999988126,
+        "exit": 0,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 36560,
+        "terminated_exact_pids": []
+      },
+      "execution_sha256": "c90233ed9db26b0b2746542446c8ebf7ac68d38b36beeb3e2e368317a4942175",
+      "failed_assertions": [],
+      "identity": {
+        "binding_sha256": "cd5a6f773483e4ae9470990c384e92b6e03acad7be6e98518779696e7da155b7",
+        "config_sha256": "b1f40a0007fc4ad32d1dac397e798e048c82778d3d9d0f86831dcfd285240490",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "75837c3f53b1fca7713d9277279d9c9d21d388d882fca636e1e60e06df6ad357",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 1800,
+        "player": "a",
+        "probe_options_sha256": "cdf4386f4fe0f5be016949e90565c6a4e1b86f3c994318498c8cf455262bf6ef",
+        "purpose": "validation",
+        "rom_sha1": "65C6B2739BAB54F8FFDA590D79BA551A0B7BAEC8",
+        "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+        "run_id": "quarantine_routing_54",
+        "script_sha256": "6fb65bbeb5fdebc69d207aaf2d4e93861567c3af0db94ff3b72ddae28fd8f743",
+        "source_sha256": "d44cc150e4d203a202882f30edcddc0ca7ebfc87eb1946f2596c038306881cef"
+      },
+      "phase": "complete",
+      "preparation_sha256": "3c69425a840f027bee79d213752e55affecd1911897bd357c95712e1907b13f8",
+      "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\quarantine_routing_54_a\\results\\result.json",
+      "result_sha256": "b49fb844b16860f025c77001325c688a75ad25caa74fc80713deb9d105d4f5ed",
+      "run_id": "quarantine_routing_54",
+      "runtime": {
+        "actions": [
+          {
+            "action": "load_state",
+            "call_ok": true,
+            "cursor_decimal": "1",
+            "label": "named_load",
+            "outcome": "denied_not_performed",
+            "returned": false
+          },
+          {
+            "action": "load_quick_save",
+            "call_ok": true,
+            "cursor_decimal": "2",
+            "label": "quick_load",
+            "outcome": "denied_not_performed",
+            "returned": false
+          },
+          {
+            "action": "load_state_as",
+            "call_ok": true,
+            "cursor_decimal": "3",
+            "label": "named_dialog",
+            "outcome": "denied_not_performed",
+            "returned": false
+          },
+          {
+            "action": "reboot_core",
+            "call_ok": true,
+            "cursor_decimal": "4",
+            "label": "reboot",
+            "outcome": "denied_not_performed",
+            "returned": true
+          },
+          {
+            "action": "save_state",
+            "call_ok": true,
+            "cursor_decimal": "5",
+            "label": "named_save",
+            "outcome": "denied_not_performed",
+            "returned": "host return is not a save receipt"
+          }
+        ],
+        "actuator_scope": "held lease retained; no original actuator operations after tool load",
+        "classification": "quarantine_only_host_routing",
+        "general_interlock_proved": false,
+        "initial_actuator": {
+          "capabilities": {
+            "debugger_control": false,
+            "exclusive_between_frame_hold": true,
+            "full_execution_safety": false,
+            "load_state_control": false,
+            "native_recovery_execution": false,
+            "preserves_user_pause": true,
+            "production_selected": false,
+            "reset_control": false,
+            "rewind_control": false
+          },
+          "capability_id": "bizhawk-2.11.1-mgba-exclusive-hold-v1",
+          "closed": false,
+          "emergency_attempts": 0,
+          "failed": false,
+          "held": true,
+          "held_yield_verified": true,
+          "host_blocked": true,
+          "host_readback_available": true,
+          "lease_name": "Local\\SLink.PlatformExecution.v1.36560",
+          "lease_owned": true,
+          "owner_id": "f2e359fec69679cd2488053ddbf05de2",
+          "physical_stop_verified": true,
+          "process_id": 36560,
+          "reason": "private quarantine routing probe",
+          "user_paused": false,
+          "yields": 1
+        },
+        "initial_frame": 1657,
+        "initial_mailbox": "534c4e4b020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "periods": [
+          {
+            "elapsed_ms": 253.5168,
+            "frame_after": 1657,
+            "frame_before": 1657,
+            "yields": 16
+          }
+        ],
+        "production_selected": false,
+        "release_ready": false,
+        "statuses": [
+          {
+            "armed": true,
+            "blocked": true,
+            "failed": false,
+            "failure": "",
+            "frame": 1657,
+            "full_execution_safety": false,
+            "held": true,
+            "label": "armed",
+            "last_sequence": 1,
+            "original_core": true,
+            "production_selected": false,
+            "selected": true
+          },
+          {
+            "armed": true,
+            "blocked": true,
+            "failed": false,
+            "failure": "",
+            "frame": 1657,
+            "full_execution_safety": false,
+            "held": true,
+            "label": "after_routed_denials",
+            "last_sequence": 6,
+            "original_core": true,
+            "production_selected": false,
+            "selected": true
+          },
+          {
+            "armed": true,
+            "blocked": true,
+            "failed": true,
+            "failure": "form_closing",
+            "frame": 1657,
+            "full_execution_safety": false,
+            "held": true,
+            "label": "after_manager_close",
+            "last_sequence": 9,
+            "original_core": true,
+            "production_selected": false,
+            "selected": false
+          }
+        ],
+        "teardown": "private process exit with original and guard holds retained"
+      }
+    },
+    {
+      "assertions": 1924,
+      "complete": true,
+      "error": null,
+      "execution": {
+        "created": 1788695579.076366,
+        "elapsed_seconds": 31.46799999999348,
+        "exit": 0,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 38064,
+        "terminated_exact_pids": []
+      },
+      "execution_sha256": "5eabd890322b945e1ccab94def0b9b6789ea0b35634c75580712a8d3339fa849",
+      "failed_assertions": [],
+      "identity": {
+        "binding_sha256": "19f65d162aaad4d438799414ec5103343603ad915f3c1b7de55516da1d6ce7b9",
+        "config_sha256": "5bdf8cd79e409cf9a3b7bf686fec19f1cb31b6c4af94048cb377c6b4420426ca",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "75837c3f53b1fca7713d9277279d9c9d21d388d882fca636e1e60e06df6ad357",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 1800,
+        "player": "a",
+        "probe_options_sha256": "70b1acf6e53a3843ef8d67fee6fc6d28a40e1443575737c5caf749a7e8c61444",
+        "purpose": "validation",
+        "rom_sha1": "65C6B2739BAB54F8FFDA590D79BA551A0B7BAEC8",
+        "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+        "run_id": "quarantine_paused_fault_55",
+        "script_sha256": "0f3d702bb4500357259d0b7c93202c7a3a19ae8f0e628489463291de6eb7c161",
+        "source_sha256": "6019d49db49a80252b33cad157ef5894eacda4851d197808732f9f2c196821b0"
+      },
+      "phase": "complete",
+      "preparation_sha256": "d9ded9382ca94f83032be97c30607fa6864fb937c657d203f0f24a6f12c87913",
+      "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\quarantine_paused_fault_55_a\\results\\result.json",
+      "result_sha256": "6822cd741e391b71ea50f0cb0c77b0d2fc88d2285679312f74514bd8410596b7",
+      "run_id": "quarantine_paused_fault_55",
+      "runtime": {
+        "actions": [
+          {
+            "action": "load_state",
+            "call_ok": true,
+            "cursor_decimal": "1",
+            "label": "named_load",
+            "outcome": "denied_not_performed",
+            "returned": false,
+            "slot": -1
+          },
+          {
+            "action": "load_quick_save",
+            "call_ok": true,
+            "cursor_decimal": "2",
+            "label": "quick_load",
+            "outcome": "denied_not_performed",
+            "returned": false,
+            "slot": 3
+          },
+          {
+            "action": "load_state_as",
+            "call_ok": true,
+            "cursor_decimal": "3",
+            "label": "named_dialog",
+            "outcome": "denied_not_performed",
+            "returned": false,
+            "slot": -1
+          },
+          {
+            "action": "reboot_core",
+            "call_ok": true,
+            "cursor_decimal": "4",
+            "label": "reboot",
+            "outcome": "denied_not_performed",
+            "returned": true,
+            "slot": -1
+          },
+          {
+            "action": "save_state",
+            "call_ok": true,
+            "cursor_decimal": "5",
+            "label": "named_save",
+            "outcome": "denied_not_performed",
+            "returned": "host return is not a save receipt",
+            "slot": -1
+          },
+          {
+            "action": "load_state",
+            "call_ok": true,
+            "cursor_decimal": "7",
+            "label": "failed_named_load",
+            "outcome": "denied_not_performed",
+            "returned": false,
+            "slot": -1
+          }
+        ],
+        "actuator_scope": "held lease retained; no original actuator operations after tool load",
+        "classification": "quarantine_only_host_routing",
+        "general_interlock_proved": false,
+        "initial_actuator": {
+          "capabilities": {
+            "debugger_control": false,
+            "exclusive_between_frame_hold": true,
+            "full_execution_safety": false,
+            "load_state_control": false,
+            "native_recovery_execution": false,
+            "preserves_user_pause": true,
+            "production_selected": false,
+            "reset_control": false,
+            "rewind_control": false
+          },
+          "capability_id": "bizhawk-2.11.1-mgba-exclusive-hold-v1",
+          "closed": false,
+          "emergency_attempts": 0,
+          "failed": false,
+          "held": true,
+          "held_yield_verified": true,
+          "host_blocked": true,
+          "host_readback_available": true,
+          "lease_name": "Local\\SLink.PlatformExecution.v1.38064",
+          "lease_owned": true,
+          "owner_id": "9e8d2a2a07fd339dd8aeeab52448bd2e",
+          "physical_stop_verified": true,
+          "process_id": 38064,
+          "reason": "private quarantine routing probe",
+          "user_paused": true,
+          "yields": 1
+        },
+        "initial_frame": 1657,
+        "initial_mailbox": "534c4e4b020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "periods": [
+          {
+            "elapsed_ms": 263.1796,
+            "frame_after": 1657,
+            "frame_before": 1657,
+            "yields": 15
+          }
+        ],
+        "production_selected": false,
+        "release_ready": false,
+        "statuses": [
+          {
+            "armed": true,
+            "blocked": true,
+            "failed": false,
+            "failure": "",
+            "frame": 1657,
+            "full_execution_safety": false,
+            "held": true,
+            "label": "armed",
+            "last_sequence": 1,
+            "original_core": true,
+            "production_selected": false,
+            "selected": true
+          },
+          {
+            "armed": true,
+            "blocked": true,
+            "failed": false,
+            "failure": "",
+            "frame": 1657,
+            "full_execution_safety": false,
+            "held": true,
+            "label": "after_routed_denials",
+            "last_sequence": 6,
+            "original_core": true,
+            "production_selected": false,
+            "selected": true
+          },
+          {
+            "armed": true,
+            "blocked": true,
+            "failed": true,
+            "failure": "existing_hold_lost",
+            "frame": 1657,
+            "full_execution_safety": false,
+            "held": true,
+            "label": "after_injected_hold_loss",
+            "last_sequence": 7,
+            "original_core": true,
+            "production_selected": false,
+            "selected": true
+          },
+          {
+            "armed": true,
+            "blocked": true,
+            "failed": true,
+            "failure": "existing_hold_lost",
+            "frame": 1657,
+            "full_execution_safety": false,
+            "held": true,
+            "label": "after_manager_close",
+            "last_sequence": 11,
+            "original_core": true,
+            "production_selected": false,
+            "selected": false
+          }
+        ],
+        "teardown": "private process exit with original and guard holds retained"
+      }
+    }
+  ],
+  "production_selected": false,
+  "release_ready": false,
+  "retained_failures": [
+    {
+      "error": "NLua.Exceptions.LuaScriptException: ...ting_41_a/source/lua/tests/rr/quarantine_guard_probe.lua:58: Invalid arguments to method: Type.GetField: 21610982",
+      "execution": {
+        "created": 1788692765.1798093,
+        "elapsed_seconds": 30.65700000000652,
+        "exit": 0,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 8608,
+        "terminated_exact_pids": []
+      },
+      "execution_sha256": "1c34a44e89e61ff8fd2859e8069b691149b29b36690dc2e1564502c521273829",
+      "phase": "running_host_observed",
+      "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\quarantine_routing_41_a\\results\\result.json",
+      "result_sha256": "064178e2b61f0d1c7984b18df2e24c3e7b090da31b0d10441b8c18564bfce373",
+      "run_id": "quarantine_routing_41"
+    },
+    {
+      "error": "NLua.Exceptions.LuaScriptException: ...ting_42_a/source/lua/tests/rr/quarantine_guard_probe.lua:113: Argument number 1 is invalid: 9230088",
+      "execution": {
+        "created": 1788692971.9499269,
+        "elapsed_seconds": 100.06200000000536,
+        "exit": 15,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 43224,
+        "terminated_exact_pids": [
+          43224
+        ]
+      },
+      "execution_sha256": "ab99fccbb0109cefd2fd280180b400d5d7865c82b9ca1ca63313c57251e26882",
+      "phase": "quarantine_loader_ready",
+      "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\quarantine_routing_42_a\\results\\result.json",
+      "result_sha256": "4fe72581ec922408242100423b512034a25726c674136b330a4bff7d9d75023f",
+      "run_id": "quarantine_routing_42"
+    },
+    {
+      "error": "NLua.Exceptions.LuaScriptException: ...ting_45_a/source/lua/tests/rr/quarantine_guard_probe.lua:66: A .NET exception occured in user-code: 28395444",
+      "execution": {
+        "created": 1788693490.9175007,
+        "elapsed_seconds": 30.578000000008615,
+        "exit": 0,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 44776,
+        "terminated_exact_pids": []
+      },
+      "execution_sha256": "a00bf4f9218105e911ab8e82f9bec9b9458b8d6bd63b55dd08ec878f82b3fbd3",
+      "phase": "running_host_observed",
+      "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\quarantine_routing_45_a\\results\\result.json",
+      "result_sha256": "ca8672b6edd069a1073424d45548aa91700907e02ac1756e6e6c08742d827edb",
+      "run_id": "quarantine_routing_45"
+    },
+    {
+      "error": "NLua.Exceptions.LuaScriptException: ...ting_47_a/source/lua/tests/rr/quarantine_guard_probe.lua:124: Argument number 1 is invalid: 59018101",
+      "execution": {
+        "created": 1788694322.4801543,
+        "elapsed_seconds": 100.06200000000536,
+        "exit": 15,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 40584,
+        "terminated_exact_pids": [
+          40584
+        ]
+      },
+      "execution_sha256": "b44a4e4c3e6c73d46bb4b651fde1a9244fd37bea8d510eaac4e4d082618b4661",
+      "phase": "quarantine_loader_returned",
+      "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\quarantine_routing_47_a\\results\\result.json",
+      "result_sha256": "9c84b0e79088aed4c1aacd5bd682d9104a3c3dd75b8000401e7c0cca8e5c8857",
+      "run_id": "quarantine_routing_47"
+    },
+    {
+      "error": "NLua.Exceptions.LuaScriptException: ...ting_48_a/source/lua/tests/rr/quarantine_guard_probe.lua:124: Argument number 1 is invalid: 59018101",
+      "execution": {
+        "created": 1788694435.2194006,
+        "elapsed_seconds": 100.06299999999464,
+        "exit": 15,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 44848,
+        "terminated_exact_pids": [
+          44848
+        ]
+      },
+      "execution_sha256": "8e22f65c01870b480a454420d0d25058e143ff47ef3a7deefa51b1c4043a9638",
+      "phase": "quarantine_loader_returned",
+      "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\quarantine_routing_48_a\\results\\result.json",
+      "result_sha256": "418df7d90f2c40e2752231475b459c528db192f92935a69e74299623acb1a73c",
+      "run_id": "quarantine_routing_48"
+    },
+    {
+      "error": "NLua.Exceptions.LuaScriptException: ...ting_49_a/source/lua/tests/rr/quarantine_guard_probe.lua:130: A .NET exception occured in user-code: 36221483",
+      "execution": {
+        "created": 1788694530.5464997,
+        "elapsed_seconds": 100.06299999999464,
+        "exit": 15,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 43232,
+        "terminated_exact_pids": [
+          43232
+        ]
+      },
+      "execution_sha256": "51a650d52c626127dd40a8f6b0f7e68d2f2deadda52172af36048963cfa8f561",
+      "phase": "quarantine_loader_returned",
+      "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\quarantine_routing_49_a\\results\\result.json",
+      "result_sha256": "ea21534122503898ac65573481e0e0f1533905e87656d14c4d3da21449598686",
+      "run_id": "quarantine_routing_49"
+    },
+    {
+      "error": "NLua.Exceptions.LuaScriptException: ...ting_50_a/source/lua/tests/rr/quarantine_guard_probe.lua:132: A .NET exception occured in user-code: 36221483",
+      "execution": {
+        "created": 1788694665.212469,
+        "elapsed_seconds": 100.04699999999139,
+        "exit": 15,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 39816,
+        "terminated_exact_pids": [
+          39816
+        ]
+      },
+      "execution_sha256": "4106f450dd6c643339e6c5c2dcd90be1fd9c46e4f07838dc22f80476881b51b1",
+      "phase": "quarantine_loader_returned",
+      "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\quarantine_routing_50_a\\results\\result.json",
+      "result_sha256": "4e6da2c98945c2de8f9a0d214867f5fc07237a3b86e99ba2c47e2fd17f3139a8",
+      "run_id": "quarantine_routing_50"
+    },
+    {
+      "error": "NLua.Exceptions.LuaScriptException: ...ting_51_a/source/lua/tests/rr/quarantine_guard_probe.lua:129: Argument number 1 is invalid: 59018101",
+      "execution": {
+        "created": 1788694830.6123,
+        "elapsed_seconds": 100.06200000000536,
+        "exit": 15,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 15528,
+        "terminated_exact_pids": [
+          15528
+        ]
+      },
+      "execution_sha256": "35c6fc51079d8dbbeaff13d790ea226ef042dae7a4d350008857c71e0c2e1ab6",
+      "phase": "quarantine_loader_returned",
+      "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\quarantine_routing_51_a\\results\\result.json",
+      "result_sha256": "041d3703608d137dc6f4c4e9bd91e5b521213aa26e806b9df28f8638664006c2",
+      "run_id": "quarantine_routing_51"
+    }
+  ],
+  "schema": "slink-host-quarantine-evidence-v1",
+  "scope": "Private MainForm routing while already held; original actuator is not used after extra tool load."
+}

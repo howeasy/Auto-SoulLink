@@ -1,0 +1,20 @@
+{
+  "schema": "slink-host-guard-toolchain-v1",
+  "scope": "experimental pinned quarantine guard; not a player release approval",
+  "compiler_package": {
+    "id": "Microsoft.Net.Compilers.Toolset",
+    "version": "4.8.0",
+    "url": "https://api.nuget.org/v3-flatcontainer/microsoft.net.compilers.toolset/4.8.0/microsoft.net.compilers.toolset.4.8.0.nupkg",
+    "catalog_url": "https://api.nuget.org/v3/catalog0/data/2023.11.22.01.55.42/microsoft.net.compilers.toolset.4.8.0.json",
+    "sha256": "37333f4f1e2ce55e621355d6da651dc23d4cb5f94a8f76b9478816e87f110ad9",
+    "sha512_base64": "eIFAj8rybLqYjomTkx7VLlMGXt2sz+zQ7EZ/VNRVWfEg9l5SQhvAlo07lcQMYN/bINs/B3tV7b0oKxDXSOk3pg=="
+  },
+  "host_references": {
+    "EmuHawk.exe": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+    "dll/BizHawk.Client.Common.dll": "cf4b643c6911d3c85c5d113caecd4b9e5803264dd0356a73b30ce8cd417bd1f8",
+    "dll/BizHawk.Common.dll": "15ebdf860bc1d8d9efcaabefe1df69de0b24f31d431b558621df353882f386b9",
+    "dll/BizHawk.Emulation.Common.dll": "f557d94912b12bde18413b60d25b3e61332b7bbfc7184349d1289d6ba9f350ee",
+    "dll/BizHawk.Emulation.Cores.dll": "444bc157418e9b5df5d07e987fc7ad1d2d1c6993676f5b864368027cb4f054d5",
+    "dll/BizHawk.WinForms.Controls.dll": "48a9d05c3ca94aa889d74a6f9f73d61e3aa1fa67e5a3ae90889b9d9206089c99"
+  }
+}

@@ -342,3 +342,14 @@ python -m ruff check tools/rr/controlled_load.py tools/rr/reset_probe_fixture.py
 | MGBAHawk.IEmulator.cs | `6b95b80f77fd9671645e3ef3e601f87370ac51906879a7f8eefcbdc868eed827` |
 | MGBAHawk.IStatable.cs | `90cd3291a89cf20c2dcd1552ae139fabf442edf365c67c0eb35fcd799f1e6971` |
 | BinaryStateLump.cs | `b87ab4ca09d8eabced716182aa3fafcfd3ca9f53ccd6a79b0094f7994aa986ce` |
+
+## Additional held-route guard
+
+The inactive [host quarantine guard](../host-quarantine-contract.md) now has two
+actual pinned-host component cases: ordinary MainForm load/save/reboot routes
+are denied under an existing hold, user pause is preserved, and explicit flag
+loss/removal leaves failure latched with hold-only retention. The unchanged shared
+actuator is not used after the additional form loads, because its original tool
+scope excludes that form. These results do not close the direct restoration,
+movie, unheld gameplay, paired reconciliation or general execution interlock gaps
+described here. Full execution safety and production selection remain false.
