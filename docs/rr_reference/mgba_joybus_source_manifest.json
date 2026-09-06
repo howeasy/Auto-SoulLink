@@ -1,0 +1,48 @@
+{
+  "schema": "slink-mgba-joybus-source-review-v1",
+  "status": "source_and_binary_correspondence_not_live_peripheral_state_proof",
+  "release_ready": false,
+  "bizhawk_tag": "2.11.1",
+  "mgba_submodule_commit": "94b1578f8545d8ad17bb4036dba908612d5731e2",
+  "mgba_dll": {
+    "observed_local_path": "E:/Howard/Bizhawk/dll/mgba.dll",
+    "release_url": "https://raw.githubusercontent.com/TASEmulators/BizHawk/2.11.1/Assets/dll/mgba.dll",
+    "sha256": "ba398a56e62ce1e4280fe96834cbbe4e6469b7070f34da313ec3d4637c4979e1",
+    "size_bytes": 775680,
+    "local_release_bytes_identical": true,
+    "independently_rebuilt_from_source": false
+  },
+  "source_repository": "https://github.com/TASEmulators/mgba",
+  "sources": {
+    "src/platform/bizhawk/bizinterface.c": "3c720eb1ff5d33c62ece48563231f990a64ddc34a7f7bb9213eac429e74e2179",
+    "src/platform/bizhawk/base.mak": "8727981fb2af708e775a5106850826c47b4f85af3ea0590aca2e32b0ffd10dec",
+    "src/gba/sio.c": "617058ea2712953b5058810288815ec8a415ef28d9ec28d4d8d50943ee0a0703",
+    "include/mgba/internal/gba/sio.h": "e98dd06d0b6ecaef4e1857c28628621e0ced3d7b85319cd202eabaf2b5e76d01",
+    "src/gba/sio/gbp.c": "14fd7eee9f44f9d057b07ec8a90f2d8268245968e6c88d0dba919c5d341066c4",
+    "src/gba/gba.c": "96a27072bb5a8d7398ac700d924a9c471f18d9e992075dc19f9105105a703e26",
+    "src/gba/io.c": "1fb6080312be49bcbd934cbcc0bfd7c8bb69b850d26ee4a933e48ee78d6faf81",
+    "src/gba/core.c": "33bc46b659e19745ed766a7043ef368c575624ed53e89c230c604f90c4104aa4"
+  },
+  "staged_config_observation": {
+    "path": "C:/Users/howar/AppData/Local/Temp/slink-rr-native-probes-01a072f9/runs/route_observation_22_a/config.initial.json",
+    "sha256": "05665997943b18af2464917a17600590cad7206167bbd1347f1eb40e6a15c959",
+    "reported_by": "validation_release and independently read by rr_patch_ghost; exact staged values, not runtime getter observations",
+    "OverrideGbPlayerDetect": false,
+    "SubframeInput": false,
+    "OverridePokemonRomhackDetect": true,
+    "RTCUseRealTime": true,
+    "SkipBios": true
+  },
+  "premises": [
+    "Pinned standalone MGBAHawk/native DLL and reviewed standard peer adapter",
+    "No external link-port or Dolphin/JOYBUS attachment",
+    "No injected MMIO, serial state, native peripheral pointers or unqualified imported transfer state",
+    "Admission after normal copyright/intro completion with GCMB progress zero and ordinary serial callback restored"
+  ],
+  "limitations": [
+    "CPU receiver tests supply synthetic JOYBUS input and do not prove that ordinary mGBA keys can produce it",
+    "Runtime source-to-binary reproducibility and direct native SIO-driver inspection were not performed",
+    "Whole-EWRAM reset and savestate provenance remain separate gates",
+    "No arena relocation or universal tail ownership approval"
+  ]
+}

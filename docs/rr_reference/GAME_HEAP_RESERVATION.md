@@ -7,6 +7,11 @@ uses RR4.1 base SHA256
 Available pret/CFRU sources supplied names and structure interpretations; the actual
 RR bytes take precedence.
 
+An inactive entry wrapper and 33 additional checks now exist under
+`patch/research/heap_tail_guard.S` and `tests/rr/native/test_heap_tail_guard_cpu.py`.
+They are excluded from the production build. The later GameCube/JOYBUS section
+records a real conditional raw conflict and its narrower pinned-mGBA qualification.
+
 ## Actual allocator and ownership
 
 | Interface or state | Verified RR address / contract |
@@ -155,12 +160,118 @@ about calculated/table-based consumers.
 | `0x0945E248` | `0x0201BE03` | Inside valid LZ77 stream at `0x0945E0B8` |
 | `0x0961B5E8` | `0x0201B8FF` | Inside valid LZ77 stream at `0x0961B364` |
 | `0x09626C90` | `0x0201BBFE` | Inside valid LZ77 stream at `0x09626AFC` |
-| `0x09EC112C` | `0x0201BDE0` | Unclassified extended-ROM data; no pointer consumer established |
+| `0x09EC112C` | `0x0201BDE0` | Audio-like data with a plausible sample header nearby; no consumer established |
 
 The tests preserve the exact ten-value inventory and validate seven containing LZ77
 streams. Compressed-data classifications prevent treating arbitrary asset bytes as
 confirmed RAM references; they do not establish that the proposed tail is free or
 immune to raw writes.
+
+Further inspection found a plausible GBA WaveData header at `0x09EBFAD0`:
+type 1/status 0, frequency `0x02B11000` (44,100×1,024), loopStart 0 and size 98,676.
+The candidate word occurs after that header among audio-like packed bytes. No direct
+reference to the header or verified sound consumer has been established. This is
+additional classification evidence, **not a resolved pointer-use/ownership claim**.
+Do not close the `0x09EC112C` item from byte appearance or missing references.
+
+## Inactive InitHeap entry-wrapper proof
+
+`patch/research/heap_tail_guard.S` proposes an eight-byte literal detour at
+`0x08002B80..87`. It uses only r2/r3 before replaying the displaced original
+instructions: push caller LR, store heap root, load the size-global address, then
+branch to original continuation `0x08002B88`. The stock routine performs the size
+store, header construction and return. The helper has no `.data`, `.bss`, mailbox
+initialization or arena writes and is not referenced by `patch/tools/build.py`.
+
+Supported synthetic inputs have aligned start/size, at least a 16-byte header and an
+overflow-free range wholly within EWRAM. Nonoverlapping ranges pass unchanged;
+overlapping ranges beginning before the candidate are clipped to its start. A range
+beginning inside the candidate or leaving less than header space is rejected.
+Rejection is an observable, non-returning loop before any RAM or stack write.
+That loop is a research fail-closed behavior, not an approved user-facing recovery
+policy; the void original API must not falsely return after a refused initialization.
+
+Private CPU-memory tests patch only their in-memory copy of the stock entry and
+map the compiled helper at `0x0A100000`. That address is outside this harness's
+stock-ROM mapping, **not universally outside GBA cartridge space**; hardware ROM
+mirror windows exist. It is not a proposed production code location.
+
+The tests compare r0-r12, final SP, full EWRAM/IWRAM contents and final NZCV flags
+against the unmodified routine called with the effective size. Both four- and
+eight-byte-aligned caller stacks pass. All seven decoded caller BL instructions
+enter the detour and return to their original next instruction. Rejection cases
+preserve caller LR, callee-saved registers and all RAM. The original API is void;
+matching r0's original return-address residue is compatibility evidence, not a new
+result-code API.
+
+This is function-level ABI evidence. InitHeap and the underlying allocator are not
+made interrupt-safe by the wrapper; the original search globals are non-reentrant.
+Ordinary save-block reset clears VBlank/HBlank callbacks before copying, but pending
+DMA and other interrupt consumers still require contextual proof. The wrapper does
+not prove startup admission, runtime allocation pressure or safe receipt lifetime.
+
+## Conditional GameCube raw writes and pinned-mGBA scope
+
+The prior source search for the `gHeap` symbol missed a real assembly user of literal
+`0x02000000`: the retained GameCube multiboot subsystem.
+
+At `0x081DBF58..64`, the actual receiver accepts a size word below `0x4000` and
+stores `2*(value+1)` as the remaining word count. Destination starts at `0x02000000`.
+At `0x081DBF88..92`, it reads `JOY_RECV`, stores a word through the current
+destination and advances. The accepted bound can cover `0x20000` bytes, including
+the entire proposed tail. CPU tests execute the real size parser and an actual
+receiver store into the tail **after reduced InitHeap**. These tests supply synthetic
+peripheral state; they do not claim ordinary GBA buttons can create a GameCube peer.
+
+There is another conditional bypass: on successful progress 2 and received game code
+`0x65366347`, copyright setup calls CpuSet at `0x080EC7D6` to copy `0x28000` bytes
+from the bundled Colosseum image into EWRAM. This application handoff also overlaps
+the tail and is not governed by InitHeap. A CPU breakpoint test captures these actual
+call arguments from the stock branch; it stops before BIOS execution and does not
+claim a real mGBA transfer occurred.
+
+The actual startup contract is visible in RR:
+
+- `sGcmb` is `0x0203AAD4`, progress byte at `+2`.
+- Copyright setup installs the GCMB serial callback at `0x080EC726..28` and calls
+  `GameCubeMultiBoot_Init` at `0x080EC72E`; main processing runs at `0x080EC746/77C`.
+- The normal progress 0 path calls `GameCubeMultiBoot_Quit` at `0x080EC7F4`, restoring
+  ordinary `SerialCB 0x0800B799` at `0x080EC7F8..FA` before intro/field entry.
+- `GameCubeMultiBoot_ExecuteProgram` is selected at `0x080EC7DE` only on successful
+  transfer progress. Generic post-intro admission cannot be inferred from a payload
+  signature alone; normal completion/progress 0 is an explicit qualification point.
+
+The supported target is the pinned standalone BizHawk mGBA peer, not hardware
+multiboot. The installed `mgba.dll` was read and matched **byte-for-byte** to the
+official BizHawk 2.11.1 asset: 775,680 bytes, SHA256
+`ba398a56e62ce1e4280fe96834cbbe4e6469b7070f34da313ec3d4637c4979e1`.
+That release pins mGBA submodule `94b1578f8545d8ad17bb4036dba908612d5731e2`.
+The source/DLL correspondence was checked; the DLL was not independently rebuilt.
+URLs and exact source hashes are in `mgba_joybus_source_manifest.json`.
+
+The pinned [BizHawk native bridge](https://github.com/TASEmulators/mgba/blob/94b1578f8545d8ad17bb4036dba908612d5731e2/src/platform/bizhawk/bizinterface.c)
+creates a standalone core and attaches rotation, rumble and luminance peripherals,
+not a link-port driver. Its frontend frame API carries buttons/sensors, not JOYBUS
+messages. The [build list](https://github.com/TASEmulators/mgba/blob/94b1578f8545d8ad17bb4036dba908612d5731e2/src/platform/bizhawk/base.mak)
+includes GBP/lockstep support but not the Dolphin transport.
+
+The pinned [SIO implementation](https://github.com/TASEmulators/mgba/blob/94b1578f8545d8ad17bb4036dba908612d5731e2/src/gba/sio.c)
+initializes the driver to NULL. Its dummy completion path covers normal 8/32 and
+multiplayer, not JOYBUS. External `GBASIOJOYSendCommand(JOY_RECV)` is the path that
+sets received status/data and raises its interrupt. Ordinary CPU writes to JOYCNT
+clear relevant status bits; unhandled receive-register writes retain the old value.
+The [GBP driver](https://github.com/TASEmulators/mgba/blob/94b1578f8545d8ad17bb4036dba908612d5731e2/src/gba/sio/gbp.c)
+handles only NORMAL32, not a GameCube JOYBUS transport.
+
+The reviewed private config independently reads `OverrideGbPlayerDetect=false`,
+`SubframeInput=false`; the current host adapter exposes no serial-injection API.
+Under a fresh/reset state, this pinned host/bridge and no externally attached or
+injected peripheral state, no supported producer for the GCMB receive stream was
+identified. The hardware counterexample therefore does **not** by itself make the
+mGBA-scoped reservation impossible. It does require explicit host/config and normal
+post-intro qualification. Imported/mutated serial state, other frontends/hardware,
+native peripheral injection or changed driver bindings invalidate that argument.
+Direct runtime SIO-driver inspection and scene/admission enforcement remain gates.
 
 ## Capacity and the retained libc path
 
@@ -207,19 +318,24 @@ libc formatting. Its metadata must remain untouched by any companion reservation
    A restored valid signature/receipt cannot authenticate the current command generation.
 6. Verify native reader lifetimes and scene cleanup separately. Moving state does not
    repair stale engine sprite/window pointers or authorize pending async effects.
+7. Preserve the scoped GameCube exclusion above and handle any unsupported transfer
+   state before companion admission. Do not silently claim hardware compatibility or
+   let a native frame hook write a supposedly exclusive tail during a raw handoff.
 
 The candidate is more defensible than an unexplained gap because it can be explicitly
 reserved from a known pool. The allocator-bound tests support continued investigation;
 the remaining raw-access, reset, capacity and protocol gates prevent an approval now.
 
-## Reproduce the 20 CPU/static checks
+## Reproduce the 53 CPU/static checks
 
 ```powershell
 python -m pip install --target patch/build/native-cpu-deps -r tests/rr/native/requirements-cpu.txt
 $env:PYTHONPATH = (Resolve-Path patch/build/native-cpu-deps).Path
-python -m pytest -q -p no:faulthandler tests/rr/native/test_game_heap_cpu.py --rr-rom 'E:/Google Drive/SLink/Pokemon - Radical Red.gba'
-python -m ruff check tests/rr/native/test_game_heap_cpu.py
+$env:SLINK_ARMGCC = 'E:/Google Drive/SLink/patch/vendor/armgcc/xpack-arm-none-eabi-gcc-15.2.1-1.1/bin'
+python -m pytest -q -p no:faulthandler tests/rr/native/test_game_heap_cpu.py tests/rr/native/test_heap_tail_guard_cpu.py --rr-repo . --rr-rom 'E:/Google Drive/SLink/Pokemon - Radical Red.gba'
+python -m ruff check tests/rr/native/test_game_heap_cpu.py tests/rr/native/test_heap_tail_guard_cpu.py
 ```
 
-All 20 checks passed during this review. The Windows faulthandler convention and
+All 53 checks passed during this review (20 original allocator/static checks plus
+33 inactive-wrapper/conditional-conflict checks). The Windows faulthandler convention and
 CPU-only limitations are documented in `patch/src/NATIVE_GHOST_MOTION.md`.
