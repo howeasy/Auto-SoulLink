@@ -1,0 +1,98 @@
+{
+  "default_menu_evidence": "0x0904EF08",
+  "default_mode_requires_clear": [
+    "easy",
+    "hardcore",
+    "restricted"
+  ],
+  "expanded_flag_range": [
+    2304,
+    6399
+  ],
+  "flag_pointer_function": "0x090B8FB0",
+  "flags": [
+    {
+      "bit_mask": 4,
+      "flag_id": 4146,
+      "name": "minimal_grinding",
+      "ram_byte": "0x0203B25A",
+      "set_script_address": "0x0904F214"
+    },
+    {
+      "bit_mask": 8,
+      "flag_id": 4147,
+      "name": "easy",
+      "ram_byte": "0x0203B25A",
+      "set_script_address": "0x0904F816"
+    },
+    {
+      "bit_mask": 16,
+      "flag_id": 4148,
+      "name": "hardcore",
+      "ram_byte": "0x0203B25A",
+      "set_script_address": "0x0904F7B4"
+    },
+    {
+      "bit_mask": 16,
+      "flag_id": 4156,
+      "name": "restricted",
+      "ram_byte": "0x0203B25B",
+      "set_script_address": "0x0904F801"
+    },
+    {
+      "bit_mask": 1,
+      "flag_id": 2368,
+      "name": "species_randomizer",
+      "ram_byte": "0x0203B17C",
+      "set_script_address": "0x0904F838"
+    },
+    {
+      "bit_mask": 2,
+      "flag_id": 2369,
+      "name": "learnset_randomizer",
+      "ram_byte": "0x0203B17C",
+      "set_script_address": "0x0904F86B"
+    },
+    {
+      "bit_mask": 4,
+      "flag_id": 2370,
+      "name": "ability_randomizer",
+      "ram_byte": "0x0203B17C",
+      "set_script_address": "0x0904F85A"
+    },
+    {
+      "bit_mask": 4,
+      "flag_id": 2362,
+      "name": "hard_mode_randomizer",
+      "ram_byte": "0x0203B17B",
+      "set_script_address": "0x0904F849"
+    }
+  ],
+  "formula": "byte = 0x0203B174 + ((flag - 0x0900) >> 3); mask = 1 << (flag & 7)",
+  "internal_randomizer_flags_require_clear": [
+    "species_randomizer",
+    "learnset_randomizer",
+    "ability_randomizer",
+    "hard_mode_randomizer"
+  ],
+  "mgm_clear_script": "0x0904F203",
+  "mgm_disabled_message": "0x0910E329",
+  "mgm_enabled_message": "0x0910E400",
+  "mgm_prompt_address": "0x0910DD7F",
+  "mgm_states_supported_by_planned_release": [
+    false,
+    true
+  ],
+  "note": "Evidence for a future reader; this generator never reads a save, running emulator, or current mode",
+  "planned_mode_pairings": [
+    [
+      false,
+      false
+    ],
+    [
+      true,
+      true
+    ]
+  ],
+  "runtime_values_observed": false
+}

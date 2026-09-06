@@ -1,0 +1,159 @@
+{
+  "box_count": 25,
+  "boxes": [
+    {
+      "box_index_zero_based": 0,
+      "data_address": "0x02029318",
+      "end_address_exclusive": "0x020299E4",
+      "pointer_address": "0x09148930"
+    },
+    {
+      "box_index_zero_based": 1,
+      "data_address": "0x020299E4",
+      "end_address_exclusive": "0x0202A0B0",
+      "pointer_address": "0x09148934"
+    },
+    {
+      "box_index_zero_based": 2,
+      "data_address": "0x0202A0B0",
+      "end_address_exclusive": "0x0202A77C",
+      "pointer_address": "0x09148938"
+    },
+    {
+      "box_index_zero_based": 3,
+      "data_address": "0x0202A77C",
+      "end_address_exclusive": "0x0202AE48",
+      "pointer_address": "0x0914893C"
+    },
+    {
+      "box_index_zero_based": 4,
+      "data_address": "0x0202AE48",
+      "end_address_exclusive": "0x0202B514",
+      "pointer_address": "0x09148940"
+    },
+    {
+      "box_index_zero_based": 5,
+      "data_address": "0x0202B514",
+      "end_address_exclusive": "0x0202BBE0",
+      "pointer_address": "0x09148944"
+    },
+    {
+      "box_index_zero_based": 6,
+      "data_address": "0x0202BBE0",
+      "end_address_exclusive": "0x0202C2AC",
+      "pointer_address": "0x09148948"
+    },
+    {
+      "box_index_zero_based": 7,
+      "data_address": "0x0202C2AC",
+      "end_address_exclusive": "0x0202C978",
+      "pointer_address": "0x0914894C"
+    },
+    {
+      "box_index_zero_based": 8,
+      "data_address": "0x0202C978",
+      "end_address_exclusive": "0x0202D044",
+      "pointer_address": "0x09148950"
+    },
+    {
+      "box_index_zero_based": 9,
+      "data_address": "0x0202D044",
+      "end_address_exclusive": "0x0202D710",
+      "pointer_address": "0x09148954"
+    },
+    {
+      "box_index_zero_based": 10,
+      "data_address": "0x0202D710",
+      "end_address_exclusive": "0x0202DDDC",
+      "pointer_address": "0x09148958"
+    },
+    {
+      "box_index_zero_based": 11,
+      "data_address": "0x0202DDDC",
+      "end_address_exclusive": "0x0202E4A8",
+      "pointer_address": "0x0914895C"
+    },
+    {
+      "box_index_zero_based": 12,
+      "data_address": "0x0202E4A8",
+      "end_address_exclusive": "0x0202EB74",
+      "pointer_address": "0x09148960"
+    },
+    {
+      "box_index_zero_based": 13,
+      "data_address": "0x0202EB74",
+      "end_address_exclusive": "0x0202F240",
+      "pointer_address": "0x09148964"
+    },
+    {
+      "box_index_zero_based": 14,
+      "data_address": "0x0202F240",
+      "end_address_exclusive": "0x0202F90C",
+      "pointer_address": "0x09148968"
+    },
+    {
+      "box_index_zero_based": 15,
+      "data_address": "0x0202F90C",
+      "end_address_exclusive": "0x0202FFD8",
+      "pointer_address": "0x0914896C"
+    },
+    {
+      "box_index_zero_based": 16,
+      "data_address": "0x0202FFD8",
+      "end_address_exclusive": "0x020306A4",
+      "pointer_address": "0x09148970"
+    },
+    {
+      "box_index_zero_based": 17,
+      "data_address": "0x020306A4",
+      "end_address_exclusive": "0x02030D70",
+      "pointer_address": "0x09148974"
+    },
+    {
+      "box_index_zero_based": 18,
+      "data_address": "0x02030D70",
+      "end_address_exclusive": "0x0203143C",
+      "pointer_address": "0x09148978"
+    },
+    {
+      "box_index_zero_based": 19,
+      "data_address": "0x0203CB44",
+      "end_address_exclusive": "0x0203D210",
+      "pointer_address": "0x0914897C"
+    },
+    {
+      "box_index_zero_based": 20,
+      "data_address": "0x0203D210",
+      "end_address_exclusive": "0x0203D8DC",
+      "pointer_address": "0x09148980"
+    },
+    {
+      "box_index_zero_based": 21,
+      "data_address": "0x0203D8DC",
+      "end_address_exclusive": "0x0203DFA8",
+      "pointer_address": "0x09148984"
+    },
+    {
+      "box_index_zero_based": 22,
+      "data_address": "0x02027434",
+      "end_address_exclusive": "0x02027B00",
+      "pointer_address": "0x09148988"
+    },
+    {
+      "box_index_zero_based": 23,
+      "data_address": "0x02027B00",
+      "end_address_exclusive": "0x020281CC",
+      "pointer_address": "0x0914898C"
+    },
+    {
+      "box_index_zero_based": 24,
+      "data_address": "0x02024638",
+      "end_address_exclusive": "0x02024D04",
+      "pointer_address": "0x09148990"
+    }
+  ],
+  "compressed_mon_bytes": 58,
+  "slots_per_box": 30,
+  "table_address": "0x09148930",
+  "validation_limit": "Pointer identity, bounds and pairwise box nonoverlap; not ownership safety against every other RR allocation"
+}

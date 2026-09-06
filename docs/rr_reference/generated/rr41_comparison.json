@@ -1,0 +1,3101 @@
+{
+  "counts": {
+    "evolution_rows_split_by_baseline_family": 83,
+    "gender_mismatches": 281,
+    "missing_baseline_types": 1,
+    "named_species_compared": 1329,
+    "type_order_only_mismatches": 1,
+    "type_set_mismatches": 1
+  },
+  "evolution_rows_split_by_baseline_family": [
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 172,
+      "baseline_target_family": 1022,
+      "method_id": 7,
+      "parameter": 99,
+      "record_address": "0x097CE638",
+      "slot": 1,
+      "source_name": "Pikachu",
+      "source_species": 25,
+      "target_name": "Raichu-Alola",
+      "target_species": 1022
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 102,
+      "baseline_target_family": 1037,
+      "method_id": 7,
+      "parameter": 93,
+      "record_address": "0x097D0CB8",
+      "slot": 1,
+      "source_name": "Exeggcute",
+      "source_species": 102,
+      "target_name": "Exeggutor-Alola",
+      "target_species": 1037
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 104,
+      "baseline_target_family": 1039,
+      "method_id": 22,
+      "parameter": 28,
+      "record_address": "0x097D0DB8",
+      "slot": 1,
+      "source_name": "Cubone",
+      "source_species": 104,
+      "target_name": "Marowak-Alola",
+      "target_species": 1039
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 109,
+      "baseline_target_family": 1215,
+      "method_id": 22,
+      "parameter": 35,
+      "record_address": "0x097D1038",
+      "slot": 1,
+      "source_name": "Koffing",
+      "source_species": 109,
+      "target_name": "Weezing-Galar",
+      "target_species": 1215
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 123,
+      "baseline_target_family": 1273,
+      "method_id": 7,
+      "parameter": 187,
+      "record_address": "0x097D1740",
+      "slot": 2,
+      "source_name": "Scyther",
+      "source_species": 123,
+      "target_name": "Kleavor",
+      "target_species": 1273
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 193,
+      "baseline_target_family": 522,
+      "method_id": 26,
+      "parameter": 246,
+      "record_address": "0x097D3A30",
+      "slot": 0,
+      "source_name": "Yanma",
+      "source_species": 193,
+      "target_name": "Yanmega",
+      "target_species": 522
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 193,
+      "baseline_target_family": 522,
+      "method_id": 4,
+      "parameter": 45,
+      "record_address": "0x097D3A38",
+      "slot": 1,
+      "source_name": "Yanma",
+      "source_species": 193,
+      "target_name": "Yanmega",
+      "target_species": 522
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 234,
+      "baseline_target_family": 1270,
+      "method_id": 4,
+      "parameter": 44,
+      "record_address": "0x097D4EB0",
+      "slot": 0,
+      "source_name": "Stantler",
+      "source_species": 234,
+      "target_name": "Wyrdeer",
+      "target_species": 1270
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 489,
+      "baseline_target_family": 490,
+      "method_id": 4,
+      "parameter": 33,
+      "record_address": "0x097DCE30",
+      "slot": 0,
+      "source_name": "Bronzor",
+      "source_species": 489,
+      "target_name": "Bronzong",
+      "target_species": 490
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 492,
+      "baseline_target_family": 1216,
+      "method_id": 7,
+      "parameter": 102,
+      "record_address": "0x097DCFC0",
+      "slot": 2,
+      "source_name": "Mime Jr.",
+      "source_species": 492,
+      "target_name": "Mr Mime-Galar",
+      "target_species": 1216
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 577,
+      "baseline_target_family": 579,
+      "method_id": 7,
+      "parameter": 87,
+      "record_address": "0x097DFAB0",
+      "slot": 0,
+      "source_name": "Boldore",
+      "source_species": 578,
+      "target_name": "Gigalith",
+      "target_species": 579
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 577,
+      "baseline_target_family": 579,
+      "method_id": 5,
+      "parameter": 0,
+      "record_address": "0x097DFAB8",
+      "slot": 1,
+      "source_name": "Boldore",
+      "source_species": 578,
+      "target_name": "Gigalith",
+      "target_species": 579
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 603,
+      "baseline_target_family": 1268,
+      "method_id": 20,
+      "parameter": 44,
+      "record_address": "0x097E0730",
+      "slot": 0,
+      "source_name": "Basculin (Red)",
+      "source_species": 603,
+      "target_name": "Basculegion",
+      "target_species": 1268
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 603,
+      "baseline_target_family": 1268,
+      "method_id": 21,
+      "parameter": 44,
+      "record_address": "0x097E0738",
+      "slot": 1,
+      "source_name": "Basculin (Red)",
+      "source_species": 603,
+      "target_name": "Basculegion (Female)",
+      "target_species": 1306
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 638,
+      "baseline_target_family": 639,
+      "method_id": 4,
+      "parameter": 28,
+      "record_address": "0x097E18B0",
+      "slot": 0,
+      "source_name": "Deerling",
+      "source_species": 638,
+      "target_name": "Sawsbuck",
+      "target_species": 639
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 672,
+      "baseline_target_family": 673,
+      "method_id": 4,
+      "parameter": 28,
+      "record_address": "0x097E29B0",
+      "slot": 0,
+      "source_name": "Mienfoo",
+      "source_species": 672,
+      "target_name": "Mienshao",
+      "target_species": 673
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 704,
+      "baseline_target_family": 705,
+      "method_id": 4,
+      "parameter": 40,
+      "record_address": "0x097E39B0",
+      "slot": 0,
+      "source_name": "Frillish (Female)",
+      "source_species": 704,
+      "target_name": "Jellicent (Female)",
+      "target_species": 705
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 707,
+      "baseline_target_family": 709,
+      "method_id": 21,
+      "parameter": 16,
+      "record_address": "0x097E3B30",
+      "slot": 0,
+      "source_name": "Burmy (Sandy)",
+      "source_species": 707,
+      "target_name": "Wormadam (Sandy)",
+      "target_species": 709
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 707,
+      "baseline_target_family": 465,
+      "method_id": 20,
+      "parameter": 16,
+      "record_address": "0x097E3B38",
+      "slot": 1,
+      "source_name": "Burmy (Sandy)",
+      "source_species": 707,
+      "target_name": "Mothim",
+      "target_species": 467
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 708,
+      "baseline_target_family": 710,
+      "method_id": 21,
+      "parameter": 16,
+      "record_address": "0x097E3BB0",
+      "slot": 0,
+      "source_name": "Burmy (Trash)",
+      "source_species": 708,
+      "target_name": "Wormadam (Trash)",
+      "target_species": 710
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 708,
+      "baseline_target_family": 465,
+      "method_id": 20,
+      "parameter": 16,
+      "record_address": "0x097E3BB8",
+      "slot": 1,
+      "source_name": "Burmy (Trash)",
+      "source_species": 708,
+      "target_name": "Mothim",
+      "target_species": 467
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 711,
+      "baseline_target_family": 712,
+      "method_id": 4,
+      "parameter": 32,
+      "record_address": "0x097E3D30",
+      "slot": 0,
+      "source_name": "Shellos (East)",
+      "source_species": 711,
+      "target_name": "Gastrodon (East)",
+      "target_species": 712
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 736,
+      "baseline_target_family": 1268,
+      "method_id": 20,
+      "parameter": 44,
+      "record_address": "0x097E49B0",
+      "slot": 0,
+      "source_name": "Basculin (Blue)",
+      "source_species": 736,
+      "target_name": "Basculegion",
+      "target_species": 1268
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 736,
+      "baseline_target_family": 1268,
+      "method_id": 21,
+      "parameter": 44,
+      "record_address": "0x097E49B8",
+      "slot": 1,
+      "source_name": "Basculin (Blue)",
+      "source_species": 736,
+      "target_name": "Basculegion (Female)",
+      "target_species": 1306
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 738,
+      "baseline_target_family": 741,
+      "method_id": 4,
+      "parameter": 28,
+      "record_address": "0x097E4AB0",
+      "slot": 0,
+      "source_name": "Deerling Summer",
+      "source_species": 738,
+      "target_name": "Sawsbuck Summer",
+      "target_species": 741
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 739,
+      "baseline_target_family": 742,
+      "method_id": 4,
+      "parameter": 28,
+      "record_address": "0x097E4B30",
+      "slot": 0,
+      "source_name": "Deerling Autumn",
+      "source_species": 739,
+      "target_name": "Sawsbuck Autumn",
+      "target_species": 742
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 740,
+      "baseline_target_family": 743,
+      "method_id": 4,
+      "parameter": 28,
+      "record_address": "0x097E4BB0",
+      "slot": 0,
+      "source_name": "Deerling Winter",
+      "source_species": 740,
+      "target_name": "Sawsbuck Winter",
+      "target_species": 743
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 744,
+      "baseline_target_family": 745,
+      "method_id": 4,
+      "parameter": 34,
+      "record_address": "0x097E4DB0",
+      "slot": 0,
+      "source_name": "Hippopotas (Female)",
+      "source_species": 744,
+      "target_name": "Hippowdon (Female)",
+      "target_species": 745
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 785,
+      "baseline_target_family": 832,
+      "method_id": 21,
+      "parameter": 23,
+      "record_address": "0x097E6238",
+      "slot": 1,
+      "source_name": "Espurr",
+      "source_species": 785,
+      "target_name": "Meowstic Female",
+      "target_species": 832
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 790,
+      "baseline_target_family": 791,
+      "method_id": 7,
+      "parameter": 99,
+      "record_address": "0x097E64B0",
+      "slot": 0,
+      "source_name": "Spritzee",
+      "source_species": 790,
+      "target_name": "Aromatisse",
+      "target_species": 791
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 790,
+      "baseline_target_family": 791,
+      "method_id": 6,
+      "parameter": 99,
+      "record_address": "0x097E64B8",
+      "slot": 1,
+      "source_name": "Spritzee",
+      "source_species": 790,
+      "target_name": "Aromatisse",
+      "target_species": 791
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 792,
+      "baseline_target_family": 793,
+      "method_id": 7,
+      "parameter": 99,
+      "record_address": "0x097E65B0",
+      "slot": 0,
+      "source_name": "Swirlix",
+      "source_species": 792,
+      "target_name": "Slurpuff",
+      "target_species": 793
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 792,
+      "baseline_target_family": 793,
+      "method_id": 6,
+      "parameter": 178,
+      "record_address": "0x097E65B8",
+      "slot": 1,
+      "source_name": "Swirlix",
+      "source_species": 792,
+      "target_name": "Slurpuff",
+      "target_species": 793
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 812,
+      "baseline_target_family": 1297,
+      "method_id": 7,
+      "parameter": 199,
+      "record_address": "0x097E6FB0",
+      "slot": 0,
+      "source_name": "Goomy",
+      "source_species": 812,
+      "target_name": "Sliggoo-Hisui",
+      "target_species": 1297
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 851,
+      "baseline_target_family": 850,
+      "method_id": 4,
+      "parameter": 45,
+      "record_address": "0x097E8330",
+      "slot": 0,
+      "source_name": "Gimmighoul (Roam)",
+      "source_species": 851,
+      "target_name": "Gholdengo",
+      "target_species": 852
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 853,
+      "baseline_target_family": 856,
+      "method_id": 7,
+      "parameter": 87,
+      "record_address": "0x097E8430",
+      "slot": 0,
+      "source_name": "Pumpkaboo (Xl)",
+      "source_species": 853,
+      "target_name": "Gourgeist (Xl)",
+      "target_species": 856
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 853,
+      "baseline_target_family": 856,
+      "method_id": 5,
+      "parameter": 0,
+      "record_address": "0x097E8438",
+      "slot": 1,
+      "source_name": "Pumpkaboo (Xl)",
+      "source_species": 853,
+      "target_name": "Gourgeist (Xl)",
+      "target_species": 856
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 854,
+      "baseline_target_family": 857,
+      "method_id": 7,
+      "parameter": 87,
+      "record_address": "0x097E84B0",
+      "slot": 0,
+      "source_name": "Pumpkaboo (L)",
+      "source_species": 854,
+      "target_name": "Gourgeist (L)",
+      "target_species": 857
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 854,
+      "baseline_target_family": 857,
+      "method_id": 5,
+      "parameter": 0,
+      "record_address": "0x097E84B8",
+      "slot": 1,
+      "source_name": "Pumpkaboo (L)",
+      "source_species": 854,
+      "target_name": "Gourgeist (L)",
+      "target_species": 857
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 855,
+      "baseline_target_family": 858,
+      "method_id": 7,
+      "parameter": 87,
+      "record_address": "0x097E8530",
+      "slot": 0,
+      "source_name": "Pumpkaboo (M)",
+      "source_species": 855,
+      "target_name": "Gourgeist (M)",
+      "target_species": 858
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 855,
+      "baseline_target_family": 858,
+      "method_id": 5,
+      "parameter": 0,
+      "record_address": "0x097E8538",
+      "slot": 1,
+      "source_name": "Pumpkaboo (M)",
+      "source_species": 855,
+      "target_name": "Gourgeist (M)",
+      "target_species": 858
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 866,
+      "baseline_target_family": 867,
+      "method_id": 4,
+      "parameter": 36,
+      "record_address": "0x097E8AB0",
+      "slot": 0,
+      "source_name": "Noibat-Sevii",
+      "source_species": 866,
+      "target_name": "Noivern-Sevii",
+      "target_species": 867
+    },
+    {
+      "auxiliary": 4372,
+      "baseline_source_family": 961,
+      "baseline_target_family": 1082,
+      "method_id": 28,
+      "parameter": 25,
+      "record_address": "0x097EBA30",
+      "slot": 0,
+      "source_name": "Rockruff",
+      "source_species": 961,
+      "target_name": "Lycanroc (Dusk)",
+      "target_species": 1082
+    },
+    {
+      "auxiliary": 5144,
+      "baseline_source_family": 961,
+      "baseline_target_family": 1046,
+      "method_id": 28,
+      "parameter": 25,
+      "record_address": "0x097EBA40",
+      "slot": 2,
+      "source_name": "Rockruff",
+      "source_species": 961,
+      "target_name": "Lycanroc N",
+      "target_species": 1046
+    },
+    {
+      "auxiliary": 4,
+      "baseline_source_family": 961,
+      "baseline_target_family": 1046,
+      "method_id": 28,
+      "parameter": 25,
+      "record_address": "0x097EBA48",
+      "slot": 3,
+      "source_name": "Rockruff",
+      "source_species": 961,
+      "target_name": "Lycanroc N",
+      "target_species": 1046
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1020,
+      "baseline_target_family": 1021,
+      "method_id": 22,
+      "parameter": 16,
+      "record_address": "0x097ED7B0",
+      "slot": 0,
+      "source_name": "Rattata-Alola",
+      "source_species": 1020,
+      "target_name": "Raticate-Alola",
+      "target_species": 1021
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1023,
+      "baseline_target_family": 1024,
+      "method_id": 7,
+      "parameter": 102,
+      "record_address": "0x097ED930",
+      "slot": 0,
+      "source_name": "Sandshrew-Alola",
+      "source_species": 1023,
+      "target_name": "Sandslash-Alola",
+      "target_species": 1024
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1025,
+      "baseline_target_family": 1026,
+      "method_id": 7,
+      "parameter": 102,
+      "record_address": "0x097EDA30",
+      "slot": 0,
+      "source_name": "Vulpix-Alola",
+      "source_species": 1025,
+      "target_name": "Ninetales-Alola",
+      "target_species": 1026
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1027,
+      "baseline_target_family": 1028,
+      "method_id": 4,
+      "parameter": 22,
+      "record_address": "0x097EDB30",
+      "slot": 0,
+      "source_name": "Diglett-Alola",
+      "source_species": 1027,
+      "target_name": "Dugtrio-Alola",
+      "target_species": 1028
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1029,
+      "baseline_target_family": 1030,
+      "method_id": 4,
+      "parameter": 28,
+      "record_address": "0x097EDC30",
+      "slot": 0,
+      "source_name": "Meowth-Alola",
+      "source_species": 1029,
+      "target_name": "Persian-Alola",
+      "target_species": 1030
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1031,
+      "baseline_target_family": 1032,
+      "method_id": 4,
+      "parameter": 23,
+      "record_address": "0x097EDD30",
+      "slot": 0,
+      "source_name": "Geodude-Alola",
+      "source_species": 1031,
+      "target_name": "Graveler-Alola",
+      "target_species": 1032
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1032,
+      "baseline_target_family": 1033,
+      "method_id": 7,
+      "parameter": 87,
+      "record_address": "0x097EDDB0",
+      "slot": 0,
+      "source_name": "Graveler-Alola",
+      "source_species": 1032,
+      "target_name": "Golem-Alola",
+      "target_species": 1033
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1032,
+      "baseline_target_family": 1033,
+      "method_id": 5,
+      "parameter": 0,
+      "record_address": "0x097EDDB8",
+      "slot": 1,
+      "source_name": "Graveler-Alola",
+      "source_species": 1032,
+      "target_name": "Golem-Alola",
+      "target_species": 1033
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1034,
+      "baseline_target_family": 1035,
+      "method_id": 4,
+      "parameter": 40,
+      "record_address": "0x097EDEB0",
+      "slot": 0,
+      "source_name": "Grimer-Alola",
+      "source_species": 1034,
+      "target_name": "Muk-Alola",
+      "target_species": 1035
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1036,
+      "baseline_target_family": 1037,
+      "method_id": 7,
+      "parameter": 98,
+      "record_address": "0x097EDFB0",
+      "slot": 0,
+      "source_name": "Exeggcute-Alola",
+      "source_species": 1036,
+      "target_name": "Exeggutor-Alola",
+      "target_species": 1037
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1083,
+      "baseline_target_family": 1084,
+      "method_id": 7,
+      "parameter": 199,
+      "record_address": "0x097EF730",
+      "slot": 0,
+      "source_name": "Meltan",
+      "source_species": 1083,
+      "target_name": "Melmetal",
+      "target_species": 1084
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1111,
+      "baseline_target_family": 1112,
+      "method_id": 4,
+      "parameter": 23,
+      "record_address": "0x097F0530",
+      "slot": 0,
+      "source_name": "Skwovet",
+      "source_species": 1111,
+      "target_name": "Greedent",
+      "target_species": 1112
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1113,
+      "baseline_target_family": 1114,
+      "method_id": 4,
+      "parameter": 16,
+      "record_address": "0x097F0630",
+      "slot": 0,
+      "source_name": "Rookidee",
+      "source_species": 1113,
+      "target_name": "Corvisquire",
+      "target_species": 1114
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1114,
+      "baseline_target_family": 1115,
+      "method_id": 4,
+      "parameter": 38,
+      "record_address": "0x097F06B0",
+      "slot": 0,
+      "source_name": "Corvisquire",
+      "source_species": 1114,
+      "target_name": "Corviknight",
+      "target_species": 1115
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1116,
+      "baseline_target_family": 1117,
+      "method_id": 4,
+      "parameter": 10,
+      "record_address": "0x097F07B0",
+      "slot": 0,
+      "source_name": "Blipbug",
+      "source_species": 1116,
+      "target_name": "Dottler",
+      "target_species": 1117
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1117,
+      "baseline_target_family": 1118,
+      "method_id": 4,
+      "parameter": 27,
+      "record_address": "0x097F0830",
+      "slot": 0,
+      "source_name": "Dottler",
+      "source_species": 1117,
+      "target_name": "Orbeetle",
+      "target_species": 1118
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1119,
+      "baseline_target_family": 1120,
+      "method_id": 4,
+      "parameter": 18,
+      "record_address": "0x097F0930",
+      "slot": 0,
+      "source_name": "Nickit",
+      "source_species": 1119,
+      "target_name": "Thievul",
+      "target_species": 1120
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1121,
+      "baseline_target_family": 1122,
+      "method_id": 4,
+      "parameter": 20,
+      "record_address": "0x097F0A30",
+      "slot": 0,
+      "source_name": "Gossifleur",
+      "source_species": 1121,
+      "target_name": "Eldegoss",
+      "target_species": 1122
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1132,
+      "baseline_target_family": 1363,
+      "method_id": 4,
+      "parameter": 30,
+      "record_address": "0x097F0FC0",
+      "slot": 2,
+      "source_name": "Applin",
+      "source_species": 1132,
+      "target_name": null,
+      "target_species": 1363
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1140,
+      "baseline_target_family": 1192,
+      "method_id": 31,
+      "parameter": 30,
+      "record_address": "0x097F13B8",
+      "slot": 1,
+      "source_name": "Toxel",
+      "source_species": 1140,
+      "target_name": "Toxtricity (Low Key)",
+      "target_species": 1192
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1160,
+      "baseline_target_family": 1161,
+      "method_id": 7,
+      "parameter": 99,
+      "record_address": "0x097F1DB0",
+      "slot": 0,
+      "source_name": "Milcery",
+      "source_species": 1160,
+      "target_name": "Alcremie (Strawberry)",
+      "target_species": 1161
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1164,
+      "baseline_target_family": 1165,
+      "method_id": 3,
+      "parameter": 0,
+      "record_address": "0x097F1FB0",
+      "slot": 0,
+      "source_name": "Snom",
+      "source_species": 1164,
+      "target_name": "Frosmoth",
+      "target_species": 1165
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1176,
+      "baseline_target_family": 1369,
+      "method_id": 4,
+      "parameter": 50,
+      "record_address": "0x097F25B0",
+      "slot": 0,
+      "source_name": "Duraludon",
+      "source_species": 1176,
+      "target_name": null,
+      "target_species": 1369
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1183,
+      "baseline_target_family": 1184,
+      "method_id": 7,
+      "parameter": 100,
+      "record_address": "0x097F2930",
+      "slot": 0,
+      "source_name": "Kubfu",
+      "source_species": 1183,
+      "target_name": "Urshifu (Single)",
+      "target_species": 1184
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1183,
+      "baseline_target_family": 1207,
+      "method_id": 7,
+      "parameter": 97,
+      "record_address": "0x097F2938",
+      "slot": 1,
+      "source_name": "Kubfu",
+      "source_species": 1183,
+      "target_name": "Urshifu (Rapid)",
+      "target_species": 1207
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1208,
+      "baseline_target_family": 52,
+      "method_id": 4,
+      "parameter": 28,
+      "record_address": "0x097F35B0",
+      "slot": 0,
+      "source_name": "Meowth-Galar",
+      "source_species": 1208,
+      "target_name": "Perrserker",
+      "target_species": 1155
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1209,
+      "baseline_target_family": 1210,
+      "method_id": 4,
+      "parameter": 28,
+      "record_address": "0x097F3630",
+      "slot": 0,
+      "source_name": "Ponyta-Galar",
+      "source_species": 1209,
+      "target_name": "Rapidash-Galar",
+      "target_species": 1210
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1211,
+      "baseline_target_family": 1212,
+      "method_id": 4,
+      "parameter": 37,
+      "record_address": "0x097F3730",
+      "slot": 0,
+      "source_name": "Slowpoke-Galar",
+      "source_species": 1211,
+      "target_name": "Slowbro-Galar",
+      "target_species": 1212
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1211,
+      "baseline_target_family": 1220,
+      "method_id": 7,
+      "parameter": 187,
+      "record_address": "0x097F3738",
+      "slot": 1,
+      "source_name": "Slowpoke-Galar",
+      "source_species": 1211,
+      "target_name": "Slowking-Galar",
+      "target_species": 1220
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1213,
+      "baseline_target_family": 1157,
+      "method_id": 4,
+      "parameter": 30,
+      "record_address": "0x097F3830",
+      "slot": 0,
+      "source_name": "Farfetch'd-Galar",
+      "source_species": 1213,
+      "target_name": "Sirfetch'd",
+      "target_species": 1157
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1216,
+      "baseline_target_family": 492,
+      "method_id": 4,
+      "parameter": 42,
+      "record_address": "0x097F39B0",
+      "slot": 0,
+      "source_name": "Mr Mime-Galar",
+      "source_species": 1216,
+      "target_name": "Mr. Rime",
+      "target_species": 1158
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1221,
+      "baseline_target_family": 222,
+      "method_id": 4,
+      "parameter": 38,
+      "record_address": "0x097F3C30",
+      "slot": 0,
+      "source_name": "Corsola-Galar",
+      "source_species": 1221,
+      "target_name": "Cursola",
+      "target_species": 1156
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1222,
+      "baseline_target_family": 1223,
+      "method_id": 4,
+      "parameter": 16,
+      "record_address": "0x097F3CB0",
+      "slot": 0,
+      "source_name": "Zigzagoon-Galar",
+      "source_species": 1222,
+      "target_name": "Linoone-Galar",
+      "target_species": 1223
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1223,
+      "baseline_target_family": 288,
+      "method_id": 22,
+      "parameter": 35,
+      "record_address": "0x097F3D30",
+      "slot": 0,
+      "source_name": "Linoone-Galar",
+      "source_species": 1223,
+      "target_name": "Obstagoon",
+      "target_species": 1154
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1225,
+      "baseline_target_family": 1226,
+      "method_id": 7,
+      "parameter": 102,
+      "record_address": "0x097F3E30",
+      "slot": 0,
+      "source_name": "Darumaka-Galar",
+      "source_species": 1225,
+      "target_name": "Darmanitan-Galar",
+      "target_species": 1226
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1228,
+      "baseline_target_family": 615,
+      "method_id": 4,
+      "parameter": 35,
+      "record_address": "0x097F3FB0",
+      "slot": 0,
+      "source_name": "Yamask-Galar",
+      "source_species": 1228,
+      "target_name": "Runerigus",
+      "target_species": 1159
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1361,
+      "baseline_target_family": 1362,
+      "method_id": 7,
+      "parameter": 98,
+      "record_address": "0x097F8230",
+      "slot": 0,
+      "source_name": null,
+      "source_species": 1361,
+      "target_name": null,
+      "target_species": 1362
+    },
+    {
+      "auxiliary": 0,
+      "baseline_source_family": 1363,
+      "baseline_target_family": 1371,
+      "method_id": 4,
+      "parameter": 44,
+      "record_address": "0x097F8330",
+      "slot": 0,
+      "source_name": null,
+      "source_species": 1363,
+      "target_name": null,
+      "target_species": 1371
+    }
+  ],
+  "gender_mismatches": [
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Dratini",
+      "rom_ratio": 127,
+      "species_id": 147
+    },
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Dragonair",
+      "rom_ratio": 127,
+      "species_id": 148
+    },
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Dragonite",
+      "rom_ratio": 127,
+      "species_id": 149
+    },
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Larvitar",
+      "rom_ratio": 127,
+      "species_id": 246
+    },
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Pupitar",
+      "rom_ratio": 127,
+      "species_id": 247
+    },
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Tyranitar",
+      "rom_ratio": 127,
+      "species_id": 248
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Shedinja",
+      "rom_ratio": 255,
+      "species_id": 303
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Luvdisc",
+      "rom_ratio": 191,
+      "species_id": 325
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Makuhita",
+      "rom_ratio": 63,
+      "species_id": 335
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Hariyama",
+      "rom_ratio": 63,
+      "species_id": 336
+    },
+    {
+      "baseline_ratio": 191,
+      "baseline_used_default": false,
+      "catalog_name": "Snorunt",
+      "rom_ratio": 127,
+      "species_id": 346
+    },
+    {
+      "baseline_ratio": 191,
+      "baseline_used_default": false,
+      "catalog_name": "Glalie",
+      "rom_ratio": 127,
+      "species_id": 347
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Azurill",
+      "rom_ratio": 191,
+      "species_id": 350
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Relicanth",
+      "rom_ratio": 31,
+      "species_id": 381
+    },
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Bagon",
+      "rom_ratio": 127,
+      "species_id": 395
+    },
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Shelgon",
+      "rom_ratio": 127,
+      "species_id": 396
+    },
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Salamence",
+      "rom_ratio": 127,
+      "species_id": 397
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown B",
+      "rom_ratio": 255,
+      "species_id": 413
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown C",
+      "rom_ratio": 255,
+      "species_id": 414
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown D",
+      "rom_ratio": 255,
+      "species_id": 415
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown E",
+      "rom_ratio": 255,
+      "species_id": 416
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown (Female)",
+      "rom_ratio": 255,
+      "species_id": 417
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown-Galar",
+      "rom_ratio": 255,
+      "species_id": 418
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown-Hisui",
+      "rom_ratio": 255,
+      "species_id": 419
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown I",
+      "rom_ratio": 255,
+      "species_id": 420
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown J",
+      "rom_ratio": 255,
+      "species_id": 421
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown K",
+      "rom_ratio": 255,
+      "species_id": 422
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown (L)",
+      "rom_ratio": 255,
+      "species_id": 423
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown (M)",
+      "rom_ratio": 255,
+      "species_id": 424
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown N",
+      "rom_ratio": 255,
+      "species_id": 425
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown (Origin)",
+      "rom_ratio": 255,
+      "species_id": 426
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown-Paldea",
+      "rom_ratio": 255,
+      "species_id": 427
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown Q",
+      "rom_ratio": 255,
+      "species_id": 428
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown R",
+      "rom_ratio": 255,
+      "species_id": 429
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown-Sevii",
+      "rom_ratio": 255,
+      "species_id": 430
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown T",
+      "rom_ratio": 255,
+      "species_id": 431
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown U",
+      "rom_ratio": 255,
+      "species_id": 432
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown V",
+      "rom_ratio": 255,
+      "species_id": 433
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown W",
+      "rom_ratio": 255,
+      "species_id": 434
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown X",
+      "rom_ratio": 255,
+      "species_id": 435
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown Y",
+      "rom_ratio": 255,
+      "species_id": 436
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown Z",
+      "rom_ratio": 255,
+      "species_id": 437
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown Exclamation",
+      "rom_ratio": 255,
+      "species_id": 438
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unown Question",
+      "rom_ratio": 255,
+      "species_id": 439
+    },
+    {
+      "baseline_ratio": 254,
+      "baseline_used_default": false,
+      "catalog_name": "Combee",
+      "rom_ratio": 31,
+      "species_id": 468
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Glameow",
+      "rom_ratio": 191,
+      "species_id": 484
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Purugly",
+      "rom_ratio": 191,
+      "species_id": 485
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pansage",
+      "rom_ratio": 31,
+      "species_id": 564
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Simisage",
+      "rom_ratio": 31,
+      "species_id": 565
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pansear",
+      "rom_ratio": 31,
+      "species_id": 566
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Simisear",
+      "rom_ratio": 31,
+      "species_id": 567
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Panpour",
+      "rom_ratio": 31,
+      "species_id": 568
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Simipour",
+      "rom_ratio": 31,
+      "species_id": 569
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Timburr",
+      "rom_ratio": 63,
+      "species_id": 585
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Gurdurr",
+      "rom_ratio": 63,
+      "species_id": 586
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Conkeldurr",
+      "rom_ratio": 63,
+      "species_id": 587
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Zorua",
+      "rom_ratio": 31,
+      "species_id": 623
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Zoroark",
+      "rom_ratio": 31,
+      "species_id": 624
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Minccino",
+      "rom_ratio": 191,
+      "species_id": 625
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Cinccino",
+      "rom_ratio": 191,
+      "species_id": 626
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Gothita",
+      "rom_ratio": 191,
+      "species_id": 627
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Gothorita",
+      "rom_ratio": 191,
+      "species_id": 628
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Gothitelle",
+      "rom_ratio": 191,
+      "species_id": 629
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Vullaby",
+      "rom_ratio": 254,
+      "species_id": 682
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Mandibuzz",
+      "rom_ratio": 254,
+      "species_id": 683
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Tornadus",
+      "rom_ratio": 0,
+      "species_id": 694
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Thundurus",
+      "rom_ratio": 0,
+      "species_id": 695
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Landorus",
+      "rom_ratio": 0,
+      "species_id": 698
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Unfezant (Female)",
+      "rom_ratio": 254,
+      "species_id": 703
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Frillish (Female)",
+      "rom_ratio": 254,
+      "species_id": 704
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Jellicent (Female)",
+      "rom_ratio": 254,
+      "species_id": 705
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Wormadam (Sandy)",
+      "rom_ratio": 254,
+      "species_id": 709
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Wormadam (Trash)",
+      "rom_ratio": 254,
+      "species_id": 710
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Rotom (Heat)",
+      "rom_ratio": 255,
+      "species_id": 713
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Rotom (Wash)",
+      "rom_ratio": 255,
+      "species_id": 714
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Rotom (Frost)",
+      "rom_ratio": 255,
+      "species_id": 715
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Rotom (Fan)",
+      "rom_ratio": 255,
+      "species_id": 716
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Rotom (Mow)",
+      "rom_ratio": 255,
+      "species_id": 717
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Giratina (Origin)",
+      "rom_ratio": 255,
+      "species_id": 718
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Shaymin (Sky)",
+      "rom_ratio": 255,
+      "species_id": 719
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Fight)",
+      "rom_ratio": 255,
+      "species_id": 720
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Flying)",
+      "rom_ratio": 255,
+      "species_id": 721
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Poison)",
+      "rom_ratio": 255,
+      "species_id": 722
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Ground)",
+      "rom_ratio": 255,
+      "species_id": 723
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Rock)",
+      "rom_ratio": 255,
+      "species_id": 724
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Bug)",
+      "rom_ratio": 255,
+      "species_id": 725
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Ghost)",
+      "rom_ratio": 255,
+      "species_id": 726
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Steel)",
+      "rom_ratio": 255,
+      "species_id": 727
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Fire)",
+      "rom_ratio": 255,
+      "species_id": 728
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Water)",
+      "rom_ratio": 255,
+      "species_id": 729
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Grass)",
+      "rom_ratio": 255,
+      "species_id": 730
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Electric)",
+      "rom_ratio": 255,
+      "species_id": 731
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Psychic)",
+      "rom_ratio": 255,
+      "species_id": 732
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Ice)",
+      "rom_ratio": 255,
+      "species_id": 733
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Dragon)",
+      "rom_ratio": 255,
+      "species_id": 734
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Dark)",
+      "rom_ratio": 255,
+      "species_id": 735
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Hippopotas (Female)",
+      "rom_ratio": 254,
+      "species_id": 744
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Hippowdon (Female)",
+      "rom_ratio": 254,
+      "species_id": 745
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Meloetta (Pirouette)",
+      "rom_ratio": 255,
+      "species_id": 746
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Ting-Lu",
+      "rom_ratio": 255,
+      "species_id": 747
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Chien-Pao",
+      "rom_ratio": 255,
+      "species_id": 748
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Wo-Chien",
+      "rom_ratio": 255,
+      "species_id": 749
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Chi-Yu",
+      "rom_ratio": 255,
+      "species_id": 750
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Kyurem (Black)",
+      "rom_ratio": 255,
+      "species_id": 752
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Kyurem (White)",
+      "rom_ratio": 255,
+      "species_id": 753
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Tornadus (Therian)",
+      "rom_ratio": 0,
+      "species_id": 754
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Thundurus (Therian)",
+      "rom_ratio": 0,
+      "species_id": 755
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Landorus (Therian)",
+      "rom_ratio": 0,
+      "species_id": 756
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Keldeo (Resolute)",
+      "rom_ratio": 255,
+      "species_id": 757
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Litleo",
+      "rom_ratio": 223,
+      "species_id": 775
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pyroar",
+      "rom_ratio": 223,
+      "species_id": 776
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Meowstic",
+      "rom_ratio": 0,
+      "species_id": 786
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Hoopa Unbound",
+      "rom_ratio": 255,
+      "species_id": 829
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pyroar Female",
+      "rom_ratio": 254,
+      "species_id": 831
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Meowstic Female",
+      "rom_ratio": 254,
+      "species_id": 832
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arceus (Fairy)",
+      "rom_ratio": 255,
+      "species_id": 834
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Zygarde 10",
+      "rom_ratio": 255,
+      "species_id": 837
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Zygarde (Complete)",
+      "rom_ratio": 255,
+      "species_id": 838
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Greninja (Ash)",
+      "rom_ratio": 31,
+      "species_id": 839
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Tinkatink",
+      "rom_ratio": 254,
+      "species_id": 840
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Tinkatuff",
+      "rom_ratio": 254,
+      "species_id": 841
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Tinkaton",
+      "rom_ratio": 254,
+      "species_id": 842
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Oinkologne",
+      "rom_ratio": 0,
+      "species_id": 847
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Floette (Eternal)",
+      "rom_ratio": 254,
+      "species_id": 848
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Oinkologne (Female)",
+      "rom_ratio": 254,
+      "species_id": 849
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Gimmighoul (Chest)",
+      "rom_ratio": 255,
+      "species_id": 850
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Gimmighoul (Roam)",
+      "rom_ratio": 255,
+      "species_id": 851
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Gholdengo",
+      "rom_ratio": 255,
+      "species_id": 852
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Venusaur (Mega)",
+      "rom_ratio": 31,
+      "species_id": 869
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Charizard (Mega X)",
+      "rom_ratio": 31,
+      "species_id": 870
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Charizard (Mega Y)",
+      "rom_ratio": 31,
+      "species_id": 871
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Blastoise (Mega)",
+      "rom_ratio": 31,
+      "species_id": 872
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Alakazam (Mega)",
+      "rom_ratio": 63,
+      "species_id": 875
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Kangaskhan (Mega)",
+      "rom_ratio": 254,
+      "species_id": 878
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Aerodactyl (Mega)",
+      "rom_ratio": 31,
+      "species_id": 881
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Mewtwo (Mega X)",
+      "rom_ratio": 255,
+      "species_id": 882
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Mewtwo (Mega Y)",
+      "rom_ratio": 255,
+      "species_id": 883
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Sceptile (Mega)",
+      "rom_ratio": 31,
+      "species_id": 890
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Blaziken (Mega)",
+      "rom_ratio": 31,
+      "species_id": 891
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Swampert (Mega)",
+      "rom_ratio": 31,
+      "species_id": 892
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Metagross (Mega)",
+      "rom_ratio": 255,
+      "species_id": 906
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Latias (Mega)",
+      "rom_ratio": 254,
+      "species_id": 907
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Latios (Mega)",
+      "rom_ratio": 0,
+      "species_id": 908
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Groudon (Primal)",
+      "rom_ratio": 255,
+      "species_id": 909
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Kyogre (Primal)",
+      "rom_ratio": 255,
+      "species_id": 910
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Rayquaza (Mega)",
+      "rom_ratio": 255,
+      "species_id": 911
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Lucario (Mega)",
+      "rom_ratio": 31,
+      "species_id": 914
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Gallade (Mega)",
+      "rom_ratio": 0,
+      "species_id": 916
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Diancie (Mega)",
+      "rom_ratio": 255,
+      "species_id": 918
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Dialga (Primal)",
+      "rom_ratio": 255,
+      "species_id": 919
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Palkia (Primal)",
+      "rom_ratio": 0,
+      "species_id": 920
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Sprigatito",
+      "rom_ratio": 31,
+      "species_id": 921
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Floragato",
+      "rom_ratio": 31,
+      "species_id": 922
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Meowscarada",
+      "rom_ratio": 31,
+      "species_id": 923
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Fuecoco",
+      "rom_ratio": 31,
+      "species_id": 924
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Crocalor",
+      "rom_ratio": 31,
+      "species_id": 925
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Skeledirge",
+      "rom_ratio": 31,
+      "species_id": 926
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Quaxly",
+      "rom_ratio": 31,
+      "species_id": 927
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Quaxwell",
+      "rom_ratio": 31,
+      "species_id": 928
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Quaquaval",
+      "rom_ratio": 31,
+      "species_id": 929
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Oricorio",
+      "rom_ratio": 191,
+      "species_id": 958
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Salandit",
+      "rom_ratio": 31,
+      "species_id": 974
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Comfey",
+      "rom_ratio": 191,
+      "species_id": 981
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pyukumuku",
+      "rom_ratio": 191,
+      "species_id": 988
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Minior (Shield)",
+      "rom_ratio": 255,
+      "species_id": 991
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Vulpix-Alola",
+      "rom_ratio": 191,
+      "species_id": 1025
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Ninetales-Alola",
+      "rom_ratio": 191,
+      "species_id": 1026
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Deoxys Attack",
+      "rom_ratio": 255,
+      "species_id": 1040
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Deoxys Defense",
+      "rom_ratio": 255,
+      "species_id": 1041
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Deoxys Speed",
+      "rom_ratio": 255,
+      "species_id": 1042
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Oricorio Y",
+      "rom_ratio": 191,
+      "species_id": 1043
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Oricorio-Paldea",
+      "rom_ratio": 191,
+      "species_id": 1044
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Oricorio-Sevii",
+      "rom_ratio": 191,
+      "species_id": 1045
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Fight)",
+      "rom_ratio": 255,
+      "species_id": 1048
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Flying)",
+      "rom_ratio": 255,
+      "species_id": 1049
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Poison)",
+      "rom_ratio": 255,
+      "species_id": 1050
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Ground)",
+      "rom_ratio": 255,
+      "species_id": 1051
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Rock)",
+      "rom_ratio": 255,
+      "species_id": 1052
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Bug)",
+      "rom_ratio": 255,
+      "species_id": 1053
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Ghost)",
+      "rom_ratio": 255,
+      "species_id": 1054
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Steel)",
+      "rom_ratio": 255,
+      "species_id": 1055
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Fire)",
+      "rom_ratio": 255,
+      "species_id": 1056
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Water)",
+      "rom_ratio": 255,
+      "species_id": 1057
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Grass)",
+      "rom_ratio": 255,
+      "species_id": 1058
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Electric)",
+      "rom_ratio": 255,
+      "species_id": 1059
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Psychic)",
+      "rom_ratio": 255,
+      "species_id": 1060
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Ice)",
+      "rom_ratio": 255,
+      "species_id": 1061
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Dragon)",
+      "rom_ratio": 255,
+      "species_id": 1062
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Dark)",
+      "rom_ratio": 255,
+      "species_id": 1063
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Silvally (Fairy)",
+      "rom_ratio": 255,
+      "species_id": 1064
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Minior (Red)",
+      "rom_ratio": 255,
+      "species_id": 1065
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Minior (Blue)",
+      "rom_ratio": 255,
+      "species_id": 1066
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Minior (Orange)",
+      "rom_ratio": 255,
+      "species_id": 1067
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Minior (Yellow)",
+      "rom_ratio": 255,
+      "species_id": 1068
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Minior (Indigo)",
+      "rom_ratio": 255,
+      "species_id": 1069
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Minior (Green)",
+      "rom_ratio": 255,
+      "species_id": 1070
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Minior (Violet)",
+      "rom_ratio": 255,
+      "species_id": 1071
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Magearna-Paldea",
+      "rom_ratio": 255,
+      "species_id": 1073
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Necrozma (Dusk Mane)",
+      "rom_ratio": 255,
+      "species_id": 1079
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Necrozma (Dawn Wings)",
+      "rom_ratio": 255,
+      "species_id": 1080
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Necrozma (Ultra)",
+      "rom_ratio": 255,
+      "species_id": 1081
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pikachu (Cosplay)",
+      "rom_ratio": 254,
+      "species_id": 1087
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pikachu (Libre)",
+      "rom_ratio": 254,
+      "species_id": 1088
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pikachu (Pop Star)",
+      "rom_ratio": 254,
+      "species_id": 1089
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pikachu (Rock Star)",
+      "rom_ratio": 254,
+      "species_id": 1090
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pikachu (Belle)",
+      "rom_ratio": 254,
+      "species_id": 1091
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pikachu (Phd)",
+      "rom_ratio": 254,
+      "species_id": 1092
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pikachu (Cap Original)",
+      "rom_ratio": 0,
+      "species_id": 1093
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pikachu (Cap Hoenn)",
+      "rom_ratio": 0,
+      "species_id": 1094
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pikachu (Cap Sinnoh)",
+      "rom_ratio": 0,
+      "species_id": 1095
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pikachu (Cap Unova)",
+      "rom_ratio": 0,
+      "species_id": 1096
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pikachu (Cap Kalos)",
+      "rom_ratio": 0,
+      "species_id": 1097
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pikachu (Cap Alola)",
+      "rom_ratio": 0,
+      "species_id": 1098
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Pikachu (Cap Partner)",
+      "rom_ratio": 0,
+      "species_id": 1099
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Cursola",
+      "rom_ratio": 191,
+      "species_id": 1156
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Milcery",
+      "rom_ratio": 254,
+      "species_id": 1160
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Alcremie (Strawberry)",
+      "rom_ratio": 254,
+      "species_id": 1161
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Indeedee",
+      "rom_ratio": 0,
+      "species_id": 1168
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Urshifu (Single)",
+      "rom_ratio": 31,
+      "species_id": 1184
+    },
+    {
+      "baseline_ratio": 255,
+      "baseline_used_default": false,
+      "catalog_name": "Lokix-Sevii",
+      "rom_ratio": 127,
+      "species_id": 1186
+    },
+    {
+      "baseline_ratio": 255,
+      "baseline_used_default": false,
+      "catalog_name": "Cramorant (Gulping)",
+      "rom_ratio": 127,
+      "species_id": 1190
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Koraidon",
+      "rom_ratio": 255,
+      "species_id": 1193
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Miraidon",
+      "rom_ratio": 255,
+      "species_id": 1194
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Indeedee Female",
+      "rom_ratio": 254,
+      "species_id": 1202
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Zacian (Crowned)",
+      "rom_ratio": 255,
+      "species_id": 1204
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Zamazenta (Crowned)",
+      "rom_ratio": 255,
+      "species_id": 1205
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Eternatus (Eternamax)",
+      "rom_ratio": 255,
+      "species_id": 1206
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Urshifu (Rapid)",
+      "rom_ratio": 31,
+      "species_id": 1207
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Articuno-Galar",
+      "rom_ratio": 255,
+      "species_id": 1217
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Zapdos-Galar",
+      "rom_ratio": 255,
+      "species_id": 1218
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Moltres-Galar",
+      "rom_ratio": 255,
+      "species_id": 1219
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Corsola-Galar",
+      "rom_ratio": 191,
+      "species_id": 1221
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Ironthorns",
+      "rom_ratio": 255,
+      "species_id": 1230
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Ironbundle",
+      "rom_ratio": 255,
+      "species_id": 1231
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Ironvaliant",
+      "rom_ratio": 255,
+      "species_id": 1232
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Tauros-Paldea",
+      "rom_ratio": 0,
+      "species_id": 1234
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Tauros P (Water)",
+      "rom_ratio": 0,
+      "species_id": 1235
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Machamp (Giga)",
+      "rom_ratio": 63,
+      "species_id": 1236
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Greattusk",
+      "rom_ratio": 255,
+      "species_id": 1237
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Tauros P (Fire)",
+      "rom_ratio": 0,
+      "species_id": 1240
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Snorlax (Giga)",
+      "rom_ratio": 31,
+      "species_id": 1241
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Brutebonnet",
+      "rom_ratio": 255,
+      "species_id": 1243
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Sandyshocks",
+      "rom_ratio": 255,
+      "species_id": 1244
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Screamtail",
+      "rom_ratio": 255,
+      "species_id": 1245
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Fluttermane",
+      "rom_ratio": 255,
+      "species_id": 1246
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Ironmoth",
+      "rom_ratio": 255,
+      "species_id": 1247
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Slitherwing",
+      "rom_ratio": 255,
+      "species_id": 1255
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Roaringmoon",
+      "rom_ratio": 255,
+      "species_id": 1257
+    },
+    {
+      "baseline_ratio": 254,
+      "baseline_used_default": false,
+      "catalog_name": "Irontreads",
+      "rom_ratio": 255,
+      "species_id": 1258
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Alcremie (Giga)",
+      "rom_ratio": 254,
+      "species_id": 1259
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Ironhands",
+      "rom_ratio": 255,
+      "species_id": 1262
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Ironjugulis",
+      "rom_ratio": 255,
+      "species_id": 1263
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Calyrex (Ice)",
+      "rom_ratio": 255,
+      "species_id": 1264
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Calyrex (Shadow)",
+      "rom_ratio": 255,
+      "species_id": 1265
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Spectrier",
+      "rom_ratio": 255,
+      "species_id": 1266
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Glastrier",
+      "rom_ratio": 255,
+      "species_id": 1267
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Basculegion",
+      "rom_ratio": 0,
+      "species_id": 1268
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Braviary-Hisui",
+      "rom_ratio": 0,
+      "species_id": 1269
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Growlithe-Hisui",
+      "rom_ratio": 63,
+      "species_id": 1271
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Arcanine-Hisui",
+      "rom_ratio": 63,
+      "species_id": 1272
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Zorua-Hisui",
+      "rom_ratio": 31,
+      "species_id": 1280
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Zoroark-Hisui",
+      "rom_ratio": 31,
+      "species_id": 1281
+    },
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Dhelmise-Sevii",
+      "rom_ratio": 255,
+      "species_id": 1294
+    },
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Voltorb-Hisui",
+      "rom_ratio": 255,
+      "species_id": 1295
+    },
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Electrode-Hisui",
+      "rom_ratio": 255,
+      "species_id": 1296
+    },
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Sliggoo-Hisui",
+      "rom_ratio": 127,
+      "species_id": 1297
+    },
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Goodra-Hisui",
+      "rom_ratio": 127,
+      "species_id": 1298
+    },
+    {
+      "baseline_ratio": 31,
+      "baseline_used_default": false,
+      "catalog_name": "Ursaluna",
+      "rom_ratio": 127,
+      "species_id": 1302
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Lilligant-Hisui",
+      "rom_ratio": 254,
+      "species_id": 1303
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Basculegion (Female)",
+      "rom_ratio": 254,
+      "species_id": 1306
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Dialga (Origin)",
+      "rom_ratio": 255,
+      "species_id": 1310
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Palkia (Origin)",
+      "rom_ratio": 255,
+      "species_id": 1311
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Enamorus",
+      "rom_ratio": 254,
+      "species_id": 1312
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Enamorus (Therian)",
+      "rom_ratio": 254,
+      "species_id": 1313
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Tandemaus",
+      "rom_ratio": 255,
+      "species_id": 1330
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Maushold",
+      "rom_ratio": 255,
+      "species_id": 1331
+    },
+    {
+      "baseline_ratio": 254,
+      "baseline_used_default": false,
+      "catalog_name": "Mabosstiff",
+      "rom_ratio": 127,
+      "species_id": 1350
+    },
+    {
+      "baseline_ratio": 254,
+      "baseline_used_default": false,
+      "catalog_name": "Bramblin",
+      "rom_ratio": 127,
+      "species_id": 1351
+    },
+    {
+      "baseline_ratio": 254,
+      "baseline_used_default": false,
+      "catalog_name": "Brambleghast",
+      "rom_ratio": 127,
+      "species_id": 1352
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Ironleaves",
+      "rom_ratio": 255,
+      "species_id": 1353
+    },
+    {
+      "baseline_ratio": 127,
+      "baseline_used_default": true,
+      "catalog_name": "Walkingwake",
+      "rom_ratio": 255,
+      "species_id": 1354
+    }
+  ],
+  "limitations": [
+    "Counts compare named catalog records, excluding the unnamed Egg sentinel",
+    "Raw evolution rows can repeat the same species edge for different methods",
+    "A family comparison does not decide regional or temporary-form aliases",
+    "Names are copied from the input catalog, not independently verified against ROM text"
+  ],
+  "missing_baseline_types": [
+    {
+      "catalog_name": "Palkia (Primal)",
+      "species_id": 920
+    }
+  ],
+  "status": "baseline_comparison_only_not_release_approval",
+  "type_order_only_mismatches": [
+    {
+      "baseline_types": [
+        11,
+        6
+      ],
+      "catalog_name": "Masquerain",
+      "rom_types_canonical": [
+        6,
+        11
+      ],
+      "species_id": 312
+    }
+  ],
+  "type_set_mismatches": [
+    {
+      "baseline_types": [
+        13,
+        13
+      ],
+      "catalog_name": "Raichu",
+      "rom_types_canonical": [
+        13,
+        0
+      ],
+      "species_id": 26
+    }
+  ]
+}

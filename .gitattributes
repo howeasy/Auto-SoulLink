@@ -1,0 +1,3 @@
+# These generated documents contain hashes of exact JSON bytes.
+docs/rr_reference/generated/*.json text eol=lf
+tests/rr/release_inventory.json text eol=lf

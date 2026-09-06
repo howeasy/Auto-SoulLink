@@ -1,0 +1,2524 @@
+{
+  "schema_version": 1,
+  "inventory_id": "rr41-stability-v1",
+  "modes": [
+    "default_mgm_off",
+    "default_mgm_on"
+  ],
+  "groups": [
+    "foundation",
+    "admission",
+    "storage",
+    "battle",
+    "acquisition",
+    "native",
+    "ghost",
+    "presentation",
+    "distribution",
+    "campaign",
+    "soak"
+  ],
+  "candidate": {
+    "candidate_id": null,
+    "source_commit": null,
+    "game": "rr4.1",
+    "base_rom_md5": "8529f3a45d32bce4da637976fcf269d4",
+    "native_abi": 2,
+    "native_build_id": null,
+    "layout_sha256": null,
+    "capabilities_sha256": null,
+    "bindings": {
+      "source": null,
+      "rom": null,
+      "patch": null,
+      "client": null,
+      "data": null,
+      "emulator": null
+    },
+    "fixtures": {
+      "default_mgm_off": null,
+      "default_mgm_on": null
+    },
+    "postgame_checkpoints": []
+  },
+  "cases": [
+    {
+      "case_id": "rr41.default_mgm_off.foundation.partial_tcp_frames",
+      "mode": "default_mgm_off",
+      "group": "foundation",
+      "assertions": [
+        "all_bytes_delivered_once",
+        "one_semantic_action"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.foundation.durable_reconnect",
+      "mode": "default_mgm_off",
+      "group": "foundation",
+      "assertions": [
+        "same_action_identity",
+        "receipt_survives_restart"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.foundation.duplicate_delivery",
+      "mode": "default_mgm_off",
+      "group": "foundation",
+      "assertions": [
+        "mutation_applied_once",
+        "same_receipt_returned"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.foundation.coordinator_restart",
+      "mode": "default_mgm_off",
+      "group": "foundation",
+      "assertions": [
+        "pending_actions_recovered",
+        "no_unverified_retry"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.foundation.malformed_message",
+      "mode": "default_mgm_off",
+      "group": "foundation",
+      "assertions": [
+        "rejected_without_mutation",
+        "connection_state_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.foundation.staged_state_commit",
+      "mode": "default_mgm_off",
+      "group": "foundation",
+      "assertions": [
+        "old_state_until_commit",
+        "committed_state_complete"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.admission.current_companion_both_players",
+      "mode": "default_mgm_off",
+      "group": "admission",
+      "assertions": [
+        "both_loaded_roms_match",
+        "both_descriptors_match"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.admission.missing_companion",
+      "mode": "default_mgm_off",
+      "group": "admission",
+      "assertions": [
+        "admission_refused",
+        "no_game_mutation"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.admission.stale_patch",
+      "mode": "default_mgm_off",
+      "group": "admission",
+      "assertions": [
+        "admission_refused",
+        "actionable_version_reason"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.admission.wrong_rom",
+      "mode": "default_mgm_off",
+      "group": "admission",
+      "assertions": [
+        "admission_refused",
+        "no_game_mutation"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.admission.mismatched_player_builds",
+      "mode": "default_mgm_off",
+      "group": "admission",
+      "assertions": [
+        "admission_refused",
+        "no_game_mutation"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.admission.unsupported_mode",
+      "mode": "default_mgm_off",
+      "group": "admission",
+      "assertions": [
+        "mode_detected_from_game",
+        "admission_refused"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.admission.trainer_save_identity",
+      "mode": "default_mgm_off",
+      "group": "admission",
+      "assertions": [
+        "trainer_identity_used",
+        "lead_ot_does_not_change_identity"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.admission.savestate_rollback",
+      "mode": "default_mgm_off",
+      "group": "admission",
+      "assertions": [
+        "generation_invalidated",
+        "paused_until_reconciled"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.admission.mixed_mgm_pair",
+      "mode": "default_mgm_off",
+      "group": "admission",
+      "assertions": [
+        "admission_refused",
+        "both_actual_modes_recorded"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.storage.deposit",
+      "mode": "default_mgm_off",
+      "group": "storage",
+      "assertions": [
+        "source_identity_checked",
+        "destination_faithful",
+        "source_removed_once"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.storage.withdraw",
+      "mode": "default_mgm_off",
+      "group": "storage",
+      "assertions": [
+        "source_identity_checked",
+        "stats_and_pp_correct",
+        "source_removed_once"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.storage.memorialize",
+      "mode": "default_mgm_off",
+      "group": "storage",
+      "assertions": [
+        "correct_dead_identity",
+        "destination_not_overwritten",
+        "survivors_preserved"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.storage.occupied_destination",
+      "mode": "default_mgm_off",
+      "group": "storage",
+      "assertions": [
+        "mutation_refused",
+        "both_mons_preserved"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.storage.full_party_or_boxes",
+      "mode": "default_mgm_off",
+      "group": "storage",
+      "assertions": [
+        "mutation_refused",
+        "no_loss_or_duplicate"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.storage.all_25_boxes",
+      "mode": "default_mgm_off",
+      "group": "storage",
+      "assertions": [
+        "each_box_address_verified",
+        "every_box_roundtrip_faithful"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.storage.reordered_party",
+      "mode": "default_mgm_off",
+      "group": "storage",
+      "assertions": [
+        "expected_key_relocated_or_rejected",
+        "other_mons_unchanged"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.storage.last_usable_mon",
+      "mode": "default_mgm_off",
+      "group": "storage",
+      "assertions": [
+        "rule_applied_explicitly",
+        "no_uncontrolled_whiteout"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.storage.move_item_status_roundtrip",
+      "mode": "default_mgm_off",
+      "group": "storage",
+      "assertions": [
+        "moves_pp_item_status_preserved",
+        "mode_stats_correct"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.storage.borrowed_party_freeze",
+      "mode": "default_mgm_off",
+      "group": "storage",
+      "assertions": [
+        "real_party_not_replaced",
+        "deferred_work_reconciled"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.storage.battle_context_refusal",
+      "mode": "default_mgm_off",
+      "group": "storage",
+      "assertions": [
+        "unsafe_write_deferred",
+        "eventual_readback_matches"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.storage.ambiguous_completion",
+      "mode": "default_mgm_off",
+      "group": "storage",
+      "assertions": [
+        "no_blind_retry",
+        "identity_readback_reconciled"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.battle.player_faint",
+      "mode": "default_mgm_off",
+      "group": "battle",
+      "assertions": [
+        "settled_faint_detected_once",
+        "correct_link_propagated"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.battle.foe_faint",
+      "mode": "default_mgm_off",
+      "group": "battle",
+      "assertions": [
+        "no_player_death_emitted",
+        "player_party_unchanged"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.battle.simultaneous_faints",
+      "mode": "default_mgm_off",
+      "group": "battle",
+      "assertions": [
+        "each_identity_counted_once",
+        "final_link_state_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.battle.battle_epoch",
+      "mode": "default_mgm_off",
+      "group": "battle",
+      "assertions": [
+        "stale_counters_not_replayed",
+        "next_battle_detects_new_faint"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.battle.outcome_codes",
+      "mode": "default_mgm_off",
+      "group": "battle",
+      "assertions": [
+        "rr_outcome_decoded",
+        "win_loss_escape_distinguished"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.battle.explosion_lua_path",
+      "mode": "default_mgm_off",
+      "group": "battle",
+      "assertions": [
+        "production_lua_path_used",
+        "move_resolves_without_softlock"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.battle.explosion_special_states",
+      "mode": "default_mgm_off",
+      "group": "battle",
+      "assertions": [
+        "blocked_or_forced_behavior_verified",
+        "no_controller_corruption"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.battle.whiteout",
+      "mode": "default_mgm_off",
+      "group": "battle",
+      "assertions": [
+        "all_deaths_settled",
+        "return_scene_reconciled"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.battle.rival_team_replace",
+      "mode": "default_mgm_off",
+      "group": "battle",
+      "assertions": [
+        "expected_team_committed",
+        "active_battlers_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.battle.rival_swap_restore",
+      "mode": "default_mgm_off",
+      "group": "battle",
+      "assertions": [
+        "borrowed_party_epoch_closed",
+        "real_party_preserved"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.acquisition.starter",
+      "mode": "default_mgm_off",
+      "group": "acquisition",
+      "assertions": [
+        "real_game_acquisition",
+        "identity_and_area_linked_once"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.acquisition.wild_capture",
+      "mode": "default_mgm_off",
+      "group": "acquisition",
+      "assertions": [
+        "real_game_capture",
+        "pair_consistent_both_players"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.acquisition.gift",
+      "mode": "default_mgm_off",
+      "group": "acquisition",
+      "assertions": [
+        "real_game_gift",
+        "policy_applied_once"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.acquisition.egg_and_hatch",
+      "mode": "default_mgm_off",
+      "group": "acquisition",
+      "assertions": [
+        "identity_survives_hatch",
+        "no_duplicate_acquisition"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.acquisition.fossil",
+      "mode": "default_mgm_off",
+      "group": "acquisition",
+      "assertions": [
+        "real_game_revival",
+        "policy_applied_once"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.acquisition.static_encounter",
+      "mode": "default_mgm_off",
+      "group": "acquisition",
+      "assertions": [
+        "correct_encounter_area",
+        "policy_applied_once"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.acquisition.dupes",
+      "mode": "default_mgm_off",
+      "group": "acquisition",
+      "assertions": [
+        "duplicate_policy_verified",
+        "eligible_encounter_not_consumed"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.acquisition.dead_zone",
+      "mode": "default_mgm_off",
+      "group": "acquisition",
+      "assertions": [
+        "restriction_enforced",
+        "unrelated_area_unchanged"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.acquisition.shiny_bonus",
+      "mode": "default_mgm_off",
+      "group": "acquisition",
+      "assertions": [
+        "shiny_rule_verified",
+        "bonus_link_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.acquisition.capture_to_pc",
+      "mode": "default_mgm_off",
+      "group": "acquisition",
+      "assertions": [
+        "boxed_identity_observed",
+        "link_not_lost"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.mailbox_queued_receipts",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "each_sequence_receipt_retained",
+        "payload_not_overwritten"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.async_owner",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "one_owner_until_retirement",
+        "queued_work_eventually_resolves"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.buffer_lifetime",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "last_reader_finishes_before_reuse",
+        "text_and_blob_intact"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.sequence_wrap_reset",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "old_receipt_not_reused",
+        "generation_change_detected"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.arena_ownership",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "all_arena_accesses_attributed",
+        "no_legitimate_owner_collision"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.native_trade",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "native_scene_observed",
+        "matching_halves_swapped",
+        "readback_reconciled"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.trade_evolution",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "native_evolution_observed",
+        "post_evolution_identity_reconciled"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.trade_ui_cancel",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "cancel_preserves_party",
+        "field_and_mailbox_released"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.pc_trade_npc",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "safe_template_and_interaction",
+        "resources_released"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.pause_during_scene",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "new_gameplay_blocked",
+        "controlled_completion_only",
+        "reconcile_before_resume"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.initialized_gfx16",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "stack_pattern_independent",
+        "full_graphics_id_preserved"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.avatar_spawn_commit",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "complete_avatar_after_spawn",
+        "palette_only_change_applied"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.palette_reference_lifetime",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "references_balanced",
+        "unrelated_palettes_preserved"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.sprite_tile_ownership",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "geometry_matches_allocation",
+        "no_foreign_resource_write"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.resource_exhaustion",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "no_partial_or_borrowed_resources",
+        "retry_after_capacity_recovers"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.running",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "motion_matches_source",
+        "no_sprite_corruption"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.bike",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "complete_mode_animation",
+        "geometry_and_speed_correct"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.surf",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "bound_surf_effect_present",
+        "bobbing_and_teardown_correct"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.fishing",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "complete_rod_animation",
+        "return_to_walk_resources_correct"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.scene_reconstruction",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "no_nonfield_writes",
+        "one_owner_after_return"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.freshness_disconnect",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "stale_visibility_and_collision_removed",
+        "fresh_epoch_respawns"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.interaction",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "valid_native_script_only",
+        "no_unintended_warp_or_battle"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.elevation_depth",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "correct_remote_elevation",
+        "depth_and_collision_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.presentation.native_messages",
+      "mode": "default_mgm_off",
+      "group": "presentation",
+      "assertions": [
+        "text_complete_and_dismissible",
+        "field_released"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.presentation.battle_notifications",
+      "mode": "default_mgm_off",
+      "group": "presentation",
+      "assertions": [
+        "text_persists_in_context",
+        "no_window_or_palette_corruption"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.presentation.sounds",
+      "mode": "default_mgm_off",
+      "group": "presentation",
+      "assertions": [
+        "correct_cue_audible",
+        "no_audio_stall_or_corruption"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.presentation.calculator",
+      "mode": "default_mgm_off",
+      "group": "presentation",
+      "assertions": [
+        "display_matches_independent_oracle",
+        "toggle_and_notification_coexist"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.presentation.info_panel",
+      "mode": "default_mgm_off",
+      "group": "presentation",
+      "assertions": [
+        "live_pairs_and_status_correct",
+        "pagination_and_close_work"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.presentation.dashboard_and_pause",
+      "mode": "default_mgm_off",
+      "group": "presentation",
+      "assertions": [
+        "actual_run_state_visible",
+        "pause_reason_and_recovery_visible"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.distribution.reproducible_build",
+      "mode": "default_mgm_off",
+      "group": "distribution",
+      "assertions": [
+        "source_rebuild_matches_patch",
+        "no_mutable_native_rom_sections"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.distribution.clean_patch_application",
+      "mode": "default_mgm_off",
+      "group": "distribution",
+      "assertions": [
+        "clean_base_hash_verified",
+        "output_rom_matches_manifest"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.distribution.wrong_patch_input",
+      "mode": "default_mgm_off",
+      "group": "distribution",
+      "assertions": [
+        "wrong_input_rejected",
+        "original_rom_unchanged"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.distribution.package_contents",
+      "mode": "default_mgm_off",
+      "group": "distribution",
+      "assertions": [
+        "all_runtime_files_present",
+        "client_data_native_versions_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.distribution.fresh_machine_launch",
+      "mode": "default_mgm_off",
+      "group": "distribution",
+      "assertions": [
+        "clean_install_starts",
+        "both_clients_admitted"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.distribution.build_descriptor",
+      "mode": "default_mgm_off",
+      "group": "distribution",
+      "assertions": [
+        "actual_loaded_descriptor_matches",
+        "layout_and_capabilities_match"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.distribution.evidence_manifest",
+      "mode": "default_mgm_off",
+      "group": "distribution",
+      "assertions": [
+        "all_hashes_verified",
+        "no_missing_skipped_or_retried_cases"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.campaign.starter_to_brock",
+      "mode": "default_mgm_off",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.campaign.misty_to_surge",
+      "mode": "default_mgm_off",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.campaign.erika",
+      "mode": "default_mgm_off",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.campaign.koga",
+      "mode": "default_mgm_off",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.campaign.sabrina",
+      "mode": "default_mgm_off",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.campaign.blaine",
+      "mode": "default_mgm_off",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.campaign.giovanni",
+      "mode": "default_mgm_off",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.campaign.elite_four",
+      "mode": "default_mgm_off",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.campaign.champion_and_credits",
+      "mode": "default_mgm_off",
+      "group": "campaign",
+      "assertions": [
+        "credits_reached_in_game",
+        "final_party_and_links_reconciled"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_off.campaign.supported_postgame",
+      "mode": "default_mgm_off",
+      "group": "campaign",
+      "assertions": [
+        "named_checkpoint_manifest_completed",
+        "postgame_state_reconciled"
+      ],
+      "requirements": {
+        "candidate_postgame_checkpoints": true
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.soak.normal_speed_2h",
+      "mode": "default_mgm_off",
+      "group": "soak",
+      "assertions": [
+        "continuous_capture_accounted",
+        "no_uncertain_operation",
+        "resources_balanced"
+      ],
+      "requirements": {
+        "normal_speed_wall_seconds": 7200,
+        "scenario_counts": {
+          "map_transitions": 100,
+          "battles_completed": 30,
+          "storage_roundtrips": 25,
+          "native_trades_completed": 5,
+          "ghost_mode_transitions": 30,
+          "reconnect_recoveries": 10,
+          "native_ui_cycles": 50
+        }
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.timing_existing_ghost_to_wild_battle",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "existing_ghost_to_wild_battle"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.timing_existing_ghost_to_trainer_battle",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "existing_ghost_to_trainer_battle"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.timing_battle_return_resource_reuse",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "battle_return_resource_reuse"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.timing_door_warp_during_sample",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "door_warp_during_sample"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.timing_bike_mount_dismount",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "bike_mount_dismount"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.timing_surf_mount_dismount",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "surf_mount_dismount"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.timing_fishing_return",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "fishing_return"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.ghost.timing_avatar_commit_during_respawn",
+      "mode": "default_mgm_off",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "avatar_commit_during_respawn"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.timing_party_picker_return",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "party_picker_return"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.timing_bag_menu_return",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "bag_menu_return"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.timing_trade_scene_takeover",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "trade_scene_takeover"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.timing_trade_evolution_completion",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "trade_evolution_completion"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.timing_notification_payload_contention",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "notification_payload_contention"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.native.timing_queued_receipt_retirement",
+      "mode": "default_mgm_off",
+      "group": "native",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "queued_receipt_retirement"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.storage.timing_source_reorder_before_commit",
+      "mode": "default_mgm_off",
+      "group": "storage",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "source_reorder_before_commit"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.storage.timing_destination_changes_before_commit",
+      "mode": "default_mgm_off",
+      "group": "storage",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "destination_changes_before_commit"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.battle.timing_faint_at_outcome_boundary",
+      "mode": "default_mgm_off",
+      "group": "battle",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "faint_at_outcome_boundary"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.battle.timing_borrowed_party_restore_boundary",
+      "mode": "default_mgm_off",
+      "group": "battle",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "borrowed_party_restore_boundary"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.foundation.timing_disconnect_after_apply_before_receipt",
+      "mode": "default_mgm_off",
+      "group": "foundation",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "disconnect_after_apply_before_receipt"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_off.admission.timing_reset_during_pending_operation",
+      "mode": "default_mgm_off",
+      "group": "admission",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "reset_during_pending_operation"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.foundation.partial_tcp_frames",
+      "mode": "default_mgm_on",
+      "group": "foundation",
+      "assertions": [
+        "all_bytes_delivered_once",
+        "one_semantic_action"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.foundation.durable_reconnect",
+      "mode": "default_mgm_on",
+      "group": "foundation",
+      "assertions": [
+        "same_action_identity",
+        "receipt_survives_restart"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.foundation.duplicate_delivery",
+      "mode": "default_mgm_on",
+      "group": "foundation",
+      "assertions": [
+        "mutation_applied_once",
+        "same_receipt_returned"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.foundation.coordinator_restart",
+      "mode": "default_mgm_on",
+      "group": "foundation",
+      "assertions": [
+        "pending_actions_recovered",
+        "no_unverified_retry"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.foundation.malformed_message",
+      "mode": "default_mgm_on",
+      "group": "foundation",
+      "assertions": [
+        "rejected_without_mutation",
+        "connection_state_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.foundation.staged_state_commit",
+      "mode": "default_mgm_on",
+      "group": "foundation",
+      "assertions": [
+        "old_state_until_commit",
+        "committed_state_complete"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.admission.current_companion_both_players",
+      "mode": "default_mgm_on",
+      "group": "admission",
+      "assertions": [
+        "both_loaded_roms_match",
+        "both_descriptors_match"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.admission.missing_companion",
+      "mode": "default_mgm_on",
+      "group": "admission",
+      "assertions": [
+        "admission_refused",
+        "no_game_mutation"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.admission.stale_patch",
+      "mode": "default_mgm_on",
+      "group": "admission",
+      "assertions": [
+        "admission_refused",
+        "actionable_version_reason"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.admission.wrong_rom",
+      "mode": "default_mgm_on",
+      "group": "admission",
+      "assertions": [
+        "admission_refused",
+        "no_game_mutation"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.admission.mismatched_player_builds",
+      "mode": "default_mgm_on",
+      "group": "admission",
+      "assertions": [
+        "admission_refused",
+        "no_game_mutation"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.admission.unsupported_mode",
+      "mode": "default_mgm_on",
+      "group": "admission",
+      "assertions": [
+        "mode_detected_from_game",
+        "admission_refused"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.admission.trainer_save_identity",
+      "mode": "default_mgm_on",
+      "group": "admission",
+      "assertions": [
+        "trainer_identity_used",
+        "lead_ot_does_not_change_identity"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.admission.savestate_rollback",
+      "mode": "default_mgm_on",
+      "group": "admission",
+      "assertions": [
+        "generation_invalidated",
+        "paused_until_reconciled"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.admission.mixed_mgm_pair",
+      "mode": "default_mgm_on",
+      "group": "admission",
+      "assertions": [
+        "admission_refused",
+        "both_actual_modes_recorded"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.storage.deposit",
+      "mode": "default_mgm_on",
+      "group": "storage",
+      "assertions": [
+        "source_identity_checked",
+        "destination_faithful",
+        "source_removed_once"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.storage.withdraw",
+      "mode": "default_mgm_on",
+      "group": "storage",
+      "assertions": [
+        "source_identity_checked",
+        "stats_and_pp_correct",
+        "source_removed_once"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.storage.memorialize",
+      "mode": "default_mgm_on",
+      "group": "storage",
+      "assertions": [
+        "correct_dead_identity",
+        "destination_not_overwritten",
+        "survivors_preserved"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.storage.occupied_destination",
+      "mode": "default_mgm_on",
+      "group": "storage",
+      "assertions": [
+        "mutation_refused",
+        "both_mons_preserved"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.storage.full_party_or_boxes",
+      "mode": "default_mgm_on",
+      "group": "storage",
+      "assertions": [
+        "mutation_refused",
+        "no_loss_or_duplicate"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.storage.all_25_boxes",
+      "mode": "default_mgm_on",
+      "group": "storage",
+      "assertions": [
+        "each_box_address_verified",
+        "every_box_roundtrip_faithful"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.storage.reordered_party",
+      "mode": "default_mgm_on",
+      "group": "storage",
+      "assertions": [
+        "expected_key_relocated_or_rejected",
+        "other_mons_unchanged"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.storage.last_usable_mon",
+      "mode": "default_mgm_on",
+      "group": "storage",
+      "assertions": [
+        "rule_applied_explicitly",
+        "no_uncontrolled_whiteout"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.storage.move_item_status_roundtrip",
+      "mode": "default_mgm_on",
+      "group": "storage",
+      "assertions": [
+        "moves_pp_item_status_preserved",
+        "mode_stats_correct"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.storage.borrowed_party_freeze",
+      "mode": "default_mgm_on",
+      "group": "storage",
+      "assertions": [
+        "real_party_not_replaced",
+        "deferred_work_reconciled"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.storage.battle_context_refusal",
+      "mode": "default_mgm_on",
+      "group": "storage",
+      "assertions": [
+        "unsafe_write_deferred",
+        "eventual_readback_matches"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.storage.ambiguous_completion",
+      "mode": "default_mgm_on",
+      "group": "storage",
+      "assertions": [
+        "no_blind_retry",
+        "identity_readback_reconciled"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.battle.player_faint",
+      "mode": "default_mgm_on",
+      "group": "battle",
+      "assertions": [
+        "settled_faint_detected_once",
+        "correct_link_propagated"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.battle.foe_faint",
+      "mode": "default_mgm_on",
+      "group": "battle",
+      "assertions": [
+        "no_player_death_emitted",
+        "player_party_unchanged"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.battle.simultaneous_faints",
+      "mode": "default_mgm_on",
+      "group": "battle",
+      "assertions": [
+        "each_identity_counted_once",
+        "final_link_state_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.battle.battle_epoch",
+      "mode": "default_mgm_on",
+      "group": "battle",
+      "assertions": [
+        "stale_counters_not_replayed",
+        "next_battle_detects_new_faint"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.battle.outcome_codes",
+      "mode": "default_mgm_on",
+      "group": "battle",
+      "assertions": [
+        "rr_outcome_decoded",
+        "win_loss_escape_distinguished"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.battle.explosion_lua_path",
+      "mode": "default_mgm_on",
+      "group": "battle",
+      "assertions": [
+        "production_lua_path_used",
+        "move_resolves_without_softlock"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.battle.explosion_special_states",
+      "mode": "default_mgm_on",
+      "group": "battle",
+      "assertions": [
+        "blocked_or_forced_behavior_verified",
+        "no_controller_corruption"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.battle.whiteout",
+      "mode": "default_mgm_on",
+      "group": "battle",
+      "assertions": [
+        "all_deaths_settled",
+        "return_scene_reconciled"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.battle.rival_team_replace",
+      "mode": "default_mgm_on",
+      "group": "battle",
+      "assertions": [
+        "expected_team_committed",
+        "active_battlers_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.battle.rival_swap_restore",
+      "mode": "default_mgm_on",
+      "group": "battle",
+      "assertions": [
+        "borrowed_party_epoch_closed",
+        "real_party_preserved"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.acquisition.starter",
+      "mode": "default_mgm_on",
+      "group": "acquisition",
+      "assertions": [
+        "real_game_acquisition",
+        "identity_and_area_linked_once"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.acquisition.wild_capture",
+      "mode": "default_mgm_on",
+      "group": "acquisition",
+      "assertions": [
+        "real_game_capture",
+        "pair_consistent_both_players"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.acquisition.gift",
+      "mode": "default_mgm_on",
+      "group": "acquisition",
+      "assertions": [
+        "real_game_gift",
+        "policy_applied_once"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.acquisition.egg_and_hatch",
+      "mode": "default_mgm_on",
+      "group": "acquisition",
+      "assertions": [
+        "identity_survives_hatch",
+        "no_duplicate_acquisition"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.acquisition.fossil",
+      "mode": "default_mgm_on",
+      "group": "acquisition",
+      "assertions": [
+        "real_game_revival",
+        "policy_applied_once"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.acquisition.static_encounter",
+      "mode": "default_mgm_on",
+      "group": "acquisition",
+      "assertions": [
+        "correct_encounter_area",
+        "policy_applied_once"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.acquisition.dupes",
+      "mode": "default_mgm_on",
+      "group": "acquisition",
+      "assertions": [
+        "duplicate_policy_verified",
+        "eligible_encounter_not_consumed"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.acquisition.dead_zone",
+      "mode": "default_mgm_on",
+      "group": "acquisition",
+      "assertions": [
+        "restriction_enforced",
+        "unrelated_area_unchanged"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.acquisition.shiny_bonus",
+      "mode": "default_mgm_on",
+      "group": "acquisition",
+      "assertions": [
+        "shiny_rule_verified",
+        "bonus_link_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.acquisition.capture_to_pc",
+      "mode": "default_mgm_on",
+      "group": "acquisition",
+      "assertions": [
+        "boxed_identity_observed",
+        "link_not_lost"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.mailbox_queued_receipts",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "each_sequence_receipt_retained",
+        "payload_not_overwritten"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.async_owner",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "one_owner_until_retirement",
+        "queued_work_eventually_resolves"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.buffer_lifetime",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "last_reader_finishes_before_reuse",
+        "text_and_blob_intact"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.sequence_wrap_reset",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "old_receipt_not_reused",
+        "generation_change_detected"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.arena_ownership",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "all_arena_accesses_attributed",
+        "no_legitimate_owner_collision"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.native_trade",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "native_scene_observed",
+        "matching_halves_swapped",
+        "readback_reconciled"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.trade_evolution",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "native_evolution_observed",
+        "post_evolution_identity_reconciled"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.trade_ui_cancel",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "cancel_preserves_party",
+        "field_and_mailbox_released"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.pc_trade_npc",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "safe_template_and_interaction",
+        "resources_released"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.pause_during_scene",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "new_gameplay_blocked",
+        "controlled_completion_only",
+        "reconcile_before_resume"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.initialized_gfx16",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "stack_pattern_independent",
+        "full_graphics_id_preserved"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.avatar_spawn_commit",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "complete_avatar_after_spawn",
+        "palette_only_change_applied"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.palette_reference_lifetime",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "references_balanced",
+        "unrelated_palettes_preserved"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.sprite_tile_ownership",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "geometry_matches_allocation",
+        "no_foreign_resource_write"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.resource_exhaustion",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "no_partial_or_borrowed_resources",
+        "retry_after_capacity_recovers"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.running",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "motion_matches_source",
+        "no_sprite_corruption"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.bike",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "complete_mode_animation",
+        "geometry_and_speed_correct"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.surf",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "bound_surf_effect_present",
+        "bobbing_and_teardown_correct"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.fishing",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "complete_rod_animation",
+        "return_to_walk_resources_correct"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.scene_reconstruction",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "no_nonfield_writes",
+        "one_owner_after_return"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.freshness_disconnect",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "stale_visibility_and_collision_removed",
+        "fresh_epoch_respawns"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.interaction",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "valid_native_script_only",
+        "no_unintended_warp_or_battle"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.elevation_depth",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "correct_remote_elevation",
+        "depth_and_collision_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.presentation.native_messages",
+      "mode": "default_mgm_on",
+      "group": "presentation",
+      "assertions": [
+        "text_complete_and_dismissible",
+        "field_released"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.presentation.battle_notifications",
+      "mode": "default_mgm_on",
+      "group": "presentation",
+      "assertions": [
+        "text_persists_in_context",
+        "no_window_or_palette_corruption"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.presentation.sounds",
+      "mode": "default_mgm_on",
+      "group": "presentation",
+      "assertions": [
+        "correct_cue_audible",
+        "no_audio_stall_or_corruption"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.presentation.calculator",
+      "mode": "default_mgm_on",
+      "group": "presentation",
+      "assertions": [
+        "display_matches_independent_oracle",
+        "toggle_and_notification_coexist"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.presentation.info_panel",
+      "mode": "default_mgm_on",
+      "group": "presentation",
+      "assertions": [
+        "live_pairs_and_status_correct",
+        "pagination_and_close_work"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.presentation.dashboard_and_pause",
+      "mode": "default_mgm_on",
+      "group": "presentation",
+      "assertions": [
+        "actual_run_state_visible",
+        "pause_reason_and_recovery_visible"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.distribution.reproducible_build",
+      "mode": "default_mgm_on",
+      "group": "distribution",
+      "assertions": [
+        "source_rebuild_matches_patch",
+        "no_mutable_native_rom_sections"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.distribution.clean_patch_application",
+      "mode": "default_mgm_on",
+      "group": "distribution",
+      "assertions": [
+        "clean_base_hash_verified",
+        "output_rom_matches_manifest"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.distribution.wrong_patch_input",
+      "mode": "default_mgm_on",
+      "group": "distribution",
+      "assertions": [
+        "wrong_input_rejected",
+        "original_rom_unchanged"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.distribution.package_contents",
+      "mode": "default_mgm_on",
+      "group": "distribution",
+      "assertions": [
+        "all_runtime_files_present",
+        "client_data_native_versions_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.distribution.fresh_machine_launch",
+      "mode": "default_mgm_on",
+      "group": "distribution",
+      "assertions": [
+        "clean_install_starts",
+        "both_clients_admitted"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.distribution.build_descriptor",
+      "mode": "default_mgm_on",
+      "group": "distribution",
+      "assertions": [
+        "actual_loaded_descriptor_matches",
+        "layout_and_capabilities_match"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.distribution.evidence_manifest",
+      "mode": "default_mgm_on",
+      "group": "distribution",
+      "assertions": [
+        "all_hashes_verified",
+        "no_missing_skipped_or_retried_cases"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.campaign.starter_to_brock",
+      "mode": "default_mgm_on",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.campaign.misty_to_surge",
+      "mode": "default_mgm_on",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.campaign.erika",
+      "mode": "default_mgm_on",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.campaign.koga",
+      "mode": "default_mgm_on",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.campaign.sabrina",
+      "mode": "default_mgm_on",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.campaign.blaine",
+      "mode": "default_mgm_on",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.campaign.giovanni",
+      "mode": "default_mgm_on",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.campaign.elite_four",
+      "mode": "default_mgm_on",
+      "group": "campaign",
+      "assertions": [
+        "real_progression_recorded",
+        "links_and_party_consistent"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.campaign.champion_and_credits",
+      "mode": "default_mgm_on",
+      "group": "campaign",
+      "assertions": [
+        "credits_reached_in_game",
+        "final_party_and_links_reconciled"
+      ],
+      "requirements": {}
+    },
+    {
+      "case_id": "rr41.default_mgm_on.campaign.supported_postgame",
+      "mode": "default_mgm_on",
+      "group": "campaign",
+      "assertions": [
+        "named_checkpoint_manifest_completed",
+        "postgame_state_reconciled"
+      ],
+      "requirements": {
+        "candidate_postgame_checkpoints": true
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.soak.normal_speed_2h",
+      "mode": "default_mgm_on",
+      "group": "soak",
+      "assertions": [
+        "continuous_capture_accounted",
+        "no_uncertain_operation",
+        "resources_balanced"
+      ],
+      "requirements": {
+        "normal_speed_wall_seconds": 7200,
+        "scenario_counts": {
+          "map_transitions": 100,
+          "battles_completed": 30,
+          "storage_roundtrips": 25,
+          "native_trades_completed": 5,
+          "ghost_mode_transitions": 30,
+          "reconnect_recoveries": 10,
+          "native_ui_cycles": 50
+        }
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.timing_existing_ghost_to_wild_battle",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "existing_ghost_to_wild_battle"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.timing_existing_ghost_to_trainer_battle",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "existing_ghost_to_trainer_battle"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.timing_battle_return_resource_reuse",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "battle_return_resource_reuse"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.timing_door_warp_during_sample",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "door_warp_during_sample"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.timing_bike_mount_dismount",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "bike_mount_dismount"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.timing_surf_mount_dismount",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "surf_mount_dismount"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.timing_fishing_return",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "fishing_return"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.ghost.timing_avatar_commit_during_respawn",
+      "mode": "default_mgm_on",
+      "group": "ghost",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "avatar_commit_during_respawn"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.timing_party_picker_return",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "party_picker_return"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.timing_bag_menu_return",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "bag_menu_return"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.timing_trade_scene_takeover",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "trade_scene_takeover"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.timing_trade_evolution_completion",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "trade_evolution_completion"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.timing_notification_payload_contention",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "notification_payload_contention"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.native.timing_queued_receipt_retirement",
+      "mode": "default_mgm_on",
+      "group": "native",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "queued_receipt_retirement"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.storage.timing_source_reorder_before_commit",
+      "mode": "default_mgm_on",
+      "group": "storage",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "source_reorder_before_commit"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.storage.timing_destination_changes_before_commit",
+      "mode": "default_mgm_on",
+      "group": "storage",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "destination_changes_before_commit"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.battle.timing_faint_at_outcome_boundary",
+      "mode": "default_mgm_on",
+      "group": "battle",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "faint_at_outcome_boundary"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.battle.timing_borrowed_party_restore_boundary",
+      "mode": "default_mgm_on",
+      "group": "battle",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "borrowed_party_restore_boundary"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.foundation.timing_disconnect_after_apply_before_receipt",
+      "mode": "default_mgm_on",
+      "group": "foundation",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "disconnect_after_apply_before_receipt"
+      }
+    },
+    {
+      "case_id": "rr41.default_mgm_on.admission.timing_reset_during_pending_operation",
+      "mode": "default_mgm_on",
+      "group": "admission",
+      "assertions": [
+        "correct_boundary_behavior",
+        "no_foreign_or_duplicate_mutation",
+        "final_state_and_resources_reconciled"
+      ],
+      "requirements": {
+        "meaningful_repetitions": 20,
+        "timing_scenario": "reset_during_pending_operation"
+      }
+    }
+  ]
+}

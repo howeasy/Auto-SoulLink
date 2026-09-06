@@ -1,0 +1,227 @@
+{
+  "anchors": [
+    {
+      "address": "0x08040FE0",
+      "expected_hex": "024f0b206843c319321c04e0",
+      "name": "species_name_stride"
+    },
+    {
+      "address": "0x08040FEC",
+      "expected_hex": "cc424009",
+      "name": "species_name_table_literal"
+    },
+    {
+      "address": "0x08072108",
+      "expected_hex": "480040188000014934e000006c2f7c09",
+      "name": "cry_table_stride_and_literal"
+    },
+    {
+      "address": "0x09407DEC",
+      "expected_hex": "10000800",
+      "name": "asset_after_species_names_header"
+    },
+    {
+      "address": "0x097B6DC4",
+      "expected_hex": "ec7d4009",
+      "name": "asset_after_species_names_first_reference"
+    },
+    {
+      "address": "0x097B8A84",
+      "expected_hex": "ec7d4009",
+      "name": "asset_after_species_names_second_reference"
+    },
+    {
+      "address": "0x0803F794",
+      "expected_hex": "0c49d000801a80004018007c",
+      "name": "gender_stride_and_ratio"
+    },
+    {
+      "address": "0x0803F7C8",
+      "expected_hex": "ec987b09",
+      "name": "gender_table_literal"
+    },
+    {
+      "address": "0x08042EC4",
+      "expected_hex": "004b184755380909",
+      "name": "evolution_dispatch"
+    },
+    {
+      "address": "0x0804449C",
+      "expected_hex": "10b50024020c074b18404240080c424019404a40072a00d80124201c10bc02bc08470000",
+      "name": "shiny_classifier"
+    },
+    {
+      "address": "0x08044180",
+      "expected_hex": "004b1847391c3f09",
+      "name": "palette_struct_detour"
+    },
+    {
+      "address": "0x093F1C44",
+      "expected_hex": "2a0c2d042d0c230c6a4024045a40240c6240c000024b072a00d9024b1818",
+      "name": "palette_struct_xor_threshold"
+    },
+    {
+      "address": "0x080440F4",
+      "expected_hex": "004b18476d1c3f09",
+      "name": "palette_pointer_detour"
+    },
+    {
+      "address": "0x093F1C84",
+      "expected_hex": "2a0c2d042d0c230c6a4024045a40240c6240c000044b072a00d9024b",
+      "name": "palette_pointer_xor_threshold"
+    },
+    {
+      "address": "0x090B8FB0",
+      "expected_hex": "0c4b0200c3180c481904090c814203d8d8100a4bc0187047",
+      "name": "expanded_flag_pointer"
+    },
+    {
+      "address": "0x090B8FE4",
+      "expected_hex": "00f7ffffff0f000074b10302ff3f0000",
+      "name": "expanded_flag_literals"
+    },
+    {
+      "address": "0x0904EF08",
+      "expected_hex": "2b3c10060136ef04092b3310060136ef04092b3410060136ef040916068000000f00b4e6100925250005a4ee0409",
+      "name": "default_mode_menu"
+    },
+    {
+      "address": "0x0904F203",
+      "expected_hex": "2a3210",
+      "name": "mgm_clear"
+    },
+    {
+      "address": "0x0904F214",
+      "expected_hex": "293210",
+      "name": "mgm_set"
+    },
+    {
+      "address": "0x0904F7B4",
+      "expected_hex": "2934102b3210070027f80409293210",
+      "name": "hardcore_set_and_mgm"
+    },
+    {
+      "address": "0x0904F801",
+      "expected_hex": "293c10",
+      "name": "restricted_set"
+    },
+    {
+      "address": "0x0904F816",
+      "expected_hex": "293310",
+      "name": "easy_set"
+    },
+    {
+      "address": "0x0904F827",
+      "expected_hex": "293210",
+      "name": "new_game_mgm_set"
+    },
+    {
+      "address": "0x0904F838",
+      "expected_hex": "294009",
+      "name": "species_randomizer_set"
+    },
+    {
+      "address": "0x0904F849",
+      "expected_hex": "293a09",
+      "name": "hard_randomizer_set"
+    },
+    {
+      "address": "0x0904F85A",
+      "expected_hex": "294209",
+      "name": "ability_randomizer_set"
+    },
+    {
+      "address": "0x0904F86B",
+      "expected_hex": "294109",
+      "name": "learnset_randomizer_set"
+    }
+  ],
+  "coverage_gaps": [
+    "Every ROM record is bounded independently by the species-name table/next asset and BaseStats/cry-table boundaries",
+    "Missing canonical catalog names remain coverage gaps even when a ROM display label is available",
+    "ROM labels can be shared by forms or truncated; do not guess expanded identities from those labels",
+    "Missing catalog IDs within the reviewed domain retain explicit sentinel/placeholder classification",
+    "No form aliases or playability inferred from display names",
+    "Permanent evolution method numbers/parameters are preserved; symbolic method semantics require reviewed RR definitions",
+    "No game-state, save compatibility, companion execution, or full release validation performed"
+  ],
+  "files": [
+    {
+      "name": "rr41_comparison.json",
+      "sha256": "fc2630b8fab9a87b025c344094e2679209d82f7dfd18d90618c7fdf6c9c265da",
+      "size_bytes": 76031
+    },
+    {
+      "name": "rr41_compressed_boxes.json",
+      "sha256": "4ad64bc12fe36801e2220e3d63828eae8398e9fe22f505ca7f33cab014324ecd",
+      "size_bytes": 4399
+    },
+    {
+      "name": "rr41_evolution_families.json",
+      "sha256": "c4933ab90692f21db9e9e61345b62eb3ccd3f65c868f72769beb4440dbbf1250",
+      "size_bytes": 257306
+    },
+    {
+      "name": "rr41_modes.json",
+      "sha256": "821ad94926506e35c7fa65f631249b38f55e081982b89ec59a2a79eceb647ab7",
+      "size_bytes": 2258
+    },
+    {
+      "name": "rr41_species.json",
+      "sha256": "854cd267ad7a98205f10650d814374675b067dc705a684f6c2949b28eefff05c",
+      "size_bytes": 726526
+    }
+  ],
+  "reference_id": "rr41-base-rom-tables-v2",
+  "release_policy_context": {
+    "companion_required_both_players": true,
+    "disconnect_policy": "pause_until_paired_reconciliation",
+    "exact_companion_build_validation": "not_performed_by_base_reference_generator"
+  },
+  "rom": {
+    "sha256": "679d112cdfe699c2793d82c7e7999ac9dfca9e222ad5a85d4f8f1e457cd0283f",
+    "size_bytes": 33554432
+  },
+  "schema_version": 2,
+  "shiny": {
+    "active_palette_compare_addresses": [
+      "0x093F1C5A",
+      "0x093F1C9A"
+    ],
+    "classifier_compare_address": "0x080444B0",
+    "generation_odds_are_not_classifier_threshold": true,
+    "xor_threshold_exclusive": 8
+  },
+  "source_files": [
+    {
+      "path": "server/pokemon_data.py",
+      "sha256": "155cec53cb4c25d6f1ca571804551b8c679d9b2d0beec990c5f57e4d0af610f0"
+    },
+    {
+      "path": "data/games/gen3_frlge/rr_types.json",
+      "sha256": "1d913d2e785c69d2e20a08bd1eec414c27f5ee1fdf287433f39e954950b9ac48"
+    },
+    {
+      "path": "data/games/gen3_frlge/rr_species.json",
+      "sha256": "cd2766ef4eca82f73f04b9f429d2bf3aabdd196a78db8e17e9f16228a56ace8d"
+    }
+  ],
+  "species_extent_evidence_document": "docs/rr_reference/SPECIES_EXTENT.md",
+  "status": "baseline_only_not_release_approval",
+  "tables": {
+    "base_stats_address": "0x097B98EC",
+    "base_stats_end_exclusive": "0x097C2F6C",
+    "base_stats_pointer": "0x080001BC",
+    "base_stats_stride_bytes": 28,
+    "evolution_address": "0x097CD9B0",
+    "evolution_pointer": "0x08042F6C",
+    "evolution_species_stride_bytes": 128,
+    "following_cry_table_pointer": "0x08072114",
+    "reviewed_rom_domain_max": 1375,
+    "species_count_including_sentinels": 1376,
+    "species_name_stride_bytes": 11,
+    "species_names_address": "0x094042CC",
+    "species_names_end_exclusive": "0x09407DEC",
+    "species_names_pointer": "0x08000144"
+  }
+}
