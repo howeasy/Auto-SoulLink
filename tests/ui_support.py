@@ -15,7 +15,7 @@ from server.adapters import game_id_for_rom_type, get_adapter
 from server.server import SLinkServer
 from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo
 
-DERIVED_FIELDS = {"sprite_html", "sprite_src", "species_name", "ability_name", "move_details"}
+DERIVED_FIELDS = {"sprite_html", "sprite_src", "species_name", "ability_name", "held_item_name", "move_details"}
 
 
 async def manager_app_without_startup():

@@ -75,9 +75,31 @@ def test_party_entries_carry_the_enriched_fields(name):
         details = fixture["players"][pid]["party_details"]
         assert details, f"{name} players.{pid} has an empty party; the mockups need one."
         for key, mon in details.items():
-            for field in ("species_name", "sprite_html", "move_details"):
+            for field in ("key", "species_name", "held_item_name", "sprite_html", "move_details"):
                 assert field in mon, f"{name} players.{pid}.party_details[{key}] lacks {field}"
+            assert mon["key"] == key
             assert mon["species_name"], f"{name} players.{pid}.party_details[{key}] unnamed"
+
+
+@pytest.mark.parametrize("name", STATUS_FIXTURES)
+def test_nested_capabilities_and_pending_captures_match_the_producer(name, live_status):
+    fixture = _load(name)
+    for pid, player in fixture["players"].items():
+        expected = live_status["players"][pid]["capabilities"]
+        assert player["capabilities"].keys() == expected.keys()
+        for feature, row in player["capabilities"].items():
+            assert row.keys() == expected[feature].keys()
+            for dimension in ("supported", "requested", "ready", "effective"):
+                if dimension in row:
+                    assert row[dimension] is None or type(row[dimension]) is bool
+            assert row["reason"] is None or isinstance(row["reason"], str)
+        for mon in player["pc_boxes"]:
+            assert {"key", "species_name", "sprite_html", "held_item_name", "move_details"} <= mon.keys()
+        for mon in player["battle_state"]["enemy_party"]:
+            assert {"species_name", "sprite_html", "held_item_name", "move_details"} <= mon.keys()
+    for pending in fixture["pending_captures"].values():
+        for mon in pending.values():
+            assert mon["key"] and mon["species_name"] and mon["sprite_html"]
 
 
 @pytest.mark.parametrize("name", STATUS_FIXTURES)

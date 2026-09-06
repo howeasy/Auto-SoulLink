@@ -358,6 +358,25 @@ body.theme-transparent #root { border: none; }
  */
 
 /* ── Sprites ────────────────────────────────────────────────────────── */
+.sprite-crop {
+  --sprite-crop-size: 40px;
+  display: inline-block;
+  width: var(--sprite-crop-size);
+  height: var(--sprite-crop-size);
+  overflow: hidden;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.sprite-crop > img.mon-sprite,
+.sprite-crop > img.enc-sprite {
+  width: calc(var(--sprite-crop-size) * 1.3);
+  height: calc(var(--sprite-crop-size) * 1.3);
+  margin: calc(var(--sprite-crop-size) * -.15);
+  max-width: none;
+  image-rendering: pixelated;
+}
+.sprite-crop:has(> img.enc-sprite) { --sprite-crop-size: 20px; }
+
 .mon-sprite, img.mon-sprite {
   width: clamp(38px, 6.5vmin, 58px);
   aspect-ratio: 1;

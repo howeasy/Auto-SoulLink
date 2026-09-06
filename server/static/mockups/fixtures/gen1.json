@@ -24,6 +24,9 @@
           "species_id": 60,
           "held_item_id": 0,
           "moves": [],
+          "species_name": "Poliwag",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"60\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/60.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
+          "held_item_name": "",
           "move_details": []
         },
         {
@@ -34,6 +37,9 @@
           "species_id": 58,
           "held_item_id": 0,
           "moves": [],
+          "species_name": "Growlithe",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"58\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/58.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
+          "held_item_name": "",
           "move_details": []
         },
         {
@@ -44,6 +50,9 @@
           "species_id": 133,
           "held_item_id": 0,
           "moves": [],
+          "species_name": "Eevee",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"133\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/133.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
+          "held_item_name": "",
           "move_details": []
         },
         {
@@ -54,6 +63,9 @@
           "species_id": 63,
           "held_item_id": 0,
           "moves": [],
+          "species_name": "Abra",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"63\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/63.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
+          "held_item_name": "",
           "move_details": []
         }
       ],
@@ -91,9 +103,11 @@
           "active": true,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "4A5B:30B8:54",
           "species_name": "Pikachu",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"25\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/25.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"25\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/25.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
           "ability_name": "",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "ThunderShock",
@@ -162,9 +176,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "5B6C:30B8:24",
           "species_name": "Pidgey",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"16\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/16.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"16\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/16.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
           "ability_name": "",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Gust",
@@ -231,9 +247,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "6C7D:30B8:70",
           "species_name": "Weedle",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"13\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/13.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"13\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/13.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
           "ability_name": "",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Poison Sting",
@@ -282,9 +300,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "7D8E:30B8:05",
           "species_name": "Spearow",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"21\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/21.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"21\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/21.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
           "ability_name": "",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Peck",
@@ -352,9 +372,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "8E9F:30B8:6B",
           "species_name": "Zubat",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"41\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/41.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"41\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/41.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
           "ability_name": "",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Leech Life",
@@ -412,9 +434,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "9F0A:30B8:60",
           "species_name": "Sandshrew",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"27\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/27.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"27\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/27.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
           "ability_name": "",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Scratch",
@@ -462,6 +486,69 @@
       "identity_error": "",
       "admission": "contract_pending",
       "admission_reason": "",
+      "capabilities": {
+        "abilities": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified."
+        },
+        "info_panel": {
+          "supported": null,
+          "ready": null,
+          "effective": false,
+          "reason": "The runtime reports this feature is inactive."
+        },
+        "explode_mode": {
+          "supported": null,
+          "ready": null,
+          "effective": false,
+          "reason": "The runtime reports this feature is inactive.",
+          "requested": false
+        },
+        "rival_team_swap": {
+          "supported": null,
+          "ready": null,
+          "effective": false,
+          "reason": "The runtime reports this feature is inactive.",
+          "requested": false
+        },
+        "overworld_presence": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": false
+        },
+        "native_messages": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": false
+        },
+        "native_sounds": {
+          "supported": null,
+          "ready": null,
+          "effective": false,
+          "reason": "The runtime reports this feature is inactive.",
+          "requested": false
+        },
+        "battle_calc": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": true
+        },
+        "pc_trade_npc": {
+          "supported": null,
+          "ready": null,
+          "effective": false,
+          "reason": "The runtime reports this feature is inactive.",
+          "requested": true
+        }
+      },
       "encounter_table": {
         "Grass": [
           {
@@ -514,6 +601,9 @@
           "species_id": 54,
           "held_item_id": 0,
           "moves": [],
+          "species_name": "Psyduck",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"54\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/54.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
+          "held_item_name": "",
           "move_details": []
         },
         {
@@ -524,6 +614,9 @@
           "species_id": 129,
           "held_item_id": 0,
           "moves": [],
+          "species_name": "Magikarp",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"129\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/129.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
+          "held_item_name": "",
           "move_details": []
         }
       ],
@@ -561,9 +654,11 @@
           "active": true,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "3C2D:7B0B:B0",
           "species_name": "Charmander",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"4\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/4.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"4\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/4.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
           "ability_name": "",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Ember",
@@ -632,9 +727,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "2D3E:7B0B:A5",
           "species_name": "Rattata",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"19\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/19.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"19\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/19.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
           "ability_name": "",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Tackle",
@@ -701,9 +798,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "1E2F:7B0B:7B",
           "species_name": "Caterpie",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
           "ability_name": "",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Tackle",
@@ -752,9 +851,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "0F1A:7B0B:A9",
           "species_name": "Geodude",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"74\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/74.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"74\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/74.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
           "ability_name": "",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Rock Throw",
@@ -822,9 +923,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "9A0B:7B0B:6D",
           "species_name": "Paras",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"46\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/46.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"46\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/46.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
           "ability_name": "",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Scratch",
@@ -882,9 +985,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "8B1C:7B0B:6C",
           "species_name": "Ekans",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"23\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/23.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"23\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/23.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
           "ability_name": "",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Wrap",
@@ -941,8 +1046,9 @@
               35,
               40
             ],
-            "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+            "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
             "species_name": "Caterpie",
+            "held_item_name": "",
             "move_details": [
               {
                 "name": "Tackle",
@@ -975,6 +1081,69 @@
       "identity_error": "",
       "admission": "contract_pending",
       "admission_reason": "",
+      "capabilities": {
+        "abilities": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified."
+        },
+        "info_panel": {
+          "supported": null,
+          "ready": null,
+          "effective": false,
+          "reason": "The runtime reports this feature is inactive."
+        },
+        "explode_mode": {
+          "supported": null,
+          "ready": null,
+          "effective": false,
+          "reason": "The runtime reports this feature is inactive.",
+          "requested": false
+        },
+        "rival_team_swap": {
+          "supported": null,
+          "ready": null,
+          "effective": false,
+          "reason": "The runtime reports this feature is inactive.",
+          "requested": false
+        },
+        "overworld_presence": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": false
+        },
+        "native_messages": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": false
+        },
+        "native_sounds": {
+          "supported": null,
+          "ready": null,
+          "effective": false,
+          "reason": "The runtime reports this feature is inactive.",
+          "requested": false
+        },
+        "battle_calc": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": true
+        },
+        "pc_trade_npc": {
+          "supported": null,
+          "ready": null,
+          "effective": false,
+          "reason": "The runtime reports this feature is inactive.",
+          "requested": true
+        }
+      },
       "encounter_table": {
         "Grass": [
           {
@@ -1029,14 +1198,14 @@
       "a_nickname": "Sparky",
       "a_species": 25,
       "a_species_name": "Pikachu",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"25\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/25.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"25\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/25.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "a_level": 6,
       "a_shiny": false,
       "b_key": "3C2D:7B0B:B0",
       "b_nickname": "Embo",
       "b_species": 4,
       "b_species_name": "Charmander",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"4\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/4.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"4\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/4.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "b_level": 6,
       "b_shiny": false,
       "a_enc_species": 0,
@@ -1052,14 +1221,14 @@
       "a_nickname": "Pidge",
       "a_species": 16,
       "a_species_name": "Pidgey",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"16\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/16.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"16\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/16.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "a_level": 8,
       "a_shiny": false,
       "b_key": "2D3E:7B0B:A5",
       "b_nickname": "Rattie",
       "b_species": 19,
       "b_species_name": "Rattata",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"19\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/19.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"19\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/19.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "b_level": 8,
       "b_shiny": false,
       "a_enc_species": 0,
@@ -1075,14 +1244,14 @@
       "a_nickname": "Sting",
       "a_species": 13,
       "a_species_name": "Weedle",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"13\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/13.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"13\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/13.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "a_level": 9,
       "a_shiny": false,
       "b_key": "1E2F:7B0B:7B",
       "b_nickname": "Wiggle",
       "b_species": 10,
       "b_species_name": "Caterpie",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "b_level": 9,
       "b_shiny": false,
       "a_enc_species": 0,
@@ -1098,14 +1267,14 @@
       "a_nickname": "Sparrow",
       "a_species": 21,
       "a_species_name": "Spearow",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"21\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/21.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"21\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/21.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "a_level": 11,
       "a_shiny": false,
       "b_key": "0F1A:7B0B:A9",
       "b_nickname": "Rocky",
       "b_species": 74,
       "b_species_name": "Geodude",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"74\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/74.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"74\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/74.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "b_level": 11,
       "b_shiny": false,
       "a_enc_species": 0,
@@ -1121,14 +1290,14 @@
       "a_nickname": "Vampy",
       "a_species": 41,
       "a_species_name": "Zubat",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"41\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/41.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"41\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/41.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "a_level": 12,
       "a_shiny": false,
       "b_key": "9A0B:7B0B:6D",
       "b_nickname": "Shroom",
       "b_species": 46,
       "b_species_name": "Paras",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"46\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/46.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"46\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/46.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "b_level": 12,
       "b_shiny": false,
       "a_enc_species": 0,
@@ -1144,14 +1313,14 @@
       "a_nickname": "Shrewd",
       "a_species": 27,
       "a_species_name": "Sandshrew",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"27\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/27.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"27\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/27.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "a_level": 13,
       "a_shiny": false,
       "b_key": "8B1C:7B0B:6C",
       "b_nickname": "Slither",
       "b_species": 23,
       "b_species_name": "Ekans",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"23\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/23.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"23\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/23.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "b_level": 13,
       "b_shiny": false,
       "a_enc_species": 0,
@@ -1190,14 +1359,14 @@
       "a_nickname": "Bubbles",
       "a_species": 60,
       "a_species_name": "Poliwag",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"60\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/60.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"60\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/60.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "a_level": 10,
       "a_shiny": false,
       "b_key": "5E6F:7B0B:2F",
       "b_nickname": "Quack",
       "b_species": 54,
       "b_species_name": "Psyduck",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"54\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/54.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"54\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/54.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "b_level": 10,
       "b_shiny": false,
       "a_enc_species": 0,
@@ -1226,7 +1395,8 @@
         "nickname": "Flame",
         "species": 58,
         "level": 14,
-        "species_name": "Growlithe"
+        "species_name": "Growlithe",
+        "sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"58\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/58.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>"
       }
     }
   },
@@ -1696,13 +1866,13 @@
       "a_nickname": "Sting",
       "a_species": 13,
       "a_species_name": "Weedle",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"13\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/13.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"13\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/13.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "a_level": 9,
       "b_key": "1E2F:7B0B:7B",
       "b_nickname": "Wiggle",
       "b_species": 10,
       "b_species_name": "Caterpie",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span class=\"sprite-crop\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\"></span>",
       "b_level": 9,
       "status": "dead"
     },

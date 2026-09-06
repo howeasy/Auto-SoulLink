@@ -427,31 +427,23 @@ class Gen1Adapter(GameAdapter):
 
     # ── GamePresentationAdapter ──────────────────────────────────────────
 
+    def max_move_pp(self, base_pp: int, pp_ups: int) -> int:
+        # RBY AddBonusPP caps each PP Up at 7, as PartyCodec.max_pp does.
+        return base_pp + min(7, base_pp // 5) * pp_ups
+
     def sprite_html(self, species_id: int, form: int = 0) -> str:
         # form unused (no alternate forms in Gen 1)
         if not species_id or species_id < 1:
             return ""
-        # Use Gen 1 Red/Blue sprites from PokeAPI, cropped 5px on each edge via overflow
+        # CSS sizes the cropped Red/Blue sprite for its surrounding component.
         url = f"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/{species_id}.png"
-        # `class="mon-sprite"` and `data-species` are NOT decoration -- shared code keys off
-        # both, and Gen 1 rendered without them:
-        #   * server.py:1659 rewrites the class to `enc-sprite` to shrink encounter icons to
-        #     20px; with no class to rewrite that is a silent no-op and the icons render at
-        #     40px in a list sized for 20;
-        #   * every responsive rule is written against `.mon-sprite` (slink.css:381,
-        #     dashboard.css:1159/1161), so party, foe and overlay sprites ignored theme
-        #     sizing entirely and stayed locked at 40px;
-        #   * the greyscale rules for a fainted mon (`slink.css:450`) and a dead link row
-        #     (`:487`) never matched, so KO'd Pokemon never greyed out;
-        #   * dashboard.js:70 / overlay-helpers.js:65 select `img.mon-sprite, img.enc-sprite`
-        #     for the chroma-key pass and skipped Gen 1 entirely.
-        # `onerror` collapses a 404 instead of showing the browser's broken-image glyph.
+        # Preserve the class swap used by encounter rows, fainted-state styling,
+        # and the data-species selector used by the shared chroma-key pass.
         return (
-            f'<span style="display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle">'
+            f'<span class="sprite-crop">'
             f'<img class="mon-sprite" data-species="{species_id}" src="{url}" '
-            f'width="52" height="52" loading="lazy" '
-            f'onerror="this.style.visibility=&#39;hidden&#39;" '
-            f'style="image-rendering:pixelated;margin:-6px">'
+            f'loading="lazy" '
+            f'onerror="this.style.visibility=&#39;hidden&#39;">'
             f'</span>'
         )
 

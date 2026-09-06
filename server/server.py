@@ -34,6 +34,7 @@ from pathlib import Path
 
 from server import gen1_admission
 from server import runtime_boundary
+from server.ui_projection import move_details, player_capabilities
 from server.save_identity import SaveIdentity
 from server.http_safety import csrf_protection, theme_cache
 from server.lua_literals import lua_comment, lua_string
@@ -3501,112 +3502,66 @@ class SLinkServer:
     def _build_status_dict(self) -> dict:
         """Serialize current server state to a JSON-safe dict."""
         s = self.state
+        runtime = self.read_runtime_facts()
 
-        def _enrich_killer(killer):
+        def _enrich_killer(killer, player_id):
             """Add species_name to a killer dict for the memorial/killfeed."""
             if not killer:
                 return killer
             k = dict(killer)
             sp = k.get("species", 0)
             if sp:
-                k["species_name"] = self.adapter.species_name(sp)
+                k["species_name"] = self.adapter_for(player_id).species_name(sp)
             return k
 
         def _enrich_party(pid):
-            """Add species_name, ability_name, sprite_html, and move_details to each party detail entry."""
-            raw = self.party_details.get(pid, {})
+            adapter = self.adapter_for(pid)
             enriched = {}
-            for key, det in raw.items():
-                d = dict(det)
-                sid = d.get("species_id", 0)
-                form = d.get("form", 0)
-                d["species_name"] = self.adapter.species_name(sid) if sid else ""
-                d["sprite_html"] = self._get_sprite_html(sid, form) if sid else ""
-                aid = d.get("ability_id", 0)
-                d["ability_name"] = self.adapter.ability_name(aid, sid) if aid else ""
-                # Enrich moves: resolve raw move IDs -> full move detail dicts.
-                # Gen 3 sends pp_bonuses as a packed bitfield (2 bits per move).
-                # Gen 4 sends pp_ups as a list[4]. Support both shapes.
-                raw_moves = d.get("moves", [])
-                raw_pp = d.get("pp", [])
-                pp_bonuses = d.get("pp_bonuses", 0)
-                pp_ups_list = d.get("pp_ups") or []
-                move_details = []
-                for idx, mid in enumerate(raw_moves):
-                    if mid and mid > 0:
-                        md = self.adapter.move_data(mid)
-                        if md:
-                            md = dict(md)
-                            base_pp = md.get("pp", 0)
-                            if idx < len(pp_ups_list):
-                                pp_ups = pp_ups_list[idx]
-                            else:
-                                pp_ups = (pp_bonuses >> (idx * 2)) & 0x3
-                            if base_pp:
-                                md["pp"] = base_pp + (base_pp * pp_ups) // 5
-                            md["current_pp"] = raw_pp[idx] if idx < len(raw_pp) else md["pp"]
-                            move_details.append(md)
-                d["move_details"] = move_details
-                enriched[key] = d
+            for key, detail in self.party_details.get(pid, {}).items():
+                mon = dict(detail)
+                species = mon.get("species_id", 0)
+                mon["key"] = key
+                mon["species_name"] = adapter.species_name(species) if species else ""
+                mon["sprite_html"] = adapter.sprite_html(species, mon.get("form", 0)) if species else ""
+                ability = mon.get("ability_id", 0)
+                mon["ability_name"] = adapter.ability_name(ability, species) if ability else ""
+                item = mon.get("held_item_id", 0)
+                mon["held_item_name"] = adapter.item_name(item) if item else ""
+                mon["move_details"] = move_details(adapter, mon)
+                enriched[key] = mon
             return enriched
 
         def _enrich_box(pid):
-            """Add move_details to PC box entries."""
-            raw_boxes = self.pc_boxes.get(pid, [])
+            adapter = self.adapter_for(pid)
             enriched = []
-            for bentry in raw_boxes:
-                b = dict(bentry)
-                raw_moves = b.get("moves", [])
-                move_details = []
-                for mid in raw_moves:
-                    if mid and mid > 0:
-                        md = self.adapter.move_data(mid)
-                        if md:
-                            md = dict(md)
-                            md["current_pp"] = md.get("pp", 0)  # box mons: show max PP
-                            move_details.append(md)
-                b["move_details"] = move_details
-                enriched.append(b)
+            for entry in self.pc_boxes.get(pid, []):
+                mon = dict(entry)
+                species = mon.get("species_id", 0)
+                mon["species_name"] = adapter.species_name(species) if species else ""
+                mon["sprite_html"] = adapter.sprite_html(species, mon.get("form", 0)) if species else ""
+                item = mon.get("held_item_id", 0)
+                mon["held_item_name"] = adapter.item_name(item) if item else ""
+                mon["move_details"] = move_details(adapter, mon, boxed=True)
+                enriched.append(mon)
             return enriched
 
         def _enrich_battle_state(pid):
-            """Add sprite_html, species_name, and move_details to each enemy_party entry."""
-            bs = dict(self.battle_state.get(pid, {"in_battle": False, "enemy_party": []}))
-            ep = bs.get("enemy_party", [])
+            adapter = self.adapter_for(pid)
+            battle = dict(self.battle_state.get(pid, {"in_battle": False, "enemy_party": []}))
             enriched = []
-            for em in ep:
-                em2 = dict(em)
-                sid = em2.get("species_id", 0)
-                form = em2.get("form", 0)
-                if sid and not em2.get("sprite_html"):
-                    em2["sprite_html"] = self._get_sprite_html(sid, form)
-                if sid and not em2.get("species_name"):
-                    em2["species_name"] = self.adapter.species_name(sid)
-                # Enrich moves: resolve raw move IDs -> full move detail dicts (mirrors _enrich_party).
-                # Gen 3 sends pp_bonuses (packed u8); Gen 4 sends pp_ups list[4]. Support both.
-                raw_moves = em2.get("moves", [])
-                raw_pp = em2.get("pp", [])
-                pp_bonuses = em2.get("pp_bonuses", 0)
-                pp_ups_list = em2.get("pp_ups") or []
-                move_details = []
-                for idx, mid in enumerate(raw_moves):
-                    if mid and mid > 0:
-                        md = self.adapter.move_data(mid)
-                        if md:
-                            md = dict(md)
-                            base_pp = md.get("pp", 0)
-                            if idx < len(pp_ups_list):
-                                pp_ups = pp_ups_list[idx]
-                            else:
-                                pp_ups = (pp_bonuses >> (idx * 2)) & 0x3
-                            if base_pp:
-                                md["pp"] = base_pp + (base_pp * pp_ups) // 5
-                            md["current_pp"] = raw_pp[idx] if idx < len(raw_pp) else md["pp"]
-                            move_details.append(md)
-                em2["move_details"] = move_details
-                enriched.append(em2)
-            bs["enemy_party"] = enriched
-            return bs
+            for entry in battle.get("enemy_party", []):
+                mon = dict(entry)
+                species = mon.get("species_id", 0)
+                if species and not mon.get("sprite_html"):
+                    mon["sprite_html"] = adapter.sprite_html(species, mon.get("form", 0))
+                if species and not mon.get("species_name"):
+                    mon["species_name"] = adapter.species_name(species)
+                item = mon.get("held_item_id", 0)
+                mon["held_item_name"] = adapter.item_name(item) if item else ""
+                mon["move_details"] = move_details(adapter, mon)
+                enriched.append(mon)
+            battle["enemy_party"] = enriched
+            return battle
 
         return {
             # "" when the last save succeeded; the error text when it did not.
@@ -3622,7 +3577,7 @@ class SLinkServer:
                     "nuzlocke_active": s.pokeballs_obtained.get(pid, False),
                     "current_area":   self.player_area.get(pid, ""),
                     "current_area_id": self.player_area_id.get(pid, ""),
-                    "current_area_display": self.adapter.area_display_name(
+                    "current_area_display": self.adapter_for(pid).area_display_name(
                         self.player_area_id.get(pid, "") or self.player_area.get(pid, "")
                     ),
                     "ball_count":     self.player_ball_count.get(pid, 0),
@@ -3642,6 +3597,7 @@ class SLinkServer:
                         "state", "contract_pending"),
                     "admission_reason": getattr(self, "admission", {}).get(pid, {}).get(
                         "reason", ""),
+                    "capabilities": player_capabilities(runtime["players"][pid], runtime["requested_rules"]),
                     "encounter_table": self._enc_table_for_status(
                         self.player_area_id.get(pid, "") or self.player_area.get(pid, ""),
                         pid,
@@ -3656,15 +3612,15 @@ class SLinkServer:
                     "a_key":      e.a.key if e.a else None,
                     "a_nickname": e.a.nickname if e.a else "",
                     "a_species":  e.a.species if e.a else 0,
-                    "a_species_name": self.adapter.species_name(e.a.species) if e.a and e.a.species else "",
-                    "a_sprite_html": self._get_sprite_html(e.a.species) if e.a and e.a.species else "",
+                    "a_species_name": self.adapter_for("a").species_name(e.a.species) if e.a and e.a.species else "",
+                    "a_sprite_html": self.adapter_for("a").sprite_html(e.a.species) if e.a and e.a.species else "",
                     "a_level":    self._resolve_level("a", e.a),
                     "a_shiny":    e.a.is_shiny if e.a else False,
                     "b_key":      e.b.key if e.b else None,
                     "b_nickname": e.b.nickname if e.b else "",
                     "b_species":  e.b.species if e.b else 0,
-                    "b_species_name": self.adapter.species_name(e.b.species) if e.b and e.b.species else "",
-                    "b_sprite_html": self._get_sprite_html(e.b.species) if e.b and e.b.species else "",
+                    "b_species_name": self.adapter_for("b").species_name(e.b.species) if e.b and e.b.species else "",
+                    "b_sprite_html": self.adapter_for("b").sprite_html(e.b.species) if e.b and e.b.species else "",
                     "b_level":    self._resolve_level("b", e.b),
                     "b_shiny":    e.b.is_shiny if e.b else False,
                     "a_enc_species": e.encounter_a.species if e.encounter_a else 0,
@@ -3681,7 +3637,8 @@ class SLinkServer:
                     pid: {
                         "key": mon.key, "nickname": mon.nickname,
                         "species": mon.species, "level": mon.level,
-                        "species_name": self.adapter.species_name(mon.species) if mon.species else "",
+                        "species_name": self.adapter_for(pid).species_name(mon.species) if mon.species else "",
+                        "sprite_html": self.adapter_for(pid).sprite_html(mon.species) if mon.species else "",
                     }
                     for pid, mon in players.items()
                 }
@@ -3707,19 +3664,19 @@ class SLinkServer:
                         "area_id":          e.area_id,
                         "area_display":     self._area_display(e.area_id),
                         "cause":            e.cause,
-                        "killer":           _enrich_killer(e.killer),
+                        "killer":           _enrich_killer(e.killer, e.initiating_player),
                         "initiating_player": e.initiating_player,
                         "a_key":      e.a.key      if e.a else None,
                         "a_nickname": e.a.nickname if e.a else "",
                         "a_species":  e.a.species  if e.a else 0,
-                        "a_species_name": self.adapter.species_name(e.a.species) if e.a and e.a.species else "",
-                        "a_sprite_html": self._get_sprite_html(e.a.species) if e.a and e.a.species else "",
+                        "a_species_name": self.adapter_for("a").species_name(e.a.species) if e.a and e.a.species else "",
+                        "a_sprite_html": self.adapter_for("a").sprite_html(e.a.species) if e.a and e.a.species else "",
                         "a_level":    self._resolve_level("a", e.a),
                         "b_key":      e.b.key      if e.b else None,
                         "b_nickname": e.b.nickname if e.b else "",
                         "b_species":  e.b.species  if e.b else 0,
-                        "b_species_name": self.adapter.species_name(e.b.species) if e.b and e.b.species else "",
-                        "b_sprite_html": self._get_sprite_html(e.b.species) if e.b and e.b.species else "",
+                        "b_species_name": self.adapter_for("b").species_name(e.b.species) if e.b and e.b.species else "",
+                        "b_sprite_html": self.adapter_for("b").sprite_html(e.b.species) if e.b and e.b.species else "",
                         "b_level":    self._resolve_level("b", e.b),
                         "status":     e.status.value,
                     }
@@ -3859,7 +3816,6 @@ class SLinkServer:
             "firered_ap": "FireRed (AP)",
             "leafgreen_ap": "LeafGreen (AP)",
             "firered_rr": "FireRed (Radical Red)",
-            "leafgreen_rr": "LeafGreen (Radical Red)",
             "heartgold": "HeartGold",
             "soulsilver": "SoulSilver",
             "platinum": "Platinum",

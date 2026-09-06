@@ -24,6 +24,9 @@
           "species_id": 60,
           "held_item_id": 217,
           "moves": [],
+          "species_name": "Poliwag",
+          "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"60\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite060Poliwag.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/60.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/60.png';}else{this.style.display='none';}\" alt=\"\">",
+          "held_item_name": "Silk Scarf",
           "move_details": []
         },
         {
@@ -34,6 +37,9 @@
           "species_id": 58,
           "held_item_id": 0,
           "moves": [],
+          "species_name": "Growlithe",
+          "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"58\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite058Growlithe.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/58.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/58.png';}else{this.style.display='none';}\" alt=\"\">",
+          "held_item_name": "",
           "move_details": []
         },
         {
@@ -44,6 +50,9 @@
           "species_id": 133,
           "held_item_id": 0,
           "moves": [],
+          "species_name": "Eevee",
+          "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"133\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite133Eevee.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/133.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/133.png';}else{this.style.display='none';}\" alt=\"\">",
+          "held_item_name": "",
           "move_details": []
         },
         {
@@ -54,6 +63,9 @@
           "species_id": 63,
           "held_item_id": 0,
           "moves": [],
+          "species_name": "Abra",
+          "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"63\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite063Abra.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/63.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/63.png';}else{this.style.display='none';}\" alt=\"\">",
+          "held_item_name": "",
           "move_details": []
         }
       ],
@@ -91,9 +103,11 @@
           "active": true,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "PIKA001",
           "species_name": "Pikachu",
           "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"25\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite025Pikachu.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/25.png';}else{this.style.display='none';}\" alt=\"\">",
           "ability_name": "Static",
+          "held_item_name": "Light Ball",
           "move_details": [
             {
               "name": "Thunder Shock",
@@ -162,9 +176,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "PIDG002",
           "species_name": "Pidgey",
           "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"16\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite016Pidgey.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/16.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/16.png';}else{this.style.display='none';}\" alt=\"\">",
           "ability_name": "Run Away",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Gust",
@@ -233,9 +249,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "SPEA003",
           "species_name": "Spearow",
           "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"21\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite021Spearow.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/21.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/21.png';}else{this.style.display='none';}\" alt=\"\">",
           "ability_name": "Intimidate",
+          "held_item_name": "Sharp Beak",
           "move_details": [
             {
               "name": "Peck",
@@ -304,9 +322,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "NIDO004",
           "species_name": "Nidoran♀",
           "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"29\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite029NidoranF.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/29.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/29.png';}else{this.style.display='none';}\" alt=\"\">",
           "ability_name": "Inner Focus",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Poison Sting",
@@ -375,9 +395,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "SAND005",
           "species_name": "Sandshrew",
           "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"27\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite027Sandshrew.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/27.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/27.png';}else{this.style.display='none';}\" alt=\"\">",
           "ability_name": "Sand Veil",
+          "held_item_name": "Choice Band",
           "move_details": [
             {
               "name": "Scratch",
@@ -446,9 +468,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "ODDI006",
           "species_name": "Oddish",
           "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"43\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite043Oddish.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/43.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/43.png';}else{this.style.display='none';}\" alt=\"\">",
           "ability_name": "Chlorophyll",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Absorb",
@@ -506,6 +530,69 @@
       "identity_error": "",
       "admission": "contract_pending",
       "admission_reason": "",
+      "capabilities": {
+        "abilities": {
+          "supported": true,
+          "ready": null,
+          "effective": null,
+          "reason": null
+        },
+        "info_panel": {
+          "supported": true,
+          "ready": null,
+          "effective": true,
+          "reason": null
+        },
+        "explode_mode": {
+          "supported": true,
+          "ready": null,
+          "effective": false,
+          "reason": "The runtime reports this feature is inactive.",
+          "requested": false
+        },
+        "rival_team_swap": {
+          "supported": true,
+          "ready": null,
+          "effective": false,
+          "reason": "The runtime reports this feature is inactive.",
+          "requested": false
+        },
+        "overworld_presence": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": false
+        },
+        "native_messages": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": false
+        },
+        "native_sounds": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": false
+        },
+        "battle_calc": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": true
+        },
+        "pc_trade_npc": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": true
+        }
+      },
       "encounter_table": {
         "Day": [
           {
@@ -856,6 +943,9 @@
           "species_id": 54,
           "held_item_id": 183,
           "moves": [],
+          "species_name": "Psyduck",
+          "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"54\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite054Psyduck.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/54.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/54.png';}else{this.style.display='none';}\" alt=\"\">",
+          "held_item_name": "Quick Claw",
           "move_details": []
         },
         {
@@ -866,6 +956,9 @@
           "species_id": 129,
           "held_item_id": 0,
           "moves": [],
+          "species_name": "Magikarp",
+          "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"129\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite129Magikarp.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/129.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/129.png';}else{this.style.display='none';}\" alt=\"\">",
+          "held_item_name": "",
           "move_details": []
         }
       ],
@@ -903,9 +996,11 @@
           "active": true,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "CHAR001",
           "species_name": "Charmander",
           "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"4\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite004Charmander.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/4.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/4.png';}else{this.style.display='none';}\" alt=\"\">",
           "ability_name": "Blaze",
+          "held_item_name": "Focus Band",
           "move_details": [
             {
               "name": "Ember",
@@ -974,9 +1069,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "RATT002",
           "species_name": "Rattata",
           "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"19\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite019Rattata.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/19.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/19.png';}else{this.style.display='none';}\" alt=\"\">",
           "ability_name": "Guts",
+          "held_item_name": "Quick Claw",
           "move_details": [
             {
               "name": "Tackle",
@@ -1045,9 +1142,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "GEOD003",
           "species_name": "Geodude",
           "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"74\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite074Geodude.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/74.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/74.png';}else{this.style.display='none';}\" alt=\"\">",
           "ability_name": "Rock Head",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Rock Throw",
@@ -1116,9 +1215,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "ZUBA004",
           "species_name": "Zubat",
           "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"41\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite041Zubat.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/41.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/41.png';}else{this.style.display='none';}\" alt=\"\">",
           "ability_name": "Inner Focus",
+          "held_item_name": "Leftovers",
           "move_details": [
             {
               "name": "Leech Life",
@@ -1187,9 +1288,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "VULP005",
           "species_name": "Vulpix",
           "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"37\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite037Vulpix.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/37.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/37.png';}else{this.style.display='none';}\" alt=\"\">",
           "ability_name": "Flash Fire",
+          "held_item_name": "",
           "move_details": [
             {
               "name": "Ember",
@@ -1258,9 +1361,11 @@
           "active": false,
           "status_cond": 0,
           "stat_stages": null,
+          "key": "BELL006",
           "species_name": "Bellsprout",
           "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"69\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite069Bellsprout.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/69.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/69.png';}else{this.style.display='none';}\" alt=\"\">",
           "ability_name": "Chlorophyll",
+          "held_item_name": "Lucky Egg",
           "move_details": [
             {
               "name": "Vine Whip",
@@ -1331,6 +1436,7 @@
             "pp_bonuses": 0,
             "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"10\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite010Caterpie.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/10.png';}else{this.style.display='none';}\" alt=\"\">",
             "species_name": "Caterpie",
+            "held_item_name": "",
             "move_details": [
               {
                 "name": "Tackle",
@@ -1363,6 +1469,69 @@
       "identity_error": "",
       "admission": "contract_pending",
       "admission_reason": "",
+      "capabilities": {
+        "abilities": {
+          "supported": true,
+          "ready": null,
+          "effective": null,
+          "reason": null
+        },
+        "info_panel": {
+          "supported": true,
+          "ready": null,
+          "effective": true,
+          "reason": null
+        },
+        "explode_mode": {
+          "supported": true,
+          "ready": null,
+          "effective": false,
+          "reason": "The runtime reports this feature is inactive.",
+          "requested": false
+        },
+        "rival_team_swap": {
+          "supported": true,
+          "ready": null,
+          "effective": false,
+          "reason": "The runtime reports this feature is inactive.",
+          "requested": false
+        },
+        "overworld_presence": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": false
+        },
+        "native_messages": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": false
+        },
+        "native_sounds": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": false
+        },
+        "battle_calc": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": true
+        },
+        "pc_trade_npc": {
+          "supported": null,
+          "ready": null,
+          "effective": null,
+          "reason": "Availability has not been verified.",
+          "requested": true
+        }
+      },
       "encounter_table": {
         "Surfing": [
           {
@@ -1701,7 +1870,8 @@
         "nickname": "Flame",
         "species": 58,
         "level": 14,
-        "species_name": "Growlithe"
+        "species_name": "Growlithe",
+        "sprite_html": "<img class=\"mon-sprite\" crossorigin=\"anonymous\" data-species=\"58\" src=\"https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/frontspr/gFrontSprite058Growlithe.png\" onerror=\"if(this.src!=='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/58.png'){this.src='https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/58.png';}else{this.style.display='none';}\" alt=\"\">"
       }
     }
   },

@@ -461,6 +461,10 @@ class GamePresentationAdapter(ABC):
         """
         return None
 
+    def max_move_pp(self, base_pp: int, pp_ups: int) -> int:
+        """Presentation maximum for a move with the reported PP-Up count."""
+        return base_pp + (base_pp * pp_ups) // 5
+
     def stat_stage_labels(self) -> list[str]:
         """Labels for the seven stat-stage slots, in order.
 

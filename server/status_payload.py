@@ -1,5 +1,7 @@
 """Side-effect-free status payloads for the Manager's no-run response."""
 
+from server.ui_projection import player_capabilities
+
 
 def empty_status_payload() -> dict:
     """Return fresh containers matching the run server's empty status schema.
@@ -7,7 +9,7 @@ def empty_status_payload() -> dict:
     There is no game selected, so the badge catalogue is empty. A contract test
     compares the remaining nested keys and JSON types with the run serializer.
     """
-    return {
+    result = {
         "save_failed": "",
         "players": {
             pid: {
@@ -67,3 +69,6 @@ def empty_status_payload() -> dict:
         "pending_bonus": {"a": [], "b": []},
         "badge_slugs": [],
     }
+    for player in result["players"].values():
+        player["capabilities"] = player_capabilities({}, result["rules"])
+    return result
