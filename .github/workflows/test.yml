@@ -42,7 +42,7 @@ jobs:
           npm --prefix calc/calc ci --ignore-scripts --no-audit --no-fund
           npm --prefix calc run build
       - name: UI DOM safety and actual calculator execution
-        run: node --test tests/js/operator_dom.test.cjs tests/js/calc_preview.test.cjs tests/js/calc_assets.test.cjs
+        run: node --test tests/js/operator_dom.test.cjs tests/js/calc_preview.test.cjs tests/js/calc_assets.test.cjs tests/js/poll.test.cjs
       # Every unit/integration node has an exact reviewed classification. Local
       # ROM/source/JAR and platform cases are named deferrals, never CI passes.
       # The strict local Gen 1 release runner remains a separate required gate.

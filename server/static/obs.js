@@ -108,7 +108,7 @@ var triggers = [];
     }
 
     function loadStatus() {
-      SLinkRun.fetch('/api/obs/status').then(function(r){return r.json();}).then(function(d) {
+      return SLinkRun.fetch('/api/obs/status').then(function(r){return r.json();}).then(function(d) {
         ['a','b'].forEach(function(p) {
           var badge = document.getElementById('status-' + p);
           var cs = (d.connections && d.connections[p]) ? d.connections[p].status : 'disconnected';
@@ -304,5 +304,5 @@ var triggers = [];
     }
 
     loadAreas();
-    loadStatus();
-    setInterval(loadStatus, 5000);
+    if (window.SLinkPoll) SLinkPoll.subscribe('obs', function () { return loadStatus(); });
+    else { loadStatus(); setInterval(loadStatus, 5000); }

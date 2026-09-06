@@ -70,7 +70,7 @@
     });
   }
   async function openDebug(trigger) {
-    if (trigger.disabled || dialog.open) return;
+    if (!trigger || trigger.disabled || dialog.open) return;
     returnFocus = document.activeElement;
     dialog.showModal();
     document.body.classList.add('board-modal-open');
@@ -131,8 +131,8 @@
       return previous ? previous(name, node, type) : true;
     };
   }
-  document.addEventListener('htmx:afterSettle', function () {
-    document.getElementById('board-connection-error').hidden = true;
+  function pageUpdated(event) {
+    if (event.type === 'htmx:afterSettle') document.getElementById('board-connection-error').hidden = true;
     var available = document.querySelector('[data-run-available]');
     document.querySelectorAll('[data-debug-open]').forEach(function (button) {
       button.disabled = available && available.dataset.runAvailable !== 'true';
@@ -140,7 +140,9 @@
     if (available && available.dataset.runAvailable !== 'true' && dialog.open) dialog.close();
     restoreDetails();
     refreshDebug();
-  });
+  }
+  document.addEventListener('htmx:afterSettle', pageUpdated);
+  document.addEventListener('slink:page-update', pageUpdated);
   ['htmx:responseError', 'htmx:sendError'].forEach(function (name) {
     document.addEventListener(name, function () { document.getElementById('board-connection-error').hidden = false; });
   });
@@ -158,4 +160,5 @@
     link.href = url.href;
   });
   restoreDetails();
+  if (new URLSearchParams(window.location.search).get('debug') === '1') openDebug(document.querySelector('[data-debug-open]'));
 })();

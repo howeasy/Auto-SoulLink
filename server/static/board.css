@@ -476,3 +476,5 @@ body.slink-board { display: block; -webkit-font-smoothing: antialiased; }
   .slink-board .board-new-run {margin-left:auto}
   .slink-board .board-rail:has(#run-list) {flex-wrap:wrap}
 }
+
+.slink-board [hidden] {display:none!important}

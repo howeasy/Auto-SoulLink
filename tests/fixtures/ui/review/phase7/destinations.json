@@ -1,0 +1,60 @@
+[
+  {
+    "width": 700,
+    "game": "gen1",
+    "theme": "light",
+    "page": "twitch",
+    "frames": [],
+    "overflow": false,
+    "title": "Soul Link — Broadcast"
+  },
+  {
+    "width": 700,
+    "game": "gen1",
+    "theme": "light",
+    "page": "tools",
+    "frames": [],
+    "overflow": false,
+    "title": "Soul Link — Tools"
+  },
+  {
+    "width": 700,
+    "game": "gen1",
+    "theme": "light",
+    "page": "gallery",
+    "frames": [
+      "http://127.0.0.1:65472/runs/review_gen1/stream/party-a?theme=transparent"
+    ],
+    "overflow": false,
+    "title": "Soul Link — Broadcast"
+  },
+  {
+    "width": 1600,
+    "game": "gen3",
+    "theme": "funtastic-grape",
+    "page": "twitch",
+    "frames": [],
+    "overflow": false,
+    "title": "Soul Link — Broadcast"
+  },
+  {
+    "width": 1600,
+    "game": "gen3",
+    "theme": "funtastic-grape",
+    "page": "tools",
+    "frames": [],
+    "overflow": false,
+    "title": "Soul Link — Tools"
+  },
+  {
+    "width": 1600,
+    "game": "gen3",
+    "theme": "funtastic-grape",
+    "page": "gallery",
+    "frames": [
+      "http://127.0.0.1:65472/runs/review_gen3/stream/party-a?theme=transparent"
+    ],
+    "overflow": false,
+    "title": "Soul Link — Broadcast"
+  }
+]

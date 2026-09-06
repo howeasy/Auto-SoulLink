@@ -1,0 +1,20 @@
+<section id="manager-obs" class="board-card board-card-body">
+<h2>OBS connections</h2><p>These settings apply across your runs. Each rule below chooses its own source run, independently of overlay sources.</p>
+<div class="obs-savebar"><label class="board-opt"><input type="checkbox" id="obs-enabled"><span>Enable OBS automation</span></label><span id="obs-revision" class="board-sub">Loading settings…</span></div>
+<div class="obs-connections">{% for pid in ['a','b'] %}<fieldset><legend>Player {{ pid|upper }} OBS</legend>
+<label class="board-field">Host<input id="obs-{{ pid }}-host" type="text" autocomplete="off" placeholder="localhost"></label>
+<label class="board-field">Port<input id="obs-{{ pid }}-port" type="number" min="1" max="65535" value="4455"></label>
+<label class="board-field">Password<input id="obs-{{ pid }}-password" type="password" autocomplete="new-password" placeholder="Leave blank to keep the saved password"></label>
+<label class="board-opt"><input id="obs-{{ pid }}-clear-password" type="checkbox"><span>Clear saved password</span></label>
+<p id="obs-{{ pid }}-status" class="board-sub">Select a source run to inspect its connection.</p>
+<button type="button" class="board-btn" data-obs-resume="{{ pid }}" hidden>I checked OBS — resume scene changes</button>
+</fieldset>{% endfor %}</div>
+<label class="board-field">Run used to inspect OBS connections<select id="obs-inspect-run"><option value="">Choose a run</option></select></label>
+<div class="obs-connections">{% for pid in ['a','b'] %}<div><label class="board-field">Player {{ pid|upper }} test scene<input id="obs-{{ pid }}-test-scene" list="obs-{{ pid }}-scenes"><datalist id="obs-{{ pid }}-scenes"></datalist></label><div class="obs-rule-actions"><button type="button" class="board-btn" data-obs-scenes="{{ pid }}">List scenes</button><button type="button" class="board-btn" data-obs-test="{{ pid }}">Test scene</button></div></div>{% endfor %}</div>
+<p id="obs-message" class="board-note" role="status" aria-live="polite" hidden></p>
+<h2>Scene rules</h2><p>Rules run from top to bottom. The first matching rule wins for each OBS endpoint in an event batch. Accepted batches are processed in arrival order.</p>
+<p class="board-sub">Imported rules stay unassigned and disabled until you choose their source run and enable them.</p>
+<div id="obs-rules"></div><button type="button" class="board-btn" id="obs-add-rule">+ Add rule</button>
+<div class="obs-savebar"><button type="button" class="board-btn primary" id="obs-save">Apply OBS settings</button><span id="obs-unsaved" role="status"></span></div>
+</section>
+<section class="board-card board-card-body"><h2>Scene activity</h2><p class="board-sub">Queued decisions and their results are separate from connection readiness.</p><div id="obs-records">No scene decisions yet.</div></section>

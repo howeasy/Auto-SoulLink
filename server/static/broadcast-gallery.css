@@ -1,0 +1,346 @@
+/* Master-detail overlay launcher — entirely token-driven so
+       the broadcaster's chosen webpage theme applies here too. The right
+       pane previews the URL with its OWN ?theme= (overlay theming is
+       independent of the launcher page theme). The page lives inside the
+       dashboard sidebar grid, so the launcher itself is the contents of the
+       right column (no full-viewport sizing). */
+    .stream-shell {
+      display: grid;
+      grid-template-columns: 230px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+    .launcher {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100vh;
+      max-height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Left rail ────────────────────────────────────────────────── */
+    .rail {
+      border-right: 1px solid var(--c-edge);
+      background: var(--c-card);
+      overflow-y: auto;
+      padding: 1em 0 2em;
+    }
+    .rail-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: .6em .9em .7em 1.4em;
+      border-bottom: 1px solid var(--c-edge);
+    }
+    .rail h1 {
+      font-family: var(--font-pixel);
+      font-size: 11px;
+      color: var(--c-brand);
+      letter-spacing: .12em;
+      margin: 0;
+      flex: 1;
+      -webkit-font-smoothing: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .rail-toggle {
+      flex-shrink: 0;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--c-dim);
+      width: 26px; height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      cursor: pointer;
+      padding: 0;
+    }
+    .rail-toggle svg { width: 14px; height: 14px; display: block; }
+    .rail-toggle:hover {
+      background: color-mix(in srgb, var(--c-brand) 18%, transparent);
+      border-color: color-mix(in srgb, var(--c-brand) 30%, var(--c-edge));
+      color: var(--c-brand);
+    }
+
+    /* Collapsed rail — narrow icon-only column. Family labels + item names
+     * hide, leaving just the family-section dots. The toggle stays visible
+     * so the user can re-expand. */
+    .rail.rail-collapsed { width: 56px; overflow: hidden; }
+    .rail.rail-collapsed h1 { display: none; }
+    .rail.rail-collapsed .rail-head { justify-content: center; padding: .6em 0; }
+    .rail.rail-collapsed .rail-family-label { display: none; }
+    .rail.rail-collapsed .rail-item { padding: 7px 0; justify-content: center; }
+    .rail.rail-collapsed .rail-item > :not(.rail-item-dot) { display: none; }
+    .rail.rail-collapsed .rail-item-dot { width: 8px; height: 8px; }
+    .launcher:has(.rail.rail-collapsed) { grid-template-columns: 56px 1fr; }
+    .rail-family {
+      margin-top: 1em;
+    }
+    .rail-family-label {
+      font-size: 10px;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+      color: var(--c-dim);
+      padding: 0 1.4em .35em;
+      font-weight: 700;
+    }
+    .rail-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 7px 1.4em;
+      border: 0;
+      background: transparent;
+      color: var(--c-txt);
+      font-family: inherit;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
+      border-left: 3px solid transparent;
+    }
+    .rail-item:hover { background: color-mix(in srgb, var(--c-edge) 30%, transparent); }
+    .rail-item.active {
+      background: color-mix(in srgb, var(--c-brand) 12%, transparent);
+      border-left-color: var(--c-brand);
+      color: var(--c-brand);
+    }
+    .rail-item-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--c-dim);
+      flex-shrink: 0;
+    }
+    .rail-item.active .rail-item-dot { background: var(--c-brand); box-shadow: 0 0 6px var(--c-brand); }
+
+    /* ── Right pane ───────────────────────────────────────────────── */
+    .pane {
+      overflow-y: auto;
+      padding: 1.4em 2em 3em;
+    }
+    .pane h2 {
+      font-size: 1.4em;
+      font-weight: 600;
+      color: var(--c-txt);
+      margin: 0 0 .25em;
+      letter-spacing: .02em;
+    }
+    .pane .desc {
+      color: var(--c-dim);
+      font-size: .95em;
+      max-width: 1000px;
+      margin-bottom: 1.2em;
+    }
+    .obs-tip {
+      background: color-mix(in srgb, var(--c-brand) 8%, transparent);
+      border: 1px solid color-mix(in srgb, var(--c-brand) 25%, transparent);
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin-bottom: 1.5em;
+      font-size: .85em;
+      color: var(--c-txt);
+      max-width: 1000px;
+    }
+    .obs-tip b { color: var(--c-brand); }
+
+    /* Live preview iframe */
+    .preview-wrap {
+      width: 100%;
+      max-width: 1000px;
+      aspect-ratio: 16 / 9;
+      background:
+        repeating-conic-gradient(
+          color-mix(in srgb, var(--c-edge) 60%, transparent) 0% 25%,
+          transparent                                       0% 50%
+        ) 50% / 16px 16px;
+      border: 1px solid var(--c-edge);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 1.4em;
+    }
+    .preview-wrap iframe {
+      width: 100%; height: 100%;
+      border: 0;
+      pointer-events: none;
+    }
+
+    /* All-Overlays overview grid — small iframe tiles, scrollable. Each
+     * tile pops out via the corner link. The grid auto-sizes to viewport. */
+    .overview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+      margin-bottom: 1.4em;
+    }
+    .overview-tile {
+      background:
+        repeating-conic-gradient(
+          color-mix(in srgb, var(--c-edge) 60%, transparent) 0% 25%,
+          transparent                                       0% 50%
+        ) 50% / 12px 12px;
+      border: 1px solid color-mix(in srgb, var(--c-brand) 25%, var(--c-edge));
+      border-radius: 6px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .overview-tile-hdr {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      background: color-mix(in srgb, var(--c-brand) 14%, var(--c-card));
+      border-bottom: 1px solid color-mix(in srgb, var(--c-brand) 28%, var(--c-edge));
+      font-size: 0.78em;
+      font-weight: 600;
+      color: var(--c-txt);
+    }
+    .overview-tile-title {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .overview-tile-pop {
+      color: var(--c-link);
+      text-decoration: none;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    .overview-tile-pop:hover { background: color-mix(in srgb, var(--c-link) 18%, transparent); }
+    .overview-tile-frame {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      border: 0;
+      pointer-events: none;
+      background: transparent;
+      display: block;
+    }
+
+    /* Config rows: Theme, Layout, Speed, Filters */
+    .cfg-block { max-width: 1000px; }
+    .cfg-row {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 12px;
+      padding: 8px 0;
+      align-items: start;
+      border-top: 1px solid var(--c-sep);
+    }
+    .cfg-row:first-of-type { border-top: 0; }
+    .cfg-lbl {
+      font-size: .82em;
+      color: var(--c-dim);
+      padding-top: 5px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .cfg-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+    .cpill {
+      background: var(--c-bg);
+      color: var(--c-dim);
+      border: 1px solid var(--c-edge);
+      border-radius: 4px;
+      padding: 4px 10px;
+      font-size: .82em;
+      cursor: pointer;
+      font-family: inherit;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .cpill:hover { color: var(--c-txt); border-color: var(--c-dim); }
+    .cpill.active {
+      color: var(--c-brand);
+      border-color: var(--c-brand);
+      background: color-mix(in srgb, var(--c-brand) 10%, transparent);
+    }
+    .cpill.factive {
+      color: var(--c-alive);
+      border-color: var(--c-alive);
+      background: color-mix(in srgb, var(--c-alive) 10%, transparent);
+    }
+    .cpill .pswatch {
+      width: 12px; height: 12px; border-radius: 2px;
+      flex-shrink: 0;
+      border: 1px solid color-mix(in srgb, var(--c-edge) 80%, transparent);
+    }
+
+    /* Size hint + URL row */
+    .size-hint {
+      font-family: var(--font-pixel);
+      font-size: 9px;
+      color: var(--c-brand);
+      opacity: .75;
+      margin: 1.2em 0 .6em;
+      -webkit-font-smoothing: none;
+      letter-spacing: .04em;
+    }
+    .url-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: .4em;
+      flex-wrap: wrap;
+    }
+    .url-box {
+      flex: 1;
+      min-width: 240px;
+      background: var(--c-bg);
+      color: var(--c-link);
+      border: 1px solid var(--c-edge);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-family: monospace;
+      font-size: .88em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      transition: color .25s;
+    }
+    .url-box.copied { color: var(--c-alive); }
+    .copy-btn, .open-btn {
+      padding: 6px 14px;
+      border-radius: 4px;
+      font-size: .85em;
+      font-family: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      white-space: nowrap;
+      border: 1px solid;
+    }
+    .copy-btn {
+      background: color-mix(in srgb, var(--c-link) 12%, transparent);
+      color: var(--c-link);
+      border-color: var(--c-link);
+    }
+    .copy-btn:hover { background: color-mix(in srgb, var(--c-link) 22%, transparent); }
+    .open-btn {
+      background: color-mix(in srgb, var(--c-alive) 12%, transparent);
+      color: var(--c-alive);
+      border-color: var(--c-alive);
+    }
+    .open-btn:hover { background: color-mix(in srgb, var(--c-alive) 22%, transparent); }
+
+    .attempts-row {
+      display: flex; align-items: center; gap: 8px;
+      margin-top: .8em;
+    }
+    .attempts-row input {
+      width: 80px;
+      background: var(--c-bg);
+      color: var(--c-brand);
+      border: 1px solid var(--c-edge);
+      border-radius: 4px;
+      padding: 5px 8px;
+      font-family: var(--font-pixel);
+      font-size: .75em;
+      text-align: center;
+    }
+
+    @media (max-width: 800px) {
+      .launcher { grid-template-columns: 1fr; max-height: none; }
+      .rail { max-height: 240px; border-right: 0; border-bottom: 1px solid var(--c-edge); }
+    }

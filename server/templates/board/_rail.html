@@ -1,9 +1,10 @@
+{% set dest = destination|default('run') %}
 <aside class="board-rail" aria-label="SLink navigation">
   <a class="board-rail-brand" href="/"><svg class="inline-ico" aria-hidden="true"><use href="#i-link"/></svg><span class="board-rail-brandtext"><b>SOUL LINK</b><span>Two players. One run.</span></span></a>
   <nav aria-label="Destinations">
-    <a class="board-rail-item active" href="{{ run_base|default('') }}/" aria-current="page"><span class="board-dot {{ 'running' if running else 'stopped' }}"></span><span class="board-rail-label">Run</span></a>
-    <a class="board-rail-item" href="{{ run_base|default('') }}/stream"><span aria-hidden="true">▣</span><span class="board-rail-label">Broadcast</span></a>
-    <a class="board-rail-item" href="/patcher"><span aria-hidden="true">⚒</span><span class="board-rail-label">Tools</span></a>
+    <a class="board-rail-item{% if dest == 'run' %} active{% endif %}" href="{{ run_base|default('') }}/"{% if dest == 'run' %} aria-current="page"{% endif %}><span class="board-dot {{ 'running' if running else 'stopped' }}"></span><span class="board-rail-label">Run</span></a>
+    <a class="board-rail-item{% if dest == 'broadcast' %} active{% endif %}" href="{{ run_base|default('') }}/broadcast"{% if dest == 'broadcast' %} aria-current="page"{% endif %}><span aria-hidden="true">▣</span><span class="board-rail-label">Broadcast</span></a>
+    <a class="board-rail-item{% if dest == 'tools' %} active{% endif %}" href="{{ run_base|default('') }}/tools"{% if dest == 'tools' %} aria-current="page"{% endif %}><span aria-hidden="true">⚒</span><span class="board-rail-label">Tools</span></a>
     {% if not manager or selected_run %}<a class="board-rail-item" href="{{ run_base|default('') }}/calc/normal.html" target="_blank" rel="noopener" data-calc-link><span aria-hidden="true">▦</span><span class="board-rail-label">Calc ↗</span></a><button type="button" class="board-rail-item" data-debug-open aria-haspopup="dialog" aria-controls="debug-dialog"{% if not running %} disabled{% endif %}><span aria-hidden="true">⌘</span><span class="board-rail-label">Debug</span><kbd>`</kbd></button>{% endif %}
   </nav>
   {% if manager %}{% include 'board/_run_list.html' %}<a class="board-btn board-new-run" href="/#new-run">+ New run</a>{% endif %}

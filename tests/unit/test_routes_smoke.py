@@ -25,7 +25,7 @@ from tests.ui_support import manager_app_without_startup  # noqa: E402
 
 # Routes with side effects or long-lived responses. /api/events is an SSE stream that never
 # completes; the calc catch-all serves files from a vendored bundle; the launcher needs a player.
-SKIP = {"/api/events", "/_ui/board-context"}  # private loopback projection covered by test_manager_board
+SKIP = {"/api/events", "/_ui/board-context", "/_internal/obs/{action}"}  # private loopback projection covered by test_manager_board
 DYNAMIC = {
     "/calc/{path:.*}": "/calc/css/main.css",
     "/calc/{path}": "/calc/css/main.css",
@@ -120,10 +120,13 @@ async def test_get_route_renders(client, path):
     resp = await client.get(path, allow_redirects=False)
     ctype = resp.headers.get("Content-Type", "")
     raw = await resp.read()                     # bytes: /companion/*.ups serves a binary patch
-    expected = 302 if path in ("/calc", "/calc/") else 200
+    redirects = {"/calc": "/calc/normal.html", "/calc/": "/calc/normal.html", "/debug": "/?debug=1",
+                 "/memorial": "/#zone-fallen", "/obs": "/broadcast?tab=obs", "/twitch": "/broadcast?tab=twitch",
+                 "/stream": "/broadcast?tab=overlays", "/stream/": "/broadcast?tab=overlays", "/patcher": "/tools"}
+    expected = 302 if path in redirects else 200
     assert resp.status == expected, f"{path} -> {resp.status}\n{raw[:1500]!r}"
     if expected == 302:
-        assert resp.headers["Location"] == "/calc/normal.html"
+        assert resp.headers["Location"] == redirects[path]
     # A 200 HTML page that came back empty means the template rendered to nothing.
     if resp.status == 200 and "text/html" in ctype:
         assert raw.decode("utf-8", "replace").strip(), f"{path} returned an empty HTML body"

@@ -105,6 +105,8 @@ def setup_patcher_routes(
     """
 
     async def handle_patcher_page(request: web.Request) -> web.Response:
+        from server.application import compatibility_location
+        raise web.HTTPFound(compatibility_location(request, '/tools'))
         slug = request.query.get("game", DEFAULT_TARGET)
         if slug not in TARGETS:
             slug = DEFAULT_TARGET

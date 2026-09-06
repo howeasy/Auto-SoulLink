@@ -1,0 +1,307 @@
+
+{#
+  Catalog data injected via a <script> tag rather than embedded directly in
+  an x-init="" HTML attribute. JSON has lots of double quotes; cramming it
+  into a double-quoted attribute terminates the attribute on the first one
+  and breaks everything downstream. A typed module-scope var is cleaner.
+#}
+<script>
+  window.SLINK_OVERLAY_CATALOG    = {{ overlays_json           | safe }};
+  window.SLINK_LAYOUT_LABELS      = {{ layout_labels_json      | safe }};
+  window.SLINK_DEFAULT_FILTERS_ON = {{ default_filters_on_json | safe }};
+  window.SLINK_ALL_FILTERS = {{ all_filters_json | safe }};
+</script>
+
+
+<div class="launcher"
+     x-data="overlayLauncher()"
+     x-init="setup(window.SLINK_OVERLAY_CATALOG)">
+
+  {# ── Left rail: families + items ────────────────────────────────── #}
+  <nav aria-label="Overlay presets" class="rail" :class="railCollapsed ? 'rail-collapsed' : ''">
+    <div class="rail-head">
+      <h1>◆ SLink Overlays</h1>
+      <button type="button" class="rail-toggle"
+              @click="railCollapsed = !railCollapsed; try { localStorage.setItem('slink-stream-rail-collapsed', railCollapsed ? '1' : '0'); } catch (_) {}"
+              :title="railCollapsed ? 'Expand overlay list' : 'Collapse overlay list'">
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path fill="currentColor" d="M2 3h12v2H2zm0 4h12v2H2zm0 4h12v2H2z"/>
+        </svg>
+      </button>
+    </div>
+    {% for fam_slug, fam_label in families %}
+      {% set fam_items = overlays | selectattr('family', 'equalto', fam_slug) | list %}
+      {% if fam_items %}
+        <div class="rail-family">
+          <div class="rail-family-label">{{ fam_label }}</div>
+          {% for ov in fam_items %}
+            <button class="rail-item"
+                    :class="active === '{{ ov.slug }}' ? 'active' : ''" :aria-pressed="active === '{{ ov.slug }}'"
+                    @click="select('{{ ov.slug }}')">
+              <span class="rail-item-dot"></span>
+              <span>{{ ov.title }}</span>
+            </button>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endfor %}
+  </nav>
+
+  {# ── Right pane: selected overlay's config ──────────────────────── #}
+  <section class="pane" aria-label="Overlay preview">
+    <div class="obs-tip">
+      <b>OBS setup:</b> Add a Browser Source → paste the URL → set width/height per the recommended size.
+      OBS's default Browser Source Custom CSS already handles transparent backgrounds.
+      <b>Overlay themes are independent of the launcher page theme</b> — they live in the URL only.
+    </div>
+
+    <h2 x-text="current.title"></h2>
+    <p class="desc" x-text="current.desc"></p>
+
+    {# Overview mode — a grid of every other overlay in mini-preview iframes
+       so the broadcaster can see all scenes at a glance. Excludes the
+       "all" entry itself to avoid recursion. #}
+    <template x-if="current.slug === 'all'">
+      <div class="overview-grid">
+        <template x-for="ov in overlays.filter(o => o.slug !== 'all')" :key="ov.slug">
+          <div class="overview-tile">
+            <div class="overview-tile-hdr">
+              <span class="overview-tile-title" x-text="ov.title"></span>
+              <a class="overview-tile-pop" target="_blank" rel="noopener"
+                 :href="SLinkRun.url('/stream/' + ov.slug + '?theme=' + params.theme)"
+                 title="Pop out">↗</a>
+            </div>
+            <iframe class="overview-tile-frame"
+                    :src="SLinkRun.url('/stream/' + ov.slug + '?theme=' + params.theme)"
+                    :title="ov.title"></iframe>
+          </div>
+        </template>
+      </div>
+    </template>
+
+    <template x-if="current.slug !== 'all'">
+      <div class="preview-wrap">
+        <iframe :src="previewUrl()" :title="current.title + ' preview'"></iframe>
+      </div>
+    </template>
+
+    <div class="cfg-block">
+      {# Theme — always shown #}
+      <div class="cfg-row">
+        <span class="cfg-lbl">Theme</span>
+        <div class="cfg-pills">
+          <template x-for="t in themes" :key="t.slug">
+            <button class="cpill"
+                    :class="params.theme === t.slug ? 'active' : ''" :aria-pressed="params.theme === t.slug"
+                    @click="setParam('theme', t.slug)"
+                    :title="t.label">
+              <span class="pswatch" :style="`background:${t.swatch}`"></span>
+              <span x-text="t.label"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+
+      {# Layout — shown only when the overlay supports more than one #}
+      <template x-if="current.layouts.length > 1">
+        <div class="cfg-row">
+          <span class="cfg-lbl">Layout</span>
+          <div class="cfg-pills">
+            <template x-for="lay in current.layouts" :key="lay">
+              <button class="cpill"
+                      :class="params.layout === lay ? 'active' : ''" :aria-pressed="params.layout === lay"
+                      @click="setParam('layout', lay)"
+                      x-text="layoutLabel(lay)"></button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      {# Speed — for overlays that auto-scroll #}
+      <template x-if="current.speeds">
+        <div class="cfg-row">
+          <span class="cfg-lbl">Speed</span>
+          <div class="cfg-pills">
+            <template x-for="s in current.speeds" :key="s">
+              <button class="cpill"
+                      :class="params.speed === s ? 'active' : ''" :aria-pressed="params.speed === s"
+                      @click="setParam('speed', s)"
+                      x-text="s + '×'"></button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      {# Pause — enemy trainer auto-scroll pause between loops #}
+      <template x-if="current.pauses">
+        <div class="cfg-row">
+          <span class="cfg-lbl">Pause</span>
+          <div class="cfg-pills">
+            <template x-for="p in current.pauses" :key="p">
+              <button class="cpill"
+                      :class="params.pause === p ? 'active' : ''" :aria-pressed="params.pause === p"
+                      @click="setParam('pause', p)"
+                      x-text="p + 's'"></button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      {# Event filters — for events + ticker #}
+      <template x-if="current.event_filters">
+        <div class="cfg-row">
+          <span class="cfg-lbl">Events</span>
+          <div class="cfg-pills">
+            <template x-for="ev in allFilters" :key="ev">
+              <button class="cpill"
+                      :class="activeFilters.has(ev) ? 'factive' : ''" :aria-pressed="activeFilters.has(ev)"
+                      @click="toggleFilter(ev)"
+                      x-text="ev"></button>
+            </template>
+          </div>
+        </div>
+      </template>
+
+      <div class="size-hint" x-text="current.sizes.join('   |   ')"></div>
+
+      <div class="url-row">
+        <span class="url-box" x-text="previewUrl()" :class="{copied: justCopied}"></span>
+        <button class="copy-btn" @click="copy()">Copy</button>
+        <a class="open-btn" :href="previewUrl()" target="_blank" rel="noopener">Open ↗</a>
+      </div>
+
+      {# Attempts counter inline editor — only the /stream/attempts overlay #}
+      <template x-if="current.attempts_input">
+        <div class="attempts-row">
+          <span class="cfg-lbl" style="padding-top:6px">Set attempts</span>
+          <input type="number" min="0" x-model.number="attemptsValue">
+          <button class="copy-btn" @click="setAttempts()">Set</button>
+        </div>
+      </template>
+    </div>
+  </section>
+</div>
+
+<script>
+function overlayLauncher() {
+  return {
+    // Server-injected data
+    overlays: [],
+    catalog: {},
+    themes: [
+      { slug: 'default',              label: 'Default',     swatch: '#070910' },
+      { slug: 'light',                label: 'Light',       swatch: '#eef2fc' },
+      { slug: 'transparent',          label: 'Transparent', swatch: 'repeating-conic-gradient(#888 0% 25%, #444 0% 50%) 50%/8px 8px' },
+      { slug: 'funtastic-grape',      label: 'Grape',       swatch: '#9933cc' },
+      { slug: 'funtastic-jungle',     label: 'Jungle',      swatch: '#00cc66' },
+      { slug: 'funtastic-fire',       label: 'Fire',        swatch: '#ff6600' },
+      { slug: 'funtastic-ice',        label: 'Ice',         swatch: '#66ccff' },
+      { slug: 'funtastic-watermelon', label: 'Watermelon',  swatch: '#ff3366' },
+      { slug: 'funtastic-smoke',      label: 'Smoke',       swatch: '#333333' },
+    ],
+    layoutLabels: window.SLINK_LAYOUT_LABELS,
+    allFilters: window.SLINK_ALL_FILTERS,
+    defaultFiltersOn: new Set(window.SLINK_DEFAULT_FILTERS_ON),
+
+    // Reactive state
+    active: '',
+    params: { theme: 'transparent', layout: '', speed: '1', pause: '2' },
+    activeFilters: new Set(),
+    justCopied: false,
+    attemptsValue: 0,
+    // Rail collapse state persists in localStorage so the choice survives
+    // page refresh + navigation between the manager + per-run server's
+    // copies of this gallery.
+    railCollapsed: (function() {
+      try { return localStorage.getItem('slink-stream-rail-collapsed') === '1'; }
+      catch (_) { return false; }
+    })(),
+
+    get current() {
+      return this.catalog[this.active] || { title: '', desc: '', sizes: [], layouts: [''] };
+    },
+
+      // NOT named `init`: Alpine auto-invokes a component's `init()` with NO arguments
+      // during initialisation, so an `init(arg)` here runs TWICE — once with arg
+      // undefined. See tests/unit/test_routes_smoke.py for the guard.
+    setup(overlays) {
+      if (!overlays || !overlays.length) return;
+      this.overlays = overlays;
+      overlays.forEach(o => { this.catalog[o.slug] = o; });
+      this.active = overlays[0].slug;
+      this.activeFilters = new Set(this.defaultFiltersOn);
+      this.fetchAttempts();
+    },
+
+    select(slug) {
+      this.active = slug;
+      // Reset params that don't apply to the newly-selected overlay so the
+      // URL string stays clean (e.g. layout doesn't carry over from one
+      // overlay's "horizontal" to another that only has default).
+      var cur = this.current;
+      if (!cur.layouts.includes(this.params.layout)) {
+        this.params.layout = cur.layouts.includes('') ? '' : cur.layouts[0];
+      }
+      if (!cur.speeds && this.params.speed !== '1') this.params.speed = '1';
+      if (!cur.pauses && this.params.pause !== '2') this.params.pause = '2';
+    },
+
+    setParam(name, val) {
+      this.params[name] = val;
+    },
+
+    toggleFilter(ev) {
+      // Keep at least one filter on so the overlay doesn't go blank
+      if (this.activeFilters.has(ev) && this.activeFilters.size === 1) return;
+      if (this.activeFilters.has(ev)) this.activeFilters.delete(ev);
+      else this.activeFilters.add(ev);
+    },
+
+    layoutLabel(lay) {
+      return this.layoutLabels[lay] || lay || 'Default';
+    },
+
+    previewUrl() {
+      var cur = this.current;
+      if (!cur.slug) return '';
+      var q = [];
+      if (this.params.theme) q.push('theme=' + this.params.theme);
+      if (cur.layouts.length > 1 && this.params.layout !== '') q.push('layout=' + this.params.layout);
+      if (cur.speeds && this.params.speed !== '1') q.push('speed=' + this.params.speed);
+      if (cur.pauses && this.params.pause !== '2') q.push('pause=' + this.params.pause);
+      if (cur.event_filters) {
+        var enabled = Array.from(this.activeFilters);
+        // Only emit if the user has diverged from the all-on default
+        if (enabled.length < this.allFilters.length) {
+          q.push('filter=' + enabled.join(','));
+        }
+      }
+      return SLinkRun.url('/stream/' + cur.slug + (q.length ? '?' + q.join('&') : ''));
+    },
+
+    copy() {
+      var url = window.location.origin + this.previewUrl();
+      navigator.clipboard.writeText(url).then(() => {
+        this.justCopied = true;
+        setTimeout(() => { this.justCopied = false; }, 1400);
+      });
+    },
+
+    fetchAttempts() {
+      SLinkRun.fetch('/api/status').then(r => r.json()).then(d => {
+        if (typeof d.attempts_count === 'number') this.attemptsValue = d.attempts_count;
+      }).catch(() => {});
+    },
+
+    setAttempts() {
+      var val = parseInt(this.attemptsValue, 10);
+      if (isNaN(val) || val < 0) return;
+      SLinkRun.fetch('/api/attempts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ count: val }),
+      });
+    },
+  };
+}
+</script>

@@ -1,0 +1,119 @@
+{
+  "fixtures_only": true,
+  "live_admission_evidence": false,
+  "obs_protocol_fixture_only": true,
+  "files": {
+    "destinations.json": {
+      "sha256": "e89198a1dcd2e186aa25b9d40994753d37adcd3e20e93cfcebf2d2bf2ecb78a3",
+      "bytes": 1226
+    },
+    "gallery-gen1-light-700.png": {
+      "sha256": "93062d90cdb95a94ad103f0218be164a56a043dff51ce3fff7620815cd512b42",
+      "bytes": 66692
+    },
+    "gallery-gen3-funtastic-grape-1600.png": {
+      "sha256": "53549e2825fa76198d3753920e7091792a16eb452ceb8a14fcd1a3180ae774aa",
+      "bytes": 173679
+    },
+    "keyboard.json": {
+      "sha256": "1e90996be696e0da99cde9ca9067d28e70cb7ea94dea7ecc258dad809326b7f5",
+      "bytes": 783
+    },
+    "matrix.json": {
+      "sha256": "8b0de94b44ab462228a65f3f11e9caa814be28a881e284d3ee01798fd523fae0",
+      "bytes": 4209
+    },
+    "obs-gen1-default-1100.png": {
+      "sha256": "05b93b53c1ea79b1d34ecf976e9e7507c4926571a1156da9e7e52fa21c3f332d",
+      "bytes": 70292
+    },
+    "obs-gen1-default-1600.png": {
+      "sha256": "322393aa5a726e30745d82c1154b0106887181db4be3690c5608976fd791b909",
+      "bytes": 84990
+    },
+    "obs-gen1-default-700.png": {
+      "sha256": "5a78146eafd059a2e9b408c24d23b155dda43628b2e6ee8e4f3f2bd98b7cbee1",
+      "bytes": 58979
+    },
+    "obs-gen1-funtastic-grape-1100.png": {
+      "sha256": "b51a3d6d8a3c526829a3f412b59480563dd102447433de0a51c0ad5b02473a62",
+      "bytes": 79826
+    },
+    "obs-gen1-funtastic-grape-1600.png": {
+      "sha256": "3f6fc7c831cebe54d8b33df63464d66d0f757ccd2b4eff544d82358f1c924bb6",
+      "bytes": 97541
+    },
+    "obs-gen1-funtastic-grape-700.png": {
+      "sha256": "041f934c57d9645b0ff708efa4317bd35f52f452542a6ec02716c3ce5264968b",
+      "bytes": 66329
+    },
+    "obs-gen1-light-1100.png": {
+      "sha256": "ea8c7f4c79f7dbca878cf307c8805f281233a04496541639f66368db67360d95",
+      "bytes": 69821
+    },
+    "obs-gen1-light-1600.png": {
+      "sha256": "d92b851595a52e3678a60cc60a6c6c35f42958d3a14cf89a52372ea04380e3ac",
+      "bytes": 84307
+    },
+    "obs-gen1-light-700.png": {
+      "sha256": "f62c6b1eafb35a4d638abd69c675f22e6bfbacbbcf2d26d39c9ef62f84e3d806",
+      "bytes": 58544
+    },
+    "obs-gen3-default-1100.png": {
+      "sha256": "fb92d0cb41d4cad229fdddebbf790cb54d48a2677be585d4a970a88004022737",
+      "bytes": 70174
+    },
+    "obs-gen3-default-1600.png": {
+      "sha256": "93d8efe246f0b2a1d7c166f52aff84691956c72298f974b4984ce95228720839",
+      "bytes": 84732
+    },
+    "obs-gen3-default-700.png": {
+      "sha256": "955309be2af6317e775842bfc5f39d41d3befa13edd4a8752919641557265960",
+      "bytes": 60627
+    },
+    "obs-gen3-funtastic-grape-1100.png": {
+      "sha256": "81b88b74720058ee00f776f2425bd5c38f9ace5482b9e0d7c23cd0692a21cc4c",
+      "bytes": 79716
+    },
+    "obs-gen3-funtastic-grape-1600.png": {
+      "sha256": "adce555fb84c03e383915ac2452d2b5d69f11296754a559f9f31334f2c95f2fc",
+      "bytes": 97500
+    },
+    "obs-gen3-funtastic-grape-700.png": {
+      "sha256": "3337ef5a8b3f03e5a3d68f6f2b3551ea394ac78158d4cccd425d84ffa018cc52",
+      "bytes": 66054
+    },
+    "obs-gen3-light-1100.png": {
+      "sha256": "e7ce26b8a8dcb62b2898180a349992c9e60e07eb22873ca6470f1c9a6778a381",
+      "bytes": 69722
+    },
+    "obs-gen3-light-1600.png": {
+      "sha256": "884025974a7de1b6a14cccf33d162a7c7c5f4ecbc069f1da9542e20bb4a46a10",
+      "bytes": 84189
+    },
+    "obs-gen3-light-700.png": {
+      "sha256": "b64a4d1ec40c230d1e35f688604dfc4150503513fe1757da8dbc1f647d5e94b9",
+      "bytes": 60427
+    },
+    "tools-gen1-light-700.png": {
+      "sha256": "7a3b4ccbf3e08b8755f0c2e617d179b2c4c07190e631b625db1cdae727c75e5b",
+      "bytes": 75938
+    },
+    "tools-gen3-funtastic-grape-1600.png": {
+      "sha256": "c51f4e6be98e722a1c3dd0be3894114f534bb5d9fdd00535fd812a3397db5f84",
+      "bytes": 116284
+    },
+    "twitch-gen1-light-700.png": {
+      "sha256": "7e23bbb9b6e3307c1bebb515b31bc4f66f354d7fa98abe9ae05c3a8501ca2ed6",
+      "bytes": 65587
+    },
+    "twitch-gen3-funtastic-grape-1600.png": {
+      "sha256": "2a287d90226d6a5d91d76a62614ef565034d9657836f9d5f9496879b6f2b5be2",
+      "bytes": 94798
+    },
+    "unassigned-rule-700.png": {
+      "sha256": "0ce99e2f0f5fd72e9b2deaa4c4eafa851358c2558313c6f0083155ce3ae6c4e0",
+      "bytes": 60066
+    }
+  }
+}

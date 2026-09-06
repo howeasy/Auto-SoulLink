@@ -1,0 +1,36 @@
+{
+  "rules": {
+    "focusOutline": "solid",
+    "focused": "+ Add rule",
+    "overflow": false,
+    "unassigned": [
+      {
+        "disabled": false,
+        "opacity": "1",
+        "reason": ""
+      },
+      {
+        "disabled": true,
+        "opacity": "1",
+        "reason": "Choose a source run before enabling this rule."
+      }
+    ]
+  },
+  "debug": {
+    "disabled": 19,
+    "inside": true,
+    "open": true,
+    "reason": "RBY run changes are unavailable until the operation and recovery interface is connected.",
+    "restored": true
+  },
+  "independentRuleSource": {
+    "pageRun": "review_gen3",
+    "ruleRun": "review_gen1",
+    "revision": 3
+  },
+  "sceneResults": {
+    "successful": "Battle",
+    "rejected": "Missing scene",
+    "protocolFixtureOnly": true
+  }
+}

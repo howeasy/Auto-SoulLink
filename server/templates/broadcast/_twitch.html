@@ -1,0 +1,91 @@
+<h1>&#x1F916; Twitch Bot</h1>
+
+  <div class="panel">
+    <h2>STATUS</h2>
+    <span id="status-badge" class="status-badge sb-dis">Loading&hellip;</span>
+    <span id="status-channel" style="margin-left:.8em;color:var(--c-dim);font-size:.85em"></span>
+    <span id="token-badge" style="margin-left:1em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block"></span>
+    <span id="clientid-badge" style="margin-left:.5em;font-size:.82em;padding:3px 10px;border-radius:3px;display:inline-block"></span>
+    <div id="status-error" style="display:none;margin-top:.7em;background:rgba(240,56,56,.1);border:1px solid #f03838;border-radius:4px;padding:7px 12px;color:var(--c-dead);font-size:.82em;font-family:monospace;word-break:break-all"></div>
+  </div>
+
+  <div class="panel">
+    <h2>CONFIGURATION</h2>
+    <div class="sec-note">
+      <strong>Connect this run's Twitch bot</strong>
+      <p>Create a Twitch application and authorize the bot account using <a href="https://dev.twitch.tv/docs/authentication/" target="_blank" rel="noopener">Twitch's authentication guide</a>.</p>
+      <p>On the server computer, provide <code>TWITCH_ACCESS_TOKEN</code>, <code>TWITCH_REFRESH_TOKEN</code>, and <code>TWITCH_CLIENT_SECRET</code> before launching SLink. Then start this run, enter its channel and client ID below, and save the settings.</p>
+    </div>
+    <div class="row2">
+      <div>
+        <label for="cfg-channel">Channel (without #)</label>
+        <input type="text" id="cfg-channel" placeholder="your_channel">
+        <label for="cfg-nick">Bot Nick</label>
+        <input type="text" id="cfg-nick" placeholder="slink_bot">
+      </div>
+      <div>
+        <label for="cfg-client-id">Client ID (from dev.twitch.tv/console)</label>
+        <input type="text" id="cfg-client-id" placeholder="abcdef1234567890abcdef1234567890" style="width:260px">
+        <label for="cfg-prefix">Command Prefix</label>
+        <input type="text" id="cfg-prefix" value="!" maxlength="3" style="width:80px">
+        <label for="cfg-cooldown">Command Cooldown (seconds)</label>
+        <input type="number" id="cfg-cooldown" min="1" max="60" value="5" style="width:80px">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn" onclick="saveConfig()">Save Config</button>
+      <button class="btn" onclick="reloadBot()">Reconnect</button>
+      <button class="btn btn-grn" onclick="enableBot()">Enable</button>
+      <button class="btn btn-red" onclick="disableBot()">Disable</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>COMMAND PREVIEW</h2>
+    <p style="color:var(--c-dim);font-size:.82em;margin-bottom:.7em">Test what the bot would reply — no message is sent to chat.</p>
+    <div style="display:flex;gap:.6em;flex-wrap:wrap;align-items:flex-end">
+      <div style="flex:1;min-width:160px">
+        <label for="prev-cmd">Command</label>
+        <select id="prev-cmd">
+          <option value="soullink">!soullink</option>
+          <option value="clauses">!clauses</option>
+          <option value="rip">!rip</option>
+          <option value="runstats">!runstats</option>
+          <option value="alltime">!alltime</option>
+          <option value="lastrun">!lastrun</option>
+          <option value="attempts">!attempts</option>
+          <option value="partner">!partner &lt;name&gt;</option>
+          <option value="area">!area &lt;name&gt;</option>
+        </select>
+      </div>
+      <div style="flex:1;min-width:120px">
+        <label for="prev-arg">Argument (optional)</label>
+        <input type="text" id="prev-arg" placeholder="e.g. PIDGEY">
+      </div>
+      <button class="btn" onclick="previewCmd()" style="margin-bottom:2px">Preview</button>
+    </div>
+    <div id="preview-out" class="preview-box" style="margin-top:.7em">&hellip;</div>
+  </div>
+
+  <div class="panel">
+    <h2>COMMAND REFERENCE</h2>
+    <table>
+      <thead><tr><th>Command</th><th>Arg</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td class="cmd">!soullink</td><td class="arg"></td><td>Plain-English Soul Link rules for new viewers</td></tr>
+        <tr><td class="cmd">!clauses</td><td class="arg"></td><td>Active clause rules (Species / Gender / Type)</td></tr>
+        <tr><td class="cmd">!rip</td><td class="arg"></td><td>Most recent death with killer detail</td></tr>
+        <tr><td class="cmd">!runstats</td><td class="arg"></td><td>Attempt #, alive/dead/shinies, oldest linked pair</td></tr>
+        <tr><td class="cmd">!alltime</td><td class="arg"></td><td>Cross-run aggregate: attempts, deaths, shinies, best run</td></tr>
+        <tr><td class="cmd">!lastrun</td><td class="arg"></td><td>How the previous run ended</td></tr>
+        <tr><td class="cmd">!attempts</td><td class="arg"></td><td>Current attempt number</td></tr>
+        <tr><td class="cmd">!partner</td><td class="arg">&lt;name&gt;</td><td>Look up a mon's Soul Link partner by nickname</td></tr>
+        <tr><td class="cmd">!area</td><td class="arg">&lt;name&gt;</td><td>Look up the link status of an area</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>RECENT ACTIVITY</h2>
+    <div id="log-list"><span class="empty">No activity yet.</span></div>
+  </div>

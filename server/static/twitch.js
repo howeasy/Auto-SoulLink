@@ -15,7 +15,7 @@ var _cfgLoaded = false;
       return a && _cfgInputIds.indexOf(a.id) !== -1;
     }
     function loadStatus(forceConfig) {
-      SLinkRun.fetch('/api/bot/status').then(function(r){return r.json();}).then(function(j){
+      return SLinkRun.fetch('/api/bot/status').then(function(r){return r.json();}).then(function(j){
         var badge = document.getElementById('status-badge');
         var chan  = document.getElementById('status-channel');
         var tBadge = document.getElementById('token-badge');
@@ -103,5 +103,5 @@ var _cfgLoaded = false;
         box.textContent = j.reply || '(no reply)';
       }).catch(function(){ box.textContent = 'Error'; });
     }
-    loadStatus();
-    setInterval(loadStatus, 5000);
+    if (window.SLinkPoll) SLinkPoll.subscribe('twitch', function () { return loadStatus(); });
+    else { loadStatus(); setInterval(loadStatus, 5000); }

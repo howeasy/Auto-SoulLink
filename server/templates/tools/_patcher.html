@@ -1,0 +1,106 @@
+<div class="patcher-wrap"
+         data-base-md5="{{ base_rom_md5 }}"
+         data-patched-md5="{{ patched_rom_md5 }}"
+         data-out-name="{{ target.out_name }}"
+         data-patch-url="/companion/{{ target.patch }}">
+
+      <header class="patcher-head">
+        <h1>Companion ROM Patcher</h1>
+        <p class="patcher-lead">
+          Apply the SLink companion patch to <strong>{{ target.base_hint }}</strong>
+          right here — the patch runs entirely in your browser, nothing is uploaded.
+          Choose the cartridge you want to patch below. The patch is <strong>optional</strong>;
+          Run Setup shows each player’s verified feature availability.
+        </p>
+        {# One page, several games. A UPS carries the CRC32 of the exact dump it was
+           diffed against, so the target has to be chosen before the file is applied
+           rather than guessed from what the user drops in. #}
+        <nav class="patcher-games">
+          {% for t in targets %}
+            {% if t.slug == target.slug %}
+              <strong class="patcher-game is-active" aria-current="true">{{ t.label }}</strong>
+            {% else %}
+              <a class="patcher-game" href="{{ run_base|default('') }}/tools?game={{ t.slug }}">{{ t.label }}</a>
+            {% endif %}
+          {% endfor %}
+        </nav>
+        {% if target.slug != "rr" %}
+        <p class="patcher-muted">
+          Only the listed cartridges have companion downloads in this version.
+          Check Run Setup for each player’s verified feature availability.
+        </p>
+        {% endif %}
+      </header>
+
+      {# ── Patch-and-download ─────────────────────────────────────────── #}
+      <section class="patcher-card">
+        <h2>1 · Patch your ROM</h2>
+        <label id="drop" class="patcher-drop" for="rom-input">
+          <input id="rom-input" type="file" accept="{{ target.accept }}" hidden>
+          <span class="patcher-drop-ico" aria-hidden="true">⬇</span>
+          <span class="patcher-drop-text">
+            Drop your <code>{{ target.label }}</code> ROM here, or click to choose
+          </span>
+          <span id="rom-name" class="patcher-drop-name"></span>
+        </label>
+
+        <div class="patcher-actions">
+          <button id="apply" type="button" class="patcher-btn" disabled>Apply patch</button>
+          <a id="download" class="patcher-btn patcher-btn-ok" hidden download>Download patched ROM</a>
+        </div>
+
+        <div id="status" class="patcher-status" role="status" aria-live="polite"></div>
+
+        <dl class="patcher-fp" id="fp" hidden>
+          <div><dt>Input md5</dt><dd id="fp-in">—</dd></div>
+          <div><dt>Output md5</dt><dd id="fp-out">—</dd></div>
+        </dl>
+      </section>
+
+      {# ── What this unlocks ──────────────────────────────────────────── #}
+      <section class="patcher-card">
+        <h2>Patch capabilities</h2>
+        <p class="patcher-muted">
+          The patch provides cartridge hooks for these features. Availability also
+          depends on the connected game and runtime; applying a patch does not by
+          itself confirm readiness.
+        </p>
+        {% if target.slug == 'rr' %}
+        <ul class="patcher-features">
+          <li><strong>Native message box</strong> — momentous overworld events (a link
+            forms, a shiny is found, an area becomes a dead zone) show in the real in-game
+            text box instead of the HUD.</li>
+          <li><strong>Peer ghost</strong> — your partner walks your overworld as a real
+            NPC, rendered as their own trainer avatar &amp; colours, moving in real time.</li>
+          <li><strong>Talk to your partner</strong> — face the ghost + press A for a native
+            <em>Trade / Say hey</em> menu. Trade plays the real in-game trade scene on both
+            sides (including trade-evolution); Say hey pings your partner.</li>
+          <li><strong>Native sound</strong> — link / KO / shiny cues play through the game's
+            own sound engine instead of a Lua RAM-poke.</li>
+          <li><strong>Bundled Battle Calc</strong> — an in-battle damage / type-effectiveness
+            readout for the highlighted move, folded into the same patch.</li>
+        </ul>
+        {% else %}
+        <p>This companion belongs to {{ target.label }}. Apply it only to the listed
+          clean cartridge. The run checks cartridge identity and feature support
+          when each player connects.</p>
+        {% endif %}
+        <p class="patcher-muted">Choose rules and features when creating a run.
+          Run Setup reports their availability separately for each player.</p>
+      </section>
+
+      {# ── Manual download ────────────────────────────────────────────── #}
+      <section class="patcher-card">
+        <h2>Prefer your own patcher?</h2>
+        <p class="patcher-muted">
+          Download the raw UPS and apply it with Flips, NUPS, RomPatcher.js, … Your clean
+          ROM's md5 should be <code>{{ base_rom_md5 }}</code>; the patched result should be
+          <code>{{ patched_rom_md5 }}</code>.
+        </p>
+        <p>
+          <a class="patcher-btn patcher-btn-ghost" href="/companion/{{ target.patch }}" download>
+            Download {{ target.patch }}
+          </a>
+        </p>
+      </section>
+    </div>

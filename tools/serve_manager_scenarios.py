@@ -20,6 +20,9 @@ from aiohttp import web  # noqa: E402
 from server import manager  # noqa: E402
 from server.server import build_app  # noqa: E402
 from tests.dashboard_scenarios import dashboard_scenario  # noqa: E402
+from tests.obs_fixture import OBSFixture  # noqa: E402
+from server.obs_controller import OBSController  # noqa: E402
+from server.obs_run_bridge import OBSRunBridge  # noqa: E402
 
 
 async def serve():
@@ -39,6 +42,9 @@ async def serve():
             # Creation writes run.json first; hydrate a separate isolated folder.
             server = dashboard_scenario(scenario, Path(temporary) / ("fixture-" + run["run_id"]))
             server._run_id, server._run_name, server._manager_port = run["run_id"], run["name"], 8090
+            server.obs = OBSController(str(directory / "obs.json"), managed=True)
+            server.obs_bridge = OBSRunBridge(server.obs, run["run_id"], 8090)
+            server.obs.event_sink = server.obs_bridge.submit
             directory.mkdir(exist_ok=True)
             (directory / "links.json").write_text(json.dumps(server.state.to_document()), encoding="utf-8")
             app = build_app(server)
@@ -55,7 +61,14 @@ async def serve():
         async def spawn(run, host, manager_port=8090):
             return await start_http(run)
         manager._spawn_run = spawn
+        fixture = OBSFixture()
         try:
+            obs_runner = web.AppRunner(fixture.app)
+            await obs_runner.setup()
+            runners.append(obs_runner)
+            obs_site = web.TCPSite(obs_runner, "127.0.0.1", 0)
+            await obs_site.start()
+            obs_port = obs_site._server.sockets[0].getsockname()[1]
             runs = []
             for game in ("gen3", "gen1"):
                 run = {"run_id": "review_" + game, "name": game.upper() + " review", "status": "running",
@@ -71,9 +84,15 @@ async def serve():
             site = web.TCPSite(runner, "127.0.0.1", 0)
             await site.start()
             port = site._server.sockets[0].getsockname()[1]
-            print(json.dumps({"manager": port, "pid": os.getpid(), "fixtures_only": True}), flush=True)
+            for server in servers.values():
+                server._manager_port = port
+                server.obs_bridge.manager_url = f"http://127.0.0.1:{port}"
+            print(json.dumps({"manager": port, "obs": obs_port, "pid": os.getpid(), "fixtures_only": True}), flush=True)
             await asyncio.Event().wait()
         finally:
+            for server in servers.values():
+                await server.obs_bridge.close()
+                await server.obs.stop_workers()
             for runner in reversed(runners):
                 await runner.cleanup()
 

@@ -1,0 +1,30 @@
+.application-content {padding:24px;min-width:0}
+.application-tabs {margin-bottom:24px;flex-wrap:wrap}
+.application-content>section {margin-bottom:24px}
+.application-content h2 {margin-top:0}
+.application-content input,.application-content select,.application-content button {font:inherit}
+.application-content .board-field {max-width:100%}
+.application-content :focus-visible {outline:2px solid var(--c-gold);outline-offset:3px}
+.application-content .board-note {margin:12px 0}
+.application-content .board-opt {align-items:flex-start}
+.broadcast-gallery .launcher {min-height:600px;max-height:none;grid-template-columns:210px minmax(0,1fr)}
+.broadcast-gallery .pane {min-width:0}
+.broadcast-gallery .rail {min-width:0}
+.broadcast-gallery .rail-item:focus-visible {outline-offset:-3px}
+.broadcast-twitch,.broadcast-obs {min-width:0}
+.broadcast-obs .row2,.broadcast-twitch .row2 {grid-template-columns:repeat(2,minmax(0,1fr))}
+.obs-connections {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.obs-connections fieldset {margin:0}
+.obs-rule {padding:16px;border:1px solid var(--c-edge);border-radius:8px;margin:12px 0;background:var(--c-card)}
+.obs-rule-grid {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.obs-rule-grid .board-field {margin:0}
+.obs-rule-actions {display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.obs-rule-reason {color:var(--c-txt);line-height:1.5}
+.obs-savebar {display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:20px 0}
+.obs-record {padding:12px 0;border-bottom:1px solid var(--c-edge);overflow-wrap:anywhere}
+.obs-record small {display:block;color:var(--c-dim)}
+.tools-patcher .patcher-wrap {max-width:none;margin:0;padding:0}
+@media(max-width:900px){.obs-rule-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.broadcast-gallery .launcher{grid-template-columns:1fr}.broadcast-gallery .rail{max-height:240px}}
+@media(max-width:600px){.application-content{padding:16px}.obs-connections,.obs-rule-grid,.broadcast-obs .row2,.broadcast-twitch .row2{grid-template-columns:1fr}}
+
+#manager-obs>h2:not(:first-child) {margin-top:28px}

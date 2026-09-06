@@ -132,8 +132,10 @@ class OBSController:
     - Coalescing queues (maxsize=1): only the latest pending scene matters.
     """
 
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: str, *, managed: bool = False):
         self._config_path = config_path
+        self._managed = managed
+        self.event_sink = None
         self._config: dict = {}
         self._clients: dict[str, simpleobsws.WebSocketClient | None] = {"a": None, "b": None}
         self._queues: dict[str, asyncio.Queue] = {
@@ -149,7 +151,7 @@ class OBSController:
     # ── config ──────────────────────────────────────────────────────────────────
 
     def load_config(self):
-        if not os.path.exists(self._config_path):
+        if self._managed or not os.path.exists(self._config_path):
             self._config = dict(_DEFAULT_CONFIG)
             self._config["connections"] = {
                 "a": dict(_DEFAULT_CONFIG["connections"]["a"]),
@@ -173,6 +175,8 @@ class OBSController:
             self._config = dict(_DEFAULT_CONFIG)
 
     def save_config(self):
+        if getattr(self, "_managed", False):
+            return  # manager owns persistence; private execution config is ephemeral
         try:
             os.makedirs(os.path.dirname(self._config_path), exist_ok=True)
             with open(self._config_path, "w") as f:
@@ -245,6 +249,9 @@ class OBSController:
 
         Called synchronously from SLinkServer._emit_obs_triggers().
         """
+        if getattr(self, "event_sink", None) is not None:
+            self.event_sink(fired_list)
+            return
         if not _OBS_AVAILABLE:
             return
         if not self._config.get("enabled"):
@@ -510,7 +517,7 @@ class OBSController:
                          f"{getattr(resp.requestStatus, 'comment', '')}",
             }
         except Exception as e:
-            return {"ok": False, "error": str(e)}
+            return {"ok": False, "confirmed": False, "error": str(e)}
 
 
 def obs_config_path(data_dir: str = None) -> str:

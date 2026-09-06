@@ -16,7 +16,8 @@ from yarl import URL
 # This is deliberately independent of the run router: adding a server endpoint
 # does not make it public through the manager. Review new entries explicitly.
 GET_PATHS = frozenset((
-    "/", "/api/status", "/api/events", "/api/calc/mons", "/memorial", "/debug",
+    "/", "/api/status", "/api/ui-state", "/api/events", "/api/calc/mons", "/memorial", "/debug",
+    "/broadcast", "/tools",
     "/twitch", "/obs", "/calc", "/calc/", "/stream", "/stream/",
     "/api/bot/status", "/api/debug/backups", "/api/debug/manual_link_data", "/api/debug/raw_state",
     "/api/obs/status", "/api/obs/areas", "/api/obs/scenes/a", "/api/obs/scenes/b",

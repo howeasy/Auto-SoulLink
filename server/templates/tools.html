@@ -1,0 +1,7 @@
+{% extends 'application.html' %}
+{% block application_head %}<link rel="stylesheet" href="/static/patcher.css">{% endblock %}
+{% block application_content %}
+<section class="board-card board-card-body"><h2>Prepare a randomized pair</h2><p>Both player cartridges must pass verification before they can be downloaded and admitted to a run.</p><p class="board-note">{{ 'Verified randomized preparation is not yet available in this version.' if randomizer_availability.reason_code == 'rby_provenance_publisher_unavailable' else randomizer_availability.reason }}</p>{% if manager and selected_run %}<a class="board-btn" href="{{ run_base }}/?view=setup">Open this run’s Setup</a>{% elif manager %}<a class="board-btn" href="/#new-run">Create a run</a>{% endif %}</section>
+<section class="tools-patcher">{% include 'tools/_patcher.html' %}</section>
+{% endblock %}
+{% block application_scripts %}<script src="/static/patcher.js" defer></script>{% endblock %}

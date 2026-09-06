@@ -1,0 +1,30 @@
+{
+  "added_portable": [
+    "tests/integration/test_managed_obs.py::test_two_runs_share_ordered_obs_execution_over_real_http_and_websockets",
+    "tests/unit/test_application_destinations.py::test_manager_destinations_keep_run_selection_explicit_and_never_enable_old_rules",
+    "tests/unit/test_application_destinations.py::test_retired_pages_redirect_with_queries_and_debug_fragment_intact",
+    "tests/unit/test_application_destinations.py::test_shared_destinations_render_with_current_navigation_and_scoped_polling[gen1]",
+    "tests/unit/test_application_destinations.py::test_shared_destinations_render_with_current_navigation_and_scoped_polling[gen3]",
+    "tests/unit/test_manager_obs_http.py::test_private_execution_routes_require_managed_local_target_and_never_enter_public_proxy",
+    "tests/unit/test_manager_obs_http.py::test_unconfirmed_execution_blocks_further_scene_changes_on_that_endpoint",
+    "tests/unit/test_obs_arbitration.py::test_accepted_batches_run_in_arrival_order_without_coalescing",
+    "tests/unit/test_obs_arbitration.py::test_application_failure_and_config_revision_remain_visible",
+    "tests/unit/test_obs_arbitration.py::test_corrupt_config_is_preserved_and_stale_revisions_cannot_save",
+    "tests/unit/test_obs_arbitration.py::test_duplicate_batch_does_not_restore_an_earlier_scene",
+    "tests/unit/test_obs_arbitration.py::test_independent_endpoints_preserve_target_and_area_filters",
+    "tests/unit/test_obs_arbitration.py::test_legacy_rules_are_unassigned_disabled_and_original_file_is_unchanged",
+    "tests/unit/test_obs_arbitration.py::test_new_rules_require_explicit_existing_source_runs",
+    "tests/unit/test_obs_arbitration.py::test_rule_priority_resolves_a_batch_once_per_shared_endpoint",
+    "tests/unit/test_obs_run_bridge.py::test_execution_requires_applied_revision_and_is_idempotent",
+    "tests/unit/test_obs_run_bridge.py::test_managed_controller_never_loads_or_overwrites_legacy_global_rules",
+    "tests/unit/test_obs_run_bridge.py::test_uncertain_websocket_result_stays_unconfirmed",
+    "tests/unit/test_routes_smoke.py::test_get_route_renders[gen1_rby-/api/ui-state]",
+    "tests/unit/test_routes_smoke.py::test_get_route_renders[gen1_rby-/broadcast]",
+    "tests/unit/test_routes_smoke.py::test_get_route_renders[gen1_rby-/tools]",
+    "tests/unit/test_routes_smoke.py::test_get_route_renders[gen3_rr-/api/ui-state]",
+    "tests/unit/test_routes_smoke.py::test_get_route_renders[gen3_rr-/broadcast]",
+    "tests/unit/test_routes_smoke.py::test_get_route_renders[gen3_rr-/tools]"
+  ],
+  "removed_or_replaced": [],
+  "existing_resource_deferrals_changed": false
+}

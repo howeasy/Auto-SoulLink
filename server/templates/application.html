@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/board-debug.css"><link rel="stylesheet" href="/static/board.css"><link rel="stylesheet" href="/static/application.css">
+{% block application_head %}{% endblock %}
+{% endblock %}
+{% block content %}
+<a class="board-skip" href="#application-content">Skip to {{ destination|capitalize }}</a>
+<div class="board">{% include 'board/_rail.html' %}<main class="board-main">
+<header class="board-runhdr"><h1 class="board-runname">{{ destination|capitalize }}</h1>{% if run_name %}<span class="board-meta">{{ run_name }}</span>{% endif %}</header>
+<p id="board-connection-error" class="board-note warning" role="status" hidden>The selected run is unavailable. Its address has not changed.</p>
+<div id="application-content" class="application-content">{% block application_content %}{% endblock %}</div>
+<div data-run-available="{{ 'true' if running else 'false' }}"></div>
+<script type="application/json" id="board-status">{{ status|default(none)|tojson }}</script>
+<script type="application/json" id="board-debug-operations">{{ debug_operations|default({})|tojson }}</script>
+<script type="application/json" id="application-state">{{ application_state|tojson }}</script>
+</main></div>
+{% include 'board/_debug_drawer.html' %}
+{% endblock %}
+{% block scripts %}
+<script src="/static/dom.js" defer></script><script src="/static/poll.js" defer></script><script src="/static/board.js" defer></script><script src="/static/application.js" defer></script>
+{% block application_scripts %}{% endblock %}
+{% endblock %}

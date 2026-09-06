@@ -400,7 +400,12 @@ class SLinkServer:
         self._bot_instance = None
         # OBS WebSocket integration
         _obs_cfg = obs_config_path(data_dir)
-        self.obs = OBSController(_obs_cfg)
+        self.obs = OBSController(_obs_cfg, managed=bool(manager_port))
+        self.obs_bridge = None
+        if manager_port:
+            from server.obs_run_bridge import OBSRunBridge
+            self.obs_bridge = OBSRunBridge(self.obs, run_id, manager_port)
+            self.obs.event_sink = self.obs_bridge.submit
 
     def _get_sprite_html(self, species_id: int, form: int = 0) -> str:
         """Get sprite HTML by delegating to the game adapter.
@@ -2516,6 +2521,17 @@ class SLinkServer:
     async def handle_status_json(self, request):
         return aiohttp_web.json_response(self._build_status_dict())
 
+    async def handle_ui_state(self, request):
+        return aiohttp_web.json_response({"status": self._build_status_dict(),
+            "debug_operations": self.read_runtime_facts()["operations"]["http"]})
+
+    async def handle_application(self, request):
+        from server.application import destination_context
+        destination = "tools" if request.path == "/tools" else "broadcast"
+        run = {"run_id": self._run_id or "standalone", "name": self._run_name or "Soul Link", "status": "running"}
+        context = destination_context(request, destination, run=run)
+        return aiohttp_jinja2.render_template(destination + ".html", request, context)
+
     async def handle_board_context(self, request):
         # Internal presentation only. Not in the public manager run allowlist.
         if not self._manager_port or not local_operator(request):
@@ -2686,7 +2702,10 @@ class SLinkServer:
         return aiohttp_web.json_response(result)
 
     async def handle_memorial_html(self, request):
-        return await self._handle_memorial_template(request)
+        if request.query.get("_smoke") == "1":
+            return await self._handle_memorial_template(request)
+        from server.application import compatibility_location
+        raise aiohttp_web.HTTPFound(compatibility_location(request, '/#zone-fallen'))
 
     async def _handle_memorial_template(self, request):
         """Jinja-rendered memorial wall."""
@@ -2721,6 +2740,8 @@ class SLinkServer:
     # ── Stream overlay handlers ──────────────────────────────────────────────
 
     async def handle_stream_index(self, request):
+        from server.application import compatibility_location
+        raise aiohttp_web.HTTPFound(compatibility_location(request, '/broadcast?tab=overlays'))
         ctx = _build_stream_index_context(request)
         ctx["sidebar_html"] = self._build_sidebar_html("stream")
         return aiohttp_jinja2.render_template("stream_index.html", request, ctx)
@@ -3593,6 +3614,8 @@ class SLinkServer:
 
 
     async def handle_twitch_page(self, request):
+        from server.application import compatibility_location
+        raise aiohttp_web.HTTPFound(compatibility_location(request, '/broadcast?tab=twitch'))
         from markupsafe import Markup
 
         context = {"sidebar_html": Markup(self._build_sidebar_html("twitch")),
@@ -3603,6 +3626,8 @@ class SLinkServer:
 
 
     async def handle_obs_page(self, request):
+        from server.application import compatibility_location
+        raise aiohttp_web.HTTPFound(compatibility_location(request, '/broadcast?tab=obs'))
         from markupsafe import Markup
 
         context = {"sidebar_html": Markup(self._build_sidebar_html("obs")),
@@ -3615,6 +3640,31 @@ class SLinkServer:
         # Include triggers (no passwords in triggers)
         status["triggers"] = self.obs._config.get("triggers", [])
         return aiohttp_web.json_response(status)
+
+    async def handle_private_obs(self, request):
+        if not self.obs_bridge or not local_operator(request) or request.headers.get("X-SLink-Target-Run") != self._run_id:
+            raise aiohttp_web.HTTPNotFound()
+        action = request.match_info["action"]
+        try:
+            if request.method == "GET" and action == "status":
+                return aiohttp_web.json_response(self.obs_bridge.status())
+            if request.method == "GET" and action == "scenes":
+                player = request.query.get("player")
+                if player not in ("a", "b"):
+                    raise ValueError("Choose Player A or Player B")
+                return aiohttp_web.json_response({"ok": True, "scenes": await self.obs.list_scenes(player)})
+            if request.method != "POST" or action not in ("config", "scene"):
+                raise aiohttp_web.HTTPNotFound()
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise ValueError("An OBS request object is required")
+            if action == "config":
+                result = await self.obs_bridge.apply(body.get("revision"), body.get("config"))
+            else:
+                result = await self.obs_bridge.execute(body.get("revision"), body.get("decision_id"), body.get("player"), body.get("scene"))
+            return aiohttp_web.json_response(result)
+        except (ValueError, TypeError) as error:
+            return aiohttp_web.json_response({"ok": False, "error": str(error)}, status=400)
 
     async def handle_obs_config(self, request):
         """POST /api/obs/config — save config and hot-reload connections."""
@@ -3966,6 +4016,8 @@ class SLinkServer:
     # ── Debug page & API ─────────────────────────────────────────────────────
 
     async def handle_debug_html(self, request):
+        from server.application import compatibility_location
+        raise aiohttp_web.HTTPFound(compatibility_location(request, '/?debug=1'))
         from markupsafe import Markup
 
         context = {"sidebar_html": Markup(self._build_sidebar_html("debug")),
@@ -4976,6 +5028,8 @@ def build_app(srv):
         target = request.headers.get("X-SLink-Target-Run")
         if target is not None and target != (getattr(srv, "_run_id", "") or "standalone"):
             return aiohttp_web.json_response({"ok": False, "error": "Run identity does not match"}, status=409)
+        if getattr(srv, "_manager_port", 0) and request.method == "POST" and request.path.startswith("/api/obs/"):
+            return aiohttp_web.json_response({"ok": False, "error": "OBS settings and rules are managed on the manager Broadcast page."}, status=409)
         return await handler(request)
     app.middlewares.append(requested_run)
     async def identify_run(request, response):
@@ -4983,9 +5037,14 @@ def build_app(srv):
     app.on_response_prepare.append(identify_run)
     setup_templating(app)
     app.router.add_get("/",            srv.handle_status_html)
+    app.router.add_get("/broadcast", srv.handle_application)
+    app.router.add_get("/tools", srv.handle_application)
     app.router.add_get("/memorial",    srv.handle_memorial_html)
     app.router.add_get("/api/status",  srv.handle_status_json)
+    app.router.add_get("/api/ui-state", srv.handle_ui_state)
     app.router.add_get("/_ui/board-context", srv.handle_board_context)
+    app.router.add_get("/_internal/obs/{action}", srv.handle_private_obs)
+    app.router.add_post("/_internal/obs/{action}", srv.handle_private_obs)
     app.router.add_get("/api/events",  srv.handle_sse)
     app.router.add_post("/api/reset",              srv.handle_reset_api)
     app.router.add_post("/api/inject_link",        srv.handle_inject_link_api)
@@ -5164,11 +5223,15 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
         log.warning("aiohttp not installed — HTTP status page disabled. Run: pip install aiohttp")
         runner = None
 
-    async with tcp_server:
-        await tcp_server.serve_forever()
-
-    if runner:
-        await runner.cleanup()
+    try:
+        async with tcp_server:
+            await tcp_server.serve_forever()
+    finally:
+        if srv.obs_bridge:
+            await srv.obs_bridge.close()
+        await srv.obs.stop_workers()
+        if runner:
+            await runner.cleanup()
 
 
 if __name__ == "__main__":

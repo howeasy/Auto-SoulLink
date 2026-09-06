@@ -7,6 +7,10 @@
     ],
     [
       "GET",
+      "/_internal/obs/{action}"
+    ],
+    [
+      "GET",
       "/_ui/board-context"
     ],
     [
@@ -48,6 +52,14 @@
     [
       "GET",
       "/api/status"
+    ],
+    [
+      "GET",
+      "/api/ui-state"
+    ],
+    [
+      "GET",
+      "/broadcast"
     ],
     [
       "GET",
@@ -280,6 +292,10 @@
     [
       "GET",
       "/stream/ticker/fragment"
+    ],
+    [
+      "GET",
+      "/tools"
     ],
     [
       "GET",
@@ -291,6 +307,10 @@
     ],
     [
       "HEAD",
+      "/_internal/obs/{action}"
+    ],
+    [
+      "HEAD",
       "/_ui/board-context"
     ],
     [
@@ -332,6 +352,14 @@
     [
       "HEAD",
       "/api/status"
+    ],
+    [
+      "HEAD",
+      "/api/ui-state"
+    ],
+    [
+      "HEAD",
+      "/broadcast"
     ],
     [
       "HEAD",
@@ -567,7 +595,15 @@
     ],
     [
       "HEAD",
+      "/tools"
+    ],
+    [
+      "HEAD",
       "/twitch"
+    ],
+    [
+      "POST",
+      "/_internal/obs/{action}"
     ],
     [
       "POST",
@@ -669,6 +705,8 @@
     "/api/obs/scenes/a",
     "/api/obs/status",
     "/api/status",
+    "/api/ui-state",
+    "/broadcast",
     "/calc",
     "/calc/",
     "/calc/css/main.css",
@@ -727,6 +765,7 @@
     "/stream/stream-memorial/fragment",
     "/stream/ticker",
     "/stream/ticker/fragment",
+    "/tools",
     "/twitch"
   ],
   "manager": [
@@ -736,6 +775,14 @@
     ],
     [
       "GET",
+      "/api/obs/scenes/{player}"
+    ],
+    [
+      "GET",
+      "/api/obs/status"
+    ],
+    [
+      "GET",
       "/api/runs"
     ],
     [
@@ -753,6 +800,10 @@
     [
       "GET",
       "/api/stream/pin"
+    ],
+    [
+      "GET",
+      "/broadcast"
     ],
     [
       "GET",
@@ -789,6 +840,10 @@
     [
       "GET",
       "/stream/{name}/{suffix}"
+    ],
+    [
+      "GET",
+      "/tools"
     ],
     [
       "HEAD",
@@ -796,6 +851,14 @@
     ],
     [
       "HEAD",
+      "/api/obs/scenes/{player}"
+    ],
+    [
+      "HEAD",
+      "/api/obs/status"
+    ],
+    [
+      "HEAD",
       "/api/runs"
     ],
     [
@@ -813,6 +876,10 @@
     [
       "HEAD",
       "/api/stream/pin"
+    ],
+    [
+      "HEAD",
+      "/broadcast"
     ],
     [
       "HEAD",
@@ -851,8 +918,28 @@
       "/stream/{name}/{suffix}"
     ],
     [
+      "HEAD",
+      "/tools"
+    ],
+    [
+      "POST",
+      "/_internal/obs/events"
+    ],
+    [
       "POST",
       "/api/attempts"
+    ],
+    [
+      "POST",
+      "/api/obs/config"
+    ],
+    [
+      "POST",
+      "/api/obs/resume"
+    ],
+    [
+      "POST",
+      "/api/obs/test"
     ],
     [
       "POST",

@@ -49,6 +49,8 @@ import aiohttp_jinja2
 from server.adapters import variant_label
 from server.board import FAMILIES, OPTION_LABELS
 from server.manager_board import shell_context, stopped_context, trusted_context
+from server.manager_obs import ManagerOBSMixin
+from server.obs_arbitration import OBSConfigError
 from server.run_proxy import allowed, relay, run_base, upstream
 from server import runtime_boundary
 from server.http_safety import csrf_protection, local_operator, theme_cache
@@ -556,7 +558,7 @@ _STATUS_BADGE = {
 }
 
 
-class RunManager:
+class RunManager(ManagerOBSMixin):
     def __init__(self, bind_host: str, manager_port: int = MANAGER_HTTP_PORT):
         self.bind_host = bind_host
         self.manager_port = manager_port
@@ -566,6 +568,7 @@ class RunManager:
         self._saved_cache = {}
         self._registry_cache = None
         self._registry_signature = None
+        self.initialize_obs(MANAGER_DIR)
 
     def _signature(self):
         try:
@@ -689,6 +692,13 @@ class RunManager:
     async def handle_index(self, request):
         return aiohttp_jinja2.render_template("manager.html", request, self._shell(request))
 
+    async def handle_application(self, request, run=None):
+        from server.application import destination_context
+        destination = "tools" if request.path.endswith("/tools") else "broadcast"
+        context = self._shell(request, run)
+        context.update(destination_context(request, destination, manager=True, run=run))
+        return aiohttp_jinja2.render_template(destination + ".html", request, context)
+
     async def _saved_board(self, run):
         directory = _run_directory(run["run_id"])
         def signature():
@@ -749,6 +759,8 @@ class RunManager:
             raise web.HTTPNotFound()
         if path == "/":
             return await self.handle_run_board(request, run)
+        if path in ("/broadcast", "/tools"):
+            return await self.handle_application(request, run)
         if path in ("/launcher/a", "/launcher/b"):
             return self._launcher_response(request, run, path[-1])
         if run.get("status") != "running":
@@ -1002,6 +1014,8 @@ class RunManager:
     # ── Stream overlay pages (served at fixed manager port 8090) ───────────────
 
     async def handle_stream_index(self, request: web.Request) -> web.Response:
+        from server.application import compatibility_location
+        raise web.HTTPFound(compatibility_location(request, '/broadcast?tab=overlays'))
         from server.chrome import build_sidebar_html
         ctx = _build_stream_index_context(request)
         # Manager itself is the host of this page — pass manager_port=None so
@@ -1107,8 +1121,17 @@ def build_app(manager):
     app = web.Application(middlewares=[csrf_protection, theme_cache, registry_errors, api_errors, finish_mutations], handler_args={"handler_cancellation": True})
     setup_templating(app)
 
+    app.router.add_get("/api/obs/status", manager.handle_global_obs_status)
+    app.router.add_post("/api/obs/config", manager.handle_global_obs_config)
+    app.router.add_get("/api/obs/scenes/{player}", manager.handle_global_obs_scenes)
+    app.router.add_post("/api/obs/resume", manager.handle_global_obs_resume)
+    app.router.add_post("/api/obs/test", manager.handle_global_obs_test)
+    app.router.add_post("/_internal/obs/events", manager.handle_obs_events)
+
     # Run-management routes
     app.router.add_get("/", manager.handle_index)
+    app.router.add_get("/broadcast", manager.handle_application)
+    app.router.add_get("/tools", manager.handle_application)
     app.router.add_route("GET", "/runs/{run_id}", manager.handle_run_route)
     app.router.add_route("HEAD", "/runs/{run_id}", manager.handle_run_route)
     app.router.add_get("/runs/{run_id}/{tail:.*}", manager.handle_run_route)
@@ -1157,8 +1180,16 @@ def build_app(manager):
     async def _startup(app: web.Application) -> None:
         await manager.initialize()
         app["proxy_session"] = aiohttp.ClientSession()
+        manager._http_session = app["proxy_session"]
+        if manager._registry_cache is not None:
+            try:
+                await manager.obs.import_legacy([Path(MANAGER_DIR).parent / "obs_config.json"])
+            except OBSConfigError:
+                pass  # preserved storage error is visible on Broadcast
+
 
     async def _cleanup(app: web.Application) -> None:
+        await manager.obs.close()
         session = app.get("proxy_session")
         if session and not session.closed:
             await session.close()
