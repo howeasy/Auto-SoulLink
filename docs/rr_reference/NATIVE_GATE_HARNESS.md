@@ -76,11 +76,15 @@ control-service activation or proofs about rewind, load, reset, debugger force,
 TAStudio, concurrent tools or every host version.
 
 The arena probe registers callbacks only after battery boot and checkpoint
-assertions. It rejects empty, all-zero and duplicate registration IDs and requires
-positive read, write and execute controls. It retains static address candidates
-separately from runtime traces, bounds trace storage and labels ownership
-unresolved. Zero hits never prove free RAM. All-bus callbacks can be expensive;
-start with a tiny frame window and a separate wall-clock process deadline.
+assertions. Actual mGBA rejects wildcard callbacks; the successor requires the
+explicit `writes_exec_v1` lane, full padded write-start address coverage and a
+single measured frame. Verified execution holds protect registration and cleanup.
+It rejects empty, all-zero and duplicate registration IDs and requires positive
+write and execute controls. Read capability is a separate observation, not silently
+included in this write-only lane. See [the exact probe contract](ARENA_EXACT_PROBE.md).
+Static candidates, runtime traces and unresolved attribution remain distinct.
+Zero hits never prove free RAM; setup/trace bounds and an outer process deadline
+are mandatory.
 
 `callback_capability_probe.lua` is a separate two-frame exact-address capability
 probe. It uses natural game reads, the native signature beacon's writes, and a
