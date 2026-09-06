@@ -1,0 +1,83 @@
+{
+  "admission_selected": false,
+  "api_types": {
+    "getromhash": "userdata",
+    "read_u32_le": "userdata",
+    "read_u8": "userdata"
+  },
+  "assertions": 1756,
+  "bundle_evidence": "explicit diagnostic placeholders, not verified client/data bundles",
+  "execution": {
+    "created": 1788705637.4401035,
+    "elapsed_seconds": 30.40600000001723,
+    "exit": 0,
+    "original_config_unchanged": true,
+    "original_save_unchanged": true,
+    "pid": 26884,
+    "terminated_exact_pids": []
+  },
+  "execution_sha256": "c829c9cfbaec0f281893a6903db5fa6be52b686260dfc7f5cec73898dbc40930",
+  "identity": {
+    "binding_sha256": "cf528ab573375d4c8f482a54f3d26a3a3d7a0e2c1f30361995bd26a16ff4ed32",
+    "config_sha256": "16b701eeff6b330e4fe50c313a65ed57c4c05fe69045abfa1d8b947aeb0bc997",
+    "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+    "emulator_version": "2.11.1",
+    "fixture_manifest_sha256": "95221d35f7d10f64a6ebd009782e5421d7b652efc3a13c537909045f43cb9104",
+    "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+    "frame_budget": 2400,
+    "player": "a",
+    "probe_options_sha256": "466e776e34fa73c87b255b2acaf95162c07b79bbe02cc318dd20ff15c8e8496f",
+    "purpose": "validation",
+    "rom_sha1": "11CF27B7EE8B3B89EE27317D5639CE92336CB3A9",
+    "rom_sha256": "d77635218962ffe0ff0b44d7c797f514f896e6e54281f8d17a703f4e1ecc7c37",
+    "run_id": "admission_userdata07_66",
+    "script_sha256": "9f32e4e9f94134323f5be0b961d6a1a43d5d736c9fb457cb3c1c4ca84076f0c6",
+    "source_sha256": "f08c36d74a0874da4851dddd3a22cf5c9d01959b8457b4705b9a6137679872ed"
+  },
+  "loader_attestation_proved": false,
+  "preparation_sha256": "8e7eda8a19702c75628de1e9905d46deeda5c99bcf9a56ab1bc48ed69fdc5a35",
+  "release_ready": false,
+  "report": {
+    "rr_metadata": {
+      "bundle_hashes": {
+        "client_bundle_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "data_bundle_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "loaded_rom_sha1": "11cf27b7ee8b3b89ee27317d5639ce92336cb3a9",
+      "mode_flags": {
+        "ability_randomizer": false,
+        "easy": false,
+        "hard_mode_randomizer": false,
+        "hardcore": false,
+        "learnset_randomizer": false,
+        "minimal_grinding": true,
+        "restricted": false,
+        "species_randomizer": false
+      },
+      "native_descriptor": {
+        "abi": 2,
+        "build_id": "217a610a94bc6f602664d8a185417859e28b6b0326c0f8e0a551fb72217dd3e1",
+        "capabilities": {
+          "descriptor_v1": true,
+          "payload_leases": true,
+          "receipts_v2": true,
+          "reservation_echo_v2": true,
+          "storage_guard_v2": true
+        },
+        "capability_mask": 31,
+        "descriptor_version": 1,
+        "layout_sha256": "3c10dcd8af7e5dc91684a6a14bc888f66f348464e463ab11db70b2b6d299885d",
+        "magic": "SLD2",
+        "mailbox_address": 33814528,
+        "mailbox_size": 64,
+        "storage_guard": 162
+      },
+      "schema": "slink-rr-metadata-v1",
+      "trainer_id": 735955135.0,
+      "trainer_name": "B"
+    }
+  },
+  "result_path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\admission_userdata07_66_a\\results\\result.json",
+  "result_sha256": "11a1de371db8e86d895b49f4976749e88f25dc22d4f5b0175a305637e650572c",
+  "schema": "slink-rr-userdata-metadata-evidence-v1"
+}

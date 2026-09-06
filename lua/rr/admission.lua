@@ -93,11 +93,18 @@ local function same(a,b)
     return true
 end
 function A.read_metadata(M,io,decoded_descriptor,bundle_evidence)
+    local function callable_candidate(value)
+        local kind=type(value)
+        -- Pinned BizHawk exposes registered Lua APIs as callable NLua userdata.
+        -- This shape is not proof: the protected read below must execute them
+        -- successfully and validate every returned byte/hash before publication.
+        return kind=="function" or kind=="userdata"
+    end
     local function read()
         if type(M)~="table" or M.profile_name~="radical_red" or M.CFRU_NO_ENCRYPT~=true
             or M.SB2_PTR_ADDR~=SB2_PTR or type(M.CHARSET)~="table" then error("RR memory profile is not ready") end
-        if type(io)~="table" or type(io.read_u8)~="function" or type(io.read_u32_le)~="function"
-            or type(io.getromhash)~="function" then error("RR read-only IO provider is incomplete") end
+        if type(io)~="table" or not callable_candidate(io.read_u8) or not callable_candidate(io.read_u32_le)
+            or not callable_candidate(io.getromhash) then error("RR read-only IO provider is incomplete") end
         local native=descriptor(decoded_descriptor)
         object_keys(bundle_evidence,{client_bundle_sha256=true,data_bundle_sha256=true},"load-time bundle evidence")
         local bundles={client_bundle_sha256=hash(bundle_evidence.client_bundle_sha256,64,"client bundle hash"),

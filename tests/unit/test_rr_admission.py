@@ -321,3 +321,24 @@ def test_lua_and_shared_session_accept_only_matching_admission_echo(contract):
     response["admission"]["save_identity"]["ot_id"] = "87654321"
     runtime.globals().response_json = json.dumps(response["admission"])
     assert runtime.execute("return RR.metadata_matches(assert(JSON.decode(response_json)),session.report)") is False
+
+
+def test_lua_metadata_accepts_callable_userdata_io_without_skipping_result_validation(contract):
+    runtime, _, _, _ = lua_provider(contract)
+    runtime.execute("IO.read_u8=read8; IO.read_u32_le=read32; IO.getromhash=romhash")
+    assert runtime.execute("return type(IO.read_u8),type(IO.read_u32_le),type(IO.getromhash)") == ("userdata",) * 3
+    text, error = runtime.globals().read_report()
+    assert error is None
+    assert json.loads(text)["rr_metadata"]["trainer_id"] == 0x12345678
+    runtime.globals().romhash = lambda: False
+    runtime.execute("IO.getromhash=romhash")
+    text, error = runtime.globals().read_report()
+    assert text is None and error
+
+
+def test_lua_metadata_does_not_treat_noncallable_userdata_as_a_provider(contract):
+    runtime, _, _, _ = lua_provider(contract)
+    runtime.globals().IO.read_u8 = object()
+    assert runtime.execute("return type(IO.read_u8)") == "userdata"
+    text, error = runtime.globals().read_report()
+    assert text is None and error
