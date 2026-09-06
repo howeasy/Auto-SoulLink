@@ -18,6 +18,7 @@ Run:
 import argparse
 import asyncio
 import contextlib
+import copy
 import html
 import json
 import logging
@@ -3583,7 +3584,9 @@ class SLinkServer:
             battle["enemy_party"] = enriched
             return battle
 
-        return {
+        # Nested move/stage/event containers belong to the renderer after this
+        # boundary; sharing them would let a display edit mutate live caches.
+        return copy.deepcopy({
             # "" when the last save succeeded; the error text when it did not.
             "save_failed": s.save_failed,
             "players": {
@@ -3716,7 +3719,7 @@ class SLinkServer:
                 for pid in ["a", "b"]
             },
             "badge_slugs": self.adapter.gym_badge_slugs(s.rom_type or ""),
-        }
+        })
 
     def _build_status_html(self) -> str:
         d = self._build_status_dict()

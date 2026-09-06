@@ -140,7 +140,7 @@ def test_status_enrichment_uses_each_players_adapter_and_preserves_raw_caches(tm
         srv._player_adapters[pid] = TaggedAdapter(pid)
         srv.connected_players[pid] = {"rom_type": "firered", "connected": True}
         srv.party_details[pid] = {pid: {"species_id": 1, "level": 5, "hp": 20, "maxHP": 20,
-                                       "held_item_id": 3, "moves": [33], "pp": [4]}}
+                                       "held_item_id": 3, "moves": [33], "pp": [4], "stat_stages": {"atk": 1}}}
         srv.state.party_keys[pid] = {pid}
         srv.pc_boxes[pid] = [{"key": pid + "-box", "species_id": 2, "held_item_id": 4, "moves": [33]}]
         srv.battle_state[pid]["enemy_party"] = [{"species_id": 3, "moves": [33]}]
@@ -164,4 +164,9 @@ def test_status_enrichment_uses_each_players_adapter_and_preserves_raw_caches(tm
     pending = data["pending_captures"]["route_2"]["b"]
     assert pending["species_name"] == "b-species-4" and 'data-owner="b"' in pending["sprite_html"]
     assert data["killfeed"][0]["killer"]["species_name"] == "b-species-7"
+    assert (srv.party_details, srv.pc_boxes, srv.battle_state) == before
+    data["players"]["a"]["party_details"]["a"]["moves"].append(99)
+    data["players"]["a"]["party_details"]["a"]["stat_stages"]["atk"] = 6
+    data["players"]["a"]["pc_boxes"][0]["moves"].clear()
+    data["players"]["b"]["battle_state"]["enemy_party"][0]["moves"].clear()
     assert (srv.party_details, srv.pc_boxes, srv.battle_state) == before

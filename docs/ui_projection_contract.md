@@ -1,9 +1,9 @@
 # UI presentation contract, revision 1
 
 This freezes the consumer boundary agreed by the UI, Gen1 Readiness, and RR task
-owners on 2026-09-05. It is an interface agreement, **not a claim that the new
-projection exists or has passed integration tests**. The producer is UI migration
-Phase 3. Restricted runtime handoff `bc880025` has now been accepted; its detached
+owners on 2026-09-05. The additive producer is now implemented by UI migration
+Phase 3; [projection evidence](ui_migration/phase3_projection.md) records its
+coverage and limits. Restricted runtime handoff `bc880025` has been accepted; its detached
 readers are documented in [ui-runtime-handoff.md](ui-runtime-handoff.md). Unknown
 or restricted runtime features retain that status until their bindings are ready.
 
@@ -67,8 +67,13 @@ projection names are agreed during Phase 3.
   receipt, delivery, game application, verified completion, and durable ACK are
   different events. `queued`, `save_failed`, or capability readiness cannot
   establish completion or permission to resume gameplay.
-- Final provenance and durable-lifecycle field names await the authoritative
-  Gen 1 handoff. Preserve unknown rather than manufacturing substitutes.
+- The frozen reader names are documented in `ui-runtime-handoff.md`: per-player
+  `expected_cartridge`, `declared_cartridge`, `verified_cartridge`,
+  `bound_save_identity`, `session`, and `observation`, plus run `persistence`,
+  `operations`, `recovery`, `liveness`, `randomization`, and `provenance`.
+  These remain backend inputs; Phase 3 does not dump those envelopes into
+  `/api/status`. Unbound durable values remain null. Later contexts must consume
+  those named inputs without substituting transport activity for completion.
 - Keep raw ROM pointers, opcodes, and party blobs internal to the runtime.
 
 Phase 3 also adds mon keys, held-item names, and pending-capture names/sprite HTML
