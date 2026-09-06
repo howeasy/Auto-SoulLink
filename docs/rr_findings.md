@@ -2,8 +2,15 @@
 
 Source baseline: `adf3362d26557aefcebf7aa3b217fec70a7d0421`.
 Paths below are repository-relative evidence pointers into `E:/Google Drive/SLink`.
-All rows remain unresolved for the release candidate until tested after the owning handoffs.
+All rows remain unresolved for release acceptance until tested against the exact candidate.
 Binary/source proof and controlled-host reproductions are distinct from live gameplay proof.
+The implementation baseline now includes the published shared/UI handoffs recorded in
+`rr_release_plan.md`. Original line numbers below identify the audited baseline, not moving
+candidate line numbers. A source finding must be reproduced before its repair is closed.
+
+Every row applies to both required configurations (Default MGM off/off and on/on) unless
+its eventual capture demonstrates a narrower scope. This is required coverage, not a claim
+that the original defect was observed in both modes. All features listed below are required.
 
 | ID | Class | Finding and evidence | Required regression |
 | --- | --- | --- | --- |
@@ -14,6 +21,7 @@ Binary/source proof and controlled-host reproductions are distinct from live gam
 | RR-N05 | Controlled runtime | Posting queued mailbox operation erases prior unconsumed completion. `lua/mailbox.lua:488`, client `:1965`. | Completion retention under queued traffic and sequence wrap/reset. |
 | RR-N06 | Controlled runtime | Shared payload buffers are written at enqueue time, overwriting an earlier operation's payload. `lua/mailbox.lua:480`. | Immutable queued payloads and leases across async scenes. |
 | RR-N07 | Unresolved ownership | Retained libc allocator metadata overlaps native state. Normal gameplay reachability is unproven. Arena `0x0203F76C..0x0203FBAF`. | Call/write instrumentation and supported-path ownership evidence; any conflict blocks layout. |
+| RR-N08 | Source finding; RR collision proof pending | Ghost movement updates current coordinates but leaves previous coordinates at the spawn tile. `drive_ghost` in `patch/src/handlers.c`; collision code may retain a phantom occupied tile. | Reproduce collision at old/current tiles against the RR binary, then verify coherent previous/current coordinates through motion and teardown. |
 | RR-S01 | Controlled runtime | Native deposit failure falls back by stale slot and moves another mon. client `:2495`. | Reorder before refusal; original operation cannot mutate the replacement slot. |
 | RR-S02 | Controlled runtime | Memorial verification failure still emits `memorialize_done`. client `:1753..1770`, `:2528`. | Contradictory ST_OK readback remains unresolved and emits no success. |
 | RR-S03 | Source proof | Withdraw/memorial native preconditions omit vacancy/expected identity/count safeguards. `handlers.c:2083,2131`. | Occupied destination, stale identity/count, last-mon refusal and canaries. |
@@ -52,3 +60,33 @@ Binary/source proof and controlled-host reproductions are distinct from live gam
   native controller path is not a rewrite target.
 
 No row may be closed solely by a passing helper test or a historical standalone result file.
+
+## Severity, feature ownership and implementation disposition
+
+P0 blocks release because it risks mutation loss/duplication, false death, divergent
+ownership or unproven native memory. P1 blocks a required feature or reliable normal play.
+P2 is presentation correctness; it still blocks this release's complete feature inventory.
+The original failure and the required regression in each row form its reproduction target.
+Actual reproduction traces belong to that row's exact candidate/run manifest.
+
+| Findings | Severity | Affected features | Current implementation disposition | Regression location |
+| --- | --- | --- | --- | --- |
+| N01-N04 | P1 | Ghost, PC NPC, battle/menu graphics | Resource repair implemented; private live validation in progress, no visual acceptance | `tests/unit/test_rr_mailbox_v2.py`, `tests/rr/native/`, release ghost/native inventory |
+| N05-N06 | P0 | All queued native operations and buffers | ABI2 retention and payload leases implemented; native scene contention pending | `tests/unit/test_rr_mailbox_v2.py`, release native/storage/trade inventory |
+| N07 | P0 | Entire native companion | Open; layout has not expanded and zero observed allocator calls cannot close it | `tools/rr/arena.py`, `lua/tests/rr/arena_probe.lua` |
+| N08 | P1 | Ghost collision and motion | Reproduction and RR collision-contract verification required | Release ghost collision/motion inventory |
+| S01-S04 | P0 | Deposit, withdrawal, memorialization | Lua context/readback and native guards implemented; physical gameplay proof pending | `tests/rr/runtime/test_storage_context.py`, release storage inventory |
+| B01-B06 | P0 | Party ownership, death/whiteout, chained acquisition | Context/temporal repairs implemented; durable runtime binding and live evidence pending | `tests/rr/runtime/test_temporal_observations.py`, `test_rr_regressions.py` |
+| T01-T04 | P0 | Native trade/evolution and member ownership | Serializable native transaction and independently validated receipts still required | Release interactive trade, contention, restart and evolution inventory |
+| I01 | P1 | Save admission with a traded leading Pokémon | Shared SaveIdentity seam and RR SaveBlock2 provider tested; new RR runtime still needs selection | `tests/unit/test_rr_admission.py`, shared SaveIdentity/state/dispatcher tests |
+| D01-D02 | P1 | Gender/species clauses and identity migration | Exact-ROM reference extracted; runtime tables and explicit form-policy migration pending | `tests/rr/reference/`, acquisition/clauses inventory |
+| D03 | P2 | Encounter guidance | Physical encounter-table/probability repair pending | Release encounter guidance inventory |
+| D04-D05 | P1 | RR types, species domain, calculator | Exact 1376-record extent proved; runtime adoption and 20 canonical-name gaps pending | `tests/rr/reference/`, calculator and clauses inventory |
+| U01-U03 | P1 | Calculator execution/provenance | Waits for reviewed UI producer and RR observed-battle binding | Release presentation/calculator inventory |
+| U04 | P2 | Memorial panel/board styling | UI contract frozen; authoritative RR presentation integration pending | Release memorial/panel presentation inventory |
+| U05 | P1 | Browser patching/distribution | Candidate build emits exact fingerprints; final patcher/package metadata adoption pending | `tests/rr/native/`, distribution inventory |
+| V01-V02 | P0 | Trustworthiness of all release evidence | Isolated runner and strict expected inventory implemented; old weak assertions cannot count | `tests/unit/test_rr_native_gate.py`, `test_rr_release_gate.py`, full release verifier |
+
+Identifiers in this table use the `RR-` prefix from the detailed rows. Component passes
+are progress, not a release disposition of fixed. The executable release inventory remains
+uncompleted; no required campaign, soak or visual result is inferred from this ledger.
