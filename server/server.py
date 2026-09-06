@@ -2914,6 +2914,33 @@ class SLinkServer:
         })
         self._save_events()
 
+    def _party_snapshot(self, player_id: str, party: list) -> dict:
+        """Legacy display fields shared by admitted HELLO and tick observations.
+
+        Cartridge/rule validation and cache publication remain at their existing
+        dispatch boundaries. This helper only constructs the display snapshot.
+        """
+        adapter = self.adapter_for(player_id)
+        return {
+            mon["key"]: {
+                "level": mon.get("level", 0),
+                "hp": mon.get("hp", 1),
+                "maxHP": mon.get("maxHP", 1),
+                "nickname": mon.get("nickname", ""),
+                "species_id": mon.get("species_id", 0),
+                "held_item_id": mon.get("held_item_id", mon.get("held_item", 0)),
+                "ability_id": mon.get("ability_id", mon.get("ability", 0)),
+                "gender": adapter.gender_from_key(mon["key"], mon.get("species_id", 0)),
+                "moves": mon.get("moves", []),
+                "pp": mon.get("pp", []),
+                "slot": mon.get("slot", index),
+                "active": mon.get("active", False),
+                "status_cond": mon.get("status_cond", 0),
+                "stat_stages": mon.get("stat_stages"),
+            }
+            for index, mon in enumerate(party) if mon.get("key")
+        }
+
     def _dispatch(self, player_id: str, msg: dict, *, _gen1_session=None) -> list:
         # The Python session object is never deserialized from a client frame.
         if (msg.get("protocol") == gen1_admission.PROTOCOL and
@@ -3023,24 +3050,7 @@ class SLinkServer:
                         self._cache_mon_info(bk, bentry)
                 self._check_memorial_box_contamination(player_id, msg["pc_boxes"])
             # Seed party_details from snapshot
-            self.party_details[player_id] = {
-                m["key"]: {
-                    "level":        m.get("level", 0),
-                    "hp":           m.get("hp", 1),
-                    "maxHP":        m.get("maxHP", 1),
-                    "nickname":     m.get("nickname", ""),
-                    "species_id":   m.get("species_id", 0),
-                    "held_item_id": m.get("held_item_id", m.get("held_item", 0)),
-                    "ability_id":   m.get("ability_id", m.get("ability", 0)),
-                    "gender":       self.adapter.gender_from_key(m["key"], m.get("species_id", 0)),
-                    "moves":        m.get("moves", []),
-                    "pp":           m.get("pp", []),
-                    "slot":         m.get("slot", idx),
-                    "active":       m.get("active", False),
-                    "status_cond":  m.get("status_cond", 0),
-                }
-                for idx, m in enumerate(msg.get("party", [])) if m.get("key")
-            }
+            self.party_details[player_id] = self._party_snapshot(player_id, msg.get("party", []))
             for k, det in self.party_details[player_id].items():
                 self._cache_mon_info(k, det)
             # Seed battle state from hello (so page reflects battle immediately)
@@ -3272,25 +3282,7 @@ class SLinkServer:
         # This prevents captures that went straight to the PC box (full-party captures)
         # from appearing as phantom party mons between ticks.
         if "party" in msg and event == "tick":
-            self.party_details[player_id] = {
-                m["key"]: {
-                    "level":        m.get("level", 0),
-                    "hp":           m.get("hp", 1),
-                    "maxHP":        m.get("maxHP", 1),
-                    "nickname":     m.get("nickname", ""),
-                    "species_id":   m.get("species_id", 0),
-                    "held_item_id": m.get("held_item_id", m.get("held_item", 0)),
-                    "ability_id":   m.get("ability_id", m.get("ability", 0)),
-                    "gender":       self.adapter.gender_from_key(m["key"], m.get("species_id", 0)),
-                    "moves":        m.get("moves", []),
-                    "pp":           m.get("pp", []),
-                    "slot":         m.get("slot", idx),
-                    "active":       m.get("active", False),
-                    "status_cond":  m.get("status_cond", 0),
-                    "stat_stages":  m.get("stat_stages"),
-                }
-                for idx, m in enumerate(msg["party"]) if m.get("key")
-            }
+            self.party_details[player_id] = self._party_snapshot(player_id, msg["party"])
             for k, det in self.party_details[player_id].items():
                 self._cache_mon_info(k, det)
 
