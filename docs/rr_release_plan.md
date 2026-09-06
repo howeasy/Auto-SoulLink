@@ -32,9 +32,12 @@ runtime or release approval.
   named Broadcast sources and compatibility URLs. Minimal consumer agreement and
   HTTP hardening are published at `064b57cb5befc83c94bec4fc75a36e8e6bcd3f6d`, with
   scalar-compatibility follow-up `965cc12664b1c9b5ee27d8fc4a97a5cf06a6b065`.
-- UI explicitly cleared independent RR context/native-storage work. The actual
-  Phase3 projection producer and authoritative provenance/recovery fields are still
-  a separate dependency for RR presentation integration.
+- UI explicitly cleared independent RR context/native-storage work. The tested
+  Phase3 producer is published at `5817e2616df2132b23403e13fe3de22d189bab5a`
+  (stacked PR9/PR6; both hosted checks passed, not merged to master). Its contract
+  was read directly. The dependency-closed stack and authoritative RR
+  provenance/recovery bindings remain separate integration work; no active UI
+  worktree was imported.
 - RR owns its admission binding, observations, execution/readback, native
   transactions, resources, exact-ROM data and cartridge evidence.
 

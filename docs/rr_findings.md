@@ -49,6 +49,7 @@ that the original defect was observed in both modes. All features listed below a
 | RR-U05 | Artifact comparison | Advertised output fingerprint differs from applied reproducible UPS bytes. `server/patcher.py:40`. | Metadata generated from exact release artifacts. |
 | RR-V01 | Harness inspection | RR emulator configs/stubs/results and GBA saves are shared across runs. `tools/e2e_duo.py:300`, `tools/run_gate.py:81`. | Isolated run/player paths and exact child-process cleanup. |
 | RR-V02 | Assertion inspection | Visual PASS and disappearance/dual-command cases bypass intended proof. `lua/tests/test_live_ghostshow.lua`, `lua/tests/duo/scenario_faint.lua`, `tools/e2e_duo.py:673`. | Required explicit oracles; real one-player action and partner propagation. |
+| RR-R01 | Pinned host source proof | Stock rewind restores before the hold check; preframe callbacks occur after that check; a savestate load can restore core memory and then fail without a Lua load notification. `docs/rr_reference/RESET_LOAD_INTERLOCK.md`. | Stop/revoke before restored BUSY execution, including late-failed loads, Power reset, rewind and direct execution bypasses. |
 
 ## Verified mechanisms to retain
 
@@ -75,17 +76,19 @@ Actual reproduction traces belong to that row's exact candidate/run manifest.
 | N05-N06 | P0 | All queued native operations and buffers | ABI2 retention and payload leases implemented; native scene contention pending | `tests/unit/test_rr_mailbox_v2.py`, release native/storage/trade inventory |
 | N07 | P0 | Entire native companion | Open; layout has not expanded and zero observed allocator calls cannot close it | `tools/rr/arena.py`, `lua/tests/rr/arena_probe.lua` |
 | N08 | P1 | Ghost collision and motion | Reproduction and RR collision-contract verification required | Release ghost collision/motion inventory |
-| S01-S04 | P0 | Deposit, withdrawal, memorialization | Lua context/readback and native guards implemented; physical gameplay proof pending | `tests/rr/runtime/test_storage_context.py`, release storage inventory |
+| S01-S03 | P0 | Deposit, withdrawal, memorialization | Lua context/readback and native guards implemented; physical gameplay proof pending | `tests/rr/runtime/test_storage_context.py`, release storage inventory |
+| S04 | P0 | Complete native withdrawal acceptance | Legacy v1 reproduced accepting corrupt PP/status/attack. Explicit v2 readback uses pinned full100-byte oracle; local loader/native coordinator and production selection remain pending | `tests/rr/runtime/test_withdrawal_evidence.py`, `docs/rr_reference/WITHDRAWAL_EVIDENCE.md`, live storage inventory |
 | B01-B06 | P0 | Party ownership, death/whiteout, chained acquisition | Context/temporal repairs implemented; durable runtime binding and live evidence pending | `tests/rr/runtime/test_temporal_observations.py`, `test_rr_regressions.py` |
 | T01-T04 | P0 | Native trade/evolution and member ownership | Serializable native transaction and independently validated receipts still required | Release interactive trade, contention, restart and evolution inventory |
 | I01 | P1 | Save admission with a traded leading Pokémon | Shared SaveIdentity seam and RR SaveBlock2 provider tested; new RR runtime still needs selection | `tests/unit/test_rr_admission.py`, shared SaveIdentity/state/dispatcher tests |
 | D01-D02 | P1 | Gender/species clauses and identity migration | Exact-ROM reference extracted; runtime tables and explicit form-policy migration pending | `tests/rr/reference/`, acquisition/clauses inventory |
 | D03 | P2 | Encounter guidance | Physical encounter-table/probability repair pending | Release encounter guidance inventory |
-| D04-D05 | P1 | RR types, species domain, calculator | Exact 1376-record extent proved; runtime adoption and 20 canonical-name gaps pending | `tests/rr/reference/`, calculator and clauses inventory |
+| D04-D05 | P1 | RR types, species domain, calculator | Exact1376-record extent and35 name corrections reviewed; inactive catalog refuses unresolved IDs1038/1214/1224. Runtime adoption remains pending | `tests/rr/reference/`, `docs/rr_reference/RR_CATALOG.md`, calculator and clauses inventory |
 | U01-U03 | P1 | Calculator execution/provenance | Waits for reviewed UI producer and RR observed-battle binding | Release presentation/calculator inventory |
 | U04 | P2 | Memorial panel/board styling | UI contract frozen; authoritative RR presentation integration pending | Release memorial/panel presentation inventory |
 | U05 | P1 | Browser patching/distribution | Candidate build emits exact fingerprints; final patcher/package metadata adoption pending | `tests/rr/native/`, distribution inventory |
 | V01-V02 | P0 | Trustworthiness of all release evidence | Isolated runner and strict expected inventory implemented; old weak assertions cannot count | `tests/unit/test_rr_native_gate.py`, `test_rr_release_gate.py`, full release verifier |
+| R01 | P0 | Reset/load/rollback and paired execution | Held/unheld ownership component tests do not close restoration bypasses; no general interlock or production capability activated | `docs/rr_reference/RESET_LOAD_INTERLOCK.md`, recovery inventory |
 
 Identifiers in this table use the `RR-` prefix from the detailed rows. Component passes
 are progress, not a release disposition of fixed. The executable release inventory remains
