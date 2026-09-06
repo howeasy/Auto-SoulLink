@@ -4,6 +4,7 @@ No routine/source rewriting and no emulator claim: the fake engine supplies only
 the harmless PING dispatch/receipt and state restoration boundaries under test.
 """
 
+import json
 import struct
 from pathlib import Path
 
@@ -273,6 +274,14 @@ def test_restored_frame_invalidates_original_owner_and_retains_busy_without_disp
     assert case.output.held_period.yields >= 10
     assert case.output.general_interlock_proved is False
     case.assert_held_no_writes()
+
+
+def test_late_failure_raw_false_survives_json_evidence_encoding():
+    case = Probe("late_failure")
+    case.run()
+    encode = case.lua.eval('require("json_codec").encode')
+    raw = json.loads(encode(case.output.after_load))
+    assert raw["call_ok"] is True and raw["returned"] is False
 
 
 @pytest.mark.parametrize(

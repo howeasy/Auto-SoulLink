@@ -202,7 +202,9 @@ return function(ctx)
             -- First restored boundary: invalidate the old frame anchor, retain
             -- its lease and emergency STOP. Never construct a replacement owner.
             local verified,verify_error=owner.verify()
-            out.after_load={call_ok=load_ok,returned=load_ok and loaded or nil,
+            local returned
+            if load_ok then returned=loaded end -- preserve a real Boolean false in raw evidence
+            out.after_load={call_ok=load_ok,returned=returned,
                 error=not load_ok and tostring(loaded) or nil,old_owner_verified=verified,
                 verify_error=verify_error,frame=emu.framecount(),mailbox_hex=hex(BASE,64),owner=owner.status()}
             held()
