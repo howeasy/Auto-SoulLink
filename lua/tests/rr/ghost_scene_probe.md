@@ -1,9 +1,9 @@
 # Running and natural wild-battle ghost probe preparation
 
-Checkpoint status: **read-only route observation is implemented and ready**.
-`ghost_route_observation.lua` and its six self-tests exist. A movement/battle
-executor has not been completed or launched at this checkpoint. No running,
-natural encounter, field-return, recording or duo gameplay pass is claimed.
+Checkpoint status: **read-only observation22 passed; running-only executor is staged
+for review and has not launched**. The natural-battle executor remains unimplemented.
+No running, natural encounter, battle/field-return, recording or duo gameplay pass
+is claimed.
 
 Frozen03 and all original save/config inputs remain unchanged. Any later component
 probe must use a fresh private instance prepared by `tools.rr.native_gate` from
@@ -62,6 +62,80 @@ to the west. These are **candidate destinations**, not a reviewed route. The
 observed RAM grid, actual connections, coordinate scripts, warps and actor positions
 must determine the route before movement is authorized in the component script.
 Do not guess a button sequence from a familiar vanilla map or a screenshot alone.
+
+## Staged running-only executor
+
+`ghost_running_probe.lua` uses `viridian_west_running_route.json`, bound to actual
+observation22 SHA256 `600f94c88972995f1e337a8908303674dda7c475e0be52f55b71cfaa0727c4e3`.
+The reviewed row34 corridor, grid x26..45, contains only collision0/elevation3/plain
+terrain. The player's segment x33→27 avoids all five warp entries and all twelve
+coordinate-script entries in actual map events `0x0872BDC4`. Their complete bytes
+and pointers are pinned in the route artifact; the actual ROM contract test checks
+them. The observed NPC at40,33 is off the route; a new blocking actor aborts before
+the next step rather than being treated as static empty space.
+
+The executor first runs the existing three-cycle normal ghost-resource control and
+reuses its settled production mailbox instance through a test-only return value.
+It then spawns a synthetic peer, stages the known-valid avatar and keeps its target
+two tiles east of the westbound player. Samples publish every two frames. It holds
+actual B/Left until the final tile's movement begins, releases input, and waits for
+the native step to finish. The input segment is limited to120 frames; no coordinate,
+battle, party, RNG or controller-function field is written directly.
+
+Success requires the actual endpoint, at least six consecutive observed two-pixel
+westward native frames with running animation22, and observed ghost running frames.
+RR's real running-animation lookup at `0x08063520` reads table `0x083A6493`, whose
+left-facing entry is22. Holding B or setting the synthetic peer's run bit alone
+cannot pass the oracle. Field/map/party identity and ghost/actor palette, callback,
+allocation and tile ownership are checked during movement. Clear must leave no
+ghost sentinel or private type6 reference. Unexpected scene/battle or a timeout fails
+and retains trace/capture attempts; cleanup never forces a write into unknown context.
+
+Every trace frame retains complete party bytes, while the gate requires the original
+count and ordered PID/OT identities. Field steps can legitimately change friendship
+or other gameplay fields, so byte equality is not used as a running-motion oracle.
+Any party-byte difference remains explicitly `party_review=pending`; no party/storage
+correctness is claimed by a graphics component pass.
+
+Full resource restoration also remains `resource_review=pending`. Final checks
+require no ghost object sentinel or private palette reference, but camera movement
+can cull/create ordinary actors and change their sprite/tile allocations. The retained
+resource snapshots require independent orphan-sprite/tile attribution; absence of a
+type6 palette alone does not establish that all ghost tiles or sprites were released.
+`running_component_complete` certifies its bounded motion, owned-frame and coarse
+cleanup assertions only, not complete resource restoration.
+
+Use a total budget of2,200 frames, including the1,656-frame battery boot and normal
+resource controls. Required executor assertion IDs are `running_component_complete`,
+`running_endpoint_reached`, `running_native_motion_observed`,
+`running_ghost_animation_observed`, `running_recording_complete`, plus
+`resource_normal_lifetime_complete` and native_gate's built-ins. The native symbol
+contract/options are the same frozen03 contract as the normal resource probe.
+
+Declared source closure, in addition to normal host/native-manifest dependencies:
+
+- `lua/tests/rr/ghost_running_probe.lua`
+- `lua/tests/rr/ghost_resource_probe.lua`
+- `lua/tests/rr/viridian_west_running_route.json`
+- `lua/mailbox.lua`
+- `lua/memory_gba.lua`
+- `lua/json_codec.lua`
+
+Every frame from ready-to-run through cleanup has a new240×160 framebuffer PNG and
+an exact frame number. The ordered recording manifest uses the pinned host's nominal
+GBA timing262144/4389 fps. It can be encoded after the run without generated or
+interpolated frames, for example from the private result directory:
+
+```powershell
+ffmpeg -framerate 262144/4389 -start_number 0 -i result_running_frame_%06d.png -c:v libx264rgb -crf 0 running.mp4
+```
+
+Retain/hash the original PNG sequence and result alongside any video derivative.
+The component always reports `release_ready=false`, `visual_review=pending`, and
+`natural_battle_tested=false`; it cannot close the battle-transition or duo lanes.
+The observer/native route and running/resource self-tests pass, but the running
+executor still needs parent review, private-host ownership qualification and an
+explicit coordinated launch. Frozen03 has not been rebuilt or modified.
 
 ## Planned bounded component executor
 
@@ -136,8 +210,9 @@ positive controls. Existing arena callback limitations must not be hidden by a
 zero-count result. The result should remain `release_ready=false` and classified
 as synthetic single-cartridge component evidence even if this bounded case passes.
 
-At this checkpoint the movement executor, reviewed route, natural battle, field
-return, continuous recording and live running/scene assertions remain outstanding.
+At this checkpoint the running-only executor/route are staged; its actual running
+and recording outcome, natural battle, battle/field return and live scene assertions
+remain outstanding.
 Bike/surf/fishing, broader motion/freshness, allocator reservation, durable recovery,
 campaigns and soaks are separate unresolved work.
 
@@ -146,4 +221,11 @@ Self-tests for the completed read-only observer:
 ```powershell
 python -m pytest -q tests/unit/test_rr_ghost_route_observation.py
 python -m ruff check tests/unit/test_rr_ghost_route_observation.py
+```
+
+Staged executor self-tests and ROM contract:
+
+```powershell
+python -m pytest -q tests/unit/test_rr_ghost_running_probe.py tests/unit/test_rr_ghost_resource_probe.py tests/rr/native/test_running_route_contract.py --rr-repo . --rr-rom 'E:/Google Drive/SLink/Pokemon - Radical Red.gba'
+python -m ruff check tests/unit/test_rr_ghost_running_probe.py tests/rr/native/test_running_route_contract.py
 ```

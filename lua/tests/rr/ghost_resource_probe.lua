@@ -361,4 +361,8 @@ return function(ctx)
         end
         error(why,0)
     end
+    -- Test-only composition seam: another bounded component may reuse this
+    -- already-settled volatile mailbox instance instead of reloading its owner.
+    -- These closures grant no production admission or frame-execution authority.
+    return {mailbox=MB,reference=reference,resources_snapshot=snapshot}
 end
