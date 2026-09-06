@@ -5,8 +5,14 @@ local Storage = {}
 local kinds = {box_mon="deposit",party_mon="withdraw",memorialize="memorialize"}
 local EMPTY_PARTY = string.rep("00",100)
 local EMPTY_BOX = string.rep("00",58)
+local function copy(value)
+    if type(value)~="table" then return value end
+    local result={}
+    for key,item in pairs(value) do result[key]=copy(item) end
+    return result
+end
 
-function Storage.new(M, MB, io, context)
+function Storage.new(M, MB, io, context, withdrawal)
     local self = {}
     -- Volatile native mailbox ownership only. The durable intent belongs to the
     -- shared command inbox; losing this lease never proves an earlier effect failed.
@@ -46,6 +52,7 @@ function Storage.new(M, MB, io, context)
         return intent.kind..":"..intent.key..":"..intent.slot..":"..intent.box..":"..intent.pos
             ..":"..table.concat(intent.before_party)..":"..intent.before_box
             ..":"..tostring(intent.source_box)..":"..tostring(intent.source_pos)
+            ..":"..(intent.withdrawal and intent.withdrawal.party_sha256 or "legacy")
     end
 
     function self.prepare(body)
@@ -93,7 +100,8 @@ function Storage.new(M, MB, io, context)
                 return nil,"memorial target is not fainted"
             end
         end
-        local intent={schema="rr-storage-intent-v1",kind=kind,key=body.key,slot=slot,box=box,pos=pos,
+        local intent={schema=withdrawal and "rr-storage-intent-v2" or "rr-storage-intent-v1",
+            kind=kind,key=body.key,slot=slot,box=box,pos=pos,
             pre_count=current.count,before_party=before_party,before_box=before_box,
             save_fingerprint=current.save_fingerprint,swap_seq=current.swap.seq,
             guard={pid=io.read_u32_le(source),otid=io.read_u32_le(source+4),count=current.count}}
@@ -104,6 +112,12 @@ function Storage.new(M, MB, io, context)
             intent.after_count=current.count;intent.after_box=source_box_hex
         elseif kind=="withdraw" then
             intent.after_count=current.count+1;intent.after_box=EMPTY_BOX
+            if withdrawal then
+                local proof,problem=withdrawal.prepare(before_box)
+                if not proof then return nil,problem end
+                intent.withdrawal=proof
+                intent.after_party[slot+1]=proof.expected_party
+            end
         else
             intent.after_count=current.count-1;intent.after_box=compressed(before_party[slot+1])
             if kind=="deposit" then
@@ -119,7 +133,8 @@ function Storage.new(M, MB, io, context)
     function self.classify(body,intent)
         local kind=kinds[body.cmd]
         if kind=="memorialize" and body.source_box~=nil then kind="boxed_memorialize" end
-        if intent.schema~="rr-storage-intent-v1" or kind~=intent.kind or body.key~=intent.key then
+        local schema=withdrawal and "rr-storage-intent-v2" or "rr-storage-intent-v1"
+        if intent.schema~=schema or kind~=intent.kind or body.key~=intent.key then
             return "diverged","storage intent does not match command"
         end
         if (body.slot or 0)~=intent.slot or body.box~=intent.box or body.pos~=intent.pos
@@ -132,12 +147,19 @@ function Storage.new(M, MB, io, context)
         if current.save_fingerprint~=intent.save_fingerprint or current.swap.seq~=intent.swap_seq then
             return "diverged","save or borrowed-party epoch changed"
         end
+        if withdrawal and kind=="withdraw" then
+            local verified,problem=withdrawal.verify(intent.withdrawal,intent.before_box)
+            if not verified then return "diverged",problem end
+            if intent.after_party[intent.slot+1]~=intent.withdrawal.expected_party then
+                return "diverged","prepared withdrawal destination differs from pinned evidence"
+            end
+        end
         local actual,boxed=party(),hex_at(M.boxMonAddr(intent.box,intent.pos),58)
         local source_boxed=intent.source_box and hex_at(M.boxMonAddr(intent.source_box,intent.source_pos),58) or nil
         if current.count==intent.after_count and boxed==intent.after_box
             and (not source_boxed or source_boxed==EMPTY_BOX) then
             local matches=same(actual,intent.after_party)
-            if intent.kind=="withdraw" then
+            if intent.kind=="withdraw" and not withdrawal then
                 local expected={table.unpack(intent.after_party)}
                 expected[intent.slot+1]=actual[intent.slot+1]
                 local base=M.PARTY_BASE+intent.slot*M.MON_SIZE
@@ -182,11 +204,20 @@ function Storage.new(M, MB, io, context)
             or observation.source_boxed~=current.source_boxed
             or not same(observation.party,current.party) then return nil,"storage evidence changed" end
         native=nil
-        return {schema="rr-storage-receipt-v1",kind=intent.kind,key=intent.key,
+        return {schema=withdrawal and "rr-storage-receipt-v2" or "rr-storage-receipt-v1",kind=intent.kind,key=intent.key,
             box=intent.box,pos=intent.pos,party_count=current.count,party=current.party,boxed=current.box,
             source_box=intent.source_box,source_pos=intent.source_pos,source_boxed=current.source_boxed,
-            durability="live_ram_only"}
+            withdrawal=copy(intent.withdrawal),durability="live_ram_only"}
     end
     return self
+end
+
+-- Selected only by the future admitted bootstrap/private validation. Missing
+-- local evidence refuses construction; never fall back to the v1 predicate.
+-- Keep legacy new() explicit until loader/admission integration is validated.
+function Storage.new_verified(M, MB, io, context, withdrawal)
+    if type(withdrawal)~="table" or type(withdrawal.prepare)~="function"
+        or type(withdrawal.verify)~="function" then return nil,"verified withdrawal binding required" end
+    return Storage.new(M, MB, io, context, withdrawal)
 end
 return Storage

@@ -4,7 +4,9 @@
 the expected 100-byte party record from a 58-byte compressed record, selected
 pinned-ROM table evidence, and an explicit Default-mode context. It never reads
 or writes emulator memory, calls native code, or grants permission to apply/ACK a
-command. Existing native conversion and `storage.classify` remain unchanged.
+command. Existing native conversion and the legacy client's v1 predicate remain
+unchanged. The explicitly selected v2 participant now consumes it through
+[the local evidence binding](WITHDRAWAL_EVIDENCE.md); production selection remains pending.
 
 This closes the offline formula gap for the standard stat branch. It does **not**
 close S04 release evidence: actual native execution/readback, authoritative context
@@ -172,7 +174,7 @@ pinned binary anchors. Coverage includes all 25 natures, all six growth rows,
 every PP-bonus byte, exact thresholds and one-below values at levels
 1/2/49/50/99/100/101/250, Shedinja, zero-level engine behavior, refusal paths and
 full reconstructed byte positions. These are **not ARM execution or emulator
-tests**. The helper is not called by the production client or `storage.lua`.
+tests**. The production client does not select the v2 evidence binding.
 
 One additional test consumes the independently captured field record in
 `tests/rr/reference/fixtures/field_party_08_a.json`. Root captured it after actual
