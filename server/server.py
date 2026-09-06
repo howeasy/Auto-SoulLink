@@ -2478,6 +2478,7 @@ class SLinkServer:
         player_id_for_conn: str | None = None
         owner = object()
         gen1_connection = False
+        legacy_hello_accepted = False
         dropping_line = False
         try:
             while True:
@@ -2543,6 +2544,33 @@ class SLinkServer:
                 # RBY socket, even by announcing a different game in its HELLO.
                 if player_id in self._gen1_sessions.sessions:
                     await self._respond_packet(writer, gen1_admission.nack(msg, "slot belongs to an admitted RBY session"))
+                    continue
+                if msg.get("event") == "hello":
+                    # Recognize the cartridge before this socket can replace an
+                    # owner, adopt an adapter, publish facts or advance sequence.
+                    from server.adapters import game_id_for_rom_type
+                    legacy_hello_accepted = False
+                    declared_rom = msg.get("rom_type")
+                    if not isinstance(declared_rom, str) or game_id_for_rom_type(declared_rom) is None:
+                        reason = "Unrecognized cartridge identity; load a supported game and send HELLO again."
+                        log.warning("[%s] rejected HELLO from %s: unrecognized cartridge rom_type=%s",
+                                    player_id, peer, repr(declared_rom)[:160])
+                        # A rejected second socket has no authority to revoke
+                        # the correctly connected player's admission or facts.
+                        if self._connection_owners.get(player_id) in (None, owner):
+                            self.admission[player_id] = {
+                                "state": "rejected", "reason_code": "unrecognized_cartridge", "reason": reason}
+                        await self._respond_packet(writer, {
+                            "ack": "NACK", "reason_code": "unrecognized_cartridge", "reason": reason,
+                            "commands": [{"cmd": "noop"}]})
+                        self._notify_sse()
+                        continue
+                    legacy_hello_accepted = True
+                elif not legacy_hello_accepted or self._connection_owners.get(player_id) is not owner:
+                    await self._respond_packet(writer, {
+                        "ack": "NACK", "reason_code": "legacy_connection_not_admitted",
+                        "reason": "A valid HELLO on the current connection is required before events.",
+                        "commands": [{"cmd": "noop"}]})
                     continue
                 self._connection_owners[player_id] = owner
 
