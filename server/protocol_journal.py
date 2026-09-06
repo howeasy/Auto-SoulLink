@@ -102,6 +102,18 @@ class EventReceipt:
     command_ids: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class RecordSnapshot:
+    revision: int
+    value: dict
+
+
+def _record_key(namespace, key):
+    if not isinstance(namespace, str) or not re.fullmatch(r"[a-z][a-z0-9_.-]{0,63}", namespace):
+        raise JournalError("invalid record namespace")
+    _identifier(key)
+
+
 class ProtocolJournal:
     def __init__(self, path, *, contract_hash, run_id=None, max_pending=4096):
         if run_id is not None:
@@ -145,10 +157,16 @@ class ProtocolJournal:
             self._db.execute("""CREATE TABLE IF NOT EXISTS sessions (
                 client_nonce TEXT PRIMARY KEY, player TEXT NOT NULL CHECK(player IN ('a','b')),
                 admission_epoch TEXT NOT NULL, session_id TEXT NOT NULL UNIQUE)""")
+            self._db.execute("""CREATE TABLE IF NOT EXISTS records (
+                namespace TEXT NOT NULL, record_key TEXT NOT NULL, revision INTEGER NOT NULL,
+                body TEXT NOT NULL, digest TEXT NOT NULL,
+                PRIMARY KEY(namespace,record_key,revision))""")
             actual = dict(self._db.execute("SELECT name,value FROM metadata"))
             run_id = run_id or actual.get("run_id") or secrets.token_hex(16)
             _identifier(run_id)
             expected = {"run_id": run_id, "contract_hash": contract_hash}
+            if "atomic_records" in actual:
+                expected["atomic_records"] = "v1"
             if actual and actual != expected:
                 raise JournalError("journal belongs to a different run or cartridge contract")
             if not actual:
@@ -218,7 +236,8 @@ class ProtocolJournal:
             "SELECT command_id FROM commands WHERE origin_player=? AND origin_operation=? ORDER BY position", (player, operation_id)))
         return EventReceipt(row["revision"], _decode(row["result"], row["result_digest"]), ids)
 
-    def commit(self, player, operation_id, request, *, expected_revision, state, commands, result, acknowledgements=()):
+    def commit(self, player, operation_id, request, *, expected_revision, state, commands, result,
+               acknowledgements=(), records=()):
         """Commit a staged transition plus BOTH outboxes, or change nothing.
 
         A complete retry returns the previous receipt. A different payload under
@@ -231,6 +250,22 @@ class ProtocolJournal:
         request_text, request_hash = _encode(request)
         state_text, state_hash = _encode(state)
         result_text, result_hash = _encode(result)
+        if not isinstance(records, (tuple, list)) or len(records) > 128:
+            raise JournalError("bounded atomic record writes required")
+        record_rows, record_keys, record_bytes = [], set(), 0
+        for record in records:
+            if not isinstance(record, dict) or set(record) != {"namespace", "key", "value"}:
+                raise JournalError("invalid atomic record write")
+            namespace, key = record["namespace"], record["key"]
+            _record_key(namespace, key)
+            if (namespace, key) in record_keys:
+                raise JournalError("duplicate record write in one transition")
+            record_keys.add((namespace, key))
+            body, fingerprint = _encode(record["value"])
+            record_bytes += len(body.encode("ascii")) + len(namespace) + len(key) + 128
+            if record_bytes > MAX_JSON_BYTES:
+                raise JournalError("atomic record batch exceeds the byte limit")
+            record_rows.append((namespace, key, expected_revision+1, body, fingerprint))
         if not isinstance(commands, dict) or set(commands) != {"a", "b"}:
             raise JournalError("both command outboxes are required")
         staged = []
@@ -265,11 +300,52 @@ class ProtocolJournal:
                              (player, operation_id, request_text, request_hash, revision, result_text, result_hash))
             self._db.executemany("""INSERT INTO commands
                 (command_id,player,origin_player,origin_operation,body,digest) VALUES (?,?,?,?,?,?)""", staged)
+            if record_rows:
+                # Older journal implementations require exactly the original
+                # two metadata fields and will refuse to reopen this database.
+                marker = self._db.execute("SELECT value FROM metadata WHERE name='atomic_records'").fetchone()
+                if marker is not None and marker[0] != "v1":
+                    raise JournalError("unsupported atomic record capability")
+                self._db.execute("INSERT OR IGNORE INTO metadata VALUES ('atomic_records','v1')")
+                self._db.executemany("INSERT INTO records VALUES (?,?,?,?,?)", record_rows)
             self._db.commit()
         except Exception:
             self._db.rollback()
             raise
         return EventReceipt(revision, json.loads(result_text), tuple(row[0] for row in staged))
+
+    def record(self, namespace, key):
+        """Latest checked component record; every prior revision is retained."""
+        _record_key(namespace, key)
+        row = self._db.execute(
+            "SELECT * FROM records WHERE namespace=? AND record_key=? ORDER BY revision DESC LIMIT 1",
+            (namespace, key)).fetchone()
+        if row is None:
+            return None
+        capability = self._db.execute("SELECT value FROM metadata WHERE name='atomic_records'").fetchone()
+        if capability is None or capability[0] != "v1":
+            raise JournalError("atomic record capability marker is missing or unsupported")
+        if row["revision"] > self.snapshot().revision:
+            raise JournalError("component record is newer than its state snapshot")
+        return RecordSnapshot(row["revision"], _decode(row["body"], row["digest"]))
+
+    def record_history(self, namespace, key, *, after_revision=0, limit=128):
+        """Bounded checked audit reads; never remove old component revisions."""
+        _record_key(namespace, key)
+        if (type(after_revision) is not int or after_revision < 0
+                or type(limit) is not int or not 1 <= limit <= 128):
+            raise JournalError("invalid record history bounds")
+        rows = self._db.execute(
+            "SELECT * FROM records WHERE namespace=? AND record_key=? AND revision>? ORDER BY revision LIMIT ?",
+            (namespace, key, after_revision, limit)).fetchall()
+        if rows:
+            marker = self._db.execute("SELECT value FROM metadata WHERE name='atomic_records'").fetchone()
+            if marker is None or marker[0] != "v1":
+                raise JournalError("atomic record capability marker is missing or unsupported")
+        current = self.snapshot().revision
+        if any(row["revision"] > current for row in rows):
+            raise JournalError("component record is newer than its state snapshot")
+        return [RecordSnapshot(row["revision"], _decode(row["body"], row["digest"])) for row in rows]
 
     def pending(self, player, *, limit=128, max_bytes=MAX_JSON_BYTES):
         _player(player)

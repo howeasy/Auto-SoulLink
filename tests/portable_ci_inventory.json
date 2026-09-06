@@ -3952,6 +3952,31 @@
         "tests/unit/test_http_server_security.py::test_calc_rejects_windows_junction_escape[0]",
         "tests/unit/test_http_server_security.py::test_calc_rejects_windows_junction_escape[1]"
       ]
+    },
+    {
+      "id": "shared-atomic-component-records",
+      "reason": "Real SQLite component-record storage tests with no ROM, emulator or generation-specific input.",
+      "requires": [],
+      "platforms": [
+        "linux",
+        "win32"
+      ],
+      "nodes": [
+        "tests/unit/test_protocol_records.py::test_records_outboxes_and_ack_survive_reopen_atomically",
+        "tests/unit/test_protocol_records.py::test_failure_publishes_neither_record_state_ack_nor_commands[records]",
+        "tests/unit/test_protocol_records.py::test_failure_publishes_neither_record_state_ack_nor_commands[capacity]",
+        "tests/unit/test_protocol_records.py::test_failure_publishes_neither_record_state_ack_nor_commands[revision]",
+        "tests/unit/test_protocol_records.py::test_uncertain_commit_and_exact_replay_do_not_duplicate_records",
+        "tests/unit/test_protocol_records.py::test_corrupt_or_unbound_record_cannot_be_read[digest]",
+        "tests/unit/test_protocol_records.py::test_corrupt_or_unbound_record_cannot_be_read[marker]",
+        "tests/unit/test_protocol_records.py::test_corrupt_or_unbound_record_cannot_be_read[future]",
+        "tests/unit/test_protocol_records.py::test_invalid_record_writes_leave_snapshot_and_outbox_untouched[namespace]",
+        "tests/unit/test_protocol_records.py::test_invalid_record_writes_leave_snapshot_and_outbox_untouched[key]",
+        "tests/unit/test_protocol_records.py::test_invalid_record_writes_leave_snapshot_and_outbox_untouched[value]",
+        "tests/unit/test_protocol_records.py::test_invalid_record_writes_leave_snapshot_and_outbox_untouched[duplicate]",
+        "tests/unit/test_protocol_records.py::test_invalid_record_writes_leave_snapshot_and_outbox_untouched[unknown]",
+        "tests/unit/test_protocol_records.py::test_invalid_record_writes_leave_snapshot_and_outbox_untouched[marker]"
+      ]
     }
   ]
 }
