@@ -11,10 +11,11 @@ reviewed boot_inputs [{frames,buttons}]. Their database directory is explicit.
 
 Each source dependency must be selected with --source-file; the script is always
 included. This snapshots a declared closure, not an inferred complete codebase.
-The arena probe's recommended required IDs are descriptor_matches_bound_rom,
-frame_budget_complete, pc_reads_available, trace_complete, execute_control_observed,
-read_hook_observed and write_hook_observed, with the matching
---native-manifest. It still reports ownership unresolved, including after zero hits.
+The exact arena lane requires explicit writes_exec_v1 selection and its complete
+assertion list in docs/rr_reference/ARENA_EXACT_PROBE.md. It reports no read
+coverage and leaves ownership unresolved, including after zero hits. Execution
+adapter probes additionally bind their exact source hash and host profile and
+permit only the reviewed lifecycle/external-clear/stopped-reload scenarios.
 
 Historical batteries without compatibility evidence use purpose fixture_discovery
 and slink-rr-fixture-candidate-v1 (compatibility="unverified", provenance object,
@@ -55,6 +56,9 @@ SCHEMA = "slink-rr-native-gate-v1"
 RESULT_SCHEMA = "slink-rr-native-gate-result-v1"
 BUILTIN_ASSERTIONS = ("system_gba", "loaded_rom_sha1", "emulator_version", "fixture_loaded")
 HOST_IDENTITY_HELPER = "lua/tests/rr/host_identity.lua"
+EXECUTION_PROBE = "lua/tests/rr/platform_execution_probe.lua"
+EXECUTION_MODULE = "lua/platform_execution.lua"
+EXECUTION_HELPER = "lua/tests/rr/platform_execution_owner_helper.lua"
 
 
 @dataclass(frozen=True)
@@ -112,6 +116,45 @@ def _validate_boot_inputs(steps: Any) -> None:
         total += frames
     if total > 3600:
         raise SandboxError("Battery boot exceeds 3600 frames")
+
+
+def _validate_execution_probe(spec: GateSpec) -> None:
+    if (spec.purpose != "validation" or spec.native_manifest is None
+            or type(spec.frames) is not int or not 1 <= spec.frames <= 2000):
+        raise SandboxError("Execution probe requires validation, a native manifest and at most 2000 frames")
+    options = spec.probe_options
+    keys = {"mode", "initial_paused", "hold_ms", "owner_id", "contender_id", "expected_host", "adapter_sha256"}
+    if not isinstance(options, dict) or set(options) != keys:
+        raise SandboxError("Execution probe requires its exact explicit options")
+    if options["mode"] not in ("lifecycle", "external_clear", "stopped_reload"):
+        raise SandboxError("Execution probe mode is not supported")
+    if type(options["initial_paused"]) is not bool:
+        raise SandboxError("Execution probe initial pause must be boolean")
+    if type(options["hold_ms"]) is not int or not 100 <= options["hold_ms"] <= 1000:
+        raise SandboxError("Execution probe hold must be bounded to 100-1000 milliseconds")
+    for key in ("owner_id", "contender_id"):
+        if not isinstance(options[key], str) or not re.fullmatch(r"[0-9a-f]{32}", options[key]):
+            raise SandboxError("Execution probe needs explicit owner/contender nonces")
+    if options["owner_id"] == options["contender_id"]:
+        raise SandboxError("Execution probe contender must also exercise a distinct owner nonce")
+    pins = options["expected_host"]
+    expected = {"capability_id", "emulator_version", "emulator_sha256", "core_type",
+                "core_assembly_sha256", "native_module_sha256"}
+    if (not isinstance(pins, dict) or set(pins) != expected
+            or any(not isinstance(value, str) or not value or len(value) > 128 for value in pins.values())):
+        raise SandboxError("Execution probe requires explicit complete host pins")
+    for key in ("emulator_sha256", "core_assembly_sha256", "native_module_sha256"):
+        if not re.fullmatch(r"[0-9a-f]{64}", pins[key]):
+            raise SandboxError("Execution probe host hash is malformed")
+    if pins["emulator_version"] != spec.emulator_version:
+        raise SandboxError("Execution probe host version differs from selected emulator")
+    if not isinstance(options["adapter_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", options["adapter_sha256"]):
+        raise SandboxError("Execution probe requires an exact adapter source hash")
+    required = {HOST_IDENTITY_HELPER, EXECUTION_MODULE, "lua/platform_clock.lua"}
+    if options["mode"] == "stopped_reload":
+        required.add(EXECUTION_HELPER)
+    if not required <= set(spec.source_files):
+        raise SandboxError("Execution probe source closure is incomplete")
 
 
 def validate_fixture(spec: GateSpec, emulator: dict, rom: dict) -> dict:
@@ -319,6 +362,8 @@ def prepare_gate(spec: GateSpec) -> Path:
         raise SandboxError("Only the explicitly supported mGBA core can be prepared")
     if type(spec.frames) is not int or not 1 <= spec.frames <= 10_000_000 or not spec.required_assertions:
         raise SandboxError("A bounded frame count and explicit structural assertion IDs are required")
+    if spec.script == EXECUTION_PROBE:
+        _validate_execution_probe(spec)
     if spec.purpose == "fixture_discovery":
         if not isinstance(spec.probe_options, dict):
             raise SandboxError("Discovery probe options must be an object")
@@ -353,6 +398,8 @@ def prepare_gate(spec: GateSpec) -> Path:
         ("fixture", spec.fixture), ("fixture_manifest", spec.fixture_manifest))}
     rom_bytes = spec.rom.read_bytes()
     fixture_meta = validate_fixture(spec, original["emulator"], original["rom"])
+    if spec.script == EXECUTION_PROBE and not fixture_meta.get("host"):
+        raise SandboxError("Execution probe requires independently observed fixture host evidence")
     config = _object_file(spec.base_config)
     descriptor = _native_descriptor(spec, rom_bytes)
     if spec.native_manifest is not None:
@@ -377,6 +424,8 @@ def prepare_gate(spec: GateSpec) -> Path:
     for relative, source in selected.items():
         if source.is_symlink() or not source.is_file():
             raise SandboxError(f"Source must be a regular contained file: {relative}")
+    if spec.script == EXECUTION_PROBE and identity(selected[EXECUTION_MODULE])["sha256"] != spec.probe_options["adapter_sha256"]:
+        raise SandboxError("Execution adapter source differs from explicitly selected hash")
     source_records = [{"relative_path": relative, **identity(path)} for relative, path in selected.items()]
     source_sha = digest(json_bytes([{k: row[k] for k in ("relative_path", "sha256", "size_bytes")}
                                    for row in source_records]))
@@ -443,7 +492,9 @@ def prepare_gate(spec: GateSpec) -> Path:
                "source_root": child_path(root, "source").as_posix(),
                "result_path": result_path.as_posix(), "frames": spec.frames,
                "fixture_meta": fixture_meta, "naming": naming,
-               "descriptor": descriptor, "probe_options": spec.probe_options}
+               "descriptor": descriptor, "probe_options": dict(spec.probe_options)}
+    if spec.script == EXECUTION_PROBE and spec.probe_options["mode"] == "stopped_reload":
+        context["probe_options"]["helper_path"] = child_path(root, "source/" + EXECUTION_HELPER).as_posix()
     if HOST_IDENTITY_HELPER in files:
         context["host_identity_path"] = child_path(root, "source/" + HOST_IDENTITY_HELPER).as_posix()
     # Database source paths do not belong in the Lua context.

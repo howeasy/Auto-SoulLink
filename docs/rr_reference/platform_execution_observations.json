@@ -1,0 +1,541 @@
+{
+  "adapter_sha256": "1186f83364c8e2366c94cdf06fd1665e11ba19471ecafe46a0ebd4bcec4a907c",
+  "full_execution_safety": false,
+  "production_selected": false,
+  "release_ready": false,
+  "runs": [
+    {
+      "complete": true,
+      "error": null,
+      "execution": {
+        "created": 1788669427.2584507,
+        "elapsed_seconds": 34.5,
+        "exit": 0,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 36168,
+        "terminated_exact_pids": []
+      },
+      "execution_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_lifecycle_21_a\\results\\execution.json",
+        "sha256": "e6e4da4fd618dab0ebcdb8a022eb8bea0eac8ff6fdff25e8b9183d107f8bc7ad",
+        "size_bytes": 195
+      },
+      "identity": {
+        "binding_sha256": "5323cc587506981324c6a4e465d90419fce192f0de4c6dcd3ecc78ef956f0049",
+        "config_sha256": "82eb17178f9ef26e017a4a14b7d7718d91654749601797748c2b135a6573f6d0",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "75837c3f53b1fca7713d9277279d9c9d21d388d882fca636e1e60e06df6ad357",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 1800,
+        "player": "a",
+        "probe_options_sha256": "3ef68b1d643bb0dc21073aca052670b8bcedba6e1e2150e668f6c1fa3ea83812",
+        "purpose": "validation",
+        "rom_sha1": "65C6B2739BAB54F8FFDA590D79BA551A0B7BAEC8",
+        "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+        "run_id": "execution_lifecycle_21",
+        "script_sha256": "9fcd8b7c5d6b735b340ef3a22707607e36ca5060582b1761b13bbe6c9da32dd6",
+        "source_sha256": "bc450adb95c3541c96db9038a4420f88e0229bb78bb259548b5d77011b934384"
+      },
+      "mode": "lifecycle",
+      "observed_host": {
+        "available": true,
+        "core_assembly": "BizHawk.Emulation.Cores, Version=2.11.1.0, Culture=neutral, PublicKeyToken=null",
+        "core_assembly_file": {
+          "path": "E:\\Howard\\Bizhawk\\dll\\BizHawk.Emulation.Cores.dll",
+          "sha256": "444bc157418e9b5df5d07e987fc7ad1d2d1c6993676f5b864368027cb4f054d5"
+        },
+        "core_type": "BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk",
+        "matches_requested_core": true,
+        "module_query_available": true,
+        "native_modules": [
+          {
+            "path": "E:\\Howard\\Bizhawk\\dll\\mgba.dll",
+            "sha256": "ba398a56e62ce1e4280fe96834cbbe4e6469b7070f34da313ec3d4637c4979e1"
+          }
+        ],
+        "process_id": 36168,
+        "requested_core": "mGBA"
+      },
+      "periods": [
+        {
+          "elapsed_ms": 252.6503,
+          "frame_after": 1657,
+          "frame_before": 1657,
+          "label": "adapter_held",
+          "paused_before": false,
+          "yields": 16
+        }
+      ],
+      "preparation_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_lifecycle_21_a\\prepared.json",
+        "sha256": "b895528d4f154333e345f6be05be30c23d13f9b328f1ae0ddb353b0ac73ec085",
+        "size_bytes": 38252
+      },
+      "result_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_lifecycle_21_a\\results\\result.json",
+        "sha256": "8ead18688ea389881a60c4f34f315ea5392ff1328c68ea36c627e07057f1bc4e",
+        "size_bytes": 200536
+      },
+      "run_id": "execution_lifecycle_21"
+    },
+    {
+      "complete": true,
+      "error": null,
+      "execution": {
+        "created": 1788669846.8914237,
+        "elapsed_seconds": 34.64099999998871,
+        "exit": 0,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 17460,
+        "terminated_exact_pids": []
+      },
+      "execution_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_paused_23_a\\results\\execution.json",
+        "sha256": "d342decaab72f500c0207e904838ab9d70bbeefcdf819a4540ee4e45d8f2c160",
+        "size_bytes": 208
+      },
+      "identity": {
+        "binding_sha256": "7ba0f31ac77f9c878ac94a3e9373951133dbea20025ffeb9ed97fdeddc3391df",
+        "config_sha256": "28adcc5c52302c2cff904f8ef022e610dbf03bd3f67bf6cdb347a35efd62835a",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "75837c3f53b1fca7713d9277279d9c9d21d388d882fca636e1e60e06df6ad357",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 1800,
+        "player": "a",
+        "probe_options_sha256": "43e964ac045d2e081713ed9552e74645d6d4add45aef5f5d9a6e20ec52ca3116",
+        "purpose": "validation",
+        "rom_sha1": "65C6B2739BAB54F8FFDA590D79BA551A0B7BAEC8",
+        "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+        "run_id": "execution_paused_23",
+        "script_sha256": "033f4abd23d4d795de43c8249a580f97340815a0e078ed3bc3ebafb3304bab26",
+        "source_sha256": "5856d5b1bdb1929090db4440033a86001a0b9b8656597679f131cb5f2715944e"
+      },
+      "mode": "lifecycle",
+      "observed_host": {
+        "available": true,
+        "core_assembly": "BizHawk.Emulation.Cores, Version=2.11.1.0, Culture=neutral, PublicKeyToken=null",
+        "core_assembly_file": {
+          "path": "E:\\Howard\\Bizhawk\\dll\\BizHawk.Emulation.Cores.dll",
+          "sha256": "444bc157418e9b5df5d07e987fc7ad1d2d1c6993676f5b864368027cb4f054d5"
+        },
+        "core_type": "BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk",
+        "matches_requested_core": true,
+        "module_query_available": true,
+        "native_modules": [
+          {
+            "path": "E:\\Howard\\Bizhawk\\dll\\mgba.dll",
+            "sha256": "ba398a56e62ce1e4280fe96834cbbe4e6469b7070f34da313ec3d4637c4979e1"
+          }
+        ],
+        "process_id": 17460,
+        "requested_core": "mGBA"
+      },
+      "periods": [
+        {
+          "elapsed_ms": 261.0146,
+          "frame_after": 1657,
+          "frame_before": 1657,
+          "label": "adapter_held",
+          "paused_before": true,
+          "yields": 16
+        },
+        {
+          "elapsed_ms": 258.5948,
+          "frame_after": 1657,
+          "frame_before": 1657,
+          "label": "pause_after_close",
+          "paused_before": true,
+          "yields": 16
+        }
+      ],
+      "preparation_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_paused_23_a\\prepared.json",
+        "sha256": "f328155a35b37b140ef264bf44e699f8259336e6e0a21dd37701e2db21f12a81",
+        "size_bytes": 38096
+      },
+      "result_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_paused_23_a\\results\\result.json",
+        "sha256": "f40779df1bf8e283f3c302a24cea21a7d0d3ab1d8585366fb21714087c79cf02",
+        "size_bytes": 206782
+      },
+      "run_id": "execution_paused_23"
+    },
+    {
+      "complete": true,
+      "error": null,
+      "execution": {
+        "created": 1788670053.7125285,
+        "elapsed_seconds": 33.46899999999732,
+        "exit": 0,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 40712,
+        "terminated_exact_pids": []
+      },
+      "execution_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_external_clear_24_a\\results\\execution.json",
+        "sha256": "9fd0c356464c79f44349f306cfbadf541bb9ef55cbe0db8fb3cb54218e676328",
+        "size_bytes": 208
+      },
+      "identity": {
+        "binding_sha256": "44dd034aeeb2775598a1835cd981256c162294f6f28171b7db49c2cdc7ce6e61",
+        "config_sha256": "3347ddefc029866c21fd3ad92e667cad8b559a696169c828940331f4af029cf5",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "75837c3f53b1fca7713d9277279d9c9d21d388d882fca636e1e60e06df6ad357",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 1800,
+        "player": "a",
+        "probe_options_sha256": "9e2d9098e5b3fe9ec053f2b390d56a68dfab6df75b4ea620270ef3a15daae4a8",
+        "purpose": "validation",
+        "rom_sha1": "65C6B2739BAB54F8FFDA590D79BA551A0B7BAEC8",
+        "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+        "run_id": "execution_external_clear_24",
+        "script_sha256": "f8f5f2d09ea70691e9ef755f9f99f8e471bfcd15781c47ab19d47b85eed3d8cc",
+        "source_sha256": "ced4d3040442f535278f8d61f47acd91f26cddfb30b63b1b205d29c4f4b22fe7"
+      },
+      "mode": "external_clear",
+      "observed_host": {
+        "available": true,
+        "core_assembly": "BizHawk.Emulation.Cores, Version=2.11.1.0, Culture=neutral, PublicKeyToken=null",
+        "core_assembly_file": {
+          "path": "E:\\Howard\\Bizhawk\\dll\\BizHawk.Emulation.Cores.dll",
+          "sha256": "444bc157418e9b5df5d07e987fc7ad1d2d1c6993676f5b864368027cb4f054d5"
+        },
+        "core_type": "BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk",
+        "matches_requested_core": true,
+        "module_query_available": true,
+        "native_modules": [
+          {
+            "path": "E:\\Howard\\Bizhawk\\dll\\mgba.dll",
+            "sha256": "ba398a56e62ce1e4280fe96834cbbe4e6469b7070f34da313ec3d4637c4979e1"
+          }
+        ],
+        "process_id": 40712,
+        "requested_core": "mGBA"
+      },
+      "periods": [
+        {
+          "elapsed_ms": 252.6207,
+          "frame_after": 1657,
+          "frame_before": 1657,
+          "label": "adapter_held",
+          "paused_before": false,
+          "yields": 16
+        },
+        {
+          "elapsed_ms": 259.4628,
+          "frame_after": 1657,
+          "frame_before": 1657,
+          "label": "failed_owner_stopped",
+          "paused_before": false,
+          "yields": 18
+        }
+      ],
+      "preparation_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_external_clear_24_a\\prepared.json",
+        "sha256": "a8e823b19c797de6558efe2c2df1d574783ba7d0a6a9375717924b742338673c",
+        "size_bytes": 38517
+      },
+      "result_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_external_clear_24_a\\results\\result.json",
+        "sha256": "ba2e5c6c8a63263aee37fd11d2bcbb297b40655cfd4f1ac776a1ab59dca41c1d",
+        "size_bytes": 202653
+      },
+      "run_id": "execution_external_clear_24"
+    },
+    {
+      "complete": false,
+      "execution": {
+        "created": 1788670284.9667299,
+        "elapsed_seconds": 65.31299999999464,
+        "exit": 15,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 23700,
+        "terminated_exact_pids": [
+          23700
+        ]
+      },
+      "execution_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_25_a\\results\\execution.json",
+        "sha256": "5ff30b9e47323977466e7170a8970f3ebf76b0897bdc5497f7afbe193dfd0303",
+        "size_bytes": 222
+      },
+      "identity": {
+        "binding_sha256": "f429242f3842de94833bc61e58959b27ce5b56cd17ef6da9005a2785f10ef074",
+        "config_sha256": "c59474998640d225a5405b34744cc05ee1bf429ed7d7a3d24f01786bda8217aa",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "75837c3f53b1fca7713d9277279d9c9d21d388d882fca636e1e60e06df6ad357",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 1800,
+        "player": "a",
+        "probe_options_sha256": "ee1030fc71459feea95c2879ecc09bba35f754be3bb8f528fd685baf0291dbdc",
+        "purpose": "validation",
+        "rom_sha1": "65C6B2739BAB54F8FFDA590D79BA551A0B7BAEC8",
+        "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+        "run_id": "execution_stopped_reload_25",
+        "script_sha256": "f8f5f2d09ea70691e9ef755f9f99f8e471bfcd15781c47ab19d47b85eed3d8cc",
+        "source_sha256": "ced4d3040442f535278f8d61f47acd91f26cddfb30b63b1b205d29c4f4b22fe7"
+      },
+      "last_phase": "running_host_observed",
+      "preparation_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_25_a\\prepared.json",
+        "sha256": "97d50842bc79796be3ac7554420b3058c374a9e92b23caf7f7dfc95d91ad0a2c",
+        "size_bytes": 38517
+      },
+      "progress_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_25_a\\results\\result_progress.json",
+        "sha256": "871c9b06d1df2dcb24baabcefd434d20ff72456b0f041ab65c5a71963617275c",
+        "size_bytes": 2424
+      },
+      "run_id": "execution_stopped_reload_25"
+    },
+    {
+      "complete": false,
+      "execution": {
+        "created": 1788670604.6811953,
+        "elapsed_seconds": 65.21900000001187,
+        "exit": 15,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 42144,
+        "terminated_exact_pids": [
+          42144
+        ]
+      },
+      "execution_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_26_a\\results\\execution.json",
+        "sha256": "2efe93ba6dea3a3486ef92bd353185b643a987c54de63ae966d2a0129bfa3397",
+        "size_bytes": 222
+      },
+      "identity": {
+        "binding_sha256": "f1dd29189acc36d619c88f98dd0823e9fea3170e89cf5c6687852fb20f6df353",
+        "config_sha256": "69bb4f3470ac2b3dfc70aa48b6762f121d07b4619127595895fd5d6ac299bb7b",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "75837c3f53b1fca7713d9277279d9c9d21d388d882fca636e1e60e06df6ad357",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 1800,
+        "player": "a",
+        "probe_options_sha256": "4687d6d40259b03b0a302eb191b17eb67c00e2d36373d16b622db66dc45db36c",
+        "purpose": "validation",
+        "rom_sha1": "65C6B2739BAB54F8FFDA590D79BA551A0B7BAEC8",
+        "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+        "run_id": "execution_stopped_reload_26",
+        "script_sha256": "004a8b0293e79bddc244a35d28d6d4176d9b706b0fdc44d564f3e78b0836a0e5",
+        "source_sha256": "953d07e687b2138bfe6b873d14593b1ccddf21907034cb339c70e5111c4b2d18"
+      },
+      "last_phase": "execution_helper_load_queued",
+      "preparation_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_26_a\\prepared.json",
+        "sha256": "a742b5547a05d7f713f70407e4aa34bf5bd8307d794f6845901e74960b6a3e8c",
+        "size_bytes": 38517
+      },
+      "progress_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_26_a\\results\\result_progress.json",
+        "sha256": "caa9bc3902da3a10a4596a9e4f00f7b7e90bf79abb86fa96afe71b8add54c4c4",
+        "size_bytes": 173371
+      },
+      "run_id": "execution_stopped_reload_26"
+    },
+    {
+      "complete": false,
+      "execution": {
+        "created": 1788671047.3720727,
+        "elapsed_seconds": 65.14100000000326,
+        "exit": 15,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 28516,
+        "terminated_exact_pids": [
+          28516
+        ]
+      },
+      "execution_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_27_a\\results\\execution.json",
+        "sha256": "e0aeda67b905070825c2c542380925c577b073992b812b780853986f0c0a7368",
+        "size_bytes": 222
+      },
+      "identity": {
+        "binding_sha256": "eede0245dfe6a1f4c247a05d5518908304dfaee15f67af201a643c9a051e4549",
+        "config_sha256": "4537146b5d979e478811560c0e73ef82e583e8065a5c9ca1ea4d6c6297544834",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "75837c3f53b1fca7713d9277279d9c9d21d388d882fca636e1e60e06df6ad357",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 1800,
+        "player": "a",
+        "probe_options_sha256": "5d30afedf7f02c9e758686978d1c1ff58dfd7bfea778cdb158de5d659877b8a7",
+        "purpose": "validation",
+        "rom_sha1": "65C6B2739BAB54F8FFDA590D79BA551A0B7BAEC8",
+        "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+        "run_id": "execution_stopped_reload_27",
+        "script_sha256": "0c8266b81493836f7ffb797f882b2fec4d12198be61237b789126ab4924fc403",
+        "source_sha256": "42d5ccde9b0b858a8d2af3b51c0403b101ac85eec310b9def9e6241a9a618f1b"
+      },
+      "last_phase": "execution_helper_load_queued",
+      "preparation_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_27_a\\prepared.json",
+        "sha256": "1d9ce1a832c8d3241703a21890fb84185bfe8da49de5498ce6d6413dc52d03a6",
+        "size_bytes": 38517
+      },
+      "progress_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_27_a\\results\\result_progress.json",
+        "sha256": "d9656ec262257d7788d3a7b91ee6fd202b7f741bded8bf2e0a25a525acbe151f",
+        "size_bytes": 173371
+      },
+      "run_id": "execution_stopped_reload_27"
+    },
+    {
+      "complete": false,
+      "error": "...ad_28_a/source/lua/tests/rr/platform_execution_probe.lua:160: Bounded helper phase did not arrive: helper_held",
+      "execution": {
+        "created": 1788671366.8699188,
+        "elapsed_seconds": 33.75,
+        "exit": 0,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 3192,
+        "terminated_exact_pids": []
+      },
+      "execution_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_28_a\\results\\execution.json",
+        "sha256": "a478ad14769f97b4eedcd84e9b573267cd0a8c79732ad30cd86e7e18fddec809",
+        "size_bytes": 195
+      },
+      "identity": {
+        "binding_sha256": "9015d4255b4996fba8f7c0fa0bc4c96071c6b791bd2e43dbe476bbb751796d99",
+        "config_sha256": "058826b1e8f8bbb4cbc414536bd2f8852211c77294d29e5c71e6e863c193c0cc",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "75837c3f53b1fca7713d9277279d9c9d21d388d882fca636e1e60e06df6ad357",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 1800,
+        "player": "a",
+        "probe_options_sha256": "4a5937654e2b5227a554bfeacedbcf01dff3872f221187b00a2dbd6cd2928810",
+        "purpose": "validation",
+        "rom_sha1": "65C6B2739BAB54F8FFDA590D79BA551A0B7BAEC8",
+        "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+        "run_id": "execution_stopped_reload_28",
+        "script_sha256": "496d69164e141adad5834f9aa5aa425276c4c1f58186dc4ddba3954decb11ad4",
+        "source_sha256": "5baf4fdeb6fee0449a45840c6e1c7b14d0cbbbcbf278b1dee36f7f1dd2d8aa14"
+      },
+      "mode": "stopped_reload",
+      "observed_host": {
+        "available": true,
+        "core_assembly": "BizHawk.Emulation.Cores, Version=2.11.1.0, Culture=neutral, PublicKeyToken=null",
+        "core_assembly_file": {
+          "path": "E:\\Howard\\Bizhawk\\dll\\BizHawk.Emulation.Cores.dll",
+          "sha256": "444bc157418e9b5df5d07e987fc7ad1d2d1c6993676f5b864368027cb4f054d5"
+        },
+        "core_type": "BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk",
+        "matches_requested_core": true,
+        "module_query_available": true,
+        "native_modules": [
+          {
+            "path": "E:\\Howard\\Bizhawk\\dll\\mgba.dll",
+            "sha256": "ba398a56e62ce1e4280fe96834cbbe4e6469b7070f34da313ec3d4637c4979e1"
+          }
+        ],
+        "process_id": 3192,
+        "requested_core": "mGBA"
+      },
+      "periods": {},
+      "preparation_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_28_a\\prepared.json",
+        "sha256": "66ec5176a5426a9a279e204136c127262798ef575cb75de4d20d009bd45e076a",
+        "size_bytes": 38517
+      },
+      "result_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_28_a\\results\\result.json",
+        "sha256": "d3a776b7af49851ca96de9e70f054de56ad3c92656a84245c44be5bf912e7819",
+        "size_bytes": 189196
+      },
+      "run_id": "execution_stopped_reload_28"
+    },
+    {
+      "complete": true,
+      "error": null,
+      "execution": {
+        "created": 1788671705.7555485,
+        "elapsed_seconds": 31.906999999991967,
+        "exit": 0,
+        "original_config_unchanged": true,
+        "original_save_unchanged": true,
+        "pid": 16080,
+        "terminated_exact_pids": []
+      },
+      "execution_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_29_a\\results\\execution.json",
+        "sha256": "a356a4c6c3f2112959f335cd0e573d9551ffd711e0a9129a513cbf17b60b617a",
+        "size_bytes": 209
+      },
+      "identity": {
+        "binding_sha256": "401db372eddd3bec2fab0a0afd5e40eb9a40037e1228fad4ca0f93cdd160066c",
+        "config_sha256": "465272c834d0f6eb601c44211c241a18ab2dc726401ee666606909dacd6198bb",
+        "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+        "emulator_version": "2.11.1",
+        "fixture_manifest_sha256": "75837c3f53b1fca7713d9277279d9c9d21d388d882fca636e1e60e06df6ad357",
+        "fixture_sha256": "c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13",
+        "frame_budget": 1800,
+        "player": "a",
+        "probe_options_sha256": "5e359b5587b5b50cca43b118bacb56847962661122c1371f678b5ae8d9b73dc6",
+        "purpose": "validation",
+        "rom_sha1": "65C6B2739BAB54F8FFDA590D79BA551A0B7BAEC8",
+        "rom_sha256": "3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301",
+        "run_id": "execution_stopped_reload_29",
+        "script_sha256": "496d69164e141adad5834f9aa5aa425276c4c1f58186dc4ddba3954decb11ad4",
+        "source_sha256": "9e4f569c9eeed06e1653043b85fa260b33a69537e459283dbcb825f02b17ec09"
+      },
+      "mode": "stopped_reload",
+      "observed_host": {
+        "available": true,
+        "core_assembly": "BizHawk.Emulation.Cores, Version=2.11.1.0, Culture=neutral, PublicKeyToken=null",
+        "core_assembly_file": {
+          "path": "E:\\Howard\\Bizhawk\\dll\\BizHawk.Emulation.Cores.dll",
+          "sha256": "444bc157418e9b5df5d07e987fc7ad1d2d1c6993676f5b864368027cb4f054d5"
+        },
+        "core_type": "BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk",
+        "matches_requested_core": true,
+        "module_query_available": true,
+        "native_modules": [
+          {
+            "path": "E:\\Howard\\Bizhawk\\dll\\mgba.dll",
+            "sha256": "ba398a56e62ce1e4280fe96834cbbe4e6469b7070f34da313ec3d4637c4979e1"
+          }
+        ],
+        "process_id": 16080,
+        "requested_core": "mGBA"
+      },
+      "periods": [
+        {
+          "elapsed_ms": 251.4801,
+          "frame_after": 1657,
+          "frame_before": 1657,
+          "label": "stopped_helper_flag_retained",
+          "paused_before": false,
+          "yields": 18
+        }
+      ],
+      "preparation_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_29_a\\prepared.json",
+        "sha256": "fb0b378be16a78c70f5c3d1331b924e1012f015ad9d1c97a7a84a7f8c0efcd8f",
+        "size_bytes": 38517
+      },
+      "result_artifact": {
+        "path": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink-rr-native-probes-01a072f9\\runs\\execution_stopped_reload_29_a\\results\\result.json",
+        "sha256": "ccdc0b0b53fc99ff0ea6e3a92c544d2c20e6ce8dacc32e7deeac4a96792d5276",
+        "size_bytes": 184216
+      },
+      "run_id": "execution_stopped_reload_29"
+    }
+  ],
+  "schema": "slink-platform-execution-observations-v1",
+  "scope": "pinned_private_actuator_and_cooperative_lease_only"
+}

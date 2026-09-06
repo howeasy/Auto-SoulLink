@@ -539,6 +539,91 @@ def test_fixture_probe_parses_without_emulator_execution():
     assert ok, error
 
 
+@pytest.mark.parametrize("name", ["platform_execution_probe.lua", "platform_execution_owner_helper.lua"])
+def test_execution_validation_scripts_parse_without_launch(name):
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    source = Path(__file__).parents[2] / "lua/tests/rr" / name
+    ok, error = runtime.eval("function(s) local f,e=load(s);return f~=nil,e end")(source.read_text())
+    assert ok, error
+
+
+def test_execution_owner_helper_emits_exactly_nine_ipc_fields(tmp_path):
+    runtime = LuaRuntime(unpack_returned_tuples=True)
+    path = tmp_path / "helper.txt"
+    runtime.globals().SLINK_EXEC_HELPER = runtime.table_from({
+        "source_root": "controlled", "status_path": path.as_posix(), "owner_id": "a" * 32,
+        "expected_host": runtime.table(),
+    })
+    runtime.execute(r'''
+        emu={framecount=function() return 7 end}
+        luanet={import_type=function() return {CurrentThread={ManagedThreadId=1}} end}
+        dofile=function(path)
+            if path:find('host_identity',1,true) then
+                return {capture=function() return {},{BlockFrameAdvance=true,EmulatorPaused=false} end}
+            end
+            return {new=function() return nil,'controlled\trefusal\nmessage' end}
+        end
+    ''')
+    source = Path(__file__).parents[2] / gate.EXECUTION_HELPER
+    runtime.execute(source.read_text())
+    fields = path.read_text().rstrip("\n").split("\t")
+    assert len(fields) == 9  # Final string.gsub must not expand its substitution count.
+    assert fields[:7] == ["refused", "0", "7", "1", "true", "false", "a" * 32]
+    assert fields[8] == "controlled refusal message"
+
+
+def execution_spec(spec):
+    pins = {"capability_id": "explicit-test-profile", "emulator_version": spec.emulator_version,
+            "emulator_sha256": "1" * 64, "core_type": "explicit-test-core",
+            "core_assembly_sha256": "2" * 64, "native_module_sha256": "3" * 64}
+    return replace(spec, script=gate.EXECUTION_PROBE, native_manifest=spec.rom,
+                   source_files=(gate.HOST_IDENTITY_HELPER, gate.EXECUTION_MODULE, "lua/platform_clock.lua"),
+                   probe_options={"mode": "lifecycle", "initial_paused": False, "hold_ms": 250,
+                                  "owner_id": "a" * 32, "contender_id": "b" * 32,
+                                  "expected_host": pins, "adapter_sha256": "4" * 64})
+
+
+@pytest.mark.parametrize("field,value", [("mode", "unreviewed"), ("initial_paused", 1),
+                                        ("hold_ms", True), ("hold_ms", 99), ("hold_ms", 1001),
+                                        ("owner_id", "A" * 32), ("contender_id", "a" * 32),
+                                        ("adapter_sha256", "not-a-hash"), ("expected_host", {})])
+def test_execution_probe_rejects_ambiguous_options_before_copy(spec, field, value):
+    selected = execution_spec(spec)
+    selected.probe_options[field] = value
+    with pytest.raises(sandbox.SandboxError, match="Execution"):
+        gate.prepare_gate(selected)
+    assert not spec.output_root.exists()
+
+
+def test_execution_probe_helper_path_cannot_target_another_script(spec):
+    selected = execution_spec(spec)
+    selected.probe_options["mode"] = "stopped_reload"
+    with pytest.raises(sandbox.SandboxError, match="source closure"):
+        gate.prepare_gate(selected)
+    selected.probe_options["helper_path"] = "E:/live/another_script.lua"
+    with pytest.raises(sandbox.SandboxError, match="exact explicit options"):
+        gate.prepare_gate(selected)
+    assert not spec.output_root.exists()
+
+
+def test_execution_probe_checks_adapter_hash_before_creating_private_files(spec, tmp_path):
+    selected = execution_spec(spec)
+    metadata = json.loads(spec.fixture_manifest.read_text())
+    metadata["host"] = {"available": True, "core_type": "BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk",
+                        "core_assembly_file": {"sha256": "2" * 64}, "native_modules": [{"sha256": "3" * 64}]}
+    spec.fixture_manifest.write_bytes(sandbox.json_bytes(metadata))
+    for relative in (selected.script, *selected.source_files):
+        path = selected.source_root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("return {}")
+    native = tmp_path / "native.json"
+    native.write_bytes(sandbox.json_bytes({"rom_sha256": sandbox.identity(spec.rom)["sha256"],
+                                         "descriptor_address": 0x08000040, "descriptor_size": 8}))
+    with pytest.raises(sandbox.SandboxError, match="adapter source differs"):
+        gate.prepare_gate(replace(selected, native_manifest=native))
+    assert not spec.output_root.exists()
+
+
 @pytest.mark.parametrize("options", [{"steps": [{"frames": 720}]},
                                      {"steps": [{"frames": True}]},
                                      {"steps": [{"frames": 5, "buttons": {"Start": 1}}]},
