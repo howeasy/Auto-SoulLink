@@ -181,3 +181,9 @@ versioned policy migration. Existing captures, links, memorial obligations and
 death history keep their recorded semantics and identifiers. Re-evaluate current
 eligibility under the new version without retroactively relabeling those facts.
 No such migration or selection is implemented by this slice.
+
+The later [creation-path study](PRECURSOR_CREATION.md) executes the actual selector,
+constructor and species accessor. All three unresolved IDs remain intact when
+explicitly constructed, while reviewed randomization pools omit them. That study
+rules out unconditional normalization on this path; it does not prove acquisition
+or justify an alias/unused classification. The catalog remains blocked.

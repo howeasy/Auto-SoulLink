@@ -1,5 +1,9 @@
 # RR 4.1 unresolved regional precursor records: engine probes
 
+Follow-up: [actual creation and accessor evidence](PRECURSOR_CREATION.md) now
+preserves22 further CPU/static cases. These add constructor behavior and pool
+domains without resolving acquisition or lineage; the classification below remains open.
+
 **Keep final catalog generation blocked.** This follow-up establishes actual
 ancestry and evolution behavior for IDs1038,1214,1224, but does not establish an
 acquisition/form-resolution path that assigns their canonical lineage. No
