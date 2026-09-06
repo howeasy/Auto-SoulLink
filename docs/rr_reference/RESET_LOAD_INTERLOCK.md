@@ -230,10 +230,106 @@ clear native uncertainty merely to finish the test.
 
 ## Evidence and implementation status
 
-Only a pure private fault-fixture helper and its preservation tests were added:
-`tools/rr/reset_probe_fixture.py`, `tests/unit/test_reset_probe_fixture.py`.
-Seven tests pass; no emulator/reset/load experiment was run by this agent.
-No new production interlock or broad UI restriction was justified/activated.
+The source analysis now has a runnable, inactive private experiment:
+`lua/tests/rr/controlled_load_probe.lua`, `tools/rr/controlled_load.py` and their
+focused modeled tests. The existing fault-copy helper accepts exactly one
+`Core.bin` or `Core.bin.zst`; it never changes that member. No controlled-load
+emulator experiment has yet run, and no production interlock or broad UI
+restriction was activated.
+
+### Bounded producer/consumer workflow
+
+The validation owner runs each case in its own disposable process using the
+reviewed frozen03 **battery**, not an auto-loaded experimental state. Required
+ROM SHA-256 is `3b69f1c2518fb4487d53f56d6003f328f91d05a9603de7278d9bbce488546301`;
+battery SHA-256 is `c8eb84b434b80dc5c7cac7b84a9a8106d78088078d277a860fb6e4b067b43d13`.
+The existing native gate binds the installed host, core, fixture and explicit
+source inputs. Include `host_identity.lua`, `platform_execution.lua`,
+`platform_clock.lua`, `mailbox.lua`, and the new probe in the source snapshot.
+Keep the actual adapter hash and native manifest inputs unchanged during a run.
+
+All three modes require `frames=1659`, the reviewed 1656 boot frames, a fresh
+32-hex `owner_id`, exact `expected_host` from the pinned adapter profile, and
+`hold_ms=250` (accepted bound 100..1000). The host must be unpaused; no movie,
+future-frame callback, rewind, conflicting form or pre-existing hold is allowed.
+The private runner must load only the wrapper/probe script and retain an outer
+100-second process deadline, polled in short intervals with progress artifacts.
+The probe never changes user pause. The forward-frame budget counts actual calls
+independently from the restored frame counter.
+
+1. Set `probe_options.mode="produce"`. The probe claims/holds its process before
+   registering exact execution watchers at `0x0800051A` and frozen03 native frame
+   entry `0x08378F70` (eight-byte anchor `f0b5b84bb84c89b0`). It posts only actual
+   mailbox `OP_PING`, releases its hold for one positive-control frame, re-holds,
+   and requires both execution controls plus the exact native descriptor receipt.
+   Two extra idle frames distinguish the saved and consumer frame anchors. It
+   posts a second PING while held, saves only `results/busy_ping.State`, and records
+   full 64-byte BUSY header/reservation, frame and file hash. It requires no
+   native dispatch while saving/observing and exits held without polling that PING.
+   Include every `PRODUCER_ASSERTIONS` ID from `tools.rr.controlled_load` as required
+   native-gate assertions, in addition to the gate's built-in fixture/host checks.
+2. Review the producer's result and exact probe hash, then freeze the two copies:
+
+   ```powershell
+   python -m tools.rr.controlled_load --prepared <private-producer/prepared.json> --probe-sha256 <reviewed-sha256>
+   ```
+
+   The helper revalidates the gate/source/result binding and frozen03 identity.
+   It refuses incomplete assertions, non-PING BUSY bytes, changed state bytes,
+   duplicate/ambiguous ZIP members, wrong BizHawk version, or non-exact typed
+   mGBA/SkipBios sync settings. It creates a new private
+   `results/controlled_load_artifacts` directory containing `busy_ping.State`,
+   `busy_late_failure.State` and `experiment.json`. Every non-UserData member must
+   remain byte-identical; the core and raw sync-member hashes are recorded.
+3. Prepare separate `mode="valid"` and `mode="late_failure"` consumers, each still
+   admitted against the same reviewed battery. In a private staged source root,
+   copy the frozen state artifacts beneath `probe_artifacts/`; select those exact
+   relative files as native-gate `source_files` so their copied/original hashes
+   become part of the run binding. Pass the frozen `experiment.json` object as
+   `probe_options.experiment` (also covered by the options binding). Never place
+   the experimental state in `GateSpec.fixture` or auto-load it in the wrapper.
+4. Each consumer proves its own positive execution/PING receipt control before
+   loading. It verifies the selected artifact's hash and establishes/records the
+   physical hold before calling `savestate.load(path,true)`. The existing owner
+   must reject its restored frame anchor. Its retained lease/emergency STOP must
+   verify physical holding; the owner remains failed. The probe then uses direct
+   held `emu.yield()` iterations with repeated stop/readback checks. It never
+   invokes mailbox poll/pump/reset, constructs a replacement owner, closes the
+   lease or clears the flag after load.
+5. Require return true plus one pre-held successful-load callback for `valid`;
+   require false/error plus zero successful-load callbacks for `late_failure`.
+   Both must restore the exact saved frame and BUSY header, retain those bytes
+   through the measured held interval, and record **zero** execution dispatch
+   since immediately before load. Require `controlled_old_owner_invalidated`,
+   `controlled_load_return`, `controlled_success_notifications`,
+   `controlled_restored_frame`, `controlled_restored_busy`,
+   `controlled_zero_restored_dispatch`, `controlled_retained_busy`,
+   `controlled_trace_complete`, `controlled_callbacks_removed`,
+   `controlled_exit_held`, `controlled_no_failures` and the two positive-control
+   assertions in each consumer gate. Cleanup removes only this probe's named
+   callbacks under the held owner; all failures are retained and the process
+   exits held. Never manufacture release authority to make teardown succeed.
+
+`SaveStateLuaLibrary.Load` in the exact pinned source catches ordinary load
+exceptions and returns false; `Save` returns a Boolean but delegates to an API
+whose canceled/deferral cases need the independent output existence/hash checks.
+The malformed UserData case therefore expects a false result after native
+restoration rather than relying on an exception reaching Lua. Source:
+[SaveStateLuaLibrary.cs](https://github.com/TASEmulators/BizHawk/blob/bdddf4a58aa1a022afb11dc73294a81a5aa7bbd5/src/BizHawk.Client.Common/lua/CommonLibs/SaveStateLuaLibrary.cs),
+[SaveStateApi.cs](https://github.com/TASEmulators/BizHawk/blob/bdddf4a58aa1a022afb11dc73294a81a5aa7bbd5/src/BizHawk.Client.Common/Api/Classes/SaveStateApi.cs).
+
+The 51 focused tests execute the real probe, actuator and mailbox Lua with
+modeled host/ARM-dispatch/state boundaries, plus strict Python artifact tests.
+They cover both load modes, missing positive evidence, altered artifact/header,
+no restoration, dispatch during load/quarantine, callback registration/cleanup
+failure, and all production memory writes constrained to the 64-byte PING
+mailbox. No product source rewriting, skip or xfail is used. These tests prove
+the probe's refusal/hold bookkeeping; they do not replace the private live runs.
+
+```powershell
+python -m pytest tests/unit/test_controlled_load.py tests/unit/test_controlled_load_probe.py tests/unit/test_reset_probe_fixture.py -q
+python -m ruff check tools/rr/controlled_load.py tools/rr/reset_probe_fixture.py tests/unit/test_controlled_load.py tests/unit/test_controlled_load_probe.py tests/unit/test_reset_probe_fixture.py
+```
 
 | Pinned host source | SHA-256 |
 |---|---|

@@ -13,7 +13,8 @@ import io
 import zipfile
 
 MALFORMED_USERDATA = b"{this-is-an-intentional-private-interlock-probe\n"
-REQUIRED = {"BizVersion.txt", "Core.bin", "SyncSettings.json"}
+REQUIRED = {"BizVersion.txt", "SyncSettings.json"}
+CORE_NAMES = {"Core.bin", "Core.bin.zst"}
 MAX_BYTES = 16 * 1024 * 1024
 
 
@@ -23,7 +24,13 @@ def failed_after_restore_copy(source: bytes) -> tuple[bytes, dict]:
     with zipfile.ZipFile(io.BytesIO(source)) as archive:
         infos = archive.infolist()
         names = [item.filename for item in infos]
-        if len(names) != len(set(names)) or not set(names) >= REQUIRED:
+        if "UserData.txt.zst" in names:
+            raise ValueError("compressed UserData has not been established for this fault lane")
+        if (
+            len(names) != len(set(names))
+            or not set(names) >= REQUIRED
+            or len(set(names) & CORE_NAMES) != 1
+        ):
             raise ValueError("state has duplicate or missing required members")
         if sum(item.file_size for item in infos) > MAX_BYTES:
             raise ValueError("expanded state exceeds byte bound")
@@ -31,7 +38,8 @@ def failed_after_restore_copy(source: bytes) -> tuple[bytes, dict]:
     version = members["BizVersion.txt"].decode("utf-8-sig").strip()
     if version != "Version 2.11.1":
         raise ValueError("private probe requires a BizHawk2.11.1 state")
-    if not members["Core.bin"] or not members["SyncSettings.json"]:
+    core = next(name for name in members if name in CORE_NAMES)
+    if not members[core] or not members["SyncSettings.json"]:
         raise ValueError("empty core or sync-settings member")
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w") as archive:

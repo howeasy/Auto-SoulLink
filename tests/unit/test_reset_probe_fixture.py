@@ -9,11 +9,20 @@ import pytest
 from tools.rr.reset_probe_fixture import MALFORMED_USERDATA, failed_after_restore_copy
 
 
-def state(*, userdata=None, version=b"Version 2.11.1\r\n", duplicate=False):
+def state(
+    *,
+    userdata=None,
+    version=b"Version 2.11.1\r\n",
+    duplicate=False,
+    core="Core.bin",
+    second_core=False,
+):
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr("BizVersion.txt", version)
-        archive.writestr("Core.bin", bytes(range(256)) * 8)
+        archive.writestr(core, bytes(range(256)) * 8)
+        if second_core:
+            archive.writestr("Core.bin.zst", b"ambiguous second encoding")
         archive.writestr("SyncSettings.json", b'{"o":{"SkipBios":true}}')
         archive.writestr("Framebuffer.bmp", b"opaque image bytes")
         if userdata is not None:
@@ -25,8 +34,9 @@ def state(*, userdata=None, version=b"Version 2.11.1\r\n", duplicate=False):
 
 
 @pytest.mark.parametrize("userdata", [None, b'{"o":{}}'])
-def test_only_userdata_changes_and_core_bytes_are_identical(userdata):
-    original = state(userdata=userdata)
+@pytest.mark.parametrize("core", ["Core.bin", "Core.bin.zst"])
+def test_only_userdata_changes_and_core_bytes_are_identical(userdata, core):
+    original = state(userdata=userdata, core=core)
     result, manifest = failed_after_restore_copy(original)
     repeated, repeated_manifest = failed_after_restore_copy(original)
     assert (repeated, repeated_manifest) == (result, manifest)
@@ -51,6 +61,11 @@ def test_only_userdata_changes_and_core_bytes_are_identical(userdata):
 def test_duplicate_members_are_not_silently_chosen():
     with pytest.raises(ValueError, match="duplicate"):
         failed_after_restore_copy(state(duplicate=True))
+
+
+def test_two_core_encodings_are_ambiguous_and_refused():
+    with pytest.raises(ValueError, match="required"):
+        failed_after_restore_copy(state(second_core=True))
 
 
 def test_wrong_host_version_is_refused():
