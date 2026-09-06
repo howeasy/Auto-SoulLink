@@ -1,4 +1,4 @@
--- lua/mailbox.lua — client side of the SLink companion-patch EWRAM mailbox (ABI v1).
+-- lua/mailbox.lua — client side of the SLink companion-patch EWRAM mailbox (ABI v2).
 --
 -- When the Radical Red companion patch is applied, an injected frame hook maintains a
 -- mailbox at 0x0203F800 and writes the 'SLNK' signature every frame. This module lets
@@ -9,12 +9,15 @@
 -- and the default domain (System Bus is reserved for ROM reads).
 
 local MB = {}
+-- Lua owns immutable pending payloads; staging never touches a live native buffer.
+local staged = {text = {}, menu = {}, blob = {}}
+local function copy_bytes(t) local r = {}; for i = 1, #t do r[i] = t[i] end; return r end
 
 MB.BASE = 0x0203F800
 MB.SIG  = 0x4B4E4C53          -- 'SLNK' little-endian (bytes 53 4C 4E 4B)
-MB.ABI  = 1
+MB.ABI  = 2
 
--- ABI v1 field offsets (see patch/src/ADDRESSES.md)
+-- ABI v2 field offsets (see patch/src/ADDRESSES.md)
 local O_SIG, O_ABI, O_OPCODE, O_SEQ, O_STATUS, O_ACKSEQ, O_REASON, O_ARGS, O_RESULT =
       0, 4, 6, 8, 10, 12, 14, 16, 48
 
@@ -48,11 +51,13 @@ MB.BLOB_BUF = 0x0203FA00     -- patch reads count*100 raw party-mon bytes from h
 -- Errors loudly on a short row: writing row[j]=nil would throw mid-stage with a half-written
 -- buffer already in EWRAM (callers validate length, this is the last line of defense).
 function MB.write_enemy_blobs(byte_rows)
+    local bytes = {}
     for i = 1, #byte_rows do
-        local row, off = byte_rows[i], MB.BLOB_BUF + (i - 1) * 100
-        if #row < 100 then error(string.format("write_enemy_blobs: row %d is %d bytes (want 100)", i, #row)) end
-        for j = 1, 100 do memory.write_u8(off + (j - 1), row[j]) end
+        local row = byte_rows[i]
+        if #row ~= 100 then error("write_enemy_blobs: each row must be exactly 100 bytes") end
+        for j = 1, 100 do bytes[#bytes + 1] = row[j] end
     end
+    staged.blob = bytes
 end
 
 -- Stage blobs + dispatch OP_SET_ENEMY_PARTY. `byte_rows` = decoded 100-byte arrays (decode hex with
@@ -71,8 +76,8 @@ end
 -- so normally false). Returns the seq to poll, or nil if the blob is malformed.
 MB.OP_SET_PARTY_MON = 18
 function MB.set_party_mon(slot, blob_row, bump)
-    if not blob_row or #blob_row < 100 then return nil end
-    for j = 1, 100 do memory.write_u8(MB.BLOB_BUF + (j - 1), blob_row[j]) end
+    if not blob_row or #blob_row ~= 100 then return nil end
+    staged.blob = copy_bytes(blob_row)
     return MB.send(MB.OP_SET_PARTY_MON, {slot, bump and 1 or 0})
 end
 
@@ -126,18 +131,16 @@ function MB.write_message(text, color)
     local limit = 255 - (color and 3 or 0)
     if #text > limit then text = text:sub(1, limit) end
     local bytes = MB.fr_encode(text)
-    local off = MB.TEXT_BUF
-    if color then
-        memory.write_u8(off, 0xFC); memory.write_u8(off + 1, 0x01); memory.write_u8(off + 2, color)
-        off = off + 3
-    end
-    for i = 1, #bytes do memory.write_u8(off + (i - 1), bytes[i]) end
+    local out = {}
+    if color then out = {0xFC, 0x01, color} end
+    for i = 1, #bytes do out[#out + 1] = bytes[i] end
+    staged.text = out
 end
 
 function MB.fanfare_args(song) return {song % 256, math.floor(song / 256) % 256} end
 
 -- Native sound effect (PlaySE). Same packing as a fanfare; the patch plays it on the SE track.
-function MB.play_se(song) return MB.send(MB.OP_PLAY_SE, MB.fanfare_args(song)) end
+function MB.play_se(song) return MB.send(MB.OP_PLAY_SE, MB.fanfare_args(song), false) end
 
 -- Native YES/NO menu over `prompt` (the menuing foundation for talk-to-partner actions). ASYNC: the
 -- field script runs over many frames, so poll the returned seq with MB.poll; on ST_OK read the choice
@@ -166,12 +169,12 @@ function MB.show_choices(options, prompt)
     local total = 1
     for i = 1, n do total = total + #options[i] + 1 end   -- fr_encode is 1 byte/char + 0xFF
     if total > 112 then return nil end
-    memory.write_u8(MB.MENU_BUF, n)
-    local off = MB.MENU_BUF + 1
+    local out = {n}
     for i = 1, n do
-        local bytes = MB.fr_encode(options[i])   -- FR-encoded, already 0xFF-terminated
-        for j = 1, #bytes do memory.write_u8(off, bytes[j]); off = off + 1 end
+        local bytes = MB.fr_encode(options[i])
+        for j = 1, #bytes do out[#out + 1] = bytes[j] end
     end
+    staged.menu = out
     local with_text = (prompt ~= nil and prompt ~= "") and 1 or 0
     if with_text == 1 then MB.write_message(prompt) end
     return MB.send(MB.OP_SHOW_CHOICES, {with_text})
@@ -220,17 +223,64 @@ end
 MB.OP_DEPOSIT_MON  = 24
 MB.OP_WITHDRAW_MON = 25
 MB.OP_MEMORIALIZE  = 26
-function MB.deposit_mon(party_slot, box_id, box_pos)   -- party[slot] -> box[box_id][box_pos]
-    return MB.send(MB.OP_DEPOSIT_MON, {party_slot, box_id, box_pos})
+local function guarded_storage(op, a, b, c, guard, extra, prepare_only)
+    if type(guard) ~= "table" then return nil, "storage guard required" end
+    local limits = op == MB.OP_WITHDRAW_MON and {24, 29, 5}
+                or op == MB.OP_MOVE_BOX_MON and {24, 29, 24} or {5, 24, 29}
+    local values = {a, b, c}
+    for i = 1, 3 do
+        local value = values[i]
+        if type(value) ~= "number" or value % 1 ~= 0 or value < 0 or value > limits[i] then
+            return nil, "invalid storage location"
+        end
+    end
+    if extra ~= nil and (type(extra) ~= "number" or extra % 1 ~= 0 or extra < 0 or extra > 29) then
+        return nil, "invalid destination box slot"
+    end
+    for _, name in ipairs({"pid", "otid", "count"}) do
+        local v = guard[name]
+        local max = name == "count" and 6 or 0xFFFFFFFF
+        if type(v) ~= "number" or v % 1 ~= 0 or v < 0 or v > max then
+            return nil, "invalid storage guard " .. name
+        end
+    end
+    local args = {a, b, c, 0xA2}
+    for _, value in ipairs({guard.pid, guard.otid}) do
+        for i = 0, 3 do args[#args + 1] = (value >> (i * 8)) & 255 end
+    end
+    args[#args + 1] = guard.count
+    if extra ~= nil then args[#args + 1] = extra end
+    if prepare_only then return MB.prepare(op, args, guard.native_id) end
+    return MB.send(op, args, nil, guard.native_id)
 end
-function MB.withdraw_mon(box_id, box_pos, party_slot)  -- box[box_id][box_pos] -> party[slot]
-    return MB.send(MB.OP_WITHDRAW_MON, {box_id, box_pos, party_slot})
+function MB.deposit_mon(party_slot, box_id, box_pos, guard)
+    return guarded_storage(MB.OP_DEPOSIT_MON, party_slot, box_id, box_pos, guard)
 end
--- party[slot] -> memorial box[box_id][box_pos]. Same conversion as deposit_mon but the party removal
--- is zero + swap-with-last (NOT shift) so survivors keep their slot indices (CFRU deferred battle
--- writes target slots — mirrors M.memorializeMon). Lua picks the free slot + renames the box.
-function MB.memorialize_mon(party_slot, box_id, box_pos)
-    return MB.send(MB.OP_MEMORIALIZE, {party_slot, box_id, box_pos})
+function MB.withdraw_mon(box_id, box_pos, party_slot, guard)
+    return guarded_storage(MB.OP_WITHDRAW_MON, box_id, box_pos, party_slot, guard)
+end
+function MB.memorialize_mon(party_slot, box_id, box_pos, guard)
+    return guarded_storage(MB.OP_MEMORIALIZE, party_slot, box_id, box_pos, guard)
+end
+
+MB.OP_MOVE_BOX_MON = 28
+function MB.move_box_mon(src_box, src_pos, dst_box, dst_pos, guard)
+    if dst_pos == nil then return nil, "destination box slot required" end
+    return guarded_storage(MB.OP_MOVE_BOX_MON, src_box, src_pos, dst_box, guard, dst_pos)
+end
+
+function MB.prepare_deposit_mon(party_slot, box_id, box_pos, guard)
+    return guarded_storage(MB.OP_DEPOSIT_MON, party_slot, box_id, box_pos, guard, nil, true)
+end
+function MB.prepare_withdraw_mon(box_id, box_pos, party_slot, guard)
+    return guarded_storage(MB.OP_WITHDRAW_MON, box_id, box_pos, party_slot, guard, nil, true)
+end
+function MB.prepare_memorialize_mon(party_slot, box_id, box_pos, guard)
+    return guarded_storage(MB.OP_MEMORIALIZE, party_slot, box_id, box_pos, guard, nil, true)
+end
+function MB.prepare_move_box_mon(src_box, src_pos, dst_box, dst_pos, guard)
+    if dst_pos == nil then return nil, "destination box slot required" end
+    return guarded_storage(MB.OP_MOVE_BOX_MON, src_box, src_pos, dst_box, guard, dst_pos, true)
 end
 
 -- Event-push ring (native -> Lua; EvRing in handlers.c @ 0x0203FD10). The patch's frame hook pushes
@@ -251,13 +301,17 @@ MB.EV_NAMES = { [1] = "player_faint", [2] = "foe_faint", [3] = "outcome",
 -- spurious party events. Clearing it is how you force a re-prime (the patch does this itself while
 -- a borrowed party is installed).
 MB.EVR_PRIM = 0x0203FD16
+-- Legacy reset drops queued events; durable bootstrap must reconcile before using it.
 function MB.events_init()
+    if not MB.present() then return false end
     memory.write_u8(MB.EVR + 1, memory.read_u8(MB.EVR))   -- rd = wr (drop anything stale)
     memory.write_u8(MB.EVR + 2, 0)                        -- clear overflow
+    return true
 end
 -- Drain all pending events. Returns a list of {type=, a=, b=} (possibly empty) plus an overflow
 -- bool (true = the ring dropped at least one event since the last drain; flag is cleared).
 function MB.events_drain()
+    if not MB.present() then return {}, false end
     local out = {}
     local wr, rd = memory.read_u8(MB.EVR), memory.read_u8(MB.EVR + 1)
     while rd ~= wr and #out < 8 do
@@ -284,13 +338,21 @@ function MB.peer_interact_count() return memory.read_u8(MB.PI_COUNT) end
 -- The patch spawns/arms/despawns a Pokémon-Center trade NPC whenever `enable`=1 (set by the client
 -- when overworld presence is OFF). Mutually exclusive with the peer ghost (which owns pi_oe when ON).
 MB.TN_ENABLE = 0x0203F8D4
-function MB.set_pc_npc(enable) memory.write_u8(MB.TN_ENABLE, enable and 1 or 0) end
+function MB.set_pc_npc(enable)
+    if not MB.present() then return false end
+    memory.write_u8(MB.TN_ENABLE, enable and 1 or 0)
+    return true
+end
 
 -- Battle-Calc display kill switch (one byte after TradeNpcState; matches handlers.c SLINK_CALC_OFF).
 -- INVERTED: 0 (EWRAM boot default — no Lua/config) = calc SHOWN; 1 = the battletext shim skips the
 -- calc trampoline so the damage display never draws. Plain EWRAM write, safe before the beacon.
 MB.CALC_OFF = 0x0203F8D8
-function MB.set_battle_calc(enable) memory.write_u8(MB.CALC_OFF, enable and 0 or 1) end
+function MB.set_battle_calc(enable)
+    if not MB.present() then return false end
+    memory.write_u8(MB.CALC_OFF, enable and 0 or 1)
+    return true
+end
 
 -- SlinkInfo @ 0x0203FD44 — the §6 SOULLINK start-menu entry (patch struct of the same name).
 -- Plain EWRAM writes rather than opcodes, same as set_pc_npc / set_battle_calc above: the menu
@@ -308,7 +370,11 @@ MB.OP_SHOW_INFO  = 27
 MB.INFO_MAXLINES = 6    -- body rows that fit at the panel's 13px pitch; the title is a ROM const
 MB.INFO_LINEW    = 32   -- bytes per slot; a line must fit encoded + terminator, so 31 chars max
 MB.INFO_PAGESLOT = 7    -- the header's page indicator; `lines` never counts it
-function MB.set_info_enable(enable) memory.write_u8(MB.INFO_ENABLE, enable and 1 or 0) end
+function MB.set_info_enable(enable)
+    if not MB.present() then return false end
+    memory.write_u8(MB.INFO_ENABLE, enable and 1 or 0)
+    return true
+end
 function MB.info_opened() return memory.read_u8(MB.INFO_OPENED) end
 
 -- Row builders. The patch decides a row's KIND from how many "\n"-separated fields it has, so
@@ -356,6 +422,7 @@ end
 -- without a 0xFF inside its 32 bytes, so an over-long line would blank the whole screen instead of
 -- just itself. Extra lines past the 8th are dropped, and `pages` lets the caller say so on screen.
 function MB.write_info(lines, page, pages)
+    if not MB.present() then return false end
     local n = math.min(#lines, MB.INFO_MAXLINES)
     for i = 1, n do
         local bytes = MB.fr_encode(tostring(lines[i]):sub(1, MB.INFO_LINEW - 1))
@@ -410,29 +477,40 @@ function MB.player_oe()
     return 0x02036E38 + id * 0x24
 end
 -- Request the engine-driven ghost (idempotent; safe to call once).
-function MB.ghost_spawn(gfx) return MB.send(MB.OP_GHOST_SPAWN, {gfx or 0, MB.LOCALID}) end
-function MB.ghost_clear() return MB.send(MB.OP_GHOST_CLEAR, {}) end
+function MB.ghost_spawn(gfx)
+    gfx = gfx or 0
+    if type(gfx) ~= "number" or gfx % 1 ~= 0 or gfx < 0 or gfx > 65535 then return nil, "invalid gfx16" end
+    return MB.send(MB.OP_GHOST_SPAWN, {gfx & 255, MB.LOCALID, (gfx >> 8) & 255}, false)
+end
+function MB.ghost_clear() return MB.send(MB.OP_GHOST_CLEAR, {}, false) end
 function MB.ghost_oe() return memory.read_u8(MB.GH_OEID) end   -- 0xFF until spawned
 -- Per-tick update: post the partner's WORLD-PIXEL position + facing + moving + live animNum. The
 -- patch LERPs the ghost sprite toward (wx,wy) so motion is continuous + sub-pixel. Plain EWRAM
 -- writes; no opcode/ack churn. face 1-4, mv 0/1, an = partner's animNum.
 function MB.ghost_set_pos(wx, wy, face, mv, an, run)
+    if not MB.present() then return false end
     memory.write_s16_le(MB.GH_WX, wx)
     memory.write_s16_le(MB.GH_WY, wy)
     memory.write_u8(MB.GH_FACE, (face and face >= 1 and face <= 4) and face or 1)
     memory.write_u8(MB.GH_MV, mv and 1 or 0)
     memory.write_u8(MB.GH_AN, an and (an & 0xFF) or 0)
     memory.write_u8(MB.GH_RUN, run and 1 or 0)
+    return true
 end
 
 -- Jump the ghost straight to the currently-posted (wx,wy) — first frame on a map / warp / big
 -- desync. Post the position with ghost_set_pos first, then call this.
-function MB.ghost_snap() memory.write_u8(MB.GH_SNAP, 1) end
+function MB.ghost_snap()
+    if not MB.present() then return false end
+    memory.write_u8(MB.GH_SNAP, 1)
+    return true
+end
 
 -- Set the partner's avatar: their live sprite images/anims ROM ptrs (valid on this copy of the same
 -- RR build) + their true 16-colour OBJ palette (pcol_hex = 64 hex chars = 16 BGR555 LE u16). The
 -- patch points the ghost sprite at these ptrs and stamps the colours into the ghost's own slot.
 function MB.ghost_set_avatar(imgs, anims, pcol_hex)
+    if not MB.present() then return false end
     memory.write_u32_le(MB.GH_IMGS, imgs or 0)
     memory.write_u32_le(MB.GH_ANIMS, anims or 0)
     if pcol_hex and #pcol_hex >= 64 then
@@ -443,6 +521,7 @@ function MB.ghost_set_avatar(imgs, anims, pcol_hex)
         end
     end
     memory.write_u8(MB.GH_AVATARDIRTY, 1)
+    return true
 end
 
 -- SwapState @ 0x0203F840 (published read-only by the patch: slink_backup_wrap sets begin,
@@ -469,67 +548,280 @@ function MB.force_move_args(battler, target, move_pos, move_id)
     return {battler, target, move_pos, 0, move_id % 256, math.floor(move_id / 256)}
 end
 
-local seq = 0
-
--- True when the companion patch is present and the ABI matches what we speak.
+-- One native owner. The bridge copies a receipt before acknowledging its retirement;
+-- callers poll the saved copy, so pumping the next command cannot erase its result.
+local next_token, inflight = 0, nil
+local outbox, receipts = {}, {}
+local receipt_count, fault, last_completion, last_polled = 0, nil, nil, nil
+local prepared_entries, durable_ids, prepared_count, durable_count, context_generation = {}, {}, 0, 0, nil
+local function deep_copy(value)
+    if type(value) ~= "table" then return value end
+    local copy = {}; for k, v in pairs(value) do copy[k] = deep_copy(v) end; return copy
+end
+local function same(a, b)
+    if type(a) ~= type(b) then return false end
+    if type(a) ~= "table" then return a == b end
+    for k, v in pairs(a) do if not same(v, b[k]) then return false end end
+    for k in pairs(b) do if a[k] == nil then return false end end
+    return true
+end
+local function current_context()
+    local player_id = memory.read_u8(MB.GPLAYER_AVATAR + 5)
+    local player = MB.player_oe()
+    return {generation=context_generation, callback2=memory.read_u32_le(0x030030F4),
+            script_lock=memory.read_u8(0x03000F9C), swap_active=memory.read_u8(0x0203F840),
+            map_group=memory.read_u8(player + 0x0A), map_num=memory.read_u8(player + 0x09),
+            player_id=player_id}
+end
+function MB.set_context_generation(value)
+    if type(value) ~= "string" or value == "" then return false, "context generation must be a string" end
+    context_generation = value; return true
+end
+local MAX_QUEUED, MAX_RECEIPTS = 128, 128
+local UI_STATE, SCRIPT_LOCK = 0x0203FC80, 0x03000F9C
 function MB.present()
-    if memory.read_u32_le(MB.BASE + O_SIG) ~= MB.SIG then return false end
-    return memory.read_u16_le(MB.BASE + O_ABI) == MB.ABI
+    local readable, signature = pcall(memory.read_u32_le, MB.BASE + O_SIG)
+    if not readable or signature ~= MB.SIG then return false end
+    local abi_readable, abi = pcall(memory.read_u16_le, MB.BASE + O_ABI)
+    return abi_readable and abi == MB.ABI
 end
-
--- The mailbox is SINGLE-SLOT: the injected hook consumes one opcode per frame, clearing
--- O_OPCODE. Two sends in the same frame would clobber each other (the server routinely
--- batches e.g. play_sound + msgbox in one TCP response), so a send while the slot is still
--- occupied queues in a Lua-side outbox that MB.pump() (called once per frame by the client)
--- drains as the slot frees. ponytail: payload BUFFERS (TEXT_BUF/MENU_BUF/BLOB_BUF) are still
--- staged at call time, so two QUEUED ops targeting the same buffer would collide — the
--- client's one-native-box-per-dispatch guard is what keeps that from happening today.
-local outbox = {}
-local function slot_free()
-    return memory.read_u16_le(MB.BASE + O_OPCODE) == 0
-end
-local function post(opcode, args, s)
-    if args then
-        for i = 1, #args do memory.write_u8(MB.BASE + O_ARGS + (i - 1), args[i]) end
+local function capture()
+    if not MB.present() then
+        if inflight or #outbox > 0 or prepared_count > 0 then fault = "native_session_changed" end
+        return
     end
-    memory.write_u16_le(MB.BASE + O_STATUS, MB.ST_BUSY)
-    memory.write_u16_le(MB.BASE + O_ACKSEQ, (s + 0xFFFF) % 0x10000)  -- != seq yet
-    memory.write_u16_le(MB.BASE + O_SEQ, s)
-    memory.write_u16_le(MB.BASE + O_OPCODE, opcode)   -- write opcode LAST (triggers dispatch)
-end
-
--- Post a command. `args` is an optional array of byte values written to args[].
--- Returns the seq to poll on. Non-blocking: the injected hook consumes it next frame
--- (or, if the slot is occupied, the op is queued and posted by a later MB.pump()).
-function MB.send(opcode, args)
-    seq = (seq + 1) % 0x10000
-    if #outbox > 0 or not slot_free() then
-        outbox[#outbox + 1] = {op = opcode, args = args, seq = seq}
-        return seq
-    end
-    post(opcode, args, seq)
-    return seq
-end
-
--- Drain one queued op per frame once the hook has consumed the previous one. Call once per
--- frame from the client's on_frame.
-function MB.pump()
-    if #outbox == 0 or not slot_free() then return end
-    local e = table.remove(outbox, 1)
-    post(e.op, e.args, e.seq)
-end
-
--- Poll a previously sent command. Returns status, reason once the hook has acked the
--- matching seq (status is ST_OK or ST_FAIL); returns nil while still pending.
-function MB.poll(expect_seq)
-    if memory.read_u16_le(MB.BASE + O_ACKSEQ) ~= expect_seq then return nil end
     local st = memory.read_u16_le(MB.BASE + O_STATUS)
-    if st == MB.ST_OK or st == MB.ST_FAIL then
-        return st, memory.read_u16_le(MB.BASE + O_REASON)
+    if inflight then
+        -- Match the prepared host generation, not callback2: a legitimate native
+        -- trade/UI operation changes scenes while retaining this reservation.
+        if inflight.context and inflight.context.generation ~= context_generation then
+            fault = "native_context_generation_changed"; return
+        end
+        if not MB.present() or memory.read_u16_le(MB.BASE + O_SEQ) ~= inflight.wire then
+            fault = "native_session_changed"; return
+        end
+        for i = 0, 7 do
+            local expected = tonumber(inflight.native_id:sub(i * 2 + 1, i * 2 + 2), 16)
+            if memory.read_u8(MB.BASE + O_ARGS + 24 + i) ~= expected then
+                fault = "native_reservation_changed"; return
+            end
+        end
+        if st == MB.ST_IDLE then fault = "native_owner_lost"; return end
+        if st ~= MB.ST_OK and st ~= MB.ST_FAIL then return end
+        if memory.read_u16_le(MB.BASE + O_ACKSEQ) ~= inflight.wire then
+            fault = "native_receipt_mismatch"; return
+        end
+        for i = 0, 7 do
+            local expected = tonumber(inflight.native_id:sub(i * 2 + 1, i * 2 + 2), 16)
+            if memory.read_u8(MB.BASE + O_RESULT + 8 + i) ~= expected then
+                fault = "native_reservation_receipt_mismatch"; return
+            end
+        end
+        if inflight.keep and receipt_count >= MAX_RECEIPTS then fault = "receipt_cache_full"; return end
+        local r = {token=inflight.token, native_id=inflight.native_id,
+                   context_generation=inflight.context and inflight.context.generation or nil, status=st,
+                   reason=memory.read_u16_le(MB.BASE + O_REASON), result={}}
+        for i = 0, 15 do r.result[i + 1] = memory.read_u8(MB.BASE + O_RESULT + i) end
+        if inflight.keep then receipts[inflight.token] = r; receipt_count = receipt_count + 1 end
+        last_completion = r
+        if durable_ids[inflight.native_id] then durable_ids[inflight.native_id].phase = "completed" end
+        inflight = nil
+        memory.write_u16_le(MB.BASE + O_STATUS, MB.ST_IDLE) -- explicit receipt retirement LAST
+    elseif MB.present() and (st ~= MB.ST_IDLE or memory.read_u16_le(MB.BASE + O_OPCODE) ~= 0) then
+        fault = "unowned_native_operation" -- Lua reload/reset requires reconciliation, not overwrite
     end
-    return nil
+end
+local function slot_free()
+    return not fault and not inflight and memory.read_u16_le(MB.BASE + O_OPCODE) == 0
+       and memory.read_u16_le(MB.BASE + O_STATUS) == MB.ST_IDLE
+end
+local function payload_free(payload)
+    local ui = memory.read_u8(UI_STATE) ~= 0
+    local script = memory.read_u8(SCRIPT_LOCK) ~= 0
+    if payload.text and (ui or script or memory.read_u8(MB.BATTLE_NOTIF) ~= 0) then return false end
+    if payload.menu and (ui or script) then return false end
+    return true
+end
+local function snapshot_payload(op)
+    local p = {}
+    if op == MB.OP_SHOW_MESSAGE or op == MB.OP_SHOW_MENU or op == MB.OP_SHOW_CHOICES
+       or op == MB.OP_SHOW_BATTLE_MESSAGE then p.text = copy_bytes(staged.text) end
+    if op == MB.OP_SHOW_CHOICES then p.menu = copy_bytes(staged.menu) end
+    if op == MB.OP_SET_PARTY_MON or op == MB.OP_SET_ENEMY_PARTY then p.blob = copy_bytes(staged.blob) end
+    return p
+end
+local function post(e)
+    if e.context and not same(e.context, current_context()) then
+        fault = "native_context_changed"; return false
+    end
+    for name, bytes in pairs(e.payload) do
+        local base = name == "text" and MB.TEXT_BUF or name == "menu" and MB.MENU_BUF or MB.BLOB_BUF
+        for i = 1, #bytes do memory.write_u8(base + i - 1, bytes[i]) end
+    end
+    for i = 0, 31 do memory.write_u8(MB.BASE + O_ARGS + i, e.args[i + 1] or 0) end
+    if e.context then
+        local c = e.context
+        memory.write_u8(MB.BASE + O_ARGS + 14, c.map_group)
+        memory.write_u8(MB.BASE + O_ARGS + 15, c.map_num)
+        memory.write_u32_le(MB.BASE + O_ARGS + 16, c.callback2)
+        memory.write_u8(MB.BASE + O_ARGS + 20, c.script_lock)
+        memory.write_u8(MB.BASE + O_ARGS + 21, c.swap_active)
+        memory.write_u8(MB.BASE + O_ARGS + 22, c.player_id)
+        memory.write_u8(MB.BASE + O_ARGS + 23, 0xC2)
+    end
+    for i = 0, 7 do
+        memory.write_u8(MB.BASE + O_ARGS + 24 + i, tonumber(e.native_id:sub(i * 2 + 1, i * 2 + 2), 16))
+    end
+    for i = 0, 15 do memory.write_u8(MB.BASE + O_RESULT + i, 0) end
+    memory.write_u16_le(MB.BASE + O_ACKSEQ, (e.wire + 0xFFFF) % 0x10000)
+    memory.write_u16_le(MB.BASE + O_REASON, 0)
+    memory.write_u16_le(MB.BASE + O_SEQ, e.wire)
+    memory.write_u16_le(MB.BASE + O_STATUS, MB.ST_BUSY)
+    inflight = e
+    memory.write_u16_le(MB.BASE + O_OPCODE, e.op) -- publish after complete payload and args
+    if durable_ids[e.native_id] then durable_ids[e.native_id].phase = "submitted" end
+    return true
+end
+local function prepare(opcode, args, native_id, keep_receipt, durable)
+    if not MB.present() then return nil, "companion ABI2 absent" end
+    if type(opcode) ~= "number" or opcode % 1 ~= 0 or opcode < 1 or opcode > 65535 then
+        return nil, "invalid native opcode"
+    end
+    if fault then return nil, fault end
+    args = args or {}
+    if #args > 14 then return nil, "too many native arguments" end
+    for i = 1, #args do
+        if type(args[i]) ~= "number" or args[i] % 1 ~= 0 or args[i] < 0 or args[i] > 255 then
+            return nil, "native arguments must be bytes"
+        end
+    end
+    local payload = snapshot_payload(opcode)
+    for name, bytes in pairs(payload) do
+        local limit = name == "text" and 256 or name == "menu" and 112 or 600
+        if #bytes > limit then return nil, "oversized native " .. name .. " payload" end
+        for i = 1, #bytes do
+            local value = bytes[i]
+            if type(value) ~= "number" or value % 1 ~= 0 or value < 0 or value > 255 then
+                return nil, "native payload must contain bytes"
+            end
+        end
+    end
+    if type(native_id) ~= "string" or #native_id ~= 16 or not native_id:match("^[0-9a-f]+$") then
+        return nil, "native reservation must be 16 lowercase hex characters"
+    end
+    if durable and not context_generation then return nil, "context generation required" end
+    if prepared_count >= MAX_QUEUED then return nil, "preparation capacity exhausted" end
+    if durable_ids[native_id] then return nil, "native_reservation_conflict" end
+    if durable and durable_count >= MAX_RECEIPTS then return nil, "reservation_registry_full" end
+    next_token = next_token + 1
+    local e = {op=opcode, args=copy_bytes(args), token=next_token, wire=next_token % 65536,
+               native_id=native_id, keep=keep_receipt ~= false, payload=payload,
+               context=durable and current_context() or nil}
+    prepared_entries[e.token] = e; prepared_count = prepared_count + 1
+    if durable then durable_ids[native_id] = {phase="prepared", entry=e}; durable_count = durable_count + 1 end
+    return deep_copy(e)
+end
+-- No EWRAM writes: persist this exact serializable preparation before submit.
+function MB.prepare(opcode, args, native_id, keep_receipt)
+    return prepare(opcode, args, native_id, keep_receipt, true)
+end
+function MB.submit(reservation)
+    if not MB.present() then
+        if inflight or #outbox > 0 or prepared_count > 0 then fault = "native_session_changed" end
+        return nil, fault or "companion ABI2 absent"
+    end
+    local token = type(reservation) == "table" and reservation.token
+    local e = token and prepared_entries[token]
+    if not e or not same(e, reservation) then return nil, "unknown_or_changed_preparation" end
+    capture()
+    if fault then return nil, fault end
+    if e.context and not same(e.context, current_context()) then return nil, "native_context_changed" end
+    if #outbox >= MAX_QUEUED then fault = "native_queue_full"; return nil, fault end
+    prepared_entries[token] = nil; prepared_count = prepared_count - 1
+    if #outbox == 0 and slot_free() and payload_free(e.payload) then
+        if not post(e) then return nil, fault end
+    else outbox[#outbox + 1] = e end
+    return e.token
+end
+-- Compatibility convenience only: volatile sends do not establish a durable intent.
+-- The coordinator uses prepare/persist/submit with a never-conflicting opaque ID.
+function MB.send(opcode, args, keep_receipt, native_id)
+    capture()
+    local reservation, why = prepare(opcode, args, native_id or string.format("%016x", next_token + 1),
+                                      keep_receipt, native_id ~= nil)
+    if not reservation then return nil, why end
+    return MB.submit(reservation)
+end
+-- Only after the durable receipt and full readback have been persisted. Historical
+-- token reuse must still be rejected by the authoritative durable command ledger.
+function MB.release_reservation(native_id)
+    local e = durable_ids[native_id]
+    if not e or e.phase ~= "completed" then return false end
+    durable_ids[native_id] = nil; durable_count = durable_count - 1; return true
 end
 
-function MB.read_result_u8(i)  return memory.read_u8(MB.BASE + O_RESULT + i) end
-
+function MB.pump()
+    capture()
+    if not MB.present() then return false end
+    if #outbox == 0 or not slot_free() or not payload_free(outbox[1].payload) then return end
+    if post(outbox[1]) then table.remove(outbox, 1) end
+end
+function MB.poll(token)
+    capture()
+    if not MB.present() then return nil, fault or "companion ABI2 absent" end
+    local r = receipts[token] or (last_completion and last_completion.token == token and last_completion)
+    if not r then return nil, fault end
+    if r.context_generation and r.context_generation ~= context_generation then
+        fault = "native_context_generation_changed"; return nil, fault
+    end
+    last_polled = r
+    if receipts[token] then receipts[token] = nil; receipt_count = receipt_count - 1 end
+    return r.status, r.reason
+end
+-- Detached historical evidence only; this does not capture or retire native state.
+function MB.get_saved_receipt(token)
+    local r = receipts[token] or (last_completion and last_completion.token == token and last_completion)
+    return r and deep_copy(r) or nil
+end
+function MB.read_result_u8(i)
+    return last_polled and last_polled.result[i + 1] or 0
+end
+function MB.session_error() return fault end
+-- Explicit recovery seam: caller must reconcile game state first. Never interrupt an
+-- engine operation or UI reader merely to make the mailbox available.
+function MB.reset_after_reconcile()
+    if not MB.present() or memory.read_u16_le(MB.BASE + O_OPCODE) ~= 0
+       or memory.read_u16_le(MB.BASE + O_STATUS) == MB.ST_BUSY
+       or memory.read_u8(UI_STATE) ~= 0 or memory.read_u8(SCRIPT_LOCK) ~= 0
+       or memory.read_u8(MB.BATTLE_NOTIF) ~= 0 then return false, "native owner still active" end
+    outbox, receipts, prepared_entries, durable_ids = {}, {}, {}, {}; receipt_count = 0; prepared_count = 0; durable_count = 0; context_generation = nil
+    inflight, fault, last_completion, last_polled = nil, nil, nil, nil
+    memory.write_u16_le(MB.BASE + O_STATUS, MB.ST_IDLE)
+    return true
+end
+function MB.read_descriptor(token)
+    local status, reason = MB.poll(token)
+    if status ~= MB.ST_OK then return nil, reason or "pending" end
+    local ptr = 0
+    for i = 0, 3 do ptr = ptr | (MB.read_result_u8(i) << (8 * i)) end
+    if ptr < 0x08000000 or ptr + 156 > 0x0A000000 then return nil, "invalid descriptor pointer" end
+    local function u16(off) return memory.read_u16_le(ptr + off, "System Bus") end
+    local function u32(off) return memory.read_u32_le(ptr + off, "System Bus") end
+    local function hexstr(off)
+        local t = {}
+        for i = 0, 63 do t[#t + 1] = string.char(memory.read_u8(ptr + off + i, "System Bus")) end
+        local value = table.concat(t)
+        if not value:match("^[0-9a-f]+$") or memory.read_u8(ptr + off + 64, "System Bus") ~= 0 then return nil end
+        return value
+    end
+    if u32(0) ~= 0x32444C53 or u16(4) ~= 1 or u16(6) ~= MB.ABI or u32(8) ~= 156
+       or u32(16) ~= MB.BASE or u16(20) ~= 64 or u16(22) ~= 0xA2 then return nil, "descriptor contract mismatch" end
+    local build, layout = hexstr(24), hexstr(89)
+    if not build or not layout then return nil, "invalid descriptor fingerprint" end
+    local caps = u32(12)
+    return {magic="SLD2", descriptor_version=1, abi=u16(6), build_id=build, layout_sha256=layout,
+            capability_mask=caps, mailbox_address=u32(16), mailbox_size=u16(20), storage_guard=u16(22),
+            capabilities={receipts_v2=(caps & 1) ~= 0, payload_leases=(caps & 2) ~= 0,
+                          storage_guard_v2=(caps & 4) ~= 0, descriptor_v1=(caps & 8) ~= 0, reservation_echo_v2=(caps & 16) ~= 0}}
+end
 return MB

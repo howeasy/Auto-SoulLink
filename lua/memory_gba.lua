@@ -338,10 +338,8 @@ function M.validateROM()
             return false, string.format(
                 "CFRU SB2 ptr=0x%08X not in EWRAM — not ready", sb2)
         end
-        local name0 = memory.read_u8(sb2)
-        if name0 == 0 or name0 == 0xFF then
-            return false, string.format(
-                "CFRU trainer name[0]=0x%02X — save not loaded yet", name0)
+        if not M.hasLoadedTrainerName(sb2) then
+            return false,"CFRU trainer name is blank or unterminated — save not loaded yet"
         end
     end
     return true, nil
@@ -513,8 +511,10 @@ function M.isPostBattleSettled()
     local task_size = M.TASK_STRUCT_SIZE or 40
     local nwriters  = #writers
     for i = 0, 15 do
-        local fn = mem_r32(M.TASKS_BASE_ADDR + i * task_size)
-        if fn ~= 0 then
+        local task = M.TASKS_BASE_ADDR + i * task_size
+        local fn = mem_r32(task)
+        -- DestroyTask clears Task.isActive (+4); func can retain a stale writer.
+        if mem_r8(task + 4) ~= 0 and fn ~= 0 then
             for j = 1, nwriters do
                 if fn == writers[j] then return false end
             end
@@ -721,6 +721,24 @@ end
 function M.readTrainerName()
     local sb2 = memory.read_u32_le(M.SB2_PTR_ADDR)
     return M.decodeString(sb2, 7)
+end
+
+-- A leading 0x00 is a space, not evidence that no save is loaded. RR's naming
+-- routine (0x0809F7EC in the pinned 4.1 base) accepts a non-space anywhere in the
+-- seven-character name and copies the whole buffer, including leading spaces.
+-- Match that bounded nonblank/EOS contract; broader save/owner checks stay with
+-- validateROM and the RR context. This does not establish durable save identity.
+function M.hasLoadedTrainerName(sb2)
+    sb2=sb2 or memory.read_u32_le(M.SB2_PTR_ADDR)
+    if sb2<0x02000000 or sb2>=0x02040000 then return false end
+    local nonblank=false
+    for i=0,7 do
+        local byte=mem_r8(sb2+i)
+        if byte==0xFF then return nonblank end
+        if i==7 then return false end
+        if byte~=0 then nonblank=true end
+    end
+    return false
 end
 
 -- Reads the fields we need from one party slot (index 0–5).

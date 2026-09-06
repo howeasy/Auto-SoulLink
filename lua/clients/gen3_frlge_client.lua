@@ -95,6 +95,10 @@ package.loaded["gen3_frlge_locations"] = nil
 package.loaded["hud"]               = nil
 package.loaded["mailbox"]           = nil
 package.loaded["peer_ghost_npc"]    = nil
+package.loaded["rr.context"]        = nil
+package.loaded["rr.storage"]        = nil
+package.loaded["rr.observations"]   = nil
+package.loaded["rr.battle_snapshot"] = nil
 
 local M     = require("memory_gba")
 local C     = require("connector")
@@ -149,11 +153,11 @@ else
     PG = nil
 end
 -- Disable the patch's PC trade-NPC until the server's `config` command resolves the presence rule, so a
--- stale/garbage EWRAM enable byte can't spawn the NPC before we know the run is presence-OFF. Plain EWRAM
--- write — safe even before the patch beacon is up.
+-- stale enable byte can't spawn the NPC before we know the run is presence-OFF.
+-- Mailbox writers refuse absent or incompatible beacons; config is reasserted on return.
 if MB then MB.set_pc_npc(false) end
--- Resync the event ring's read index (drop events from before this Lua load) — plain EWRAM writes,
--- safe before the patch beacon is up. See MB.events_drain in on_frame.
+-- The legacy load path drops prior ring events only with a matching beacon.
+-- Durable bootstrap must reconcile before this reset. See MB.events_drain in on_frame.
 if MB then MB.events_init() end
 
 -- Game module detection — provides game-specific area/gift classification
@@ -375,8 +379,16 @@ end
 M.applyProfile(detected.profile, detected.variant)
 local rom_type        = detected.module.rom_type_for_variant(detected.variant)
 local IS_RR           = (detected.variant == "radical_red")  -- peer ghost is RR-only
+local RR = nil
+if IS_RR then
+    local context = require("rr.context").new(M, MB, memory)
+    RR = {context=context, storage=require("rr.storage").new(M, MB, memory, context),
+        battle_snapshot=require("rr.battle_snapshot")}
+    RR.frame = context.sample()
+    RR.baseline_established = RR.frame.party_observable
+end
 local val_ok, val_err = M.validateROM()
-local writes_enabled  = val_ok
+local writes_enabled  = val_ok and (not RR or RR.frame.patch_present)
 -- Re-validated each frame when false (save may not be loaded at script start).
 local memorial_box_renamed = false  -- one-shot: rename Box 13 to "THE DEAD"
 local memorial_overflow_renamed = {} -- overflow boxes already renamed
@@ -726,6 +738,7 @@ local function dispatch_commands(cmds)
             if native_sfx_enabled and patch_present() and not M.isInBattle() then MB.play_se(c.sound)
             else M.playSE(c.sound) end
         elseif (c.cmd == "force_faint" or c.cmd == "force_explode") and c.key then
+            if RR and RR.suppressed_frame then RR.suppressed_frame[c.key]="external" end
             -- Populate nick_cache from server-provided nickname (for mons not in our party yet).
             if c.nickname and c.nickname ~= "" then
                 nick_cache[c.key] = c.nickname
@@ -766,6 +779,7 @@ local function dispatch_commands(cmds)
                                 pending_explosions[c.key] = {
                                     slot = slot, battler = battler, start_frame = frame_count,
                                 }
+                                if RR then RR.suppressed_frame[c.key]="engine" end
                                 M.playSE(M.SE_LINKED_KO)
                                 show_fallback("!! " .. nick_label(c.key) .. " BOOM!", "hud", 255, 80, 80, 360)
                                 console.log(string.format(
@@ -1003,9 +1017,9 @@ local function dispatch_commands(cmds)
             -- fallback; battle_calc drives the patch's calc kill-switch byte.
             if c.overworld_presence ~= nil then
                 pc_npc_enabled = (c.overworld_presence == false) and (c.pc_trade_npc ~= false)
-                -- Plain EWRAM write, safe pre-beacon (same as the boot-time set_pc_npc(false)):
-                -- gating on patch_present() here dropped the enable when the config command
-                -- raced the patch beacon (~frame 13). Also re-asserted on beacon return.
+                if PG and PG.set_enabled then PG.set_enabled(c.overworld_presence) end
+                -- The mailbox refuses writes before a matching beacon. Keep the
+                -- desired setting above so the beacon-return path can reassert it.
                 if MB then MB.set_pc_npc(pc_npc_enabled) end
             end
             if c.native_messages ~= nil then native_msgs_enabled = (c.native_messages == true) end
@@ -1045,6 +1059,11 @@ local seq            = 0
 local pending_labels = {}
 
 send = function(evt, label, is_auto, is_silent)
+    if RR and RR.observations and evt.event=="capture" and not evt.gift then
+        RR.observations.capture(evt.area_id,evt.key,RR.observations.current_battle_id())
+    elseif RR and RR.observations and evt.event=="key_change" then
+        RR.observations.migrate(evt.old_key,evt.new_key)
+    end
     if not C.connected() then
         console.log("[SLink-FRLGE] NOT CONNECTED — dropped: "..(label or evt.event))
         return
@@ -1129,6 +1148,7 @@ local function index_party(battle_active)
             -- Reuse pooled entry table (per-buffer) to avoid per-frame allocation
             local entry = pool[i]
             entry.hp = hp; entry.maxHP = maxHP; entry.level = lv; entry.slot = i
+            entry.is_egg = (flags & FLAG_EGG) ~= 0
             t[k] = entry
             -- Inline delta stats cache: only re-read combat stats when identity or level changes.
             -- Saves a separate 6-slot loop with redundant personality/otid/level reads.
@@ -1184,6 +1204,7 @@ end
 local _display_cache = {}  -- key → {nickname, species_id, held_item_id, ability_id}
 
 local function build_party_snapshot(battle_active)
+    if RR and (not RR.frame.party_observable or pending_storage or pending_memorialize) then return {} end
     if M.PARTY_IN_SB1 and M.PARTY_BASE == 0 then return {} end
     -- Active battler detection (singles & doubles): primary path is gBattlerPartyIndexes
     -- via getBattlerForPartySlot(). Species+level match against gBattleMons[0] is kept
@@ -1470,7 +1491,7 @@ end
 local initialized     = false
 local was_connected   = false
 local prev_area, prev_loc = current_area_loc()
-local prev_party      = index_party()
+local prev_party      = (not RR or RR.frame.party_observable) and index_party() or {}
 local prev_in_battle  = M.isInBattle()
 local prev_keys       = {}
 
@@ -1595,6 +1616,24 @@ local _sync_blocked_logged = false  -- one-shot: log once when entering blocked 
 -- Pokéball gate: no_catch suppressed until player enters a non-gift encounter area.
 -- Gift area classification now handled by game_module.is_gift_area()
 local nuzlocke_active = false
+if RR then
+    RR.observations=require("rr.observations").new({result_grace=POST_BATTLE_GRACE})
+    function RR.emit_observations(events)
+        for _,evt in ipairs(events) do
+            if evt.event=="no_catch" then
+                if nuzlocke_active and evt.area_id and evt.area_id~=""
+                    and not resolved_areas[evt.area_id] and not game_module.is_gift_area(evt.area_id) then
+                    resolved_areas[evt.area_id]=true
+                    send(evt,"no_catch:"..evt.area_id,true)
+                end
+            elseif evt.event=="whiteout" then
+                M.playSE(M.SE_BOO);send(evt,"whiteout",true)
+            else
+                send(evt,evt.event..":"..(evt.key or ""):sub(1,8),true)
+            end
+        end
+    end
+end
 
 
 -- ── Sync write helpers ─────────────────────────────────────────────────────────
@@ -1635,6 +1674,16 @@ local function exec_box_mon(key)
             if patch_present() then
                 local bx, px = M.findEmptyBoxSlot()
                 if bx then
+                    if RR then
+                        local body={cmd="box_mon",key=key,slot=slot,box=bx,pos=px}
+                        local intent,reason=RR.storage.prepare(body)
+                        local seq,problem
+                        if intent then seq,problem=RR.storage.apply(body,intent) end
+                        pending_storage={mode="deposit",key=key,slot=slot,box=bx,pos=px,
+                            body=body,intent=intent,seq=seq,start_frame=frame_count,
+                            uncertain=not seq and (reason or problem) or nil}
+                        return "pending"
+                    end
                     sync_written_keys[key] = true
                     local seq = MB.deposit_mon(slot, bx, px)
                     if seq then
@@ -1644,6 +1693,11 @@ local function exec_box_mon(key)
                     end
                 end
                 -- no free slot / send failed → fall through to the proven Lua path
+            end
+            if RR then
+                pending_storage={mode="deposit",key=key,start_frame=frame_count,
+                    uncertain="native deposit could not be prepared"}
+                return "pending"
             end
             local bi, si, err = M.depositPartyMon(slot)
             if bi then
@@ -1688,6 +1742,16 @@ local function exec_party_mon(key, stats)
         local count = memory.read_u8(M.PARTY_COUNT_ADDR)
         local bx, px = M.scanBoxForKey(key)
         if bx and count < 6 then
+            if RR then
+                local body={cmd="party_mon",key=key,slot=count,box=bx,pos=px,stats=stats}
+                local intent,reason=RR.storage.prepare(body)
+                local seq,problem
+                if intent then seq,problem=RR.storage.apply(body,intent) end
+                pending_storage={mode="withdraw",key=key,slot=count,box=bx,pos=px,
+                    body=body,intent=intent,seq=seq,start_frame=frame_count,
+                    uncertain=not seq and (reason or problem) or nil}
+                return "pending"
+            end
             sync_written_keys[key] = true
             all_known_keys[key]    = true
             local seq = MB.withdraw_mon(bx, px, count)
@@ -1698,6 +1762,11 @@ local function exec_party_mon(key, stats)
             end
         end
         -- not in a box / party full / send failed → fall through to the proven Lua path
+    end
+    if RR then
+        pending_storage={mode="withdraw",key=key,start_frame=frame_count,
+            uncertain="native withdrawal could not be prepared"}
+        return "pending"
     end
     -- Fail closed: refuse to retrieve without valid stats (prevents zero-stat crash).
     if not stats or not stats.level or stats.level <= 0
@@ -1765,6 +1834,7 @@ local function memorialize_finish(key, bi, si, pre_count)
     if still_in_party then
         console.log("[SLink-FRLGE] ⚠ memorialize VERIFY FAIL: key still in party after memorialize!")
     end
+    if RR and (still_in_party or not in_memorial) then return false end
 
     hud_show("† " .. nick_label(key) .. " buried", 255, 140, 40, 300)
     send({event="memorialize_done", key=key, box=bi}, "memorialize_done:"..key:sub(1,8), true)
@@ -1796,7 +1866,8 @@ local function exec_memorialize(key)
     -- compress + zero + swap-with-last in one frame-hook pass — no multi-frame Lua RAM-poke window
     -- for CFRU's deferred writes to race. ASYNC like deposit/withdraw: return "pending"; the
     -- §4a-sexies poll runs memorialize_finish (or falls back to the Lua path below on failure).
-    -- Box-resident mons (died while boxed) always take the Lua path — it scans boxes too.
+    -- RR box-resident mons use the guarded native box migration below. Other
+    -- profiles retain their existing Lua box-to-box path.
     if patch_present() and not memorialize_native_disabled
        and not pending_storage and not pending_memorialize then
         local count = memory.read_u8(M.PARTY_COUNT_ADDR)
@@ -1807,6 +1878,16 @@ local function exec_memorialize(key)
         if pslot then
             local bi, si = M.findFreeMemorialSlot()
             if bi then
+                if RR then
+                    local body={cmd="memorialize",key=key,slot=pslot,box=bi,pos=si}
+                    local intent,reason=RR.storage.prepare(body)
+                    local seq,problem
+                    if intent then seq,problem=RR.storage.apply(body,intent) end
+                    pending_memorialize={key=key,box=bi,slot=si,pre_count=count,
+                        body=body,intent=intent,seq=seq,start_frame=frame_count,
+                        uncertain=not seq and (reason or problem) or nil}
+                    return "pending"
+                end
                 local seq = MB.memorialize_mon(pslot, bi, si)
                 if seq then
                     pending_memorialize = {key = key, box = bi, slot = si, pre_count = count,
@@ -1819,7 +1900,25 @@ local function exec_memorialize(key)
             end
         end
     end
-
+    if RR then
+        local source_box,source_pos=M.scanBoxForKey(key)
+        if source_box and (source_box==M.MEMORIAL_BOX or memorial_overflow_renamed[source_box]) then
+            if memorialize_finish(key,source_box,source_pos,pre_count) then return end
+            pending_memorialize={key=key,start_frame=frame_count,
+                uncertain="existing memorial location failed identity readback"}
+            return "pending"
+        end
+        local bi,si=M.findFreeMemorialSlot()
+        local body,intent,seq,reason
+        if source_box and bi then
+            body={cmd="memorialize",key=key,box=bi,pos=si,source_box=source_box,source_pos=source_pos}
+            intent,reason=RR.storage.prepare(body)
+            if intent then seq,reason=RR.storage.apply(body,intent) end
+        end
+        pending_memorialize={key=key,box=bi,slot=si,pre_count=pre_count,start_frame=frame_count,
+            body=body,intent=intent,seq=seq,uncertain=not seq and (reason or "boxed memorial source/destination unavailable") or nil}
+        return "pending"
+    end
     local bi, si = M.memorializeMon(key)
     if bi then
         memorialize_finish(key, bi, si, pre_count)
@@ -1837,6 +1936,7 @@ end
 -- captures. Memorial/overflow boxes are skipped — dead mons must never block a
 -- future same-PID capture. Shared by the connect handler and the startup seed.
 local function seed_known_keys_from_boxes()
+    if RR and not RR.context.sample().party_observable then return end
     for boxIdx = 0, (M.BOXES_PER_STORE or 14) - 1 do
         if boxIdx ~= M.MEMORIAL_BOX and not memorial_overflow_renamed[boxIdx] then
             for slotIdx = 0, M.MONS_PER_BOX - 1 do
@@ -1854,18 +1954,32 @@ local function on_frame()
 
     -- 0a. Refresh ASLR-dependent party addresses (no-op for vanilla/AP)
     M.refreshPartyAddrs()
+    if RR then
+        RR.frame = RR.context.sample()
+        if not RR.frame.patch_present then writes_enabled = false end
+        RR.native_events={}
+        RR.suppressed_frame={}
+        if RR.frame.party_observable and not RR.baseline_established then
+            -- A reload may have begun while a preset party owned RAM. Seed the
+            -- first real party before any hello, recovery scan or diff can use it.
+            prev_party = index_party(RR.frame.in_battle)
+            for key in pairs(prev_party) do all_known_keys[key] = true end
+            seed_known_keys_from_boxes()
+            RR.baseline_established = true
+        end
+    end
 
     -- 0b. Re-validate writes if previously disabled (save may load after script start)
     if not writes_enabled then
         local ok, err = M.validateROM()
-        if ok then
+        if ok and (not RR or RR.frame.patch_present) then
             writes_enabled = true
             console.log("[SLink-FRLGE] ✓ ROM validation passed — writes enabled")
         end
     end
 
     -- Rename memorial box once after writes are first enabled
-    if writes_enabled and not memorial_box_renamed then
+    if writes_enabled and not memorial_box_renamed and (not RR or RR.frame.owner=="field_idle") then
         local ok, err = pcall(M.renameBox, M.MEMORIAL_BOX, "THE DEAD")
         if ok then
             memorial_box_renamed = true
@@ -1878,15 +1992,16 @@ local function on_frame()
     -- (ROADMAP §3). The per-frame Lua polls remain the unpatched fallback / safety net.
     if patch_present() then
         local evs, ovf = MB.events_drain()
+        if RR then RR.native_events=evs end
         for _, e in ipairs(evs) do
             if e.type == MB.EV_PLAYER_FAINT then
-                ev_faint_credit = ev_faint_credit + 1
+                if not RR then ev_faint_credit = ev_faint_credit + 1 end
                 console.log("[SLink-FRLGE] [ev] player faint settled (counter=" .. e.a ..
                             ", credit=" .. ev_faint_credit .. ")")
             elseif e.type == MB.EV_FOE_FAINT then
                 console.log("[SLink-FRLGE] [ev] foe faint settled (counter=" .. e.a .. ")")
             elseif e.type == MB.EV_OUTCOME then
-                if e.a == 2 then ev_outcome_loss = true end
+                if e.a == 2 and not RR then ev_outcome_loss = true end
                 console.log("[SLink-FRLGE] [ev] battle outcome=" .. e.a ..
                             (e.a == 2 and " (LOSS/whiteout)" or ""))
             elseif e.type == MB.EV_PARTY_ADD then
@@ -1914,7 +2029,8 @@ local function on_frame()
 
     -- 2. Connection state change → send hello on (re)connect
     local now_connected = C.connected()
-    if now_connected ~= was_connected then
+    if now_connected ~= was_connected and (not now_connected or not RR
+        or (RR.frame.party_observable and not pending_storage and not pending_memorialize)) then
         if now_connected then
             console.log("[SLink-FRLGE] [TCP] connected to "..SERVER_HOST..":"..SERVER_PORT)
             -- Mid-run reconnect: check actual bag contents to determine nuzlocke gate.
@@ -1929,7 +2045,8 @@ local function on_frame()
             -- RAM belongs to the NPC, not the player. Sending it would corrupt identity lock.
             local raw_count = memory.read_u8(M.PARTY_COUNT_ADDR)
             local save_loaded = raw_count >= 0 and raw_count <= 6
-            local snap = (save_loaded and not borrowed_battle) and build_party_snapshot(false) or {}
+            local snap = (save_loaded and not borrowed_battle and (not RR or RR.frame.party_observable))
+                and build_party_snapshot(false) or {}
             -- Seed all_known_keys from current party on connect
             for k in pairs(prev_party) do all_known_keys[k] = true end
             -- Seed all_known_keys from PC boxes so withdrawn mons are recognized
@@ -2115,13 +2232,14 @@ local function on_frame()
         local coffx = memory.read_s16_le(0x02021BC8)
         local coffy = memory.read_s16_le(0x02021BCA)
         local idle  = (memory.read_u8(OE + 0x00) & 0x80) ~= 0   -- heldMovementFinished set
-        if idle or pg_align_tx == nil then
+        local ghost_field_active = memory.read_u32_le(0x030030F4) == 0x080565B5
+        if ghost_field_active and (idle or pg_align_tx == nil) then
             pg_align_tx = memory.read_s16_le(OE + 0x10); pg_align_ty = memory.read_s16_le(OE + 0x12)
             pg_coff_ax = coffx; pg_coff_ay = coffy
         end
         -- 30 Hz while moving (fresher targets shrink the patch's lead-extrapolation window),
         -- 20 Hz idle (nothing changes; don't double the idle chatter).
-        if frame_count % (idle and 3 or 2) == 0 then
+        if ghost_field_active and frame_count % (idle and 3 or 2) == 0 then
             local f = memory.read_u8(OE + 0x18) & 0x0F
             if f < 1 or f > 4 then f = 1 end
             local sid  = memory.read_u8(OE + 0x04)
@@ -2154,7 +2272,7 @@ local function on_frame()
                    f  = f, mv = (moving and 1 or 0),
                    an = anim,                        -- live animNum (exact animation)
                    run = (anim >= 8 and 1 or 0),
-                   gfx = memory.read_u8(OE + 0x05),
+                   gfx = memory.read_u8(OE + 0x05) | (memory.read_u8(OE + 0x23) << 8),
                    imgs = imgs, anim = anim_ptr, pcol = pcol }, "ghost_pos", true, true)
             if not pg_send_logged then
                 pg_send_logged = true
@@ -2405,6 +2523,7 @@ local function on_frame()
                 -- Settle: Explosion landed, switched out, or battle ended.
                 clear_lock_state(st)
                 M.forceFaint(st.slot)
+                if RR and in_battle and not still_active then RR.suppressed_frame[key]="external_override" end
                 _battle_hp_cache[key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
                 force_fainted_keys[key] = true
                 pending_explosions[key] = nil
@@ -2415,6 +2534,7 @@ local function on_frame()
                 -- Fallback: Explosion never connected — apply HP=0 directly.
                 clear_lock_state(st)
                 M.forceFaint(st.slot)
+                if RR then RR.suppressed_frame[key]="external_override" end
                 _battle_hp_cache[key] = {hp = 0, maxHP = mem_u16(base + M.OFF_MAX_HP), level = mem_u8(base + M.OFF_LEVEL)}
                 force_fainted_keys[key] = true
                 pending_explosions[key] = nil
@@ -2452,10 +2572,42 @@ local function on_frame()
     end
 
     -- 4a-quinque. Settle the native PC box⇄party storage op (OP_DEPOSIT_MON / OP_WITHDRAW_MON). Async:
-    -- the opcode acks next frame. ST_OK → success bookkeeping; ST_FAIL → Lua fallback; timeout → re-check
-    -- the real party/box state (a lost ack on a SUCCEEDED op must not double-run through the fallback).
+    -- RR verifies prepared party/box states before success and retains uncertainty.
+    -- The compatibility profiles keep their existing fallback behavior below.
     if pending_storage then
         local ps = pending_storage
+        if RR then
+            local status = ps.seq and MB.poll(ps.seq) or nil
+            local due = (status and not ps.uncertain)
+                or ((ps.uncertain or frame_count-ps.start_frame>=STORAGE_OP_TIMEOUT)
+                    and (not ps.last_check or frame_count-ps.last_check>=30))
+            if due and ps.intent then
+                ps.last_check=frame_count
+                local state,proof=RR.storage.classify(ps.body,ps.intent)
+                local receipt,reason
+                if state=="after" then receipt,reason=RR.storage.receipt(ps.body,ps.intent,proof) end
+                if receipt then
+                    sync_written_keys[ps.key]=true
+                    all_known_keys[ps.key]=true
+                    if ps.mode=="withdraw" then
+                        send({event="sync_retrieve_done",key=ps.key},"sync_retrieve_done:"..ps.key:sub(1,8),true,true)
+                    end
+                    hud_show((ps.mode=="withdraw" and "↑ " or "↓ ")..nick_label(ps.key).." verified",100,255,160,200)
+                    local pids=_read_party_pids()
+                    for i=0,5 do _stable_party_pids[i]=pids[i];_last_party_pids[i]=pids[i] end
+                    _last_pid_change_frame=frame_count
+                    post_unfreeze_frames=POST_UNFREEZE_SETTLE
+                    pending_storage=nil
+                else
+                    ps.uncertain=reason or (type(proof)=="string" and proof) or "native storage poststate unproven"
+                end
+            end
+            if ps.uncertain and not ps.uncertain_logged then
+                ps.uncertain_logged=true
+                console.log("[SLink-FRLGE] STORAGE UNRESOLVED: "..ps.key.." — "..ps.uncertain)
+                hud_show("! Storage needs reconciliation",255,80,80,600)
+            end
+        else
         local status = MB.poll(ps.seq)
         local outcome  -- "ok" | "fallback" | nil (keep waiting)
         if status == MB.ST_OK then
@@ -2515,13 +2667,39 @@ local function on_frame()
             post_unfreeze_frames = POST_UNFREEZE_SETTLE
             pending_storage = nil
         end
+        end -- legacy profiles; RR never replays an uncertain native write in Lua
     end
 
-    -- 4a-sexies. Settle the native memorialize (OP_MEMORIALIZE). On ST_OK run the shared epilogue
-    -- (verify + HUD + memorialize_done + overflow rename); on failure/timeout disable the native
-    -- path for the session and re-queue the command so the proven Lua RAM-poke path takes over.
+    -- 4a-sexies. RR requires a physical receipt before the shared memorial epilogue.
+    -- Compatibility profiles retain the older failure/requeue behavior.
     if pending_memorialize then
         local pm = pending_memorialize
+        if RR then
+            local status=pm.seq and MB.poll(pm.seq) or nil
+            local due=(status and not pm.uncertain)
+                or ((pm.uncertain or frame_count-pm.start_frame>120)
+                    and (not pm.last_check or frame_count-pm.last_check>=30))
+            if due and pm.intent then
+                pm.last_check=frame_count
+                local state,proof=RR.storage.classify(pm.body,pm.intent)
+                local receipt,reason
+                if state=="after" then receipt,reason=RR.storage.receipt(pm.body,pm.intent,proof) end
+                if receipt and memorialize_finish(pm.key,pm.box,pm.slot,pm.pre_count) then
+                    local pids=_read_party_pids()
+                    for i=0,5 do _stable_party_pids[i]=pids[i];_last_party_pids[i]=pids[i] end
+                    _last_pid_change_frame=frame_count
+                    sync_written_keys[pm.key]=true
+                    pending_memorialize=nil
+                else
+                    pm.uncertain=reason or (type(proof)=="string" and proof) or "native memorial poststate unproven"
+                end
+            end
+            if pm.uncertain and not pm.uncertain_logged then
+                pm.uncertain_logged=true
+                console.log("[SLink-FRLGE] MEMORIAL UNRESOLVED: "..pm.key.." — "..pm.uncertain)
+                hud_show("! Memorial needs reconciliation",255,80,80,600)
+            end
+        else
         local st = MB.poll(pm.seq)
         local timed_out = frame_count - pm.start_frame > 120
         if st == MB.ST_OK then
@@ -2538,6 +2716,7 @@ local function on_frame()
             pending_memorialize = nil
             table.insert(pending_sync_cmds, 1, {cmd = "memorialize", key = pm.key})
         end
+        end -- legacy profiles
     end
 
     -- 4b. Flush deferred battle faints: apply force_faint to mons that are no longer
@@ -2608,6 +2787,9 @@ local function on_frame()
     local post_eob_clear = post_eob_frames == 0 or M.isPostBattleSettled()
     local safe_now = is_overworld and sync_cooldown == 0 and not party_frozen
                      and post_battle_frames == 0 and eob_clear and post_eob_clear
+    if RR then
+        safe_now = safe_now and RR.context.storage_readback_prerequisite(RR.frame)
+    end
     if #pending_sync_cmds > 0 then
         if not safe_now or not writes_enabled then
             if not _sync_blocked_logged then
@@ -2753,6 +2935,14 @@ local function on_frame()
         -- Detect borrowed-party battles (CFRU/RR only).
         local ok_bb, is_bb = pcall(M.isBorrowedBattle)
         borrowed_battle = ok_bb and is_bb or false
+        if RR then
+            RR.emit_observations(RR.observations.begin_battle(
+                {area_id=area,wild=battle_is_wild},prev_party,(M.readFaintCounters()),frame_count,
+                borrowed_battle or not RR.frame.party_observable))
+            -- Ended RR results retain their own origin/deadline in the observer;
+            -- an old box grace window cannot scan or reset this new battle.
+            post_battle_frames=0
+        end
         if borrowed_battle then
             -- Snapshot the real party BEFORE the game swaps it out.
             -- prev_party still holds the last-frame (real) party here.
@@ -2840,6 +3030,7 @@ local function on_frame()
         end
         console.log(string.format("[SLink-FRLGE] [battle] start  wild=%s  borrowed=%s  area=%s",
             tostring(battle_is_wild), tostring(borrowed_battle), battle_area_id or "(none)"))
+        if RR then RR.observations.set_box_origin(battle_box_index,battle_box_snapshot) end
         -- Show encounter prompt when a wild battle starts in an unresolved area.
         if battle_is_wild and nuzlocke_active and battle_area_id and battle_area_id ~= ""
                 and not resolved_areas[battle_area_id] and not game_module.is_gift_area(battle_area_id) then
@@ -2850,6 +3041,7 @@ local function on_frame()
     end
 
     -- ── gBattleMons cache update (every frame while in battle + transition) ──
+    local curr_party,party_count
     -- CFRU does NOT copy battle HP/level back to the party struct during battle.
     -- Cache gBattleMons values for all player-side battlers each frame so that
     -- index_party/build_party_snapshot can use them (survives mon switches).
@@ -2858,6 +3050,22 @@ local function on_frame()
     -- gated only on in_battle would miss the final HP=0.
     if (in_battle or battle_just_ended) and M.BATTLE_MONS_ADDR and M.BATTLE_MONS_ADDR ~= 0
        and M.BATTLER_PARTY_INDEXES_ADDR then
+        if RR then
+            RR.counter_reliable=true
+            local last=(M.BATTLERS_COUNT_ADDR and mem_u8(M.BATTLERS_COUNT_ADDR)>=4) and 2 or 0
+            for battler=0,last,2 do
+                local observed,reason=RR.battle_snapshot.read(M,memory,battler)
+                if observed then
+                    local cached=_battle_hp_cache[observed.key] or {}
+                    cached.hp=force_fainted_keys[observed.key] and 0 or observed.hp
+                    cached.maxHP=observed.maxHP;cached.level=observed.level
+                    _battle_hp_cache[observed.key]=cached
+                    if observed.ability>0 then _ability_cache[observed.key]=observed.ability end
+                elseif reason=="unattributed zero" then
+                    RR.counter_reliable=false
+                end
+            end
+        else
         -- Update cache for battler 0 (always the player's primary mon)
         local idx0 = mem_u16(M.BATTLER_PARTY_INDEXES_ADDR)
         if idx0 < 6 then
@@ -2943,9 +3151,49 @@ local function on_frame()
                 end
             end
         end
+        end -- compatibility cache; RR routes transitional records by identity
     end
 
     -- ── battle end ───────────────────────────────────────────────────────────
+    if RR then
+        local observable=RR.frame.patch_present and RR.frame.save_fingerprint~=nil
+            and not RR.frame.identity_ambiguous and not RR.frame.party_invalid
+            and (not RR.frame.swap or RR.frame.swap.active==0)
+            and not borrowed_battle and not party_frozen and not pending_storage and not pending_memorialize
+            and not pending_trade_apply
+            and (RR.frame.party_observable or battle_just_ended)
+        if observable then
+            -- Preserve final live battler HP BEFORE compatibility cleanup clears
+            -- its cache; party HP can still lag the final KO on this exact frame.
+            curr_party,party_count=index_party(in_battle or battle_just_ended)
+        else
+            curr_party,party_count=prev_party,mem_u8(M.PARTY_COUNT_ADDR)
+        end
+        if battle_just_ended then
+            local foe=M.BATTLE_MONS_ADDR+M.BATTLE_MON_SIZE
+            RR.observations.end_battle(M.getBattleOutcome(),
+                {species_id=mem_u16(foe),level=mem_u8(foe+0x2A)},frame_count)
+        end
+        local suppressed={}
+        for key in pairs(force_fainted_keys) do suppressed[key]="external" end
+        for key in pairs(pending_battle_faints) do suppressed[key]="external" end
+        for key in pairs(pending_explosions) do suppressed[key]="engine" end
+        for key,cause in pairs(RR.suppressed_frame) do suppressed[key]=cause end
+        local settled_zero={}
+        local field_readback=observable and not in_battle and RR.context.storage_readback_prerequisite(RR.frame)
+        if field_readback and M.isPostBattleSettled() then
+            for key,mon in pairs(curr_party) do
+                local base=M.PARTY_BASE+mon.slot*M.MON_SIZE
+                if M.monKey(base)==key and mem_u16(base+M.OFF_HP)==0 then settled_zero[key]=true end
+            end
+        end
+        RR.emit_observations(RR.observations.observe({party=curr_party,previous=prev_party,
+            observable=observable,borrowed=borrowed_battle or (RR.frame.swap and RR.frame.swap.active~=0),
+            in_battle=in_battle,battle_just_ended=battle_just_ended,outcome=M.getBattleOutcome(),
+            area_id=area,counter=(M.readFaintCounters()),native_events=RR.native_events,
+            counter_reliable=RR.counter_reliable,suppressed=suppressed,settled_zero=settled_zero,
+            outside_authoritative=field_readback}))
+    end
     if battle_just_ended then
         -- Borrowed-party cleanup: restore the real party snapshot and skip
         -- HP writeback (the cached HP belongs to the borrowed mons, not ours).
@@ -2993,7 +3241,9 @@ local function on_frame()
 
     -- 6. Read party; diff sees correct HP (game writes back gBattleMons→party on battle end).
     -- Stats cache is merged into index_party() — no separate pass needed.
-    local curr_party, party_count = index_party(in_battle)
+    if not RR then
+        curr_party,party_count=index_party(in_battle)
+    end
     -- Now that Lua has its own view of the party, resolve any ring events waiting on it.
     if patch_present() then
         EV.owns = true          -- the ring now owns species-change detection
@@ -3072,7 +3322,7 @@ local function on_frame()
     -- Borrowed-party battles are already caught by isBorrowedBattle() at
     -- battle start; the PID detector is only needed for overworld transitions.
     local _pid_reverted = false
-    if not party_frozen and not in_battle then
+    if not party_frozen and (not in_battle or (use_authoritative_swap and _swap.active ~= 0)) then
         -- Trigger source: authoritative patch signal (preferred) or the PID heuristic.
         local _do_freeze, _freeze_log = false, nil
         if use_authoritative_swap then
@@ -3080,7 +3330,7 @@ local function on_frame()
             -- beginning.  Threshold-free and false-positive-free: no compaction guard is
             -- needed because the engine genuinely backed the party up (vs. the heuristic,
             -- which can't tell a swap from a deposit-driven slot compaction).
-            if _auth_begin_edge then
+            if _auth_begin_edge or _swap.active ~= 0 then
                 _do_freeze  = true
                 _freeze_log = "patch swap-begin (authoritative)"
             end
@@ -3390,6 +3640,8 @@ local function on_frame()
         and post_unfreeze_frames == 0
         and not pending_trade_apply         -- freeze the diff for the whole trade (party swaps mid-scene)
         and not pending_storage             -- freeze the diff while a native deposit/withdraw is in flight
+        and not pending_memorialize         -- an unresolved native mutation cannot establish a new baseline
+        and (not RR or RR.frame.party_observable)
         and (in_battle or post_battle_frames > 0 or is_overworld)
 
     if party_diff_ok then
@@ -3660,7 +3912,7 @@ local function on_frame()
         elseif curr_info then
             -- Key still in party
             if prev_info.hp > 0 then had_alive = true end
-            if prev_info.hp > 0 and curr_info.hp == 0 and not party_frozen then
+            if not RR and prev_info.hp > 0 and curr_info.hp == 0 and not party_frozen then
                 -- Don't re-report faints that we caused via force_faint command,
                 -- or that are pending deferral (active battler awaiting switch-out).
                 if force_fainted_keys[k] then
@@ -3739,6 +3991,7 @@ local function on_frame()
     -- multiple pending we can't safely pick which one to credit (pairs()
     -- order is undefined) — fall through to the timer, which gives time
     -- for transient HP=0 to recover.
+    if not RR then
     local n_pending = 0
     for _ in pairs(pending_faint_debounce) do n_pending = n_pending + 1 end
     local curr_pfc = nil
@@ -3812,6 +4065,7 @@ local function on_frame()
         M.playSE(M.SE_BOO)
         send({event="whiteout"}, "whiteout", true)
     end
+    end -- compatibility faint/whiteout detector; RR temporal state lives in observations.lua
 
     end -- party_diff_ok
 
@@ -3898,7 +4152,8 @@ local function on_frame()
             post_eob_frames = post_eob_frames - 1
             if post_eob_frames == 0 and not M.isPostBattleSettled() then
                 console.log("[SLink-FRLGE] post-EOB safety cap exhausted; isPostBattleSettled still false. "
-                    .. "Sync writes will proceed; if a corruption follows, the profile's "
+                    .. (RR and "RR storage still requires its field/writer prerequisites; " or "Sync writes will proceed; ")
+                    .. "if a corruption follows, the profile's "
                     .. "POST_BATTLE_WRITER_TASKS set likely needs another discovery run "
                     .. "(test_post_eob_settle_discovery.lua) on the battle type that just happened.")
             end
@@ -4083,7 +4338,7 @@ local function on_frame()
 
         if post_battle_frames == 0 then
             local outcome_caught = (M.getBattleOutcome() == M.OUTCOME_CAUGHT)
-            if nuzlocke_active and battle_is_wild and not captured_this_battle and not outcome_caught
+            if not RR and nuzlocke_active and battle_is_wild and not captured_this_battle and not outcome_caught
                     and battle_area_id and battle_area_id ~= ""
                     and not resolved_areas[battle_area_id]
                     and not game_module.is_gift_area(battle_area_id) then
@@ -4107,6 +4362,8 @@ local function on_frame()
         end
     end
 
+    if RR then RR.emit_observations(RR.observations.drain_results(frame_count)) end
+
     -- ── activate nuzlocke once the player has Pokéballs in their bag ─────────────
     -- Throttled to every 15 frames (~0.25s) to avoid 14 bag reads per frame.
     if not nuzlocke_active and frame_count % 15 == 0 and M.hasPokeballs() then
@@ -4117,7 +4374,8 @@ local function on_frame()
     end
 
     -- ── safe ─────────────────────────────────────────────────────────────────
-    if pending_safe and is_overworld then
+    if pending_safe and is_overworld and (not RR or (not pending_storage and not pending_memorialize
+        and RR.context.storage_readback_prerequisite(RR.frame))) then
         pending_safe = false
         send({event="safe"}, "safe", true)
     end
@@ -4139,7 +4397,8 @@ local function on_frame()
             -- During borrowed-party battles or party freeze (pre-battle swap),
             -- don't send the borrowed mons as our party — omit party data
             -- so the server keeps the real snapshot.
-            if not borrowed_battle and not party_frozen then
+            if not borrowed_battle and not party_frozen and (not RR or (RR.frame.party_observable
+                and not pending_storage and not pending_memorialize)) then
                 evt.party = build_party_snapshot(in_battle)
             end
             -- Include enemy party when in battle; send empty table when not (clears stale data).

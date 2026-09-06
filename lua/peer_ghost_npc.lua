@@ -22,29 +22,51 @@ local ok_mb, MB = pcall(require, "mailbox")
 if not ok_mb then MB = nil end
 
 local PG = {}
-local OE = 0x02036E38          -- gObjectEvents[0] = the local player
--- engine's elevation->base subpriority table (event_object_movement.c sElevationToSubpriority)
-local ELEV2SUB = {[0]=115,[1]=115,[2]=83,[3]=115,[4]=83,[5]=115,[6]=83,[7]=115,
-                  [8]=83,[9]=115,[10]=83,[11]=115,[12]=83,[13]=0,[14]=0,[15]=115}
 local interact_text = "Your partner is here!"   -- shown when YOU press A on the ghost
 local SNAP_PX = 48             -- world-px jump beyond this in one update -> snap, don't slide
 local S
 
-function PG.init() S = { ghost = nil, spawned = false, pi_last = 0, interact_pending = false,
-                         last_w = nil, av_imgs = nil, av_anims = nil, last_gsid = nil,
+function PG.init() S = { ghost = nil, enabled = true, spawned = false, pi_last = 0, interact_pending = false,
+                         last_w = nil, av_imgs = nil, av_anims = nil, av_pcol = nil,
                          spawn_gfx = nil } end
 function PG.present() return MB ~= nil and MB.present() end
 function PG.set_interact_text(s) if s and s ~= "" then interact_text = s end end
 
--- partner state update; x,y are TILE coords (object-event currentCoords space)
-function PG.on_ghost_pos(t) if S then S.ghost = t end end
+-- partner state update; x,y are world-pixel coordinates
+function PG.on_ghost_pos(t)
+  if not S or not S.enabled or type(t) ~= "table" then return false end
+  local bounds = {mg={0,255}, mn={0,255}, x={-32768,32767}, y={-32768,32767},
+                  f={1,4}, gfx={0,65535}}
+  for field, range in pairs(bounds) do
+    local v = t[field]
+    if type(v) ~= "number" or v % 1 ~= 0 or v < range[1] or v > range[2] then return false end
+  end
+  for _, field in ipairs({"mv", "run", "an"}) do
+    local v = t[field]
+    local max = field == "an" and 255 or 1
+    if v ~= nil and (type(v) ~= "number" or v % 1 ~= 0 or v < 0 or v > max) then return false end
+  end
+  if t.pcol ~= nil and (type(t.pcol) ~= "string" or #t.pcol ~= 64 or not t.pcol:match("^[0-9a-fA-F]+$")) then return false end
+  for _, field in ipairs({"imgs", "anim"}) do
+    local v = t[field]
+    if v ~= nil and v ~= 0 and (type(v) ~= "number" or v % 4 ~= 0 or v < 0x08000000 or v >= 0x0A000000) then return false end
+  end
+  S.ghost = t
+  return true
+end
 
 function PG.on_ghost_clear()
   if not S then return end
   S.ghost = nil
   if S.spawned and MB then MB.ghost_clear() end
-  S.spawned = false; S.last_w = nil; S.av_imgs = nil; S.av_anims = nil; S.last_gsid = nil
+  S.spawned = false; S.last_w = nil; S.av_imgs = nil; S.av_anims = nil; S.av_pcol = nil
   S.spawn_gfx = nil
+end
+
+function PG.set_enabled(value)
+  if not S then PG.init() end
+  S.enabled = value == true
+  if not S.enabled then PG.on_ghost_clear() end
 end
 
 -- True once per detected talk-to-ghost (the client emits a peer_interact event to the server).
@@ -54,7 +76,7 @@ function PG.consume_interact()
 end
 
 function PG.on_frame()
-  if not PG.present() then return end
+  if not S or not S.enabled or not PG.present() then return end
   -- Only touch the ghost in the WALKABLE FIELD. Menus (party/bag/start), the trade scene, etc. reuse
   -- gSprites for their own UI; the avatar re-assert below writes gSprites[ghost_sid], which corrupts
   -- those screens (the party-menu "square"/sprite errors). is_overworld is TRUE in menus (only battle
@@ -88,17 +110,19 @@ function PG.on_frame()
   -- the partner's, which is the bug the stand-in was working around. Both players run the same RR
   -- build, so the partner's graphicsId indexes the same graphics-info table here. Fall back to 0 (the
   -- default 16x32 player base) until their gfx has actually arrived.
-  local want_gfx = (type(g.gfx) == "number" and g.gfx >= 0 and g.gfx <= 255) and g.gfx or 0
+  local want_gfx = (type(g.gfx) == "number" and g.gfx >= 0 and g.gfx <= 65535 and g.gfx % 1 == 0) and g.gfx or 0
   if not S.spawned then
     MB.write_message(interact_text)     -- pre-set the talk-to-ghost message (patch shows it)
-    MB.ghost_spawn(want_gfx)            -- patch spawns it + drives from here
+    local request = MB.ghost_spawn(want_gfx)
+    if not request then return end
     S.spawned, S.pi_last = true, MB.peer_interact_count()
     S.spawn_gfx = want_gfx
     S.last_w = nil; S.av_imgs = nil
   elseif want_gfx ~= S.spawn_gfx then
     -- Partner mounted the bike / started surfing / cast a rod: re-post the gfxId. drive_ghost sees
     -- gfxId ~= curGfx and does a clean remove + respawn at the new size, then re-applies the avatar.
-    MB.ghost_spawn(want_gfx)
+    local request = MB.ghost_spawn(want_gfx)
+    if not request then return end
     S.spawn_gfx = want_gfx
     S.av_imgs = nil                     -- force the avatar re-forward onto the new sprite slot
     console.log("[peer-ghost] partner avatar size changed -> respawn gfx=" .. want_gfx)
@@ -120,55 +144,12 @@ function PG.on_frame()
       (g.pcol or "nil"):sub(1, 16), limgs, lpc, tostring(g.imgs == limgs)))
   end
 
-  -- Forward the partner's avatar (live sprite images/anims ROM ptrs + true 16-colour palette) to the
-  -- patch, and cache the decoded values for the per-frame re-assert below. Only on change.
-  if g.imgs and g.imgs ~= 0 and g.imgs ~= S.av_imgs then
+  -- Stage complete desired avatar state; the native owner handles all sprite,
+  -- palette, allocation, animation and depth writes. Re-forward palette-only and
+  -- animation-table changes even if the images pointer stayed unchanged.
+  if g.imgs and g.imgs ~= 0 and (g.imgs ~= S.av_imgs or g.anim ~= S.av_anims or g.pcol ~= S.av_pcol) then
     MB.ghost_set_avatar(g.imgs, g.anim or 0, g.pcol)
-    S.av_imgs = g.imgs
-    S.av_anims = g.anim or 0
-  end
-
-  -- Re-assert the partner's avatar onto the ghost sprite EVERY FRAME, here in Lua. The client runs
-  -- this at end-of-frame (after the engine's field update), so a post-warp / door-transition sprite
-  -- reload can't leave the ghost showing the local stand-in — our write always wins. (The patch also
-  -- stamps it at frame-top; this is the belt-and-braces that fixes the "ghost looks like me" revert.)
-  if S.av_imgs and S.spawned then
-    local goe = MB.ghost_oe()
-    -- ONLY write if the slot is still ACTIVE and OURS (localId 0xF0). After a warp the engine rebuilds
-    -- the object-event array and may reassign our old slot to a real map NPC; without this guard the
-    -- re-assert would scribble the partner's sprite/palette onto that NPC (or the player) = corruption.
-    local owned = goe < 16 and (memory.read_u8(OE + goe*0x24) & 1) == 1
-                            and memory.read_u8(OE + goe*0x24 + 0x08) == 0xF0
-    if owned then
-      local gsid = memory.read_u8(OE + goe*0x24 + 0x04)
-      if gsid < 64 then
-        local sa = 0x0202063C + gsid*0x44
-        -- Read-compare-write: the re-assert must still WIN whenever the engine reverted the sprite,
-        -- but on the (vast majority of) frames where nothing reverted, skip the redundant writes.
-        if memory.read_u32_le(sa + 0x0C) ~= S.av_imgs then
-          memory.write_u32_le(sa + 0x0C, S.av_imgs)                     -- sprite.images
-        end
-        if S.av_anims and S.av_anims ~= 0 and memory.read_u32_le(sa + 0x08) ~= S.av_anims then
-          memory.write_u32_le(sa + 0x08, S.av_anims)                    -- sprite.anims
-        end
-        local attr2 = memory.read_u16_le(sa + 0x04)
-        if (attr2 & 0xF000) ~= (15 << 12) then
-          memory.write_u16_le(sa + 0x04, (attr2 & 0x0FFF) | (15 << 12)) -- OBJ palette slot 15
-        end
-        -- LAYERING: replicate the engine's per-frame OE subpriority (sElevationToSubpriority[elev] +
-        -- screen-Y term + 1) so the ghost sorts in front/behind the player by depth, not always on top.
-        local pelev = memory.read_u8(poe + 0x0B) & 0x0F
-        local ccy = memory.read_s8(sa + 0x29)                       -- centerToCornerVecY
-        local yy = (memory.read_s16_le(sa + 0x22) - ccy + memory.read_s16_le(0x02021BCA) + 8) & 0xFF
-        yy = (16 - (yy >> 4)) << 1
-        memory.write_u8(sa + 0x43, ((ELEV2SUB[pelev] or 115) + yy + 1) & 0xFF)
-        if gsid ~= S.last_gsid then                                     -- respawn -> re-DMA new tiles now
-          memory.write_u8(sa + 0x3F, memory.read_u8(sa + 0x3F) | 0x04)  -- animBeginning
-          memory.write_u8(sa + 0x2C, memory.read_u8(sa + 0x2C) & 0xBF)  -- animPaused = 0
-          S.last_gsid = gsid
-        end
-      end
-    end
+    S.av_imgs, S.av_anims, S.av_pcol = g.imgs, g.anim, g.pcol
   end
 
   -- Mirror the partner's exact motion: post their WORLD-PIXEL position + facing + moving + live

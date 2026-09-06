@@ -16,6 +16,7 @@ Usage: python patch/tools/build.py [--rom <Radical Red.gba>]
 import argparse
 import glob
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -103,6 +104,11 @@ CFLAGS = ["-mthumb", "-mcpu=arm7tdmi", "-mtune=arm7tdmi", "-Os", "-ffreestanding
           "-mno-unaligned-access", "-Wall", "-std=c11"]
 
 
+def canonical_text_bytes(data):
+    """Git LF/CRLF checkouts have one native identity; raw hashes remain provenance."""
+    return data.replace(b"\r\n", b"\n")
+
+
 def md5(p):
     with open(p, "rb") as f:
         return hashlib.md5(f.read()).hexdigest()
@@ -133,6 +139,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rom", default=DEFAULT_RR)
     ap.add_argument("--no-verify-md5", action="store_true")
+    ap.add_argument("--output-dir", help="keep all generated ROM/UPS/build artifacts in this directory")
     ap.add_argument("--no-battle-calc", action="store_true",
                     help="skip folding in the RR4.1_Custom Battle Calc delta "
                          "(emit base-RR + SLink only)")
@@ -141,6 +148,8 @@ def main():
                          "emitted UPS is byte-identical to the committed dist/SLink-RR.ups. "
                          "Touches nothing in the tree.")
     args = ap.parse_args()
+    if args.output_dir:
+        BUILD = DIST = os.path.abspath(args.output_dir)
     committed_ups = os.path.join(DIST, "SLink-RR.ups")
     tmp = tempfile.mkdtemp(prefix="slink-build-") if args.check else None
     if args.check:
@@ -153,19 +162,43 @@ def main():
         sys.exit("toolchain missing: no arm-none-eabi-gcc in $SLINK_ARMGCC, "
                  "patch/vendor/armgcc/*/bin, or PATH")
 
-    obj = os.path.join(BUILD, "handlers.o")
+    native_sources = [os.path.join(SRC, "handlers.c")] + sorted(
+        path for path in glob.glob(os.path.join(SRC, "*.c")) if os.path.basename(path) != "handlers.c")
+    tracked_inputs = sorted(glob.glob(os.path.join(SRC, "*.c")) + glob.glob(os.path.join(SRC, "*.h"))
+                            + [os.path.join(SRC, "slink.ld"), __file__,
+                               os.path.join(PATCH, "..", "lua", "mailbox.lua")])
+    def sha256_file(path):
+        with open(path, "rb") as stream:
+            return hashlib.sha256(stream.read()).hexdigest()
+    input_hashes = {os.path.relpath(path, PATCH).replace(os.sep, "/"): sha256_file(path)
+                    for path in tracked_inputs}
+    canonical_hashes = {}
+    for path in tracked_inputs:
+        with open(path, "rb") as stream:
+            canonical_hashes[os.path.relpath(path, PATCH).replace(os.sep, "/")] = hashlib.sha256(
+                canonical_text_bytes(stream.read())).hexdigest()
+    compiler_path = shutil.which(GCC) or GCC
+    compiler_sha256 = sha256_file(compiler_path)
+    build_id = hashlib.sha256(json.dumps({"inputs": canonical_hashes, "compiler": compiler_sha256,
+                                         "flags": CFLAGS}, sort_keys=True).encode()).hexdigest()
+    layout_sha256 = canonical_hashes["src/native_mailbox.h"]
+    defines = [f'-DSLINK_NATIVE_BUILD_ID="{build_id}"',
+               f'-DSLINK_NATIVE_LAYOUT_SHA256="{layout_sha256}"']
+    objects = [os.path.join(BUILD, os.path.basename(path).replace(".c", ".o")) for path in native_sources]
     elf = os.path.join(BUILD, "handlers.elf")
     binf = os.path.join(BUILD, "handlers.bin")
     print("[1/7] compile")
-    run([GCC, *CFLAGS, "-c", os.path.join(SRC, "handlers.c"), "-o", obj])
+    for source, output in zip(native_sources, objects, strict=True):
+        run([GCC, *CFLAGS, *defines, "-c", source, "-o", output])
     print(f"[2/7] link @ {CODE_BASE:#x}")
     run([LD, "-T", os.path.join(SRC, "slink.ld"), "-e", "slink_hook",
-         "--no-warn-rwx-segments", obj, "-o", elf])
+         "--no-warn-rwx-segments", *objects, "-o", elf])
     print("[3/7] verify slink_hook address")
     # Every symbol the ROM-side rewrites need to point at. Missing one is fatal: it would mean a
     # detour or table word silently keeping its old target.
     WANTED = ("slink_hook", "slink_battletext_hook", "slink_backup_wrap",
-              "slink_startmenu_cb", "slink_setup_start_menu", "sSoulLinkLabel", "sSoulLinkDesc")
+              "slink_startmenu_cb", "slink_setup_start_menu", "sSoulLinkLabel", "sSoulLinkDesc",
+              "slink_native_descriptor")
     sym = {}
     for line in run([NM, elf]).splitlines():
         parts = line.split()
@@ -269,6 +302,27 @@ def main():
     with open(os.path.join(DIST, "SLink-RR.ups"), "wb") as f:
         f.write(ups)
     print(f"      SLink-RR.ups ({len(ups)} B) round-trip OK")
+    capabilities = {"receipts_v2": True, "payload_leases": True,
+                    "storage_guard_v2": True, "descriptor_v1": True, "reservation_echo_v2": True}
+    manifest = {"schema_version": 1, "abi": 2, "build_id": build_id,
+                "layout_sha256": layout_sha256, "descriptor_address": sym["slink_native_descriptor"],
+                "descriptor_size": 156, "descriptor_version": 1, "capability_mask": 31,
+                "capabilities": capabilities,
+                "capabilities_sha256": hashlib.sha256(json.dumps(capabilities, sort_keys=True,
+                                                                   separators=(",", ":")).encode()).hexdigest(),
+                "mailbox_address": 0x0203F800, "mailbox_size": 64, "storage_guard": 0xA2,
+                "native_inputs": input_hashes, "native_inputs_canonical": canonical_hashes,
+                "text_eol_policy": "CRLF normalized to LF for embedded build/layout identity; raw native_inputs are provenance",
+                "compiler_sha256": compiler_sha256, "flags": CFLAGS,
+                "base_rom_md5": src_md5, "base_rom_sha1": hashlib.sha1(clean).hexdigest(),
+                "base_rom_sha256": hashlib.sha256(clean).hexdigest(),
+                "rom_md5": hashlib.md5(patched).hexdigest(), "rom_sha1": hashlib.sha1(patched).hexdigest(),
+                "rom_sha256": hashlib.sha256(patched).hexdigest(),
+                "patch_sha256": hashlib.sha256(ups).hexdigest(),
+                "arena_ownership": "UNRESOLVED: overlaps dormant libc allocator; live instrumentation required"}
+    with open(os.path.join(BUILD, "native_manifest.json"), "w", encoding="utf-8") as stream:
+        json.dump(manifest, stream, indent=2, sort_keys=True)
+        stream.write("\n")
     if args.check:
         with open(committed_ups, "rb") as f:
             want = f.read()

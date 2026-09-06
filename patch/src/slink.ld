@@ -12,8 +12,11 @@ SECTIONS
     KEEP(*(.text.entry))   /* slink_hook lands exactly at CODE_BASE */
     *(.text*)
     *(.rodata*)
-    *(.data*)
   } > rom
 
+  .data : { *(.data*) } > rom
+  .bss (NOLOAD) : { *(.bss*) *(COMMON) } > rom
+  ASSERT(SIZEOF(.data) == 0, "SLink native .data is forbidden: use explicit verified state")
+  ASSERT(SIZEOF(.bss) == 0, "SLink native .bss/COMMON is forbidden: use explicit verified state")
   /DISCARD/ : { *(.ARM.exidx*) *(.ARM.attributes) *(.comment) *(.note*) }
 }

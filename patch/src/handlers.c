@@ -7,26 +7,9 @@
  *
  * Mailbox ABI v1 — see patch/src/ADDRESSES.md.
  */
-#include <stdint.h>
-typedef uint8_t u8; typedef uint16_t u16; typedef uint32_t u32;
-typedef int8_t s8; typedef int16_t s16; typedef int32_t s32;
-
-#define MAILBOX_ADDR 0x0203F800u
-#define SLNK_SIG     0x4B4E4C53u   /* 'SLNK' */
-#define ABI_VER      1
-
-typedef struct {
-    volatile u32 signature;    /* 0  */
-    volatile u16 abi_version;  /* 4  */
-    volatile u16 opcode;       /* 6  */
-    volatile u16 seq;          /* 8  */
-    volatile u16 status;       /* 10 */
-    volatile u16 ack_seq;      /* 12 */
-    volatile u16 reason;       /* 14 */
-    volatile u8  args[32];     /* 16 */
-    volatile u8  result[16];   /* 48 */
-} Mailbox;
-#define MB ((Mailbox*)MAILBOX_ADDR)
+#include "native_mailbox.h"
+#include "rr_storage_guard.h"
+#include "rr_presence_engine.h"
 
 enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
        OP_FORCE_MOVE_SLOT = 5, OP_SPAWN_PEER_NPC = 6, OP_DESPAWN_PEER_NPC = 7,
@@ -50,9 +33,9 @@ enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
                                      Deposit conversion, but removal is zero + SWAP-WITH-LAST (not
                                      shift) so survivors keep their slot indices (CFRU deferred
                                      battle writes target slots; mirrors Lua M.memorializeMon). */
-       OP_SHOW_INFO = 27 };       /* §6 SOULLINK info screen from the lines staged in SlinkInfo;
+       OP_SHOW_INFO = 27, OP_MOVE_BOX_MON = 28 };       /* §6 SOULLINK info screen from the lines staged in SlinkInfo;
                                      async, result[0] = 0 (A) / 0x7F (B) — the pagination signal */
-enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
+
 
 /* Armed forced-move state (controller-swap driver), EWRAM scratch past the mailbox. */
 typedef struct {
@@ -124,7 +107,7 @@ typedef struct {
     volatile u8  an;         /* 15 partner's live animNum (exact animation) */
     volatile u8  run;        /* 16 partner running/biking (speed: 1 px/frame walk, 2 px/frame run) */
     volatile u8  avatarDirty;/* 17 Lua sets when imgs/anims/palette changed; C applies + clears */
-    volatile u8  _pad1[2];   /* 18..19 align the u32 ptrs */
+    volatile u8  gfxHi, curGfxHi; /* 18..19: previously padding; complete RR graphics IDs */
     volatile u32 imgs;       /* 20 partner's live gSprites[sid].images ROM ptr (avatar override) */
     volatile u32 anims;      /* 24 partner's live gSprites[sid].anims  ROM ptr */
     volatile s32 dispx;      /* 28 interpolated x, world-px (PLAIN px — constant-velocity follow) */
@@ -134,10 +117,15 @@ typedef struct {
     volatile u8  leadpx;     /* 40 px extrapolated PAST a stale target while the partner is
                               *    still moving (<= GHOST_LEAD_CAP_PX); fresh targets absorb it.
                               *    Boot-zero = no lead = the old reach-and-pause behavior. */
+    volatile u8 paletteSlot, ownedSprite, lifecycle; /* 41..43: previous tail padding */
 } GhostState;
 #define GH ((GhostState *)0x0203F850u)
+_Static_assert(sizeof(GhostState) == 44, "ghost arena must not grow");
 #define GH_F_HAVE_C    0x01u
 #define GH_F_HAVE_DISP 0x02u
+#define GH_LIFE_OWNED 1u
+#define GH_LIFE_SUSPENDED 2u
+#define GH_LIFE_DEFERRED 3u
 /* Partner's live 16-colour OBJ palette (BGR555), decoded by Lua from the `pcol` wire field. Above
  * SLINK_BLOB_BUF (ends 0x0203FC58), below EWRAM end 0x0203FFFF; 2-aligned for u16 colour writes. */
 #define GHOST_PAL_BUF 0x0203FC60u
@@ -158,6 +146,7 @@ typedef struct {
     volatile u32 fieldCb;   /* captured overworld field callback2 (gMain.callback2) */
 } UiState;
 #define MENU ((UiState *)0x0203FC80u)
+_Static_assert(sizeof(UiState) == 12, "UI arena must not grow");
 
 /* In-battle notification state. The native FIELD message box (OP_SHOW_MESSAGE) can't open during a
  * battle, so SLink notifications that fire in battle (a linked mon KO'd, a shiny found mid-battle, ...)
@@ -382,11 +371,7 @@ typedef void (*CreateMon_t)(void *mon, u16 species, u8 level, u8 fixedIV,
                             u8 otIdType, u32 otId);
 #define CreateMon ((CreateMon_t)0x0803DA55u)
 
-/* int SpawnSpecialObjectEventParameterized(u8 gfxId, u8 movementBehavior, u8 localId,
- *      s16 x, s16 y, u8 elevation)  @ 0x0805E830 — spawns a real overworld NPC
- *      (engine owns its sprite/palette/VRAM/callback). x,y are camera-offset coords. */
-typedef int (*SpawnNpc_t)(u8 gfxId, u8 movement, u8 localId, s16 x, s16 y, u8 elevation);
-#define SpawnSpecialObjectEventParameterized ((SpawnNpc_t)0x0805E831u)
+/* Presence allocation uses the verified full RR template wrapper. */
 typedef void (*DestroySprite_t)(void *sprite);
 #define DestroySprite ((DestroySprite_t)0x08007281u)
 /* bool8 ShowFieldMessage(const u8 *str) @0x0806943C — native field message box.
@@ -531,6 +516,40 @@ static u32 player_oe(void)
  * sScriptContext2Enabled alone is NOT a sufficient gate: it's 0 inside those menu CB2s too. */
 static u8 on_field(void) { return R32(gMain + 0x04) == CB2_OVERWORLD; }
 
+/* Field storage is a checked transaction against current engine state. */
+static u8 rr_storage_field_ready(void)
+{
+    if (!on_field() || R8(sScriptContext2Enabled) || SW->active || MENU->pending) return 0;
+    if (R8(gPlayerAvatar + 5) >= 16 || !(R8(player_oe()) & 1)) return 0;
+    for (u32 i = 0; i < 16; i++)
+        if (rr_postbattle_writer_active((volatile const u8 *)(gTasks + i * 0x28))) return 0;
+    if (MB->args[23] == 0xC2) { /* durable preparation: recheck on the actual apply frame */
+        u32 player = player_oe();
+        if (R8(player + 0x0A) != MB->args[14] || R8(player + 0x09) != MB->args[15]
+            || R32(gMain + 4) != rr_guard_word(MB->args + 16)
+            || R8(sScriptContext2Enabled) != MB->args[20] || SW->active != MB->args[21]
+            || R8(gPlayerAvatar + 5) != MB->args[22]) return 0;
+    }
+    return 1;
+}
+static u8 rr_usable_mon(u32 mon)
+{
+    return R16(mon + 0x56) > 0 && !(R32(mon + 0x48) & (1u << 30));
+}
+static u8 rr_removal_safe(u8 slot, u8 count)
+{
+    if (count <= 1) return 0;
+    if (!rr_usable_mon(gPlayerParty + (u32)slot * MON_SIZE)) return 1;
+    for (u8 i = 0; i < count; i++)
+        if (i != slot && rr_usable_mon(gPlayerParty + (u32)i * MON_SIZE)) return 1;
+    return 0;
+}
+static void rr_storage_receipt(void)
+{
+    for (u32 i = 0; i < 8; i++) MB->result[i] = MB->args[4 + i];
+    /* Result bytes 8..15 are exclusively the echoed reservation ID. */
+}
+
 /* ---- engine object-event movement API (CFRU follower model; see ADDRESSES.md). The "EventObject"
  * names are CFRU's; identical to pokefirered "ObjectEvent". All take a struct EventObject *. ---- */
 typedef u8   (*OeSetMove_t)(void *oe, u8 movementActionId);   /* returns bool8 */
@@ -554,14 +573,12 @@ typedef void (*OeTurn_t)(void *oe, u8 dir);
 #define DIR_EAST  4u
 #define GHOST_SNAP_TILES 10  /* >this many tiles off -> snap instead of walking there */
 
+static void ghost_cb(void *s);
 static void ghost_remove(void);   /* defined below; drive_ui tears the ghost down when the trade scene starts */
 
 static void ack(u16 st, u16 reason)
 {
-    MB->reason  = reason;
-    MB->status  = st;
-    MB->ack_seq = MB->seq;
-    MB->opcode  = 0;        /* consumed */
+    native_mailbox_complete(MB, MB->seq, st, reason);
 }
 
 /* Runs in place of the menu controller (we swapped gBattlerControllerFuncs[b] to here),
@@ -584,7 +601,7 @@ static void slink_force_controller(void)
     u32 mask = (1u << b) | (1u << (b + 4)) | (1u << (b + 8)) | (1u << (b + 12)) | 0xF0000000u;
     R32(gBattleExecBuffer) &= ~mask;
     AM->armed = 0;
-    MB->status = ST_OK; MB->reason = 0; MB->ack_seq = AM->seq; MB->opcode = 0;
+    native_mailbox_complete(MB, AM->seq, ST_OK, 0);
 }
 
 /* Every frame while armed: when the player's action/move menu is up, swap its
@@ -601,7 +618,7 @@ static void drive_force_move(void)
     }
     if (++AM->frames > 600) {
         AM->armed = 0;
-        MB->status = ST_FAIL; MB->reason = 10; MB->ack_seq = AM->seq; MB->opcode = 0;
+        native_mailbox_complete(MB, AM->seq, ST_FAIL, 10);
     }
 }
 
@@ -1020,8 +1037,7 @@ static void ui_done(u16 st, u8 result0)
 {
     MENU->pending = 0;
     MB->result[0] = result0;
-    MB->status = st; MB->reason = (st == ST_OK) ? 0 : 12;
-    MB->ack_seq = MENU->seq; MB->opcode = 0;
+    native_mailbox_complete(MB, MENU->seq, st, (st == ST_OK) ? 0 : 12);
 }
 
 /* Poll whichever async native-UI op OP_SHOW_MENU / OP_CHOOSE_PARTY_MON / OP_TRADE_SCENE set up, and
@@ -1031,14 +1047,29 @@ static void drive_ui(void)
 {
     if (!MENU->pending) return;
 
+    if (MENU->kind == 4) { /* field-message text lease; ACK once lock is observed */
+        u8 locked = R8(sScriptContext2Enabled);
+        if (MENU->phase == 1) {
+            if (locked) {
+                MENU->phase = 2; MENU->frames = 0;
+                MB->result[0] = 1;
+                native_mailbox_complete(MB, MENU->seq, ST_OK, 0);
+            } else if (MENU->frames < 60) MENU->frames++;
+            else MB->reason = 12; /* unresolved: retain owner and require reconciliation */
+        } else if (!locked && on_field()) {
+            MENU->pending = 0; /* no second ACK: a later command may now own the mailbox */
+        }
+        return;
+    }
     if (MENU->kind == 1) {                         /* yes/no menu: lockall sets sScriptContext2Enabled */
         u8 active = R8(sScriptContext2Enabled);
         if (MENU->phase == 1) {                    /* waiting for the script to lock the field */
             if (active) { MENU->phase = 2; MENU->frames = 0; }
-            else if (++MENU->frames > 60) ui_done(ST_FAIL, 0);
+            else if (MENU->frames < 60) MENU->frames++;
+            else MB->reason = 12; /* unresolved: retain owner and require reconciliation */
             return;
         }
-        if (active) { if (++MENU->frames > 1800) ui_done(ST_FAIL, 0); return; }
+        if (active) return; /* live script owns its buffers until it actually releases */
         ui_done(ST_OK, (u8)R16(gSpecialVar_Result));   /* 1=YES 0=NO/B */
         return;
     }
@@ -1046,7 +1077,7 @@ static void drive_ui(void)
     if (MENU->kind == 2) {                         /* party chooser: Var8004 sentinel 0xFF -> 0-7 */
         u16 v = R16(gSpecialVar_0x8004);
         if (v <= 7) ui_done(ST_OK, (u8)v);         /* 0-5 chosen, 7 = cancel */
-        else if (++MENU->frames > 1800) ui_done(ST_FAIL, 0);
+        /* No timeout releases an unresolved party-menu owner. */
         return;
     }
 
@@ -1055,7 +1086,8 @@ static void drive_ui(void)
         u32 cb = R32(gMain + 0x04);
         if (MENU->phase == 0) {                    /* waiting for the scene to take over the screen */
             if (MENU->fieldCb && cb != MENU->fieldCb) { MENU->phase = 1; MENU->frames = 0; }
-            else if (++MENU->frames > 180) ui_done(ST_FAIL, 0);   /* never started */
+            else if (MENU->frames < 180) MENU->frames++;
+            else MB->reason = 12; /* never observed start: do not free an uncertain scene */
             return;
         }
         /* The in-game-trade text reads the RECEIVED-mon name + OT from sInGameTrades[Var8004] (our stale
@@ -1068,7 +1100,7 @@ static void drive_ui(void)
           for (u32 i = 0; i < 11; i++) v3[i] = nk[i];
           for (u32 i = 0; i < 8;  i++) v1[i] = ot[i]; }
         if (cb == MENU->fieldCb) ui_done(ST_OK, 0);               /* back on the field -> done */
-        else if (++MENU->frames > 5400) ui_done(ST_FAIL, 0);      /* ~90 s safety */
+        /* A running scene retains its lease until verified field return. */
     }
 }
 
@@ -1091,7 +1123,9 @@ static void check_peer_interact(void)
                                                            * so running/bumping into the ghost can't
                                                            * trigger the dialogue + lock input; talk is a
                                                            * deliberate stationary A-press (waving). */
+    if (SS->pi_oe >= 16) return;
     u32 g = gObjectEvents + (u32)SS->pi_oe * OE_STRIDE;
+    if (R8(g + 8) != 0xF0 && R8(g + 8) != TN_LOCALID) return;
     if (!(R8(g) & 1)) return;                             /* ghost active? */
     int px = (s16)R16(p + 0x10), py = (s16)R16(p + 0x12);
     u8  f  = R8(p + 0x18) & 0x0F;
@@ -1114,19 +1148,17 @@ static void check_peer_interact(void)
  * Never RemoveEventObject a slot a real NPC now owns (post-warp the slot is reused). */
 static void ghost_remove(void)
 {
-    if (GH->oeId != 0xFF) {
-        u32 g = gObjectEvents + (u32)GH->oeId * OE_STRIDE;
-        if ((R8(g) & 1) && R8(g + 0x08) == GH->localId) {
-            RemoveEventObject((void *)g);   /* frees the sprite (this build's fn = RemoveObjectEvent
-                                             * INTERNAL — it does NOT clear the OE active flag) */
-            R8(g) = 0;                      /* so explicitly deactivate the object-event; otherwise the
-                                             * collision OE LINGERS as an invisible wall after a clear
-                                             * (only masked before because map changes reload all OEs) */
-        }
-        GH->oeId = 0xFF;
-    }
-    GH->flags = 0;
-    SS->pi_armed = 0;
+    u8 old = GH->oeId, old_pal = GH->paletteSlot, tracked = GH->lifecycle;
+    u8 released = 0xFF;
+    if (old < 16) rr_remove_presence(old, 0xF0, (u32)&ghost_cb, &released);
+    /* An engine sprite reset can discard sprite memory without releasing our
+     * private reference. Type6 cannot be reassigned by built-in palette lookup;
+     * release only a still-valid exclusive reference, never a reused engine slot. */
+    if (tracked && released != old_pal && rr_palette_private_owned(old_pal)) rr_palette_release(old_pal);
+    rr_release_private_orphan(old_pal);
+    GH->oeId = 0xFF; GH->ownedSprite = 0xFF; GH->paletteSlot = 0xFF;
+    GH->flags = 0; GH->lifecycle = 0;
+    if (SS->pi_oe == old) SS->pi_armed = 0;
 }
 
 /* Inert sprite callback: we neutralize the ghost OE's movement callback so the engine never moves it
@@ -1141,7 +1173,7 @@ static void ghost_cb(void *s) { (void)s; }
  * anims/paletteNum are set on change; the slot-15 colours are re-stamped each frame so the engine's
  * tint/fade pass can't drop them (v1 shows the partner's true colours — day/night tint on the avatar
  * is a documented follow-up). The partner's on-foot frame is 16x32, matching the stand-in's tiles. */
-#define GHOST_PAL_SLOT 15u
+#define GHOST_PAL_SLOT ((u32)GH->paletteSlot)
 #define OBJ_PLTT_RAM   0x05000200u   /* live OBJ palette RAM; the engine DMAs Faded -> here each frame */
 
 /* Unsigned divide. The blob links handlers.o ALONE — no libgcc — so `/` on a runtime value emits an
@@ -1217,33 +1249,44 @@ static void apply_tint(void)
     }
 }
 
-static void apply_avatar(u32 g)
+static u8 apply_avatar(u32 g)
 {
-    if (!GH->imgs) return;                         /* no partner avatar received yet */
-    /* The imgs/anims ptrs are PEER-SUPPLIED (broadcast by the partner's client). Only ever write
-     * ROM pointers into the sprite struct — a corrupt/hostile value would send AnimateSprite reading
-     * arbitrary memory. 32 MB ROM window: [0x08000000, 0x0A000000). */
-    if (GH->imgs < 0x08000000u || GH->imgs >= 0x0A000000u) return;
-    if (GH->anims && (GH->anims < 0x08000000u || GH->anims >= 0x0A000000u)) return;
+    if (GH->paletteSlot >= 16 || !rr_palette_private_owned(GH->paletteSlot)) return 0;
+    if (!GH->imgs) return 1; /* valid native stand-in until a complete avatar arrives */
     u8 sid = R8(g + OE_SPRITE_ID);
-    if (sid >= SPR_COUNT) return;
+    if (sid >= SPR_COUNT) return 0;
     u32 spr = gSprites + (u32)sid * SPR_STRIDE;
-    R32(spr + SPR_IMAGES) = GH->imgs;              /* sprite.images — re-assert every frame */
-    if (GH->anims) R32(spr + SPR_ANIMS) = GH->anims;  /* sprite.anims */
+    u16 gfx = (u16)(R8(g + 5) | ((u16)R8(g + 0x23) << 8));
+    u32 info = rr_presence_graphics(gfx);
+    if (!info || GH->imgs != R32(info + 0x1C) || GH->anims != R32(info + 0x18)) return 0;
+    u8 animation = GH->mv ? GH->an : (GH->face >= 1 && GH->face <= 4 ? GH->face - 1 : 0);
+    if (!rr_avatar_fits(GH->imgs, GH->anims, animation, R16(spr + RR_GHOST_ALLOCATION_OFFSET))) return 0;
+    R32(spr + SPR_IMAGES) = GH->imgs;
+    R32(spr + SPR_ANIMS) = GH->anims;
     if (GH->avatarDirty) {
-        R8(spr + 0x3F) |= 0x04;                    /* animBeginning -> re-DMA frame0 from new imgs */
+        R8(spr + 0x3F) |= 0x04;
+        R8(spr + 0x2C) &= (u8)~0x40u;
         GH->avatarDirty = 0;
     }
-    /* keep the sprite on our dedicated palette slot every frame (engine sets paletteNum only at
-     * SetGraphicsId, but re-assert defensively against reflection/ground-effect repaints). */
-    u16 attr2 = R16(spr + 0x04);
-    R16(spr + 0x04) = (u16)((attr2 & (u16)~0xF000u) | (GHOST_PAL_SLOT << 12));
+    /* PaletteNum is assigned by the ownership transfer, never stolen by a repaint. */
+    if ((R16(spr + 4) >> 12) != GH->paletteSlot) return 0;
     apply_tint();
+    return 1;
 }
 
 /* idle/walk animNum from facing (pret ANIM_STD: idle face = f-1 (0..3 S/N/W/E); walk = f+3 (4..7)). */
 static u8 idle_anim(u8 f) { return (f >= 1 && f <= 4) ? (u8)(f - 1) : 0; }
 static u8 walk_anim(u8 f) { return (f >= 1 && f <= 4) ? (u8)(f + 3) : 4; }
+
+static void ghost_depth(u32 sprite, u8 elevation)
+{
+    static const u8 priority[16] = {2,2,2,2,1,2,1,2,1,2,1,2,1,0,0,2};
+    static const u8 sub[16] = {115,115,83,115,83,115,83,115,83,115,83,115,83,0,0,115};
+    u32 yy = ((s16)R16(sprite + 0x22) - (s8)R8(sprite + 0x29)
+               + (s16)R16(gSpriteCoordOffsetY) + 8) & 0xFF;
+    R8(sprite + 0x43) = (u8)(sub[elevation] + ((16 - (yy >> 4)) << 1) + 1);
+    R16(sprite + 4) = (u16)((R16(sprite + 4) & (u16)~0x0C00u) | ((u16)priority[elevation] << 10));
+}
 
 /* Engine-driven peer ghost (proven Lua-clone model, in C): spawn a real OE for the sprite slot /
  * collision / palette, NEUTRALIZE its callback, then each frame drive pos1 (sub-pixel LERP toward
@@ -1268,6 +1311,14 @@ static void drive_ghost(void)
      * otherwise. The ghost OE is preserved across menus, so the lifecycle below RESUMES on return. */
     if (R32(gMain + 4) != CB2_OVERWORLD) return;
 
+    /* Presence-OFF trade mode and a partner ghost cannot share pi_oe or the
+     * interaction entry point. Retire ours before the PC NPC driver can spawn. */
+    if (TN->enable) {
+        GH->active = 0;
+        if (GH->oeId != 0xFF) ghost_remove();
+        return;
+    }
+
     /* A native trade scene is pending or about to take over: tear the ghost down NOW and DON'T respawn
      * until the scene op finishes. This branch runs while the field is still active (between the client
      * dispatching OP_TRADE_SCENE and the scene CB2 actually grabbing the screen), so RemoveEventObject
@@ -1285,26 +1336,26 @@ static void drive_ghost(void)
      * by some teardown path that didn't fully clean up (scripts/cutscenes/slot-reassignment/warps).
      * Free its sprite + deactivate it. This catch-all stops "invisible collision" from accumulating
      * after dialogue and other scripted events, regardless of how the orphan was created. */
+    u8 removed_orphan = 0;
     for (u32 i = 0; i < 16; i++) {
         if (i == GH->oeId) continue;
         u32 oo = gObjectEvents + i * OE_STRIDE;
-        if ((R8(oo) & 1) && R8(oo + 0x08) == 0xF0u) {
-            RemoveEventObject((void *)oo);   /* free the sprite */
-            R8(oo) = 0;                       /* + deactivate (this build's RemoveEventObject won't) */
-        }
+        if ((R8(oo) & 1) && R8(oo + 0x08) == 0xF0u)
+            removed_orphan |= rr_remove_presence((u8)i, 0xF0, (u32)&ghost_cb, 0);
     }
 
+    if (removed_orphan) return; /* attached engine effects must see the parent inactive */
     if (!GH->active) { if (GH->oeId != 0xFF) ghost_remove(); return; }
 
     u32 player = player_oe();                     /* the player's ACTUAL slot (not always 0) */
     u8 pg = R8(player + 0x0A), pn = R8(player + 0x09);
 
     /* (a) map change -> the warp rebuilt all OE slots; clean-remove ours and re-spawn on the new map. */
-    if (GH->oeId != 0xFF && (pg != GH->pmapGroup || pn != GH->pmapNum)) ghost_remove();
+    if (GH->oeId != 0xFF && (pg != GH->pmapGroup || pn != GH->pmapNum)) { ghost_remove(); return; }
     GH->pmapGroup = pg; GH->pmapNum = pn;
 
     /* (b) gfx change (partner mounted bike / surfed / fished) -> re-spawn with the new sprite. */
-    if (GH->oeId != 0xFF && GH->gfxId != GH->curGfx) ghost_remove();
+    if (GH->oeId != 0xFF && (GH->gfxId != GH->curGfx || GH->gfxHi != GH->curGfxHi)) { ghost_remove(); return; }
 
     /* (c) spawn once, adjacent to the player; neutralize the callback so we own pos1. */
     if (GH->oeId == 0xFF) {
@@ -1315,14 +1366,14 @@ static void drive_ghost(void)
          * makes it solid (matching the player's elevation) only once it's on-screen + actually following. */
         u8  pelev = R8(player + 0x0B) & 0x0F;
         u8  elev  = (u8)(pelev == 0x0F ? 0x0E : 0x0F);
-        int oe = SpawnSpecialObjectEventParameterized(GH->gfxId, /*MOVEMENT_TYPE_NONE*/0,
+        int oe = rr_spawn_presence((u16)(GH->gfxId | ((u16)GH->gfxHi << 8)), /*MOVEMENT_TYPE_NONE*/0,
                                                       GH->localId, px, (s16)(py + 1), elev);
-        if (oe >= 16) return;                    /* no free slot on this map; retry next frame */
-        GH->oeId = (u8)oe; GH->curGfx = GH->gfxId;
+        if (oe >= 16) { GH->lifecycle = GH_LIFE_DEFERRED; return; }
+        GH->oeId = (u8)oe; GH->curGfx = GH->gfxId; GH->curGfxHi = GH->gfxHi;
         u8 sid = R8(gObjectEvents + (u32)oe * OE_STRIDE + 0x04);
         if (sid < 64) {
             u32 spr = gSprites + (u32)sid * SPR_STRIDE;
-            R32(spr + 0x1C) = ((u32)&ghost_cb) | 1u;   /* neutralize the movement callback */
+            /* Callback changes only after a balanced palette ownership transfer. */
             R8(spr + 0x3E) |= 0x02;                    /* coordOffset-enabled (scroll with the map) */
             R8(spr + 0x3E) |= 0x04;                    /* INVISIBLE until a fresh camera baseline is
                                                         * cached + first proper placement — avoids the
@@ -1332,20 +1383,40 @@ static void drive_ghost(void)
         GH->flags = 0;                           /* recompute C + disp (snap) on first drive */
         GH->snap = 1;
         GH->avatarDirty = 1;                     /* re-stamp the avatar onto the fresh sprite slot */
-        SS->pi_oe = (u8)oe; SS->pi_armed = 1;    /* auto-arm talk-to-ghost on the live slot */
+        u8 palette;
+        if (!rr_adopt_ghost_sprite((u8)oe, 0xF0, (u32)&ghost_cb, &palette)) {
+            ghost_remove(); GH->lifecycle = GH_LIFE_DEFERRED; return;
+        }
+        GH->paletteSlot = palette; GH->ownedSprite = sid; GH->lifecycle = GH_LIFE_OWNED;
         return;
     }
 
     u32 g = gObjectEvents + (u32)GH->oeId * OE_STRIDE;
 
-    /* (d) slot freed/reassigned under us -> forget, respawn next frame. */
-    if (!(R8(g) & 1) || R8(g + 0x08) != GH->localId) { GH->oeId = 0xFF; return; }
-    u8 gsid = R8(g + 0x04);
-    if (gsid >= 64) { GH->oeId = 0xFF; return; }
+    /* Field returns can rebuild the sprite while preserving its OE. Re-adopt
+     * that fresh engine allocation; never decrement cached prior-scene slots. */
+    u8 gsid = rr_object_sprite(GH->oeId, 0xF0);
+    if (gsid >= 64) { ghost_remove(); return; }
     u32 gspr = gSprites + (u32)gsid * SPR_STRIDE;
-
-    /* render the PARTNER's avatar (their sprite ptrs + true colours), not the local player's. */
-    apply_avatar(g);
+    u8 palette;
+    if (rr_ghost_sprite_owned(GH->oeId, 0xF0, (u32)&ghost_cb) >= 64) {
+        ghost_remove(); return;
+    }
+    if (!rr_adopt_ghost_sprite(GH->oeId, 0xF0, (u32)&ghost_cb, &palette)) {
+        ghost_remove(); GH->lifecycle = GH_LIFE_DEFERRED; return;
+    }
+    if (GH->lifecycle != GH_LIFE_OWNED || GH->ownedSprite != gsid) {
+        GH->flags = 0; GH->snap = 1; GH->avatarDirty = 1;
+    }
+    GH->paletteSlot = palette; GH->ownedSprite = gsid; GH->lifecycle = GH_LIFE_OWNED;
+    if (!apply_avatar(g)) {
+        R8(gspr + 0x3E) |= 0x04;
+        u8 pe = R8(player + 0x0B) & 15;
+        u8 hidden_elevation = pe == 15 ? 14 : 15;
+        R8(g + 0x0B) = hidden_elevation | (hidden_elevation << 4);
+        SS->pi_armed = 0;
+        return;
+    }
 
     /* (C baseline) screen = sprite.pos1 + coordOffset; a sprite at world-px W has pos1 = W + C where
      * C = playerSprite.pos1 - playerTile*16. Cache C while the player is tile-aligned (idle) — the
@@ -1440,6 +1511,8 @@ static void drive_ghost(void)
         s16 gtx = (s16)((wpx + 8) >> 4), gty = (s16)((wpy + 8) >> 4);
         R16(g + 0x10) = (u16)gtx; R16(g + 0x12) = (u16)gty;   /* collision/interact tile = drawn tile */
         R8(g + 0x0B) = (u8)(pelev | (pelev << 4));    /* match player elevation -> SOLID */
+        ghost_depth(gspr, pelev);
+        SS->pi_oe = GH->oeId; SS->pi_armed = 1;
     } else {
         u8 ge = (u8)(pelev == 0x0F ? 0x0E : 0x0F);    /* mismatched, nonzero -> pass-through */
         R8(gspr + 0x3E) |= 0x04;                      /* invisible */
@@ -1590,8 +1663,7 @@ static void tn_remove(void)
     if (oe == 0xFF) return;
     u32 g = gObjectEvents + (u32)oe * OE_STRIDE;
     if ((R8(g) & 1) && R8(g + 0x08) == TN_LOCALID) {
-        RemoveEventObject((void *)g);   /* free sprite */
-        R8(g) = 0;                       /* + deactivate (this build's RemoveEventObject won't) */
+        rr_remove_presence(oe, TN_LOCALID, (u32)&ghost_cb, 0);
     }
     /* Only disarm if the talk slot is still OURS — never stomp the ghost's arm (the ghost arms once,
      * at spawn; clearing it here would permanently kill talk-to-ghost on a presence ON transition). */
@@ -1627,7 +1699,7 @@ static void drive_trade_npc(void)
     /* Spawn once at the fixed counter tile (solid, elev 3) and arm talk on the live slot. */
     if (TN->oeId == 0xFF) {
         if (R8(sScriptContext2Enabled)) return;   /* not mid-dialogue / warp fade */
-        int oe = SpawnSpecialObjectEventParameterized(PCNPC_GFX, PCNPC_MOVEMENT,
+        int oe = rr_spawn_presence(PCNPC_GFX, PCNPC_MOVEMENT,
                                                       TN_LOCALID, PCNPC_TILE_X, PCNPC_TILE_Y, /*elev*/3);
         if (oe >= 16) return;                      /* no free slot on this map; retry next frame */
         TN->oeId  = (u8)oe;
@@ -1789,13 +1861,8 @@ void slink_hook(void)
     MB->signature   = SLNK_SIG;   /* presence beacon, every frame */
     MB->abi_version = ABI_VER;
 
-    /* Capture the overworld FIELD callback while the player is walking (you can't walk in a menu /
-     * battle / trade scene), then gate the sprite-touching drivers off when we're NOT on the field —
-     * so the native party menu / trade scene CB2 (which repurpose gSprites) aren't corrupted by the
-     * ghost driver. The async pollers (drive_ui) only read state + the mailbox, so they always run. */
-    { u32 p = player_oe();
-      if ((R8(p) & 1) && !(R8(p) & 0x80)) MENU->fieldCb = R32(gMain + 0x04); }
-    u8 field_active = (MENU->fieldCb == 0) || (R32(gMain + 0x04) == MENU->fieldCb);
+    /* Never infer context from a retained OE: scenes reuse those slots. */
+    u8 field_active = on_field();
 
     drive_force_move();           /* runs the armed controller-swap each frame */
     drive_swap_state();           /* ends the borrowed-party "Party Freeze" window (begin is a BL hook) */
@@ -1806,23 +1873,19 @@ void slink_hook(void)
         drive_trade_npc();        /* Pokémon-Center trade NPC (presence-OFF trade entry point) */
         check_peer_interact();    /* talk-to-ghost / talk-to-NPC detection (generic on SS->pi_oe) */
         drive_info();             /* open the SOULLINK screen when the START-menu row was chosen */
-    } else if (GH->oeId != 0xFF && GH->oeId < 16) {
-        /* In a menu/scene CB2 (party picker / trade scene), the engine repurposes gSprites — hide our
-         * ghost sprite so its tiles can't bleed into the menu (the initiator's "sprite glitch"). It's
-         * re-shown by drive_ghost when the field is active again. */
-        u32 g = gObjectEvents + (u32)GH->oeId * OE_STRIDE;
-        if ((R8(g) & 1) && R8(g + 0x08) == GH->localId) {
-            u8 sid = R8(g + 0x04);
-            if (sid < 64) R8(gSprites + (u32)sid * SPR_STRIDE + 0x3E) |= 0x04;   /* invisible */
-        }
+    } else if (GH->oeId < 16) {
+        /* Mark only our own metadata; do not touch sprite/palette memory here. */
+        GH->lifecycle = GH_LIFE_SUSPENDED;
     }
+
     drive_ui();                   /* async native UI (menu / party chooser / trade scene) publisher */
 
     u16 op = MB->opcode;
-    if (op == 0) return;          /* idle */
+    if (op == 0 || MB->status != ST_BUSY) return; /* no command or unretired receipt */
 
     switch (op) {
     case OP_PING:
+        native_mailbox_describe(MB);
         break;
 
     case OP_FORCE_FAINT: {
@@ -1903,12 +1966,13 @@ void slink_hook(void)
     }
 
     case OP_SPAWN_PEER_NPC: {     /* args: [0]=gfxId [1]=localId [2..3]=x [4..5]=y [6]=movement */
+        if (!on_field()) { ack(ST_FAIL, 20); return; }
         u8  gfx     = MB->args[0];
         u8  localId = MB->args[1];
         s16 x       = (s16)(MB->args[2] | (MB->args[3] << 8));
         s16 y       = (s16)(MB->args[4] | (MB->args[5] << 8));
         u8  movement = MB->args[6];
-        int oe = SpawnSpecialObjectEventParameterized(gfx, movement, localId, x, y, /*elev*/3);
+        int oe = rr_spawn_presence(gfx, movement, localId, x, y, /*elev*/3);
         MB->result[0] = (u8)oe;   /* object-event id (>=16 = failed) */
         break;
     }
@@ -1921,9 +1985,12 @@ void slink_hook(void)
                                                            the script under the wrong CB2 and still
                                                            ack "shown" — the client then skips its
                                                            Lua fallback and the message is lost */
-        run_sign_msgbox();        /* DISMISSABLE native dialogue (not bare ShowFieldMessage) */
-        MB->result[0] = 1;
-        break;
+        if (MENU->pending) { MB->result[0] = 0; break; }
+        run_sign_msgbox();
+        MENU->kind = 4; MENU->phase = 1; MENU->seq = MB->seq;
+        MENU->frames = 0; MENU->pending = 1;
+        MB->opcode = 0; /* asynchronous opened receipt, then a separate text lease */
+        return;
     }
 
     case OP_PLAY_FANFARE: {       /* args: [0..1] = songId (jingle: link-formed / trade-complete) */
@@ -1940,6 +2007,7 @@ void slink_hook(void)
                                      ack ST_BUSY now; drive_ui publishes the choice (result[0]) when
                                      the field script resolves. The menuing foundation for talk-to-
                                      partner actions (Trade / status / ...). */
+        if (MENU->pending) { ack(ST_FAIL, 4); return; }
         if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }  /* a box/script already up */
         if (!on_field()) { ack(ST_FAIL, 3); return; }                 /* menu/battle CB2 -> corruption */
         run_yesno_msgbox();
@@ -1953,6 +2021,7 @@ void slink_hook(void)
                                      that stays open under the list (the talk-NPC's line). ASYNC;
                                      lockall-bracketed like OP_SHOW_MENU, so drive_ui kind 1 publishes
                                      the chosen index (result[0]; 0x7F = cancel). */
+        if (MENU->pending) { ack(ST_FAIL, 4); return; }
         if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
         if (!on_field()) { ack(ST_FAIL, 3); return; }
         if (!choices_ok()) { ack(ST_FAIL, 2); return; }   /* must be caught HERE — see choices_ok */
@@ -1967,6 +2036,7 @@ void slink_hook(void)
                                      contend with ghost/trade/msgbox traffic for nothing); args[0] is
                                      just the page number to display. ASYNC, lockall-bracketed, so
                                      drive_ui kind 1 publishes result[0] = 0 (A) / 0x7F (B). */
+        if (MENU->pending) { ack(ST_FAIL, 4); return; }
         if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
         if (!on_field()) { ack(ST_FAIL, 3); return; }
         if (!info_lines_ok()) { ack(ST_FAIL, 2); return; }   /* nothing staged, or a slot with no
@@ -1982,6 +2052,7 @@ void slink_hook(void)
     case OP_CHOOSE_PARTY_MON: {   /* native "Choose a POKeMON" party menu. ASYNC: ack ST_BUSY; drive_ui
                                      publishes the chosen slot (result[0]=0-5, or 7=cancel) once the menu
                                      closes (Var8004). Used to pick WHICH linked mon to trade. */
+        if (MENU->pending) { ack(ST_FAIL, 4); return; }
         if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
         if (!on_field()) { ack(ST_FAIL, 3); return; }
         R16(gSpecialVar_0x8004) = 0x00FF;    /* sentinel -> the menu overwrites it with 0-5 / 7 */
@@ -1995,11 +2066,12 @@ void slink_hook(void)
                                      gPlayerParty[slot] with the mon staged in gEnemyParty[0] (caller
                                      must OP_SET_ENEMY_PARTY count=1 first). ASYNC: ack ST_BUSY; drive_ui
                                      acks ST_OK when the scene returns to the field. */
+        if (MENU->pending) { ack(ST_FAIL, 4); return; }
         if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
         if (MB->args[0] > 5) { ack(ST_FAIL, 2); return; }
         if (!on_field()) { ack(ST_FAIL, 3); return; }            /* also keeps fieldCb from caching a
                                                                   * transient menu CB2 (stale-cb hang) */
-        if (!MENU->fieldCb) MENU->fieldCb = R32(gMain + 0x04);   /* dispatched from the field */
+        MENU->fieldCb = CB2_OVERWORLD;   /* dispatched from the field */
         run_trade_scene(MB->args[0]);
         MENU->kind = 3; MENU->phase = 0; MENU->seq = MB->seq; MENU->frames = 0; MENU->pending = 1;
         MB->status = ST_BUSY; MB->opcode = 0;
@@ -2017,32 +2089,24 @@ void slink_hook(void)
         break;
 
     case OP_DESPAWN_PEER_NPC: {   /* args: [0]=objectEventId */
+        if (!on_field()) { ack(ST_FAIL, 20); return; }
         u8 oe = MB->args[0];
         if (oe >= 16) { ack(ST_FAIL, 2); return; }
         u32 oebase = gObjectEvents + (u32)oe * OE_STRIDE;
         if (!(R8(oebase) & 1)) { ack(ST_FAIL, 3); return; }   /* OE not active: spriteId is garbage */
         u8 spriteId = R8(oebase + OE_SPRITE_ID);
         if (spriteId >= SPR_COUNT) { ack(ST_FAIL, 4); return; }  /* never index gSprites OOB */
-        DestroySprite((void *)(gSprites + (u32)spriteId * SPR_STRIDE));
-        R8(oebase + 0x00) = 0;    /* clear active flag (RemoveObjectEventInternal) */
+        if (!rr_remove_presence(oe, R8(oebase + 8), (u32)&ghost_cb, 0)) { ack(ST_FAIL, 4); return; }
         break;
     }
 
-    case OP_GHOST_SPAWN:          /* engine-driven ghost: args [0]=gfxId [1]=localId. The frame */
-        ghost_remove();           /* CLEAN UP any existing ghost FIRST. A re-spawn (client reconnect / */
-                                  /* Lua reload re-inits the receiver -> re-sends OP_GHOST_SPAWN) used */
-                                  /* to just set oeId=0xFF, ORPHANING the live OE as a permanent */
-                                  /* invisible wall "where the player was at connection". Now removed. */
-        GH->gfxId  = MB->args[0]; /* hook (drive_ghost) spawns + drives it; Lua then posts the */
-        GH->localId = MB->args[1];/* partner's world-px position + avatar into GhostState. */
-        GH->oeId   = 0xFF;
-        GH->curGfx = 0xFF;        /* force a spawn next frame */
-        GH->flags = 0;            /* recompute C + disp on first drive */
-        GH->snap = 0;             /* the spawn branch arms the first snap once the OE exists */
-        GH->avatarDirty = 0; GH->imgs = 0; GH->anims = 0;  /* no partner avatar until Lua posts one */
-        GH->pmapGroup = R8(player_oe() + 0x0A);     /* seed map so frame 1 doesn't false-trigger */
-        GH->pmapNum   = R8(player_oe() + 0x09);
-        GH->active = 1;
+    case OP_GHOST_SPAWN: /* desired-state update only; field driver owns all teardown */
+        if (MB->args[1] != 0xF0) { ack(ST_FAIL, 2); return; }
+        GH->gfxId = MB->args[0]; GH->gfxHi = MB->args[2];
+        GH->localId = 0xF0;
+        GH->active = 1; GH->snap = 1; GH->avatarDirty = 1;
+        /* Do not erase avatar staging, current owner, or palette leases. A queued
+         * spawn can arrive after a scene took over the screen. */
         break;
 
     case OP_GHOST_CLEAR:          /* drive_ghost does the clean RemoveEventObject next frame */
@@ -2080,6 +2144,7 @@ void slink_hook(void)
                                      Lua scans the box for the key (a READ) and passes the located slot +
                                      the target party slot (= current count). The engine conversion runs
                                      the real BoxMonToMon/PP/stats math, so the mon comes out fully formed. */
+        if (!rr_storage_field_ready()) { ack(ST_FAIL, RR_STORAGE_CONTEXT); return; }
         u8 box = MB->args[0], pos = MB->args[1], ps = MB->args[2];
         if (box >= TOTAL_BOXES_COUNT || pos >= IN_BOX_COUNT || ps > 5) { ack(ST_FAIL, 2); return; }
         u32 comp = R32(sPokemonBoxPtrs + (u32)box * 4) + (u32)pos * COMPRESSED_MON_SIZE;
@@ -2090,9 +2155,17 @@ void slink_hook(void)
             for (u32 i = 0; i < COMPRESSED_MON_SIZE; i++) nz |= R8(comp + i);
             if (!nz) { ack(ST_FAIL, 3); return; }
         }
+        u8 count = R8(gPlayerPartyCount);
+        u16 guard = rr_storage_precondition(MB->args, count, (volatile const u8 *)comp);
+        if (guard) { ack(ST_FAIL, guard); return; }
+        if (ps != count || count >= 6) { ack(ST_FAIL, RR_STORAGE_COUNT); return; }
+        if (!rr_bytes_empty((volatile const u8 *)(gPlayerParty + (u32)ps * MON_SIZE), MON_SIZE)) {
+            ack(ST_FAIL, RR_STORAGE_OCCUPIED); return;
+        }
         CompressedMonToMon((void *)comp, (void *)(gPlayerParty + (u32)ps * MON_SIZE));
         if (R8(gPlayerPartyCount) <= ps) R8(gPlayerPartyCount) = (u8)(ps + 1);   /* extend count to cover the new slot */
         for (u32 i = 0; i < COMPRESSED_MON_SIZE; i++) R8(comp + i) = 0;          /* free the box slot (the mon moved) */
+        rr_storage_receipt();
         break;
     }
 
@@ -2100,17 +2173,25 @@ void slink_hook(void)
                                      A party Pokemon's first 80 bytes ARE a BoxPokemon, so compress straight
                                      from it; then remove the mon from the party (shift-compact + count--),
                                      mirroring the Lua depositPartyMon exactly. */
+        if (!rr_storage_field_ready()) { ack(ST_FAIL, RR_STORAGE_CONTEXT); return; }
         u8 ps = MB->args[0], box = MB->args[1], pos = MB->args[2];
         if (ps > 5 || box >= TOTAL_BOXES_COUNT || pos >= IN_BOX_COUNT) { ack(ST_FAIL, 2); return; }
         u8 count = R8(gPlayerPartyCount);
         if (ps >= count) { ack(ST_FAIL, 3); return; }                           /* slot must hold a real mon */
+        if (rr_bytes_empty((volatile const u8 *)(gPlayerParty + (u32)ps * MON_SIZE), MON_SIZE)) {
+            ack(ST_FAIL, 3); return;
+        }
+        u16 guard = rr_storage_precondition(MB->args, count,
+                          (volatile const u8 *)(gPlayerParty + (u32)ps * MON_SIZE));
+        if (guard) { ack(ST_FAIL, guard); return; }
+        if (!rr_removal_safe(ps, count)) { ack(ST_FAIL, RR_STORAGE_LAST_USABLE); return; }
         u32 comp = R32(sPokemonBoxPtrs + (u32)box * 4) + (u32)pos * COMPRESSED_MON_SIZE;
         {   /* destination box slot must be EMPTY: a desynced server aiming at an occupied
                slot would silently destroy the mon stored there — permanent loss in a
                Nuzlocke. Empty slots are zero-filled. */
             u32 nz = 0;
             for (u32 i = 0; i < COMPRESSED_MON_SIZE; i++) nz |= R8(comp + i);
-            if (nz) { ack(ST_FAIL, 4); return; }
+            if (nz) { ack(ST_FAIL, RR_STORAGE_OCCUPIED); return; }
         }
         CreateCompressedMonFromBoxMon((void *)(gPlayerParty + (u32)ps * MON_SIZE), (void *)comp);
         for (u8 s = ps; (u8)(s + 1) < count; s++)                               /* shift [ps+1..] down one slot */
@@ -2119,6 +2200,7 @@ void slink_hook(void)
         { u32 last = gPlayerParty + (u32)(count - 1) * MON_SIZE;                /* zero the vacated last slot */
           for (u32 i = 0; i < MON_SIZE; i++) R8(last + i) = 0; }
         R8(gPlayerPartyCount) = (u8)(count - 1);
+        rr_storage_receipt();
         break;
     }
 
@@ -2128,11 +2210,23 @@ void slink_hook(void)
                                      CFRU's deferred battle writes can't land on the wrong mon —
                                      mirrors Lua M.memorializeMon exactly. Lua picks the free memorial
                                      slot + does the box rename (one-time, non-critical RAM writes). */
+        if (!rr_storage_field_ready()) { ack(ST_FAIL, RR_STORAGE_CONTEXT); return; }
         u8 ps = MB->args[0], box = MB->args[1], pos = MB->args[2];
         if (ps > 5 || box >= TOTAL_BOXES_COUNT || pos >= IN_BOX_COUNT) { ack(ST_FAIL, 2); return; }
         u8 count = R8(gPlayerPartyCount);
         if (ps >= count) { ack(ST_FAIL, 3); return; }
+        if (rr_bytes_empty((volatile const u8 *)(gPlayerParty + (u32)ps * MON_SIZE), MON_SIZE)) {
+            ack(ST_FAIL, 3); return;
+        }
+        u16 guard = rr_storage_precondition(MB->args, count,
+                          (volatile const u8 *)(gPlayerParty + (u32)ps * MON_SIZE));
+        if (guard) { ack(ST_FAIL, guard); return; }
+        if (!rr_removal_safe(ps, count)) { ack(ST_FAIL, RR_STORAGE_LAST_USABLE); return; }
+        if (R16(gPlayerParty + (u32)ps * MON_SIZE + 0x56) != 0) { ack(ST_FAIL, RR_STORAGE_NOT_DEAD); return; }
         u32 comp = R32(sPokemonBoxPtrs + (u32)box * 4) + (u32)pos * COMPRESSED_MON_SIZE;
+        if (!rr_bytes_empty((volatile const u8 *)comp, COMPRESSED_MON_SIZE)) {
+            ack(ST_FAIL, RR_STORAGE_OCCUPIED); return;
+        }
         CreateCompressedMonFromBoxMon((void *)(gPlayerParty + (u32)ps * MON_SIZE), (void *)comp);
         u32 base = gPlayerParty + (u32)ps * MON_SIZE;
         for (u32 i = 0; i < MON_SIZE; i++) R8(base + i) = 0;
@@ -2142,6 +2236,29 @@ void slink_hook(void)
             for (u32 i = 0; i < MON_SIZE; i++) R8(last + i) = 0;
         }
         R8(gPlayerPartyCount) = (u8)(count - 1);
+        rr_storage_receipt();
+        break;
+    }
+
+    case OP_MOVE_BOX_MON: { /* args: srcbox,srcpos,dstbox,guard,PID,OTID,count,dstpos */
+        if (!rr_storage_field_ready()) { ack(ST_FAIL, RR_STORAGE_CONTEXT); return; }
+        u8 sb = MB->args[0], sp = MB->args[1], db = MB->args[2], dp = MB->args[13];
+        if (sb >= TOTAL_BOXES_COUNT || db >= TOTAL_BOXES_COUNT || sp >= IN_BOX_COUNT
+            || dp >= IN_BOX_COUNT || (sb == db && sp == dp)) { ack(ST_FAIL, 2); return; }
+        u32 source = R32(sPokemonBoxPtrs + (u32)sb * 4) + (u32)sp * COMPRESSED_MON_SIZE;
+        u32 dest = R32(sPokemonBoxPtrs + (u32)db * 4) + (u32)dp * COMPRESSED_MON_SIZE;
+        if (rr_bytes_empty((volatile const u8 *)source, COMPRESSED_MON_SIZE)) { ack(ST_FAIL, 3); return; }
+        u16 guard = rr_storage_precondition(MB->args, R8(gPlayerPartyCount), (volatile const u8 *)source);
+        if (guard) { ack(ST_FAIL, guard); return; }
+        if (!rr_bytes_empty((volatile const u8 *)dest, COMPRESSED_MON_SIZE)) {
+            ack(ST_FAIL, RR_STORAGE_OCCUPIED); return;
+        }
+        for (u32 i = 0; i < COMPRESSED_MON_SIZE; i++) R8(dest + i) = R8(source + i);
+        /* Readback precedes source retirement; no transient party scratch or conversion. */
+        for (u32 i = 0; i < COMPRESSED_MON_SIZE; i++)
+            if (R8(dest + i) != R8(source + i)) { ack(ST_FAIL, 27); return; }
+        for (u32 i = 0; i < COMPRESSED_MON_SIZE; i++) R8(source + i) = 0;
+        rr_storage_receipt();
         break;
     }
 
