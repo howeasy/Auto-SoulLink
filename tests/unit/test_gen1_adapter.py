@@ -221,8 +221,8 @@ def test_type_name_unknown(adapter):
 def test_sprite_html_pikachu(adapter):
     html = adapter.sprite_html(25)
     assert "generation-i/red-blue/transparent/25.png" in html
-    assert "overflow:hidden" in html
-    assert "pixelated" in html
+    assert 'class="sprite-crop"' in html
+    assert 'class="mon-sprite"' in html and 'data-species="25"' in html
 
 
 def test_sprite_html_zero(adapter):
