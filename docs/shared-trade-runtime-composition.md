@@ -43,3 +43,17 @@ complete policy. Its tests use full rule/identity/recovery documents and actual 
 native receipts and host authority are declared fixtures. The default held-service
 launcher supplies no trade policy and remains unable to execute a trade. The actual
 native receptionist/partner/execution adapters still require end-to-end binding.
+
+## Optional suspension lifecycle extension
+
+`DurableRuntime._before_suspend(reason)` defaults to no action. A generation
+binding can override it to persist operation-specific interruption obligations.
+The hook runs under the serialized suspend lifecycle, after the hold notice and
+before the suspended barrier is committed. Exceptions follow the existing failure
+path and always clear admitted owners, heartbeat state and control challenges.
+It does not issue an execution grant or change the journal/transport schema.
+The first caller is RBY's durable native-trade interruption binding. The extension
+was checked with88 RBY server lifecycle/trade regressions, including18 interruption
+cases, and the4,604-pass unit/integration suite. The two pre-existing Windows
+symlink skips are not release waivers. Each generation still owns its interruption
+transition, startup handling and physical recovery policy; none is selected here.
