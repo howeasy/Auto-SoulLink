@@ -13,3 +13,6 @@ capstone==5.0.7
 # tests/unit/test_manager_launcher.py importorskips it. Undeclared until now, so a fresh
 # clone silently skipped those tests and had no Lua syntax gate.
 lupa==2.8
+
+# Pillow - image fixtures and validation for native frame recording tests/tools.
+Pillow==11.3.0
