@@ -37,7 +37,7 @@ import urllib.error
 import zipfile
 
 import psutil
-from emulator_sandbox import (ProcessIdentity, copy_verified, create_instance_root, hidden_process_kwargs,
+from emulator_sandbox import (capture_spawn, copy_verified, create_instance_root, hidden_process_kwargs,
                               identity, isolated_config, json_bytes, capture_owned_tree, terminate_owned, verify_identity)
 from pathlib import Path
 
@@ -435,20 +435,12 @@ class DuoRun:
         return Path(REPO) / self.gcfg["rom"][inst]
 
     def _remember_process(self, process):
-        if process.poll() is not None:
+        owned = capture_spawn(process, process_api=psutil)
+        if owned is None:
             return
-        try:
-            created = psutil.Process(process.pid).create_time()
-            # Popen retains the original process handle even after numeric PID
-            # reuse. Do not turn a replacement process into a cleanup target.
-            if process.poll() is not None:
-                return
-            self._owned_processes.append(ProcessIdentity(process.pid, created))
-            (self._created_data_dir / "process-manifest.json").write_bytes(json_bytes(
-                [{"pid": item.pid, "created": item.created} for item in self._owned_processes]))
-        except psutil.NoSuchProcess as error:
-            if process.poll() is None:
-                raise RuntimeError("Cannot establish spawned process identity") from error
+        self._owned_processes.append(owned)
+        (self._created_data_dir / "process-manifest.json").write_bytes(json_bytes(
+            [{"pid": item.pid, "created": item.created} for item in self._owned_processes]))
 
     @staticmethod
     def _save_files(directory):

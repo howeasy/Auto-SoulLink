@@ -31,3 +31,7 @@ The Gen 3 E2E suite still lacks an owner-qualified ROM/savestate provenance pair
 RR reproduced a numeric PID reuse race before/during creation-time lookup. The inspected method/test correction from `b8ee44c` checks the original Popen handle before lookup and again before registering ownership. Both regression cases failed on the previous implementation and pass with the correction. No other RR harness or generation-policy changes were imported.
 
 Validation of this follow-up: **25 focused tests passed**; full unit/integration suite **3907 passed, 2 skipped**. The existing Gen 1 E2E cutoff is unchanged.
+
+The spawn-identity check is now centralized in the owner-published `capture_spawn` helper from `ea5a5501e2e6d9495317c972f9afe09c917699bc`. The duo runner delegates to it and retains only its local manifest handling. The nine provider cases and existing runner/seeding checks pass together (34 focused cases).
+
+Shared-helper delegation validation: **3985 full-suite passes, 2 skips**; **3679 portable passes, 308 explicit deferrals**; Ruff is clean.

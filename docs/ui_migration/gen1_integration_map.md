@@ -33,3 +33,5 @@ The full Gen 1 E2E cutoff remains 15 natural-case passes and 30 guarded fixture-
 ## Validation of shared adoption
 
 Critical dependency blobs match the owner handoff. The owner-supplied shared tests were added to the reviewed portable inventory: 69 new cases. Full unit/integration: **3976 passed, 2 skipped**. Portable selection: **3670 passed, 308 explicit deferrals**. Ruff is clean, **218 Lua files** parse, and **103 canonical-source checks** pass. Shared server/client modules load successfully; generation-specific selection and qualification remain unchanged.
+
+RR owns the shared emulator-isolation primitives. `capture_spawn` and its standalone tests are frozen in `ea5a5501e2e6d9495317c972f9afe09c917699bc`; UI consumes that helper rather than retaining another PID-registration implementation. Generation-specific probe wrappers remain with their owners.
