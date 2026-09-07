@@ -187,6 +187,28 @@ class ProcessIdentity:
     created: float
 
 
+def capture_spawn(process, process_api=None) -> ProcessIdentity | None:
+    """Capture an existing Popen's identity without adopting a reused numeric PID.
+
+    The original handle must remain alive across the create-time lookup. An
+    exited original returns None; missing identity for a live original refuses.
+    This function neither launches/cleans processes nor publishes a manifest.
+    """
+    if process.poll() is not None:
+        return None
+    if process_api is None:
+        import psutil as process_api
+    try:
+        created = process_api.Process(process.pid).create_time()
+        if process.poll() is not None:
+            return None
+        return ProcessIdentity(process.pid, created)
+    except process_api.NoSuchProcess as error:
+        if process.poll() is None:
+            raise SandboxError("Cannot establish spawned process identity") from error
+        return None
+
+
 def capture_owned_tree(root: ProcessIdentity, process_api=None) -> list[ProcessIdentity]:
     """Capture only descendants of the exact process this runner started."""
     if process_api is None:
