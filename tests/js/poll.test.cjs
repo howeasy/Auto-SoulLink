@@ -5,10 +5,10 @@ const vm = require('node:vm');
 const {test} = require('node:test');
 
 test('application polling stays serial and resumes after browser back navigation', async () => {
-  const timers = new Map(), events = new Map();
+  const timers = new Map(), events = new Map(), delays = new Map();
   let next = 0, release, reads = 0;
   const gate = new Promise(resolve => { release = resolve; });
-  const context = {setTimeout(fn) { timers.set(++next, fn); return next; }, clearTimeout(id) { timers.delete(id); },
+  const context = {setTimeout(fn, delay) { timers.set(++next, fn); delays.set(next, delay); return next; }, clearTimeout(id) { timers.delete(id); },
     addEventListener(name, fn) { events.set(name, fn); }};
   context.window = context;
   vm.createContext(context);
@@ -27,13 +27,24 @@ test('application polling stays serial and resumes after browser back navigation
   release();
   await running;
   assert.equal(timers.size, 1);
+  assert.equal(delays.get(timers.keys().next().value), 0, 'refresh during a read queues one immediate follow-up');
+  const [followUpId, followUp] = timers.entries().next().value;
+  timers.delete(followUpId);
+  await followUp();
+  assert.equal(reads, 4);
+  assert.equal(timers.size, 1);
+  assert.equal(delays.get(timers.keys().next().value), 2000, 'coalesced refresh returns to normal cadence');
   events.get('pagehide')();
   assert.equal(timers.size, 0);
+  context.SLinkPoll.refresh();
+  context.SLinkPoll.subscribe('hidden', () => {});
+  assert.equal(timers.size, 0, 'hidden documents must not schedule polling');
   events.get('pageshow')();
   assert.equal(timers.size, 1);
   const [resumedId, resumed] = timers.entries().next().value;
   timers.delete(resumedId);
   await resumed();
-  assert.equal(reads, 4);
+  assert.equal(reads, 6);
   assert.equal(timers.size, 1);
+  assert.equal(delays.get(timers.keys().next().value), 2000, 'immediate refresh does not create a polling loop');
 });

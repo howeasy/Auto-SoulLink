@@ -1,5 +1,13 @@
 # Consolidation progress
 
+## Polling refresh follow-up
+
+Explicit refresh requests from saved-source edits and OBS controls now coalesce into one immediate follow-up when a poll is already running. Reads remain serial, and refresh/subscription calls cannot restart timers while the document is suspended. The coordinator regression test covers immediate follow-up scheduling, return to the normal interval, failure isolation and browser back navigation.
+
+Validation: 4054 unit/integration tests passed, two existing skips (68.50 seconds); all 16 JavaScript cases passed, including the extended coordinator regression; Ruff E9/F6/F7/F81/F82 is clean.
+
+Owner coordination reconfirmed that Gen 1's latest reusable cut is the typed client journal `26aee43`, already adopted. Generation activation, the fixture initializer and verified randomizer publication remain unpublished. RR's private candidate08 field checkpoint does not qualify the shared full-duo ROM/savestate inventory. No generation-owned implementation is duplicated by this follow-up.
+
 Working checkout: `E:\Google Drive\SLink\.claude\worktrees\ui-phase7b-sources`, branch `codex/ui-rework`. Root switched externally back to `codex/gen2base`; no additional UI checkout was created. The UI phase branches and reviewed mockup branches are already ancestors. No active checkout was pruned. Gen 2 confirmed root ownership was released and its separate investigation caches must be preserved.
 
 ## Completed cleanup
