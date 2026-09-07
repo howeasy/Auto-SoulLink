@@ -284,9 +284,17 @@ class DurableRuntime:
             with contextlib.suppress(ConnectionError, RuntimeError):
                 writer.write(canonical_json(notice).encode("ascii") + b"\n")
 
+    def _before_suspend(self, reason):
+        """Generation binding may journal owned obligations after the hold notice.
+
+        Called under the same serialized lifecycle as suspend. Failure still
+        clears all connection authority in suspend's finally block.
+        """
+
     def suspend(self, reason):
         self._notify_holds(reason)
         try:
+            self._before_suspend(reason)
             stage = self.state()
             stage.barrier.invalidate(reason)
             self._commit_system(stage, "runtime_suspended")
