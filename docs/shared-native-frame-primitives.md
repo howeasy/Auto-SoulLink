@@ -7,14 +7,21 @@ calls. Each generation supplies its qualified execution and evidence binding.
   operation ID/digest, physical context, admission binding and phase. Its colon-call
   API is `challenge`, `accept`, `ready`, `consume`, `revoke`, `status`. A private
   verifier must approve the exact grant; a credit is spent before any host step.
-  Neither renewal nor revocation refunds the operation-wide budget. Invalid scope,
+  Neither renewal nor revocation refunds the operation-wide budget. Within one
+  window service, the stable operation ID retains its spent credits across phase,
+  digest, physical-context and admission-binding changes. These changes still
+  require a newly verified grant. A replacement service requires the generation
+  policy to account for previously executed frames; no recovery is inferred.
+  Invalid scope,
   replay, expired authority or clock rollback cannot provide frames. The closed
   string scope is validated/copied directly on the frame path; metatables and
   array-tagged scopes remain invalid.
 - `frame_pacer.new(options)` takes a monotonic clock and integer video-rate
   numerator/denominator. `take(permitted, user_paused)` schedules at most one frame
   and discards long-stall time debt. It grants no execution permission. `status`
-  reports its clock/scheduling state. Call the qualified host only after both
+  reports its clock/scheduling state. It latches a failure if a finite clock is
+  too large to represent a strictly future deadline at the requested period.
+  Call the qualified host only after both
   pacing and execution authority allow the frame.
 - `json_codec` retains its existing bounded wire API. Ordinary ASCII string spans
   are scanned in the native matcher, stopping at escape, quote, control and UTF-8
