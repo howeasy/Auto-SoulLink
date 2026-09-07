@@ -101,7 +101,10 @@ function M.new(options)
             assert(type(packet.ttl_ms)=="number"and packet.ttl_ms%1==0 and packet.ttl_ms>=1 and packet.ttl_ms<=lifetime,
                 "invalid operation lifetime")
             assert(token(packet.proof_digest,64),"operation-specific server proof required")
-            local key=assert(JSON.encode(pending.scope))
+            -- A phase, digest or admission/context change must not refund this
+            -- operation's spent credits. Those fields still bind each grant;
+            -- the per-service ceiling follows the stable operation identifier.
+            local key=pending.scope.operation_id
             assert(packet.frames<=operation_limit-(state.scope_counts[key]or 0),"operation-wide frame ceiling exceeded")
             local deadline=pending.issued+packet.ttl_ms/1000
             assert(time<deadline,"operation response already expired")

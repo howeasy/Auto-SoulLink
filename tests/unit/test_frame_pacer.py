@@ -45,3 +45,12 @@ def test_clock_failure_latches_the_scheduler(lua):
 @pytest.mark.parametrize('value',['0','-1','true','1.5','1000000001'])
 def test_invalid_video_clock_is_refused(lua,value):
     assert lua.eval("pcall(function()Pacer.new({clock=function()return time end,numerator="+value+",denominator=1})end)")[0] is False
+
+
+@pytest.mark.parametrize('value',[1e20,2**49])
+def test_finite_clock_with_insufficient_precision_cannot_schedule_frames(lua,value):
+    lua.globals().time=value
+    allowed,reason=lua.eval('pacer:take(true,false)')
+    assert allowed is False and 'represent' in reason
+    assert lua.eval('pacer:take(true,false)')[0] is False
+    assert lua.eval('pacer:status().scheduled')==0

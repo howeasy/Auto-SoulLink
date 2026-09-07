@@ -172,3 +172,15 @@ def test_scope_cannot_bypass_json_container_validation(lua,expression):
     assert accept(lua,packet(lua))
     lua.execute('current='+expression)
     assert lua.globals().consume()[0] is False
+
+
+@pytest.mark.parametrize('field',['phase','operation_digest','context_generation','binding_digest'])
+def test_scope_rebinding_does_not_refund_the_same_operation_budget(lua,field):
+    lua.execute('window=make_window(2)')
+    assert accept(lua,packet(lua,frames=2))
+    assert lua.globals().consume() and lua.globals().consume()
+    lua.execute("window:revoke('phase or context transition')")
+    lua.globals().current[field]='native_release' if field=='phase' else 'f'*(64 if field.endswith('digest') else 32)
+    assert accept(lua,packet(lua,frames=1))[0] is False
+    assert not lua.globals().consume()
+    assert lua.eval('window:status().consumed')==2

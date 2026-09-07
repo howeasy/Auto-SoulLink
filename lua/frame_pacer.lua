@@ -20,8 +20,11 @@ function M.new(options)
             previous=now
             if not permitted or user_paused then next_frame=nil;return false end
             if next_frame and now<next_frame then return false end
-            if not next_frame or now-next_frame>=period then next_frame=now+period
-            else next_frame=next_frame+period end
+            local origin=(not next_frame or now-next_frame>=period)and now or next_frame
+            local deadline=origin+period
+            assert(deadline>now and deadline<math.huge and math.abs((deadline-origin)-period)<=period*.001,
+                "frame clock cannot represent the requested video period")
+            next_frame=deadline
             scheduled=scheduled+1;return true
         end)
         if not ok then failed=tostring(result);next_frame=nil;return false,failed end
