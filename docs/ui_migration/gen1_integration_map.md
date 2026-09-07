@@ -45,3 +45,13 @@ The optional component-composition callback and semantic dispatch hook preserve 
 The Gen 1-specific recovery composition (`gen1_trade_recovery.py`), typed routing, native/host adapters and activation remain with Gen 1. Its moving physical-policy test suite was not copied into UI; only the self-contained shared identity and six composition tests were adopted. The default held-service launcher still has no trade policy and ordinary gameplay/fixture-initialization/randomizer gates remain unchanged.
 
 Complete closure validation: **4043 full-suite passes, 2 skips**; **3737 portable passes, 308 explicit deferrals**; Ruff is clean. Shared identity and composition tests add 58 reviewed portable cases. No generation-specific activation changed.
+
+## Typed client journal composition
+
+Reused the exact four-file cut `26aee4348a27e799b95a8f6ba9b0eaeb7ad0395c`: `lua/client_journal.lua`, its 11 shared composition tests, frozen v1 reader fixture and contract. The journal fingerprint matches the owner handoff; existing shared test helpers already match the parent.
+
+Default two-argument callers retain v1 behavior. Only composed writes promote to v2; opening does not migrate a journal, and the old reader refuses v2. Terminal event identity/payload, receipt and outbox publish together; intermediate evidence cannot retire a command. These optional callbacks do not activate a generation policy or physical authority.
+
+Gen 1 retains its native in-game UI/event/SaveRAM adapters: `gen1_trade_events.lua`, `gen1_receptionist_client.lua`, `gen1_partner_prompt_executor.lua` and `gen1_saved_trade_executor.lua`. They were not copied into the browser UI task. Runtime/artifact/network/recovery qualification remains separate from the owner's native file-transport tests.
+
+Typed client-journal validation: **4054 full-suite passes, 2 skips**; **3748 portable passes, 308 explicit deferrals**; Ruff is clean and 218 production Lua files parse.
