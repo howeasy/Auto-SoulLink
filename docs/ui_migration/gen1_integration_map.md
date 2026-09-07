@@ -55,3 +55,9 @@ Default two-argument callers retain v1 behavior. Only composed writes promote to
 Gen 1 retains its native in-game UI/event/SaveRAM adapters: `gen1_trade_events.lua`, `gen1_receptionist_client.lua`, `gen1_partner_prompt_executor.lua` and `gen1_saved_trade_executor.lua`. They were not copied into the browser UI task. Runtime/artifact/network/recovery qualification remains separate from the owner's native file-transport tests.
 
 Typed client-journal validation: **4054 full-suite passes, 2 skips**; **3748 portable passes, 308 explicit deferrals**; Ruff is clean and 218 production Lua files parse.
+
+## Published prerequisites reserved for the next producer handoff
+
+Gen 1 published `6369c0b253c7a79fb232a7b513cdf8fabcf9d28c` (parent `26aee43`): exactly `server/patch_plan.py`, `tests/unit/test_patch_plan.py` and `docs/shared-patch-plan.md`. The reviewed pure `PatchSpan`/`apply_spans` helper checks fixed-size preimages, nonoverlap, protected ranges and optional bank boundaries before producing bytes. Reuse this owner module when integrating the qualified cartridge builder; do not implement another binary write-set engine in Tools. It remains unimported here because the generation builder/publisher is not yet qualified. Source identity, symbol/free-space provenance, checksum policy and semantic admission remain the caller's responsibility.
+
+Gen 1 also reports adopting the shared runtime-lease cut `36821a1ddb3d9b9ec55ad67a988e1a3668274663` (`server/runtime_lease.py`, its tests and contract). Track that dependency in the next generation-specific handoff rather than duplicating process ownership in the UI. Neither published helper alone authorizes ordinary gameplay, native-frame authority, fixture initialization or randomized publication. The owner's combined native artifact smoke evidence is separate from those remaining gates.
