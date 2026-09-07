@@ -123,3 +123,25 @@ def test_invalid_initial_or_replacement_payload_never_reaches_disk(runtime):
     before = lua.globals().disk
     assert store.commit(store, lua.eval("JSON.array()"))[0] is False
     assert lua.globals().disk == before
+
+
+def test_read_copies_nested_validated_types_without_exposing_the_private_cache(runtime):
+    lua=runtime
+    lua.execute('''initial={empty_array=JSON.array(),empty_object=JSON.object(),
+        nested=JSON.array({JSON.null,false,{unicode='é雪',number=9007199254740991}})}''')
+    store=opened(lua)
+    original=lua.globals().disk
+    lua.execute('''
+        local first=assert(store:read())
+        assert(JSON.kind(first.empty_array)=='array' and JSON.kind(first.empty_object)=='object')
+        assert(first.nested[1]==JSON.null and first.nested[2]==false and first.nested[3].unicode=='é雪')
+        first.nested[3].unicode='changed';first.empty_array[1]='changed'
+        -- Public fields cannot replace the validated cache or its wire preimage.
+        store.document={payload={forged=true},revision=999};store.wire='forged'
+        local second,revision=store:read()
+        assert(revision==0 and second.nested[3].unicode=='é雪' and #second.empty_array==0)
+        assert(second.nested[3].number==9007199254740991)
+    ''')
+    assert lua.globals().disk==original
+    assert store.commit(store,lua.eval("{next=JSON.array({JSON.null})}")) is True
+    assert store.read(store)[1]==1
