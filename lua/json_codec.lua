@@ -85,7 +85,10 @@ function M.decode(input, limits)
             elseif byte < 32 then
                 fail("unescaped control character")
             elseif byte < 128 then
-                index = index + 1
+                -- Scan ordinary ASCII spans in the native string matcher. Stop
+                -- at every control, quote, escape or UTF-8 byte so the existing
+                -- validation and decoded-string limits still see each boundary.
+                index = input:find('[%z\1-\31"\\\127-\255]', index + 1) or #input + 1
             else
                 -- Validate raw UTF-8, including overlong forms and surrogate encodings.
                 local length = (byte >= 0xC2 and byte <= 0xDF) and 2
