@@ -248,9 +248,17 @@ class DurableRuntime:
             return self._control(player, message)
         if event in {"ghost_pos", self.hold_event, "runtime_opened", "runtime_suspended", "runtime_reconciliation_refused"}:
             raise ProtocolError("Durable transient/internal traffic cannot enter durable rules")
-        self.dispatcher.dispatch(player, message["operation_id"], self._semantic(message),
-                                 preserve_peer_session=True)
+        self._dispatch_semantic(player, message, owner)
         return self.gate.response(player, message, self.delivery_commands(player))
+
+    def _dispatch_semantic(self, player, message, owner):
+        """Generation extension after ownership/replay/control checks, before reply.
+
+        Overrides must journal exactly one semantic event before returning. This
+        seam grants no physical authority and does not replace the session gate.
+        """
+        return self.dispatcher.dispatch(player, message["operation_id"], self._semantic(message),
+                                        preserve_peer_session=True)
 
     def delivery_commands(self, player):
         # A native command can itself contain player/seq/operation_id. Preserve

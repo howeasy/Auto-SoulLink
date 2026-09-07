@@ -35,3 +35,13 @@ The full Gen 1 E2E cutoff remains 15 natural-case passes and 30 guarded fixture-
 Critical dependency blobs match the owner handoff. The owner-supplied shared tests were added to the reviewed portable inventory: 69 new cases. Full unit/integration: **3976 passed, 2 skipped**. Portable selection: **3670 passed, 308 explicit deferrals**. Ruff is clean, **218 Lua files** parse, and **103 canonical-source checks** pass. Shared server/client modules load successfully; generation-specific selection and qualification remain unchanged.
 
 RR owns the shared emulator-isolation primitives. `capture_spawn` and its standalone tests are frozen in `ea5a5501e2e6d9495317c972f9afe09c917699bc`; UI consumes that helper rather than retaining another PID-registration implementation. Generation-specific probe wrappers remain with their owners.
+
+## Additive shared trade/runtime closure
+
+Adopted the owner-specified final nine files from `72b91aca302a15272df5aadfc2b68beab652357f`, including the previously absent shared identity registry (unchanged base `231bf78`), its tests/contract, and the complete coordinator contract. All supplied source/test fingerprints match. The initial patch-only import was aborted when its missing base was detected; no partial merge remains.
+
+The optional component-composition callback and semantic dispatch hook preserve default behavior. `pending_ids(player)` supplies the complete bounded obligation index; a limited delivery batch must never be used to infer completion. Shared identity witnesses and typed policy inputs are declarations that generation code must independently validate, not physical evidence by themselves.
+
+The Gen 1-specific recovery composition (`gen1_trade_recovery.py`), typed routing, native/host adapters and activation remain with Gen 1. Its moving physical-policy test suite was not copied into UI; only the self-contained shared identity and six composition tests were adopted. The default held-service launcher still has no trade policy and ordinary gameplay/fixture-initialization/randomizer gates remain unchanged.
+
+Complete closure validation: **4043 full-suite passes, 2 skips**; **3737 portable passes, 308 explicit deferrals**; Ruff is clean. Shared identity and composition tests add 58 reviewed portable cases. No generation-specific activation changed.

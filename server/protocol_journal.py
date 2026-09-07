@@ -362,6 +362,20 @@ class ProtocolJournal:
         current = self._record_revision_limit(namespace, key)
         return [self._checked_record(row, current) for row in rows]
 
+    def pending_ids(self, player):
+        """Complete bounded obligation index, independent of delivery pagination.
+
+        Use command() for checked bodies. A transport batch can omit obligations
+        due to its count/byte limit and must not be used as a completion proof.
+        """
+        _player(player)
+        rows = self._db.execute(
+            "SELECT command_id FROM commands WHERE player=? AND outcome IS NULL ORDER BY position LIMIT 4097",
+            (player,)).fetchall()
+        if len(rows) > 4096:
+            raise JournalError("durable obligation index exceeds the journal bound")
+        return tuple(_identifier(row["command_id"]) for row in rows)
+
     def pending(self, player, *, limit=128, max_bytes=MAX_JSON_BYTES):
         _player(player)
         if type(limit) is not int or not 1 <= limit <= 128 or type(max_bytes) is not int or not ENVELOPE_RESERVE <= max_bytes <= MAX_JSON_BYTES:
