@@ -13,7 +13,12 @@ import secrets
 import time
 from dataclasses import asdict, dataclass
 
-from server.identity_registry import IdentityContext, IdentityRegistry, IdentityWitness, MigrationWitness
+from server.identity_registry import (
+    IdentityContext,
+    IdentityRegistry,
+    IdentityWitness,
+    MigrationWitness,
+)
 from server.paired_recovery import _hex, _player
 from server.protocol_journal import JournalError, ProtocolJournal, RevisionConflict, _encode
 from server.save_identity import SaveIdentity
@@ -124,12 +129,15 @@ class TradeCoordinator:
     REQUIRED_POLICY = ("authorize", "offer", "prompt", "decision", "prepare", "ready",
                        "commit", "applied", "verified", "auxiliary", "finalize")
 
-    def __init__(self, journal: ProtocolJournal, policy, *, clock=None, new_id=None):
+    def __init__(self, journal: ProtocolJournal, policy, *, clock=None, new_id=None, compose_components=None):
         if any(not callable(getattr(policy, name, None)) for name in self.REQUIRED_POLICY):
             raise JournalError("complete trade validation policy required")
         self.journal, self.policy = journal, policy
         self.clock = clock or (lambda: time.time_ns() // 1_000_000)
         self.new_id = new_id or (lambda: secrets.token_hex(16))
+        if compose_components is not None and not callable(compose_components):
+            raise JournalError("trade component composition must be callable")
+        self.compose_components = compose_components
 
     @staticmethod
     def initial_state(rules, identities, *, components=None):
@@ -260,6 +268,14 @@ class TradeCoordinator:
 
     def _save(self, issuer, operation_id, message, revision, state, trade, commands, acknowledgements=()):
         self._validate_trade(trade)
+        if self.compose_components is not None:
+            # The binding may update only components. All inputs are detached;
+            # rules, identities, trade evidence and outboxes remain coordinator-owned.
+            components = self.compose_components(_clone(state), _clone(trade),
+                _clone(commands), [_clone(row) for row in acknowledgements])
+            if not isinstance(components, dict):
+                raise JournalError("trade composition must return a component dictionary")
+            state["components"] = _clone(components)
         receipt = self.journal.commit(issuer, operation_id, message, expected_revision=revision,
             state=state, commands=commands,
             result={"ack": "ACK", "transaction_id": trade["id"], "phase": trade["phase"]},
