@@ -28,3 +28,11 @@ success flag; generation recovery remains a separate verified procedure.
 against the existing typed SaveRAM file receipt, expected host and bounded frame
 interval. Remote paths remain opaque and are never opened by the server. Gen1
 uses it for both full pre-trade saves and the final original-trade save.
+
+Both the private expected host profile and reported profile must be plain ASCII
+identifiers of1-128 characters: an initial lowercase letter followed by lowercase
+letters, digits, underscores, dots or hyphens. Invalid/missing values cannot
+authorize a receipt merely by matching each other. A different reported identifier
+is rejected. The caller must obtain its expected identifier from its qualified
+host binding; this generic verifier does not maintain a host registry or qualify
+an arbitrary identifier supplied by a caller.
