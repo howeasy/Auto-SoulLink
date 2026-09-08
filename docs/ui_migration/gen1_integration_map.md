@@ -61,3 +61,37 @@ Typed client-journal validation: **4054 full-suite passes, 2 skips**; **3748 por
 Gen 1 published `6369c0b253c7a79fb232a7b513cdf8fabcf9d28c` (parent `26aee43`): exactly `server/patch_plan.py`, `tests/unit/test_patch_plan.py` and `docs/shared-patch-plan.md`. The reviewed pure `PatchSpan`/`apply_spans` helper checks fixed-size preimages, nonoverlap, protected ranges and optional bank boundaries before producing bytes. Reuse this owner module when integrating the qualified cartridge builder; do not implement another binary write-set engine in Tools. It remains unimported here because the generation builder/publisher is not yet qualified. Source identity, symbol/free-space provenance, checksum policy and semantic admission remain the caller's responsibility.
 
 Gen 1 also reports adopting the shared runtime-lease cut `36821a1ddb3d9b9ec55ad67a988e1a3668274663` (`server/runtime_lease.py`, its tests and contract). Track that dependency in the next generation-specific handoff rather than duplicating process ownership in the UI. Neither published helper alone authorizes ordinary gameplay, native-frame authority, fixture initialization or randomized publication. The owner's combined native artifact smoke evidence is separate from those remaining gates.
+
+## Shared-helper review, 2026-09-08
+
+Reviewed the actual published branch objects against UI `029a42a`, preserving the active UI checkout and every generation checkout. The journal's `9d031d1` component-revision correction was already present; no duplicate import was needed. Six dependency-checked cuts applied without conflicts:
+
+| Published cut | UI adoption | Effect and boundary |
+| --- | --- | --- |
+| `e1d2acf` | `831b046` | Default-no-op suspension hook after hold notice, before reading/persisting the barrier. Generation interruption policy remains external. |
+| `3801f83`, formatting correction `e261d13` | `010830f`, `40608e8` | Private validated state-store cache with detached typed copies; generic trade transition driver. No automatic generation policy selection. |
+| `3649e2d`, correction `cfed9be` | `6189ccc`, `4cf0f89` | ASCII JSON scanning and shared frame window/pacer. Operation budgets survive scope changes; unrepresentable clock deadlines are refused. No host execution or frame authority is supplied. |
+| `77c7562` | `0342b28` | Syntax checks explicitly use Lupa Lua 5.4, matching the pinned host instead of Lupa's changing default. |
+
+New consumer tests exercise suspension with a real SQLite journal: default behavior, hook-before-barrier ordering, preservation of an interruption commit in the next snapshot, hook/barrier failure, and unconditional session/challenge revocation. The other imported source/test files retain their published bytes. The portable inventory adds only the exact new cases; no existing case is removed or reclassified.
+
+The following published helpers are available for the generation integration, but remain **unimported and unactivated** in this UI checkout. Reuse their frozen modules when an actual consumer and its complete dependency closure arrive:
+
+| Published cut | Reuse responsibility |
+| --- | --- |
+| `36821a1` runtime lease | Exclusive runtime process ownership; read-only readers remain separate. |
+| `6369c0b` patch plan; `7a5c7aa` ROM change audit | Checked byte edits and exhaustive change accounting; neither supplies cartridge semantic verification or publication. |
+| `9f7f6c7` staged panel | Native page staging with owned generations; browser presentation must not duplicate the cartridge panel. |
+| `ad968d3` SaveRAM; `9704623`, corrections `89ef524`/`eefcbba` staged commands | Host save adapter, remote image/receipt verification and ordered durable child stages. Host/profile/context and physical policy remain generation-owned. |
+| `160412c` observations/keyed inventory | Durable checkpoint sequencing and bounded keyed comparison; key equality alone does not prove logical identity or historical events. |
+| `085acbe` party grants; `6d85974` linked death | Rule staging after generation-owned evidence. Browser projections do not reimplement these rules. |
+| `bc3ad9d` held-write permits | One-use scope-bound permits; no ordinary execution or frame authority. |
+| `2899b53` Gambatte profile; `114f3f3` stat experience | Explicit host-profile selection and shared arithmetic; neither changes production cartridge selection implicitly. |
+
+Several shared branch tips only add Pillow for their native test dependencies. Do not replace the UI's split requirements wholesale with a provider branch's older manifest. Adopt the dependency when importing tests that actually need it.
+
+Gen 1's reported initial enrollment (`initial_observation: queued/acknowledged`) is not gameplay history or ordinary readiness. Its browser patcher, producer, bootstrap/observation and recovery activation remain generation-owned pending a bounded frozen handoff. The full Gen 1/Gen 3 E2E and verified randomizer completion gaps recorded above remain outstanding; shared helper tests do not close them.
+
+Gen 1 reconfirmed that the adopted frame/syntax corrections have no newer replacement. Its moving held-service launcher can now authorize an exact pending faint write under a one-use permit and fixed-frame proof; ordinary execution remains false and this generation binding is not published for UI adoption. Frozen presentation facts remain unchanged.
+
+Validation: **4126 unit/integration passes, 2 existing skips** (86.06 seconds); **3820 portable passes, 308 explicit deferrals** (57.02 seconds); **16 JavaScript passes**, **220 Lua 5.4 parses**, **103 canonical-source checks**, and clean Ruff E9/F6/F7/F81/F82. Seven production/tool blobs match the exact published corrected cuts. The focused shared regression selection is 104 cases, of which 72 are new portable inventory entries.

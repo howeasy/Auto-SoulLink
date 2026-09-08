@@ -1,5 +1,11 @@
 # Consolidation progress
 
+## Shared-helper adoption, 2026-09-08
+
+The [integration map](gen1_integration_map.md#shared-helper-review-2026-09-08) now distinguishes adopted corrected helpers from published prerequisites that still lack a qualified generation consumer. Imported the default suspension hook, private state-store snapshot copies, trade driver, JSON scan improvement, corrected frame windows/pacing and explicit Lua 5.4 syntax runner. Added shared SQLite suspension failure/order tests for reuse by Gen 1. No generation-owned activation or producer code changed.
+
+Current local validation: 4126 full-suite passes / two existing skips; 3820 portable passes / 308 explicit deferrals; 16 JavaScript cases, 220 Lua 5.4 parses and 103 canonical-source checks pass; required Ruff is clean. These counts supersede earlier local counts below, without closing the recorded emulator/randomizer qualification gaps.
+
 ## Polling refresh follow-up
 
 Explicit refresh requests from saved-source edits and OBS controls now coalesce into one immediate follow-up when a poll is already running. Reads remain serial, and refresh/subscription calls cannot restart timers while the document is suspended. The coordinator regression test covers immediate follow-up scheduling, return to the normal interval, failure isolation and browser back navigation.
