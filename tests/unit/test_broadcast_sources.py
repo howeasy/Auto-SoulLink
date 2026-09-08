@@ -1,5 +1,6 @@
 import asyncio
 import json
+import sys
 
 import pytest
 
@@ -107,3 +108,39 @@ async def test_native_theme_alias_and_literal_names_round_trip_without_data_loss
     source = await service.create(settings(name=name, theme="dark"))
     assert source["theme"] == "default" and service.get(source["id"])["name"] == name
     assert json.loads(service.path.read_text())["sources"][0]["name"] == name
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("damage", ["boolean_schema", "float_schema", "duplicate_root", "duplicate_run", "escaped_duplicate_run", "deep_json"])
+async def test_ambiguous_store_is_refused_and_preserved_for_every_operation(store, damage):
+    service, _ = store
+    source = await service.create(settings())
+    record = json.dumps(source)
+    raw = '{"schema":1,"sources":[' + record + ']}'
+    if damage == "boolean_schema":
+        raw = raw.replace('"schema":1', '"schema":true')
+    elif damage == "float_schema":
+        raw = raw.replace('"schema":1', '"schema":1.0')
+    elif damage == "duplicate_root":
+        raw = raw[:-1] + ',"sources":[]}'
+    elif damage in {"duplicate_run", "escaped_duplicate_run"}:
+        duplicate = 'run_id' if damage == "duplicate_run" else r'run\u005fid'
+        raw = raw.replace('"run_id": "run_one"', '"run_id": "run_one", "' + duplicate + '": "run_two"')
+    else:
+        depth = sys.getrecursionlimit() + 50
+        raw = '[' * depth + '0' + ']' * depth
+    original = raw.encode()
+    service.path.write_bytes(original)
+    for read in (service.list, lambda: service.get(source["id"])):
+        with pytest.raises(SourceError) as error:
+            read()
+        assert error.value.status == 503
+    for mutate in (
+        lambda: service.create(settings()),
+        lambda: service.update(source["id"], {"revision": 1, "name": "Renamed"}),
+        lambda: service.delete(source["id"], 1),
+    ):
+        with pytest.raises(SourceError) as error:
+            await mutate()
+        assert error.value.status == 503
+        assert service.path.read_bytes() == original

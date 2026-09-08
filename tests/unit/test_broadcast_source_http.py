@@ -10,6 +10,44 @@ from tests.dashboard_scenarios import dashboard_scenario
 
 
 @pytest.mark.asyncio
+async def test_ambiguous_source_file_refuses_http_reads_and_writes_without_retargeting(tmp_path, monkeypatch):
+    monkeypatch.setattr(manager, "MANAGER_DIR", str(tmp_path))
+    monkeypatch.setattr(manager, "REGISTRY_PATH", str(tmp_path / "registry.json"))
+    manager._save_registry([{"run_id": run_id, "name": run_id, "status": "stopped", "pid": None,
+                             "http_port": 8081 + index, "tcp_port": 54321 + index}
+                            for index, run_id in enumerate(("run_one", "run_two"))])
+    service = manager.RunManager("127.0.0.1")
+    source = await service.sources.create({"name": "Team", "run_id": "run_one", "preset": "party"})
+    original = service.sources.path.read_bytes()
+    ambiguous = original.replace(b'"run_id": "run_one"', b'"run_id": "run_one", "run_id": "run_two"')
+    assert ambiguous != original
+    service.sources.path.write_bytes(ambiguous)
+
+    async def forbidden_projection(*args):
+        raise AssertionError("An ambiguous source must never resolve a run projection")
+
+    monkeypatch.setattr(service, "_source_context", forbidden_projection)
+    api = "/api/broadcast/sources"
+    page = "/broadcast/sources/" + source["id"]
+    cases = [("GET", api, None), ("GET", api + "/" + source["id"], None),
+             ("POST", api, {"name": "New", "run_id": "run_one", "preset": "party"}),
+             ("PATCH", api + "/" + source["id"], {"revision": 1, "run_id": "run_two"}),
+             ("DELETE", api + "/" + source["id"], {"revision": 1}),
+             ("GET", page, None), ("GET", page + "/fragment?revision=1", None)]
+    async with TestClient(TestServer(manager.build_app(service))) as client:
+        for method, url, body in cases:
+            response = await client.request(method, url, **({"json": body} if body is not None else {}))
+            assert response.status == 503
+            text = await response.text()
+            assert "original file has been preserved" in text
+            assert service.sources.path.read_bytes() == ambiguous
+        service.sources.path.write_bytes(original)  # Model operator restoration, never automatic repair.
+        recovered = await client.get(api + "/" + source["id"])
+        assert recovered.status == 200
+        assert (await recovered.json())["source"] == source
+
+
+@pytest.mark.asyncio
 async def test_saved_source_retargets_with_revision_and_never_switches_when_run_stops(tmp_path, monkeypatch):
     directory = tmp_path / "runs"
     directory.mkdir()

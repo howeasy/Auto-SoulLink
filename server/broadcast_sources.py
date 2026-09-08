@@ -18,6 +18,16 @@ class SourceError(ValueError):
         self.status = status
 
 
+def _unique_fields(pairs):
+    """Reject ambiguous stored objects, including escaped duplicate field names."""
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate source-store field")
+        result[key] = value
+    return result
+
+
 class SourceStore:
     def __init__(self, path, run_lookup):
         self.path = Path(path)
@@ -69,8 +79,8 @@ class SourceStore:
 
     def _read(self):
         try:
-            document = json.loads(self.path.read_text(encoding="utf-8"))
-            if not isinstance(document, dict) or set(document) != {"schema", "sources"} or document["schema"] != 1 or not isinstance(document["sources"], list):
+            document = json.loads(self.path.read_text(encoding="utf-8"), object_pairs_hook=_unique_fields)
+            if not isinstance(document, dict) or set(document) != {"schema", "sources"} or type(document["schema"]) is not int or document["schema"] != 1 or not isinstance(document["sources"], list):
                 raise ValueError("invalid store")
             seen, result = set(), []
             for source in document["sources"]:
@@ -85,7 +95,7 @@ class SourceStore:
             return result
         except FileNotFoundError:
             return []
-        except (OSError, ValueError, TypeError, AttributeError, KeyError) as error:
+        except (OSError, ValueError, TypeError, AttributeError, KeyError, RecursionError) as error:
             raise SourceError("Saved broadcast sources could not be read. The original file has been preserved.", 503) from error
 
     def list(self):

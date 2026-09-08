@@ -1,5 +1,13 @@
 # Consolidation progress
 
+## Saved-source corruption follow-up
+
+Saved-source decoding now rejects duplicate JSON object keys, including escaped spellings of the same key, and requires the schema version to be an integer. Previously `true` and `1.0` were accepted as version 1, and duplicate keys silently selected the final value. That could discard earlier records or change the interpreted source run before the next write replaced the file. Excessive JSON nesting is also reported through the existing preserved-storage 503 response.
+
+Six isolated storage scenarios exercise reads, creates, updates and deletes against boolean/float schemas, duplicate root/source keys, escaped duplicates and excessive nesting. A manager HTTP test covers collection/detail reads, all mutation methods, the OBS page and its fragment. Every refused operation preserves the exact file bytes and never invokes run projection. Explicitly restoring the valid file recovers the same source ID, revision and run. Valid generated files and legacy defaults retain their existing behavior. This does not add generation-owned verification or change admission.
+
+Validation: **4156 full-suite passes, two existing skips** (83.10 seconds); **3850 portable passes, 308 explicit deferrals** (57.41 seconds); all 22 focused saved-source tests pass. Required Ruff and full-config Ruff on the changed Python files pass. Seven exact portable test IDs were added, with no existing test changes or deferral reclassification. The live Claude UI discussion was unavailable for this bounded follow-up; no peer-review completion is claimed.
+
 ## Polling availability resilience
 
 Shared application and OBS-source polling now passes a 10-second cancellation signal through status, saved-source collection, fragment and response-body reads. Standalone OBS scene discovery is awaited within that same tick and uses the same signal. Leaving the page aborts active reads; browser back navigation resumes with a fresh signal. Reads remain serial and refresh requests still coalesce. This aborts the fetch itself instead of racing an abandoned promise that could later replace the DOM. A stalled source keeps its current canvas with the existing unavailable indicator, then resumes its explicit source/run polling.
