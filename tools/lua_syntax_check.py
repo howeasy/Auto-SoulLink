@@ -1,7 +1,7 @@
-"""Syntax-check every lua/**/*.lua file using lupa (Lua 5.5 runtime).
+"""Syntax-check every lua/**/*.lua file using lupa's Lua 5.4 runtime.
 
-SLink's BizHawk Lua targets 5.5; the system `luac` on this box is 5.1 and
-rejects 5.5-only syntax. This script uses lupa's embedded 5.5 runtime to
+Pinned BizHawk 2.11.1 loads lua54.dll; the system `luac` may be older and
+lupa's default runtime may be newer. Select the actual target explicitly to
 parse-load every file (no execution) and reports any errors.
 
 Exit 0 on clean, 1 on any syntax error.
@@ -11,14 +11,14 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import lupa
+from lupa.lua54 import LuaRuntime
 
 ROOT = Path(__file__).resolve().parent.parent
 LUA_DIR = ROOT / "lua"
 
 
 def main() -> int:
-    runtime = lupa.LuaRuntime(unpack_returned_tuples=True)
+    runtime = LuaRuntime(unpack_returned_tuples=True)
     check = runtime.eval(
         "function(code, name)\n"
         "  local fn, err = load(code, name)\n"
