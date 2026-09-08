@@ -17,6 +17,10 @@ journal checks. It may return None to defer. Errors propagate; the driver does
 not retry an uncertain effect, manufacture consent, grant frames, or resume an
 interrupted native transaction. Every step rereads committed facts.
 
+An explicitly supplied `new_id` must be callable, including when its truth value
+is false. Invalid factories fail at construction before either callback runs.
+Omitting it or passing None selects the secure default identifier factory.
+
 The first caller is RBY's native runtime binding. Its driver runs after typed
 trade events and verified control requests, using the existing private coordinator
 entry. Other generations can supply the same two callbacks without copying that

@@ -191,3 +191,29 @@ def test_invalid_status_cannot_drive_a_transition(state):
     with pytest.raises(JournalError):
         driver.step()
     assert not calls
+
+
+@pytest.mark.parametrize("value", [False, 0, "", [], {}, "not callable", object()])
+def test_invalid_identifier_factory_refuses_before_reading_or_advancing(value):
+    calls = []
+    with pytest.raises(JournalError, match="factory must be callable"):
+        TradeDriver(lambda: calls.append("read"), lambda *args: calls.append("advance"), new_id=value)
+    assert calls == []
+
+
+def test_falsey_callable_identifier_factory_is_retained():
+    class Factory:
+        def __bool__(self):
+            return False
+
+        def __call__(self):
+            return "b" * 32
+
+    factory = Factory()
+    driver = TradeDriver(
+        lambda: {"phase": "accepted", "transaction_id": "a" * 32, "recovery_required": False},
+        lambda action, transaction, operation: operation,
+        new_id=factory,
+    )
+    assert driver.new_id is factory
+    assert driver.step() == {"action": "prepare", "result": "b" * 32}

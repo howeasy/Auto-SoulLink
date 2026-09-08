@@ -20,8 +20,10 @@ class TradeDriver:
     def __init__(self, read_transaction, advance, *, new_id=None):
         if not callable(read_transaction) or not callable(advance):
             raise JournalError("owned trade state and control callbacks required")
+        if new_id is not None and not callable(new_id):
+            raise JournalError("trade operation identifier factory must be callable")
         self.read_transaction, self.advance = read_transaction, advance
-        self.new_id = new_id or (lambda: secrets.token_hex(16))
+        self.new_id = new_id if new_id is not None else (lambda: secrets.token_hex(16))
 
     def step(self):
         state = self.read_transaction()
