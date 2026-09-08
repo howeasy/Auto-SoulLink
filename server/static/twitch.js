@@ -14,8 +14,8 @@ var _cfgLoaded = false;
       var a = document.activeElement;
       return a && _cfgInputIds.indexOf(a.id) !== -1;
     }
-    function loadStatus(forceConfig) {
-      return SLinkRun.fetch('/api/bot/status').then(function(r){return r.json();}).then(function(j){
+    function loadStatus(forceConfig, signal) {
+      return SLinkRun.fetch('/api/bot/status',{signal:signal}).then(function(r){return r.json();}).then(function(j){
         var badge = document.getElementById('status-badge');
         var chan  = document.getElementById('status-channel');
         var tBadge = document.getElementById('token-badge');
@@ -103,5 +103,5 @@ var _cfgLoaded = false;
         box.textContent = j.reply || '(no reply)';
       }).catch(function(){ box.textContent = 'Error'; });
     }
-    if (window.SLinkPoll) SLinkPoll.subscribe('twitch', function () { return loadStatus(); });
+    if (window.SLinkPoll) SLinkPoll.subscribe('twitch', function (signal) { return loadStatus(false, signal); });
     else { loadStatus(); setInterval(loadStatus, 5000); }

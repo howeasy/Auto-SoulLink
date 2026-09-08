@@ -21,10 +21,10 @@
     document.getElementById('source-error').hidden=true;
     if (root) { root.dataset.availability='deleted';root.dataset.scrollEnabled='false';root.style.height='';root.replaceChildren(); var note=document.createElement('div');note.className='bc-offline';note.textContent=message;root.append(note); }
   }
-  SLinkPoll.subscribe('broadcast-source', async function () {
+  SLinkPoll.subscribe('broadcast-source', async function (signal) {
     var current = ++sequence;
     try {
-      var response = await fetch(url.href,{cache:'no-store'});
+      var response = await fetch(url.href,{cache:'no-store',signal:signal});
       if(current!==sequence)return;
       if(response.status===409&&saved){location.reload();return;}
       if(response.status===404||response.status===410){unavailable('This source or its assigned run was deleted.');return;}

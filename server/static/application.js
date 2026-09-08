@@ -16,18 +16,18 @@
     });
     list.querySelectorAll('.board-run-link').forEach(function (link) { if (!live.has(link.id)) link.remove(); });
   }
-  SLinkPoll.subscribe('application', async function () {
+  SLinkPoll.subscribe('application', async function (signal) {
     var running = !state.manager;
     try {
       if (state.manager) {
-        var response = await fetch('/api/runs'), data = await response.json();
+        var response = await fetch('/api/runs', {signal:signal}), data = await response.json();
         if (!response.ok) throw new Error(data.error);
         rail(data.runs);
         running = data.runs.some(function (run) { return run.run_id === state.run_id && run.status === 'running'; });
       }
       var ui = null;
       if (running && state.run_id) {
-        var response = await SLinkRun.fetch('/api/ui-state');
+        var response = await SLinkRun.fetch('/api/ui-state', {signal:signal});
         if (!response.ok) throw new Error('Run unavailable');
         ui = await response.json();
       }

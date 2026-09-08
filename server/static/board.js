@@ -143,7 +143,7 @@
   }
   document.addEventListener('htmx:afterSettle', pageUpdated);
   document.addEventListener('slink:page-update', pageUpdated);
-  ['htmx:responseError', 'htmx:sendError'].forEach(function (name) {
+  ['htmx:responseError', 'htmx:sendError', 'htmx:timeout'].forEach(function (name) {
     document.addEventListener(name, function () { document.getElementById('board-connection-error').hidden = false; });
   });
   document.addEventListener('slink:debug-rendered', availability);

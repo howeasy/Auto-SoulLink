@@ -1,4 +1,4 @@
-<nav id="run-list" aria-label="Saved runs"{% if not selected_run and destination|default('run') == 'run' %} hx-get="/" hx-trigger="every 2s" hx-select="#run-list" hx-swap="morph:outerHTML" hx-ext="morph"{% endif %}>
+<nav id="run-list" aria-label="Saved runs"{% if not selected_run and destination|default('run') == 'run' %} hx-get="/" hx-trigger="every 2s" hx-request='{"timeout":10000}' hx-select="#run-list" hx-swap="morph:outerHTML" hx-ext="morph"{% endif %}>
   <span class="board-cap">Runs</span>
   {% for run in runs %}<a id="run-link-{{ run.run_id }}" class="board-run-link{% if selected_run and run.run_id == selected_run.run_id %} active{% endif %}" href="/runs/{{ run.run_id }}/{% if destination and destination != 'run' %}{{ destination }}{% if tab %}?tab={{ tab }}{% endif %}{% endif %}"{% if selected_run and run.run_id == selected_run.run_id %} aria-current="true"{% endif %}><span class="board-dot {{ run.status }}" aria-hidden="true"></span><span><b>{{ run.name }}</b><small>{{ run.status|capitalize }}</small></span></a>{% else %}<p class="board-sub">Your runs will appear here.</p>{% endfor %}
 </nav>

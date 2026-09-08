@@ -48,11 +48,11 @@
   });
   document.getElementById('source-delete').addEventListener('click',async function(){if(!current||!current.id||busy)return;if(!confirm('Delete saved source “'+current.name+'”? Its OBS URL will show that the source was deleted.'))return;mutation++;busy=true;try{var response=await fetch('/api/broadcast/sources/'+current.id,{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:current.revision})}),data=await response.json();if(!response.ok)throw new Error(data.error);sources=sources.filter(function(source){return source.id!==current.id;});current=null;form.hidden=true;document.getElementById('source-output').hidden=true;document.getElementById('sources-empty').hidden=false;document.getElementById('source-preview').removeAttribute('src');renderList();message('Source deleted.');}catch(error){message(error.message);}finally{busy=false;SLinkPoll.refresh();}});
   document.getElementById('source-copy').addEventListener('click',async function(){try{await navigator.clipboard.writeText(document.getElementById('source-url').value);message('OBS URL copied.');}catch(_){document.getElementById('source-url').select();message('Select and copy the OBS URL.');}});
-  SLinkPoll.subscribe('saved-sources',async function(){
+  SLinkPoll.subscribe('saved-sources',async function(signal){
     if(busy)return;
     var started=mutation;
     try{
-      var response=await fetch('/api/broadcast/sources',{cache:'no-store'}),data=await response.json();
+      var response=await fetch('/api/broadcast/sources',{cache:'no-store',signal:signal}),data=await response.json();
       if(busy||started!==mutation)return;
       if(!response.ok)throw new Error(data.error);
       sources=data.sources;presets=data.presets;runs=data.runs;

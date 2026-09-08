@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const {test} = require('node:test');
 
 function source() {
-  let poll, response, frame, reloads = 0, morphs = 0;
+  let poll, response, frame, fetchSignal, reloads = 0, morphs = 0;
   const motion = {matches: true};
   const root = {dataset: {availability: 'live', scrollEnabled: 'true'}, style: {}, className: 'preset-links', classList: {contains() { return false; }},
     scrollHeight: 500, clientHeight: 100, scrollTop: 0,
@@ -17,7 +17,7 @@ function source() {
       getElementById(id) { return id === 'root' ? root : error; },
       createElement() { return {}; }, addEventListener() {}},
     location: {href: 'http://localhost/broadcast/sources/id', reload() { reloads++; }},
-    fetch: async () => response,
+    fetch: async (url, options) => { fetchSignal = options.signal; return response; },
     DOMParser: class { parseFromString() { return {getElementById() { return {dataset: {revision: '2'}}; }}; } },
     Idiomorph: {morph() { morphs++; root.dataset.availability = 'live'; }},
     SLinkPoll: {subscribe(name, callback) { assert.equal(name, 'broadcast-source'); poll = callback; }},
@@ -25,8 +25,27 @@ function source() {
   context.window = context;
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../server/static/broadcast-source.js'), 'utf8'), context);
   return {root, error, motion, animate: now => frame(now), get reloads() { return reloads; }, get morphs() { return morphs; },
+    get fetchSignal() { return fetchSignal; },
+    async stall(signal) { response = {status: 200, ok: true, headers: {get() { return '2'; }},
+      text: () => new Promise((resolve, reject) => { if (signal.aborted) reject(new Error('aborted body'));
+        else signal.addEventListener('abort', () => reject(new Error('aborted body')), {once: true}); })}; await poll(signal); },
     async tick(status, revision = '2') { response = {status, ok: status === 200, headers: {get() { return revision; }}, text: async () => '<main/>'}; await poll(); }};
 }
+
+test('source body cancellation retains the current canvas and recovers on the next poll', async () => {
+  const page = source(), controller = new AbortController();
+  const reading = page.stall(controller.signal);
+  await Promise.resolve();
+  assert.equal(page.fetchSignal, controller.signal);
+  controller.abort();
+  await reading;
+  assert.equal(page.morphs, 0);
+  assert.equal(page.reloads, 0);
+  assert.equal(page.error.hidden, false);
+  await page.tick(200);
+  assert.equal(page.morphs, 1);
+  assert.equal(page.error.hidden, true);
+});
 
 test('deleted sources clear telemetry and stale error banners; polling can recover', async () => {
   const page = source();

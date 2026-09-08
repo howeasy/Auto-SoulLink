@@ -60,11 +60,11 @@
     });
     renderRules();
   }
-  async function load() {
+  async function load(signal) {
     if(busy)return;
     var selected=document.getElementById('obs-inspect-run').value||app.run_id||'';
     try{
-      var response=await fetch('/api/obs/status'+(selected?'?run_id='+encodeURIComponent(selected):''));
+      var response=await fetch('/api/obs/status'+(selected?'?run_id='+encodeURIComponent(selected):''),{signal:signal});
       var result=await response.json();if(!response.ok)throw new Error(result.error||'OBS settings are unavailable.');
       if(config&&result.config.revision<config.revision)return;
       runs=result.runs;

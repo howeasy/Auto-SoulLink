@@ -107,8 +107,8 @@ var triggers = [];
       autoSaveTriggers();
     }
 
-    function loadStatus() {
-      return SLinkRun.fetch('/api/obs/status').then(function(r){return r.json();}).then(function(d) {
+    function loadStatus(signal) {
+      return SLinkRun.fetch('/api/obs/status',{signal:signal}).then(function(r){return r.json();}).then(function(d) {
         ['a','b'].forEach(function(p) {
           var badge = document.getElementById('status-' + p);
           var cs = (d.connections && d.connections[p]) ? d.connections[p].status : 'disconnected';
@@ -131,14 +131,13 @@ var triggers = [];
           triggersLoaded = true;
           renderTriggers();
         }
-        loadScenes('a');
-        loadScenes('b');
+        return Promise.allSettled([loadScenes('a', signal), loadScenes('b', signal)]);
       }).catch(function(){});
     }
 
     var _scenesCache = {a: [], b: []};
-    function loadScenes(player) {
-      SLinkRun.fetch('/api/obs/scenes/' + player).then(function(r){return r.json();}).then(function(d) {
+    function loadScenes(player, signal) {
+      return SLinkRun.fetch('/api/obs/scenes/' + player, {signal:signal}).then(function(r){return r.json();}).then(function(d) {
         _scenesCache[player] = d.scenes || [];
         _updateSceneLists();
       }).catch(function(){});
@@ -304,5 +303,5 @@ var triggers = [];
     }
 
     loadAreas();
-    if (window.SLinkPoll) SLinkPoll.subscribe('obs', function () { return loadStatus(); });
+    if (window.SLinkPoll) SLinkPoll.subscribe('obs', function (signal) { return loadStatus(signal); });
     else { loadStatus(); setInterval(loadStatus, 5000); }

@@ -1,5 +1,13 @@
 # Consolidation progress
 
+## Polling availability resilience
+
+Shared application and OBS-source polling now passes a 10-second cancellation signal through status, saved-source collection, fragment and response-body reads. Standalone OBS scene discovery is awaited within that same tick and uses the same signal. Leaving the page aborts active reads; browser back navigation resumes with a fresh signal. Reads remain serial and refresh requests still coalesce. This aborts the fetch itself instead of racing an abandoned promise that could later replace the DOM. A stalled source keeps its current canvas with the existing unavailable indicator, then resumes its explicit source/run polling.
+
+The Run board retains its existing HTMX coordinator, with the same 10-second request limit on board and empty-run-rail reads. Timeout events now show the board's connection warning. Mutation requests, source revisions, selected-run identity, Calc SSE and generation-owned runtime code are unchanged.
+
+Validation: 4141 unit/integration tests passed with two existing skips (74.31 seconds); 21 JavaScript tests passed; required Ruff subset passes. New coverage includes an actual HTTP response whose headers arrive but body stalls, timer cleanup, abort/back-navigation races, canvas preservation/recovery and nested OBS scene-read cancellation. The hydrated board contract verifies the request limit. The live Claude discussion was reconnected by session ID and a bounded review is pending.
+
 Lint statements in this historical ledger refer to the plan's explicit `E9,F6,F7,F81,F82` gate. The [peer-review reconciliation](gen1_integration_map.md#peer-review-reconciliation) separately records full-config lint findings and the adopted test-formatting correction; the whole repository is not claimed full-config clean.
 
 ## Shared-helper adoption, 2026-09-08

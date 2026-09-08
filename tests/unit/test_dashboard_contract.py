@@ -77,6 +77,7 @@ async def test_sprites_polling_and_generation_specific_stages_survive(rendered):
     assert server._get_sprite_html(25) in text
     content = dom.by_id("content")
     assert content.attrs["hx-get"] == "/" and content.attrs["hx-trigger"] == "every 2s"
+    assert content.attrs["hx-request"] == '{"timeout":10000}'
     assert "morph" in content.attrs["hx-swap"]
     for index, amount in ((0, 1), (3, 2), (4, 3)):
         label = server.adapter.stat_stage_labels()[index]
