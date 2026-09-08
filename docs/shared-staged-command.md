@@ -5,11 +5,22 @@ outer command. The caller supplies a checked state store, ordered named child
 adapters, a current physical-context callback, and final physical readback policy.
 It supplies no ROM layout, frame authority, save path or physical effect itself.
 
+The stage list must be dense and ordered with1-16 entries; holes and keyed extra
+entries are rejected rather than silently dropping work. Names and callbacks are
+captured at construction. A supplied receipt converter must be callable and return
+a nonempty JSON object; nil/false results are failures, not requests for fallback.
+
 The outer intent binds command ID/sequence, body digest, physical context and
 stage names. Each child intent is persisted before its effect. A verified child
 receipt is persisted before selecting the next child. Armed native work remains
 pending; partial states/errors remain recoverable obligations. A completed child
 is never applied again when later work or receipt publication fails.
+
+The owned context is rechecked after child callbacks, before effects and durable
+progression, after storage commits, and after final verification/conversion. A
+callback that changes context cannot carry its result into another context or
+produce an outer ACK. The caller's context callback must reflect the current
+physical generation (or refuse an invalidated owner), never a stale saved label.
 
 `verify_completed(results, body, identity)` must prove current final physical
 state before a completed sequence can produce its outer receipt. Optional

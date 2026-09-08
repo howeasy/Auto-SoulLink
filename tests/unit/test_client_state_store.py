@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 import pytest
-from lupa import LuaRuntime
+from lupa.lua54 import LuaRuntime
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 @pytest.fixture
 def runtime():
     lua = LuaRuntime(unpack_returned_tuples=True)
+    assert lua.eval("_VERSION") == "Lua 5.4", "shared client fixture must match the admitted BizHawk Lua ABI"
     lua.globals().root = ROOT.as_posix()
     lua.globals().hash_text = lambda text: hashlib.sha256(text.encode("utf-8")).hexdigest()
     lua.execute("""
