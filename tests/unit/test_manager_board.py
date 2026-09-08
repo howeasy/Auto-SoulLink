@@ -145,3 +145,6 @@ async def test_new_run_form_and_names_are_rendered_as_text_with_no_embedded_regi
     assert any(node.attrs.get("id") == "new-run" for node in dom.root.descendants("form"))
     assert any(node.attrs.get("name") == "game_family" for node in dom.root.descendants("select"))
     assert 'name="auto_start" checked' in page
+    rail = dom.by_id("run-list")
+    assert rail.attrs["hx-trigger"] == "every 2s"
+    assert rail.attrs["hx-request"] == '{"timeout":10000}'

@@ -169,7 +169,7 @@ test('OBS polling awaits both scene bodies and passes through the tick signal', 
         aborted++; reject(new Error('scene body aborted'));
       }, {once: true}))};
     }},
-    SLinkPoll: {subscribe(id, read) { assert.equal(id, 'obs'); poll = read; }}};
+    SLinkPoll: {subscribe(id, read) { assert.equal(id, 'obs'); poll = read; }, status() {}}};
   context.window = context;
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../server/static/obs.js'), 'utf8'), context);
   const controller = new AbortController();
@@ -181,4 +181,98 @@ test('OBS polling awaits both scene bodies and passes through the tick signal', 
   await reading;
   assert.equal(aborted, 2);
   assert.equal(settled, true);
+});
+
+for (const [file, banner] of [
+  ['application.js', 'board-connection-error'], ['broadcast-source.js', 'source-error'],
+  ['broadcast-sources.js', 'sources-stale'], ['manager-obs.js', 'manager-obs-stale'],
+  ['obs.js', 'obs-stale'], ['twitch.js', 'twitch-stale'],
+]) {
+  test(file + ' forwards the poll signal and shows a recoverable timeout state', async () => {
+    const nodes = new Map(), calls = [];
+    let read, collect = false, fail = true;
+    function element() { return {hidden: true, textContent: '', value: '', style: {}, dataset: {}, options: [],
+      classList: {add() {}, remove() {}, toggle() {}, contains() { return false; }},
+      addEventListener() {}, append(...items) { this.options.push(...items); }, appendChild(item) { this.options.push(item); },
+      replaceChildren(...items) { this.options = items; }, setAttribute() {}, removeAttribute() {},
+      querySelector() { return null; }, querySelectorAll() { return []; }}; }
+    const node = id => { if (!nodes.has(id)) nodes.set(id, element()); return nodes.get(id); };
+    node('application-state').textContent = '{"manager":true,"run_id":"run_a","destination":"broadcast"}';
+    node('root').dataset = {sourceRevision: '2'};
+    const data = {runs: [{run_id: 'run_a', status: 'running', name: 'Run A'}], sources: [], presets: [],
+      status: 'disabled', config: {revision: 1, enabled: false, rules: [], connections: {a: {host: '', port: 1}, b: {host: '', port: 1}}},
+      applications: {}, records: [], blocked_endpoints: [], connections: {}, scenes: [], groups: [], areas: []};
+    async function fetch(url, options) {
+      if (collect) {
+        calls.push({url, signal: options && options.signal});
+        if (fail) return new Promise((resolve, reject) => options.signal.addEventListener('abort', () => {
+          const error = new Error('BROWSER_INTERNAL_ABORT_TEXT'); error.name = 'AbortError'; reject(error);
+        }, {once: true}));
+      }
+      return {ok: true, status: 200, json: async () => data, text: async () => '<main/>', headers: {get() { return '2'; }}};
+    }
+    const context = {AbortController, URL, fetch, setTimeout() {}, clearTimeout() {}, addEventListener() {},
+      requestAnimationFrame() {}, matchMedia: () => ({matches: true}), innerHeight: 600, innerWidth: 800,
+      location: {href: 'http://localhost/', reload() {}},
+      CustomEvent: class {}, DOMParser: class { parseFromString() { return {getElementById: () => ({dataset: {revision: '2'}})}; } },
+      Idiomorph: {morph() {}},
+      document: {activeElement: null, body: {dataset: {sourceRevision: '2', savedSource: 'true', fragmentUrl: '/fragment'}},
+        getElementById: node, createElement: element, querySelector: () => element(), querySelectorAll: () => [],
+        addEventListener() {}, dispatchEvent() {}},
+      SLinkRun: {fetch}, SLinkDOM: {el: element}};
+    context.window = context;
+    vm.createContext(context);
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../../server/static/poll.js'), 'utf8'), context);
+    context.SLinkPoll = {...context.SLinkPoll, subscribe(id, callback) { assert.equal(read, undefined); read = callback; }};
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../../server/static', file), 'utf8'), context);
+    await new Promise(resolve => setImmediate(resolve));
+    collect = true;
+    const controller = new AbortController(), pending = read(controller.signal);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.ok(calls.length > 0);
+    assert.ok(calls.every(call => call.signal === controller.signal), 'every request needs the tick signal');
+    controller.abort();
+    await pending;
+    assert.equal(node(banner).hidden, false);
+    assert.ok([...nodes.values()].every(item => !item.textContent.includes('BROWSER_INTERNAL_ABORT_TEXT')));
+    fail = false; calls.length = 0;
+    const fresh = new AbortController();
+    await read(fresh.signal);
+    assert.ok(calls.every(call => call.signal === fresh.signal));
+    assert.equal(node(banner).hidden, true, 'successful recovery clears the stale indicator');
+    if (banner.endsWith('-stale')) {
+      fail = true;
+      const leaving = new AbortController(), exiting = read(leaving.signal);
+      await new Promise(resolve => setImmediate(resolve));
+      leaving.abort('slink-pagehide');
+      await exiting;
+      assert.equal(node(banner).hidden, true, 'page exit must not publish a timeout notice');
+    }
+  });
+}
+
+test('every production subscriber has signal and timeout presentation coverage', () => {
+  const root = path.join(__dirname, '../../server/static');
+  const subscribers = fs.readdirSync(root, {recursive: true}).filter(file => file.endsWith('.js') &&
+    /SLinkPoll\s*\.\s*subscribe\s*\(/.test(fs.readFileSync(path.join(root, file), 'utf8'))).sort();
+  assert.deepEqual(subscribers, ['application.js', 'broadcast-source.js', 'broadcast-sources.js',
+    'manager-obs.js', 'obs.js', 'twitch.js']);
+});
+
+test('a noncooperative reader cannot overlap a new tick after cancellation', async () => {
+  const page = coordinator();
+  let release, signal;
+  const gate = new Promise(resolve => { release = resolve; });
+  page.poll.subscribe('ignores-abort', received => { signal = received; return gate; });
+  const running = page.fire(0);
+  await Promise.resolve();
+  page.fire(10000);
+  page.poll.refresh();
+  await Promise.resolve();
+  assert.equal(signal.aborted, true);
+  assert.equal(page.timers.size, 0, 'must wait for actual work to settle, never race abandoned DOM work');
+  release();
+  await running;
+  assert.equal(page.timers.size, 1);
+  assert.equal([...page.timers.values()][0].delay, 0);
 });

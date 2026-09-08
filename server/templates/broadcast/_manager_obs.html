@@ -1,4 +1,5 @@
 <section id="manager-obs" class="board-card board-card-body">
+<p id="manager-obs-stale" class="board-note warning" role="status" hidden>OBS updates interrupted. Showing last received data. Retrying automatically.</p>
 <h2>OBS connections</h2><p>These settings apply across your runs. Each rule below chooses its own source run, independently of overlay sources.</p>
 <div class="obs-savebar"><label class="board-opt"><input type="checkbox" id="obs-enabled"><span>Enable OBS automation</span></label><span id="obs-revision" class="board-sub">Loading settings…</span></div>
 <div class="obs-connections">{% for pid in ['a','b'] %}<fieldset><legend>Player {{ pid|upper }} OBS</legend>

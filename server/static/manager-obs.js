@@ -84,7 +84,8 @@
       result.records.forEach(function(record){var run=runs.find(function(item){return item.run_id===record.run_id;});records.append(el('div',{className:'obs-record'},(run?run.name:'Deleted run')+' · Player '+record.player.toUpperCase()+' OBS · '+record.scene+' · '+record.state,el('small',{},'Batch '+record.sequence+' · revision '+record.revision),record.error?el('p',{},record.error):null));});
       if(!result.records.length)records.append('No scene decisions yet.');
       if(result.blocked_endpoints.length)message(result.blocked_endpoints.map(function(item){return item.host+':'+item.port+' — '+item.reason;}).join('\n'));
-    }catch(error){message(error.message);}
+      SLinkPoll.status('manager-obs-stale', false, signal);
+    }catch(error){SLinkPoll.status('manager-obs-stale', true, signal);}
   }
   document.getElementById('manager-obs').addEventListener('input',function(event){if(event.target.id!=='obs-inspect-run')changed();});
   document.getElementById('obs-inspect-run').addEventListener('change',function(){SLinkPoll.refresh();});

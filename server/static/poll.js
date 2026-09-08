@@ -17,9 +17,14 @@
     finally { clearTimeout(deadline); active = null; running = false; if (!suspended) timer = setTimeout(tick, refreshPending ? 0 : 2000); }
   }
   window.SLinkPoll = Object.freeze({
+    status: function (id, stale, signal) {
+      if (signal && signal.aborted && signal.reason === 'slink-pagehide') return;
+      var node = document.getElementById(id);
+      if (node) node.hidden = !stale;
+    },
     subscribe: function (id, read) { subscriptions.set(id, read); if (!running && !suspended && timer === null) timer = setTimeout(tick, 0); },
     refresh: function () { refreshPending = true; if (!running && !suspended) { if (timer !== null) clearTimeout(timer); timer = setTimeout(tick, 0); } }
   });
-  window.addEventListener('pagehide', function () { suspended = true; if (timer !== null) clearTimeout(timer); timer = null; if (active) active.abort(); });
+  window.addEventListener('pagehide', function () { suspended = true; if (timer !== null) clearTimeout(timer); timer = null; if (active) active.abort('slink-pagehide'); });
   window.addEventListener('pageshow', function () { if (suspended) { suspended = false; SLinkPoll.refresh(); } });
 })();

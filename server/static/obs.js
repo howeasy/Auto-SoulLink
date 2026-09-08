@@ -131,8 +131,10 @@ var triggers = [];
           triggersLoaded = true;
           renderTriggers();
         }
-        return Promise.allSettled([loadScenes('a', signal), loadScenes('b', signal)]);
-      }).catch(function(){});
+        return Promise.allSettled([loadScenes('a', signal), loadScenes('b', signal)]).then(function(results){
+          if(window.SLinkPoll)SLinkPoll.status('obs-stale',results.some(function(result){return result.status==='rejected'||result.value===false;}),signal);
+        });
+      }).catch(function(){if(window.SLinkPoll)SLinkPoll.status('obs-stale',true,signal);});
     }
 
     var _scenesCache = {a: [], b: []};
@@ -140,7 +142,8 @@ var triggers = [];
       return SLinkRun.fetch('/api/obs/scenes/' + player, {signal:signal}).then(function(r){return r.json();}).then(function(d) {
         _scenesCache[player] = d.scenes || [];
         _updateSceneLists();
-      }).catch(function(){});
+        return true;
+      }).catch(function(){return false;});
     }
     function _updateSceneLists() {
       var setA = new Set(_scenesCache.a);

@@ -55,6 +55,7 @@
       var response=await fetch('/api/broadcast/sources',{cache:'no-store',signal:signal}),data=await response.json();
       if(busy||started!==mutation)return;
       if(!response.ok)throw new Error(data.error);
+      SLinkPoll.status('sources-stale', false, signal);
       sources=data.sources;presets=data.presets;runs=data.runs;
       var updated=current&&current.id&&sources.find(function(source){return source.id===current.id;});
       if(updated&&!dirty&&updated.revision>current.revision)choose(updated);
@@ -64,6 +65,6 @@
       }
       if(current&&current.id&&!updated)message('This source was deleted elsewhere. Your settings remain visible, but this source can no longer be saved.');
       else if(updated&&dirty&&updated.revision!==current.revision)message('This source changed elsewhere. Your unsaved settings are still here; reload before saving.');
-    }catch(error){if(!busy&&started===mutation)message(error.message);}
+    }catch(error){if(!busy&&started===mutation)SLinkPoll.status('sources-stale', true, signal);}
   });
 })();

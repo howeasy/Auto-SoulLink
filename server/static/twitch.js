@@ -22,6 +22,7 @@ var _cfgLoaded = false;
         var cidBadge = document.getElementById('clientid-badge');
         var errBox = document.getElementById('status-error');
         if (!badge) return;
+        if(window.SLinkPoll)SLinkPoll.status('twitch-stale',false,signal);
         if (j.status === 'connected') { badge.className='status-badge sb-on'; badge.textContent='Connected'; }
         else if (j.status === 'disabled') { badge.className='status-badge sb-dis'; badge.textContent='Disabled'; }
         else { badge.className='status-badge sb-off'; badge.textContent='Disconnected'; }
@@ -78,7 +79,7 @@ var _cfgLoaded = false;
             ll.appendChild(d);
           });
         }
-      }).catch(function(){});
+      }).catch(function(){if(window.SLinkPoll)SLinkPoll.status('twitch-stale',true,signal);});
     }
     function saveConfig() {
       var ciEl = document.getElementById('cfg-client-id');

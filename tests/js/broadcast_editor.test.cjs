@@ -27,7 +27,7 @@ function editor() {
     presets: [{id: 'party', name: 'Party', player_choices: [['a'], ['b'], ['a', 'b']], layouts: [''], defaults: {}, event_filters: [], sizes: [{label: '280×380', width: 280, height: 380}]}]});
   const response = data => ({ok: true, json: async () => data});
   const context = {document, structuredClone, location: {origin: 'http://localhost'},
-    SLinkPoll: {subscribe(name, callback) { poll = callback; }, refresh() {}},
+    SLinkPoll: {subscribe(name, callback) { poll = callback; }, refresh() {}, status() {}},
     fetch: async (url, options = {}) => {
       if (options.method === 'PATCH') { revision++; return response({source: saved()}); }
       if (pending) return pending;
