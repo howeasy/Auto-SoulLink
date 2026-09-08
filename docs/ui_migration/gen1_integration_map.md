@@ -2,6 +2,8 @@
 
 Current UI checkout: `ui-phase7b-sources`, branch `codex/ui-rework`. This map records the Gen 1 owner's published handoff, not the contents of its moving worktree. Generation-specific implementation remains with Gen 1.
 
+Lint scope: historical "Ruff is clean" statements below refer to the approved plan's explicit `ruff check . --select E9,F6,F7,F81,F82` gate. They do not establish a clean run under every rule in `ruff.toml`. The peer-review follow-up below reports the full-config result separately.
+
 ## Adopted shared modules
 
 | Capability | Owner's frozen cut | Reused files | Selection boundary |
@@ -92,6 +94,18 @@ Several shared branch tips only add Pillow for their native test dependencies. D
 
 Gen 1's reported initial enrollment (`initial_observation: queued/acknowledged`) is not gameplay history or ordinary readiness. Its browser patcher, producer, bootstrap/observation and recovery activation remain generation-owned pending a bounded frozen handoff. The full Gen 1/Gen 3 E2E and verified randomizer completion gaps recorded above remain outstanding; shared helper tests do not close them.
 
-Gen 1 reconfirmed that the adopted frame/syntax corrections have no newer replacement. Its moving held-service launcher can now authorize an exact pending faint write under a one-use permit and fixed-frame proof; ordinary execution remains false and this generation binding is not published for UI adoption. Frozen presentation facts remain unchanged.
+Gen 1 reconfirmed the production frame/syntax corrections; the initial review missed the separately published test-only normalization `9b3e1fd`, now adopted as `90b55e8`. Its moving held-service launcher can now authorize an exact pending faint write under a one-use permit and fixed-frame proof; ordinary execution remains false and this generation binding is not published for UI adoption. Frozen presentation facts remain unchanged.
 
 Validation: **4126 unit/integration passes, 2 existing skips** (86.06 seconds); **3820 portable passes, 308 explicit deferrals** (57.02 seconds); **16 JavaScript passes**, **220 Lua 5.4 parses**, **103 canonical-source checks**, and clean Ruff E9/F6/F7/F81/F82. Seven production/tool blobs match the exact published corrected cuts. The focused shared regression selection is 104 cases, of which 72 are new portable inventory entries.
+
+## Peer-review reconciliation
+
+Claude's `UI-Codex Collab` review identified the missed test-formatting cut and a gap in suspension containment coverage. The exact two-file `9b3e1fd4f92d36ef10493d57f678e385c44830fa` cut is adopted; frame test IDs are unchanged. Four additional tests use the real runtime constructor, recovery barrier, session gate and SQLite journal with a portable generation document binding. They verify refusal after a hook failure, actual TCP NACK/EOF for both `JournalError` and `RuntimeError`, and invalidation of the persisted recovery ticket on reopen. The original four ordering tests remain intact.
+
+Full-config Ruff with the pinned UI environment reported **73 findings before normalization, 59 afterward**. All 59 remaining findings are in 29 files unchanged from `029a42a`; the 14 introduced frame-test findings are removed. The approved fatal-error subset passes separately. The peer's 28/14 whole-tree counts were not reproducible here, so they are not used as validation evidence. No broad formatting sweep or rule suppression is included in this follow-up.
+
+The connection loop already catches arbitrary callback exceptions and closes its writer in `finally`; no exception-type production change was needed. Gen 1 owns the reported `TradeDriver.new_id` validation and pacing-contract clarifications. The alleged execution-window reason overwrite is not supported by the reviewed control flow: missing scope clears the grant before `live()` checks it and returns.
+
+RR explicitly reconfirmed the frozen three-file RuntimeLease handoff `36821a1ddb3d9b9ec55ad67a988e1a3668274663`, with unchanged file contents and no superseding cut. A `codex/shared-*` branch is a discovery convention, not the freeze authority. Pin the owner-published commit and file closure; do not import the moving RR branch head. The lease remains unimported in UI pending a real lifecycle consumer.
+
+Follow-up validation: **4130 unit/integration passes, two existing skips** (71.15 seconds); **3824 portable passes, 308 explicit deferrals** (48.07 seconds); all 64 focused frame/suspension tests pass. The changed test files pass full-config Ruff; the required repository subset passes; 220 Lua files parse under 5.4. Existing whole-tree full-config findings remain explicitly outstanding above.

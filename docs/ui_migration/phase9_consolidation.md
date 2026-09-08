@@ -1,5 +1,7 @@
 # Consolidation progress
 
+Lint statements in this historical ledger refer to the plan's explicit `E9,F6,F7,F81,F82` gate. The [peer-review reconciliation](gen1_integration_map.md#peer-review-reconciliation) separately records full-config lint findings and the adopted test-formatting correction; the whole repository is not claimed full-config clean.
+
 ## Shared-helper adoption, 2026-09-08
 
 The [integration map](gen1_integration_map.md#shared-helper-review-2026-09-08) now distinguishes adopted corrected helpers from published prerequisites that still lack a qualified generation consumer. Imported the default suspension hook, private state-store snapshot copies, trade driver, JSON scan improvement, corrected frame windows/pacing and explicit Lua 5.4 syntax runner. Added shared SQLite suspension failure/order tests for reuse by Gen 1. No generation-owned activation or producer code changed.
