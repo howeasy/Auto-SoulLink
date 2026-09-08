@@ -103,6 +103,14 @@ class EventReceipt:
 
 
 @dataclass(frozen=True)
+class EventSnapshot:
+    revision: int
+    request: dict
+    result: dict
+    command_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class RecordSnapshot:
     revision: int
     value: dict
@@ -235,6 +243,39 @@ class ProtocolJournal:
         ids = tuple(r[0] for r in self._db.execute(
             "SELECT command_id FROM commands WHERE origin_player=? AND origin_operation=? ORDER BY position", (player, operation_id)))
         return EventReceipt(row["revision"], _decode(row["result"], row["result_digest"]), ids)
+
+    def event_snapshot(self, player, operation_id):
+        """Read checked, detached event evidence without supplying its request.
+
+        This is an audit read, not replay validation or execution authority.
+        Use event() when retrying a request under an existing operation ID.
+        """
+        _player(player)
+        _identifier(operation_id)
+        row = self._db.execute("""SELECT events.*,
+            (SELECT revision FROM snapshot WHERE singleton=1) AS committed_revision
+            FROM events WHERE player=? AND operation_id=?""", (player, operation_id)).fetchone()
+        if row is None:
+            return None
+        current = row["committed_revision"]
+        if type(current) is not int or current < 0:
+            raise JournalError("invalid committed state revision")
+        if type(row["revision"]) is not int or not 1 <= row["revision"] <= current:
+            raise JournalError("event has an invalid committed revision")
+        for name in ("request", "result"):
+            if (not isinstance(row[name], str)
+                    or not isinstance(row[name + "_digest"], str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", row[name + "_digest"])):
+                raise JournalError("invalid stored event document or digest")
+        try:
+            request = _decode(row["request"], row["request_digest"])
+            result = _decode(row["result"], row["result_digest"])
+        except (UnicodeError, RecursionError) as exc:
+            raise JournalError("invalid stored event document encoding or structure") from exc
+        ids = tuple(_identifier(r[0]) for r in self._db.execute(
+            "SELECT command_id FROM commands WHERE origin_player=? AND origin_operation=? ORDER BY position",
+            (player, operation_id)))
+        return EventSnapshot(row["revision"], request, result, ids)
 
     def commit(self, player, operation_id, request, *, expected_revision, state, commands, result,
                acknowledgements=(), records=()):
