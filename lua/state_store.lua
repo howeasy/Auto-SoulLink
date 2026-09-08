@@ -66,6 +66,10 @@ function M.open(backend,binding,initial)
             if self.closed or self.fault then return nil,self.fault or "state store is closed" end
             return clone_validated(document.payload),document.revision
         end
+        function self:revision()
+            if self.closed or self.fault then return nil,self.fault or "state store is closed" end
+            return document.revision
+        end
         function self:commit(payload)
             if self.closed or self.fault then return false,self.fault or "state store is closed" end
             local success,error=pcall(function()

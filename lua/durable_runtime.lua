@@ -68,6 +68,14 @@ function M.new(options)
         assert(type(options.read_hello)=="function" and type(options.metadata_matches)=="function","metadata callbacks required")
         assert(type(options.operation_ready)=="function","operation-specific readiness policy required")
         assert(options.reconciliation==nil or type(options.reconciliation)=="function","invalid reconciliation callback")
+        local operation_execution=options.operation_execution
+        if operation_execution~=nil then
+            assert(type(operation_execution)=="table","operation execution binding must be a table")
+            for _,method in ipairs({"request","accept","authorize_apply","revoke","status"})do
+                assert(type(operation_execution[method])=="function","operation execution callback required: "..method)
+            end
+            operation_execution.revoke("runtime initialization requires fresh operation authority")
+        end
         local journal,adapter=options.journal,options.executor_adapter
         assert(type(adapter)=="table","executor_adapter required")
         for _,name in ipairs({"prepare","classify","apply","receipt"}) do
@@ -121,10 +129,16 @@ function M.new(options)
             state.failed=state.failed or fatal
             state.reason=why;state.phase=state.failed and "failed" or "connection_pending"
             state.request=nil;state.binding=nil;state.admission=nil;state.recovery=nil;state.last_control=nil
+            state.last_verified_control=nil
+            if operation_execution then
+                local revoked,problem=pcall(operation_execution.revoke,why)
+                if not revoked then state.failed=true;state.failure=state.failure or reason(problem)end
+            end
             local held,hold_error=pcall(function()control:revoke(why)end)
             session:revoke(why)
             local cleared,clear_error=pcall(function()transport.disconnect();queues_empty()end)
             state.connected=false
+            if state.failed then state.phase="failed";state.reason=state.failure or state.reason end
             if not held or not cleared then
                 state.failed=true;state.phase="failed"
                 state.failure=state.failure or reason(not held and hold_error or clear_error)
@@ -160,11 +174,17 @@ function M.new(options)
         end
         local function permission(body,intent)
             if not control_tick() or not current_metadata() then return false,"current binding is unavailable" end
+            if operation_execution and (not state.last_verified_control or now()-state.last_verified_control>=WATCHDOG)then
+                return false,"fresh control roundtrip required for operation execution"
+            end
             local before=control:status()
             local allowed,why=options.operation_ready(copy(body),intent and copy(intent) or nil,copy(before))
             assert(type(allowed)=="boolean","operation readiness must explicitly allow or defer")
             -- A slow readiness callback cannot use an expired ticket to apply.
             if not control_tick() or not current_metadata() then return false,"authority changed during readiness" end
+            if operation_execution and (not state.last_verified_control or now()-state.last_verified_control>=WATCHDOG)then
+                return false,"control liveness expired during readiness"
+            end
             local after=control:status()
             if before.admitted~=after.admitted or before.held~=after.held
                 or before.recovery_epoch~=after.recovery_epoch then return false,"authority changed during readiness" end
@@ -174,11 +194,23 @@ function M.new(options)
         local executor=Executor.new(journal,{prepare=adapter.prepare,classify=adapter.classify,receipt=adapter.receipt,
             apply=function(body,intent,identity)
                 local allowed,why=permission(body,intent)
-                -- Readiness may admit read-only classification/receipts under a
-                -- hold. Physical apply always needs independent ordinary run
-                -- authority; this composition has no native recovery authority.
-                if allowed and (not control_tick() or control:status().ordinary_execution~=true) then
-                    allowed=false;why="ordinary execution authority is required to apply"
+                -- Configured generations may require command-scoped authority
+                -- even while an ordinary run ticket exists. No generic native
+                -- or recovery permission is inferred by this composition.
+                if allowed then
+                    if not control_tick() or not current_metadata()then
+                        allowed=false;why="current execution binding is unavailable"
+                    elseif operation_execution then
+                        allowed,why=operation_execution.authorize_apply(copy(body),copy(intent),copy(identity),copy(control:status()))
+                        assert(type(allowed)=="boolean","operation apply authority must explicitly allow or defer")
+                        if allowed and (not control_tick() or not current_metadata() or not state.last_verified_control
+                            or now()-state.last_verified_control>=WATCHDOG)then
+                            allowed=false;why="authority changed during operation authorization"
+                        end
+                    else
+                        allowed=control:status().ordinary_execution==true
+                        why="ordinary execution authority is required to apply"
+                    end
                 end
                 if not allowed then
                     apply_deferred=reason(why or "operation is not ready")
@@ -246,6 +278,7 @@ function M.new(options)
                 assert(fresh.context_generation==binding.context_generation and matches(packet.admission,fresh),
                     "metadata changed during HELLO")
                 control:bind(binding)
+                if operation_execution then operation_execution.revoke("new admission binding")end
                 state.binding=copy(binding);state.admission=copy(packet.admission)
                 state.recovery=packet.recovery~=JSON.null and packet.recovery and copy(packet.recovery) or nil
                 state.phase="admitted";state.reason="waiting for paired control authority"
@@ -253,6 +286,13 @@ function M.new(options)
                 assert(JSON.kind(packet.control)=="object","control response packet required")
                 assert(JSON.kind(packet.recovery)=="object","control response recovery document required")
                 assert(control:accept(packet.control),"stale or invalid control authority")
+                state.last_verified_control=request.started
+                if operation_execution then
+                    local grant=packet.operation_execution
+                    assert(grant==nil or grant==JSON.null or JSON.kind(grant)=="object","invalid operation execution response")
+                    assert(operation_execution.accept(grant~=JSON.null and grant and copy(grant)or nil,copy(state.binding))==true,
+                        "operation execution response was not accepted")
+                end
                 state.recovery=packet.recovery~=JSON.null and packet.recovery and copy(packet.recovery) or nil
                 state.reason=control:status().reason
             else
@@ -272,6 +312,7 @@ function M.new(options)
                 end
             end
             state.request=nil
+            state.last_completed=request.kind
         end
         local function service()
             local time=now()
@@ -304,7 +345,8 @@ function M.new(options)
                 if send({event="hello"},"hello",time) then state.phase="hello_sent" end
             elseif session.state=="admitted" then
                 if not control_tick() then return end
-                if not state.last_control or time-state.last_control>=heartbeat then
+                if (not state.last_control or time-state.last_control>=heartbeat)
+                    and not (state.last_completed=="control" and state.event_count>0)then
                     local proof
                     if options.reconciliation and state.recovery then
                         proof=options.reconciliation(copy(state.recovery))
@@ -314,7 +356,14 @@ function M.new(options)
                         end
                     end
                     local challenge=control:challenge()
-                    if send({event="control",operation_id=challenge.challenge,control=challenge,reconciliation=proof},"control",time) then
+                    local operation
+                    if operation_execution then
+                        operation=operation_execution.request(copy(state.binding),copy(control:status()))
+                        if operation~=nil then
+                            operation=copy(operation);assert(JSON.kind(operation)=="object","operation execution request must be an object")
+                        end
+                    end
+                    if send({event="control",operation_id=challenge.challenge,control=challenge,reconciliation=proof,operation_execution=operation},"control",time) then
                         state.last_control=time
                     end
                 else
@@ -358,14 +407,23 @@ function M.new(options)
             if state.failed then return false,state.failure end
             return true
         end
-        function self:status()
+        function self:is_bound()
+            return state.binding~=nil and control:status().admitted
+        end
+        function self:status(options)
+            local execution=state.execution
+            if options and options.summary and execution then
+                execution={outcome=execution.outcome,phase=execution.phase,pending=execution.pending,
+                    reason=execution.reason,retryable=execution.retryable,replayed=execution.replayed}
+            end
             return copy({protocol=protocol,phase=state.phase,connected=state.connected,failed=state.failed,
                 reason=state.reason,failure=state.failure,session_state=session.state,session_id=session.session_id,
                 admission_epoch=session.epoch,context_generation=state.binding and state.binding.context_generation,
                 binding_missing=state.binding==nil or not control:status().admitted,
                 request=state.request,pending_events=state.event_count,pending_commands=state.command_count,
-                command_id=state.command_id,execution=state.execution,deferred=state.deferred,control=control:status(),
+                command_id=state.command_id,execution=execution,deferred=state.deferred,control=control:status(),
                 hold_verified=state.hold_verified,host_request_verified=state.host_request_verified,
+                operation_execution=operation_execution and operation_execution.status()or nil,
                 production_selected=false,host_qualification_proved=false,native_recovery_execution=false})
         end
         events();commands()
