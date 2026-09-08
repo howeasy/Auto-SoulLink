@@ -4,6 +4,8 @@
 local M={SCHEMA="slink-saveram-file-v1"}
 function M.new(options)
     assert(type(options.authorize)=="function","private save-file authority required")
+    assert(options.path==nil or type(options.path)=="string" and #options.path>0 and #options.path<=4096,
+        "explicit SaveRAM path must be a bounded string")
     local profile=assert(require("platform_execution").supported_profile(options.profile))
     luanet.load_assembly("System")
     luanet.load_assembly("System.Windows.Forms")
@@ -44,10 +46,14 @@ function M.new(options)
         and tostring(core:GetType().FullName)==profile.core_type
         and hash(File.ReadAllBytes(core:GetType().Assembly.Location))==profile.core_assembly_sha256,
         "save-file host profile differs")
-    local target=tostring(Path.GetFullPath(options.path))
     local get_property=luanet.get_method_bysig(main:GetType(),"GetProperty","System.String","System.Reflection.BindingFlags")
     local property=assert(get_property("Config",flags))
     local get_config=luanet.get_method_bysig(property,"GetValue","System.Object")
+    local initial_config=get_config(main)
+    -- An owner may bind the current configured path instead of supplying it.
+    -- Both modes freeze it once and recheck it before and after every flush.
+    local target=tostring(Path.GetFullPath(options.path or Paths.SaveRamAbsolutePath(
+        initial_config.PathEntries,main.Game,main.MovieSession.Movie)))
     local flush=luanet.get_method_bysig(main,"FlushSaveRAM","System.Boolean")
     local self={path=target}
     local function guard()

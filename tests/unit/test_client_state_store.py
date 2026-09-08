@@ -61,6 +61,23 @@ def test_publish_readback_reopen_and_detached_reads(runtime):
     assert json.loads(lua.globals().disk)["document"]["payload"]["inbox"] == []
 
 
+def test_revision_token_changes_only_on_commits_and_refuses_faulted_or_closed_owner(runtime):
+    lua=runtime;store=opened(lua)
+    assert store.revision(store)==0
+    payload,revision=store.read(store)
+    payload['foreign']='detached'
+    assert store.revision(store)==revision==0
+    assert store.commit(store,payload) is True and store.revision(store)==1
+    lua.globals().mode='after'
+    assert store.commit(store,lua.eval('{new=true}'))[0] is False
+    assert store.revision(store)[0] is None
+    store.close(store)
+    lua.globals().mode='ok';reopened=opened(lua)
+    assert reopened.revision(reopened)==2
+    reopened.close(reopened)
+    assert reopened.revision(reopened)[0] is None
+
+
 @pytest.mark.parametrize("mode,committed", [("before", False), ("after", True)])
 def test_uncertain_publication_latches_until_reopen(runtime, mode, committed):
     lua = runtime
