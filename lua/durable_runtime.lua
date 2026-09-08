@@ -129,6 +129,7 @@ function M.new(options)
             state.failed=state.failed or fatal
             state.reason=why;state.phase=state.failed and "failed" or "connection_pending"
             state.request=nil;state.binding=nil;state.admission=nil;state.recovery=nil;state.last_control=nil
+            state.last_verified_control=nil
             if operation_execution then
                 local revoked,problem=pcall(operation_execution.revoke,why)
                 if not revoked then state.failed=true;state.failure=state.failure or reason(problem)end
@@ -173,11 +174,17 @@ function M.new(options)
         end
         local function permission(body,intent)
             if not control_tick() or not current_metadata() then return false,"current binding is unavailable" end
+            if operation_execution and (not state.last_verified_control or now()-state.last_verified_control>=WATCHDOG)then
+                return false,"fresh control roundtrip required for operation execution"
+            end
             local before=control:status()
             local allowed,why=options.operation_ready(copy(body),intent and copy(intent) or nil,copy(before))
             assert(type(allowed)=="boolean","operation readiness must explicitly allow or defer")
             -- A slow readiness callback cannot use an expired ticket to apply.
             if not control_tick() or not current_metadata() then return false,"authority changed during readiness" end
+            if operation_execution and (not state.last_verified_control or now()-state.last_verified_control>=WATCHDOG)then
+                return false,"control liveness expired during readiness"
+            end
             local after=control:status()
             if before.admitted~=after.admitted or before.held~=after.held
                 or before.recovery_epoch~=after.recovery_epoch then return false,"authority changed during readiness" end
@@ -196,6 +203,10 @@ function M.new(options)
                     elseif operation_execution then
                         allowed,why=operation_execution.authorize_apply(copy(body),copy(intent),copy(identity),copy(control:status()))
                         assert(type(allowed)=="boolean","operation apply authority must explicitly allow or defer")
+                        if allowed and (not control_tick() or not current_metadata() or not state.last_verified_control
+                            or now()-state.last_verified_control>=WATCHDOG)then
+                            allowed=false;why="authority changed during operation authorization"
+                        end
                     else
                         allowed=control:status().ordinary_execution==true
                         why="ordinary execution authority is required to apply"
@@ -275,6 +286,7 @@ function M.new(options)
                 assert(JSON.kind(packet.control)=="object","control response packet required")
                 assert(JSON.kind(packet.recovery)=="object","control response recovery document required")
                 assert(control:accept(packet.control),"stale or invalid control authority")
+                state.last_verified_control=request.started
                 if operation_execution then
                     local grant=packet.operation_execution
                     assert(grant==nil or grant==JSON.null or JSON.kind(grant)=="object","invalid operation execution response")
