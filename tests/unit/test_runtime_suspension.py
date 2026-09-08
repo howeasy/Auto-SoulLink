@@ -3,11 +3,12 @@
 import asyncio
 import copy
 import json
+import logging
 from types import SimpleNamespace
 
 import pytest
 
-from server.durable_runtime import DurableRuntime
+from server.durable_runtime import TIMEOUT, DurableRuntime
 from server.identity_registry import IdentityRegistry
 from server.paired_recovery import RecoveryBarrier, VerifiedReconciliation
 from server.protocol import SessionGate
@@ -89,25 +90,39 @@ class PortableStage:
         stage.component = copy.deepcopy(document["component"])
         stage.identities = IdentityRegistry.restore(document["identities"], run_id="1" * 32)
         stage.barrier = RecoveryBarrier.restore(document["barrier"])
+        stage.rules = SimpleNamespace()
         return stage
+
+    def admit(self, player, metadata, binding):
+        self.component["admissions"][player] = {"metadata": copy.deepcopy(metadata)}
+        self.barrier.bind(player, **binding)
+
+    def handle_event(self, player, request, **options):
+        assert request["event"] == "hello"  # No cartridge rule behavior is modeled here.
+        return []
+
+    def take_commands(self, player, immediate):
+        return {"a": [], "b": []}
 
     def document(self):
         return {"component": self.component, "identities": self.identities.document(),
                 "barrier": self.barrier.document()}
 
 
-def open_portable_runtime(tmp_path, *, initialize=False):
+def open_portable_runtime(tmp_path, *, initialize=False, clock=lambda: 10):
     contract = {"schema": "test-suspension-contract"}
-    initial = {"component": {"contract": contract},
+    initial = {"component": {"contract": contract, "admissions": {"a": None, "b": None}},
                "identities": IdentityRegistry("1" * 32).document(),
                "barrier": RecoveryBarrier("a" * 64).document()}
     return DurableRuntime(
         tmp_path / "lifecycle.sqlite3", contract=contract, data_dir=tmp_path,
         protocol="test-suspension", hold_event="test_hold", stage_type=PortableStage,
         new_session_gate=lambda **options: SessionGate(
-            protocol="test-suspension", durable_ids=True, hello_validator=lambda *args: {}, **options),
+            protocol="test-suspension", durable_ids=True,
+            hello_validator=lambda *args: {"save_identity": {"ot_id": "0000", "trainer_name": "TEST"}},
+            **options),
         validate_event=lambda *args: None, validate_receipt=lambda *args: None,
-        verify_reconciliation=lambda *args: None, clock=lambda: 10,
+        verify_reconciliation=lambda *args: None, clock=clock,
         initial_state=initial if initialize else None, run_id="1" * 32,
     )
 
@@ -116,8 +131,9 @@ def open_portable_runtime(tmp_path, *, initialize=False):
 @pytest.mark.parametrize("error_type", [JournalError, RuntimeError])
 @pytest.mark.parametrize("entry", ["process", "connection"])
 async def test_hook_failure_latches_runtime_closes_connection_and_reopen_revokes_ticket(
-    tmp_path, error_type, entry,
+    tmp_path, error_type, entry, caplog,
 ):
+    caplog.set_level(logging.ERROR, logger="server.durable_runtime")
     runtime = open_portable_runtime(tmp_path, initialize=True)
     try:
         stage = runtime.state()
@@ -161,9 +177,24 @@ async def test_hook_failure_latches_runtime_closes_connection_and_reopen_revokes
                     reply = json.loads(await asyncio.wait_for(reader.readline(), 3))
                     assert reply["ack"] == "NACK"
                     assert reply["admission"]["state"] == "contract_pending"
+                    assert reply["admission"]["reason"] == "injected suspension callback"
                     assert reply["commands"] == []
                     assert await asyncio.wait_for(reader.read(), 3) == b""
                     await asyncio.wait_for(finished.wait(), 3)
+                    finished.clear()
+                    retry_reader, retry_writer = await asyncio.open_connection("127.0.0.1", port)
+                    try:
+                        retry_writer.write(json.dumps(message).encode() + b"\n")
+                        await retry_writer.drain()
+                        retry = json.loads(await asyncio.wait_for(retry_reader.readline(), 3))
+                        assert retry["admission"]["state"] == "contract_pending"
+                        assert "requires reopen" in retry["admission"]["reason"]
+                        assert retry["commands"] == []
+                        assert await asyncio.wait_for(retry_reader.read(), 3) == b""
+                        await asyncio.wait_for(finished.wait(), 3)
+                    finally:
+                        retry_writer.close()
+                        await retry_writer.wait_closed()
                 finally:
                     writer.close()
                     await writer.wait_closed()
@@ -177,6 +208,10 @@ async def test_hook_failure_latches_runtime_closes_connection_and_reopen_revokes
         assert runtime.state().barrier.ticket() == ticket
         with pytest.raises(JournalError, match="requires reopen"):
             runtime.process(message, object())
+        errors = [record for record in caplog.records if record.name == "server.durable_runtime"]
+        assert len(errors) == int(entry == "connection" and error_type is RuntimeError)
+        if errors:
+            assert errors[0].exc_info[0] is RuntimeError
     finally:
         runtime.close()
     reopened = open_portable_runtime(tmp_path)
@@ -188,3 +223,90 @@ async def test_hook_failure_latches_runtime_closes_connection_and_reopen_revokes
         assert reopened.gate.sessions == {}
     finally:
         reopened.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["hook_failure", "commit", "barrier_failure"])
+async def test_admitted_writer_is_held_before_hook_and_revoked_at_exact_deadline(tmp_path, mode):
+    now = [0.0]
+    runtime = open_portable_runtime(tmp_path, initialize=True, clock=lambda: now[0])
+    written = []
+    finished = asyncio.Event()
+
+    async def connected(reader, writer):
+        # Observe actual queued socket bytes, preserving StreamWriter's real transport.
+        write = writer.write
+
+        def observe(data):
+            written.append(json.loads(data))
+            write(data)
+
+        writer.write = observe
+        try:
+            await runtime.handle_client(reader, writer)
+        finally:
+            finished.set()
+
+    server = await asyncio.start_server(connected, "127.0.0.1", 0)
+    try:
+        reader, writer = await asyncio.open_connection("127.0.0.1", server.sockets[0].getsockname()[1])
+        try:
+            hello = {"protocol": runtime.protocol, "player": "a", "event": "hello", "seq": 0,
+                     "client_nonce": "4" * 32, "operation_id": "4" * 32,
+                     "context_generation": "5" * 32}
+            writer.write(json.dumps(hello).encode() + b"\n")
+            await writer.drain()
+            admitted = json.loads(await asyncio.wait_for(reader.readline(), 3))
+            assert admitted["admission"]["state"] == "admitted"
+            assert set(runtime.gate.sessions) == set(runtime._control_challenges) == set(runtime._writers) == {"a"}
+            with pytest.raises(JournalError, match="close runtime connections"):
+                runtime.close()
+
+            # A real control challenge before expiry proves the admitted owner is usable.
+            now[0] = TIMEOUT - 0.001
+            control = {**hello, "event": "control", "seq": 1, "operation_id": "6" * 32,
+                       "session_id": admitted["session_id"], "admission_epoch": admitted["admission_epoch"],
+                       "control": {**admitted["admission"]["control_binding"], "challenge": "6" * 32}}
+            writer.write(json.dumps(control).encode() + b"\n")
+            await writer.drain()
+            assert json.loads(await asyncio.wait_for(reader.readline(), 3))["ack"] == "ACK"
+            assert runtime._control_challenges["a"] == {"6" * 32}
+            before = runtime.journal.snapshot()
+            epoch = runtime.state().barrier.document()["epoch"]
+
+            def hook(reason):
+                assert runtime._writers and runtime.gate.sessions and runtime._control_challenges
+                assert written[-1]["event"] == "test_hold"
+                if mode == "hook_failure":
+                    raise JournalError("injected admitted hook failure")
+                stage = runtime.state()
+                stage.component["interruption"] = reason
+                runtime._commit_system(stage, "test_interruption")
+                if mode == "barrier_failure":
+                    runtime.journal._db.execute("""CREATE TRIGGER fail_suspension BEFORE INSERT ON events
+                        WHEN NEW.request = '{"event":"runtime_suspended"}'
+                        BEGIN SELECT RAISE(ABORT, 'injected suspension publication'); END""")
+
+            runtime._before_suspend = hook
+            now[0] += TIMEOUT  # Exact >= boundary, measured from the accepted control heartbeat.
+            writer.write(json.dumps({**control, "seq": 2, "operation_id": "7" * 32}).encode() + b"\n")
+            await writer.drain()
+            notice = json.loads(await asyncio.wait_for(reader.readline(), 3))
+            assert notice["event"] == "test_hold"
+            refused = json.loads(await asyncio.wait_for(reader.readline(), 3))
+            assert refused["ack"] == "NACK" and refused["commands"] == []
+            assert await asyncio.wait_for(reader.read(), 3) == b""
+            await asyncio.wait_for(finished.wait(), 3)
+            assert runtime.gate.sessions == runtime._control_seen == runtime._control_challenges == runtime._writers == {}
+            after = runtime.journal.snapshot()
+            assert after.revision == before.revision + {"hook_failure": 0, "commit": 2, "barrier_failure": 1}[mode]
+            assert ("interruption" in after.state["component"]) == (mode != "hook_failure")
+            assert (runtime.state().barrier.document()["epoch"] != epoch) == (mode == "commit")
+            assert (runtime._failed is None) == (mode == "commit")
+        finally:
+            writer.close()
+            await writer.wait_closed()
+    finally:
+        server.close()
+        await server.wait_closed()
+        runtime.close()
