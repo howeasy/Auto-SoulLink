@@ -27,6 +27,13 @@ calls. Each generation supplies its qualified execution and evidence binding.
   are scanned in the native matcher, stopping at escape, quote, control and UTF-8
   boundaries. Unicode validity and encoded/decoded resource bounds are unchanged.
 
+The pacer is a cadence helper, not an independent rate limit across authority or
+pause transitions. A call with `permitted=false` or `user_paused=true` discards
+the deadline; resuming may schedule immediately, even at the same timestamp as
+the preceding frame. The caller must keep those signals faithful to its actual
+lifecycle and enforce any independent rate/budget requirement in its qualified
+host/authority binding. Toggling them is not a way to earn more authority.
+
 The modules require the existing shared `json_codec` and `platform_identity`;
 callers may supply a nonce generator for window challenges. No new dependency is
 introduced. Generation-specific command/ROM/checkpoint validators, suspension,
