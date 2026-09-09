@@ -133,3 +133,15 @@ Without `operation_execution`, applying a command still requires ordinary execut
 No `platform_saveram`, linked-death/memorial helpers, generation adapters, launcher bundles or Manager launch setup are imported by this cut. Those published or moving components remain with their owners until a real UI consumer and frozen integration closure are available. Ordinary gameplay and verified-randomizer completion gates remain unchanged.
 
 Validation: **4149 full-suite passes, two existing skips** (76.23 seconds); **3843 portable passes, 308 explicit deferrals** (54.75 seconds); 76 focused shared-client cases pass. Required Ruff and full-config Ruff on the imported tests pass; 220 production Lua files parse under 5.4. The two production Lua files match the frozen owner cut exactly. Eight new portable test IDs were registered without removing or changing existing IDs.
+
+## Event evidence and runtime latency closure
+
+Adopted `08e825b3f1e1dbcc576ce57efb28a523196f797d` as `416107f`, then the exact ten-file `7810e69c48be2a2684d8abad14ea6f83044b877e` cut as `359a559`. The existing journal and durable-runtime files matched the required parent versions before either patch. The event-snapshot prerequisite adds detached, checked event evidence while preserving the existing replay API. No stored schema or generation authority changes.
+
+Runtime replies are now written to the transport before presentation work; this is not a claim that the peer has received an ACK. One detached presentation state supplies rules and status. The optional `_presentation_state()` hook is never used for admission or execution. Journal validation reuse requires freshly read snapshot revision/body/digest bytes to match exactly; record evidence and current history bounds are still checked on each read.
+
+The bounded deterministic validation cache requires fresh external dependencies in its key and returns detached results. It cannot replace current ownership, permission or journal checks. The command-service router requires exactly one claiming service and retains the response route; revocation reaches every selected service even if another fails. No generation service selection is added by importing these helpers.
+
+All owner tests are included: 43 event-snapshot cases and 21 latency/cache/router cases, plus the existing 11 suspension cases in focused verification. The publication-order test needed formatting for five E701/E702 findings; its Python AST remains identical to the published cut. Production files are unmodified from the frozen owner versions. Gen 1's producer, Manager and native launcher work remains a separate, moving integration boundary.
+
+Validation: **4220 full-suite passes, two existing skips** (78.90 seconds); **3914 portable passes, 308 explicit deferrals** (55.70 seconds); all 75 focused cases pass. Required Ruff and full-config Ruff on the new helper/tests pass; 221 production Lua files parse under 5.4. The portable inventory adds the exact 64 new cases without dropping or reclassifying any existing node.
