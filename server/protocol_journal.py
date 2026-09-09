@@ -380,7 +380,7 @@ class ProtocolJournal:
             FROM records WHERE namespace=? AND record_key=?""", (namespace, key)).fetchone()
         if bounds["invalid"]:
             raise JournalError("component record has an invalid committed revision")
-        current = self.snapshot().revision
+        current = self._checked_snapshot_revision()
         if type(current) is not int or current < 0:
             raise JournalError("invalid committed state revision")
         if bounds["latest"] is not None:
@@ -390,6 +390,21 @@ class ProtocolJournal:
             if bounds["latest"] > current:
                 raise JournalError("component record is newer than its state snapshot")
         return current
+
+    def _checked_snapshot_revision(self):
+        # Every read still obtains the actual row. Only deterministic validation
+        # of the exact same bytes is reused; no decoded mutable state, record,
+        # command, binding or execution authority is cached here.
+        row = self._db.execute('SELECT revision,body,digest FROM snapshot WHERE singleton=1').fetchone()
+        if row is None:
+            raise JournalError('journal has not been bootstrapped')
+        current = tuple(row)
+        if getattr(self, '_validated_snapshot_row', None) != current:
+            _decode(row['body'], row['digest'])
+            if type(row['revision']) is not int or row['revision'] < 0:
+                raise JournalError('invalid committed state revision')
+            self._validated_snapshot_row = current
+        return row['revision']
 
     def record_history(self, namespace, key, *, after_revision=0, limit=128):
         """Bounded checked audit reads; never remove old component revisions."""

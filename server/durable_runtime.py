@@ -313,16 +313,26 @@ class DurableRuntime:
         return True
 
     def status(self):
-        stage = self.state()
+        return self._status_from_stage(self.state())
+
+    def _status_from_stage(self, stage):
         return {"recovery": stage.barrier.status(), "failed": self._failed,
                 "connections": {p: {"connected": p in self.gate.sessions, "rom_type": self.gate.sessions[p].metadata.get("rom_type") if p in self.gate.sessions else None,
                     "last_event": "durable_session", "last_seen_ts": self._wall_seen.get(p)} for p in ("a", "b")},
                 "scope": "configured_runtime_requires_qualified_generation_bindings"}
 
+    def _presentation_state(self):
+        """Detached display projection; generation bindings may avoid proof replay.
+
+        This hook is never used for admission, command execution or authority.
+        """
+        return self.state()
+
     def _publish(self, callback):
         if callback is not None:
             try:
-                callback(self.rule_state(), self.status())
+                stage = self._presentation_state()
+                callback(stage.rules, self._status_from_stage(stage))
             except Exception:
                 # Presentation failure cannot roll back a committed event or
                 # cause another physical command to be generated.
@@ -346,8 +356,11 @@ class DurableRuntime:
                 async with self._lock:
                     response = self.process(message, owner)
                     self._writers[player] = (owner, writer)
+                    # Commit and validate first, then expose the response before
+                    # presentation work. Rendering cannot consume a live permit's
+                    # response budget or delay an already committed ACK.
+                    writer.write(canonical_json(response).encode("ascii") + b"\n")
                     self._publish(on_change)
-                writer.write(canonical_json(response).encode("ascii") + b"\n")
                 await writer.drain()
                 raw = None
         except (asyncio.IncompleteReadError, ConnectionError, TimeoutError):
