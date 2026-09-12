@@ -9,7 +9,7 @@ FILES = (
     "lua/slink.lua", "lua/gen1_client_entry.lua", "lua/gen1_runtime.lua", "lua/gen1_session.lua", "lua/gen1_runtime_profiles.lua",
     "lua/durable_runtime.lua", "lua/client_session.lua", "lua/client_journal.lua", "lua/control_service.lua",
     "lua/command_executor.lua", "lua/connector.lua", "lua/json_codec.lua", "lua/state_store.lua",
-    "lua/platform_storage.lua", "lua/platform_identity.lua", "lua/platform_execution.lua", "lua/platform_clock.lua",
+    "lua/platform_storage.lua", "lua/platform_identity.lua", "lua/platform_execution.lua", "lua/hold_mux.lua", "lua/platform_clock.lua",
     "lua/memory_gb.lua", "lua/gen1_write_safety.lua", "lua/games/gen1_rby.lua", "lua/gen1_party_codec.lua",
     "lua/staged_panel.lua",
     "lua/wire_protocol.lua", "lua/socket.lua", "lua/x64/socket-windows-5-4.dll",

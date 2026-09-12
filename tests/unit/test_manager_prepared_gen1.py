@@ -5,12 +5,32 @@ import pytest
 
 from server import gen1_admission, manager
 from server.gen1_run_config import open_runtime
+from server.gen1_runtime_admission import METADATA_SCHEMA, PROTOCOL
 from tests.unit.test_gen1_sessions import contract
 
 
 class Request:
     def __init__(self,body):self.body=body
     async def json(self):return self.body
+
+
+def first_controls(runtime):
+    owners={player:object() for player in ('a','b')};admissions={}
+    for index,player in enumerate(('a','b'),1):
+        operation=f'{index:032x}'
+        admissions[player]=runtime.process({
+            'protocol':PROTOCOL,'run_id':runtime.journal.run_id,'player':player,'event':'hello','seq':0,
+            'client_nonce':operation,'operation_id':operation,'context_generation':player*32,
+            'gen1_metadata':{'schema':METADATA_SCHEMA,'cartridge':runtime.contract['players'][player],
+                'save_identity':{'ot_id':'0000','trainer_name':'SAME'},'physical_instance':str(index)*32}},owners[player])
+    responses=[]
+    for index,player in enumerate(('a','b'),3):
+        binding=admissions[player]['admission']['control_binding'];challenge=f'{index:032x}'
+        session=runtime.gate.sessions[player]
+        responses.append(runtime.process({'protocol':PROTOCOL,'player':player,'event':'control',
+            'seq':session.last_seq+1,'operation_id':challenge,'session_id':session.session_id,
+            'admission_epoch':runtime.gate.epoch,'control':{**binding,'challenge':challenge}},owners[player]))
+    return responses
 
 
 @pytest.mark.asyncio
@@ -35,9 +55,14 @@ async def test_manager_prepares_a_fresh_runtime_before_optional_server_start(tmp
     runtime=open_runtime(tmp_path/runs[0]['run_id'])
     try:
         assert runtime.initial_observations and runtime.free_service
+        assert runtime.status()['service']['recovery_required'] is False
         assert runtime.state().rules.species_lock and runtime.state().rules.gender_lock
         assert not runtime.state().rules.battle_calc and not runtime.state().rules.native_messages
         assert not runtime.state().rules.links and not runtime.state().identities.document()['members']
+        first,second=first_controls(runtime)
+        assert first['control']['authority']=='hold'
+        assert second['control']['authority']=='hold'
+        assert runtime.paired_control_current() and not runtime.service_current()
     finally:runtime.close()
 
 

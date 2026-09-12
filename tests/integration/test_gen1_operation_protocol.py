@@ -25,10 +25,14 @@ def test_actual_tcp_operation_window_is_scoped_and_revoked_on_protocol_or_peer_l
                 assert response["ack"]=="ACK" and response["commands"]==[]
             response=await send("a",case.envelope("a",{"event":"faint","key":case.keys["a"]}))
             assert response["ack"]=="ACK"
+            binding=case.runtime.gate.sessions["a"].metadata["control_binding"]
+            challenge=case.token()
+            first=case.envelope("a",{"event":"control","control":{**binding,"challenge":challenge}},challenge)
+            assert (await send("a",first))["control"]["authority"]=="hold"
             message=request(case)
             before=case.runtime.journal.snapshot()
             response=await send("b",message)
-            assert response["control"]["authority"]=="hold"
+            assert response["control"]["authority"]=="service"
             assert response["operation_execution"]["scope"]==message["operation_execution"]["window"]["scope"]
             assert case.runtime.journal.snapshot()==before and case.runtime.state().barrier.ticket() is None
             if failure=="replayed_challenge":

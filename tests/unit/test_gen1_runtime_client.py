@@ -205,3 +205,73 @@ def test_gen1_wrapper_cannot_be_retargeted_and_preserves_journal_on_hold(tmp_pat
         assert json.loads(lua.globals().state_json())["outbox"] == []
     finally:
         case.close()
+
+
+def test_free_service_completes_startup_held_command_before_constructing_loop():
+    lua = lua_store.__wrapped__()
+    lua.globals().launch_json = json.dumps({
+        "schema": "slink-gen1-launch-v1", "protocol": "slink-gen1-durable-v1",
+        "mode": "free_service", "run_id": "a" * 32, "player": "a",
+        "host": "localhost", "port": 9000, "initial_observations": True,
+        "cartridge": {"variant": "yellow", "final_rom_sha1": "e" * 40},
+    })
+    lua.execute(r'''
+        package.path=root..'/lua/?.lua;'..package.path
+        JSON=require('json_codec');physical=false;pending=1;loop_built=false;startup_write=false;clock=0;nonce=0
+        gameinfo={getromhash=function()return string.rep('e',40)end}
+        emu={framecount=function()return 100 end,yield=function()end,frameadvance=function()error('startup advanced a frame')end}
+        console={log=function()end}
+        package.loaded['memory_gb']={initProfile=function()end,isPartyWriteSafe=function()return true end,
+            readPlayerId=function()return 0 end,readPlayerName=function()return 'SAME'end,read_u8=function()return 1 end}
+        package.loaded['games.gen1_rby']={}
+        package.loaded['gen1_runtime_profiles']={metadata=function(_,cartridge)return cartridge end}
+        package.loaded['platform_identity']={new_nonce=function()nonce=nonce+1;return string.format('%032x',nonce)end}
+        local host={set_held=function(value)physical=value;return true end,
+            status=function()return {held=physical,physical_stop_verified=physical}end,
+            yield_held=function()assert(physical);return true end}
+        package.loaded['platform_execution']={supported_profile=function()return {}end,new=function()return host end}
+        package.loaded['platform_clock']={new=function()return function()clock=clock+.01;return clock end end}
+        luanet={load_assembly=function()end,import_type=function(name)
+            if name=='System.IO.Path'then return {GetFullPath=function(value)return value end,
+                GetDirectoryName=function()return 'tmp'end}end
+            error('unexpected type '..name)
+        end}
+        local baseline={initial_inventory={phase='acknowledged'},bootstrap={phase='acknowledged'}}
+        local store={read=function()return {observation=baseline}end,close=function()end}
+        package.loaded['platform_storage']={new=function()return {}end}
+        package.loaded['state_store']={open=function()return store end}
+        package.loaded['connector']={}
+        local journal={pending_commands=function()return pending==1 and {{command_id='initial'}}or{}end,
+            pending_events=function()return {}end}
+        package.loaded['client_journal']={initial=function()return {}end,open=function()return journal end}
+        package.loaded['gen1_bootstrap_observer']={new=function()return {close=function()end,status=function()return{}end}end}
+        local observer={signals={status=function()return{}end},step=function()end,close=function()end}
+        package.loaded['gen1_initial_observation']={new=function()return observer end,capture=function()return{}end}
+        local operations={request=function()end,accept=function()return true end,authorize_apply=function()return false end,
+            revoke=function()end,status=function()return{}end}
+        package.loaded['gen1_held_faint']={new=function()return {operations=operations,ready=function()return false end,
+            pending=function()return pending==1 end,adapter={prepare=function()end,classify=function()end,
+                apply=function()end,receipt=function()end}}end}
+        package.loaded['gen1_acquisition_observers']={new=function()return {close=function()end}end}
+        package.loaded['battle_force_authority']={service=function()return {revoke=function()return true end,
+            close=function()return true end,status=function()return{}end}end}
+        package.loaded['gen1_runtime']={unwrap=function(value)return value end,new=function(options)
+            runtime_options=options
+            return {step=function()
+                    if pending==1 then
+                        assert(not loop_built and physical and options.operation_held(),'startup command lacks the startup hold')
+                        startup_write=true;pending=0
+                    end
+                    return true
+                end,
+                has_service_lease=function()return true end,is_bound=function()return true end,
+                observe=function()return {1}end,status=function()return{}end,revoke=function()end}
+        end}
+        package.loaded['gen1_observation_loop']={new=function()
+            assert(startup_write and pending==0 and physical,'loop constructed before startup command settled')
+            loop_built=true;return {tick=function()end}
+        end}
+        service=assert(require('gen1_client_entry').start(assert(JSON.decode(launch_json)),{root=root,storage_root='tmp'}))
+        assert(service:step())
+        assert(startup_write and loop_built and service.loop~=nil and not physical)
+    ''')

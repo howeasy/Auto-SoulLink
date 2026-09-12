@@ -18,6 +18,11 @@ def test_transport_precedes_presentation_and_each_publication_reads_one_view(fai
         runtime._writers = {}
         runtime._failed = None
         runtime._wall_seen = {}
+        runtime._clock = 0
+        runtime._service_epoch = "1" * 32
+        runtime._barred_service_epoch = None
+        runtime._service_recovery_required = True
+        runtime._service_reason = "fixture has no service continuity"
         runtime.protocol = "fixture"
         runtime.gate = SimpleNamespace(sessions={})
         stage = SimpleNamespace(

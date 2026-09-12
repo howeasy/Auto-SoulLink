@@ -1,7 +1,6 @@
 """Private RBY control-response binding for independently verified operation windows."""
 import copy
 
-from server.durable_runtime import TIMEOUT
 from server.execution_window import VerifiedExecutionWindow,command_scope,issue
 from server.held_write_permit import VerifiedHeldWrite, issue as issue_write
 from server.protocol import ProtocolError,digest
@@ -40,9 +39,7 @@ def issue_for_control(runtime,player,request,verify):
     binding=copy.deepcopy(runtime.gate.sessions[player].metadata["control_binding"])
     owners={p:(session.owner,copy.deepcopy(session.metadata)) for p,session in runtime.gate.sessions.items()}
     def current():
-        now=runtime._now()
-        return (runtime._failed is None and set(runtime.gate.sessions)=={"a","b"}
-            and set(runtime._control_seen)=={"a","b"} and all(now-seen<TIMEOUT for seen in runtime._control_seen.values())
+        return (runtime.paired_control_current()
             and all(p in owners and session.owner is owners[p][0] and session.metadata==owners[p][1]
                     for p,session in runtime.gate.sessions.items()))
     if not current():raise JournalError("fresh unchanged paired owners required for operation authority")

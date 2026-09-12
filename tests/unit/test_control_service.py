@@ -14,8 +14,9 @@ def runtime():
     lua.execute("""
         JSON=require('json_codec');Control=require('control_service')
         clock=0;nonce=0;held=nil;user_paused=false;hold_failed=false;hold_refused=false;serviced=0
-        function make_control()
+        function make_control(service_execution)
             return Control.new({clock=function() return clock end,
+                service_execution=service_execution,
                 new_nonce=function() nonce=nonce+1;return string.format('%032x',nonce) end,
                 host={set_held=function(value,why)
                     if hold_failed then error('injected actuator failure') end
@@ -44,8 +45,10 @@ def challenge(lua):
 
 
 def permit(lua, packet=None, epoch="e"):
-    packet = (packet or challenge(lua)) | {"authority": "run", "recovery_epoch": epoch * 32,
-                                         "ticket_digest": "f" * 64}
+    packet = (packet or challenge(lua)) | {
+        "authority": "run", "service_epoch": epoch * 32, "service_digest": epoch * 64,
+        "recovery_epoch": epoch * 32, "ticket_digest": "f" * 64,
+    }
     return lua.globals().accept(json.dumps(packet))
 
 
@@ -133,7 +136,9 @@ def test_service_crossing_old_deadline_cannot_renew_with_younger_inflight_reply(
     permit(lua)
     step(lua)
     lua.globals().clock = 1.5
-    packet = challenge(lua) | {"authority": "run", "recovery_epoch": "e" * 32, "ticket_digest": "f" * 64}
+    packet = challenge(lua) | {"authority": "run", "service_epoch": "e" * 32,
+                               "service_digest": "e" * 64,
+                               "recovery_epoch": "e" * 32, "ticket_digest": "f" * 64}
     lua.globals().reply_text = json.dumps(packet)
     lua.execute("""
         function service()
@@ -257,3 +262,113 @@ def test_bounded_recovery_frames_are_never_inferred_from_ordinary_ticket(runtime
     status = lua.globals().control.status(lua.globals().control)
     assert status.ordinary_execution
     assert status.native_recovery_execution is False
+
+
+def test_service_authority_releases_only_a_service_selected_client(runtime):
+    lua = runtime
+    lua.execute("control=make_control(true)")
+    bind(lua)
+    packet = challenge(lua) | {
+        "authority": "service", "service_epoch": "e" * 32,
+        "service_digest": "f" * 64, "reason": "recovery proof is still pending",
+    }
+    assert lua.globals().accept(json.dumps(packet))
+    assert lua.globals().held is True
+    assert step(lua)
+    status = lua.globals().control.status(lua.globals().control)
+    assert status.authority == "service" and status.service_execution
+    assert not status.ordinary_execution and not status.native_recovery_execution
+    assert lua.globals().held is False
+
+
+def test_revocation_bars_a_stale_service_epoch(runtime):
+    lua = runtime
+    lua.execute("control=make_control(true)")
+    bind(lua)
+    packet = challenge(lua) | {
+        "authority": "service", "service_epoch": "e" * 32,
+        "service_digest": "f" * 64, "reason": "service ready",
+    }
+    assert lua.globals().accept(json.dumps(packet))
+    step(lua)
+    lua.globals().control.revoke(lua.globals().control, "disconnect")
+    assert lua.globals().held is True
+    assert lua.globals().control.status(lua.globals().control).barred_service_epoch == "e" * 32
+    bind(lua, "1")
+    stale = challenge(lua) | {
+        "authority": "service", "service_epoch": "e" * 32,
+        "service_digest": "f" * 64, "reason": "stale service",
+    }
+    assert not lua.globals().accept(json.dumps(stale))
+    assert lua.globals().control.status(lua.globals().control).authority == "hold"
+
+
+def test_temporary_server_hold_allows_same_service_epoch_to_resume(runtime):
+    lua = runtime
+    lua.execute("control=make_control(true)")
+    bind(lua)
+    service = {"authority": "service", "service_epoch": "e" * 32,
+               "service_digest": "f" * 64, "reason": "service ready"}
+    assert lua.globals().accept(json.dumps(challenge(lua) | service))
+    step(lua)
+    assert lua.globals().held is False
+    held = challenge(lua) | {"authority": "hold", "reason": "startup peer still settling"}
+    assert lua.globals().accept(json.dumps(held))
+    status = lua.globals().control.status(lua.globals().control)
+    assert lua.globals().held is True and status.barred_service_epoch is None
+    assert lua.globals().accept(json.dumps(challenge(lua) | service))
+    step(lua)
+    assert lua.globals().held is False
+
+
+def test_owner_keyed_mux_keeps_startup_and_writer_holds_independent(runtime):
+    lua = runtime
+    lua.execute("""
+        physical=false;writes=0
+        mux=require('hold_mux').new({owners={'startup','control','writer','lifecycle'},
+            host={set_held=function(value)physical=value;writes=writes+1;return true end}})
+        assert(mux:set('startup',true,'atomic startup'))
+        assert(mux:set('control',true,'control hold'))
+        assert(mux:set('control',false,'service lease current'))
+        assert(physical and mux:held('startup'))
+        assert(mux:set('writer',true,'held writer'))
+        assert(mux:set('startup',false,'startup complete'))
+        assert(physical and mux:held('writer'))
+        assert(mux:set('writer',false,'writer complete'))
+        assert(not physical)
+    """)
+
+
+def test_mux_construction_never_releases_startup_on_stale_lease_or_builder_failure(runtime):
+    lua = runtime
+    lua.execute("""
+        physical=false;current=true
+        mux=require('hold_mux').new({owners={'startup','control','writer','lifecycle'},
+            host={set_held=function(value)physical=value;return true end}})
+        assert(mux:set('startup',true,'atomic startup'))
+        local ok=pcall(function()mux:construct_and_release('startup','constructed',
+            function()return current end,function()current=false;return {}end)end)
+        assert(not ok and physical and mux:held('startup'))
+        current=true
+        ok=pcall(function()mux:construct_and_release('startup','constructed',
+            function()return current end,function()error('builder failed')end)end)
+        assert(not ok and physical and mux:held('startup'))
+        local built=mux:construct_and_release('startup','constructed',function()return current end,
+            function()assert(physical);return {ready=true}end)
+        assert(built.ready and not physical and not mux:held('startup'))
+    """)
+
+
+def test_mux_rolls_back_an_unverified_owner_release(runtime):
+    lua = runtime
+    lua.execute("""
+        physical=false;refuse_release=false
+        mux=require('hold_mux').new({owners={'writer'},host={set_held=function(value)
+            if not value and refuse_release then return false,'injected refusal'end
+            physical=value;return true
+        end}})
+        assert(mux:set('writer',true,'write begins'))
+        refuse_release=true
+        local ok,why=mux:set('writer',false,'write ends')
+        assert(not ok and why=='injected refusal' and mux:held('writer') and physical)
+    """)

@@ -985,3 +985,5 @@ def test_window_service_arms_each_frame_closes_on_the_reached_row_and_declines_s
     assert probe.eval("S:arm()") is False and probe.eval("#completed") == 1
     probe.execute("S:close()")
     assert probe.eval("next(hooks) == nil") is True
+    assert probe.eval("S:status().revoked") is True
+    assert probe.eval("S:arm()") is False

@@ -27,6 +27,12 @@ MAX_CONTROL_CHALLENGES = 65536
 log = logging.getLogger(__name__)
 
 
+def _service_text(value, fallback="service authority is unavailable"):
+    text = "".join(character if character.isprintable() else " " for character in str(value or ""))
+    text = text.strip()[:256]
+    return text or fallback
+
+
 class DurableRuntime:
     def __init__(self, path, *, contract, data_dir, protocol, hold_event, stage_type, new_session_gate,
                  validate_event, validate_receipt,
@@ -46,6 +52,17 @@ class DurableRuntime:
         self._failed = None
         self._control_seen = {}
         self._control_challenges = {}
+        # A service lease is deliberately ephemeral.  It proves that both current
+        # socket owners completed a fresh CONTROL roundtrip; it is neither a
+        # RecoveryBarrier ticket nor permission for native/ordinary recovery.
+        # Reopening a previously admitted journal cannot reconstruct that fact,
+        # so it stays fail-closed until the later persisted-continuity lane exists.
+        # A pristine configured journal may be opened once by the Manager and
+        # again by its child server before any client evidence exists.
+        self._service_epoch = secrets.token_hex(16)
+        self._barred_service_epoch = None
+        self._service_recovery_required = False
+        self._service_reason = "waiting for fresh paired control roundtrips"
         self._wall_seen = {}
         self._writers = {}
         self._lock = asyncio.Lock()
@@ -72,6 +89,12 @@ class DurableRuntime:
             self.dispatcher = DurableDispatcher(self.journal, data_dir=data_dir, staged_type=BoundStage,
                 validate_event=self._validate_event, validate_receipt=self._validate_receipt)
             stage = self.state()
+            admissions = stage.component.get("admissions")
+            if not isinstance(admissions, dict) or set(admissions) != {"a", "b"}:
+                raise JournalError("Durable state lacks the paired admission ledger")
+            self._service_recovery_required = any(value is not None for value in admissions.values())
+            if self._service_recovery_required:
+                self._service_reason = "runtime reopened after client evidence; service continuity recovery is required"
             stage.barrier.invalidate("Durable runtime opened; fresh paired admission required")
             self._commit_system(stage, "runtime_opened")
         except Exception:
@@ -95,6 +118,7 @@ class DurableRuntime:
                 raise JournalError("Durable monotonic clock failed")
         except Exception as error:
             self._failed = "Durable monotonic clock failed; reopen and reconcile"
+            self._revoke_service(self._failed)
             self._notify_holds(self._failed)
             self.gate.sessions.clear()
             self._control_seen.clear()
@@ -138,7 +162,9 @@ class DurableRuntime:
         payload.pop("context_generation", None)
         self.dispatcher.dispatch(player, message["operation_id"], payload, preserve_peer_session=True,
                                  save_identity=SaveIdentity(**session.metadata["save_identity"]))
-        self._control_seen[player] = self._now()  # Initial heartbeat deadline; HELLO grants no ticket.
+        # HELLO proves admission/ownership only.  In particular it must not make
+        # either player live for service authority.
+        self._control_seen.pop(player, None)
         self._control_challenges[player] = set()
         # Durable commands are fetched through a journaled sync/semantic response,
         # never accepted as an unjournaled HELLO command batch by the client.
@@ -190,14 +216,24 @@ class DurableRuntime:
                         expected_revision=stage.journal_revision, state=stage.document(),
                         commands={"a": [], "b": []}, result={"ack": "ACK"})
         ticket = stage.barrier.ticket()
-        both_live = (set(self.gate.sessions) == {"a", "b"}
-                     and set(self._control_seen) == {"a", "b"}
-                     and all(now - seen < TIMEOUT for seen in self._control_seen.values()))
+        paired_control = self._paired_control_current_at(now)
+        release_ready = self._service_release_ready(stage)
+        hold_reason = (self._service_reason if self._service_recovery_required
+                       else "waiting for fresh paired control roundtrips")
+        if paired_control and not release_ready:
+            hold_reason = _service_text(self._service_release_reason(stage),
+                                        "service release prerequisites are incomplete")
         authority = {**binding, "challenge": challenge, "authority": "hold",
-                     "reason": stage.barrier.status()["reason"]}
-        if ticket is not None and both_live and self._failed is None:
-            authority = {**binding, "challenge": challenge, "authority": "run",
-                         "recovery_epoch": ticket["epoch"], "ticket_digest": ticket["digest"]}
+                     "reason": hold_reason}
+        service = self._service_binding() if paired_control else None
+        if service is not None and release_ready:
+            authority = {**binding, "challenge": challenge, "authority": "service", **service,
+                         # Keep the normal recovery blocker visible as progress;
+                         # it does not prevent read-only observation service.
+                         "reason": _service_text(stage.barrier.status()["reason"], "service authority is current")}
+            if ticket is not None:
+                authority = {**binding, "challenge": challenge, "authority": "run", **service,
+                             "recovery_epoch": ticket["epoch"], "ticket_digest": ticket["digest"]}
         response = self.gate.response(player, message, [])
         response.update(control=authority, recovery=stage.barrier.document())
         return response
@@ -209,6 +245,7 @@ class DurableRuntime:
             return response
         except (OSError, sqlite3.DatabaseError):
             self._failed = "Durable durable persistence failed; reopen and reconcile"
+            self._revoke_service(self._failed)
             self._notify_holds(self._failed)
             self.gate.sessions.clear()
             self._control_seen.clear()
@@ -271,6 +308,53 @@ class DurableRuntime:
                              "command_id": command["command_id"], "command_sequence": command["command_sequence"]})
         return commands
 
+    def _service_binding(self):
+        if set(self.gate.sessions) != {"a", "b"}:
+            return None
+        bindings = {
+            player: self.gate.sessions[player].metadata["control_binding"]["binding_digest"]
+            for player in ("a", "b")
+        }
+        return {"service_epoch": self._service_epoch,
+                "service_digest": digest({"protocol": self.protocol, "authority": "service",
+                                          "service_epoch": self._service_epoch,
+                                          "admission_epoch": self.gate.epoch,
+                                          "bindings": bindings})}
+
+    def _paired_control_current_at(self, now):
+        if now is None or self._failed is not None or self._service_recovery_required:
+            return False
+        return (set(self.gate.sessions) == {"a", "b"}
+                and set(self._control_seen) == {"a", "b"}
+                and all(now - seen < TIMEOUT for seen in self._control_seen.values()))
+
+    def paired_control_current(self):
+        """Fresh two-owner CONTROL liveness; grants no free-running release."""
+        if self._failed is not None or self._service_recovery_required:
+            return False
+        return self._paired_control_current_at(self._now())
+
+    def _service_release_ready(self, stage):
+        """Generation hook: pure persisted-state predicate, never a liveness grant."""
+        return True
+
+    def _service_release_reason(self, stage):
+        return "service release prerequisites are incomplete"
+
+    def service_current(self):
+        """Whether current paired control also satisfies the release predicate."""
+        return self.paired_control_current() and self._service_release_ready(self.state())
+
+    def _revoke_service(self, reason):
+        previous = self._service_epoch
+        self._barred_service_epoch = previous
+        self._service_epoch = secrets.token_hex(16)
+        if self._service_epoch == previous:
+            self._service_epoch = digest({"barred_service_epoch": previous,
+                                          "reason": str(reason), "rotation": "required"})[:32]
+        self._service_recovery_required = True
+        self._service_reason = _service_text(reason)
+
     def _notify_holds(self, reason, *, except_owner=None):
         for player, (owner, writer) in tuple(self._writers.items()):
             if owner is except_owner or not self.gate.owns(player, owner):
@@ -292,6 +376,8 @@ class DurableRuntime:
         """
 
     def suspend(self, reason):
+        reason = _service_text(reason, "runtime suspended")
+        self._revoke_service(reason)
         self._notify_holds(reason)
         try:
             self._before_suspend(reason)
@@ -316,9 +402,21 @@ class DurableRuntime:
         return self._status_from_stage(self.state())
 
     def _status_from_stage(self, stage):
+        paired_control = self._paired_control_current_at(self._clock)
+        release_ready = self._service_release_ready(stage)
+        release_reason = None if release_ready else _service_text(self._service_release_reason(stage))
         return {"recovery": stage.barrier.status(), "failed": self._failed,
                 "connections": {p: {"connected": p in self.gate.sessions, "rom_type": self.gate.sessions[p].metadata.get("rom_type") if p in self.gate.sessions else None,
                     "last_event": "durable_session", "last_seen_ts": self._wall_seen.get(p)} for p in ("a", "b")},
+                "service": {"epoch": self._service_epoch,
+                            "barred_epoch": self._barred_service_epoch,
+                            "digest": (self._service_binding() or {}).get("service_digest"),
+                            "paired_control_current": paired_control,
+                            "release_ready": release_ready,
+                            "release_reason": release_reason,
+                            "current": paired_control and release_ready,
+                            "recovery_required": self._service_recovery_required,
+                            "reason": self._service_reason},
                 "scope": "configured_runtime_requires_qualified_generation_bindings"}
 
     def _presentation_state(self):

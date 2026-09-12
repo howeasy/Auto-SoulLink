@@ -26,6 +26,7 @@ def test_suspension_orders_notice_hook_and_barrier_and_revokes_on_failure(tmp_pa
     runtime._control_seen = {"a": 1, "b": 1}
     runtime._control_challenges = {"a": "challenge", "b": "challenge"}
     order = []
+    runtime._revoke_service = lambda reason: order.append("service")
     runtime._notify_holds = lambda reason: order.append("notice")
 
     def state():
@@ -46,7 +47,7 @@ def test_suspension_orders_notice_hook_and_barrier_and_revokes_on_failure(tmp_pa
     runtime.state = state
 
     def before_suspend(reason):
-        assert order == ["notice"]
+        assert order == ["service", "notice"]
         assert set(runtime.gate.sessions) == {"a", "b"}
         order.append("hook")
         if mode == "hook_failure":
@@ -68,9 +69,9 @@ def test_suspension_orders_notice_hook_and_barrier_and_revokes_on_failure(tmp_pa
             assert runtime._failed is None
         assert runtime.gate.sessions == runtime._control_seen == runtime._control_challenges == {}
         after = journal.snapshot()
-        assert order == (["notice", "barrier"] if mode == "default" else
-                         ["notice", "hook"] if mode == "hook_failure" else
-                         ["notice", "hook", "barrier"])
+        assert order == (["service", "notice", "barrier"] if mode == "default" else
+                         ["service", "notice", "hook"] if mode == "hook_failure" else
+                         ["service", "notice", "hook", "barrier"])
         interruption_written = mode in {"commit", "barrier_failure"}
         barrier_written = mode in {"default", "commit"}
         assert after.revision == before.revision + interruption_written + barrier_written

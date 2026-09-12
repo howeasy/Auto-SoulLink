@@ -68,6 +68,10 @@ function M.new(options)
         assert(type(options.read_hello)=="function" and type(options.metadata_matches)=="function","metadata callbacks required")
         assert(type(options.operation_ready)=="function","operation-specific readiness policy required")
         assert(options.reconciliation==nil or type(options.reconciliation)=="function","invalid reconciliation callback")
+        assert(options.operation_held==nil or type(options.operation_held)=="function",
+            "operation hold readback must be a function")
+        assert(options.on_revoke==nil or type(options.on_revoke)=="function",
+            "runtime revocation callback must be a function")
         local operation_execution=options.operation_execution
         if operation_execution~=nil then
             assert(type(operation_execution)=="table","operation execution binding must be a table")
@@ -111,6 +115,7 @@ function M.new(options)
             read_metadata=read_report,metadata_matches=matches,new_nonce=options.new_nonce})
         assert(type(options.host)=="table" and type(options.host.set_held)=="function","hold host required")
         control=Control.new({clock=options.clock,timeout=WATCHDOG,new_nonce=options.new_nonce,
+            service_execution=options.service_execution,
             host={set_held=function(held,why)
                 state.host_request_verified=false;state.hold_verified=false
                 local accepted=options.host.set_held(held,why)
@@ -130,6 +135,12 @@ function M.new(options)
             state.reason=why;state.phase=state.failed and "failed" or "connection_pending"
             state.request=nil;state.binding=nil;state.admission=nil;state.recovery=nil;state.last_control=nil
             state.last_verified_control=nil
+            if options.on_revoke then
+                local stopped,problem=pcall(options.on_revoke,why)
+                if not stopped or problem~=true then
+                    state.failed=true;state.failure=state.failure or reason(not stopped and problem or "runtime revocation was not verified")
+                end
+            end
             if operation_execution then
                 local revoked,problem=pcall(operation_execution.revoke,why)
                 if not revoked then state.failed=true;state.failure=state.failure or reason(problem)end
@@ -172,12 +183,19 @@ function M.new(options)
             end
             return true
         end
+        local function control_status()
+            local status=control:status()
+            if options.operation_held then status.operation_held=options.operation_held()
+            else status.operation_held=status.held end
+            assert(type(status.operation_held)=="boolean","operation hold readback must be boolean")
+            return status
+        end
         local function permission(body,intent)
             if not control_tick() or not current_metadata() then return false,"current binding is unavailable" end
             if operation_execution and (not state.last_verified_control or now()-state.last_verified_control>=WATCHDOG)then
                 return false,"fresh control roundtrip required for operation execution"
             end
-            local before=control:status()
+            local before=control_status()
             local allowed,why=options.operation_ready(copy(body),intent and copy(intent) or nil,copy(before))
             assert(type(allowed)=="boolean","operation readiness must explicitly allow or defer")
             -- A slow readiness callback cannot use an expired ticket to apply.
@@ -185,9 +203,11 @@ function M.new(options)
             if operation_execution and (not state.last_verified_control or now()-state.last_verified_control>=WATCHDOG)then
                 return false,"control liveness expired during readiness"
             end
-            local after=control:status()
+            local after=control_status()
             if before.admitted~=after.admitted or before.held~=after.held
-                or before.recovery_epoch~=after.recovery_epoch then return false,"authority changed during readiness" end
+                or before.authority~=after.authority or before.service_epoch~=after.service_epoch
+                or before.recovery_epoch~=after.recovery_epoch
+                or before.operation_held~=after.operation_held then return false,"authority changed during readiness" end
             return allowed,why
         end
         local apply_deferred
@@ -201,7 +221,7 @@ function M.new(options)
                     if not control_tick() or not current_metadata()then
                         allowed=false;why="current execution binding is unavailable"
                     elseif operation_execution then
-                        allowed,why=operation_execution.authorize_apply(copy(body),copy(intent),copy(identity),copy(control:status()))
+                        allowed,why=operation_execution.authorize_apply(copy(body),copy(intent),copy(identity),copy(control_status()))
                         assert(type(allowed)=="boolean","operation apply authority must explicitly allow or defer")
                         if allowed and (not control_tick() or not current_metadata() or not state.last_verified_control
                             or now()-state.last_verified_control>=WATCHDOG)then
@@ -358,7 +378,7 @@ function M.new(options)
                     local challenge=control:challenge()
                     local operation
                     if operation_execution then
-                        operation=operation_execution.request(copy(state.binding),copy(control:status()))
+                        operation=operation_execution.request(copy(state.binding),copy(control_status()))
                         if operation~=nil then
                             operation=copy(operation);assert(JSON.kind(operation)=="object","operation execution request must be an object")
                         end
@@ -410,6 +430,17 @@ function M.new(options)
         function self:is_bound()
             return state.binding~=nil and control:status().admitted
         end
+        function self:has_service_lease()
+            if state.failed or not state.binding then return false end
+            local serviced,why=control:step()
+            if not serviced then revoke(why,true);return false end
+            if state.binding and not control:status().admitted then
+                revoke("control watchdog revoked admission",false);return false
+            end
+            local status=control:status()
+            return state.last_verified_control~=nil and now()-state.last_verified_control<WATCHDOG
+                and status.admitted and status.service_execution==true
+        end
         function self:status(options)
             local execution=state.execution
             if options and options.summary and execution then
@@ -433,6 +464,10 @@ function M.new(options)
     end)
     if not ok then
         local held,problem=pcall(function()
+            if type(options)=="table" and type(options.on_revoke)=="function" then
+                assert(options.on_revoke("durable runtime initialization failed")==true,
+                    "runtime initialization revocation was not verified")
+            end
             if control then control:revoke("durable runtime initialization failed")
             elseif type(options)=="table" and type(options.host)=="table" and type(options.host.set_held)=="function" then
                 assert(options.host.set_held(true,"durable runtime initialization failed")==true,"initial hold was not verified")

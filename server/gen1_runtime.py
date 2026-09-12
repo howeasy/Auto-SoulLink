@@ -194,6 +194,24 @@ class Gen1Runtime(DurableRuntime):
         super().close()
         self._run_lease.__exit__()
 
+    def _service_release_ready(self, stage):
+        """Cold free-run starts only after both owned enrollment saves settled."""
+        if not self.free_service:
+            return True
+        components = stage.document()["components"]
+        initial = components.get("gen1-initial-observations", {})
+        bootstrap = components.get("gen1-new-game-bootstrap", {})
+        saves = components.get("gen1-initial-save", {})
+        return (set(initial) == {"a", "b"}
+                and set(bootstrap) == {"a", "b"}
+                and set(saves) == {"a", "b"}
+                and all(isinstance(saves[player], dict)
+                        and saves[player].get("receipt_operation") is not None
+                        for player in ("a", "b")))
+
+    def _service_release_reason(self, stage):
+        return "waiting for both initial observations, new-game bootstraps, and initial-save receipts"
+
     def _presentation_state(self):
         # The journal checks the committed snapshot hash. Displaying that state
         # does not require replaying physical save/ROM proofs after every poll.
@@ -413,6 +431,7 @@ class Gen1Runtime(DurableRuntime):
             )
         except (OSError, sqlite3.DatabaseError):
             self._failed = "RBY trade persistence failed; reopen and reconcile"
+            self._revoke_service(self._failed)
             self._notify_holds(self._failed)
             self.gate.sessions.clear()
             self._control_seen.clear()

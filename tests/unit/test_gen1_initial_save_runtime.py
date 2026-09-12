@@ -11,12 +11,14 @@ import pytest
 from server.gen1_held_faint import verify
 from server.gen1_initial_save_runtime import COMPONENT, original_command, prepared, record_key
 from server.gen1_run_config import create_runtime, open_runtime
+from server.execution_window import command_scope
+from server.held_write_permit import SCHEMA as HELD_WINDOW_SCHEMA
 from server.held_write_permit import VerifiedHeldWrite
 from server.protocol import digest
 from server.protocol_journal import JournalError
 from tests.unit.test_gen1_bootstrap_runtime import deliver, enroll, receipt
 from tests.unit.test_gen1_held_faint import checkpoint
-from tests.unit.test_gen1_initial_observation import admit
+from tests.unit.test_gen1_initial_observation import admit, observation, send
 from tests.unit.test_gen1_sessions import contract
 
 
@@ -83,6 +85,96 @@ def send_ack(runtime, player, owner, message, operation=None):
 def complete_initial_save(runtime, player, owner):
     """Fixture only: acknowledge a pending save with a synthetic exact file proof."""
     return send_ack(runtime, player, owner, acknowledgement(runtime, player))
+
+
+def test_free_service_waits_for_both_startup_saves_while_their_permits_remain_live(tmp_path):
+    runtime = create_runtime(tmp_path, contract("yellow", "yellow"), free_service=True)
+    instant = runtime.clock()
+    runtime.clock = lambda: instant
+    owners = {player: admit(runtime, player) for player in ("a", "b")}
+
+    def control(player, operation_execution=None):
+        session = runtime.gate.sessions[player]
+        binding = session.metadata["control_binding"]
+        challenge = secrets.token_hex(16)
+        message = {
+            "protocol": runtime.protocol, "player": player, "event": "control",
+            "session_id": session.session_id, "admission_epoch": runtime.gate.epoch,
+            "seq": session.last_seq + 1, "operation_id": challenge,
+            "control": {**binding, "challenge": challenge},
+        }
+        if operation_execution is not None:
+            message["operation_execution"] = operation_execution
+        return runtime.process(message, owners[player])
+
+    def grant(player):
+        command, proof = evidence(runtime, player)
+        binding = runtime.gate.sessions[player].metadata["control_binding"]
+        window = {"schema": HELD_WINDOW_SCHEMA, "challenge": secrets.token_hex(16),
+                  "scope": command_scope(command, binding, phase=proof["phase"])}
+        response = control(player, {"window": window, "evidence": proof})
+        assert response["control"]["authority"] == "hold"
+        assert response["operation_execution"] is not None
+
+    try:
+        assert runtime._control_seen == {}
+        assert control("a")["control"]["authority"] == "hold"
+        waiting = control("b")["control"]
+        assert waiting["authority"] == "hold" and "initial-save receipts" in waiting["reason"]
+        assert runtime.paired_control_current() and not runtime.service_current()
+
+        initials = {}
+        for player in ("a", "b"):
+            initials[player] = observation(runtime, player)
+            send(runtime, player, owners[player], initials[player])
+        assert control("a")["control"]["authority"] == "hold"
+
+        deliver(runtime, "a", owners["a"], receipt(runtime, "a", initials["a"]))
+        grant("a")
+        complete_initial_save(runtime, "a", owners["a"])
+        assert control("b")["control"]["authority"] == "hold"
+
+        deliver(runtime, "b", owners["b"], receipt(runtime, "b", initials["b"]))
+        grant("b")
+        assert control("a")["control"]["authority"] == "hold"
+        complete_initial_save(runtime, "b", owners["b"])
+        final = control("b")["control"]
+        assert final["authority"] == "service" and runtime.service_current()
+        components = runtime.state().document()["components"]
+        assert set(components["gen1-initial-observations"]) == {"a", "b"}
+        assert set(components["gen1-new-game-bootstrap"]) == {"a", "b"}
+        assert all(components[COMPONENT][player]["receipt_operation"] for player in ("a", "b"))
+    finally:
+        runtime.close()
+
+
+def test_free_service_battery_enrollment_without_bootstrap_remains_held(tmp_path):
+    runtime = create_runtime(tmp_path, contract("yellow", "yellow"), free_service=True)
+    instant = runtime.clock()
+    runtime.clock = lambda: instant
+    owners = {player: admit(runtime, player) for player in ("a", "b")}
+    try:
+        for player in ("a", "b"):
+            send(runtime, player, owners[player], observation(runtime, player, occupied=True))
+        responses = []
+        for player in ("a", "b"):
+            session = runtime.gate.sessions[player]
+            binding = session.metadata["control_binding"]
+            challenge = secrets.token_hex(16)
+            responses.append(runtime.process({
+                "protocol": runtime.protocol, "player": player, "event": "control",
+                "session_id": session.session_id, "admission_epoch": runtime.gate.epoch,
+                "seq": session.last_seq + 1, "operation_id": challenge,
+                "control": {**binding, "challenge": challenge},
+            }, owners[player]))
+        assert [response["control"]["authority"] for response in responses] == ["hold", "hold"]
+        assert runtime.paired_control_current() and not runtime.service_current()
+        components = runtime.state().document()["components"]
+        assert set(components["gen1-initial-observations"]) == {"a", "b"}
+        assert "gen1-new-game-bootstrap" not in components
+        assert "gen1-initial-save" not in components
+    finally:
+        runtime.close()
 
 
 def evidence(runtime, player, phase="initial_save"):

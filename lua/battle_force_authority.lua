@@ -66,7 +66,7 @@ function M.service(options)
     assert(journal and memory and type(unwrap)=="function" and type(options.owner_id)=="string" and type(options.held)=="function",
         "window service dependencies required")
     local frame_of=options.frame or function()return emu.framecount()end
-    local executors,self={},{window=nil}
+    local executors,self={},{window=nil,revoked=false,reason=nil}
     local function executor(name)
         if not executors[name] then executors[name]=M.new({owner_id=options.owner_id,held=options.held,name=name})end
         return executors[name]
@@ -91,6 +91,7 @@ function M.service(options)
         self.window=nil
     end
     function self:arm() -- last in the tick: for the frame about to run
+        if self.revoked then return false end
         local now=frame_of();local w=self.window
         if not w then
             local entry,body,live=pending()
@@ -103,6 +104,7 @@ function M.service(options)
         assert(w.exec.arm(w.authority));w.armed=now;return true
     end
     function self:finish() -- first in the next tick: the frame that just ran
+        if self.revoked then return nil end
         local w=self.window
         if not w or not w.armed then return nil end
         local now=frame_of()
@@ -112,8 +114,16 @@ function M.service(options)
         if row.site~=JSON.null or now>w.last or not in_battle() or not live then close(w.entry,w.authority,w.rows,now)end
         return row
     end
-    function self:status()return {open=self.window~=nil,rows=self.window and #self.window.rows or 0,armed=self.window~=nil and self.window.armed~=nil}end
-    function self:close()for _,ex in pairs(executors)do ex.close()end;executors={};self.window=nil end
+    function self:status()return {open=self.window~=nil,rows=self.window and #self.window.rows or 0,
+        armed=self.window~=nil and self.window.armed~=nil,revoked=self.revoked,reason=self.reason}end
+    function self:revoke(reason)
+        assert(type(reason)=="string"and #reason>0 and #reason<=256 and not reason:find("[%c]"),
+            "explicit instruction revocation reason required")
+        if not self.revoked then for _,ex in pairs(executors)do ex.close()end end
+        executors={};self.window=nil;self.revoked=true;self.reason=reason
+        return true
+    end
+    function self:close()return self:revoke("battle instruction service is closing")end
     return self
 end
 return M

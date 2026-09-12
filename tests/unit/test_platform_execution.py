@@ -344,7 +344,8 @@ def test_shared_control_emergency_rehold_uses_the_failed_actuator_safely():
     )
     control.bind(control, binding)
     packet = control.challenge(control)
-    packet.authority, packet.recovery_epoch, packet.ticket_digest = "run", "f" * 32, "1" * 64
+    packet.authority, packet.service_epoch, packet.service_digest = "run", "e" * 32, "2" * 64
+    packet.recovery_epoch, packet.ticket_digest = "f" * 32, "1" * 64
     assert control.accept(control, packet) is True
     lua.globals().T.release_readback_error = True
     assert control.step(control)[0] is False

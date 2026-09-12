@@ -12,6 +12,7 @@ from tests.unit.test_gen1_runtime_server import RuntimeCase
 def case(tmp_path):
     value=RuntimeCase(tmp_path)
     value.admit("a");value.admit("b")
+    value.control("a")  # One owner alone stays held; b's request below completes the service lease.
     value.send("a",{"event":"faint","key":value.keys["a"]})
     yield value
     value.close()
@@ -44,7 +45,7 @@ def test_typed_current_proof_grants_only_the_exact_command_and_keeps_barrier_hel
     case.runtime.verify_operation_execution=verifier
     message=request(case);before=case.runtime.journal.snapshot()
     response=case.runtime.process(message,case.owners["b"])
-    assert response["control"]["authority"]=="hold"
+    assert response["control"]["authority"]=="service"
     assert response["operation_execution"]["scope"]==message["operation_execution"]["window"]["scope"]
     assert response["operation_execution"]["frames"]==30
     assert case.runtime.journal.snapshot()==before
@@ -72,7 +73,7 @@ def test_generation_verifier_cannot_return_a_success_flag_or_stale_proof(case,ki
     case.runtime.verify_operation_execution=checked
     if kind=="denied":
         response=case.runtime.process(request(case),case.owners["b"])
-        assert response["operation_execution"] is None and response["control"]["authority"]=="hold"
+        assert response["operation_execution"] is None and response["control"]["authority"]=="service"
     else:
         with pytest.raises(JournalError):case.runtime.process(request(case),case.owners["b"])
 

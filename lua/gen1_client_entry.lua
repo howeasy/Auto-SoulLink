@@ -37,7 +37,7 @@ function M.start(launch,options)
     assert(gameinfo.getromhash():lower()==launch.cartridge.final_rom_sha1,"loaded ROM differs from the run launcher")
     local actual=assert(require("gen1_runtime_profiles").metadata(launch.cartridge.variant,launch.cartridge))
     assert(JSON.encode(actual)==JSON.encode(launch.cartridge),"loaded cartridge profile differs from the launcher")
-    local self={phase="waiting_for_overworld",reason="Waiting for a verified overworld checkpoint",host=nil,runtime=nil,store=nil}
+    local self={phase="waiting_for_overworld",reason="Waiting for a verified overworld checkpoint",host=nil,holds=nil,runtime=nil,store=nil}
     local nonce=require("platform_identity").new_nonce
     local generation,instance=assert(nonce()),assert(nonce())
     local context,first_frame
@@ -66,7 +66,8 @@ function M.start(launch,options)
         local Execution=require("platform_execution")
         self.host=assert(Execution.new({profile="gambatte",owner_id=instance,exclusive_ownership="emulator_process",
             control_context="between_frames",expected_host=assert(Execution.supported_profile("gambatte"))}))
-        assert(self.host.set_held(true,"waiting for qualified paired runtime bindings"))
+        self.holds=require("hold_mux").new({host=self.host,owners={"startup","control","writer","lifecycle"}})
+        assert(self.holds:set("startup",true,"waiting for qualified paired runtime bindings"))
         first_frame=emu.framecount()
         context={context_generation=generation,physical_instance=instance,
             save_identity={ot_id=string.format("%04X",memory.readPlayerId()),trainer_name=memory.readPlayerName()}}
@@ -125,21 +126,25 @@ function M.start(launch,options)
             self.instruction=require("battle_force_authority").service({journal=journal,memory=memory,owner_id=instance,held=at_boundary,
                 unwrap=function(entry)return require("gen1_runtime").unwrap(entry.body,launch.player)end})
         end
+        local function hard_revoke(reason)
+            assert(self.holds:set("lifecycle",true,reason))
+            if self.instruction then assert(self.instruction:revoke(reason))end
+            return true
+        end
         self.runtime=assert(require("gen1_runtime").new({run_id=launch.run_id,player=launch.player,
             variant=launch.cartridge.variant,server_host=launch.host,server_port=launch.port,
             control_interval=free and 0.5 or nil,
             sync_interval=free and 1 or nil,
             prepared_cartridge=launch.cartridge,
             transport=require("connector"),journal=journal,clock=clock,
-            host={set_held=function(held,reason)
-                -- Authority bookkeeping only once the loop runs: the loop and its writer own the physical hold (P10).
-                if free and self.loop then return true end
-                if not held then
-                    self.host.set_held(true,"ordinary execution is not qualified for this launcher")
-                    return false
-                end
-                return self.host.set_held(true,reason)
-            end},
+            host=self.holds:adapter("control"),service_execution=free,
+            operation_held=function()
+                -- Enrollment commands run under the startup hold.  Only after
+                -- the observation loop exists does the momentary writer own it.
+                local owner=free and self.loop and "writer" or "startup"
+                return self.holds:held(owner) and self.host.status().physical_stop_verified==true
+            end,
+            on_revoke=hard_revoke,
             read_context=free and source_owned or owned,
             operation_execution=operations,
             operation_ready=ready,
@@ -152,7 +157,7 @@ function M.start(launch,options)
                 -- core is released: the initial save is an image command prepared from the enrollment
                 -- checkpoint, and gen1_held_save_image.classify refuses it once the core has moved.
                 if #assert(journal:pending_commands())>0 or #assert(journal:pending_events())>0 then return false end
-                return self.runtime:is_bound() and self.observer.signals~=nil and self.acquisitions~=nil
+                return self.runtime:has_service_lease() and self.observer.signals~=nil and self.acquisitions~=nil
                     and baseline.initial_inventory~=nil and baseline.initial_inventory.phase=="acknowledged"
                     and baseline.bootstrap~=nil and baseline.bootstrap.phase=="acknowledged"
             end
@@ -172,27 +177,29 @@ function M.start(launch,options)
                         -- Captured under a momentary verified hold, so the host stanza (held=true) is true
                         -- and matches the initial observation the server compares it with.
                         if not memory.isPartyWriteSafe()then return nil end
-                        assert(self.host.set_held(true,"heartbeat inventory checkpoint"))
+                        assert(self.holds:set("writer",true,"heartbeat inventory checkpoint"))
                         local ok,point=pcall(Observation.capture,{owned=owned,host=self.host,memory=memory,variant=launch.cartridge.variant})
-                        assert(self.host.set_held(false,"free-running observation"))
+                        assert(self.holds:set("writer",false,"heartbeat inventory checkpoint complete"))
                         if not ok then error(point,0)end
                         return point
                     end,
                     writer={pending=writer_pending,service=function()
                         -- ponytail: whole-command hold, bounded per tick and retried while pending; item 4
                         -- maps every engine command to its executor and item 5 adds the in-battle window.
-                        assert(self.host.set_held(true,"servicing a held write command"))
+                        assert(self.holds:set("writer",true,"servicing a held write command"))
                         local deadline=clock()+M.WRITE_SERVICE_SECONDS
                         local ok,why=pcall(function()
                             while writer_pending() and clock()<deadline do
                                 assert(self.runtime:step());assert(self.host.yield_held())
                             end
                         end)
-                        assert(self.host.set_held(false,"free-running observation"))
+                        assert(self.holds:set("writer",false,"held write service complete"))
                         if not ok then error(why,0)end
                     end}}
-                self.loop=Loop.new(self.loop_ctx) -- adopts the persisted cursor, or takes observers:initial under the hold
-                assert(self.host.set_held(false,"free-running observation"))
+                local loop=self.holds:construct_and_release("startup","free-running observation loop constructed",
+                    function()return self.runtime:has_service_lease()end,
+                    function()return Loop.new(self.loop_ctx)end) -- adopts the persisted cursor, or takes observers:initial under the hold
+                self.loop=loop
                 self.phase="free_service";self.reason="Free-running observation; writes take the hold"
                 console.log("[SLink] Free-running observation loop started at frame "..emu.framecount())
             end
@@ -226,7 +233,8 @@ function M.start(launch,options)
         if not ok then
             self.phase="failed";self.reason=tostring(why)
             if self.runtime then pcall(function()self.runtime:revoke("client entry failed")end)end
-            if self.host then pcall(function()self.host.set_held(true,"client entry failed")end)end
+            if self.holds then pcall(function()self.holds:set("lifecycle",true,"client entry failed")end)
+            elseif self.host then pcall(function()self.host.set_held(true,"client entry failed")end)end
             return false,self.reason
         end
         return true
@@ -242,10 +250,12 @@ function M.start(launch,options)
             bootstrap_observation=bootstrap,
             engine_signals=self.observer and self.observer.signals and self.observer.signals:status()or nil,
             runtime=self.runtime and self.runtime:status({summary=true}) or nil,
+            hold_mux=self.holds and self.holds:status() or nil,
             ordinary_execution=false,
             free_service=free,observation_loop=self.loop~=nil}))))
     end
     function self:close()
+        if self.holds then assert(self.holds:set("lifecycle",true,"client service is closing"))end
         if self.instruction then self.instruction:close()end
         if self.acquisitions then self.acquisitions:close()end
         if self.bootstrap then self.bootstrap.close()end

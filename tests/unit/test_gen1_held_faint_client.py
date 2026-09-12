@@ -33,13 +33,13 @@ def test_prepare_and_noop_wait_for_permission_then_complete_without_frames(runti
         local adapter={}
         for _,name in ipairs({'prepare','classify','receipt'})do adapter[name]=function(wrapped,...)return service.adapter[name](wrapped.body,...)end end
         adapter.apply=function(wrapped,intent,identity)
-            assert(service.operations.authorize_apply(wrapped.body,intent,identity,{admitted=true,held=true}))
+            assert(service.operations.authorize_apply(wrapped.body,intent,identity,{admitted=true,operation_held=true}))
             return service.adapter.apply(wrapped.body,intent,identity)
         end
         executor=require('command_executor').new(journal,adapter)
         function step()return executor:step(id)end
         function request()
-            local value=service.operations.request({binding_digest=string.rep('f',64)},{admitted=true,held=true})
+            local value=service.operations.request({binding_digest=string.rep('f',64)},{admitted=true,operation_held=true})
             return JSON.encode(value)
         end
         function grant()
@@ -95,13 +95,13 @@ def test_composed_held_faint_executes_force_explode_as_the_overworld_faint_write
         local adapter={}
         for _,name in ipairs({'prepare','classify','receipt'})do adapter[name]=function(wrapped,...)return service.adapter[name](wrapped.body,...)end end
         adapter.apply=function(wrapped,intent,identity)
-            assert(service.operations.authorize_apply(wrapped.body,intent,identity,{admitted=true,held=true}))
+            assert(service.operations.authorize_apply(wrapped.body,intent,identity,{admitted=true,operation_held=true}))
             return service.adapter.apply(wrapped.body,intent,identity)
         end
         executor=require('command_executor').new(journal,adapter)
         function step()return executor:step(id)end
         function request()
-            return JSON.encode(service.operations.request({binding_digest=string.rep('f',64)},{admitted=true,held=true}))
+            return JSON.encode(service.operations.request({binding_digest=string.rep('f',64)},{admitted=true,operation_held=true}))
         end
         function grant()
             local value=JSON.decode(request());local proof=journal.store.backend.sha256(assert(require('journal_document').encode(value.evidence)))

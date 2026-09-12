@@ -150,7 +150,7 @@ function M.new(options)
     self.ready=function(body,intent,control)
         if not matches(body) or not control.admitted then return false,"waiting for owned held faint command"end
         if missed_rival(body,intent)then return true end
-        if not control.held or not readable(body)then return false,"waiting for owned held faint command"end
+        if not control.operation_held or not readable(body)then return false,"waiting for owned held faint command"end
         if body.cmd=="retirement_observe"or body.cmd=="storage_observe"then return true end
         if body.cmd=="memorial_observe" then
             if mem.getPartyCount()<1 then return false,"memorial read requires an existing party member"end
@@ -167,14 +167,14 @@ function M.new(options)
     self.operations={
         request=function(binding,control)
             self.binding=copy(binding);refresh()
-            if not control.admitted or not control.held or not safe()then return nil end
+            if not control.admitted or not control.operation_held or not safe()then return nil end
             local current_point
             if self.current and is_image(self.current.body) and self.current.intent then
                 current_point=require("gen1_full_save").capture(mem,options.variant)
                 self.memorial_phase=selected(self.current.body).phase(current_point,self.current.body.payload)
             end
             local selected=scope()
-            if not selected or not control.admitted or not control.held or not safe()then return nil end
+            if not selected or not control.admitted or not control.operation_held or not safe()then return nil end
             local entry=self.current;local status=host.status()
             local evidence={schema=Rival.handles(entry.body) and Rival.EVIDENCE or is_death(entry.body) and "rby-held-faint-evidence-v1" or (entry.body.cmd=="initial_save" and "rby-held-initial-save-evidence-v1" or entry.body.cmd=="acquisition_retire"and"rby-held-retirement-evidence-v1"or entry.body.cmd=="storage_apply"and"rby-held-storage-evidence-v1"or "rby-held-memorial-evidence-v1"),command_id=entry.command_id,command_sequence=entry.command_sequence,
                 context_generation=owned().context_generation,final_sha1=gameinfo.getromhash():lower(),
@@ -206,7 +206,7 @@ function M.new(options)
             local ok,why=permit:accept(packet);self.pending_request=nil;self.pending_proof=nil;return ok,why
         end,
         authorize_apply=function(body,intent,identity,control)
-            return control.admitted and control.held and matches(body) and safe() and self.current.command_id==identity.command_id
+            return control.admitted and control.operation_held and matches(body) and safe() and self.current.command_id==identity.command_id
                 and self.current.command_sequence==identity.command_sequence and same(self.current.intent,intent) and permit:consume()==true,
                 "fresh single-use held faint permission required"
         end,

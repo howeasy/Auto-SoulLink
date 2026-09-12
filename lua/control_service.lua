@@ -15,8 +15,12 @@ function M.new(options)
         "execution hold adapter required")
     local timeout=options.timeout or 2
     assert(type(timeout)=="number" and timeout>0 and timeout<math.huge,"invalid watchdog timeout")
+    assert(options.service_execution==nil or type(options.service_execution)=="boolean",
+        "explicit service execution selection must be boolean")
+    local service_selected=options.service_execution==true
     local state={held=true,reason="waiting for paired admission and reconciliation",last_clock=nil,
-        binding=nil,pending=nil,last_started=nil,ticket=nil,last_nonce=nil,failed=false,barred_epoch=nil}
+        binding=nil,pending=nil,last_started=nil,ticket=nil,last_nonce=nil,failed=false,barred_epoch=nil,
+        authority="hold",service_epoch=nil,service_digest=nil,barred_service_epoch=nil}
     local self={}
     local function set_held(value,why)
         assert(options.host.set_held(value,why)==true,"execution hold was not verified")
@@ -37,15 +41,18 @@ function M.new(options)
         end
         return value
     end
-    local function hold(why)
+    local function hold(why,bar_service)
+        assert(type(bar_service)=="boolean","explicit service-epoch disposition required")
         if state.ticket then state.barred_epoch=state.ticket.epoch end
+        if bar_service and state.service_epoch then state.barred_service_epoch=state.service_epoch end
         state.held=true;state.reason=why;state.ticket=nil;state.last_started=nil
+        state.authority="hold";state.service_epoch=nil;state.service_digest=nil
         set_held(true,why)
     end
     function self:revoke(why)
         assert(reason(why),"explicit revocation reason required")
         state.binding=nil;state.pending=nil
-        hold(why)
+        hold(why,true)
     end
     function self:bind(binding)
         assert(type(binding)=="table","admitted control binding required")
@@ -83,15 +90,42 @@ function M.new(options)
         if not pending or packet.challenge~=pending.nonce then return false end
         state.pending=nil
         if time-pending.issued>=timeout then return false end
-        if packet.authority=="hold" and reason(packet.reason) then
-            hold(packet.reason);return true
+        local function exact(fields)
+            local expected={challenge=true,authority=true}
+            for key in pairs(state.binding)do expected[key]=true end
+            for _,key in ipairs(fields)do expected[key]=true end
+            for key in pairs(packet)do if not expected[key]then return false end end
+            for key in pairs(expected)do if packet[key]==nil then return false end end
+            return true
         end
-        if packet.authority~="run" or not hex(packet.recovery_epoch,32) or not hex(packet.ticket_digest,64) then
-            hold("invalid paired execution authority");return false
+        if packet.authority=="hold" and exact({"reason"}) and reason(packet.reason) then
+            hold(packet.reason,false);return true
+        end
+        if (packet.authority~="service" and packet.authority~="run")
+            or not hex(packet.service_epoch,32) or not hex(packet.service_digest,64) then
+            hold("invalid paired execution authority",true);return false
+        end
+        if packet.service_epoch==state.barred_service_epoch then
+            hold("service authority predates the execution hold",true);return false
+        end
+        if packet.authority=="service" then
+            if not exact({"service_epoch","service_digest","reason"}) or not reason(packet.reason) then
+                hold("invalid paired service authority",true);return false
+            end
+            state.authority="service";state.service_epoch=packet.service_epoch
+            state.service_digest=packet.service_digest;state.ticket=nil
+            state.last_started=pending.issued;state.reason=packet.reason
+            return true
+        end
+        if not exact({"service_epoch","service_digest","recovery_epoch","ticket_digest"})
+            or not hex(packet.recovery_epoch,32) or not hex(packet.ticket_digest,64) then
+            hold("invalid paired execution authority",true);return false
         end
         if packet.recovery_epoch==state.barred_epoch then
-            hold("reconciliation predates the execution hold");return false
+            hold("reconciliation predates the execution hold",true);return false
         end
+        state.authority="run";state.service_epoch=packet.service_epoch
+        state.service_digest=packet.service_digest
         state.ticket={epoch=packet.recovery_epoch,digest=packet.ticket_digest}
         state.last_started=pending.issued
         state.reason="paired reconciliation and fresh roundtrip confirmed"
@@ -104,24 +138,30 @@ function M.new(options)
             local time=now()
             if service then service(self) end
             time=now()
-            local permitted=not state.failed and state.binding and state.ticket and state.last_started
-                and time-state.last_started<timeout
+            local service_permitted=service_selected and state.authority=="service"
+            local permitted=not state.failed and state.binding and state.last_started
+                and time-state.last_started<timeout and (state.authority=="run" or service_permitted)
             set_held(not permitted,state.reason)
             state.held=not permitted
         end)
         if not ok then
             state.failed=true;state.binding=nil;state.pending=nil
             -- Try the independent host hold even after a clock/network/store failure.
-            local held,problem=pcall(hold,"control service failed: "..tostring(why):sub(1,200))
+            local held,problem=pcall(hold,"control service failed: "..tostring(why):sub(1,200),true)
             if not held then return false,"execution hold failed: "..tostring(problem) end
             return false,tostring(why)
         end
         return true
     end
     function self:status()
-        return {held=state.held,reason=state.reason,failed=state.failed,
+        return {held=state.held,reason=state.reason,failed=state.failed,authority=state.authority,
             admitted=state.binding~=nil,recovery_epoch=state.ticket and state.ticket.epoch or nil,
-            ordinary_execution=not state.held,read_only_service=true,native_recovery_execution=false}
+            service_epoch=state.service_epoch,service_digest=state.service_digest,
+            barred_service_epoch=state.barred_service_epoch,
+            service_execution=service_selected and not state.held
+                and (state.authority=="service" or state.authority=="run"),
+            ordinary_execution=state.authority=="run" and not state.held,
+            read_only_service=true,native_recovery_execution=false}
     end
     -- Fail before exposing an object if the host cannot establish the initial hold.
     set_held(true,state.reason)

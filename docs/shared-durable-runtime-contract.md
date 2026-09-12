@@ -85,6 +85,37 @@ with respect to the emulated game; only `apply` may perform the intended effect.
 The adapter's prepared intent, identity checks, poststate and receipt remain its
 responsibility. See [the native executor contract](shared-executor-native-contract.md).
 
+Control authority has three explicit states. `hold` keeps the host stopped.
+`service` requires a fresh CONTROL roundtrip from both current admitted owners and
+carries a 32-hex `service_epoch` plus 64-hex `service_digest`; when the client was
+constructed with `service_execution=true`, it permits free read-only observation
+and separately authorized held writes. It never sets `ordinary_execution` or
+`native_recovery_execution`. `run` carries the same current service binding plus
+the independently verified RecoveryBarrier epoch/digest and is the only ordinary
+execution authority. HELLO timestamps, TCP connectivity and semantic ACKs never
+count as service liveness. Disconnect, watchdog expiry, hold notice and server
+reopen after persisted client evidence bar the old service epoch. Process-restart
+continuity is not implemented, so such a reopened runtime reports
+`service.recovery_required=true` and stays held. The Manager's normal pristine
+create/close/server-open handoff remains eligible because neither admission slot
+contains client evidence yet.
+
+The Gen 1 `free_service` binding adds a persisted release predicate on top of
+paired CONTROL liveness: both `gen1-initial-observations` records, both
+`gen1-new-game-bootstrap` records, and both completed `gen1-initial-save`
+`receipt_operation` values must exist. Paired CONTROL may still authorize those
+command-scoped startup writes while the response remains `hold`; it cannot release
+either cartridge early. Battery/legacy starts without that complete provenance
+remain held. Recovery after a disconnect, watchdog, hard failure, or previously
+active process reopen is intentionally unavailable in this slice and requires the
+later persisted-continuity work.
+
+`operation_held()` is an optional Boolean readback used for command-scoped held
+writes when the service owner itself is free-running. `on_revoke(reason)` is an
+optional fail-closed hook and must return exactly `true`; a cartridge binding uses
+it to acquire its lifecycle hold and disarm instruction hooks before the runtime
+can return to a frame boundary. Neither callback grants authority.
+
 Ordinary authorized `armed`/`PENDING` keeps the oldest command outstanding and
 blocks newer commands. It preserves an independently valid run ticket so ordinary
 native completion can occur; PENDING grants no ticket or frames. When held,

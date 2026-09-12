@@ -374,20 +374,20 @@ def test_composed_held_faint_dispatches_the_swap_under_the_one_use_permit(runtim
         local adapter={}
         for _,name in ipairs({"prepare","classify","receipt"})do adapter[name]=function(wrapped,...)return service.adapter[name](wrapped.body,...)end end
         adapter.apply=function(wrapped,intent,identity)
-            assert(service.operations.authorize_apply(wrapped.body,intent,identity,{admitted=true,held=true}))
+                assert(service.operations.authorize_apply(wrapped.body,intent,identity,{admitted=true,operation_held=true}))
             return service.adapter.apply(wrapped.body,intent,identity)
         end
         executor=require("command_executor").new(journal,adapter)
         function step()return executor:step(id)end
         function request()
-            return JSON.encode(service.operations.request({binding_digest=string.rep("f",64)},{admitted=true,held=true}))
+                return JSON.encode(service.operations.request({binding_digest=string.rep("f",64)},{admitted=true,operation_held=true}))
         end
         function grant()
             local value=JSON.decode(request());local proof=journal.store.backend.sha256(assert(require("journal_document").encode(value.evidence)))
             return service.operations.accept(JSON.object({schema="slink-held-write-permit-v1",scope=value.window.scope,
                 challenge=value.window.challenge,uses=1,ttl_ms=1000,proof_digest=proof}))
         end
-        function ready_unheld()return service.ready(body,nil,{admitted=true,held=false})end
+            function ready_unheld()return service.ready(body,nil,{admitted=true,operation_held=false})end
         function next_command()
             local pending=assert(journal:pending_events())[1]
             assert(pending and journal:accept_response(pending.operation_id,JSON.array()))

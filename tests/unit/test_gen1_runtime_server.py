@@ -243,6 +243,82 @@ def test_control_requires_explicit_verified_evidence_and_does_not_retire_semanti
         case.runtime.process(packet, case.owners["b"])
 
 
+def test_service_authority_requires_both_fresh_controls_not_two_hellos(case):
+    case.admit("a")
+    case.admit("b")
+    assert case.runtime._control_seen == {}
+    assert case.runtime.service_current() is False
+    first = case.control("a")[1]["control"]
+    assert first["authority"] == "hold"
+    assert case.runtime.service_current() is False
+    second = case.control("b")[1]["control"]
+    assert second["authority"] == "service"
+    assert set(second) == {
+        "session_id", "admission_epoch", "context_generation", "binding_digest", "challenge",
+        "authority", "service_epoch", "service_digest", "reason",
+    }
+    assert case.runtime.service_current() is True
+    assert case.runtime.state().barrier.ticket() is None
+    refreshed = case.control("a")[1]["control"]
+    assert refreshed["authority"] == "service"
+    assert refreshed["service_epoch"] == second["service_epoch"]
+    assert refreshed["service_digest"] == second["service_digest"]
+
+
+def test_disconnect_rotates_service_epoch_and_requires_explicit_continuity_recovery(case):
+    case.admit("a")
+    case.admit("b")
+    case.control("a")
+    granted = case.control("b")[1]["control"]
+    assert granted["authority"] == "service"
+    epoch = granted["service_epoch"]
+    assert case.runtime.disconnect("a", case.owners["a"])
+    status = case.runtime.status()["service"]
+    assert status["recovery_required"] is True and status["current"] is False
+    assert status["barred_epoch"] == epoch and status["epoch"] != epoch
+    case.admit("a")
+    case.admit("b")
+    assert case.control("a")[1]["control"]["authority"] == "hold"
+    refused = case.control("b")[1]["control"]
+    assert refused["authority"] == "hold"
+    assert case.runtime.status()["service"]["recovery_required"] is True
+
+
+def test_server_reopen_does_not_reconstruct_an_ephemeral_service_lease(case):
+    case.admit("a")
+    case.admit("b")
+    case.control("a")
+    epoch = case.control("b")[1]["control"]["service_epoch"]
+    case.close()
+    case.open()
+    status = case.runtime.status()["service"]
+    assert status["epoch"] != epoch
+    assert status["barred_epoch"] is None  # Ephemeral authority is intentionally absent from disk.
+    assert status["recovery_required"] is True and status["current"] is False
+    case.admit("a")
+    case.admit("b")
+    case.control("a")
+    assert case.control("b")[1]["control"]["authority"] == "hold"
+
+
+def test_service_status_uses_only_the_last_validated_clock_snapshot(case):
+    case.admit("a")
+    case.admit("b")
+    case.control("a")
+    case.control("b")
+    case.runtime.clock = lambda: pytest.fail("presentation status sampled the live clock")
+    status = case.runtime.status()["service"]
+    assert status["paired_control_current"] is True
+    assert status["release_ready"] is True and status["current"] is True
+
+
+def test_service_revocation_reason_is_bounded_and_printable(case):
+    case.runtime._revoke_service("bad\nreason\x00" + "x" * 400)
+    reason = case.runtime.status()["service"]["reason"]
+    assert 0 < len(reason) <= 256 and all(character.isprintable() for character in reason)
+    assert "\n" not in reason and "\x00" not in reason
+
+
 def test_wrong_or_duplicate_connection_cannot_evict_owner(case):
     case.admit("a")
     owner = case.owners["a"]
