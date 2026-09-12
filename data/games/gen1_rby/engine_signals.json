@@ -1,6 +1,6 @@
 {
   "schema": "rby-engine-signal-sites-v1",
-  "sha256": "c1d850c6d93f8295c61acdbd7a2a1dd71e960a1d26231a873e9a600df3d81f55",
+  "sha256": "d57a72a411f7328a7c52cde8ffe5b90123aeff173296e60a6814f46a5688ce0b",
   "titles": {
     "blue": {
       "addresses": {
@@ -10,6 +10,7 @@
         "wCurEnemyLevel": 53543,
         "wCurItem": 53137,
         "wCurMap": 54110,
+        "wCurOpponent": 53337,
         "wCurPartySpecies": 53137,
         "wIsInBattle": 53335,
         "wItemQuantity": 53142,
@@ -72,6 +73,7 @@
         "wCurEnemyLevel": 53543,
         "wCurItem": 53137,
         "wCurMap": 54110,
+        "wCurOpponent": 53337,
         "wCurPartySpecies": 53137,
         "wIsInBattle": 53335,
         "wItemQuantity": 53142,
@@ -134,6 +136,7 @@
         "wCurEnemyLevel": 53542,
         "wCurItem": 53136,
         "wCurMap": 54109,
+        "wCurOpponent": 53336,
         "wCurPartySpecies": 53136,
         "wIsInBattle": 53334,
         "wItemQuantity": 53141,

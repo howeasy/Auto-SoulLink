@@ -95,6 +95,20 @@ def test_close_unregisters_every_hook(probe):
     assert probe.globals().flush()[0] is False
 
 
+def test_probe_reads_the_battle_flag_and_opponent_between_frames_only(probe):
+    addresses = DATA['titles']['yellow']['addresses']
+    assert addresses['wCurOpponent'] == 0xD058
+    assert DATA['titles']['red']['addresses']['wCurOpponent'] == 0xD059 == DATA['titles']['blue']['addresses']['wCurOpponent']
+    probe.globals().bus[addresses['wIsInBattle']] = 2
+    probe.globals().bus[addresses['wCurOpponent']] = 225
+    assert json.loads(probe.eval("JSON.encode(probe:probe())")) == {'battle': 2, 'opponent': 225}
+    probe.globals().held = False
+    assert probe.eval("(pcall(function()return probe:probe()end))") is False
+    probe.globals().held = True
+    probe.globals().hash = 'e' * 40
+    assert probe.eval("(pcall(function()return probe:probe()end))") is False  # the context check runs on every read
+
+
 @pytest.mark.parametrize('fault',[None,'pc_destination','failed','nonball'])
 def test_ball_hook_uses_actual_h_and_l_registers_and_success_carry(probe,fault):
     load_point(probe)

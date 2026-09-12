@@ -21,12 +21,14 @@ package.path=root.."/lua/?.lua;"..package.path
 JSON=require("json_codec");Loop=require("gen1_observation_loop")
 calls={};appended={};persisted={};prepared_with={}
 frame=99;queue=JSON.array();receipts=JSON.array();witness=JSON.array();pending_write=false;inventories=0
+battle=0;opponent=0;instruction=nil
 local function note(name)
     assert(ctx.at_boundary==true,name.." called outside a frame boundary")
     calls[#calls+1]=name
 end
 local function clone(v)return assert(JSON.decode(assert(JSON.encode(v))))end
 engine={peek=function()note("peek");return clone(queue)end,
+    probe=function()assert(ctx.at_boundary==true,"probe called outside a frame boundary");return {battle=battle,opponent=opponent}end,
     drain=function(_,expected)
         note("drain");assert(JSON.encode(expected)==JSON.encode(queue),"drain differs from peek")
         queue=JSON.array();return true
@@ -58,7 +60,7 @@ writer={pending=function()calls[#calls+1]="pending";return pending_write end,
     service=function()calls[#calls+1]="service"end}
 baseline=JSON.object()
 function build()
-    ctx={engine=engine,observers=observers,journal=journal,session=session,writer=writer,baseline=baseline,
+    ctx={engine=engine,observers=observers,journal=journal,session=session,writer=writer,baseline=baseline,instruction=instruction,
         frame=function()return frame end,owned=function()return {context_generation=string.rep("a",32)}end,
         rom_hash=function()return string.rep("f",40)end,
         inventory=function()inventories=inventories+1;return {schema="fixture-inventory",frame=frame}end}
@@ -185,3 +187,61 @@ def test_runs_without_acquisition_observers(lua):
     assert lua.eval("#appended") == 1
     assert lua.eval("JSON.kind(appended[1].event.acquisitions)") == "array"
     assert "prepare" not in calls(lua) and "ready" not in calls(lua)
+
+
+def test_engine_probe_is_required(lua):
+    with pytest.raises(LuaError, match="dependencies required"):
+        lua.execute("engine.probe=nil;build()")
+
+
+def test_every_event_carries_the_polled_battle_byte_and_no_trainer_row_by_default(lua):
+    lua.globals().signal()
+    lua.globals().advance()
+    assert lua.eval("appended[1].event.battle") == 0 and lua.eval("appended[1].event.trainer == JSON.null") is True
+    lua.execute("battle=1;opponent=36")  # a wild battle: the species id in wCurOpponent, flag 1
+    lua.globals().signal()
+    lua.globals().advance()
+    assert lua.eval("appended[2].event.battle") == 1 and lua.eval("appended[2].event.trainer == JSON.null") is True
+
+
+def test_trainer_engagement_publishes_once_after_three_stable_ticks(lua):
+    lua.execute("battle=2;opponent=225")  # rival class 25 + OPP_ID_OFFSET while wIsInBattle == 2
+    lua.globals().advance(2)  # frames 100, 101: not stable yet
+    assert lua.eval("#appended") == 0
+    lua.globals().advance()  # frame 102: the third stable tick publishes at once, off-heartbeat
+    assert lua.eval("#appended") == 1
+    assert lua.eval("appended[1].event.trainer.trainer_id") == 225 and lua.eval("appended[1].event.trainer.frame") == 102
+    assert lua.eval("appended[1].event.battle") == 2 and lua.eval("appended[1].event.signals == JSON.null") is True
+    lua.globals().advance(18)  # through the frame 120 heartbeat: the same engagement is not published again
+    assert lua.eval("#appended") == 2 and lua.eval("appended[2].event.trainer == JSON.null") is True
+    lua.execute("battle=0;opponent=0")
+    lua.globals().advance(5)
+    lua.execute("battle=2;opponent=225")
+    lua.globals().advance(3)  # the next engagement is a new row
+    assert lua.eval("#appended") == 3 and lua.eval("appended[3].event.trainer.trainer_id") == 225
+
+
+def test_trainer_row_needs_a_trainer_class_the_trainer_flag_and_a_steady_byte(lua):
+    lua.execute("battle=1;opponent=225")  # the wild flag never engages
+    lua.globals().advance(5)
+    lua.execute("battle=2;opponent=36")  # a species id is not a trainer class
+    lua.globals().advance(5)
+    lua.execute("battle=2;opponent=225")
+    lua.globals().advance()
+    lua.execute("opponent=226")  # a byte still being written restarts the count
+    lua.globals().advance(2)
+    assert lua.eval("#appended") == 0
+    lua.globals().advance()
+    assert lua.eval("#appended") == 1 and lua.eval("appended[1].event.trainer.trainer_id") == 226
+
+
+def test_instruction_window_finishes_first_and_arms_last_in_a_tick(lua):
+    lua.execute("""instruction={finish=function()calls[#calls+1]="finish" end,arm=function()calls[#calls+1]="arm" end};build()""")
+    lua.globals().pending_write = True
+    lua.globals().signal()
+    lua.globals().advance()
+    seq = calls(lua)
+    assert seq[0] == "finish" and seq[-1] == "arm"
+    assert seq.index("append") < seq.index("service") < seq.index("pump") < seq.index("arm")
+    lua.execute("frame=frame+1;calls={};loop:observe()")  # a writer that steps frames itself never touches the window
+    assert "finish" not in calls(lua) and "arm" not in calls(lua)

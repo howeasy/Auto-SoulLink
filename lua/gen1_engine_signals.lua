@@ -78,6 +78,12 @@ function M.new(options)
         check();assert(options.held()==true and equal(expected,pending),"engine signal drain differs from persisted observations")
         pending=JSON.array();return true
     end
+    -- Polled battle state for the free loop (read-only, between frames): wIsInBattle and wCurOpponent
+    -- (trainer class + 200 while a trainer battle is being set up; the wild species otherwise).
+    function self:probe()
+        check();assert(options.held()==true,"engine probe must be read under a held frame boundary")
+        return {battle=memory.read_u8(addresses.wIsInBattle,"System Bus"),opponent=memory.read_u8(addresses.wCurOpponent,"System Bus")}
+    end
     function self:batch(signals,sequence)
         check();assert(options.held()==true and type(sequence)=="number" and sequence%1==0 and sequence>=1,
             "held engine batch sequence required")

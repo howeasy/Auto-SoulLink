@@ -6,6 +6,14 @@
 -- A capture call that opened without returning yet persists the cursor alone
 -- (ctx.persist) before its witness is acknowledged. No RAM address, no write and
 -- no hold live here; writes are ctx.writer:service(), which takes its own hold.
+-- Polled battle state comes from ctx.engine:probe() (wIsInBattle, wCurOpponent): every
+-- event carries the battle byte, and a TRAINER battle start (opponent = class + 200 while
+-- wIsInBattle == 2, stable for TRAINER_STABLE_TICKS ticks, once per battle: the debounce
+-- the legacy client used, gen1_rby_client.lua TRAINER_STABLE_GATE) publishes at once.
+-- ctx.instruction (optional, {finish, arm}) is the in-battle instruction window of
+-- gen1_client_entry.lua: finish() settles the frame that just ran before anything else in
+-- the tick, arm() is the last thing before the next frame, so an armed executor never
+-- overlaps a writer hold and its rows ride the command receipt, not this event.
 --
 -- Boundary predicate. gen1_engine_signals.lua (:74 peek, :78 drain, :82 batch),
 -- gen1_acquisition_observers.lua (:37 check, reached by every method) and, through
@@ -19,14 +27,14 @@
 -- given to both modules must not assert the hold either (gen1_client_entry.lua:109-113
 -- does; source_owned at :103-108 does not).
 local JSON=require("json_codec")
-local M={SCHEMA="rby-observation-v1",MAX_SIGNALS=32,MAX_RECEIPTS=16,HEARTBEAT=30}
+local M={SCHEMA="rby-observation-v1",MAX_SIGNALS=32,MAX_RECEIPTS=16,HEARTBEAT=30,TRAINER_OFFSET=200,TRAINER_STABLE_TICKS=3}
 local function copy(value)return assert(JSON.decode(assert(JSON.encode(value))))end
 local function integer(n)return type(n)=="number" and n%1==0 and n>=0 and n<=9007199254740991 end
 local function witnessed(rows) -- every raw witness ends as a receipt or a cursor change
     return #rows.capture+#rows.grants+#rows.static+#rows.npc_exchange+#rows.wild+#rows.evolution>0
 end
 function M.new(ctx)
-    assert(type(ctx)=="table" and ctx.engine and ctx.journal and ctx.session and ctx.baseline
+    assert(type(ctx)=="table" and ctx.engine and type(ctx.engine.probe)=="function" and ctx.journal and ctx.session and ctx.baseline
         and type(ctx.owned)=="function" and type(ctx.rom_hash)=="function","observation loop dependencies required")
     local period=ctx.heartbeat or M.HEARTBEAT
     assert(integer(period) and period>=1,"heartbeat period in frames required")
@@ -40,7 +48,17 @@ function M.new(ctx)
         if not ok then error(result,0)end
         return result
     end
-    local self={}
+    local self={trainer={id=nil,ticks=0,published=false}}
+    local function trainer(probe,frame) -- one trainer_battle_start row per stable trainer engagement
+        local id=probe.battle==2 and probe.opponent>=M.TRAINER_OFFSET and probe.opponent or nil
+        local t=self.trainer
+        if id~=t.id then t={id=id,ticks=0,published=false};self.trainer=t end
+        if id==nil then return JSON.null end
+        t.ticks=t.ticks+1
+        if t.published or t.ticks<M.TRAINER_STABLE_TICKS then return JSON.null end
+        t.published=true
+        return {trainer_id=id,frame=frame}
+    end
     -- Acquisition cursor: persisted with every publication, advanced in memory between them.
     if ctx.observers then
         self.source=guarded(function()return baseline().acquisition_source or ctx.observers:initial(frame_of())end)
@@ -51,8 +69,11 @@ function M.new(ctx)
         local rows=ctx.observers and ctx.observers:prepare(self.source) or nil
         assert(#signals<=M.MAX_SIGNALS,"frame signal batch exceeds source bounds")
         assert(not rows or #rows.receipts<=M.MAX_RECEIPTS,"frame acquisition batch exceeds source bounds")
+        local probe=ctx.engine:probe()
+        assert(integer(probe.battle) and probe.battle<=255 and integer(probe.opponent) and probe.opponent<=255,"engine probe bytes required")
+        local engaged=trainer(probe,frame)
         local heartbeat=frame%period==0
-        local publish=#signals>0 or heartbeat or rows~=nil and #rows.receipts>0
+        local publish=#signals>0 or heartbeat or engaged~=JSON.null or rows~=nil and #rows.receipts>0
         local event
         if publish or rows and witnessed(rows) then
             local current=baseline()
@@ -69,7 +90,8 @@ function M.new(ctx)
                 end
                 event={schema=M.SCHEMA,event="observation",frame=frame,sequence=seq,context=copy(ctx.owned()),
                     rom=ctx.rom_hash(),signals=batch,acquisitions=rows and copy(rows.receipts) or JSON.array(),
-                    inventory=heartbeat and ctx.inventory and ctx.inventory() or JSON.null}
+                    inventory=heartbeat and ctx.inventory and ctx.inventory() or JSON.null,
+                    battle=probe.battle,trainer=engaged}
                 current.observation_sequence=seq
                 assert(ctx.journal:append(event,current)) -- durable before any source forgets
             else
@@ -82,10 +104,12 @@ function M.new(ctx)
         return event
     end
     local function service(self)
+        if ctx.instruction then ctx.instruction:finish()end -- the frame that just ran, before anything can hold or yield
         local event=observe(self)
         if ctx.writer and ctx.writer:pending() then ctx.writer:service()end
         ctx.session:pump()
         if ctx.observers then assert(ctx.observers:ready(self.source))end
+        if ctx.instruction then ctx.instruction:arm()end -- for the frame about to run; nothing else follows in this tick
         return event
     end
     function self:observe()return guarded(observe,self)end -- for a writer that steps frames itself
