@@ -2234,6 +2234,22 @@ function M.depositMemorialMon(slot)
         end
         if previous == nil then
             if mbox_count ~= 0 then return false, "memorial box not empty; reservation unverified" end
+            if not initializing then
+                -- A count-zero header does not confer ownership of hidden
+                -- records. Before the first local reservation, the *entire*
+                -- initialized image must be empty; otherwise slot 0 would
+                -- overwrite an unowned dead record (HP zero bypasses the
+                -- live-record scan below).
+                if mem_r8(species_off, SRAM_DOMAIN) ~= 0xFF then
+                    return false, "unowned memorial box is not empty"
+                end
+                for i = 2, geometry.box_len - 1 do
+                    local value = mem_r8(mem_off + i, SRAM_DOMAIN)
+                    if value ~= 0 and value ~= 0xFF then
+                        return false, "unowned memorial box is not empty"
+                    end
+                end
+            end
         end
         if not initializing then
             if mem_r8(species_off + mbox_count, SRAM_DOMAIN) ~= 0xFF then

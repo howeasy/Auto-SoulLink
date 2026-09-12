@@ -304,7 +304,7 @@ local ok,err=pcall(function()
     local structs_off=memoff+1+(M.BOX_MAX_MONS+1)
     local ots_off=structs_off+M.BOX_MAX_MONS*M.BOX_STRUCT_SIZE
     local nicks_off=ots_off+M.BOX_MAX_MONS*11
-local function memorial_state(initialized)
+    local function memorial_state(initialized)
         seed(3,2)
         write(address("wCurrentBoxNum"),0)
         -- Party slot 1 is the dead one (HP 0); the memorial requires a fainted selection.
@@ -341,10 +341,19 @@ local function memorial_state(initialized)
         M._memorial_reservations=nil
         local before=image()
         local r,e=M.depositMemorialMon(1)
-        hidden_ok=refuses("memorial refuses a live record hidden at reserved slot "..slot,r,e,
-                          "memorial box contains a live Pokemon",before) and hidden_ok
+        hidden_ok=refuses("unowned initialized memorial refuses a live record hidden at slot "..slot,r,e,
+                          "unowned memorial box is not empty",before) and hidden_ok
     end
-    t.check("a live record anywhere in the reserved box image refuses the memorial",hidden_ok)
+    for _,slot in ipairs({0,19}) do
+        memorial_state()
+        hidden_record(slot,0)
+        M._memorial_reservations=nil
+        local before=image()
+        local r,e=M.depositMemorialMon(1)
+        hidden_ok=refuses("unowned initialized memorial refuses a dead record hidden at slot "..slot,r,e,
+            "unowned memorial box is not empty",before) and hidden_ok
+    end
+    t.check("an unowned initialized grave rejects hidden live and dead records before writes",hidden_ok)
     local first_use_ok=true
     for _,slot in ipairs({0,7,19}) do
         memorial_state(false)
@@ -392,27 +401,27 @@ local function memorial_state(initialized)
         erased==true and erased_error==nil and read(memoff,"CartRAM")==1
             and read(address("wCurrentBoxNum"))>=0x80,tostring(erased_error))
     memorial_state()
-    hidden_record(19,0)                                     -- dead tail record, legal to ignore
-    M._memorial_reservations=nil
-    local tail_before=bytes(memoff+1+2,boxlen-3,"CartRAM")  -- everything past count and species[0..1]
+    local first_owned,first_owned_error=M.depositMemorialMon(1)
+    t.check("clean initialized Box 12 establishes the first local grave reservation",
+        first_owned==true and first_owned_error==nil and read(memoff,"CartRAM")==1,
+        tostring(first_owned_error))
+    local owned_struct=bytes(structs_off,M.BOX_STRUCT_SIZE,"CartRAM")
+    local owned_ot=bytes(ots_off,11,"CartRAM")
+    local owned_nick=bytes(nicks_off,11,"CartRAM")
+    local unused_tail=bytes(structs_off+19*M.BOX_STRUCT_SIZE,M.BOX_STRUCT_SIZE,"CartRAM")
     local others_before={}
     for i=6,10 do others_before[i]=bytes(sram_offset("sBox7")+(i-6)*boxlen,boxlen,"CartRAM") end
+    -- The first successful memorial is the provenance for this local reservation.
+    -- A second burial may append after that exact owned dead record, never overwrite it.
+    write(address("wPartyMons")+44+1,0);write(address("wPartyMons")+44+2,0)
     local buried,reason=M.depositMemorialMon(1)
-    t.check("memorial with a dead tail record succeeds",buried==true and reason==nil,tostring(reason))
-    local tail_after=bytes(memoff+1+2,boxlen-3,"CartRAM")
-    -- Only slot 0 of the struct, OT and nickname arrays may differ; the dead tail and every
-    -- other slot are byte-identical, and boxes 7..11 of the same bank are untouched.
-    local touched_outside=nil
-    for i=1,#tail_before do
-        if tail_before[i]~=tail_after[i] then
-            local off=memoff+1+2+(i-1)
-            local in_slot0=(off>=structs_off and off<structs_off+M.BOX_STRUCT_SIZE)
-                or (off>=ots_off and off<ots_off+11) or (off>=nicks_off and off<nicks_off+11)
-            if not in_slot0 then touched_outside=string.format("box 12 offset $%04X",off);break end
-        end
-    end
-    t.check("memorial writes only slot 0 of the reserved box; the dead tail record is untouched",
-            touched_outside==nil and read(memoff,"CartRAM")==1,touched_outside)
+    t.check("second memorial appends behind its genuinely owned prior grave",
+        buried==true and reason==nil and read(memoff,"CartRAM")==2,tostring(reason))
+    t.check("owned first grave and unused slot-19 tail remain byte-identical",
+        compare(owned_struct,bytes(structs_off,M.BOX_STRUCT_SIZE,"CartRAM"))==nil
+            and compare(owned_ot,bytes(ots_off,11,"CartRAM"))==nil
+            and compare(owned_nick,bytes(nicks_off,11,"CartRAM"))==nil
+            and compare(unused_tail,bytes(structs_off+19*M.BOX_STRUCT_SIZE,M.BOX_STRUCT_SIZE,"CartRAM"))==nil)
     local others_ok=true
     for i=6,10 do
         others_ok=others_ok and compare(others_before[i],bytes(sram_offset("sBox7")+(i-6)*boxlen,boxlen,"CartRAM"))==nil
@@ -422,5 +431,5 @@ end)
 memorysavestate.loadcorestate(boot)
 memorysavestate.removestate(boot)
 t.check("boundary harness completed",ok,tostring(err))
-t.check("all 44 refusals were exercised",refusals==44,"refusals="..refusals)
+t.check("all 46 refusals were exercised",refusals==46,"refusals="..refusals)
 t.finish("storage boundaries")
