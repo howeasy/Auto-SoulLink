@@ -49,7 +49,7 @@ function M.new(options)
                     end
                     self.signals=require("gen1_engine_signals").new({journal=options.journal,variant=options.variant,
                         final_sha1=gameinfo.getromhash():lower(),owned=options.source_owned or options.owned,
-                        held=function()return options.host.status().physical_stop_verified end})
+                        held=function()return options.host.status().physical_stop_verified or (options.at_boundary and options.at_boundary()==true)end})
                 end
                 if not options.ordinary_frames then self.signals:flush()end
             end

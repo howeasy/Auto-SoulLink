@@ -106,6 +106,7 @@ class Gen1Runtime(DurableRuntime):
         initial_observations=False,
         ordinary_frames=False,
         native_trade=False,
+        free_service=False,
         **options,
     ):
         self.trade = None
@@ -121,6 +122,9 @@ class Gen1Runtime(DurableRuntime):
                 not ordinary_frames or prepared_cartridges is None or trade_policy is not None):
             raise JournalError('composed native trade requires ordinary frames and the reproduced cartridge pair')
         self.native_trade = native_trade
+        if type(free_service) is not bool or free_service and (not initial_observations or ordinary_frames):
+            raise JournalError('free-run observation requires initial observations and replaces ordinary frames')
+        self.free_service = free_service
         if native_trade:
             from server.gen1_native_policy import NativeTradePolicy
             trade_policy = NativeTradePolicy()
@@ -221,6 +225,8 @@ class Gen1Runtime(DurableRuntime):
         verify_state(self.journal,stage)
         from server.gen1_inventory_observation import verify_journal as verify_inventory
         verify_inventory(self.journal,stage)
+        from server.gen1_observation_runtime import verify_journal as verify_observations
+        verify_observations(self.journal,stage)
         from server.gen1_bootstrap_runtime import verify_journal as verify_bootstrap
         verify_bootstrap(self.journal,stage)
         from server.gen1_initial_save_runtime import verify_journal as verify_initial_save
@@ -275,6 +281,11 @@ class Gen1Runtime(DurableRuntime):
         event = message["event"]
         if event in ('acquisition_observation', 'npc_exchange_observation', 'wild_encounter_observation', 'evolution_observation'):
             raise ProtocolError('acquisition receipts require an accounted frame completion')
+        if event == 'observation':
+            if not self.free_service:
+                raise ProtocolError('free-run observation is not selected')
+            from server.gen1_observation_runtime import record
+            return record(self, player, message['operation_id'], self._semantic(message))
         if event == 'native_frame_return':
             if not self.ordinary_frames:
                 raise ProtocolError('native frame accounting is not selected')

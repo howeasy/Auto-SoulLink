@@ -27,10 +27,11 @@ def read_bound_configuration(directory):
         return None,None
     value = decode_frame(path.read_bytes())
     fields={"schema", "mode", "run_id", "journal", "contract"}
-    if (set(value)-fields-{'prepared_artifacts','initial_observations','ordinary_frames','native_trade'} or not fields<=set(value) or value["schema"] != SCHEMA
+    if (set(value)-fields-{'prepared_artifacts','initial_observations','ordinary_frames','native_trade','free_service'} or not fields<=set(value) or value["schema"] != SCHEMA
             or ('initial_observations' in value and value['initial_observations'] is not True)
             or ('ordinary_frames' in value and (value['ordinary_frames'] is not True or value.get('initial_observations') is not True))
             or ('native_trade' in value and (value['native_trade'] is not True or value.get('ordinary_frames') is not True or 'prepared_artifacts' not in value))
+            or ('free_service' in value and (value['free_service'] is not True or value.get('initial_observations') is not True or 'ordinary_frames' in value))
             or value["mode"] != "held_service" or not isinstance(value["journal"], str)
             or Path(value["journal"]).name != value["journal"] or ":" in value["journal"] or "\\" in value["journal"]):
         raise JournalError("unsupported prepared Gen1 run configuration")
@@ -64,6 +65,7 @@ def configure_runtime(runtime):
     if runtime.initial_observations:value['initial_observations']=True
     if runtime.ordinary_frames:value['ordinary_frames']=True
     if runtime.native_trade:value['native_trade']=True
+    if runtime.free_service:value['free_service']=True
     cartridges=getattr(runtime,"prepared_cartridges",None)
     if cartridges is not None:
         if not cartridges.directory.is_relative_to(directory):raise JournalError("prepared artifacts must belong to this run")
@@ -89,12 +91,13 @@ def open_runtime(directory):
         initial_observations=value.get('initial_observations',False),
         ordinary_frames=value.get('ordinary_frames',False),
         native_trade=value.get('native_trade',False),
+        free_service=value.get('free_service',False),
         verify_operation_execution=verify_held_faint if value.get('initial_observations',False) else None,
         validate_receipt=Gen1ReceiptPolicy({p: c["variant"] for p,c in value["contract"]["players"].items()}),
         verify_reconciliation=lambda *args: None)
 
 
-def create_runtime(directory,contract,*,run_id=None,prepared_cartridges=None,rule_options=None,ordinary_frames=False,native_trade=False):
+def create_runtime(directory,contract,*,run_id=None,prepared_cartridges=None,rule_options=None,ordinary_frames=False,native_trade=False,free_service=False):
     """Create an empty owned run; initial game evidence arrives separately over TCP."""
     import secrets
     from server.adapters import get_adapter
@@ -103,6 +106,8 @@ def create_runtime(directory,contract,*,run_id=None,prepared_cartridges=None,rul
     from server.state import SoulLinkState
     if type(native_trade) is not bool or native_trade and (not ordinary_frames or prepared_cartridges is None):
         raise JournalError('native trade selection requires ordinary frames and reproduced prepared cartridges')
+    if type(free_service) is not bool or free_service and ordinary_frames:
+        raise JournalError('free-run observation replaces ordinary frame selection')
     directory=Path(directory).resolve();directory.mkdir(parents=True,exist_ok=True)
     if any((directory/name).exists() for name in (FILENAME,'runtime.sqlite3','links.json','memorial.json')):
         raise JournalError('fresh runtime creation cannot replace an existing or legacy run')
@@ -127,6 +132,7 @@ def create_runtime(directory,contract,*,run_id=None,prepared_cartridges=None,rul
         initial_state=initial,initial_observations=True,prepared_cartridges=prepared_cartridges,
         ordinary_frames=ordinary_frames,
         native_trade=native_trade,
+        free_service=free_service,
         verify_operation_execution=verify_held_faint,
         validate_event=unavailable,validate_receipt=Gen1ReceiptPolicy({p:c['variant'] for p,c in profiles.items()}),
         verify_reconciliation=lambda *args:None)

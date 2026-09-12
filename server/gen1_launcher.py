@@ -24,16 +24,18 @@ OBSERVATION_FILES=("lua/gen1_held_initial_save.lua","lua/gen1_held_save_image.lu
     "lua/gen1_bootstrap_observer.lua","data/games/gen1_rby/gen1_bootstrap_sites.lua")
 
 
+# The read-only acquisition sources; shared by the credit loop and the free-running loop.
+SOURCE_FILES = ("lua/gen1_acquisition_observers.lua", "lua/gen1_capture_observer.lua", "lua/gen1_grant_observer.lua",
+                "lua/gen1_static_observer.lua", "lua/gen1_npc_exchange_observer.lua", "lua/gen1_wild_encounter_observer.lua",
+                "lua/gen1_evolution_observer.lua", "data/games/gen1_rby/gen1_evolution_sites.lua",
+                "data/games/gen1_rby/gen1_static_sites.lua", "data/games/gen1_rby/gen1_npc_exchange_sites.lua",
+                "data/games/gen1_rby/gen1_wild_encounter_sites.lua",
+                "data/games/gen1_rby/gen1_capture_sites.lua", "data/games/gen1_rby/gen1_grant_sites.lua")
 ORDINARY_FILES = ("lua/gen1_frame_client.lua", "lua/platform_bounded_execution.lua",
                   "lua/execution_window.lua", "lua/frame_pacer.lua",
                   "lua/gen1_identity_guard.lua", "data/games/gen1_rby/gen1_identity_sites.lua",
-                  "lua/gen1_acquisition_observers.lua", "lua/gen1_capture_observer.lua", "lua/gen1_grant_observer.lua",
-                  "lua/gen1_native_frame_client.lua",
-                  "lua/gen1_static_observer.lua", "lua/gen1_npc_exchange_observer.lua", "lua/gen1_wild_encounter_observer.lua",
-                  "lua/gen1_evolution_observer.lua", "data/games/gen1_rby/gen1_evolution_sites.lua",
-                  "data/games/gen1_rby/gen1_static_sites.lua", "data/games/gen1_rby/gen1_npc_exchange_sites.lua",
-                  "data/games/gen1_rby/gen1_wild_encounter_sites.lua",
-                  "data/games/gen1_rby/gen1_capture_sites.lua", "data/games/gen1_rby/gen1_grant_sites.lua")
+                  "lua/gen1_native_frame_client.lua") + SOURCE_FILES
+FREE_FILES = ("lua/gen1_observation_loop.lua",) + SOURCE_FILES
 
 NATIVE_FILES = ("lua/command_service_router.lua", "lua/gen1_native_runtime.lua",
     "lua/gen1_native_trade_executor.lua", "lua/gen1_partner_prompt_executor.lua", "lua/gen1_prepared_save.lua",
@@ -44,11 +46,12 @@ NATIVE_FILES = ("lua/command_service_router.lua", "lua/gen1_native_runtime.lua",
 def configuration(runtime, player, *, root=ROOT):
     return build_configuration(runtime.journal.run_id, runtime.contract, player, root=root,
         prepared_cartridges=getattr(runtime,"prepared_cartridges",None),initial_observations=runtime.initial_observations,
-        ordinary_frames=getattr(runtime,"ordinary_frames",False),native_trade=getattr(runtime,"native_trade",False))
+        ordinary_frames=getattr(runtime,"ordinary_frames",False),native_trade=getattr(runtime,"native_trade",False),
+        free_service=getattr(runtime,"free_service",False))
 
 
 def build_configuration(run_id, contract, player, *, root=ROOT,prepared_cartridges=None,initial_observations=False,
-                        ordinary_frames=False,native_trade=False):
+                        ordinary_frames=False,native_trade=False,free_service=False):
     profiles = state_type_for(prepared_cartridges).validate_contract(contract)
     if player not in ("a", "b"):
         raise ValueError("RBY launch player required")
@@ -57,11 +60,14 @@ def build_configuration(run_id, contract, player, *, root=ROOT,prepared_cartridg
     if type(native_trade) is not bool or native_trade and (not ordinary_frames or prepared_cartridges is None
             or not all(p['capabilities']['pc_trade'] for p in profiles.values())):
         raise ValueError('native launcher requires the reproduced native cartridge pair and bounded frames')
+    if type(free_service) is not bool or free_service and (not initial_observations or ordinary_frames):
+        raise ValueError('free-run launch requires initial observations and replaces ordinary frames')
     result={"schema": "slink-gen1-launch-v1", "protocol": "slink-gen1-durable-v1",
-        "mode": "held_service", "run_id": run_id, "player": player,
+        "mode": "free_service" if free_service else "held_service", "run_id": run_id, "player": player,
         "cartridge": profiles[player], "files": file_bundle(root, FILES+(OBSERVATION_FILES if initial_observations else ())
                                                           +(ORDINARY_FILES if ordinary_frames else ())
-                                                          +(NATIVE_FILES if native_trade else ()))}
+                                                          +(NATIVE_FILES if native_trade else ())
+                                                          +(FREE_FILES if free_service else ()))}
     if initial_observations:result['initial_observations']=True
     if ordinary_frames:result['ordinary_frames']=True
     if native_trade:result['native_manifest']=prepared_cartridges.manifest(player)
