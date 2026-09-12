@@ -14,9 +14,18 @@ local function clone(value) return assert(JSON.decode(encode(value))) end
 -- External initial/replacement values still take the full codec validation path.
 local function clone_validated(value)
     if value==JSON.null or type(value)~="table"then return value end
-    local result=JSON.kind(value)=="array" and JSON.array() or JSON.object()
+    local kind=JSON.kind(value)
+    -- Match json_codec.encode's inference for untagged nonempty arrays too.
+    local result=(kind=="array" or kind~="object" and #value>0) and JSON.array() or JSON.object()
     for key,child in pairs(value)do result[key]=clone_validated(child)end
     return result
+end
+local function clone_after_json_check(value)
+    -- encode() also decodes the wire to validate UTF-8, bounds, cycles and
+    -- canonical numbers.  The following structural copy detaches that proven
+    -- value without decoding the same 70-KiB source string a second time.
+    encode(value)
+    return clone_validated(value)
 end
 local function exact_fields(value,fields)
     if type(value)~="table" then return false end
@@ -77,14 +86,18 @@ function M.open(backend,binding,initial)
                 if actual~=wire then error(reason or "local state changed outside its owner",0) end
                 if document.revision>=9007199254740991 then error("local state revision exhausted",0) end
                 local next_document={schema=M.SCHEMA,binding=document.binding,
-                    revision=document.revision+1,payload=clone(payload)}
+                    revision=document.revision+1,payload=clone_after_json_check(payload)}
                 if JSON.kind(next_document.payload)~="object" then error("local state payload must be an object",0) end
                 local next_wire=encode({document=next_document,sha256=backend.sha256(encode(next_document))})
                 local saved,why=backend.replace(next_wire)
                 if not saved then error(why or "state publication failed",0) end
                 local observed,read_error=backend.read()
                 if observed~=next_wire then error(read_error or "state publication readback differs",0) end
-                document=unpack(observed);wire=observed
+                -- next_document is detached by clone(payload) and its exact
+                -- canonical envelope/checksum was encoded above.  An exact
+                -- flushed readback cannot add information by decoding those
+                -- same bytes again; reopening still runs unpack() from disk.
+                document=next_document;wire=observed
             end)
             if not success then self.fault=tostring(error);return false,self.fault end
             return true

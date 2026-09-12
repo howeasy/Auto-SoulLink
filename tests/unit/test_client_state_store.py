@@ -145,6 +145,42 @@ def test_invalid_initial_or_replacement_payload_never_reaches_disk(runtime):
     assert lua.globals().disk == before
 
 
+def test_large_exact_readback_keeps_detached_state_and_reopen_revalidates(runtime):
+    lua = runtime
+    store = opened(lua)
+    payload = lua.eval("JSON.object({blob=string.rep('A',74000),nested=JSON.array({1,2,3})})")
+    assert store.commit(store, payload) is True
+    wire = lua.globals().disk
+    payload.blob = "changed outside store"
+    assert store.read(store)[0].blob == "A" * 74000
+    assert lua.globals().disk == wire
+    store.close(store)
+    reopened = opened(lua)
+    assert reopened.read(reopened)[0].blob == "A" * 74000
+    changed = json.loads(wire)
+    changed["document"]["payload"]["blob"] = "corrupt"
+    lua.globals().disk = json.dumps(changed)
+    reopened.close(reopened)
+    assert lua.globals().open_store()[0] is None, "reopen must check the file checksum afresh"
+
+
+@pytest.mark.parametrize("expression", [
+    "(function() local value={} value.self=value return value end)()",
+    "JSON.object({blob=string.char(255)})",
+    "JSON.object({bad=function()end})",
+])
+def test_invalid_large_commit_never_reaches_atomic_replace(runtime, expression):
+    lua = runtime
+    store = opened(lua)
+    before, writes = lua.globals().disk, lua.globals().writes
+    value = lua.eval(expression)
+    assert store.commit(store, value)[0] is False
+    assert lua.globals().disk == before and lua.globals().writes == writes
+    store.close(store)
+    again = opened(lua)
+    assert len(again.read(again)[0].outbox) == 0
+
+
 def test_read_copies_nested_validated_types_without_exposing_the_private_cache(runtime):
     lua=runtime
     lua.execute('''initial={empty_array=JSON.array(),empty_object=JSON.object(),
