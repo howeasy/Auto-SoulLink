@@ -153,19 +153,28 @@ def test_a_clean_rom_reproduces_the_shipped_tables(title):
     shipped = _shipped(title)
     # `m.split(" ")[0]`, because a multi-floor dungeon's methods carry the floor:
     # "Grass B1F", "Water B4F". An exact-name filter dropped every such area, which made
-    # this control quietly stop covering seven of them. Super Rod is still excluded --
-    # the shipped file has no fishing at all, which the two tests below pin.
-    grass_water = {a: {m: v for m, v in b.items() if m.split(" ")[0] in ("Grass", "Water")}
-                   for a, b in built.items()}
-    grass_water = {a: b for a, b in grass_water.items() if b}
+    # this control quietly stop covering seven of them. Super Rod is compared too; Old Rod
+    # and Good Rod are NOT, because the scanner does not emit them -- they are global in
+    # the ROM and the generator places them by its own rule (every area with a Water
+    # method or a Super Rod group), which the shipped file alone pins.
+    scanned = ("Grass", "Water", "Super")
+    built = {a: {m: v for m, v in b.items() if m.split(" ")[0] in scanned}
+             for a, b in built.items()}
+    built = {a: b for a, b in built.items() if b}
+    shipped = {a: {m: v for m, v in b.items() if m.split(" ")[0] in scanned}
+               for a, b in shipped.items()}
+    shipped = {a: b for a, b in shipped.items() if b}
 
-    assert set(grass_water) == set(shipped), (
-        f"{title}: areas differ — only built {sorted(set(grass_water) - set(shipped))}, "
-        f"only shipped {sorted(set(shipped) - set(grass_water))}")
-    stripped_built, stripped_shipped = _strip_names(grass_water), _strip_names(shipped)
+    assert set(built) == set(shipped), (
+        f"{title}: areas differ — only built {sorted(set(built) - set(shipped))}, "
+        f"only shipped {sorted(set(shipped) - set(built))}")
+    stripped_built, stripped_shipped = _strip_names(built), _strip_names(shipped)
     for area in sorted(shipped):
+        assert set(stripped_built[area]) == set(stripped_shipped[area]), (
+            f"{title}/{area}: methods differ — built {sorted(stripped_built[area])}, "
+            f"shipped {sorted(stripped_shipped[area])}")
         for method in shipped[area]:
-            assert stripped_built[area].get(method) == stripped_shipped[area][method], (
+            assert stripped_built[area][method] == stripped_shipped[area][method], (
                 f"{title}/{area}/{method} differs from the shipped table")
 
 
@@ -195,10 +204,13 @@ def test_later_floors_are_no_longer_dropped():
     exposes every floor, and a method that exists only on a later floor is present.
     """
     shipped = _shipped("yellow")["seafoam_islands"]
-    floors = {m.split(" ", 1)[1] for m in shipped if " " in m}
+    floors = {m.split(" ", 1)[1] for m in shipped if m.startswith(("Grass", "Water"))}
     assert floors == {"1F", "B1F", "B2F", "B3F", "B4F"}, f"got {sorted(floors)}"
     assert any(m.startswith("Water") for m in shipped), (
         "the surfing table that only exists on a later floor is missing again")
+    # Rods carry no floor: the scanner adds Super Rod without a map id, and the generator
+    # mirrors that so the control above holds.
+    assert {"Old Rod", "Good Rod", "Super Rod"} <= set(shipped)
 
     # And a single-map area keeps the plain, unsuffixed labels it always had.
     assert set(_shipped("yellow")["route_1"]) == {"Grass"}
@@ -212,12 +224,25 @@ def test_percentages_sum_to_100_per_method(title):
             assert total == 100, f"{title}/{area}/{method} sums to {total}"
 
 
-def test_super_rod_is_added_where_the_shipped_tables_have_no_fishing_at_all():
-    """The shipped file only ever carries Grass and Water, so fishing is invisible today."""
-    assert all({m.split(" ")[0] for m in b} <= {"Grass", "Water"}
-               for b in _shipped("red").values())
-    built = _tables_from_rom("red")
-    assert sum(1 for b in built.values() if "Super Rod" in b) > 10
+@pytest.mark.parametrize("title", TITLES)
+def test_the_scanner_super_rod_blocks_equal_the_shipped_ones(title):
+    """Positive control for fishing: the Super Rod block the scanner builds from a clean
+    cartridge is the one tools/gen_gen1_encounters.py built from pret, area for area.
+
+    This used to pin the ABSENCE of fishing in the shipped file. Old Rod and Good Rod are
+    shipped but not scanned (the scanner reads them -- `scan_fishing` -- but
+    `build_encounter_tables` only adds Super Rod), so they are pinned by the generator's
+    own check instead: tests/unit/test_gen1_generated_maps_fishing.py.
+    """
+    built = {a: b["Super Rod"] for a, b in _strip_names(_tables_from_rom(title)).items()
+             if "Super Rod" in b}
+    shipped = {a: b["Super Rod"] for a, b in _strip_names(_shipped(title)).items()
+               if "Super Rod" in b}
+    assert len(built) > 10
+    assert built == shipped
+    for area, block in _shipped(title).items():
+        if "Super Rod" in block:
+            assert {"Old Rod", "Good Rod"} <= set(block), f"{title}/{area} has Super Rod only"
 
 
 # ── untrusted input ──────────────────────────────────────────────────────────────────────
