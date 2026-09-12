@@ -223,7 +223,7 @@ function M.open(store,new_id,options)
         if not ids then return nil,reason end
         return ids[1]
     end
-    function self:accept_response(operation_id,commands)
+    function self:accept_response(operation_id,commands,semantic_result)
         return mutate(function(state)
             if not state.outbox[1] or state.outbox[1].operation_id~=operation_id then
                 error("response does not acknowledge the oldest durable event",0)
@@ -262,7 +262,8 @@ function M.open(store,new_id,options)
                 end
             end
             if options.acknowledge_event then
-                local baseline=options.acknowledge_event(copy(event),operation_id,copy(state.observation))
+                local baseline=options.acknowledge_event(copy(event),operation_id,copy(state.observation),
+                    semantic_result and copy(semantic_result) or nil)
                 if baseline~=nil then
                     assert(JSON.kind(baseline)=="object","acknowledged observation baseline must be an object")
                     if encoded(baseline)~=encoded(state.observation)then

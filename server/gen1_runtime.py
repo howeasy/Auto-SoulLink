@@ -194,6 +194,34 @@ class Gen1Runtime(DurableRuntime):
         super().close()
         self._run_lease.__exit__()
 
+    def _process(self, message, owner):
+        response = super()._process(message, owner)
+        if message.get("event") != "observation" or response.get("ack") != "ACK":
+            return response
+        # A transport ACK alone cannot tell the free client whether its exact
+        # inventory point entered the stream or was deferred behind a physical
+        # obligation. Resolve the immutable committed result under this same
+        # operation ID, including on a session-local retry.
+        player, operation = message["player"], message["operation_id"]
+        recorded = self.journal.event(player, operation, self._semantic(message))
+        if recorded is None:
+            raise JournalError("acknowledged observation lacks its committed result")
+        outcome = recorded.result
+        has_inventory = message.get("inventory") is not None
+        deferred = outcome.get("inventory_deferred") is True
+        settled = "inventory_transition_digest" in outcome
+        if has_inventory and deferred == settled or not has_inventory and (deferred or settled):
+            raise JournalError("observation inventory settlement is inconsistent")
+        response["observation_result"] = {
+            "schema": "rby-observation-result-v1", "operation_id": operation,
+            "sequence": message["sequence"], "frame": message["frame"],
+            "inventory_status": "deferred" if deferred else "recorded" if settled else "absent",
+        }
+        # SessionGate caches the response before this generation-owned field is
+        # attached. Keep exact retries byte-for-byte identical.
+        self.gate.sessions[player].last_response = copy.deepcopy(response)
+        return response
+
     def _service_release_ready(self, stage):
         """Cold free-run starts only after both owned enrollment saves settled."""
         if not self.free_service:

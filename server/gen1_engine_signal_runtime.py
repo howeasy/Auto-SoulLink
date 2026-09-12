@@ -67,7 +67,8 @@ def record(runtime,player,operation,request):
         commands=staged['commands'],result=staged['result'],records=staged['records']).result
 
 
-def stage_observation(runtime,stage,document,player,operation,request,*,frame_origin=None,frame_request=None):
+def stage_observation(runtime,stage,document,player,operation,request,*,frame_origin=None,frame_request=None,
+                      allow_transport_rotation=False):
     """Stage evidence on caller-owned state; return entry/result/commands/records.
 
     Only the detached stage/document may change. Journal/session reads retain
@@ -79,7 +80,7 @@ def stage_observation(runtime,stage,document,player,operation,request,*,frame_or
     initial=document['components'].get(INITIAL,{}).get(player)
     if initial is None:raise JournalError('engine signals require initial enrollment')
     metadata=runtime.gate.sessions[player].metadata
-    matching=same_admitted_context(metadata,initial['metadata']) if origin else metadata==initial['metadata']
+    matching=same_admitted_context(metadata,initial['metadata']) if origin or allow_transport_rotation else metadata==initial['metadata']
     if not matching:raise JournalError('engine signal source context changed; recovery required')
     entries=document['components'].setdefault(COMPONENT,{})
     old=entries.get(player);payload=request['payload']

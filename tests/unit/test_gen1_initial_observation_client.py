@@ -83,6 +83,39 @@ def test_free_observation_ack_persists_the_exact_server_cursor(runtime):  # noqa
     assert saved["observation_sequence"] == 1 and payload(lua)["outbox"] == []
 
 
+def test_deferred_inventory_ack_durably_forces_a_later_unchanged_resend(runtime):  # noqa: F811
+    lua = runtime
+    start(lua)
+    lua.execute("""
+        package.loaded.gen1_full_save={}
+        Observe=require('gen1_initial_observation')
+        store:close();store=assert(open_store());journal=assert(Journal.open(store,new_id,Observe))
+        local baseline=assert(store:read()).observation
+        baseline.observation_sequence=1
+        event={event='observation',schema='rby-observation-v1',sequence=1,frame=120,
+            inventory={schema='fixture-point',source='unchanged'}}
+        first=assert(journal:append(event,baseline))
+        local deferred={schema='rby-observation-result-v1',operation_id=first,
+            sequence=1,frame=120,inventory_status='deferred'}
+        assert(journal:accept_response(first,JSON.array(),deferred))
+        first_baseline=assert(store:read()).observation
+        assert(first_baseline.pending_inventory_retry.operation_id==first)
+        baseline=assert(store:read()).observation
+        baseline.observation_sequence=2
+        second=assert(journal:append({event='observation',schema='rby-observation-v1',sequence=2,
+            frame=150,inventory={schema='fixture-point',source='unchanged'}},baseline))
+        local accepted={schema='rby-observation-result-v1',operation_id=second,
+            sequence=2,frame=150,inventory_status='recorded'}
+        assert(journal:accept_response(second,JSON.array(),accepted))
+        final=assert(store:read()).observation
+    """)
+    first = json.loads(lua.eval("JSON.encode(first_baseline)"))
+    assert first["pending_inventory_retry"]["sequence"] == 1
+    final = json.loads(lua.eval("JSON.encode(final)"))
+    assert "pending_inventory_retry" not in final and final["observation_cursor"]["sequence"] == 2
+    assert payload(lua)["outbox"] == []
+
+
 def test_acknowledged_free_initial_payload_compacts_to_a_bound_digest_only_after_adoption(runtime):  # noqa: F811
     lua = runtime
     lua.execute("""

@@ -114,7 +114,7 @@ function M.new(options)
     function self:close()if self.signals then self.signals:close()end end
     return self
 end
-function M.acknowledge_event(payload,operation_id,baseline)
+function M.acknowledge_event(payload,operation_id,baseline,semantic_result)
     if payload.event=="observation"then
         assert(payload.schema=="rby-observation-v1" and type(payload.sequence)=="number"
             and payload.sequence%1==0 and payload.sequence>=1 and type(payload.frame)=="number"
@@ -128,6 +128,27 @@ function M.acknowledge_event(payload,operation_id,baseline)
                 "acknowledged observation cursor skipped or moved backwards")
         end
         baseline.observation_cursor={sequence=payload.sequence,operation_id=operation_id,frame=payload.frame}
+        if semantic_result then
+            assert(JSON.kind(semantic_result)=="object" and semantic_result.schema=="rby-observation-result-v1"
+                and semantic_result.operation_id==operation_id and semantic_result.sequence==payload.sequence
+                and semantic_result.frame==payload.frame,"observation settlement belongs to another event")
+            local expected=payload.inventory~=JSON.null and payload.inventory~=nil
+            local status=semantic_result.inventory_status
+            assert((not expected and status=="absent") or (expected and (status=="recorded"or status=="deferred")),
+                "observation inventory settlement differs from its payload")
+            local count=0
+            for key in pairs(semantic_result)do
+                assert(key=="schema"or key=="operation_id"or key=="sequence"or key=="frame"
+                    or key=="inventory_status","unexpected observation settlement field")
+                count=count+1
+            end
+            assert(count==5,"complete observation settlement required")
+            if status=="deferred"then
+                baseline.pending_inventory_retry={operation_id=operation_id,sequence=payload.sequence,frame=payload.frame}
+            elseif status=="recorded"then
+                baseline.pending_inventory_retry=nil
+            end
+        end
         return baseline
     end
     if payload.event=="inventory_observation"then

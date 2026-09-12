@@ -364,6 +364,25 @@ function M.new(options)
                 state.recovery=packet.recovery~=JSON.null and packet.recovery and copy(packet.recovery) or nil
                 state.reason=control:status().reason
             else
+                local oldest=events()[1]
+                assert(oldest and oldest.operation_id==request.operation_id,
+                    "semantic response lacks its oldest durable event")
+                local semantic_result=packet.observation_result
+                if oldest.payload.event=="observation"then
+                    assert(JSON.kind(semantic_result)=="object"
+                        and semantic_result.schema=="rby-observation-result-v1"
+                        and semantic_result.operation_id==request.operation_id
+                        and semantic_result.sequence==oldest.payload.sequence
+                        and semantic_result.frame==oldest.payload.frame,
+                        "observation response lacks its exact committed settlement")
+                    local inventory=oldest.payload.inventory
+                    local status=semantic_result.inventory_status
+                    assert((inventory==JSON.null and status=="absent")
+                        or (inventory~=JSON.null and (status=="recorded"or status=="deferred")),
+                        "observation settlement differs from its durable inventory")
+                else
+                    assert(semantic_result==nil,"unsolicited observation settlement")
+                end
                 local durable=JSON.array()
                 for _,command in ipairs(batch) do
                     local body=JSON.object()
@@ -371,7 +390,7 @@ function M.new(options)
                     durable[#durable+1]={command_id=command.command_id,command_sequence=command.command_sequence,body=body}
                 end
                 local safe,saved,problem=pcall(function()
-                    local accepted,error=journal:accept_response(request.operation_id,durable)
+                    local accepted,error=journal:accept_response(request.operation_id,durable,semantic_result)
                     if accepted then events();commands() end
                     return accepted,error
                 end)

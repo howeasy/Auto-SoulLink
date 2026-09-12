@@ -37,6 +37,8 @@ function M.new(ctx)
     assert(type(ctx)=="table" and ctx.engine and type(ctx.engine.probe)=="function" and ctx.journal and ctx.session and ctx.baseline
         and type(ctx.owned)=="function" and type(ctx.rom_hash)=="function","observation loop dependencies required")
     assert(ctx.verify==nil or type(ctx.verify)=="function","observation boundary verifier must be callable")
+    assert(ctx.pending_inventory_retry==nil or type(ctx.pending_inventory_retry)=="function",
+        "durable inventory retry reader must be callable")
     local period=ctx.heartbeat or M.HEARTBEAT
     assert(integer(period) and period>=1,"heartbeat period in frames required")
     local frame_of=ctx.frame or function()return emu.framecount()end
@@ -88,13 +90,14 @@ function M.new(ctx)
         local inventory=JSON.null
         if heartbeat and ctx.checkpoint then
             self.diagnostics.inventory_checks=self.diagnostics.inventory_checks+1
-            local point,fingerprint=ctx.checkpoint(self.fingerprint)
+            local retry=ctx.pending_inventory_retry and ctx.pending_inventory_retry() or nil
+            local point,fingerprint=ctx.checkpoint(self.fingerprint,retry~=nil)
             if fingerprint then self.fingerprint=fingerprint end
             if point then inventory=point end
         elseif heartbeat and ctx.inventory then
             inventory=ctx.inventory()or JSON.null
         end
-        local publish=#signals>0 or inventory~=JSON.null or (heartbeat and not ctx.checkpoint)
+        local publish=#signals>0 or inventory~=JSON.null or (heartbeat and (not ctx.checkpoint or probe.battle~=0))
             or engaged~=JSON.null or rows~=nil and #rows.receipts>0
         local event
         if publish or rows and witnessed(rows) then

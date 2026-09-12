@@ -213,10 +213,14 @@ function M.start(launch,options)
                     "continuity inventory differs from its idle source frame")
                 continuity.idle.pending_events=0;continuity.idle.pending_commands=0
                 local baseline=assert(self.store:read()).observation
-                return {schema="rby-free-service-continuity-v1",service_epoch=recovery.service_epoch,
+                local proof={schema="rby-free-service-continuity-v1",service_epoch=recovery.service_epoch,
                     binding_digest=binding.binding_digest,
                     initial_operation_id=baseline.initial_inventory.operation_id,
                     cursor=continuity.cursor,inventory=point,idle=continuity.idle}
+                if baseline.pending_inventory_retry then
+                    proof.pending_inventory_retry=baseline.pending_inventory_retry
+                end
+                return proof
             end)
             if not ok then return deferred(proof)end
             self.continuity_cache=assert(JSON.decode(assert(JSON.encode(proof))))
@@ -284,13 +288,13 @@ function M.start(launch,options)
                     if not ok then error(point,0)end
                     return point
                 end
-                local function checkpoint(previous)
+                local function checkpoint(previous,force)
                     if not memory.isPartyWriteSafe()then return nil,previous,false end
                     assert(self.holds:set("writer",true,"inventory fingerprint checkpoint"))
                     local ok,point,fingerprint,changed=pcall(function()
                         local frame=emu.framecount();source_owned()
                         local current=Fingerprint.capture(memory,launch.cartridge.variant)
-                        local dirty=previous~=false and(not previous or not Fingerprint.same(previous,current))
+                        local dirty=previous~=false and(force or not previous or not Fingerprint.same(previous,current))
                         local full=dirty and Observation.capture({owned=owned,host=self.host,memory=memory,
                             variant=launch.cartridge.variant})or nil
                         source_owned();assert(emu.framecount()==frame,"inventory fingerprint frame changed")
@@ -303,6 +307,9 @@ function M.start(launch,options)
                 self.loop_ctx={engine=self.observer.signals,observers=self.acquisitions,owned=source_owned,instruction=self.instruction,
                     rom_hash=function()return gameinfo.getromhash():lower()end,
                     baseline=function()return assert(self.store:read()).observation end,
+                    pending_inventory_retry=function()
+                        return assert(self.store:read()).observation.pending_inventory_retry
+                    end,
                     verify=function()
                         assert(self.holds:verify())
                         source_owned()

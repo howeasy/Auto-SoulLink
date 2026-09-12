@@ -26,6 +26,7 @@ FIELDS = {
     "inventory",
     "idle",
 }
+OPTIONAL = {"pending_inventory_retry"}
 CURSOR = {"sequence", "operation_id", "frame"}
 IDLE = {
     "pending_events",
@@ -38,6 +39,7 @@ IDLE = {
     "battle",
     "source_frame",
 }
+RETRY = {"operation_id", "sequence", "frame"}
 MAX_INT = 2**53 - 1
 
 
@@ -65,7 +67,7 @@ def _inventory_semantics(value):
 def verify(runtime, player, evidence, stage, binding):
     if not runtime.free_service or runtime.native_trade:
         raise JournalError("service continuity is limited to non-trade RBY free service")
-    if not isinstance(evidence, dict) or set(evidence) != FIELDS or evidence.get("schema") != SCHEMA:
+    if not isinstance(evidence, dict) or set(evidence) - OPTIONAL != FIELDS or evidence.get("schema") != SCHEMA:
         raise JournalError("typed RBY free-service continuity proof required")
     if evidence["service_epoch"] != runtime._service_epoch:
         raise JournalError("service continuity proof refers to a stale service epoch")
@@ -122,7 +124,34 @@ def verify(runtime, player, evidence, stage, binding):
     point = evidence["inventory"]
     current = validate(point, metadata, initial["binding"])
     expected = validate(latest, initial["metadata"], initial["binding"])
-    if _inventory_semantics(current) != _inventory_semantics(expected):
+    retry = evidence.get("pending_inventory_retry")
+    if retry is not None:
+        if (not isinstance(retry, dict) or set(retry) != RETRY
+                or type(retry["sequence"]) is not int or type(retry["frame"]) is not int
+                or not 1 <= retry["sequence"] <= cursor["sequence"]
+                or not 0 <= retry["frame"] <= cursor["frame"]):
+            raise JournalError("invalid deferred inventory retry cursor")
+        operation = _identifier(retry["operation_id"], "deferred inventory operation")
+        receipt = runtime.journal.event_snapshot(player, operation)
+        request = receipt.request if receipt is not None else None
+        if (not isinstance(request, dict) or request.get("event") != "observation"
+                or request.get("sequence") != retry["sequence"] or request.get("frame") != retry["frame"]
+                or request.get("inventory") is None or receipt.result.get("inventory_deferred") is not True
+                or request.get("context") != {
+                    "context_generation": initial["binding"]["context_generation"],
+                    "physical_instance": initial["metadata"]["gen1_metadata"]["physical_instance"],
+                    "save_identity": initial["metadata"]["save_identity"],
+                }):
+            raise JournalError("service continuity retry lacks its exact deferred observation")
+        recorded = document["components"].get(INVENTORY, {}).get(player)
+        if recorded is not None:
+            latest_receipt = runtime.journal.event_snapshot(player, recorded["operation_id"])
+            if latest_receipt is None or latest_receipt.revision >= receipt.revision:
+                raise JournalError("deferred retry predates the latest committed inventory")
+        deferred = validate(request["inventory"], metadata, initial["binding"])
+        if _inventory_semantics(current) != _inventory_semantics(deferred):
+            raise JournalError("held inventory differs from its deferred physical witness")
+    elif _inventory_semantics(current) != _inventory_semantics(expected):
         raise JournalError("service continuity inventory differs from the last committed checkpoint")
     if (point["host"] != initial["observation"]["host"]
             or point["frame"] != idle["source_frame"]

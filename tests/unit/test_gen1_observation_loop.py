@@ -143,6 +143,44 @@ def test_exact_dirty_checkpoint_suppresses_unchanged_heartbeats_and_publishes_fu
     assert lua.eval("loop:status().inventory_publications") == 1
 
 
+def test_deferred_ack_forces_full_resend_at_next_same_byte_checkpoint(lua):
+    lua.execute("""
+        checks=0
+        baseline.pending_inventory_retry={operation_id=string.rep('9',32),sequence=1,frame=90}
+        checkpoint=function(previous,force)
+            checks=checks+1
+            local fingerprint={schema='fixture-fingerprint',value=1}
+            if previous==false then return nil,fingerprint,false end
+            assert(force==true,'deferred ACK did not force a full same-byte point')
+            return {schema='fixture-inventory',frame=frame},fingerprint,true
+        end
+        ctx_retry=function()return baseline.pending_inventory_retry end
+        build();ctx.pending_inventory_retry=ctx_retry
+    """)
+    lua.globals().advance(21)
+    assert lua.eval("checks") == 2 and lua.eval("#appended") == 1
+    assert lua.eval("appended[1].event.inventory.frame") == 120
+    assert lua.eval("appended[1].event.sequence") == 1
+
+
+def test_battle_heartbeat_publishes_null_inventory_without_source_signal(lua):
+    lua.execute("""
+        battle=1;opponent=36
+        checkpoint=function(previous)
+            if previous==false then return nil,{schema='fixture-fingerprint',value=1},false end
+            return nil,{schema='fixture-fingerprint',value=1},false
+        end
+        build()
+    """)
+    lua.globals().advance(21)
+    assert lua.eval("#appended") == 1
+    assert lua.eval("appended[1].event.frame") == 120
+    assert lua.eval("appended[1].event.battle") == 1
+    assert lua.eval("appended[1].event.inventory == JSON.null") is True
+    assert lua.eval("appended[1].event.signals == JSON.null") is True
+    assert lua.eval("#appended[1].event.acquisitions") == 0
+
+
 def test_sequence_increments_per_event_and_lands_in_the_baseline(lua):
     lua.globals().signal()
     lua.globals().advance()  # frame 100: signal
