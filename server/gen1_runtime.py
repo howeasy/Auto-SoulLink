@@ -158,6 +158,7 @@ class Gen1Runtime(DurableRuntime):
                 verify_reconciliation=verify_reconciliation,
                 **options,
             )
+            self.journal.enable_verified_row_cache()
             if trade_policy is not None:
                 self.trade = TradeCoordinator(
                     self.journal,
