@@ -80,6 +80,36 @@ Order is by dependency first, payoff second. Step 0 is the precondition. Each st
 bound, what Gen 3 code is replaced or wrapped, what stays in the adapter, the gate that must keep passing,
 an effort class (S under a day of focused work, M a few days, L a week or more) and the risk.
 
+### Step 0a (added 2026-09-11). Reconcile the shared spine with gen1/rc
+
+The in-flight shared worktree (`.claude/worktrees/shared-framework`, branch `claude/shared-framework` at
+`codex/shared-operation-binding-v1` 9433c80) and `gen1/rc` change 131 of the same paths versus master; 109 are
+byte-identical and these 22 diverge. Reconciling them is the first task of the binding work, before any step
+below, and nothing here is Gen 1 release work:
+
+- `.gitattributes`
+- `docs/gen1_reference/GAMBATTE_EXECUTION_HOLD.md`
+- `docs/platform-execution-contract.md`
+- `docs/rr_reference/SHARED_PROFILE_HOLD.md`
+- `lua/clients/gen3_frlge_client.lua`
+- `lua/platform_clock.lua`
+- `lua/platform_saveram.lua`
+- `requirements-dev.txt`
+- `server/durable_runtime.py`
+- `server/linked_death_rules.py`
+- `server/manager.py`
+- `server/protocol_journal.py`
+- `server/server.py`
+- `server/state.py`
+- `server/status_payload.py`
+- `tests/unit/test_client_state_store.py`
+- `tests/unit/test_http_server_security.py`
+- `tests/unit/test_linked_death_rules.py`
+- `tests/unit/test_manager_http_hardening.py`
+- `tests/unit/test_protocol_records.py`
+- `tests/unit/test_runtime_operation_binding.py`
+- `tools/emulator_sandbox.py`
+
 ### Step 0. P1: restore the trade staging gate
 
 Apply `proposals/P1-gen3-trade-gate.patch` (one inserted `elseif` at `gen3_frlge_client.lua:2221-2241`).

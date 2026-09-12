@@ -6,6 +6,19 @@ tree on that day. The worktree carries 64 tracked files modified and everything 
 untracked files (the whole `docs/gen1_reference/` set, the proposal series, `server/gen1_*` and
 `lua/gen1_*` modules) are included, so line numbers belong to the working tree, not to the commit.
 
+> **Status after the takeover (2026-09-11 evening).** The Gen 1 branch is now `gen1/rc` (built on
+> `codex/gen1-gambatte-hold`, WIP commit `ead07af`, the proposal series applied as commits `07ba1ca`..`c9bf980`).
+> The line numbers below were read at HEAD `79d5172` and are historical; the module inventory is current except
+> where a row is marked DELETED: `server/capture_rules.py`, `party_grant_rules.py`, `member_identity_rules.py`,
+> `acquisition_disposition_rules.py` went with the fold into the shared engine (commit `0d7db99`), and the
+> ordinary frame-credit loop `server/gen1_frame_control.py`, `gen1_frame_journal.py`, `gen1_frame_runtime.py`,
+> `gen1_frame_acquisitions.py`, `lua/gen1_frame_client.lua` went with the free-run loop (commit `48c64d0`); the
+> tier-2 native-trade window machinery (`execution_window`, `frame_progress`, `frame_pacer`, `gen1_native_*`)
+> is kept, with the ledger helpers of the deleted modules moved into `server/gen1_native_frame_accounting.py`.
+> The shared-framework in-flight worktree is `.claude/worktrees/shared-framework` on `claude/shared-framework`
+> at `codex/shared-operation-binding-v1`; its 22 files diverging from `gen1/rc` are listed in
+> `docs/gen1_reference/GEN3_BINDING_PLAN.md` step 0.
+
 ## Goal, in one paragraph
 
 One generalized Soul Link runtime with one rule engine, and one adapter per generation that supplies only
@@ -104,16 +117,16 @@ Groups follow the subsystem map. Line counts are `wc -l` of the working tree fil
 | `server/pokemon_data.py` (1796) | one clause: species, type, gender and key helpers | `server/adapters/gen1_rby.py:14` | `server/adapters/gen3_frlge.py:14`; `server/state.py:29`; `server/server.py:49,56` | Shared. Finding: `server/pokemon_data.py:1017` imports `server/rr_ability_overrides.py` (RR data inside a shared module); see the plan, section 3 |
 | `server/gen1_semantic_events.py` (75) | P3 note: pure translators to the events `handle_event` consumes (`:16-75`) | `server/gen1_engine_bridge.py:14`; `server/gen1_whiteout.py` (P12); P8 and P9 patches | n/a: the Gen 3 client already emits these events (`capture` :3588, `no_catch` :4102, `faint` :3682, `whiteout` :3813, `trainer_battle_start` :2337, `memorialize_done` via `memorialize_finish` :1752) | Gen 1 adapter code that exists only to feed the shared engine |
 | `server/gen1_engine_bridge.py` (116) | P13 note: `starter_grant`, `no_catch`, `rekey`, `memorial_completion` through `handle_event` (:23-45) | P13 patch call sites (`server/gen1_starter_settlement.py:12,126`, `gen1_wild_encounter_runtime.py`, `gen1_evolution_runtime.py`, `gen1_npc_exchange_runtime.py`, `gen1_memorial_runtime.py`), not yet applied | n/a | Present as a file in the tree, its consumers only in the P13 patch |
-| `server/capture_rules.py` (65) | detached copy of `_handle_capture`; GEN3_STANDARD_COMPARISON section 1.1 | `server/acquisition_disposition_rules.py:10` (from `server/gen1_acquisition_runtime.py:251`) | never (Gen 3 runs the engine method) | Unused after P9 and P13; delete with its tests (P13 note, "What is now unused") |
+| `server/capture_rules.py` (65) | detached copy of `_handle_capture`; GEN3_STANDARD_COMPARISON section 1.1 | `server/acquisition_disposition_rules.py:10` (from `server/gen1_acquisition_runtime.py:251`) | never (Gen 3 runs the engine method) | Unused after P9 and P13; delete with its tests (P13 note, "What is now unused") DELETED 2026-09-11 (commit 0d7db99) |
 | `server/no_catch_rules.py` (112) | detached copy of `_handle_no_catch` | `server/gen1_wild_encounter_runtime.py:12` | never | After P13 only `decision` (naming) and `update_run_over` remain in use |
-| `server/member_identity_rules.py` (47) | detached copy of `_handle_key_change` | `server/gen1_evolution_runtime.py:18`; `server/gen1_npc_exchange_runtime.py:37` | never | Unused after P13 |
-| `server/acquisition_disposition_rules.py` (31) | adapter over `capture_rules` and `party_grant_rules` | `server/gen1_acquisition_runtime.py:251` | never | Unused after P9 |
+| `server/member_identity_rules.py` (47) | detached copy of `_handle_key_change` | `server/gen1_evolution_runtime.py:18`; `server/gen1_npc_exchange_runtime.py:37` | never | Unused after P13 DELETED 2026-09-11 (commit 0d7db99) |
+| `server/acquisition_disposition_rules.py` (31) | adapter over `capture_rules` and `party_grant_rules` | `server/gen1_acquisition_runtime.py:251` | never | Unused after P9 DELETED 2026-09-11 (commit 0d7db99) |
 
 ### Exempt party grants
 
 | Module | Contract | Gen 1 binding | Gen 3 binding today | Notes |
 | --- | --- | --- | --- | --- |
-| `server/party_grant_rules.py` (57) | [shared-party-grants](shared-party-grants.md) | `server/gen1_starter_settlement.py:12`; `server/acquisition_disposition_rules.py:11` | never; a Gen 3 starter is `capture` with `area_id="intro"` (`gen3_frlge_client.lua:3620`) into `_handle_capture` | Unused after P13; starters-and-clauses is an owner decision (plan, section 4) |
+| `server/party_grant_rules.py` (57) | [shared-party-grants](shared-party-grants.md) | `server/gen1_starter_settlement.py:12`; `server/acquisition_disposition_rules.py:11` | never; a Gen 3 starter is `capture` with `area_id="intro"` (`gen3_frlge_client.lua:3620`) into `_handle_capture` | Unused after P13; starters-and-clauses is an owner decision (plan, section 4) DELETED 2026-09-11 (commit 0d7db99) |
 
 ### Linked deaths
 
@@ -174,7 +187,7 @@ Groups follow the subsystem map. Line counts are `wc -l` of the working tree fil
 | `server/paired_recovery.py` (205) | [shared-recovery-contract](shared-recovery-contract.md) "Durable reconciliation" (`RecoveryBarrier`) | `server/gen1_runtime_state.py:18`; `server/gen1_runtime.py:203`; `server/gen1_trade_recovery.py:7`; shared `server/durable_runtime.py:19` | new; today HELLO re-reconciles everything in memory (`server/state.py:951`) | |
 | `server/paired_liveness.py` (105) | shared-recovery-contract "Fresh authority and independent clocks" | unbound in production: only `server/runtime_boundary.py:133,147` reports it as `None`; tests only | new | Unbound by both generations today |
 
-### Bounded frame scheduling (retired after P10)
+### Bounded frame scheduling (tier 1 deleted in 48c64d0 on 2026-09-11; tier 2 kept for native trade)
 
 | Module | Contract | Gen 1 binding | Gen 3 binding today | Notes |
 | --- | --- | --- | --- | --- |
