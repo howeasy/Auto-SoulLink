@@ -1669,9 +1669,9 @@ class SLinkServer:
         "Night":      "🌙",
         "Surfing":    "🌊",
         "Rock Smash": "🪨",
-        "Old Rod":    "🎣 Old",
-        "Good Rod":   "🎣 Good",
-        "Super Rod":  "🎣 Super",
+        "Old Rod":    "🎣",     # the label already says which rod: "🎣 Old Rod"
+        "Good Rod":   "🎣",
+        "Super Rod":  "🎣",
     }
 
     def _ingest_rom_content(self, player_id: str, payload: dict) -> None:
@@ -1877,9 +1877,11 @@ class SLinkServer:
             if not entries:
                 continue
             # A multi-floor dungeon labels its methods "Grass B1F" / "Water B4F", so the
-            # icon is looked up on the BASE method. Without this a floor loses its icon
-            # and reads as a different kind of encounter from the one above it.
-            icon = self._METHOD_ICON.get(method.split(" ")[0], "")
+            # icon is looked up on the full name first and then with the trailing floor
+            # token dropped. Splitting on the FIRST space looked up "Old"/"Super"/"Rock"
+            # and no rod or Rock Smash method ever got its icon, in any generation.
+            icon = (self._METHOD_ICON.get(method)
+                    or self._METHOD_ICON.get(method.rsplit(" ", 1)[0], ""))
             label = f"{icon} {method}" if icon else method
             rows = ""
             for e in entries:

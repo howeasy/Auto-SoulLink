@@ -716,7 +716,9 @@ def test_every_floor_of_a_multi_floor_dungeon_is_reachable():
         "cerulean_cave": {"1F", "2F", "B1F"},
     }
     for area, floors in expected.items():
-        got = {m.split(" ", 1)[1] for m in red[area] if " " in m}
+        # Rods are per-area, not per-floor (mirroring the ROM scanner), so only the
+        # grass/surf methods carry a floor.
+        got = {m.split(" ", 1)[1] for m in red[area] if m.startswith(("Grass", "Water"))}
         assert got == floors, f"{area}: got {sorted(got)}, expected {sorted(floors)}"
 
 
@@ -724,19 +726,22 @@ def test_single_map_areas_keep_their_plain_labels():
     """The load-bearing control: 26 of the 39 areas are one map, and their method names
     must be exactly what they always were or every consumer sees a gratuitous change."""
     red = _all_shipped()["red"]
+    rods = {"Old Rod", "Good Rod", "Super Rod"}
     assert set(red["route_1"]) == {"Grass"}
-    assert set(red["route_4"]) == {"Grass"}
+    assert set(red["route_4"]) == {"Grass"} | rods
     # A water-only single-map area, so the unsuffixed rule is shown to hold for Water and
     # not just for Grass. (Route 19 is sea; Route 12 has no Water table at all. Both of my
     # first guesses here were assumptions, and the data corrected them.)
-    assert set(red["route_19"]) == {"Water"}
+    assert set(red["route_19"]) == {"Water"} | rods
 
 
 def test_the_rule_area_ids_did_not_change():
     """Splitting the AREA would silently change what a run means — each floor would become
     its own dead-zone unit. Only the display axis was split."""
     red = _all_shipped()["red"]
-    assert len(red) == 39, f"the area count changed to {len(red)}"
+    # 39 grass/surf areas, plus the three towns that only ever had a Super Rod table
+    # (Pallet, Celadon, Cinnabar) -- all of them existing area_map.json ids, none new.
+    assert len(red) == 42, f"the area count changed to {len(red)}"
     for area in red:
         assert ":" not in area and " " not in area, f"{area} looks like a sub-area id"
 
