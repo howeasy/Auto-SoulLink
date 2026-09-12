@@ -100,10 +100,18 @@ def fps_between(commits):
 
 def run_free_pair(variants):
     assert not verify()["failures"]
+    assert "SLINK_CLIENT_STORAGE_ROOT" not in os.environ, "measure the production LocalAppData journal path"
 
     async def scenario():
         directory = Path(tempfile.mkdtemp(prefix=f"free-service-{variants[0][0]}{variants[1][0]}-", dir=ROOT / ".cache"))
         run_id = secrets.token_hex(16)
+        client_base = Path(os.environ["LOCALAPPDATA"]) / "SLink" / "clients"
+        client_run_root = client_base / run_id
+        # The default client path is itself part of this gate. Own exactly this
+        # fresh run directory so teardown never touches an existing save/journal.
+        client_run_root.mkdir(parents=True, exist_ok=False)
+        owner_marker = client_run_root / ".slink-live-test-owner"
+        owner_marker.write_text(run_id)
         players = dict(zip(("a", "b"), variants, strict=True))
         private = json.loads(Path(BIZHAWK_CONFIG).read_text(encoding="utf-8-sig"))
         private["Rewind"]["Enabled"] = False
@@ -145,8 +153,7 @@ def run_free_pair(variants):
                 jobs.append(asyncio.create_task(asyncio.to_thread(
                     run_gate, script.relative_to(ROOT).as_posix(), rom_key=variant, timeout=420, quiet=True,
                     config_base=str(config), fixture_override=str(fixture),
-                    extra_env={"SLINK_LAUNCHER_TEST_INPUT": str(spec),
-                               "SLINK_CLIENT_STORAGE_ROOT": str(directory / "client-data")})))
+                    extra_env={"SLINK_LAUNCHER_TEST_INPUT": str(spec)})))
             observed = {p: await wait("observed", p, 55) for p in players}
             assert all(row["cold_boot"] is True for row in observed.values())
             runtime = create_runtime(directory, contract(*variants), run_id=run_id, free_service=True)
@@ -211,13 +218,15 @@ def run_free_pair(variants):
                 assert passed, f"{path}\n{log[-4000:]}"
             client_final = {}
             for p, result in ready.items():
-                local_state = json.loads(Path(result["status"]["journal_path"]).read_text())["document"]["payload"]
+                journal_path = Path(result["status"]["journal_path"])
+                assert journal_path.resolve() == (client_run_root / p / "journal.json").resolve()
+                local_state = json.loads(journal_path.read_text())["document"]["payload"]
                 assert local_state["outbox"] == [] and local_state["inbox"] == []
                 initial_cursor = local_state["observation"]["initial_inventory"]
                 assert initial_cursor["schema"] == "rby-initial-observation-cursor-v1"
                 assert "payload" not in initial_cursor and len(json.dumps(local_state)) < 16 * 1024
                 client_final[p] = {"pending_events": 0, "pending_commands": 0,
-                                   "journal_bytes": Path(result["status"]["journal_path"]).stat().st_size}
+                                   "journal_bytes": journal_path.stat().st_size}
             publish(directory / "server-turns.json", {"turns": turns})
             document = runtime.state().document()
             state = runtime.state()
@@ -370,6 +379,9 @@ def run_free_pair(variants):
         finally:
             if any(not job.done() for job in jobs):
                 publish(directory / "abort.json", {"reason": "paired free-service launcher test finished or failed"})
+            pending = set()
+            if jobs:
+                _, pending = await asyncio.wait(jobs, timeout=15)
             if web is not None:
                 await web.close()
             if listener is not None:
@@ -377,6 +389,11 @@ def run_free_pair(variants):
                 await listener.wait_closed()
             if runtime is not None:
                 runtime.close()
+            assert not pending, "test clients still running; preserve their journal directory for diagnosis"
+            assert (not client_run_root.is_symlink() and not client_run_root.is_junction()
+                    and client_run_root.resolve().parent == client_base.resolve()
+                    and owner_marker.read_text() == run_id), "test client journal ownership changed"
+            shutil.rmtree(client_run_root)
 
     asyncio.run(scenario())
 
