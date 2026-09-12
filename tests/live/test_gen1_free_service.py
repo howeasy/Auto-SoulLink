@@ -101,6 +101,16 @@ def fps_between(commits):
             "first_frame": commits[0]["frame"], "last_frame": commits[-1]["frame"], "events": len(commits)}
 
 
+def classify_teardown_errors(turns, finish_requested_at):
+    """Only the peer's stale CONTROL after our paired finish request is expected."""
+    errors = [row for row in turns if row["error"] is not None]
+    assert all(row["began"] >= finish_requested_at
+               and row["event"] == "control"
+               and row["error"] == "ProtocolError: connection does not own this player session"
+               for row in errors), errors
+    return errors
+
+
 def run_free_pair(variants):
     assert not verify()["failures"]
     assert "SLINK_CLIENT_STORAGE_ROOT" not in os.environ, "measure the production LocalAppData journal path"
@@ -215,10 +225,13 @@ def run_free_pair(variants):
             # Both owners are still admitted after every phase; then stop the proven clients
             # before the synchronous evidence review, as the ordinary launcher test does.
             assert set(runtime.gate.sessions) == set(players)
+            finish_requested_at = time.perf_counter()
             publish(directory / "finish.json", {"done": True})
             for job in jobs:
                 passed, path, log = await job
                 assert passed, f"{path}\n{log[-4000:]}"
+            await asyncio.sleep(0.1)
+            teardown_errors = classify_teardown_errors(turns, finish_requested_at)
             client_final = {}
             for p, result in ready.items():
                 journal_path = Path(result["status"]["journal_path"])
@@ -230,11 +243,13 @@ def run_free_pair(variants):
                 assert "payload" not in initial_cursor and len(json.dumps(local_state)) < 16 * 1024
                 client_final[p] = {"pending_events": 0, "pending_commands": 0,
                                    "journal_bytes": journal_path.stat().st_size}
-            publish(directory / "server-turns.json", {"turns": turns})
+            publish(directory / "server-turns.json", {"turns": turns, "finish_requested_at": finish_requested_at,
+                                                    "teardown_errors": teardown_errors})
             document = runtime.state().document()
             state = runtime.state()
             summary = {"schema": "rby-free-service-live-v1", "directory": directory.name, "run_id": run_id,
                        "variants": list(variants), "phases_planned": PHASES, "credit_loop": CREDIT_LOOP,
+                       "teardown_control_errors": len(teardown_errors),
                        "server_turns": {event: len([row for row in turns if row["event"] == event])
                                         for event in sorted({row["event"] for row in turns})},
                        "players": {}}
