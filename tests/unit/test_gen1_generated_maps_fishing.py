@@ -85,15 +85,17 @@ def test_in_memory_rebuild_equals_the_shipped_tables(built):
 def test_every_rod_method_is_present_and_sums_to_100(title):
     tables = _shipped()[title]
     for rod in RODS:
-        areas = [a for a, b in tables.items() if rod in b]
+        areas = [a for a, b in tables.items() if any(m.startswith(rod) for m in b)]
         assert len(areas) == 28, f"{title}/{rod}: {len(areas)} areas"
         for a in areas:
-            total = sum(e["rate"] for e in tables[a][rod])
-            assert total == 100, f"{title}/{a}/{rod} sums to {total}"
+            for method, entries in tables[a].items():
+                if method.startswith(rod):
+                    total = sum(e["rate"] for e in entries)
+                    assert total == 100, f"{title}/{a}/{method} sums to {total}"
     # One placement rule: Old and Good Rod go wherever there is surf water or a Super Rod
     # group, and nowhere else.
     for a, b in tables.items():
-        fishable = "Super Rod" in b or any(m.startswith("Water") for m in b)
+        fishable = any(m.startswith(("Super Rod", "Water")) for m in b)
         assert ({"Old Rod", "Good Rod"} <= set(b)) == fishable, f"{title}/{a}: {sorted(b)}"
 
 
@@ -126,17 +128,41 @@ def test_red_blue_super_rod_groups_match_the_asm():
 def test_yellow_super_rod_rows_match_the_asm():
     # pokeyellow data/wild/super_rod.asm line 2:
     #   db PALLET_TOWN, STARYU, 10, TENTACOOL, 10, STARYU, 5, TENTACOOL, 20
+    # and engine/items/super_rod.asm GenerateRandomFishingEncounter compares one random byte
+    # to $66/$B2/$E5, so the four slots weigh 102/76/51/27 of 256: Staryu (slots 1+3) 60,
+    # Tentacool (slots 2+4) 40. Not uniform, unlike Red and Blue.
     t = _shipped()["yellow"]
-    assert _rows(t["pallet_town"]["Super Rod"]) == {"Staryu": (50, 5, 10), "Tentacool": (50, 10, 20)}
-    # Cerulean Cave has two rows (1F: Goldeen 25 / Seaking 35,45,55; B1F: 30 / 40,50,60).
-    # The lowest map id wins within an area and B1F (0xE3) is below 1F (0xE4), exactly as
-    # gen1_rom_scan.build_encounter_tables resolves it; pinned so the choice is visible.
-    assert _rows(t["cerulean_cave"]["Super Rod"]) == {"Seaking": (75, 40, 60), "Goldeen": (25, 30, 30)}
-    # Vermilion Dock folds into vermilion_city (one rule area, like the Fighting Dojo into
-    # Saffron) and Yellow gives the dock its own row (Tentacool, Staryu, Shellder); the city
-    # map (5) wins over the dock (94), so the widget shows the city's row. Same display
-    # limitation as Cerulean Cave above, pinned so it stays a decision.
-    assert _rows(t["vermilion_city"]["Super Rod"]) == {"Tentacool": (75, 10, 20), "Horsea": (25, 5, 5)}
+    assert _rows(t["pallet_town"]["Super Rod"]) == {"Staryu": (60, 5, 10), "Tentacool": (40, 10, 20)}
+    assert enc.parse_super_rod_thresholds(enc._PRET_YELLOW) == (0x66, 0xB2, 0xE5)
+    assert enc.parse_super_rod_thresholds(enc._PRET) is None
+    # Cerulean Cave has two rows (1F: Goldeen 25 / Seaking 35,45,55; B1F: 30 / 40,50,60) and
+    # Vermilion City two (city: Tentacool 15,20,10 / Horsea 5; dock: Tentacool 10,15 / Staryu
+    # 15 / Shellder 10). Each fishing map in a multi-map area keeps its own labelled row --
+    # the wild floor where there is one, else the map constant's tail -- so nothing is lost
+    # to first-wins, and the rates are the Yellow slot weights aggregated per species.
+    assert _rows(t["cerulean_cave"]["Super Rod 1F"]) == {"Seaking": (60, 35, 55), "Goldeen": (40, 25, 25)}
+    assert _rows(t["cerulean_cave"]["Super Rod B1F"]) == {"Seaking": (60, 40, 60), "Goldeen": (40, 30, 30)}
+    assert _rows(t["vermilion_city"]["Super Rod"]) == {"Tentacool": (90, 10, 20), "Horsea": (10, 5, 5)}
+    assert _rows(t["vermilion_city"]["Super Rod Dock"]) == {"Tentacool": (70, 10, 15), "Staryu": (20, 15, 15), "Shellder": (10, 10, 10)}
+    assert "Super Rod" not in t["cerulean_cave"]
+
+
+def test_super_rod_weights_are_the_titles_own_and_the_pin_bites(monkeypatch):
+    """Red/Blue reject-sample uniformly; Yellow thresholds one byte. A scanner pin that drifts
+    from the asm is refused by the generator, and a wrong group size is refused by the scanner."""
+    from server.adapters import gen1_rom_scan as scan
+    assert scan.super_rod_rates("red", 2) == (50, 50) and scan.super_rod_rates("blue", 4) == (25, 25, 25, 25)
+    assert scan.super_rod_rates("red", 3) == (34, 33, 33)
+    assert scan.super_rod_rates("yellow", 4) == (40, 30, 20, 10)
+    with pytest.raises(scan.RomScanError):
+        scan.super_rod_rates("yellow", 3)
+    group = [(10, "STARYU"), (10, "TENTACOOL"), (5, "STARYU"), (20, "TENTACOOL")]
+    assert enc.super_rod_rates("yellow", enc._PRET_YELLOW, group) == [40, 30, 20, 10]
+    monkeypatch.setattr(scan, "YELLOW_SUPER_ROD_THRESHOLDS", (0x40, 0x80, 0xC0))
+    with pytest.raises(ValueError, match="differ from the scanner pin"):
+        enc.super_rod_rates("yellow", enc._PRET_YELLOW, group)
+    with pytest.raises(ValueError, match="unexpected super rod selection routine"):
+        enc.super_rod_rates("red", enc._PRET_YELLOW, group)
 
 
 # ── (e) the widget shows the rod icon ────────────────────────────────────────────────────

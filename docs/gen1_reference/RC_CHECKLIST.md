@@ -1,6 +1,6 @@
 # Gen 1 release checklist
 
-Rendered 2026-09-12 from `tests/gen1_release_requirements.json` (schema `1`) at worktree HEAD `1f53928`. The manifest is the truth and `tools/verify_gen1_release.py` is the gate; this page is a render of the same rows so the status of the release fits on one screen. Regenerate with:
+Rendered 2026-09-12 from `tests/gen1_release_requirements.json` (schema `1`) at worktree HEAD `94c8015`. The manifest is the truth and `tools/verify_gen1_release.py` is the gate; this page is a render of the same rows so the status of the release fits on one screen. Regenerate with:
 
 ```bash
 python docs/gen1_reference/render_rc_checklist.py . docs/gen1_reference/RC_CHECKLIST.md

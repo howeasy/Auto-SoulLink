@@ -9,7 +9,7 @@ check has a negative control proving it bites. 218 registered / 170 missing of 3
 
 | Clause | Proof | What is asserted |
 | --- | --- | --- |
-| stream active-run pins | `tests/unit/test_manager_stream_pin.py` (6 tests, new) | Through the app `manager.main` builds, two registry runs alive (liveness stubbed, each backed by a real aiohttp overlay stub): newest-running is the default target; `POST /api/stream/pin` routes `/stream/{name}`, its `/fragment` poll and the query string to the pinned run's port while the other run receives nothing; unknown id is 404 and keeps the pin; invalid JSON is 400; `null` unpins; a dead pinned run falls back and the registry records it stopped with pid null; no running run gives the friendly 404 and the empty status payload |
+| stream active-run pins | `tests/unit/test_manager_stream_pin.py` (7 tests, new) | Through the app `manager.main` builds, two registry runs alive (liveness stubbed, each backed by a real aiohttp overlay stub): newest-running is the default target; `POST /api/stream/pin` routes `/stream/{name}`, its `/fragment` poll and the query string to the pinned run's port while the other run receives nothing; unknown id is 404 and a stopped or dead run is 409, both keeping the previous pin (a dead run used to be accepted with a 200 that echoed a pin `_active_stream_run` had already dropped); an accepted pin reports the stored pin; invalid JSON is 400; `null` unpins; a dead pinned run falls back and the registry records it stopped with pid null; no running run gives the friendly 404 and the empty status payload |
 | capability-gated controls | same file, `test_the_ability_column_follows_the_adapter_capability[gen1_rby, gen3_rr]`, `test_the_patcher_offers_the_start_panel_only_where_the_target_has_one[rb-red, rb-blue, yellow]` | The real dashboard renders the party table without the Ability header for `Gen1Adapter` (`supports_abilities()` False) and with it for Gen 3; `/patcher` lists the START-panel feature for rb-red and rb-blue and not for yellow, following `capabilities.panel` |
 | Gen 1 accurate UI | `test_routes_smoke.py` (gen1_rby parametrizations), `test_gen1_presentation.py` | Every route renders for a Gen 1 server with real Gen 1 keys, the pair reaches the dashboard and memorial, sprite class, status tokens, badge mask, active box |
 | safe JSON | `test_manager_xss.py`, `test_http_server_security.py::test_dashboard_escapes_client_text_in_both_views_and_encounter_rows` | No payload closes the script element, round trip unchanged, client text escaped in both views and encounter rows, cross-origin mutation blocked |
@@ -46,7 +46,7 @@ PokemonStatsOffset is named).
 | Clause | Check | Source parsed at check time |
 | --- | --- | --- |
 | maps/subareas | `tools/gen_gen1_area_map.py --check` | `constants/map_constants.asm` (both decomps), `data/wild/grass_water.asm`, `data/wild/super_rod.asm`; every fishable map has an area; Yellow-only ids stated; the Lua tables equal a render of the JSON |
-| every encounter method | `tools/gen_gen1_encounters.py --check` + the clean-ROM scanner control (`test_gen1_rom_content.py`) | grass/water per map with the version conditionals, `good_rod.asm`, `super_rod.asm` (R/B pointer groups and the Yellow flat format), `ItemUseOldRod`; Old/Good/Super Rod shipped for 28 areas per title; Super Rod rates are the game's uniform pick (`ReadSuperRodData`), shared with the scanner as `uniform_rates` |
+| every encounter method | `tools/gen_gen1_encounters.py --check` + the clean-ROM scanner control (`test_gen1_rom_content.py`, now every method) | grass/water per map with the version conditionals, `good_rod.asm`, `super_rod.asm` (R/B pointer groups and the Yellow flat format), `ItemUseOldRod`; Old/Good/Super Rod shipped for 28 areas per title; rates are the title's own pick: R/B uniform (`ReadSuperRodData` rejection-samples a 2-bit number), Yellow 102/76/51/27 of 256 (`GenerateRandomFishingEncounter` compares one byte to `$66/$B2/$E5`, parsed from `engine/items/super_rod.asm` and asserted equal to the scanner pin `YELLOW_SUPER_ROD_THRESHOLDS`); every fishing map in a multi-map area keeps its own labelled Super Rod row (wild floor, else the map constant's tail: `Super Rod Dock`, `Super Rod Gym`, `Super Rod 1F/B1F`), published in `floor_labels.json` and applied identically by `build_encounter_tables`, which also emits Old and Good Rod so production ROM ingestion cannot drop a method |
 | types | `test_gen1_canonical_moves_trainers_types.py::test_types_match_pret[red/blue, yellow]` | `constants/type_constants.asm` and all 151 `data/pokemon/base_stats/*.asm` equal `_TYPE_IDS` and `_SPECIES_TYPES` (BIRD, carried by nothing, is the documented omission) |
 | moves | `tools/gen_moves_data.py --check` | `data/moves/moves.asm` and `names.asm` of both decomps: 165 in id order, name, type, power, accuracy, pp, split |
 | trainers | `tools/gen_gen1_trainers.py --check` | `constants/trainer_constants.asm` (OPP_ID_OFFSET parsed), `data/trainers/names.asm`, `data/trainers/parties.asm` per title; party counts equal the UPR pin `TrainerDataClassCounts` |
@@ -68,10 +68,10 @@ Data defects the checks found and fixed:
 - The dashboard looked encounter icons up on the first word of the method, so no rod or Rock Smash method
   in any generation ever had its icon.
 
-Display limitation, pinned rather than hidden: Super Rod carries no floor label and the lowest map id wins
-within an area (the scanner's rule), so Yellow's distinct Vermilion Dock row and Cerulean Cave 1F row are
-not shown. Upgrade path: floor labels for Super Rod maps, one paired change in the generator and
-`build_encounter_tables`.
+Review corrections (Codex, same day): the first cut modelled Yellow's Super Rod as uniform and let the
+lowest map id win a shared area, hiding Yellow's Vermilion Dock and Cerulean Cave 1F rows, and the scanner
+did not emit Old/Good Rod so a ROM-ingested table lost them. All three are fixed above; the `Super Rod`
+key count per title is 26 because Cerulean Cave carries only labelled rows.
 
 ## Re-pins
 
@@ -87,6 +87,6 @@ and the two tools. The gate run is the review.
 - `python tools/verify_gen1_rom_layout.py`: 40 ok / 0 fail / 0 missing.
 - `python tools/gen_gen1_area_map.py --check`, `gen_gen1_encounters.py --check`, `gen_moves_data.py --check`,
   `gen_gen1_trainers.py --check`: all exit 0.
-- `python -m pytest tests/unit -k "gen1 or gift or no_catch or semantic or routes_smoke or manager or rom_scan or rom_content or adapter or engine_bridge or starter or acquisition"`: 5100 passed.
+- `python -m pytest tests/unit -k "gen1 or gift or no_catch or semantic or routes_smoke or manager or rom_scan or rom_content or adapter or engine_bridge or starter or acquisition"`: 5100 passed (before the review corrections; the affected suites, 447 tests, rerun green after them).
 - `python tools/repin_gen1_release_hashes.py`: 0 stale, 0 missing. `verify_gen1_release.py --list`: 218 / 170.
 - `verify_gen1_release.py --quick` and the inventory refresh: recorded in the closing commit.

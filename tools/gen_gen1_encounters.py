@@ -321,18 +321,60 @@ def parse_super_rod(repo: str, map_consts: dict[str, int]) -> dict[int, list[tup
     return per_map
 
 
-def super_rod_rates(entries: list[tuple[int, str]]) -> list[int]:
-    """Uniform per-entry percentages: the game rerolls a 2-bit number until it is below the
-    group size (ReadSuperRodData), so every entry is equally likely. Shared with the ROM
-    scanner so a clean cartridge reproduces this file exactly."""
+def parse_super_rod_thresholds(repo: str) -> tuple[int, ...] | None:
+    """The `cp $nn` operands of pokeyellow's GenerateRandomFishingEncounter, in order.
+
+    Yellow does not pick uniformly: one random byte is compared against three thresholds and
+    the first slot whose threshold it is below wins, so the slots weigh 102, 76, 51 and 27 of
+    256. pokered has no such routine (its ReadSuperRodData rerolls a 2-bit number until it is
+    below the group size, which IS uniform) and returns None here.
+    """
+    path = os.path.join(repo, "engine", "items", "super_rod.asm")
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        body = f.read()
+    m = re.search(r"GenerateRandomFishingEncounter:(.*?)\n\.", body, re.S)
+    if not m:
+        raise ValueError("pokeyellow super_rod.asm: GenerateRandomFishingEncounter not found")
+    return tuple(int(v, 16) for v in re.findall(r"^\s*cp \$([0-9a-fA-F]+)", m.group(1), re.M))
+
+
+def super_rod_rates(variant: str, repo: str, entries: list[tuple[int, str]]) -> list[int]:
+    """Per-slot percentages as the title rolls them, through the ROM scanner's own function
+    so a clean cartridge reproduces this file exactly. Yellow's thresholds are parsed out of
+    the asm here and must equal the scanner's pin; Red and Blue are uniform (rejection
+    sampling in ReadSuperRodData)."""
     if _REPO not in sys.path:
         sys.path.insert(0, _REPO)
-    from server.adapters.gen1_rom_scan import uniform_rates
-    return list(uniform_rates(len(entries)))
+    from server.adapters.gen1_rom_scan import YELLOW_SUPER_ROD_THRESHOLDS, super_rod_rates as rates
+    thresholds = parse_super_rod_thresholds(repo)
+    if (variant == "yellow") != (thresholds is not None):
+        raise ValueError(f"{variant}: unexpected super rod selection routine")
+    if thresholds is not None and thresholds != YELLOW_SUPER_ROD_THRESHOLDS:
+        raise ValueError(f"pokeyellow super rod thresholds {thresholds} differ from the scanner pin "
+                         f"{YELLOW_SUPER_ROD_THRESHOLDS}")
+    return list(rates(variant, len(entries)))
+
+
+def map_suffix(const_name: str, area_id: str) -> str:
+    """" Dock" for VERMILION_DOCK in vermilion_city, "" for the area's own map.
+
+    A fishing map without a wild-data label still needs a stable, source-derived name when
+    its area holds several fishing maps; the map constant minus the area's own letters is
+    what is left (VERMILION_DOCK -> Dock, CERULEAN_GYM -> Gym).
+    """
+    letters = [c for c in const_name if c != "_"]
+    flat_area = area_id.replace("_", "").lower()
+    i = 0
+    while i < len(letters) and i < len(flat_area) and letters[i].lower() == flat_area[i]:
+        i += 1
+    tail = "".join(letters[i:])
+    return " " + tail.title() if tail else ""
 
 
 def build_variant(repo: str, defines: frozenset[str], index_to_natdex: dict[int, int],
-                  map_id_to_area: dict[int, str]) -> tuple[dict, list, set]:
+                  map_id_to_area: dict[int, str], variant: str = "red") -> tuple[dict, list, set]:
     """Encounter tables for ONE game version. Returns (areas, skipped_areas, skipped_species)."""
     species_consts = parse_pokemon_constants(
         os.path.join(repo, "constants", "pokemon_constants.asm")
@@ -377,11 +419,13 @@ def build_variant(repo: str, defines: frozenset[str], index_to_natdex: dict[int,
     # must reproduce this file byte for byte, which is the known-positive control that
     # proves the scanner reads real structure rather than something plausible.
     floor_suffix_by_map: dict[int, str] = {}
-    # area_id -> how many maps carry wild data, so single-map areas keep unsuffixed labels.
+    # area_id -> how many maps carry wild OR fishing data, so single-map areas keep
+    # unsuffixed labels and every map of a multi-map area gets a stable one.
+    map_consts = parse_map_constants(os.path.join(repo, "constants", "map_constants.asm"))
+    const_by_id = {v: k for k, v in map_consts.items()}
+    super_rod = parse_super_rod(repo, map_consts)
     floors_per_area: dict[str, int] = {}
-    for _mid, _label in pointers:
-        if _label == "NothingWildMons":
-            continue
+    for _mid in sorted({m for m, lbl in pointers if lbl != "NothingWildMons"} | set(super_rod)):
         _aid = map_id_to_area.get(_mid)
         if _aid:
             floors_per_area[_aid] = floors_per_area.get(_aid, 0) + 1
@@ -419,12 +463,13 @@ def build_variant(repo: str, defines: frozenset[str], index_to_natdex: dict[int,
         if not block:
             areas.pop(area_id, None)
 
-    # FISHING. Super Rod is per map: no floor suffix and lowest map id wins within an area,
-    # exactly as gen1_rom_scan.build_encounter_tables adds it, so the clean-ROM control
-    # holds for it too. Old and Good Rod are global in the ROM, so the placement rule is
-    # ours: every area with a Water method on any floor, or a Super Rod group, gets both.
-    super_rod = parse_super_rod(repo, parse_map_constants(
-        os.path.join(repo, "constants", "map_constants.asm")))
+    # FISHING. Super Rod is per map and carries the map's label when its area holds several
+    # fishing maps (a floor from the wild-data label, else the map constant's tail: " Dock",
+    # " Gym"), so Yellow's distinct Vermilion Dock and Cerulean Cave rows are all shown;
+    # the labels are published in floor_labels.json and gen1_rom_scan.build_encounter_tables
+    # applies the same ones, so the clean-ROM control holds. Old and Good Rod are global in
+    # the ROM, so the placement rule is ours: every area with a Water method on any floor,
+    # or a Super Rod group, gets both. Rates are the title's own pick (super_rod_rates).
     fishing_areas: list[str] = [a for a, b in areas.items()
                                 if any(m.startswith("Water") for m in b)]
     for map_id in sorted(super_rod):
@@ -435,8 +480,15 @@ def build_variant(repo: str, defines: frozenset[str], index_to_natdex: dict[int,
         block = areas.setdefault(area_id, {})
         if area_id not in fishing_areas:
             fishing_areas.append(area_id)
-        if "Super Rod" not in block:
-            block["Super Rod"] = to_entries(aggregate(super_rod[map_id], super_rod_rates(super_rod[map_id])))
+        suffix = floor_suffix_by_map.get(map_id, "")
+        if not suffix and floors_per_area.get(area_id, 0) > 1:
+            suffix = map_suffix(const_by_id[map_id], area_id)
+            if suffix:
+                floor_suffix_by_map[map_id] = suffix
+        method = "Super Rod" + suffix
+        if method not in block:
+            block[method] = to_entries(aggregate(super_rod[map_id],
+                                                 super_rod_rates(variant, repo, super_rod[map_id])))
     old_rod = to_entries(aggregate(parse_old_rod(repo), [100]))
     good_rod = to_entries(aggregate(parse_good_rod(repo), [50, 50]))
     for area_id in fishing_areas:
@@ -486,7 +538,7 @@ def build(quiet: bool = False) -> tuple[dict, dict[str, str], list[str]]:
     floor_suffixes: dict[int, str] = {}
     for variant, (repo, defines) in VARIANTS.items():
         areas, skipped_area, skipped_species, floors = build_variant(
-            repo, defines, index_to_natdex, map_id_to_area)
+            repo, defines, index_to_natdex, map_id_to_area, variant)
         floor_suffixes.update(floors)
         out[variant] = areas
         problems += _check_rates(variant, areas)
