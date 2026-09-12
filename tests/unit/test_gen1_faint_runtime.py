@@ -76,22 +76,27 @@ def test_activation_faint_and_physical_ack_are_atomic_and_do_not_claim_memorial_
         deliver(runtime,'a',owners['a'],value,op);assert runtime.journal.snapshot()==before
         stage=runtime.state();assert stage.rules.links[0].status==LinkStatus.DEAD
         assert stage.rules.pokeballs_obtained=={'a':True,'b':False}
-        assert not stage.rules.run_over and not runtime.journal.pending_ids('a')
-        pending=runtime.journal.pending('b');assert len(pending)==1 and pending[0]['cmd']=='force_faint'
+        assert not stage.rules.run_over
+        assert [c['cmd'] for c in runtime.journal.pending('a')]==['hud_notice','hud_notice']
+        pending=runtime.journal.pending('b');assert [c['cmd'] for c in pending]==['force_faint','hud_notice','hud_notice']
         command=runtime.journal.command('b',pending[0]['command_id']);message=acknowledgement(runtime,'b',command)
         receipt_op=secrets.token_hex(16);ack(runtime,'b',owners['b'],message,receipt_op)
         snapshot=runtime.journal.snapshot();ack(runtime,'b',owners['b'],message,receipt_op)
         assert runtime.journal.snapshot()==snapshot
-        assert all([c['cmd'] for c in runtime.journal.pending(p)]==['memorial_observe'] for p in ('a','b'))
+        assert all([c['cmd'] for c in runtime.journal.pending(p)]==['hud_notice','hud_notice','memorial_observe']
+                   for p in ('a','b'))
+        acknowledge_hud(runtime)
         assert runtime.state().rules.partner_blobs['b'][0]['blob'][1:3]==b'\0\0'
         death=next(iter(runtime.state().document()['components'][COMPONENT]['deaths'].values()))
         assert death['phase']=='pending_memorial' and REASON in runtime.state().barrier.document()['blockers'].values()
         assert all(runtime.state().rules.pending_memorials.values())
         deliver(runtime,'b',owners['b'],{**payload(runtime,'b',['battle_faint'],2),'signals':[bag(variants[1])]})
         assert runtime.state().rules.run_over is True
+        assert all([c['cmd'] for c in runtime.journal.pending(p)]==['memorial_observe','hud_state']
+                   for p in ('a','b'))
         # The partner engine's later faint callback does not create another command.
         deliver(runtime,'b',owners['b'],signal_batch(runtime,'b',sequence=3,activate=False))
-        assert [c['cmd'] for c in runtime.journal.pending('a')]==['memorial_observe']
+        assert [c['cmd'] for c in runtime.journal.pending('a')]==['memorial_observe','hud_state']
         assert len(runtime.state().document()['components'][COMPONENT]['deaths'])==1
     finally:runtime.close()
     reopened=open_runtime(tmp_path)
@@ -109,6 +114,34 @@ def test_faint_before_ball_delivery_in_same_batch_remains_suppressed(tmp_path):
         assert runtime.state().rules.links[0].status==LinkStatus.ALIVE and runtime.state().rules.party_keys==before
         assert runtime.state().rules.pokeballs_obtained['a'] and not runtime.journal.pending_ids('b')
     finally:runtime.close()
+
+
+def test_both_activated_linked_death_publishes_one_terminal_state_after_the_physical_faint(tmp_path):
+    runtime = create_runtime(tmp_path, contract('red', 'yellow'))
+    try:
+        owners = paired(runtime)
+        deliver(runtime, 'b', owners['b'], {**payload(runtime, 'b', ['battle_faint'], 2),
+                                           'signals': [bag('yellow')]})
+        death = signal_batch(runtime, 'a')
+        operation = secrets.token_hex(16)
+        deliver(runtime, 'a', owners['a'], death, operation)
+        snapshot = runtime.journal.snapshot()
+        deliver(runtime, 'a', owners['a'], death, operation)
+        assert runtime.journal.snapshot() == snapshot
+        assert runtime.state().rules.run_over is True
+        assert [c['cmd'] for c in runtime.journal.pending('b')] == [
+            'force_faint', 'hud_notice', 'hud_state', 'hud_notice']
+        assert [c['cmd'] for c in runtime.journal.pending('a')] == [
+            'hud_notice', 'hud_state', 'hud_notice']
+        assert all(sum(c['cmd'] == 'hud_state' for c in runtime.journal.pending(p)) == 1
+                   for p in ('a', 'b'))
+        for player in ('a', 'b'):
+            state = next(c for c in runtime.journal.pending(player) if c['cmd'] == 'hud_state')
+            assert state['mode'] == 'game_over' and state['text'] == ''
+        acknowledge_hud(runtime)
+        assert all(not any(c['cmd'] == 'hud_state' for c in runtime.journal.pending(p)) for p in ('a', 'b'))
+    finally:
+        runtime.close()
 
 
 @pytest.mark.parametrize('fault',['flags','destination','quantity','terminator','count','missing_ball'])
@@ -189,7 +222,8 @@ def test_faint_ack_cannot_skip_an_older_pending_command(tmp_path):
             expected_revision=snapshot.revision,state=snapshot.state,
             commands={'a':[],'b':[{'cmd':'fixture_older_observation'}]},result={'ack':'ACK'})
         deliver(runtime,'a',owners['a'],signal_batch(runtime,'a'))
-        command=runtime.journal.command('b',runtime.journal.pending_ids('b')[-1])
+        command=next(runtime.journal.command('b',identifier) for identifier in runtime.journal.pending_ids('b')
+                     if runtime.journal.command('b',identifier)['body']['cmd']=='force_faint')
         before=runtime.journal.snapshot()
         with pytest.raises(JournalError,match='oldest'):
             ack(runtime,'b',owners['b'],acknowledgement(runtime,'b',command))

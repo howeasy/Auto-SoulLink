@@ -146,7 +146,7 @@ def test_faint_signal_settles_exactly_as_the_standalone_engine_event(tmp_path, c
             links = [(link["status"], link["area_id"], link["a"]["key"], link["b"]["key"]) for link in document["rules"]["core"]["links"]]
             party = document["rules"]["runtime"]["party_keys"]
             fixed = {name: death[name] for name in death if name not in ("at", "link_id", "members")}
-            return fixed, links, party, [(body["cmd"], body["key"], body.get("player")) for body in pending]
+            return fixed, links, party, [(body["cmd"], body.get("key"), body.get("player")) for body in pending]
         finally:
             runtime.close()
 
@@ -157,7 +157,7 @@ def test_faint_signal_settles_exactly_as_the_standalone_engine_event(tmp_path, c
     death, links, party, commands = observed
     assert death["phase"] == "pending_faint" and death["peer"] == "b"
     assert links[0][0] == LinkStatus.DEAD.value and not party["a"] and not party["b"]
-    assert [command[0] for command in commands] == ["force_faint"]
+    assert [command[0] for command in commands] == ["force_faint", "hud_notice", "hud_notice"]
 
 
 def test_heartbeat_inventory_records_the_checkpoint_and_chains_from_the_previous_batch(tmp_path):
@@ -277,7 +277,8 @@ def test_heartbeat_inventory_is_deferred_while_any_physical_obligation_is_open(t
             points[player] = stable["observation"]
             acknowledge_hud(runtime)
         deliver(runtime, "a", owners["a"], batch(runtime, "a", 1, frame=121, signals=signal_batch(runtime, "a")))
-        assert runtime.journal.pending_ids("b") and not runtime.journal.pending_ids("a")
+        assert [c["cmd"] for c in runtime.journal.pending("b")] == ["force_faint", "hud_notice", "hud_notice"]
+        assert [c["cmd"] for c in runtime.journal.pending("a")] == ["hud_notice", "hud_notice"]
         sequences = {p: runtime.state().document()["components"][INVENTORY][p]["sequence"] for p in ("a", "b")}
         for player, frame in (("b", 125), ("a", 126)):
             _, result = publish(runtime, player, owners[player], batch(runtime, player, 1 if player == "b" else 2, frame=frame,
@@ -289,7 +290,7 @@ def test_heartbeat_inventory_is_deferred_while_any_physical_obligation_is_open(t
         # The physical faint closed, but its memorial obligations opened: the checkpoint stays deferred
         # until every obligation has its receipt, exactly as the standalone stream would refuse it.
         pending = [runtime.journal.command("b", identifier)["body"] for identifier in runtime.journal.pending_ids("b")]
-        assert pending and all("death_id" in body and body["cmd"] != "force_faint" for body in pending)
+        assert pending and [body["cmd"] for body in pending] == ["hud_notice", "hud_notice", "memorial_observe"]
         fainted = checkpoint(points["b"], 140)
         party = bytearray.fromhex(fainted["source"]["fields"]["party"])
         party[9:11] = b"\0\0"

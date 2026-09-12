@@ -515,6 +515,7 @@ def test_manual_dead_link_withdrawal_rearchives_without_new_death_or_usable_key(
                 "receipt": {"schema": "gen1-force-faint-receipt-v1", "before": pre, "after": post},
             },
         )
+        acknowledge_hud(runtime)  # the durable no-write death/whiteout feedback precedes memorial reads
         raw = bytearray.fromhex(points["b"]["source"]["fields"]["party"])
         raw[9:11] = b"\0\0"
         points["b"]["source"]["fields"]["party"] = raw.hex().upper()

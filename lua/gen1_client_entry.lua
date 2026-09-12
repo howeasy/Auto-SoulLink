@@ -2,8 +2,14 @@
 -- enroll and may execute only server-permitted writes; gameplay stays held.
 -- free_service (P10): observe free, hold to write. The loop of gen1_observation_loop.lua
 -- ticks once per emulated frame; the heartbeat checkpoint and every write take a
--- momentary verified hold of their own.
+-- momentary verified hold of their own. Durable commands reach exactly one service through
+-- command_service_router: physical commands take the held faint service (permit + hold),
+-- hud_notice takes gen1_hud_service, which draws on the lua/hud.lua overlay with no write,
+-- permit or hold and therefore settles even while lifecycle-held.
 local M={WRITE_SERVICE_SECONDS=2,CONTINUITY_RETRY_SECONDS=2}
+-- GB overlay geometry, as lua/clients/gen1_rby_client.lua:185.
+local OVERLAY={screen_w=160,screen_h=144,hud_x=2,hud_y=134,hud_right=158,prompt_y=36,prompt_h=10,gameover_y=50,
+    font_size=8,char_width=5}
 local function hex(value,size)
     return type(value)=="string" and #value==size and value:match("^[0-9a-f]+$")~=nil
 end
@@ -43,6 +49,15 @@ function M.start(launch,options)
         continuity_status={state="unavailable",reason="free service is not initialized"}}
     local nonce=require("platform_identity").new_nonce
     local generation,instance=assert(nonce()),assert(nonce())
+    -- An in-process script reload evicts the module cache but retains globals.  The
+    -- previous overlay closure can still erase BizHawk's persistent GUI pixels before
+    -- the fresh module loses that visibility state.
+    local previous_overlay_clear=rawget(_G,"SLINK_RUNTIME_OVERLAY_CLEAR")
+    if type(previous_overlay_clear)=="function" then pcall(previous_overlay_clear)end
+    _G.SLINK_RUNTIME_OVERLAY_CLEAR=nil
+    self.overlay=require("hud");self.overlay.init(OVERLAY)
+    self.overlay_clear=function()return self.overlay.clear()end
+    _G.SLINK_RUNTIME_OVERLAY_CLEAR=self.overlay_clear
     local context,first_frame
     if launch.initial_observations then
         -- Installed before New Game so its bus hooks witness the normal
@@ -100,7 +115,6 @@ function M.start(launch,options)
             assert(self.host.status().physical_stop_verified and emu.framecount()==first_frame,"held physical context changed")
             return source_owned()
         end
-        local function unavailable()error("cartridge execution is not selected in held-service launch mode",0)end
         local clock=assert(require("platform_clock").new())
         self.clock=clock
         -- Free-run: the executor reads that run on every control turn (operations.request,
@@ -117,9 +131,14 @@ function M.start(launch,options)
         if Observation then self.observer=Observation.new({memory=memory,variant=launch.cartridge.variant,
             journal=journal,host=self.host,owned=owned,source_owned=source_owned,engine_signals=true,
             bootstrap=self.bootstrap,free_service=free,at_boundary=at_boundary})end
-        local operations=faint and faint.operations or nil
-        local ready=faint and faint.ready or function()return false,"Waiting for qualified cartridge execution and reconciliation"end
-        local executor=faint and faint.adapter or {prepare=unavailable,classify=unavailable,apply=unavailable,receipt=unavailable}
+        -- HUD notices are no-write commands: no memory, permit, hold or sound. They settle while
+        -- lifecycle-held so a pending notice can never block service continuity; every other
+        -- command stays with the held faint service, and writer_pending stays physical-only.
+        self.hud=require("gen1_hud_service").new({journal=journal,overlay=self.overlay,player=launch.player})
+        local services={self.hud}
+        if faint then services[#services+1]=faint end
+        local router=require("command_service_router").new(services)
+        local operations,ready,executor=router.operations,router.ready,router.adapter
         local function new_instruction()
             return require("battle_force_authority").service({journal=journal,memory=memory,owner_id=instance,held=at_boundary,
                 unwrap=function(entry)return require("gen1_runtime").unwrap(entry.body,launch.player)end})
@@ -335,6 +354,8 @@ function M.start(launch,options)
         local ok,why=pcall(function()
             assert(gameinfo.getromhash():lower()==launch.cartridge.final_rom_sha1,"launch cartridge changed")
             local physical_frame=emu.framecount()
+            -- Retained notices count emulated frames: one overlay render per new frame, none while held.
+            if physical_frame~=self.rendered_frame then self.rendered_frame=physical_frame;self.overlay.render()end
             if self.last_physical_frame and physical_frame<self.last_physical_frame then
                 self.continuity_invalidated="emulator frame moved backwards; controlled recovery is required"
                 if self.holds then assert(self.holds:set("lifecycle",true,self.continuity_invalidated))end
@@ -381,6 +402,7 @@ function M.start(launch,options)
             engine_signals=self.observer and self.observer.signals and self.observer.signals:status()or nil,
             runtime=self.runtime and self.runtime:status({summary=true}) or nil,
             observation_diagnostics=self.loop and self.loop:status()or nil,
+            hud=self.hud and self.hud.status() or nil,
             continuity=self.continuity_status,
             hold_mux=self.holds and self.holds:status() or nil,
             ordinary_execution=false,
@@ -395,6 +417,12 @@ function M.start(launch,options)
         if self.load_state_hook then event.unregisterbyid(self.load_state_hook);self.load_state_hook=nil end
         if self.runtime then self.runtime:revoke("client service is closing")end
         if self.store then self.store:close()end
+        if self.overlay_clear then
+            assert(self.overlay_clear()==true)
+            if rawget(_G,"SLINK_RUNTIME_OVERLAY_CLEAR")==self.overlay_clear then
+                _G.SLINK_RUNTIME_OVERLAY_CLEAR=nil
+            end
+        end
         -- Stopping a Lua service cannot release gameplay. Its independent host
         -- lease remains held until controlled recovery or process exit.
     end

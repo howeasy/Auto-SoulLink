@@ -131,7 +131,9 @@ def stage_observation(runtime, stage, document, player, operation, request):
     # obligation's receipt carries its own checkpoint, so the heartbeat one is deferred, not refused.
     recorded_inventory = False
     if request['inventory'] is not None:
-        if any(runtime.journal.pending_ids(p) for p in ('a', 'b')):
+        from server.gen1_hud_feedback import pending_physical_ids
+
+        if any(pending_physical_ids(runtime.journal, p) for p in ('a', 'b')):
             result['inventory_deferred'] = True
         else:
             from server.gen1_inventory_observation import (

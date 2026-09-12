@@ -146,7 +146,9 @@ def stage_observation(runtime, stage, document, player, operation, request, *, f
     matching = same_admitted_context(metadata, initial['metadata']) if origin else metadata == initial['metadata']
     if not matching:
         raise JournalError('inventory stream context changed; reconciliation required')
-    if document['active_trade'] or origin is None and runtime.journal.pending_ids(player):
+    from server.gen1_hud_feedback import pending_physical_ids
+
+    if document['active_trade'] or origin is None and pending_physical_ids(runtime.journal, player):
         raise JournalError('physical command obligations require their own observation closure')
     entries = document['components'].setdefault(COMPONENT, {})
     old = entries.get(player)

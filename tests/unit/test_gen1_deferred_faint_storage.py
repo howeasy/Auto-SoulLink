@@ -16,6 +16,7 @@ from server.gen1_storage import expected
 from server.protocol_journal import JournalError
 from tests.unit.observation_fixture import commit, observe, starters
 from tests.unit.test_gen1_faint_runtime import signal_batch
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
 from tests.unit.test_gen1_sessions import contract
 from tests.unit.test_gen1_storage_runtime import COMPONENT as STORAGE, read, source, spare, write
 
@@ -173,6 +174,7 @@ def test_real_death_is_recorded_but_force_faint_waits_for_storage_compensation(
             job["death_abort"] == death_id
             and job["resolution"]["refusal"] == "linked-death-before-storage-write"
         )
+        acknowledge_hud(runtime)  # no-write UI can settle before the newly queued storage writes
         write(runtime, "a")
         assert (
             runtime.state().document()["components"][COMPONENT]["deaths"][death_id]["phase"]

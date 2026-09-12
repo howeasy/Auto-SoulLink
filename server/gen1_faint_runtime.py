@@ -96,6 +96,24 @@ def _command_origin(journal, death):
     return semantic_receipt(journal, death["player"], death["engine_record"], "engine_signals")
 
 
+def _recipient_commands(journal, issued, recipient):
+    """A compound death event has A/B HUD commands as well as the peer write."""
+    rows = []
+    for identifier in issued.command_ids:
+        found = []
+        for player in ("a", "b"):
+            try:
+                found.append((player, journal.command(player, identifier)))
+            except JournalError as error:
+                if str(error) != "unknown command or wrong player":
+                    raise
+        if len(found) != 1:
+            raise JournalError("linked death command has no unique recipient")
+        if found[0][0] == recipient:
+            rows.append(found[0][1])
+    return rows
+
+
 def settle(runtime, stage, document, player, entry):
     commands = {"a": [], "b": []}
     relevant = [
@@ -120,7 +138,16 @@ def settle(runtime, stage, document, player, entry):
                     "index": index,
                 }
                 stage.rules.pokeballs_obtained[player] = True
+                was_over = stage.rules.run_over
                 update_run_over(stage.rules)
+                if not was_over and stage.rules.run_over:
+                    # A previously settled linked death can become terminal when
+                    # the second owner's Pokeballs are observed.  update_run_over
+                    # changes the flag directly, not via the shared engine queue.
+                    from server.gen1_hud_feedback import build_state
+
+                    for recipient in ("a", "b"):
+                        commands[recipient].append(build_state({"cmd": "game_over"}))
             continue
         if row["kind"] != "faint" or not stage.rules.pokeballs_obtained[player]:
             continue
@@ -153,19 +180,20 @@ def settle(runtime, stage, document, player, entry):
         # _propagate_faint): pair DEAD, both party keys released, both memorial obligations, the
         # peer command selected (force_faint, or force_explode when the run and adapter opt in),
         # run-over checked. Gen 1 supplies the evidence around it, nothing else.
-        stage.rules.handle_event(player, faint_event(key=row["key"], level=mon.level, cause=row["cause"]))
+        immediate = stage.rules.handle_event(player, faint_event(key=row["key"], level=mon.level, cause=row["cause"]))
         if link.status != LinkStatus.DEAD:
             raise JournalError("shared rule engine did not settle the linked death")
         link.cause = row["cause"]  # RBY knows battle versus poison; _propagate_faint records "battle" for every generation
         at = link.killed_at
-        queued = stage.rules.queued_commands
-        physical = [c for c in queued[partner] if c.get("cmd") in ("force_faint", "force_explode") and c.get("key") == getattr(link, partner).key]
+        captured = stage.rules.take_commands(player, immediate)
+        physical = [c for c in captured[partner] if c.get("cmd") in ("force_faint", "force_explode") and c.get("key") == getattr(link, partner).key]
         if len(physical) != 1:
             raise JournalError("shared rule engine did not select exactly one peer death command")
-        # Everything else the engine queued is decided but executed elsewhere on Gen 1: memorials by
-        # gen1_memorial_runtime after the physical faint receipt (the obligation is already in
-        # pending_memorials), sounds never (sfx is false on every RBY profile), game_over via run_over.
-        stage.rules.queued_commands = {"a": [], "b": []}
+        from server.gen1_hud_feedback import classify_death
+
+        labels = {p: getattr(link, p).nickname or stage.rules.adapter.species_name(getattr(link, p).species)
+                  or getattr(link, p).key[:8] for p in ("a", "b")}
+        feedback = classify_death(captured, member_labels=labels)
         effect = {"player": partner, "command": dict(physical[0])}
         effect["command"]["death_id"] = death_id
         component["deaths"][death_id] = {
@@ -199,9 +227,14 @@ def settle(runtime, stage, document, player, entry):
         stage.barrier.set_blockers(blockers)
         # P5-whiteout: AnyPartyAlive over the same signal, only after the faint settled, so the
         # whited-out pair is already DEAD and the engine cannot queue a second peer death for it.
-        settle_whiteout(stage, document, player, entry, index, signal)
+        whiteout_feedback = settle_whiteout(stage, document, player, entry, index, signal)
+        for recipient in ("a", "b"):
+            commands[recipient].extend(feedback[recipient])
+            commands[recipient].extend(whiteout_feedback[recipient])
     synchronize(stage, document)
-    return commands
+    from server.gen1_hud_feedback import feedback_last
+
+    return feedback_last(commands)
 
 
 def acknowledge(runtime, player, operation, message):
@@ -566,9 +599,7 @@ def verify_journal(journal, stage):
         if "deferred" in death:
             deferred = death["deferred"]
             jobs = stage.document()["components"].get("gen1-storage-settlement", {}).get("jobs", {})
-            original = [
-                journal.command(death["peer"], identifier) for identifier in receipt.command_ids
-            ]
+            original = _recipient_commands(journal, receipt, death["peer"])
             if any(command["body"].get("death_id") == death_id for command in original):
                 raise JournalError("deferred death already published its physical mutation")
             terminal = []
@@ -603,9 +634,7 @@ def verify_journal(journal, stage):
                 ):
                     raise JournalError("deferred faint preceded storage completion")
             receipt = issued
-        commands = [
-            journal.command(death["peer"], identifier) for identifier in receipt.command_ids
-        ]
+        commands = _recipient_commands(journal, receipt, death["peer"])
         matches = [command for command in commands if command["body"].get("death_id") == death_id]
         if len(matches) != 1 or matches[0]["body"].get("key") != death["peer_key"]:
             raise JournalError("death lacks exactly one physical obligation")

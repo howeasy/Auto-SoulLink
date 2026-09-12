@@ -16,6 +16,7 @@ from tests.unit.rules_fixture import seed_link_half
 from tests.unit.test_gen1_engine_signal_runtime import deliver
 from tests.unit.test_gen1_faint_runtime import ack, paired, signal_batch
 from tests.unit.test_gen1_held_faint import checkpoint
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
 from tests.unit.test_gen1_inventory_observation import party_point
 from tests.unit.test_gen1_memorial_runtime import completion, observe
 from tests.unit.test_gen1_party_codec import make_blob
@@ -152,22 +153,24 @@ def test_opposite_player_deaths_renew_preimage_after_real_force_faint_and_close_
 
         faint("a", 0)  # D1 -> real FF1 to b.
         force_faint("b")  # Real ACK schedules MO1 for both players.
+        acknowledge_hud(runtime)  # D1 presentation settles before the memorial read
         old_command, old_read = read("a")
         faint("b", 1)  # Independent D2 -> real FF2 to a, behind a's MO1.
-        assert [row["cmd"] for row in runtime.journal.pending("a")] == [
+        assert [row["cmd"] for row in runtime.journal.pending("a") if row["cmd"] not in ("hud_notice", "hud_state")] == [
             "memorial_observe",
             "force_faint",
         ]
         death_ids = set(runtime.state().document()["components"]["gen1-faint-settlement"]["deaths"])
         assert len(death_ids) == 2
         ack(runtime, "a", owners["a"], old_read)
-        assert [row["cmd"] for row in runtime.journal.pending("a")] == [
+        assert [row["cmd"] for row in runtime.journal.pending("a") if row["cmd"] not in ("hud_notice", "hud_state")] == [
             "force_faint",
             "memorial_observe",
         ]
         entry = runtime.state().document()["components"][COMPONENT]["entries"]["a"][0]
         assert entry["payload"] is None and len(entry["observations"]) == 1
         force_faint("a")  # Typed full-party ACK changes the second mon's HP.
+        acknowledge_hud(runtime)  # D2 presentation no longer precedes the renewed read
         fresh_command, fresh_read = read("a")
         assert fresh_command["command_id"] != old_command["command_id"]
         assert fresh_read["receipt"]["point"] != old_read["receipt"]["point"]

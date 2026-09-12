@@ -250,7 +250,8 @@ def test_free_service_completes_startup_held_command_before_constructing_loop():
         package.loaded['platform_storage']={new=function()return {}end}
         package.loaded['state_store']={open=function()return store end}
         package.loaded['connector']={}
-        local journal={pending_commands=function()return pending==1 and {{command_id='initial'}}or{}end,
+        local journal={hud_state=function()return nil end,
+            pending_commands=function()return pending==1 and {{command_id='initial'}}or{}end,
             pending_events=function()return event_pending==1 and {{operation_id=string.rep('5',32)}}or{}end}
         package.loaded['client_journal']={initial=function()return {}end,open=function()return journal end}
         package.loaded['gen1_bootstrap_observer']={new=function()return {close=function()end,status=function()return{}end}end}
@@ -259,6 +260,7 @@ def test_free_service_completes_startup_held_command_before_constructing_loop():
         local operations={request=function()end,accept=function()return true end,authorize_apply=function()return false end,
             revoke=function()end,status=function()return{}end}
         package.loaded['gen1_held_faint']={new=function()return {operations=operations,ready=function()return false end,
+            handles=function(body)return body.cmd~='hud_notice'and body.cmd~='hud_state'end,
             pending=function()return pending==1 end,adapter={prepare=function()end,classify=function()end,
                 apply=function()end,receipt=function()end}}end}
         package.loaded['gen1_acquisition_observers']={new=function()return {close=function()end}end}

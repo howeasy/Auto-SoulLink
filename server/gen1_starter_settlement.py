@@ -98,7 +98,9 @@ def settle_ready(runtime, stage, document, *, frame_origin=None, hud_now=time.ti
     # Do not adopt one side of an arbitrary pre-existing game into a new run.
     if any(row['inventory']['members'] or starter_flag(row['observation']['source']) for row in initials.values()):
         raise JournalError('paired starter settlement requires two observed pre-starter saves')
-    if (frame_origin is None and any(runtime.journal.pending_ids(p) for p in ('a', 'b'))) or document['active_trade']:
+    from server.gen1_hud_feedback import pending_physical_ids
+
+    if (frame_origin is None and any(pending_physical_ids(runtime.journal, p) for p in ('a', 'b'))) or document['active_trade']:
         raise JournalError('starter settlement cannot cross physical obligations')
     checkpoints = document['components'].get('gen1-inventory-observations', {})
     for player in ('a', 'b'):

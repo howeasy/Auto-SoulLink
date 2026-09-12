@@ -107,6 +107,7 @@ function M.new(options)
         if Rival.handles(self.current.body)then return rival.safe(self.current.body)==true end
         return mem.isPartyWriteSafe()==true
     end
+    self.handles=M.handles -- command_service_router service shape
     self.adapter={}
     for _,name in ipairs({"prepare"})do
         self.adapter[name]=function(body,...)

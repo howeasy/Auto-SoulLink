@@ -127,6 +127,11 @@ class Gen1ReceiptPolicy:
 
             verify_receipt(command, event.get("receipt"))
             return []
+        if body.get("cmd") == "hud_state":
+            from server.gen1_hud_feedback import verify_state_receipt
+
+            verify_state_receipt(command, event.get("receipt"))
+            return []
         if body.get("cmd") == "replace_rival_team":
             # Lazy: gen1_held_rival_team imports gen1_held_faint, which imports this module.
             from server.gen1_held_rival_team import verify_rival_team_receipt

@@ -13,6 +13,8 @@ from server.protocol_journal import JournalError
 
 COMMAND_SCHEMA = "slink-gen1-hud-notice-v1"
 RECEIPT_SCHEMA = "slink-gen1-hud-receipt-v1"
+STATE_SCHEMA = "slink-gen1-hud-state-v1"
+STATE_RECEIPT_SCHEMA = "slink-gen1-hud-state-receipt-v1"
 KINDS = frozenset({"link_pending", "link_formed", "violation", "clause_retry"})
 SURFACES = frozenset({"hud", "prompt"})
 BODY_FIELDS = frozenset(
@@ -22,6 +24,9 @@ RECEIPT_FIELDS = frozenset(
     {"schema", "command_id", "command_sequence", "body_digest", "disposition", "frame"}
 )
 SOURCE_COMMANDS = frozenset({"hud_show", "msgbox", "gui_prompt"})
+PRESENTATION_COMMANDS = frozenset({"hud_notice", "hud_state"})
+STATE_MODES = {"game_over": "game_over"}
+STATE_FIELDS = frozenset({"cmd", "schema", "mode", "text"})
 MAX_TEXT = 30
 MAX_FRAMES = 600
 TTL_SECONDS = 30
@@ -115,6 +120,24 @@ def build_notice(kind, surface, text, *, r, g, b, frames, now=time.time):
         "expires_at": issued + TTL_SECONDS,
     }
     return validate_body(body)
+
+
+def build_state(command):
+    """Project only the engine's explicit persistent display transitions, never sound."""
+    if not isinstance(command, dict) or command.get("cmd") not in STATE_MODES:
+        raise JournalError("eligible Gen 1 HUD state command required")
+    mode = STATE_MODES[command["cmd"]]
+    return validate_state({"cmd": "hud_state", "schema": STATE_SCHEMA, "mode": mode, "text": ""})
+
+
+def validate_state(body):
+    if (not isinstance(body, dict) or set(body) != STATE_FIELDS or body.get("cmd") != "hud_state"
+            or body.get("schema") != STATE_SCHEMA or body.get("mode") != "game_over"):
+        raise JournalError("complete versioned Gen 1 HUD state required")
+    text = body["text"]
+    if text != "":
+        raise JournalError("invalid Gen 1 HUD state text")
+    return body
 
 
 def project(command, *, kind, surface, text=None, now=time.time):
@@ -216,8 +239,71 @@ def classify_captured(captured, *, linked, rejected, rejection_text=None, now=ti
     return coalesce(feedback)
 
 
+def classify_death(captured, *, member_labels, whiteout=False, now=time.time):
+    """Capture staged death/whiteout presentation without publishing legacy physical commands.
+
+    The caller must have drained both staged queues with take_commands(player, immediate),
+    including the caller's own immediate result. Terminal game-over has no TTL;
+    transient notices preserve order independently for each recipient.
+    """
+    if (not isinstance(captured, dict) or set(captured) != {"a", "b"}
+            or not isinstance(member_labels, dict) or set(member_labels) != {"a", "b"}):
+        raise JournalError("complete Gen 1 death feedback capture required")
+    feedback = {"a": [], "b": []}
+    rebuild_pending = whiteout and any(
+        isinstance(command, dict) and command.get("cmd") == "rebuild_start"
+        for batch in captured.values() if isinstance(batch, list) for command in batch
+    )
+    for player in ("a", "b"):
+        if not isinstance(captured[player], list):
+            raise JournalError("ordered Gen 1 death feedback capture required")
+        label = member_labels[player]
+        message = "!! WHITEOUT!" if whiteout else f"!! {label} DIED!"
+        death = best_effort_notice("violation", "hud", message,
+                                   r=255, g=80, b=80, frames=360, now=now,
+                                   source="whiteout" if whiteout else "linked_death")
+        if death is not None:
+            feedback[player].append(death)
+        for command in captured[player]:
+            source = command.get("cmd") if isinstance(command, dict) else None
+            if source == "rebuild_start":
+                # The shared engine selected boxed survivors. Their physical
+                # rebuild is a separate owned storage transaction.
+                # Do not claim its final saved completion at the whiteout edge.
+                notice = best_effort_notice("violation", "prompt", "REBUILD PENDING - PC available",
+                                            r=255, g=200, b=60, frames=360, now=now,
+                                            source="whiteout:rebuild_pending")
+                if notice is not None:
+                    feedback[player].append(notice)
+            elif source == "rebuild_done":
+                raise JournalError("Gen 1 rebuild completion lacks a physical executor")
+            elif source in STATE_MODES:
+                feedback[player].append(build_state(command))
+            elif source == "hud_show":
+                # The legacy partner HUD says "Rebuilt N" at command creation,
+                # before a single Gen 1 saved physical receipt. Override only
+                # that whiteout-rebuild copy with an honest pending status.
+                notice = (best_effort_notice("violation", "hud", "REBUILD PENDING",
+                                             r=255, g=200, b=60, frames=360, now=now,
+                                             source="whiteout:partner_rebuild_pending")
+                          if rebuild_pending else project_best_effort(
+                              command, kind="violation", surface="hud", now=now))
+                if notice is not None:
+                    feedback[player].append(notice)
+            elif source in ("msgbox", "gui_prompt"):
+                notice = project_best_effort(command, kind="violation", surface="prompt", now=now)
+                if notice is not None:
+                    feedback[player].append(notice)
+            # Sounds, memorials and physical rebuild commands are not HUD commands.
+    return feedback
+
+
 def coalesce(feedback):
-    """Drop stale pending-link copy when the same atomic batch also forms a link."""
+    """Validate and copy one ordered feedback batch without cross-event data loss.
+
+    One observation commit can settle acquisitions from more than one area. A formed
+    link therefore provides no safe correlation for deleting another pending notice.
+    """
     if not isinstance(feedback, dict) or set(feedback) != {"a", "b"}:
         raise JournalError("complete Gen 1 HUD feedback batch required")
     result = {}
@@ -226,13 +312,26 @@ def coalesce(feedback):
             raise JournalError("ordered Gen 1 HUD feedback batch required")
         for body in feedback[player]:
             validate_body(body)
-        formed = any(body["kind"] == "link_formed" for body in feedback[player])
-        result[player] = [
-            body
-            for body in feedback[player]
-            if not (formed and body["kind"] == "link_pending")
-        ]
+        result[player] = list(feedback[player])
     return result
+
+
+def _validate_presentation(body):
+    if body.get("cmd") == "hud_state":
+        return validate_state(body)
+    return validate_body(body)
+
+
+def pending_physical_ids(journal, player):
+    """Safety guards may ignore queued no-write UI, but FIFO ACK guards may not."""
+    physical = []
+    for identifier in journal.pending_ids(player):
+        body = journal.command(player, identifier)["body"]
+        if body.get("cmd") in PRESENTATION_COMMANDS:
+            _validate_presentation(body)  # malformed UI can never bypass a physical guard
+        else:
+            physical.append(identifier)
+    return tuple(physical)
 
 
 def append_after_physical(commands, feedback):
@@ -248,7 +347,9 @@ def append_after_physical(commands, feedback):
     for player in ("a", "b"):
         if not isinstance(commands[player], list) or not isinstance(feedback[player], list):
             raise JournalError("ordered Gen 1 command and feedback batches required")
-    feedback = coalesce(feedback)
+    for player in ("a", "b"):
+        for body in feedback[player]:
+            _validate_presentation(body)
     for player in ("a", "b"):
         result[player] = [*commands[player], *feedback[player]]
     return result
@@ -264,11 +365,12 @@ def feedback_last(commands):
             raise JournalError("ordered Gen 1 command batch required")
         if any(not isinstance(body, dict) for body in commands[player]):
             raise JournalError("Gen 1 command batch entries must be objects")
-        notices = [body for body in commands[player] if body.get("cmd") == "hud_notice"]
-        coalesced = coalesce({player: notices, ("b" if player == "a" else "a"): []})[player]
+        notices = [body for body in commands[player] if body.get("cmd") in ("hud_notice", "hud_state")]
+        for body in notices:
+            _validate_presentation(body)
         result[player] = [
-            body for body in commands[player] if body.get("cmd") != "hud_notice"
-        ] + coalesced
+            body for body in commands[player] if body.get("cmd") not in ("hud_notice", "hud_state")
+        ] + notices
     return result
 
 
@@ -298,3 +400,24 @@ def verify_receipt(command, receipt):
     elif frame != -1:
         raise JournalError("expired Gen 1 HUD receipt must use frame -1")
     return {"disposition": receipt["disposition"], "frame": frame}
+
+
+def verify_state_receipt(command, receipt):
+    """A state ACK must attest an actual draw/erase of this exact durable transition."""
+    if not isinstance(command, dict) or not {"command_id", "command_sequence", "body"} <= set(command):
+        raise JournalError("authoritative Gen 1 HUD state command required")
+    body = validate_state(command["body"])
+    command_id = command["command_id"]
+    sequence = command["command_sequence"]
+    if not isinstance(command_id, str) or not re.fullmatch(r"[0-9a-f]{32}", command_id):
+        raise JournalError("Gen 1 HUD state receipt needs its command id")
+    _integer(sequence, 1, MAX_INT, "command sequence")
+    if (not isinstance(receipt, dict) or set(receipt) != RECEIPT_FIELDS
+            or receipt.get("schema") != STATE_RECEIPT_SCHEMA
+            or receipt.get("command_id") != command_id
+            or receipt.get("command_sequence") != sequence
+            or receipt.get("body_digest") != digest(body)
+            or receipt.get("disposition") != "applied"):
+        raise JournalError("complete matching Gen 1 HUD state receipt required")
+    _integer(receipt.get("frame"), 0, MAX_INT, "HUD state draw frame")
+    return {"disposition": "applied", "frame": receipt["frame"]}

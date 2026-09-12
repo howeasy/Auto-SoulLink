@@ -16,13 +16,20 @@ from server.gen1_hud_feedback import (
     COMMAND_SCHEMA,
     RECEIPT_FIELDS,
     RECEIPT_SCHEMA,
+    STATE_RECEIPT_SCHEMA,
+    STATE_SCHEMA,
     append_after_physical,
     build_notice,
+    build_state,
+    classify_death,
     classify_captured,
     feedback_last,
+    pending_physical_ids,
     project,
     validate_body,
+    validate_state,
     verify_receipt,
+    verify_state_receipt,
 )
 from server.gen1_run_config import create_runtime
 from server.gen1_staged_state import StagedGen1State
@@ -70,9 +77,12 @@ def acknowledge_hud(runtime, *players):
     for player in players or ("a", "b"):
         for command_id in runtime.journal.pending_ids(player):
             command = runtime.journal.command(player, command_id)
-            if command["body"].get("cmd") != "hud_notice":
+            if command["body"].get("cmd") not in ("hud_notice", "hud_state"):
                 continue
             receipt = hud_receipt(command)
+            if command["body"]["cmd"] == "hud_state":
+                receipt.update(schema=STATE_RECEIPT_SCHEMA, disposition="applied")
+                verify_state_receipt(command, receipt)
             runtime.dispatcher.dispatch(
                 player,
                 secrets.token_hex(16),
@@ -302,7 +312,7 @@ def test_best_effort_projection_cannot_roll_back_rules_and_audits_clock_or_text_
     assert "dropping Gen 1 HUD notice" in caplog.text
 
 
-def test_link_formed_coalesces_pending_notice_for_same_recipient():
+def test_aggregate_feedback_never_discards_an_unrelated_pending_notice():
     feedback = classify_captured(
         {
             "a": [
@@ -315,7 +325,55 @@ def test_link_formed_coalesces_pending_notice_for_same_recipient():
         rejected=False,
         now=lambda: 100,
     )
-    assert [body["kind"] for body in feedback["a"]] == ["link_formed"]
+    # One observation can carry different areas. Without a correlation key the pending
+    # notice must survive rather than being guessed stale.
+    assert [body["kind"] for body in feedback["a"]] == ["link_pending", "link_formed"]
+
+
+def test_death_feedback_captures_both_immediate_and_peer_presentation_without_sound_or_physical():
+    captured = {"a": [{"cmd": "memorialize", "key": "A"}, {"cmd": "game_over"}],
+                "b": [{"cmd": "force_faint", "key": "B"}, {"cmd": "play_sound", "sound": 26},
+                      {"cmd": "game_over"}]}
+    feedback = classify_death(captured, member_labels={"a": "Pikachu", "b": "Bulbasaur"},
+                              now=lambda: 100)
+    assert [(body["cmd"], body.get("mode"), body.get("text")) for body in feedback["a"]] == [
+        ("hud_notice", None, "!! Pikachu DIED!"), ("hud_state", "game_over", "")]
+    assert [(body["cmd"], body.get("mode"), body.get("text")) for body in feedback["b"]] == [
+        ("hud_notice", None, "!! Bulbasaur DIED!"), ("hud_state", "game_over", "")]
+    combined = append_after_physical({"a": [], "b": [captured["b"][0]]}, feedback)
+    assert [c["cmd"] for c in combined["b"]] == ["force_faint", "hud_notice", "hud_state"]
+
+
+def test_whiteout_rebuild_notice_is_truthfully_held_without_claiming_physical_completion():
+    captured = {"a": [{"cmd": "party_mon", "key": "boxed"},
+                      {"cmd": "rebuild_start", "text": "REBUILDING: Squirtle"}],
+                "b": [{"cmd": "party_mon", "key": "peer_boxed"}, {"cmd": "play_sound", "sound": 26},
+                      {"cmd": "hud_show", "text": ">> Rebuilt 2", "frames": 360}]}
+    feedback = classify_death(captured, member_labels={"a": "WHITEOUT", "b": "WHITEOUT"},
+                              whiteout=True, now=lambda: 100)
+    assert [body["text"] for body in feedback["a"]] == ["!! WHITEOUT!", "REBUILD PENDING - PC available"]
+    assert [body["text"] for body in feedback["b"]] == ["!! WHITEOUT!", "REBUILD PENDING"]
+    assert all(body["cmd"] == "hud_notice" for batch in feedback.values() for body in batch)
+    assert not any(body["cmd"] in ("party_mon", "rebuild_start", "game_over")
+                   for batch in feedback.values() for body in batch)
+    with pytest.raises(JournalError, match="lacks a physical executor"):
+        classify_death({"a": [{"cmd": "rebuild_done"}], "b": []},
+                       member_labels={"a": "WHITEOUT", "b": "WHITEOUT"})
+
+
+@pytest.mark.parametrize("mutation", [lambda b: b.update(mode="rebuilding"), lambda b: b.update(text="x"),
+                                      lambda b: b.update(sound=26), lambda b: b.update(schema="v2")])
+def test_terminal_hud_state_has_no_sound_or_unproven_rebuild_modes(mutation):
+    body = build_state({"cmd": "game_over"})
+    assert body == {"cmd": "hud_state", "schema": STATE_SCHEMA, "mode": "game_over", "text": ""}
+    command = journal_command(body)
+    receipt = {**hud_receipt(command), "schema": STATE_RECEIPT_SCHEMA, "disposition": "applied"}
+    assert verify_state_receipt(command, receipt) == {"disposition": "applied", "frame": 42}
+    mutation(body)
+    with pytest.raises(JournalError):
+        validate_state(body)
+    with pytest.raises(JournalError):
+        verify_state_receipt(command, receipt)
 
 
 def test_physical_commands_precede_hud_in_the_same_journal_commit(tmp_path):
@@ -343,6 +401,26 @@ def test_physical_commands_precede_hud_in_the_same_journal_commit(tmp_path):
             "retirement_observe",
             "hud_notice",
         ]
+    finally:
+        journal.close()
+
+
+def test_no_write_ui_does_not_look_like_a_second_physical_obligation(tmp_path):
+    journal = ProtocolJournal(tmp_path / "hud-physical.sqlite3", run_id="c" * 32, contract_hash="d" * 64)
+    try:
+        journal.bootstrap({"state": "fixture"})
+        commands = [{"cmd": "storage_observe", "job_id": "a" * 32}, notice(), build_state({"cmd": "game_over"})]
+        snapshot = journal.snapshot()
+        journal.commit("a", "e" * 32, {"event": "fixture"}, expected_revision=snapshot.revision,
+                       state=snapshot.state, commands={"a": commands, "b": []}, result={"ack": "ACK"})
+        ids = journal.pending_ids("a")
+        assert pending_physical_ids(journal, "a") == (ids[0],)
+        snapshot = journal.snapshot()
+        journal.commit("a", "f" * 32, {"event": "malformed-fixture"}, expected_revision=snapshot.revision,
+                       state=snapshot.state, commands={"a": [{**build_state({"cmd": "game_over"}), "sound": 26}], "b": []},
+                       result={"ack": "ACK"})
+        with pytest.raises(JournalError, match="complete versioned"):
+            pending_physical_ids(journal, "a")
     finally:
         journal.close()
 
