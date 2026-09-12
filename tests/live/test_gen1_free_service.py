@@ -261,9 +261,9 @@ def run_free_pair(variants):
                 assert start_shot.read_bytes() != end_shot.read_bytes()
                 # Unchanged 30-frame fingerprints intentionally create no semantic event.
                 # Any actual source change still publishes the complete existing point.
-                final_inventory = result["final_inventory"]
+                final_source = result["final_source"]
                 initial_entry = document["components"]["gen1-initial-observations"][p]
-                decoded = decode_inventory(final_inventory["source"], initial_entry["metadata"]["save_identity"])
+                decoded = decode_inventory(final_source, initial_entry["metadata"]["save_identity"])
                 assert {key: value for key, value in decoded.items() if key != "source_digest"} == {
                     key: value for key, value in initial_entry["inventory"].items() if key != "source_digest"}
                 commits = [row for row in turns if row["event"] == "observation" and row["player"] == p]
@@ -344,20 +344,20 @@ def run_free_pair(variants):
                 checkpoints = [row[2]["inventory"] for row in observations if row[2]["inventory"] is not None]
                 kinds = [item["kind"] for row in observations for item in row[2]["acquisitions"]]
                 deferred = sum(1 for row in observations if row[3].get("inventory_deferred"))
-                last = ready[p]["final_inventory"]
+                last = ready[p]["final_source"]
                 transition = (snapshot["components"].get(INVENTORY, {}).get(p) or {}).get("transition", {
                     "added": [], "removed": [], "movements": [], "party_hp_zero": [], "changed": []})
                 comparison = {"route": "bedroom only: the scripted inputs (one step Right) never reach the starter",
-                              "free_run": {"checkpoints": len(checkpoints), "deferred_checkpoints": deferred, "frame": last["frame"],
-                                           "acquisition_kinds": kinds, "save_status": last["source"]["save_status"],
+                              "free_run": {"checkpoints": len(checkpoints), "deferred_checkpoints": deferred, "frame": ready[p]["frame_after"],
+                                           "acquisition_kinds": kinds, "save_status": last["save_status"],
                                            "transition": strip_digests(transition)},
                               "credit_run": credit_reference(p)}
                 reference = comparison["credit_run"]
                 if reference is not None:
-                    assert last["source"]["fields"]["party"] == reference["party"]
-                    assert last["source"]["fields"]["box"] == reference["box"]
-                    assert last["source"]["fields"]["name"] == reference["name"]
-                    assert last["source"]["save_status"] == reference["save_status"]
+                    assert last["fields"]["party"] == reference["party"]
+                    assert last["fields"]["box"] == reference["box"]
+                    assert last["fields"]["name"] == reference["name"]
+                    assert last["save_status"] == reference["save_status"]
                     assert kinds == reference["acquisition_kinds"] == []
                     assert comparison["free_run"]["transition"] == reference["transition"]
                     comparison["result"] = "party, box and name bytes, save status, receipt kinds and transition identical"

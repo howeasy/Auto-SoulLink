@@ -17,6 +17,11 @@ local G=dofile(ROOT.."/lua/tests/gatelib.lua")
 local t=G.start("test_gen1_free_service_gate",{no_boot=true})
 package.path=ROOT.."/lua/?.lua;"..ROOT.."/data/games/gen1_rby/?.lua;"..package.path
 local clock=assert(dofile(ROOT.."/lua/platform_clock.lua").new())
+local function independent_inventory()
+    -- The gate's read-only full-source oracle at a between-frame boundary; no
+    -- production debug command or additional public runtime capability.
+    return require("gen1_full_save").capture(require("memory_gb"),t.variant)
+end
 local function publish(name,value)
     local path=input.directory.."/"..name.."-"..input.player..".json"
     local file=assert(io.open(path..".tmp","w"));file:write(assert(JSON.encode(value)));file:close()
@@ -137,7 +142,7 @@ emu.frameadvance=function()
                     local proof=dirty_probe;dirty_probe=nil
                     publish("ready",{status=status,held_frame=held_frame,loop_started=loop_started,frame_after=emu.framecount(),
                         clock_after=clock(),frames_driven=frames_driven,screenshots=screenshots,phases=phases,
-                        dirty_probe=proof,final_inventory=assert(SLINK_RUNTIME_CHECKPOINT()),actual_generated_launcher=true})
+                        dirty_probe=proof,final_source=independent_inventory(),actual_generated_launcher=true})
                     reported=true
                 end
             elseif not reported and phase and emu.framecount()-phase.began.frame>=phase.frames then

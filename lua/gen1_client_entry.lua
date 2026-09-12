@@ -386,10 +386,6 @@ function M.start(launch,options)
             ordinary_execution=false,
             free_service=free,observation_loop=self.loop~=nil}))))
     end
-    function self:checkpoint()
-        assert(self.loop and self.loop_ctx and self.loop_ctx.inventory,"free-service checkpoint unavailable")
-        return assert(self.loop_ctx.inventory(),"write-safe full inventory checkpoint unavailable")
-    end
     function self:close()
         if self.holds then assert(self.holds:set("lifecycle",true,"client service is closing"))end
         if self.instruction then self.instruction:close()end
@@ -408,7 +404,6 @@ end
 function M.run(launch)
     local service=M.start(launch)
     _G.SLINK_RUNTIME_STATUS=function()return service:status()end
-    _G.SLINK_RUNTIME_CHECKPOINT=function()return service:checkpoint()end
     console.log("[SLink] Waiting for the initial verified overworld checkpoint")
     while true do
         local ok,why=service:step()
