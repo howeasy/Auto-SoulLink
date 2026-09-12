@@ -71,7 +71,11 @@ def stage_canonical_pair(directory,clean_paths):
             "rom_sha256":installed["rom_sha256"],"manifest":f"final/{player}/manifest.json",
             "manifest_sha256":hashlib.sha256(encoded).hexdigest(),"content_profile_hash":installed["content_profile_hash"]}
     published={"schema":CANONICAL_SCHEMA,"status":"canonical_requires_runtime_admission","runtime_ready":False,"players":players}
-    (directory/"prepared-artifacts.json").write_text(json.dumps(published,sort_keys=True,indent=1),encoding="utf-8")
+    # The descriptor is published last and atomically: a partial stage has no descriptor and
+    # PreparedCartridges refuses the directory, so a run is never created over half a pair.
+    index=directory/"prepared-artifacts.json";temporary=index.with_suffix(".tmp")
+    temporary.write_text(json.dumps(published,sort_keys=True,indent=1),encoding="utf-8");temporary.replace(index)
+    PreparedCartridges(directory)  # readback proof before the caller publishes the run
     return directory
 
 
@@ -185,6 +189,10 @@ class PreparedCartridges:
                     or entry["variant"] not in companions):
                 raise ValueError("canonical player descriptor differs")
             installed=companions[entry["variant"]]
+            # Exact player-scoped paths: an aliased descriptor pointing both players at one file
+            # would pass every hash check while erasing the per-player artifact distinction.
+            if (entry["rom"]!=f"final/{player}/slink_{entry['variant']}.gb" or entry["manifest"]!=f"final/{player}/manifest.json"):
+                raise ValueError("canonical companion artifact path differs from its player")
             final=path(entry["rom"]).read_bytes();encoded=path(entry["manifest"]).read_bytes()
             manifest=decode_frame(encoded)
             expected=copy.deepcopy(installed["manifest"]);expected["output"]=entry["rom"]

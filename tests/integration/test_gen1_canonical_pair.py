@@ -50,7 +50,7 @@ def test_staged_pair_is_the_installed_canonical_companion_and_reopens_by_plain_c
     assert prepared_targets(cartridges) == {}
 
 
-@pytest.mark.parametrize("kind", ["patched_input", "rom_byte", "manifest_field", "descriptor_hash", "not_empty"])
+@pytest.mark.parametrize("kind", ["patched_input", "rom_byte", "manifest_field", "descriptor_hash", "not_empty", "aliased_paths", "no_descriptor"])
 def test_staging_and_readback_refuse_wrong_inputs_or_tampered_artifacts(tmp_path, kind):
     run = tmp_path / "run"
     run.mkdir()
@@ -81,6 +81,15 @@ def test_staging_and_readback_refuse_wrong_inputs_or_tampered_artifacts(tmp_path
         encoded = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
         path.write_bytes(encoded)
         index["players"]["a"]["manifest_sha256"] = hashlib.sha256(encoded).hexdigest()
+    elif kind == "aliased_paths":
+        # Both players pointed at player a's (valid, catalog-exact) files: every hash matches, the path does not.
+        index["players"]["b"]["rom"] = index["players"]["a"]["rom"]
+        index["players"]["b"]["manifest"] = index["players"]["a"]["manifest"]
+    elif kind == "no_descriptor":
+        (directory / "prepared-artifacts.json").unlink()  # a partial stage (artifacts, no descriptor) is refused
+        with pytest.raises(FileNotFoundError):
+            PreparedCartridges(directory)
+        return
     else:
         index["players"]["a"]["content_profile_hash"] = "0" * 64
     (directory / "prepared-artifacts.json").write_text(json.dumps(index))
