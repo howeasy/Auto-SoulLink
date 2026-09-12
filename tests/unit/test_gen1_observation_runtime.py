@@ -298,7 +298,7 @@ def test_heartbeat_inventory_is_deferred_while_any_physical_obligation_is_open(t
         runtime.close()
 
 
-@pytest.mark.parametrize("fault", ["rom", "generation", "instance", "identity", "kind", "shape", "enrollment"])
+@pytest.mark.parametrize("fault", ["rom", "generation", "instance", "identity", "kind", "malformed", "shape", "enrollment"])
 def test_hostile_batches_commit_nothing(tmp_path, fault):
     runtime = create_runtime(tmp_path, contract("blue", "yellow"), free_service=True)
     try:
@@ -313,7 +313,9 @@ def test_hostile_batches_commit_nothing(tmp_path, fault):
             request["context"]["physical_instance"] = "f" * 32
         elif fault == "identity":
             request["context"]["save_identity"]["ot_id"] = "0001"
-        elif fault == "kind":
+        elif fault == "kind":  # not in the source catalog: fails closed before any decoder runs
+            request["acquisitions"] = [{"kind": "trade", "receipt": {}}]
+        elif fault == "malformed":  # a catalogued kind whose receipt its decoder refuses
             request["acquisitions"] = [{"kind": "wild_begin", "receipt": {}}]
         elif fault == "shape":
             del request["inventory"]

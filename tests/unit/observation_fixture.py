@@ -126,17 +126,31 @@ def starters(runtime):
         observe(runtime, player, inventory=stable["observation"])
 
 
+# The witness whose point shows what a delivering row left behind; static and wild rows deliver nothing.
+DELIVERED = {"grant": lambda r: r["return"]["point"], "capture": lambda r: r["receipt"]["end"]["point"],
+             "npc_exchange": lambda r: r["return"]["point"], "evolution": lambda r: r["after"]["point"]}
+
+
+def party_after(rows):
+    """The party the last delivering row leaves behind, or None when none delivers."""
+    for row in reversed(rows):
+        if row["kind"] in DELIVERED:
+            return DELIVERED[row["kind"]](row["receipt"])["party_hex"]
+    return None
+
+
 def checkpoint(runtime, player, rows, after, *, party=None):
-    """The latest checkpoint moved to ``after``, showing the last row's returned party/box."""
+    """The latest checkpoint moved to ``after``, showing the last delivering row's returned party/box."""
     document = runtime.state().document()
     old = document["components"].get(INVENTORY, {}).get(player)
     result = copy.deepcopy(old["observation"] if old else document["components"][INITIAL][player]["observation"])
     result["frame"] = after
-    if rows:
-        row = rows[-1]
-        point = (row["receipt"]["return"] if row["kind"] == "grant" else row["receipt"]["receipt"]["end"])["point"]
-        result["source"]["fields"]["party"] = point["party_hex"]
-        result["source"]["fields"]["box"] = point["box_hex"]
+    for row in reversed(rows):
+        if row["kind"] in DELIVERED:
+            point = DELIVERED[row["kind"]](row["receipt"])
+            result["source"]["fields"]["party"] = point["party_hex"]
+            result["source"]["fields"]["box"] = point["box_hex"]
+            break
     if party is not None:
         result["source"]["fields"]["party"] = party
     return result

@@ -35,8 +35,11 @@ def result_for(entry):
 
 
 def receipts_of(message):
-    if message.get("event") == "frame_complete":
-        return message.get("bundle", {}).get("acquisitions") or []
+    from server.gen1_observation_provenance import contained_receipts
+
+    rows = contained_receipts(message)  # a free-run batch (or a compound frame): one wire list, raw indices kept
+    if rows is not None:
+        return rows
     payload = message.get("payload")
     if (
         set(message) != {"event", "payload"}
@@ -425,6 +428,8 @@ def verify_journal(journal, stage, *, rom_provider=None):
             raise JournalError("evolution lost its atomic event/record")
         if event.result.get("evolution_digest") != digest(entry):
             raise JournalError("evolution result differs from its stored history")
+        from server.gen1_observation_provenance import batch_origin
+
         if "frame_origin" in entry:
             if (
                 event_reference.resolve(journal, entry["frame_origin"]) != event
@@ -432,7 +437,7 @@ def verify_journal(journal, stage, *, rom_provider=None):
                 or event.result.get("observations_settled") is not True
             ):
                 raise JournalError("evolution lost its settled containing frame")
-        elif (
+        elif not batch_origin(event, entry, "evolution_digest") and (
             event.request.get("event") != EVENT
             or event.result != result_for(entry)
             or event.request["payload"]["sequence"] != entry["sequence"]

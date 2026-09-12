@@ -656,3 +656,72 @@ def test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer
         verify_journal(runtime.journal, runtime.state())
     finally:
         runtime.close()
+
+
+@pytest.mark.parametrize("all_full", [False, True], ids=["inactive-capacity", "no-legal-capacity"])
+def test_quarantine_uses_proved_capacity_or_records_specific_no_space_hold(tmp_path, all_full):
+    from server.gen1_full_save import SYMBOLS, image
+    from server.gen1_grave_storage import checksum_banks
+    from server.gen1_memorial_policy import box_offset
+    from server.gen1_party_codec import PartyCodec
+    from server.gen1_storage_runtime import REASON
+    from tests.unit.observation_fixture import checkpoint as observed, party_blobs
+    from tests.unit.test_gen1_party_codec import make_blob
+    from tests.unit.test_gen1_source_pipeline_adversarial import static_capture
+
+    runtime = create_runtime(tmp_path, contract("yellow", "yellow"))
+    try:
+        starters(runtime)
+        point = source(runtime, "a")
+        physical = point["source"]
+        cart = bytearray.fromhex(physical["cart_hex"])
+        for box in range(12):
+            raw = bytearray(1122)
+            raw[1] = 255
+            if box == 0 or all_full and box < 11:
+                raw[0] = 20
+                raw[21] = 255
+                for slot in range(20):
+                    mon = make_blob(PartyCodec("yellow"), dv=0x8000 + 20 * box + slot)
+                    raw[1 + slot] = mon[0]
+                    for start, data in (
+                        (22 + 33 * slot, mon[:33]),
+                        (682 + 11 * slot, mon[44:55]),
+                        (902 + 11 * slot, mon[55:]),
+                    ):
+                        raw[start : start + len(data)] = data
+            if box == 0:
+                physical["fields"]["box"] = raw.hex().upper()
+                raw = bytearray(1122)
+                raw[1] = 255
+            cart[box_offset(box) : box_offset(box) + 1122] = raw
+        checksum_banks(cart, {2, 3})
+        symbols = SYMBOLS["pokeyellow"]
+        main = bytearray.fromhex(physical["fields"]["main"])
+        main[symbols["wCurrentBoxNum"] - symbols["wMainDataStart"]] = 128
+        physical["fields"]["main"] = main.hex().upper()
+        physical["cart_hex"] = cart.hex().upper()
+        physical["cart_hex"] = image(physical).hex().upper()
+        physical["save_status"] = 2
+        point["frame"] = 120
+        commit(runtime, "a", [], point=point)
+        raw = static_capture(runtime, "a", begin=130, end=145, party=party_blobs(physical["fields"]["party"]))
+        for witness in ("begin", "end"):
+            raw["receipt"]["receipt"][witness]["point"]["box_hex"] = physical["fields"]["box"]
+            raw["receipt"]["receipt"][witness]["point"]["current_box"] = 128
+        commit(runtime, "a", [raw], point=observed(runtime, "a", [raw], 150))
+        read(runtime, "a")
+        job = latest_job(runtime)
+        if all_full:
+            assert job["blocked_reason"] == "no-proved-storage-capacity" and not job["prepared"]
+            assert not runtime.journal.pending_ids("a")
+            assert REASON in runtime.state().barrier.document()["blockers"].values()
+        else:
+            assert job["prepared"]["a"]["destination_box"] == 1
+            assert job["prepared"]["a"]["after"]["fields"]["box"] == physical["fields"]["box"]
+            write(runtime, "a")
+            assert job["keys"]["a"] not in runtime.state().rules.party_keys["a"]
+        verify_state(runtime.state())
+        verify_journal(runtime.journal, runtime.state())
+    finally:
+        runtime.close()

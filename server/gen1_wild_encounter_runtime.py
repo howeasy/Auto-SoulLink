@@ -34,8 +34,11 @@ def record_key():
 def receipts_of(message):
     if not isinstance(message, dict):
         raise JournalError("typed encounter source event required")
-    if message.get("event") == "frame_complete":
-        return message.get("bundle", {}).get("acquisitions") or []
+    from server.gen1_observation_provenance import contained_receipts
+
+    rows = contained_receipts(message)  # a free-run batch (or a compound frame): one wire list, raw indices kept
+    if rows is not None:
+        return rows
     payload = message.get("payload")
     if (
         set(message) != {"event", "payload"}
@@ -371,8 +374,9 @@ def stage(
 ):
     """Stage ordered raw source rows, then revisit either player's deferred end.
 
-    Root supplies its proved compound frame and calls this after source acquisition
-    staging, including on later inventory-only frames while a peer end is deferred.
+    The free-run batch (`gen1_observation_runtime.stage_observation`) passes itself as
+    `frame_request` and calls this after source acquisition staging, including on later
+    batches without encounter rows while a peer end is deferred; None when nothing can move.
     """
     _player(player)
     _identifier(operation)

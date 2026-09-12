@@ -119,3 +119,28 @@ def test_frame_accounted_player_needs_a_native_handoff_origin(tmp_path):
             observation_bundle(handoff)
     finally:
         runtime.close()
+
+
+def test_free_run_batch_is_the_committing_origin_of_every_source_settlement():
+    """P10 verifiers key on the committing event: a batch settles an entry when its result carries the digest."""
+    from types import SimpleNamespace
+
+    from server.gen1_observation_provenance import batch_origin, contained_inventory, contained_receipts
+
+    entry = {"sequence": 1, "operation_id": "a" * 32, "settled": []}
+    rows = [{"kind": "npc_exchange", "receipt": {}}]
+    batch = {"event": "observation", "acquisitions": rows, "inventory": {"frame": 140}}
+    committed = SimpleNamespace(request=batch, result={"ack": "ACK", "exchange_digest": digest(entry)})
+    assert batch_origin(committed, entry, "exchange_digest") is True
+    with pytest.raises(JournalError, match="free-run observation differs"):
+        batch_origin(committed, entry, "evolution_digest")
+    with pytest.raises(JournalError, match="free-run observation differs"):
+        batch_origin(committed, {**entry, "sequence": 2}, "exchange_digest")
+    standalone = SimpleNamespace(request={"event": "npc_exchange_observation"}, result={})
+    assert batch_origin(standalone, entry, "exchange_digest") is False and batch_origin(None, entry, "exchange_digest") is False
+    assert contained_receipts(batch) == rows and contained_receipts({"event": "observation"}) == []
+    assert contained_receipts({"event": "frame_complete", "bundle": {"acquisitions": rows}}) == rows
+    assert contained_receipts({"event": "npc_exchange_observation", "payload": {"receipts": rows}}) is None
+    assert contained_inventory(batch) == {"frame": 140} and contained_inventory({"event": "observation", "inventory": None}) is None
+    assert contained_inventory({"event": "inventory_observation", "payload": {"observation": {"frame": 7}}}) == {"frame": 7}
+    assert contained_inventory({"event": "engine_signals"}) is None

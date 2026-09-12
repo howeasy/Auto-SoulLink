@@ -1,9 +1,13 @@
 """Bind RBY semantic evidence to its containing event.
 
 Two containers remain now that the frame-credit loop is retired: a free-run ``observation``
-batch (P10, gen1_observation_runtime), which carries its engine signals and inventory inline,
-and a ``native_frame_handoff``, the compound event a handed-back native loan settles its final
-inventory and native checkpoint through (gen1_native_frame_accounting).
+batch (P10, gen1_observation_runtime), which carries its engine signals, inventory and the one
+source-receipt list (``acquisitions``: captures, grants, static origins/ends, NPC exchanges,
+wild boundaries, evolutions) inline, and a ``native_frame_handoff``, the compound event a
+handed-back native loan settles its final inventory and native checkpoint through
+(gen1_native_frame_accounting). The settlement modules key their verifiers on the committing
+event: ``batch_origin`` is that rule for a free-run batch, ``contained_receipts`` and
+``contained_inventory`` name what a committed event carries.
 """
 
 import copy
@@ -40,6 +44,41 @@ def _bundle(request):
 
 
 observation_bundle = _bundle
+
+
+def contained_receipts(request):
+    """The raw ``{kind, receipt}`` list an event carries (a free-run batch's ``acquisitions``, a compound
+    frame's ``bundle.acquisitions``), or None when the event carries no source receipts."""
+    kind = request.get('event') if isinstance(request, dict) else None
+    if kind == 'observation':
+        return request.get('acquisitions') or []
+    if kind == 'frame_complete':
+        return request.get('bundle', {}).get('acquisitions') or []
+    return None
+
+
+def contained_inventory(request):
+    """The inventory checkpoint an event carries (a free-run batch, a compound frame, a standalone
+    ``inventory_observation``), or None."""
+    kind = request.get('event') if isinstance(request, dict) else None
+    if kind == 'observation':
+        return request.get('inventory')
+    if kind == 'frame_complete':
+        return request.get('bundle', {}).get('inventory')
+    if kind == 'inventory_observation':
+        return request.get('payload', {}).get('observation')
+    return None
+
+
+def batch_origin(event, entry, field):
+    """True when ``event`` (the snapshot of the event that committed ``entry``) is a free-run observation
+    batch: P10 verifiers key on the committing event, whose result must carry ``digest(entry)`` under
+    ``field`` (acquisition_digest, exchange_digest, evolution_digest). False for any other event."""
+    if event is None or event.request.get('event') != 'observation':
+        return False
+    if event.result.get(field) != digest(entry):
+        raise JournalError('free-run observation differs from its semantic evidence digest')
+    return True
 
 
 def _contained(request, semantic):

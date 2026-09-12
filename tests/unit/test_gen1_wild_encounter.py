@@ -494,3 +494,70 @@ def test_real_observer_is_readonly_and_keeps_receipts_until_durable_ack():
         bus[p.addresses.wBattleType]=4;hooks['slink-wild-encounter-begin']();assert(observer.status().pending==0)
         observer.close();assert(removed==2 and next(hooks)==nil)
     """)
+
+
+def _batched_encounters(runtime):
+    """Saved, batch-carried source evidence for both players; no root staging hooks are replaced."""
+    from server.gen1_initial_save_runtime import prepared
+    from tests.unit.observation_fixture import checkpoint as boundary, commit, start
+
+    start(runtime)
+    results = {}
+    for player in ("a", "b"):
+        point = boundary(runtime, player, [], 140)
+        point["source"] = copy.deepcopy(prepared(runtime.state().document(), player)["after"])
+        results[player] = commit(
+            runtime,
+            player,
+            [row(runtime, player, "begin", 110), row(runtime, player, "end", 130)],
+            point=point,
+        )
+    commit(runtime, "a", [], point=boundary(runtime, "a", [], 180), after=180)
+    return results
+
+
+def test_batched_wild_boundaries_are_rechecked_from_their_committed_batches_after_reopen(tmp_path):
+    from server import event_reference
+
+    value = create_runtime(tmp_path, contract("yellow", "yellow"))
+    try:
+        results = _batched_encounters(value)
+        wild.verify_journal(value.journal, value.state())
+        for player in ("a", "b"):
+            operation, request, result = results[player]
+            resolved = next(iter(encounters(value, player).values()))
+            assert result["wild_encounter_digest"] and "acquisition_digest" not in result
+            assert resolved["begin"]["source_ref"] == {"event": event_reference.make(player, operation, request), "index": 0}
+            assert resolved["end"]["source_ref"]["index"] == 1
+            assert resolved["phase"] == "no_catch" and resolved["decision"]["outcome"] == "ball_gate"  # no ball source yet
+        assert value.state().document()["components"]["gen1-observation-progress"]["a"]["frame"] == 180
+    finally:
+        value.close()
+    reopened = open_runtime(tmp_path)
+    try:
+        wild.verify_journal(reopened.journal, reopened.state())
+    finally:
+        reopened.close()
+
+
+def test_a_rewritten_wild_witness_in_the_committed_batch_fails_the_audit(tmp_path):
+    """The frame ledger is gone; the audit re-decodes the raw row inside the batch that committed it, so a
+    source frame rewritten under a consistent digest is refused as a differing referenced event."""
+    from server.protocol_journal import _encode
+
+    value = create_runtime(tmp_path, contract("yellow", "yellow"))
+    try:
+        results = _batched_encounters(value)
+        stage = value.state()
+        operation, request, _ = results["a"]
+        corrupt = copy.deepcopy(request)
+        corrupt["acquisitions"][0]["receipt"]["witness"]["frame"] = 99  # a frame this owner never published
+        text, fingerprint = _encode(corrupt)
+        value.journal._db.execute(
+            "UPDATE events SET request=?, request_digest=? WHERE player=? AND operation_id=?",
+            (text, fingerprint, "a", operation),
+        )
+        with pytest.raises(JournalError, match="referenced event request differs"):
+            wild.verify_journal(value.journal, stage)
+    finally:
+        value.close()

@@ -8,20 +8,27 @@ whenever an engine signal, a source receipt or the heartbeat exists::
      "context": {"context_generation": ..., "physical_instance": ..., "save_identity": {...}},
      "rom": "<final sha1>",
      "signals": <rby-engine-signals-v1 batch or null>,
-     "acquisitions": [{"kind": "capture" | "grant", "receipt": {...}}, ...],
+     "acquisitions": [{"kind": <gen1_source_receipts.KINDS>, "receipt": {...}}, ...],
      "inventory": <rby-initial-observation-v1 checkpoint or null>}
 
-The batch is settled the way the retired frame-credit loop settled a compound frame bundle,
-minus the frame ledger: each part is staged by the module that owns its evidence on ONE
-detached stage/document, and one journal commit carries every record and both outboxes.
-Order: inventory (the stable checkpoint acquisitions settle against), engine signals (ball
-activation, faints, the starter source), then acquisition receipts. Nothing here decides a
-rule and nothing here grants execution; the per-player sequence record is the only new
-evidence, and it only orders the batches.
+``acquisitions`` is the ONE source-receipt list gen1_acquisition_observers.lua assembles in
+frame order: captures, scripted grants, static origins and battle ends, NPC exchanges, wild
+begins and ends, ordinary evolutions. The batch is settled the way the retired frame-credit
+loop settled a compound frame bundle, minus the frame ledger: each part is staged by the
+module that owns its evidence on ONE detached stage/document, and one journal commit carries
+every record and both outboxes. Order: inventory (the stable checkpoint acquisitions settle
+against), engine signals (ball activation, faints, the starter source), the trainer
+engagement, then the receipt list decoded once (raw indices kept): static origins/ends
+first, so an origin is known before its own capture pairs and ambiguous evidence is held;
+acquisitions; NPC exchanges and evolutions, which migrate members the acquisitions settled;
+the wild-encounter lifecycle (no_catch through the engine bridge); storage; the in-battle
+instruction. Nothing here decides a rule and nothing here grants execution; the per-player
+sequence record is the only new evidence, and it only orders the batches.
 """
 import copy
 
 from server.gen1_initial_observation import COMPONENT as INITIAL
+from server.gen1_source_receipts import KINDS
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier
 
@@ -37,9 +44,6 @@ CONTEXT = frozenset({'context_generation', 'physical_instance', 'save_identity'}
 ENTRY = frozenset({'sequence', 'operation_id', 'frame'})
 MAX_RECEIPTS = 16
 MAX_INT = 2**53 - 1
-# gen1_source_receipts.ACQUISITION_KINDS. Static, exchange, wild and evolution rows belong to
-# runtimes not yet wired to observation batches (P10 section 5): refused fail-closed, never dropped.
-SETTLED_KINDS = ('capture', 'grant')
 
 
 def key(player):
@@ -62,8 +66,8 @@ def typed(request):
     for row in rows:
         if not isinstance(row, dict) or set(row) != {'kind', 'receipt'} or not isinstance(row['receipt'], dict):
             raise JournalError('typed observation receipt required')
-        if row['kind'] not in SETTLED_KINDS:
-            raise JournalError('observation receipt kind has no free-run settlement yet')
+        if row['kind'] not in KINDS:  # every catalogued kind settles below; anything else fails closed
+            raise JournalError('unknown observation receipt kind')
     if 'battle' in request and (type(request['battle']) is not int or not 0 <= request['battle'] <= 255):
         raise JournalError('observation battle byte required')
     trainer = request.get('trainer')
@@ -161,18 +165,68 @@ def stage_observation(runtime, stage, document, player, operation, request):
         commands[player].extend(swaps)
         result['trainer_battle'] = {'trainer_id': trainer_id, 'rival_team': len(swaps)}
         synchronize(stage, document)
-    # 3. Acquisition receipts, plus pending facts a fresh checkpoint may now settle.
-    from server.gen1_acquisition_runtime import COMPONENT as ACQUISITIONS
-    pending = document['components'].get(ACQUISITIONS, {}).get(player, {}).get('pending')
-    if request['acquisitions'] or (pending and recorded_inventory):
-        from server import event_reference
-        from server.gen1_acquisition_runtime import decode_receipts, source_rom, stage_acquisitions
+    # 3. The source-receipt list, decoded ONCE so every fact keeps its raw index, then staged kind by kind in
+    # the order the retired compound frame used (gen1_frame_acquisitions.stage, gen1_frame_journal.returned).
+    from server import event_reference
+    from server.gen1_acquisition_runtime import COMPONENT as ACQUISITIONS, source_rom, stage_acquisitions
+    from server.gen1_npc_exchange_runtime import COMPONENT as EXCHANGES, stage_exchanges
+    from server.gen1_source_receipts import (
+        ACQUISITION_KINDS,
+        EVOLUTION_KINDS,
+        EXCHANGE_KINDS,
+        LIFECYCLE_KINDS,
+        decode,
+    )
+    from server.gen1_wild_encounter_runtime import COMPONENT as ENCOUNTERS, KINDS as ENCOUNTER_ROWS, stage as stage_encounters
+    components = document['components']
+    pending = {name: bool(components.get(name, {}).get(player, {}).get('pending')) for name in (ACQUISITIONS, EXCHANGES)}
+    reference = event_reference.make(player, operation, request)
+    facts, rom = [], None
+    if request['acquisitions'] or recorded_inventory and any(pending.values()):
         provider = getattr(runtime, 'prepared_cartridges', None)
         rom = source_rom(initial['metadata'], player, provider.rom if provider is not None else None)
-        facts = decode_receipts(request['acquisitions'], initial['metadata'], initial['binding'],
-                                reference=event_reference.make(player, operation, request), rom=rom)
-        merge(stage_acquisitions(runtime, stage, document, player, operation, facts, frame_request=request, rom=rom),
-              'acquisition_digest')
+        facts = decode(request['acquisitions'], initial['metadata'], initial['binding'], reference=reference, rom=rom)
+
+    def of(kinds):
+        return [fact for fact in facts if fact['kind'] in kinds]
+
+    # 3a. Statics first, in list order, so origins and ends are known before any capture pairs: a static's own
+    # capture pairs under the static id, and evidence that is neither provably the static's nor provably wild
+    # is HELD (a recovery hold, kept out of acquisition settlement until reconciliation).
+    held, attributions = set(), None
+    if of(LIFECYCLE_KINDS):
+        from server.gen1_faint_runtime import synchronize
+        from server.gen1_static_lifecycle import held_blockers, stage as stage_statics
+        statics = stage_statics(document, player, of(LIFECYCLE_KINDS), reference)
+        held, attributions = set(statics['held']), statics['attributions']
+        stage.barrier.set_blockers({**stage.barrier.document()['blockers'], **held_blockers(document)})
+        synchronize(stage, document)
+        records.extend(statics['records'])
+        result['static_digest'] = digest(statics['records'][0]['value'])
+    # 3b. Acquisition receipts, plus pending facts a fresh checkpoint may now settle.
+    if of(ACQUISITION_KINDS) or pending[ACQUISITIONS] and recorded_inventory:
+        merge(stage_acquisitions(runtime, stage, document, player, operation,
+                                 [fact for fact in of(ACQUISITION_KINDS) if fact['fact']['key'] not in held],
+                                 frame_request=request, rom=rom, attributions=attributions), 'acquisition_digest')
+    # 3c. NPC exchanges migrate identities and rule halves acquisitions settled (bridge rekey, npc_trade): no ordinal,
+    # no acquisition. Pending until a stable checkpoint shows the incoming mon, exactly as acquisitions are.
+    if of(EXCHANGE_KINDS) or pending[EXCHANGES] and recorded_inventory:
+        merge(stage_exchanges(runtime, stage, document, player, operation, of(EXCHANGE_KINDS), frame_request=request),
+              'exchange_digest')
+    # 3d. Ordinary evolutions: the source witness is a complete physical result, so the collector migrates at once
+    # (bridge rekey, evolution) even before an overworld checkpoint.
+    if of(EVOLUTION_KINDS):
+        from server.gen1_evolution_runtime import stage_evolutions
+        merge(stage_evolutions(runtime, stage, document, player, operation, of(EVOLUTION_KINDS), frame_request=request, rom=rom),
+              'evolution_digest')
+    # 3e. Wild encounters: begins, captures and ends in this batch, and either player's end deferred behind an
+    # unsettled peer capture. A wild end without its capture is the no_catch Gen 3 sends after its post-battle grace
+    # window (gen3_frlge_client.lua no_catch); here the capture is source-witnessed, so no grace timer is inferred.
+    # The lifecycle decides through the bridge (dead zones, paired no-catch retirement); it needs both owners.
+    if of(ENCOUNTER_ROWS) or ENCOUNTERS in components:
+        encounter = stage_encounters(runtime, stage, document, player, operation, request, frame_request=request)
+        if encounter is not None:
+            merge(encounter, 'wild_encounter_digest')
     # 4. Storage compensation (boxed deliveries, PC moves) for the checkpoint this batch recorded.
     if recorded_inventory:
         from server.gen1_storage_runtime import stage as stage_storage

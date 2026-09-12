@@ -11,11 +11,12 @@ incoming MonInfo under its ORIGINAL area. An exchange never creates an acquisiti
 consumes an ordinal (`gen1-acquisition-ordinals` is untouched) and never pairs anything.
 An outgoing key with no logical identity is refused: the registry cannot mint one here.
 
-Phase / staging. The compound settlement calls `stage_exchanges` once per consumed
-bundle, AFTER inventory settlement and AFTER `stage_acquisitions`, in the same detached
+Phase / staging. The free-run batch (`gen1_observation_runtime.stage_observation`) calls
+`stage_exchanges` once per batch that carries an exchange row or a checkpoint while one is
+pending, AFTER inventory settlement and AFTER `stage_acquisitions`, in the same detached
 stage/document, folding `records` into the one atomic commit and `result['exchange_digest']`
-into the frame result. The raw rows are the `npc_exchange` entries of the ONE wire list
-`bundle['acquisitions']` (see `receipts_of`; `source_ref.index` is the raw position there);
+into the batch result. The raw rows are the `npc_exchange` entries of the ONE wire list
+`request['acquisitions']` (see `receipts_of`; `source_ref.index` is the raw position there);
 `record` is the standalone handler for runs without frame accounting and a test driver only.
 `verify_state` belongs beside the acquisition check in `Gen1RuntimeState.__init__`,
 `verify_journal` beside it in `Gen1Runtime.state`.
@@ -82,13 +83,15 @@ def decode_receipts(receipts, metadata, binding, *, reference):
 
 
 def receipts_of(request):
-    """Raw receipt list inside a standalone event or a compound frame bundle."""
+    """Raw receipt list inside a standalone event or its containing batch (one wire list; exchange rows keep their raw index)."""
     if request.get('event') == EVENT:
         return _typed(request)['receipts']
-    if request.get('event') == 'frame_complete':
-        rows = request.get('bundle', {}).get('acquisitions')  # one wire list; exchange rows keep their raw index
-        return rows or []
-    raise JournalError('exchange source event is neither standalone nor a compound frame')
+    from server.gen1_observation_provenance import contained_receipts
+
+    rows = contained_receipts(request)
+    if rows is None:
+        raise JournalError('exchange source event is neither standalone nor a containing batch')
+    return rows
 
 
 def _stable(document, player, fact, initial):
@@ -309,11 +312,15 @@ def verify_journal(journal, stage):
         current = journal.event_snapshot(player, entry['operation_id'])
         if current is None or current.revision != stored.revision:
             raise JournalError('exchange current entry lost its exact committed event/revision')
+        from server.gen1_observation_provenance import batch_origin, contained_inventory
+
         if entry.get('frame_origin') is not None:
             if event_reference.resolve(journal, entry['frame_origin']) != current or current.request.get('event') != 'frame_complete':
                 raise JournalError('exchange current frame origin differs')
             if current.result.get('exchange_digest') != digest(entry) or current.result.get('observations_settled') is not True:
                 raise JournalError('exchange current frame result differs from its entry')
+        elif batch_origin(current, entry, 'exchange_digest'):
+            pass  # a free-run batch committed it; its result digest is the check
         elif current.request.get('event') != EVENT or current.result != result_for(entry):
             raise JournalError('exchange current standalone result differs')
         else:
@@ -339,12 +346,7 @@ def verify_journal(journal, stage):
             stable_event = journal.event_snapshot(player, row['inventory_operation'])
             if stable_event is None or not snapshot.revision <= stable_event.revision <= stored.revision:
                 raise JournalError('settled exchange lost its stable inventory event')
-            if stable_event.request.get('event') == 'frame_complete':
-                observed = stable_event.request.get('bundle', {}).get('inventory')
-            elif stable_event.request.get('event') == 'inventory_observation':
-                observed = stable_event.request.get('payload', {}).get('observation')
-            else:
-                observed = None
+            observed = contained_inventory(stable_event.request)
             validate_observation(observed, initial['metadata'], initial['binding'])
             view = {'components': {INVENTORY: {player: {'operation_id': row['inventory_operation'], 'observation': observed}}}}
             stable = _stable(view, player, row['fact'], initial)

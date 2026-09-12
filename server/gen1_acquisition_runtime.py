@@ -462,14 +462,14 @@ def verify_journal(journal, stage, *, rom_provider=None):
         current = journal.event_snapshot(player,entry['operation_id'])
         if current is None or current.revision!=stored.revision:
             raise JournalError('acquisition current entry lost its exact committed event/revision')
+        from server.gen1_observation_provenance import batch_origin, contained_inventory
         if entry.get('frame_origin') is not None:
             if event_reference.resolve(journal,entry['frame_origin'])!=current or current.request.get('event')!='frame_complete':
                 raise JournalError('acquisition current frame origin differs')
             if current.result.get('acquisition_digest')!=digest(entry) or current.result.get('observations_settled') is not True:
                 raise JournalError('acquisition current frame result differs from its entry')
-        elif current.request.get('event')=='observation':
-            if current.result.get('acquisition_digest')!=digest(entry):
-                raise JournalError('acquisition current observation result differs from its entry')
+        elif batch_origin(current, entry, 'acquisition_digest'):
+            pass  # a free-run batch committed it; its result digest is the check
         elif current.request.get('event')!=EVENT or current.result!=result_for(entry):
             raise JournalError('acquisition current standalone result differs')
         else:
@@ -494,14 +494,7 @@ def verify_journal(journal, stage, *, rom_provider=None):
                 stable_event=journal.event_snapshot(player,row['inventory_operation'])
                 if stable_event is None or not snapshot.revision<=stable_event.revision<=stored.revision:
                     raise JournalError('settled acquisition lost its stable inventory event')
-                if stable_event.request.get('event')=='frame_complete':
-                    observed=stable_event.request.get('bundle',{}).get('inventory')
-                elif stable_event.request.get('event')=='inventory_observation':
-                    observed=stable_event.request.get('payload',{}).get('observation')
-                elif stable_event.request.get('event')=='observation':
-                    observed=stable_event.request.get('inventory')
-                else:
-                    observed=None
+                observed=contained_inventory(stable_event.request)
                 from server.gen1_initial_observation import validate
 
                 validate(observed,initial['metadata'],initial['binding'])

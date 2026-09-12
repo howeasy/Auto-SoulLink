@@ -7,6 +7,7 @@ sequence numbers landing in the baseline, writer service only after publication,
 pump every tick, and fail-closed batch bounds. The fakes also refuse any call made
 outside ctx.at_boundary, which is the relaxed predicate the real sources will use.
 """
+import json
 import os
 
 import pytest
@@ -245,3 +246,103 @@ def test_instruction_window_finishes_first_and_arms_last_in_a_tick(lua):
     assert seq.index("append") < seq.index("service") < seq.index("pump") < seq.index("arm")
     lua.execute("frame=frame+1;calls={};loop:observe()")  # a writer that steps frames itself never touches the window
     assert "finish" not in calls(lua) and "arm" not in calls(lua)
+
+
+# The real acquisition aggregator (gen1_acquisition_observers.lua) over stubbed producers: every source kind
+# rides the batch through the same persist-before-drain path, under the loop's boundary predicate.
+SOURCES = """
+package.loaded.gen1_capture_sites=assert(JSON.decode(capture_data_json))
+Sources=require("gen1_acquisition_observers")
+emu={framecount=function()return frame end}
+gameinfo={getromhash=function()return string.rep("f",40)end}
+local function clone(v)return assert(JSON.decode(assert(JSON.encode(v))))end
+buffers={capture=JSON.array(),grants=JSON.array(),static=JSON.array(),npc_exchange=JSON.array(),wild=JSON.array(),evolution=JSON.array()}
+local function producer(name)
+    return {status=function()return {pending=#buffers[name],in_flight=0,removing=false}end,
+        peek=function()assert(ctx.at_boundary==true,name.." peeked outside a frame boundary");return clone(buffers[name])end,
+        acknowledge=function(expected)
+            assert(ctx.at_boundary==true,name.." drained outside a frame boundary")
+            assert(JSON.encode(expected)==JSON.encode(buffers[name]),name.." drain differs from peek")
+            calls[#calls+1]="drain:"..name;buffers[name]=JSON.array();return true
+        end,close=function()end}
+end
+function build_sources()
+    observers=Sources.new({variant="yellow",final_sha1=string.rep("f",40),
+        owned=function()return {context_generation=string.rep("a",32),physical_instance=string.rep("1",32)}end,
+        held=function()return ctx.at_boundary==true end, -- P4 section 4: "held" reads "between frames, inside the loop"
+        capture=producer("capture"),grants=producer("grants"),static=producer("static"),npc_exchange=producer("npc_exchange"),
+        wild=producer("wild"),evolution=producer("evolution"),new_nonce=function()return string.rep("9",32)end})
+    build()
+end
+function kinds(event)local out={};for i,row in ipairs(event.acquisitions)do out[i]=row.kind end;return table.concat(out,",")end
+"""
+
+
+@pytest.fixture
+def sourced(lua):
+    from server.gen1_capture_receipt import DATA
+
+    lua.globals().capture_data_json = json.dumps(DATA)
+    lua.execute(SOURCES)
+    lua.execute("build_sources()")
+    return lua
+
+
+def test_static_exchange_wild_and_evolution_rows_ride_the_batch_and_drain_after_append(sourced):
+    lua = sourced
+    lua.execute("""
+        buffers.static[1]={schema="rby-static-origin-receipt-v1",source_id="static:route12_snorlax",arm={frame=100},began={frame=100}}
+        buffers.static[2]={schema="rby-static-origin-receipt-v1",["end"]={frame=100}}
+        buffers.npc_exchange[1]={schema="rby-npc-exchange-receipt-v1",source_id="npc:route_2_trade_house:1",call={frame=99},remove={frame=100},["return"]={frame=100}}
+        buffers.wild[1]={schema="rby-wild-encounter-receipt-v1",kind="begin",witness={frame=100}}
+        buffers.evolution[1]={schema="rby-evolution-receipt-v1",outcome="evolved",before={frame=100},after={frame=100}}
+    """)
+    lua.globals().advance()  # frame 100 (the first returned frame): one publication carries every kind, in completion order
+    seq = calls(lua)
+    assert lua.eval("#appended") == 1 and lua.eval("appended[1].event.signals == JSON.null") is True
+    assert lua.eval("kinds(appended[1].event)") == "static_origin,static_battle_end,npc_exchange,wild_begin,evolution"
+    assert lua.eval("appended[1].event.acquisitions[1].receipt.source_id") == "static:route12_snorlax"
+    assert lua.eval("appended[1].event.acquisitions[4].receipt.kind") == "begin"
+    assert lua.eval("appended[1].baseline.acquisition_source.frame") == 100
+    for name in ("capture", "grants", "static", "npc_exchange", "wild", "evolution"):
+        assert seq.index("append") < seq.index("drain:" + name), name + " drained before the batch was durable"
+    assert lua.eval("#buffers.static + #buffers.npc_exchange + #buffers.wild + #buffers.evolution") == 0
+    lua.globals().advance()  # frame 101: quiet again
+    assert lua.eval("#appended") == 1
+
+
+def test_capture_assembly_persists_its_open_call_before_drain_and_publishes_once_on_delivery(sourced):
+    lua = sourced
+    lua.execute('buffers.capture[1]={kind="party_begin",frame=100,sp=57342}')
+    lua.globals().advance()  # frame 100: the call opened; the cursor is persisted, nothing is published
+    seq = calls(lua)
+    assert "append" not in seq and seq.index("persist") < seq.index("drain:capture")
+    assert lua.eval("persisted[1].acquisition_source.capture_open.kind") == "party_begin" and lua.eval("#buffers.capture") == 0
+    lua.execute('buffers.capture[1]={kind="party_end",frame=101,sp=57342}')
+    lua.globals().advance()  # frame 101: the return completes ONE capture receipt
+    seq = calls(lua)
+    assert lua.eval("#appended") == 1 and seq.index("append") < seq.index("drain:capture")
+    assert lua.eval("kinds(appended[1].event)") == "capture"
+    row = json.loads(lua.eval("JSON.encode(appended[1].event.acquisitions[1].receipt)"))
+    assert row["schema"] == "rby-capture-receipt-v1" and row["receipt"]["destination"] == "party"
+    assert (row["receipt"]["begin"]["frame"], row["receipt"]["end"]["frame"]) == (100, 101)
+    assert lua.eval("appended[1].baseline.acquisition_source.capture_open == JSON.null") is True
+
+
+def test_a_refused_publication_keeps_every_source_buffer_and_stops_the_next_frame(sourced):
+    lua = sourced
+    lua.execute("""
+        buffers.wild[1]={schema="rby-wild-encounter-receipt-v1",kind="end",witness={frame=100}}
+        buffers.evolution[1]={schema="rby-evolution-receipt-v1",outcome="cancelled",before={frame=100},after={frame=100}}
+        journal.append=function()error("transport refused the batch",0)end
+    """)
+    with pytest.raises(LuaError, match="transport refused the batch"):
+        lua.globals().advance()
+    seq = calls(lua)
+    assert not any(name.startswith("drain:") for name in seq) and lua.eval("#appended") == 0
+    assert lua.eval("#buffers.wild") == 1 and lua.eval("#buffers.evolution") == 1
+    assert lua.eval("ctx.at_boundary") is False
+    # The cursor never moved: the next frame cannot be assembled, so nothing drains (fail closed, P4).
+    with pytest.raises(LuaError, match="exactly one returned frame"):
+        lua.globals().advance()
+    assert lua.eval("#buffers.wild") == 1 and lua.eval("#buffers.evolution") == 1 and "drain:wild" not in calls(lua)
