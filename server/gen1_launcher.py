@@ -14,13 +14,14 @@ FILES = (
     "lua/staged_panel.lua",
     "lua/wire_protocol.lua", "lua/socket.lua", "lua/x64/socket-windows-5-4.dll",
     "data/games/gen1_rby/gen1_admission_profiles.lua", "data/games/gen1_rby/gen1_party_codec_data.lua",
-    "data/games/gen1_rby/gen1_companion_profiles.lua",
+    "data/games/gen1_rby/gen1_companion_profiles.lua", "data/games/gen1_rby/gen1_rby_areas.lua",
 )
 OBSERVATION_FILES=("lua/gen1_held_initial_save.lua","lua/gen1_held_save_image.lua","lua/gen1_held_retirement.lua","lua/gen1_held_storage.lua","lua/gen1_storage_checkpoint.lua","lua/hex_delta.lua","lua/gen1_held_memorial.lua","lua/platform_saveram.lua","lua/gen1_initial_observation.lua","lua/gen1_full_save.lua","lua/gen1_trade_preparation.lua",
-    "lua/gen1_held_faint.lua","lua/held_write_permit.lua","lua/gen1_write_checkpoint.lua","lua/gen1_force_faint_executor.lua",
+    "lua/gen1_receptionist_client.lua",
+    "lua/gen1_held_faint.lua","lua/gen1_held_rival_team.lua","lua/held_write_permit.lua","lua/gen1_write_checkpoint.lua","lua/gen1_force_faint_executor.lua",
     "lua/gen1_command_receipts.lua","lua/journal_document.lua","lua/observation_stream.lua",
     "lua/gen1_engine_signals.lua","data/games/gen1_rby/gen1_engine_signal_data.lua",
-    "data/games/gen1_rby/gen1_full_save_layout.lua",
+    "data/games/gen1_rby/gen1_full_save_layout.lua","data/games/gen1_rby/gen1_rival_team_checkpoint.lua",
     "lua/gen1_bootstrap_observer.lua","data/games/gen1_rby/gen1_bootstrap_sites.lua")
 
 
@@ -35,7 +36,7 @@ FREE_FILES = ("lua/gen1_observation_loop.lua", "lua/instruction_executor.lua", "
 
 NATIVE_FILES = ("lua/command_service_router.lua", "lua/gen1_native_runtime.lua",
     "lua/gen1_native_trade_executor.lua", "lua/gen1_partner_prompt_executor.lua", "lua/gen1_prepared_save.lua",
-    "lua/gen1_receptionist_client.lua", "lua/gen1_receptionist_executor.lua", "lua/gen1_saved_trade_executor.lua",
+    "lua/gen1_receptionist_executor.lua", "lua/gen1_saved_trade_executor.lua",
     "lua/gen1_trade_abort.lua", "lua/gen1_trade_events.lua", "lua/staged_command.lua")
 
 

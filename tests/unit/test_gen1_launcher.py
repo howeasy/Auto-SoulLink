@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import re
 import socket
 import sqlite3
 import subprocess
@@ -15,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
-from server.gen1_launcher import FILES, configuration, launcher
+from server.gen1_launcher import FILES, build_configuration, configuration, launcher
 from server.gen1_run_config import FILENAME, configure_runtime, open_runtime, read_configuration
 from server.journal_reader import read_journal
 from server.protocol import ProtocolError
@@ -67,6 +68,58 @@ def test_bundle_hashes_are_cross_checkout_stable_but_do_not_hide_content_drift(t
     assert file_bundle(tmp_path, ["sample.lua"]) != first
     with pytest.raises(ValueError):
         file_bundle(tmp_path, ["../elsewhere.lua"])
+
+
+def test_free_service_checked_bundle_covers_every_literal_lua_dependency(prepared):
+    root = Path(__file__).resolve().parents[2]
+    config = build_configuration(RUN_ID, prepared.contract, "a", initial_observations=True, free_service=True)
+    selected = {entry["path"] for entry in config["files"]}
+    missing = []
+    pattern = re.compile(
+        r"(?:\brequire\s*(?:\(\s*)?|\bpcall\s*\(\s*require\s*,\s*)['\"]([A-Za-z0-9_.-]+)['\"]"
+    )
+    for name in sorted(selected):
+        if not name.endswith(".lua"):
+            continue
+        for module in pattern.findall((root / name).read_text(encoding="utf-8")):
+            if name == "lua/slink.lua" and module == "game_detect":
+                continue  # the durable launch branch returns before legacy auto-detection
+            relative = module.replace(".", "/") + ".lua"
+            candidates = [f"lua/{relative}", f"data/games/gen1_rby/{relative}"]
+            existing = [path for path in candidates if (root / path).is_file()]
+            if existing and not any(path in selected for path in existing):
+                missing.append((name, module, existing))
+    assert missing == []
+
+
+def test_durable_entry_evicts_every_checked_lua_module_before_start():
+    from lupa.lua54 import LuaRuntime
+
+    root = Path(__file__).resolve().parents[2]
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().root = root.as_posix()
+    lua.globals().launch = json.dumps({
+        "protocol": "slink-gen1-durable-v1",
+        "files": [
+            {"path": "lua/gen1_client_entry.lua"},
+            {"path": "lua/gen1_held_rival_team.lua"},
+            {"path": "data/games/gen1_rby/gen1_rival_team_checkpoint.lua"},
+        ],
+    })
+    result = lua.execute(r'''
+        package.path=root.."/lua/?.lua;"..package.path
+        package.loaded.gen1_client_entry={stale=true}
+        package.loaded.gen1_held_rival_team={stale=true}
+        package.loaded.gen1_rival_team_checkpoint={stale=true}
+        package.preload.gen1_client_entry=function()return {run=function(configuration)
+            return package.loaded.gen1_held_rival_team==nil
+                and package.loaded.gen1_rival_team_checkpoint==nil
+                and configuration.protocol
+        end}end
+        SLINK_RUNTIME_LAUNCH_JSON=launch
+        return dofile(root.."/lua/slink.lua")
+    ''')
+    assert result == "slink-gen1-durable-v1"
 
 
 def test_wrong_run_launcher_cannot_admit_even_with_identical_cartridge_and_save(prepared):

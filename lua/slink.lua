@@ -12,18 +12,24 @@ package.path = _dir .. "?.lua;" .. _dir .. "?/init.lua;" .. package.path
 -- Explicit durable selection never falls through to a legacy client or its
 -- shared log file. The checked launcher supplies the run-bound configuration.
 if rawget(_G,"SLINK_RUNTIME_LAUNCH_JSON")~=nil then
-    for _,name in ipairs({"gen1_client_entry","gen1_runtime","gen1_session","gen1_admission_profiles",
-        "gen1_runtime_profiles","gen1_companion_profiles","gen1_party_codec_data",
-        "staged_panel",
-        "durable_runtime","client_session","client_journal","control_service","command_executor",
-        "connector","json_codec","state_store","platform_storage","platform_identity","platform_execution",
-        "platform_clock","memory_gb","gen1_write_safety","games.gen1_rby","gen1_party_codec","wire_protocol"})do
-        package.loaded[name]=nil
-    end
+    package.loaded.json_codec=nil
     local JSON=require("json_codec")
     local configuration=assert(JSON.decode(SLINK_RUNTIME_LAUNCH_JSON))
     SLINK_RUNTIME_LAUNCH_JSON=nil
     assert(configuration.protocol=="slink-gen1-durable-v1","unsupported durable launcher protocol")
+    -- The checked launcher, not a second hand-maintained list, defines every
+    -- module whose cached bytecode must be evicted on an in-process reload.
+    -- Data modules resolve by basename through the Gen 1 package.path; Lua
+    -- modules also clear their full dotted path (for example games.gen1_rby).
+    assert(type(configuration.files)=="table","checked durable client files required")
+    for _,entry in ipairs(configuration.files)do
+        if type(entry)=="table"and type(entry.path)=="string"and entry.path:match("%.lua$")then
+            local dotted=entry.path:gsub("%.lua$",""):gsub("^lua/",""):gsub("/",".")
+            local base=dotted:match("([^.]+)$")
+            package.loaded[dotted]=nil
+            package.loaded[base]=nil
+        end
+    end
     return require("gen1_client_entry").run(configuration)
 end
 
