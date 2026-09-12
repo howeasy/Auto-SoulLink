@@ -1,6 +1,6 @@
 # Gen 1 release checklist
 
-Rendered 2026-09-12 from `tests/gen1_release_requirements.json` (schema `1`) at worktree HEAD `2494cc6`. The manifest is the truth and `tools/verify_gen1_release.py` is the gate; this page is a render of the same rows so the status of the release fits on one screen. Regenerate with:
+Rendered 2026-09-12 from `tests/gen1_release_requirements.json` (schema `1`) at worktree HEAD `ffcc118`. The manifest is the truth and `tools/verify_gen1_release.py` is the gate; this page is a render of the same rows so the status of the release fits on one screen. Regenerate with:
 
 ```bash
 python docs/gen1_reference/render_rc_checklist.py . docs/gen1_reference/RC_CHECKLIST.md
@@ -12,29 +12,29 @@ A row is `registered` when the manifest lists at least one reviewed executable p
 
 | Stage | Description | Registered | Missing | Closure plan |
 | --- | --- | ---: | ---: | --- |
-| `canonical-validation` | Canonical sources, constants, structures, addresses, ROM layouts and generated data | 9 | 3 | 7e umbrella registrations |
-| `unit-protocol` | Unit, server, admission, transaction, transport, DOM, route and API tests | 110 | 7 | 7e umbrella registrations |
-| `live-memory` | Clean R/B/Y memory transformations and write-safe state gates | 44 | 10 | 7e umbrella registrations |
+| `canonical-validation` | Canonical sources, constants, structures, addresses, ROM layouts and generated data | 10 | 2 | 7e umbrella registrations |
+| `unit-protocol` | Unit, server, admission, transaction, transport, DOM, route and API tests | 116 | 1 | 7e umbrella registrations |
+| `live-memory` | Clean R/B/Y memory transformations and write-safe state gates | 47 | 7 | 7e umbrella registrations |
 | `single-player` | Real single-player engine behavior and every mandatory gameplay axis | 0 | 60 | 7a natural-play drivers on the free-run loop (after handoff item 5) |
 | `live-duos` | Five live pairs: Red/Blue, Blue/Yellow, Yellow/Red, Red/Red and Yellow/Yellow | 7 | 5 | 7b existing duo runner on the production loop |
-| `ordered-contracts` | Nine ordered cartridge pair contracts, each in both HELLO orders | 0 | 18 | 7b one parametrized HELLO-order contract test |
+| `ordered-contracts` | Nine ordered cartridge pair contracts, each in both HELLO orders | 18 | 0 | 7b one parametrized HELLO-order contract test |
 | `manager-isolation` | Same-hash Blue/Blue and Yellow/Yellow SaveRAM isolation through real Manager | 2 | 2 | 7b existing duo runner on the production loop |
 | `patch-browser` | Clean and approved UPR patching, genuine browser E2E and final artifact boots | 2 | 40 | 7d UPR categories per title, browser E2E (needs playwright), panel and SFX gates |
 | `trade-receptionist` | Full native receptionist and durable physical trade matrix | 13 | 55 | 7c register the passing nine-pair live matrix per title; add busy-queued and recovery rows |
 | `human-session` | Staged two-player human session after passing automation | 0 | 1 | 7g full gate run green, then the staged human session (--complete-human) |
-| **total** | 388 requirements, 10 stages | **187** | **201** | |
+| **total** | 388 requirements, 10 stages | **215** | **173** | |
 
 ## Requirements
 
 ### `canonical-validation`: Canonical sources, constants, structures, addresses, ROM layouts and generated data
 
-9 registered, 3 missing. Closure: 7e umbrella registrations.
+10 registered, 2 missing. Closure: 7e umbrella registrations.
 
 | # | Requirement | Description | Status | Proof (check, source) |
 | ---: | --- | --- | --- | --- |
 | 1 | `canonical.source-pins` | Exact pret source revisions, RGBDS tools, canonical builds and generated symbol artifact hashes | registered | `canonical-sources` (tools/verify_canonical_sources.py); `canonical-final` (tools/verify_canonical_sources.py) |
 | 2 | `canonical.profiles` | Every active WRAM/SRAM field in Red, Blue, Yellow and AP has source-backed verified classification or is intentionally nil | registered | `canonical-sources` (tools/verify_canonical_sources.py); `canonical-final` (tools/verify_canonical_sources.py); `profile-addresses` (tools/verify_profile_addresses.py) |
-| 3 | `canonical.constants` | All canonical capacities, layouts, names, PP/status encodings, endian rules, save geometry and checksum invariants | **MISSING PROOF** |  |
+| 3 | `canonical.constants` | All canonical capacities, layouts, names, PP/status encodings, endian rules, save geometry and checksum invariants | registered | `constants` (tools/verify_gen1_constants.py); `party-codec-data` (tools/gen_gen1_codec_data.py); `unit` (tests/unit/test_gen1_strict_profile_contracts.py); `unit` (tests/unit/test_gen1_party_codec.py); `unit` (tests/unit/test_gen1_sram_boxes.py) |
 | 4 | `canonical.rom-layout` | Every hook, free span, bank-qualified call, protected header byte, UPR pointer root and payload is source and byte validated | **MISSING PROOF** |  |
 | 5 | `canonical.generated-data` | Per-title maps/subareas, every encounter method, types, moves, trainers, items, gifts, statics and evolution families match canonical source | **MISSING PROOF** |  |
 | 6 | `canonical.structure-limits` | Source-derived party/box/battle member offsets and sizes, name strides/terminators, transfer size, party/box/bag/move/max-level/stat limits, PP/status masks, SRAM box/checksum geometry and computed-stat byte order. Other multibyte codec/min-level enforcement remains in canonical.constants. | registered | `canonical-sources` (tools/verify_canonical_sources.py); `canonical-final` (tools/verify_canonical_sources.py); `constants` (tools/verify_gen1_constants.py) |
@@ -47,17 +47,17 @@ A row is `registered` when the manifest lists at least one reviewed executable p
 
 ### `unit-protocol`: Unit, server, admission, transaction, transport, DOM, route and API tests
 
-110 registered, 7 missing. Closure: 7e umbrella registrations.
+116 registered, 1 missing. Closure: 7e umbrella registrations.
 
 | # | Requirement | Description | Status | Proof (check, source) |
 | ---: | --- | --- | --- | --- |
-| 1 | `protocol.unit` | Complete selected unit inventory passes without skip or expected failure | **MISSING PROOF** |  |
-| 2 | `protocol.transport` | Partial receive/send offsets, queue bounds, reconnect replay and dispatcher/deferred exceptions with explicit NACK and continued processing | **MISSING PROOF** |  |
-| 3 | `protocol.admission` | Exact per-player final hash, profile, provenance, codec, capabilities, nonce and epoch gating before every semantic/write operation | **MISSING PROOF** |  |
-| 4 | `protocol.transactions` | Durable operation IDs, session sequences, ACK/NACK, zero-mutation validation and collision checks on every key-producing operation | **MISSING PROOF** |  |
-| 5 | `protocol.server` | Rule engine and persistence through actual server routes and APIs | **MISSING PROOF** |  |
+| 1 | `protocol.unit` | Complete selected unit inventory passes without skip or expected failure | registered | `unit` (tests/unit/test_gen1_release_gate.py) |
+| 2 | `protocol.transport` | Partial receive/send offsets, queue bounds, reconnect replay and dispatcher/deferred exceptions with explicit NACK and continued processing | registered | `unit` (tests/unit/test_connector_fragmentation.py); `unit` (tests/unit/test_gen1_runtime_server.py); `unit` (tests/unit/test_gen1_command_validation.py); `unit` (tests/unit/test_client_invariants.py) |
+| 3 | `protocol.admission` | Exact per-player final hash, profile, provenance, codec, capabilities, nonce and epoch gating before every semantic/write operation | registered | `unit` (tests/unit/test_gen1_sessions.py); `unit` (tests/unit/test_gen1_admission.py) |
+| 4 | `protocol.transactions` | Durable operation IDs, session sequences, ACK/NACK, zero-mutation validation and collision checks on every key-producing operation | registered | `unit` (tests/unit/test_protocol_journal.py); `unit` (tests/unit/test_gen1_sessions.py); `unit` (tests/unit/test_gen1_player_scoped_rules.py) |
+| 5 | `protocol.server` | Rule engine and persistence through actual server routes and APIs | registered | `unit` (tests/unit/test_gen1_runtime_server.py); `unit` (tests/unit/test_gen1_sessions.py); `unit` (tests/unit/test_manager_http_hardening.py) |
 | 6 | `protocol.dom` | Gen 1 accurate UI, safe JSON, stream active-run pins, capability-gated controls and variant labels | **MISSING PROOF** |  |
-| 7 | `protocol.ap-regression` | Existing Archipelago behavior and gates remain safe; all inherited new R/B fields nil or independently verified | **MISSING PROOF** |  |
+| 7 | `protocol.ap-regression` | Existing Archipelago behavior and gates remain safe; all inherited new R/B fields nil or independently verified | registered | `unit` (tests/unit/test_legacy_hello_admission.py); `unit` (tests/unit/test_runtime_boundary.py); `unit` (tests/unit/test_gen1_staged_state.py); `unit` (tests/unit/test_gen1_strict_profile_contracts.py) |
 | 8 | `release-gate.outcomes` | Actual pytest subprocess outcomes cannot disguise skip, collection skip, xfail, non-strict XPASS, failed teardown or deselection as success. | registered | `unit` (tests/unit/test_gen1_release_gate.py) |
 | 9 | `release-gate.inventory` | Missing expected tests, missing phases, stale evidence, deselected tests and quick-only diagnostics cannot produce release approval; legitimate individual passing assertions remain visible under failing lanes. | registered | `unit` (tests/unit/test_gen1_release_gate.py) |
 | 10 | `release-gate.integrity` | Fixture mutation/deletion/addition, missing/hash-drifted legal inputs, unpinned UPR, review-source drift and worktree path escapes fail closed. | registered | `unit` (tests/unit/test_gen1_release_gate.py) |
@@ -171,18 +171,18 @@ A row is `registered` when the manifest lists at least one reviewed executable p
 
 ### `live-memory`: Clean R/B/Y memory transformations and write-safe state gates
 
-44 registered, 10 missing. Closure: 7e umbrella registrations.
+47 registered, 7 missing. Closure: 7e umbrella registrations.
 
 | # | Requirement | Description | Status | Proof (check, source) |
 | ---: | --- | --- | --- | --- |
 | 1 | `memory.red.differential` | Canonical MoveMon/RemovePokemon/party and box compaction/append from cloned emulator states; all counts, slots, boundary failures, stats/level derivation, HP/status, names/species lists, dex changes, SRAM bank/checksum and immediate reload persistence (axes: title, party_counts, box_counts, source_slots, destination_slots) | **MISSING PROOF** |  |
-| 2 | `memory.red.write-safe` | Live proof of the adopted write-safe predicate; no proof keeps writes disabled (axes: title, states) | **MISSING PROOF** |  |
+| 2 | `memory.red.write-safe` | Live proof of the adopted write-safe predicate; no proof keeps writes disabled (axes: title, states) | registered | `live-gates` (tests/live/test_gen1_gates.py) |
 | 3 | `memory.red.storage` | Active box WRAM plus eleven SRAM boxes, invalid current box refusal, recomputed withdrawn stats, initialized bit/checksum before memorial, whole empty reserved box, NACK and canonical initiator deposit undo (axes: title) | **MISSING PROOF** |  |
 | 4 | `memory.blue.differential` | Canonical MoveMon/RemovePokemon/party and box compaction/append from cloned emulator states; all counts, slots, boundary failures, stats/level derivation, HP/status, names/species lists, dex changes, SRAM bank/checksum and immediate reload persistence (axes: title, party_counts, box_counts, source_slots, destination_slots) | **MISSING PROOF** |  |
-| 5 | `memory.blue.write-safe` | Live proof of the adopted write-safe predicate; no proof keeps writes disabled (axes: title, states) | **MISSING PROOF** |  |
+| 5 | `memory.blue.write-safe` | Live proof of the adopted write-safe predicate; no proof keeps writes disabled (axes: title, states) | registered | `live-gates` (tests/live/test_gen1_gates.py) |
 | 6 | `memory.blue.storage` | Active box WRAM plus eleven SRAM boxes, invalid current box refusal, recomputed withdrawn stats, initialized bit/checksum before memorial, whole empty reserved box, NACK and canonical initiator deposit undo (axes: title) | **MISSING PROOF** |  |
 | 7 | `memory.yellow.differential` | Canonical MoveMon/RemovePokemon/party and box compaction/append from cloned emulator states; all counts, slots, boundary failures, stats/level derivation, HP/status, names/species lists, dex changes, SRAM bank/checksum and immediate reload persistence (axes: title, party_counts, box_counts, source_slots, destination_slots) | **MISSING PROOF** |  |
-| 8 | `memory.yellow.write-safe` | Live proof of the adopted write-safe predicate; no proof keeps writes disabled (axes: title, states) | **MISSING PROOF** |  |
+| 8 | `memory.yellow.write-safe` | Live proof of the adopted write-safe predicate; no proof keeps writes disabled (axes: title, states) | registered | `live-gates` (tests/live/test_gen1_gates.py) |
 | 9 | `memory.yellow.storage` | Active box WRAM plus eleven SRAM boxes, invalid current box refusal, recomputed withdrawn stats, initialized bit/checksum before memorial, whole empty reserved box, NACK and canonical initiator deposit undo (axes: title) | **MISSING PROOF** |  |
 | 10 | `memory.yellow.pc-restrictions` | Canonical Yellow deposit/release permission and happiness behavior under the adopted cartridge-matching policy; synchronized boxing respects restrictions and canonically undoes a refused initiator deposit. Full confirmation/menu/rollback proof remains required. | **MISSING PROOF** |  |
 | 11 | `memory.red.primitive-differential` | 1661 common storage transformations from cloned cartridge states: 400 deposits, 1260 withdrawals and one stale-BoxLevel case. Compares every authoritative active record/name/list, dex bytes and SRAM bank. One canonicalized fixture species; unused tails, invalid-input refusals, PC menus and write-safe admission remain separate. (axes: title, deposit_party_counts, deposit_box_counts, withdraw_party_counts, withdraw_box_counts, selected_slot) | registered | `canonical-sources` (tools/verify_canonical_sources.py); `canonical-final` (tools/verify_canonical_sources.py); `live-gates` (tests/live/test_gen1_gates.py) |
@@ -318,28 +318,28 @@ A row is `registered` when the manifest lists at least one reviewed executable p
 
 ### `ordered-contracts`: Nine ordered cartridge pair contracts, each in both HELLO orders
 
-0 registered, 18 missing. Closure: 7b one parametrized HELLO-order contract test.
+18 registered, 0 missing. Closure: 7b one parametrized HELLO-order contract test.
 
 | # | Requirement | Description | Status | Proof (check, source) |
 | ---: | --- | --- | --- | --- |
-| 1 | `contract.red.red.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 2 | `contract.red.red.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 3 | `contract.red.blue.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 4 | `contract.red.blue.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 5 | `contract.red.yellow.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 6 | `contract.red.yellow.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 7 | `contract.blue.red.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 8 | `contract.blue.red.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 9 | `contract.blue.blue.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 10 | `contract.blue.blue.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 11 | `contract.blue.yellow.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 12 | `contract.blue.yellow.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 13 | `contract.yellow.red.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 14 | `contract.yellow.red.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 15 | `contract.yellow.blue.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 16 | `contract.yellow.blue.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 17 | `contract.yellow.yellow.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
-| 18 | `contract.yellow.yellow.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | **MISSING PROOF** |  |
+| 1 | `contract.red.red.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 2 | `contract.red.red.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 3 | `contract.red.blue.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 4 | `contract.red.blue.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 5 | `contract.red.yellow.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 6 | `contract.red.yellow.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 7 | `contract.blue.red.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 8 | `contract.blue.red.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 9 | `contract.blue.blue.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 10 | `contract.blue.blue.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 11 | `contract.blue.yellow.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 12 | `contract.blue.yellow.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 13 | `contract.yellow.red.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 14 | `contract.yellow.red.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 15 | `contract.yellow.blue.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 16 | `contract.yellow.blue.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 17 | `contract.yellow.yellow.hello-ab` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
+| 18 | `contract.yellow.yellow.hello-ba` | Deterministic admission/content/semantic/command contracts with per-player variant and final hash (axes: player_a, player_b, hello_order) | registered | `unit` (tests/unit/test_gen1_sessions.py) |
 
 ### `manager-isolation`: Same-hash Blue/Blue and Yellow/Yellow SaveRAM isolation through real Manager
 
