@@ -208,6 +208,8 @@ def case(tmp_path):
     value = TradeCase(tmp_path)
     value.admit("a")
     value.admit("b")
+    value.control("a")
+    value.control("b")
     yield value
     value.close()
 
@@ -252,6 +254,8 @@ def test_all_ordered_pairs_atomically_follow_trade_through_both_native_closures(
         case.policy.recovery = True
         case.admit("b")
         case.admit("a")
+        case.control("b")
+        case.control("a")
         assert {p: case.runtime.journal.pending(p) for p in ("a", "b")} == pending
         case.apply_verify("b")
         case.trade_control("finalize")
