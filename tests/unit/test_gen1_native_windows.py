@@ -11,27 +11,35 @@ from server.gen1_native_frame_accounting import persist_grant
 from server.gen1_native_windows import COMPONENT, key, persist, verify_journal, windows_for
 from server.protocol import digest
 from server.protocol_journal import JournalError
-from tests.unit.test_gen1_native_execution import armed, verify
-from tests.unit.test_gen1_native_execution import case  # noqa: F401  (pytest fixture, used by name)
+from tests.unit.test_gen1_native_execution import (
+    armed,
+    case,  # noqa: F401  (pytest fixture, resolved by name below)
+    verify,
+)
+
+
+@pytest.fixture
+def native_case(request):
+    return request.getfixturevalue("case")
 
 
 def request_for(proof):
     return {"schema": WINDOW_SCHEMA, "challenge": secrets.token_hex(16), "scope": dict(proof.scope)}
 
 
-def issued(case,  # noqa: F811 evidence=None, *, free_native=True):
-    value, policy, command, original = case
+def issued(native_case, evidence=None, *, free_native=True):
+    value, policy, command, original = native_case
     value.runtime.verify_operation_execution = policy
     if free_native:  # the production selection this component serves; standalone runtimes keep None
         value.runtime.free_service = True
         value.runtime.native_trade = True
-    proof = verify(case, evidence)
+    proof = verify(native_case, evidence)
     request = request_for(proof)
     return value, policy, command, (evidence or original), request, issue(request, proof), proof
 
 
-def test_free_player_windows_are_journaled_with_the_grant_and_survive_reopen(case):  # noqa: F811
-    value, policy, command, evidence, request, response, proof = issued(case)
+def test_free_player_windows_are_journaled_with_the_grant_and_survive_reopen(native_case):
+    value, policy, command, evidence, request, response, proof = issued(native_case)
     assert "gen1-frame-progress" not in value.runtime.state().document()["components"]
     before = value.runtime.journal.snapshot()
     result = persist_grant(value.runtime, "a", request, response, evidence)
@@ -49,7 +57,7 @@ def test_free_player_windows_are_journaled_with_the_grant_and_survive_reopen(cas
     assert value.runtime.journal.snapshot().revision == before.revision + 1
     # The armed renewal advances the same command's entry: later frame, longer routine prefix.
     renewal = armed(evidence)
-    _, _, _, _, request2, response2, proof2 = issued(case, renewal)
+    _, _, _, _, request2, response2, proof2 = issued(native_case, renewal)
     persist_grant(value.runtime, "a", request2, response2, renewal)
     entry2 = windows_for(value.runtime.state().document(), "a")[command["command_id"]]
     assert entry2["armed"] is True and entry2["sequence_length"] == 2 and entry2["host"]["frame"] == 115
@@ -59,8 +67,8 @@ def test_free_player_windows_are_journaled_with_the_grant_and_survive_reopen(cas
 
 
 @pytest.mark.parametrize("fault", ["unverified", "foreign_response", "backwards", "not_native_policy"])
-def test_windows_refuse_unverified_or_regressing_progress_and_commit_nothing(case, fault):  # noqa: F811
-    value, policy, command, evidence, request, response, proof = issued(case)
+def test_windows_refuse_unverified_or_regressing_progress_and_commit_nothing(native_case, fault):
+    value, policy, command, evidence, request, response, proof = issued(native_case)
     before = value.runtime.journal.snapshot()
     if fault == "unverified":
         request = request_for(proof)
@@ -86,8 +94,8 @@ def test_windows_refuse_unverified_or_regressing_progress_and_commit_nothing(cas
 
 
 @pytest.mark.parametrize("selection", ["standalone", "held_native", "free_only"])
-def test_runtimes_that_did_not_select_free_native_persist_nothing(case, selection):  # noqa: F811
-    value, policy, command, evidence, request, response, proof = issued(case, free_native=False)
+def test_runtimes_that_did_not_select_free_native_persist_nothing(native_case, selection):
+    value, policy, command, evidence, request, response, proof = issued(native_case, free_native=False)
     value.runtime.free_service = selection == "free_only"
     value.runtime.native_trade = selection == "held_native"
     before = value.runtime.journal.snapshot()
@@ -96,8 +104,8 @@ def test_runtimes_that_did_not_select_free_native_persist_nothing(case, selectio
     assert COMPONENT not in value.runtime.state().document()["components"]
 
 
-def test_a_window_record_that_lost_its_event_fails_the_audit(case):  # noqa: F811
-    value, policy, command, evidence, request, response, proof = issued(case)
+def test_a_window_record_that_lost_its_event_fails_the_audit(native_case):
+    value, policy, command, evidence, request, response, proof = issued(native_case)
     persist_grant(value.runtime, "a", request, response, evidence)
     stage = value.runtime.state()
     document = stage.document()
