@@ -4,20 +4,26 @@ import json
 
 import pytest
 
+from pathlib import Path
+
 from server.gen1_bootstrap_receipt import DATA
 from tests.unit.test_client_journal import start
 from tests.unit.test_client_state_store import runtime  # noqa: F401
 
 ORDER = ("load", "loaded", "chose", "pressed", "enter")
+CONTINUE = json.loads((Path(__file__).resolve().parents[2] / "data/games/gen1_rby/continue_sites.json").read_text())
+# Every New Game receipt already journaled carries this hash and is re-verified against it on
+# reopen (gen1_bootstrap_receipt), so CONTINUE support lives in its own file and never moves it.
+NEW_GAME_SOURCE_SHA256 = "e8b35f43f2429dd69a6e22a76b99958973b53c572da1780e5907f8624cc67551"
 
 
 @pytest.fixture
 def probe(runtime):  # noqa: F811
     start(runtime)
-    runtime.globals().data_json = json.dumps(DATA)
+    runtime.globals().data_json = json.dumps(CONTINUE)
     runtime.execute("""
-        package.loaded.gen1_bootstrap_sites=assert(JSON.decode(data_json))
-        profile=JSON.decode(data_json).titles.yellow;sites=profile['continue']
+        package.loaded.gen1_continue_sites=assert(JSON.decode(data_json))
+        profile=JSON.decode(data_json).titles.yellow;sites=profile.sites;profile_sha=JSON.decode(data_json).sha256
         rom={};bus={};hooks={};frame=100;pc=0;sp=0xDFFE;regA=2;held=true
         scope={context_generation=string.rep('a',32),physical_instance=string.rep('1',32)}
         hash=profile.clean_sha1
@@ -27,11 +33,9 @@ def probe(runtime):  # noqa: F811
         event={on_bus_exec=function(fn,a,name)hooks[name]=fn;return name end,
             unregisterbyid=function(name)hooks[name]=nil end}
         for kind,site in pairs(sites)do
-            if kind~='save_file_status' then
-                for i=1,#site.expected_hex,2 do
-                    local v=tonumber(site.expected_hex:sub(i,i+1),16)
-                    rom[site.rom_offset+(i-1)/2]=v;bus[site.address+(i-1)/2]=v
-                end
+            for i=1,#site.expected_hex,2 do
+                local v=tonumber(site.expected_hex:sub(i,i+1),16)
+                rom[site.rom_offset+(i-1)/2]=v;bus[site.address+(i-1)/2]=v
             end
         end
         function create()return require('gen1_continue_observer').new({variant='yellow',final_sha1=hash,
@@ -51,7 +55,7 @@ def test_the_ordered_witness_is_published_once_and_detached(probe):
         assert(probe.peek()==nil);fire('load');fire('loaded');assert(probe.peek()==nil and probe.status().loaded)
         fire('chose');fire('pressed');assert(probe.peek()==nil)
         fire('enter');local result=probe.peek()
-        assert(result.schema=='rby-continue-receipt-v1' and result.loaded.status==2 and result.load.sp==result.loaded.sp)
+        assert(result.schema=='rby-continue-receipt-v1' and result.source_sha256==profile_sha and result.loaded.status==2 and result.load.sp==result.loaded.sp)
         assert(result.load.frame<result.loaded.frame and result.chose.frame<result.pressed.frame and result.pressed.frame<result.enter.frame)
         assert(result.load.bank==sites.load.bank and result.enter.pc==sites.enter.address)
         result.enter.frame=1;assert(probe.peek().enter.frame~=1)
@@ -123,10 +127,29 @@ def test_every_pinned_site_survives_the_canonical_companion_patch(variant):
 
     manifest = companion_profiles()[variant]["manifest"]
     final = (ROOT / manifest["output"]).read_bytes()
-    title = DATA["titles"][variant]
-    sites = dict(title["sites"])
-    sites.update({kind: site for kind, site in title["continue"].items() if kind != "save_file_status"})
+    sites = {**DATA["titles"][variant]["sites"], **CONTINUE["titles"][variant]["sites"]}
     assert set(sites) == {"begin", "end", *ORDER}
     for kind, site in sites.items():
         expected = bytes.fromhex(site["expected_hex"])
         assert final[site["rom_offset"] : site["rom_offset"] + len(expected)] == expected, (variant, kind)
+
+
+def test_new_game_receipts_keep_verifying_against_the_unchanged_bootstrap_source():
+    """A journaled New Game receipt stores the bootstrap source hash and is re-verified against
+    DATA["sha256"] on every reopen: adding CONTINUE support must not move it."""
+    from server.gen1_bootstrap_receipt import validate
+    from server.protocol_journal import JournalError
+
+    assert DATA["sha256"] == NEW_GAME_SOURCE_SHA256
+    assert CONTINUE["schema"] == "rby-continue-sites-v1" and CONTINUE["sha256"] != DATA["sha256"]
+    assert set(DATA["titles"]["yellow"]) == {"source_commit", "clean_sha1", "bank_address", "fields", "sites"}
+    receipt = {"schema": "rby-bootstrap-receipt-v1", "source_sha256": CONTINUE["sha256"], "variant": "yellow",
+               "context_generation": "a" * 32, "physical_instance": "1" * 32, "final_sha1": DATA["titles"]["yellow"]["clean_sha1"],
+               "begin": {"frame": 1, "pc": 0, "bank": 1, "sp": 0}, "end": {"frame": 2, "pc": 0, "bank": 1, "sp": 0, "point": {}}}
+    with pytest.raises(JournalError, match="bootstrap source or physical context differs"):
+        validate(receipt, variant="yellow", identity={}, context_generation="a" * 32, physical_instance="1" * 32,
+                 final_sha1=receipt["final_sha1"], source={}, frame=10)
+    receipt["source_sha256"] = DATA["sha256"]
+    with pytest.raises(JournalError, match="bootstrap execution site differs"):  # past the source check
+        validate(receipt, variant="yellow", identity={}, context_generation="a" * 32, physical_instance="1" * 32,
+                 final_sha1=receipt["final_sha1"], source={}, frame=10)

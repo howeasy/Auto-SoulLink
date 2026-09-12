@@ -2,7 +2,8 @@
 -- write, admission, or release authority: it records where the CPU went and publishes the
 -- ordered witness once, under a held frame.
 --
--- The path is source-pinned (data/games/gen1_rby/bootstrap_sites.json `continue`):
+-- The path is source-pinned (data/games/gen1_rby/continue_sites.json, its own file and hash so
+-- the New Game receipts already journaled against bootstrap_sites.json keep verifying):
 --   load    TryLoadSaveFile entry (MainMenu runs it BEFORE any choice, for the save preview)
 --   loaded  TryLoadSaveFile.done: same SP as the entry, register A = wSaveFileStatus (2 = good)
 --   chose   MainMenu.choseContinue (the player selected CONTINUE; may repeat if they back out)
@@ -11,7 +12,7 @@
 -- Anything out of this order, a bad checksum, a stack mismatch, or a hit after completion is a
 -- failure; the witness is then never published.
 local JSON=require('json_codec')
-local Data=require('gen1_bootstrap_sites')
+local Data=require('gen1_continue_sites')
 local M={}
 local ORDER={'load','loaded','chose','pressed','enter'}
 local function copy(value)return assert(JSON.decode(assert(JSON.encode(value))))end
@@ -21,7 +22,7 @@ local function hex(address,count,domain)
 end
 function M.new(options)
     assert(type(options.owned)=='function' and type(options.held)=='function','owned continue observer required')
-    local profile=assert(Data.titles[options.variant]);local sites=assert(profile['continue'],'continue sites')
+    local profile=assert(Data.titles[options.variant]);local sites=assert(profile.sites,'continue sites')
     local owner=copy(options.owned())
     assert(type(owner.context_generation)=='string' and type(owner.physical_instance)=='string','pre-admission physical identity required')
     local hooks={};local seen={};local finished,failure;local closed=false

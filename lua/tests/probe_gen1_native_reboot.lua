@@ -21,7 +21,7 @@ local G=dofile(ROOT.."/lua/tests/gatelib.lua")
 local t=G.start("probe_gen1_native_reboot",{no_boot=true})   -- verdict file exists from here on
 local mem=t.M
 -- Boot witness: lua/gen1_continue_observer.lua on the source-pinned CONTINUE sites
--- (data/games/gen1_rby/bootstrap_sites.json `continue`): TryLoadSaveFile entry/same-SP return with
+-- (data/games/gen1_rby/continue_sites.json): TryLoadSaveFile entry/same-SP return with
 -- wSaveFileStatus 2, then MainMenu.choseContinue -> MainMenu.pressedA -> SpecialEnterMap, in order.
 -- The overworld is then proven by walking (G.prove_booted).
 local function hex(address,count,domain)
@@ -30,8 +30,8 @@ local function hex(address,count,domain)
     return table.concat(out)
 end
 local ok,why=pcall(function()
-    local Sites=require("gen1_bootstrap_sites")
-    local status_address=assert(Sites.titles[manifest.variant]["continue"].save_file_status)
+    local Sites=require("gen1_continue_sites")
+    local status_address=assert(Sites.titles[manifest.variant].save_file_status)
     local observer=require("gen1_continue_observer").new({variant=manifest.variant,final_sha1=manifest.final_sha1,
         owned=function()return {context_generation=string.rep("0",32),physical_instance=string.rep("0",32)} end,
         held=function()return true end})   -- read-only probe: no admission, no writer; publication is local
