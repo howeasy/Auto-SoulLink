@@ -157,7 +157,25 @@ byte-identical, 37 are real three-way conflicts, and two of those decide the cos
 (ui +840/-4588 versus ours +778/-145) and `server/templates/manager.html`, where the UI extraction deletes what
 this branch extends.
 
-## 7. Where to read next
+## 7. How to pick the branch up
+
+`gen1/rc` is checked out in this worktree (`.claude/worktrees/gen1-rby-code-sweep-8d06e2`), which is the one
+consolidated Gen 1 worktree the owner asked for. Git refuses to check the same branch out twice, so:
+
+- **To continue the RC directly**, work in this directory. It is clean, its HEAD equals `origin/gen1/rc`, and the
+  gitignored inputs it needs (ROMs, savestates, `.cache/pret`, the UPR jar, `.cache/node`) are already here.
+- **To work on a topic branch**, cut it from the tip without disturbing this checkout:
+  `git -C "E:/Google Drive/SLink" worktree add -b codex/gen1-<topic> "E:/Google Drive/SLink/.claude/worktrees/gen1-<topic>" gen1/rc`.
+  Remember the read-only-attribute trap in section 6 before removing any worktree again.
+- **Never** switch or reset the root checkout; it stays on `codex/gen2base` by the owner's standing rule.
+
+CI (`.github/workflows/test.yml`, on every push) runs ruff's bug-class selection, the Lua syntax gate and
+`tools/verify_portable_ci.py`. It is green at checkpoint 5 (`7135d8f`) and at the branch tip. The intermediate
+Phase 6 commits (`c5be9f5` through `4fd5cce`) are red for one reason only: the portable-CI inventory was
+reconciled once at the end of the phase (`f271cd5`), so those commits carry node-classification drift. Worth
+knowing before bisecting; nothing else is wrong with them.
+
+## 8. Where to read next
 
 `INTERIM_LEDGER_2026-09-10.md` rows 14 to 25 are the blow-by-blow with evidence paths, and its findings list
 holds everything noticed in passing. `RESUME_2026-09-11.md` has the current state at its head plus the tool
