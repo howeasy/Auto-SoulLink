@@ -22,6 +22,8 @@ Each entry: {id, name, type, power, accuracy, pp, split, effect_chance?}
 
 import json
 import os
+import re
+import sys
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GEN1_OUT = os.path.join(REPO_ROOT, "data", "games", "gen1_rby", "moves.json")
@@ -546,7 +548,85 @@ def build_entry_gen2(idx, internal, power, type_, acc, pp, eff_chance):
     }
 
 
+# ── Gen 1 --check: the embedded table above vs pret, parsed at check time ──────
+
+_MOVE_RE = re.compile(r"^\s*move\s+(\w+),\s*\w+,\s*(\d+),\s*(\w+),\s*(\d+),\s*(\d+)")
+_LI_RE = re.compile(r'^\s*li\s+"([^"]*)"')
+
+
+def find_pret(name: str) -> str:
+    """`.cache/pret/<name>`, searching upward: a worktree has no .cache of its own."""
+    d = REPO_ROOT
+    for _ in range(6):
+        cand = os.path.join(d, ".cache", "pret", name)
+        if os.path.isdir(cand):
+            return cand
+        parent = os.path.dirname(d)
+        if parent == d:
+            break
+        d = parent
+    return os.path.join(REPO_ROOT, ".cache", "pret", name)
+
+
+def parse_pret_gen1_moves(pret_dir: str) -> list[dict]:
+    """Every `move NAME, EFFECT, POWER, TYPE, ACCURACY, PP` line of data/moves/moves.asm,
+    in id order, rendered through the same conversion as the embedded table; plus the
+    cartridge display name from data/moves/names.asm (pret stores accuracy in percent,
+    so no `* 255 / 100` is needed)."""
+    rows = []
+    with open(os.path.join(pret_dir, "data", "moves", "moves.asm"), encoding="utf-8") as f:
+        for line in f:
+            m = _MOVE_RE.match(line)
+            if m:
+                internal, power, type_, acc, pp = m.groups()
+                rows.append(build_entry_gen1(len(rows) + 1, internal, int(power), type_, int(acc), int(pp)))
+    with open(os.path.join(pret_dir, "data", "moves", "names.asm"), encoding="utf-8") as f:
+        names = [m.group(1) for m in map(_LI_RE.match, f) if m]
+    if len(names) != len(rows):
+        raise SystemExit(f"{pret_dir}: {len(rows)} moves but {len(names)} names")
+    for row, name in zip(rows, names, strict=True):
+        row["cart_name"] = name
+    return rows
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def check_gen1(shipped: list[dict], pret: list[dict], title: str) -> list[str]:
+    """Differences between the shipped moves.json entries and one decomp; [] when clean."""
+    diffs = []
+    if len(shipped) != 165 or len(pret) != 165:
+        diffs.append(f"{title}: count shipped={len(shipped)} pret={len(pret)} expected 165")
+    for i, (s, p) in enumerate(zip(shipped, pret, strict=False), start=1):
+        if s.get("id") != i:
+            diffs.append(f"{title}: entry #{i} has id {s.get('id')}")
+        for key in ("internal_name", "type", "power", "accuracy", "pp", "split"):
+            if s.get(key) != p[key]:
+                diffs.append(f"{title}: move {i} {p['internal_name']} {key}: shipped={s.get(key)!r} pret={p[key]!r}")
+        if _norm(s.get("name", "")) != _norm(p["cart_name"]):
+            diffs.append(f"{title}: move {i} name: shipped={s.get('name')!r} cartridge={p['cart_name']!r}")
+    return diffs
+
+
+def check_gen1_all(shipped: list[dict] | None = None) -> list[str]:
+    """Shipped Gen 1 moves.json vs BOTH pokered and pokeyellow; each title reports separately."""
+    if shipped is None:
+        with open(GEN1_OUT, encoding="utf-8") as f:
+            shipped = json.load(f)["moves"]
+    diffs = []
+    for title, name in (("red/blue", "pokered"), ("yellow", "pokeyellow")):
+        diffs += check_gen1(shipped, parse_pret_gen1_moves(find_pret(name)), title)
+    return diffs
+
+
 def main():
+    if "--check" in sys.argv:
+        diffs = check_gen1_all()
+        for d in diffs:
+            print(d)
+        print(f"gen1 moves.json vs pokered+pokeyellow: {len(diffs)} differences")
+        sys.exit(1 if diffs else 0)
     gen1_entries = [build_entry_gen1(i + 1, *row) for i, row in enumerate(GEN1_MOVES)]
     gen2_entries = [build_entry_gen2(i + 1, *row) for i, row in enumerate(GEN2_MOVES)]
 
