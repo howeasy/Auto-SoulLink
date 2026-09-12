@@ -1066,7 +1066,64 @@
       "id": "memory.red.differential",
       "stage": "live-memory",
       "description": "Canonical MoveMon/RemovePokemon/party and box compaction/append from cloned emulator states; all counts, slots, boundary failures, stats/level derivation, HP/status, names/species lists, dex changes, SRAM bank/checksum and immediate reload persistence",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[red-lua/tests/test_gen1_storage_differential.lua]",
+          "assertion_basis": "On the live Red cartridge, lua/tests/test_gen1_storage_differential.lua runs the cartridge's own _MoveMon/_RemovePokemon through a RAM trampoline on a cloned core state and compares SLink's depositPartyMon/retrieveBoxMon against it over the authoritative ranges (party and box counts, species lists, structs, OT and nickname arrays, dex owned/seen, current box, SRAM bank): 400 deposit/party-compaction cases (party 2..6, box 0..19, every slot), 1260 withdraw/box-compaction/append cases (party 0..5, box 1..20, every slot), and a stale BoxLevel case proving the level is derived from experience; the comparator is proven to detect a one-byte mutation. Covers counts, slots, compaction/append, HP/status, names/species lists and dex changes.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_differential.lua": "7a0a1af680418033440c17233bb2b343b20c730b37bb582df6e6f938c2928888",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[red-lua/tests/test_gen1_storage_boundaries.lua]",
+          "assertion_basis": "Boundary failures on the live Red cartridge, lua/tests/test_gen1_storage_boundaries.lua: depositPartyMon refuses the last party member (box 0/10/19), a full current box (party 2 and 6, every slot) and an invalid slot (-1, count, 6, 1.5, a string, true, nil); retrieveBoxMon refuses a full party (box 1 and 20); each refusal returns the production message and the whole WRAM (C000-DFFF), HRAM and 32 KB SRAM image plus the SRAM bank register are byte-identical before and after (the comparator is proven on a one-byte SRAM and a one-byte WRAM mutation); positive controls one past each boundary succeed so the refusals are not vacuous.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_boundaries.lua": "bdddef22d71c0ca367e937b1e6cdc3617e830905e9d223bafbfb8e84f16371b3",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878",
+            "lua/tests/gen1_gatelib.lua": "5489903f786c7f74545f8a97888fec4f476e98914cc60e003e04911e1a27305f"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[red-lua/tests/test_gen1_stats_differential.lua]",
+          "assertion_basis": "Stats and level derivation on the live Red cartridge: canonical CalcExperience and CalcStats run unchanged with bank-qualified symbols on cloned core states and SLink's derivation is compared against them.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_stats_differential.lua": "07716fb2889f0731cff2dadc27e276309ec0c45e27b6609edc4985e0bfc6e0db",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[red-lua/tests/test_gen1_storage_persistence.lua]",
+          "assertion_basis": "SRAM bank/checksum and immediate reload persistence on the live Red cartridge: canonical SRAM initialization for all 12 current-box values matches the cartridge's EmptyAllSRAMBoxes plus SaveMainData image byte for byte across the whole 32 KB (tails retained), initialization is idempotent, a normal deposit followed by a memorial matches the canonical SaveCurrentBoxData then SavePartyAndDexData image, the canonical loaders and the ChangeBox first-time branch retain the grave, and a real core reset (client.reboot_core) reaches CONTINUE with the initialized bit, the grave, the party and the boxed mon intact.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_persistence.lua": "2fa6182ba280de1dc6db431e3f86c6f16882545428c11a53b701318709854cf1",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        }
+      ],
       "axes": {
         "title": "red",
         "party_counts": [
@@ -1163,7 +1220,455 @@
       "id": "memory.red.storage",
       "stage": "live-memory",
       "description": "Active box WRAM plus eleven SRAM boxes, invalid current box refusal, recomputed withdrawn stats, initialized bit/checksum before memorial, whole empty reserved box, NACK and canonical initiator deposit undo",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_withdraw_and_explode.py",
+          "source_sha256": "7009732ba7738f9affcd75cdfb2cadf24a91384dafe5d7ba0cfab1fdf0133228",
+          "nodeid": "tests/unit/test_gen1_withdraw_and_explode.py::test_storage_scan_uses_wram_for_current_box_and_sram_for_other_eleven",
+          "assertion_basis": "The real Lua storedBoxKeys scanner sees a valid unique record in each of the twelve SRAM boxes; for every current-box selector on Red, Blue and Yellow it returns exactly the eleven inactive SRAM records plus the distinct active WRAM record, excludes the stale active SRAM copy, and refuses a poisoned inactive source without writing.",
+          "supporting_sources": {
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[red-lua/tests/test_gen1_storage_boundaries.lua]",
+          "assertion_basis": "On the live Red cartridge, 46 exact writer refusals retain complete WRAM, HRAM, 32 KiB CartRAM and SRAM bank images. Initialized unowned count-zero Box 12 rejects hidden live slots 0/7/19 and dead slots 0/19 before writes; eight first-use cases reject hidden data and partial erasure. Clean zero-filled and the committed fixture's virgin all-FF images both admit first use; a second grave appends only behind the exact prior locally owned record, preserving that record, unused slot 19 and boxes 7–11. Canonical deposit/withdraw inverse controls remain exact across 60 and 18 cases.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_boundaries.lua": "bdddef22d71c0ca367e937b1e6cdc3617e830905e9d223bafbfb8e84f16371b3",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878",
+            "lua/tests/gen1_gatelib.lua": "5489903f786c7f74545f8a97888fec4f476e98914cc60e003e04911e1a27305f"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[red-lua/tests/test_gen1_boxroundtrip_gate.lua]",
+          "assertion_basis": "Recomputed withdrawn stats on the live Red cartridge: a no-cache retrieval recomputes and appends, the received mon lands behind the untouched original, all 33 boxed bytes and 22 name bytes survive, the level is recomputed instead of replaying a stale BoxLevel, a middle-box removal compacts both records and the parallel names, unavailable canonical evidence NACKs without writes and restored evidence permits retry.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_boxroundtrip_gate.lua": "31da938d2a8fab8b689a74283122deeb51818e65a9ea00e0c1130c9d819b0269",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[red-lua/tests/test_gen1_storage_persistence.lua]",
+          "assertion_basis": "Initialized bit and checksum before memorial on the live Red cartridge: protectSramBoxes reproduces the cartridge's EmptyAllSRAMBoxes plus SaveMainData image for every current box, persists the initialization flag and its covering checksum, and the memorial poststate equals the canonical current-box then party/dex save.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_persistence.lua": "2fa6182ba280de1dc6db431e3f86c6f16882545428c11a53b701318709854cf1",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_unsafe_or_invalid_peer_read_never_writes_peer_and_restores_initiator[invalid_box]",
+          "assertion_basis": "An invalid peer current-box selector refuses the peer write and restores the initiator through the owned server storage job. Other refusal and pairing cases are registered separately.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_withdraw_and_explode.py",
+          "source_sha256": "7009732ba7738f9affcd75cdfb2cadf24a91384dafe5d7ba0cfab1fdf0133228",
+          "nodeid": "tests/unit/test_gen1_withdraw_and_explode.py::test_inactive_boxes_do_not_exist_before_first_changebox",
+          "assertion_basis": "Before the cartridge's first ChangeBox, the Lua scanner returns only the active WRAM box despite nonempty stale SRAM bytes.",
+          "supporting_sources": {
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_unsafe_or_invalid_peer_read_never_writes_peer_and_restores_initiator[battle]",
+          "assertion_basis": "A peer battle context refuses peer storage writes and canonically restores the PC initiator; the owned job and journal remain valid.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_unsafe_or_invalid_peer_read_never_writes_peer_and_restores_initiator[text]",
+          "assertion_basis": "A peer text context refuses peer storage writes and canonically restores the PC initiator; the owned job and journal remain valid.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_cartridge_deposit_refusal_keeps_peer_containers_and_undoes_actor[full_box]",
+          "assertion_basis": "A cartridge full_box refusal preserves the peer containers and undoes the initiator through the owned storage job.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_cartridge_deposit_refusal_keeps_peer_containers_and_undoes_actor[yellow_restriction]",
+          "assertion_basis": "A cartridge yellow_restriction refusal preserves the peer containers and undoes the initiator through the owned storage job.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[last-member-compensation-variants0]",
+          "assertion_basis": "After a verified peer read, the last-member-compensation path on ordered pairing 0 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[last-member-compensation-variants1]",
+          "assertion_basis": "After a verified peer read, the last-member-compensation path on ordered pairing 1 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[last-member-compensation-variants2]",
+          "assertion_basis": "After a verified peer read, the last-member-compensation path on ordered pairing 2 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[paired-deposit-variants0]",
+          "assertion_basis": "After a verified peer read, the paired-deposit path on ordered pairing 0 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[paired-deposit-variants1]",
+          "assertion_basis": "After a verified peer read, the paired-deposit path on ordered pairing 1 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[paired-deposit-variants2]",
+          "assertion_basis": "After a verified peer read, the paired-deposit path on ordered pairing 2 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[live_record-red]",
+          "assertion_basis": "On red, a first-use unowned Box 12 with a hidden live_record refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[dead_record-red]",
+          "assertion_basis": "On red, a first-use unowned Box 12 with a hidden dead_record refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[ot_name-red]",
+          "assertion_basis": "On red, a first-use unowned Box 12 with a hidden ot_name refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[species_list-red]",
+          "assertion_basis": "On red, a first-use unowned Box 12 with a hidden species_list refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[mixed_zero-red]",
+          "assertion_basis": "On red, a partially erased first-use Box 12 (mixed_zero) refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[mixed_ff-red]",
+          "assertion_basis": "On red, a partially erased first-use Box 12 (mixed_ff) refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_virgin_erased_ff_box12_is_a_valid_first_use_memorial[red]",
+          "assertion_basis": "On red, the exact virgin all-FF Box 12 is admitted by shared server policy and grave append as a first-use memorial, with the initialized bit persisted.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[0-red]",
+          "assertion_basis": "On red with ordinary current-box selector 0, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[1-red]",
+          "assertion_basis": "On red with ordinary current-box selector 1, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[2-red]",
+          "assertion_basis": "On red with ordinary current-box selector 2, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[3-red]",
+          "assertion_basis": "On red with ordinary current-box selector 3, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[4-red]",
+          "assertion_basis": "On red with ordinary current-box selector 4, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[5-red]",
+          "assertion_basis": "On red with ordinary current-box selector 5, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[6-red]",
+          "assertion_basis": "On red with ordinary current-box selector 6, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[7-red]",
+          "assertion_basis": "On red with ordinary current-box selector 7, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[8-red]",
+          "assertion_basis": "On red with ordinary current-box selector 8, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[9-red]",
+          "assertion_basis": "On red with ordinary current-box selector 9, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[10-red]",
+          "assertion_basis": "On red with ordinary current-box selector 10, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_initialized_unowned_dead_record_refuses_policy_and_direct_append_without_writes[0-red]",
+          "assertion_basis": "On red, initialized count-zero Box 12 with an unowned dead record hidden at slot 0 is refused by policy and direct append before any detached field or CartRAM write.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_initialized_unowned_dead_record_refuses_policy_and_direct_append_without_writes[19-red]",
+          "assertion_basis": "On red, initialized count-zero Box 12 with an unowned dead record hidden at slot 19 is refused by policy and direct append before any detached field or CartRAM write.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_active_box12_before_initialization_refuses_policy_and_append[red]",
+          "assertion_basis": "On red, active Box 12 with the changed-boxes bit clear is refused by policy and append; this impossible state cannot grant a first-use grave write.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        }
+      ],
       "axes": {
         "title": "red"
       }
@@ -1172,7 +1677,64 @@
       "id": "memory.blue.differential",
       "stage": "live-memory",
       "description": "Canonical MoveMon/RemovePokemon/party and box compaction/append from cloned emulator states; all counts, slots, boundary failures, stats/level derivation, HP/status, names/species lists, dex changes, SRAM bank/checksum and immediate reload persistence",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[blue-lua/tests/test_gen1_storage_differential.lua]",
+          "assertion_basis": "On the live Blue cartridge, lua/tests/test_gen1_storage_differential.lua runs the cartridge's own _MoveMon/_RemovePokemon through a RAM trampoline on a cloned core state and compares SLink's depositPartyMon/retrieveBoxMon against it over the authoritative ranges (party and box counts, species lists, structs, OT and nickname arrays, dex owned/seen, current box, SRAM bank): 400 deposit/party-compaction cases (party 2..6, box 0..19, every slot), 1260 withdraw/box-compaction/append cases (party 0..5, box 1..20, every slot), and a stale BoxLevel case proving the level is derived from experience; the comparator is proven to detect a one-byte mutation. Covers counts, slots, compaction/append, HP/status, names/species lists and dex changes.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_differential.lua": "7a0a1af680418033440c17233bb2b343b20c730b37bb582df6e6f938c2928888",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[blue-lua/tests/test_gen1_storage_boundaries.lua]",
+          "assertion_basis": "Boundary failures on the live Blue cartridge, lua/tests/test_gen1_storage_boundaries.lua: depositPartyMon refuses the last party member (box 0/10/19), a full current box (party 2 and 6, every slot) and an invalid slot (-1, count, 6, 1.5, a string, true, nil); retrieveBoxMon refuses a full party (box 1 and 20); each refusal returns the production message and the whole WRAM (C000-DFFF), HRAM and 32 KB SRAM image plus the SRAM bank register are byte-identical before and after (the comparator is proven on a one-byte SRAM and a one-byte WRAM mutation); positive controls one past each boundary succeed so the refusals are not vacuous.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_boundaries.lua": "bdddef22d71c0ca367e937b1e6cdc3617e830905e9d223bafbfb8e84f16371b3",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878",
+            "lua/tests/gen1_gatelib.lua": "5489903f786c7f74545f8a97888fec4f476e98914cc60e003e04911e1a27305f"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[blue-lua/tests/test_gen1_stats_differential.lua]",
+          "assertion_basis": "Stats and level derivation on the live Blue cartridge: canonical CalcExperience and CalcStats run unchanged with bank-qualified symbols on cloned core states and SLink's derivation is compared against them.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_stats_differential.lua": "07716fb2889f0731cff2dadc27e276309ec0c45e27b6609edc4985e0bfc6e0db",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[blue-lua/tests/test_gen1_storage_persistence.lua]",
+          "assertion_basis": "SRAM bank/checksum and immediate reload persistence on the live Blue cartridge: canonical SRAM initialization for all 12 current-box values matches the cartridge's EmptyAllSRAMBoxes plus SaveMainData image byte for byte across the whole 32 KB (tails retained), initialization is idempotent, a normal deposit followed by a memorial matches the canonical SaveCurrentBoxData then SavePartyAndDexData image, the canonical loaders and the ChangeBox first-time branch retain the grave, and a real core reset (client.reboot_core) reaches CONTINUE with the initialized bit, the grave, the party and the boxed mon intact.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_persistence.lua": "2fa6182ba280de1dc6db431e3f86c6f16882545428c11a53b701318709854cf1",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        }
+      ],
       "axes": {
         "title": "blue",
         "party_counts": [
@@ -1269,7 +1831,455 @@
       "id": "memory.blue.storage",
       "stage": "live-memory",
       "description": "Active box WRAM plus eleven SRAM boxes, invalid current box refusal, recomputed withdrawn stats, initialized bit/checksum before memorial, whole empty reserved box, NACK and canonical initiator deposit undo",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_withdraw_and_explode.py",
+          "source_sha256": "7009732ba7738f9affcd75cdfb2cadf24a91384dafe5d7ba0cfab1fdf0133228",
+          "nodeid": "tests/unit/test_gen1_withdraw_and_explode.py::test_storage_scan_uses_wram_for_current_box_and_sram_for_other_eleven",
+          "assertion_basis": "The real Lua storedBoxKeys scanner sees a valid unique record in each of the twelve SRAM boxes; for every current-box selector on Red, Blue and Yellow it returns exactly the eleven inactive SRAM records plus the distinct active WRAM record, excludes the stale active SRAM copy, and refuses a poisoned inactive source without writing.",
+          "supporting_sources": {
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[blue-lua/tests/test_gen1_storage_boundaries.lua]",
+          "assertion_basis": "On the live Blue cartridge, 46 exact writer refusals retain complete WRAM, HRAM, 32 KiB CartRAM and SRAM bank images. Initialized unowned count-zero Box 12 rejects hidden live slots 0/7/19 and dead slots 0/19 before writes; eight first-use cases reject hidden data and partial erasure. Clean zero-filled and the committed fixture's virgin all-FF images both admit first use; a second grave appends only behind the exact prior locally owned record, preserving that record, unused slot 19 and boxes 7–11. Canonical deposit/withdraw inverse controls remain exact across 60 and 18 cases.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_boundaries.lua": "bdddef22d71c0ca367e937b1e6cdc3617e830905e9d223bafbfb8e84f16371b3",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878",
+            "lua/tests/gen1_gatelib.lua": "5489903f786c7f74545f8a97888fec4f476e98914cc60e003e04911e1a27305f"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[blue-lua/tests/test_gen1_boxroundtrip_gate.lua]",
+          "assertion_basis": "Recomputed withdrawn stats on the live Blue cartridge: a no-cache retrieval recomputes and appends, the received mon lands behind the untouched original, all 33 boxed bytes and 22 name bytes survive, the level is recomputed instead of replaying a stale BoxLevel, a middle-box removal compacts both records and the parallel names, unavailable canonical evidence NACKs without writes and restored evidence permits retry.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_boxroundtrip_gate.lua": "31da938d2a8fab8b689a74283122deeb51818e65a9ea00e0c1130c9d819b0269",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[blue-lua/tests/test_gen1_storage_persistence.lua]",
+          "assertion_basis": "Initialized bit and checksum before memorial on the live Blue cartridge: protectSramBoxes reproduces the cartridge's EmptyAllSRAMBoxes plus SaveMainData image for every current box, persists the initialization flag and its covering checksum, and the memorial poststate equals the canonical current-box then party/dex save.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_persistence.lua": "2fa6182ba280de1dc6db431e3f86c6f16882545428c11a53b701318709854cf1",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_unsafe_or_invalid_peer_read_never_writes_peer_and_restores_initiator[invalid_box]",
+          "assertion_basis": "An invalid peer current-box selector refuses the peer write and restores the initiator through the owned server storage job. Other refusal and pairing cases are registered separately.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_withdraw_and_explode.py",
+          "source_sha256": "7009732ba7738f9affcd75cdfb2cadf24a91384dafe5d7ba0cfab1fdf0133228",
+          "nodeid": "tests/unit/test_gen1_withdraw_and_explode.py::test_inactive_boxes_do_not_exist_before_first_changebox",
+          "assertion_basis": "Before the cartridge's first ChangeBox, the Lua scanner returns only the active WRAM box despite nonempty stale SRAM bytes.",
+          "supporting_sources": {
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_unsafe_or_invalid_peer_read_never_writes_peer_and_restores_initiator[battle]",
+          "assertion_basis": "A peer battle context refuses peer storage writes and canonically restores the PC initiator; the owned job and journal remain valid.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_unsafe_or_invalid_peer_read_never_writes_peer_and_restores_initiator[text]",
+          "assertion_basis": "A peer text context refuses peer storage writes and canonically restores the PC initiator; the owned job and journal remain valid.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_cartridge_deposit_refusal_keeps_peer_containers_and_undoes_actor[full_box]",
+          "assertion_basis": "A cartridge full_box refusal preserves the peer containers and undoes the initiator through the owned storage job.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_cartridge_deposit_refusal_keeps_peer_containers_and_undoes_actor[yellow_restriction]",
+          "assertion_basis": "A cartridge yellow_restriction refusal preserves the peer containers and undoes the initiator through the owned storage job.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[last-member-compensation-variants0]",
+          "assertion_basis": "After a verified peer read, the last-member-compensation path on ordered pairing 0 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[last-member-compensation-variants1]",
+          "assertion_basis": "After a verified peer read, the last-member-compensation path on ordered pairing 1 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[last-member-compensation-variants2]",
+          "assertion_basis": "After a verified peer read, the last-member-compensation path on ordered pairing 2 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[paired-deposit-variants0]",
+          "assertion_basis": "After a verified peer read, the paired-deposit path on ordered pairing 0 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[paired-deposit-variants1]",
+          "assertion_basis": "After a verified peer read, the paired-deposit path on ordered pairing 1 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[paired-deposit-variants2]",
+          "assertion_basis": "After a verified peer read, the paired-deposit path on ordered pairing 2 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[live_record-blue]",
+          "assertion_basis": "On blue, a first-use unowned Box 12 with a hidden live_record refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[dead_record-blue]",
+          "assertion_basis": "On blue, a first-use unowned Box 12 with a hidden dead_record refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[ot_name-blue]",
+          "assertion_basis": "On blue, a first-use unowned Box 12 with a hidden ot_name refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[species_list-blue]",
+          "assertion_basis": "On blue, a first-use unowned Box 12 with a hidden species_list refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[mixed_zero-blue]",
+          "assertion_basis": "On blue, a partially erased first-use Box 12 (mixed_zero) refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[mixed_ff-blue]",
+          "assertion_basis": "On blue, a partially erased first-use Box 12 (mixed_ff) refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_virgin_erased_ff_box12_is_a_valid_first_use_memorial[blue]",
+          "assertion_basis": "On blue, the exact virgin all-FF Box 12 is admitted by shared server policy and grave append as a first-use memorial, with the initialized bit persisted.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[0-blue]",
+          "assertion_basis": "On blue with ordinary current-box selector 0, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[1-blue]",
+          "assertion_basis": "On blue with ordinary current-box selector 1, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[2-blue]",
+          "assertion_basis": "On blue with ordinary current-box selector 2, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[3-blue]",
+          "assertion_basis": "On blue with ordinary current-box selector 3, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[4-blue]",
+          "assertion_basis": "On blue with ordinary current-box selector 4, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[5-blue]",
+          "assertion_basis": "On blue with ordinary current-box selector 5, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[6-blue]",
+          "assertion_basis": "On blue with ordinary current-box selector 6, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[7-blue]",
+          "assertion_basis": "On blue with ordinary current-box selector 7, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[8-blue]",
+          "assertion_basis": "On blue with ordinary current-box selector 8, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[9-blue]",
+          "assertion_basis": "On blue with ordinary current-box selector 9, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[10-blue]",
+          "assertion_basis": "On blue with ordinary current-box selector 10, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_initialized_unowned_dead_record_refuses_policy_and_direct_append_without_writes[0-blue]",
+          "assertion_basis": "On blue, initialized count-zero Box 12 with an unowned dead record hidden at slot 0 is refused by policy and direct append before any detached field or CartRAM write.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_initialized_unowned_dead_record_refuses_policy_and_direct_append_without_writes[19-blue]",
+          "assertion_basis": "On blue, initialized count-zero Box 12 with an unowned dead record hidden at slot 19 is refused by policy and direct append before any detached field or CartRAM write.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_active_box12_before_initialization_refuses_policy_and_append[blue]",
+          "assertion_basis": "On blue, active Box 12 with the changed-boxes bit clear is refused by policy and append; this impossible state cannot grant a first-use grave write.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        }
+      ],
       "axes": {
         "title": "blue"
       }
@@ -1278,7 +2288,64 @@
       "id": "memory.yellow.differential",
       "stage": "live-memory",
       "description": "Canonical MoveMon/RemovePokemon/party and box compaction/append from cloned emulator states; all counts, slots, boundary failures, stats/level derivation, HP/status, names/species lists, dex changes, SRAM bank/checksum and immediate reload persistence",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[yellow-lua/tests/test_gen1_storage_differential.lua]",
+          "assertion_basis": "On the live Yellow cartridge, lua/tests/test_gen1_storage_differential.lua runs the cartridge's own _MoveMon/_RemovePokemon through a RAM trampoline on a cloned core state and compares SLink's depositPartyMon/retrieveBoxMon against it over the authoritative ranges (party and box counts, species lists, structs, OT and nickname arrays, dex owned/seen, current box, SRAM bank): 400 deposit/party-compaction cases (party 2..6, box 0..19, every slot), 1260 withdraw/box-compaction/append cases (party 0..5, box 1..20, every slot), and a stale BoxLevel case proving the level is derived from experience; the comparator is proven to detect a one-byte mutation. Covers counts, slots, compaction/append, HP/status, names/species lists and dex changes.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_differential.lua": "7a0a1af680418033440c17233bb2b343b20c730b37bb582df6e6f938c2928888",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[yellow-lua/tests/test_gen1_storage_boundaries.lua]",
+          "assertion_basis": "Boundary failures on the live Yellow cartridge, lua/tests/test_gen1_storage_boundaries.lua: depositPartyMon refuses the last party member (box 0/10/19), a full current box (party 2 and 6, every slot) and an invalid slot (-1, count, 6, 1.5, a string, true, nil); retrieveBoxMon refuses a full party (box 1 and 20); each refusal returns the production message and the whole WRAM (C000-DFFF), HRAM and 32 KB SRAM image plus the SRAM bank register are byte-identical before and after (the comparator is proven on a one-byte SRAM and a one-byte WRAM mutation); positive controls one past each boundary succeed so the refusals are not vacuous.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_boundaries.lua": "bdddef22d71c0ca367e937b1e6cdc3617e830905e9d223bafbfb8e84f16371b3",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878",
+            "lua/tests/gen1_gatelib.lua": "5489903f786c7f74545f8a97888fec4f476e98914cc60e003e04911e1a27305f"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[yellow-lua/tests/test_gen1_stats_differential.lua]",
+          "assertion_basis": "Stats and level derivation on the live Yellow cartridge: canonical CalcExperience and CalcStats run unchanged with bank-qualified symbols on cloned core states and SLink's derivation is compared against them.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_stats_differential.lua": "07716fb2889f0731cff2dadc27e276309ec0c45e27b6609edc4985e0bfc6e0db",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[yellow-lua/tests/test_gen1_storage_persistence.lua]",
+          "assertion_basis": "SRAM bank/checksum and immediate reload persistence on the live Yellow cartridge: canonical SRAM initialization for all 12 current-box values matches the cartridge's EmptyAllSRAMBoxes plus SaveMainData image byte for byte across the whole 32 KB (tails retained), initialization is idempotent, a normal deposit followed by a memorial matches the canonical SaveCurrentBoxData then SavePartyAndDexData image, the canonical loaders and the ChangeBox first-time branch retain the grave, and a real core reset (client.reboot_core) reaches CONTINUE with the initialized bit, the grave, the party and the boxed mon intact.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_persistence.lua": "2fa6182ba280de1dc6db431e3f86c6f16882545428c11a53b701318709854cf1",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        }
+      ],
       "axes": {
         "title": "yellow",
         "party_counts": [
@@ -1375,7 +2442,455 @@
       "id": "memory.yellow.storage",
       "stage": "live-memory",
       "description": "Active box WRAM plus eleven SRAM boxes, invalid current box refusal, recomputed withdrawn stats, initialized bit/checksum before memorial, whole empty reserved box, NACK and canonical initiator deposit undo",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_withdraw_and_explode.py",
+          "source_sha256": "7009732ba7738f9affcd75cdfb2cadf24a91384dafe5d7ba0cfab1fdf0133228",
+          "nodeid": "tests/unit/test_gen1_withdraw_and_explode.py::test_storage_scan_uses_wram_for_current_box_and_sram_for_other_eleven",
+          "assertion_basis": "The real Lua storedBoxKeys scanner sees a valid unique record in each of the twelve SRAM boxes; for every current-box selector on Red, Blue and Yellow it returns exactly the eleven inactive SRAM records plus the distinct active WRAM record, excludes the stale active SRAM copy, and refuses a poisoned inactive source without writing.",
+          "supporting_sources": {
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[yellow-lua/tests/test_gen1_storage_boundaries.lua]",
+          "assertion_basis": "On the live Yellow cartridge, 46 exact writer refusals retain complete WRAM, HRAM, 32 KiB CartRAM and SRAM bank images. Initialized unowned count-zero Box 12 rejects hidden live slots 0/7/19 and dead slots 0/19 before writes; eight first-use cases reject hidden data and partial erasure. Clean zero-filled and the committed fixture's virgin all-FF images both admit first use; a second grave appends only behind the exact prior locally owned record, preserving that record, unused slot 19 and boxes 7–11. Canonical deposit/withdraw inverse controls remain exact across 60 and 18 cases.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_boundaries.lua": "bdddef22d71c0ca367e937b1e6cdc3617e830905e9d223bafbfb8e84f16371b3",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878",
+            "lua/tests/gen1_gatelib.lua": "5489903f786c7f74545f8a97888fec4f476e98914cc60e003e04911e1a27305f"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[yellow-lua/tests/test_gen1_boxroundtrip_gate.lua]",
+          "assertion_basis": "Recomputed withdrawn stats on the live Yellow cartridge: a no-cache retrieval recomputes and appends, the received mon lands behind the untouched original, all 33 boxed bytes and 22 name bytes survive, the level is recomputed instead of replaying a stale BoxLevel, a middle-box removal compacts both records and the parallel names, unavailable canonical evidence NACKs without writes and restored evidence permits retry.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_boxroundtrip_gate.lua": "31da938d2a8fab8b689a74283122deeb51818e65a9ea00e0c1130c9d819b0269",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "bd37cf19b6b5123f692f1620a190ec350797680878a607190ac272459fe1e39e",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_gate[yellow-lua/tests/test_gen1_storage_persistence.lua]",
+          "assertion_basis": "Initialized bit and checksum before memorial on the live Yellow cartridge: protectSramBoxes reproduces the cartridge's EmptyAllSRAMBoxes plus SaveMainData image for every current box, persists the initialization flag and its covering checksum, and the memorial poststate equals the canonical current-box then party/dex save.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_storage_persistence.lua": "2fa6182ba280de1dc6db431e3f86c6f16882545428c11a53b701318709854cf1",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_unsafe_or_invalid_peer_read_never_writes_peer_and_restores_initiator[invalid_box]",
+          "assertion_basis": "An invalid peer current-box selector refuses the peer write and restores the initiator through the owned server storage job. Other refusal and pairing cases are registered separately.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_withdraw_and_explode.py",
+          "source_sha256": "7009732ba7738f9affcd75cdfb2cadf24a91384dafe5d7ba0cfab1fdf0133228",
+          "nodeid": "tests/unit/test_gen1_withdraw_and_explode.py::test_inactive_boxes_do_not_exist_before_first_changebox",
+          "assertion_basis": "Before the cartridge's first ChangeBox, the Lua scanner returns only the active WRAM box despite nonempty stale SRAM bytes.",
+          "supporting_sources": {
+            "lua/memory_gb.lua": "efb5cb17d5455eb8a24fb731dda3dad09bb592a25fdc8cfb4a26ffd03005b6f6"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_unsafe_or_invalid_peer_read_never_writes_peer_and_restores_initiator[battle]",
+          "assertion_basis": "A peer battle context refuses peer storage writes and canonically restores the PC initiator; the owned job and journal remain valid.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_unsafe_or_invalid_peer_read_never_writes_peer_and_restores_initiator[text]",
+          "assertion_basis": "A peer text context refuses peer storage writes and canonically restores the PC initiator; the owned job and journal remain valid.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_cartridge_deposit_refusal_keeps_peer_containers_and_undoes_actor[full_box]",
+          "assertion_basis": "A cartridge full_box refusal preserves the peer containers and undoes the initiator through the owned storage job.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_cartridge_deposit_refusal_keeps_peer_containers_and_undoes_actor[yellow_restriction]",
+          "assertion_basis": "A cartridge yellow_restriction refusal preserves the peer containers and undoes the initiator through the owned storage job.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[last-member-compensation-variants0]",
+          "assertion_basis": "After a verified peer read, the last-member-compensation path on ordered pairing 0 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[last-member-compensation-variants1]",
+          "assertion_basis": "After a verified peer read, the last-member-compensation path on ordered pairing 1 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[last-member-compensation-variants2]",
+          "assertion_basis": "After a verified peer read, the last-member-compensation path on ordered pairing 2 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[paired-deposit-variants0]",
+          "assertion_basis": "After a verified peer read, the paired-deposit path on ordered pairing 0 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[paired-deposit-variants1]",
+          "assertion_basis": "After a verified peer read, the paired-deposit path on ordered pairing 1 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_storage_runtime.py",
+          "source_sha256": "164254ee539e9d6e0e77dfd8210ba9d2de432fe6e409f65fc6231944c90b5f85",
+          "nodeid": "tests/unit/test_gen1_storage_runtime.py::test_observed_deposit_synchronizes_or_canonically_undoes_after_verified_peer_read[paired-deposit-variants2]",
+          "assertion_basis": "After a verified peer read, the paired-deposit path on ordered pairing 2 either synchronizes the physical deposit or canonically undoes it with durable job receipts.",
+          "supporting_sources": {
+            "server/gen1_storage_runtime.py": "56df802dae0e0fb563ff9036bf554af468d4352809262698599d387cd89a16c3",
+            "server/gen1_storage_policy.py": "e092a294628fc6713aced2b6b04744bd8c915cef8e9d31430be6638f3107132a",
+            "server/gen1_storage.py": "f9a1401ea69a2d86809b598b3737ab51febdabef5e84a3b344f08c11386f3565"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[live_record-yellow]",
+          "assertion_basis": "On yellow, a first-use unowned Box 12 with a hidden live_record refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[dead_record-yellow]",
+          "assertion_basis": "On yellow, a first-use unowned Box 12 with a hidden dead_record refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[ot_name-yellow]",
+          "assertion_basis": "On yellow, a first-use unowned Box 12 with a hidden ot_name refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[species_list-yellow]",
+          "assertion_basis": "On yellow, a first-use unowned Box 12 with a hidden species_list refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[mixed_zero-yellow]",
+          "assertion_basis": "On yellow, a partially erased first-use Box 12 (mixed_zero) refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write[mixed_ff-yellow]",
+          "assertion_basis": "On yellow, a partially erased first-use Box 12 (mixed_ff) refuses in both server policy and append before any detached field or CartRAM byte changes.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_virgin_erased_ff_box12_is_a_valid_first_use_memorial[yellow]",
+          "assertion_basis": "On yellow, the exact virgin all-FF Box 12 is admitted by shared server policy and grave append as a first-use memorial, with the initialized bit persisted.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[0-yellow]",
+          "assertion_basis": "On yellow with ordinary current-box selector 0, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[1-yellow]",
+          "assertion_basis": "On yellow with ordinary current-box selector 1, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[2-yellow]",
+          "assertion_basis": "On yellow with ordinary current-box selector 2, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[3-yellow]",
+          "assertion_basis": "On yellow with ordinary current-box selector 3, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[4-yellow]",
+          "assertion_basis": "On yellow with ordinary current-box selector 4, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[5-yellow]",
+          "assertion_basis": "On yellow with ordinary current-box selector 5, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[6-yellow]",
+          "assertion_basis": "On yellow with ordinary current-box selector 6, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[7-yellow]",
+          "assertion_basis": "On yellow with ordinary current-box selector 7, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[8-yellow]",
+          "assertion_basis": "On yellow with ordinary current-box selector 8, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[9-yellow]",
+          "assertion_basis": "On yellow with ordinary current-box selector 9, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_every_uninitialized_ordinary_current_box_checks_unowned_box12[10-yellow]",
+          "assertion_basis": "On yellow with ordinary current-box selector 10, a hidden dead Box 12 record is rejected by both the shared storage policy and memorial append without mutating the source point.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_initialized_unowned_dead_record_refuses_policy_and_direct_append_without_writes[0-yellow]",
+          "assertion_basis": "On yellow, initialized count-zero Box 12 with an unowned dead record hidden at slot 0 is refused by policy and direct append before any detached field or CartRAM write.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_initialized_unowned_dead_record_refuses_policy_and_direct_append_without_writes[19-yellow]",
+          "assertion_basis": "On yellow, initialized count-zero Box 12 with an unowned dead record hidden at slot 19 is refused by policy and direct append before any detached field or CartRAM write.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_memorial_policy.py",
+          "source_sha256": "44ac74734505fc4a1107c9d5210dc3e5ccd710cbcce98de30642ea4af3ccc44e",
+          "nodeid": "tests/unit/test_gen1_memorial_policy.py::test_active_box12_before_initialization_refuses_policy_and_append[yellow]",
+          "assertion_basis": "On yellow, active Box 12 with the changed-boxes bit clear is refused by policy and append; this impossible state cannot grant a first-use grave write.",
+          "supporting_sources": {
+            "server/gen1_memorial_policy.py": "3d0dd34c54db926e096d4a47392ee97c712140482be7742cdda5759d445c42fb",
+            "server/gen1_grave_storage.py": "38781f0b13af6ccbd41f3bfdaf240bb3b744db1e7fc0620288e01182324fad43",
+            "server/gen1_memorial.py": "1e6e6344b555b563a1c7ce75a9550cb1f942eac52911df4920ccc0a2b1b9649f"
+          }
+        }
+      ],
       "axes": {
         "title": "yellow"
       }
@@ -47591,14 +49106,14 @@
     {
       "id": "panel.maps-pokedex-native-component",
       "stage": "trade-receptionist",
-      "description": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pok\u00e9dex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
+      "description": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pokédex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
       "proofs": [
         {
           "check": "live-gates",
           "source": "tests/live/test_gen1_companion.py",
           "nodeid": "tests/live/test_gen1_companion.py::test_panel_protocol_across_maps_and_pokedex_states[False-ViridianPokecenter-red]",
           "source_sha256": "ec387330a2832102f0f678e0ee505e231919db39d9e4e342fb09b0897e9ccc25",
-          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pok\u00e9dex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
+          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pokédex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
           "supporting_sources": {
             "lua/tests/test_gen1_companion_panel_gate.lua": "ef532bf70d83681b1db1ff4d62303b899a740c294a24f4e225377b8a593565f5",
             "tools/gen1_panel_fixture.py": "d6e8fafd6ee9f44255abec0c12d6a36b8aeb862ba390e01794fb62075714e73d",
@@ -47613,7 +49128,7 @@
           "source": "tests/live/test_gen1_companion.py",
           "nodeid": "tests/live/test_gen1_companion.py::test_panel_protocol_across_maps_and_pokedex_states[False-ViridianPokecenter-blue]",
           "source_sha256": "ec387330a2832102f0f678e0ee505e231919db39d9e4e342fb09b0897e9ccc25",
-          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pok\u00e9dex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
+          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pokédex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
           "supporting_sources": {
             "lua/tests/test_gen1_companion_panel_gate.lua": "ef532bf70d83681b1db1ff4d62303b899a740c294a24f4e225377b8a593565f5",
             "tools/gen1_panel_fixture.py": "d6e8fafd6ee9f44255abec0c12d6a36b8aeb862ba390e01794fb62075714e73d",
@@ -47628,7 +49143,7 @@
           "source": "tests/live/test_gen1_companion.py",
           "nodeid": "tests/live/test_gen1_companion.py::test_panel_protocol_across_maps_and_pokedex_states[False-IndigoPlateauLobby-red]",
           "source_sha256": "ec387330a2832102f0f678e0ee505e231919db39d9e4e342fb09b0897e9ccc25",
-          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pok\u00e9dex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
+          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pokédex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
           "supporting_sources": {
             "lua/tests/test_gen1_companion_panel_gate.lua": "ef532bf70d83681b1db1ff4d62303b899a740c294a24f4e225377b8a593565f5",
             "tools/gen1_panel_fixture.py": "d6e8fafd6ee9f44255abec0c12d6a36b8aeb862ba390e01794fb62075714e73d",
@@ -47643,7 +49158,7 @@
           "source": "tests/live/test_gen1_companion.py",
           "nodeid": "tests/live/test_gen1_companion.py::test_panel_protocol_across_maps_and_pokedex_states[False-IndigoPlateauLobby-blue]",
           "source_sha256": "ec387330a2832102f0f678e0ee505e231919db39d9e4e342fb09b0897e9ccc25",
-          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pok\u00e9dex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
+          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pokédex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
           "supporting_sources": {
             "lua/tests/test_gen1_companion_panel_gate.lua": "ef532bf70d83681b1db1ff4d62303b899a740c294a24f4e225377b8a593565f5",
             "tools/gen1_panel_fixture.py": "d6e8fafd6ee9f44255abec0c12d6a36b8aeb862ba390e01794fb62075714e73d",
@@ -47658,7 +49173,7 @@
           "source": "tests/live/test_gen1_companion.py",
           "nodeid": "tests/live/test_gen1_companion.py::test_panel_protocol_across_maps_and_pokedex_states[False-SafariZoneCenter-red]",
           "source_sha256": "ec387330a2832102f0f678e0ee505e231919db39d9e4e342fb09b0897e9ccc25",
-          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pok\u00e9dex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
+          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pokédex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
           "supporting_sources": {
             "lua/tests/test_gen1_companion_panel_gate.lua": "ef532bf70d83681b1db1ff4d62303b899a740c294a24f4e225377b8a593565f5",
             "tools/gen1_panel_fixture.py": "d6e8fafd6ee9f44255abec0c12d6a36b8aeb862ba390e01794fb62075714e73d",
@@ -47673,7 +49188,7 @@
           "source": "tests/live/test_gen1_companion.py",
           "nodeid": "tests/live/test_gen1_companion.py::test_panel_protocol_across_maps_and_pokedex_states[False-SafariZoneCenter-blue]",
           "source_sha256": "ec387330a2832102f0f678e0ee505e231919db39d9e4e342fb09b0897e9ccc25",
-          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pok\u00e9dex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
+          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pokédex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
           "supporting_sources": {
             "lua/tests/test_gen1_companion_panel_gate.lua": "ef532bf70d83681b1db1ff4d62303b899a740c294a24f4e225377b8a593565f5",
             "tools/gen1_panel_fixture.py": "d6e8fafd6ee9f44255abec0c12d6a36b8aeb862ba390e01794fb62075714e73d",
@@ -47688,7 +49203,7 @@
           "source": "tests/live/test_gen1_companion.py",
           "nodeid": "tests/live/test_gen1_companion.py::test_panel_protocol_across_maps_and_pokedex_states[True-ViridianPokecenter-red]",
           "source_sha256": "ec387330a2832102f0f678e0ee505e231919db39d9e4e342fb09b0897e9ccc25",
-          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pok\u00e9dex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
+          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pokédex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
           "supporting_sources": {
             "lua/tests/test_gen1_companion_panel_gate.lua": "ef532bf70d83681b1db1ff4d62303b899a740c294a24f4e225377b8a593565f5",
             "tools/gen1_panel_fixture.py": "d6e8fafd6ee9f44255abec0c12d6a36b8aeb862ba390e01794fb62075714e73d",
@@ -47703,7 +49218,7 @@
           "source": "tests/live/test_gen1_companion.py",
           "nodeid": "tests/live/test_gen1_companion.py::test_panel_protocol_across_maps_and_pokedex_states[True-ViridianPokecenter-blue]",
           "source_sha256": "ec387330a2832102f0f678e0ee505e231919db39d9e4e342fb09b0897e9ccc25",
-          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pok\u00e9dex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
+          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pokédex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
           "supporting_sources": {
             "lua/tests/test_gen1_companion_panel_gate.lua": "ef532bf70d83681b1db1ff4d62303b899a740c294a24f4e225377b8a593565f5",
             "tools/gen1_panel_fixture.py": "d6e8fafd6ee9f44255abec0c12d6a36b8aeb862ba390e01794fb62075714e73d",
@@ -47718,7 +49233,7 @@
           "source": "tests/live/test_gen1_companion.py",
           "nodeid": "tests/live/test_gen1_companion.py::test_panel_protocol_across_maps_and_pokedex_states[True-IndigoPlateauLobby-red]",
           "source_sha256": "ec387330a2832102f0f678e0ee505e231919db39d9e4e342fb09b0897e9ccc25",
-          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pok\u00e9dex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
+          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pokédex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
           "supporting_sources": {
             "lua/tests/test_gen1_companion_panel_gate.lua": "ef532bf70d83681b1db1ff4d62303b899a740c294a24f4e225377b8a593565f5",
             "tools/gen1_panel_fixture.py": "d6e8fafd6ee9f44255abec0c12d6a36b8aeb862ba390e01794fb62075714e73d",
@@ -47733,7 +49248,7 @@
           "source": "tests/live/test_gen1_companion.py",
           "nodeid": "tests/live/test_gen1_companion.py::test_panel_protocol_across_maps_and_pokedex_states[True-IndigoPlateauLobby-blue]",
           "source_sha256": "ec387330a2832102f0f678e0ee505e231919db39d9e4e342fb09b0897e9ccc25",
-          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pok\u00e9dex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
+          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pokédex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
           "supporting_sources": {
             "lua/tests/test_gen1_companion_panel_gate.lua": "ef532bf70d83681b1db1ff4d62303b899a740c294a24f4e225377b8a593565f5",
             "tools/gen1_panel_fixture.py": "d6e8fafd6ee9f44255abec0c12d6a36b8aeb862ba390e01794fb62075714e73d",
@@ -47748,7 +49263,7 @@
           "source": "tests/live/test_gen1_companion.py",
           "nodeid": "tests/live/test_gen1_companion.py::test_panel_protocol_across_maps_and_pokedex_states[True-SafariZoneCenter-red]",
           "source_sha256": "ec387330a2832102f0f678e0ee505e231919db39d9e4e342fb09b0897e9ccc25",
-          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pok\u00e9dex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
+          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pokédex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
           "supporting_sources": {
             "lua/tests/test_gen1_companion_panel_gate.lua": "ef532bf70d83681b1db1ff4d62303b899a740c294a24f4e225377b8a593565f5",
             "tools/gen1_panel_fixture.py": "d6e8fafd6ee9f44255abec0c12d6a36b8aeb862ba390e01794fb62075714e73d",
@@ -47763,7 +49278,7 @@
           "source": "tests/live/test_gen1_companion.py",
           "nodeid": "tests/live/test_gen1_companion.py::test_panel_protocol_across_maps_and_pokedex_states[True-SafariZoneCenter-blue]",
           "source_sha256": "ec387330a2832102f0f678e0ee505e231919db39d9e4e342fb09b0897e9ccc25",
-          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pok\u00e9dex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
+          "assertion_basis": "144 actual native panel scenarios across R/B, Viridian/Indigo/Safari and both Pokédex states. Covers ABI generation/BG/reveal/ACK/close faults. Host reset/rebind remains outside this component.",
           "supporting_sources": {
             "lua/tests/test_gen1_companion_panel_gate.lua": "ef532bf70d83681b1db1ff4d62303b899a740c294a24f4e225377b8a593565f5",
             "tools/gen1_panel_fixture.py": "d6e8fafd6ee9f44255abec0c12d6a36b8aeb862ba390e01794fb62075714e73d",

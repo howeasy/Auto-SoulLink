@@ -44,6 +44,10 @@ GATES = {
     # all active records, names, lists and dex bytes across every count/source slot.
     "lua/tests/test_gen1_storage_differential.lua": "town",
     "lua/tests/test_gen1_storage_persistence.lua": "town",
+    # The edges of the same geometry: every writer refusal (last member, full box, invalid
+    # slot, full party, invalid current box, hidden live record in the memorial box) leaves
+    # WRAM/HRAM/SRAM byte-identical, and the initiator undo equals the cartridge inverse.
+    "lua/tests/test_gen1_storage_boundaries.lua": "town",
     "lua/tests/test_gen1_stats_differential.lua": "town",
     "lua/tests/test_gen1_memory_gate.lua": "town",
     "lua/tests/test_gen1_writes_gate.lua": "town",
