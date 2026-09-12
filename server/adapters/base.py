@@ -93,11 +93,11 @@ class GameRulesAdapter(ABC):
         return False
 
     def area_policy(self) -> str | None:
-        """A token naming how this adapter classifies areas, written into every saved state
-        document. A document that carries a different token (or none) was written under an
-        older classification and is passed through `persisted_area` exactly once, on the
-        load that first sees it; a document carrying the current token is loaded as is.
-        None means the adapter has never reclassified an area."""
+        """A token naming how this adapter classifies areas, stamped into the saved state
+        document only when not None (so adapters that never reclassified keep their exact
+        document shape). A document with NO token is the known legacy shape and is passed
+        through `persisted_area` exactly once, on the load that first sees it; the current
+        token loads as is; any other token is refused as unknown to this build."""
         return None
 
     def persisted_area(self, area_id: str) -> str:
