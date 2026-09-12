@@ -37,18 +37,23 @@ The first version of this gate initialized SRAM before testing hidden Box 12 rec
 the actual first-use branch untested: both the Lua memorial writer and the Python grave append
 treated a zero count as empty even when a live/dead record or name tail was hidden beyond it.
 The corrected writers now require the entire unowned, pre-initialization Box 12 image to be
-empty **before any initialization or grave write**. Count must be zero; the pre-init species
-terminator may be zero or `FF` (the cartridge's init installs `FF`); every remaining byte must
-be zero or `FF`. An impossible active-Box-12/uninitialized combination is refused. The already
-initialized dead-tail rule is unchanged.
+empty **before any initialization or grave write**. Read-only inspection of all three committed
+town SaveRAM fixtures found bit 7 clear and an exact virgin all-`FF` Box 12, including its count;
+the initial correction would therefore have wrongly blocked a normal first memorial. The final
+predicate admits only either that **exact all-`FF` erased image**, or a zero-filled image with
+`00/00` or `00/FF` header. It rejects mixed partial erasure and every nonempty inactive tail.
+The already initialized dead-tail rule is unchanged. An active-Box-12/uninitialized state is not
+a natural cartridge state; the separate active-box policy path is not qualified by this correction.
 
-The revised live gate adds six first-use refusals per title: hidden live records at slots 0, 7,
-and 19, a hidden dead record at 19, an unowned nickname tail, and an unowned species-list tail.
+The revised live gate adds eight first-use refusals per title: hidden live records at slots 0, 7,
+and 19, a hidden dead record at 19, an unowned nickname tail, an unowned species-list tail, and
+one partial-erasure mutation against each admitted empty shape.
 Every refusal preserves whole WRAM, HRAM, 32 KiB CartRAM and the bank register. A genuinely
-empty first-use image succeeds and persists the initialized bit. The gate now exercises **42
-exact refusals per title**. The Python policy and append paths have a separate 12-case
-Red/Blue/Yellow matrix that asserts the detached fields and CartRAM are unchanged before a
-refusal. Six initially failing executor tests were stale `operation_held` fixtures; two positive
+empty first-use image and the actual fixture's virgin erased-`FF` Box 12 both succeed and persist
+the initialized bit. The gate now exercises **44 exact refusals per title**. The Python policy and
+append paths have a separate 18-case Red/Blue/Yellow matrix that asserts the detached fields
+and CartRAM are unchanged before a refusal. Six initially failing executor tests were stale
+`operation_held` fixtures; two positive
 storage-runtime scenarios had arbitrary synthetic pre-ChangeBox SRAM and now explicitly seed a
 clean unowned Box 12, rather than weakening production admission.
 
@@ -61,8 +66,8 @@ pytest nodes are registered on the three storage rows; no manifest row was remov
 
 Corrected evidence: `SLINK_LIVE=1 python -m pytest tests/live/test_gen1_gates.py -q -p no:randomly
 -k storage_boundaries --junitxml=.cache/memory_boundaries_corrected_live.xml` passed Red, Blue,
-and Yellow (3 passed, 0 skipped, 56 other gates deselected, 18.20 s), with zero gate checks
-failed. The affected non-live sweep passed 254 tests; `tools/lua_syntax_check.py` parsed 302
+and Yellow (3 passed, 0 skipped, 56 other gates deselected, 18.19 s), with zero gate checks
+failed. The affected non-live sweep passed 266 tests; `tools/lua_syntax_check.py` parsed 302
 files. The full 15-gate matrix below predates the correction and is not claimed as a post-fix
 rerun.
 

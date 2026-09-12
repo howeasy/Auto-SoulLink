@@ -314,6 +314,14 @@ local function memorial_state(initialized)
             -- A genuinely empty pre-ChangeBox image. Its zero header is legal:
             -- EmptyAllSRAMBoxes will install the FF terminator during init.
             for i=0,boxlen-1 do write(memoff+i,0,"CartRAM") end
+        elseif initialized == "erased" then
+            -- The committed town battery saves have never changed boxes and
+            -- carry virgin erased FF bytes, including an FF count. No test
+            -- write is made to Box 12 on this path before the production call.
+            assert(read(address("wCurrentBoxNum"))<0x80,"fixture already initialized boxes")
+            for i=0,boxlen-1 do
+                assert(read(memoff+i,"CartRAM")==0xFF,"fixture Box 12 is not virgin erased")
+            end
         else
             local did,why=M.protectSramBoxes()    -- first-time init, as the cartridge would
             assert(did and not why,"memorial geometry init refused: "..tostring(why))
@@ -362,12 +370,27 @@ local function memorial_state(initialized)
     before=image();r,e=M.depositMemorialMon(1)
     first_use_ok=refuses("first-use memorial refuses unowned species-list tail",r,e,
         "unowned memorial box is not empty before initialization",before) and first_use_ok
-    t.check("whole pre-init reserved image refuses all hidden record/name/list content",first_use_ok)
+    memorial_state(false)
+    write(memoff+100,0xFF,"CartRAM")
+    before=image();r,e=M.depositMemorialMon(1)
+    first_use_ok=refuses("first-use memorial refuses partially erased zero image",r,e,
+        "unowned memorial box is not empty before initialization",before) and first_use_ok
+    memorial_state("erased")
+    write(memoff+100,0,"CartRAM")
+    before=image();r,e=M.depositMemorialMon(1)
+    first_use_ok=refuses("first-use memorial refuses partially zeroed erased image",r,e,
+        "unowned memorial box is not empty before initialization",before) and first_use_ok
+    t.check("whole pre-init reserved image refuses hidden data and partial erasure",first_use_ok)
     memorial_state(false)
     local first,first_error=M.depositMemorialMon(1)
     t.check("genuinely empty first-use memorial succeeds and persists initialized bit",
         first==true and first_error==nil and read(memoff,"CartRAM")==1
             and read(address("wCurrentBoxNum"))>=0x80,tostring(first_error))
+    memorial_state("erased")
+    local erased,erased_error=M.depositMemorialMon(1)
+    t.check("virgin erased-FF cartridge Box 12 admits the first memorial without a setup write",
+        erased==true and erased_error==nil and read(memoff,"CartRAM")==1
+            and read(address("wCurrentBoxNum"))>=0x80,tostring(erased_error))
     memorial_state()
     hidden_record(19,0)                                     -- dead tail record, legal to ignore
     M._memorial_reservations=nil
@@ -399,5 +422,5 @@ end)
 memorysavestate.loadcorestate(boot)
 memorysavestate.removestate(boot)
 t.check("boundary harness completed",ok,tostring(err))
-t.check("all 42 refusals were exercised",refusals==42,"refusals="..refusals)
+t.check("all 44 refusals were exercised",refusals==44,"refusals="..refusals)
 t.finish("storage boundaries")

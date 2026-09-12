@@ -68,11 +68,19 @@ def grave_digest(point):
 
 def entirely_empty(raw, *, before_init=False):
     """A zero count alone cannot reserve stale or hidden monster/name bytes."""
+    if before_init:
+        return (
+            isinstance(raw, bytes)
+            and len(raw) == BOX_SIZE
+            and (
+                raw == b"\xff" * BOX_SIZE
+                or (raw[:2] in (b"\0\0", b"\0\xff") and raw[2:] == bytes(BOX_SIZE - 2))
+            )
+        )
     return (
         isinstance(raw, bytes)
         and len(raw) == BOX_SIZE
-        and raw[0] == 0
-        and (raw[1] in (0, 255) if before_init else raw[1] == 255)
+        and raw[:2] == b"\0\xff"
         and all(value in (0, 255) for value in raw[2:])
     )
 
@@ -102,8 +110,6 @@ def storage_policy(point, *, reserved_digest=None):
     The prepared payload and exact file receipt durably retain all archive bytes.
     """
     active, initialized = current_box(point)
-    if active == GRAVE_BOX and not initialized:
-        raise JournalError("active memorial box cannot precede box initialization")
     if reserved_digest is not None and reserved_digest != grave_digest(point):
         raise JournalError("memorial reservation changed")
     raw = box_image(point, GRAVE_BOX) if initialized or active == GRAVE_BOX else None
