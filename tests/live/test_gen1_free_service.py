@@ -34,9 +34,12 @@ from tools.verify_canonical_sources import verify
 
 ROOT = Path(__file__).resolve().parents[2]
 GATE = "test_gen1_free_service_gate"
-# Production cadence: a ten-second 1x window and the same wall duration at 3x.
-PHASES = [{"name": "one_x", "speed": 100, "frames": 600},
-          {"name": "three_x", "speed": 300, "frames": 1800}]
+# Active bytes change twice in EVERY measured 600-frame window; quiet controls
+# separately prove that the 30-frame check itself adds no publication or backlog.
+PHASES = [{"name": "one_x", "speed": 100, "frames": 600, "active": True},
+          {"name": "three_x", "speed": 300, "frames": 1800, "active": True},
+          {"name": "one_x_quiet", "speed": 100, "frames": 600, "active": False},
+          {"name": "three_x_quiet", "speed": 300, "frames": 600, "active": False}]
 TARGET_FPS = 59.727500569606
 MIN_FRACTION = 0.99
 # The credit-loop run behind ORDINARY_FRAME_TURNOVER_PROFILE.md (refresh 2026-09-10).
@@ -258,11 +261,18 @@ def run_free_pair(variants):
                 assert [ph["name"] for ph in phases] == [ph["name"] for ph in PHASES]
                 for ph, planned in zip(phases, PHASES, strict=True):
                     assert ph["frames"] >= planned["frames"] and ph["seconds"] > 0
-                    assert ph["active"]["injected"] and ph["active"]["restored"]
-                    assert ph["active"]["original"] != ph["active"]["replacement"]
+                    assert ph["active"] is planned["active"]
+                    assert len(ph["windows"]) == planned["frames"] // 600
+                    assert len(ph["probes"]) == (len(ph["windows"]) if planned["active"] else 0)
+                    for window, probe in zip(ph["windows"], ph["probes"], strict=False):
+                        assert probe["injected"] and probe["restored"]
+                        assert probe["original"] != probe["replacement"]
+                        assert (window["first_frame"] <= probe["injected_frame"]
+                                < probe["restored_frame"] <= window["last_frame"])
                     target = TARGET_FPS * planned["speed"] / 100
                     assert ph["fps"] >= target * MIN_FRACTION, ph
                     assert ph["windows"] and all(window["fps"] >= target * MIN_FRACTION for window in ph["windows"]), ph
+                    assert all(window["pending_events"] <= 1 for window in ph["windows"]), ph
                     assert ph["windows"][-1]["fps"] >= ph["windows"][0]["fps"] * MIN_FRACTION, ph
                 labels = {Path(shot).name.split("-", 1)[1] for shot in result["screenshots"]}
                 assert labels == {"intro.png", "held-checkpoint.png", "free-start.png"}
@@ -293,7 +303,10 @@ def run_free_pair(variants):
                 measured_publications = sum(ph["diagnostics"]["after"]["inventory_publications"]
                                             - ph["diagnostics"]["before"]["inventory_publications"] for ph in phases)
                 assert measured_checks == sum(ph["frames"] for ph in PHASES) // 30
-                assert measured_publications >= 4
+                assert measured_publications == 2 * sum(ph["frames"] // 600 for ph in PHASES if ph["active"])
+                for ph in phases:
+                    publications = ph["diagnostics"]["after"]["inventory_publications"] - ph["diagnostics"]["before"]["inventory_publications"]
+                    assert publications == (2 * len(ph["windows"]) if ph["active"] else 0)
                 dirty = result["dirty_probe"]
                 assert dirty["schema"] == "rby-inventory-dirty-negative-control-v1"
                 assert dirty["phase"] == "restored" and dirty["after"] - dirty["before"] == 2
@@ -352,6 +365,26 @@ def run_free_pair(variants):
                 assert len(observations) == summary["players"][p]["observation_events"]
                 assert all(row[3]["ack"] == "ACK" and row[3]["ordinary_execution"] is False for row in observations)
                 assert not any(row[2].get("event") in ("frame_grant", "frame_complete", "frame_enrollment") for row in rows if row[0] == p)
+                point_windows = {}
+                for phase in ready[p]["phases"]:
+                    window_sequences = []
+                    for index, window in enumerate(phase["windows"]):
+                        points = [row[2] for row in observations
+                                  if window["first_frame"] < row[2]["frame"] <= window["last_frame"]
+                                  and row[2]["inventory"] is not None]
+                        if phase["active"]:
+                            assert len(points) == 2, (p, phase["name"], index, points)
+                            probe = phase["probes"][index]
+                            assert (probe["injected_frame"] < points[0]["frame"] <= probe["restored_frame"]
+                                    < points[1]["frame"] <= window["last_frame"])
+                            observed = [int(point["inventory"]["source"]["fields"]["party"][806:808], 16)
+                                        for point in points]
+                            assert observed == [probe["replacement"], probe["original"]], (p, phase["name"], observed)
+                        else:
+                            assert not points, (p, phase["name"], index, points)
+                        window_sequences.append([point["sequence"] for point in points])
+                    point_windows[phase["name"]] = window_sequences
+                summary["players"][p]["point_windows"] = point_windows
                 checkpoints = [row[2]["inventory"] for row in observations if row[2]["inventory"] is not None]
                 kinds = [item["kind"] for row in observations for item in row[2]["acquisitions"]]
                 deferred = sum(1 for row in observations if row[3].get("inventory_deferred"))
