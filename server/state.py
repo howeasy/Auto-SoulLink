@@ -801,7 +801,7 @@ class SoulLinkState:
             enc_a = MonInfo(**ed["encounter_a"]) if ed.get("encounter_a") else None
             enc_b = MonInfo(**ed["encounter_b"]) if ed.get("encounter_b") else None
             entry = LinkEntry(
-                area_id=ed["area_id"],
+                area_id=self.adapter.persisted_area(ed["area_id"]),
                 a=a, b=b,
                 status=LinkStatus(ed["status"]),
                 encounter_a=enc_a,
@@ -814,9 +814,9 @@ class SoulLinkState:
             self.links.append(entry)
             self._index_entry(entry)
         for area_id, status_str in data.get("area_states", {}).items():
-            self.area_states[area_id] = AreaStatus(status_str)
+            self.area_states[self.adapter.persisted_area(area_id)] = AreaStatus(status_str)
         for area_id, players in data.get("pending_captures", {}).items():
-            self.pending_captures[area_id] = {
+            self.pending_captures[self.adapter.persisted_area(area_id)] = {
                 pid: MonInfo(**mon_data)
                 for pid, mon_data in players.items()
             }

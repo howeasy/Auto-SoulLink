@@ -5129,7 +5129,8 @@
         "tests/unit/test_manager_stream_pin.py::test_unpinning_restores_newest_running_selection",
         "tests/unit/test_manager_stream_pin.py::test_with_no_running_run_the_overlay_explains_and_status_is_empty",
         "tests/unit/test_manager_stream_pin.py::test_without_a_pin_the_newest_running_run_is_the_stream_target",
-        "tests/unit/test_manager_stream_pin.py::test_a_stopped_or_dead_run_cannot_be_pinned_and_the_pin_is_kept"
+        "tests/unit/test_manager_stream_pin.py::test_a_stopped_or_dead_run_cannot_be_pinned_and_the_pin_is_kept",
+        "tests/unit/test_gen1_gift_areas.py::test_records_saved_under_a_reclassified_gift_area_keep_their_gift_meaning_on_reload"
       ]
     },
     {
@@ -5475,7 +5476,10 @@
         "tests/unit/test_gen1_generated_maps_fishing.py::test_red_blue_super_rod_groups_match_the_asm",
         "tests/unit/test_gen1_generated_maps_fishing.py::test_rendered_widget_carries_the_rod_icon",
         "tests/unit/test_gen1_generated_maps_fishing.py::test_yellow_super_rod_rows_match_the_asm",
-        "tests/unit/test_gen1_generated_maps_fishing.py::test_super_rod_weights_are_the_titles_own_and_the_pin_bites"
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_super_rod_weights_are_the_titles_own_and_the_pin_bites",
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_every_fishing_map_keeps_its_own_labelled_super_rod_row[red]",
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_every_fishing_map_keeps_its_own_labelled_super_rod_row[blue]",
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_every_fishing_map_keeps_its_own_labelled_super_rod_row[yellow]"
       ]
     },
     {

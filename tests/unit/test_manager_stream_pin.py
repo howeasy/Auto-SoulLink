@@ -12,6 +12,7 @@ abilities) and the patcher's START-panel feature follows the target's `capabilit
 """
 
 import json
+
 import pytest
 import pytest_asyncio
 from aiohttp import web
@@ -194,7 +195,8 @@ async def test_a_pinned_run_that_dies_falls_back_and_is_recorded_as_stopped(mana
     status = await (await manager_client.get("/api/stream/pin")).json()
     assert status == {"pinned": None, "active_run_id": "new", "active_run_name": "run new"}
     assert await (await manager_client.get("/stream/links")).text() == "overlay:new:/stream/links"
-    registry = json.loads(open(manager.REGISTRY_PATH, encoding="utf-8").read())
+    with open(manager.REGISTRY_PATH, encoding="utf-8") as f:
+        registry = json.load(f)
     by_id = {r["run_id"]: r for r in registry["runs"]}
     assert by_id["old"]["status"] == "stopped" and by_id["old"]["pid"] is None
 

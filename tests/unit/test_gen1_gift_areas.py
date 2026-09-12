@@ -195,3 +195,40 @@ def test_no_lua_gift_area_is_a_wild_encounter_area():
         assert not overlap, (
             f"{variant}: {sorted(overlap)} are wild encounter areas but the Lua gift set "
             f"suppresses no_catch there, so they can never dead-zone")
+
+
+# ── persisted state across the 2026-09-12 reclassification ──────────────────────────────
+
+def test_records_saved_under_a_reclassified_gift_area_keep_their_gift_meaning_on_reload(tmp_path):
+    """pallet_town, celadon_city and cinnabar_island were gift areas and are fishing areas
+    now. Everything a run persisted under those ids was gift-classified (that was the
+    defect), so a reload moves them into the gift namespace: the fossil pair stays a gift
+    pair, a pending fossil cannot pair with a rod catch, and the town is free to become a
+    real encounter area for the rest of the run."""
+    from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo, SoulLinkState
+    state = SoulLinkState(data_dir=str(tmp_path), adapter=Gen1Adapter())
+    fossil = LinkEntry(area_id="cinnabar_island",
+                       a=MonInfo(key="AABB:30B8:AA", level=30, species=138),
+                       b=MonInfo(key="CCDD:7B0B:AB", level=30, species=140),
+                       status=LinkStatus.ALIVE)
+    state.links.append(fossil)
+    state._index_entry(fossil)
+    state.area_states["cinnabar_island"] = AreaStatus.LINKED
+    state.area_states["pallet_town"] = AreaStatus.PENDING_B
+    state.pending_captures["pallet_town"] = {"a": MonInfo(key="EEFF:30B8:99", level=5, species=1)}
+    state.area_states["route_1"] = AreaStatus.LINKED
+    state._save()
+
+    reloaded = SoulLinkState.load(data_dir=str(tmp_path), adapter=Gen1Adapter())
+    assert [link.area_id for link in reloaded.links] == ["gift_cinnabar_island"]
+    assert reloaded.area_states == {"gift_cinnabar_island": AreaStatus.LINKED,
+                                    "gift_pallet_town": AreaStatus.PENDING_B,
+                                    "route_1": AreaStatus.LINKED}
+    assert set(reloaded.pending_captures) == {"gift_pallet_town"}
+    assert reloaded.adapter.is_gift_area("gift_cinnabar_island")
+    assert not reloaded.adapter.is_gift_area("cinnabar_island")
+    # A rod catch in Cinnabar now opens the real area instead of touching the fossil pair.
+    reloaded.pokeballs_obtained = {"a": True, "b": True}
+    reloaded.handle_event("b", {"event": "area_enter", "area_id": "cinnabar_island"})
+    assert reloaded.area_states["cinnabar_island"] == AreaStatus.PENDING_A
+    assert reloaded.area_states["gift_cinnabar_island"] == AreaStatus.LINKED

@@ -392,6 +392,17 @@ class Gen1Adapter(GameAdapter):
     def is_gift_area(self, area_id: str) -> bool:
         return area_id in _GIFT_AREAS or area_id.startswith("gift_")
 
+    # Gift areas until 2026-09-12 that are fishing areas in every title. Everything a run
+    # persisted under these ids was classified as a gift (that was the defect), so on reload
+    # they move to the gift namespace and keep exactly the meaning they had; new records use
+    # the bare id for rod captures and gift_<id> for grants, as every other wild area does.
+    _RECLASSIFIED_GIFT_AREAS = frozenset({"pallet_town", "celadon_city", "cinnabar_island"})
+
+    def persisted_area(self, area_id: str) -> str:
+        if area_id in self._RECLASSIFIED_GIFT_AREAS:
+            return f"gift_{area_id}"
+        return area_id
+
     def bind_peer(self, rom_type: str) -> None:
         """Declare the partner cartridge after construction (the restore path learns the
         pair from the runtime contract, after the rule state has been rebuilt)."""

@@ -147,11 +147,13 @@ def check(area_map: dict, repos: dict[str, str]) -> tuple[list[str], list[str]]:
         for name in grass_water:
             if str(consts.index(name)) not in area_map:
                 failures.append(f"{title}: {name} ({consts.index(name)}) has a wild table but no area")
-        unmapped_rod = [n for n in super_rod if str(consts.index(n)) not in area_map]
+        # A Super Rod table is an encounter table: a fishable map without a rule area is a
+        # failure, the same as a grass map without one (a catch there would be untracked).
+        for name in super_rod:
+            if str(consts.index(name)) not in area_map:
+                failures.append(f"{title}: {name} ({consts.index(name)}) has a super rod table but no area")
         notes.append(f"{title}: {len(grass_water)} grass/water maps and {len(super_rod)} "
-                     f"super rod maps carry wild data; super-rod-only maps without an area "
-                     f"(fishing there is not shown): "
-                     + (", ".join(f"{n}({consts.index(n)})" for n in unmapped_rod) or "none"))
+                     f"super rod maps carry wild data, every one mapped to an area")
 
     # Yellow-only ids, stated explicitly: pokeyellow appends SUMMER_BEACH_HOUSE and renames
     # one house; the ids the two decomps share must agree name for name.

@@ -92,6 +92,16 @@ class GameRulesAdapter(ABC):
         """
         return False
 
+    def persisted_area(self, area_id: str) -> str:
+        """The area id a PERSISTED record should carry today.
+
+        An adapter that reclassifies an area (a former gift area that turns out to hold wild
+        encounters) maps records saved under the old classification to the id that keeps
+        their old meaning, so a reload never changes what an existing link, pending capture
+        or area state was. Identity by default.
+        """
+        return area_id
+
     def gift_link_area(self, area_id: str) -> str:
         """Area_id under which a gift/egg capture should be linked.
 

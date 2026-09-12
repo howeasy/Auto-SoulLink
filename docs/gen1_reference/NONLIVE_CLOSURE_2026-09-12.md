@@ -68,6 +68,17 @@ Data defects the checks found and fixed:
 - The dashboard looked encounter icons up on the first word of the method, so no rod or Rock Smash method
   in any generation ever had its icon.
 
+Persisted state across the gift-area reclassification: everything a run saved under `pallet_town`,
+`celadon_city` or `cinnabar_island` was gift-classified (that was the defect), so `SoulLinkState.load` passes
+every persisted area id through the adapter's `persisted_area` hook and Gen 1 moves those three into the gift
+namespace (`gift_cinnabar_island` keeps the fossil pair a gift pair; a pending fossil cannot pair with a rod
+catch; the town is a real encounter area from then on). Shared code calls the hook only; identity elsewhere.
+`tools/gen_gen1_area_map.py --check` fails on any fishable map without an area (no note path). The Super Rod
+labels are derived, not hand-typed: a per-title test asserts that every area holds exactly one labelled row per
+fishing map, each label the wild floor or the map constant's tail, so a future map or decomp change cannot
+silently collapse rows. Ruff on the lane's files is clean under the default ruleset; the six findings left in
+`server/manager.py:756-787` predate the lane (Codex's launcher hunk) and were not touched.
+
 Review corrections (Codex, same day): the first cut modelled Yellow's Super Rod as uniform and let the
 lowest map id win a shared area, hiding Yellow's Vermilion Dock and Cerulean Cave 1F rows, and the scanner
 did not emit Old/Good Rod so a ROM-ingested table lost them. All three are fixed above; the `Super Rod`
