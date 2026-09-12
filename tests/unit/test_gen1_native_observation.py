@@ -130,6 +130,11 @@ def test_paired_checkpoints_follow_both_handed_back_loans_and_reopen(tmp_path):
 
 # ── the free-run bridge: the checkpoint rides the heartbeat inventory, no ledger ─────────
 
+def key_of_inventory(player):
+    from server.gen1_inventory_observation import record_key
+    return record_key(player)
+
+
 def free_readback(runtime, player, point):
     """The party readback a native client reads in the same held frame as its heartbeat inventory."""
     state = runtime.state().document()
@@ -200,6 +205,58 @@ def test_free_batches_anchor_the_checkpoint_to_their_heartbeat_inventory_and_reo
         verify_journal(reopened.journal, reopened.state())
     finally:
         reopened.close()
+
+
+def test_an_old_free_anchor_survives_more_heartbeats_than_the_history_read_bound(tmp_path):
+    """Player b publishes 131 heartbeats with checkpoints: its current anchor is inventory record
+    131, past the 128-record bound of a history prefix scan (the old lookup lost it and failed the
+    audit). Player a keeps its anchor at heartbeat 1 and then publishes 130 inventory-only
+    heartbeats: the old anchor still verifies (found by the revision its batch committed at) and is
+    reported stale, as before; a fresh checkpoint then makes a current again."""
+    from tests.unit.test_gen1_observation_runtime import (
+        batch,
+        checkpoint,
+        deliver,
+        enrolled,
+        publish,
+    )
+
+    value = create_runtime(tmp_path, contract("yellow", "red"), free_service=True)
+    try:
+        owners, points = {}, {}
+        for player in ("a", "b"):
+            owner, initial, _first = enrolled(value, player, occupied=True)
+            owners[player], points[player] = owner, checkpoint(initial, 130)
+        for player in ("a", "b"):
+            point = points[player]
+            publish(value, player, owners[player], {**batch(value, player, 1, frame=130, inventory=point),
+                                                    "native_checkpoint": free_readback(value, player, point)})
+        for sequence in range(2, 132):
+            frame = 130 + 30 * (sequence - 1)
+            point = checkpoint(points["b"], frame)
+            publish(value, "b", owners["b"], {**batch(value, "b", sequence, frame=frame, inventory=point),
+                                              "native_checkpoint": free_readback(value, "b", point)})
+        document = value.state().document()
+        assert document["components"][COMPONENT]["a"]["anchor"] == {"inventory_sequence": 1}
+        assert document["components"][COMPONENT]["b"]["anchor"] == {"inventory_sequence": 131}
+        assert len(value.journal.record_history("gen1-inventory-observations", key_of_inventory("b"))) == 128  # the bound
+        verify_journal(value.journal, value.state())
+        assert set(checkpoints(value)) == {"a", "b"}
+        for sequence in range(2, 132):
+            frame = 130 + 30 * (sequence - 1)
+            deliver(value, "a", owners["a"], batch(value, "a", sequence, frame=frame, inventory=checkpoint(points["a"], frame)))
+        assert value.state().document()["components"][COMPONENT]["a"]["anchor"] == {"inventory_sequence": 1}
+        verify_journal(value.journal, value.state())
+        with pytest.raises(JournalError, match="stale"):
+            checkpoints(value)
+        point = checkpoint(points["a"], 130 + 30 * 131)
+        publish(value, "a", owners["a"], {**batch(value, "a", 132, frame=130 + 30 * 131, inventory=point),
+                                          "native_checkpoint": free_readback(value, "a", point)})
+        assert value.state().document()["components"][COMPONENT]["a"]["anchor"] == {"inventory_sequence": 132}
+        verify_journal(value.journal, value.state())
+        assert set(checkpoints(value)) == {"a", "b"}
+    finally:
+        value.close()
 
 
 @pytest.mark.parametrize("fault", ["no_inventory", "bad_schema", "identity", "battle"])

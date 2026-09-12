@@ -209,10 +209,14 @@ def _verify_free_origin(journal, document, player, entry, event):
         raise JournalError("free native observation differs from its actual batch source")
     from server.gen1_inventory_observation import COMPONENT as INVENTORY, record_key
 
+    # The anchoring inventory was written in the batch's own commit, so it is the one inventory
+    # record at exactly the event's revision: a single bounded read, not a history scan (which is
+    # capped at 128 records and would lose an old anchor after that many heartbeats).
     sequence = entry["anchor"]["inventory_sequence"]
-    history = journal.record_history(INVENTORY, record_key(player))
-    committed = next((row for row in history if row.value.get("sequence") == sequence), None)
-    if committed is None or committed.value.get("operation_id") != entry["origin"]["operation_id"]:
+    history = journal.record_history(INVENTORY, record_key(player), after_revision=event.revision - 1, limit=1)
+    committed = history[0] if history else None
+    if (committed is None or committed.revision != event.revision or committed.value.get("sequence") != sequence
+            or committed.value.get("operation_id") != entry["origin"]["operation_id"]):
         raise JournalError("free native observation lost its anchoring inventory observation")
     initial = document["components"]["gen1-initial-observations"][player]
     validate_inventory(request["inventory"], initial["metadata"], initial["binding"])
