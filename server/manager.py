@@ -932,15 +932,20 @@ class RunManager:
             return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
         run_id = body.get("run_id") or None
         if run_id is not None:
-            runs = _load_registry()
-            if not any(r["run_id"] == run_id for r in runs):
+            run = _find_run(self._get(), run_id)
+            if run is None:
                 return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+            # A stopped or dead run can never serve an overlay: _active_stream_run would drop
+            # the pin on its next call, so accepting it here would answer 200 with a pin that
+            # no longer exists. Refuse instead of reporting a phantom.
+            if run.get("status") != "running" or not _is_alive(run.get("pid")):
+                return web.json_response({"ok": False, "error": "Run is not running"}, status=409)
         self._stream_pin_id = run_id
         log.info(f"Stream overlay pin set to: {run_id!r}")
         active = self._active_stream_run()
         return web.json_response({
             "ok": True,
-            "pinned": run_id,
+            "pinned": self._stream_pin_id,
             "active_run_id": active["run_id"] if active else None,
         })
 

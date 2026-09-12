@@ -2296,7 +2296,37 @@
           "max_level": 38
         }
       ],
-      "Super Rod": [
+      "Super Rod B3F": [
+        {
+          "species_id": 90,
+          "name": "Shellder",
+          "rate": 25,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 116,
+          "name": "Horsea",
+          "rate": 25,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 25,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 120,
+          "name": "Staryu",
+          "rate": 25,
+          "min_level": 15,
+          "max_level": 15
+        }
+      ],
+      "Super Rod B4F": [
         {
           "species_id": 90,
           "name": "Shellder",
@@ -3232,7 +3262,67 @@
           "max_level": 53
         }
       ],
-      "Super Rod": [
+      "Super Rod 2F": [
+        {
+          "species_id": 80,
+          "name": "Slowbro",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        },
+        {
+          "species_id": 99,
+          "name": "Kingler",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        },
+        {
+          "species_id": 117,
+          "name": "Seadra",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        },
+        {
+          "species_id": 119,
+          "name": "Seaking",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        }
+      ],
+      "Super Rod B1F": [
+        {
+          "species_id": 80,
+          "name": "Slowbro",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        },
+        {
+          "species_id": 99,
+          "name": "Kingler",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        },
+        {
+          "species_id": 117,
+          "name": "Seadra",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        },
+        {
+          "species_id": 119,
+          "name": "Seaking",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        }
+      ],
+      "Super Rod 1F": [
         {
           "species_id": 80,
           "name": "Slowbro",
@@ -3398,6 +3488,29 @@
           "max_level": 15
         }
       ],
+      "Super Rod Gym": [
+        {
+          "species_id": 54,
+          "name": "Psyduck",
+          "rate": 34,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 98,
+          "name": "Krabby",
+          "rate": 33,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 33,
+          "min_level": 15,
+          "max_level": 15
+        }
+      ],
       "Old Rod": [
         {
           "species_id": 129,
@@ -3426,6 +3539,22 @@
     },
     "vermilion_city": {
       "Super Rod": [
+        {
+          "species_id": 90,
+          "name": "Shellder",
+          "rate": 50,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 98,
+          "name": "Krabby",
+          "rate": 50,
+          "min_level": 15,
+          "max_level": 15
+        }
+      ],
+      "Super Rod Dock": [
         {
           "species_id": 90,
           "name": "Shellder",
@@ -5922,7 +6051,37 @@
           "max_level": 38
         }
       ],
-      "Super Rod": [
+      "Super Rod B3F": [
+        {
+          "species_id": 90,
+          "name": "Shellder",
+          "rate": 25,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 116,
+          "name": "Horsea",
+          "rate": 25,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 25,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 120,
+          "name": "Staryu",
+          "rate": 25,
+          "min_level": 15,
+          "max_level": 15
+        }
+      ],
+      "Super Rod B4F": [
         {
           "species_id": 90,
           "name": "Shellder",
@@ -6872,7 +7031,67 @@
           "max_level": 53
         }
       ],
-      "Super Rod": [
+      "Super Rod 2F": [
+        {
+          "species_id": 80,
+          "name": "Slowbro",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        },
+        {
+          "species_id": 99,
+          "name": "Kingler",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        },
+        {
+          "species_id": 117,
+          "name": "Seadra",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        },
+        {
+          "species_id": 119,
+          "name": "Seaking",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        }
+      ],
+      "Super Rod B1F": [
+        {
+          "species_id": 80,
+          "name": "Slowbro",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        },
+        {
+          "species_id": 99,
+          "name": "Kingler",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        },
+        {
+          "species_id": 117,
+          "name": "Seadra",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        },
+        {
+          "species_id": 119,
+          "name": "Seaking",
+          "rate": 25,
+          "min_level": 23,
+          "max_level": 23
+        }
+      ],
+      "Super Rod 1F": [
         {
           "species_id": 80,
           "name": "Slowbro",
@@ -7038,6 +7257,29 @@
           "max_level": 15
         }
       ],
+      "Super Rod Gym": [
+        {
+          "species_id": 54,
+          "name": "Psyduck",
+          "rate": 34,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 98,
+          "name": "Krabby",
+          "rate": 33,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 33,
+          "min_level": 15,
+          "max_level": 15
+        }
+      ],
       "Old Rod": [
         {
           "species_id": 129,
@@ -7066,6 +7308,22 @@
     },
     "vermilion_city": {
       "Super Rod": [
+        {
+          "species_id": 90,
+          "name": "Shellder",
+          "rate": 50,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 98,
+          "name": "Krabby",
+          "rate": 50,
+          "min_level": 15,
+          "max_level": 15
+        }
+      ],
+      "Super Rod Dock": [
         {
           "species_id": 90,
           "name": "Shellder",
@@ -7383,14 +7641,14 @@
         {
           "species_id": 118,
           "name": "Goldeen",
-          "rate": 75,
+          "rate": 90,
           "min_level": 20,
           "max_level": 30
         },
         {
           "species_id": 119,
           "name": "Seaking",
-          "rate": 25,
+          "rate": 10,
           "min_level": 30,
           "max_level": 30
         }
@@ -7743,23 +8001,23 @@
         {
           "species_id": 98,
           "name": "Krabby",
-          "rate": 50,
+          "rate": 70,
           "min_level": 15,
           "max_level": 20
         },
         {
-          "species_id": 99,
-          "name": "Kingler",
-          "rate": 25,
-          "min_level": 25,
-          "max_level": 25
-        },
-        {
           "species_id": 116,
           "name": "Horsea",
-          "rate": 25,
+          "rate": 20,
           "min_level": 10,
           "max_level": 10
+        },
+        {
+          "species_id": 99,
+          "name": "Kingler",
+          "rate": 10,
+          "min_level": 25,
+          "max_level": 25
         }
       ],
       "Old Rod": [
@@ -7830,14 +8088,14 @@
         {
           "species_id": 72,
           "name": "Tentacool",
-          "rate": 75,
+          "rate": 90,
           "min_level": 10,
           "max_level": 20
         },
         {
           "species_id": 116,
           "name": "Horsea",
-          "rate": 25,
+          "rate": 10,
           "min_level": 5,
           "max_level": 5
         }
@@ -7940,14 +8198,14 @@
         {
           "species_id": 116,
           "name": "Horsea",
-          "rate": 50,
+          "rate": 70,
           "min_level": 20,
           "max_level": 25
         },
         {
           "species_id": 117,
           "name": "Seadra",
-          "rate": 50,
+          "rate": 30,
           "min_level": 25,
           "max_level": 35
         }
@@ -8050,21 +8308,21 @@
         {
           "species_id": 116,
           "name": "Horsea",
-          "rate": 50,
+          "rate": 70,
           "min_level": 15,
           "max_level": 20
         },
         {
           "species_id": 72,
           "name": "Tentacool",
-          "rate": 25,
+          "rate": 20,
           "min_level": 10,
           "max_level": 10
         },
         {
           "species_id": 117,
           "name": "Seadra",
-          "rate": 25,
+          "rate": 10,
           "min_level": 20,
           "max_level": 20
         }
@@ -8275,14 +8533,14 @@
         {
           "species_id": 72,
           "name": "Tentacool",
-          "rate": 50,
+          "rate": 70,
           "min_level": 5,
           "max_level": 15
         },
         {
           "species_id": 90,
           "name": "Shellder",
-          "rate": 50,
+          "rate": 30,
           "min_level": 25,
           "max_level": 35
         }
@@ -8355,14 +8613,14 @@
         {
           "species_id": 90,
           "name": "Shellder",
-          "rate": 75,
+          "rate": 60,
           "min_level": 20,
           "max_level": 40
         },
         {
           "species_id": 72,
           "name": "Tentacool",
-          "rate": 25,
+          "rate": 40,
           "min_level": 15,
           "max_level": 15
         }
@@ -8407,23 +8665,23 @@
         {
           "species_id": 72,
           "name": "Tentacool",
-          "rate": 50,
+          "rate": 60,
           "min_level": 15,
-          "max_level": 30
-        },
-        {
-          "species_id": 73,
-          "name": "Tentacruel",
-          "rate": 25,
-          "min_level": 30,
           "max_level": 30
         },
         {
           "species_id": 120,
           "name": "Staryu",
-          "rate": 25,
+          "rate": 30,
           "min_level": 20,
           "max_level": 20
+        },
+        {
+          "species_id": 73,
+          "name": "Tentacruel",
+          "rate": 10,
+          "min_level": 30,
+          "max_level": 30
         }
       ],
       "Old Rod": [
@@ -8464,23 +8722,23 @@
       ],
       "Super Rod": [
         {
-          "species_id": 73,
-          "name": "Tentacruel",
-          "rate": 50,
-          "min_level": 20,
-          "max_level": 40
-        },
-        {
           "species_id": 72,
           "name": "Tentacool",
-          "rate": 25,
+          "rate": 40,
           "min_level": 20,
           "max_level": 20
         },
         {
+          "species_id": 73,
+          "name": "Tentacruel",
+          "rate": 40,
+          "min_level": 20,
+          "max_level": 40
+        },
+        {
           "species_id": 120,
           "name": "Staryu",
-          "rate": 25,
+          "rate": 20,
           "min_level": 30,
           "max_level": 30
         }
@@ -8555,23 +8813,23 @@
         {
           "species_id": 72,
           "name": "Tentacool",
-          "rate": 50,
+          "rate": 60,
           "min_level": 15,
-          "max_level": 30
-        },
-        {
-          "species_id": 73,
-          "name": "Tentacruel",
-          "rate": 25,
-          "min_level": 30,
           "max_level": 30
         },
         {
           "species_id": 120,
           "name": "Staryu",
-          "rate": 25,
+          "rate": 30,
           "min_level": 20,
           "max_level": 20
+        },
+        {
+          "species_id": 73,
+          "name": "Tentacruel",
+          "rate": 10,
+          "min_level": 30,
+          "max_level": 30
         }
       ],
       "Old Rod": [
@@ -8642,14 +8900,14 @@
         {
           "species_id": 60,
           "name": "Poliwag",
-          "rate": 75,
+          "rate": 90,
           "min_level": 5,
           "max_level": 15
         },
         {
           "species_id": 61,
           "name": "Poliwhirl",
-          "rate": 25,
+          "rate": 10,
           "min_level": 15,
           "max_level": 15
         }
@@ -8722,14 +8980,14 @@
         {
           "species_id": 60,
           "name": "Poliwag",
-          "rate": 50,
+          "rate": 70,
           "min_level": 25,
           "max_level": 30
         },
         {
           "species_id": 61,
           "name": "Poliwhirl",
-          "rate": 50,
+          "rate": 30,
           "min_level": 30,
           "max_level": 40
         }
@@ -8802,14 +9060,14 @@
         {
           "species_id": 118,
           "name": "Goldeen",
-          "rate": 75,
+          "rate": 90,
           "min_level": 20,
           "max_level": 30
         },
         {
           "species_id": 119,
           "name": "Seaking",
-          "rate": 25,
+          "rate": 10,
           "min_level": 30,
           "max_level": 30
         }
@@ -8882,14 +9140,14 @@
         {
           "species_id": 98,
           "name": "Krabby",
-          "rate": 50,
+          "rate": 70,
           "min_level": 10,
           "max_level": 15
         },
         {
           "species_id": 99,
           "name": "Kingler",
-          "rate": 50,
+          "rate": 30,
           "min_level": 15,
           "max_level": 25
         }
@@ -9600,25 +9858,48 @@
           "max_level": 36
         }
       ],
-      "Super Rod": [
-        {
-          "species_id": 120,
-          "name": "Staryu",
-          "rate": 50,
-          "min_level": 20,
-          "max_level": 40
-        },
+      "Super Rod B3F": [
         {
           "species_id": 98,
           "name": "Krabby",
-          "rate": 25,
+          "rate": 40,
           "min_level": 25,
           "max_level": 25
         },
         {
+          "species_id": 120,
+          "name": "Staryu",
+          "rate": 40,
+          "min_level": 20,
+          "max_level": 40
+        },
+        {
           "species_id": 99,
           "name": "Kingler",
-          "rate": 25,
+          "rate": 20,
+          "min_level": 35,
+          "max_level": 35
+        }
+      ],
+      "Super Rod B4F": [
+        {
+          "species_id": 98,
+          "name": "Krabby",
+          "rate": 40,
+          "min_level": 25,
+          "max_level": 25
+        },
+        {
+          "species_id": 120,
+          "name": "Staryu",
+          "rate": 40,
+          "min_level": 20,
+          "max_level": 40
+        },
+        {
+          "species_id": 99,
+          "name": "Kingler",
+          "rate": 20,
           "min_level": 35,
           "max_level": 35
         }
@@ -9859,14 +10140,14 @@
         {
           "species_id": 129,
           "name": "Magikarp",
-          "rate": 75,
+          "rate": 90,
           "min_level": 5,
           "max_level": 15
         },
         {
           "species_id": 147,
           "name": "Dratini",
-          "rate": 25,
+          "rate": 10,
           "min_level": 15,
           "max_level": 15
         }
@@ -9967,14 +10248,14 @@
         {
           "species_id": 129,
           "name": "Magikarp",
-          "rate": 75,
+          "rate": 90,
           "min_level": 5,
           "max_level": 15
         },
         {
           "species_id": 147,
           "name": "Dratini",
-          "rate": 25,
+          "rate": 10,
           "min_level": 15,
           "max_level": 15
         }
@@ -10075,14 +10356,14 @@
         {
           "species_id": 129,
           "name": "Magikarp",
-          "rate": 75,
+          "rate": 90,
           "min_level": 5,
           "max_level": 15
         },
         {
           "species_id": 147,
           "name": "Dratini",
-          "rate": 25,
+          "rate": 10,
           "min_level": 15,
           "max_level": 15
         }
@@ -10183,21 +10464,21 @@
         {
           "species_id": 129,
           "name": "Magikarp",
-          "rate": 50,
+          "rate": 70,
           "min_level": 5,
           "max_level": 10
         },
         {
           "species_id": 147,
           "name": "Dratini",
-          "rate": 25,
+          "rate": 20,
           "min_level": 10,
           "max_level": 10
         },
         {
           "species_id": 148,
           "name": "Dragonair",
-          "rate": 25,
+          "rate": 10,
           "min_level": 15,
           "max_level": 15
         }
@@ -10396,20 +10677,36 @@
           "max_level": 60
         }
       ],
-      "Super Rod": [
+      "Super Rod B1F": [
         {
           "species_id": 119,
           "name": "Seaking",
-          "rate": 75,
+          "rate": 60,
           "min_level": 40,
           "max_level": 60
         },
         {
           "species_id": 118,
           "name": "Goldeen",
-          "rate": 25,
+          "rate": 40,
           "min_level": 30,
           "max_level": 30
+        }
+      ],
+      "Super Rod 1F": [
+        {
+          "species_id": 119,
+          "name": "Seaking",
+          "rate": 60,
+          "min_level": 35,
+          "max_level": 55
+        },
+        {
+          "species_id": 118,
+          "name": "Goldeen",
+          "rate": 40,
+          "min_level": 25,
+          "max_level": 25
         }
       ],
       "Old Rod": [
@@ -10441,18 +10738,18 @@
     "pallet_town": {
       "Super Rod": [
         {
-          "species_id": 72,
-          "name": "Tentacool",
-          "rate": 50,
-          "min_level": 10,
-          "max_level": 20
-        },
-        {
           "species_id": 120,
           "name": "Staryu",
-          "rate": 50,
+          "rate": 60,
           "min_level": 5,
           "max_level": 10
+        },
+        {
+          "species_id": 72,
+          "name": "Tentacool",
+          "rate": 40,
+          "min_level": 10,
+          "max_level": 20
         }
       ],
       "Old Rod": [
@@ -10522,14 +10819,14 @@
         {
           "species_id": 118,
           "name": "Goldeen",
-          "rate": 50,
+          "rate": 70,
           "min_level": 25,
           "max_level": 30
         },
         {
           "species_id": 119,
           "name": "Seaking",
-          "rate": 50,
+          "rate": 30,
           "min_level": 30,
           "max_level": 40
         }
@@ -10565,16 +10862,39 @@
         {
           "species_id": 72,
           "name": "Tentacool",
-          "rate": 75,
+          "rate": 90,
           "min_level": 10,
           "max_level": 20
         },
         {
           "species_id": 116,
           "name": "Horsea",
-          "rate": 25,
+          "rate": 10,
           "min_level": 5,
           "max_level": 5
+        }
+      ],
+      "Super Rod Dock": [
+        {
+          "species_id": 72,
+          "name": "Tentacool",
+          "rate": 70,
+          "min_level": 10,
+          "max_level": 15
+        },
+        {
+          "species_id": 120,
+          "name": "Staryu",
+          "rate": 20,
+          "min_level": 15,
+          "max_level": 15
+        },
+        {
+          "species_id": 90,
+          "name": "Shellder",
+          "rate": 10,
+          "min_level": 10,
+          "max_level": 10
         }
       ],
       "Old Rod": [
@@ -10644,14 +10964,14 @@
         {
           "species_id": 129,
           "name": "Magikarp",
-          "rate": 75,
+          "rate": 90,
           "min_level": 5,
           "max_level": 15
         },
         {
           "species_id": 130,
           "name": "Gyarados",
-          "rate": 25,
+          "rate": 10,
           "min_level": 15,
           "max_level": 15
         }
@@ -10685,18 +11005,18 @@
     "cinnabar_island": {
       "Super Rod": [
         {
-          "species_id": 72,
-          "name": "Tentacool",
-          "rate": 50,
-          "min_level": 15,
-          "max_level": 30
-        },
-        {
           "species_id": 120,
           "name": "Staryu",
-          "rate": 50,
+          "rate": 60,
           "min_level": 10,
           "max_level": 15
+        },
+        {
+          "species_id": 72,
+          "name": "Tentacool",
+          "rate": 40,
+          "min_level": 15,
+          "max_level": 30
         }
       ],
       "Old Rod": [

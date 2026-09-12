@@ -157,6 +157,28 @@ async def test_an_unknown_run_id_is_refused_and_the_pin_is_kept(manager_client, 
 
 
 @pytest.mark.asyncio
+async def test_a_stopped_or_dead_run_cannot_be_pinned_and_the_pin_is_kept(manager_client, two_runs, alive):
+    """The registry knows "gone" (stopped) and, once 102 dies, "new" (running but dead).
+
+    Accepting either used to answer 200 with pinned=<that id> while _active_stream_run had
+    already dropped the pin, so the next GET contradicted the POST. Both are refused now and
+    the previous pin survives.
+    """
+    await manager_client.post("/api/stream/pin", json={"run_id": "old"})
+    refused = await manager_client.post("/api/stream/pin", json={"run_id": "gone"})
+    assert refused.status == 409
+    assert (await refused.json()) == {"ok": False, "error": "Run is not running"}
+    alive.discard(102)
+    dead = await manager_client.post("/api/stream/pin", json={"run_id": "new"})
+    assert dead.status == 409
+    status = await (await manager_client.get("/api/stream/pin")).json()
+    assert status == {"pinned": "old", "active_run_id": "old", "active_run_name": "run old"}
+    # The response of an accepted pin reports the stored pin, never the request echo.
+    accepted = await (await manager_client.post("/api/stream/pin", json={"run_id": "old"})).json()
+    assert accepted["pinned"] == status["pinned"] == "old"
+
+
+@pytest.mark.asyncio
 async def test_unpinning_restores_newest_running_selection(manager_client, two_runs):
     await manager_client.post("/api/stream/pin", json={"run_id": "old"})
     cleared = await (await manager_client.post("/api/stream/pin", json={"run_id": None})).json()

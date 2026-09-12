@@ -122,7 +122,7 @@ def _tables_from_rom(title: str) -> dict:
         _REPO, "data", "games", "gen1_rby", "species_index.json"), encoding="utf-8"))
     adapter = get_adapter("gen1_rby", rom_type=title.capitalize())
     return build_encounter_tables(
-        {"wild": scan_wild(rom), "fishing": scan_fishing(rom)},
+        {"variant": title, "wild": scan_wild(rom), "fishing": scan_fishing(rom)},
         {int(k): v["area_id"] for k, v in area_map.items()},
         {int(k): v for k, v in species["index_to_national"].items()},
         adapter.species_name)
@@ -151,20 +151,10 @@ def test_a_clean_rom_reproduces_the_shipped_tables(title):
     """
     built = _tables_from_rom(title)
     shipped = _shipped(title)
-    # `m.split(" ")[0]`, because a multi-floor dungeon's methods carry the floor:
-    # "Grass B1F", "Water B4F". An exact-name filter dropped every such area, which made
-    # this control quietly stop covering seven of them. Super Rod is compared too; Old Rod
-    # and Good Rod are NOT, because the scanner does not emit them -- they are global in
-    # the ROM and the generator places them by its own rule (every area with a Water
-    # method or a Super Rod group), which the shipped file alone pins.
-    scanned = ("Grass", "Water", "Super")
-    built = {a: {m: v for m, v in b.items() if m.split(" ")[0] in scanned}
-             for a, b in built.items()}
-    built = {a: b for a, b in built.items() if b}
-    shipped = {a: {m: v for m, v in b.items() if m.split(" ")[0] in scanned}
-               for a, b in shipped.items()}
-    shipped = {a: b for a, b in shipped.items() if b}
-
+    # EVERY method, every area: Grass and Water per floor, Super Rod per fishing map with
+    # its published label, Old and Good Rod under every fishing area, with the title's own
+    # slot weights (Yellow's are not uniform). Nothing is filtered out any more: a method
+    # the scanner stopped emitting, or emitted under a different label, fails here.
     assert set(built) == set(shipped), (
         f"{title}: areas differ — only built {sorted(set(built) - set(shipped))}, "
         f"only shipped {sorted(set(shipped) - set(built))}")
@@ -208,9 +198,13 @@ def test_later_floors_are_no_longer_dropped():
     assert floors == {"1F", "B1F", "B2F", "B3F", "B4F"}, f"got {sorted(floors)}"
     assert any(m.startswith("Water") for m in shipped), (
         "the surfing table that only exists on a later floor is missing again")
-    # Rods carry no floor: the scanner adds Super Rod without a map id, and the generator
-    # mirrors that so the control above holds.
-    assert {"Old Rod", "Good Rod", "Super Rod"} <= set(shipped)
+    # Seafoam fishes on its two lowest floors only, and each keeps its floor label.
+    assert {"Old Rod", "Good Rod", "Super Rod B3F", "Super Rod B4F"} <= set(shipped)
+    assert not any(m in ("Super Rod", "Super Rod 1F") for m in shipped)
+    # A fishing map that shares its area gets a stable label from its wild floor or from the
+    # map constant, so Yellow's distinct Vermilion Dock and Cerulean Cave rows both survive.
+    assert {"Super Rod", "Super Rod Dock"} <= set(_shipped("yellow")["vermilion_city"])
+    assert {"Super Rod 1F", "Super Rod B1F"} <= set(_shipped("yellow")["cerulean_cave"])
 
     # And a single-map area keeps the plain, unsuffixed labels it always had.
     assert set(_shipped("yellow")["route_1"]) == {"Grass"}
@@ -229,20 +223,19 @@ def test_the_scanner_super_rod_blocks_equal_the_shipped_ones(title):
     """Positive control for fishing: the Super Rod block the scanner builds from a clean
     cartridge is the one tools/gen_gen1_encounters.py built from pret, area for area.
 
-    This used to pin the ABSENCE of fishing in the shipped file. Old Rod and Good Rod are
-    shipped but not scanned (the scanner reads them -- `scan_fishing` -- but
-    `build_encounter_tables` only adds Super Rod), so they are pinned by the generator's
-    own check instead: tests/unit/test_gen1_generated_maps_fishing.py.
+    This used to pin the ABSENCE of fishing in the shipped file, then Super Rod alone; the
+    scanner now emits all three rods (Old and Good under every area with surf water or a
+    Super Rod group, the generator's placement rule), so production ROM ingestion cannot
+    drop a rod method the shipped file has.
     """
-    built = {a: b["Super Rod"] for a, b in _strip_names(_tables_from_rom(title)).items()
-             if "Super Rod" in b}
-    shipped = {a: b["Super Rod"] for a, b in _strip_names(_shipped(title)).items()
-               if "Super Rod" in b}
+    def rods(tables):
+        return {a: {m: v for m, v in b.items() if "Rod" in m}
+                for a, b in _strip_names(tables).items() if any("Rod" in m for m in b)}
+    built, shipped = rods(_tables_from_rom(title)), rods(_shipped(title))
     assert len(built) > 10
     assert built == shipped
-    for area, block in _shipped(title).items():
-        if "Super Rod" in block:
-            assert {"Old Rod", "Good Rod"} <= set(block), f"{title}/{area} has Super Rod only"
+    for area, block in shipped.items():
+        assert {"Old Rod", "Good Rod"} <= set(block), f"{title}/{area} lacks a global rod"
 
 
 # ── untrusted input ──────────────────────────────────────────────────────────────────────

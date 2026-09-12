@@ -635,19 +635,45 @@ def aggregate_slots(slots: list[dict], rates: tuple[int, ...] = _SLOT_RATES) -> 
     return list(by_species.values())
 
 
-def uniform_rates(count: int) -> tuple[int, ...]:
-    """Integer percentages for a fishing group, which the game picks from UNIFORMLY.
-
-    ReadSuperRodData draws a 2-bit random number and rerolls until it is below the group
-    size (engine/items/item_effects.asm), so every entry is equally likely; the shipped
-    tables used to pad the group to ten slots and apply the grass weights, which showed a
-    two-fish group as 54/46. The remainder of 100 goes to the first entries so the block
-    still sums to 100. tools/gen_gen1_encounters.py uses this same function.
-    """
-    if count <= 0:
+def _percentages(weights: tuple[int, ...]) -> tuple[int, ...]:
+    """Integer percentages summing to 100 by largest remainder, ties to the earlier slot."""
+    total = sum(weights)
+    if total <= 0:
         return ()
-    base, extra = divmod(100, count)
-    return tuple(base + (1 if i < extra else 0) for i in range(count))
+    exact = [w * 100 / total for w in weights]
+    floors = [int(x) for x in exact]
+    order = sorted(range(len(weights)), key=lambda i: (-(exact[i] - floors[i]), i))
+    for i in order[:100 - sum(floors)]:
+        floors[i] += 1
+    return tuple(floors)
+
+
+def uniform_rates(count: int) -> tuple[int, ...]:
+    """Integer percentages for a group the game picks from UNIFORMLY (Red and Blue).
+
+    pokered's ReadSuperRodData draws a 2-bit random number and rerolls until it is below the
+    group size (engine/items/item_effects.asm), so every entry is equally likely; the shipped
+    tables used to pad the group to ten slots and apply the grass weights, which showed a
+    two-fish group as 54/46. tools/gen_gen1_encounters.py uses this same function.
+    """
+    return _percentages(tuple(1 for _ in range(count)))
+
+
+# pokeyellow's GenerateRandomFishingEncounter (engine/items/super_rod.asm) compares one
+# random byte against these thresholds and takes the first slot whose threshold it is below,
+# so the four slots weigh 102, 76, 51 and 27 of 256: not uniform. tools/gen_gen1_encounters.py
+# parses the same `cp` operands out of the asm and asserts they equal this pin.
+YELLOW_SUPER_ROD_THRESHOLDS = (0x66, 0xB2, 0xE5)
+
+
+def super_rod_rates(variant: str, count: int) -> tuple[int, ...]:
+    """Per-slot percentages for a Super Rod group, per title, as the cartridge rolls them."""
+    if variant == "yellow":
+        if count != 4:
+            raise RomScanError(f"Yellow super rod groups hold four slots, got {count}")
+        bounds = (0,) + YELLOW_SUPER_ROD_THRESHOLDS + (256,)
+        return _percentages(tuple(bounds[i + 1] - bounds[i] for i in range(4)))
+    return uniform_rates(count)
 
 
 def build_encounter_tables(content: dict, map_to_area, index_to_natdex,
@@ -703,11 +729,27 @@ def build_encounter_tables(content: dict, map_to_area, index_to_natdex,
             if rec[key]:
                 add(area_id, method, rec[key]["slots"], map_id)
 
+    # FISHING, the same rules as tools/gen_gen1_encounters.py so a clean cartridge reproduces
+    # the shipped file: Super Rod is per map and carries the map's published label when the
+    # area has several fishing maps (Cerulean Cave floors, Vermilion City and its Dock), so
+    # no distinct row is lost to first-wins; Old and Good Rod are global in the ROM and go
+    # under every area with a surf table or a Super Rod group; rates are the title's own
+    # pick (super_rod_rates).
     fishing = content.get("fishing") or {}
+    variant = content.get("variant") or ""
+    fishing_areas: list[str] = [a for a, b in out.items() if any(m.startswith("Water") for m in b)]
     for map_id, entries in sorted((fishing.get("super_rod") or {}).items()):
         area_id = map_to_area.get(map_id)
         if area_id:
-            add(area_id, "Super Rod", entries, rates=uniform_rates(len(entries)))
+            add(area_id, "Super Rod", entries, map_id, rates=super_rod_rates(variant, len(entries)))
+            if area_id not in fishing_areas:
+                fishing_areas.append(area_id)
+    old_rod, good_rod = fishing.get("old_rod") or [], fishing.get("good_rod") or []
+    for area_id in fishing_areas:
+        if old_rod:
+            add(area_id, "Old Rod", old_rod, rates=uniform_rates(len(old_rod)))
+        if good_rod:
+            add(area_id, "Good Rod", good_rod, rates=uniform_rates(len(good_rod)))
     return out
 
 
