@@ -23,7 +23,10 @@ if rawget(_G,"SLINK_RUNTIME_LAUNCH_JSON")~=nil then
     -- modules also clear their full dotted path (for example games.gen1_rby).
     assert(type(configuration.files)=="table","checked durable client files required")
     for _,entry in ipairs(configuration.files)do
-        if type(entry)=="table"and type(entry.path)=="string"and entry.path:match("%.lua$")then
+        assert(type(entry)=="table"and type(entry.path)=="string"and type(entry.sha256)=="string"
+            and #entry.sha256==64 and entry.sha256:match("^[0-9a-f]+$")
+            and(entry.encoding=="utf8_lf"or entry.encoding=="raw"),"invalid checked durable client file")
+        if entry.path:match("%.lua$")then
             local dotted=entry.path:gsub("%.lua$",""):gsub("^lua/",""):gsub("/",".")
             local base=dotted:match("([^.]+)$")
             package.loaded[dotted]=nil

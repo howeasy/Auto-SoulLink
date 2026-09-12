@@ -16,7 +16,15 @@ from types import SimpleNamespace
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
-from server.gen1_launcher import FILES, build_configuration, configuration, launcher
+from server.gen1_launcher import (
+    FILES,
+    FREE_FILES,
+    NATIVE_FILES,
+    OBSERVATION_FILES,
+    build_configuration,
+    configuration,
+    launcher,
+)
 from server.gen1_run_config import FILENAME, configure_runtime, open_runtime, read_configuration
 from server.journal_reader import read_journal
 from server.protocol import ProtocolError
@@ -70,10 +78,10 @@ def test_bundle_hashes_are_cross_checkout_stable_but_do_not_hide_content_drift(t
         file_bundle(tmp_path, ["../elsewhere.lua"])
 
 
-def test_free_service_checked_bundle_covers_every_literal_lua_dependency(prepared):
+@pytest.mark.parametrize("extra", [OBSERVATION_FILES + FREE_FILES, OBSERVATION_FILES + FREE_FILES + NATIVE_FILES])
+def test_free_service_checked_bundle_covers_every_literal_lua_dependency(extra):
     root = Path(__file__).resolve().parents[2]
-    config = build_configuration(RUN_ID, prepared.contract, "a", initial_observations=True, free_service=True)
-    selected = {entry["path"] for entry in config["files"]}
+    selected = set(FILES + extra)
     missing = []
     pattern = re.compile(
         r"(?:\brequire\s*(?:\(\s*)?|\bpcall\s*\(\s*require\s*,\s*)['\"]([A-Za-z0-9_.-]+)['\"]"
@@ -93,7 +101,7 @@ def test_free_service_checked_bundle_covers_every_literal_lua_dependency(prepare
 
 
 def test_durable_entry_evicts_every_checked_lua_module_before_start():
-    from lupa.lua54 import LuaRuntime
+    from lupa.lua54 import LuaError, LuaRuntime
 
     root = Path(__file__).resolve().parents[2]
     lua = LuaRuntime(unpack_returned_tuples=True)
@@ -101,9 +109,12 @@ def test_durable_entry_evicts_every_checked_lua_module_before_start():
     lua.globals().launch = json.dumps({
         "protocol": "slink-gen1-durable-v1",
         "files": [
-            {"path": "lua/gen1_client_entry.lua"},
-            {"path": "lua/gen1_held_rival_team.lua"},
-            {"path": "data/games/gen1_rby/gen1_rival_team_checkpoint.lua"},
+            {"path": path, "sha256": "a" * 64, "encoding": "utf8_lf"}
+            for path in (
+                "lua/gen1_client_entry.lua",
+                "lua/gen1_held_rival_team.lua",
+                "data/games/gen1_rby/gen1_rival_team_checkpoint.lua",
+            )
         ],
     })
     result = lua.execute(r'''
@@ -120,6 +131,10 @@ def test_durable_entry_evicts_every_checked_lua_module_before_start():
         return dofile(root.."/lua/slink.lua")
     ''')
     assert result == "slink-gen1-durable-v1"
+
+    lua.globals().launch = json.dumps({"protocol": "slink-gen1-durable-v1", "files": ["lua/gen1_client_entry.lua"]})
+    with pytest.raises(LuaError, match="invalid checked durable client file"):
+        lua.execute('SLINK_RUNTIME_LAUNCH_JSON=launch;return dofile(root.."/lua/slink.lua")')
 
 
 def test_wrong_run_launcher_cannot_admit_even_with_identical_cartridge_and_save(prepared):

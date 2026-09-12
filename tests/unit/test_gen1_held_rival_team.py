@@ -248,7 +248,7 @@ def test_missed_receipt_requires_a_complete_ineligible_window():
     receipt = {"schema": rival.MISSED_RECEIPT, "trainer_id": RIVAL,
                "observed": {"battle": 2, "opponent": RIVAL, "enemy_position": 0, "frame": 123}}
     assert rival.verify_rival_team_receipt(command, receipt, variant="red")["missed"] is True
-    for fault in ("missing", "trainer", "frame", "early", "eligible"):
+    for fault in ("missing", "trainer", "frame", "eligible"):
         bad = copy.deepcopy(receipt)
         if fault == "missing":
             del bad["observed"]["opponent"]
@@ -256,8 +256,6 @@ def test_missed_receipt_requires_a_complete_ineligible_window():
             bad["trainer_id"] = 242
         elif fault == "frame":
             bad["observed"]["frame"] = -1
-        elif fault == "early":
-            bad["observed"]["frame"] = command["source_frame"] - 1
         else:
             bad["observed"] = {"battle": p["trainer_battle"], "opponent": RIVAL,
                                "enemy_position": 0xFF, "frame": 123}

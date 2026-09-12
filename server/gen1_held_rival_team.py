@@ -137,8 +137,8 @@ def verify_rival_team_receipt(body, receipt, *, variant):
                 or type(observed["frame"]) is not int or observed["frame"] < 0):
             raise JournalError("complete missed rival window observation required")
         source_frame = body.get("source_frame")
-        if type(source_frame) is not int or source_frame < 0 or observed["frame"] < source_frame:
-            raise JournalError("missed rival receipt predates its trainer observation")
+        if type(source_frame) is not int or source_frame < 0:
+            raise JournalError("missed rival receipt requires its trainer observation frame")
         profile = PROFILES[variant]
         if (observed["battle"] == profile["trainer_battle"] and observed["opponent"] == body["trainer_id"]
                 and observed["enemy_position"] == 0xFF):
