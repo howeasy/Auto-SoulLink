@@ -133,9 +133,27 @@ descriptions should keep their re-wording; when master moves.
 
 ## 6. Worktrees and the trap that ate fourteen of them
 
-Registered now: the root (`codex/gen2base`), this Gen 1 worktree (`gen1/rc`), `shared-framework`
-(`claude/shared-framework`), `gen1-collab-bad73b` (a session sandbox) and `agent-a7f68e4f2daf34d8d` (UI, has a
-unique commit and an untracked directory, left alone).
+`.claude/worktrees/` now holds live worktrees only, and `.claude/worktrees/README.md` is the map kept beside
+them (that folder is gitignored, so the map lives on disk, not in this branch):
+
+| Directory | Branch | Purpose |
+| --- | --- | --- |
+| `gen1-rby-code-sweep-8d06e2` | `gen1/rc` | the Gen 1 RC, all finished Gen 1 work (directory name is historical) |
+| `shared-framework` | `claude/shared-framework` at `codex/shared-operation-binding-v1` | in-flight shared layer and the Gen 3 port |
+| `agent-a7f68e4f2daf34d8d` | `claude/ui-mockup-track-b` | UI mockup track B, one unique commit, left alone |
+| `gen1-collab-bad73b` | `claude/gen1-collab-bad73b` | session sandbox at master, removable when idle |
+| `gen2-production`, `rr-foundation`, `gen3-non-rr-planning-2b0be2` | none, content only | Gen 2 and Gen 3 content whose git admin entries were gutted long ago; untouched by owner instruction, and their branches `codex/gen2-production` (fb754a2) and `codex/rr-foundation` (e4fd473) are intact |
+
+Five former worktree directories that carry content not on any branch moved to `.claude/worktrees-archive/`
+(`agent-a6f8ce62fc90289c2`, `soul-link-ui-mockups-40f67b`, `ui-phase0-ci`, `ui-phase0-integration`,
+`ui-phase7b-sources`); their deltas are tarred under `.cache/snapshots/orphans-2026-09-11/` with a MANIFEST.
+Seven further orphans were verified byte-identical to their branches and deleted. The dead admin entries of
+`gen2-production` and `rr-foundation` were cleared, which is what had been printing a "failed to delete ...
+Permission denied" block on every git command; their content directories and branches are untouched.
+
+The root checkout was switched from `codex/gen2base` to `master` by an unknown actor at 2026-09-12 07:00. It is
+clean and matches `origin/master`, and `codex/gen2base` still exists at b5d1aa7. I did not move it; flagging it
+because your 2026-09-06 handoff asked that unexplained root switches be reported rather than assumed.
 
 **Directories under `E:/Google Drive/SLink` carry the Windows read-only attribute.** `rmdir` on such a directory
 fails with access denied although deleting the files inside succeeds, so every `git worktree remove` and every
