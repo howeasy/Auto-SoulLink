@@ -105,7 +105,15 @@ def semantic_receipt(journal, player, entry, kind):
         raise JournalError('unknown observation receipt kind')
     origin = validate_entry_origin(entry, player)
     if origin is None:
-        return journal.event(player, entry['operation_id'], semantic)
+        outer = journal.event_snapshot(player, entry['operation_id'])
+        if outer is None or outer.request.get('event') != 'observation':
+            return journal.event(player, entry['operation_id'], semantic)
+        # A free-run observation (P10) contains its semantics the way a compound frame does.
+        contained = outer.request.get('signals') if kind == 'engine_signals' else outer.request.get('inventory')
+        expected = semantic['payload'] if kind == 'engine_signals' else semantic['payload']['observation']
+        if contained is None or contained != expected or outer.result.get(field) != digest(entry):
+            raise JournalError('free-run observation differs from its semantic evidence digest')
+        return EventReceipt(outer.revision, {'ack': 'ACK', field: digest(entry), 'ordinary_execution': False}, outer.command_ids)
     outer = event_reference.resolve(journal, origin)
     _contained(outer.request, semantic)
     result = outer.result

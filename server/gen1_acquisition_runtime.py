@@ -104,6 +104,8 @@ def receipts_of(request):
     if request.get('event') == 'frame_complete':
         rows = request.get('bundle', {}).get('acquisitions')
         return rows or []
+    if request.get('event') == 'observation':  # free-run batch (P10)
+        return request.get('acquisitions') or []
     raise JournalError('acquisition source event is neither standalone nor a compound frame')
 
 
@@ -454,6 +456,9 @@ def verify_journal(journal, stage, *, rom_provider=None):
                 raise JournalError('acquisition current frame origin differs')
             if current.result.get('acquisition_digest')!=digest(entry) or current.result.get('observations_settled') is not True:
                 raise JournalError('acquisition current frame result differs from its entry')
+        elif current.request.get('event')=='observation':
+            if current.result.get('acquisition_digest')!=digest(entry):
+                raise JournalError('acquisition current observation result differs from its entry')
         elif current.request.get('event')!=EVENT or current.result!=result_for(entry):
             raise JournalError('acquisition current standalone result differs')
         else:
@@ -491,6 +496,8 @@ def verify_journal(journal, stage, *, rom_provider=None):
                     observed=stable_event.request.get('bundle',{}).get('inventory')
                 elif stable_event.request.get('event')=='inventory_observation':
                     observed=stable_event.request.get('payload',{}).get('observation')
+                elif stable_event.request.get('event')=='observation':
+                    observed=stable_event.request.get('inventory')
                 else:
                     observed=None
                 from server.gen1_initial_observation import validate
