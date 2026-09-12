@@ -1,15 +1,15 @@
 """Ordered ball activation and linked death/receipt settlement for owned RBY signals."""
 
 import copy
-from datetime import UTC, datetime
 
 from server import event_reference
 from server.gen1_command_receipts import verify_force_faint_receipt
 from server.gen1_initial_observation import COMPONENT as INITIAL
 from server.gen1_observation_provenance import semantic_receipt
 from server.gen1_party_codec import PartyCodec
+from server.gen1_semantic_events import faint_event
 from server.gen1_starter_settlement import context
-from server.linked_death_rules import record_linked_death, update_run_over
+from server.linked_death_rules import update_run_over
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier
 
@@ -146,17 +146,24 @@ def settle(runtime, stage, document, player, entry):
             raise JournalError("faint rule pair differs from logical identity linkage")
         death_id = identifier(player, entry["operation_id"], index)
         mon = PartyCodec(entry["payload"]["variant"]).validate_blob(bytes.fromhex(row["blob_hex"]))
-        at = datetime.now(UTC).isoformat()
-        effect = record_linked_death(
-            stage.rules,
-            player,
-            row["key"],
-            cause=row["cause"],
-            level=mon.level,
-            at=at,
-            partner_command="force_faint",
-        )
-        assert effect is not None
+        # The shared rule engine decides the death exactly as it does for Gen 3 (_handle_faint ->
+        # _propagate_faint): pair DEAD, both party keys released, both memorial obligations, the
+        # peer command selected (force_faint, or force_explode when the run and adapter opt in),
+        # run-over checked. Gen 1 supplies the evidence around it, nothing else.
+        stage.rules.handle_event(player, faint_event(key=row["key"], level=mon.level, cause=row["cause"]))
+        if link.status != LinkStatus.DEAD:
+            raise JournalError("shared rule engine did not settle the linked death")
+        link.cause = row["cause"]  # RBY knows battle versus poison; _propagate_faint records "battle" for every generation
+        at = link.killed_at
+        queued = stage.rules.queued_commands
+        physical = [c for c in queued[partner] if c.get("cmd") in ("force_faint", "force_explode") and c.get("key") == getattr(link, partner).key]
+        if len(physical) != 1:
+            raise JournalError("shared rule engine did not select exactly one peer death command")
+        # Everything else the engine queued is decided but executed elsewhere on Gen 1: memorials by
+        # gen1_memorial_runtime after the physical faint receipt (the obligation is already in
+        # pending_memorials), sounds never (sfx is false on every RBY profile), game_over via run_over.
+        stage.rules.queued_commands = {"a": [], "b": []}
+        effect = {"player": partner, "command": dict(physical[0])}
         effect["command"]["death_id"] = death_id
         component["deaths"][death_id] = {
             "player": player,
