@@ -15,7 +15,7 @@ from server.gen1_initial_observation import COMPONENT as INITIAL, display_name
 from server.gen1_party_codec import PartyCodec
 from server.gen1_starter_settlement import context
 from server.identity_registry import IdentityWitness, MigrationWitness
-from server.member_identity_rules import rekey as _rekey
+from server.gen1_engine_bridge import rekey as _rekey
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier, _player
 from server.state import MonInfo
@@ -217,6 +217,7 @@ def stage_evolutions(
                     level=after.level,
                     nickname=display_name(after.nickname),
                 ),
+                reason="evolution",
             )
             if usable:
                 stage.rules.party_keys[player].discard(before.key)

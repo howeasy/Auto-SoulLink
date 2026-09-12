@@ -34,7 +34,7 @@ from server.gen1_initial_observation import (
 from server.gen1_party_codec import PartyCodec
 from server.gen1_starter_settlement import context as identity_context
 from server.identity_registry import IdentityWitness, MigrationWitness
-from server.member_identity_rules import rekey as _rekey
+from server.gen1_engine_bridge import rekey as _rekey
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier
 from server.state import MonInfo
@@ -185,7 +185,7 @@ def stage_exchanges(runtime, stage, document, player, operation, facts, frame_or
         witness = MigrationWitness(member_id, own_context, outgoing, before_digest, IdentityWitness(own_context, mon.key, mon.sha256, 1))
         stage.identities.migrate_many(player, event_id, [witness])
         info = MonInfo(key=mon.key, level=mon.level, species=mon.species_id, nickname=display_name(mon.nickname))
-        rule, area = _rekey(stage.rules, player, outgoing, info)
+        rule, area = _rekey(stage.rules, player, outgoing, info, reason="npc_trade")
         if outgoing in stage.rules.party_keys[player]:
             stage.rules.party_keys[player].discard(outgoing)
             stage.rules.party_keys[player].add(mon.key)

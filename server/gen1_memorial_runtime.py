@@ -10,7 +10,7 @@ from server.gen1_initial_observation import inventory
 from server.gen1_memorial import expected, reservation, verify_receipt
 from server.gen1_party_codec import PartyCodec
 from server.held_write_permit import VerifiedHeldWrite
-from server.linked_death_rules import record_memorial_completion
+from server.gen1_engine_bridge import memorial_completion as record_memorial_completion
 from server.operation_scope import command_scope
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier

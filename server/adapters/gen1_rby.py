@@ -56,8 +56,9 @@ _GIFT_AREAS = frozenset({
 # must also be in _GIFT_AREAS or the exemption silently stops firing.
 # `test_gen1_gift_areas.py` pins that.
 _FIXED_SPECIES_GIFTS = frozenset({
-    "mt_moon_pokecenter",  # Magikarp from the salesman, always level 5
-    "silph_co",            # Lapras on 7F
+    "mt_moon_pokecenter",     # Magikarp from the salesman, always level 5
+    "silph_co",               # Lapras on 7F
+    "celadon_mansion_roof",   # Eevee from the back-door flat; no player choice, so the clauses do not apply
 })
 
 # Gen 1 type IDs → names
@@ -383,7 +384,12 @@ class Gen1Adapter(GameAdapter):
         return area_id in _GIFT_AREAS or area_id.startswith("gift_")
 
     def is_fixed_species_gift(self, area_id: str) -> bool:
-        return area_id in _FIXED_SPECIES_GIFTS
+        # DECISION FLAGGED FOR THE OWNER (proposal P13): Gen 3 applies the clauses to starters
+        # ("intro" is not in its fixed-species set), so two identical starters under species lock
+        # are a violation there. The Gen 1 RC exempted starters (Yellow has no choice at all, and
+        # a violation at minute one has no retry). This keeps the RC policy explicitly, at the
+        # adapter, until the owner picks one rule for every generation.
+        return area_id in _FIXED_SPECIES_GIFTS or area_id == "oaks_lab"
 
     def evo_family(self, species_id: int) -> int:
         """Gen 1's own evolution families — see _GEN1_FAMILY above.

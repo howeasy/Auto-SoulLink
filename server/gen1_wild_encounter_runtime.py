@@ -9,7 +9,7 @@ and supplies the exact identity required by the shared retirement executor.
 import copy
 from datetime import UTC, datetime
 
-from server import event_reference, no_catch_rules
+from server import event_reference, gen1_engine_bridge, no_catch_rules
 from server.adapters.gen1_rby import _MAP_ID_TO_AREA
 from server.admission_context import same_admitted_context
 from server.gen1_capture_receipt import validate_receipt as capture_receipt
@@ -337,16 +337,17 @@ def _resolve(runtime, stage, document, component, event):
                 row["phase"] = "awaiting_peer"
                 continue
             at = datetime.now(UTC).isoformat()
-            outcome = no_catch_rules.record(
+            outcome = gen1_engine_bridge.no_catch(
                 stage.rules,
                 player,
                 area,
                 begin["species_id"],
                 begin["level"],
                 activated=row["activated"],
-                occurred_at=at,
                 proved_peers=_boxed_peers(document, player),
+                decision=no_catch_rules.decision,
             )
+            at = outcome.pop("at") or at
             row.update(phase="no_catch", decision=outcome, occurred_at=at)
             if outcome["retire"]:
                 peer, key = outcome["retire"]["player"], outcome["retire"]["key"]

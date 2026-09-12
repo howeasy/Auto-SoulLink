@@ -9,7 +9,7 @@ from server.gen1_full_save import SYMBOLS
 from server.gen1_party_codec import PartyCodec
 from server.gen1_observation_provenance import semantic_receipt
 from server.identity_registry import IdentityContext, IdentityWitness
-from server.party_grant_rules import record_exempt_party_grant
+from server.gen1_engine_bridge import starter_grant
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier
 from server.save_identity import SaveIdentity
@@ -123,7 +123,7 @@ def settle_ready(runtime, stage, document, *, frame_origin=None):
         acquired = stage.identities.acquire(acquisition, acquisition, witness)
         peer = mon_info(PartyCodec(initials[partner]['observation']['source']['variant']).validate_blob(
             bytes.fromhex(other['blob_hex']))) if other else None
-        linked = record_exempt_party_grant(stage.rules, player, AREA, mon_info(mon), peer=peer)
+        linked = starter_grant(stage.rules, player, AREA, mon_info(mon))   # the shared engine pairs the starters
         cache_party(stage.rules, player, mon)
         component['settled'][player] = {'member_id': acquired['member_id'], 'acquisition_id': acquisition,
             'inventory_entry': copy.deepcopy(entry), 'blob_hex': mon.raw.hex().upper()}
