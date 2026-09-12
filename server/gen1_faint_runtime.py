@@ -123,8 +123,6 @@ def settle(runtime, stage, document, player, entry):
             continue
         if player not in component["activations"]:
             raise JournalError("active faint has no qualified ball activation history")
-        if stage.rules.explode_mode:
-            raise JournalError("Explode death requires its qualified physical receipt binding")
         link = stage.rules.find_link(player, row["key"])
         if link is None or link.a is None or link.b is None:
             raise JournalError("active faint requires a qualified linked identity")
