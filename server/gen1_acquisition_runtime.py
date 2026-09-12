@@ -24,7 +24,8 @@ from server.gen1_starter_settlement import context as identity_context
 from server.identity_registry import IdentityWitness
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier
-from server.state import MonInfo
+from server.gen1_semantic_events import capture_event
+from server.state import LinkStatus, MonInfo
 
 COMPONENT = 'gen1-acquisition-settlement'
 ORDINALS = 'gen1-acquisition-ordinals'
@@ -248,12 +249,9 @@ def stage_acquisitions(runtime, stage, document, player, operation, facts, frame
             settled['rule'] = 'retirement_required'
             settled['retirement_reason'] = RETIREMENT_REASON
         else:
-            from server.acquisition_disposition_rules import record as record_disposition
-            # Box evidence stays55bytes; detached clause computation does not
-            # promote its key to a usable party slot. Storage owns that mask.
-            exempt=fact['kind']=='scripted_grant'
-            outcome=record_disposition(stage.rules,player,area,mon,exempt=exempt)
-            settled['rule']='exempt_grant' if exempt else 'clause_checked'
+            exempt = fact['kind'] == 'scripted_grant'
+            outcome = _decide_through_engine(stage.rules, player, area, mon, stable, exempt=exempt)
+            settled['rule'] = 'exempt_grant' if exempt else 'clause_checked'
             settled['violation'] = outcome['violation']
             linked = outcome['linked']
         if settled['rule'] in ('boxed_deferred','retirement_required') or settled['violation'] is not None:
@@ -291,6 +289,37 @@ def stage_acquisitions(runtime, stage, document, player, operation, facts, frame
             {'player':player,'operation_id':operation,'message':frame_request})
     return {'entry': entry, 'result': result_for(entry), 'commands': commands,
             'records': [{'namespace': COMPONENT, 'key': record_key(player), 'value': entry}, *extra_records]}
+
+
+def _decide_through_engine(rules, player, area, mon, stable, *, exempt):
+    """The shared rule engine decides pending/link/violation exactly as it does for Gen 3
+    (SoulLinkState._handle_capture). Three RBY adapter policies stay around it:
+    usability is published only by the proved physical disposition (the party mask is
+    restored, as before), ball activation comes only from the bag_received engine signal
+    (the flag is restored), and physical effects are executed by the storage and memorial
+    runtimes from the rules state, so the engine's queued commands are drained here."""
+    partner = "b" if player == "a" else "a"
+    # area_of already namespaced grants (gift_<area> or the pairing id), so the engine gets gift=False and
+    # therefore keeps the id as given; a real gift area still maps through _is_gift_capture unchanged.
+    peer = rules.pending_captures.get(area, {}).get(partner)
+    violation = None
+    if peer is not None and not rules.adapter.is_fixed_species_gift(area):
+        halves = {player: mon, partner: peer}
+        found = rules._check_link_violation(halves["a"], halves["b"])
+        if found is not None:
+            violation = list(found)
+    masks = copy.deepcopy(rules.party_keys)
+    activated = dict(rules.pokeballs_obtained)
+    rules.handle_event(player, capture_event(key=mon.key, area_id=area, species_id=mon.species, level=mon.level,
+                                             nickname=mon.nickname or "", gift=False,
+                                             in_box=stable["location"] == "box"))
+    rules.queued_commands = {"a": [], "b": []}
+    rules.party_keys = masks
+    rules.pokeballs_obtained = activated
+    linked = rules.find_link(player, mon.key)
+    if linked is not None and linked.status != LinkStatus.ALIVE:
+        linked = None
+    return {"linked": linked, "violation": violation}
 
 
 def _link_members(entries, player, link, own_member_id, identities, initials):
