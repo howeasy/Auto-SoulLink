@@ -1,6 +1,6 @@
 # Gen 1 release checklist
 
-Rendered 2026-09-12 from `tests/gen1_release_requirements.json` (schema `1`) at worktree HEAD `ffcc118`. The manifest is the truth and `tools/verify_gen1_release.py` is the gate; this page is a render of the same rows so the status of the release fits on one screen. Regenerate with:
+Rendered 2026-09-12 from `tests/gen1_release_requirements.json` (schema `1`) at worktree HEAD `5ff5f17`. The manifest is the truth and `tools/verify_gen1_release.py` is the gate; this page is a render of the same rows so the status of the release fits on one screen. Regenerate with:
 
 ```bash
 python docs/gen1_reference/render_rc_checklist.py . docs/gen1_reference/RC_CHECKLIST.md
@@ -14,7 +14,7 @@ A row is `registered` when the manifest lists at least one reviewed executable p
 | --- | --- | ---: | ---: | --- |
 | `canonical-validation` | Canonical sources, constants, structures, addresses, ROM layouts and generated data | 10 | 2 | 7e umbrella registrations |
 | `unit-protocol` | Unit, server, admission, transaction, transport, DOM, route and API tests | 116 | 1 | 7e umbrella registrations |
-| `live-memory` | Clean R/B/Y memory transformations and write-safe state gates | 47 | 7 | 7e umbrella registrations |
+| `live-memory` | Clean R/B/Y memory transformations and write-safe state gates | 53 | 1 | 7e umbrella registrations |
 | `single-player` | Real single-player engine behavior and every mandatory gameplay axis | 0 | 60 | 7a natural-play drivers on the free-run loop (after handoff item 5) |
 | `live-duos` | Five live pairs: Red/Blue, Blue/Yellow, Yellow/Red, Red/Red and Yellow/Yellow | 7 | 5 | 7b existing duo runner on the production loop |
 | `ordered-contracts` | Nine ordered cartridge pair contracts, each in both HELLO orders | 18 | 0 | 7b one parametrized HELLO-order contract test |
@@ -22,7 +22,7 @@ A row is `registered` when the manifest lists at least one reviewed executable p
 | `patch-browser` | Clean and approved UPR patching, genuine browser E2E and final artifact boots | 2 | 40 | 7d UPR categories per title, browser E2E (needs playwright), panel and SFX gates |
 | `trade-receptionist` | Full native receptionist and durable physical trade matrix | 13 | 55 | 7c register the passing nine-pair live matrix per title; add busy-queued and recovery rows |
 | `human-session` | Staged two-player human session after passing automation | 0 | 1 | 7g full gate run green, then the staged human session (--complete-human) |
-| **total** | 388 requirements, 10 stages | **215** | **173** | |
+| **total** | 388 requirements, 10 stages | **221** | **167** | |
 
 ## Requirements
 
@@ -171,19 +171,19 @@ A row is `registered` when the manifest lists at least one reviewed executable p
 
 ### `live-memory`: Clean R/B/Y memory transformations and write-safe state gates
 
-47 registered, 7 missing. Closure: 7e umbrella registrations.
+53 registered, 1 missing. Closure: 7e umbrella registrations.
 
 | # | Requirement | Description | Status | Proof (check, source) |
 | ---: | --- | --- | --- | --- |
-| 1 | `memory.red.differential` | Canonical MoveMon/RemovePokemon/party and box compaction/append from cloned emulator states; all counts, slots, boundary failures, stats/level derivation, HP/status, names/species lists, dex changes, SRAM bank/checksum and immediate reload persistence (axes: title, party_counts, box_counts, source_slots, destination_slots) | **MISSING PROOF** |  |
+| 1 | `memory.red.differential` | Canonical MoveMon/RemovePokemon/party and box compaction/append from cloned emulator states; all counts, slots, boundary failures, stats/level derivation, HP/status, names/species lists, dex changes, SRAM bank/checksum and immediate reload persistence (axes: title, party_counts, box_counts, source_slots, destination_slots) | registered | `live-gates` (tests/live/test_gen1_gates.py) |
 | 2 | `memory.red.write-safe` | Live proof of the adopted write-safe predicate; no proof keeps writes disabled (axes: title, states) | registered | `live-gates` (tests/live/test_gen1_gates.py) |
-| 3 | `memory.red.storage` | Active box WRAM plus eleven SRAM boxes, invalid current box refusal, recomputed withdrawn stats, initialized bit/checksum before memorial, whole empty reserved box, NACK and canonical initiator deposit undo (axes: title) | **MISSING PROOF** |  |
-| 4 | `memory.blue.differential` | Canonical MoveMon/RemovePokemon/party and box compaction/append from cloned emulator states; all counts, slots, boundary failures, stats/level derivation, HP/status, names/species lists, dex changes, SRAM bank/checksum and immediate reload persistence (axes: title, party_counts, box_counts, source_slots, destination_slots) | **MISSING PROOF** |  |
+| 3 | `memory.red.storage` | Active box WRAM plus eleven SRAM boxes, invalid current box refusal, recomputed withdrawn stats, initialized bit/checksum before memorial, whole empty reserved box, NACK and canonical initiator deposit undo (axes: title) | registered | `unit` (tests/unit/test_gen1_withdraw_and_explode.py); `live-gates` (tests/live/test_gen1_gates.py); `unit` (tests/unit/test_gen1_storage_runtime.py) |
+| 4 | `memory.blue.differential` | Canonical MoveMon/RemovePokemon/party and box compaction/append from cloned emulator states; all counts, slots, boundary failures, stats/level derivation, HP/status, names/species lists, dex changes, SRAM bank/checksum and immediate reload persistence (axes: title, party_counts, box_counts, source_slots, destination_slots) | registered | `live-gates` (tests/live/test_gen1_gates.py) |
 | 5 | `memory.blue.write-safe` | Live proof of the adopted write-safe predicate; no proof keeps writes disabled (axes: title, states) | registered | `live-gates` (tests/live/test_gen1_gates.py) |
-| 6 | `memory.blue.storage` | Active box WRAM plus eleven SRAM boxes, invalid current box refusal, recomputed withdrawn stats, initialized bit/checksum before memorial, whole empty reserved box, NACK and canonical initiator deposit undo (axes: title) | **MISSING PROOF** |  |
-| 7 | `memory.yellow.differential` | Canonical MoveMon/RemovePokemon/party and box compaction/append from cloned emulator states; all counts, slots, boundary failures, stats/level derivation, HP/status, names/species lists, dex changes, SRAM bank/checksum and immediate reload persistence (axes: title, party_counts, box_counts, source_slots, destination_slots) | **MISSING PROOF** |  |
+| 6 | `memory.blue.storage` | Active box WRAM plus eleven SRAM boxes, invalid current box refusal, recomputed withdrawn stats, initialized bit/checksum before memorial, whole empty reserved box, NACK and canonical initiator deposit undo (axes: title) | registered | `unit` (tests/unit/test_gen1_withdraw_and_explode.py); `live-gates` (tests/live/test_gen1_gates.py); `unit` (tests/unit/test_gen1_storage_runtime.py) |
+| 7 | `memory.yellow.differential` | Canonical MoveMon/RemovePokemon/party and box compaction/append from cloned emulator states; all counts, slots, boundary failures, stats/level derivation, HP/status, names/species lists, dex changes, SRAM bank/checksum and immediate reload persistence (axes: title, party_counts, box_counts, source_slots, destination_slots) | registered | `live-gates` (tests/live/test_gen1_gates.py) |
 | 8 | `memory.yellow.write-safe` | Live proof of the adopted write-safe predicate; no proof keeps writes disabled (axes: title, states) | registered | `live-gates` (tests/live/test_gen1_gates.py) |
-| 9 | `memory.yellow.storage` | Active box WRAM plus eleven SRAM boxes, invalid current box refusal, recomputed withdrawn stats, initialized bit/checksum before memorial, whole empty reserved box, NACK and canonical initiator deposit undo (axes: title) | **MISSING PROOF** |  |
+| 9 | `memory.yellow.storage` | Active box WRAM plus eleven SRAM boxes, invalid current box refusal, recomputed withdrawn stats, initialized bit/checksum before memorial, whole empty reserved box, NACK and canonical initiator deposit undo (axes: title) | registered | `unit` (tests/unit/test_gen1_withdraw_and_explode.py); `live-gates` (tests/live/test_gen1_gates.py); `unit` (tests/unit/test_gen1_storage_runtime.py) |
 | 10 | `memory.yellow.pc-restrictions` | Canonical Yellow deposit/release permission and happiness behavior under the adopted cartridge-matching policy; synchronized boxing respects restrictions and canonically undoes a refused initiator deposit. Full confirmation/menu/rollback proof remains required. | **MISSING PROOF** |  |
 | 11 | `memory.red.primitive-differential` | 1661 common storage transformations from cloned cartridge states: 400 deposits, 1260 withdrawals and one stale-BoxLevel case. Compares every authoritative active record/name/list, dex bytes and SRAM bank. One canonicalized fixture species; unused tails, invalid-input refusals, PC menus and write-safe admission remain separate. (axes: title, deposit_party_counts, deposit_box_counts, withdraw_party_counts, withdraw_box_counts, selected_slot) | registered | `canonical-sources` (tools/verify_canonical_sources.py); `canonical-final` (tools/verify_canonical_sources.py); `live-gates` (tests/live/test_gen1_gates.py) |
 | 12 | `memory.red.initialization-and-memorial-persistence` | All 12 initialized-box transformations match canonical EmptyAllSRAMBoxes/SaveMainData; ordinary deposit followed by memorial preserves surviving party, current box and grave through cartridge save/load, ChangeBox initialization branch and real core reboot. Both live/save player-ID byte mismatch cases refuse with zero mutation. Durable reservation and synchronized rollback remain separate. (axes: title, current_box_indices) | registered | `canonical-sources` (tools/verify_canonical_sources.py); `canonical-final` (tools/verify_canonical_sources.py); `live-gates` (tests/live/test_gen1_gates.py) |
