@@ -6,6 +6,7 @@ from server.gen1_prepared_cartridges import PreparedCartridges
 def prepared_targets(cartridges):
     if cartridges is None:return {}
     if not isinstance(cartridges,PreparedCartridges):raise ValueError("reproduced prepared cartridges required")
+    if getattr(cartridges,"provenance",None)!="reproduced_upr":return {}  # a canonical pair is not a randomized patch target
     result={}
     for player,metadata in cartridges.contract()["players"].items():
         variant=metadata["variant"];slug="run-"+player
