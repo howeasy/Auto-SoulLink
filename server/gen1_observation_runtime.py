@@ -37,8 +37,11 @@ EVENT = 'observation'
 SCHEMA = 'rby-observation-v1'
 FIELDS = frozenset({'schema', 'event', 'frame', 'sequence', 'context', 'rom', 'signals', 'acquisitions', 'inventory'})
 # The loop's polled battle byte (wIsInBattle) and its debounced trainer engagement ({trainer_id, frame} or null):
-# optional on the wire so the live-proven P10 batches stay valid; the loop always sends both.
-OPTIONAL = frozenset({'battle', 'trainer'})
+# optional on the wire so the live-proven P10 batches stay valid; the loop always sends both. A client launched
+# with a native manifest also sends ``native_checkpoint`` ({schema: rby-native-observation-v1, party} or null),
+# the same-frame party readback the native trade stack anchors to the heartbeat inventory.
+OPTIONAL = frozenset({'battle', 'trainer', 'native_checkpoint'})
+NATIVE_CHECKPOINT = 'rby-native-observation-v1'
 TRAINER = frozenset({'trainer_id', 'frame'})
 CONTEXT = frozenset({'context_generation', 'physical_instance', 'save_identity'})
 ENTRY = frozenset({'sequence', 'operation_id', 'frame'})
@@ -75,6 +78,12 @@ def typed(request):
                                 or type(trainer['trainer_id']) is not int or not 1 <= trainer['trainer_id'] <= 255
                                 or type(trainer['frame']) is not int or not 0 <= trainer['frame'] <= request['frame']):
         raise JournalError('typed trainer battle start required')
+    native = request.get('native_checkpoint')
+    if native is not None and (not isinstance(native, dict) or set(native) != {'schema', 'party'}
+                               or native['schema'] != NATIVE_CHECKPOINT or not isinstance(native['party'], dict)):
+        raise JournalError('typed native checkpoint required')
+    if native is not None and request['inventory'] is None:
+        raise JournalError('native checkpoint requires the same-batch heartbeat inventory')
     return request
 
 
@@ -117,6 +126,13 @@ def stage_observation(runtime, stage, document, player, operation, request):
         raise JournalError('observation sequence skipped or repeated')
     if request['frame'] < (old['frame'] + 1 if old else initial['observation']['frame']):
         raise JournalError('observation frame moved backwards')
+    # Quarantine: while a native trade owns the party (offer through finalize), the free loop may only
+    # keep its sequence and its heartbeat alive (the inventory is deferred behind the trade's own
+    # commands below). Ordinary rule mutations are refused, never staged: nothing this batch could carry
+    # was observed under the ownership the trade requires.
+    if document.get('active_trade') is not None and (request['signals'] is not None or request['acquisitions']
+                                                      or request.get('trainer') is not None or request.get('battle')):
+        raise JournalError('ordinary observation quarantined while a native trade owns the party')
     result = {'ack': 'ACK', 'ordinary_execution': False}
     commands, records = {'a': [], 'b': []}, []
 
@@ -145,6 +161,19 @@ def stage_observation(runtime, stage, document, player, operation, request):
             merge(stage_inventory(runtime, stage, document, player, operation,
                                   {'event': 'inventory_observation', 'payload': payload}), 'inventory_transition_digest')
             recorded_inventory = True
+    # 1b. The native trade checkpoint the client read in the same held frame as that inventory. It rides
+    # the heartbeat, so it is deferred with it; a batch that carries the checkpoint while the trade stack
+    # cannot use it (no inventory recorded) is not an error, it simply keeps the previous checkpoint.
+    if request.get('native_checkpoint') is not None:
+        if recorded_inventory:
+            from server.gen1_inventory_observation import COMPONENT as INVENTORY_COMPONENT
+            from server.gen1_native_observation import stage_free
+            staged = stage_free(document, player, operation, request,
+                                document['components'][INVENTORY_COMPONENT][player])
+            records.append(staged['record'])
+            result['native_checkpoint_digest'] = digest(staged['entry'])
+        else:
+            result['native_checkpoint_deferred'] = True
     # 2. Engine signals: ball activation, faints and the starter source, exactly as the standalone event.
     if request['signals'] is not None:
         from server.gen1_engine_signal_runtime import stage_observation as stage_engine
@@ -170,7 +199,11 @@ def stage_observation(runtime, stage, document, player, operation, request):
     # 3. The source-receipt list, decoded ONCE so every fact keeps its raw index, then staged kind by kind in
     # the order the retired compound frame used (gen1_frame_acquisitions.stage, gen1_frame_journal.returned).
     from server import event_reference
-    from server.gen1_acquisition_runtime import COMPONENT as ACQUISITIONS, source_rom, stage_acquisitions
+    from server.gen1_acquisition_runtime import (
+        COMPONENT as ACQUISITIONS,
+        source_rom,
+        stage_acquisitions,
+    )
     from server.gen1_npc_exchange_runtime import COMPONENT as EXCHANGES, stage_exchanges
     from server.gen1_source_receipts import (
         ACQUISITION_KINDS,
@@ -179,7 +212,11 @@ def stage_observation(runtime, stage, document, player, operation, request):
         LIFECYCLE_KINDS,
         decode,
     )
-    from server.gen1_wild_encounter_runtime import COMPONENT as ENCOUNTERS, KINDS as ENCOUNTER_ROWS, stage as stage_encounters
+    from server.gen1_wild_encounter_runtime import (
+        COMPONENT as ENCOUNTERS,
+        KINDS as ENCOUNTER_ROWS,
+        stage as stage_encounters,
+    )
     components = document['components']
     pending = {name: bool(components.get(name, {}).get(player, {}).get('pending')) for name in (ACQUISITIONS, EXCHANGES)}
     reference = event_reference.make(player, operation, request)
