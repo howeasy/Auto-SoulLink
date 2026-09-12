@@ -65,6 +65,45 @@ local held_frame,reported,finished=nil,false,false
 local dirty_probe
 local frames_driven,loop_started=0,nil
 local phase_index,phase,phases=0,nil,JSON.array()
+-- TEMPORARY TEST-ONLY diagnostic: no production module or authority edit.
+local profile={schema="rby-free-service-diagnostic-v1",captures=JSON.array(),observes=JSON.array(),
+    commits=JSON.array(),replaces=JSON.array()}
+local profile_service,profile_attached=nil,false
+local function sample(rows,value,limit)if #rows<limit then rows[#rows+1]=value end end
+local function attach_profile()
+    if profile_attached or not profile_service or not profile_service.loop or not profile_service.runtime then return end
+    local service=profile_service
+    local observation=assert(package.loaded.gen1_initial_observation)
+    local capture=assert(observation.capture)
+    observation.capture=function(...)
+        local began=clock();local value=capture(...)
+        sample(profile.captures,{frame=emu.framecount(),ms=(clock()-began)*1000},32)
+        return value
+    end
+    local observe=assert(service.runtime.observe)
+    service.runtime.observe=function(self,...)
+        local began=clock();local ids,why=observe(self,...);local ended=clock()
+        sample(profile.observes,{frame=emu.framecount(),began=began,ended=ended,ms=(ended-began)*1000,
+            operation_id=ids and ids[1]or nil},32)
+        return ids,why
+    end
+    local store=assert(service.store)
+    local commit=assert(store.commit)
+    store.commit=function(self,payload)
+        local began=clock();local ok,why=commit(self,payload);local ended=clock()
+        local outbox=type(payload)=="table"and payload.outbox or nil
+        sample(profile.commits,{frame=emu.framecount(),began=began,ended=ended,ms=(ended-began)*1000,
+            kind=type(outbox)=="table"and #outbox>0 and"outbox"or"empty",outbox=type(outbox)=="table"and #outbox or -1},64)
+        return ok,why
+    end
+    local replace=assert(store.backend.replace)
+    store.backend.replace=function(text)
+        local began=clock();local ok,why=replace(text)
+        sample(profile.replaces,{frame=emu.framecount(),ms=(clock()-began)*1000,bytes=#text},64)
+        return ok,why
+    end
+    profile_attached=true;profile.attached_frame=emu.framecount()
+end
 local function status_now()return SLINK_RUNTIME_STATUS and SLINK_RUNTIME_STATUS()end
 local function begin_phase(status)
     phase_index=phase_index+1;phase=PHASES[phase_index]
@@ -116,6 +155,7 @@ emu.frameadvance=function()
     -- Free-running: the entry advances one frame per loop tick. Drive the profile inputs
     -- (one step Right, then idle) every frame; read the status every 120 frames, not every
     -- frame, so the gate itself does not shape the per-frame cost it measures.
+    if not profile_attached then attach_profile()end
     local status
     if not loop_started or dirty_probe or (emu.framecount()-loop_started.frame)%120==0 then status=status_now()end
     if not loop_started then
@@ -168,7 +208,8 @@ emu.frameadvance=function()
                     local proof=dirty_probe;dirty_probe=nil
                     publish("ready",{status=status,held_frame=held_frame,loop_started=loop_started,frame_after=emu.framecount(),
                         clock_after=clock(),frames_driven=frames_driven,screenshots=screenshots,phases=phases,
-                        dirty_probe=proof,final_source=independent_inventory(),actual_generated_launcher=true})
+                        dirty_probe=proof,final_source=independent_inventory(),actual_generated_launcher=true,
+                        diagnostic=profile})
                     reported=true
                 end
             elseif not reported and phase and emu.framecount()-phase.began.frame>=phase.frames then
@@ -191,11 +232,25 @@ emu.frameadvance=function()
     end
     original_advance()
 end
+local original_require=require
+local profile_wrapped_module
+require=function(name)
+    local module=original_require(name)
+    if name=="gen1_client_entry"and module~=profile_wrapped_module then
+        local start=module.start
+        module.start=function(...)
+            local service=start(...);profile_service=service;return service
+        end
+        profile_wrapped_module=module
+    end
+    return module
+end
 local ok,why=xpcall(function()dofile(input.launcher)end,debug.traceback)
+require=original_require
 emu.yield=original_yield;emu.frameadvance=original_advance
 if not finished then
     pcall(function()shot("failed-frame")end)
     local status_ok,status=pcall(function()return SLINK_RUNTIME_STATUS and SLINK_RUNTIME_STATUS()end)
-    publish("failure",{error=tostring(why),status=status_ok and status or tostring(status)})
+    publish("failure",{error=tostring(why),status=status_ok and status or tostring(status),diagnostic=profile})
     t.check("generated launcher completed free-service qualification",false,tostring(why));t.finish()
 end

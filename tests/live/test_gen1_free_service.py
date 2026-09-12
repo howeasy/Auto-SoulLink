@@ -10,6 +10,7 @@ compared with the credit-path run behind ORDINARY_FRAME_TURNOVER_PROFILE.md.
 """
 
 import asyncio
+import gc
 import json
 import os
 import secrets
@@ -20,6 +21,7 @@ import time
 from pathlib import Path
 
 import pytest
+import psutil
 from aiohttp.test_utils import TestClient, TestServer
 
 from server.gen1_initial_observation import inventory as decode_inventory
@@ -137,6 +139,44 @@ def run_free_pair(variants):
         jobs, listener, web = [], None, None
         runtime = None
         turns = []
+        # TEMPORARY TEST-ONLY diagnostics; no production authority/cache edit.
+        diagnostic = {"schema": "rby-free-service-host-diagnostic-v1", "publish": [], "writer_write": [],
+                      "writer_drain": [], "host_samples": [], "gc_pauses": [], "python_pid": os.getpid()}
+        collecting = asyncio.Event()
+        sampler_task = None
+        gc_started = {}
+
+        def gc_timing(phase, info):
+            now = time.perf_counter()
+            generation = info["generation"]
+            if phase == "start":
+                gc_started[generation] = now
+            elif generation in gc_started:
+                began = gc_started.pop(generation)
+                if len(diagnostic["gc_pauses"]) < 128:
+                    diagnostic["gc_pauses"].append({"began": began, "ended": now,
+                                                     "generation": generation})
+
+        gc.callbacks.append(gc_timing)
+
+        async def sample_host(processes):
+            psutil.cpu_percent(interval=None)
+            while not collecting.is_set():
+                rows = []
+                for process in processes:
+                    try:
+                        cpu = process.cpu_times()
+                        rows.append({"pid": process.pid, "name": process.name(), "cpu_seconds": cpu.user + cpu.system,
+                                     "rss_bytes": process.memory_info().rss, "threads": process.num_threads()})
+                    except (psutil.Error, OSError):
+                        continue
+                if len(diagnostic["host_samples"]) < 128:
+                    diagnostic["host_samples"].append({"clock": time.perf_counter(), "os_cpu_percent": psutil.cpu_percent(interval=None),
+                                                       "python_gc_counts": list(gc.get_count()), "processes": rows})
+                try:
+                    await asyncio.wait_for(collecting.wait(), timeout=1)
+                except TimeoutError:
+                    pass
 
         async def wait(name, player, seconds):
             file = directory / f"{name}-{player}.json"
@@ -169,6 +209,21 @@ def run_free_pair(variants):
                     extra_env={"SLINK_LAUNCHER_TEST_INPUT": str(spec)})))
             observed = {p: await wait("observed", p, 55) for p in players}
             assert all(row["cold_boot"] is True for row in observed.values())
+            emulators = {}
+            for process in psutil.process_iter(["name", "cmdline"]):
+                try:
+                    name = (process.info["name"] or "").lower()
+                    command = " ".join(process.info["cmdline"] or []).lower()
+                    if "emuhawk" in name and directory.name in command:
+                        for player in players:
+                            if f"gate-{player}.lua" in command:
+                                assert player not in emulators, "duplicate diagnostic emulator for one player"
+                                emulators[player] = process
+                except (psutil.Error, OSError):
+                    continue
+            assert set(emulators) == set(players), "diagnostic requires exactly two owned EmuHawk processes"
+            diagnostic["emulator_pids"] = {player: process.pid for player, process in emulators.items()}
+            sampler_task = asyncio.create_task(sample_host([psutil.Process(os.getpid()), *emulators.values()]))
             runtime = create_runtime(directory, contract(*variants), run_id=run_id, free_service=True)
             original_process = runtime.process
 
@@ -195,11 +250,51 @@ def run_free_pair(variants):
                     turns.append(row)
 
             runtime.process = measured_process
+            original_publish = runtime._publish
+
+            def measured_publish(callback):
+                began = time.perf_counter()
+                try:
+                    return original_publish(callback)
+                finally:
+                    if len(diagnostic["publish"]) < 512:
+                        diagnostic["publish"].append({"began": began, "ended": time.perf_counter()})
+
+            runtime._publish = measured_publish
             assert not runtime.journal.snapshot().state["rules"]["core"]["player_identity"]
             configure_runtime(runtime)
             srv = SLinkServer(data_dir=str(directory), gen1_runtime=runtime)
+
+            class WriterProbe:
+                def __init__(self, writer):
+                    self.writer = writer
+                    self.connection = str(writer.get_extra_info("peername"))
+
+                def __getattr__(self, name):
+                    return getattr(self.writer, name)
+
+                def write(self, data):
+                    began = time.perf_counter()
+                    value = self.writer.write(data)
+                    if len(diagnostic["writer_write"]) < 512:
+                        diagnostic["writer_write"].append({"began": began, "ended": time.perf_counter(),
+                                                           "bytes": len(data), "connection": self.connection})
+                    return value
+
+                async def drain(self):
+                    began = time.perf_counter()
+                    try:
+                        return await self.writer.drain()
+                    finally:
+                        if len(diagnostic["writer_drain"]) < 512:
+                            diagnostic["writer_drain"].append({"began": began, "ended": time.perf_counter(),
+                                                               "connection": self.connection})
+
+            async def measured_connection(reader, writer):
+                return await srv.handle_client(reader, WriterProbe(writer))
+
             listener = await asyncio.start_server(
-                srv.handle_client, "127.0.0.1", 0, limit=4 * 1024 * 1024
+                measured_connection, "127.0.0.1", 0, limit=4 * 1024 * 1024
             )
             srv._tcp_port = listener.sockets[0].getsockname()[1]
             web = TestClient(TestServer(build_app(srv)))
@@ -430,6 +525,12 @@ def run_free_pair(variants):
             pending = set()
             if jobs:
                 _, pending = await asyncio.wait(jobs, timeout=15)
+            collecting.set()
+            if sampler_task is not None:
+                await sampler_task
+            if gc_timing in gc.callbacks:
+                gc.callbacks.remove(gc_timing)
+            publish(directory / "perf-diagnostic.json", diagnostic)
             if web is not None:
                 await web.close()
             if listener is not None:
