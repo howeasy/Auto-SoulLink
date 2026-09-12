@@ -1,5 +1,7 @@
 # Gen 1 RC handoff — 2026-09-12, wrap-up checkpoint
 
+> Historical handoff. Read [RC_MASTER_GUIDE.md](RC_MASTER_GUIDE.md) first for current owners, branch state, complete open-work register and compaction-safe resume capsule. This document retains the earlier evidence and limitations.
+
 This is a stop/resume ledger, not a release verdict. The owner narrowed the target to Gen 1 RC and shared-module readiness, with sustained full speed at 1× and 3× (5× is not required). No Gen 2/Gen 3/UI port or feature expansion is part of this checkpoint. Evidence must distinguish source, controlled engine, downloaded production launcher, paired gameplay, and human use. Passing component tests or a peer review is not a full-playthrough claim.
 
 **Current plan of record:** [RC_COMPLETION_OWNERSHIP_PLAN_2026-09-12.md](RC_COMPLETION_OWNERSHIP_PLAN_2026-09-12.md). It supersedes the broad resume-order list below for the current mandate: only active 3× and native recovery are in progress, followed by an owner-requested pause. The later release ledger is not authorization to start more lanes.

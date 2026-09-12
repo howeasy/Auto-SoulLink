@@ -1,5 +1,7 @@
 # Gen 1 RC completion: owners, gates, and stop rules
 
+> Historical execution snapshot. The current single resume/plan entry point is [RC_MASTER_GUIDE.md](RC_MASTER_GUIDE.md); its A/B status files supersede branch HEADs and pause status below. Preserve this file for the original A+B acceptance contract.
+
 Status: **execution paused for owner review**, 2026-09-12. This plan replaces an unbounded “work on Gen 1” queue with two active blockers and one explicit pause. It does not lower the 388-row release manifest or call component tests a full playthrough.
 
 ## One finish line at a time
