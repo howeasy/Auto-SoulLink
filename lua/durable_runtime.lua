@@ -487,10 +487,13 @@ function M.new(options)
         function self:observe(payloads,baseline)
             if state.failed then return nil,state.failure end
             local safe,ids,why=pcall(function()
-                local batch=copy(payloads)
-                assert(JSON.kind(batch)=="array","observation array required")
-                for _,payload in ipairs(batch) do semantic(payload) end
-                return journal:append_many(batch,baseline)
+                -- The journal immediately validates and detaches this whole
+                -- batch before it can publish anything.  Check transient
+                -- event kinds first, but do not encode/decode the full point
+                -- twice on the same single-threaded observation boundary.
+                assert(type(payloads)=="table","observation array required")
+                for _,payload in ipairs(payloads) do semantic(payload) end
+                return journal:append_many(payloads,baseline)
             end)
             if not safe or not ids then
                 revoke(safe and why or ids,true);return nil,state.failure

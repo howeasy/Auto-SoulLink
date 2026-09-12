@@ -213,6 +213,42 @@ def test_gen1_wrapper_cannot_be_retargeted_and_preserves_journal_on_hold(tmp_pat
         case.close()
 
 
+@pytest.mark.parametrize("source", [
+    "JSON.array({JSON.object({event='trade_request'})})",
+    "JSON.array({JSON.object({event='observation',source=string.char(255)})})",
+    "(function()local p=JSON.object({event='observation'});p.self=p;return JSON.array({p})end)()",
+    "JSON.object({event='observation'})",
+])
+def test_observe_rejects_transient_or_malformed_batch_before_journal_mutation(tmp_path, source):
+    case = RuntimeCase(tmp_path)
+    try:
+        lua = client(case, "a")
+        before = lua.globals().disk
+        payloads = lua.eval(source)
+        result = lua.globals().runtime.observe(lua.globals().runtime, payloads, lua.eval("JSON.object({})"))
+        assert result[0] is None and result[1]
+        assert lua.globals().disk == before
+        assert json.loads(lua.globals().state_json())["outbox"] == []
+        assert json.loads(lua.globals().status_json())["failed"] is True
+    finally:
+        case.close()
+
+
+def test_observe_detaches_full_point_and_reopen_checks_durable_bytes(tmp_path):
+    case = RuntimeCase(tmp_path)
+    try:
+        lua = client(case, "a")
+        payloads = lua.eval("JSON.array({JSON.object({event='observation',source=string.rep('A',74000)})})")
+        result = lua.globals().runtime.observe(lua.globals().runtime, payloads, lua.eval("JSON.object({frame=1})"))
+        assert len(result) == 1
+        payloads[1].source = "changed by caller"
+        assert json.loads(lua.globals().state_json())["outbox"][0]["payload"]["source"] == "A" * 74000
+        lua.execute("store:close();reopened=assert(open_store())")
+        assert lua.eval("(assert(reopened:read())).outbox[1].payload.source") == "A" * 74000
+    finally:
+        case.close()
+
+
 def test_free_service_completes_startup_held_command_before_constructing_loop():
     lua = lua_store.__wrapped__()
     lua.globals().launch_json = json.dumps({
