@@ -17,6 +17,10 @@
     transform    Ditto (not linked) uses TRANSFORM: wPlayerBattleStatus3 TRANSFORMED set, battle struct = enemy
     player_action  Ditto linked while transformed: menu -> not_reached only; FIGHT commit ->
                  ExecutePlayerMove+0 write (HP 0000 + CANNOT_MOVE) -> faint -> black-out (both mons down)
+    explode_first  (scenarios=["explode_first"] only, P11) the EXPLODE binding armed for the linked Squirtle from the
+                 walk on: the wild battle's first MainInBattleLoop+0 rewrites its four move slots to EXPLOSION (PP 5)
+                 before the first menu; FIGHT + slot 1 reaches ExecutePlayerMove+0 with $99 already selected (one-byte
+                 no-op write) and the ORIGINAL engine's ExplodeEffect faints the mon itself and hits the wild mon
   Assertions and screenshots anchor on the CURRENT member's non-refused row, never an earlier callback.
 --]]
 local ROOT=SLINK_ROOT or os.getenv("SLINK_ROOT")
@@ -32,7 +36,7 @@ local f=assert(io.open(assert(os.getenv("SLINK_BATTLE_FORCE_INPUT")),"r"));local
 local A=config.addresses;local SITES=config.sites;local OUT=config.out_dir;local D=config.driver
 -- config.scenarios (optional list) selects scenarios; nil = the full benched -> transform -> player_action battle.
 local function want(name)
-    local sc=config.scenarios;if sc==nil or sc==JSON.null then return name~="fight_first" end
+    local sc=config.scenarios;if sc==nil or sc==JSON.null then return name~="fight_first" and name~="explode_first" end
     for _,n in ipairs(sc)do if n==name then return true end end;return false
 end
 local u8=function(a)return memory.read_u8(a,"System Bus")end
@@ -53,11 +57,14 @@ local function world()return {map=u8(config.coord_addr.map),x=u8(config.coord_ad
     party0=party_slot(0).hp_hex,party1=party_count()>=2 and party_slot(1).hp_hex or JSON.null,frame=emu.framecount()}end
 local challenge_n=0
 local owner=nil;local in_frame=false
+-- current.binding selects the authority a step arms (faint by default); the explode binding carries its own site writes
+local current={member=nil,scenario=nil,exec=nil,binding=Battle.NAME}
 local function authority(member,frame,step)
     challenge_n=challenge_n+1
+    local explode=current.binding==Battle.EXPLODE
     return {schema=Executor.SCHEMA,challenge=fmt("%032x",challenge_n),scope={operation_id=string.rep("0",32),operation_digest=string.rep("0",64),
         context_generation=string.rep("0",32),binding_digest=string.rep("0",64),phase="battle_force_faint"},proof_digest=string.rep("0",64),
-        owner_id=result.owner_id,frame=frame,step=step,uses=1,held=false,binding=Battle.NAME,member=member,sites=SITES,addresses=A,
+        owner_id=result.owner_id,frame=frame,step=step,uses=1,held=false,binding=current.binding,member=member,sites=explode and config.explode_sites or SITES,addresses=A,
         hook_frame_offset=(owner and result.hook_frame_offset_bounded) or result.hook_frame_offset_harness or 0}
 end
 local function scenario(name)local s={name=name,reached=JSON.array(),not_reached=0,checks=JSON.array()};result.scenarios[#result.scenarios+1]=s;return s end
@@ -66,6 +73,8 @@ local function check(s,what,ok,detail)s.checks[#s.checks+1]={what=what,ok=ok and
 -- ── frame primitive: harness (emu.frameadvance) until the owner exists, then step_one ──────────
 local function held()if owner then return owner.status().host.physical_stop_verified end;return not in_frame end
 local X=Battle.new({owner_id=result.owner_id,held=held})
+local XE=Battle.new({owner_id=result.owner_id,held=held,name=Battle.EXPLODE}) -- same two sites, its own hooks and challenge ledger
+current.exec=X
 local step_n=0
 -- Measured live (lua/tests/probe_input_latency.lua): under step_one joypad.set is STICKY — a button stays
 -- held until another joypad.set replaces it (frameadvance auto-releases). Every frame therefore sets all
@@ -78,15 +87,14 @@ local function frame(buttons)
     if owner then local ok,r=owner.step_one({});assert(ok,r)else in_frame=true;emu.frameadvance();in_frame=false end
     t.frame=t.frame+1
 end
-local current={member=nil,scenario=nil}
 local function step(buttons)
-    local member,s=current.member,current.scenario
+    local member,s,ex=current.member,current.scenario,current.exec
     step_n=step_n+1
     local before=emu.framecount()
     local auth=authority(member,before,step_n)
-    assert(X.arm(auth))
+    assert(ex.arm(auth))
     frame(buttons)
-    local ev=X.finish()
+    local ev=ex.finish()
     if ev.site~=JSON.null and ev.site~=nil then
         s.reached[#s.reached+1]={authority=auth,evidence=ev,world_at_finish=world(),bounded=owner~=nil}
         note(fmt("[%s] REACHED %s frame=%d hook_frame=%s member=%02X refusal=%s writes=%d",s.name,ev.site,before,tostring(ev.hook_frame),member.species,
@@ -94,7 +102,7 @@ local function step(buttons)
     else s.not_reached=s.not_reached+1 end
     return ev
 end
-local function use(member,s)current.member=member;current.scenario=s end
+local function use(member,s,exec,binding)current.member=member;current.scenario=s;current.exec=exec or X;current.binding=binding or Battle.NAME end
 local function wait(frames,stop)for _=1,frames do if stop and stop()then return true end;step(nil)end;return stop and stop()or false end
 local function landed(s,base,member)
     local r=s.reached[#s.reached]
@@ -204,7 +212,18 @@ local ok,why=xpcall(function()
         check(s,"joypad input reaches the core inside step_one",moved,fmt("%s -> %s",JSON.encode(w0),JSON.encode(world())))
     end
     -- ── the one battle ─────────────────────────────────────────────────────────────────────────
-    local battle=scenario("battle_entry");use(stranger,battle)
+    local battle=scenario("battle_entry")
+    -- explode_first arms the EXPLODE binding for the linked Squirtle from the walk on, so the wild battle's very first
+    -- MainInBattleLoop+0 (before its first menu) is the loop_head site: the eight-byte moveset write lands before any menu.
+    -- A stray battle from the probe walk has already passed its first loop head: end it with the non-linked member first.
+    local explode=want("explode_first") and scenario("explode_first") or nil
+    if explode and u8(A.wIsInBattle)~=0 then
+        local c=scenario("explode_cleanup");use(stranger,c)
+        to_menu(120,"A")
+        for _=1,8 do if u8(A.wIsInBattle)==0 then break end;local r=drv.run();c.run=r;if not r.ok then to_menu(120,nil)end end
+        check(c,"stray battle ended by RUN before the explode entry",u8(A.wIsInBattle)==0,JSON.encode(world()))
+    end
+    if explode then use(squirtle,explode,XE,Battle.EXPLODE) else use(stranger,battle) end
     if u8(A.wIsInBattle)==0 then check(battle,"entered a wild battle by walking (step_one)",enter_battle(battle),JSON.encode(world()))
     else battle.menu=to_menu(240,"A");check(battle,"battle from the probe reached its menu",battle.menu and battle.menu.ok,JSON.encode(battle.menu))end
     shot("battle_menu");battle.world=world()
@@ -243,6 +262,55 @@ local ok,why=xpcall(function()
         for _=1,8 do if u8(A.wIsInBattle)==0 then break end;local r=drv.run();s.run=r;if not r.ok then to_menu(120,nil)end end
         s.world_final=world();shot("fight_first_after")
         note("fight_first final: "..JSON.encode(s.world_final))
+    end
+    -- explode_first: the EXPLODE binding on the ACTIVE linked Squirtle (armed since the walk: see the battle entry above)
+    if explode then
+        local s=explode
+        s.world_before=world()
+        check(s,"the linked mon is the active battle mon",u8(A.wPlayerMonNumber)==0 and s.world_before.battle_species==squirtle.species,JSON.encode(s.world_before))
+        local head=landed(s,0,squirtle) and s.reached[#s.reached] or nil
+        local moves,pp=hexrange(A.wBattleMonMoves,4),hexrange(A.wBattleMonPP,4)
+        check(s,"MainInBattleLoop+0 was reached before the first menu with the EXPLODE footprint (4 x $99 moves + 4 x PP 5)",
+            head~=nil and head.evidence.site=="loop_head" and #head.evidence.writes==8 and head.evidence.writes[1].address==A.wBattleMonMoves
+            and head.evidence.writes[5].address==A.wBattleMonPP and moves=="99999999" and pp=="05050505",
+            JSON.encode({rows=#s.reached,site=head and head.evidence.site or JSON.null,writes=head and head.evidence.writes or JSON.null,moves=moves,pp=pp}))
+        if head then s.loop_head_row={site=head.evidence.site,frame=head.evidence.frame,hook_frame=head.evidence.hook_frame,challenge=head.authority.challenge,
+            writes=head.evidence.writes,state=head.evidence.state,world=head.world_at_finish} end
+        local menu_rows=s.not_reached;wait(30)
+        check(s,"menu state with the active linked member yields not_reached only",s.not_reached==menu_rows+30,fmt("%d->%d reached=%d",menu_rows,s.not_reached,#s.reached))
+        local base=#s.reached
+        local enemy_before=u8(A.wEnemyMonHP)*256+u8(A.wEnemyMonHP+1)
+        if drv.state().x~=5 then s.choose=drv.choose("FIGHT") else s.choose={skipped="move menu already open"} end
+        wait(30);shot("explode_first_after_write") -- the move menu: EXPLOSION in every slot
+        local trace=drv.commit_move(1,900);s.commit_trace=trace
+        wait(600,function()return landed(s,base,squirtle) end)
+        local row=landed(s,base,squirtle) and s.reached[#s.reached] or nil
+        check(s,"ExecutePlayerMove+0 was reached and written for the ACTIVE linked member after FIGHT",row~=nil and row.evidence.site=="player_action",
+            fmt("rows after commit=%d stages=%s",#s.reached-base,JSON.encode(trace.stages or {})))
+        if row then
+            s.write_row={site=row.evidence.site,frame=row.evidence.frame,hook_frame=row.evidence.hook_frame,challenge=row.authority.challenge,writes=row.evidence.writes,
+                state=row.evidence.state,world=row.world_at_finish}
+            check(s,"the action-site write is wPlayerSelectedMove=$99 alone, already $99 from the menu (the slot re-derivation): a one-byte no-op",
+                #row.evidence.writes==1 and row.evidence.writes[1].address==A.wPlayerSelectedMove and row.evidence.writes[1].before_hex=="99"
+                and row.evidence.writes[1].after_hex=="99" and row.evidence.state.selected_move==0x99,JSON.encode(row.evidence))
+        end
+        -- the engine's own turn: ExplodeEffect zeroes the user's HP and status, the wild mon takes the hit
+        wait(900,function()return hexrange(A.wBattleMonHP,2)=="0000" or party_slot(0).hp_hex=="0000" or u8(A.wPlayerMonNumber)~=0 or u8(A.wIsInBattle)==0 end)
+        wait(60)
+        local enemy_after=u8(A.wEnemyMonHP)*256+u8(A.wEnemyMonHP+1)
+        s.engine={selected_move_at_execute=row and row.evidence.state.selected_move or JSON.null,selected_move_after_a=trace.selected_move,
+            enemy_hp_before=enemy_before,enemy_hp_after=enemy_after,slot0_hp=party_slot(0).hp_hex,battle_hp=hexrange(A.wBattleMonHP,2),
+            active=u8(A.wPlayerMonNumber),in_battle=u8(A.wIsInBattle),frame=emu.framecount()}
+        shot("explode_first_fainted")
+        check(s,"the linked mon exploded itself in the original engine (party HP 0000)",party_slot(0).hp_hex=="0000",JSON.encode(s.engine))
+        check(s,"the wild mon took the Explosion (enemy HP dropped)",enemy_after<enemy_before,JSON.encode(s.engine))
+        -- "Use next POKeMON?" -> Ditto (not linked: zero writes); then end the battle by RUN attempts, or it is already over
+        use(stranger,s)
+        for _=1,30 do if u8(A.wPlayerMonNumber)==1 or u8(A.wIsInBattle)==0 then break end;for _=1,3 do step({A=true})end;for _=1,20 do step(nil)end end
+        if u8(A.wIsInBattle)~=0 then to_menu(120,"A") end
+        for _=1,8 do if u8(A.wIsInBattle)==0 then break end;local r=drv.run();s.run=r;if not r.ok then to_menu(120,nil)end end
+        s.world_final=world();shot("explode_first_after")
+        note("explode_first final: "..JSON.encode(s.world_final))
     end
     -- benched: PKMN -> Ditto in while Squirtle is the linked member
     if want("benched") then

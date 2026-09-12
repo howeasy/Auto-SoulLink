@@ -104,7 +104,7 @@ def authority(variant, **host):
 def state(variant, **over):
     base = {"is_in_battle": 1, "battle_type": 0, "link_state": 0, "player_mon_number": 2, "status3": 0, "battle_species": 0x84,
             "battle_dvs_hex": "9a5f", "party_species": 0x84, "party_dvs_hex": "9a5f", "party_ot_id_hex": "1234", "party_hp_hex": "0037", "party_status": 0,
-            "hp_hex": "0037", "enemy_hp_hex": "0012", "action_result": 0, "selected_move": 0x21}
+            "hp_hex": "0037", "enemy_hp_hex": "0012", "action_result": 0, "selected_move": 0x21, "moves_hex": "21270000", "pp_hex": "231e0000"}
     base.update(over)
     return base
 
@@ -112,18 +112,22 @@ def state(variant, **over):
 def before_bytes(variant, st):
     a = auth.ANCHORS[variant]["addresses"]
     hp = a["wPartyMon1HP"] + 88
-    return {a["wBattleMonHP"]: int(st["hp_hex"][:2], 16), a["wBattleMonHP"] + 1: int(st["hp_hex"][2:], 16), a["wPlayerSelectedMove"]: st["selected_move"],
-            hp: int(st["party_hp_hex"][:2], 16), hp + 1: int(st["party_hp_hex"][2:], 16), a["wPartyMon1Status"] + 88: st["party_status"]}
+    out = {a["wBattleMonHP"]: int(st["hp_hex"][:2], 16), a["wBattleMonHP"] + 1: int(st["hp_hex"][2:], 16), a["wPlayerSelectedMove"]: st["selected_move"],
+           hp: int(st["party_hp_hex"][:2], 16), hp + 1: int(st["party_hp_hex"][2:], 16), a["wPartyMon1Status"] + 88: st["party_status"]}
+    for i in range(4):
+        out[a["wBattleMonMoves"] + i] = int(st["moves_hex"][2 * i:2 * i + 2], 16)
+        out[a["wBattleMonPP"] + i] = int(st["pp_hex"][2 * i:2 * i + 2], 16)
+    return out
 
 
-def evidence(variant, site, st=None, **over):
+def evidence(variant, site, st=None, binding=auth.BINDING, **over):
     a = auth.ANCHORS[variant]
     st = st if st is not None else state(variant)
     row = {"schema": generic.EVIDENCE, "challenge": "f" * 32, "owner_id": OWNER, "frame": 1200, "step": 9, "held": False, "site": site,
            "pc": a[site]["pc"], "bank": a["bank"], "sp": 0xDFF0,
            "stack_hex": ("64430000" if variant != "yellow" else "7a430000") if site == "player_action" else "12345678",
            "hook_frame": 1200 + OFFSET, "state": st, "writes": [], "refusal": None}
-    decision = auth.decide(st, MEMBER, variant, site)
+    decision = auth.decide(st, MEMBER, variant, site, binding=binding)
     if decision["refusal"] is None:
         before = before_bytes(variant, st)
         row["writes"] = [{"address": w["address"], "before_hex": f"{before[w['address']]:02x}", "after_hex": f"{w['value']:02x}"} for w in decision["writes"]]
@@ -256,7 +260,7 @@ def test_loop_head_arrives_by_jump_so_only_the_action_site_pins_a_return_address
 
 
 def test_prepare_binds_the_pending_owned_death_and_refuses_everything_else():
-    with pytest.raises(JournalError, match="force_faint only"):
+    with pytest.raises(JournalError, match="serves force_faint"):
         auth.prepare("a", {**COMMAND, "body": {"cmd": "memorialize"}}, BINDING, DEATH, MEMBER, HOST, variant="red")
     for death in ({**DEATH, "phase": "pending_memorial"}, {**DEATH, "peer": "b"}, {**DEATH, "peer_key": "K2"}, None):
         with pytest.raises(JournalError, match="pending owned death"):
@@ -327,6 +331,7 @@ def load(lua, variant, st, site):
         put(a.wPartyMon1HP+p.stride*p.slot,st.party_hp_hex);bus[a.wPartyMon1Status+p.stride*p.slot]=st.party_status
         put(a.wBattleMonHP,st.hp_hex);put(a.wEnemyMonHP,st.enemy_hp_hex);bus[a.wActionResultOrTookBattleTurn]=st.action_result
         bus[a.wPlayerSelectedMove]=st.selected_move;put(regs.SP,p.stack)
+        put(a.wBattleMonMoves,st.moves_hex);put(a.wBattleMonPP,st.pp_hex)
         target=p.sites[p.site]
     """)
 

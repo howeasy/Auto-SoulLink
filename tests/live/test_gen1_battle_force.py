@@ -46,7 +46,7 @@ def run_live(variant, *, bounded_battle=True, timeout=900, fixture=None, scenari
     """`fixture`: an isolated .cache two-mon SaveRAM (disclosed fixture) instead of the committed one-mon save."""
     directory = Path(tempfile.mkdtemp(prefix=f'battle-force-{variant}-', dir=Path(REPO) / '.cache'))
     output = directory / 'result.json'
-    spec = {'addresses': auth.ANCHORS[variant]['addresses'], 'sites': auth.sites(variant), 'output': output.as_posix(),
+    spec = {'addresses': auth.ANCHORS[variant]['addresses'], 'sites': auth.sites(variant), 'explode_sites': auth.sites(variant, auth.EXPLODE), 'output': output.as_posix(),
             'out_dir': directory.as_posix(), 'coord_addr': COORDS[variant], 'encounter': ENCOUNTER[variant], 'bounded_battle': bounded_battle,
             'menu_pc': MENU_PC[variant], 'diag_pcs': DIAG_PCS.get(variant, {}), 'fixture': str(fixture) if fixture else None,
             'scenarios': scenarios, 'driver': DRIVER[variant]}
@@ -111,4 +111,29 @@ def test_active_linked_mon_faints_at_execute_player_move_under_bounded_owner(var
                                                         'write_rows': [s.get('write_row') for s in result['scenarios'] if s.get('write_row')]}, indent=1))
     active = [o for o in outcomes if o['scenario'] == 'fight_first' and o['site'] == 'player_action' and o['outcome'] == 'fainted']
     assert active, json.dumps(outcomes, indent=1)
+    assert passed and result['passed'] and result['sram_diff_bytes'] == 0, f'{directory}\n{log[-3000:]}'
+
+
+@pytest.mark.parametrize('variant', ['red', 'blue', 'yellow'])
+def test_active_linked_mon_explodes_under_the_explode_binding(variant):
+    """P11: the EXPLODE binding on the same two sites. MainInBattleLoop+0 rewrites the active linked mon's four move
+    slots to EXPLOSION (PP 5) before the battle's first menu, the menu re-derives $99 from the chosen slot,
+    ExecutePlayerMove+0 finds it already selected (a one-byte no-op write) and the ORIGINAL engine's ExplodeEffect
+    faints the mon itself while the wild mon takes the hit."""
+    passed, path, log, result, directory = run_live(variant, fixture=FIXTURES[variant], scenarios=['explode_first'])
+    assert result is not None, f'{directory}\n{path}\n{log[-4000:]}'
+    outcomes = verify_rows(result, variant)
+    scenario = next((s for s in result['scenarios'] if s['name'] == 'explode_first'), None)
+    (directory / 'summary.json').write_text(json.dumps({'variant': variant, 'passed': passed, 'outcomes': outcomes,
+                                                        'checks': [(s['name'], [(c['what'], c['ok']) for c in s['checks']]) for s in result['scenarios']],
+                                                        'engine': scenario and scenario.get('engine'), 'loop_head_row': scenario and scenario.get('loop_head_row'),
+                                                        'write_rows': [s.get('write_row') for s in result['scenarios'] if s.get('write_row')]}, indent=1))
+    armed = {o['site'] for o in outcomes if o['scenario'] == 'explode_first' and o['outcome'] == 'explode_armed'}
+    assert armed == {'loop_head', 'player_action'}, json.dumps(outcomes, indent=1)
+    assert all(o['outcome'] != 'REFUSED_BY_SERVER' for o in outcomes), json.dumps(outcomes, indent=1)
+    row = scenario['loop_head_row']
+    assert [(w['address'], w['after_hex']) for w in row['writes']] == [(a, '99') for a in range(auth.ANCHORS[variant]['addresses']['wBattleMonMoves'], auth.ANCHORS[variant]['addresses']['wBattleMonMoves'] + 4)] + \
+        [(a, '05') for a in range(auth.ANCHORS[variant]['addresses']['wBattleMonPP'], auth.ANCHORS[variant]['addresses']['wBattleMonPP'] + 4)]
+    engine = scenario['engine']
+    assert engine['selected_move_at_execute'] == auth.EXPLOSION and engine['slot0_hp'] == '0000' and engine['enemy_hp_after'] < engine['enemy_hp_before'], json.dumps(engine)
     assert passed and result['passed'] and result['sram_diff_bytes'] == 0, f'{directory}\n{log[-3000:]}'
