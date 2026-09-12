@@ -7,7 +7,7 @@ from pathlib import Path
 
 from server.durable_runtime import TIMEOUT, DurableRuntime
 from server.gen1_runtime_admission import HOLD_EVENT, PROTOCOL, new_session_gate
-from server.gen1_runtime_state import Gen1RuntimeState,state_type_for
+from server.gen1_runtime_state import Gen1RuntimeState, state_type_for
 from server.gen1_trade_recovery import compose, transactions, verify_journal
 from server.protocol import ProtocolError
 from server.protocol_journal import JournalError
@@ -174,7 +174,10 @@ class Gen1Runtime(DurableRuntime):
                     ),
                 )
                 if native_trade:
-                    from server.gen1_native_binding import install_native_driver, install_native_execution
+                    from server.gen1_native_binding import (
+                        install_native_driver,
+                        install_native_execution,
+                    )
                     from server.gen1_native_observation import candidate_checkpoints, checkpoints
                     execution = install_native_execution(self)
                     trade_policy.configure(execution, read_checkpoints=lambda: checkpoints(self),
@@ -253,6 +256,7 @@ class Gen1Runtime(DurableRuntime):
         # does not require replaying physical save/ROM proofs after every poll.
         # Authority paths still use state(), including its full record audit.
         from types import SimpleNamespace
+
         from server.gen1_staged_state import StagedGen1State
         from server.paired_recovery import RecoveryBarrier
         snapshot = self.journal.snapshot()
@@ -297,6 +301,8 @@ class Gen1Runtime(DurableRuntime):
             self.prepared_cartridges.rom if self.prepared_cartridges is not None else None))
         from server.gen1_native_observation import verify_journal as verify_native_observations
         verify_native_observations(self.journal, stage)
+        from server.gen1_native_windows import verify_journal as verify_native_windows
+        verify_native_windows(self.journal, stage)
         from server.gen1_static_lifecycle import verify_journal as verify_statics
         verify_statics(self.journal, stage, rom_provider=(
             self.prepared_cartridges.rom if self.prepared_cartridges is not None else None))

@@ -6,7 +6,7 @@ import pytest
 
 from server.execution_window import command_scope
 from server.gen1_cartridge_profiles import companion_profiles
-from server.gen1_native_execution import NativeExecutionPolicy, SCHEMA
+from server.gen1_native_execution import SCHEMA, NativeExecutionPolicy
 from server.gen1_trade_preparation import preparation_payload, verify_preparation
 from server.protocol import digest
 from server.protocol_journal import JournalError
@@ -17,7 +17,7 @@ from tests.unit.test_gen1_trade_preparation import checkpoint
 
 @pytest.fixture
 def case(tmp_path):
-    value=TradeCase(tmp_path);value.admit("a");value.admit("b")
+    value=TradeCase(tmp_path);value.admit("a");value.admit("b");value.control("a");value.control("b")
     manifests={p:companion_profiles()[v]["manifest"] for p,v in value.variants.items()}
     for p in manifests:value.policy.rules[p].rom_sha1=manifests[p]["final_sha1"]
     fixture=SimpleNamespace(policy=value.policy,contexts=value.policy.contexts,

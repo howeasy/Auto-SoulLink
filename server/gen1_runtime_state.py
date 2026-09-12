@@ -132,6 +132,8 @@ class Gen1RuntimeState:
         verify_acquisitions(self)
         from server.gen1_native_observation import verify_state as verify_native_observations
         verify_native_observations(self)
+        from server.gen1_native_windows import verify_state as verify_native_windows
+        verify_native_windows(self)
         from server.gen1_static_lifecycle import (
             COMPONENT as STATICS,
             verify_state as verify_statics,
