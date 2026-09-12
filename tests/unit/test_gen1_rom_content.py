@@ -122,7 +122,7 @@ def _tables_from_rom(title: str) -> dict:
         _REPO, "data", "games", "gen1_rby", "species_index.json"), encoding="utf-8"))
     adapter = get_adapter("gen1_rby", rom_type=title.capitalize())
     return build_encounter_tables(
-        {"wild": scan_wild(rom), "fishing": scan_fishing(rom)},
+        {"variant": title, "wild": scan_wild(rom), "fishing": scan_fishing(rom)},
         {int(k): v["area_id"] for k, v in area_map.items()},
         {int(k): v for k, v in species["index_to_national"].items()},
         adapter.species_name)
@@ -151,21 +151,20 @@ def test_a_clean_rom_reproduces_the_shipped_tables(title):
     """
     built = _tables_from_rom(title)
     shipped = _shipped(title)
-    # `m.split(" ")[0]`, because a multi-floor dungeon's methods carry the floor:
-    # "Grass B1F", "Water B4F". An exact-name filter dropped every such area, which made
-    # this control quietly stop covering seven of them. Super Rod is still excluded --
-    # the shipped file has no fishing at all, which the two tests below pin.
-    grass_water = {a: {m: v for m, v in b.items() if m.split(" ")[0] in ("Grass", "Water")}
-                   for a, b in built.items()}
-    grass_water = {a: b for a, b in grass_water.items() if b}
-
-    assert set(grass_water) == set(shipped), (
-        f"{title}: areas differ — only built {sorted(set(grass_water) - set(shipped))}, "
-        f"only shipped {sorted(set(shipped) - set(grass_water))}")
-    stripped_built, stripped_shipped = _strip_names(grass_water), _strip_names(shipped)
+    # EVERY method, every area: Grass and Water per floor, Super Rod per fishing map with
+    # its published label, Old and Good Rod under every fishing area, with the title's own
+    # slot weights (Yellow's are not uniform). Nothing is filtered out any more: a method
+    # the scanner stopped emitting, or emitted under a different label, fails here.
+    assert set(built) == set(shipped), (
+        f"{title}: areas differ — only built {sorted(set(built) - set(shipped))}, "
+        f"only shipped {sorted(set(shipped) - set(built))}")
+    stripped_built, stripped_shipped = _strip_names(built), _strip_names(shipped)
     for area in sorted(shipped):
+        assert set(stripped_built[area]) == set(stripped_shipped[area]), (
+            f"{title}/{area}: methods differ — built {sorted(stripped_built[area])}, "
+            f"shipped {sorted(stripped_shipped[area])}")
         for method in shipped[area]:
-            assert stripped_built[area].get(method) == stripped_shipped[area][method], (
+            assert stripped_built[area][method] == stripped_shipped[area][method], (
                 f"{title}/{area}/{method} differs from the shipped table")
 
 
@@ -195,10 +194,17 @@ def test_later_floors_are_no_longer_dropped():
     exposes every floor, and a method that exists only on a later floor is present.
     """
     shipped = _shipped("yellow")["seafoam_islands"]
-    floors = {m.split(" ", 1)[1] for m in shipped if " " in m}
+    floors = {m.split(" ", 1)[1] for m in shipped if m.startswith(("Grass", "Water"))}
     assert floors == {"1F", "B1F", "B2F", "B3F", "B4F"}, f"got {sorted(floors)}"
     assert any(m.startswith("Water") for m in shipped), (
         "the surfing table that only exists on a later floor is missing again")
+    # Seafoam fishes on its two lowest floors only, and each keeps its floor label.
+    assert {"Old Rod", "Good Rod", "Super Rod B3F", "Super Rod B4F"} <= set(shipped)
+    assert not any(m in ("Super Rod", "Super Rod 1F") for m in shipped)
+    # A fishing map that shares its area gets a stable label from its wild floor or from the
+    # map constant, so Yellow's distinct Vermilion Dock and Cerulean Cave rows both survive.
+    assert {"Super Rod", "Super Rod Dock"} <= set(_shipped("yellow")["vermilion_city"])
+    assert {"Super Rod 1F", "Super Rod B1F"} <= set(_shipped("yellow")["cerulean_cave"])
 
     # And a single-map area keeps the plain, unsuffixed labels it always had.
     assert set(_shipped("yellow")["route_1"]) == {"Grass"}
@@ -212,12 +218,24 @@ def test_percentages_sum_to_100_per_method(title):
             assert total == 100, f"{title}/{area}/{method} sums to {total}"
 
 
-def test_super_rod_is_added_where_the_shipped_tables_have_no_fishing_at_all():
-    """The shipped file only ever carries Grass and Water, so fishing is invisible today."""
-    assert all({m.split(" ")[0] for m in b} <= {"Grass", "Water"}
-               for b in _shipped("red").values())
-    built = _tables_from_rom("red")
-    assert sum(1 for b in built.values() if "Super Rod" in b) > 10
+@pytest.mark.parametrize("title", TITLES)
+def test_the_scanner_super_rod_blocks_equal_the_shipped_ones(title):
+    """Positive control for fishing: the Super Rod block the scanner builds from a clean
+    cartridge is the one tools/gen_gen1_encounters.py built from pret, area for area.
+
+    This used to pin the ABSENCE of fishing in the shipped file, then Super Rod alone; the
+    scanner now emits all three rods (Old and Good under every area with surf water or a
+    Super Rod group, the generator's placement rule), so production ROM ingestion cannot
+    drop a rod method the shipped file has.
+    """
+    def rods(tables):
+        return {a: {m: v for m, v in b.items() if "Rod" in m}
+                for a, b in _strip_names(tables).items() if any("Rod" in m for m in b)}
+    built, shipped = rods(_tables_from_rom(title)), rods(_shipped(title))
+    assert len(built) > 10
+    assert built == shipped
+    for area, block in shipped.items():
+        assert {"Old Rod", "Good Rod"} <= set(block), f"{title}/{area} lacks a global rod"
 
 
 # ── untrusted input ──────────────────────────────────────────────────────────────────────

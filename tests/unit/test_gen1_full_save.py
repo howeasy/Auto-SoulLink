@@ -89,6 +89,50 @@ def test_bulk_and_scalar_capture_are_byte_identical_and_domain_explicit(variant)
     assert lua.globals().frame==123
 
 
+@pytest.mark.parametrize('variant',['red','blue','yellow'])
+def test_native_binary_capture_is_exact_and_preferred_over_array(variant):
+    lua=LuaRuntime(unpack_returned_tuples=True);lua.globals().root=ROOT.as_posix();lua.globals().variant=variant
+    lua.execute('''
+        package.path=root..'/lua/?.lua;'..root..'/data/games/gen1_rby/?.lua;'..package.path
+        JSON=require('json_codec');Full=require('gen1_full_save')
+        local function byte(address,domain)return (address+(domain=='CartRAM'and 37 or 11))%256 end
+        memory={read_u8=function(address,domain)return byte(address,domain)end,
+            read_bytes_as_array=function(address,count,domain)
+                local out={};for i=0,count-1 do out[i+1]=byte(address+i,domain)end;return out
+            end}
+        array=assert(JSON.encode(Full.capture({},variant)))
+        binary_calls=0
+        memory.read_bytes_as_array=function()error('binary reader must take precedence')end
+        memory.read_bytes_as_binary_string=function(address,count,domain)
+            binary_calls=binary_calls+1;local out={}
+            for i=0,count-1 do out[i+1]=string.char(byte(address+i,domain))end
+            return table.concat(out)
+        end
+        binary=assert(JSON.encode(Full.capture({},variant)))
+    ''')
+    assert json.loads(lua.globals().binary)==json.loads(lua.globals().array)
+    assert lua.globals().binary_calls==7
+
+
+def test_callable_userdata_bulk_reader_is_used_instead_of_scalar_fallback():
+    lua=LuaRuntime(unpack_returned_tuples=True);lua.globals().root=ROOT.as_posix()
+    calls=[]
+    def native(address,count,domain):
+        calls.append((address,count,domain))
+        return '\x01'*count
+    lua.globals().native=native
+    lua.execute('''
+        package.path=root..'/lua/?.lua;'..root..'/data/games/gen1_rby/?.lua;'..package.path
+        assert(type(native)=='userdata')
+        memory={read_bytes_as_binary_string=native,read_bytes_as_array=function()
+            error('array fallback forbidden')end,read_u8=function()return 2 end}
+        local point=require('gen1_full_save').capture({},'yellow')
+        assert(point.cart_hex==string.rep('01',0x8000))
+    ''')
+    assert len(calls)==7 and sum(count for _,count,_ in calls)==0x8000+sum(
+        region['length'] for region in layout('yellow')['regions'].values())
+
+
 @pytest.mark.parametrize('fault',['error','short','non_byte'])
 def test_present_but_invalid_bulk_reader_fails_closed_without_scalar_fallback(fault):
     lua=LuaRuntime(unpack_returned_tuples=True);lua.globals().root=ROOT.as_posix();lua.globals().fault=fault

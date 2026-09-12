@@ -147,7 +147,9 @@ def stage_observation(runtime, stage, document, player, operation, request):
     # obligation's receipt carries its own checkpoint, so the heartbeat one is deferred, not refused.
     recorded_inventory = False
     if request['inventory'] is not None:
-        if any(runtime.journal.pending_ids(p) for p in ('a', 'b')):
+        from server.gen1_hud_feedback import pending_physical_ids
+
+        if any(pending_physical_ids(runtime.journal, p) for p in ('a', 'b')):
             result['inventory_deferred'] = True
         else:
             from server.gen1_inventory_observation import (
@@ -159,7 +161,8 @@ def stage_observation(runtime, stage, document, player, operation, request):
                        'previous_operation_id': before['operation_id'] if before else initial['operation_id'],
                        'observation': copy.deepcopy(request['inventory'])}
             merge(stage_inventory(runtime, stage, document, player, operation,
-                                  {'event': 'inventory_observation', 'payload': payload}), 'inventory_transition_digest')
+                                  {'event': 'inventory_observation', 'payload': payload},
+                                  allow_transport_rotation=True), 'inventory_transition_digest')
             recorded_inventory = True
     # 1b. The native trade checkpoint the client read in the same held frame as that inventory. It rides
     # the heartbeat, so it is deferred with it; a batch that carries the checkpoint while the trade stack
@@ -178,7 +181,8 @@ def stage_observation(runtime, stage, document, player, operation, request):
     if request['signals'] is not None:
         from server.gen1_engine_signal_runtime import stage_observation as stage_engine
         merge(stage_engine(runtime, stage, document, player, operation,
-                           {'event': 'engine_signals', 'payload': copy.deepcopy(request['signals'])}), 'engine_evidence_digest')
+                           {'event': 'engine_signals', 'payload': copy.deepcopy(request['signals'])},
+                           allow_transport_rotation=True), 'engine_evidence_digest')
     # 2b. Trainer engagement: the shared engine decides Rival Swap (_handle_trainer_battle_start) and queues
     # replace_rival_team for this player; the held rival-team executor writes it at the battle_init checkpoint.
     if request.get('trainer') is not None:
@@ -287,6 +291,9 @@ def stage_observation(runtime, stage, document, player, operation, request):
     entries[player] = entry
     result['observation_digest'] = digest(entry)
     records.append({'namespace': COMPONENT, 'key': key(player), 'value': entry})
+    from server.gen1_hud_feedback import feedback_last
+
+    commands = feedback_last(commands)
     return {'entry': entry, 'result': result, 'commands': commands, 'records': records}
 
 

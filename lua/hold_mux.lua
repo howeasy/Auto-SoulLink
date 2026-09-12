@@ -25,6 +25,7 @@ function M.new(options)
     end
     assert(next(allowed)~=nil,"at least one hold owner required")
     local held,reasons={},{}
+    local applied=nil
     local self={}
     local function aggregate()
         return next(held)~=nil
@@ -40,21 +41,33 @@ function M.new(options)
         assert(allowed[owner],"unknown execution hold owner")
         assert(type(value)=="boolean" and valid_reason(why),"boolean hold and explicit reason required")
         local before_held,before_reason=held[owner],reasons[owner]
+        local before_aggregate=aggregate()
         if value then held[owner]=true;reasons[owner]=why else held[owner]=nil;reasons[owner]=nil end
-        local called,accepted,problem=pcall(options.host.set_held,aggregate(),aggregate_reason(why))
+        local after_aggregate=aggregate()
+        if applied~=nil and before_aggregate==after_aggregate and applied==after_aggregate then return true end
+        local called,accepted,problem=pcall(options.host.set_held,after_aggregate,aggregate_reason(why))
         if not called or accepted~=true then
             held[owner],reasons[owner]=before_held,before_reason
             return false,(not called and accepted) or problem or "aggregate execution hold was not verified"
         end
+        applied=after_aggregate
         return true
     end
+    function self:verify()
+        assert(type(options.host.verify)=="function","execution hold verification unavailable")
+        local ok,accepted,problem=pcall(options.host.verify)
+        if not ok or accepted~=true then return false,(not ok and accepted)or problem or"aggregate execution hold was not verified"end
+        return true
+    end
+    function self:is_held()return aggregate()end
     function self:held(owner)
         assert(allowed[owner],"unknown execution hold owner")
         return held[owner]==true
     end
     function self:adapter(owner)
         assert(allowed[owner],"unknown execution hold owner")
-        return {set_held=function(value,why)return self:set(owner,value,why)end}
+        return {set_held=function(value,why)return self:set(owner,value,why)end,
+            verify=function()return self:verify()end}
     end
     function self:construct_and_release(owner,why,current,build)
         assert(allowed[owner] and held[owner],"construction owner must hold execution")

@@ -167,6 +167,53 @@ def test_later_frame_volatile_main_bytes_do_not_replace_inventory_semantics(tmp_
         runtime.close()
 
 
+def test_idle_reconnect_can_use_exact_deferred_inventory_then_retry_after_release(tmp_path):
+    from server.gen1_full_save import SYMBOLS
+
+    runtime = create_runtime(tmp_path, contract("yellow", "yellow"), free_service=True)
+    try:
+        owners = enroll_progress(runtime)
+        recorded = proof(runtime, "a")["inventory"]
+        deferred = checkpoint(recorded, 160)
+        main = bytearray.fromhex(deferred["source"]["fields"]["main"])
+        symbols = SYMBOLS["pokeyellow"]
+        selector = symbols["wCurrentBoxNum"] - symbols["wMainDataStart"]
+        main[selector] = 1 if main[selector] != 1 else 2
+        deferred["source"]["fields"]["main"] = main.hex().upper()
+        stage = runtime.state()
+        [obligation] = runtime.journal.commit("a", secrets.token_hex(16), {"event": "fixture_obligation"},
+            expected_revision=stage.journal_revision, state=stage.document(),
+            commands={"a": [], "b": [{"cmd": "fixture_pending"}]}, result={"ack": "ACK"}).command_ids
+        response = deliver(runtime, "a", owners["a"], batch(runtime, "a", 2, frame=160, inventory=deferred))
+        assert response["observation_result"]["inventory_status"] == "deferred"
+        assert runtime.state().document()["components"][INVENTORY]["a"]["observation"] == recorded
+        stage = runtime.state()
+        runtime.journal.commit("b", secrets.token_hex(16), {"event": "fixture_obligation_settled"},
+            expected_revision=stage.journal_revision, state=stage.document(),
+            commands={"a": [], "b": []}, result={"ack": "ACK"},
+            acknowledgements=[{"player": "b", "command_id": obligation,
+                "outcome": "ACK", "receipt": {"schema": "fixture-receipt-v1"}}])
+        operation = response["operation_id"]
+        runtime.disconnect("a", owners["a"])
+        owners = reconnect(runtime)
+        value = proof(runtime, "a")
+        value["inventory"] = deferred
+        value["idle"]["source_frame"] = 160
+        value["pending_inventory_retry"] = {"operation_id": operation, "sequence": 2, "frame": 160}
+        first = control(runtime, owners, "a", value)
+        assert first["service_recovery"]["proofs"] == {"a": True, "b": False}
+        assert control(runtime, owners, "b", proof(runtime, "b"))["control"]["authority"] == "service"
+        # The deferred point was not adopted as inventory by continuity. Only
+        # a fresh post-release observation may do that.
+        assert runtime.state().document()["components"][INVENTORY]["a"]["observation"] == recorded
+        accepted = deliver(runtime, "a", owners["a"], batch(runtime, "a", 3, frame=190,
+                           inventory=checkpoint(deferred, 190)))
+        assert accepted["observation_result"]["inventory_status"] == "recorded"
+        assert runtime.state().document()["components"][INVENTORY]["a"]["observation"]["frame"] == 190
+    finally:
+        runtime.close()
+
+
 def test_disconnect_after_saves_before_first_observation_uses_initial_cursor(tmp_path):
     from tests.unit.test_gen1_initial_save_runtime import complete_initial_save, setup
 

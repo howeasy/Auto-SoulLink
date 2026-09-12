@@ -152,6 +152,16 @@ function H.show(text, r, g, b, duration_frames)
     }
 end
 
+-- One actual gui draw of a HUD bar entry (no frame accounting).
+local function draw_hud(msg)
+    gui.drawBox(cfg.hud_x - 2, cfg.hud_y - 2,
+                cfg.hud_right, cfg.hud_y + cfg.font_size,
+                0xFF000000, 0xBB000000)
+    gui.drawText(cfg.hud_x, cfg.hud_y - 1, msg.text, msg.color,
+                 nil, cfg.font_size, "Courier New", "Bold")
+    hud_visible = true
+end
+
 local function render_hud()
     if #hud_queue == 0 then
         if hud_visible then
@@ -163,12 +173,7 @@ local function render_hud()
         return
     end
     local msg = hud_queue[1]
-    gui.drawBox(cfg.hud_x - 2, cfg.hud_y - 2,
-                cfg.hud_right, cfg.hud_y + cfg.font_size,
-                0xFF000000, 0xBB000000)
-    gui.drawText(cfg.hud_x, cfg.hud_y - 1, msg.text, msg.color,
-                 nil, cfg.font_size, "Courier New", "Bold")
-    hud_visible = true
+    draw_hud(msg)
     msg.frames = msg.frames - 1
     if msg.frames <= 0 then remove(hud_queue, 1) end
 end
@@ -186,6 +191,14 @@ function H.prompt(text, r, g, b, duration_frames)
     }
 end
 
+-- One actual gui draw of a center prompt entry (no frame accounting).
+local function draw_prompt(p)
+    local py = cfg.prompt_y
+    gui.drawBox(1, py, cfg.screen_w - 1, py + cfg.prompt_h, 0xFF000000, 0xCC000000)
+    gui.drawText(4, py + 1, p.text, p.color, nil, cfg.font_size, "Courier New", "Bold")
+    prompt_visible = true
+end
+
 local function render_prompt()
     local py = cfg.prompt_y
     local py2 = py + cfg.prompt_h
@@ -197,11 +210,43 @@ local function render_prompt()
         return
     end
     local p = prompt_queue[1]
-    gui.drawBox(1, py, cfg.screen_w - 1, py2, 0xFF000000, 0xCC000000)
-    gui.drawText(4, py + 1, p.text, p.color, nil, cfg.font_size, "Courier New", "Bold")
-    prompt_visible = true
+    draw_prompt(p)
     p.frames = p.frames - 1
     if p.frames <= 0 then remove(prompt_queue, 1) end
+end
+
+-- ── Durable notice present path (Gen 1 durable client) ──────────────────────
+-- H.present draws one server-issued notice with an actual gui call NOW and
+-- retains its remaining frame budget at the tail of the surface queue.  The
+-- Retention is FIFO and never silently discards an earlier notice. The immediate
+-- draw is not strict visual FIFO: on the same surface B briefly paints over A,
+-- then render() resumes A before retaining B's remaining frames. Waiting to draw
+-- B until A drains could wedge a physical command behind B while the core is held.
+-- Returns true only after the draw call completed, which is what a durable
+-- "drawn" receipt asserts. H.render keeps drawing it for `frames` frames.
+function H.present(notice)
+    assert(type(notice) == "table" and (notice.surface == "hud" or notice.surface == "prompt")
+        and type(notice.text) == "string" and type(notice.frames) == "number" and notice.frames >= 1,
+        "hud notice with surface, text and frames required")
+    local prompt = notice.surface == "prompt"
+    local queue = prompt and prompt_queue or hud_queue
+    local fit = prompt and fit_prompt or fit_hud
+    local entry = {
+        text   = fit(sanitize(notice.text)),
+        color  = fmt("#%02X%02X%02X", notice.r or 255, notice.g or 255, notice.b or 255),
+        -- present() draws the first requested frame immediately.  Retention owns only
+        -- the remaining frames, so the wire duration is not rendered once too many.
+        frames = notice.frames - 1,
+    }
+    if prompt then draw_prompt(entry) else draw_hud(entry) end
+    -- Retained only once the draw call completed: a failed draw retains nothing.
+    if entry.frames > 0 then queue[#queue + 1] = entry end
+    return true
+end
+
+-- Retained notice counts per surface, for client status readback.
+function H.retained()
+    return {hud = #hud_queue, prompt = #prompt_queue}
 end
 
 -- ── Game-over persistent overlay ────────────────────────────────────────────
@@ -299,14 +344,41 @@ end
 
 -- ── Utility ─────────────────────────────────────────────────────────────────
 function H.clear()
+    -- BizHawk's GUI surface retains the last painted pixels.  Erase every surface
+    -- that this module may have painted before forgetting its visibility state.
+    if hud_visible then
+        gui.drawBox(cfg.hud_x - 2, cfg.hud_y - 2,
+                    cfg.hud_right, cfg.hud_y + cfg.font_size,
+                    0x00000000, 0x00000000)
+    end
+    if prompt_visible then
+        gui.drawBox(1, cfg.prompt_y, cfg.screen_w - 1, cfg.prompt_y + cfg.prompt_h,
+                    0x00000000, 0x00000000)
+    end
+    if game_over or rebuild_text or nuzlocke_start_visible then
+        gui.drawBox(0, cfg.gameover_y, cfg.screen_w, cfg.gameover_y + 24,
+                    0x00000000, 0x00000000)
+    end
     hud_queue = {}
     prompt_queue = {}
     hud_visible = false
     prompt_visible = false
+    game_over = false
     rebuild_text = nil
     nuzlocke_start_text = nil
     nuzlocke_start_frames = 0
     nuzlocke_start_visible = false
+    return true
+end
+
+-- Durable state changes are applied visibly before their journal receipt.  A
+-- replacement Lua VM replays the journal's versioned state here even after its
+-- command has been ACKed and removed from the inbox.
+function H.apply_state(mode, text)
+    assert(mode == "game_over" and text == "", "terminal HUD state mode required")
+    H.set_game_over()
+    render_game_over()
+    return true
 end
 
 return H

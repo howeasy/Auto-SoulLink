@@ -610,7 +610,9 @@ def acknowledge(runtime, player, operation, message):
     if command["body"] == read_body(job, player) and player not in job["reads"]:
         _observation(command, message["receipt"], document, player)
         # A prepared read cannot survive an intervening authorized party write.
-        if len(pending) != 1:
+        from server.gen1_hud_feedback import pending_physical_ids
+
+        if len(pending_physical_ids(runtime.journal, player)) != 1:
             raise JournalError("storage read must close after other physical obligations")
         head = graves.latest(runtime.journal, document, player)
         anchor = _source_anchor(
@@ -625,7 +627,7 @@ def acknowledge(runtime, player, operation, message):
         if set(job["reads"]) == set(job["keys"]):
             for side, prior in job["reads"].items():
                 expected_pending = (command["command_id"],) if side == player else ()
-                if runtime.journal.pending_ids(side) != expected_pending:
+                if pending_physical_ids(runtime.journal, side) != expected_pending:
                     raise JournalError("storage plan cannot overtake pending physical commands")
                 original = issued(runtime.journal, side, job["origin"], read_body(job, side))
                 _observation(original, prior["receipt"], document, side)

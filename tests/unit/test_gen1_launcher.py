@@ -21,7 +21,6 @@ from server.gen1_launcher import (
     FREE_FILES,
     NATIVE_FILES,
     OBSERVATION_FILES,
-    build_configuration,
     configuration,
     launcher,
 )
@@ -98,6 +97,17 @@ def test_free_service_checked_bundle_covers_every_literal_lua_dependency(extra):
             if existing and not any(path in selected for path in existing):
                 missing.append((name, module, existing))
     assert missing == []
+
+
+def test_command_router_and_hud_service_are_in_every_checked_launcher_closure():
+    # gen1_client_entry composes the router with the no-write HUD service on every launch, so the
+    # held closure carries them (and the canonical encoder the HUD receipt digest needs) and the
+    # in-process reload evicts them with the rest of the checked files.
+    assert {"lua/command_service_router.lua", "lua/gen1_hud_service.lua", "lua/hud.lua",
+            "lua/journal_document.lua"} <= set(FILES)
+    assert "lua/command_service_router.lua" not in NATIVE_FILES
+    bundle = FILES + OBSERVATION_FILES + FREE_FILES + NATIVE_FILES
+    assert len(bundle) == len(set(bundle))
 
 
 def test_durable_entry_evicts_every_checked_lua_module_before_start():

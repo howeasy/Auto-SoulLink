@@ -7,13 +7,13 @@ import pytest
 from server.gen1_full_save import SYMBOLS, layout
 from server.gen1_initial_observation import COMPONENT, inventory
 from server.gen1_launcher import OBSERVATION_FILES, configuration
+from server.gen1_party_codec import PartyCodec
 from server.gen1_run_config import create_runtime, open_runtime
 from server.gen1_runtime_admission import METADATA_SCHEMA, PROTOCOL
-from server.protocol_journal import JournalError
-from tests.unit.test_gen1_sessions import contract
-from tests.unit.test_gen1_party_codec import make_blob
-from server.gen1_party_codec import PartyCodec
 from server.gen1_runtime_state import Gen1RuntimeState
+from server.protocol_journal import JournalError
+from tests.unit.test_gen1_party_codec import make_blob
+from tests.unit.test_gen1_sessions import contract
 
 
 def source(variant,*,occupied=False):
@@ -118,6 +118,15 @@ def test_fresh_creation_cannot_shadow_a_legacy_or_existing_run(tmp_path):
     assert marker.read_text()=='existing' and not (tmp_path/'runtime.sqlite3').exists()
 
 
+def test_runtime_creation_refuses_gen1_native_sounds_before_creating_files(tmp_path):
+    with pytest.raises(JournalError, match='native sounds are unavailable'):
+        create_runtime(tmp_path, contract(), rule_options={'native_sounds': True})
+    assert not any(
+        (tmp_path / name).exists()
+        for name in ('gen1_runtime.json', 'runtime.sqlite3', 'links.json', 'memorial.json')
+    )
+
+
 @pytest.mark.parametrize('fault',['inventory','metadata','binding','context_history','blocker'])
 def test_corrupt_initial_record_refuses_read_only_restore(tmp_path,fault):
     runtime=create_runtime(tmp_path,contract('yellow','yellow'))
@@ -134,8 +143,10 @@ def test_corrupt_initial_record_refuses_read_only_restore(tmp_path,fault):
 
 
 def test_display_identity_matches_existing_client_decoder_for_every_allowed_name_byte():
-    from lupa.lua54 import LuaRuntime
     from pathlib import Path
+
+    from lupa.lua54 import LuaRuntime
+
     from server.gen1_initial_observation import display_name
     text=(Path(__file__).resolve().parents[2]/'lua/memory_gb.lua').read_text()
     block=text[text.index('M._CHARSET = {'):text.index('\nfunction M.decodeString')]

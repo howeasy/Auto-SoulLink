@@ -2207,6 +2207,25 @@ function M.depositMemorialMon(slot)
 
     local reservation_key
     if geometry then
+        -- The cartridge's first ChangeBox clears only each box header. Before
+        -- we emulate that initialization, a zero count is not proof that Box 12
+        -- contains no player data. Refuse every nonempty byte in the entire
+        -- unowned image before protectSramBoxes can write either SRAM bank.
+        if initializing then
+            local virgin_count = mem_r8(mem_off, SRAM_DOMAIN)
+            local virgin_species = mem_r8(species_off, SRAM_DOMAIN)
+            local zero_image = virgin_count == 0 and (virgin_species == 0 or virgin_species == 0xFF)
+            local erased_image = virgin_count == 0xFF and virgin_species == 0xFF
+            if not (zero_image or erased_image) then
+                return false, "unowned memorial box is not empty before initialization"
+            end
+            for i = 2, geometry.box_len - 1 do
+                local value = mem_r8(mem_off + i, SRAM_DOMAIN)
+                if value ~= (zero_image and 0 or 0xFF) then
+                    return false, "unowned memorial box is not empty before initialization"
+                end
+            end
+        end
         M._memorial_reservations = M._memorial_reservations or {}
         reservation_key = tostring(M.readPlayerId()) .. ":" .. tostring(mem_off)
         local previous = M._memorial_reservations[reservation_key]
@@ -2215,6 +2234,22 @@ function M.depositMemorialMon(slot)
         end
         if previous == nil then
             if mbox_count ~= 0 then return false, "memorial box not empty; reservation unverified" end
+            if not initializing then
+                -- A count-zero header does not confer ownership of hidden
+                -- records. Before the first local reservation, the *entire*
+                -- initialized image must be empty; otherwise slot 0 would
+                -- overwrite an unowned dead record (HP zero bypasses the
+                -- live-record scan below).
+                if mem_r8(species_off, SRAM_DOMAIN) ~= 0xFF then
+                    return false, "unowned memorial box is not empty"
+                end
+                for i = 2, geometry.box_len - 1 do
+                    local value = mem_r8(mem_off + i, SRAM_DOMAIN)
+                    if value ~= 0 and value ~= 0xFF then
+                        return false, "unowned memorial box is not empty"
+                    end
+                end
+            end
         end
         if not initializing then
             if mem_r8(species_off + mbox_count, SRAM_DOMAIN) ~= 0xFF then

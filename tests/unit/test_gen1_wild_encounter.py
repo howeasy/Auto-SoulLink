@@ -21,6 +21,7 @@ from tests.unit.test_gen1_acquisition_runtime import checkpoint, observe as acqu
 from tests.unit.test_gen1_capture_receipt import receipt as capture_fixture
 from tests.unit.test_gen1_engine_signal_runtime import deliver as engine, payload as engine_payload
 from tests.unit.test_gen1_faint_runtime import bag
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
 from tests.unit.test_gen1_initial_observation import admit, observation, send
 from tests.unit.test_gen1_sessions import contract
 
@@ -214,7 +215,13 @@ def test_flee_or_ko_closes_exact_encounter_with_ball_gate_and_no_legacy_writes(
     record(runtime, "a", [row(runtime, "a", "begin", 130), row(runtime, "a", "end", 160)])
     resolved = next(iter(encounters(runtime).values()))
     assert resolved["decision"]["outcome"] == outcome
-    assert not runtime.journal.pending_ids("a") and not runtime.journal.pending_ids("b")
+    notices = [
+        runtime.journal.command(player, command_id)["body"]
+        for player in ("a", "b")
+        for command_id in runtime.journal.pending_ids(player)
+    ]
+    assert len(notices) == (2 if activated else 0)
+    assert all(body["cmd"] == "hud_notice" and body["kind"] == "violation" for body in notices)
     assert not runtime.state().document()["components"][wild.COMPONENT]["obligations"]
 
 
@@ -265,7 +272,10 @@ def test_peer_capture_pending_identity_defers_until_real_stable_settlement_then_
     source = wild.retirement_source(document, "b", resolved["retirement_id"])
     assert source["reason"] == "paired_no_catch" and obligation["phase"] == "pending"
     commands = [runtime.journal.command("b", key) for key in runtime.journal.pending_ids("b")]
-    assert len(commands) == 1 and commands[0]["body"]["cmd"] == "retirement_observe"
+    assert [command["body"]["cmd"] for command in commands] == [
+        "retirement_observe",
+        "hud_notice",
+    ]
     assert commands[0]["body"]["key"] == source["key"]
     assert runtime.state().barrier.document()["blockers"][source["hold_id"]] == wild.REASON
     assert not runtime.state().rules.pending_captures
@@ -303,6 +313,7 @@ def test_dead_zone_retirement_reports_memorialize_done_and_the_pair_reaches_memo
     # The engine booked the burial of the retired catch (Gen 3 buries it); it stays booked until
     # the retirement job's verified archive reports it.
     assert link.status == LinkStatus.DEAD and link.a is None and state.rules.pending_memorials["b"] == {key}
+    acknowledge_hud(runtime)
     # The read finds the catch beside a second party member, so the archive kernel applies.
     _, read = observed(runtime, "b")
     point = read["receipt"]["point"]
@@ -418,7 +429,11 @@ def test_checked_wild_history_survives_reopen_with_no_new_rule_or_command(runtim
             reopened.journal.snapshot().state["components"][wild.COMPONENT]
             == before.state["components"][wild.COMPONENT]
         )
-        assert not reopened.journal.pending_ids("a") and not reopened.journal.pending_ids("b")
+        assert all(
+            reopened.journal.command(player, command_id)["body"]["cmd"] == "hud_notice"
+            for player in ("a", "b")
+            for command_id in reopened.journal.pending_ids(player)
+        )
     finally:
         reopened.close()
 

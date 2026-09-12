@@ -67,13 +67,14 @@ async def test_manager_prepares_a_fresh_runtime_before_optional_server_start(tmp
 
 
 @pytest.mark.asyncio
-async def test_unsupported_rules_cannot_start_or_register_a_prepared_run(tmp_path,monkeypatch):
+@pytest.mark.parametrize('rules',[{'native_messages':True},{'native_sounds':True}])
+async def test_unsupported_rules_cannot_start_or_register_a_prepared_run(tmp_path,monkeypatch,rules):
     monkeypatch.setattr(manager,'MANAGER_DIR',str(tmp_path))
     monkeypatch.setattr(manager,'_load_registry',lambda:[])
     monkeypatch.setattr(manager,'_save_registry',lambda value:pytest.fail('invalid run registered'))
     monkeypatch.setattr(gen1_admission,'clean_contract',lambda paths:contract('red','blue'))
     response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request({
-        'name':'invalid','rom_a':'a.gb','rom_b':'b.gb','rules':{'native_messages':True},'start':True}))
+        'name':'invalid','rom_a':'a.gb','rom_b':'b.gb','rules':rules,'start':True}))
     assert response.status==400
 
 

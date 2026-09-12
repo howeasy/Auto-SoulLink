@@ -102,6 +102,7 @@ def create_runtime(directory,contract,*,run_id=None,prepared_cartridges=None,rul
     launcher rows still use. The frame-credit mode that used to sit between them is retired.
     """
     import secrets
+
     from server.adapters import get_adapter
     from server.gen1_staged_state import StagedGen1State
     from server.identity_registry import IdentityRegistry
@@ -110,6 +111,13 @@ def create_runtime(directory,contract,*,run_id=None,prepared_cartridges=None,rul
         raise JournalError('native trade selection requires reproduced prepared cartridges')
     if type(free_service) is not bool:
         raise JournalError('explicit free-run observation selection required')
+    allowed={'species_lock','gender_lock','type_lock','explode_mode','rival_team_swap','native_sounds','pc_trade_npc'}
+    if (rule_options is not None
+            and (not isinstance(rule_options,dict) or set(rule_options)-allowed
+                 or any(type(value) is not bool for value in rule_options.values()))):
+        raise JournalError('explicit supported Gen1 rule options required')
+    if rule_options and rule_options.get('native_sounds') is True:
+        raise JournalError('Gen 1 native sounds are unavailable')
     directory=Path(directory).resolve();directory.mkdir(parents=True,exist_ok=True)
     if any((directory/name).exists() for name in (FILENAME,'runtime.sqlite3','links.json','memorial.json')):
         raise JournalError('fresh runtime creation cannot replace an existing or legacy run')
@@ -119,10 +127,7 @@ def create_runtime(directory,contract,*,run_id=None,prepared_cartridges=None,rul
         peer_rom_type=profiles['b']['variant']))   # the pair decides the starter clause policy
     rules.rom_type=profiles['a']['variant']
     rules.battle_calc=False;rules.native_messages=False;rules.overworld_presence=False
-    allowed={'species_lock','gender_lock','type_lock','explode_mode','rival_team_swap','native_sounds','pc_trade_npc'}
     if rule_options is not None:
-        if not isinstance(rule_options,dict) or set(rule_options)-allowed or any(type(value) is not bool for value in rule_options.values()):
-            raise JournalError('explicit supported Gen1 rule options required')
         for key,value in rule_options.items():setattr(rules,key,value)
     initial=state_type_for(prepared_cartridges).initial(
         StagedGen1State.from_live(rules,{'retired_pairs':[]}).document(),IdentityRegistry(run_id).document(),contract,data_dir=directory)

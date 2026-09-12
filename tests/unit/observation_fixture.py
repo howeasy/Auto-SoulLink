@@ -16,6 +16,7 @@ from server.gen1_observation_runtime import COMPONENT as PROGRESS, EVENT, SCHEMA
 from server.protocol import digest
 from tests.unit.test_gen1_acquisition_runtime import grant as grant_receipt
 from tests.unit.test_gen1_bootstrap_receipt import fixture
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
 from tests.unit.test_gen1_initial_observation import admit, observation, send
 from tests.unit.test_gen1_starter_settlement import source_and_checkpoint
 
@@ -124,6 +125,7 @@ def starters(runtime):
         # P10 stages the checkpoint before the source is remembered, so the pair settles across two batches.
         observe(runtime, player, signals=source, frame=105)
         observe(runtime, player, inventory=stable["observation"])
+        acknowledge_hud(runtime)
 
 
 # The witness whose point shows what a delivering row left behind; static and wild rows deliver nothing.

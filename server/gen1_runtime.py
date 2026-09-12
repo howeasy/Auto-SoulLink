@@ -194,6 +194,34 @@ class Gen1Runtime(DurableRuntime):
         super().close()
         self._run_lease.__exit__()
 
+    def _process(self, message, owner):
+        response = super()._process(message, owner)
+        if message.get("event") != "observation" or response.get("ack") != "ACK":
+            return response
+        # A transport ACK alone cannot tell the free client whether its exact
+        # inventory point entered the stream or was deferred behind a physical
+        # obligation. Resolve the immutable committed result under this same
+        # operation ID, including on a session-local retry.
+        player, operation = message["player"], message["operation_id"]
+        recorded = self.journal.event(player, operation, self._semantic(message))
+        if recorded is None:
+            raise JournalError("acknowledged observation lacks its committed result")
+        outcome = recorded.result
+        has_inventory = message.get("inventory") is not None
+        deferred = outcome.get("inventory_deferred") is True
+        settled = "inventory_transition_digest" in outcome
+        if has_inventory and deferred == settled or not has_inventory and (deferred or settled):
+            raise JournalError("observation inventory settlement is inconsistent")
+        response["observation_result"] = {
+            "schema": "rby-observation-result-v1", "operation_id": operation,
+            "sequence": message["sequence"], "frame": message["frame"],
+            "inventory_status": "deferred" if deferred else "recorded" if settled else "absent",
+        }
+        # SessionGate caches the response before this generation-owned field is
+        # attached. Keep exact retries byte-for-byte identical.
+        self.gate.sessions[player].last_response = copy.deepcopy(response)
+        return response
+
     def _service_release_ready(self, stage):
         """Cold free-run starts only after both owned enrollment saves settled."""
         if not self.free_service:
@@ -231,6 +259,7 @@ class Gen1Runtime(DurableRuntime):
         return SimpleNamespace(
             rules=StagedGen1State.restore(snapshot.state['rules'], data_dir=self.data_dir),
             barrier=RecoveryBarrier.restore(snapshot.state['components']['gen1-runtime']['recovery']),
+            document=lambda: copy.deepcopy(snapshot.state),
         )
 
     def state(self):
@@ -349,6 +378,21 @@ class Gen1Runtime(DurableRuntime):
             raise ProtocolError("RBY trade control is private to the runtime")
         if event == "command_ack":
             command = self.journal.command(player, message.get("command_id"))
+            if command["body"].get("cmd") in ("hud_notice", "hud_state"):
+                semantic = self._semantic(message)
+                # The shared dispatcher verifies the exact no-write receipt, but
+                # deliberately does not impose FIFO on other generations. Gen 1's
+                # physical-before-HUD journal ordering is a release invariant.
+                # An already committed operation or identical completed receipt
+                # remains replayable after the command leaves the pending index.
+                if self.journal.event(player, message["operation_id"], semantic) is None:
+                    if command["outcome"] is None:
+                        pending = self.journal.pending_ids(player)
+                        if not pending or pending[0] != message["command_id"]:
+                            raise JournalError("Gen 1 HUD ACK must own the oldest pending command")
+                    elif (command["outcome"] != "ACK" or semantic.get("outcome") != "ACK"
+                          or command["receipt"] != semantic.get("receipt")):
+                        raise JournalError("Gen 1 HUD replay differs from the completed receipt")
             if command['body'].get('cmd') in ('retirement_observe','acquisition_retire'):
                 from server.gen1_retirement_runtime import acknowledge
                 return acknowledge(self, player, message['operation_id'], self._semantic(message))

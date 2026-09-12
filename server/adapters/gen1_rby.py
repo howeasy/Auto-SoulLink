@@ -31,13 +31,18 @@ log = logging.getLogger(__name__)
 # through to the literal area "gift", so the Magikarp and the Celadon Eevee
 # (CELADON_MANSION_ROOF_HOUSE, map 132) shared one bucket and PAIRED WITH EACH
 # OTHER. Both maps are now in area_map.json with their own ids.
+#
+# Pallet Town, Celadon City and Cinnabar Island used to be listed too, and they are
+# fishing areas (Old, Good and Super Rod in all three titles), so they were the same
+# free-catch hole as Route 4 with a rod instead of grass. No grant is delivered on those
+# maps at runtime: the starter lives in `oaks_lab`, and every other script grant reaches
+# the engine namespaced through `gift_link_area` (the fossil room folds into
+# cinnabar_island and pairs under gift_cinnabar_island). A gift area is only for maps
+# where a gift is the ONLY way a Pokémon arrives.
 _GIFT_AREAS = frozenset({
-    "pallet_town",
     "oaks_lab",
-    "celadon_city",
     "saffron_city",
     "silph_co",
-    "cinnabar_island",
     "mt_moon_pokecenter",     # Magikarp salesman
     "celadon_mansion_roof",   # Eevee
     "celadon_game_corner",
@@ -386,6 +391,22 @@ class Gen1Adapter(GameAdapter):
 
     def is_gift_area(self, area_id: str) -> bool:
         return area_id in _GIFT_AREAS or area_id.startswith("gift_")
+
+    # Gift areas until 2026-09-12 that are fishing areas in every title. Everything a run
+    # persisted under these ids was classified as a gift (that was the defect), so on reload
+    # they move to the gift namespace and keep exactly the meaning they had; new records use
+    # the bare id for rod captures and gift_<id> for grants, as every other wild area does.
+    _RECLASSIFIED_GIFT_AREAS = frozenset({"pallet_town", "celadon_city", "cinnabar_island"})
+    # Bump when an area is reclassified again; a document without this exact token is legacy.
+    _AREA_POLICY = "gen1-areas-v2-fishing-towns"
+
+    def area_policy(self) -> str | None:
+        return self._AREA_POLICY
+
+    def persisted_area(self, area_id: str) -> str:
+        if area_id in self._RECLASSIFIED_GIFT_AREAS:
+            return f"gift_{area_id}"
+        return area_id
 
     def bind_peer(self, rom_type: str) -> None:
         """Declare the partner cartridge after construction (the restore path learns the

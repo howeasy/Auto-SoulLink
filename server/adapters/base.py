@@ -92,6 +92,24 @@ class GameRulesAdapter(ABC):
         """
         return False
 
+    def area_policy(self) -> str | None:
+        """A token naming how this adapter classifies areas, stamped into the saved state
+        document only when not None (so adapters that never reclassified keep their exact
+        document shape). A document with NO token is the known legacy shape and is passed
+        through `persisted_area` exactly once, on the load that first sees it; the current
+        token loads as is; any other token is refused as unknown to this build."""
+        return None
+
+    def persisted_area(self, area_id: str) -> str:
+        """The area id a record saved under an OLDER area policy should carry today.
+
+        An adapter that reclassifies an area (a former gift area that turns out to hold wild
+        encounters) maps records saved under the old classification to the id that keeps
+        their old meaning. Called only for documents whose `area_policy` is not the current
+        one, so a record saved under the current policy is never touched. Identity by default.
+        """
+        return area_id
+
     def gift_link_area(self, area_id: str) -> str:
         """Area_id under which a gift/egg capture should be linked.
 

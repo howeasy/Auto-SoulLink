@@ -72,8 +72,8 @@ def test_scripted_grant_translates_as_a_gift_and_links_under_the_gift_namespace(
     assert state.adapter.gift_link_area("route_1") == "gift_route_1"
     assert "gift_route_1" in state.area_states and "route_1" not in state.area_states
     assert state.pokeballs_obtained["a"] is False   # a gift never activates the ball gate
-    # A grant in a gift area (Pallet Town starters) keeps that area id, exactly as the adapter says.
-    assert state.adapter.is_gift_area("pallet_town") and state.adapter.gift_link_area("pallet_town") == "pallet_town"
+    # A grant in a gift area (the Oak's Lab starters) keeps that area id, exactly as the adapter says.
+    assert state.adapter.is_gift_area("oaks_lab") and state.adapter.gift_link_area("oaks_lab") == "oaks_lab"
 
 
 def test_no_catch_after_the_partner_caught_makes_a_dead_zone_and_retires_the_catch(tmp_path):

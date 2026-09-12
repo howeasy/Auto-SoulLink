@@ -106,7 +106,12 @@ def test_paired_lua_durable_delivery_matches_python_journal_without_any_frames(t
         assert (
             before["outbox"][-1]["operation_id"] == operation and before["observation"]["hp"] == 0
         )
-        exchange(14)
+        semantic_start = len(sent)
+        exchange(8)
+        faint_index = next(index for index, (p, message, _response) in enumerate(sent)
+                           if index >= semantic_start and p == "a" and message["event"] == "faint")
+        assert not any(p == "a" and message["event"] == "sync" for p, message, _ in sent[faint_index + 1:])
+        exchange(6)
         assert case.runtime.rule_state().links[0].status == LinkStatus.DEAD
         received = json.loads(clients["b"].globals().state_json())
         commands = [row for row in received["inbox"] if row["body"]["cmd"] == "force_faint"]
@@ -147,6 +152,7 @@ def test_paired_lua_durable_delivery_matches_python_journal_without_any_frames(t
             options.executor_adapter.receipt=function(_,_,observation)return observation end
         """)
         exchange(14)
+        assert any(p == "a" and message["event"] == "sync" for p, message, _ in sent[semantic_start:])
         assert case.runtime.journal.command("b", commands[0]["command_id"])["outcome"] == "ACK"
         client_state = json.loads(lua.globals().state_json())
         assert client_state["command_floor"] >= commands[0]["command_sequence"]
@@ -244,7 +250,8 @@ def test_free_service_completes_startup_held_command_before_constructing_loop():
         package.loaded['platform_storage']={new=function()return {}end}
         package.loaded['state_store']={open=function()return store end}
         package.loaded['connector']={}
-        local journal={pending_commands=function()return pending==1 and {{command_id='initial'}}or{}end,
+        local journal={hud_state=function()return nil end,
+            pending_commands=function()return pending==1 and {{command_id='initial'}}or{}end,
             pending_events=function()return event_pending==1 and {{operation_id=string.rep('5',32)}}or{}end}
         package.loaded['client_journal']={initial=function()return {}end,open=function()return journal end}
         package.loaded['gen1_bootstrap_observer']={new=function()return {close=function()end,status=function()return{}end}end}
@@ -253,6 +260,7 @@ def test_free_service_completes_startup_held_command_before_constructing_loop():
         local operations={request=function()end,accept=function()return true end,authorize_apply=function()return false end,
             revoke=function()end,status=function()return{}end}
         package.loaded['gen1_held_faint']={new=function()return {operations=operations,ready=function()return false end,
+            handles=function(body)return body.cmd~='hud_notice'and body.cmd~='hud_state'end,
             pending=function()return pending==1 end,adapter={prepare=function()end,classify=function()end,
                 apply=function()end,receipt=function()end}}end}
         package.loaded['gen1_acquisition_observers']={new=function()return {close=function()end}end}

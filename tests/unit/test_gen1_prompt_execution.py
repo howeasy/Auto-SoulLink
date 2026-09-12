@@ -17,7 +17,13 @@ from tests.unit.test_gen1_trade_preparation import checkpoint
 
 @pytest.fixture
 def case(tmp_path):
-    run=TradeCase(tmp_path);run.admit("a");run.admit("b")
+    run=TradeCase(tmp_path)
+    run.admit("a")
+    run.admit("b")
+    # Native windows require a fresh paired CONTROL lease after both admissions;
+    # HELLO alone is never execution authority.
+    run.control("a")
+    run.control("b")
     manifests={p:companion_profiles()[v]["manifest"] for p,v in run.variants.items()}
     for p in manifests:run.policy.rules[p].rom_sha1=manifests[p]["final_sha1"]
     model=SimpleNamespace(policy=run.policy,contexts=run.policy.contexts,

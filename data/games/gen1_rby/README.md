@@ -45,11 +45,14 @@ Archipelago variants have never been launched. See
 - `moves.json` — 165 moves: name, type, power, accuracy, pp, split
 - `trainers.json` — `classes` (class_id → class name) + `named_trainers` (gym leaders, E4, rivals)
 - `encounter_tables.json` — Wild encounter slots, keyed **by game version first**
-  (`red` / `blue` / `yellow`), then by area_id. 39 areas each. Red and Blue differ in 25 of
+  (`red` / `blue` / `yellow`), then by area_id. 46 areas each (39 with grass or surf, plus the seven towns that only fish: Pallet, Viridian, Cerulean, Vermilion,
+  Celadon, Fuchsia and Cinnabar). Red and Blue differ in 25 of
   those areas and Yellow differs from Red in 36, so they cannot share one table — the
   generator honours pokered's `IF DEF(_RED)` / `IF DEF(_BLUE)` blocks and reads Yellow from
   pokeyellow. Regenerate with `python tools/gen_gen1_encounters.py`, which refuses to write
   unless every method block sums to 100% with no zero-rate species.
+  Methods are Grass, Water, Old Rod, Good Rod and Super Rod (rods from pret data/wild/good_rod.asm,
+  super_rod.asm and ItemUseOldRod); `--check` rebuilds in memory and refuses on drift.
 - `species_index.json` — Internal species index ↔ National dex map
 
 ## Sources

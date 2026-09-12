@@ -275,6 +275,7 @@ def complete_retirement(stage, document, target_player, obligation_id, receipt_r
 
 def _resolve(runtime, stage, document, component, event):
     commands, records = {"a": [], "b": []}, []
+    feedback = {"a": [], "b": []}
     for player, entry in component["players"].items():
         for encounter_id, row in entry["encounters"].items():
             if row["phase"] not in ("ended", "awaiting_peer"):
@@ -310,6 +311,9 @@ def _resolve(runtime, stage, document, component, event):
                 proved_peers=None,
                 decision=no_catch_rules.decision,
             )
+            notices = outcome.pop("feedback")
+            for recipient in ("a", "b"):
+                feedback[recipient].extend(notices[recipient])
             at = outcome.pop("at") or at
             row.update(phase="no_catch", decision=outcome, occurred_at=at)
             if outcome["retire"]:
@@ -366,7 +370,9 @@ def _resolve(runtime, stage, document, component, event):
                 for p in ("a", "b"):
                     commands[p].extend(added[p])
                 records.extend(extra)
-    return commands, records
+    from server.gen1_hud_feedback import append_after_physical
+
+    return append_after_physical(commands, feedback), records
 
 
 def stage(

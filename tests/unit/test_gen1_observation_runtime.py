@@ -28,6 +28,7 @@ from server.state import LinkStatus
 from tests.unit.test_gen1_acquisition_runtime import grant
 from tests.unit.test_gen1_engine_signal_runtime import deliver as deliver_signals
 from tests.unit.test_gen1_faint_runtime import ack, acknowledgement, paired, signal_batch
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
 from tests.unit.test_gen1_initial_observation import admit, observation, send
 from tests.unit.test_gen1_inventory_observation import deliver as deliver_inventory
 from tests.unit.test_gen1_sessions import contract
@@ -52,10 +53,31 @@ def deliver(runtime, player, owner, request, operation=None):
 
 
 def publish(runtime, player, owner, request):
-    """Deliver one batch and return its committed result; the transport reply carries no result."""
+    """Deliver one batch and return its committed result."""
     operation = secrets.token_hex(16)
     deliver(runtime, player, owner, request, operation)
     return operation, runtime.journal.event_snapshot(player, operation).result
+
+
+def test_transport_binds_inventory_outcome_to_exact_observation_and_replay(tmp_path):
+    runtime = create_runtime(tmp_path, contract("yellow", "yellow"), free_service=True)
+    try:
+        owner, initial, _ = enrolled(runtime, "a")
+        request = batch(runtime, "a", 1, frame=130, inventory=checkpoint(initial, 130))
+        operation = secrets.token_hex(16)
+        session = runtime.gate.sessions["a"]
+        packet = {"protocol": runtime.protocol, "player": "a", "session_id": session.session_id,
+                  "admission_epoch": runtime.gate.epoch, "seq": session.last_seq + 1,
+                  "operation_id": operation, **request}
+        response = runtime.process(packet, owner)
+        assert response["observation_result"] == {"schema": "rby-observation-result-v1",
+            "operation_id": operation, "sequence": 1, "frame": 130, "inventory_status": "recorded"}
+        assert runtime.process(packet, owner) == response
+        no_inventory = batch(runtime, "a", 2, frame=160)
+        answer = deliver(runtime, "a", owner, no_inventory)
+        assert answer["observation_result"]["inventory_status"] == "absent"
+    finally:
+        runtime.close()
 
 
 def enrolled(runtime, player, *, occupied=False):
@@ -145,7 +167,7 @@ def test_faint_signal_settles_exactly_as_the_standalone_engine_event(tmp_path, c
             links = [(link["status"], link["area_id"], link["a"]["key"], link["b"]["key"]) for link in document["rules"]["core"]["links"]]
             party = document["rules"]["runtime"]["party_keys"]
             fixed = {name: death[name] for name in death if name not in ("at", "link_id", "members")}
-            return fixed, links, party, [(body["cmd"], body["key"], body.get("player")) for body in pending]
+            return fixed, links, party, [(body["cmd"], body.get("key"), body.get("player")) for body in pending]
         finally:
             runtime.close()
 
@@ -156,7 +178,7 @@ def test_faint_signal_settles_exactly_as_the_standalone_engine_event(tmp_path, c
     death, links, party, commands = observed
     assert death["phase"] == "pending_faint" and death["peer"] == "b"
     assert links[0][0] == LinkStatus.DEAD.value and not party["a"] and not party["b"]
-    assert [command[0] for command in commands] == ["force_faint"]
+    assert [command[0] for command in commands] == ["force_faint", "hud_notice", "hud_notice"]
 
 
 def test_heartbeat_inventory_records_the_checkpoint_and_chains_from_the_previous_batch(tmp_path):
@@ -209,6 +231,7 @@ def test_acquisition_receipt_settles_pending_or_in_the_same_batch_as_its_checkpo
         deliver(runtime, "a", owners["a"], batch(runtime, "a", 2, frame=200, inventory=stable("a", 200)))
         row = acquisitions(runtime, "a")
         assert row["pending"] == [] and len(row["settled"]) == 1 and row["settled"][0]["link_id"] is None
+        acknowledge_hud(runtime)
         # b: receipt and heartbeat checkpoint in ONE batch; inventory is staged first, so it settles at once.
         # (A checkpoint committed before its receipt cannot prove it: the verifier orders them by revision.)
         _, result = publish(runtime, "b", owners["b"], batch(runtime, "b", 1, frame=200, acquisitions=[receipts["b"]],
@@ -252,6 +275,7 @@ def test_starter_source_and_checkpoint_settle_through_observation_batches(tmp_pa
             deliver(runtime, player, owners[player], batch(runtime, player, 1, frame=105, signals=source))
             assert player in runtime.state().document()["components"][STARTERS]["sources"]
             deliver(runtime, player, owners[player], batch(runtime, player, 2, frame=110, inventory=stable["observation"]))
+            acknowledge_hud(runtime)
         state = runtime.state()
         assert set(state.document()["components"][STARTERS]["settled"]) == {"a", "b"}
         assert len(state.rules.links) == 1 and state.rules.links[0].status == LinkStatus.ALIVE
@@ -272,12 +296,17 @@ def test_heartbeat_inventory_is_deferred_while_any_physical_obligation_is_open(t
             deliver_signals(runtime, player, owners[player], source)
             deliver_inventory(runtime, player, owners[player], stable)
             points[player] = stable["observation"]
+            acknowledge_hud(runtime)
         deliver(runtime, "a", owners["a"], batch(runtime, "a", 1, frame=121, signals=signal_batch(runtime, "a")))
-        assert runtime.journal.pending_ids("b") and not runtime.journal.pending_ids("a")
+        assert [c["cmd"] for c in runtime.journal.pending("b")] == ["force_faint", "hud_notice", "hud_notice"]
+        assert [c["cmd"] for c in runtime.journal.pending("a")] == ["hud_notice", "hud_notice"]
         sequences = {p: runtime.state().document()["components"][INVENTORY][p]["sequence"] for p in ("a", "b")}
         for player, frame in (("b", 125), ("a", 126)):
-            _, result = publish(runtime, player, owners[player], batch(runtime, player, 1 if player == "b" else 2, frame=frame,
-                                                                      inventory=checkpoint(points[player], frame)))
+            request = batch(runtime, player, 1 if player == "b" else 2, frame=frame,
+                            inventory=checkpoint(points[player], frame))
+            response = deliver(runtime, player, owners[player], request)
+            assert response["observation_result"]["inventory_status"] == "deferred"
+            result = runtime.journal.event_snapshot(player, response["operation_id"]).result
             assert result["inventory_deferred"] is True and "inventory_transition_digest" not in result
         assert {p: runtime.state().document()["components"][INVENTORY][p]["sequence"] for p in ("a", "b")} == sequences
         command = runtime.journal.command("b", runtime.journal.pending_ids("b")[0])
@@ -285,7 +314,7 @@ def test_heartbeat_inventory_is_deferred_while_any_physical_obligation_is_open(t
         # The physical faint closed, but its memorial obligations opened: the checkpoint stays deferred
         # until every obligation has its receipt, exactly as the standalone stream would refuse it.
         pending = [runtime.journal.command("b", identifier)["body"] for identifier in runtime.journal.pending_ids("b")]
-        assert pending and all("death_id" in body and body["cmd"] != "force_faint" for body in pending)
+        assert pending and [body["cmd"] for body in pending] == ["hud_notice", "hud_notice", "memorial_observe"]
         fainted = checkpoint(points["b"], 140)
         party = bytearray.fromhex(fainted["source"]["fields"]["party"])
         party[9:11] = b"\0\0"
@@ -511,6 +540,22 @@ def test_in_battle_batch_issues_the_window_and_its_receipt_enforces_the_death_on
         assert death(reopened, death_id)["enforcement"]["site"] == "player_action"
     finally:
         reopened.close()
+
+
+def test_late_peer_death_needs_only_the_next_null_inventory_battle_heartbeat(tmp_path):
+    runtime = create_runtime(tmp_path, contract("yellow", "yellow"), free_service=True)
+    try:
+        owners, death_id = dead_pair(runtime)
+        assert window_command(runtime, "b") is None
+        request = armed_batch(runtime, "b", 1, frame=150, battle=1)
+        assert request["inventory"] is None and request["signals"] is None and request["acquisitions"] == []
+        response = deliver(runtime, "b", owners["b"], request)
+        assert response["observation_result"]["inventory_status"] == "absent"
+        command = window_command(runtime, "b")
+        assert command is not None and command["body"]["death_id"] == death_id
+        assert command["body"]["authority"]["frame"] == 151
+    finally:
+        runtime.close()
 
 
 def test_non_terminal_windows_leave_the_death_pending_and_re_issue_only_while_in_battle(tmp_path):

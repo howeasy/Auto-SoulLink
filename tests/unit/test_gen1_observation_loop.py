@@ -21,7 +21,7 @@ HARNESS = """
 package.path=root.."/lua/?.lua;"..package.path
 JSON=require("json_codec");Loop=require("gen1_observation_loop")
 calls={};appended={};persisted={};prepared_with={}
-frame=99;queue=JSON.array();receipts=JSON.array();witness=JSON.array();pending_write=false;inventories=0
+frame=99;queue=JSON.array();receipts=JSON.array();witness=JSON.array();pending_write=false;inventories=0;checkpoint=nil
 battle=0;opponent=0;instruction=nil
 local function note(name)
     assert(ctx.at_boundary==true,name.." called outside a frame boundary")
@@ -65,7 +65,8 @@ function build()
     ctx={engine=engine,observers=observers,journal=journal,session=session,writer=writer,baseline=baseline,instruction=instruction,
         frame=function()return frame end,owned=function()return {context_generation=string.rep("a",32)}end,
         rom_hash=function()return string.rep("f",40)end,
-        inventory=function()inventories=inventories+1;return {schema="fixture-inventory",frame=frame}end}
+        inventory=function()inventories=inventories+1;return {schema="fixture-inventory",frame=frame}end,
+        checkpoint=checkpoint}
     loop=Loop.new(ctx)
 end
 function advance(count)for _=1,count or 1 do frame=frame+1;calls={};loop:tick()end end
@@ -118,6 +119,66 @@ def test_heartbeat_frame_publishes_inventory_with_nothing_else(lua):
     assert "drain" not in seq and seq.index("append") < seq.index("observers_drain")
     lua.globals().advance()  # frame 121: quiet again
     assert lua.eval("#appended") == 1 and lua.globals().inventories == 1
+
+
+def test_exact_dirty_checkpoint_suppresses_unchanged_heartbeats_and_publishes_full_change(lua):
+    lua.execute("""
+        checks=0;dirty=false
+        checkpoint=function(previous)
+            checks=checks+1
+            local fingerprint={schema='fixture-fingerprint',value=dirty and 2 or 1}
+            if previous==false then return nil,fingerprint,false end
+            local changed=previous.value~=fingerprint.value
+            return changed and {schema='fixture-inventory',frame=frame}or nil,fingerprint,changed
+        end
+        build()
+    """)
+    lua.globals().advance(21)  # through frame 120: same 30-frame sample, no durable event
+    assert lua.eval("checks") == 2 and lua.eval("#appended") == 0
+    assert lua.eval("loop:status().inventory_checks") == 1
+    lua.globals().dirty = True
+    lua.globals().advance(30)  # frame 150: the changed sample publishes the complete point once
+    assert lua.eval("checks") == 3 and lua.eval("#appended") == 1
+    assert lua.eval("appended[1].event.inventory.schema") == "fixture-inventory"
+    assert lua.eval("loop:status().inventory_publications") == 1
+
+
+def test_deferred_ack_forces_full_resend_at_next_same_byte_checkpoint(lua):
+    lua.execute("""
+        checks=0
+        baseline.pending_inventory_retry={operation_id=string.rep('9',32),sequence=1,frame=90}
+        checkpoint=function(previous,force)
+            checks=checks+1
+            local fingerprint={schema='fixture-fingerprint',value=1}
+            if previous==false then return nil,fingerprint,false end
+            assert(force==true,'deferred ACK did not force a full same-byte point')
+            return {schema='fixture-inventory',frame=frame},fingerprint,true
+        end
+        ctx_retry=function()return baseline.pending_inventory_retry end
+        build();ctx.pending_inventory_retry=ctx_retry
+    """)
+    lua.globals().advance(21)
+    assert lua.eval("checks") == 2 and lua.eval("#appended") == 1
+    assert lua.eval("appended[1].event.inventory.frame") == 120
+    assert lua.eval("appended[1].event.sequence") == 1
+
+
+def test_battle_heartbeat_publishes_null_inventory_without_source_signal(lua):
+    lua.execute("""
+        battle=1;opponent=36
+        checkpoint=function(previous)
+            if previous==false then return nil,{schema='fixture-fingerprint',value=1},false end
+            return nil,{schema='fixture-fingerprint',value=1},false
+        end
+        build()
+    """)
+    lua.globals().advance(21)
+    assert lua.eval("#appended") == 1
+    assert lua.eval("appended[1].event.frame") == 120
+    assert lua.eval("appended[1].event.battle") == 1
+    assert lua.eval("appended[1].event.inventory == JSON.null") is True
+    assert lua.eval("appended[1].event.signals == JSON.null") is True
+    assert lua.eval("#appended[1].event.acquisitions") == 0
 
 
 def test_sequence_increments_per_event_and_lands_in_the_baseline(lua):

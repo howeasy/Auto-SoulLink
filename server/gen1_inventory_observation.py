@@ -130,7 +130,8 @@ def _typed_request(request):
         raise JournalError('typed inventory observation required')
 
 
-def stage_observation(runtime, stage, document, player, operation, request, *, frame_origin=None, frame_request=None):
+def stage_observation(runtime, stage, document, player, operation, request, *, frame_origin=None, frame_request=None,
+                      allow_transport_rotation=False):
     """Stage evidence on caller-owned state; return entry/result/commands/records.
 
     Only the detached stage/document may change. Journal/session reads retain
@@ -143,10 +144,13 @@ def stage_observation(runtime, stage, document, player, operation, request, *, f
     if initial is None:
         raise JournalError('inventory observation requires initial enrollment')
     metadata = runtime.gate.sessions[player].metadata
-    matching = same_admitted_context(metadata, initial['metadata']) if origin else metadata == initial['metadata']
+    matching = (same_admitted_context(metadata, initial['metadata'])
+                if origin or allow_transport_rotation else metadata == initial['metadata'])
     if not matching:
         raise JournalError('inventory stream context changed; reconciliation required')
-    if document['active_trade'] or origin is None and runtime.journal.pending_ids(player):
+    from server.gen1_hud_feedback import pending_physical_ids
+
+    if document['active_trade'] or origin is None and pending_physical_ids(runtime.journal, player):
         raise JournalError('physical command obligations require their own observation closure')
     entries = document['components'].setdefault(COMPONENT, {})
     old = entries.get(player)
@@ -171,11 +175,11 @@ def stage_observation(runtime, stage, document, player, operation, request, *, f
     verify_entry(entry, initial)
     entries[player] = entry
     from server.gen1_starter_settlement import settle_ready
-    settle_ready(runtime, stage, document, frame_origin=origin)
+    feedback = settle_ready(runtime, stage, document, frame_origin=origin)
     from server.gen1_rule_inventory import refresh_party
     refresh_party(stage.rules, player, after, initial['metadata']['save_identity'])
     document['rules'] = stage.rules.document()
     # The history/execution blocker stays until the ordinary lifecycle qualifies.
     # Only a separately proved starter source can settle from this checkpoint.
-    return {'entry': entry, 'commands': {'a': [], 'b': []}, 'result': result(entry),
+    return {'entry': entry, 'commands': feedback, 'result': result(entry),
         'records': [{'namespace': COMPONENT, 'key': record_key(player), 'value': entry}]}

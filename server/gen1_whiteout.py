@@ -58,17 +58,21 @@ def settle_whiteout(stage, document, player, entry, index, signal):
     event = whiteout_from_faint(stage.rules.partner_blobs[player], None, signal,
                                 area_id=area_for_map(signal["point"]["map_id"]))
     if event is None:
-        return None
-    stage.rules.handle_event(player, event)
-    queued = stage.rules.queued_commands
-    if any(c.get("cmd") in ("force_faint", "force_explode") for rows in queued.values() for c in rows):
+        return {"a": [], "b": []}
+    immediate = stage.rules.handle_event(player, event)
+    captured = stage.rules.take_commands(player, immediate)
+    if any(c.get("cmd") in ("force_faint", "force_explode") for rows in captured.values() for c in rows):
         raise JournalError("whiteout found a linked party member its faint settlement left alive")
-    # ponytail: memorialize, hud_show, game_over and the party_mon of a rebuild are decided here and,
-    # as after the faint (P8), executed elsewhere or not at all on Gen 1 until the item-4 executor map.
-    stage.rules.queued_commands = {"a": [], "b": []}
+    # The durable HUD closes its explicit game-over/rebuild transitions.  This
+    # presentation path neither executes nor falsely acknowledges the engine's
+    # legacy party_mon/memorialize commands; those require their own physical lane.
+    from server.gen1_hud_feedback import classify_death
+
+    labels = {p: "WHITEOUT" for p in ("a", "b")}
+    feedback = classify_death(captured, member_labels=labels, whiteout=True)
     document["components"].setdefault(COMPONENT, {})[identifier(player, entry["operation_id"], index)] = {
         "player": player, "engine_record": copy.deepcopy(entry), "index": index, "area_id": event["area_id"]}
-    return event
+    return feedback
 
 
 def verify_state(stage):

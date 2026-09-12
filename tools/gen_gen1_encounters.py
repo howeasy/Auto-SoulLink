@@ -4,6 +4,9 @@
 Reads:
     .cache/pret/pokered/data/wild/grass_water.asm          (map_id → label)
     .cache/pret/pokered/data/wild/maps/*.asm               (per-map encounter slots)
+    .cache/pret/pokered/data/wild/good_rod.asm             (Good Rod: two global entries)
+    .cache/pret/pokered/data/wild/super_rod.asm            (Super Rod: per-map groups)
+    .cache/pret/pokered/engine/items/item_effects.asm      (Old Rod: `lb bc, 5, MAGIKARP`)
     .cache/pret/pokered/constants/pokemon_constants.asm    (species name → internal idx)
     data/games/gen1_rby/area_map.json                      (map_id → area_id)
     data/games/gen1_rby/species_index.json                 (internal idx → NatDex)
@@ -16,6 +19,18 @@ Slot percentages per pret/data/wild/probabilities.asm:
 
 Per-species rates are summed across all slots the species occupies.
 Min/max levels are min/max across those slots.
+
+Fishing. Old Rod is one entry at 100%, Good Rod two entries at 50% each; both are global
+in the ROM and are placed under EVERY area that has a Water (surf) method on any floor or a
+Super Rod group -- one rule, applied to all three titles. Super Rod is per map, picked
+uniformly by the game (ReadSuperRodData rerolls a 2-bit number until it is below the group
+size), so its 2-4 entries share 100% equally through the scanner's own `uniform_rates`, and
+a clean cartridge scanned at runtime reproduces this file. Like the scanner, Super Rod
+carries no floor suffix and the lowest map id wins within an area. Old and Good Rod are
+generator-only: the scanner does not emit them.
+
+    python tools/gen_gen1_encounters.py          # regenerate
+    python tools/gen_gen1_encounters.py --check  # rebuild in memory and diff (exit 1 on drift)
 """
 from __future__ import annotations
 
@@ -214,8 +229,8 @@ def species_display_name(species_const: str) -> str:
     return species_const.title().replace("_", " ")
 
 
-def aggregate(entries: list[tuple[int, str]]) -> list[dict]:
-    """Collapse 10-slot list to per-species rate + min/max levels.
+def aggregate(entries: list[tuple[int, str]], rates: list[int] = SLOT_RATES) -> list[dict]:
+    """Collapse a slot list to per-species rate + min/max levels.
 
     Drops MISSINGNO entries (species_const == "MISSINGNO") and NO_MON.
     """
@@ -223,7 +238,7 @@ def aggregate(entries: list[tuple[int, str]]) -> list[dict]:
     for slot, (level, sp) in enumerate(entries):
         if sp in ("NO_MON", "MISSINGNO"):
             continue
-        rate = SLOT_RATES[slot] if slot < len(SLOT_RATES) else 0
+        rate = rates[slot] if slot < len(rates) else 0
         if sp not in by_species:
             by_species[sp] = {"_const": sp, "rate": 0, "min_level": level, "max_level": level}
         cur = by_species[sp]
@@ -233,13 +248,158 @@ def aggregate(entries: list[tuple[int, str]]) -> list[dict]:
     return list(by_species.values())
 
 
+def parse_map_constants(path: str) -> dict[str, int]:
+    """MAP_NAME -> map id, in `map_const` order (Gen 1 has no skips)."""
+    out: dict[str, int] = {}
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            m = re.match(r"^\s*map_const\s+([A-Z_0-9]+)\s*,", line)
+            if m:
+                out[m.group(1)] = len(out)
+    return out
+
+
+def parse_old_rod(repo: str) -> list[tuple[int, str]]:
+    """ItemUseOldRod's `lb bc, LEVEL, SPECIES` -- the only such line in item_effects.asm."""
+    path = os.path.join(repo, "engine", "items", "item_effects.asm")
+    with open(path, encoding="utf-8") as f:
+        found = re.findall(r"^\s*lb\s+bc\s*,\s*(\d+)\s*,\s*([A-Z][A-Z_0-9]*)\s*$", f.read(), re.M)
+    if len(found) != 1:
+        raise ValueError(f"{path}: expected one `lb bc, level, SPECIES`, found {found}")
+    return [(int(found[0][0]), found[0][1])]
+
+
+def parse_good_rod(repo: str) -> list[tuple[int, str]]:
+    """GoodRodMons: `db level, SPECIES` x2."""
+    out = []
+    with open(os.path.join(repo, "data", "wild", "good_rod.asm"), encoding="utf-8") as f:
+        for raw in f:
+            m = re.match(r"^\s*db\s+(\d+)\s*,\s*([A-Z_0-9]+)", raw.split(";", 1)[0])
+            if m:
+                out.append((int(m.group(1)), m.group(2)))
+    if len(out) != 2:
+        raise ValueError(f"good_rod.asm: expected 2 entries, found {out}")
+    return out
+
+
+def parse_super_rod(repo: str, map_consts: dict[str, int]) -> dict[int, list[tuple[int, str]]]:
+    """map id -> [(level, SPECIES)], in file order.
+
+    pokered: `dbw MAP, .GroupN` pointers, then `.GroupN:` / `db count` / `db level, SPECIES`.
+    pokeyellow: one flat row per map, `db MAP, SPECIES, level, SPECIES, level, ...`.
+    """
+    per_map: dict[int, list[tuple[int, str]]] = {}
+    pointers: dict[int, str] = {}
+    groups: dict[str, list[tuple[int, str]]] = {}
+    cur: str | None = None
+    with open(os.path.join(repo, "data", "wild", "super_rod.asm"), encoding="utf-8") as f:
+        for raw in f:
+            line = raw.split(";", 1)[0].strip()
+            m = re.match(r"^dbw\s+([A-Z_0-9]+)\s*,\s*(\.[A-Za-z0-9_]+)\s*$", line)
+            if m:
+                pointers[map_consts[m.group(1)]] = m.group(2)
+                continue
+            m = re.match(r"^(\.[A-Za-z0-9_]+):\s*$", line)
+            if m:
+                cur = m.group(1)
+                groups[cur] = []
+                continue
+            m = re.match(r"^db\s+(\d+)\s*,\s*([A-Z_0-9]+)\s*$", line)
+            if m and cur is not None:
+                groups[cur].append((int(m.group(1)), m.group(2)))
+                continue
+            m = re.match(r"^db\s+([A-Z_0-9]+)\s*,\s*(.+)$", line)
+            if m and m.group(1) in map_consts:
+                fields = [x.strip() for x in m.group(2).split(",")]
+                per_map[map_consts[m.group(1)]] = [
+                    (int(fields[i + 1]), fields[i]) for i in range(0, len(fields), 2)]
+    for map_id, label in pointers.items():
+        per_map[map_id] = groups[label]
+    for map_id, entries in per_map.items():
+        if not entries:
+            raise ValueError(f"super_rod.asm: map {map_id} has an empty group")
+    return per_map
+
+
+def parse_super_rod_thresholds(repo: str) -> tuple[int, ...] | None:
+    """The `cp $nn` operands of pokeyellow's GenerateRandomFishingEncounter, in order.
+
+    Yellow does not pick uniformly: one random byte is compared against three thresholds and
+    the first slot whose threshold it is below wins, so the slots weigh 102, 76, 51 and 27 of
+    256. pokered has no such routine (its ReadSuperRodData rerolls a 2-bit number until it is
+    below the group size, which IS uniform) and returns None here.
+    """
+    path = os.path.join(repo, "engine", "items", "super_rod.asm")
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        body = f.read()
+    m = re.search(r"GenerateRandomFishingEncounter:(.*?)\n\.", body, re.S)
+    if not m:
+        raise ValueError("pokeyellow super_rod.asm: GenerateRandomFishingEncounter not found")
+    return tuple(int(v, 16) for v in re.findall(r"^\s*cp \$([0-9a-fA-F]+)", m.group(1), re.M))
+
+
+def super_rod_rates(variant: str, repo: str, entries: list[tuple[int, str]]) -> list[int]:
+    """Per-slot percentages as the title rolls them, through the ROM scanner's own function
+    so a clean cartridge reproduces this file exactly. Yellow's thresholds are parsed out of
+    the asm here and must equal the scanner's pin; Red and Blue are uniform (rejection
+    sampling in ReadSuperRodData)."""
+    if _REPO not in sys.path:
+        sys.path.insert(0, _REPO)
+    from server.adapters.gen1_rom_scan import YELLOW_SUPER_ROD_THRESHOLDS, super_rod_rates as rates
+    thresholds = parse_super_rod_thresholds(repo)
+    if (variant == "yellow") != (thresholds is not None):
+        raise ValueError(f"{variant}: unexpected super rod selection routine")
+    if thresholds is not None and thresholds != YELLOW_SUPER_ROD_THRESHOLDS:
+        raise ValueError(f"pokeyellow super rod thresholds {thresholds} differ from the scanner pin "
+                         f"{YELLOW_SUPER_ROD_THRESHOLDS}")
+    return list(rates(variant, len(entries)))
+
+
+def map_suffix(const_name: str, area_id: str) -> str:
+    """" Dock" for VERMILION_DOCK in vermilion_city, "" for the area's own map.
+
+    A fishing map without a wild-data label still needs a stable, source-derived name when
+    its area holds several fishing maps; the map constant minus the area's own letters is
+    what is left (VERMILION_DOCK -> Dock, CERULEAN_GYM -> Gym).
+    """
+    letters = [c for c in const_name if c != "_"]
+    flat_area = area_id.replace("_", "").lower()
+    i = 0
+    while i < len(letters) and i < len(flat_area) and letters[i].lower() == flat_area[i]:
+        i += 1
+    tail = "".join(letters[i:])
+    return " " + tail.title() if tail else ""
+
+
 def build_variant(repo: str, defines: frozenset[str], index_to_natdex: dict[int, int],
-                  map_id_to_area: dict[int, str]) -> tuple[dict, list, set]:
+                  map_id_to_area: dict[int, str], variant: str = "red") -> tuple[dict, list, set]:
     """Encounter tables for ONE game version. Returns (areas, skipped_areas, skipped_species)."""
     species_consts = parse_pokemon_constants(
         os.path.join(repo, "constants", "pokemon_constants.asm")
     )
     pointers = parse_wild_pointers(os.path.join(repo, "data", "wild", "grass_water.asm"))
+    skipped_unknown_species: set[str] = set()
+
+    def to_entries(agg: list[dict]) -> list[dict]:
+        """Aggregated species consts -> the JSON entry shape, most likely first."""
+        out = []
+        for e in agg:
+            idx = species_consts.get(e["_const"])
+            natdex = index_to_natdex.get(idx) if idx is not None else None
+            if not natdex:
+                skipped_unknown_species.add(e["_const"])
+                continue
+            out.append({
+                "species_id": natdex,
+                "name": species_display_name(e["_const"]),
+                "rate": e["rate"],
+                "min_level": e["min_level"],
+                "max_level": e["max_level"],
+            })
+        out.sort(key=lambda x: (-x["rate"], x["species_id"]))
+        return out
 
     # ONE RULE AREA PER DUNGEON, BUT EVERY FLOOR'S TABLE.
     # This used to be first-wins: a dungeon spans several maps, they all resolve to one
@@ -259,16 +419,17 @@ def build_variant(repo: str, defines: frozenset[str], index_to_natdex: dict[int,
     # must reproduce this file byte for byte, which is the known-positive control that
     # proves the scanner reads real structure rather than something plausible.
     floor_suffix_by_map: dict[int, str] = {}
-    # area_id -> how many maps carry wild data, so single-map areas keep unsuffixed labels.
+    # area_id -> how many maps carry wild OR fishing data, so single-map areas keep
+    # unsuffixed labels and every map of a multi-map area gets a stable one.
+    map_consts = parse_map_constants(os.path.join(repo, "constants", "map_constants.asm"))
+    const_by_id = {v: k for k, v in map_consts.items()}
+    super_rod = parse_super_rod(repo, map_consts)
     floors_per_area: dict[str, int] = {}
-    for _mid, _label in pointers:
-        if _label == "NothingWildMons":
-            continue
+    for _mid in sorted({m for m, lbl in pointers if lbl != "NothingWildMons"} | set(super_rod)):
         _aid = map_id_to_area.get(_mid)
         if _aid:
             floors_per_area[_aid] = floors_per_area.get(_aid, 0) + 1
     skipped_unknown_area: list[tuple[int, str]] = []
-    skipped_unknown_species: set[str] = set()
 
     for map_id, label in pointers:
         if label == "NothingWildMons":
@@ -296,29 +457,43 @@ def build_variant(repo: str, defines: frozenset[str], index_to_natdex: dict[int,
                                        ("Water" + suffix, water_rate, water)):
             if rate == 0 or not entries:
                 continue
-            agg = aggregate(entries)
-            method_entries = []
-            for e in agg:
-                idx = species_consts.get(e["_const"])
-                if idx is None:
-                    skipped_unknown_species.add(e["_const"])
-                    continue
-                natdex = index_to_natdex.get(idx)
-                if not natdex:
-                    skipped_unknown_species.add(e["_const"])
-                    continue
-                method_entries.append({
-                    "species_id": natdex,
-                    "name": species_display_name(e["_const"]),
-                    "rate": e["rate"],
-                    "min_level": e["min_level"],
-                    "max_level": e["max_level"],
-                })
+            method_entries = to_entries(aggregate(entries))
             if method_entries:
-                method_entries.sort(key=lambda x: (-x["rate"], x["species_id"]))
                 block[method] = method_entries
         if not block:
             areas.pop(area_id, None)
+
+    # FISHING. Super Rod is per map and carries the map's label when its area holds several
+    # fishing maps (a floor from the wild-data label, else the map constant's tail: " Dock",
+    # " Gym"), so Yellow's distinct Vermilion Dock and Cerulean Cave rows are all shown;
+    # the labels are published in floor_labels.json and gen1_rom_scan.build_encounter_tables
+    # applies the same ones, so the clean-ROM control holds. Old and Good Rod are global in
+    # the ROM, so the placement rule is ours: every area with a Water method on any floor,
+    # or a Super Rod group, gets both. Rates are the title's own pick (super_rod_rates).
+    fishing_areas: list[str] = [a for a, b in areas.items()
+                                if any(m.startswith("Water") for m in b)]
+    for map_id in sorted(super_rod):
+        area_id = map_id_to_area.get(map_id)
+        if not area_id:
+            skipped_unknown_area.append((map_id, "SuperRod"))
+            continue
+        block = areas.setdefault(area_id, {})
+        if area_id not in fishing_areas:
+            fishing_areas.append(area_id)
+        suffix = floor_suffix_by_map.get(map_id, "")
+        if not suffix and floors_per_area.get(area_id, 0) > 1:
+            suffix = map_suffix(const_by_id[map_id], area_id)
+            if suffix:
+                floor_suffix_by_map[map_id] = suffix
+        method = "Super Rod" + suffix
+        if method not in block:
+            block[method] = to_entries(aggregate(super_rod[map_id],
+                                                 super_rod_rates(variant, repo, super_rod[map_id])))
+    old_rod = to_entries(aggregate(parse_old_rod(repo), [100]))
+    good_rod = to_entries(aggregate(parse_good_rod(repo), [50, 50]))
+    for area_id in fishing_areas:
+        areas[area_id]["Old Rod"] = list(old_rod)
+        areas[area_id]["Good Rod"] = list(good_rod)
 
     return areas, skipped_unknown_area, skipped_unknown_species, floor_suffix_by_map
 
@@ -349,13 +524,8 @@ def _check_rates(variant: str, areas: dict) -> list[str]:
     return problems
 
 
-def main() -> int:
-    for path in {repo for repo, _ in VARIANTS.values()}:
-        if not os.path.exists(path):
-            sys.stderr.write(f"Missing pret repo at {path}\n"
-                             "Run tools/build_pret_syms.py first to clone it.\n")
-            return 1
-
+def build(quiet: bool = False) -> tuple[dict, dict[str, str], list[str]]:
+    """(tables, floor_suffixes, problems) for all three titles, from the decomps."""
     with open(_AREA_MAP, encoding="utf-8") as f:
         area_map = json.load(f)
     with open(_SPECIES_INDEX, encoding="utf-8") as f:
@@ -368,16 +538,54 @@ def main() -> int:
     floor_suffixes: dict[int, str] = {}
     for variant, (repo, defines) in VARIANTS.items():
         areas, skipped_area, skipped_species, floors = build_variant(
-            repo, defines, index_to_natdex, map_id_to_area)
+            repo, defines, index_to_natdex, map_id_to_area, variant)
         floor_suffixes.update(floors)
         out[variant] = areas
         problems += _check_rates(variant, areas)
-        print(f"{variant}: {len(areas)} areas")
+        if quiet:
+            continue
+        rods = {r: sum(1 for b in areas.values() if r in b)
+                for r in ("Old Rod", "Good Rod", "Super Rod")}
+        print(f"{variant}: {len(areas)} areas; rod methods {rods}")
         if skipped_area:
             print(f"  {len(skipped_area)} maps skipped (no area_id mapping): "
                   + ", ".join(f"{lbl}({mid})" for mid, lbl in skipped_area))
         if skipped_species:
             print(f"  {len(skipped_species)} species skipped: {', '.join(sorted(skipped_species))}")
+    return out, {str(k): v for k, v in sorted(floor_suffixes.items())}, problems
+
+
+def diff_against_shipped(out: dict, floor_suffixes: dict[str, str]) -> list[str]:
+    """First differences between an in-memory rebuild and the two shipped files."""
+    diffs: list[str] = []
+    try:
+        with open(_OUT, encoding="utf-8") as f:
+            shipped = json.load(f)
+        with open(_FLOORS_OUT, encoding="utf-8") as f:
+            shipped_floors = json.load(f)
+    except (OSError, ValueError) as exc:
+        return [f"cannot read shipped file: {exc}"]
+    if shipped_floors != floor_suffixes:
+        diffs.append(f"floor_labels.json differs: {shipped_floors} != {floor_suffixes}")
+    for variant in sorted(set(out) | set(shipped)):
+        built, have = out.get(variant, {}), shipped.get(variant, {})
+        for area in sorted(set(built) | set(have)):
+            for method in sorted(set(built.get(area, {})) | set(have.get(area, {}))):
+                b, h = built.get(area, {}).get(method), have.get(area, {}).get(method)
+                if b != h:
+                    diffs.append(f"{variant}/{area}/{method}: built {b} != shipped {h}")
+    return diffs
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    for path in {repo for repo, _ in VARIANTS.values()}:
+        if not os.path.exists(path):
+            sys.stderr.write(f"Missing pret repo at {path}\n"
+                             "Run tools/build_pret_syms.py first to clone it.\n")
+            return 1
+
+    out, floor_suffixes, problems = build()
 
     if problems:
         sys.stderr.write("REFUSING TO WRITE — rate validation failed:\n")
@@ -387,6 +595,16 @@ def main() -> int:
             sys.stderr.write(f"  ... and {len(problems) - 40} more\n")
         return 1
 
+    if "--check" in argv:
+        diffs = diff_against_shipped(out, floor_suffixes)
+        if diffs:
+            print(f"DRIFT: {len(diffs)} difference(s) between pret and {_OUT}")
+            for d in diffs[:20]:
+                print(f"  {d}")
+            return 1
+        print(f"OK: encounter_tables.json matches pret for {', '.join(out)}")
+        return 0
+
     with open(_OUT, "w", encoding="utf-8") as f:
         json.dump(out, f, indent=2, ensure_ascii=False)
         f.write("\n")
@@ -395,7 +613,7 @@ def main() -> int:
     # Published for server/adapters/gen1_rom_scan.py, which labels a RANDOMIZED cartridge's
     # floors and must produce identical keys -- the clean-ROM control asserts the two agree.
     with open(_FLOORS_OUT, "w", encoding="utf-8") as f:
-        json.dump({str(k): v for k, v in sorted(floor_suffixes.items())}, f, indent=2)
+        json.dump(floor_suffixes, f, indent=2)
         f.write("\n")
     print(f"Wrote {_FLOORS_OUT} ({len(floor_suffixes)} multi-floor maps)")
     return 0

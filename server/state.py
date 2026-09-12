@@ -68,6 +68,10 @@ class MonInfo:
     is_shiny: bool = False
 
 
+class UnknownAreaPolicy(ValueError):
+    """The saved state names an area policy this build does not know; never load it as fresh."""
+
+
 @dataclass
 class LinkEntry:
     area_id: str
@@ -768,7 +772,9 @@ class SoulLinkState:
                 data = json.load(f)
             state._restore_document(data)
         except Exception as e:
-            if isinstance(e, player_keys.AmbiguousPhysicalKey):
+            # Both must fail closed: a fresh state in place of a run this build cannot read
+            # would silently drop gameplay.
+            if isinstance(e, (player_keys.AmbiguousPhysicalKey, UnknownAreaPolicy)):
                 raise
             log.error(f"Failed to load {state._links_path}: {e}")
         return state
@@ -795,13 +801,28 @@ class SoulLinkState:
             from server.adapters import get_adapter
             self.adapter = get_adapter(saved_game_id, is_rr=self.is_rr, rom_type=data.get("rom_type", ""))
         self.rom_type = data.get("rom_type", "")
+        # Area policy. An adapter that has reclassified an area names its current policy;
+        # the document stamps it (only then, so other generations keep their exact shape).
+        # No token at all is the one known legacy shape and is migrated exactly once through
+        # the adapter's persisted_area (the next save stamps the token); a token that is
+        # neither absent nor current was written by code this build does not know and is
+        # refused rather than reinterpreted.
+        current_policy = self.adapter.area_policy()
+        saved_policy = data.get("area_policy")
+        if current_policy is not None and saved_policy is not None and saved_policy != current_policy:
+            raise UnknownAreaPolicy(f"state document area policy {saved_policy!r} is unknown to this build "
+                                    f"(current {current_policy!r}); refusing to reinterpret its area ids")
+        legacy = current_policy is not None and saved_policy is None
+        area = self.adapter.persisted_area if legacy else (lambda area_id: area_id)
+        if legacy and (data.get("links") or data.get("area_states") or data.get("pending_captures")):
+            log.info(f"[LOAD] state document predates area policy {current_policy!r}; migrating area ids once")
         for ed in data.get("links", []):
             a = MonInfo(**ed["a"]) if ed.get("a") else None
             b = MonInfo(**ed["b"]) if ed.get("b") else None
             enc_a = MonInfo(**ed["encounter_a"]) if ed.get("encounter_a") else None
             enc_b = MonInfo(**ed["encounter_b"]) if ed.get("encounter_b") else None
             entry = LinkEntry(
-                area_id=ed["area_id"],
+                area_id=area(ed["area_id"]),
                 a=a, b=b,
                 status=LinkStatus(ed["status"]),
                 encounter_a=enc_a,
@@ -814,9 +835,9 @@ class SoulLinkState:
             self.links.append(entry)
             self._index_entry(entry)
         for area_id, status_str in data.get("area_states", {}).items():
-            self.area_states[area_id] = AreaStatus(status_str)
+            self.area_states[area(area_id)] = AreaStatus(status_str)
         for area_id, players in data.get("pending_captures", {}).items():
-            self.pending_captures[area_id] = {
+            self.pending_captures[area(area_id)] = {
                 pid: MonInfo(**mon_data)
                 for pid, mon_data in players.items()
             }
@@ -3182,6 +3203,8 @@ class SoulLinkState:
                 for pid, rb in self.rebuild_pending.items()
             },
         }
+        if self.adapter.area_policy() is not None:
+            payload["area_policy"] = self.adapter.area_policy()
         return copy.deepcopy(payload)
 
     def _save(self):

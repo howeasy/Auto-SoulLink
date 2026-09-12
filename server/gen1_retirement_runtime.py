@@ -463,7 +463,9 @@ def acknowledge(runtime, player, operation, message):
             message["receipt"],
             runtime.gate.sessions[player].metadata["control_binding"],
         )
-        if len(pending) > 1:
+        from server.gen1_hud_feedback import pending_physical_ids
+
+        if len(pending_physical_ids(runtime.journal, player)) > 1:
             row["observations"].append(reference)
             commands[player].append(read_body(row))
         else:

@@ -22,7 +22,7 @@ def setup(lua):
         package.loaded.gen1_capture_sites=assert(JSON.decode(capture_data_json))
         Acquisitions=require('gen1_acquisition_observers');Canonical=require('journal_document')
         frame=100;held=true;capture_pending=JSON.array();grant_pending=JSON.array();grant_open=0;drains=0;nonce=0
-        context={context_generation=string.rep('a',32),physical_instance=string.rep('1',32)}
+        context={context_generation=string.rep('a',32),physical_instance=string.rep('1',32)};owned_calls=0
         emu={framecount=function()return frame end};gameinfo={getromhash=function()return string.rep('b',40)end}
         capture_fixture=assert(JSON.decode(capture_json))
         function detached(v)return assert(JSON.decode(assert(JSON.encode(v))))end
@@ -44,8 +44,9 @@ def setup(lua):
             acknowledge=function(expected)
                 assert(Canonical.encode(expected)==Canonical.encode(evolution_pending));evolution_pending=JSON.array();return true
             end,close=function()end}
-        function construct()
-            return Acquisitions.new({variant='yellow',final_sha1=string.rep('b',40),owned=function()return context end,
+        function construct(fast)
+            return Acquisitions.new({variant='yellow',final_sha1=string.rep('b',40),owned=function()owned_calls=owned_calls+1;return context end,
+                fast_path=fast,
                 held=function()return held end,capture=capture_hooks,grants=grant_hooks,static=idle_hooks(),npc_exchange=idle_hooks(),wild=idle_hooks(),evolution=evolution_hooks,
                 new_nonce=function()nonce=nonce+1;return string.format('%032x',nonce)end})
         end
@@ -63,6 +64,22 @@ def setup(lua):
             state=prepared.state;assert(collector:drain(prepared))
         end
     """)
+
+
+def test_production_fast_path_advances_a_quiet_cursor_without_owner_or_json_copies(runtime):
+    lua = runtime
+    setup(lua)
+    lua.execute("""
+        collector=construct(true);state=collector:initial(frame);owned_calls=0
+        frame=101;quiet=collector:prepare(state)
+        assert(quiet==nil and state.frame==101 and collector:ready(state))
+    """)
+    assert lua.globals().owned_calls == 0
+    lua.execute("""
+        frame=102;grant_open=1;active=collector:prepare(state)
+        assert(active and active.state.frame==102)
+    """)
+    assert lua.globals().owned_calls > 0
 
 
 def test_evolution_requires_retained_live_call_and_durable_completion_before_drain(runtime):

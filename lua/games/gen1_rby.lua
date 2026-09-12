@@ -572,12 +572,9 @@ end
 -- re-attemptable forever. `tests/unit/test_gen1_gift_areas.py` now reads both files and
 -- requires them equal.
 M.GIFT_AREAS = {
-    pallet_town = true,
     oaks_lab = true,
-    celadon_city = true,
     saffron_city = true,
     silph_co = true,
-    cinnabar_island = true,
     mt_moon_pokecenter = true,    -- Magikarp salesman
     celadon_mansion_roof = true,  -- Eevee
     celadon_game_corner = true,

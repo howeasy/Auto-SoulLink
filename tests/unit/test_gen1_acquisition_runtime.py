@@ -28,6 +28,7 @@ from server.gen1_runtime_state import Gen1RuntimeState
 from server.protocol_journal import JournalError
 from server.state import AreaStatus, LinkStatus
 from tests.unit.test_gen1_grant_receipt import fresh, receipt as grant_receipt
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
 from tests.unit.test_gen1_initial_observation import admit, observation, send
 from tests.unit.test_gen1_inventory_observation import deliver as deliver_inventory, party_point
 from tests.unit.test_gen1_sessions import contract
@@ -60,6 +61,7 @@ def observe(runtime, player, receipts, sequence, operation=None):
 
 
 def checkpoint(runtime, player, owner, initial, previous, party_hex, *, frame=200, sequence=1):
+    acknowledge_hud(runtime, player)
     point = copy.deepcopy(initial)
     point["frame"] = frame
     point["source"]["fields"]["party"] = party_hex
@@ -115,6 +117,16 @@ def test_grant_is_pending_until_stable_then_settles_identity_ordinal_rule_and_pa
         assert len(links) == 1 and links[0]["area_id"] == "celadon_mansion_roof" and links[0]["status"] == LinkStatus.ALIVE.value
         assert document["rules"]["core"]["area_states"]["celadon_mansion_roof"] == AreaStatus.LINKED.value
         assert not document["rules"]["core"]["pending_captures"]
+        notices = {
+            player: [
+                runtime.journal.command(player, command_id)["body"]
+                for command_id in runtime.journal.pending_ids(player)
+            ]
+            for player in ("a", "b")
+        }
+        assert [body["kind"] for body in notices["a"]] == ["link_formed"]
+        assert [body["kind"] for body in notices["b"]] == ["link_formed"]
+        assert all(body["cmd"] == "hud_notice" for batch in notices.values() for body in batch)
         verify_state(state)
         verify_journal(runtime.journal, state)
         assert runtime.journal.record(COMPONENT, record_key("a")).value == entry(runtime, "a")

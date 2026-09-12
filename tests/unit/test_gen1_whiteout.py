@@ -10,8 +10,10 @@ from server.gen1_faint_runtime import COMPONENT as FAINT
 from server.gen1_party_codec import PartyCodec
 from server.gen1_run_config import create_runtime, open_runtime
 from server.gen1_runtime_state import Gen1RuntimeState
+from server.gen1_hud_feedback import classify_death
+from server.gen1_staged_state import StagedGen1State
 from server.protocol_journal import JournalError
-from server.state import LinkStatus
+from server.state import LinkEntry, LinkStatus, MonInfo
 from tests.unit.test_gen1_engine_signal_runtime import deliver
 from tests.unit.test_gen1_engine_signals import signal
 from tests.unit.test_gen1_faint_runtime import paired, signal_batch
@@ -69,6 +71,33 @@ def test_engine_outcome_matches_the_shared_whiteout_standard(tmp_path):
     assert state.run_over is True and any(c.get("cmd") == "game_over" for c in own), own
 
 
+def test_multi_link_whiteout_reports_rebuild_held_without_claiming_party_restoration(tmp_path):
+    state = linked_state(tmp_path)
+    first = state.links[0]
+    first.status = LinkStatus.DEAD  # the source faint settles before whiteout
+    state.party_keys = {"a": set(), "b": set()}
+    for index in (1, 2):
+        entry = LinkEntry(area_id=f"route_{index + 1}",
+                          a=MonInfo(key=f"A:BOX:{index}", species=0x4C, nickname=f"A{index}"),
+                          b=MonInfo(key=f"B:BOX:{index}", species=0x07, nickname=f"B{index}"),
+                          status=LinkStatus.ALIVE)
+        state.links.append(entry)
+        state._index_entry(entry)
+    staged = StagedGen1State.from_live(state, {"retired_pairs": []})
+    immediate = staged.handle_event("a", {"event": "whiteout", "area_id": "route_1"})
+    captured = staged.take_commands("a", immediate)
+    assert staged.run_over is False
+    assert [c["cmd"] for c in captured["a"] if c["cmd"] in ("party_mon", "rebuild_start")] == [
+        "party_mon", "party_mon", "rebuild_start"]
+    assert sum(c["cmd"] == "party_mon" for c in captured["b"]) == 2
+    feedback = classify_death(captured, member_labels={"a": "WHITEOUT", "b": "WHITEOUT"},
+                              whiteout=True, now=lambda: 100)
+    assert [c["text"] for c in feedback["a"]] == ["!! WHITEOUT!", "REBUILD PENDING - PC available"]
+    assert [c["text"] for c in feedback["b"]] == ["!! WHITEOUT!", "REBUILD PENDING"]
+    assert not any(c["cmd"] == "hud_state" for commands in feedback.values() for c in commands)
+    assert not any(c["cmd"] == "party_mon" for commands in feedback.values() for c in commands)
+
+
 def two_mon_batch(runtime, player, second_hp):
     """The paired starter faints in slot 0 while a second, unlinked member sits in slot 1."""
     value = signal_batch(runtime, player)
@@ -104,7 +133,8 @@ def test_whiteout_settles_once_behind_its_faint_and_survives_restore(tmp_path, v
         assert set(whiteouts) == set(deaths) and len(deaths) == 1
         record = next(iter(whiteouts.values()))
         assert record["player"] == "a" and record["area_id"] == "oaks_lab" and record["index"] == 1
-        assert [c["cmd"] for c in runtime.journal.pending("b")] == ["force_faint"]
+        assert [c["cmd"] for c in runtime.journal.pending("b")] == ["force_faint", "hud_notice", "hud_notice"]
+        assert [c["text"] for c in runtime.journal.pending("a") if c["cmd"] == "hud_notice"][-1] == "!! WHITEOUT!"
         assert runtime.state().rules.party_keys["a"] == set() and runtime.state().rules.links[0].status == LinkStatus.DEAD
         wo.verify_state(runtime.state())
     finally:
@@ -126,7 +156,8 @@ def test_a_second_member_decides_between_a_plain_faint_and_a_whiteout(tmp_path, 
         document = runtime.state().document()
         assert len(document["components"][FAINT]["deaths"]) == 1
         assert (wo.COMPONENT in document["components"]) == (second_hp == 0)
-        assert [c["cmd"] for c in runtime.journal.pending("b")] == ["force_faint"]
+        assert [c["cmd"] for c in runtime.journal.pending("b")] == (
+            ["force_faint", "hud_notice", "hud_notice"] if second_hp == 0 else ["force_faint", "hud_notice"])
     finally:
         runtime.close()
 

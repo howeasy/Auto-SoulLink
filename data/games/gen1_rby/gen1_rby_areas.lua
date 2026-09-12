@@ -5,7 +5,11 @@
 local T = {}
 
 T[  0] = "pallet_town"  -- 0x00 Pallet Town
+T[  1] = "viridian_city"  -- 0x01 Viridian City
+T[  3] = "cerulean_city"  -- 0x03 Cerulean City
+T[  5] = "vermilion_city"  -- 0x05 Vermilion City
 T[  6] = "celadon_city"  -- 0x06 Celadon City
+T[  7] = "fuchsia_city"  -- 0x07 Fuchsia City
 T[  8] = "cinnabar_island"  -- 0x08 Cinnabar Island
 T[ 10] = "saffron_city"  -- 0x0A Saffron City
 T[ 12] = "route_1"  -- 0x0C Route 1
@@ -39,11 +43,13 @@ T[ 51] = "viridian_forest"  -- 0x33 Viridian Forest
 T[ 59] = "mt_moon"  -- 0x3B Mt. Moon
 T[ 60] = "mt_moon"  -- 0x3C Mt. Moon
 T[ 61] = "mt_moon"  -- 0x3D Mt. Moon
+T[ 65] = "cerulean_city"  -- 0x41 Cerulean City
 T[ 68] = "mt_moon_pokecenter"  -- 0x44 Mt. Moon Pokecenter
 T[ 82] = "rock_tunnel"  -- 0x52 Rock Tunnel
 T[ 83] = "power_plant"  -- 0x53 Power Plant
 T[ 85] = "digletts_cave"  -- 0x55 Diglett's Cave
 T[ 88] = "bills_house"  -- 0x58 Bill's House
+T[ 94] = "vermilion_city"  -- 0x5E Vermilion City
 T[108] = "victory_road"  -- 0x6C Victory Road
 T[132] = "celadon_mansion_roof"  -- 0x84 Celadon Mansion Roof
 T[137] = "celadon_game_corner"  -- 0x89 Celadon Game Corner

@@ -21,6 +21,7 @@ from server.state import LinkStatus
 from tests.unit.test_gen1_engine_signal_runtime import deliver
 from tests.unit.test_gen1_faint_runtime import ack, acknowledgement, paired, signal_batch
 from tests.unit.test_gen1_held_faint import checkpoint
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
 from tests.unit.test_gen1_memorial import fixture
 from tests.unit.test_gen1_sessions import contract
 
@@ -30,6 +31,7 @@ def start(runtime):
     deliver(runtime, "a", owners["a"], signal_batch(runtime, "a"))
     command = runtime.journal.command("b", runtime.journal.pending_ids("b")[0])
     ack(runtime, "b", owners["b"], acknowledgement(runtime, "b", command))
+    acknowledge_hud(runtime)  # the transient death/whiteout HUD precedes the memorial reads
     return owners
 
 
@@ -374,6 +376,7 @@ def test_ten_paired_deaths_keep_active_state_bounded_and_audit_archived_evidence
                 deliver(runtime,'a',owners['a'],signal_batch(runtime,'a',sequence=index+2,activate=False))
                 command=runtime.journal.command('b',runtime.journal.pending_ids('b')[0])
                 ack(runtime,'b',owners['b'],acknowledgement(runtime,'b',command))
+                acknowledge_hud(runtime)
             for player in ('a','b'):
                 _,message=observe(runtime,player);ack(runtime,player,owners[player],message)
                 _,message=completion(runtime,player);ack(runtime,player,owners[player],message)

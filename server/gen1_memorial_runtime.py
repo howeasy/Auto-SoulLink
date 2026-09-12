@@ -235,7 +235,9 @@ def acknowledge(runtime, player, operation, message):
             binding,
             journal=runtime.journal,
         )
-        if len(runtime.journal.pending_ids(player)) > 1:
+        from server.gen1_hud_feedback import pending_physical_ids
+
+        if len(pending_physical_ids(runtime.journal, player)) > 1:
             # A queued faint will precede a newly appended apply. Read again
             # after it instead of preparing a poststate that it will invalidate.
             entry["observations"].append(event)

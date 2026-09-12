@@ -22,6 +22,7 @@ from pathlib import Path
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
+from server.gen1_initial_observation import inventory as decode_inventory
 from server.gen1_inventory_observation import COMPONENT as INVENTORY
 from server.gen1_observation_runtime import COMPONENT as PROGRESS
 from server.gen1_run_config import configure_runtime, create_runtime, open_runtime
@@ -33,9 +34,11 @@ from tools.verify_canonical_sources import verify
 
 ROOT = Path(__file__).resolve().parents[2]
 GATE = "test_gen1_free_service_gate"
-# Cartridge rate first (the claim), then the harness speed the credit-loop profile ran at.
-PHASES = [{"name": "cartridge_rate", "speed": 100, "frames": 600},
-          {"name": "unthrottled", "speed": 6399, "frames": 600}]
+# Production cadence: a ten-second 1x window and the same wall duration at 3x.
+PHASES = [{"name": "one_x", "speed": 100, "frames": 600},
+          {"name": "three_x", "speed": 300, "frames": 1800}]
+TARGET_FPS = 59.727500569606
+MIN_FRACTION = 0.99
 # The credit-loop run behind ORDINARY_FRAME_TURNOVER_PROFILE.md (refresh 2026-09-10).
 CREDIT_RUN = Path(os.environ.get("SLINK_CREDIT_RUN", ROOT / ".cache/gen1-bootstrap-launcher-ehtld3qv"))
 CREDIT_LOOP = {"source": "docs/gen1_reference/ORDINARY_FRAME_TURNOVER_PROFILE.md, refresh 2026-09-10",
@@ -104,6 +107,9 @@ def run_free_pair(variants):
         players = dict(zip(("a", "b"), variants, strict=True))
         private = json.loads(Path(BIZHAWK_CONFIG).read_text(encoding="utf-8-sig"))
         private["Rewind"]["Enabled"] = False
+        private["FrameSkip"] = 0
+        private["AutoMinimizeSkipping"] = False
+        private["CoreSyncSettings"]["BizHawk.Emulation.Cores.Nintendo.Gameboy.Gameboy"]["FrameLength"] = 0
         config = directory / "base-config.ini"
         config.write_text(json.dumps(private))
         source = (ROOT / f"lua/tests/{GATE}.lua").read_text()
@@ -203,6 +209,15 @@ def run_free_pair(variants):
             for job in jobs:
                 passed, path, log = await job
                 assert passed, f"{path}\n{log[-4000:]}"
+            client_final = {}
+            for p, result in ready.items():
+                local_state = json.loads(Path(result["status"]["journal_path"]).read_text())["document"]["payload"]
+                assert local_state["outbox"] == [] and local_state["inbox"] == []
+                initial_cursor = local_state["observation"]["initial_inventory"]
+                assert initial_cursor["schema"] == "rby-initial-observation-cursor-v1"
+                assert "payload" not in initial_cursor and len(json.dumps(local_state)) < 16 * 1024
+                client_final[p] = {"pending_events": 0, "pending_commands": 0,
+                                   "journal_bytes": Path(result["status"]["journal_path"]).stat().st_size}
             publish(directory / "server-turns.json", {"turns": turns})
             document = runtime.state().document()
             state = runtime.state()
@@ -234,31 +249,51 @@ def run_free_pair(variants):
                 assert [ph["name"] for ph in phases] == [ph["name"] for ph in PHASES]
                 for ph, planned in zip(phases, PHASES, strict=True):
                     assert ph["frames"] >= planned["frames"] and ph["seconds"] > 0
+                    target = TARGET_FPS * planned["speed"] / 100
+                    assert ph["fps"] >= target * MIN_FRACTION, ph
+                    assert ph["windows"] and all(window["fps"] >= target * MIN_FRACTION for window in ph["windows"]), ph
+                    assert ph["windows"][-1]["fps"] >= ph["windows"][0]["fps"] * MIN_FRACTION, ph
                 labels = {Path(shot).name.split("-", 1)[1] for shot in result["screenshots"]}
                 assert labels == {"intro.png", "held-checkpoint.png", "free-start.png"}
                 start_shot, end_shot = directory / f"{p}-free-start.png", directory / f"{p}-free-end.png"
                 for shot in (start_shot, end_shot):
                     assert shot.is_file() and shot.stat().st_size > 0
                 assert start_shot.read_bytes() != end_shot.read_bytes()
-                # Server side: every batch committed once, in sequence, frames advancing.
+                # Unchanged 30-frame fingerprints intentionally create no semantic event.
+                # Any actual source change still publishes the complete existing point.
+                final_source = result["final_source"]
+                initial_entry = document["components"]["gen1-initial-observations"][p]
+                decoded = decode_inventory(final_source, initial_entry["metadata"]["save_identity"])
+                assert {key: value for key, value in decoded.items() if key != "source_digest"} == {
+                    key: value for key, value in initial_entry["inventory"].items() if key != "source_digest"}
                 commits = [row for row in turns if row["event"] == "observation" and row["player"] == p]
-                assert commits and all(row["error"] is None for row in commits)
+                assert all(row["error"] is None for row in commits)
                 assert [row["sequence"] for row in commits] == list(range(1, len(commits) + 1))
                 assert all(b["frame"] > a["frame"] for a, b in zip(commits, commits[1:], strict=False))
-                progress = document["components"][PROGRESS][p]
-                assert progress["sequence"] == len(commits) and progress["frame"] == commits[-1]["frame"]
+                progress = document["components"].get(PROGRESS, {}).get(p)
+                if commits:
+                    assert progress["sequence"] == len(commits) and progress["frame"] == commits[-1]["frame"]
+                else:
+                    assert progress is None
                 heartbeats = [row for row in commits if row["heartbeat"]]
-                assert heartbeats
-                entry = document["components"][INVENTORY][p]
-                assert entry["observation"]["frame"] == heartbeats[-1]["frame"]
-                assert entry["transition"]["added"] == [] and entry["transition"]["removed"] == []
+                diagnostics = status["observation_diagnostics"]
+                measured_checks = sum(ph["diagnostics"]["after"]["inventory_checks"]
+                                      - ph["diagnostics"]["before"]["inventory_checks"] for ph in phases)
+                measured_publications = sum(ph["diagnostics"]["after"]["inventory_publications"]
+                                            - ph["diagnostics"]["before"]["inventory_publications"] for ph in phases)
+                assert measured_checks == sum(ph["frames"] for ph in PHASES) // 30
+                assert measured_publications == 0
+                dirty = result["dirty_probe"]
+                assert dirty["schema"] == "rby-inventory-dirty-negative-control-v1"
+                assert dirty["phase"] == "restored" and dirty["after"] - dirty["before"] == 2
+                assert diagnostics["inventory_publications"] == len(heartbeats) == 2
                 per_phase = {}
                 for ph in phases:
                     inside = [row for row in commits if ph["began"]["frame"] <= row["frame"] <= ph["ended"]["frame"]]
                     per_phase[ph["name"]] = {"emulator": {"frames": ph["frames"], "seconds": ph["seconds"], "fps": ph["fps"],
                                                           "speed": ph["speed"], "pending_events_at_start": ph["began"]["pending_events"],
                                                           "pending_events_at_end": ph["ended"]["pending_events"],
-                                                          "loop_iteration_ms": ph.get("iterations")},
+                                                          "windows": ph.get("windows"), "diagnostics": ph.get("diagnostics")},
                                              "server_commits": fps_between(inside),
                                              "heartbeats": sum(1 for row in inside if row["heartbeat"])}
                 summary["players"][p] = {
@@ -267,10 +302,13 @@ def run_free_pair(variants):
                     "observation_events": len(commits), "heartbeats": len(heartbeats),
                     "batches_without_inventory": len(commits) - len(heartbeats),
                     "signals": sum(row["signals"] for row in commits), "acquisitions": sum(row["acquisitions"] for row in commits),
-                    "sequence_gaps": 0, "first_frame": commits[0]["frame"], "last_frame": commits[-1]["frame"],
+                    "sequence_gaps": 0, "first_frame": commits[0]["frame"] if commits else None,
+                    "last_frame": commits[-1]["frame"] if commits else None,
                     "server_commits": fps_between(commits),
-                    "server_ms_per_observation": 1000 * sum(row["finished"] - row["began"] for row in commits) / len(commits),
+                    "server_ms_per_observation": (1000 * sum(row["finished"] - row["began"] for row in commits) / len(commits)
+                                                  if commits else None),
                     "phases": per_phase, "pending_events_at_end": status["runtime"]["pending_events"],
+                    "final_backlog": client_final[p],
                     "screenshots": [start_shot.name, end_shot.name]}
             assert not document["identities"]["members"] and not document["rules"]["core"]["links"]
             assert state.barrier.ticket() is None
@@ -296,7 +334,7 @@ def run_free_pair(variants):
             finally:
                 reopened.close()
             rows, snapshot = journal_events(directory / "runtime.sqlite3")
-            assert snapshot["components"][PROGRESS] == document["components"][PROGRESS]
+            assert snapshot["components"].get(PROGRESS) == document["components"].get(PROGRESS)
             for p in players:
                 observations = [row for row in rows if row[0] == p and row[2].get("event") == "observation"]
                 assert [row[2]["sequence"] for row in observations] == list(range(1, len(observations) + 1))
@@ -306,18 +344,20 @@ def run_free_pair(variants):
                 checkpoints = [row[2]["inventory"] for row in observations if row[2]["inventory"] is not None]
                 kinds = [item["kind"] for row in observations for item in row[2]["acquisitions"]]
                 deferred = sum(1 for row in observations if row[3].get("inventory_deferred"))
-                last = checkpoints[-1]
+                last = ready[p]["final_source"]
+                transition = (snapshot["components"].get(INVENTORY, {}).get(p) or {}).get("transition", {
+                    "added": [], "removed": [], "movements": [], "party_hp_zero": [], "changed": []})
                 comparison = {"route": "bedroom only: the scripted inputs (one step Right) never reach the starter",
-                              "free_run": {"checkpoints": len(checkpoints), "deferred_checkpoints": deferred, "frame": last["frame"],
-                                           "acquisition_kinds": kinds, "save_status": last["source"]["save_status"],
-                                           "transition": strip_digests(snapshot["components"][INVENTORY][p]["transition"])},
+                              "free_run": {"checkpoints": len(checkpoints), "deferred_checkpoints": deferred, "frame": ready[p]["frame_after"],
+                                           "acquisition_kinds": kinds, "save_status": last["save_status"],
+                                           "transition": strip_digests(transition)},
                               "credit_run": credit_reference(p)}
                 reference = comparison["credit_run"]
                 if reference is not None:
-                    assert last["source"]["fields"]["party"] == reference["party"]
-                    assert last["source"]["fields"]["box"] == reference["box"]
-                    assert last["source"]["fields"]["name"] == reference["name"]
-                    assert last["source"]["save_status"] == reference["save_status"]
+                    assert last["fields"]["party"] == reference["party"]
+                    assert last["fields"]["box"] == reference["box"]
+                    assert last["fields"]["name"] == reference["name"]
+                    assert last["save_status"] == reference["save_status"]
                     assert kinds == reference["acquisition_kinds"] == []
                     assert comparison["free_run"]["transition"] == reference["transition"]
                     comparison["result"] = "party, box and name bytes, save status, receipt kinds and transition identical"
@@ -339,5 +379,6 @@ def run_free_pair(variants):
     asyncio.run(scenario())
 
 
-def test_generated_free_service_launcher_free_runs_the_bedroom_and_publishes_observation_batches():
-    run_free_pair(("yellow", "yellow"))
+@pytest.mark.parametrize("variants", [("yellow", "yellow"), ("red", "blue")])
+def test_generated_free_service_launcher_free_runs_the_bedroom_and_publishes_observation_batches(variants):
+    run_free_pair(variants)

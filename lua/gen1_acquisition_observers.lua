@@ -31,13 +31,18 @@ function M.new(options)
         end
         error(reason,0)
     end
-    local self={};local failed=nil
+    local self={fast=false};local failed=nil
+    local function statuses()
+        return capture.status(),grants.status(),static.status(),exchange.status(),wild.status(),evolution.status()
+    end
+    local function healthy(c,g,s,x,w,e)
+        for _,st in ipairs({c,g,s,x,w,e})do assert(not st.failed and not st.closed,"acquisition hook failed or closed")end
+    end
     local function check()
         assert(not failed,failed)
         assert(options.held()==true and same(owner,options.owned()),"acquisition boundary lost held ownership")
         assert(gameinfo.getromhash():lower()==options.final_sha1,"acquisition cartridge changed")
-        local c,g,s,x,w,e=capture.status(),grants.status(),static.status(),exchange.status(),wild.status(),evolution.status()
-        for _,st in ipairs({c,g,s,x,w,e})do assert(not st.failed and not st.closed,"acquisition hook failed or closed")end
+        local c,g,s,x,w,e=statuses();healthy(c,g,s,x,w,e)
         return c,g,s,x,w,e
     end
     -- The witness whose hook completed a row: its frame orders the merged list.
@@ -83,6 +88,15 @@ function M.new(options)
             frame=frame,capture_open=JSON.null,grant_open=0,grant_incarnation=nonce,evolution_open=0}
     end
     function self:ready(state)
+        if options.fast_path and self.fast then
+            assert(options.held()==true and not failed,"acquisition boundary lost ownership")
+            validate(state)
+            local c,g,s,x,w,e=statuses();healthy(c,g,s,x,w,e)
+            assert(state.frame==emu.framecount() and c.pending==0 and g.pending==0 and s.pending==0
+                and x.pending==0 and w.pending==0 and e.pending==0 and g.in_flight==state.grant_open
+                and e.in_flight==(state.evolution_open or 0),"quiet acquisition source changed before frame completion")
+            return true
+        end
         local c,g,s,x,w,e=check();validate(state)
         assert(state.frame==emu.framecount(),"acquisition source state differs from held frame")
         assert(c.pending==0 and g.pending==0 and s.pending==0 and x.pending==0 and w.pending==0 and e.pending==0
@@ -101,9 +115,17 @@ function M.new(options)
         return true
     end
     function self:prepare(state)
-        local _,g,s,x,w,e=check();validate(state)
+        assert(not failed,failed)
+        assert(options.held()==true,"acquisition boundary lost held ownership")
         local frame=emu.framecount()
         assert(frame==state.frame+1,"acquisition assembly requires exactly one returned frame")
+        validate(state)
+        local c,g,s,x,w,e=statuses();healthy(c,g,s,x,w,e)
+        if options.fast_path and c.pending==0 and g.pending==0 and s.pending==0 and x.pending==0 and w.pending==0 and e.pending==0
+            and g.in_flight==state.grant_open and e.in_flight==(state.evolution_open or 0)then
+            state.frame=frame;self.fast=true;return nil
+        end
+        c,g,s,x,w,e=check();self.fast=false
         local captured,granted,statics,exchanged,wilds,evolved=capture.peek(),grants.peek(),static.peek(),exchange.peek(),wild.peek(),evolution.peek()
         local next_state=copy(state);local receipts=JSON.array()
         for _,witness in ipairs(captured)do

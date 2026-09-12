@@ -20,6 +20,7 @@ from server.gen1_storage_runtime import (
 from server.protocol import digest
 from tests.unit.observation_fixture import commit, current_frame, observe, starters
 from tests.unit.test_gen1_held_faint import checkpoint
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
 from tests.unit.test_gen1_memorial import fixture
 from tests.unit.test_gen1_sessions import contract
 
@@ -30,6 +31,31 @@ def source(runtime, player):
             "observation"
         ]
     )
+
+
+def clean_first_use_grave(point):
+    """Give this synthetic fresh-save fixture a proved-empty, unowned Box 12.
+
+    The generic CartRAM fixture contains arbitrary pre-ChangeBox bytes. Those
+    bytes must now refuse memorial admission, so positive scenarios explicitly
+    supply the clean preimage they intend to exercise.
+    """
+    from server.gen1_full_save import SYMBOLS, image
+    from server.gen1_grave_storage import checksum_banks
+    from server.gen1_memorial_policy import box_offset
+
+    variant = point["variant"]
+    symbols = SYMBOLS["pokeyellow" if variant == "yellow" else "pokered"]
+    main = bytes.fromhex(point["fields"]["main"])
+    flag = main[symbols["wCurrentBoxNum"] - symbols["wMainDataStart"]]
+    if flag & 128:
+        return
+    cart = bytearray.fromhex(point["cart_hex"])
+    grave = box_offset(11)
+    cart[grave : grave + 1122] = b"\0\xff" + bytes(1120)
+    checksum_banks(cart, {3})
+    point["cart_hex"] = cart.hex().upper()
+    point["cart_hex"] = image(point).hex().upper()
 
 
 def all_jobs(runtime):
@@ -51,6 +77,7 @@ def spare(runtime, player):
             "cart_hex"
         ]
         point["source"]["save_status"] = 2
+    clean_first_use_grave(point["source"])
     donor, _, _ = fixture(point["source"]["variant"], count=2, slot=0)
     other = bytes.fromhex(donor["fields"]["party"])
     raw = bytearray.fromhex(point["source"]["fields"]["party"])
@@ -137,6 +164,7 @@ def complete_storage(runtime):
     physical = getattr(runtime, "test_storage_physical", {})
     for _ in range(32):
         progressed = False
+        acknowledge_hud(runtime)
         for player in ("a", "b"):
             pending = runtime.journal.pending_ids(player)
             if not pending:
@@ -283,6 +311,7 @@ def test_boxed_grants_pair_logically_without_becoming_usable_party_keys(tmp_path
             raw = grant(runtime, player, delivery="box")
             point = observed(runtime, player, [raw], 140)
             commit(runtime, player, [raw], point=point)
+            acknowledge_hud(runtime)
             entry = runtime.state().document()["components"]["gen1-acquisition-settlement"][player]
             row = entry["settled"][0]
             assert row["rule"] == "exempt_grant" and row["violation"] is None
@@ -395,6 +424,7 @@ def test_reserved_grave_pc_undo_advances_only_its_exact_owned_archive_head(tmp_p
             "after"
         ]["cart_hex"]
         acquired_point["source"]["save_status"] = 2
+        clean_first_use_grave(acquired_point["source"])
         commit(runtime, "a", [row], point=acquired_point)
         _, message = retire_read(runtime)
         retire_ack(runtime, "a", secrets.token_hex(16), message)
@@ -512,6 +542,7 @@ def test_manual_dead_link_withdrawal_rearchives_without_new_death_or_usable_key(
                 "receipt": {"schema": "gen1-force-faint-receipt-v1", "before": pre, "after": post},
             },
         )
+        acknowledge_hud(runtime)  # the durable no-write death/whiteout feedback precedes memorial reads
         raw = bytearray.fromhex(points["b"]["source"]["fields"]["party"])
         raw[9:11] = b"\0\0"
         points["b"]["source"]["fields"]["party"] = raw.hex().upper()

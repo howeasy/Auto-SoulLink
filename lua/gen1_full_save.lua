@@ -12,7 +12,15 @@ for value=0,255 do HEX[value]=string.format("%02X",value)end
 local function read(mem,address,count,domain)
     domain=domain or "System Bus"
     local result={}
-    if type(memory.read_bytes_as_array)=="function"then
+    if memory.read_bytes_as_binary_string~=nil then
+        -- The native bulk reader avoids marshalling 32 KiB of CartRAM through
+        -- a Lua number table. Every byte still becomes the identical full hex
+        -- checkpoint; no sampled region or shortened wire evidence is used.
+        local ok,raw=pcall(memory.read_bytes_as_binary_string,address,count,domain)
+        assert(ok,"bulk binary memory read failed: "..tostring(raw))
+        assert(type(raw)=="string"and#raw==count,"bulk binary memory read returned an incomplete range")
+        for index=1,count do result[index]=HEX[raw:byte(index)]end
+    elseif memory.read_bytes_as_array~=nil then
         local ok,values=pcall(memory.read_bytes_as_array,address,count,domain)
         assert(ok,"bulk memory read failed: "..tostring(values))
         assert(type(values)=="table"and #values==count,"bulk memory read returned an incomplete range")

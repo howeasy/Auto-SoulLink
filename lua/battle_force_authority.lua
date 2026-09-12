@@ -67,6 +67,7 @@ function M.service(options)
         "window service dependencies required")
     local frame_of=options.frame or function()return emu.framecount()end
     local executors,self={},{window=nil,revoked=false,reason=nil}
+    local pending_revision,pending_entry,pending_body,pending_live
     local function executor(name)
         if not executors[name] then executors[name]=M.new({owner_id=options.owner_id,held=options.held,name=name})end
         return executors[name]
@@ -75,15 +76,19 @@ function M.service(options)
     local function in_battle()local v=battle();return v==1 or v==2 end
     -- the pending battle_instruction entry, its body, and whether its death command is still the oldest pending write
     local function pending()
+        local revision=journal.store and journal.store.revision and assert(journal.store:revision())or nil
+        if revision~=nil and revision==pending_revision then return pending_entry,pending_body,pending_live end
         local list=assert(journal:pending_commands())
         local oldest=list[1] and unwrap(list[1])
         for _,entry in ipairs(list)do
             local body=unwrap(entry)
             if body.cmd==M.COMMAND then
                 local live=oldest~=nil and (oldest.cmd=="force_faint" or oldest.cmd=="force_explode") and oldest.death_id==body.death_id
+                pending_revision,pending_entry,pending_body,pending_live=revision,entry,body,live
                 return entry,body,live
             end
         end
+        pending_revision,pending_entry,pending_body,pending_live=revision,nil,nil,nil
         return nil
     end
     local function close(entry,authority,rows,now)
