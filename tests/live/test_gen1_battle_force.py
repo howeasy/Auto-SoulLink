@@ -137,3 +137,35 @@ def test_active_linked_mon_explodes_under_the_explode_binding(variant):
     engine = scenario['engine']
     assert engine['selected_move_at_execute'] == auth.EXPLOSION and engine['slot0_hp'] == '0000' and engine['enemy_hp_after'] < engine['enemy_hp_before'], json.dumps(engine)
     assert passed and result['passed'] and result['sram_diff_bytes'] == 0, f'{directory}\n{log[-3000:]}'
+
+
+@pytest.mark.parametrize('variant', ['red', 'blue', 'yellow'])
+def test_active_linked_mon_faints_inside_a_late_entered_window_on_the_free_loop(variant):
+    """Handoff item 5 in the free-loop form (gen1_observation_loop.lua + battle_force_authority.service): no bounded owner
+    (emu.frameadvance, held() = the frame boundary), one WINDOW_FRAMES authority per issue entered late, the SAME table
+    armed every frame, the reached row closing its window; every window settles with battle_force_authority.verify_window
+    exactly as the server settles the battle_instruction receipt. The death delivery itself (the server issuing the
+    command from a batch and re-issuing from the receipt) is unit-tested in tests/unit/test_gen1_observation_runtime.py;
+    running it through two live launchers needs a paired battery-save fixture with starters and balls (Phase 7)."""
+    passed, path, log, result, directory = run_live(variant, fixture=FIXTURES[variant], scenarios=['free_window'])
+    assert result is not None, f'{directory}\n{path}\n{log[-4000:]}'
+    outcomes = verify_rows(result, variant)
+    scenario = next((s for s in result['scenarios'] if s['name'] == 'free_window'), None)
+    offset = result.get('hook_frame_offset_harness')
+    verdicts = []
+    for window in scenario['windows']:
+        try:
+            verdicts.append(auth.verify_window(window['authority'], window['rows'], hook_frame_offset=offset))
+        except JournalError as error:
+            verdicts.append({'covered': None, 'outcome': 'REFUSED_BY_SERVER', 'row': None, 'reason': str(error)})
+    (directory / 'summary.json').write_text(json.dumps({'variant': variant, 'passed': passed, 'outcomes': outcomes,
+                                                        'windows': [(v['covered'], v['outcome'], v.get('reason')) for v in verdicts],
+                                                        'checks': [(s['name'], [(c['what'], c['ok']) for c in s['checks']]) for s in result['scenarios']],
+                                                        'write_row': scenario.get('write_row')}, indent=1))
+    assert all(o['outcome'] != 'REFUSED_BY_SERVER' for o in outcomes), json.dumps(outcomes, indent=1)
+    assert all(v['outcome'] != 'REFUSED_BY_SERVER' for v in verdicts), json.dumps([(v['outcome'], v.get('reason')) for v in verdicts], indent=1)
+    assert any(v['outcome'] == 'fainted' and v['row']['site'] == 'player_action' for v in verdicts), json.dumps([v['outcome'] for v in verdicts])
+    first = scenario['windows'][0]
+    assert first['rows'][0]['frame'] > first['authority']['frame'], 'the window was entered late'
+    assert result.get('hook_frame_offset_bounded') is None, 'no bounded owner ran'
+    assert passed and result['passed'] and result['sram_diff_bytes'] == 0, f'{directory}\n{log[-3000:]}'

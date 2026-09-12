@@ -78,8 +78,9 @@ function M.new(options)
         if w and w.challenge==authority.challenge then -- the next frame of an open window
             assert(now==w.next_frame,"instruction authority window is not contiguous")
         else
-            assert(first==now,"authority names a frame other than the one about to run")
-            w={challenge=authority.challenge,last=first+count-1,next_frame=first,consumed=false}
+            -- a window may be entered late (the free loop receives it frames after `first`); its rows then start here
+            assert(now>=first and now<=first+count-1,"authority names a frame other than the one about to run")
+            w={challenge=authority.challenge,last=first+count-1,next_frame=now,consumed=false}
         end
         local step=type(authority.step)=="number" and authority.step+(now-first)
         assert(step and step>last_step,"instruction authority step is not after the last finished step")

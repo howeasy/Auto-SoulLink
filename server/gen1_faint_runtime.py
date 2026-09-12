@@ -1,8 +1,9 @@
 """Ordered ball activation and linked death/receipt settlement for owned RBY signals."""
 
 import copy
+import re
 
-from server import event_reference
+from server import battle_force_authority as instruction, event_reference
 from server.gen1_command_receipts import verify_force_faint_receipt
 from server.gen1_initial_observation import COMPONENT as INITIAL
 from server.gen1_observation_provenance import semantic_receipt
@@ -13,6 +14,7 @@ from server.gen1_whiteout import settle_whiteout
 from server.linked_death_rules import update_run_over
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier
+from server.state import DEATH_COMMANDS
 
 COMPONENT = "gen1-faint-settlement"
 REASON = "Linked death requires verified physical faint and memorial closure"
@@ -176,6 +178,7 @@ def settle(runtime, stage, document, player, entry):
             "peer": partner,
             "peer_key": getattr(link, partner).key,
             "at": at,
+            "command": physical[0]["cmd"],
             "phase": "pending_faint",
             "receipt_event": None,
         }
@@ -215,10 +218,12 @@ def acknowledge(runtime, player, operation, message):
     body = command["body"]
     document = stage.document()
     death = document["components"].get(COMPONENT, {}).get("deaths", {}).get(body.get("death_id"))
+    if body.get("cmd") == instruction.COMMAND:
+        return _acknowledge_instruction(runtime, stage, document, player, operation, message, command, death)
     if (
         death is None
         or death["peer"] != player
-        or body.get("cmd") != "force_faint"
+        or body.get("cmd") not in DEATH_COMMANDS
         or body.get("key") != death["peer_key"]
         or message["command_sequence"] != command["command_sequence"]
     ):
@@ -281,6 +286,80 @@ def acknowledge(runtime, player, operation, message):
     ).result
 
 
+def enforce(death, verdict, *, origin):
+    """Record a verified terminal window verdict (fainted / benched) on its death exactly once.
+
+    The death stays ``pending_faint``: the peer's overworld held faint later finds HP already
+    ``0000`` and its proven no-op receipt closes the death through ``acknowledge``. Non-terminal
+    verdicts (refused, not_reached, explode_armed, declined) record nothing; the next window re-issues.
+    """
+    if verdict["outcome"] not in instruction.TERMINAL:
+        return None
+    if death["phase"] != "pending_faint":
+        raise JournalError("battle enforcement requires a pending physical faint")
+    if "enforcement" in death:
+        raise JournalError("linked death was already enforced in battle")
+    row = verdict["row"]
+    death["enforcement"] = {"origin": origin, "frame": row["frame"], "step": row["step"], "site": row["site"],
+                            "outcome": verdict["outcome"], "evidence_digest": digest(row)}
+    return death["enforcement"]
+
+
+def _acknowledge_instruction(runtime, stage, document, player, operation, message, command, death):
+    """Close one battle_instruction window: verify its rows against the issued authority, enforce a terminal
+    verdict once, and re-issue in the same transaction while the peer reports a battle and the death is
+    still pending. Never the oldest pending command: that is the death command it serves."""
+    body = command["body"]
+    receipt = message["receipt"]
+    if (death is None or death["peer"] != player or body.get("key") != death["peer_key"]
+            or message["command_sequence"] != command["command_sequence"]):
+        raise JournalError("instruction acknowledgement differs from its owned obligation")
+    if command["outcome"] is not None:
+        raise JournalError("completed instruction window requires replay of its original acknowledgement")
+    authority = body.get("authority")
+    if (not isinstance(receipt, dict) or set(receipt) != {"schema", "challenge", "frame", "battle", "rows"}
+            or receipt["schema"] != instruction.RECEIPT or not isinstance(authority, dict)
+            or receipt["challenge"] != authority.get("challenge") or type(receipt["frame"]) is not int
+            or type(receipt["battle"]) is not int or not 0 <= receipt["battle"] <= 255 or not isinstance(receipt["rows"], list)):
+        raise JournalError("exact instruction window receipt required")
+    binding = runtime.gate.sessions[player].metadata["control_binding"]
+    original = runtime.journal.command(player, authority.get("scope", {}).get("operation_id"))
+    if original["body"].get("death_id") != body.get("death_id"):
+        raise JournalError("instruction window names another death command")
+    initial = document["components"][INITIAL][player]
+    instruction.verify_issued(authority, original, binding, player=player, anchor=initial["observation"]["frame"],
+                              owner_id=initial["metadata"]["gen1_metadata"]["physical_instance"])
+    verdict = instruction.verify_window(authority, receipt["rows"]) if receipt["rows"] else {"covered": None, "outcome": "declined", "row": None}
+    if verdict["outcome"] in instruction.TERMINAL and death["phase"] != "pending_faint":
+        raise JournalError("battle enforcement arrived after the physical faint closed")
+    result = {"ack": "ACK", "instruction_outcome": verdict["outcome"]}
+    enforced = enforce(death, verdict, origin=event_reference.make(player, operation, message))
+    if enforced is not None:
+        result["instruction_digest"] = digest(enforced)
+    commands = {"a": [], "b": []}
+    if receipt["battle"] != 0:
+        following = instruction.pending_instruction(runtime, stage, document, player, frame=receipt["frame"] + 1, seed=operation,
+                                                    binding=binding, ignore=message["command_id"])
+        if following is not None:
+            commands[player].append(following)
+    return runtime.journal.commit(
+        player, operation, message, expected_revision=stage.journal_revision, state=document, commands=commands, result=result,
+        acknowledgements=[{"player": player, "command_id": message["command_id"], "outcome": "ACK", "receipt": receipt}],
+    ).result
+
+
+def _verify_enforcement(journal, death_id, death):
+    enforcement = death["enforcement"]
+    issued = event_reference.resolve(journal, enforcement["origin"])
+    message = issued.request
+    closed = journal.command(death["peer"], message.get("command_id")) if message.get("event") == "command_ack" else None
+    if (closed is None or closed["body"].get("cmd") != instruction.COMMAND or closed["body"].get("death_id") != death_id
+            or closed["outcome"] != "ACK" or closed["receipt"] != message.get("receipt")
+            or issued.result.get("instruction_outcome") != enforcement["outcome"]
+            or issued.result.get("instruction_digest") != digest(enforcement)):
+        raise JournalError("battle enforcement lacks its verified instruction window receipt")
+
+
 def verified_source(proof, initial):
     from server.gen1_engine_signals import validate_batch
 
@@ -321,7 +400,7 @@ def verify_state(stage):
             raise JournalError("ball activation lost its permanent rule credit")
     for death_id, death in component["deaths"].items():
         _identifier(death_id)
-        if set(death) - {"deferred"} != {
+        if set(death) - {"deferred", "enforcement"} != {
             "player",
             "engine_record",
             "index",
@@ -331,9 +410,10 @@ def verify_state(stage):
             "peer",
             "peer_key",
             "at",
+            "command",
             "phase",
             "receipt_event",
-        }:
+        } or death["command"] not in DEATH_COMMANDS:
             raise JournalError("incomplete linked death record")
         player = death["player"]
         peer = death["peer"]
@@ -379,7 +459,8 @@ def verify_state(stage):
             if (
                 not isinstance(command, dict)
                 or set(command) != {"cmd", "death_id", "key", "nickname"}
-                or command["cmd"] != "force_faint"
+                or command["cmd"] not in DEATH_COMMANDS
+                or command["cmd"] != death["command"]
                 or command["death_id"] != death_id
                 or command["key"] != death["peer_key"]
                 or not isinstance(command["nickname"], str)
@@ -391,6 +472,20 @@ def verify_state(stage):
                 event_reference.validate(deferred["origin"])
         elif death["phase"] == "pending_issue":
             raise JournalError("unissued faint lacks its storage deferral")
+        if "enforcement" in death:
+            enforcement = death["enforcement"]
+            if (
+                not isinstance(enforcement, dict)
+                or set(enforcement) != {"origin", "frame", "step", "site", "outcome", "evidence_digest"}
+                or enforcement["outcome"] not in instruction.TERMINAL
+                or enforcement["site"] not in instruction.SITES
+                or any(type(enforcement[name]) is not int or enforcement[name] < 0 for name in ("frame", "step"))
+                or not isinstance(enforcement["evidence_digest"], str)
+                or not re.fullmatch("[0-9a-f]{64}", enforcement["evidence_digest"])
+                or death["phase"] == "pending_issue"
+            ):
+                raise JournalError("invalid battle enforcement record")
+            event_reference.validate(enforcement["origin"])
         link = stage.rules.find_link(player, death["key"])
         from server.state import LinkStatus
 
@@ -438,7 +533,7 @@ def verify_state(stage):
             event = death["receipt_event"]
             _identifier(event["operation_id"])
             verify_force_faint_receipt(
-                {"cmd": "force_faint", "key": death["peer_key"]},
+                {"cmd": death["command"], "key": death["peer_key"]},
                 event["message"]["receipt"],
                 variant=initials[peer]["observation"]["source"]["variant"],
                 identity=initials[peer]["metadata"]["save_identity"],
@@ -515,8 +610,12 @@ def verify_journal(journal, stage):
         if len(matches) != 1 or matches[0]["body"].get("key") != death["peer_key"]:
             raise JournalError("death lacks exactly one physical obligation")
         command = matches[0]
+        if command["body"].get("cmd") != death["command"]:
+            raise JournalError("death lost its selected physical command")
         if "deferred" in death and command["body"] != death["deferred"]["command"]:
             raise JournalError("issued faint differs from its retained source command")
+        if "enforcement" in death:
+            _verify_enforcement(journal, death_id, death)
         if death["phase"] == "pending_faint":
             if command["outcome"] is not None:
                 raise JournalError("unrecorded faint completion")

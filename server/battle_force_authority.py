@@ -55,6 +55,19 @@ the existing overworld held faint (``gen1_held_faint``) settles the death afterw
 Refused (nothing written): Safari / old man / Yellow RUN + PIKACHU battle types, link
 battles, an active mon that is neither the linked mon nor its Transform, a slot whose
 species/DVs are not the linked mon's, an already-fainted target, an enemy at 0 HP.
+
+Free-loop delivery (handoff item 5 on P4/P10). The durable wire carries commands, nothing
+else, so the authority travels as the peer's own command ``battle_instruction`` (``COMMAND``:
+``{cmd, death_id, key, authority}``), queued by ``pending_instruction`` from an observation
+batch whose ``battle`` byte is non-zero (or from the ACK of the previous window) while the
+peer's oldest pending command is the death's ``force_faint``/``force_explode``. Its window is
+``WINDOW_FRAMES`` consecutive frames from the batch frame; the client may ENTER it late (the
+command arrives several frames after the batch) and arms the same table once per frame until a
+site is reached or the window, the battle or the command runs out, then closes the command with
+the receipt ``RECEIPT`` (``{schema, challenge, frame, battle, rows}``). ``verify_window`` settles
+those rows against the issued authority (``verify_issued`` reproduces it from its command) and
+``gen1_faint_runtime.enforce`` records a ``fainted``/``benched`` verdict on the death exactly once;
+``refused``/``not_reached``/``explode_armed`` leave the death pending and the ACK re-issues.
 """
 import re
 
@@ -66,6 +79,12 @@ from server.protocol_journal import JournalError
 BINDING = 'rby-battle-force-faint'
 EXPLODE = 'rby-battle-force-explode'
 BINDINGS = {'force_faint': BINDING, 'force_explode': EXPLODE}  # the command names its binding; nothing else selects it
+COMMAND = 'battle_instruction'  # the peer's command that carries one issued authority to the free loop
+RECEIPT = 'rby-instruction-window-receipt-v1'  # its ACK receipt: the ordered evidence rows of the window
+WINDOW_FRAMES = generic.MAX_WINDOW_FRAMES
+TERMINAL = ('fainted', 'benched')  # the outcomes that enforce the death; explode_armed is re-issued (module docstring)
+FAINTS = 'gen1-faint-settlement'
+INITIAL = 'gen1-initial-observations'
 EXPLOSION = 0x99  # constants/move_constants.asm: const EXPLOSION ; 99
 EXPLODE_PP = 5
 PARTY_STRIDE = 44
@@ -257,3 +276,91 @@ def verify_evidence(authority, evidence, *, hook_frame_offset=None):
         before[a['wBattleMonPP'] + i] = int(state['pp_hex'][2 * i:2 * i + 2], 16)
     outcome = generic.verify_footprint(evidence, decision, before)
     return {'outcome': outcome, 'site': site, 'reason': decision['refusal']}
+
+
+def challenge_for(seed, death_id):
+    """Deterministic one-use challenge: the issuing event and the death it serves (a replay reproduces it)."""
+    return digest({'instruction': seed, 'death_id': death_id})[:32]
+
+
+def pending_instruction(runtime, stage, document, player, *, frame, seed, binding, ignore=None):
+    """The ``battle_instruction`` command for ``player``'s oldest pending death command, or None.
+
+    None when nothing is pending, the oldest pending command is not ``force_faint``/``force_explode``,
+    its death is not ``pending_faint`` (or already carries ``enforcement``), another window is still
+    outstanding (``ignore`` names the one being acknowledged), or the linked member is not in the
+    party roster. ``frame`` is the first frame of the ``WINDOW_FRAMES`` window; the step is the
+    free-run anchor rule (frames since enrollment, plus one), so per-frame steps stay monotonic
+    across windows. The command body is the journal's, so a replay reproduces the same authority."""
+    pending = [i for i in runtime.journal.pending_ids(player) if i != ignore]
+    if not pending:
+        return None
+    commands = [runtime.journal.command(player, identifier) for identifier in pending]
+    if any(c['body'].get('cmd') == COMMAND for c in commands):
+        return None
+    command = commands[0]
+    body = command['body']
+    if body.get('cmd') not in BINDINGS or 'death_id' not in body:
+        return None
+    death = document['components'].get(FAINTS, {}).get('deaths', {}).get(body['death_id'])
+    if (death is None or death.get('phase') != 'pending_faint' or 'enforcement' in death or death.get('peer') != player
+            or death.get('peer_key') != body.get('key')):
+        return None
+    row = next((r for r in stage.rules.partner_blobs[player] if r['key'] == body['key']), None)
+    if row is None:
+        return None
+    initial = document['components'][INITIAL][player]
+    anchor = initial['observation']['frame']
+    if type(frame) is not int or frame < anchor:
+        raise JournalError('instruction window must start at or after the enrollment frame')
+    variant = initial['metadata']['gen1_metadata']['cartridge']['variant']
+    host = {'owner_id': initial['metadata']['gen1_metadata']['physical_instance'], 'frame': frame, 'step': frame - anchor + 1,
+            'count': WINDOW_FRAMES}
+    proof = prepare(player, command, binding, death, member_of(body['key'], row['slot']), host, variant=variant)
+    authority = issue({'schema': generic.SCHEMA, 'challenge': challenge_for(seed, body['death_id']), 'scope': dict(proof.scope)}, proof)
+    return {'cmd': COMMAND, 'death_id': body['death_id'], 'key': body['key'], 'authority': authority}
+
+
+def verify_issued(authority, command, binding, *, player, anchor, owner_id):
+    """The journaled authority is exactly what ``prepare``/``issue`` produce for its death command under the
+    free-run anchor rule for the enrolled owner; a tampered owner, frame, step, member, sites or addresses is
+    refused (the challenge is deterministic from the issuing event, ``challenge_for``, and the receipt must echo it)."""
+    if not isinstance(authority, dict) or not isinstance(authority.get('member'), dict) or not isinstance(authority.get('challenge'), str):
+        raise JournalError('battle instruction authority required')
+    if authority.get('owner_id') != owner_id:
+        raise JournalError('battle instruction authority names another owner')
+    body = command['body']
+    member = {k: authority['member'].get(k) for k in ('slot', 'species', 'dvs_hex', 'ot_id_hex')}
+    variant = authority['member'].get('variant')
+    if variant not in ANCHORS:
+        raise JournalError('battle instruction authority names an unsupported title')
+    first, count = generic.window(authority)
+    if type(anchor) is not int or authority.get('step') != first - anchor + 1 or count != WINDOW_FRAMES:
+        raise JournalError('battle instruction authority window differs from the free-run rule')
+    death = {'phase': 'pending_faint', 'peer': player, 'peer_key': body.get('key')}
+    host = {'owner_id': authority.get('owner_id'), 'frame': first, 'step': authority['step'], 'count': count}
+    try:
+        proof = prepare(player, command, binding, death, member, host, variant=variant)
+        expected = issue({'schema': generic.SCHEMA, 'challenge': authority['challenge'], 'scope': dict(proof.scope)}, proof)
+    except (ValueError, TypeError) as error:
+        raise JournalError('battle instruction authority does not reproduce from its command') from error
+    if authority != expected:
+        raise JournalError('battle instruction authority differs from the one its command issues')
+    return expected
+
+
+def verify_window(authority, rows, *, hook_frame_offset=None):
+    """Settle the ordered rows of one free-loop window. The client may have entered the window late, so the
+    rows start anywhere inside ``frames`` and run contiguously from there (the generic verifier is given the
+    authority rebased to that entry frame, which keeps every per-row frame/step check exact).
+    Returns ``{'covered': [first, last], 'outcome', 'row'}`` exactly as ``instruction_authority.verify_window``."""
+    first, count = generic.window(authority)
+    if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+        raise JournalError('instruction window evidence must cover one to count frames')
+    start = rows[0].get('frame')
+    if type(start) is not int or not first <= start < first + count:
+        raise JournalError('instruction window evidence starts outside the authority window')
+    rebased = {**authority, 'frame': start, 'step': authority['step'] + (start - first)}
+    if 'frames' in authority:
+        rebased['frames'] = {'first': start, 'count': first + count - start}
+    return generic.verify_window(rebased, rows, verify_row=verify_evidence, hook_frame_offset=hook_frame_offset)

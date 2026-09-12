@@ -49,4 +49,71 @@ end
 function M.new(options)
     return Executor.new({owner_id=options.owner_id,held=options.held,binding={name=options.name or M.NAME,snapshot=M.snapshot,decide=M.decide}})
 end
+M.COMMAND="battle_instruction";M.RECEIPT="rby-instruction-window-receipt-v1"
+-- Free-loop window service (handoff item 5). The server queues one `battle_instruction` command
+-- {cmd, death_id, key, authority} for the peer whose oldest pending command is the death's force
+-- command while it is in battle. arm() runs last in a loop tick and finish() first in the next one
+-- (gen1_observation_loop.lua), so exactly one free-running frame lies between them. Rows accumulate
+-- until a site is reached or the window, the battle or the death command runs out; the command then
+-- closes with the RECEIPT {schema, challenge, frame, battle, rows} and the server verifies, enforces
+-- or re-issues. A command that cannot be armed at all (battle over, window passed, death command gone)
+-- closes with no rows: declined. options: journal (pending_commands, complete_command), memory
+-- (memory_gb after initProfile), unwrap(entry)->body, owner_id, held (the loop boundary predicate),
+-- frame (default emu.framecount).
+function M.service(options)
+    local JSON=require("json_codec")
+    local journal,memory,unwrap=options.journal,options.memory,options.unwrap
+    assert(journal and memory and type(unwrap)=="function" and type(options.owner_id)=="string" and type(options.held)=="function",
+        "window service dependencies required")
+    local frame_of=options.frame or function()return emu.framecount()end
+    local executors,self={},{window=nil}
+    local function executor(name)
+        if not executors[name] then executors[name]=M.new({owner_id=options.owner_id,held=options.held,name=name})end
+        return executors[name]
+    end
+    local function battle()return memory.read_u8(memory.BATTLE_FLAG_ADDR)end
+    local function in_battle()local v=battle();return v==1 or v==2 end
+    -- the pending battle_instruction entry, its body, and whether its death command is still the oldest pending write
+    local function pending()
+        local list=assert(journal:pending_commands())
+        local oldest=list[1] and unwrap(list[1])
+        for _,entry in ipairs(list)do
+            local body=unwrap(entry)
+            if body.cmd==M.COMMAND then
+                local live=oldest~=nil and (oldest.cmd=="force_faint" or oldest.cmd=="force_explode") and oldest.death_id==body.death_id
+                return entry,body,live
+            end
+        end
+        return nil
+    end
+    local function close(entry,authority,rows,now)
+        assert(journal:complete_command(entry.command_id,"ACK",{schema=M.RECEIPT,challenge=authority.challenge,frame=now,battle=battle(),rows=rows}))
+        self.window=nil
+    end
+    function self:arm() -- last in the tick: for the frame about to run
+        local now=frame_of();local w=self.window
+        if not w then
+            local entry,body,live=pending()
+            if not entry then return false end
+            local a=body.authority;local first,count=Executor.window(a)
+            if not live or now<first or now>first+count-1 or not in_battle() then close(entry,a,JSON.array(),now);return false end
+            w={entry=entry,authority=a,rows=JSON.array(),last=first+count-1,exec=executor(a.binding)}
+            self.window=w
+        end
+        assert(w.exec.arm(w.authority));w.armed=now;return true
+    end
+    function self:finish() -- first in the next tick: the frame that just ran
+        local w=self.window
+        if not w or not w.armed then return nil end
+        local now=frame_of()
+        if now==w.armed then return nil end -- no frame ran (the host was held outside the loop): still armed
+        local row=w.exec.finish();w.armed=nil;w.rows[#w.rows+1]=row
+        local _,_,live=pending()
+        if row.site~=JSON.null or now>w.last or not in_battle() or not live then close(w.entry,w.authority,w.rows,now)end
+        return row
+    end
+    function self:status()return {open=self.window~=nil,rows=self.window and #self.window.rows or 0,armed=self.window~=nil and self.window.armed~=nil}end
+    function self:close()for _,ex in pairs(executors)do ex.close()end;executors={};self.window=nil end
+    return self
+end
 return M

@@ -31,7 +31,7 @@ SOURCE_FILES = ("lua/gen1_acquisition_observers.lua", "lua/gen1_capture_observer
                 "data/games/gen1_rby/gen1_static_sites.lua", "data/games/gen1_rby/gen1_npc_exchange_sites.lua",
                 "data/games/gen1_rby/gen1_wild_encounter_sites.lua",
                 "data/games/gen1_rby/gen1_capture_sites.lua", "data/games/gen1_rby/gen1_grant_sites.lua")
-FREE_FILES = ("lua/gen1_observation_loop.lua",) + SOURCE_FILES
+FREE_FILES = ("lua/gen1_observation_loop.lua", "lua/instruction_executor.lua", "lua/battle_force_authority.lua") + SOURCE_FILES
 
 NATIVE_FILES = ("lua/command_service_router.lua", "lua/gen1_native_runtime.lua",
     "lua/gen1_native_trade_executor.lua", "lua/gen1_partner_prompt_executor.lua", "lua/gen1_prepared_save.lua",
@@ -60,8 +60,10 @@ def build_configuration(run_id, contract, player, *, root=ROOT,prepared_cartridg
         "cartridge": profiles[player], "files": file_bundle(root, FILES+(OBSERVATION_FILES if initial_observations else ())
                                                           +(NATIVE_FILES if native_trade else ())
                                                           +(FREE_FILES if free_service else ()))}
-    if initial_observations:result['initial_observations']=True
-    if native_trade:result['native_manifest']=prepared_cartridges.manifest(player)
+    if initial_observations:
+        result['initial_observations']=True
+    if native_trade:
+        result['native_manifest']=prepared_cartridges.manifest(player)
     return result
 
 

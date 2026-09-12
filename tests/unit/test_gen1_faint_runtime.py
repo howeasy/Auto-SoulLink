@@ -193,3 +193,43 @@ def test_faint_ack_cannot_skip_an_older_pending_command(tmp_path):
             ack(runtime,'b',owners['b'],acknowledgement(runtime,'b',command))
         assert runtime.journal.snapshot()==before
     finally:runtime.close()
+
+
+def test_death_records_name_their_selected_command_and_a_force_explode_death_settles_through_its_ack(tmp_path):
+    runtime = create_runtime(tmp_path, contract('red', 'red'), rule_options={'explode_mode': True})
+    try:
+        owners = paired(runtime)
+        deliver(runtime, 'a', owners['a'], signal_batch(runtime, 'a'))
+        death = next(iter(runtime.state().document()['components'][COMPONENT]['deaths'].values()))
+        command = runtime.journal.command('b', runtime.journal.pending_ids('b')[0])
+        assert death['command'] == 'force_explode' == command['body']['cmd'] and death['phase'] == 'pending_faint'
+        message = acknowledgement(runtime, 'b', command)
+        wrong = copy.deepcopy(message)
+        wrong['receipt']['schema'] = 'gen1-force-faint-receipt-v1'
+        with pytest.raises(JournalError, match='versioned'):
+            ack(runtime, 'b', owners['b'], wrong)
+        message['receipt']['schema'] = 'gen1-force-explode-receipt-v1'
+        ack(runtime, 'b', owners['b'], message)
+        death = next(iter(runtime.state().document()['components'][COMPONENT]['deaths'].values()))
+        assert death['phase'] == 'pending_memorial' and runtime.journal.command('b', command['command_id'])['outcome'] == 'ACK'
+    finally:
+        runtime.close()
+
+
+def test_enforce_records_a_terminal_window_verdict_once_and_ignores_the_rest():
+    from server import event_reference
+    from server.gen1_faint_runtime import enforce
+    from server.protocol import digest
+    origin = event_reference.make('b', '1' * 32, {'event': 'command_ack'})
+    death = {'phase': 'pending_faint'}
+    row = {'frame': 130, 'step': 31, 'site': 'loop_head', 'writes': []}
+    for outcome in ('not_reached', 'refused', 'explode_armed', 'declined'):
+        assert enforce(death, {'outcome': outcome, 'row': None}, origin=origin) is None and 'enforcement' not in death
+    enforcement = enforce(death, {'outcome': 'fainted', 'row': row}, origin=origin)
+    assert death['enforcement'] == enforcement == {'origin': origin, 'frame': 130, 'step': 31, 'site': 'loop_head', 'outcome': 'fainted',
+                                                  'evidence_digest': digest(row)}
+    assert death['phase'] == 'pending_faint'
+    with pytest.raises(JournalError, match='already enforced'):
+        enforce(death, {'outcome': 'benched', 'row': row}, origin=origin)
+    with pytest.raises(JournalError, match='pending physical faint'):
+        enforce({'phase': 'pending_memorial'}, {'outcome': 'fainted', 'row': row}, origin=origin)

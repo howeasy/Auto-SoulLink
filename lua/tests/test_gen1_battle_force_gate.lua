@@ -21,6 +21,10 @@
                  walk on: the wild battle's first MainInBattleLoop+0 rewrites its four move slots to EXPLOSION (PP 5)
                  before the first menu; FIGHT + slot 1 reaches ExecutePlayerMove+0 with $99 already selected (one-byte
                  no-op write) and the ORIGINAL engine's ExplodeEffect faints the mon itself and hits the wild mon
+    free_window  (scenarios=["free_window"] only, handoff item 5) fight_first in the FREE-LOOP form: no bounded owner
+                 (emu.frameadvance, held() = the frame boundary), one 64-frame window authority per issue entered late,
+                 the SAME table armed every frame until a site is reached or the window runs out, then the next window;
+                 tests/live/test_gen1_battle_force.py settles every window with battle_force_authority.verify_window
   Assertions and screenshots anchor on the CURRENT member's non-refused row, never an earlier callback.
 --]]
 local ROOT=SLINK_ROOT or os.getenv("SLINK_ROOT")
@@ -36,7 +40,7 @@ local f=assert(io.open(assert(os.getenv("SLINK_BATTLE_FORCE_INPUT")),"r"));local
 local A=config.addresses;local SITES=config.sites;local OUT=config.out_dir;local D=config.driver
 -- config.scenarios (optional list) selects scenarios; nil = the full benched -> transform -> player_action battle.
 local function want(name)
-    local sc=config.scenarios;if sc==nil or sc==JSON.null then return name~="fight_first" and name~="explode_first" end
+    local sc=config.scenarios;if sc==nil or sc==JSON.null then return name~="fight_first" and name~="explode_first" and name~="free_window" end
     for _,n in ipairs(sc)do if n==name then return true end end;return false
 end
 local u8=function(a)return memory.read_u8(a,"System Bus")end
@@ -91,10 +95,20 @@ local function step(buttons)
     local member,s,ex=current.member,current.scenario,current.exec
     step_n=step_n+1
     local before=emu.framecount()
-    local auth=authority(member,before,step_n)
+    local auth
+    local w=current.window
+    if w then -- free-loop form: one WINDOW-frame authority entered `late` frames in, the SAME table armed every frame until consumed or exhausted
+        local a=w.authority
+        if not a or w.consumed or before>a.frames.first+a.frames.count-1 then
+            a=authority(member,before-w.late,step_n-w.late);a.frames={first=before-w.late,count=Executor.MAX_WINDOW_FRAMES}
+            w.authority=a;w.consumed=false;w.windows[#w.windows+1]={authority=a,rows=JSON.array()}
+        end
+        auth=a
+    else auth=authority(member,before,step_n) end
     assert(ex.arm(auth))
     frame(buttons)
     local ev=ex.finish()
+    if w then local rows=w.windows[#w.windows].rows;rows[#rows+1]=ev;if ev.site~=JSON.null and ev.site~=nil then w.consumed=true end end
     if ev.site~=JSON.null and ev.site~=nil then
         s.reached[#s.reached+1]={authority=auth,evidence=ev,world_at_finish=world(),bounded=owner~=nil}
         note(fmt("[%s] REACHED %s frame=%d hook_frame=%s member=%02X refusal=%s writes=%d",s.name,ev.site,before,tostring(ev.hook_frame),member.species,
@@ -191,7 +205,7 @@ local ok,why=xpcall(function()
             check(c,"stray battle ended by RUN",u8(A.wIsInBattle)==0,JSON.encode(world()))
         end
     end
-    do
+    if not want("free_window") then -- the free loop has no bounded owner: every frame stays emu.frameadvance
         local s=scenario("bounded_convention");use(stranger,s)
         owner=require("platform_bounded_execution").new({profile="gambatte",owner_id=assert(require("platform_identity").new_nonce()),
             expected_host=require("platform_execution").supported_profile("gambatte"),authorize=function(value)return value~=nil end})
@@ -262,6 +276,50 @@ local ok,why=xpcall(function()
         for _=1,8 do if u8(A.wIsInBattle)==0 then break end;local r=drv.run();s.run=r;if not r.ok then to_menu(120,nil)end end
         s.world_final=world();shot("fight_first_after")
         note("fight_first final: "..JSON.encode(s.world_final))
+    end
+    -- free_window: fight_first in the free-loop form (handoff item 5). No bounded owner; ONE 64-frame window authority per
+    -- issue, as the server issues it from a batch, entered `late` frames after its first frame and armed with the SAME
+    -- table every frame until a site is reached or the window runs out, then the next window (the re-issue the server
+    -- makes from the window receipt). tests/live/test_gen1_battle_force.py settles every window with verify_window.
+    if want("free_window") then
+        local s=scenario("free_window");use(squirtle,s)
+        current.window={late=8,windows=JSON.array(),consumed=false}
+        local menu_rows=s.not_reached;wait(30)
+        check(s,"menu state with the active linked member yields not_reached only",s.not_reached==menu_rows+30,fmt("%d->%d reached=%d",menu_rows,s.not_reached,#s.reached))
+        s.world_before=world()
+        check(s,"the linked mon is the active battle mon",u8(A.wPlayerMonNumber)==0 and s.world_before.battle_species==squirtle.species,JSON.encode(s.world_before))
+        check(s,"frames advance with emu.frameadvance, not a bounded owner",owner==nil,"owner="..tostring(owner))
+        local base=#s.reached
+        if drv.state().x~=5 then s.choose=drv.choose("FIGHT") else s.choose={skipped="move menu already open"} end
+        local trace=drv.commit_move(1,900);s.commit_trace=trace
+        wait(600,function()return landed(s,base,squirtle) end)
+        local row=landed(s,base,squirtle) and s.reached[#s.reached] or nil
+        check(s,"a site was reached and written for the ACTIVE linked member after FIGHT inside a late-entered window",row~=nil,
+            fmt("rows after commit=%d windows=%d stages=%s",#s.reached-base,#current.window.windows,JSON.encode(trace.stages or {})))
+        if row then
+            -- the window the reached row closed (the driver may have stepped on and opened the next one already)
+            local w;for _,candidate in ipairs(current.window.windows)do if candidate.authority.challenge==row.authority.challenge then w=candidate end end
+            s.write_row={site=row.evidence.site,frame=row.evidence.frame,hook_frame=row.evidence.hook_frame,challenge=row.authority.challenge,writes=row.evidence.writes,
+                state=row.evidence.state,world=row.world_at_finish}
+            check(s,"the site was ExecutePlayerMove+0 with the ACTIVE footprint (wBattleMonHP 0000 + wPlayerSelectedMove $FF)",
+                row.evidence.site=="player_action" and #row.evidence.writes==3 and row.evidence.writes[1].address==A.wBattleMonHP and row.evidence.writes[3].address==A.wPlayerSelectedMove
+                and row.evidence.writes[3].after_hex=="ff",JSON.encode(row.evidence.writes))
+            check(s,"the reached row closed its window: entered late, contiguous rows, the reached row last",
+                w.authority.challenge==row.authority.challenge and w.rows[1].frame==w.authority.frames.first+current.window.late and w.rows[#w.rows].site=="player_action"
+                and #w.rows==w.rows[#w.rows].frame-w.rows[1].frame+1,fmt("first=%d entry=%d rows=%d",w.authority.frames.first,w.rows[1].frame,#w.rows))
+            watch_after(s,row,"free_window")
+        end
+        s.windows=current.window.windows;current.window=nil
+        s.world_after=world();s.slot0=party_slot(0)
+        check(s,"the linked mon fainted in the original engine (party HP 0000) with the active battle struct at 0000",
+            s.slot0.hp_hex=="0000" and (s.world_after.battle_hp=="0000" or u8(A.wPlayerMonNumber)~=0 or u8(A.wIsInBattle)==0),JSON.encode(s.world_after))
+        shot("free_window_fainted")
+        use(stranger,s)
+        for _=1,30 do if u8(A.wPlayerMonNumber)==1 or u8(A.wIsInBattle)==0 then break end;for _=1,3 do step({A=true})end;for _=1,20 do step(nil)end end
+        to_menu(120,"A")
+        for _=1,8 do if u8(A.wIsInBattle)==0 then break end;local r=drv.run();s.run=r;if not r.ok then to_menu(120,nil)end end
+        s.world_final=world();shot("free_window_after")
+        note("free_window final: "..JSON.encode(s.world_final))
     end
     -- explode_first: the EXPLODE binding on the ACTIVE linked Squirtle (armed since the walk: see the battle entry above)
     if explode then
@@ -385,7 +443,7 @@ local ok,why=xpcall(function()
         result.sram_diff_bytes=diff
         t.check("SRAM unchanged across the whole gate",diff==0,fmt("%d bytes differ",diff))
     end
-    result.driver_hits=drv.hits();result.owner_final=owner.status()
+    result.driver_hits=drv.hits();result.owner_final=owner and owner.status() or JSON.null
 end,debug.traceback)
 result.passed=ok and t.failures==0;result.error=not ok and tostring(why)or nil
 if not ok then note("ERROR: "..tostring(why)) end

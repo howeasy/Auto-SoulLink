@@ -120,6 +120,10 @@ function M.start(launch,options)
             self.acquisitions=require("gen1_acquisition_observers").new({variant=launch.cartridge.variant,
                 final_sha1=launch.cartridge.final_rom_sha1,owned=source_owned,
                 held=function()return self.host.status().physical_stop_verified==true or at_boundary() end})
+            -- In-battle death delivery (handoff item 5): the window service arms the one-instruction executor
+            -- under the loop boundary predicate; its rows close the server's battle_instruction command.
+            self.instruction=require("battle_force_authority").service({journal=journal,memory=memory,owner_id=instance,held=at_boundary,
+                unwrap=function(entry)return require("gen1_runtime").unwrap(entry.body,launch.player)end})
         end
         self.runtime=assert(require("gen1_runtime").new({run_id=launch.run_id,player=launch.player,
             variant=launch.cartridge.variant,server_host=launch.host,server_port=launch.port,
@@ -159,7 +163,7 @@ function M.start(launch,options)
             end
             self.start_loop=function()
                 if self.loop or not loop_ready()then return end
-                self.loop_ctx={engine=self.observer.signals,observers=self.acquisitions,owned=source_owned,
+                self.loop_ctx={engine=self.observer.signals,observers=self.acquisitions,owned=source_owned,instruction=self.instruction,
                     rom_hash=function()return gameinfo.getromhash():lower()end,
                     baseline=function()return assert(self.store:read()).observation end,
                     journal={append=function(_,event,baseline)
@@ -244,6 +248,7 @@ function M.start(launch,options)
             free_service=free,observation_loop=self.loop~=nil}))))
     end
     function self:close()
+        if self.instruction then self.instruction:close()end
         if self.acquisitions then self.acquisitions:close()end
         if self.bootstrap then self.bootstrap.close()end
         if self.observer then self.observer:close()end

@@ -776,3 +776,212 @@ def test_window_arm_requires_the_hold_and_a_latched_fault_ends_the_window(probe)
         finish(probe)
     with pytest.raises(Exception, match="reports a hold"):
         arm(probe, a)
+
+
+# ---------------------------------------------------------------- free-loop window (handoff item 5)
+
+
+def window_authority(variant="red", *, first=1200, anchor=1192):
+    """A server-issued free-loop window: WINDOW_FRAMES frames from `first`, the step by the anchor rule."""
+    return authority(variant, frame=first, step=first - anchor + 1, count=auth.WINDOW_FRAMES)
+
+
+def unreached(a, frame):
+    return {"schema": generic.EVIDENCE, "challenge": a["challenge"], "owner_id": a["owner_id"], "frame": frame, "step": a["step"] + (frame - a["frame"]),
+            "held": False, "site": None, "pc": None, "bank": None, "sp": None, "stack_hex": None, "hook_frame": None, "state": None, "writes": [], "refusal": None}
+
+
+def window_rows(variant, a, start, count, *, reached_at=None, site="loop_head", st=None):
+    rows = [unreached(a, start + i) for i in range(count)]
+    if reached_at is not None:
+        f = start + reached_at
+        rows[reached_at] = evidence(variant, site, st, challenge=a["challenge"], frame=f, step=a["step"] + (f - a["frame"]), hook_frame=f + OFFSET)
+    return rows
+
+
+def test_verify_window_accepts_a_window_entered_late_and_settles_its_last_row():
+    a = window_authority("red")
+    rows = window_rows("red", a, 1210, 5, reached_at=4)
+    assert auth.verify_window(a, rows, hook_frame_offset=OFFSET) == {"covered": [1210, 1214], "outcome": "fainted", "row": rows[4]}
+    assert auth.verify_window(a, window_rows("red", a, 1263, 1))["outcome"] == "not_reached"  # the last frame of the window alone
+    assert auth.verify_window(a, window_rows("red", a, 1200, 64))["covered"] == [1200, 1263]
+    benched = window_rows("red", a, 1230, 2, reached_at=1, st=state("red", player_mon_number=0))
+    assert auth.verify_window(a, benched, hook_frame_offset=OFFSET)["outcome"] == "benched"
+    refused = window_rows("red", a, 1230, 2, reached_at=1, st=state("red", hp_hex="0000"))
+    assert auth.verify_window(a, refused, hook_frame_offset=OFFSET)["outcome"] == "refused"
+    with pytest.raises(JournalError, match="not contiguous"):  # the generic verifier still demands frames.first
+        generic.verify_window(a, rows, verify_row=auth.verify_evidence, hook_frame_offset=OFFSET)
+
+
+@pytest.mark.parametrize("start, count, reached_at, mutate, match", [
+    (1199, 2, None, None, "starts outside"),
+    (1264, 1, None, None, "starts outside"),
+    (1260, 5, None, None, "one to count frames"),  # runs past the end of the window
+    (1210, 3, 1, None, "must be the last row"),
+    (1210, 3, None, lambda rows: rows.pop(1), "not contiguous"),
+    (1210, 2, None, lambda rows: rows[1].update(step=rows[1]["step"] + 1), "authorized bounded step"),
+    (1210, 2, None, lambda rows: rows[0].update(challenge="0" * 32), "different instruction authority"),
+    (1210, 0, None, None, "one to count frames"),
+])
+def test_verify_window_refuses_rows_outside_the_window_gaps_order_and_foreign_challenges(start, count, reached_at, mutate, match):
+    a = window_authority("blue")
+    rows = window_rows("blue", a, start, count, reached_at=reached_at)
+    if mutate:
+        mutate(rows)
+    with pytest.raises(JournalError, match=match):
+        auth.verify_window(a, rows, hook_frame_offset=OFFSET)
+
+
+def test_verify_issued_reproduces_the_authority_from_its_command_and_refuses_tampering():
+    a = window_authority("red", first=1200, anchor=1192)
+    assert auth.verify_issued(a, COMMAND, BINDING, player="a", anchor=1192, owner_id=OWNER) == a
+    with pytest.raises(JournalError, match="free-run rule"):
+        auth.verify_issued(a, COMMAND, BINDING, player="a", anchor=1100, owner_id=OWNER)  # another anchor means another step
+    with pytest.raises(JournalError, match="another owner"):
+        auth.verify_issued(a, COMMAND, BINDING, player="a", anchor=1192, owner_id="1" * 32)
+    for tamper, match in [
+        (lambda t: t.update(step=t["step"] + 1), "free-run rule"),
+        (lambda t: t["frames"].update(count=5), "free-run rule"),
+        (lambda t: t.update(frame=1201), "malformed"),
+        (lambda t: t["member"].update(species=1), "differs from the physical key"),
+        (lambda t: t["sites"]["loop_head"].update(pc=t["sites"]["loop_head"]["pc"] + 1), "differs from the one its command issues"),
+        (lambda t: t["addresses"].update(wBattleMonHP=0), "differs from the one its command issues"),
+        (lambda t: t.update(hook_frame_offset=1), "differs from the one its command issues"),
+        (lambda t: t.update(binding=auth.EXPLODE), "differs from the one its command issues"),
+        (lambda t: t.update(owner_id="1" * 32), "another owner"),
+    ]:
+        tampered = json.loads(json.dumps(a))
+        tamper(tampered)
+        with pytest.raises(JournalError, match=match):
+            auth.verify_issued(tampered, COMMAND, BINDING, player="a", anchor=1192, owner_id=OWNER)
+    other = {**COMMAND, "body": {**COMMAND["body"], "cmd": "force_explode"}}
+    with pytest.raises(JournalError):  # the command selects the binding: this one issues the EXPLODE authority
+        auth.verify_issued(a, other, BINDING, player="a", anchor=1192, owner_id=OWNER)
+
+
+def test_pending_instruction_issues_for_the_oldest_pending_death_command_and_nothing_else(tmp_path):
+    from server.gen1_run_config import create_runtime
+    from tests.unit.test_gen1_engine_signal_runtime import deliver
+    from tests.unit.test_gen1_faint_runtime import paired, signal_batch
+    from tests.unit.test_gen1_sessions import contract
+    run = create_runtime(tmp_path, contract("red", "blue"))
+    try:
+        owners = paired(run)
+        binding = run.gate.sessions["b"].metadata["control_binding"]
+        stage = run.state()
+        assert auth.pending_instruction(run, stage, stage.document(), "b", frame=130, seed="1" * 32, binding=binding) is None  # nothing pending
+        deliver(run, "a", owners["a"], signal_batch(run, "a"))
+        stage = run.state()
+        document = stage.document()
+        death_id, death = next(iter(document["components"][auth.FAINTS]["deaths"].items()))
+        initial = document["components"][auth.INITIAL]["b"]
+        anchor = initial["observation"]["frame"]
+        issued = auth.pending_instruction(run, stage, document, "b", frame=130, seed="1" * 32, binding=binding)
+        a = issued["authority"]
+        assert issued["cmd"] == auth.COMMAND and issued["death_id"] == death_id and issued["key"] == death["peer_key"]
+        assert a["frame"] == 130 and a["step"] == 130 - anchor + 1 and a["frames"] == {"first": 130, "count": auth.WINDOW_FRAMES}
+        assert a["binding"] == auth.BINDING and a["member"]["slot"] == 0 and a["challenge"] == auth.challenge_for("1" * 32, death_id)
+        assert a["owner_id"] == initial["metadata"]["gen1_metadata"]["physical_instance"] and a["member"]["variant"] == "blue"
+        command = run.journal.command("b", run.journal.pending_ids("b")[0])
+        assert auth.verify_issued(a, command, binding, player="b", anchor=anchor, owner_id=a["owner_id"]) == a
+        assert auth.pending_instruction(run, stage, document, "b", frame=130, seed="1" * 32, binding=binding) == issued  # deterministic
+        assert auth.pending_instruction(run, stage, document, "a", frame=130, seed="1" * 32, binding=binding) is None  # the killer has nothing pending
+        with pytest.raises(JournalError, match="enrollment frame"):
+            auth.pending_instruction(run, stage, document, "b", frame=anchor - 1, seed="1" * 32, binding=binding)
+        enforced = json.loads(json.dumps(document))
+        enforced["components"][auth.FAINTS]["deaths"][death_id]["enforcement"] = {}
+        assert auth.pending_instruction(run, stage, enforced, "b", frame=130, seed="1" * 32, binding=binding) is None
+        # one outstanding window at a time; the one being acknowledged is ignored
+        snapshot = run.journal.snapshot()
+        run.journal.commit("a", "2" * 32, {"event": "issued-window-fixture"}, expected_revision=snapshot.revision, state=snapshot.state,
+                           commands={"a": [], "b": [issued]}, result={"ack": "ACK"})
+        stage = run.state()
+        document = stage.document()
+        assert auth.pending_instruction(run, stage, document, "b", frame=140, seed="3" * 32, binding=binding) is None
+        following = auth.pending_instruction(run, stage, document, "b", frame=140, seed="3" * 32, binding=binding,
+                                             ignore=run.journal.pending_ids("b")[-1])
+        assert following["authority"]["frame"] == 140 and following["authority"]["challenge"] != a["challenge"]
+    finally:
+        run.close()
+
+
+def test_pending_instruction_waits_behind_an_older_pending_command(tmp_path):
+    from server.gen1_run_config import create_runtime
+    from tests.unit.test_gen1_engine_signal_runtime import deliver
+    from tests.unit.test_gen1_faint_runtime import paired, signal_batch
+    from tests.unit.test_gen1_sessions import contract
+    run = create_runtime(tmp_path, contract("yellow", "yellow"))
+    try:
+        owners = paired(run)
+        snapshot = run.journal.snapshot()
+        run.journal.commit("a", "4" * 32, {"event": "explicit-older-command-fixture"}, expected_revision=snapshot.revision,
+                           state=snapshot.state, commands={"a": [], "b": [{"cmd": "fixture_older_observation"}]}, result={"ack": "ACK"})
+        deliver(run, "a", owners["a"], signal_batch(run, "a"))
+        stage = run.state()
+        binding = run.gate.sessions["b"].metadata["control_binding"]
+        assert auth.pending_instruction(run, stage, stage.document(), "b", frame=130, seed="1" * 32, binding=binding) is None
+    finally:
+        run.close()
+
+
+def test_window_may_be_entered_late_and_its_rows_start_at_the_entry_frame(probe):
+    a = authority("blue", count=8)  # frames 1200..1207
+    load(probe, "blue", state("blue"), "loop_head")
+    probe.execute("frame=1203")
+    rows = step_window(probe, a, "loop_head", fire_at=2, frames=3)  # armed at 1203, 1204, 1205; the site fires on the third
+    assert [r["frame"] for r in rows] == [1203, 1204, 1205] and [r["step"] for r in rows] == [12, 13, 14]
+    assert rows[2]["site"] == "loop_head" and window_status(probe) == {"covered_from": 1203, "covered_to": 1205, "consumed": True}
+    assert auth.verify_window(a, rows, hook_frame_offset=OFFSET)["outcome"] == "fainted"
+    with pytest.raises(Exception, match="already used"):
+        arm(probe, a)
+    late = authority("blue", count=8)
+    late["challenge"] = "1" * 32
+    probe.execute("frame=1208")  # one frame past the window: refused
+    with pytest.raises(Exception, match="frame other than the one about to run"):
+        arm(probe, late)
+
+
+def test_window_service_arms_each_frame_closes_on_the_reached_row_and_declines_stale_commands(probe):
+    a = authority("red", count=8)  # frames 1200..1207
+    load(probe, "red", state("red"), "loop_head")
+    probe.globals().command_json = json.dumps({"cmd": auth.COMMAND, "death_id": "d" * 32, "key": COMMAND["body"]["key"], "authority": a})
+    probe.execute("""
+        addr=JSON.decode(payload).a
+        inbox={{command_id=string.rep('1',32),command_sequence=1,body={cmd='force_faint',death_id=string.rep('d',32),key='9A5F:1234:84'}},
+               {command_id=string.rep('2',32),command_sequence=2,body=JSON.decode(command_json)}}
+        completed={}
+        journal={pending_commands=function()local out={};for _,e in ipairs(inbox)do if not e.outcome then out[#out+1]=e end end;return out end,
+                 complete_command=function(_,id,outcome,receipt)
+                     for _,e in ipairs(inbox)do if e.command_id==id then e.outcome=outcome;e.receipt=receipt end end
+                     completed[#completed+1]={id=id,outcome=outcome,receipt=receipt};return true end}
+        mem={BATTLE_FLAG_ADDR=addr.wIsInBattle,read_u8=function(address)return bus[address] or 0 end}
+        S=require('battle_force_authority').service({journal=journal,memory=mem,owner_id=string.rep('a',32),held=function()return held end,
+            unwrap=function(e)return e.body end})
+    """)
+    probe.execute("frame=1203")  # the command arrived three frames into its window
+    assert probe.eval("S:arm()") is True and probe.eval("S:status().armed") is True
+    assert probe.eval("S:finish() == nil") is True and probe.eval("S:status().armed") is True  # no frame ran: still armed
+    run_frame(probe)
+    row = json.loads(probe.eval("JSON.encode(S:finish())"))
+    assert row["site"] is None and row["frame"] == 1203 and probe.eval("#completed") == 0 and probe.eval("S:status().rows") == 1
+    assert probe.eval("S:arm()") is True
+    hit(probe, "loop_head")
+    run_frame(probe)
+    row = json.loads(probe.eval("JSON.encode(S:finish())"))
+    assert row["site"] == "loop_head" and probe.eval("#completed") == 1 and probe.eval("S:status().open") is False
+    receipt = json.loads(probe.eval("JSON.encode(completed[1].receipt)"))
+    assert receipt["schema"] == auth.RECEIPT and receipt["challenge"] == a["challenge"] and receipt["battle"] == 1 and receipt["frame"] == 1205
+    assert [r["frame"] for r in receipt["rows"]] == [1203, 1204] and receipt["rows"][1]["site"] == "loop_head"
+    assert auth.verify_window(a, receipt["rows"], hook_frame_offset=OFFSET)["outcome"] == "fainted"
+    assert probe.eval("S:arm()") is False, "nothing pending any more"
+    # a command whose window has passed closes declined (no rows), so the server re-issues from the receipt
+    probe.execute("inbox[2].outcome=nil;completed={};frame=1300")
+    assert probe.eval("S:arm()") is False and probe.eval("#completed") == 1
+    declined = json.loads(probe.eval("JSON.encode(completed[1].receipt)"))
+    assert declined["rows"] == [] and declined["frame"] == 1300 and declined["challenge"] == a["challenge"]
+    probe.execute("inbox[2].outcome=nil;completed={};frame=1206;bus[addr.wIsInBattle]=0")  # inside the window but the battle is over
+    assert probe.eval("S:arm()") is False and probe.eval("#completed") == 1 and json.loads(probe.eval("JSON.encode(completed[1].receipt)"))["battle"] == 0
+    probe.execute("inbox[1].outcome='ACK';inbox[2].outcome=nil;completed={};bus[addr.wIsInBattle]=1")  # the death command already closed
+    assert probe.eval("S:arm()") is False and probe.eval("#completed") == 1
+    probe.execute("S:close()")
+    assert probe.eval("next(hooks) == nil") is True

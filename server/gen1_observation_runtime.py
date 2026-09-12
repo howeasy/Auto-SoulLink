@@ -29,6 +29,10 @@ COMPONENT = 'gen1-observation-progress'
 EVENT = 'observation'
 SCHEMA = 'rby-observation-v1'
 FIELDS = frozenset({'schema', 'event', 'frame', 'sequence', 'context', 'rom', 'signals', 'acquisitions', 'inventory'})
+# The loop's polled battle byte (wIsInBattle) and its debounced trainer engagement ({trainer_id, frame} or null):
+# optional on the wire so the live-proven P10 batches stay valid; the loop always sends both.
+OPTIONAL = frozenset({'battle', 'trainer'})
+TRAINER = frozenset({'trainer_id', 'frame'})
 CONTEXT = frozenset({'context_generation', 'physical_instance', 'save_identity'})
 ENTRY = frozenset({'sequence', 'operation_id', 'frame'})
 MAX_RECEIPTS = 16
@@ -43,7 +47,7 @@ def key(player):
 
 
 def typed(request):
-    if not isinstance(request, dict) or set(request) != FIELDS or request['schema'] != SCHEMA or request['event'] != EVENT:
+    if not isinstance(request, dict) or set(request) - OPTIONAL != FIELDS or request['schema'] != SCHEMA or request['event'] != EVENT:
         raise JournalError('typed free-run observation required')
     if (any(type(request[name]) is not int or not 0 <= request[name] <= MAX_INT for name in ('frame', 'sequence'))
             or request['sequence'] < 1):
@@ -60,6 +64,13 @@ def typed(request):
             raise JournalError('typed observation receipt required')
         if row['kind'] not in SETTLED_KINDS:
             raise JournalError('observation receipt kind has no free-run settlement yet')
+    if 'battle' in request and (type(request['battle']) is not int or not 0 <= request['battle'] <= 255):
+        raise JournalError('observation battle byte required')
+    trainer = request.get('trainer')
+    if trainer is not None and (not isinstance(trainer, dict) or set(trainer) != TRAINER
+                                or type(trainer['trainer_id']) is not int or not 1 <= trainer['trainer_id'] <= 255
+                                or type(trainer['frame']) is not int or not 0 <= trainer['frame'] <= request['frame']):
+        raise JournalError('typed trainer battle start required')
     return request
 
 
@@ -135,6 +146,21 @@ def stage_observation(runtime, stage, document, player, operation, request):
         from server.gen1_engine_signal_runtime import stage_observation as stage_engine
         merge(stage_engine(runtime, stage, document, player, operation,
                            {'event': 'engine_signals', 'payload': copy.deepcopy(request['signals'])}), 'engine_evidence_digest')
+    # 2b. Trainer engagement: the shared engine decides Rival Swap (_handle_trainer_battle_start) and queues
+    # replace_rival_team for this player; the held rival-team executor writes it at the battle_init checkpoint.
+    if request.get('trainer') is not None:
+        from server.gen1_faint_runtime import synchronize
+        from server.gen1_semantic_events import trainer_battle_start_event
+        trainer_id = request['trainer']['trainer_id']
+        # handle_event returns the player's own immediate commands and clears them; take_commands drains both queues.
+        immediate = stage.rules.handle_event(player, trainer_battle_start_event(trainer_id=trainer_id))
+        taken = stage.rules.take_commands(player, immediate)
+        # replace_rival_team is the only Gen 1 command this event queues; anything else the engine might add here is
+        # executed elsewhere on Gen 1 (gen1_faint_runtime.settle drops sounds and memorials the same way).
+        swaps = [c for c in taken[player] if c.get('cmd') == 'replace_rival_team']
+        commands[player].extend(swaps)
+        result['trainer_battle'] = {'trainer_id': trainer_id, 'rival_team': len(swaps)}
+        synchronize(stage, document)
     # 3. Acquisition receipts, plus pending facts a fresh checkpoint may now settle.
     from server.gen1_acquisition_runtime import COMPONENT as ACQUISITIONS
     pending = document['components'].get(ACQUISITIONS, {}).get(player, {}).get('pending')
@@ -154,6 +180,16 @@ def stage_observation(runtime, stage, document, player, operation, request):
         records.extend(storage['records'])
         for recipient in ('a', 'b'):
             commands[recipient].extend(storage['commands'][recipient])
+    # 5. In-battle death delivery (handoff item 5): while this player's oldest pending command is a death
+    # command and the batch shows a battle, hand it the one-instruction authority as its own
+    # battle_instruction command; its ACK receipt (gen1_faint_runtime) verifies, enforces or re-issues.
+    if request.get('battle'):
+        from server.battle_force_authority import pending_instruction
+        issued = pending_instruction(runtime, stage, document, player, frame=request['frame'] + 1, seed=operation,
+                                     binding=metadata['control_binding'])
+        if issued is not None:
+            commands[player].append(issued)
+            result['instruction_issued'] = issued['authority']['challenge']
     entry = {'sequence': request['sequence'], 'operation_id': operation, 'frame': request['frame']}
     entries[player] = entry
     result['observation_digest'] = digest(entry)
