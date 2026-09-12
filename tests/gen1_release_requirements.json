@@ -320,7 +320,63 @@
       "id": "canonical.constants",
       "stage": "canonical-validation",
       "description": "All canonical capacities, layouts, names, PP/status encodings, endian rules, save geometry and checksum invariants",
-      "proofs": []
+      "proofs": [
+        {
+          "check": "constants",
+          "source": "tools/verify_gen1_constants.py",
+          "source_sha256": "9f9e010f443db23906b11fbfb2cde32a96fbc51e16ae9615bdab44d616f8ca87",
+          "assertion_basis": "87 rows, 29 per pokered, pokeyellow and alchav_pokered, from the pinned source: capacities (PARTY_LENGTH, MONS_PER_BOX, NUM_BOXES, NUM_MOVES, MAX_LEVEL, MAX_STAT_VALUE, BAG_ITEM_CAPACITY), layouts (box, party and battle macro members against symbols, the 66-byte transfer blob, OTID, Exp and base-stat offsets, four name strides, six contiguous stat stages), names (NAME_LENGTH, the $50 terminator, the $FF species terminator), PP_UP_MASK, PP_MASK and the PSN, BRN, FRZ, PAR and SLP status masks, big-endian computed stats, SRAM box, bank, main-save and flag geometry with save-copy ranges, and the checksum invariants (complemented byte sum, the sGameData span, checksum adjacency, per-bank box checksums); growth curves are checked against the Lua data.",
+          "supporting_sources": {
+            "data/pret_syms.json": "0c6d63a29256af8f4b55254fafb8c74e728a4dea0b5452b96d690e09de014cbd",
+            "data/pret_sources.lock.json": "29fc92aa6ea58e402c50eb889737659fc7bb5d131805258cd3f6e28b8dc98366",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        },
+        {
+          "check": "party-codec-data",
+          "source": "tools/gen_gen1_codec_data.py",
+          "source_sha256": "4f0491ebf29071211478ebeb9c30cf97da258f12117ea1674ebf87a009b47063",
+          "assertion_basis": "Regenerates the safe name alphabet, the PP of 165 moves and 151 species facts per title from the canonical builds and compares both published artifacts (the names clause).",
+          "supporting_sources": {
+            "data/games/gen1_rby/party_codec.json": "aaa094558c89b4ad7d2bff9007580a139fecd061c3317bfbea75edcf22dc6a7d",
+            "data/games/gen1_rby/gen1_party_codec_data.lua": "465b3309046a202fb08ec0bb157c6f88462075f7e087568f95459a1d20a4e352",
+            "data/pret_sources.lock.json": "29fc92aa6ea58e402c50eb889737659fc7bb5d131805258cd3f6e28b8dc98366"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_strict_profile_contracts.py",
+          "source_sha256": "59d42c93364a64f3e13d0421a2b95b22883a499dfb4ed51f1cea58c7aca3a7ad",
+          "nodeid": "tests/unit/test_gen1_strict_profile_contracts.py::test_structure_symbol_drift_is_not_a_warning",
+          "assertion_basis": "Negative control: a one-byte party_struct symbol drift makes the validator emit FAIL, so the 87 OK rows are not vacuous.",
+          "supporting_sources": {
+            "tools/verify_gen1_constants.py": "9f9e010f443db23906b11fbfb2cde32a96fbc51e16ae9615bdab44d616f8ca87",
+            "data/pret_syms.json": "0c6d63a29256af8f4b55254fafb8c74e728a4dea0b5452b96d690e09de014cbd"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_party_codec.py",
+          "source_sha256": "2437d72088daa5592542148ac4e1da6e7773e1fedf22970d482f8ca6d0949b24",
+          "nodeid": "tests/unit/test_gen1_party_codec.py::test_malformed_fields_reject_the_entire_blob[33-0]",
+          "assertion_basis": "The multibyte codec and min-level enforcement that canonical.structure-limits defers here: level 0 (and the siblings for level or box level 101) is refused by both the Python and the Lua codec without mutating the blob; test_all_canonical_species_at_level_boundaries_agree_between_codecs checks 151 species at four levels with multibyte experience, stat experience and computed stats agreeing across codecs.",
+          "supporting_sources": {
+            "server/gen1_party_codec.py": "c56c904876598140ab4668b63cb8eb350628c842e19ab673306d24b55da318b0",
+            "lua/gen1_party_codec.lua": "fab757d7ae9f55f4ce20930acfcf947e77c89510caa7396633dca6f94af8d296",
+            "data/games/gen1_rby/party_codec.json": "aaa094558c89b4ad7d2bff9007580a139fecd061c3317bfbea75edcf22dc6a7d"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sram_boxes.py",
+          "source_sha256": "e72574b3a43f775a4ce86cd414a214cf04f45ea97e05fd12911b00bf62a11539",
+          "nodeid": "tests/unit/test_gen1_sram_boxes.py::test_checksums_match_pokereds_algorithm[2]",
+          "assertion_basis": "The Lua SRAM box checksum writer reproduces the complemented byte sum of the source over scattered non-zero content for bank 2 (the sibling covers bank 3), tying the checksum invariant to runtime behaviour.",
+          "supporting_sources": {
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        }
+      ]
     },
     {
       "id": "canonical.rom-layout",
@@ -338,31 +394,367 @@
       "id": "protocol.unit",
       "stage": "unit-protocol",
       "description": "Complete selected unit inventory passes without skip or expected failure",
-      "proofs": []
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_release_gate.py",
+          "source_sha256": "afa818ec36f6b013456e12f9ed1476c147db8b6f2e0c0af7b3486579fe79a9bc",
+          "nodeid": "tests/unit/test_gen1_release_gate.py::test_actual_pytest_reports_reject_nonpassing_outcomes[def test_case():\\n    print('999 passed')\\n    pytest.skip('allowed skip')\\n-args1-False]",
+          "assertion_basis": "Runs a real pytest subprocess with the release plugin and asserts validate_pytest_report reports problems for a skipped test even though stdout claims 999 passed (the without-skip clause of the unit inventory).",
+          "supporting_sources": {
+            "tools/verify_gen1_release.py": "c6c3eda791a035de642ca6b400fbb8166252ce9c2353689816cbbd3e7399f7c8",
+            "tools/gen1_release_pytest.py": "dc41f2aa388ba63edc0be7a4b3dc06118ef9a1d6827755a1fdcccf4ffcd5e2e5"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_release_gate.py",
+          "source_sha256": "afa818ec36f6b013456e12f9ed1476c147db8b6f2e0c0af7b3486579fe79a9bc",
+          "nodeid": "tests/unit/test_gen1_release_gate.py::test_actual_pytest_reports_reject_nonpassing_outcomes[@pytest.mark.xfail\\ndef test_case():\\n    assert False\\n-args2-False]",
+          "assertion_basis": "Real subprocess evidence for an xfail-marked test is rejected (the without-expected-failure clause).",
+          "supporting_sources": {
+            "tools/verify_gen1_release.py": "c6c3eda791a035de642ca6b400fbb8166252ce9c2353689816cbbd3e7399f7c8",
+            "tools/gen1_release_pytest.py": "dc41f2aa388ba63edc0be7a4b3dc06118ef9a1d6827755a1fdcccf4ffcd5e2e5"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_release_gate.py",
+          "source_sha256": "afa818ec36f6b013456e12f9ed1476c147db8b6f2e0c0af7b3486579fe79a9bc",
+          "nodeid": "tests/unit/test_gen1_release_gate.py::test_actual_pytest_reports_reject_nonpassing_outcomes[@pytest.mark.xfail(strict=False)\\ndef test_case():\\n    assert True\\n-args3-False]",
+          "assertion_basis": "A non-strict XPASS is rejected as evidence, so an expected-failure marker cannot pass the gate either way.",
+          "supporting_sources": {
+            "tools/verify_gen1_release.py": "c6c3eda791a035de642ca6b400fbb8166252ce9c2353689816cbbd3e7399f7c8",
+            "tools/gen1_release_pytest.py": "dc41f2aa388ba63edc0be7a4b3dc06118ef9a1d6827755a1fdcccf4ffcd5e2e5"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_release_gate.py",
+          "source_sha256": "afa818ec36f6b013456e12f9ed1476c147db8b6f2e0c0af7b3486579fe79a9bc",
+          "nodeid": "tests/unit/test_gen1_release_gate.py::test_actual_pytest_reports_reject_nonpassing_outcomes[pytest.skip('collection skip', allow_module_level=True)\\n-args5-False]",
+          "assertion_basis": "A module-level collection skip is rejected, so a selected file cannot leave the inventory by skipping itself.",
+          "supporting_sources": {
+            "tools/verify_gen1_release.py": "c6c3eda791a035de642ca6b400fbb8166252ce9c2353689816cbbd3e7399f7c8",
+            "tools/gen1_release_pytest.py": "dc41f2aa388ba63edc0be7a4b3dc06118ef9a1d6827755a1fdcccf4ffcd5e2e5"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_release_gate.py",
+          "source_sha256": "afa818ec36f6b013456e12f9ed1476c147db8b6f2e0c0af7b3486579fe79a9bc",
+          "nodeid": "tests/unit/test_gen1_release_gate.py::test_actual_pytest_reports_reject_nonpassing_outcomes[def test_case():\\n    assert True\\ndef test_omitted():\\n    assert True\\n-args6-False]",
+          "assertion_basis": "Deselecting one selected test with -k fails the report although every executed test passed (the complete-selected-inventory clause).",
+          "supporting_sources": {
+            "tools/verify_gen1_release.py": "c6c3eda791a035de642ca6b400fbb8166252ce9c2353689816cbbd3e7399f7c8",
+            "tools/gen1_release_pytest.py": "dc41f2aa388ba63edc0be7a4b3dc06118ef9a1d6827755a1fdcccf4ffcd5e2e5"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_release_gate.py",
+          "source_sha256": "afa818ec36f6b013456e12f9ed1476c147db8b6f2e0c0af7b3486579fe79a9bc",
+          "nodeid": "tests/unit/test_gen1_release_gate.py::test_expected_test_disappearance_fails_even_when_remaining_tests_pass",
+          "assertion_basis": "validate_pytest_report reports inventory drift when an expected node id is absent from a fully passing report; test_complete_current_execution_passes is the positive control. Together with the four proofs above this is the gate policy the row describes: the unit check passes only when the complete selected inventory executes with no skip or expected failure.",
+          "supporting_sources": {
+            "tools/verify_gen1_release.py": "c6c3eda791a035de642ca6b400fbb8166252ce9c2353689816cbbd3e7399f7c8"
+          }
+        }
+      ]
     },
     {
       "id": "protocol.transport",
       "stage": "unit-protocol",
       "description": "Partial receive/send offsets, queue bounds, reconnect replay and dispatcher/deferred exceptions with explicit NACK and continued processing",
-      "proofs": []
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_connector_fragmentation.py",
+          "source_sha256": "f22d85239275d4e68e6e4eaed8ce03d1dfd27b0da2c2d24dffe05a6f0c184b33",
+          "nodeid": "tests/unit/test_connector_fragmentation.py::test_each_pump_has_a_wire_budget_and_resumes_absolute_send_offsets",
+          "assertion_basis": "Drives lua/connector.lua with a socket that accepts partial sends and asserts the next pump resumes at the exact absolute byte offset (partial send offsets).",
+          "supporting_sources": {
+            "lua/connector.lua": "e4f25bcbb992df7b711db812ff92f30cd77a1e1f67604ef0976fc7f7b2b3fc7d"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_connector_fragmentation.py",
+          "source_sha256": "f22d85239275d4e68e6e4eaed8ce03d1dfd27b0da2c2d24dffe05a6f0c184b33",
+          "nodeid": "tests/unit/test_connector_fragmentation.py::test_a_line_split_across_frames_is_reassembled_whole",
+          "assertion_basis": "A line delivered across several receive fragments is reassembled exactly once (partial receive offsets).",
+          "supporting_sources": {
+            "lua/connector.lua": "e4f25bcbb992df7b711db812ff92f30cd77a1e1f67604ef0976fc7f7b2b3fc7d"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_connector_fragmentation.py",
+          "source_sha256": "f22d85239275d4e68e6e4eaed8ce03d1dfd27b0da2c2d24dffe05a6f0c184b33",
+          "nodeid": "tests/unit/test_connector_fragmentation.py::test_outbound_queue_refuses_overflow_and_recovers_after_drain",
+          "assertion_basis": "send returns false at the queue bound, nothing is dropped and sending resumes after drain; test_receive_backpressure_bounds_memory_without_losing_order covers the inbound bound (queue bounds).",
+          "supporting_sources": {
+            "lua/connector.lua": "e4f25bcbb992df7b711db812ff92f30cd77a1e1f67604ef0976fc7f7b2b3fc7d"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_runtime_server.py",
+          "source_sha256": "ae89fe5452d1512be7bac8c4e32a89184fdbb146c1046c9a7d332dbdfc55acc5",
+          "nodeid": "tests/unit/test_gen1_runtime_server.py::test_semantic_replay_survives_reconnect_without_hello_readopting_party",
+          "assertion_basis": "After close, reopen and fresh hellos, resending the original operation_id yields no new events and identical pending outboxes with the rules unchanged (reconnect replay); test_durable_dispatch.py::test_v2_operation_survives_new_session_and_server_restart_without_repeating_rules asserts the same across a new session-gate epoch.",
+          "supporting_sources": {
+            "server/gen1_runtime.py": "ba516c0f4405740b3b9a5110edbdab2cea8c2f61540829ba715419c0c6fb2970",
+            "server/protocol_journal.py": "47c28b1563bb223ebc3951b9826dff1b717fdbc57048cb73483164504588dc9f",
+            "server/protocol.py": "0e16ec251e256bcbf4fe0537e2c2ae5d05a942468104744a6c83ca09c3fcf234",
+            "server/durable_dispatch.py": "06a521e33410858f600ae32c7c61617b94af73a7f03cfb886bbf352a183bc752"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_command_validation.py",
+          "source_sha256": "03fe95a13403d0f0fd9b09a911b7164edf82cb8fe35dd2e86e06b0e482df7178",
+          "nodeid": "tests/unit/test_gen1_command_validation.py::test_an_unexpected_handler_exception_nacks_and_the_next_command_runs",
+          "assertion_basis": "Real dispatch_commands from the client: an injected handler error produces an explicit NACK and a command_nack event, and the following hud_show still executes (dispatcher exception with explicit NACK and continued processing).",
+          "supporting_sources": {
+            "lua/clients/gen1_rby_client.lua": "783f7e5458f91a91851129089c03bdaca221d295b10550ac4e03c4982e11bbd5",
+            "lua/gen1_commands.lua": "b68e75aea23d27e7bc7580b87db48e003a1dc018f4e26fbe86855405fce621f7",
+            "lua/json_codec.lua": "59766918c8fcfc4fc3d813f35aedd9ea4fcec2b964209c70af9a46ef225aa74d"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_command_validation.py",
+          "source_sha256": "03fe95a13403d0f0fd9b09a911b7164edf82cb8fe35dd2e86e06b0e482df7178",
+          "nodeid": "tests/unit/test_gen1_command_validation.py::test_validation_exceptions_are_contained_before_any_queue_mutation",
+          "assertion_basis": "An injected validator exception leaves the pending sync queue empty and writes at zero, NACKs, and the next command runs; server side, test_gen1_runtime_server.py::test_unexpected_domain_exception_nacks_and_revokes_without_partial_rules asserts NACK over real TCP with journal rules unchanged.",
+          "supporting_sources": {
+            "lua/clients/gen1_rby_client.lua": "783f7e5458f91a91851129089c03bdaca221d295b10550ac4e03c4982e11bbd5",
+            "lua/gen1_commands.lua": "b68e75aea23d27e7bc7580b87db48e003a1dc018f4e26fbe86855405fce621f7",
+            "server/gen1_runtime.py": "ba516c0f4405740b3b9a5110edbdab2cea8c2f61540829ba715419c0c6fb2970"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_client_invariants.py",
+          "source_sha256": "6d16f8cbc2fcdacb4d48bb5e0ebf26c399faf0fa6f68e042c1fcac60ef805e5a",
+          "nodeid": "tests/unit/test_client_invariants.py::test_deferred_sync_executor_is_fault_contained[gen1_rby_client.lua]",
+          "assertion_basis": "Deferred-executor exceptions: a source pin that the deferred sync executor block is wrapped in pcall, and test_gen1_nacks_a_failed_sync_command_before_dropping_it pins that its failure branch emits sync_retrieve_failed or memorialize_failed. This clause is source-pinned, not executed; the executed evidence for the row is the dispatcher-level pair above.",
+          "supporting_sources": {
+            "lua/clients/gen1_rby_client.lua": "783f7e5458f91a91851129089c03bdaca221d295b10550ac4e03c4982e11bbd5"
+          }
+        }
+      ]
     },
     {
       "id": "protocol.admission",
       "stage": "unit-protocol",
       "description": "Exact per-player final hash, profile, provenance, codec, capabilities, nonce and epoch gating before every semantic/write operation",
-      "proofs": []
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A hello whose final_rom_sha1 differs from the per-player contract is NACKed with no commands, and player identity, rom type, adapter, party caches, sessions and connected players are byte-identical before and after (exact per-player final hash).",
+          "supporting_sources": {
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/protocol.py": "0e16ec251e256bcbf4fe0537e2c2ae5d05a942468104744a6c83ca09c3fcf234"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[content_profile_hash-0000000000000000000000000000000000000000000000000000000000000000]",
+          "assertion_basis": "The same zero-mutation NACK for a wrong content profile hash; the sibling parameters content_profile_schema-old, party_codec-old and patch_version-3 cover profile, codec and provenance, capabilities-value8 and value9 cover capabilities, client_nonce-bad covers the nonce.",
+          "supporting_sources": {
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[capabilities-value8]",
+          "assertion_basis": "Capabilities that do not match the contract profile exactly are refused before any state is adopted.",
+          "supporting_sources": {
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_bad_envelopes_do_not_advance_semantic_state[change5]",
+          "assertion_basis": "An admitted player whose semantic event carries a stale admission_epoch is NACKed and the player area does not change (epoch gating before a semantic operation).",
+          "supporting_sources": {
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/protocol.py": "0e16ec251e256bcbf4fe0537e2c2ae5d05a942468104744a6c83ca09c3fcf234",
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_contract_change_revokes_both_sessions_even_before_another_hello",
+          "assertion_basis": "Rewriting rom_contract.json rotates the epoch, NACKs the in-flight event, clears both sessions and de-admits both players without a new hello.",
+          "supporting_sources": {
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_admission.py",
+          "source_sha256": "c42ad001d27f9f4fc1c819e3fadf85bc3aec34c86904236c3521e3232e64aaf8",
+          "nodeid": "tests/unit/test_gen1_admission.py::TestTheGateItself::test_a_rejected_hello_mutates_nothing_and_sends_no_write",
+          "assertion_basis": "Through SLinkServer._dispatch a rejected hello returns only noop, never queues a box_mon write, and leaves player identity, trainer names and rom type unset; the sibling test_a_non_hello_event_from_an_unadmitted_player_is_dropped asserts a capture from an unadmitted player records no pending capture or link (gating before every semantic and write operation).",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/state.py": "5db1a4d8bacfd68d9ad1780b5e3f04c0db5eeaf77c896a4e31cf2d7655fe9d13"
+          }
+        }
+      ]
     },
     {
       "id": "protocol.transactions",
       "stage": "unit-protocol",
       "description": "Durable operation IDs, session sequences, ACK/NACK, zero-mutation validation and collision checks on every key-producing operation",
-      "proofs": []
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_protocol_journal.py",
+          "source_sha256": "29c5d670f23cb7b8dcc84fca40a3fcfabb75b0ca0b8abd91f2d1ca1d7a25a28f",
+          "nodeid": "tests/unit/test_protocol_journal.py::test_duplicate_semantic_operation_replays_without_state_or_command_duplication",
+          "assertion_basis": "A repeated operation_id returns the original receipt, the revision stays at 1, outboxes are not duplicated, and reusing the id with a different payload raises JournalError (durable operation ids).",
+          "supporting_sources": {
+            "server/protocol_journal.py": "47c28b1563bb223ebc3951b9826dff1b717fdbc57048cb73483164504588dc9f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_protocol_journal.py",
+          "source_sha256": "29c5d670f23cb7b8dcc84fca40a3fcfabb75b0ca0b8abd91f2d1ca1d7a25a28f",
+          "nodeid": "tests/unit/test_protocol_journal.py::test_a_consumed_client_nonce_cannot_be_reused_after_restart_or_by_another_player",
+          "assertion_basis": "Session nonces are durable across reopen and unique per player; state and outboxes are untouched by refused registrations (session sequences).",
+          "supporting_sources": {
+            "server/protocol_journal.py": "47c28b1563bb223ebc3951b9826dff1b717fdbc57048cb73483164504588dc9f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_bad_envelopes_do_not_advance_semantic_state[change2]",
+          "assertion_basis": "A skipped seq on the live session is NACKed with no semantic change; change0 (seq reuse) and test_duplicate_retries_return_original_response_without_redispatch (an identical retry is served from the journal, a conflicting retry is NACKed, _dispatch never re-runs) complete the session-sequence clause.",
+          "supporting_sources": {
+            "server/protocol.py": "0e16ec251e256bcbf4fe0537e2c2ae5d05a942468104744a6c83ca09c3fcf234",
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_protocol_journal.py",
+          "source_sha256": "29c5d670f23cb7b8dcc84fca40a3fcfabb75b0ca0b8abd91f2d1ca1d7a25a28f",
+          "nodeid": "tests/unit/test_protocol_journal.py::test_explicit_receipts_are_durable_and_cannot_be_changed_afterward[NACK]",
+          "assertion_basis": "acknowledge persists an explicit NACK once, refuses a conflicting proof, and the pending outbox reflects it after reopen; the ACK parameter mirrors it.",
+          "supporting_sources": {
+            "server/protocol_journal.py": "47c28b1563bb223ebc3951b9826dff1b717fdbc57048cb73483164504588dc9f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_protocol_journal.py",
+          "source_sha256": "29c5d670f23cb7b8dcc84fca40a3fcfabb75b0ca0b8abd91f2d1ca1d7a25a28f",
+          "nodeid": "tests/unit/test_protocol_journal.py::test_outbox_bound_refuses_the_whole_transition_before_mutation",
+          "assertion_basis": "A refused commit leaves the snapshot state, the event lookup and both outboxes exactly as before (zero-mutation validation).",
+          "supporting_sources": {
+            "server/protocol_journal.py": "47c28b1563bb223ebc3951b9826dff1b717fdbc57048cb73483164504588dc9f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_player_scoped_rules.py",
+          "source_sha256": "6c479e05e5289c7d0b7f400a610b344d3c1baf650b3c86bd8443e18309e21c9f",
+          "nodeid": "tests/unit/test_gen1_player_scoped_rules.py::test_same_save_capture_or_key_change_collision_has_no_rule_or_command_effect",
+          "assertion_basis": "_handle_capture raises AmbiguousPhysicalKey and _handle_key_change refuses a collision on a duplicated key with the staged document unchanged; test_gen1_identity_and_collisions.py::test_a_capture_colliding_with_a_live_link_is_refused and ::test_index_entry_refuses_same_save_aliasing cover link-time and index-time collisions (collision checks on key-producing operations).",
+          "supporting_sources": {
+            "server/state.py": "5db1a4d8bacfd68d9ad1780b5e3f04c0db5eeaf77c896a4e31cf2d7655fe9d13",
+            "server/player_keys.py": "b3a24ad267f0ba2042d3dcdbf5d01913c1c407ef2b6c954b110766396a773079",
+            "server/gen1_staged_state.py": "b61ffbed8092a9ec6a9eb2d1438a451e86708fd433e2d231f3650bb9ee69663b"
+          }
+        }
+      ]
     },
     {
       "id": "protocol.server",
       "stage": "unit-protocol",
       "description": "Rule engine and persistence through actual server routes and APIs",
-      "proofs": []
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_runtime_server.py",
+          "source_sha256": "ae89fe5452d1512be7bac8c4e32a89184fdbb146c1046c9a7d332dbdfc55acc5",
+          "nodeid": "tests/unit/test_gen1_runtime_server.py::test_configured_main_server_tcp_uses_journal_route_and_closes_both_on_disconnect",
+          "assertion_basis": "Real asyncio TCP into SLinkServer.handle_client with the legacy dispatch forbidden: a faint over the wire is ACKed, the first link becomes DEAD in the rule engine, the partner receives gen1_hold, and sessions close on disconnect.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_runtime.py": "ba516c0f4405740b3b9a5110edbdab2cea8c2f61540829ba715419c0c6fb2970",
+            "server/protocol_journal.py": "47c28b1563bb223ebc3951b9826dff1b717fdbc57048cb73483164504588dc9f"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_runtime_server.py",
+          "source_sha256": "ae89fe5452d1512be7bac8c4e32a89184fdbb146c1046c9a7d332dbdfc55acc5",
+          "nodeid": "tests/unit/test_gen1_runtime_server.py::test_configured_http_reads_work_and_unbound_launch_writes_refuse",
+          "assertion_basis": "aiohttp TestClient on build_app: /api/status returns 200, /api/reset 409, /launcher/a.lua 400, and the journal snapshot is unchanged afterward (persistence through actual HTTP routes).",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_runtime.py": "ba516c0f4405740b3b9a5110edbdab2cea8c2f61540829ba715419c0c6fb2970"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_runtime_server.py",
+          "source_sha256": "ae89fe5452d1512be7bac8c4e32a89184fdbb146c1046c9a7d332dbdfc55acc5",
+          "nodeid": "tests/unit/test_gen1_runtime_server.py::test_unconfigured_durable_protocol_cannot_fall_through_legacy_tcp",
+          "assertion_basis": "Over real TCP an unconfigured durable hello is NACKed with reason code gen1_durable_runtime_unconfigured and state.to_document is unchanged.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/protocol.py": "0e16ec251e256bcbf4fe0537e2c2ae5d05a942468104744a6c83ca09c3fcf234"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_real_tcp_player_binding_oversize_resync_and_old_disconnect",
+          "assertion_basis": "Real TCP: a pre-hello event is NACKed, an oversize line is NACKed and a hello then ACKs on the same socket, a second-player hello on the wrong socket is NACKed, a replacement connection is admitted and the old close does not evict it.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_manager_http_hardening.py",
+          "source_sha256": "9a181e58bd0ecc871c0907e16b2927e0716374d19400b310a205572320d59148",
+          "nodeid": "tests/unit/test_manager_http_hardening.py::test_browser_attempts_update_crosses_manager_and_run_middlewares",
+          "assertion_basis": "A Manager POST to /api/attempts proxied into a live run app sets the attempts count and persists it to links.json; a cross-site origin gets 403 and the file bytes are unchanged (persistence through actual routes).",
+          "supporting_sources": {
+            "server/manager.py": "cad9dea7a74789af48ddf1f2c2159786e3b4d5031f0c4fd0c224ef509db8436d",
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/state.py": "5db1a4d8bacfd68d9ad1780b5e3f04c0db5eeaf77c896a4e31cf2d7655fe9d13"
+          }
+        }
+      ]
     },
     {
       "id": "protocol.dom",
@@ -374,7 +766,64 @@
       "id": "protocol.ap-regression",
       "stage": "unit-protocol",
       "description": "Existing Archipelago behavior and gates remain safe; all inherited new R/B fields nil or independently verified",
-      "proofs": []
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_legacy_hello_admission.py",
+          "source_sha256": "508d9d91e25554ae7ac76497ac423b07de0ff79621a626abe5a59134a7cae87f",
+          "nodeid": "tests/unit/test_legacy_hello_admission.py::test_recognized_gen3_and_ap_startup_keeps_existing_adapter_and_command_behavior[red_ap]",
+          "assertion_basis": "Over real TCP a red_ap hello is admitted, returns a config command, binds game_id gen1_rby with is_rr false and a later tick is accepted; the blue_ap parameter mirrors it (existing Archipelago behaviour).",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/adapters/__init__.py": "b7256ab368fff44ef1a8cf8087efbc246dacf991d5fc338135b51bf45907bf94",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_runtime_boundary.py",
+          "source_sha256": "3555d861e18f3f3e370f4c70e7db2f28d8be8f47442517ee29b9b6ede596869d",
+          "nodeid": "tests/unit/test_runtime_boundary.py::test_existing_ap_binding_does_not_inherit_rby_restrictions",
+          "assertion_basis": "operation_decision for reset stays available on a red_ap-bound server, so the vanilla-RBY handler restrictions do not leak onto Archipelago (gates remain safe).",
+          "supporting_sources": {
+            "server/runtime_boundary.py": "2026ba79d650cd0d8d6c1a83bc34a2e9c1fe4a5690994ec2a968f097a8ffa8bd",
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_staged_state.py",
+          "source_sha256": "5b6f2d8774f89ad69528a0ed40ecebb515df0b02df5b823d6050736ae22adc23",
+          "nodeid": "tests/unit/test_gen1_staged_state.py::test_other_modes_cannot_use_the_new_staged_store[red_ap]",
+          "assertion_basis": "StagedGen1State.from_live refuses a red_ap state as not vanilla RBY, keeping Archipelago on its existing persistence path.",
+          "supporting_sources": {
+            "server/gen1_staged_state.py": "b61ffbed8092a9ec6a9eb2d1438a451e86708fd433e2d231f3650bb9ee69663b"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_strict_profile_contracts.py",
+          "source_sha256": "59d42c93364a64f3e13d0421a2b95b22883a499dfb4ed51f1cea58c7aca3a7ad",
+          "nodeid": "tests/unit/test_gen1_strict_profile_contracts.py::test_future_vanilla_fields_do_not_appear_in_ap",
+          "assertion_basis": "Injecting a new field into the red profile of lua/games/gen1_rby.lua leaves it absent from the effective red_ap and blue_ap profiles (inherited new R/B fields are nil).",
+          "supporting_sources": {
+            "tools/verify_profile_addresses.py": "33035c1542728964d6b05eef3e49adee3e15b3f4de27695f0f82ce220a5380e0",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_strict_profile_contracts.py",
+          "source_sha256": "59d42c93364a64f3e13d0421a2b95b22883a499dfb4ed51f1cea58c7aca3a7ad",
+          "nodeid": "tests/unit/test_gen1_strict_profile_contracts.py::test_all_five_effective_profiles_have_only_verified_categories",
+          "assertion_basis": "Every effective field of red_ap and blue_ap has a verifier row with severity OK against the alchav_pokered symbols (independently verified); test_gen1_archipelago.py::test_ap_profile_uses_relocated_addresses pins the relocated deltas explicitly. Needs the pinned pret sources present, which the gate requires.",
+          "supporting_sources": {
+            "tools/verify_profile_addresses.py": "33035c1542728964d6b05eef3e49adee3e15b3f4de27695f0f82ce220a5380e0",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878",
+            "data/pret_syms.json": "0c6d63a29256af8f4b55254fafb8c74e728a4dea0b5452b96d690e09de014cbd"
+          }
+        }
+      ]
     },
     {
       "id": "memory.red.differential",
@@ -423,7 +872,41 @@
       "id": "memory.red.write-safe",
       "stage": "live-memory",
       "description": "Live proof of the adopted write-safe predicate; no proof keeps writes disabled",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "f902a20dfa3a2954f34cd55b748128938f5670a369cb301e6eb06b122cc28790",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_write_checkpoint[overworld-town-red]",
+          "assertion_basis": "lua/tests/test_gen1_write_safety_overworld.lua samples the production memory_gb isPartyWriteSafe predicate every frame under ROM exec hooks on Red: a positive idle candidate exists in the overworld; twelve START-menu rows with and without the Pokedex, the real Pokemon Center PC (Withdraw, Deposit, Release, ChangeBox selectors, the stats screen, the twelve-box selector), the cable-club handshake and a poison blackout each assert no non-world candidate (EnterMap, DisplayTextID, naming and PC contexts) and that a writable checkpoint is regained; reset and title never qualify. This is the live proof of the adopted write-safe predicate across the overworld, transition, menu, PC, blackout, reset and title axes.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_write_safety_overworld.lua": "7830f381752c4ec63c0775999e542dad6440734d2e1b4dc1ba996ba42f03b83f",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "866564c89d2e568f4acd537e93d75c4bbab1f30f7cafc3884a0946cd4c9e323f",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878",
+            "lua/gen1_write_safety.lua": "6c8ece193e73c14f982a0017729b461b3fc2420f0431aecc8cf298b64883dba2",
+            "lua/gen1_party_codec.lua": "fab757d7ae9f55f4ce20930acfcf947e77c89510caa7396633dca6f94af8d296",
+            "data/games/gen1_rby/gen1_party_codec_data.lua": "465b3309046a202fb08ec0bb157c6f88462075f7e087568f95459a1d20a4e352"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "f902a20dfa3a2954f34cd55b748128938f5670a369cb301e6eb06b122cc28790",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_write_checkpoint[battle-battle-red]",
+          "assertion_basis": "lua/tests/test_gen1_write_safety_battle.lua boots the Red battle fixture through CONTINUE, starts a real wild battle, captures with a Master Ball into DisplayNamingScreen and returns to the overworld; asserts that boot, battle and naming were sampled and never qualify (isPartyWriteSafe false on every sampled frame) and that positive world control qualifies. Covers the battle, naming and boot axes of the predicate.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_write_safety_battle.lua": "f5d6b49940d3b5a122b061c5fa6c3d06cdb0185931e8c8004a66af4c75ffc42b",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "lua/tests/duo/gen1_hunt.lua": "14a023492e27d4a70bff764f4573965928c79386bedf3c851d857b9fc62c9a22",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "866564c89d2e568f4acd537e93d75c4bbab1f30f7cafc3884a0946cd4c9e323f",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878",
+            "lua/gen1_write_safety.lua": "6c8ece193e73c14f982a0017729b461b3fc2420f0431aecc8cf298b64883dba2"
+          }
+        }
+      ],
       "axes": {
         "title": "red",
         "states": [
@@ -495,7 +978,41 @@
       "id": "memory.blue.write-safe",
       "stage": "live-memory",
       "description": "Live proof of the adopted write-safe predicate; no proof keeps writes disabled",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "f902a20dfa3a2954f34cd55b748128938f5670a369cb301e6eb06b122cc28790",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_write_checkpoint[overworld-town-blue]",
+          "assertion_basis": "The same lua/tests/test_gen1_write_safety_overworld.lua matrix on Blue: positive idle candidate, every START-menu row, the real PC menus, selectors, stats screen and box selector, the cable-club handshake and a blackout each assert no non-world candidate and a regained writable checkpoint; reset and title never qualify.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_write_safety_overworld.lua": "7830f381752c4ec63c0775999e542dad6440734d2e1b4dc1ba996ba42f03b83f",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "866564c89d2e568f4acd537e93d75c4bbab1f30f7cafc3884a0946cd4c9e323f",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878",
+            "lua/gen1_write_safety.lua": "6c8ece193e73c14f982a0017729b461b3fc2420f0431aecc8cf298b64883dba2",
+            "lua/gen1_party_codec.lua": "fab757d7ae9f55f4ce20930acfcf947e77c89510caa7396633dca6f94af8d296",
+            "data/games/gen1_rby/gen1_party_codec_data.lua": "465b3309046a202fb08ec0bb157c6f88462075f7e087568f95459a1d20a4e352"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "f902a20dfa3a2954f34cd55b748128938f5670a369cb301e6eb06b122cc28790",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_write_checkpoint[battle-battle-blue]",
+          "assertion_basis": "The same lua/tests/test_gen1_write_safety_battle.lua gate on Blue: boot, a real wild battle and the capture naming screen are sampled and never qualify; positive world control qualifies.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_write_safety_battle.lua": "f5d6b49940d3b5a122b061c5fa6c3d06cdb0185931e8c8004a66af4c75ffc42b",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "lua/tests/duo/gen1_hunt.lua": "14a023492e27d4a70bff764f4573965928c79386bedf3c851d857b9fc62c9a22",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "866564c89d2e568f4acd537e93d75c4bbab1f30f7cafc3884a0946cd4c9e323f",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878",
+            "lua/gen1_write_safety.lua": "6c8ece193e73c14f982a0017729b461b3fc2420f0431aecc8cf298b64883dba2"
+          }
+        }
+      ],
       "axes": {
         "title": "blue",
         "states": [
@@ -567,7 +1084,41 @@
       "id": "memory.yellow.write-safe",
       "stage": "live-memory",
       "description": "Live proof of the adopted write-safe predicate; no proof keeps writes disabled",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "f902a20dfa3a2954f34cd55b748128938f5670a369cb301e6eb06b122cc28790",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_write_checkpoint[overworld-town-yellow]",
+          "assertion_basis": "The same overworld matrix on Yellow plus the Yellow-only PrintBox row (the actual printer transmission loop is reached, closes, and a writable checkpoint is regained); every row asserts no non-world candidate, and reset and title never qualify.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_write_safety_overworld.lua": "7830f381752c4ec63c0775999e542dad6440734d2e1b4dc1ba996ba42f03b83f",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "866564c89d2e568f4acd537e93d75c4bbab1f30f7cafc3884a0946cd4c9e323f",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878",
+            "lua/gen1_write_safety.lua": "6c8ece193e73c14f982a0017729b461b3fc2420f0431aecc8cf298b64883dba2",
+            "lua/gen1_party_codec.lua": "fab757d7ae9f55f4ce20930acfcf947e77c89510caa7396633dca6f94af8d296",
+            "data/games/gen1_rby/gen1_party_codec_data.lua": "465b3309046a202fb08ec0bb157c6f88462075f7e087568f95459a1d20a4e352"
+          }
+        },
+        {
+          "check": "live-gates",
+          "source": "tests/live/test_gen1_gates.py",
+          "source_sha256": "f902a20dfa3a2954f34cd55b748128938f5670a369cb301e6eb06b122cc28790",
+          "nodeid": "tests/live/test_gen1_gates.py::test_gen1_write_checkpoint[battle-battle-yellow]",
+          "assertion_basis": "The same battle and naming gate on Yellow: boot, battle and naming are sampled and never qualify; positive world control qualifies.",
+          "supporting_sources": {
+            "lua/tests/test_gen1_write_safety_battle.lua": "f5d6b49940d3b5a122b061c5fa6c3d06cdb0185931e8c8004a66af4c75ffc42b",
+            "lua/tests/gatelib.lua": "0944afe545610c5f9aa1ded7f7384596e02028e448b9d9c18050fea9a57cd5c0",
+            "lua/tests/duo/gen1_hunt.lua": "14a023492e27d4a70bff764f4573965928c79386bedf3c851d857b9fc62c9a22",
+            "tools/run_gb_gate.py": "a18d2e61365344cf4afcd0ff657e4576be8899714c79eafc20c62c0e92616c7b",
+            "lua/memory_gb.lua": "866564c89d2e568f4acd537e93d75c4bbab1f30f7cafc3884a0946cd4c9e323f",
+            "lua/games/gen1_rby.lua": "fbeec95a968eced015b957e424004c77c68470e37a4883f51df27013f3d9d878",
+            "lua/gen1_write_safety.lua": "6c8ece193e73c14f982a0017729b461b3fc2420f0431aecc8cf298b64883dba2"
+          }
+        }
+      ],
       "axes": {
         "title": "yellow",
         "states": [
@@ -1526,7 +2077,33 @@
       "id": "contract.red.red.hello-ab",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order0-titles0]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of red (player a) and red (player b); HELLO arrives from player a then b through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "red",
         "player_b": "red",
@@ -1537,7 +2114,33 @@
       "id": "contract.red.red.hello-ba",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order1-titles0]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of red (player a) and red (player b); HELLO arrives from player b then a through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "red",
         "player_b": "red",
@@ -1548,7 +2151,33 @@
       "id": "contract.red.blue.hello-ab",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order0-titles1]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of red (player a) and blue (player b); HELLO arrives from player a then b through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "red",
         "player_b": "blue",
@@ -1559,7 +2188,33 @@
       "id": "contract.red.blue.hello-ba",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order1-titles1]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of red (player a) and blue (player b); HELLO arrives from player b then a through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "red",
         "player_b": "blue",
@@ -1570,7 +2225,33 @@
       "id": "contract.red.yellow.hello-ab",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order0-titles2]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of red (player a) and yellow (player b); HELLO arrives from player a then b through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "red",
         "player_b": "yellow",
@@ -1581,7 +2262,33 @@
       "id": "contract.red.yellow.hello-ba",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order1-titles2]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of red (player a) and yellow (player b); HELLO arrives from player b then a through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "red",
         "player_b": "yellow",
@@ -1592,7 +2299,33 @@
       "id": "contract.blue.red.hello-ab",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order0-titles3]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of blue (player a) and red (player b); HELLO arrives from player a then b through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "blue",
         "player_b": "red",
@@ -1603,7 +2336,33 @@
       "id": "contract.blue.red.hello-ba",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order1-titles3]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of blue (player a) and red (player b); HELLO arrives from player b then a through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "blue",
         "player_b": "red",
@@ -1614,7 +2373,33 @@
       "id": "contract.blue.blue.hello-ab",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order0-titles4]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of blue (player a) and blue (player b); HELLO arrives from player a then b through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "blue",
         "player_b": "blue",
@@ -1625,7 +2410,33 @@
       "id": "contract.blue.blue.hello-ba",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order1-titles4]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of blue (player a) and blue (player b); HELLO arrives from player b then a through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "blue",
         "player_b": "blue",
@@ -1636,7 +2447,33 @@
       "id": "contract.blue.yellow.hello-ab",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order0-titles5]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of blue (player a) and yellow (player b); HELLO arrives from player a then b through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "blue",
         "player_b": "yellow",
@@ -1647,7 +2484,33 @@
       "id": "contract.blue.yellow.hello-ba",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order1-titles5]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of blue (player a) and yellow (player b); HELLO arrives from player b then a through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "blue",
         "player_b": "yellow",
@@ -1658,7 +2521,33 @@
       "id": "contract.yellow.red.hello-ab",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order0-titles6]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of yellow (player a) and red (player b); HELLO arrives from player a then b through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "yellow",
         "player_b": "red",
@@ -1669,7 +2558,33 @@
       "id": "contract.yellow.red.hello-ba",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order1-titles6]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of yellow (player a) and red (player b); HELLO arrives from player b then a through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "yellow",
         "player_b": "red",
@@ -1680,7 +2595,33 @@
       "id": "contract.yellow.blue.hello-ab",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order0-titles7]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of yellow (player a) and blue (player b); HELLO arrives from player a then b through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "yellow",
         "player_b": "blue",
@@ -1691,7 +2632,33 @@
       "id": "contract.yellow.blue.hello-ba",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order1-titles7]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of yellow (player a) and blue (player b); HELLO arrives from player b then a through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "yellow",
         "player_b": "blue",
@@ -1702,7 +2669,33 @@
       "id": "contract.yellow.yellow.hello-ab",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order0-titles8]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of yellow (player a) and yellow (player b); HELLO arrives from player a then b through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "yellow",
         "player_b": "yellow",
@@ -1713,7 +2706,33 @@
       "id": "contract.yellow.yellow.hello-ba",
       "stage": "ordered-contracts",
       "description": "Deterministic admission/content/semantic/command contracts with per-player variant and final hash",
-      "proofs": [],
+      "proofs": [
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_all_ordered_title_pairs_in_both_hello_orders[order1-titles8]",
+          "assertion_basis": "A real SLinkServer is built from a rom_contract whose players are the clean admission profiles of yellow (player a) and yellow (player b); HELLO arrives from player b then a through _gen1_wire_response. Asserts: both replies ACK with one shared admission_epoch and distinct session ids; each player's connected variant and the adapter selected for it (adapter_for(p)._enc_variant) equal that player's title; a subsequent semantic area_enter from each player ACKs and sets its area; and every command issued carries that player's admission_epoch, session_id, seq and operation_id. The per-player final hash is the clean profile final_rom_sha1 carried in each HELLO (admission.cartridge_metadata); its gating is asserted by the second proof.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499",
+            "server/adapters/gen1_rby.py": "2e563edb3732afee182c8ac1df86a9727395fb1469a1b5020655e82b3daed314",
+            "tools/gen_gen1_admission_profiles.py": "a64ed6d7918cbb7d416ddd10ad64787557597ad10ab291f76c65e1b33dc9ba5b",
+            "data/games/gen1_rby/admission_profiles.json": "f15b8e0f2434f75682620f262327c5447cdb52dc5d6ad4e150edb43811d6a438"
+          }
+        },
+        {
+          "check": "unit",
+          "source": "tests/unit/test_gen1_sessions.py",
+          "source_sha256": "adee342efb027213014f4cbf5e36bd6fe274ea85ba6564a2605ec0b7ae4b044f",
+          "nodeid": "tests/unit/test_gen1_sessions.py::test_refused_hello_never_changes_rule_identity_or_cartridge_caches[final_rom_sha1-0000000000000000000000000000000000000000]",
+          "assertion_basis": "A HELLO whose final_rom_sha1 does not match the contract is refused (NACK) and leaves rule identity and the cartridge caches unchanged, so admission is gated on the exact per-player final hash.",
+          "supporting_sources": {
+            "server/server.py": "b480598a9739d7d5e1fe3d586fca8f99679c5ddec4d4a029826a3189c29630dd",
+            "server/gen1_admission.py": "32e51e4dbd0d25c442f951cb1a2e31e9a93f17a6dc4d1a588da174fcc4153499"
+          }
+        }
+      ],
       "axes": {
         "player_a": "yellow",
         "player_b": "yellow",
