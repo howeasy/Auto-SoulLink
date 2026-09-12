@@ -5133,7 +5133,9 @@
         "tests/unit/test_gen1_gift_areas.py::test_records_saved_under_a_reclassified_gift_area_keep_their_gift_meaning_on_reload",
         "tests/unit/test_gen1_gift_areas.py::test_a_new_fishing_record_stays_bare_across_repeated_reloads",
         "tests/unit/test_gen1_gift_areas.py::test_a_legacy_document_is_migrated_exactly_once",
-        "tests/unit/test_gen1_gift_areas.py::test_a_document_under_a_different_token_is_treated_as_legacy"
+        "tests/unit/test_gen1_gift_areas.py::test_a_document_under_an_unknown_token_is_refused_not_reinterpreted",
+        "tests/unit/test_gen1_gift_areas.py::test_only_a_reclassifying_adapter_stamps_the_token",
+        "tests/unit/test_gen1_gift_areas.py::test_a_pre_policy_durable_snapshot_refuses_exact_restore"
       ]
     },
     {

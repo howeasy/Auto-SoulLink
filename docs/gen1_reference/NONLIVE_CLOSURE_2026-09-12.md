@@ -75,8 +75,13 @@ gift-classified (the defect), so `SoulLinkState.load` passes its link, pending-c
 the adapter's `persisted_area` exactly once (`gift_cinnabar_island` keeps the fossil pair a gift pair; a pending
 fossil cannot pair with a rod catch); the next save stamps the token. A document carrying the current token is
 loaded as is, so a rod catch saved under the bare id stays bare across any number of reloads (round-trip tests:
-new record x3 reloads, legacy migrated once then a new bare record survives, a foreign token is legacy). Shared
-code calls the two hooks only. `tools/gen_gen1_area_map.py --check` fails on any fishable map without an area (no note path). The Super Rod
+new record x3 reloads, legacy migrated once then a new bare record survives). Only the known legacy shape (no
+token) is migratable: any other token is refused through both `from_document` and the file loader (`UnknownAreaPolicy`
+propagates; `load` never returns a fresh state in its place), and the token is stamped only when the adapter has one,
+so Gen 2 and Gen 3 documents keep their exact shape. Deliberate consequence for the durable store: a staged snapshot
+written before the policy would migrate on restore and no longer re-encode exactly, so `StagedGen1State.restore`
+refuses it (`did not restore exactly`); such a run needs a controlled migration, not a reload (negative test pinned).
+Shared code calls the two hooks only. `tools/gen_gen1_area_map.py --check` fails on any fishable map without an area (no note path). The Super Rod
 labels are derived, not hand-typed: a per-title test asserts that every area holds exactly one labelled row per
 fishing map, each label the wild floor or the map constant's tail, so a future map or decomp change cannot
 silently collapse rows. Ruff on the lane's files is clean under the default ruleset; the six findings left in

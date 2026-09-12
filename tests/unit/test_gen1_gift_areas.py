@@ -27,6 +27,7 @@ Cinnabar fossils, share a map and therefore share an area id. That is correct â€
 is ONE logical event where the two players pick independently, and they are supposed
 to pair with each other.
 """
+import copy
 import json
 import os
 import re
@@ -268,16 +269,56 @@ def test_a_legacy_document_is_migrated_exactly_once(tmp_path):
         again._save()
 
 
-def test_a_document_under_a_different_token_is_treated_as_legacy(tmp_path):
+def test_a_document_under_an_unknown_token_is_refused_not_reinterpreted(tmp_path):
+    """Only the one known legacy shape (no token) is migratable; a token this build does not
+    know was written by newer code and must not be read back under an older policy."""
     from server.state import SoulLinkState
     _legacy_document(tmp_path)
     with open(tmp_path / "links.json", encoding="utf-8") as f:
         document = json.load(f)
-    document["area_policy"] = "gen1-areas-v1"
+    document["area_policy"] = "gen1-areas-v3-something-newer"
+    with pytest.raises(ValueError, match="unknown to this build"):
+        SoulLinkState.from_document(document, data_dir=str(tmp_path), adapter=Gen1Adapter())
+    # The file loader swallows most load errors into a fresh state; this one must propagate,
+    # or an unreadable run would come back empty and lose its gameplay.
     with open(tmp_path / "links.json", "w", encoding="utf-8") as f:
         json.dump(document, f)
-    reloaded = SoulLinkState.load(data_dir=str(tmp_path), adapter=Gen1Adapter())
-    assert [link.area_id for link in reloaded.links] == ["gift_cinnabar_island"]
+    with pytest.raises(ValueError, match="unknown to this build"):
+        SoulLinkState.load(data_dir=str(tmp_path), adapter=Gen1Adapter())
+
+
+def test_only_a_reclassifying_adapter_stamps_the_token():
+    """Gen 2 and Gen 3 documents keep their exact shape: no area_policy key at all."""
+    from server.adapters import get_adapter
+    from server.state import SoulLinkState
+    assert "area_policy" in SoulLinkState(adapter=Gen1Adapter()).to_document()
+    for game_id in ("gen2_crystal", "gen3_frlge"):
+        assert "area_policy" not in SoulLinkState(adapter=get_adapter(game_id)).to_document()
+
+
+def test_a_pre_policy_durable_snapshot_refuses_exact_restore(tmp_path):
+    """Deliberate: the staged (durable) store restores a document and requires it to
+    re-encode exactly. A snapshot from before the area policy would migrate on restore and
+    gain the token, so it does not re-encode exactly and is refused, never silently
+    reinterpreted; such a run needs a controlled migration, not a reload."""
+    from server.gen1_staged_state import StagedGen1State
+    from server.protocol_journal import JournalError
+    from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo, SoulLinkState
+    live = SoulLinkState(data_dir=str(tmp_path), adapter=Gen1Adapter())
+    link = LinkEntry(area_id="cinnabar_island",
+                     a=MonInfo(key="AABB:30B8:AA", level=30, species=138),
+                     b=MonInfo(key="CCDD:7B0B:AB", level=30, species=140),
+                     status=LinkStatus.ALIVE)
+    live.links.append(link)
+    live._index_entry(link)
+    live.area_states["cinnabar_island"] = AreaStatus.LINKED
+    live.pokeballs_obtained = {"a": True, "b": True}
+    document = StagedGen1State.from_live(live, {"retired_pairs": []}).document()
+    assert StagedGen1State.restore(document, data_dir=str(tmp_path)).document() == document
+    legacy = copy.deepcopy(document)
+    del legacy["core"]["area_policy"]
+    with pytest.raises(JournalError, match="did not restore exactly"):
+        StagedGen1State.restore(legacy, data_dir=str(tmp_path))
 
 
 def test_records_saved_under_a_reclassified_gift_area_keep_their_gift_meaning_on_reload(tmp_path):
