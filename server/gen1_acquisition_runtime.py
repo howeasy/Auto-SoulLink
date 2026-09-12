@@ -25,7 +25,7 @@ from server.gen1_starter_settlement import context as identity_context
 from server.identity_registry import IdentityWitness
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier
-from server.state import LinkStatus, MonInfo
+from server.state import DEATH_COMMANDS, LinkStatus, MonInfo
 
 COMPONENT = 'gen1-acquisition-settlement'
 ORDINALS = 'gen1-acquisition-ordinals'
@@ -312,9 +312,17 @@ def _decide_through_engine(rules, player, area, mon, stable, *, exempt):
             violation = list(found)
     masks = copy.deepcopy(rules.party_keys)
     activated = dict(rules.pokeballs_obtained)
-    rules.handle_event(player, capture_event(key=mon.key, area_id=area, species_id=mon.species, level=mon.level,
-                                             nickname=mon.nickname or "", gift=False,
-                                             in_box=stable["location"] == "box"))
+    own = rules.handle_event(player, capture_event(key=mon.key, area_id=area, species_id=mon.species, level=mon.level,
+                                                   nickname=mon.nickname or "", gift=False,
+                                                   in_box=stable["location"] == "box"))
+    # handle_event returns the caller's own queue (state.py:403-411), so the captured key's death command
+    # is read there, never from queued_commands[player].
+    if violation is None and any(c.get("cmd") in DEATH_COMMANDS and c.get("key") == mon.key for c in own):
+        # The engine's own pre-check rejects a single half before it pends (the family already sits in an
+        # alive link or a pending capture elsewhere, _handle_capture): the death command for the captured
+        # key is its universal rejection signal, and the consequence is the pair path's (hold, retry area,
+        # memorial obligation kept); it never reaches _check_link_violation, so the text is a stable one.
+        violation = [f"Species clause: {rules.adapter.species_name(mon.species)} family already held", ""]
     rules.queued_commands = {"a": [], "b": []}
     rules.party_keys = masks
     rules.pokeballs_obtained = activated

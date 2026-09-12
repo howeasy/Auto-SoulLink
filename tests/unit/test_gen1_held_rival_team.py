@@ -249,6 +249,10 @@ def test_exact_rival_swap_gets_a_held_write_and_faults_are_refused(tmp_path):
         document = server.state().document()
         proof = rival.verify("a", command, evidence, document, binding)
         assert isinstance(proof, VerifiedHeldWrite) and proof.scope["phase"] == "replace_rival_team"
+        # The held-write entry point (gen1_run_config verify_operation_execution) dispatches the swap here.
+        from server.gen1_held_faint import verify as held_verify
+        dispatched = held_verify("a", command, evidence, document, binding)
+        assert isinstance(dispatched, VerifiedHeldWrite) and dict(dispatched.scope) == dict(proof.scope)
         executor.apply(request, wire(g, intent))
         after = plain(g, executor.image(request))
         assert after["image_hex"] == rival.expected_image(partner)
@@ -271,8 +275,37 @@ def test_exact_rival_swap_gets_a_held_write_and_faults_are_refused(tmp_path):
                 bad["schema"] = "rby-held-faint-evidence-v1"
             with pytest.raises(JournalError):
                 rival.verify("a", cmd, bad, document, binding)
+            with pytest.raises(JournalError):
+                held_verify("a", cmd, bad, document, binding)
     finally:
         server.close()
+
+
+def test_receipt_policy_settles_the_rival_swap_ack_by_its_readback():
+    """The durable dispatcher's receipt callback (gen1_command_receipts.Gen1ReceiptPolicy) verifies the
+    swap ACK with verify_rival_team_receipt and raises no rule follow-up: the swap is informational."""
+    from types import SimpleNamespace
+
+    from server.gen1_command_receipts import Gen1ReceiptPolicy
+
+    policy = Gen1ReceiptPolicy({"a": "red", "b": "red"})
+    command, rows = body("red")
+    receipt = {"schema": rival.RECEIPT, "trainer_id": RIVAL,
+               "before": {"count": 3, "species_list": [1, 2, 3, 255], "image_hex": "00" * (67 * 2 + 2)},
+               "after": {"count": 2, "species_list": [rows[0][0], rows[1][0], 255], "image_hex": rival.expected_image(rows)}}
+    journal_command = {"command_id": "a" * 32, "command_sequence": 1, "body": command}
+
+    def ack(value):
+        event = {"event": "command_ack", "command_id": "a" * 32, "command_sequence": 1, "outcome": "ACK", "receipt": value}
+        return policy("a", journal_command, event, SimpleNamespace(player_identity={}))
+
+    assert ack(receipt) == []
+    tampered = copy.deepcopy(receipt)
+    tampered["after"]["species_list"][0] ^= 1
+    with pytest.raises(JournalError):
+        ack(tampered)
+    with pytest.raises(JournalError):
+        ack({"schema": "gen1-force-faint-receipt-v1", "before": receipt["before"], "after": receipt["after"]})
 
 
 def test_composed_held_faint_dispatches_the_swap_under_the_one_use_permit(runtime):  # noqa: F811

@@ -3,9 +3,13 @@ import json
 from pathlib import Path
 
 from server.admission_context import same_admitted_context
-from server.operation_scope import command_scope
+from server.gen1_command_receipts import (
+    RECEIPT_SCHEMAS,
+    validate_party_snapshot,
+    verify_force_faint,
+)
 from server.held_write_permit import VerifiedHeldWrite
-from server.gen1_command_receipts import verify_force_faint, validate_party_snapshot
+from server.operation_scope import command_scope
 from server.protocol import digest
 from server.protocol_journal import JournalError
 
@@ -18,7 +22,7 @@ def verify_checkpoint(point,variant):
     profile=PROFILES[variant];p=profile['write_safe'];sp=point['sp']
     if type(point['pc']) is not int or point['pc']!=p['irq_vector'] or type(sp) is not int or not p['stack_min']<=sp<=p['stack_end']-3:
         raise JournalError('held CPU is not at the qualified overworld checkpoint')
-    rom={};system={}
+    rom={}
     def instruction(addr,op,target):
         for i,value in enumerate((op,target&255,target>>8)):rom[str(addr+i)]=value
     instruction(p['irq_vector'],0xC3,p['vblank_entry'])
@@ -54,7 +58,13 @@ def verify(player,command,evidence,state,binding):
     if body.get('cmd')=='storage_apply':
         from server.gen1_storage_runtime import verify_operation
         return verify_operation(player,command,evidence,state,binding)
-    if body.get('cmd')!='force_faint' or 'death_id' not in body:return None
+    if body.get('cmd')=='replace_rival_team':
+        from server.gen1_held_rival_team import verify as verify_rival_team
+        return verify_rival_team(player,command,evidence,state,binding)
+    # force_explode at the verified overworld checkpoint is the faint write (the in-battle form is the
+    # rby-battle-force-explode instruction binding, battle_force_authority); only the receipt schema
+    # and the permit phase name the command.
+    if body.get('cmd') not in RECEIPT_SCHEMAS or 'death_id' not in body:return None
     if not isinstance(evidence,dict) or set(evidence)!={'schema','command_id','command_sequence','context_generation',
             'final_sha1','host','checkpoint','intent','current'} or evidence['schema']!=SCHEMA:
         raise JournalError('complete held faint evidence required')
@@ -72,7 +82,7 @@ def verify(player,command,evidence,state,binding):
         raise JournalError('held faint may only write the verified overworld party slot')
     validate_party_snapshot(evidence['current'],variant=variant)
     if evidence['current'] not in (intent['before'],intent['after']):raise JournalError('faint readback diverged from prepared intent')
-    return VerifiedHeldWrite(command_scope(command,binding,phase='force_faint'),digest(evidence),1000,digest(state))
+    return VerifiedHeldWrite(command_scope(command,binding,phase=body['cmd']),digest(evidence),1000,digest(state))
 
 
 def verify_owned_host(player,command,evidence,state,binding,*,historical=False):

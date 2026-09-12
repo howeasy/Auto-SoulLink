@@ -9,9 +9,11 @@ function M.handles(body)
     return type(body)=="table"and(body.cmd=="initial_save"or type(body.job_id)=="string"
         and(body.cmd=="storage_observe"or body.cmd=="storage_apply")or type(body.acquisition_id)=="string"
         and(body.cmd=="retirement_observe"or body.cmd=="acquisition_retire")or type(body.death_id)=="string"
-        and(body.cmd=="force_faint"or body.cmd=="memorialize"or body.cmd=="memorial_observe")or Rival.handles(body))
+        and(body.cmd=="force_faint"or body.cmd=="force_explode"or body.cmd=="memorialize"or body.cmd=="memorial_observe")or Rival.handles(body))
 end
 local function is_read(body)return body.cmd=="memorial_observe"or body.cmd=="retirement_observe"or body.cmd=="storage_observe"end
+local function is_death(body)return body.cmd=="force_faint"or body.cmd=="force_explode"end
+local EXPLODE_RECEIPT="gen1-force-explode-receipt-v1"  -- server: gen1_command_receipts.RECEIPT_SCHEMAS
 local function copy(v)return assert(JSON.decode(assert(JSON.encode(v))))end
 local function same(a,b)return Canonical.encode(a)==Canonical.encode(b)end
 function M.new(options)
@@ -47,6 +49,18 @@ function M.new(options)
         return safe()
     end
     local adapter=require("gen1_force_faint_executor").new(mem,options.variant,owned().save_identity,safe)
+    -- force_explode at the verified overworld checkpoint is the faint write (gen3_frlge_client.lua:790-796,
+    -- gen1_rby_client.lua:322-334 do the same out of battle): the faint executor sees a force_faint body,
+    -- the receipt names force_explode so the server settles that command and no other.
+    local explode={}
+    for _,name in ipairs({"prepare","classify","apply","receipt"})do
+        explode[name]=function(body,...)
+            local faint=copy(body);faint.cmd="force_faint"
+            local result,why=adapter[name](faint,...)
+            if name=="receipt" and result then result.schema=EXPLODE_RECEIPT end
+            return result,why
+        end
+    end
     local memorial=require("gen1_held_memorial").new({memory=mem,variant=options.variant,owned=owned,host=host,
         safe=safe,sha=sha,saveram_path=options.saveram_path,saveram_directory=options.saveram_directory,
         permitted=function()return permit:valid()==true and permit:status().used end})
@@ -69,6 +83,7 @@ function M.new(options)
     local function selected(body)
         if Rival.handles(body)then return rival end
         if body.cmd=="force_faint"then return adapter end
+        if body.cmd=="force_explode"then return explode end
         if body.cmd=="acquisition_retire"or body.cmd=="retirement_observe"then return retirement end
         if body.cmd=="storage_apply"or body.cmd=="storage_observe"then return storage end
         return body.cmd=="initial_save" and initial or memorial
@@ -139,12 +154,12 @@ function M.new(options)
             local selected=scope()
             if not selected or not control.admitted or not control.held or not safe()then return nil end
             local entry=self.current;local status=host.status()
-            local evidence={schema=Rival.handles(entry.body) and Rival.EVIDENCE or entry.body.cmd=="force_faint" and "rby-held-faint-evidence-v1" or (entry.body.cmd=="initial_save" and "rby-held-initial-save-evidence-v1" or entry.body.cmd=="acquisition_retire"and"rby-held-retirement-evidence-v1"or entry.body.cmd=="storage_apply"and"rby-held-storage-evidence-v1"or "rby-held-memorial-evidence-v1"),command_id=entry.command_id,command_sequence=entry.command_sequence,
+            local evidence={schema=Rival.handles(entry.body) and Rival.EVIDENCE or is_death(entry.body) and "rby-held-faint-evidence-v1" or (entry.body.cmd=="initial_save" and "rby-held-initial-save-evidence-v1" or entry.body.cmd=="acquisition_retire"and"rby-held-retirement-evidence-v1"or entry.body.cmd=="storage_apply"and"rby-held-storage-evidence-v1"or "rby-held-memorial-evidence-v1"),command_id=entry.command_id,command_sequence=entry.command_sequence,
                 context_generation=owned().context_generation,final_sha1=gameinfo.getromhash():lower(),
                 host={owner_id=status.owner_id,capability_id=status.capability_id,process_id=status.process_id,
                     frame=emu.framecount(),held=status.physical_stop_verified==true},
                 checkpoint=Rival.handles(entry.body) and rival.checkpoint(entry.body) or require("gen1_write_checkpoint").capture(mem.profile),intent=copy(entry.intent),
-                current=Rival.handles(entry.body) and rival.image(entry.body) or entry.body.cmd=="force_faint" and assert(Receipts.party_snapshot(mem,options.variant)) or current_point}
+                current=Rival.handles(entry.body) and rival.image(entry.body) or is_death(entry.body) and assert(Receipts.party_snapshot(mem,options.variant)) or current_point}
             if is_image(entry.body)then evidence.phase=self.memorial_phase or phases(entry.body).apply end
             self.pending_proof=sha(evidence);self.pending_request=assert(permit:challenge())
             self.pending_sequence=entry.command_sequence

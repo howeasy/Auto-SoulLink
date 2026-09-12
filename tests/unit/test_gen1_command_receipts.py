@@ -7,7 +7,9 @@ from lupa import LuaRuntime
 
 from server.gen1_command_receipts import (
     RECEIPT_SCHEMA,
+    RECEIPT_SCHEMAS,
     SCHEMA,
+    Gen1ReceiptPolicy,
     validate_party_snapshot,
     verify_force_faint,
     verify_force_faint_receipt,
@@ -147,6 +149,61 @@ def test_valid_blobs_cannot_hide_incomplete_or_unrelated_physical_changes(receip
     validate_party_snapshot(after, variant="yellow")
     with pytest.raises(JournalError):
         verify_force_faint(command, before, after, variant="yellow", identity=IDENTITY)
+
+
+def fainted(before, slot):
+    after = copy.deepcopy(before)
+    raw = bytearray.fromhex(after["party"][slot])
+    raw[1:3] = b"\0\0"
+    after["party"][slot] = raw.hex().upper()
+    return after
+
+
+def test_death_receipts_name_the_command_they_close():
+    """Both engine death commands are the same overworld party write; the receipt schema says which
+    obligation it closes, and a receipt of the other kind is refused for that command."""
+    from server.state import DEATH_COMMANDS
+
+    assert set(RECEIPT_SCHEMAS) == set(DEATH_COMMANDS) and RECEIPT_SCHEMAS["force_faint"] == RECEIPT_SCHEMA
+    before = snapshot("red")
+    after = fainted(before, 1)
+    command = command_for(before, 1)
+    for cmd, schema in RECEIPT_SCHEMAS.items():
+        body = {**command, "cmd": cmd}
+        receipt = {"schema": schema, "before": before, "after": after}
+        assert verify_force_faint_receipt(body, receipt, variant="red", identity=IDENTITY) == {"key": command["key"], "slot": 1}
+        other = next(value for value in RECEIPT_SCHEMAS.values() if value != schema)
+        with pytest.raises(JournalError, match="versioned force-faint receipt"):
+            verify_force_faint_receipt(body, {**receipt, "schema": other}, variant="red", identity=IDENTITY)
+    with pytest.raises(JournalError):
+        verify_force_faint_receipt({**command, "cmd": "memorialize"}, {"schema": RECEIPT_SCHEMA, "before": before, "after": after},
+                                   variant="red", identity=IDENTITY)
+
+
+def test_receipt_policy_accepts_exactly_the_executor_shapes():
+    from types import SimpleNamespace
+
+    policy = Gen1ReceiptPolicy({"a": "red", "b": "yellow"})
+    state = SimpleNamespace(player_identity={"b": dict(IDENTITY)})
+    before = snapshot("yellow")
+    after = fainted(before, 0)
+    command = command_for(before, 0)
+
+    def ack(body, receipt, outcome="ACK"):
+        journal_command = {"command_id": "a" * 32, "command_sequence": 1, "body": body}
+        event = {"event": "command_ack", "command_id": "a" * 32, "command_sequence": 1, "outcome": outcome, "receipt": receipt}
+        return policy("b", journal_command, event, state)
+
+    for cmd, schema in RECEIPT_SCHEMAS.items():
+        body = {**command, "cmd": cmd, "nickname": "", "death_id": "d" * 32}
+        assert ack(body, {"schema": schema, "before": before, "after": after}) == []
+        other = next(value for value in RECEIPT_SCHEMAS.values() if value != schema)
+        with pytest.raises(JournalError):
+            ack(body, {"schema": other, "before": before, "after": after})
+        with pytest.raises(JournalError, match="explicit physical ACK"):
+            ack(body, {"schema": schema, "before": before, "after": after}, outcome="NACK")
+    with pytest.raises(JournalError, match="no verified RBY receipt policy"):
+        ack({"cmd": "memorialize", "key": command["key"], "death_id": "d" * 32}, {"schema": RECEIPT_SCHEMA, "before": before, "after": after})
 
 
 def bind_memory(lua, variant):

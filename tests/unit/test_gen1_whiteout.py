@@ -146,13 +146,17 @@ def test_faint_before_ball_activation_records_no_whiteout(tmp_path):
         runtime.close()
 
 
-@pytest.mark.parametrize("fault", ["area", "death", "keys"])
-def test_tampered_whiteout_records_are_refused(tmp_path, fault):
+@pytest.mark.parametrize("fault,message", [("area", "whiteout record differs"), ("death", "whiteout|recovery holds"),
+                                           ("keys", "incomplete whiteout record")])
+def test_tampered_whiteout_records_are_refused_by_the_state_aggregate(tmp_path, fault, message):
+    """Gen1RuntimeState runs gen1_whiteout.verify_state next to the faint verifier, so a tampered record
+    never restores (the area and shape faults are caught by nothing else)."""
     runtime = create_runtime(tmp_path, contract("blue", "blue"))
     try:
         owners = paired(runtime)
         deliver(runtime, "a", owners["a"], signal_batch(runtime, "a"))
         document = copy.deepcopy(runtime.state().document())
+        Gen1RuntimeState.restore(document, data_dir=tmp_path)
         whiteout_id, record = next(iter(document["components"][wo.COMPONENT].items()))
         if fault == "area":
             record["area_id"] = "route_1"
@@ -160,7 +164,7 @@ def test_tampered_whiteout_records_are_refused(tmp_path, fault):
             document["components"][FAINT]["deaths"].pop(whiteout_id)
         else:
             record["extra"] = True
-        with pytest.raises(JournalError):
-            wo.verify_state(Gen1RuntimeState.restore(document, data_dir=tmp_path))
+        with pytest.raises(JournalError, match=message):
+            Gen1RuntimeState.restore(document, data_dir=tmp_path)
     finally:
         runtime.close()

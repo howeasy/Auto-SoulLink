@@ -12,6 +12,10 @@ from server.protocol_journal import JournalError
 
 SCHEMA = "gen1-party-readback-v1"
 RECEIPT_SCHEMA = "gen1-force-faint-receipt-v1"
+# Both engine death commands (state.DEATH_COMMANDS) are the same party write at an overworld
+# checkpoint (gen3_frlge_client.lua:790-796 does exactly that out of battle); the receipt's schema
+# names the command it closes, so a force_explode obligation can only be settled by its own receipt.
+RECEIPT_SCHEMAS = {"force_faint": RECEIPT_SCHEMA, "force_explode": "gen1-force-explode-receipt-v1"}
 FIELDS = {"schema", "variant", "save_id", "save_name", "party_count", "party",
           "species_list", "battle_flag", "active_slot", "battle_hp"}
 
@@ -57,7 +61,7 @@ def validate_party_snapshot(snapshot, *, variant):
 
 
 def verify_force_faint(command, before, after, *, variant, identity):
-    if not isinstance(command, dict) or command.get("cmd") != "force_faint":
+    if not isinstance(command, dict) or command.get("cmd") not in RECEIPT_SCHEMAS:
         raise JournalError("force-faint receipt has the wrong command")
     pre = validate_party_snapshot(before, variant=variant)
     post = validate_party_snapshot(after, variant=variant)
@@ -89,8 +93,9 @@ def verify_force_faint(command, before, after, *, variant, identity):
 
 
 def verify_force_faint_receipt(command, receipt, *, variant, identity):
+    expected = RECEIPT_SCHEMAS.get(command.get("cmd")) if isinstance(command, dict) else None
     if (not isinstance(receipt, dict) or set(receipt) != {"schema", "before", "after"}
-            or receipt.get("schema") != RECEIPT_SCHEMA):
+            or expected is None or receipt.get("schema") != expected):
         raise JournalError("versioned force-faint receipt required")
     return verify_force_faint(command, receipt["before"], receipt["after"], variant=variant, identity=identity)
 
@@ -98,7 +103,8 @@ def verify_force_faint_receipt(command, receipt, *, variant, identity):
 class Gen1ReceiptPolicy:
     """Receiver-specific physical proof callback for the staged dispatcher.
 
-    Only force_faint ACK has a complete policy here. Other commands and terminal
+    The death commands (force_faint, force_explode as the overworld faint write) and
+    replace_rival_team ACKs have complete policies here. Other commands and terminal
     NACKs require their own proved no-effect/compensation rules before activation.
     The authoritative command comes from the journal, not from the ACK payload.
     """
@@ -116,7 +122,14 @@ class Gen1ReceiptPolicy:
         if not isinstance(command, dict) or not isinstance(command.get("body"), dict):
             raise JournalError("authoritative journal command required")
         body = command["body"]
-        if body.get("cmd") != "force_faint":
+        if body.get("cmd") == "replace_rival_team":
+            # Lazy: gen1_held_rival_team imports gen1_held_faint, which imports this module.
+            from server.gen1_held_rival_team import verify_rival_team_receipt
+
+            # The swap is informational to the rules (state._handle_rival_team_replaced only logs).
+            verify_rival_team_receipt(body, event.get("receipt"), variant=self._variants[player])
+            return []
+        if body.get("cmd") not in RECEIPT_SCHEMAS:
             raise JournalError("command has no verified RBY receipt policy")
         verify_force_faint_receipt(body, event.get("receipt"), variant=self._variants[player],
                                    identity=getattr(state,'rules',state).player_identity.get(player))

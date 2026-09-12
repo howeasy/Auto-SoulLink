@@ -112,7 +112,10 @@ class Gen1RuntimeState:
         verify_bootstrap(self)
         from server.gen1_initial_save_runtime import verify_state as verify_initial_save
         verify_initial_save(self)
-        from server.gen1_native_frame_accounting import validate_ledger, validate_state as verify_native_frames
+        from server.gen1_native_frame_accounting import (
+            validate_ledger,
+            validate_state as verify_native_frames,
+        )
         validate_ledger(self.document())
         verify_native_frames(self.document())
         from server.gen1_engine_signal_runtime import verify_state as verify_signals
@@ -121,13 +124,18 @@ class Gen1RuntimeState:
         verify_starters(self)
         from server.gen1_faint_runtime import verify_state as verify_faints
         verify_faints(self)
+        from server.gen1_whiteout import verify_state as verify_whiteouts
+        verify_whiteouts(self)
         from server.gen1_memorial_runtime import verify_state as verify_memorials
         verify_memorials(self)
         from server.gen1_acquisition_runtime import verify_state as verify_acquisitions
         verify_acquisitions(self)
         from server.gen1_native_observation import verify_state as verify_native_observations
         verify_native_observations(self)
-        from server.gen1_static_lifecycle import verify_state as verify_statics, COMPONENT as STATICS
+        from server.gen1_static_lifecycle import (
+            COMPONENT as STATICS,
+            verify_state as verify_statics,
+        )
         verify_statics(self._document['components'].get(STATICS, {}))
         from server.gen1_static_lifecycle import HOLD_REASON as STATIC_HOLD, held_blockers
         if {k: v for k, v in self.barrier.document()['blockers'].items() if v == STATIC_HOLD} != held_blockers(self._document):

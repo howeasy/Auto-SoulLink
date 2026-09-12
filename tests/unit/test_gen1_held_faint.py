@@ -1,13 +1,14 @@
 import copy
 from itertools import product
+
 import pytest
 
-from server.gen1_held_faint import PROFILES, verify, verify_checkpoint, SCHEMA
+from server.gen1_held_faint import PROFILES, SCHEMA, verify, verify_checkpoint
 from server.gen1_run_config import create_runtime
 from server.held_write_permit import VerifiedHeldWrite
 from server.protocol_journal import JournalError
-from tests.unit.test_gen1_faint_runtime import paired, signal_batch, acknowledgement
 from tests.unit.test_gen1_engine_signal_runtime import deliver
+from tests.unit.test_gen1_faint_runtime import acknowledgement, paired, signal_batch
 from tests.unit.test_gen1_sessions import contract
 
 
@@ -37,22 +38,28 @@ def evidence(runtime,command):
         'current':receipt['before']}
 
 
+@pytest.mark.parametrize('cmd',['force_faint','force_explode'])
 @pytest.mark.parametrize('variants',list(product(('red','blue','yellow'),repeat=2)))
-def test_exact_held_death_command_gets_no_frame_authority(tmp_path,variants):
-    runtime=create_runtime(tmp_path,contract(*variants))
+def test_exact_held_death_command_gets_no_frame_authority(tmp_path,variants,cmd):
+    """Under Explode Mode the engine selects force_explode (state._propagate_faint); at the verified
+    overworld checkpoint it is the same faint write, so the same evidence earns the permit and only the
+    scope phase names the command."""
+    runtime=create_runtime(tmp_path,contract(*variants),rule_options={'explode_mode':cmd=='force_explode'})
     try:
         owners=paired(runtime);deliver(runtime,'a',owners['a'],signal_batch(runtime,'a'))
         command=runtime.journal.command('b',runtime.journal.pending_ids('b')[0]);value=evidence(runtime,command)
+        assert command['body']['cmd']==cmd
         proof=verify('b',command,value,runtime.state().document(),runtime.gate.sessions['b'].metadata['control_binding'])
-        assert isinstance(proof,VerifiedHeldWrite) and not hasattr(proof,'frames')
+        assert isinstance(proof,VerifiedHeldWrite) and not hasattr(proof,'frames') and proof.scope['phase']==cmd
         value['current']=value['intent']['after']
         assert isinstance(verify('b',command,value,runtime.state().document(),runtime.gate.sessions['b'].metadata['control_binding']),VerifiedHeldWrite)
     finally:runtime.close()
 
 
+@pytest.mark.parametrize('cmd',['force_faint','force_explode'])
 @pytest.mark.parametrize('fault',['frame','host','intent','body','context','checkpoint','battle'])
-def test_changed_physical_or_command_evidence_refuses_permission(tmp_path,fault):
-    runtime=create_runtime(tmp_path,contract('yellow','yellow'))
+def test_changed_physical_or_command_evidence_refuses_permission(tmp_path,fault,cmd):
+    runtime=create_runtime(tmp_path,contract('yellow','yellow'),rule_options={'explode_mode':cmd=='force_explode'})
     try:
         owners=paired(runtime);deliver(runtime,'a',owners['a'],signal_batch(runtime,'a'))
         cmd=runtime.journal.command('b',runtime.journal.pending_ids('b')[0]);value=evidence(runtime,cmd)
@@ -78,5 +85,5 @@ def test_all_checkpoint_reads_are_required_and_tampering_is_rejected(variant):
 
 
 def test_server_checkpoint_artifact_matches_the_qualified_client_profiles():
-    from tools.gen_gen1_write_checkpoint import generate, OUTPUT
+    from tools.gen_gen1_write_checkpoint import OUTPUT, generate
     assert OUTPUT.read_text()==generate()

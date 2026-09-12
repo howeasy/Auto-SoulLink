@@ -264,6 +264,56 @@ def test_game_corner_purchases_pair_by_ordinal_and_the_same_prize_on_both_sides_
         reopened.close()
 
 
+def test_engine_precheck_rejection_of_a_single_half_is_recorded_as_a_violation_with_its_hold(tmp_path):
+    """b's first purchase (Dratini) links with a's first (Abra). a's second purchase is another Dratini:
+    no partner half pends on its ordinal area, but the engine's own species pre-check finds the family in
+    the alive link and rejects the half before it pends (_handle_capture queues force_faint + memorialize
+    and returns). The settled row records the violation, the constraint hold, the retry area and the
+    consumed ordinal exactly as the pair path does; the memorial obligation stays, as it does there."""
+    runtime = create_runtime(tmp_path, contract("red", "red"), rule_options={"species_lock": True})
+    try:
+        codec = PartyCodec("red")
+        prizes = {0: (0x94, 9), 3: (0x58, 18)}  # Abra, Dratini
+        purchases = {"b": [(3, 0x3333)], "a": [(0, 0x1111), (3, 0x2222)]}
+        enrolled = {player: enroll(runtime, player) for player in ("a", "b")}
+        for player in ("b", "a"):  # b first, so a's second half meets an ALIVE link rather than a pending half
+            owner, initial, first = enrolled[player]
+            observe(runtime, player, [grant(runtime, player, "grant:game_corner_purchase:0", slot=slot, dv=dv)
+                                      for slot, dv in purchases[player]], 1)
+            stable = [fresh(codec, *prizes[slot], dv=dv, ot_id=0) for slot, dv in purchases[player]]
+            checkpoint(runtime, player, owner, initial, first, party_point("red", stable)["fields"]["party"])
+            observe(runtime, player, [], 2)
+        state = runtime.state()
+        document = state.document()
+        core = document["rules"]["core"]
+        first_area, second_area = "grant:game_corner_purchase#1", "grant:game_corner_purchase#2"
+        assert document["components"][ORDINALS] == {"grant:game_corner_purchase": {"a": 2, "b": 1}}
+        linked, rejected = entry(runtime, "a")["settled"]
+        assert linked["area"] == first_area and linked["violation"] is None
+        assert [(link["area_id"], link["status"]) for link in core["links"]] == [(first_area, LinkStatus.ALIVE.value)]
+        assert rejected["area"] == second_area and rejected["rule"] == "exempt_grant" and rejected["link_id"] is None
+        assert rejected["violation"][0].startswith("Species clause") and rejected["violation"][1] == ""
+        assert second_area not in core["pending_captures"] and second_area in core["retry_areas"]["a"]
+        assert rejected["fact"]["key"] in core["pending_memorials"]["a"]
+        assert rejected["fact"]["key"] not in document["rules"]["runtime"]["party_keys"]["a"]
+        assert not any(document["rules"]["runtime"]["queued_commands"].values())
+        holds = {key for key, reason in state.barrier.document()["blockers"].items() if reason == CONSTRAINT_REASON}
+        assert holds == {constraint_id("a", rejected["acquisition_id"])}
+        verify_state(state)
+        verify_journal(runtime.journal, state)
+        saved = document["components"][COMPONENT]
+    finally:
+        runtime.close()
+    reopened = open_runtime(tmp_path)
+    try:
+        stage = reopened.state()
+        assert stage.document()["components"][COMPONENT] == saved
+        verify_state(stage)
+        verify_journal(reopened.journal, stage)
+    finally:
+        reopened.close()
+
+
 @pytest.mark.parametrize("fault", ["sequence", "context", "repeat_key", "unknown_source", "malformed_row", "too_many"])
 def test_hostile_observations_commit_nothing(tmp_path, fault):
     runtime = create_runtime(tmp_path, contract("yellow", "yellow"))
