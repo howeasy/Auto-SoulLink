@@ -256,6 +256,58 @@ def test_deliberate_empty_batch_updates_only_the_baseline(runtime):  # noqa: F81
     assert accepted(lua.globals().journal.append(lua.globals().journal, None, lua.eval("{}"))) is None
 
 
+def test_large_nonempty_append_is_durable_and_detached_despite_equal_baseline(runtime):  # noqa: F811
+    lua = runtime
+    start(lua)
+    lua.execute("payloads=JSON.array({JSON.object({event='capture',blob=string.rep('A',74000)})})")
+    baseline = lua.eval("JSON.object({frame=10})")
+    before = lua.globals().writes
+    ids = lua.globals().journal.append_many(lua.globals().journal, lua.globals().payloads, baseline)
+    assert len(ids) == 1 and lua.globals().writes == before + 1
+    lua.globals().payloads[1].blob = "caller mutation"
+    lua.globals().reopen()
+    state = lua.globals().state()
+    assert state.outbox[1].payload.blob == "A" * 74000
+    assert state.observation.frame == 10
+    before = lua.globals().writes
+    assert len(lua.globals().journal.append_many(lua.globals().journal, lua.eval("JSON.array()"), baseline)) == 0
+    assert lua.globals().writes == before, "empty unchanged baseline must remain a true no-op"
+
+
+def test_checked_batch_copy_preserves_inferred_and_explicit_json_kinds(runtime):  # noqa: F811
+    lua = runtime
+    start(lua)
+    # Plain numeric-key Lua table was previously normalized by decode(copy).
+    lua.execute("payloads={JSON.object({event='capture',null_value=JSON.null,empty_list=JSON.array(),empty_map=JSON.object()})}")
+    ids = lua.globals().journal.append_many(lua.globals().journal, lua.globals().payloads, lua.eval("JSON.object({frame=1})"))
+    assert len(ids) == 1
+    lua.globals().reopen()
+    state = lua.globals().state()
+    payload = state.outbox[1].payload
+    lua.globals().checked_payload = payload
+    assert lua.eval("checked_payload.null_value==JSON.null")
+    assert lua.globals().JSON.kind(payload.empty_list) == "array"
+    assert lua.globals().JSON.kind(payload.empty_map) == "object"
+    before, writes, issued = lua.globals().disk, lua.globals().writes, lua.globals().next_id
+    assert accepted(lua.globals().journal.append_many(
+        lua.globals().journal, lua.eval("JSON.object()"), lua.eval("JSON.object({frame=2})"))) is None
+    assert (lua.globals().disk, lua.globals().writes, lua.globals().next_id) == (before, writes, issued)
+
+
+@pytest.mark.parametrize("source", [
+    "(function() local p=JSON.object({event='capture'});p.self=p;return JSON.array({p})end)()",
+    "JSON.array({JSON.object({event='capture',blob=string.char(255)})})",
+    "JSON.array({JSON.object({event='capture',bad=function()end})})",
+])
+def test_nonempty_append_rejects_unserializable_source_before_publication(runtime, source):  # noqa: F811
+    lua = runtime
+    start(lua)
+    before, writes, issued = lua.globals().disk, lua.globals().writes, lua.globals().next_id
+    result = lua.globals().journal.append_many(lua.globals().journal, lua.eval(source), lua.eval("JSON.object({frame=10})"))
+    assert accepted(result) is None
+    assert (lua.globals().disk, lua.globals().writes, lua.globals().next_id) == (before, writes, issued)
+
+
 def test_batch_collision_with_existing_operation_preserves_the_entire_frame(runtime):  # noqa: F811
     lua = runtime
     start(lua)
