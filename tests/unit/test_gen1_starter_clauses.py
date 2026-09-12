@@ -11,8 +11,9 @@ import pytest
 
 from server.adapters import get_adapter
 from server.adapters.gen1_rby import Gen1Adapter
-from server.gen1_engine_bridge import starter_grant
+from server.gen1_engine_bridge import allowed_starters, memorial_completion, starter_grant
 from server.gen1_run_config import create_runtime, open_runtime
+from server.protocol_journal import JournalError
 from server.state import AreaStatus, LinkStatus, MonInfo, SoulLinkState
 from tests.unit.test_gen1_sessions import contract
 
@@ -20,7 +21,7 @@ LAB = "oaks_lab"
 KEY_A = "AAAA:0001:99"   # DVs:OTID:species byte (Bulbasaur 0x99 internal)
 KEY_B = "BBBB:0002:99"
 KEY_B_CHARMANDER = "BBBB:0002:B0"
-BULBASAUR, CHARMANDER, PIKACHU = 1, 4, 25   # National Dex ids the engine reasons about
+BULBASAUR, CHARMANDER, SQUIRTLE, PIKACHU = 1, 4, 7, 25   # National Dex ids the engine reasons about
 
 
 @pytest.mark.parametrize("a,b", list(product(("red", "blue", "yellow"), repeat=2)))
@@ -90,9 +91,31 @@ def test_bridge_surfaces_the_engine_rejection_of_identical_starters(tmp_path):
     # The rejected starter stays pending for the other player, exactly as Gen 3 leaves it.
     assert rules.area_states[LAB] == AreaStatus.PENDING_B and set(rules.pending_captures[LAB]) == {"a"}   # the lab waits on b
     assert LAB in rules.retry_areas["b"] and KEY_B not in rules.party_keys["b"] and not rules.links
-    # Physical consequences run from the rules state through the held executors; nothing dangles here.
-    assert rules.queued_commands == {"a": [], "b": []} and not rules.pending_memorials["b"]
+    # The burial the engine booked stays booked for the starter_clause retirement job to report; the
+    # prompt and sound it queued are drained (Gen 1 has no HUD executor on the durable path yet).
+    assert rules.queued_commands == {"a": [], "b": []} and rules.pending_memorials["b"] == {KEY_B}
     assert not any(rules.pokeballs_obtained.values())
+    # The engine names what the rejected player may choose now: the partner's pick is out under the
+    # species lock and, sharing its own types, under the type lock; the other two share no type.
+    assert allowed_starters(rules, "b", LAB, (BULBASAUR, CHARMANDER, SQUIRTLE)) == [CHARMANDER, SQUIRTLE]
+    rules.species_lock = False
+    assert allowed_starters(rules, "b", LAB, (BULBASAUR, CHARMANDER, SQUIRTLE)) == [CHARMANDER, SQUIRTLE]
+    rules.type_lock = False
+    assert allowed_starters(rules, "b", LAB, (BULBASAUR, CHARMANDER, SQUIRTLE)) == [BULBASAUR, CHARMANDER, SQUIRTLE]
+
+
+def test_rejected_starter_memorial_completes_once_and_leaves_the_lab_waiting(tmp_path):
+    rules = rules_for(tmp_path, "red", "red")
+    starter_grant(rules, "a", LAB, MonInfo(key=KEY_A, level=5, species=BULBASAUR))
+    starter_grant(rules, "b", LAB, MonInfo(key=KEY_B, level=5, species=BULBASAUR))
+    # No pair exists for a rejected pending half: the engine drops the obligation and the key, and the
+    # lab keeps waiting on the rejected player with the partner's starter still pending.
+    assert memorial_completion(rules, "b", KEY_B) is True
+    assert not rules.pending_memorials["b"] and KEY_B not in rules.party_keys["b"] and rules.find_link("b", KEY_B) is None
+    assert rules.area_states[LAB] == AreaStatus.PENDING_B and set(rules.pending_captures[LAB]) == {"a"}
+    assert LAB in rules.retry_areas["b"] and not rules.links and rules.queued_commands == {"a": [], "b": []}
+    with pytest.raises(JournalError, match="pending memorial obligation"):
+        memorial_completion(rules, "b", KEY_B)   # exactly one completion per retired key
 
 
 def test_bridge_keeps_yellow_yellow_starters_exempt(tmp_path):

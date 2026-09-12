@@ -271,6 +271,71 @@ def test_peer_capture_pending_identity_defers_until_real_stable_settlement_then_
     assert not runtime.state().rules.pending_captures
 
 
+def test_dead_zone_retirement_reports_memorialize_done_and_the_pair_reaches_memorial(runtime):
+    from server.gen1_engine_bridge import memorial_completion
+    from server.gen1_full_save import image
+    from server.gen1_party_codec import PartyCodec
+    from server.gen1_retirement_runtime import acknowledge
+    from server.state import LinkStatus
+    from tests.unit.test_gen1_inventory_observation import party_point
+    from tests.unit.test_gen1_party_codec import make_blob
+    from tests.unit.test_gen1_retirement_runtime import observed, written
+
+    activate(runtime)
+    caught = capture(runtime, "b")
+    acquire(runtime, "b", [caught], 1)
+    record(runtime, "a", [row(runtime, "a", "begin", 130), row(runtime, "a", "end", 160)])
+    checkpoint(
+        runtime,
+        "b",
+        runtime.test_owners["b"],
+        runtime.test_initials["b"],
+        runtime.test_operations["b"],
+        caught["receipt"]["receipt"]["end"]["point"]["party_hex"],
+        frame=170,
+    )
+    acquire(runtime, "b", [], 2)
+    record(runtime, "b", [])
+    obligation_id = next(iter(encounters(runtime).values()))["retirement_id"]
+    state = runtime.state()
+    key = state.document()["components"][wild.COMPONENT]["obligations"][obligation_id]["key"]
+    link = state.rules.find_link("b", key)
+    # The engine booked the burial of the retired catch (Gen 3 buries it); it stays booked until
+    # the retirement job's verified archive reports it.
+    assert link.status == LinkStatus.DEAD and link.a is None and state.rules.pending_memorials["b"] == {key}
+    # The read finds the catch beside a second party member, so the archive kernel applies.
+    _, read = observed(runtime, "b")
+    point = read["receipt"]["point"]
+    party = bytes.fromhex(point["fields"]["party"])
+    filler = make_blob(PartyCodec("yellow"), dv=0x7654, otid=0)
+    blobs = [party[8:52] + party[272:283] + party[338:349], filler]
+    point["fields"]["party"] = party_point("yellow", blobs)["fields"]["party"]
+    point["cart_hex"] = image(point).hex().upper()
+    acknowledge(runtime, "b", secrets.token_hex(16), read)
+    _, write = written(runtime, "b")
+    acknowledge(runtime, "b", secrets.token_hex(16), write)
+    state = runtime.state()
+    document = state.document()
+    obligation = document["components"][wild.COMPONENT]["obligations"][obligation_id]
+    assert obligation["phase"] == "complete" and obligation_id not in state.barrier.document()["blockers"]
+    link = state.rules.find_link("b", key)
+    assert link.status == LinkStatus.MEMORIAL and link.cause == "dead_zone" and link.a is None
+    assert not state.rules.pending_memorials["b"] and key not in state.rules.party_keys["b"]
+    assert document["rules"]["memorial"]["retired_pairs"][-1]["area_id"] == link.area_id
+    assert not runtime.journal.pending_ids("b") and not runtime.journal.pending_ids("a")
+    with pytest.raises(JournalError, match="pending memorial obligation"):
+        memorial_completion(state.rules, "b", key)  # exactly one completion per retired key
+    wild.verify_state(state)
+    wild.verify_journal(runtime.journal, state)
+    directory = runtime.data_dir
+    runtime.close()
+    reopened = open_runtime(directory)
+    try:
+        assert reopened.state().rules.find_link("b", key).status == LinkStatus.MEMORIAL
+    finally:
+        reopened.close()
+
+
 def test_own_pending_source_from_prior_encounter_prevents_false_no_catch(runtime):
     activate(runtime)
     acquire(runtime, "a", [capture(runtime, "a")], 1)

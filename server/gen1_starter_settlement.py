@@ -3,14 +3,15 @@ import copy
 from dataclasses import asdict
 from datetime import UTC, datetime
 
+from server import event_reference
 from server.admission_context import same_admitted_context
+from server.gen1_engine_bridge import allowed_starters, starter_grant
 from server.gen1_engine_signal_runtime import interpret
-from server.gen1_initial_observation import COMPONENT as INITIAL, validate, display_name
 from server.gen1_full_save import SYMBOLS
-from server.gen1_party_codec import PartyCodec
+from server.gen1_initial_observation import COMPONENT as INITIAL, display_name, validate
 from server.gen1_observation_provenance import semantic_receipt
+from server.gen1_party_codec import PartyCodec
 from server.identity_registry import IdentityContext, IdentityWitness
-from server.gen1_engine_bridge import starter_grant
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier
 from server.save_identity import SaveIdentity
@@ -19,6 +20,8 @@ from server.state import AreaStatus, MonInfo
 COMPONENT = 'gen1-starter-settlement'
 SCHEMA = 'rby-starter-settlement-v2'   # v2: a clause rejection is part of the settlement record
 AREA = 'oaks_lab'
+KANTO_STARTERS = (1, 4, 7)   # the lab's choice on Red and Blue; Yellow's Pikachu is scripted and never rejected
+REJECTION_FIELDS = {'player', 'key', 'member_id', 'reason', 'at', 'allowed', 'receipt_ref'}
 
 
 def initial_component():
@@ -129,13 +132,15 @@ def settle_ready(runtime, stage, document, *, frame_origin=None):
         if rejected is not None:
             # The engine applied the clauses to the pair of starters and rejected one (Gen 3 does the
             # same; Gen 1 exempts Yellow/Yellow at the adapter). The rejected starter is not usable and
-            # the lab stays pending for the other player; the physical retirement is executed from the
-            # rules state (handoff item 4), and the pair has no logical link.
+            # the lab stays pending for the other player; the pair has no logical link. The burial the
+            # engine booked is executed by a starter_clause retirement job (gen1_retirement_runtime
+            # schedules it from the rejected player's next batch) and receipt_ref closes it here.
             if rejected['player'] not in component['settled'] or component['link_id'] is not None:
                 raise JournalError('starter clause rejection does not name a settled starter')
             component['rejection'] = {'player': rejected['player'], 'key': rejected['key'],
                 'member_id': component['settled'][rejected['player']]['member_id'], 'reason': rejected['reason'],
-                'at': datetime.now(UTC).isoformat()}
+                'at': datetime.now(UTC).isoformat(),
+                'allowed': allowed_starters(stage.rules, rejected['player'], AREA, KANTO_STARTERS), 'receipt_ref': None}
         if linked is not None:
             setattr(linked, partner, mon_info(current_peer))
             cache_party(stage.rules, partner, current_peer)
@@ -147,6 +152,38 @@ def settle_ready(runtime, stage, document, *, frame_origin=None):
     stage.barrier.set_history(recovery_history(document['rules'], document['identities'], document['active_trade'],
         document['components'].get('gen1-trade')))
     document['components']['gen1-runtime']['recovery'] = stage.barrier.document()
+
+
+def rejected_starter(document, player, acquisition_id):
+    """Retirement source of the clause-rejected starter (gen1_retirement_runtime cause starter_clause)."""
+    component = document['components'].get(COMPONENT) or {}
+    rejection = component.get('rejection')
+    settled = component.get('settled', {}).get(player)
+    if (rejection is None or rejection['player'] != player or settled is None
+            or settled['acquisition_id'] != acquisition_id or rejection['member_id'] != settled['member_id']):
+        raise JournalError('starter clause retirement lacks its settlement rejection')
+    return {'acquisition_id': acquisition_id, 'key': rejection['key'], 'member_id': rejection['member_id'],
+            'reason': 'starter_clause'}
+
+
+def complete_rejection(document, player, receipt_ref):
+    """The verified retirement image of the rejected starter closes the rejection, once."""
+    rejection = document['components'][COMPONENT]['rejection']
+    event_reference.validate(receipt_ref)
+    if rejection is None or rejection['player'] != player or receipt_ref['player'] != player or rejection['receipt_ref'] is not None:
+        raise JournalError('starter clause retirement is already complete or names another player')
+    rejection['receipt_ref'] = copy.deepcopy(receipt_ref)
+
+
+def rejection_prompt(document, adapter):
+    """The engine's clause prompt for the rejected player, extended with the starters the engine would
+    accept now. Its delivery is the item-4 HUD executor: Gen 1's durable outbox carries physical
+    obligations only (lua/gen1_held_faint handles them; durable_runtime.lua revokes on any other kind),
+    so the bridges drain every engine prompt today and this one is recorded, not queued."""
+    rejection = document['components'][COMPONENT]['rejection']
+    names = ', '.join(adapter.species_name(species) for species in rejection['allowed'])
+    return {'cmd': 'gui_prompt', 'text': '[x] ' + rejection['reason'] + ' -- allowed starters: ' + names,
+            'r': 255, 'g': 200, 'b': 60, 'frames': 360}
 
 
 def verify_state(stage):
@@ -213,7 +250,7 @@ def verify_state(stage):
         raise JournalError('paired settled starters lack logical linkage')
     rejection = component['rejection']
     if rejection is not None:
-        if (not isinstance(rejection, dict) or set(rejection) != {'player', 'key', 'member_id', 'reason', 'at'}
+        if (not isinstance(rejection, dict) or set(rejection) != REJECTION_FIELDS
                 or rejection['player'] not in component['settled'] or component['link_id'] is not None
                 or not isinstance(rejection['reason'], str) or not rejection['reason']):
             raise JournalError('invalid starter clause rejection')
@@ -227,8 +264,14 @@ def verify_state(stage):
         if (rules.find_link(rejection['player'], mon.key) is not None or mon.key in rules.party_keys[rejection['player']]
                 or AREA not in rules.retry_areas[rejection['player']]
                 or rules.area_states.get(AREA) != (AreaStatus.PENDING_A if rejection['player'] == 'a' else AreaStatus.PENDING_B)   # waiting on the rejected player
-                or set(rules.pending_captures.get(AREA, {})) != {partner}):
+                or set(rules.pending_captures.get(AREA, {})) != {partner}
+                or rejection['allowed'] != allowed_starters(rules, rejection['player'], AREA, KANTO_STARTERS)):
             raise JournalError('starter clause rejection differs from the rule state')
+        # The engine booked the burial; the retirement job's verified image reports it exactly once.
+        if rejection['receipt_ref'] is not None:
+            event_reference.validate(rejection['receipt_ref'])
+        if (mon.key in rules.pending_memorials[rejection['player']]) != (rejection['receipt_ref'] is None):
+            raise JournalError('starter clause rejection differs from its memorial obligation')
 
 
 def verify_journal(journal, stage):
@@ -245,3 +288,10 @@ def verify_journal(journal, stage):
         entry = settled['inventory_entry']; receipt = semantic_receipt(journal, player, entry, 'inventory_observation')
         if receipt is None or receipt.result != result(entry):
             raise JournalError('starter settlement lacks its committed inventory event')
+    rejection = component['rejection']
+    if rejection is not None and rejection['receipt_ref'] is not None:
+        request = event_reference.resolve(journal, rejection['receipt_ref']).request
+        command = journal.command(rejection['player'], request.get('command_id', ''))
+        if (request.get('event') != 'command_ack' or request.get('outcome') != 'ACK' or command['outcome'] != 'ACK'
+                or command['body'].get('cmd') != 'acquisition_retire' or command['body'].get('key') != rejection['key']):
+            raise JournalError('starter clause rejection lacks its verified retirement receipt')

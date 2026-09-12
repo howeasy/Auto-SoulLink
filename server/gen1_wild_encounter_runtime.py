@@ -633,6 +633,14 @@ def verify_state(state):
                     from server.state import AreaStatus, LinkStatus
 
                     area = _encounter_area(document, player, begin)
+                    # The retired partner catch is the pair's one booked memorial: its verified
+                    # archive reports memorialize_done, and the pair reaches MEMORIAL as in Gen 3.
+                    obligation = component["obligations"].get(row["retirement_id"] or "", {})
+                    status = (
+                        LinkStatus.MEMORIAL
+                        if obligation.get("phase") == "complete"
+                        else LinkStatus.DEAD
+                    )
                     links = [
                         link
                         for link in state.rules.links
@@ -640,7 +648,7 @@ def verify_state(state):
                         and link.cause == "dead_zone"
                         and link.initiating_player == player
                         and link.killed_at == row["occurred_at"]
-                        and link.status == LinkStatus.DEAD
+                        and link.status == status
                     ]
                     if state.rules.area_states.get(area) != AreaStatus.DEAD_ZONE or len(links) != 1:
                         raise JournalError("no-catch decision lacks its exact dead-zone rule entry")

@@ -18,7 +18,10 @@ from server.gen1_retirement_runtime import (
     EVIDENCE,
     OBSERVE,
     acknowledge,
+    entry_for,
     expand_entry,
+    policy_source,
+    schedule_job,
     verify_journal,
     verify_operation,
     verify_state,
@@ -79,18 +82,21 @@ def acquired(runtime, where="party"):
     return runtime.state().document()["components"][COMPONENT]["a"][0]
 
 
-def observed(runtime):
-    command = runtime.journal.command("a", runtime.journal.pending_ids("a")[0])
+def observed(runtime, player="a"):
+    command = runtime.journal.command(player, runtime.journal.pending_ids(player)[0])
     document = runtime.state().document()
-    source = document["components"]["gen1-inventory-observations"]["a"]["observation"]
+    source = document["components"]["gen1-inventory-observations"][player]["observation"]
+    # A momentary free-run hold reports the latest batch frame; a fixed hold the enrolment frame.
+    progress = document["components"].get("gen1-observation-progress", {}).get(player)
+    frame = progress["frame"] if progress else document["components"]["gen1-initial-observations"][player]["observation"]["frame"]
     receipt = {
         "schema": OBSERVE,
         "command_id": command["command_id"],
         "command_sequence": command["command_sequence"],
-        "context_generation": "a" * 32,
+        "context_generation": player * 32,
         "final_sha1": source["final_sha1"],
-        "host": {**source["host"], "frame": source["frame"]},
-        "checkpoint": checkpoint("yellow"),
+        "host": {**source["host"], "frame": frame},
+        "checkpoint": checkpoint(runtime.contract["players"][player]["variant"]),
         "point": copy.deepcopy(source["source"]),
     }
     return command, {
@@ -102,9 +108,9 @@ def observed(runtime):
     }
 
 
-def written(runtime):
-    command = runtime.journal.command("a", runtime.journal.pending_ids("a")[0])
-    row = runtime.state().document()["components"][COMPONENT]["a"][0]
+def written(runtime, player="a"):
+    command = runtime.journal.command(player, runtime.journal.pending_ids(player)[0])
+    row = entry_for(runtime.state().document(), player, command["body"]["acquisition_id"])
     p = row["payload"]
     receipt = {
         "schema": SCHEMA,
@@ -117,7 +123,7 @@ def written(runtime):
         "after": copy.deepcopy(p["after"]),
         "file": {
             "schema": "slink-saveram-file-v1",
-            "path": "owned/a/SaveRAM/game.sav",
+            "path": "owned/" + player + "/SaveRAM/game.sav",
             "byte_length": 0x8000,
             "sha256": hashlib.sha256(bytes.fromhex(p["after"]["cart_hex"])).hexdigest(),
             "host_profile": "bizhawk-2.11.1-gambatte-exclusive-hold-v1",
@@ -191,6 +197,41 @@ def test_retirement_preserves_unlinked_gift_in_grave_and_clears_only_its_constra
     runtime = open_runtime(tmp_path)
     try:
         verify_journal(runtime.journal, runtime.state())
+    finally:
+        runtime.close()
+
+
+def test_starter_clause_cause_requires_the_settlement_rejection_and_adds_nothing_without_it(tmp_path):
+    runtime = create_runtime(tmp_path, contract())
+    try:
+        acquired(runtime)  # a run whose starters were never settled, let alone rejected
+        document = runtime.state().document()
+        event = {"player": "a", "operation_id": secrets.token_hex(16), "message": {"event": "fixture"}}
+        cause = {"kind": "starter_clause", "acquisition_id": "f" * 32}
+        with pytest.raises(JournalError, match="settlement rejection"):
+            policy_source(document, "a", cause)
+        with pytest.raises(JournalError, match="settlement rejection"):
+            schedule_job(document, "a", event, cause=cause)
+        assert len(document["components"][COMPONENT]["a"]) == 1
+        with pytest.raises(JournalError, match="unknown retirement cause"):
+            policy_source(document, "a", {"kind": "starter_clause", "obligation_id": "f" * 32})
+    finally:
+        runtime.close()
+
+
+def test_yellow_only_retirement_books_no_engine_memorial_and_verify_state_holds_it_to_that(tmp_path):
+    runtime = create_runtime(tmp_path, contract())
+    try:
+        acquired(runtime)
+        _, read = observed(runtime)
+        acknowledge(runtime, "a", secrets.token_hex(16), read)
+        _, write = written(runtime)
+        acknowledge(runtime, "a", secrets.token_hex(16), write)
+        stage = runtime.state()
+        verify_state(stage)
+        stage.rules.pending_memorials["a"].add(stage.document()["components"][COMPONENT]["a"][0]["key"])
+        with pytest.raises(JournalError, match="memorial obligation"):
+            verify_state(stage)
     finally:
         runtime.close()
 

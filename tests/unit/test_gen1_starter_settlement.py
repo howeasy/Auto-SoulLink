@@ -9,14 +9,17 @@ from server.gen1_full_save import SYMBOLS
 from server.gen1_party_codec import PartyCodec
 from server.gen1_run_config import create_runtime, open_runtime
 from server.gen1_runtime_state import Gen1RuntimeState
-from server.gen1_starter_settlement import COMPONENT, AREA
+from server.gen1_starter_settlement import AREA, COMPONENT
 from server.protocol_journal import JournalError
 from server.state import AreaStatus
-from tests.unit.test_gen1_sessions import contract
+from tests.unit.test_gen1_engine_signal_runtime import (
+    deliver as engine_event,
+    payload as engine_payload,
+)
 from tests.unit.test_gen1_initial_observation import admit, observation, send
 from tests.unit.test_gen1_inventory_observation import deliver as inventory_event, party_point
-from tests.unit.test_gen1_engine_signal_runtime import deliver as engine_event, payload as engine_payload
 from tests.unit.test_gen1_party_codec import make_blob
+from tests.unit.test_gen1_sessions import contract
 
 
 def enroll(runtime):
@@ -92,10 +95,11 @@ def test_stable_starters_settle_owned_identities_and_the_engine_pairs_or_rejects
         if outcome=='rejected':
             assert not stage.rules.links and not document['identities']['links'] and component['link_id'] is None
             assert component['rejection']=={'player':second,'key':keys[second],'member_id':component['settled'][second]['member_id'],
-                'reason':'Species clause: both are Bulbasaur','at':component['rejection']['at']}
+                'reason':'Species clause: both are Bulbasaur','at':component['rejection']['at'],'allowed':[4,7],'receipt_ref':None}   # Charmander, Squirtle
             assert stage.rules.area_states[AREA]==(AreaStatus.PENDING_A if second=='a' else AreaStatus.PENDING_B)   # the lab waits on the rejected player
             assert set(stage.rules.pending_captures[AREA])=={first} and AREA in stage.rules.retry_areas[second]
-            assert keys[second] not in stage.rules.party_keys[second] and not stage.rules.pending_memorials[second]
+            # The burial the engine booked stays booked until the starter_clause retirement job reports it.
+            assert keys[second] not in stage.rules.party_keys[second] and stage.rules.pending_memorials[second]=={keys[second]}
         else:
             assert len(stage.rules.links)==len(document['identities']['links'])==1 and component['rejection'] is None
             assert not stage.rules.pending_captures and not any(stage.rules.retry_areas.values())
@@ -113,6 +117,76 @@ def test_stable_starters_settle_owned_identities_and_the_engine_pairs_or_rejects
         assert restored['rules']==document['rules'] and restored['identities']==document['identities']
         assert restored['components'][COMPONENT]==document['components'][COMPONENT]
         assert runtime.state().barrier.ticket() is None
+    finally:runtime.close()
+
+
+def test_rejected_starter_is_retired_in_place_and_reports_its_memorial_once(tmp_path):
+    from server.gen1_engine_bridge import memorial_completion
+    from server.gen1_full_save import image
+    from server.gen1_retirement_runtime import (
+        COMPONENT as RETIREMENT,
+        acknowledge,
+        schedule,
+        verify_journal as verify_retirement_journal,
+        verify_state as verify_retirements,
+    )
+    from server.gen1_starter_settlement import rejection_prompt
+    from tests.unit.test_gen1_acquisition_runtime import observe as acquire
+    from tests.unit.test_gen1_retirement_runtime import observed, written
+    runtime=create_runtime(tmp_path,contract('red','blue'))
+    try:
+        owners,initials,operations=enroll(runtime)
+        snap=runtime.journal.snapshot();stage=runtime.state()
+        stage.rules.species_lock=stage.rules.type_lock=True
+        stage.barrier.set_history(stage.history_digest());document=stage.document()
+        runtime.journal.commit('a',secrets.token_hex(16),{'event':'explicit-rule-options-fixture'},expected_revision=snap.revision,
+            state=document,commands={'a':[],'b':[]},result={'ack':'ACK'})
+        for player in ('a','b'):   # both choose Bulbasaur; the engine rejects the second
+            source,checkpoint=source_and_checkpoint(runtime,player,initials[player],operations[player],species=BULBASAUR)
+            engine_event(runtime,player,owners[player],source);inventory_event(runtime,player,owners[player],checkpoint)
+        stage=runtime.state();document=stage.document();component=document['components'][COMPONENT]
+        rejection=component['rejection'];key=rejection['key'];acquisition=component['settled']['b']['acquisition_id']
+        assert rejection['player']=='b' and rejection['receipt_ref'] is None and stage.rules.pending_memorials['b']=={key}
+        assert rejection_prompt(document,stage.rules.adapter)=={'cmd':'gui_prompt','r':255,'g':200,'b':60,'frames':360,
+            'text':'[x] Species clause: both are Bulbasaur -- allowed starters: Charmander, Squirtle'}
+        assert not runtime.journal.pending_ids('a') and not runtime.journal.pending_ids('b')
+        # The rejected player's next batch schedules the job: one read for the rejected player, nothing for the partner.
+        acquire(runtime,'b',[],1)
+        pending=[runtime.journal.command('b',i)['body'] for i in runtime.journal.pending_ids('b')]
+        assert pending==[{'cmd':'retirement_observe','acquisition_id':acquisition,'key':key,'reason':'starter_clause'}]
+        assert not runtime.journal.pending_ids('a')
+        document=runtime.state().document();rows=document['components'][RETIREMENT]['b']
+        assert [row['cause'] for row in rows]==[{'kind':'starter_clause','acquisition_id':acquisition}]
+        event={'player':'b','operation_id':secrets.token_hex(16),'message':{'event':'fixture'}}
+        assert schedule(document,'b',event)==({'a':[],'b':[]},[]) and len(document['components'][RETIREMENT]['b'])==1   # no second job
+        # The read finds the saved cartridge with the starter as its whole party.
+        _,read=observed(runtime,'b');point=read['receipt']['point'];point['cart_hex']=image(point).hex().upper()
+        acknowledge(runtime,'b',secrets.token_hex(16),read)
+        payload=runtime.state().document()['components'][RETIREMENT]['b'][0]['payload']
+        before,after=(bytes.fromhex(payload[name]['fields']['party']) for name in ('before','after'))
+        # Fainted where it stands (the archive kernels refuse to empty a party), nothing else touched.
+        assert before[0]==after[0]==1 and before[9:11]!=b'\0\0' and after[9:11]==b'\0\0'
+        assert after[:9]+after[11:]==before[:9]+before[11:] and payload['after']['save_status']==2
+        _,write=written(runtime,'b');operation=secrets.token_hex(16)
+        result=acknowledge(runtime,'b',operation,write);saved=runtime.journal.snapshot()
+        assert acknowledge(runtime,'b',operation,write)==result and runtime.journal.snapshot()==saved   # a replay reports nothing twice
+        stage=runtime.state();document=stage.document();rejection=document['components'][COMPONENT]['rejection']
+        assert rejection['receipt_ref']['operation_id']==operation and not runtime.journal.pending_ids('b')
+        # The engine's outcome for a rejected pending half: the booked memorial and the key are gone, no pair
+        # exists, and the lab still waits on the rejected player with the partner's starter pending.
+        assert not stage.rules.pending_memorials['b'] and key not in stage.rules.party_keys['b'] and stage.rules.find_link('b',key) is None
+        assert not stage.rules.links and stage.rules.area_states[AREA]==AreaStatus.PENDING_B
+        assert set(stage.rules.pending_captures[AREA])=={'a'} and AREA in stage.rules.retry_areas['b']
+        assert stage.rules.party_size['b']==1 and stage.rules.partner_blobs['b'][0]['key']==key
+        with pytest.raises(JournalError,match='pending memorial obligation'):
+            memorial_completion(stage.rules,'b',key)   # exactly one completion per retired key
+        verify_retirements(stage);verify_retirement_journal(runtime.journal,stage)
+    finally:runtime.close()
+    runtime=open_runtime(tmp_path)
+    try:
+        restored=runtime.state()
+        assert restored.document()['components'][COMPONENT]['rejection']==rejection and not restored.rules.pending_memorials['b']
+        assert restored.barrier.ticket() is None
     finally:runtime.close()
 
 

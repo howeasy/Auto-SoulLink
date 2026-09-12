@@ -11,16 +11,24 @@ from server.gen1_acquisition_runtime import (
     constraint_id,
     receipts_of,
 )
+from server.gen1_engine_bridge import memorial_completion
 from server.gen1_full_save import image
+from server.gen1_grave_storage import validate_saved
 from server.gen1_held_faint import verify_owned_checkpoint
 from server.gen1_initial_observation import inventory
-from server.gen1_retirement import prepare, verify_receipt, wire_payload
+from server.gen1_retirement import SCHEMA, prepare, verify_receipt, wire_payload
 from server.gen1_save_delta import recover_point
 from server.held_write_permit import VerifiedHeldWrite
 from server.issued_command import issued as issued
 from server.operation_scope import command_scope
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier
+from server.save_file_receipt import verify_file_image
+
+HOST_PROFILE = "bizhawk-2.11.1-gambatte-exclusive-hold-v1"
+# The engine books the burial of a dead-zone casualty and of a clause-rejected starter (Gen 3 buries
+# both); the job's verified image is that memorial and reports memorialize_done exactly once.
+BOOKED_CAUSES = ("paired_no_catch", "starter_clause")
 
 COMPONENT = "gen1-acquisition-retirement"
 OBSERVE = "rby-retirement-observation-v1"
@@ -118,6 +126,10 @@ def policy_source(document, player, cause):
         from server.gen1_wild_encounter_runtime import retirement_source
 
         return retirement_source(document, player, cause["obligation_id"])
+    if set(cause) == {"kind", "acquisition_id"} and cause["kind"] == "starter_clause":
+        from server.gen1_starter_settlement import rejected_starter
+
+        return rejected_starter(document, player, cause["acquisition_id"])
     raise JournalError("unknown retirement cause adapter")
 
 
@@ -190,6 +202,22 @@ def schedule(document, player, event):
             event,
             cause={"kind": "yellow_only_grant", "acquisition_id": source["acquisition_id"]},
         )
+    # The settlement owns the rejection; the job is scheduled from the rejected player's next
+    # batch (stage_acquisitions calls this), since the settlement commit carries no commands.
+    from server.gen1_starter_settlement import COMPONENT as STARTERS
+
+    starters = document["components"].get(STARTERS) or {}
+    rejection = starters.get("rejection")
+    if rejection and rejection["player"] == player and rejection["receipt_ref"] is None:
+        return schedule_job(
+            document,
+            player,
+            event,
+            cause={
+                "kind": "starter_clause",
+                "acquisition_id": starters["settled"][player]["acquisition_id"],
+            },
+        )
     # No-catch owns the source policy; archive mechanics remain the same.
     for identifier, obligation in (
         document["components"].get("gen1-wild-encounters", {}).get("obligations", {}).items()
@@ -235,14 +263,16 @@ def preparation(journal, document, player, command, receipt, binding, *, histori
     row = expand_entry(journal, entry_for(document, player, command["body"]["acquisition_id"]))
     policy = policy_source(document, player, row["cause"])
     point = receipt["point"]
-    sources = [
-        r
-        for r in document["components"].get(ACQUISITIONS, {}).get(player, {}).get("settled", [])
-        if r["acquisition_id"] == row["acquisition_id"]
-    ]
-    if len(sources) != 1:
-        raise JournalError("retirement target lacks its settled acquisition provenance")
-    source = sources[0]
+    source = None
+    if row["cause"]["kind"] != "starter_clause":  # a starter is settled by the lab, not a batch
+        sources = [
+            r
+            for r in document["components"].get(ACQUISITIONS, {}).get(player, {}).get("settled", [])
+            if r["acquisition_id"] == row["acquisition_id"]
+        ]
+        if len(sources) != 1:
+            raise JournalError("retirement target lacks its settled acquisition provenance")
+        source = sources[0]
     roster = inventory(point, metadata["save_identity"])
     members = [m for m in roster["members"] if m["key"] == row["key"]]
     if len(members) != 1:
@@ -280,9 +310,11 @@ def preparation(journal, document, player, command, receipt, binding, *, histori
     )
     birth = None
     if member["location"] == "box" and member["box"] == 11:
+        if row["cause"]["kind"] != "yellow_only_grant":
+            raise JournalError("active-grave retirement needs its source-specific birth proof")
         birth_event = event_reference.resolve(journal, source["source_ref"]["event"])
         raw = receipts_of(birth_event.request)[source["source_ref"]["index"]]
-        if row["cause"]["kind"] != "yellow_only_grant" or raw["kind"] != "grant":
+        if raw["kind"] != "grant":
             raise JournalError("active-grave retirement needs its source-specific birth proof")
         if head is not None and head["revision"] > birth_event.revision:
             raise JournalError("grave changed after the boxed gift birth")
@@ -290,9 +322,9 @@ def preparation(journal, document, player, command, receipt, binding, *, histori
             "before": raw["receipt"]["call"]["point"]["box_hex"],
             "after": raw["receipt"]["return"]["point"]["box_hex"],
         }
-    payload = prepare(
+    payload = prepare_image(
+        row,
         point,
-        row["key"],
         identity=metadata["save_identity"],
         context_generation=binding["context_generation"],
         final_sha1=metadata["gen1_metadata"]["cartridge"]["final_rom_sha1"],
@@ -302,6 +334,84 @@ def preparation(journal, document, player, command, receipt, binding, *, histori
     )
     payload.update(grave_head=head, source_anchor=anchor)
     return payload
+
+
+def fainted_in_place(point, key, *, identity):
+    """A rejected starter is its whole party, and the archive kernels refuse to empty one (the
+    cartridge's own BillsPCDeposit limit, gen1_memorial_policy), so it is fainted where it stands,
+    as terminal retention leaves a last linked member: the after image differs only in its HP.
+    ponytail: no archive even if the party has grown by then; the key is unusable either way."""
+    roster = inventory(point, identity)
+    targets = [m for m in roster["members"] if m["key"] == key and m["location"] == "party"]
+    if len(targets) != 1:
+        raise JournalError("starter retirement requires its exact party target")
+    validate_saved(point)
+    after = copy.deepcopy(point)
+    party = bytearray.fromhex(after["fields"]["party"])
+    offset = 8 + 44 * targets[0]["slot"] + 1
+    party[offset : offset + 2] = b"\0\0"
+    after["fields"]["party"] = party.hex().upper()
+    after["cart_hex"] = image(after).hex().upper()
+    after["save_status"] = 2
+    return after
+
+
+def prepare_image(row, point, **options):
+    """The job's exact write image: the archive kernel, or the in-place faint of a starter."""
+    if row["cause"]["kind"] != "starter_clause":
+        return prepare(point, row["key"], **options)
+    payload = {
+        "before": copy.deepcopy(point),
+        "after": fainted_in_place(point, row["key"], identity=options["identity"]),
+        "key": row["key"],
+    }
+    for name in ("context_generation", "final_sha1", "frame", "reserved_digest", "birth_box"):
+        payload[name] = copy.deepcopy(options.get(name))
+    return payload
+
+
+def verify_write_receipt(command, receipt, row, *, identity):
+    """gen1_retirement.verify_receipt recomputes the archive, which a whole-party starter refuses;
+    the same receipt contract is held against the in-place image."""
+    payload = row["payload"]
+    if row["cause"]["kind"] != "starter_clause":
+        return verify_receipt(command, receipt, payload, identity=identity)
+    fields = {
+        "schema",
+        "command_id",
+        "command_sequence",
+        "body_digest",
+        "context_generation",
+        "final_sha1",
+        "before_digest",
+        "after",
+        "file",
+    }
+    if not isinstance(receipt, dict) or set(receipt) != fields or receipt["schema"] != SCHEMA:
+        raise JournalError("complete retirement file receipt required")
+    wanted = {
+        "command_id": command["command_id"],
+        "command_sequence": command["command_sequence"],
+        "body_digest": digest(command["body"]),
+        "context_generation": payload["context_generation"],
+        "final_sha1": payload["final_sha1"],
+        "before_digest": digest(payload["before"]),
+    }
+    if command["body"] != write_body(row) or any(
+        type(receipt[k]) is not type(v) or receipt[k] != v for k, v in wanted.items()
+    ):
+        raise JournalError("retirement receipt changed command, source or context")
+    after = fainted_in_place(payload["before"], row["key"], identity=identity)
+    if payload["after"] != after or receipt["after"] != after:
+        raise JournalError("retirement differs from the exact fainted starter image")
+    verify_file_image(
+        receipt["file"],
+        bytes.fromhex(after["cart_hex"]),
+        host_profile=HOST_PROFILE,
+        frame_from=payload["frame"],
+        frame_to=payload["frame"],
+    )
+    return {"key": row["key"], "after_digest": digest(after)}
 
 
 def completed(document, player, acquisition_id):
@@ -361,11 +471,8 @@ def acknowledge(runtime, player, operation, message):
             row["payload"] = prepared
             commands[player].append(write_body(row))
     elif row["payload"] is not None and command["body"] == write_body(row):
-        verify_receipt(
-            command,
-            message["receipt"],
-            row["payload"],
-            identity=stage.rules.player_identity[player],
+        verify_write_receipt(
+            command, message["receipt"], row, identity=stage.rules.player_identity[player]
         )
         after = row["payload"]["after"]
         records.append(
@@ -393,7 +500,7 @@ def acknowledge(runtime, player, operation, message):
                 raise JournalError("retirement lost its source constraint hold")
             del blockers[source["hold_id"]]
             stage.barrier.set_blockers(blockers)
-        else:
+        elif row["cause"]["kind"] == "paired_no_catch":
             from server.gen1_wild_encounter_runtime import complete_retirement
 
             records.append(
@@ -401,6 +508,12 @@ def acknowledge(runtime, player, operation, message):
                     stage, document, player, row["cause"]["obligation_id"], reference
                 )
             )
+        else:
+            from server.gen1_starter_settlement import complete_rejection
+
+            complete_rejection(document, player, reference)
+        if row["cause"]["kind"] in BOOKED_CAUSES:
+            memorial_completion(stage.rules, player, row["key"])
         stage.rules.party_keys[player].discard(row["key"])
         from server.gen1_party_codec import PartyCodec
 
@@ -501,6 +614,9 @@ def verify_state(stage):
                 or row["key"] in stage.rules.party_keys[player]
             ):
                 raise JournalError("retirement source, reason or unusable key differs")
+            booked = row["cause"]["kind"] in BOOKED_CAUSES and row["receipt_operation"] is None
+            if (row["key"] in stage.rules.pending_memorials[player]) != booked:
+                raise JournalError("retirement memorial obligation differs from its completion")
             event_reference.validate(row["origin"])
             if retained:
                 ref = row["retained"]
@@ -524,9 +640,9 @@ def verify_state(stage):
                     raise JournalError("retirement completion lacks exact image evidence")
             if row["payload"] is not None:
                 p = row["payload"]
-                expected = prepare(
+                expected = prepare_image(
+                    row,
                     p["before"],
-                    row["key"],
                     identity=stage.rules.player_identity[player],
                     context_generation=p["context_generation"],
                     final_sha1=p["final_sha1"],
@@ -612,11 +728,8 @@ def verify_journal(journal, stage):
                 or digest(write["receipt"]) != row["receipt_digest"]
             ):
                 raise JournalError("retirement file completion lost its exact ACK")
-            verify_receipt(
-                write,
-                write["receipt"],
-                row["payload"],
-                identity=stage.rules.player_identity[player],
+            verify_write_receipt(
+                write, write["receipt"], row, identity=stage.rules.player_identity[player]
             )
 
 

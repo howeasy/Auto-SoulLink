@@ -338,8 +338,7 @@ def build(
             verify_receipt(command, receipt, value["before"], **arguments(document, player))
             pre, post = value["before"], value["after"]
         elif kind == 'acquisition_retire':
-            from server.gen1_retirement import verify_receipt
-            from server.gen1_retirement_runtime import write_body
+            from server.gen1_retirement_runtime import verify_write_receipt, write_body
             from server.issued_command import issued
             value = entry['payload']
             if (value is None or command != issued(journal, player, entry['observation_event'], write_body(entry))
@@ -347,7 +346,8 @@ def build(
                     or value['context_generation'] != initial['binding']['context_generation']
                     or value['final_sha1'] != initial['metadata']['gen1_metadata']['cartridge']['final_rom_sha1']):
                 raise JournalError('inventory retirement is not its original owned image')
-            verify_receipt(command, receipt, value, identity=identity)
+            # The runtime verifier knows every retirement shape (archive, and the in-place starter_clause faint).
+            verify_write_receipt(command, receipt, entry, identity=identity)
             pre, post = value['before'], value['after']
         elif kind == 'storage_apply':
             from server import event_reference

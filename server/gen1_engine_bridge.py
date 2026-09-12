@@ -11,7 +11,12 @@ replaces those drains one command kind at a time.
 """
 from dataclasses import fields
 
-from server.gen1_semantic_events import capture_event, key_change_event, memorialize_done_event, no_catch_event
+from server.gen1_semantic_events import (
+    capture_event,
+    key_change_event,
+    memorialize_done_event,
+    no_catch_event,
+)
 from server.protocol_journal import JournalError
 from server.state import AreaStatus, LinkStatus, MonInfo
 
@@ -39,16 +44,28 @@ def starter_grant(rules, player, area, info):
             raise JournalError("shared rule engine rejected more than one starter")
         prompts = [c.get("text", "") for c in commands if c.get("cmd") == "gui_prompt"]
         reason = prompts[0][4:] if prompts and prompts[0].startswith("[x] ") else "clause violation"
+        # The engine books the burial (force_faint and memorialize). Gen 1 executes it as a retirement
+        # job with the starter_clause cause (gen1_retirement_runtime), whose verified image reports
+        # memorialize_done through memorial_completion below; the obligation stays booked until then.
         rejection = {"player": pid, "key": fainted[0]["key"], "reason": reason}
-        # The engine books the burial (force_faint and memorialize) for the rejected starter. Gen 1
-        # executes physical consequences from the rules state through the held executors (handoff
-        # item 4: a retirement with a starter_clause cause), so the obligation is released here, not
-        # left dangling, exactly as no_catch does for a retired partner catch.
-        rules.pending_memorials[pid].discard(fainted[0]["key"])
     _drain(rules)
     rules.pokeballs_obtained = activated
     link = rules.find_link(player, info.key)
     return (link if link is not None and link.status == LinkStatus.ALIVE else None), rejection
+
+
+def allowed_starters(rules, player, area, species):
+    """Which of ``species`` the engine would pair with the partner's starter still pending in
+    ``area``: the clause check the rejection ran, over each candidate, recording nothing."""
+    peer = "b" if player == "a" else "a"
+    partner = rules.pending_captures.get(area, {}).get(peer)
+    allowed = []
+    for candidate in species:
+        mon = MonInfo(key="", level=5, species=int(candidate))
+        pair = (mon, partner) if player == "a" else (partner, mon)
+        if partner is None or rules._check_link_violation(*pair) is None:
+            allowed.append(int(candidate))
+    return allowed
 
 
 def no_catch(rules, player, area, species, level, *, activated, proved_peers, decision):
@@ -71,13 +88,10 @@ def no_catch(rules, player, area, species, level, *, activated, proved_peers, de
         raise JournalError("shared rule engine retired more than one partner catch")
     if retired:
         # The engine leaves the usable-party mask to the faint it queued; Gen 1 executes that faint as
-        # a retirement job, so the rule mask drops the retired catch now, as the death path does.
+        # a retirement job, so the rule mask drops the retired catch now, as the death path does. The
+        # memorial the engine booked for it stays booked: the job's verified archive reports it
+        # (memorial_completion), and the retired pair reaches MEMORIAL as in Gen 3.
         rules.party_keys[peer].discard(retired[0]["key"])
-        # The engine also books a memorial for the retired catch (Gen 3 buries it). Gen 1 archives it
-        # through the retirement job, which keeps its own completion accounting today; reporting that
-        # completion back as memorialize_done, so the retired pair reaches MEMORIAL as in Gen 3, is the
-        # handoff item 4 follow-up. Until then the obligation is released here, not left dangling.
-        rules.pending_memorials[peer].discard(retired[0]["key"])
     dead = [link for link in rules.links if link.area_id == area and link.cause == "dead_zone"]
     return {"outcome": outcome, "retire": {"player": peer, "key": retired[0]["key"]} if retired else None,
             "at": dead[-1].killed_at if dead else None}
@@ -125,11 +139,12 @@ def rekey(rules, player, outgoing, mon, *, reason):
 
 
 def memorial_completion(rules, player, key):
-    """One physically verified memorial; True when both halves are done and the pair is MEMORIAL."""
+    """One physically verified memorial for a burial the engine booked: a linked death, a dead-zone
+    casualty or a rejected starter. Refuses a second report (the obligation is gone). True when the
+    engine closed the pair (MEMORIAL), or the key has no pair to close."""
     link = rules.find_link(player, key)
-    if (link is None or link.a is None or link.b is None or link.status != LinkStatus.DEAD
-            or key not in rules.pending_memorials[player]):
-        raise JournalError("exact pending linked memorial required")
+    if key not in rules.pending_memorials[player] or (link is not None and link.status != LinkStatus.DEAD):
+        raise JournalError("exact pending memorial obligation required")
     rules.handle_event(player, memorialize_done_event(key=key))
     _drain(rules)
-    return link.status == LinkStatus.MEMORIAL
+    return link is None or link.status == LinkStatus.MEMORIAL
