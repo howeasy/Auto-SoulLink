@@ -1,5 +1,11 @@
 # P10: free-run observation server (handoff item 3, server half and wiring)
 
+> **Update 2026-09-12 (commit 6f07831).** Section 5's fail-closed list is historical: statics, NPC
+> exchanges, evolutions and wild encounters now ride the observation batch and stage in `stage_observation`
+> after acquisitions, so only genuinely unknown receipt kinds fail closed. The credit-path deletion listed
+> here landed as commit 48c64d0 with tier 2 (the native-trade window machinery) deliberately kept.
+
+
 Status: implemented as two new files plus two patches. Verified in a private copy of the
 scratch worktree with P8 and P9 applied; nothing that already existed in the sweep worktree
 was edited. Line numbers below are the patched files as they read after both patches apply.
