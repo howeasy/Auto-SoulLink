@@ -346,7 +346,7 @@ def test_same_vm_reload_replays_the_persisted_receipt_and_draws_new_notices_on_t
     assert runtime.eval("Overlay.retained().hud") == 1
 
 
-def test_overlay_preserves_fifo_and_every_notice_frame_budget(runtime):  # noqa: F811
+def test_overlay_retains_fifo_but_immediate_draw_briefly_preempts_visual_order(runtime):  # noqa: F811
     harness(runtime)
     runtime.execute(r"""
         assert(Overlay.present({surface='hud',text='A',frames=2,r=1,g=2,b=3})==true)
@@ -363,7 +363,9 @@ def test_overlay_preserves_fifo_and_every_notice_frame_budget(runtime):  # noqa:
         assert(boxes==before_clear+1) -- the visible prompt surface was actually erased
         assert(Overlay.retained().hud==0 and Overlay.retained().prompt==0)
     """)
-    # frames is the total displayed-frame budget, including present()'s immediate draw.
+    # Actual same-surface draw order is A,B,A, not strict visual FIFO. B must
+    # draw now for a truthful ACK; deferring it would wedge later physical work
+    # on a held core. All remaining frames are retained without silent eviction.
     assert [d["text"] for d in draws(runtime)] == ["A", "B", "A", "* Linked e"] + [f"P{i}" for i in range(1, 21)]
     assert draws(runtime)[3]["color"] == "#010203" and draws(runtime)[4]["color"] == "#FFFFFF"
 

@@ -529,3 +529,52 @@ def test_durable_ack_replay_returns_the_original_commit_without_a_second_effect(
         assert runtime.journal.pending("a") == []
     finally:
         runtime.close()
+
+
+@pytest.mark.parametrize("terminal", [False, True])
+def test_gen1_server_rejects_hud_ack_behind_physical_head_then_accepts_exact_replay(tmp_path, terminal):
+    from tests.unit.test_gen1_runtime_server import RuntimeCase
+
+    case = RuntimeCase(tmp_path)
+    try:
+        case.admit("a")
+        case.admit("b")
+        physical = {"cmd": "fixture_physical"}  # its physical proof is isolated from this FIFO test
+        body = build_state({"cmd": "game_over"}) if terminal else notice()
+        snapshot = case.runtime.journal.snapshot()
+        case.runtime.journal.commit("a", "e" * 32, {"event": "ordered-fixture"},
+                                    expected_revision=snapshot.revision, state=snapshot.state,
+                                    commands={"a": [physical, body], "b": []}, result={"ack": "ACK"})
+        physical_id, hud_id = case.runtime.journal.pending_ids("a")
+        command = case.runtime.journal.command("a", hud_id)
+        receipt = hud_receipt(command)
+        if terminal:
+            receipt.update(schema=STATE_RECEIPT_SCHEMA, disposition="applied")
+        payload = {"event": "command_ack", "command_id": hud_id,
+                   "command_sequence": command["command_sequence"], "outcome": "ACK", "receipt": receipt}
+        before = case.runtime.journal.snapshot()
+        with pytest.raises(JournalError, match="oldest pending command"):
+            case.send("a", payload, operation="1" * 32)
+        assert case.runtime.journal.snapshot() == before
+        assert case.runtime.journal.pending_ids("a") == (physical_id, hud_id)
+        assert case.runtime.journal.command("a", hud_id)["outcome"] is None
+
+        # Another physical lane owns this fixture's proof. Once it settles, the
+        # same HUD receipt is valid through the public Gen1Runtime socket path.
+        assert case.runtime.journal.acknowledge("a", physical_id, "ACK", {"schema": "fixture-physical-v1"}) is True
+        _, response = case.send("a", payload, operation="2" * 32)
+        assert response["ack"] == "ACK"
+        assert case.runtime.journal.command("a", hud_id)["outcome"] == "ACK"
+        committed = case.runtime.journal.snapshot()
+        _, replay = case.send("a", payload, operation="2" * 32)
+        assert replay["ack"] == "ACK" and case.runtime.journal.snapshot() == committed
+        _, duplicate = case.send("a", payload, operation="3" * 32)
+        assert duplicate["ack"] == "ACK"
+        assert case.runtime.journal.command("a", hud_id)["receipt"] == receipt
+        assert case.runtime.journal.pending_ids("a") == ()
+        after_duplicate = case.runtime.journal.snapshot()
+        with pytest.raises(JournalError, match="completed receipt"):
+            case.send("a", {**payload, "receipt": {**receipt, "frame": 43}}, operation="4" * 32)
+        assert case.runtime.journal.snapshot() == after_duplicate
+    finally:
+        case.close()

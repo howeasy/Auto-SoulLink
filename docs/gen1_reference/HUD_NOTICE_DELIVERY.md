@@ -121,9 +121,13 @@ the draw and the receipt may show the same notice twice, bounded by the server T
 `gen1_client_entry.step` calls `hud.render()` once per new emulated frame and never while
 the frame count stands still (held), so retained notices count emulated frames. The immediate
 `present` draw consumes the first requested frame; a notice is therefore drawn exactly `frames`
-times when uninterrupted, not `frames + 1`. Retained notices preserve the overlay's existing
-FIFO order and are never silently evicted after their receipt. Legacy `hud.show`/`hud.prompt`
-callers keep the same order. Text passes through the overlay's
+times when uninterrupted, not `frames + 1`. Retention is FIFO and never silently evicts a
+receipted notice. It is not strict same-surface visual FIFO: if A still has retained frames,
+B draws once immediately for its exact receipt, then the next `render()` resumes A before
+showing B's remaining frames (A, B, A, ...). Deferring B's ACK until A drains could block
+a later physical command forever while the emulator is held. This bounded visual
+preemption needs a live BizHawk legibility gate before release; it is not presented as a
+verified final UX. Legacy `hud.show`/`hud.prompt` callers keep their queue behavior. Text passes through the overlay's
 `sanitize` and fit functions as before.
 
 ## Status

@@ -218,9 +218,10 @@ end
 -- ── Durable notice present path (Gen 1 durable client) ──────────────────────
 -- H.present draws one server-issued notice with an actual gui call NOW and
 -- retains its remaining frame budget at the tail of the surface queue.  The
--- existing overlay contract is FIFO: a later notice may draw once for its
--- durable receipt, but it may not silently discard or preempt an earlier
--- notice's remaining duration.
+-- Retention is FIFO and never silently discards an earlier notice. The immediate
+-- draw is not strict visual FIFO: on the same surface B briefly paints over A,
+-- then render() resumes A before retaining B's remaining frames. Waiting to draw
+-- B until A drains could wedge a physical command behind B while the core is held.
 -- Returns true only after the draw call completed, which is what a durable
 -- "drawn" receipt asserts. H.render keeps drawing it for `frames` frames.
 function H.present(notice)

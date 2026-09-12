@@ -350,6 +350,21 @@ class Gen1Runtime(DurableRuntime):
             raise ProtocolError("RBY trade control is private to the runtime")
         if event == "command_ack":
             command = self.journal.command(player, message.get("command_id"))
+            if command["body"].get("cmd") in ("hud_notice", "hud_state"):
+                semantic = self._semantic(message)
+                # The shared dispatcher verifies the exact no-write receipt, but
+                # deliberately does not impose FIFO on other generations. Gen 1's
+                # physical-before-HUD journal ordering is a release invariant.
+                # An already committed operation or identical completed receipt
+                # remains replayable after the command leaves the pending index.
+                if self.journal.event(player, message["operation_id"], semantic) is None:
+                    if command["outcome"] is None:
+                        pending = self.journal.pending_ids(player)
+                        if not pending or pending[0] != message["command_id"]:
+                            raise JournalError("Gen 1 HUD ACK must own the oldest pending command")
+                    elif (command["outcome"] != "ACK" or semantic.get("outcome") != "ACK"
+                          or command["receipt"] != semantic.get("receipt")):
+                        raise JournalError("Gen 1 HUD replay differs from the completed receipt")
             if command['body'].get('cmd') in ('retirement_observe','acquisition_retire'):
                 from server.gen1_retirement_runtime import acknowledge
                 return acknowledge(self, player, message['operation_id'], self._semantic(message))
