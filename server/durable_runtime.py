@@ -62,6 +62,8 @@ class DurableRuntime:
         self._service_epoch = secrets.token_hex(16)
         self._barred_service_epoch = None
         self._service_recovery_required = False
+        self._service_continuity = {}
+        self._service_refusals = {}
         self._service_reason = "waiting for fresh paired control roundtrips"
         self._wall_seen = {}
         self._writers = {}
@@ -170,6 +172,8 @@ class DurableRuntime:
         # never accepted as an unjournaled HELLO command batch by the client.
         response = self.gate.response(player, message, [], hello=True)
         response["recovery"] = self.state().barrier.document()
+        if self._service_continuity_enabled():
+            response["service_recovery"] = self._service_recovery_document()
         # The barrier now requires fresh paired proofs. Initial peers are already
         # held; sending a disconnect notice here would create a HELLO/reconnect
         # loop in which the second arrival always evicts the first.
@@ -215,6 +219,29 @@ class DurableRuntime:
                     self.journal.commit(player, challenge, self._semantic(message),
                         expected_revision=stage.journal_revision, state=stage.document(),
                         commands={"a": [], "b": []}, result={"ack": "ACK"})
+        continuity = message.get("service_continuity")
+        if continuity is not None:
+            try:
+                proof = self._verify_service_continuity(
+                    player, copy.deepcopy(continuity), stage, copy.deepcopy(binding)
+                )
+                if not isinstance(proof, str) or not re.fullmatch(r"[0-9a-f]{64}", proof):
+                    raise JournalError("service continuity binding returned no verified proof")
+                previous = self._service_continuity.get(player)
+                if previous is not None and previous != proof:
+                    raise JournalError("conflicting service continuity proof in the current epoch")
+            except (JournalError, ValueError) as error:
+                refusal = _service_text(error, "service continuity proof was refused")
+                self._service_continuity.pop(player, None)
+                self._service_refusals[player] = refusal
+                self._service_recovery_required = True
+                self._service_reason = refusal
+            else:
+                self._service_refusals.pop(player, None)
+                self._service_continuity[player] = proof
+                if set(self._service_continuity) == {"a", "b"}:
+                    self._service_recovery_required = False
+                    self._service_reason = "paired same-process service continuity verified"
         ticket = stage.barrier.ticket()
         paired_control = self._paired_control_current_at(now)
         release_ready = self._service_release_ready(stage)
@@ -236,6 +263,8 @@ class DurableRuntime:
                              "recovery_epoch": ticket["epoch"], "ticket_digest": ticket["digest"]}
         response = self.gate.response(player, message, [])
         response.update(control=authority, recovery=stage.barrier.document())
+        if self._service_continuity_enabled():
+            response["service_recovery"] = self._service_recovery_document()
         return response
 
     def process(self, message, owner):
@@ -321,6 +350,23 @@ class DurableRuntime:
                                           "admission_epoch": self.gate.epoch,
                                           "bindings": bindings})}
 
+    def _service_recovery_document(self):
+        return {
+            "schema": "slink-service-recovery-v1",
+            "required": self._service_recovery_required,
+            "service_epoch": self._service_epoch,
+            "paired_admission": set(self.gate.sessions) == {"a", "b"},
+            "proofs": {player: player in self._service_continuity for player in ("a", "b")},
+            "refusals": {player: self._service_refusals.get(player) for player in ("a", "b")},
+        }
+
+    def _service_continuity_enabled(self):
+        return False
+
+    def _verify_service_continuity(self, player, evidence, stage, binding):
+        """Generation hook returning a trusted evidence digest, never a client success flag."""
+        raise JournalError("service continuity recovery is not configured for this runtime")
+
     def _paired_control_current_at(self, now):
         if now is None or self._failed is not None or self._service_recovery_required:
             return False
@@ -353,6 +399,8 @@ class DurableRuntime:
             self._service_epoch = digest({"barred_service_epoch": previous,
                                           "reason": str(reason), "rotation": "required"})[:32]
         self._service_recovery_required = True
+        self._service_continuity.clear()
+        self._service_refusals.clear()
         self._service_reason = _service_text(reason)
 
     def _notify_holds(self, reason, *, except_owner=None):
@@ -405,18 +453,26 @@ class DurableRuntime:
         paired_control = self._paired_control_current_at(self._clock)
         release_ready = self._service_release_ready(stage)
         release_reason = None if release_ready else _service_text(self._service_release_reason(stage))
+        service = {"epoch": self._service_epoch,
+                   "barred_epoch": self._barred_service_epoch,
+                   "digest": (self._service_binding() or {}).get("service_digest"),
+                   "paired_control_current": paired_control,
+                   "release_ready": release_ready,
+                   "release_reason": release_reason,
+                   "current": paired_control and release_ready,
+                   "recovery_required": self._service_recovery_required,
+                   "reason": self._service_reason}
+        if self._service_continuity_enabled():
+            service["continuity"] = {player: player in getattr(self, "_service_continuity", {})
+                                     for player in ("a", "b")}
+            service["continuity_refusals"] = {
+                player: getattr(self, "_service_refusals", {}).get(player)
+                for player in ("a", "b")
+            }
         return {"recovery": stage.barrier.status(), "failed": self._failed,
                 "connections": {p: {"connected": p in self.gate.sessions, "rom_type": self.gate.sessions[p].metadata.get("rom_type") if p in self.gate.sessions else None,
                     "last_event": "durable_session", "last_seen_ts": self._wall_seen.get(p)} for p in ("a", "b")},
-                "service": {"epoch": self._service_epoch,
-                            "barred_epoch": self._barred_service_epoch,
-                            "digest": (self._service_binding() or {}).get("service_digest"),
-                            "paired_control_current": paired_control,
-                            "release_ready": release_ready,
-                            "release_reason": release_reason,
-                            "current": paired_control and release_ready,
-                            "recovery_required": self._service_recovery_required,
-                            "reason": self._service_reason},
+                "service": service,
                 "scope": "configured_runtime_requires_qualified_generation_bindings"}
 
     def _presentation_state(self):

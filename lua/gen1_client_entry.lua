@@ -3,7 +3,7 @@
 -- free_service (P10): observe free, hold to write. The loop of gen1_observation_loop.lua
 -- ticks once per emulated frame; the heartbeat checkpoint and every write take a
 -- momentary verified hold of their own.
-local M={WRITE_SERVICE_SECONDS=2}
+local M={WRITE_SERVICE_SECONDS=2,CONTINUITY_RETRY_SECONDS=2}
 local function hex(value,size)
     return type(value)=="string" and #value==size and value:match("^[0-9a-f]+$")~=nil
 end
@@ -37,7 +37,10 @@ function M.start(launch,options)
     assert(gameinfo.getromhash():lower()==launch.cartridge.final_rom_sha1,"loaded ROM differs from the run launcher")
     local actual=assert(require("gen1_runtime_profiles").metadata(launch.cartridge.variant,launch.cartridge))
     assert(JSON.encode(actual)==JSON.encode(launch.cartridge),"loaded cartridge profile differs from the launcher")
-    local self={phase="waiting_for_overworld",reason="Waiting for a verified overworld checkpoint",host=nil,holds=nil,runtime=nil,store=nil}
+    local self={phase="waiting_for_overworld",reason="Waiting for a verified overworld checkpoint",host=nil,holds=nil,runtime=nil,store=nil,
+        continuity_invalidated=nil,last_physical_frame=nil,load_state_hook=nil,continuity_cache=nil,
+        continuity_retry=nil,continuity_epoch=nil,
+        continuity_status={state="unavailable",reason="free service is not initialized"}}
     local nonce=require("platform_identity").new_nonce
     local generation,instance=assert(nonce()),assert(nonce())
     local context,first_frame
@@ -117,18 +120,101 @@ function M.start(launch,options)
         local operations=faint and faint.operations or nil
         local ready=faint and faint.ready or function()return false,"Waiting for qualified cartridge execution and reconciliation"end
         local executor=faint and faint.adapter or {prepare=unavailable,classify=unavailable,apply=unavailable,receipt=unavailable}
+        local function new_instruction()
+            return require("battle_force_authority").service({journal=journal,memory=memory,owner_id=instance,held=at_boundary,
+                unwrap=function(entry)return require("gen1_runtime").unwrap(entry.body,launch.player)end})
+        end
         if free then
             self.acquisitions=require("gen1_acquisition_observers").new({variant=launch.cartridge.variant,
                 final_sha1=launch.cartridge.final_rom_sha1,owned=source_owned,
                 held=function()return self.host.status().physical_stop_verified==true or at_boundary() end})
             -- In-battle death delivery (handoff item 5): the window service arms the one-instruction executor
             -- under the loop boundary predicate; its rows close the server's battle_instruction command.
-            self.instruction=require("battle_force_authority").service({journal=journal,memory=memory,owner_id=instance,held=at_boundary,
-                unwrap=function(entry)return require("gen1_runtime").unwrap(entry.body,launch.player)end})
+            self.instruction=new_instruction()
         end
         local function hard_revoke(reason)
             assert(self.holds:set("lifecycle",true,reason))
             if self.instruction then assert(self.instruction:revoke(reason))end
+            return true
+        end
+        if free then
+            assert(event and type(event.onloadstate)=="function","savestate lifecycle callback required")
+            self.load_state_hook=assert(event.onloadstate(function()
+                self.continuity_invalidated="savestate load requires controlled recovery"
+                hard_revoke(self.continuity_invalidated)
+                if self.runtime then self.runtime:revoke(self.continuity_invalidated)end
+            end,"slink-free-service-load-"..instance))
+        end
+        local function service_continuity(recovery,binding)
+            local function deferred(why)
+                local text=tostring(why or "service continuity is not ready"):gsub("[%c]"," "):sub(1,240)
+                self.continuity_status={state="deferred",service_epoch=recovery and recovery.service_epoch or nil,
+                    reason=text~=""and text or "service continuity is not ready"}
+                return nil
+            end
+            if not free or self.continuity_invalidated or not self.loop then
+                return deferred(self.continuity_invalidated or "free observation loop is not initialized")
+            end
+            if self.continuity_epoch~=recovery.service_epoch then
+                self.continuity_epoch=recovery.service_epoch
+                self.continuity_cache=nil;self.continuity_retry=nil
+            end
+            local refused=recovery.refusals and recovery.refusals[launch.player]
+            if refused and refused~=JSON.null then
+                self.continuity_cache=nil
+                local now=clock()
+                if not self.continuity_retry or self.continuity_retry.reason~=refused then
+                    self.continuity_retry={reason=refused,retry_at=now+M.CONTINUITY_RETRY_SECONDS}
+                end
+                if now<self.continuity_retry.retry_at then
+                    deferred(refused)
+                    self.continuity_status.retry_at=self.continuity_retry.retry_at
+                    return nil
+                end
+                self.continuity_retry=nil
+            end
+            if self.continuity_cache and self.continuity_cache.service_epoch==recovery.service_epoch then
+                self.continuity_status={state="ready",service_epoch=recovery.service_epoch,reason="cached held continuity proof"}
+                return assert(JSON.decode(assert(JSON.encode(self.continuity_cache))))
+            end
+            local ok,proof=pcall(function()
+                assert(self.holds:held("lifecycle") and self.host.status().physical_stop_verified,
+                    "service continuity requires the lifecycle hold")
+                local pending_events,event_error=journal:pending_events()
+                local pending_commands,command_error=journal:pending_commands()
+                assert(pending_events,event_error or "durable events unavailable")
+                assert(pending_commands,command_error or "durable commands unavailable")
+                assert(#pending_events==0 and #pending_commands==0,"client journal is not idle")
+                local continuity,continuity_error=self.loop:continuity()
+                assert(continuity,continuity_error)
+                local point=self.loop_ctx.inventory()
+                assert(point,"party write-safe inventory checkpoint is unavailable")
+                assert(point.frame==continuity.idle.source_frame,
+                    "continuity inventory differs from its idle source frame")
+                continuity.idle.pending_events=0;continuity.idle.pending_commands=0
+                local baseline=assert(self.store:read()).observation
+                return {schema="rby-free-service-continuity-v1",service_epoch=recovery.service_epoch,
+                    binding_digest=binding.binding_digest,
+                    initial_operation_id=baseline.initial_inventory.operation_id,
+                    cursor=continuity.cursor,inventory=point,idle=continuity.idle}
+            end)
+            if not ok then return deferred(proof)end
+            self.continuity_cache=assert(JSON.decode(assert(JSON.encode(proof))))
+            self.continuity_retry=nil
+            self.continuity_status={state="ready",service_epoch=recovery.service_epoch,reason="held continuity proof captured"}
+            return proof
+        end
+        local function accept_service(_,recovery)
+            assert(not self.continuity_invalidated,"invalidated physical context cannot resume service")
+            if self.holds:held("lifecycle") then
+                assert(recovery.required==false and recovery.proofs.a==true and recovery.proofs.b==true,
+                    "paired service continuity proof is incomplete")
+                if self.instruction and self.instruction:status().revoked then
+                    self.instruction=new_instruction()
+                    if self.loop_ctx then self.loop_ctx.instruction=self.instruction end
+                end
+                assert(self.holds:set("lifecycle",false,"paired service continuity verified"))
+            end
             return true
         end
         self.runtime=assert(require("gen1_runtime").new({run_id=launch.run_id,player=launch.player,
@@ -145,6 +231,8 @@ function M.start(launch,options)
                 return self.holds:held(owner) and self.host.status().physical_stop_verified==true
             end,
             on_revoke=hard_revoke,
+            service_continuity=free and service_continuity or nil,
+            on_service_authority=free and accept_service or nil,
             read_context=free and source_owned or owned,
             operation_execution=operations,
             operation_ready=ready,
@@ -211,6 +299,13 @@ function M.start(launch,options)
         if self.phase=="failed"then return false,self.reason end
         local ok,why=pcall(function()
             assert(gameinfo.getromhash():lower()==launch.cartridge.final_rom_sha1,"launch cartridge changed")
+            local physical_frame=emu.framecount()
+            if self.last_physical_frame and physical_frame<self.last_physical_frame then
+                self.continuity_invalidated="emulator frame moved backwards; controlled recovery is required"
+                if self.holds then assert(self.holds:set("lifecycle",true,self.continuity_invalidated))end
+                error(self.continuity_invalidated,0)
+            end
+            self.last_physical_frame=physical_frame
             if not self.runtime then
                 -- Hold at the first safe overworld frame that is also visible. A fresh
                 -- New Game reaches write-safety inside the white fade into the
@@ -250,6 +345,7 @@ function M.start(launch,options)
             bootstrap_observation=bootstrap,
             engine_signals=self.observer and self.observer.signals and self.observer.signals:status()or nil,
             runtime=self.runtime and self.runtime:status({summary=true}) or nil,
+            continuity=self.continuity_status,
             hold_mux=self.holds and self.holds:status() or nil,
             ordinary_execution=false,
             free_service=free,observation_loop=self.loop~=nil}))))
@@ -260,6 +356,7 @@ function M.start(launch,options)
         if self.acquisitions then self.acquisitions:close()end
         if self.bootstrap then self.bootstrap.close()end
         if self.observer then self.observer:close()end
+        if self.load_state_hook then event.unregisterbyid(self.load_state_hook);self.load_state_hook=nil end
         if self.runtime then self.runtime:revoke("client service is closing")end
         if self.store then self.store:close()end
         -- Stopping a Lua service cannot release gameplay. Its independent host

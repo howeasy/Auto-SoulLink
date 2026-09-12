@@ -58,3 +58,24 @@ def test_replaced_context_cannot_reuse_the_old_initial_baseline(observer):
     observer.execute("context.context_generation=string.rep('c',32)")
     assert observer.globals().observe(True)[0] is False
     assert len(payload(observer)['outbox'])==1
+
+
+def test_free_observation_ack_persists_the_exact_server_cursor(runtime):  # noqa: F811
+    lua = runtime
+    start(lua)
+    lua.execute("""
+        package.loaded.gen1_full_save={}
+        Observe=require('gen1_initial_observation')
+        store:close();store=assert(open_store());journal=assert(Journal.open(store,new_id,Observe))
+        local baseline=assert(store:read()).observation
+        baseline.observation_sequence=1
+        operation=assert(journal:append({event='observation',schema='rby-observation-v1',sequence=1,frame=123},baseline))
+        assert(journal:accept_response(operation,JSON.array()))
+    """)
+    saved = payload(lua)["observation"]
+    assert saved["observation_cursor"] == {
+        "sequence": 1,
+        "operation_id": lua.globals().operation,
+        "frame": 123,
+    }
+    assert saved["observation_sequence"] == 1 and payload(lua)["outbox"] == []

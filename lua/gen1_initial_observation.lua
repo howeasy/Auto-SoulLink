@@ -83,6 +83,21 @@ function M.new(options)
     return self
 end
 function M.acknowledge_event(payload,operation_id,baseline)
+    if payload.event=="observation"then
+        assert(payload.schema=="rby-observation-v1" and type(payload.sequence)=="number"
+            and payload.sequence%1==0 and payload.sequence>=1 and type(payload.frame)=="number"
+            and payload.frame%1==0 and payload.frame>=0,"invalid acknowledged observation cursor")
+        assert(type(baseline.observation_sequence)=="number"
+            and baseline.observation_sequence>=payload.sequence,
+            "acknowledged observation exceeds the persisted producer cursor")
+        local prior=baseline.observation_cursor
+        if prior then
+            assert(payload.sequence==prior.sequence+1 and payload.frame>=prior.frame,
+                "acknowledged observation cursor skipped or moved backwards")
+        end
+        baseline.observation_cursor={sequence=payload.sequence,operation_id=operation_id,frame=payload.frame}
+        return baseline
+    end
     if payload.event=="inventory_observation"then
         return Stream.acknowledge("inventory_stream","inventory_observation",payload,operation_id,baseline)
     end

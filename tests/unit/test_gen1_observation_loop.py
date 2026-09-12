@@ -47,7 +47,8 @@ observers={initial=function(_,at)note("initial");return {frame=at,capture_open=J
             static=JSON.array(),npc_exchange=JSON.array(),wild=JSON.array(),evolution=JSON.array()}
     end,
     drain=function(_,rows)note("observers_drain");receipts=JSON.array();witness=JSON.array();return true end,
-    ready=function(_,state)note("ready");assert(state.frame==frame,"ready frame differs");return true end}
+    ready=function(_,state)note("ready");assert(state.frame==frame,"ready frame differs");return true end,
+    idle=function(_,state)note("idle");assert(state.frame==frame,"idle frame differs");return true end}
 journal={append=function(_,event,baseline)
         note("append");appended[#appended+1]={event=clone(event),baseline=clone(baseline)}
         return string.rep("a",32)
@@ -179,6 +180,62 @@ def test_persisted_cursor_is_adopted_instead_of_a_fresh_initial(lua):
     assert "initial" not in calls(lua)
     lua.globals().advance()
     assert lua.eval("prepared_with[1].fixture") is True
+
+
+def test_idle_continuity_requires_the_acknowledged_cursor_and_empty_sources(lua):
+    lua.execute("""
+        baseline.observation_sequence=1
+        baseline.observation_cursor={sequence=1,operation_id=string.rep('a',32),frame=99}
+        baseline.acquisition_source={frame=99,capture_open=JSON.null,grant_open=0,evolution_open=0}
+        calls={};build();continuity=loop:continuity()
+    """)
+    assert lua.eval("continuity.cursor.sequence") == 1
+    assert lua.eval("continuity.idle.source_frame") == 99
+    assert lua.eval("continuity.idle.battle") == 0
+    assert calls(lua) == ["idle", "peek", "pending"]
+
+
+def test_idle_continuity_before_first_observation_is_rooted_in_initial_ack(lua):
+    lua.execute("""
+        baseline.initial_inventory={phase='acknowledged',operation_id=string.rep('9',32),
+            payload={event='initial_observation',payload={frame=99}}}
+        baseline.acquisition_source={frame=99,capture_open=JSON.null,grant_open=0,evolution_open=0}
+        build();continuity=loop:continuity()
+    """)
+    assert lua.eval("continuity.cursor.sequence") == 0
+    assert lua.eval("continuity.cursor.operation_id") == "9" * 32
+    assert lua.eval("continuity.cursor.frame") == 99
+
+
+@pytest.mark.parametrize(
+    ("fault", "message"),
+    [
+        ("unacked", "not durably acknowledged"),
+        ("capture", "open acquisition cursor"),
+        ("engine", "engine hook buffer"),
+        ("battle", "battle state"),
+        ("write", "physical write obligation"),
+    ],
+)
+def test_nonidle_continuity_is_refused(lua, fault, message):
+    lua.execute("""
+        baseline.observation_sequence=1
+        baseline.observation_cursor={sequence=1,operation_id=string.rep('a',32),frame=99}
+        baseline.acquisition_source={frame=99,capture_open=JSON.null,grant_open=0,evolution_open=0}
+        build()
+    """)
+    if fault == "unacked":
+        lua.execute("baseline.observation_sequence=2")
+    elif fault == "capture":
+        lua.execute("loop.source.capture_open={kind='party_begin',frame=99}")
+    elif fault == "engine":
+        lua.execute("queue[1]={kind='faint',frame=99}")
+    elif fault == "battle":
+        lua.globals().battle = 1
+    else:
+        lua.globals().pending_write = True
+    result = lua.eval("loop:continuity()")
+    assert result[0] is None and message in result[1]
 
 
 def test_runs_without_acquisition_observers(lua):

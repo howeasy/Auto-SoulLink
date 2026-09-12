@@ -68,6 +68,10 @@ function M.new(options)
         assert(type(options.read_hello)=="function" and type(options.metadata_matches)=="function","metadata callbacks required")
         assert(type(options.operation_ready)=="function","operation-specific readiness policy required")
         assert(options.reconciliation==nil or type(options.reconciliation)=="function","invalid reconciliation callback")
+        assert(options.service_continuity==nil or type(options.service_continuity)=="function",
+            "invalid service continuity callback")
+        assert(options.on_service_authority==nil or type(options.on_service_authority)=="function",
+            "invalid service-authority callback")
         assert(options.operation_held==nil or type(options.operation_held)=="function",
             "operation hold readback must be a function")
         assert(options.on_revoke==nil or type(options.on_revoke)=="function",
@@ -90,6 +94,7 @@ function M.new(options)
         local sync_interval=interval(options.sync_interval,0.5,2)
         local state={phase="connection_pending",connected=false,failed=false,reason="waiting for admission",
             last_clock=nil,last_control=nil,last_sync=nil,request=nil,binding=nil,admission=nil,recovery=nil,
+            service_recovery=nil,
             event_count=0,command_count=0,hold_verified=false,host_request_verified=false}
         local self={}
         local function now()
@@ -133,7 +138,7 @@ function M.new(options)
             if fatal and not state.failure then state.failure=why end
             state.failed=state.failed or fatal
             state.reason=why;state.phase=state.failed and "failed" or "connection_pending"
-            state.request=nil;state.binding=nil;state.admission=nil;state.recovery=nil;state.last_control=nil
+            state.request=nil;state.binding=nil;state.admission=nil;state.recovery=nil;state.service_recovery=nil;state.last_control=nil
             state.last_verified_control=nil
             if options.on_revoke then
                 local stopped,problem=pcall(options.on_revoke,why)
@@ -286,6 +291,29 @@ function M.new(options)
             if request.kind~="semantic" then
                 assert(packet.recovery==nil or packet.recovery==JSON.null or JSON.kind(packet.recovery)=="object",
                     "invalid recovery document")
+                local service=packet.service_recovery
+                if options.service_continuity then
+                    assert(JSON.kind(service)=="object" and service.schema=="slink-service-recovery-v1"
+                        and type(service.required)=="boolean" and token(service.service_epoch,32)
+                        and type(service.paired_admission)=="boolean"
+                        and JSON.kind(service.proofs)=="object" and type(service.proofs.a)=="boolean"
+                        and type(service.proofs.b)=="boolean" and JSON.kind(service.refusals)=="object",
+                        "invalid service recovery document")
+                    for key in pairs(service)do
+                        assert(key=="schema"or key=="required"or key=="service_epoch"or key=="paired_admission"
+                            or key=="proofs"or key=="refusals",
+                            "unknown service recovery field")
+                    end
+                    for key in pairs(service.proofs)do assert(key=="a"or key=="b","unknown service recovery player")end
+                    for key,value in pairs(service.refusals)do
+                        assert((key=="a"or key=="b")and(value==JSON.null or type(value)=="string"
+                            and #value>0 and #value<=256 and not value:find("[%c]")),"invalid service continuity refusal")
+                    end
+                    state.service_recovery=copy(service)
+                else
+                    assert(service==nil or service==JSON.null or JSON.kind(service)=="object",
+                        "invalid optional service recovery document")
+                end
             end
             if request.kind=="hello" then
                 local binding=packet.admission.control_binding
@@ -307,6 +335,11 @@ function M.new(options)
                 assert(JSON.kind(packet.recovery)=="object","control response recovery document required")
                 assert(control:accept(packet.control),"stale or invalid control authority")
                 state.last_verified_control=request.started
+                if (packet.control.authority=="service"or packet.control.authority=="run")
+                    and options.on_service_authority then
+                    assert(options.on_service_authority(copy(packet.control),copy(state.service_recovery))==true,
+                        "service authority did not release its lifecycle hold")
+                end
                 if operation_execution then
                     local grant=packet.operation_execution
                     assert(grant==nil or grant==JSON.null or JSON.kind(grant)=="object","invalid operation execution response")
@@ -375,6 +408,16 @@ function M.new(options)
                             assert(JSON.kind(proof)=="object","reconciliation evidence must be an object, not a success flag")
                         end
                     end
+                    local continuity
+                    if options.service_continuity and state.service_recovery and state.service_recovery.required
+                        and state.service_recovery.paired_admission then
+                        continuity=options.service_continuity(copy(state.service_recovery),copy(state.binding))
+                        if continuity~=nil then
+                            continuity=copy(continuity)
+                            assert(JSON.kind(continuity)=="object",
+                                "service continuity evidence must be an object, not a success flag")
+                        end
+                    end
                     local challenge=control:challenge()
                     local operation
                     if operation_execution then
@@ -383,7 +426,8 @@ function M.new(options)
                             operation=copy(operation);assert(JSON.kind(operation)=="object","operation execution request must be an object")
                         end
                     end
-                    if send({event="control",operation_id=challenge.challenge,control=challenge,reconciliation=proof,operation_execution=operation},"control",time) then
+                    if send({event="control",operation_id=challenge.challenge,control=challenge,reconciliation=proof,
+                        service_continuity=continuity,operation_execution=operation},"control",time) then
                         state.last_control=time
                     end
                 else
@@ -452,6 +496,7 @@ function M.new(options)
                 admission_epoch=session.epoch,context_generation=state.binding and state.binding.context_generation,
                 binding_missing=state.binding==nil or not control:status().admitted,
                 request=state.request,pending_events=state.event_count,pending_commands=state.command_count,
+                service_recovery=state.service_recovery,
                 command_id=state.command_id,execution=execution,deferred=state.deferred,control=control:status(),
                 hold_verified=state.hold_verified,host_request_verified=state.host_request_verified,
                 operation_execution=operation_execution and operation_execution.status()or nil,

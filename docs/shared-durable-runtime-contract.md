@@ -33,6 +33,8 @@ local runtime, why = Runtime.new({
     operation_ready = operation_specific_readiness,
     executor_adapter = prepared_command_adapter,
     reconciliation = verified_local_evidence_or_nil,
+    service_continuity = held_same_process_idle_evidence_or_nil,
+    on_service_authority = release_lifecycle_hold_after_accept,
     new_nonce = fresh_nonce,           -- optional platform default
 })
 ```
@@ -94,11 +96,23 @@ and separately authorized held writes. It never sets `ordinary_execution` or
 the independently verified RecoveryBarrier epoch/digest and is the only ordinary
 execution authority. HELLO timestamps, TCP connectivity and semantic ACKs never
 count as service liveness. Disconnect, watchdog expiry, hold notice and server
-reopen after persisted client evidence bar the old service epoch. Process-restart
-continuity is not implemented, so such a reopened runtime reports
-`service.recovery_required=true` and stays held. The Manager's normal pristine
-create/close/server-open handoff remains eligible because neither admission slot
-contains client evidence yet.
+reopen after persisted client evidence bar the old service epoch. The RBY free
+service has one narrow continuity path: the same still-running BizHawk/Lua owner
+may reconnect while its independent lifecycle hold remains physically verified
+and submit typed `rby-free-service-continuity-v1` evidence for the current service
+epoch. Both current players must prove the exact persisted observation cursor,
+current held full inventory, original process/context/save/ROM identity and empty
+client/source/battle/command state before `service.recovery_required` clears. The
+server also checks the exact committed observation progress, latest inventory
+semantics (party count, current box, box-initialization state, members and boxes)
+and empty durable command journal. Volatile full-save bytes, the transient
+`save_status` byte and a later held frame may differ; `source_digest` is
+deliberately not an inventory identity. Before the
+first free observation, sequence zero is rooted in the immutable initial-observation
+operation and frame. It then issues `service`; only acceptance of that
+response allows the client to clear its lifecycle hold. The Manager's normal
+pristine create/close/server-open handoff remains eligible because neither
+admission slot contains client evidence yet.
 
 The Gen 1 `free_service` binding adds a persisted release predicate on top of
 paired CONTROL liveness: both `gen1-initial-observations` records, both
@@ -106,15 +120,43 @@ paired CONTROL liveness: both `gen1-initial-observations` records, both
 `receipt_operation` values must exist. Paired CONTROL may still authorize those
 command-scoped startup writes while the response remains `hold`; it cannot release
 either cartridge early. Battery/legacy starts without that complete provenance
-remain held. Recovery after a disconnect, watchdog, hard failure, or previously
-active process reopen is intentionally unavailable in this slice and requires the
-later persisted-continuity work.
+remain held. This continuity does not repair or advance physical state. A replaced
+Lua or BizHawk process, changed context/save/ROM/inventory, missing or stale peer
+proof, open acquisition or engine buffers, battle/instruction/native-trade
+activity, pending event/command, savestate load, reset or backwards frame remains
+held. Controlled reset/load/rewind recovery, process replacement and native-trade
+recovery require separate contracts.
+
+A malformed, stale or changed continuity proof is an ordinary refusal, not a
+transport fault: the current service epoch and both socket owners remain intact,
+the peer receives no asynchronous hold notice, and the submitting player receives
+`authority="hold"` with a bounded refusal in `service_recovery.refusals`. The
+client clears the rejected proof cache and waits two monotonic seconds before one
+same-epoch recomputation. This lets a no-write command settle while held without
+creating a retry or reconnect storm; a stable refusal remains held and retries at
+that bounded cadence. A new epoch clears the retry state immediately. Unsafe
+menus, battles and non-idle buffers produce no proof and do not fail the Lua
+service. Once a held inventory point is captured, the client reuses that exact
+proof for the epoch until a refusal invalidates it.
 
 `operation_held()` is an optional Boolean readback used for command-scoped held
 writes when the service owner itself is free-running. `on_revoke(reason)` is an
 optional fail-closed hook and must return exactly `true`; a cartridge binding uses
 it to acquire its lifecycle hold and disarm instruction hooks before the runtime
 can return to a frame boundary. Neither callback grants authority.
+
+`service_continuity(service_recovery, binding)` is an optional held-only producer.
+It returns a detached typed evidence object or nil. `service_recovery` identifies
+the current ephemeral epoch, whether both peers are admitted, and which player
+proofs the server has accepted; the client does not submit evidence before paired
+admission is reported.
+`binding` is the current admitted control binding. `on_service_authority(control,
+service_recovery)` runs only after a current `service`/`run` response has passed
+the control validator. It must return exactly true after safely releasing any
+generation lifecycle hold; a recovery release additionally requires
+`required=false` and both accepted proof flags. Initial service delivery with no
+lifecycle recovery hold remains valid. Failure revokes and retains the physical
+stop.
 
 Ordinary authorized `armed`/`PENDING` keeps the oldest command outstanding and
 blocks newer commands. It preserves an independently valid run ticket so ordinary
@@ -132,7 +174,8 @@ The matching server must use the common durable session envelope and these paths
   Its response contains `admission.control_binding` with matching `session_id`,
   `admission_epoch`, `context_generation` (32 hex each) and `binding_digest`
   (64 hex). HELLO responses contain an empty command array. An optional recovery
-  object can supply the first reconciliation attempt.
+  object can supply the first reconciliation attempt. Bindings with service
+  continuity also receive `service_recovery` naming its current service epoch.
 * Semantic responses atomically retire the oldest durable operation and stage
   every returned command. Commands arrive flat with their delivery envelope;
   the runtime strips `protocol`, `player`, `admission_epoch`, `session_id`, `seq`,
@@ -140,9 +183,12 @@ The matching server must use the common durable session envelope and these paths
   stored body, retaining the last two as the journal record identity.
 * Transient control requests use `event="control"`, the shared sequence and a
   fresh challenge as `operation_id`. They include the challenge/binding object
-  and optional reconciliation evidence. Responses have `commands=[]`, a `control`
-  authority packet and an object `recovery` document. Control never calls journal
-  `accept_response` or retires a semantic event.
+  and optional reconciliation evidence. They may also carry typed
+  `service_continuity` evidence. Responses have `commands=[]`, a `control`
+  authority packet, an object `recovery` document and the current
+  `service_recovery` descriptor. Control never calls journal `accept_response` or
+  retires a semantic event; accepted service proofs are ephemeral and bound to
+  the current service epoch.
 * A configured hold notice contains current protocol/player/epoch/session,
   `event=hold_event`, a bounded reason and `commands=[]`. It can only revoke;
   a notice for a stale session is ignored. A current notice discards socket

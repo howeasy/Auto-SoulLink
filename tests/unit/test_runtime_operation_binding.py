@@ -137,3 +137,69 @@ def test_service_fault_hard_holds_then_disarms_before_the_step_returns(runtime, 
         assert(revocation_order[1]=='hold' and revocation_order[2]=='disarm')
         assert(not service:has_service_lease())
     ''')
+
+
+def test_service_continuity_is_sent_for_the_current_epoch_and_releases_after_accept(runtime):
+    lua = runtime
+    start(lua)
+    lua.execute('''
+        local Runtime=require('durable_runtime')
+        now=0;connected=false;incoming={};physical=true;proofs=0;released=0
+        local binding={session_id=string.rep('1',32),admission_epoch=string.rep('2',32),
+            context_generation=string.rep('3',32),binding_digest=string.rep('4',64)}
+        local recovery={schema='slink-service-recovery-v1',required=true,
+            service_epoch=string.rep('5',32),paired_admission=true,proofs={a=false,b=true},
+            refusals={a=JSON.null,b=JSON.null}}
+        local transport={init=function()connected=true end,connected=function()return connected end,pump=function()end,
+            disconnect=function()connected=false;incoming={}end,receive=function()return table.remove(incoming,1)end,
+            queue_status=function()return {send_lines=0,send_bytes=0,send_offset=0,receive_lines=0,
+                receive_bytes=0,partial_receive_bytes=0,pending_receive_bytes=0,ready_receive_bytes=0}end,
+            send=function(raw)
+                local packet=assert(JSON.decode(raw))
+                local response={protocol=packet.protocol,player=packet.player,seq=packet.seq,operation_id=packet.operation_id,
+                    session_id=binding.session_id,admission_epoch=binding.admission_epoch,ack='ACK',commands=JSON.array(),
+                    recovery=JSON.object(),service_recovery=recovery}
+                if packet.event=='hello'then
+                    response.admission={state='admitted',client_nonce=packet.client_nonce,control_binding=binding}
+                elseif packet.event=='control'then
+                    if recovery.required then
+                        assert(packet.service_continuity.schema=='fixture-continuity-v1'
+                            and packet.service_continuity.service_epoch==recovery.service_epoch)
+                    else assert(packet.service_continuity==nil)end
+                    recovery={schema='slink-service-recovery-v1',required=false,
+                        service_epoch=recovery.service_epoch,paired_admission=true,proofs={a=true,b=true},
+                        refusals={a=JSON.null,b=JSON.null}}
+                    response.service_recovery=recovery
+                    response.control={session_id=binding.session_id,admission_epoch=binding.admission_epoch,
+                        context_generation=binding.context_generation,binding_digest=binding.binding_digest,
+                        challenge=packet.control.challenge,authority='service',service_epoch=recovery.service_epoch,
+                        service_digest=string.rep('6',64),reason='paired continuity verified'}
+                end
+                incoming[#incoming+1]=assert(JSON.encode(response));return true
+            end}
+        service=assert(Runtime.new({protocol='fixture-runtime-v1',hold_event='fixture_hold',player='a',
+            journal=journal,clock=function()return now end,transport=transport,server_host='localhost',server_port=1,
+            read_hello=function()return {context_generation=binding.context_generation}end,
+            metadata_matches=function()return true end,new_nonce=new_id,service_execution=true,
+            host={set_held=function(value)physical=value;return true end},
+            service_continuity=function(current,current_binding)
+                proofs=proofs+1;assert(physical and current.service_epoch==recovery.service_epoch
+                    and current_binding.binding_digest==binding.binding_digest)
+                return {schema='fixture-continuity-v1',service_epoch=current.service_epoch}
+            end,
+            on_service_authority=function(control,current)
+                if released==0 then callback_physical=physical;callback_required=current.required end
+                assert(control.authority=='service'and current.required==false)
+                released=released+1;return true
+            end,
+            operation_ready=function()return false,'no commands'end,
+            executor_adapter={prepare=function()error('no command')end,classify=function()error('no command')end,
+                apply=function()error('no command')end,receipt=function()error('no command')end}}))
+        for i=1,16 do now=i*.1;assert(service:step())end
+        assert(proofs==1,'unexpected proof count '..proofs)
+        assert(released>=1,'service callback was not invoked '..JSON.encode(service:status()))
+        assert(callback_physical==true and callback_required==false,'release callback order changed')
+        assert(not physical,'service response did not release control hold')
+        assert(service:has_service_lease(),'accepted service lease is not current')
+        assert(service:status().service_recovery.required==false)
+    ''')

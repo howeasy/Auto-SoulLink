@@ -212,6 +212,14 @@ class Gen1Runtime(DurableRuntime):
     def _service_release_reason(self, stage):
         return "waiting for both initial observations, new-game bootstraps, and initial-save receipts"
 
+    def _verify_service_continuity(self, player, evidence, stage, binding):
+        from server.gen1_service_continuity import verify
+
+        return verify(self, player, evidence, stage, binding)
+
+    def _service_continuity_enabled(self):
+        return self.free_service and not self.native_trade
+
     def _presentation_state(self):
         # The journal checks the committed snapshot hash. Displaying that state
         # does not require replaying physical save/ROM proofs after every poll.

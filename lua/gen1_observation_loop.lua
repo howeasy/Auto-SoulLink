@@ -114,6 +114,43 @@ function M.new(ctx)
     end
     function self:observe()return guarded(observe,self)end -- for a writer that steps frames itself
     function self:tick()return guarded(service,self)end
+    function self:continuity()
+        local ok,result=pcall(function()return guarded(function()
+            local current=baseline();local source=assert(self.source,"persisted acquisition cursor required")
+            local cursor=current.observation_cursor
+            if cursor then
+                assert(type(cursor)=="table"and cursor.sequence==current.observation_sequence,
+                    "last observation is not durably acknowledged")
+            else
+                assert(current.observation_sequence==nil or current.observation_sequence==0,
+                    "last observation is not durably acknowledged")
+                local initial=assert(current.initial_inventory,"initial observation cursor required")
+                local payload=assert(initial.payload).payload
+                assert(initial.phase=="acknowledged"and type(initial.operation_id)=="string"and payload,
+                    "initial observation is not durably acknowledged")
+                cursor={sequence=0,operation_id=initial.operation_id,frame=payload.frame}
+            end
+            assert(source.capture_open==JSON.null and source.grant_open==0
+                and (source.evolution_open or 0)==0 and source.native_handoff_operation_id==nil,
+                "open acquisition cursor prohibits service continuity")
+            if ctx.observers then
+                assert(type(ctx.observers.idle)=="function","idle acquisition verifier required")
+                assert(ctx.observers:idle(source))
+            end
+            local engine=ctx.engine:peek();assert(#engine==0,"engine hook buffer prohibits service continuity")
+            local probe=ctx.engine:probe();assert(probe.battle==0,"battle state prohibits service continuity")
+            local instruction=ctx.instruction and ctx.instruction:status()or {open=false,armed=false}
+            assert(not instruction.open and not instruction.armed,"battle instruction prohibits service continuity")
+            assert(not ctx.writer or not ctx.writer:pending(),"physical write obligation prohibits service continuity")
+            return {cursor=copy(cursor),idle={acquisition_open=false,acquisition_pending=0,
+                engine_pending=0,instruction_open=false,instruction_armed=false,battle=0,source_frame=source.frame}}
+        end)end)
+        if not ok then
+            local why=tostring(result or "service continuity is not idle"):gsub("[%c]"," "):sub(1,240)
+            return nil,why~=""and why or "service continuity is not idle"
+        end
+        return result
+    end
     function self:run()while true do emu.frameadvance();self:tick()end end
     return self
 end

@@ -217,11 +217,13 @@ def test_free_service_completes_startup_held_command_before_constructing_loop():
     })
     lua.execute(r'''
         package.path=root..'/lua/?.lua;'..package.path
-        JSON=require('json_codec');physical=false;pending=1;loop_built=false;startup_write=false;clock=0;nonce=0
+        JSON=require('json_codec');physical=false;pending=1;event_pending=0;loop_built=false;startup_write=false;clock=0;nonce=0;frame=100
+        write_safe=true;continuity_fault=nil;captures=0
         gameinfo={getromhash=function()return string.rep('e',40)end}
-        emu={framecount=function()return 100 end,yield=function()end,frameadvance=function()error('startup advanced a frame')end}
+        emu={framecount=function()return frame end,yield=function()end,frameadvance=function()error('startup advanced a frame')end}
+        event={onloadstate=function(fn)load_callback=fn;return 'load-hook'end,unregisterbyid=function()end}
         console={log=function()end}
-        package.loaded['memory_gb']={initProfile=function()end,isPartyWriteSafe=function()return true end,
+        package.loaded['memory_gb']={initProfile=function()end,isPartyWriteSafe=function()return write_safe end,
             readPlayerId=function()return 0 end,readPlayerName=function()return 'SAME'end,read_u8=function()return 1 end}
         package.loaded['games.gen1_rby']={}
         package.loaded['gen1_runtime_profiles']={metadata=function(_,cartridge)return cartridge end}
@@ -230,23 +232,24 @@ def test_free_service_completes_startup_held_command_before_constructing_loop():
             status=function()return {held=physical,physical_stop_verified=physical}end,
             yield_held=function()assert(physical);return true end}
         package.loaded['platform_execution']={supported_profile=function()return {}end,new=function()return host end}
-        package.loaded['platform_clock']={new=function()return function()clock=clock+.01;return clock end end}
+        package.loaded['platform_clock']={new=function()return function()return clock end end}
         luanet={load_assembly=function()end,import_type=function(name)
             if name=='System.IO.Path'then return {GetFullPath=function(value)return value end,
                 GetDirectoryName=function()return 'tmp'end}end
             error('unexpected type '..name)
         end}
-        local baseline={initial_inventory={phase='acknowledged'},bootstrap={phase='acknowledged'}}
+        local baseline={initial_inventory={phase='acknowledged',operation_id=string.rep('9',32)},bootstrap={phase='acknowledged'},
+            observation_sequence=1,observation_cursor={sequence=1,operation_id=string.rep('8',32),frame=100}}
         local store={read=function()return {observation=baseline}end,close=function()end}
         package.loaded['platform_storage']={new=function()return {}end}
         package.loaded['state_store']={open=function()return store end}
         package.loaded['connector']={}
         local journal={pending_commands=function()return pending==1 and {{command_id='initial'}}or{}end,
-            pending_events=function()return {}end}
+            pending_events=function()return event_pending==1 and {{operation_id=string.rep('5',32)}}or{}end}
         package.loaded['client_journal']={initial=function()return {}end,open=function()return journal end}
         package.loaded['gen1_bootstrap_observer']={new=function()return {close=function()end,status=function()return{}end}end}
         local observer={signals={status=function()return{}end},step=function()end,close=function()end}
-        package.loaded['gen1_initial_observation']={new=function()return observer end,capture=function()return{}end}
+        package.loaded['gen1_initial_observation']={new=function()return observer end,capture=function()captures=captures+1;return{frame=100}end}
         local operations={request=function()end,accept=function()return true end,authorize_apply=function()return false end,
             revoke=function()end,status=function()return{}end}
         package.loaded['gen1_held_faint']={new=function()return {operations=operations,ready=function()return false end,
@@ -269,9 +272,47 @@ def test_free_service_completes_startup_held_command_before_constructing_loop():
         end}
         package.loaded['gen1_observation_loop']={new=function()
             assert(startup_write and pending==0 and physical,'loop constructed before startup command settled')
-            loop_built=true;return {tick=function()end}
+            loop_built=true;return {tick=function()end,continuity=function()
+                if continuity_fault then return nil,continuity_fault end
+                return {cursor=baseline.observation_cursor,
+                idle={acquisition_open=false,acquisition_pending=0,engine_pending=0,instruction_open=false,
+                    instruction_armed=false,battle=0,source_frame=100}}end}
         end}
         service=assert(require('gen1_client_entry').start(assert(JSON.decode(launch_json)),{root=root,storage_root='tmp'}))
         assert(service:step())
         assert(startup_write and loop_built and service.loop~=nil and not physical)
+        assert(runtime_options.on_service_authority({},{required=true,proofs={a=false,b=false}})and not physical)
+        assert(runtime_options.on_revoke('connector disconnected'))
+        assert(physical and service.holds:held('lifecycle'))
+        local recovery={service_epoch=string.rep('7',32),refusals={}}
+        local binding={binding_digest=string.rep('6',64)}
+        event_pending=1;assert(runtime_options.service_continuity(recovery,binding)==nil);event_pending=0
+        pending=1;assert(runtime_options.service_continuity(recovery,binding)==nil);pending=0
+        write_safe=false;assert(runtime_options.service_continuity(recovery,binding)==nil and service.phase~='failed');write_safe=true
+        continuity_fault='battle state prohibits service continuity'
+        assert(runtime_options.service_continuity(recovery,binding)==nil and service.phase~='failed')
+        continuity_fault=nil
+        continuity=assert(runtime_options.service_continuity(recovery,binding))
+        assert(captures==1)
+        assert(runtime_options.service_continuity(recovery,binding).cursor.sequence==1 and captures==1)
+        local next_recovery={service_epoch=string.rep('8',32),refusals={}}
+        assert(runtime_options.service_continuity(next_recovery,binding).service_epoch==next_recovery.service_epoch and captures==2)
+        assert(runtime_options.service_continuity(next_recovery,binding).cursor.sequence==1 and captures==2)
+        clock=10
+        recovery.refusals.a='server refused fixture proof'
+        assert(runtime_options.service_continuity(recovery,binding)==nil and captures==2)
+        assert(runtime_options.service_continuity(recovery,binding)==nil and captures==2)
+        clock=11.99;assert(runtime_options.service_continuity(recovery,binding)==nil and captures==2)
+        clock=12;assert(runtime_options.service_continuity(recovery,binding).service_epoch==recovery.service_epoch and captures==3)
+        recovery.refusals.a=nil
+        assert(continuity.schema=='rby-free-service-continuity-v1'and continuity.service_epoch==recovery.service_epoch
+            and continuity.initial_operation_id==string.rep('9',32)and continuity.cursor.sequence==1)
+        local safe=pcall(runtime_options.on_service_authority,{},{required=true,proofs={a=true,b=false}})
+        assert(not safe and physical and service.holds:held('lifecycle'))
+        assert(runtime_options.on_service_authority({},{required=false,proofs={a=true,b=true}}))
+        assert(not physical and not service.holds:held('lifecycle'))
+        assert(runtime_options.on_revoke('connector disconnected'))
+        load_callback()
+        assert(physical and runtime_options.service_continuity(recovery,binding)==nil)
+        frame=99;assert(service:step()==false and physical)
     ''')

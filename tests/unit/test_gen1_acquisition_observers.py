@@ -134,6 +134,19 @@ def test_same_live_grant_observer_survives_transport_reconnect_and_emits_paid_re
     """)
 
 
+def test_idle_continuity_refuses_open_or_buffered_acquisition_work(runtime):
+    lua = runtime
+    setup(lua)
+    assert lua.eval("collector:idle(state)") is True
+    lua.globals().grant_open = 1
+    with pytest.raises(LuaError, match="open acquisition source"):
+        lua.eval("collector:idle(state)")
+    lua.globals().grant_open = 0
+    lua.execute("capture_pending[1]={kind='party_begin',frame=100}")
+    with pytest.raises(LuaError, match="open acquisition source"):
+        lua.eval("collector:idle(state)")
+
+
 @pytest.mark.parametrize(
     "fault",
     [

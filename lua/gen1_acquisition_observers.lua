@@ -90,6 +90,16 @@ function M.new(options)
             "previous acquisition witnesses were not durably drained")
         return true
     end
+    function self:idle(state)
+        local c,g,s,x,w,e=check();validate(state)
+        assert(state.frame==emu.framecount() and state.capture_open==JSON.null and state.grant_open==0
+            and (state.evolution_open or 0)==0 and state.native_handoff_operation_id==nil
+            and c.pending==0 and g.pending==0 and g.in_flight==0
+            and s.pending==0 and s.in_flight==0 and x.pending==0 and x.in_flight==0 and not x.removing
+            and w.pending==0 and e.pending==0 and e.in_flight==0,
+            "open acquisition source prohibits service continuity")
+        return true
+    end
     function self:prepare(state)
         local _,g,s,x,w,e=check();validate(state)
         local frame=emu.framecount()
