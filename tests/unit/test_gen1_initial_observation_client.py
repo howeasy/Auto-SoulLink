@@ -2,13 +2,14 @@ import json
 
 import pytest
 
-from tests.unit.test_client_state_store import runtime  # noqa: F401
 from tests.unit.test_client_journal import start
+from tests.unit.test_client_state_store import runtime  # noqa: F401
 
 
 @pytest.fixture
 def observer(runtime):  # noqa: F811
-    lua=runtime;start(lua)
+    lua = runtime
+    start(lua)
     lua.execute('''
         frame=100;context={context_generation=string.rep('a',32)};fault=nil
         emu={framecount=function()return frame end};gameinfo={getromhash=function()return string.rep('b',40)end}
@@ -48,7 +49,8 @@ def test_changed_owner_or_frame_during_snapshot_cannot_publish(observer,fault):
 
 
 def test_store_failure_cannot_advance_the_observation_baseline(observer):
-    before=observer.globals().disk;observer.globals().mode='before'
+    before = observer.globals().disk
+    observer.globals().mode = 'before'
     assert observer.globals().observe(True)[0] is False
     assert observer.globals().disk==before
 
@@ -79,3 +81,49 @@ def test_free_observation_ack_persists_the_exact_server_cursor(runtime):  # noqa
         "frame": 123,
     }
     assert saved["observation_sequence"] == 1 and payload(lua)["outbox"] == []
+
+
+def test_acknowledged_free_initial_payload_compacts_to_a_bound_digest_only_after_adoption(runtime):  # noqa: F811
+    lua = runtime
+    lua.execute("""
+        package.loaded.gen1_full_save={}
+        Observe=require('gen1_initial_observation')
+        entry={phase='acknowledged',operation_id=string.rep('9',32),payload={event='initial_observation',payload={
+            schema='rby-initial-observation-v1',context_generation=string.rep('a',32),
+            final_sha1=string.rep('b',40),frame=123,source={large=string.rep('FF',32768)}}}}
+        before=assert(JSON.encode(entry));cursor=Observe.initial_cursor(entry)
+        compact,changed=Observe.compact_initial(entry,function(value)
+            assert(value==assert(require('journal_document').encode(entry.payload.payload)))
+            return string.rep('c',64)
+        end)
+        compact_again,changed_again=Observe.compact_initial(compact,function()error('already compact')end)
+    """)
+    assert lua.globals().changed is True and lua.globals().changed_again is False
+    compact = json.loads(lua.eval("JSON.encode(compact)"))
+    assert compact == {
+        "schema": "rby-initial-observation-cursor-v1", "phase": "acknowledged",
+        "operation_id": "9" * 32, "context_generation": "a" * 32,
+        "final_sha1": "b" * 40, "frame": 123, "payload_digest": "c" * 64,
+    }
+    assert lua.eval("Observe.initial_cursor(compact_again).frame") == 123
+    assert "payload" not in compact and len(lua.globals().before) > 65_000
+
+
+def test_free_service_restart_accepts_only_the_same_compact_context(runtime):  # noqa: F811
+    lua = runtime
+    lua.execute("""
+        package.loaded.gen1_full_save={}
+        Observe=require('gen1_initial_observation')
+        context={context_generation=string.rep('a',32)}
+        baseline={initial_inventory={schema=Observe.COMPACT,phase='acknowledged',operation_id=string.rep('9',32),
+            context_generation=context.context_generation,final_sha1=string.rep('b',40),frame=123,
+            payload_digest=string.rep('c',64)},bootstrap={phase='acknowledged'}}
+        journal={store={read=function()return {observation=baseline}end}}
+        restarted=Observe.new({journal=journal,memory={},variant='yellow',free_service=true,
+            owned=function()return context end,host={}})
+        ok,value=pcall(function()return restarted:step(true)end)
+        context.context_generation=string.rep('d',32)
+        foreign=pcall(function()return restarted:step(true)end)
+    """)
+    assert lua.globals().ok is True and lua.globals().value is False
+    assert lua.globals().foreign is False

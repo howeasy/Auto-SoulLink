@@ -18,12 +18,21 @@ function M.new(options)
     assert(options.service_execution==nil or type(options.service_execution)=="boolean",
         "explicit service execution selection must be boolean")
     local service_selected=options.service_execution==true
+    local audit_interval=options.audit_interval or 0.05
+    assert(type(audit_interval)=="number"and audit_interval>0 and audit_interval<=0.5,
+        "bounded host audit interval required")
     local state={held=true,reason="waiting for paired admission and reconciliation",last_clock=nil,
         binding=nil,pending=nil,last_started=nil,ticket=nil,last_nonce=nil,failed=false,barred_epoch=nil,
-        authority="hold",service_epoch=nil,service_digest=nil,barred_service_epoch=nil}
+        authority="hold",service_epoch=nil,service_digest=nil,barred_service_epoch=nil,last_host_audit=nil}
     local self={}
     local function set_held(value,why)
         assert(options.host.set_held(value,why)==true,"execution hold was not verified")
+    end
+    local function audit(time,force)
+        if not force and state.last_host_audit and time-state.last_host_audit<audit_interval then return true end
+        if options.host.verify then assert(options.host.verify()==true,"execution hold audit was not verified")end
+        state.last_host_audit=time
+        return true
     end
     local function now()
         local ok,value=pcall(options.clock)
@@ -143,6 +152,7 @@ function M.new(options)
                 and time-state.last_started<timeout and (state.authority=="run" or service_permitted)
             set_held(not permitted,state.reason)
             state.held=not permitted
+            audit(time,false)
         end)
         if not ok then
             state.failed=true;state.binding=nil;state.pending=nil
@@ -163,6 +173,7 @@ function M.new(options)
             ordinary_execution=state.authority=="run" and not state.held,
             read_only_service=true,native_recovery_execution=false}
     end
+    function self:verify()return audit(now(),true)end
     -- Fail before exposing an object if the host cannot establish the initial hold.
     set_held(true,state.reason)
     return self

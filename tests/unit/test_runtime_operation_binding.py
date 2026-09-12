@@ -107,8 +107,8 @@ def test_service_fault_hard_holds_then_disarms_before_the_step_returns(runtime, 
                 end
                 incoming[#incoming+1]=assert(JSON.encode(response));return true
             end}
-        local mux=Mux.new({owners={'startup','control','writer','lifecycle'},
-            host={set_held=function(value)physical=value;return true end}})
+            local mux=Mux.new({owners={'startup','control','writer','lifecycle'},
+                host={set_held=function(value)physical=value;return true end,verify=function()return true end}})
         assert(mux:set('startup',true,'atomic startup'))
         service=assert(Runtime.new({protocol='fixture-runtime-v1',hold_event='fixture_hold',player='a',
             journal=journal,clock=function()return now end,transport=transport,server_host='localhost',server_port=1,
@@ -181,7 +181,7 @@ def test_service_continuity_is_sent_for_the_current_epoch_and_releases_after_acc
             journal=journal,clock=function()return now end,transport=transport,server_host='localhost',server_port=1,
             read_hello=function()return {context_generation=binding.context_generation}end,
             metadata_matches=function()return true end,new_nonce=new_id,service_execution=true,
-            host={set_held=function(value)physical=value;return true end},
+                host={set_held=function(value)physical=value;return true end,verify=function()return true end},
             service_continuity=function(current,current_binding)
                 proofs=proofs+1;assert(physical and current.service_epoch==recovery.service_epoch
                     and current_binding.binding_digest==binding.binding_digest)

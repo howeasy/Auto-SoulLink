@@ -36,6 +36,7 @@ end
 function M.new(ctx)
     assert(type(ctx)=="table" and ctx.engine and type(ctx.engine.probe)=="function" and ctx.journal and ctx.session and ctx.baseline
         and type(ctx.owned)=="function" and type(ctx.rom_hash)=="function","observation loop dependencies required")
+    assert(ctx.verify==nil or type(ctx.verify)=="function","observation boundary verifier must be callable")
     local period=ctx.heartbeat or M.HEARTBEAT
     assert(integer(period) and period>=1,"heartbeat period in frames required")
     local frame_of=ctx.frame or function()return emu.framecount()end
@@ -48,7 +49,14 @@ function M.new(ctx)
         if not ok then error(result,0)end
         return result
     end
-    local self={trainer={id=nil,ticks=0,published=false}}
+    local self={trainer={id=nil,ticks=0,published=false},diagnostics={ticks=0,observer_quiet=0,
+        observer_active=0,publications=0,inventory_checks=0,inventory_publications=0,
+        signal_publications=0,acquisition_publications=0}}
+    if ctx.checkpoint then
+        local _,fingerprint=ctx.checkpoint(false)
+        assert(fingerprint,"initial inventory fingerprint required")
+        self.fingerprint=fingerprint
+    end
     local function trainer(probe,frame) -- one trainer_battle_start row per stable trainer engagement
         local id=probe.battle==2 and probe.opponent>=M.TRAINER_OFFSET and probe.opponent or nil
         local t=self.trainer
@@ -67,15 +75,30 @@ function M.new(ctx)
         local frame=frame_of()
         local signals=ctx.engine:peek()
         local rows=ctx.observers and ctx.observers:prepare(self.source) or nil
+        if ctx.observers then
+            local key=rows and"observer_active"or"observer_quiet"
+            self.diagnostics[key]=self.diagnostics[key]+1
+        end
         assert(#signals<=M.MAX_SIGNALS,"frame signal batch exceeds source bounds")
         assert(not rows or #rows.receipts<=M.MAX_RECEIPTS,"frame acquisition batch exceeds source bounds")
         local probe=ctx.engine:probe()
         assert(integer(probe.battle) and probe.battle<=255 and integer(probe.opponent) and probe.opponent<=255,"engine probe bytes required")
         local engaged=trainer(probe,frame)
         local heartbeat=frame%period==0
-        local publish=#signals>0 or heartbeat or engaged~=JSON.null or rows~=nil and #rows.receipts>0
+        local inventory=JSON.null
+        if heartbeat and ctx.checkpoint then
+            self.diagnostics.inventory_checks=self.diagnostics.inventory_checks+1
+            local point,fingerprint=ctx.checkpoint(self.fingerprint)
+            if fingerprint then self.fingerprint=fingerprint end
+            if point then inventory=point end
+        elseif heartbeat and ctx.inventory then
+            inventory=ctx.inventory()or JSON.null
+        end
+        local publish=#signals>0 or inventory~=JSON.null or (heartbeat and not ctx.checkpoint)
+            or engaged~=JSON.null or rows~=nil and #rows.receipts>0
         local event
         if publish or rows and witnessed(rows) then
+            if ctx.verify then assert(ctx.verify())end
             local current=baseline()
             if rows then current.acquisition_source=copy(rows.state)end
             if publish then
@@ -90,8 +113,12 @@ function M.new(ctx)
                 end
                 event={schema=M.SCHEMA,event="observation",frame=frame,sequence=seq,context=copy(ctx.owned()),
                     rom=ctx.rom_hash(),signals=batch,acquisitions=rows and copy(rows.receipts) or JSON.array(),
-                    inventory=heartbeat and ctx.inventory and ctx.inventory() or JSON.null,
+                    inventory=inventory,
                     battle=probe.battle,trainer=engaged}
+                self.diagnostics.publications=self.diagnostics.publications+1
+                if inventory~=JSON.null then self.diagnostics.inventory_publications=self.diagnostics.inventory_publications+1 end
+                if #signals>0 then self.diagnostics.signal_publications=self.diagnostics.signal_publications+1 end
+                if rows and #rows.receipts>0 then self.diagnostics.acquisition_publications=self.diagnostics.acquisition_publications+1 end
                 current.observation_sequence=seq
                 assert(ctx.journal:append(event,current)) -- durable before any source forgets
             else
@@ -104,6 +131,7 @@ function M.new(ctx)
         return event
     end
     local function service(self)
+        self.diagnostics.ticks=self.diagnostics.ticks+1
         if ctx.instruction then ctx.instruction:finish()end -- the frame that just ran, before anything can hold or yield
         local event=observe(self)
         if ctx.writer and ctx.writer:pending() then ctx.writer:service()end
@@ -114,6 +142,7 @@ function M.new(ctx)
     end
     function self:observe()return guarded(observe,self)end -- for a writer that steps frames itself
     function self:tick()return guarded(service,self)end
+    function self:status()return copy(self.diagnostics)end
     function self:continuity()
         local ok,result=pcall(function()return guarded(function()
             local current=baseline();local source=assert(self.source,"persisted acquisition cursor required")
@@ -125,10 +154,11 @@ function M.new(ctx)
                 assert(current.observation_sequence==nil or current.observation_sequence==0,
                     "last observation is not durably acknowledged")
                 local initial=assert(current.initial_inventory,"initial observation cursor required")
-                local payload=assert(initial.payload).payload
-                assert(initial.phase=="acknowledged"and type(initial.operation_id)=="string"and payload,
-                    "initial observation is not durably acknowledged")
-                cursor={sequence=0,operation_id=initial.operation_id,frame=payload.frame}
+                local payload=initial.payload and initial.payload.payload or nil
+                assert(initial.phase=="acknowledged"and type(initial.operation_id)=="string"
+                    and (payload and type(payload.frame)=="number"or initial.schema=="rby-initial-observation-cursor-v1"
+                    and type(initial.frame)=="number"),"initial observation is not durably acknowledged")
+                cursor={sequence=0,operation_id=initial.operation_id,frame=payload and payload.frame or initial.frame}
             end
             assert(source.capture_open==JSON.null and source.grant_open==0
                 and (source.evolution_open or 0)==0 and source.native_handoff_operation_id==nil,

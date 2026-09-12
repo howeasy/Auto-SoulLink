@@ -71,6 +71,9 @@ function M.new(options)
     end)
     if not ok then close_hooks();error(why,0)end
     function self:peek()
+        assert(not closed and not failure,failure or "engine observation is closed")
+        assert(options.held()==true,"engine signals must be read under a held frame boundary")
+        if options.fast_path and #pending==0 then return JSON.array()end
         check();assert(options.held()==true,"engine signals must be read under a held frame boundary")
         return copy(pending)
     end
@@ -81,7 +84,9 @@ function M.new(options)
     -- Polled battle state for the free loop (read-only, between frames): wIsInBattle and wCurOpponent
     -- (trainer class + 200 while a trainer battle is being set up; the wild species otherwise).
     function self:probe()
-        check();assert(options.held()==true,"engine probe must be read under a held frame boundary")
+        assert(not closed and not failure,failure or "engine observation is closed")
+        assert(options.held()==true,"engine probe must be read under a held frame boundary")
+        if not options.fast_path then check()end
         return {battle=memory.read_u8(addresses.wIsInBattle,"System Bus"),opponent=memory.read_u8(addresses.wCurOpponent,"System Bus")}
     end
     function self:batch(signals,sequence)

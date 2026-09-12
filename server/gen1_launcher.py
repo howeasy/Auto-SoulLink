@@ -32,7 +32,8 @@ SOURCE_FILES = ("lua/gen1_acquisition_observers.lua", "lua/gen1_capture_observer
                 "data/games/gen1_rby/gen1_static_sites.lua", "data/games/gen1_rby/gen1_npc_exchange_sites.lua",
                 "data/games/gen1_rby/gen1_wild_encounter_sites.lua",
                 "data/games/gen1_rby/gen1_capture_sites.lua", "data/games/gen1_rby/gen1_grant_sites.lua")
-FREE_FILES = ("lua/gen1_observation_loop.lua", "lua/instruction_executor.lua", "lua/battle_force_authority.lua") + SOURCE_FILES
+FREE_FILES = ("lua/gen1_observation_loop.lua", "lua/gen1_inventory_fingerprint.lua",
+              "lua/instruction_executor.lua", "lua/battle_force_authority.lua") + SOURCE_FILES
 
 NATIVE_FILES = ("lua/command_service_router.lua", "lua/gen1_native_runtime.lua",
     "lua/execution_window.lua", "lua/platform_bounded_execution.lua", "lua/gen1_native_frame_client.lua", "lua/frame_pacer.lua",

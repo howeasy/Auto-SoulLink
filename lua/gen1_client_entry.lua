@@ -127,6 +127,7 @@ function M.start(launch,options)
         if free then
             self.acquisitions=require("gen1_acquisition_observers").new({variant=launch.cartridge.variant,
                 final_sha1=launch.cartridge.final_rom_sha1,owned=source_owned,
+                fast_path=true,
                 held=function()return self.host.status().physical_stop_verified==true or at_boundary() end})
             -- In-battle death delivery (handoff item 5): the window service arms the one-instruction executor
             -- under the loop boundary predicate; its rows close the server's battle_instruction command.
@@ -138,7 +139,7 @@ function M.start(launch,options)
             return true
         end
         if free then
-            assert(event and type(event.onloadstate)=="function","savestate lifecycle callback required")
+            assert(event and event.onloadstate,"savestate lifecycle callback required")
             self.load_state_hook=assert(event.onloadstate(function()
                 self.continuity_invalidated="savestate load requires controlled recovery"
                 hard_revoke(self.continuity_invalidated)
@@ -220,7 +221,7 @@ function M.start(launch,options)
         self.runtime=assert(require("gen1_runtime").new({run_id=launch.run_id,player=launch.player,
             variant=launch.cartridge.variant,server_host=launch.host,server_port=launch.port,
             control_interval=free and 0.5 or nil,
-            sync_interval=free and 1 or nil,
+            sync_interval=free and 0.5 or nil,
             prepared_cartridge=launch.cartridge,
             transport=require("connector"),journal=journal,clock=clock,
             host=self.holds:adapter("control"),service_execution=free,
@@ -239,6 +240,7 @@ function M.start(launch,options)
             executor_adapter=executor}))
         if free then
             local Loop=require("gen1_observation_loop")
+            local Fingerprint=require("gen1_inventory_fingerprint")
             local function loop_ready()
                 local baseline=assert(self.store:read()).observation
                 -- Held-phase writes finish, and every held-phase event is acknowledged, before the
@@ -254,23 +256,44 @@ function M.start(launch,options)
             end
             self.start_loop=function()
                 if self.loop or not loop_ready()then return end
+                local function capture_inventory()
+                    if not memory.isPartyWriteSafe()then return nil end
+                    assert(self.holds:set("writer",true,"full inventory checkpoint"))
+                    local ok,point=pcall(Observation.capture,{owned=owned,host=self.host,memory=memory,
+                        variant=launch.cartridge.variant})
+                    assert(self.holds:set("writer",false,"full inventory checkpoint complete"))
+                    if not ok then error(point,0)end
+                    return point
+                end
+                local function checkpoint(previous)
+                    if not memory.isPartyWriteSafe()then return nil,previous,false end
+                    assert(self.holds:set("writer",true,"inventory fingerprint checkpoint"))
+                    local ok,point,fingerprint,changed=pcall(function()
+                        local frame=emu.framecount();source_owned()
+                        local current=Fingerprint.capture(memory,launch.cartridge.variant)
+                        local dirty=previous~=false and(not previous or not Fingerprint.same(previous,current))
+                        local full=dirty and Observation.capture({owned=owned,host=self.host,memory=memory,
+                            variant=launch.cartridge.variant})or nil
+                        source_owned();assert(emu.framecount()==frame,"inventory fingerprint frame changed")
+                        return full,current,dirty
+                    end)
+                    assert(self.holds:set("writer",false,"inventory fingerprint checkpoint complete"))
+                    if not ok then error(point,0)end
+                    return point,fingerprint,changed
+                end
                 self.loop_ctx={engine=self.observer.signals,observers=self.acquisitions,owned=source_owned,instruction=self.instruction,
                     rom_hash=function()return gameinfo.getromhash():lower()end,
                     baseline=function()return assert(self.store:read()).observation end,
+                    verify=function()
+                        assert(self.holds:verify())
+                        source_owned()
+                        return true
+                    end,
                     journal={append=function(_,event,baseline)
                             local ids,why=self.runtime:observe(JSON.array({event}),baseline);return ids and ids[1],why end,
                         append_many=function(_,events,baseline)return self.runtime:observe(events,baseline)end},
                     session={pump=function()assert(self.runtime:step())end}, -- never blocks: connector settimeout(0)
-                    inventory=function()
-                        -- Captured under a momentary verified hold, so the host stanza (held=true) is true
-                        -- and matches the initial observation the server compares it with.
-                        if not memory.isPartyWriteSafe()then return nil end
-                        assert(self.holds:set("writer",true,"heartbeat inventory checkpoint"))
-                        local ok,point=pcall(Observation.capture,{owned=owned,host=self.host,memory=memory,variant=launch.cartridge.variant})
-                        assert(self.holds:set("writer",false,"heartbeat inventory checkpoint complete"))
-                        if not ok then error(point,0)end
-                        return point
-                    end,
+                    inventory=capture_inventory,checkpoint=checkpoint,
                     writer={pending=writer_pending,service=function()
                         -- ponytail: whole-command hold, bounded per tick and retried while pending; item 4
                         -- maps every engine command to its executor and item 5 adds the in-battle window.
@@ -286,7 +309,19 @@ function M.start(launch,options)
                     end}}
                 local loop=self.holds:construct_and_release("startup","free-running observation loop constructed",
                     function()return self.runtime:has_service_lease()end,
-                    function()return Loop.new(self.loop_ctx)end) -- adopts the persisted cursor, or takes observers:initial under the hold
+                    function()
+                        local loop=Loop.new(self.loop_ctx) -- adopt everything before compacting the acknowledged enrollment
+                        if type(Observation.compact_initial)=="function"then
+                            local baseline=assert(self.store:read()).observation
+                            local compact,changed=Observation.compact_initial(
+                                baseline.initial_inventory,assert(journal.store).backend.sha256)
+                            if changed then
+                                baseline.initial_inventory=compact
+                                assert(journal:append_many(JSON.array(),baseline))
+                            end
+                        end
+                        return loop
+                    end)
                 self.loop=loop
                 self.phase="free_service";self.reason="Free-running observation; writes take the hold"
                 console.log("[SLink] Free-running observation loop started at frame "..emu.framecount())
@@ -317,7 +352,7 @@ function M.start(launch,options)
             if self.loop then
                 -- One tick per emulated frame (run() advances it). Under a hold taken outside the loop
                 -- only the runtime pumps, so a tick never re-observes the same frame.
-                if self.host.status().held then assert(self.runtime:step())else self.loop:tick()end
+                if self.holds:is_held() then assert(self.runtime:step())else self.loop:tick()end
                 return
             end
             local serviced,reason=self.runtime:step()
@@ -345,10 +380,15 @@ function M.start(launch,options)
             bootstrap_observation=bootstrap,
             engine_signals=self.observer and self.observer.signals and self.observer.signals:status()or nil,
             runtime=self.runtime and self.runtime:status({summary=true}) or nil,
+            observation_diagnostics=self.loop and self.loop:status()or nil,
             continuity=self.continuity_status,
             hold_mux=self.holds and self.holds:status() or nil,
             ordinary_execution=false,
             free_service=free,observation_loop=self.loop~=nil}))))
+    end
+    function self:checkpoint()
+        assert(self.loop and self.loop_ctx and self.loop_ctx.inventory,"free-service checkpoint unavailable")
+        return assert(self.loop_ctx.inventory(),"write-safe full inventory checkpoint unavailable")
     end
     function self:close()
         if self.holds then assert(self.holds:set("lifecycle",true,"client service is closing"))end
@@ -368,6 +408,7 @@ end
 function M.run(launch)
     local service=M.start(launch)
     _G.SLINK_RUNTIME_STATUS=function()return service:status()end
+    _G.SLINK_RUNTIME_CHECKPOINT=function()return service:checkpoint()end
     console.log("[SLink] Waiting for the initial verified overworld checkpoint")
     while true do
         local ok,why=service:step()

@@ -231,6 +231,7 @@ class Gen1Runtime(DurableRuntime):
         return SimpleNamespace(
             rules=StagedGen1State.restore(snapshot.state['rules'], data_dir=self.data_dir),
             barrier=RecoveryBarrier.restore(snapshot.state['components']['gen1-runtime']['recovery']),
+            document=lambda: copy.deepcopy(snapshot.state),
         )
 
     def state(self):

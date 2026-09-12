@@ -65,6 +65,8 @@ function M.new(options)
             and options.server_port>=1 and options.server_port<=65535,"explicit server_port required")
         assert(options.player=="a" or options.player=="b","explicit player required")
         assert(type(options.journal)=="table" and type(options.clock)=="function","journal and monotonic clock required")
+        assert(options.service_execution~=true or type(options.host)=="table"and type(options.host.verify)=="function",
+            "service execution requires a host audit")
         assert(type(options.read_hello)=="function" and type(options.metadata_matches)=="function","metadata callbacks required")
         assert(type(options.operation_ready)=="function","operation-specific readiness policy required")
         assert(options.reconciliation==nil or type(options.reconciliation)=="function","invalid reconciliation callback")
@@ -92,8 +94,10 @@ function M.new(options)
         local heartbeat=interval(options.control_interval,0.25,0.5)
         local response_timeout=interval(options.response_timeout,0.75,1)
         local sync_interval=interval(options.sync_interval,0.5,2)
+        local metadata_interval=interval(options.metadata_interval,0.05,0.5)
         local state={phase="connection_pending",connected=false,failed=false,reason="waiting for admission",
-            last_clock=nil,last_control=nil,last_sync=nil,request=nil,binding=nil,admission=nil,recovery=nil,
+            last_clock=nil,last_control=nil,last_sync=nil,last_semantic=nil,last_metadata=nil,
+            request=nil,binding=nil,admission=nil,recovery=nil,
             service_recovery=nil,
             event_count=0,command_count=0,hold_verified=false,host_request_verified=false}
         local self={}
@@ -127,7 +131,7 @@ function M.new(options)
                 state.host_request_verified=accepted==true
                 state.hold_verified=accepted==true and held==true
                 return accepted
-            end}})
+            end,verify=options.host.verify and function()return options.host.verify()end or nil}})
         local function queues_empty()
             local snapshot=transport.queue_status()
             assert(type(snapshot)=="table","connector queue readback unavailable")
@@ -139,7 +143,7 @@ function M.new(options)
             state.failed=state.failed or fatal
             state.reason=why;state.phase=state.failed and "failed" or "connection_pending"
             state.request=nil;state.binding=nil;state.admission=nil;state.recovery=nil;state.service_recovery=nil;state.last_control=nil
-            state.last_verified_control=nil
+            state.last_verified_control=nil;state.last_metadata=nil
             if options.on_revoke then
                 local stopped,problem=pcall(options.on_revoke,why)
                 if not stopped or problem~=true then
@@ -161,23 +165,34 @@ function M.new(options)
                 state.reason=state.failure
             end
         end
+        local event_revision,event_list,command_revision,command_list
+        local function revision()return journal.store.revision and assert(journal.store:revision())or nil end
         local function events()
+            local current=revision()
+            if current~=nil and current==event_revision then state.event_count=#event_list;return event_list end
             local list,why=journal:pending_events()
             assert(list,why or "durable events unavailable")
             for _,entry in ipairs(list) do semantic(entry.payload) end
+            event_revision,event_list=current,list
             state.event_count=#list;return list
         end
         local function commands()
+            local current=revision()
+            if current~=nil and current==command_revision then state.command_count=#command_list;return command_list end
             local list,why=journal:pending_commands()
             assert(list,why or "durable commands unavailable")
+            command_revision,command_list=current,list
             state.command_count=#list;return list
         end
-        local function current_metadata()
+        local function current_metadata(force)
             if session.state~="admitted" or not state.binding then return false end
+            local time=now()
+            if not force and state.last_metadata and time-state.last_metadata<metadata_interval then return true end
             local report,why=read_report()
             if not report or report.context_generation~=state.binding.context_generation or not matches(state.admission,report) then
                 revoke(why or "context changed; fresh admission required",false);return false
             end
+            state.last_metadata=time
             return true
         end
         local function control_tick()
@@ -196,7 +211,7 @@ function M.new(options)
             return status
         end
         local function permission(body,intent)
-            if not control_tick() or not current_metadata() then return false,"current binding is unavailable" end
+            if not control_tick() or not current_metadata(true) then return false,"current binding is unavailable" end
             if operation_execution and (not state.last_verified_control or now()-state.last_verified_control>=WATCHDOG)then
                 return false,"fresh control roundtrip required for operation execution"
             end
@@ -204,7 +219,7 @@ function M.new(options)
             local allowed,why=options.operation_ready(copy(body),intent and copy(intent) or nil,copy(before))
             assert(type(allowed)=="boolean","operation readiness must explicitly allow or defer")
             -- A slow readiness callback cannot use an expired ticket to apply.
-            if not control_tick() or not current_metadata() then return false,"authority changed during readiness" end
+            if not control_tick() or not current_metadata(true) then return false,"authority changed during readiness" end
             if operation_execution and (not state.last_verified_control or now()-state.last_verified_control>=WATCHDOG)then
                 return false,"control liveness expired during readiness"
             end
@@ -223,12 +238,12 @@ function M.new(options)
                 -- even while an ordinary run ticket exists. No generic native
                 -- or recovery permission is inferred by this composition.
                 if allowed then
-                    if not control_tick() or not current_metadata()then
+                    if not control_tick() or not current_metadata(true)then
                         allowed=false;why="current execution binding is unavailable"
                     elseif operation_execution then
                         allowed,why=operation_execution.authorize_apply(copy(body),copy(intent),copy(identity),copy(control_status()))
                         assert(type(allowed)=="boolean","operation apply authority must explicitly allow or defer")
-                        if allowed and (not control_tick() or not current_metadata() or not state.last_verified_control
+                        if allowed and (not control_tick() or not current_metadata(true) or not state.last_verified_control
                             or now()-state.last_verified_control>=WATCHDOG)then
                             allowed=false;why="authority changed during operation authorization"
                         end
@@ -363,6 +378,7 @@ function M.new(options)
                 if not safe or not saved then
                     revoke(not safe and saved or problem or "response publication is uncertain",true);return
                 end
+                state.last_semantic=now()
             end
             state.request=nil
             state.last_completed=request.kind
@@ -388,7 +404,7 @@ function M.new(options)
                 if not accepted then revoke(problem,false);return end
                 if not state.connected or state.failed then return end
             end
-            if session.state=="admitted" and not current_metadata() then return end
+            if session.state=="admitted" and not current_metadata(false) then return end
             execute_one()
             if state.failed or not state.connected or state.request then return end
             time=now()
@@ -432,7 +448,9 @@ function M.new(options)
                     end
                 else
                     local pending=events()
-                    if #pending==0 and (not state.last_sync or time-state.last_sync>=sync_interval) then
+                    local recent=state.last_sync
+                    if state.last_semantic and (not recent or state.last_semantic>recent)then recent=state.last_semantic end
+                    if #pending==0 and (not recent or time-recent>=sync_interval) then
                         local id,why=journal:append(JSON.object({event="sync"}))
                         assert(id,why);state.last_sync=time;pending=events()
                     end
