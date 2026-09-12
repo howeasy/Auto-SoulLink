@@ -26,10 +26,10 @@ Seeding and the canonical `_MoveMon`/`_RemovePokemon` trampoline are the ones
 | invalid current box | `wCurrentBoxNum` 12, 13, 127, `$8C`, `$8D`, `$FF` | both writers `false, "invalid current box"`, identical; 11, `$8B`, 0, `$80` are legal and deposit succeeds |
 | canonical initiator deposit undo | 60 cases: party 2..6, box 0/5/18, every slot | after the cartridge's own MoveMon deposit, `retrieveBoxMon` of the deposited key equals the cartridge's inverse MoveMon withdraw on a cloned state over the authoritative records, and both counts are restored |
 | canonical initiator withdraw undo | 18 cases: party 1/3/5, box 1/7/20, first and last slot | after the cartridge's own withdraw, `depositPartyMon` of the appended slot equals the cartridge's inverse deposit |
-| whole empty reserved box, live record hidden | slot 0, 7, 19 of box 12 past a zero count, initialized bit set | `depositMemorialMon` refuses `"memorial box contains a live Pokemon"`, whole image identical |
-| whole empty reserved box, dead tail | dead record at slot 19 | the memorial succeeds writing only slot 0 of the struct, OT and nickname arrays; every other byte of the box-12 image past count/species[0..1] and boxes 7..11 of the same bank are byte-identical |
+| whole empty reserved box, live or dead record hidden | live record at slot 0, 7, 19; dead record at 0 or 19; count zero, initialized bit set, no owned reservation | `depositMemorialMon` refuses `"unowned memorial box is not empty"`, whole image identical |
+| prior owned memorial | one successful, exact local first grave followed by another faint | the second memorial appends at slot 1; the owned slot-0 record, unused slot 19 and boxes 7..11 remain byte-identical |
 
-36 refusals per title, each exact and mutation-free.
+The original 36-refusal gate was superseded by the final 46-refusal gate below.
 
 ## Independent correction after code review
 
@@ -42,20 +42,31 @@ town SaveRAM fixtures found bit 7 clear and an exact virgin all-`FF` Box 12, inc
 the initial correction would therefore have wrongly blocked a normal first memorial. The final
 predicate admits only either that **exact all-`FF` erased image**, or a zero-filled image with
 `00/00` or `00/FF` header. It rejects mixed partial erasure and every nonempty inactive tail.
-The already initialized dead-tail rule is unchanged. An active-Box-12/uninitialized state is not
-a natural cartridge state; the separate active-box policy path is not qualified by this correction.
+An active-Box-12/uninitialized state is not a natural cartridge state and now fails closed in
+both Python policy and append, matching the Lua writer. Initialized count-zero Box 12 is also
+checked across its entire unowned image before a first reservation: hidden dead records are no
+longer exempt just because their HP is zero. An already owned prior grave remains appendable
+only when its exact reservation preimage matches.
 
 The revised live gate adds eight first-use refusals per title: hidden live records at slots 0, 7,
 and 19, a hidden dead record at 19, an unowned nickname tail, an unowned species-list tail, and
 one partial-erasure mutation against each admitted empty shape.
 Every refusal preserves whole WRAM, HRAM, 32 KiB CartRAM and the bank register. A genuinely
 empty first-use image and the actual fixture's virgin erased-`FF` Box 12 both succeed and persist
-the initialized bit. The gate now exercises **44 exact refusals per title**. The Python policy and
+the initialized bit. The gate now exercises **46 exact refusals per title**. The Python policy and
 append paths have a separate 18-case Red/Blue/Yellow matrix that asserts the detached fields
 and CartRAM are unchanged before a refusal. Six initially failing executor tests were stale
 `operation_held` fixtures; two positive
 storage-runtime scenarios had arbitrary synthetic pre-ChangeBox SRAM and now explicitly seed a
 clean unowned Box 12, rather than weakening production admission.
+
+The final review also found that Python's `not active` check treated the 0-based current box
+index as a boolean, skipping the inactive Box 12 pre-init guard for selectors 1–10. All eleven
+ordinary selectors are now covered per title in a direct policy test. Initialized, unowned dead
+records at slots 0 and 19 are refused by Lua, Python policy and direct Python append without
+changing any image byte. The prior positive test for active Box 12 with bit 7 clear was a
+synthetic impossible state; it now asserts production preparation refuses without journal
+mutation. Component and retirement tests still cover initialized active Box 12.
 
 The former inactive-box scan test seeded only Box 12. Its replacement seeds a unique valid
 record in **all twelve SRAM boxes**, runs all twelve active-box selectors on Red, Blue, and
@@ -64,10 +75,10 @@ active SRAM key, and proves each inactive source is read by poisoning it. The di
 `gen1_gatelib.lua` dependency is pinned on all six rows, and exact storage-runtime sibling
 pytest nodes are registered on the three storage rows; no manifest row was removed.
 
-Corrected evidence: `SLINK_LIVE=1 python -m pytest tests/live/test_gen1_gates.py -q -p no:randomly
--k storage_boundaries --junitxml=.cache/memory_boundaries_corrected_live.xml` passed Red, Blue,
-and Yellow (3 passed, 0 skipped, 56 other gates deselected, 18.19 s), with zero gate checks
-failed. The affected non-live sweep passed 266 tests; `tools/lua_syntax_check.py` parsed 302
+Final review evidence: `SLINK_LIVE=1 python -m pytest tests/live/test_gen1_gates.py -q -p no:randomly
+-k storage_boundaries --junitxml=.cache/memory_boundaries_final_review_live.xml` passed Red, Blue,
+and Yellow (3 passed, 0 skipped, 56 other gates deselected, 25.22 s), with zero gate checks
+failed. The affected non-live sweep passed 334 tests; `tools/lua_syntax_check.py` parsed 302
 files. The full 15-gate matrix below predates the correction and is not claimed as a post-fix
 rerun.
 

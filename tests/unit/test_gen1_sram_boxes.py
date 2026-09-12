@@ -270,6 +270,12 @@ def _memorial_runtime(changed_boxes_set=False):
         sysbus[{int(M.BOX_SPECIES_ADDR)}] = 255
         cartram[{BOX12 + 1}] = 255
     """)
+    if changed_boxes_set:
+        # An initialized cartridge has a valid header in every inactive SRAM
+        # box. Without these the writer can refuse at storedBoxKeys before the
+        # intended Box 12 first-reservation guard is ever reached.
+        for box in range(1, 13):
+            cartram(lua)[box_offset(box) + 1] = 255
     return lua, M
 
 
@@ -344,6 +350,21 @@ def test_first_memorial_accepts_virgin_erased_ff_box12_without_erasing_unowned_d
     assert M.depositMemorialMon(0) is True
     assert ram[BOX12] == 1 and ram[BOX12 + 1] == 0x99
     assert lua.globals().sysbus[CURRENT_BOX_NUM] == 128
+
+
+@pytest.mark.parametrize("slot", [0, 19])
+def test_initialized_unowned_dead_record_refuses_before_any_memorial_write(slot):
+    lua, M = _memorial_runtime(changed_boxes_set=True)
+    ram = cartram(lua)
+    base = BOX12 + 22 + slot * 33
+    ram[base] = 0x99
+    ram[base + 1], ram[base + 2] = 0, 0
+    before = dict(lua.globals().sysbus), dict(ram)
+    lua.execute("writes = {}")
+    result = M.depositMemorialMon(0)
+    assert result == (False, "unowned memorial box is not empty")
+    assert (dict(lua.globals().sysbus), dict(ram)) == before
+    assert len(lua.globals().writes) == 0
 
 
 def test_memorial_also_saves_an_earlier_unsaved_ordinary_deposit():

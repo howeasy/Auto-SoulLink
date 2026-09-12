@@ -54,6 +54,8 @@ def append(point, fields, cart, boxed, *, reserved_digest=None, policy=None):
     flag = bytes.fromhex(point["fields"]["main"])[flag_offset]
     active = flag & 127 == 11
     initializing = not flag & 128
+    if active and initializing:
+        raise JournalError("active memorial box cannot precede box initialization")
     if active and policy is None:
         raise JournalError("active memorial box requires reconciliation")
     if reserved_digest is not None and reserved_digest != grave_digest(point):
@@ -65,6 +67,8 @@ def append(point, fields, cart, boxed, *, reserved_digest=None, policy=None):
     count = 0 if initializing and not active else grave[0]
     if count and reserved_digest is None:
         raise JournalError("nonempty memorial requires an owned reservation")
+    if not initializing and count == 0 and reserved_digest is None and not entirely_empty(bytes(grave)):
+        raise JournalError("empty grave contains unowned bytes; reconciliation required")
     if count >= 20 and policy is None:
         raise JournalError("memorial box full")
     if not initializing or active:
