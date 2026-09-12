@@ -93,9 +93,13 @@ def verify_owned_host(player,command,evidence,state,binding,*,historical=False):
             or type(host['process_id']) is not int or host['process_id']!=initial['observation']['host']['process_id']
             or type(host['frame']) is not int or host['held'] is not True):
         raise JournalError('faint host/frame differs from the enrolled fixed hold')
-    from server.gen1_frame_runtime import COMPONENT as FRAMES, verified_held_frame
-    if player in state['components'].get(FRAMES, {}):
-        verified_held_frame(state, player, host['frame'], historical=historical)
+    progress=state['components'].get('gen1-observation-progress',{}).get(player)
+    if progress is not None:
+        # Free-run (P10): the hold is momentary and the server keeps no step count, so a write
+        # frame must not precede the latest observation checkpoint it followed (the enrollment
+        # frame when re-verified later, once the checkpoint has moved past the write).
+        if host['frame']<(initial['observation']['frame'] if historical else progress['frame']):
+            raise JournalError('faint host/frame precedes the observation checkpoint')
     elif host['frame'] != initial['observation']['frame']:
         raise JournalError('faint host/frame differs from the enrolled fixed hold')
     if not historical and state['active_trade'] is not None:raise JournalError('trade owns the party')

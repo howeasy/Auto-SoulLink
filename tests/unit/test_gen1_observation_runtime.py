@@ -335,12 +335,12 @@ def test_free_service_selection_persists_routes_and_ships_the_loop(tmp_path):
         config = configuration(runtime, "a")
         files = {row["path"] for row in config["files"]}
         assert config["mode"] == "free_service" and set(FREE_FILES) <= files
-        assert "lua/gen1_observation_loop.lua" in files and "lua/gen1_frame_client.lua" not in files
+        assert "lua/gen1_observation_loop.lua" in files
     finally:
         runtime.close()
     reopened = open_runtime(tmp_path / "free")
     try:
-        assert reopened.free_service is True and not reopened.ordinary_frames
+        assert reopened.free_service is True
         assert configuration(reopened, "b")["mode"] == "free_service"
     finally:
         reopened.close()
@@ -356,5 +356,12 @@ def test_free_service_selection_persists_routes_and_ships_the_loop(tmp_path):
         assert held.journal.snapshot() == before
     finally:
         held.close()
-    with pytest.raises(JournalError, match="replaces ordinary frame"):
-        create_runtime(tmp_path / "both", contract("red", "red"), free_service=True, ordinary_frames=True)
+    # A run prepared for the retired frame-credit mode cannot be served any more.
+    from server.json_files import atomic_write_json
+    from server.gen1_run_config import FILENAME
+
+    stale = read_configuration(tmp_path / "held")
+    stale["ordinary_frames"] = True
+    atomic_write_json(tmp_path / "held" / FILENAME, stale)
+    with pytest.raises(JournalError, match="unsupported prepared"):
+        open_runtime(tmp_path / "held")

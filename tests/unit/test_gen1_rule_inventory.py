@@ -1,16 +1,14 @@
 """Ordinary physical changes refresh trade planning without minting identities."""
 
 import copy
-import secrets
 from types import SimpleNamespace
 
 import pytest
 
-from server.gen1_frame_journal import returned
 from server.gen1_party_codec import PartyCodec
 from server.gen1_run_config import create_runtime
 from server.party_observation_cache import refresh
-from tests.unit.test_gen1_atomic_frame_settlement import frame, starters, window
+from tests.unit.observation_fixture import observe, starters
 from tests.unit.test_gen1_sessions import contract
 
 
@@ -41,14 +39,7 @@ def test_ordinary_party_changes_replace_stale_trade_cache(tmp_path, variant, cha
         party[8:52] = updated[:44]
         observation["source"]["fields"]["party"] = party.hex().upper()
         observation["frame"] += 1
-        window(runtime, "a")
-        returned(
-            runtime,
-            "a",
-            secrets.token_hex(16),
-            frame(runtime, "a", observation, None),
-            settle_observations=True,
-        )
+        observe(runtime, "a", inventory=observation)
         after = runtime.state()
         assert after.rules.partner_blobs["a"][0]["blob"] == bytes(updated) != old
         assert after.rules.party_keys["a"] == keys

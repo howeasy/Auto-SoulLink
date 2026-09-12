@@ -25,8 +25,8 @@ from server.protocol_journal import JournalError
 from tests.unit.test_gen1_static_receipt import capture_fact, check, check_end, end_receipt, receipt
 
 SNORLAX, ZAPDOS, VOLTORB = "static:route12_snorlax", "static:powerplant_zapdos", "static:powerplant_voltorb1"
-FRAME = {"a": event_reference.make("a", "1" * 32, {"event": "frame_complete", "bundle": {}}),
-         "b": event_reference.make("b", "2" * 32, {"event": "frame_complete", "bundle": {}})}
+FRAME = {"a": event_reference.make("a", "1" * 32, {"event": "observation", "acquisitions": []}),
+         "b": event_reference.make("b", "2" * 32, {"event": "observation", "acquisitions": []})}
 
 
 def ref(index=0, player="a"):

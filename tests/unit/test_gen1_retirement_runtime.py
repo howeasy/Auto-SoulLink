@@ -26,7 +26,7 @@ from server.gen1_retirement_runtime import (
 from server.gen1_run_config import create_runtime, open_runtime
 from server.protocol import digest
 from server.protocol_journal import JournalError
-from tests.unit.test_gen1_frame_acquisitions import checkpoint as inventory_point, commit, start
+from tests.unit.observation_fixture import checkpoint as inventory_point, commit, start
 from tests.unit.test_gen1_grant_receipt import DATA, receipt as grant_receipt
 from tests.unit.test_gen1_held_faint import checkpoint
 

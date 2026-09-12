@@ -113,18 +113,16 @@ def test_cached_inventory_does_not_cache_observation_authority(change):
 
 def test_warm_inventory_cache_does_not_skip_current_journal_record_checks(tmp_path):
     from server.gen1_run_config import create_runtime
-    from tests.unit.test_gen1_frame_control import request
-    from tests.unit.test_gen1_frame_journal import setup
+    from tests.unit.observation_fixture import starters
     from tests.unit.test_gen1_sessions import contract
 
-    runtime = create_runtime(tmp_path, contract('yellow', 'yellow'), ordinary_frames=True)
+    runtime = create_runtime(tmp_path, contract('yellow', 'yellow'), free_service=True)
     try:
-        setup(runtime)
-        runtime.process(request(runtime), runtime.gate.sessions['a'].owner)
+        starters(runtime)
         runtime.state()
         assert inventory.cache_info()['hits'] > 0
         changed = runtime.journal._db.execute("UPDATE records SET body='{}' WHERE namespace=?",
-                                             ('gen1-frame-progress',)).rowcount
+                                             ('gen1-inventory-observations',)).rowcount
         assert changed > 0
         with pytest.raises(JournalError, match='checksum mismatch'):
             runtime.state()

@@ -11,7 +11,7 @@ incoming MonInfo under its ORIGINAL area. An exchange never creates an acquisiti
 consumes an ordinal (`gen1-acquisition-ordinals` is untouched) and never pairs anything.
 An outgoing key with no logical identity is refused: the registry cannot mint one here.
 
-Phase / staging. `gen1_frame_acquisitions.stage` calls `stage_exchanges` once per consumed
+Phase / staging. The compound settlement calls `stage_exchanges` once per consumed
 bundle, AFTER inventory settlement and AFTER `stage_acquisitions`, in the same detached
 stage/document, folding `records` into the one atomic commit and `result['exchange_digest']`
 into the frame result. The raw rows are the `npc_exchange` entries of the ONE wire list
@@ -334,15 +334,6 @@ def verify_journal(journal, stage):
             decoded = decode_receipts([receipts[reference['index']]], initial['metadata'], initial['binding'], reference=reference['event'])[0]
             if decoded['kind'] != row['kind'] or decoded['fact'] != row['fact']:
                 raise JournalError('exchange fact differs from its authoritative receipt')
-            if snapshot.request.get('event')=='frame_complete':
-                from server.gen1_frame_acquisitions import verify_frames
-                from server.gen1_frame_journal import retained_return
-                from server.gen1_frame_runtime import anchor
-                bound=anchor(document,player)
-                closed=retained_return(journal,player,snapshot.result.get('closed_frame_digest',''),bound)
-                if closed['receipt']!=snapshot.request['receipt']:
-                    raise JournalError('exchange source differs from its retained frame receipt')
-                verify_frames(journal,player,bound,closed,[receipts[reference['index']]],[decoded])
             if row not in entry['settled']:
                 continue
             stable_event = journal.event_snapshot(player, row['inventory_operation'])

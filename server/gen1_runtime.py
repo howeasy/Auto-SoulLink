@@ -104,7 +104,6 @@ class Gen1Runtime(DurableRuntime):
         verify_operation_execution=None,
         prepared_cartridges=None,
         initial_observations=False,
-        ordinary_frames=False,
         native_trade=False,
         free_service=False,
         **options,
@@ -115,15 +114,12 @@ class Gen1Runtime(DurableRuntime):
         self._memorial_verified=set()
         if type(initial_observations) is not bool:raise JournalError('explicit initial-observation selection required')
         self.initial_observations=initial_observations
-        if type(ordinary_frames) is not bool or ordinary_frames and not initial_observations:
-            raise JournalError('ordinary frame selection requires initial observations')
-        self.ordinary_frames=ordinary_frames
         if type(native_trade) is not bool or native_trade and (
-                not ordinary_frames or prepared_cartridges is None or trade_policy is not None):
-            raise JournalError('composed native trade requires ordinary frames and the reproduced cartridge pair')
+                not initial_observations or prepared_cartridges is None or trade_policy is not None):
+            raise JournalError('composed native trade requires initial observations and the reproduced cartridge pair')
         self.native_trade = native_trade
-        if type(free_service) is not bool or free_service and (not initial_observations or ordinary_frames):
-            raise JournalError('free-run observation requires initial observations and replaces ordinary frames')
+        if type(free_service) is not bool or free_service and not initial_observations:
+            raise JournalError('free-run observation requires initial observations')
         self.free_service = free_service
         if native_trade:
             from server.gen1_native_policy import NativeTradePolicy
@@ -231,8 +227,6 @@ class Gen1Runtime(DurableRuntime):
         verify_bootstrap(self.journal,stage)
         from server.gen1_initial_save_runtime import verify_journal as verify_initial_save
         verify_initial_save(self.journal,stage)
-        from server.gen1_frame_journal import verify_journal as verify_frames
-        verify_frames(self, stage.document())
         from server.gen1_native_frame_accounting import verify_journal as verify_native_frames
         verify_native_frames(self, stage.document())
         from server.gen1_engine_signal_runtime import verify_journal as verify_signals
@@ -287,20 +281,15 @@ class Gen1Runtime(DurableRuntime):
             from server.gen1_observation_runtime import record
             return record(self, player, message['operation_id'], self._semantic(message))
         if event == 'native_frame_return':
-            if not self.ordinary_frames:
+            if not self.native_trade:
                 raise ProtocolError('native frame accounting is not selected')
             from server.gen1_native_frame_accounting import returned
             return returned(self, player, message['operation_id'], self._semantic(message))
         if event == 'native_frame_handoff':
-            if not self.ordinary_frames:
+            if not self.native_trade:
                 raise ProtocolError('native frame accounting is not selected')
             from server.gen1_native_frame_accounting import handoff
             return handoff(self, player, message['operation_id'], self._semantic(message))
-        if event == 'frame_complete':
-            if not self.ordinary_frames:
-                raise ProtocolError('ordinary frame integration is not selected')
-            from server.gen1_frame_journal import returned
-            return returned(self, player, message['operation_id'], self._semantic(message), settle_observations=True)
         if event=='engine_signals':
             if not self.initial_observations:raise ProtocolError('engine signal observation is not selected')
             from server.gen1_engine_signal_runtime import record
@@ -391,15 +380,10 @@ class Gen1Runtime(DurableRuntime):
         request=message.get("operation_execution")
         if request is not None:
             if isinstance(request,dict) and isinstance(request.get('window'),dict) and request['window'].get('schema') == 'rby-native-handoff-query-v1':
-                if not self.ordinary_frames:
+                if not self.native_trade:
                     raise ProtocolError('native frame accounting is not selected')
                 from server.gen1_native_frame_accounting import handoff_status
                 response['operation_execution'] = handoff_status(self, player, request)
-            elif isinstance(request,dict) and isinstance(request.get('window'),dict) and isinstance(request['window'].get('scope'),dict) and request['window']['scope'].get('phase')=='ordinary':
-                if not self.ordinary_frames:
-                    raise ProtocolError('ordinary frame integration is not selected')
-                from server.gen1_frame_control import issue_for_control
-                response['operation_execution']=issue_for_control(self,player,request)
             else:
                 from server.gen1_execution_authority import issue_for_control
                 response["operation_execution"]=issue_for_control(self,player,request,self.verify_operation_execution)

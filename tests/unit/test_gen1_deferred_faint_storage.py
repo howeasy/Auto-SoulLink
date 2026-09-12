@@ -1,4 +1,4 @@
-"""Actual source/PC/frame/held-ACK interleavings; synthetic cartridge and file proofs."""
+"""Actual source/PC/observation/held-ACK interleavings; synthetic cartridge and file proofs."""
 
 import copy
 import secrets
@@ -11,13 +11,11 @@ from server.gen1_faint_runtime import (
     verify_journal,
     verify_state,
 )
-from server.gen1_frame_journal import returned
 from server.gen1_run_config import create_runtime, open_runtime
 from server.gen1_storage import expected
 from server.protocol_journal import JournalError
-from tests.unit.test_gen1_atomic_frame_settlement import frame, starters, window
+from tests.unit.observation_fixture import commit, observe, starters
 from tests.unit.test_gen1_faint_runtime import signal_batch
-from tests.unit.test_gen1_frame_acquisitions import commit
 from tests.unit.test_gen1_sessions import contract
 from tests.unit.test_gen1_storage_runtime import COMPONENT as STORAGE, read, source, spare, write
 
@@ -125,7 +123,6 @@ def in_flight(runtime):
     spare(runtime, "a")
     spare(runtime, "b")
     keys = {p: getattr(runtime.state().rules.links[0], p).key for p in ("a", "b")}
-    window(runtime, "a", frames=20)  # Already issued before B's PC action creates the hold.
     point = source(runtime, "b")
     point["frame"] += 1
     point["source"] = expected(
@@ -137,21 +134,17 @@ def in_flight(runtime):
 
 
 def close_faint(runtime, cause="poison_faint"):
+    """The source faint arrives while both storage reads are open: signals settle, the heartbeat waits."""
     payload = signal_batch(runtime, "a", cause=cause)
     payload["signals"][0]["frame"] = 125
     payload["signals"][1]["frame"] = 126
     point = source(runtime, "a")
-    point["frame"] = 130
     party = bytearray.fromhex(point["source"]["fields"]["party"])
     party[9:11] = bytes(2)
     if cause == "poison_faint":
         party[12] = 8
-    point["source"]["fields"]["party"] = party.hex().upper()
     payload["signals"][1]["point"]["party_hex"] = party.hex().upper()
-    message = frame(runtime, "a", point, payload)
-    operation = secrets.token_hex(16)
-    result = returned(runtime, "a", operation, message, settle_observations=True)
-    return operation, message, result
+    return observe(runtime, "a", signals=payload, frame=130)
 
 
 @pytest.mark.parametrize("read_receiver_first", [False, True])
@@ -233,47 +226,20 @@ def test_real_death_is_recorded_but_force_faint_waits_for_storage_compensation(
         reopened.close()
 
 
-def test_storage_cannot_read_the_source_cartridge_until_its_granted_frame_closes(tmp_path):
-    runtime = create_runtime(tmp_path, contract("red", "blue"))
-    try:
-        _, job_id = in_flight(runtime)
-        before = runtime.journal.snapshot()
-        with pytest.raises(JournalError):
-            read(runtime, "a")
-        assert runtime.journal.snapshot() == before
-        assert not runtime.state().document()["components"][STORAGE]["jobs"][job_id]["prepared"]
-    finally:
-        runtime.close()
-
-
-def test_both_storage_reads_close_the_causal_window_before_any_write_is_prepared(tmp_path):
-    from server.gen1_engine_signal_runtime import record as record_engine
-
+def test_open_storage_reads_and_writes_defer_the_heartbeat_checkpoint(tmp_path):
     runtime = create_runtime(tmp_path, contract("red", "blue"))
     try:
         _, job_id = in_flight(runtime)
         point = source(runtime, "a")
         point["frame"] = 130
-        returned(
-            runtime,
-            "a",
-            secrets.token_hex(16),
-            frame(runtime, "a", point, None),
-            settle_observations=True,
-        )
+        _, _, result = observe(runtime, "a", inventory=point, allow_deferred=True)
+        assert result["inventory_deferred"] is True and "inventory_transition_digest" not in result
         read(runtime, "b")
         read(runtime, "a")
         assert runtime.state().document()["components"][STORAGE]["jobs"][job_id]["prepared"]
-        before = runtime.journal.snapshot()
-        with pytest.raises(JournalError, match="physical commands"):
-            window(runtime, "a", frames=20)
-        with pytest.raises(JournalError, match="compound frame"):
-            record_engine(
-                runtime,
-                "a",
-                secrets.token_hex(16),
-                {"event": "engine_signals", "payload": signal_batch(runtime, "a")},
-            )
-        assert runtime.journal.snapshot() == before
+        point["frame"] = 131
+        _, _, result = observe(runtime, "a", inventory=point, allow_deferred=True)
+        assert result["inventory_deferred"] is True  # the storage_apply commands are still open
+        assert runtime.state().document()["components"]["gen1-inventory-observations"]["a"]["observation"]["frame"] < 130
     finally:
         runtime.close()

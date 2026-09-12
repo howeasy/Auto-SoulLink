@@ -252,18 +252,15 @@ def _job(stage, document, origin, kind, keys, *, actor=None, destination=None, s
 
 
 def stage(runtime, state, document, player, operation, message):
-    """Call once after inventory/acquisition rules inside the same frame commit."""
-    if message.get("event") != "frame_complete":
-        raise JournalError("storage requires accounted frame provenance")
+    """Call once after inventory/acquisition rules inside the same observation batch commit."""
+    if message.get("event") != "observation":
+        raise JournalError("storage requires a settled observation batch")
     checkpoint = document["components"].get("gen1-inventory-observations", {}).get(player)
     if checkpoint is None or checkpoint["operation_id"] != operation:
         return {"commands": {"a": [], "b": []}, "records": []}
     origin = event_reference.make(player, operation, message)
-    if (
-        checkpoint.get("frame_origin") != origin
-        or checkpoint["observation"] != message["bundle"]["inventory"]
-    ):
-        raise JournalError("storage frame differs from its staged inventory")
+    if checkpoint["observation"] != message["inventory"]:
+        raise JournalError("storage batch differs from its staged inventory")
     commands = {"a": [], "b": []}
     component = _component(document)
     movements = checkpoint["transition"]["movements"]
@@ -914,9 +911,9 @@ def verify_journal(journal, state):
             if prepared != job["prepared"] or resolution != job["resolution"]:
                 raise JournalError("retained storage policy differs from original evidence")
         origin = event_reference.resolve(journal, job["origin"])
-        if origin.request.get("event") == "frame_complete":
-            if origin.result.get("observations_settled") is not True:
-                raise JournalError("storage source frame was not accounted")
+        if origin.request.get("event") == "observation":
+            if origin.result.get("inventory_transition_digest") is None:
+                raise JournalError("storage source batch recorded no checkpoint")
         elif origin.request.get("event") == "command_ack":
             prior = journal.command(job["origin"]["player"], origin.request.get("command_id"))
             prior_job = component["jobs"].get(prior["body"].get("job_id"))

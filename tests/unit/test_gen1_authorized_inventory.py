@@ -6,7 +6,6 @@ import secrets
 import pytest
 
 from server.gen1_authorized_inventory import build, delta, replay
-from server.gen1_frame_journal import returned
 from server.gen1_initial_observation import inventory
 from server.gen1_initial_save_runtime import prepared
 from server.gen1_inventory_observation import COMPONENT, record_key, result
@@ -15,9 +14,9 @@ from server.gen1_memorial_runtime import expand_entry
 from server.gen1_run_config import create_runtime, open_runtime
 from server.protocol import canonical_json, digest
 from server.protocol_journal import JournalError
-from tests.unit.test_gen1_atomic_frame_settlement import frame, starters, window
+from server.gen1_observation_runtime import record as record_batch
+from tests.unit.observation_fixture import observe, setup, starters
 from tests.unit.test_gen1_faint_runtime import ack, signal_batch
-from tests.unit.test_gen1_frame_journal import setup
 from tests.unit.test_gen1_held_faint import checkpoint
 from tests.unit.test_gen1_initial_observation import admit, observation, send
 from tests.unit.test_gen1_inventory_observation import deliver
@@ -100,22 +99,22 @@ def receiver_memorial(runtime):
     saved = prepared(document, "b")["after"]
     b["source"]["cart_hex"], b["source"]["save_status"] = saved["cart_hex"], 2
     b["frame"] = 120
-    window(runtime, "b")
-    returned(
-        runtime, "b", secrets.token_hex(16), frame(runtime, "b", b, None), settle_observations=True
-    )
-    window(runtime, "a")
+    observe(runtime, "b", inventory=b)
     signal = signal_batch(runtime, "a")
+    # A keeps a second member too, so its own memorial can complete later: a lone dead member
+    # would need terminal retention, which this run never reaches.
+    party = bytearray.fromhex(signal["signals"][-1]["point"]["party_hex"])
+    party[0] = 2
+    party[2:4] = bytes((second[2], 255))
+    party[52:96] = second[52:96]
+    party[283:294] = second[283:294]
+    party[349:360] = second[349:360]
+    signal["signals"][-1]["point"]["party_hex"] = party.hex().upper()
     a = copy.deepcopy(runtime.state().document()["components"][COMPONENT]["a"]["observation"])
     a["frame"] = 122
-    a["source"]["fields"]["party"] = signal["signals"][-1]["point"]["party_hex"]
-    returned(
-        runtime,
-        "a",
-        secrets.token_hex(16),
-        frame(runtime, "a", a, signal),
-        settle_observations=True,
-    )
+    a["source"]["fields"]["party"] = party.hex().upper()
+    a["source"]["cart_hex"], a["source"]["save_status"] = prepared(document, "a")["after"]["cart_hex"], 2
+    observe(runtime, "a", inventory=a, signals=signal)
     owner = runtime.gate.sessions["b"].owner
     command = runtime.journal.command("b", runtime.journal.pending_ids("b")[0])
     members = inventory(b["source"], {"ot_id": "0000", "trainer_name": "SAME"})["members"]
@@ -180,7 +179,37 @@ def receiver_memorial(runtime):
     after = copy.deepcopy(b)
     after["source"] = expand_entry(runtime.journal, archived)["payload"]["after"]
     after["frame"] = 121
-    return b, after
+    return b, after, a
+
+
+def complete_memorial(runtime, player, point, frame):
+    """Acknowledge the memorial observe and memorialize commands for ``player`` at its held frame."""
+    owner = runtime.gate.sessions[player].owner
+    initial = runtime.state().document()["components"]["gen1-initial-observations"][player]
+    command = runtime.journal.command(player, runtime.journal.pending_ids(player)[0])
+    ack(
+        runtime,
+        player,
+        owner,
+        {
+            "event": "command_ack",
+            "command_id": command["command_id"],
+            "command_sequence": command["command_sequence"],
+            "outcome": "ACK",
+            "receipt": {
+                "schema": "rby-memorial-observation-v1",
+                "command_id": command["command_id"],
+                "command_sequence": command["command_sequence"],
+                "context_generation": initial["binding"]["context_generation"],
+                "final_sha1": initial["observation"]["final_sha1"],
+                "host": {**point["host"], "frame": frame},
+                "checkpoint": checkpoint(point["source"]["variant"]),
+                "point": copy.deepcopy(point["source"]),
+            },
+        },
+    )
+    _, message = completion(runtime, player)
+    ack(runtime, player, owner, message)
 
 
 @pytest.mark.parametrize("variant", ["red", "blue", "yellow"])
@@ -189,15 +218,19 @@ def test_forced_faint_and_memorial_same_frame_have_ordered_attribution_not_gamep
 ):
     runtime = create_runtime(tmp_path, contract(variant, variant))
     try:
-        before, after = receiver_memorial(runtime)
+        before, after, source_point = receiver_memorial(runtime)
         # An unrelated byte change remains visible after the authorized image.
         after["source"]["cart_hex"] = "01" + after["source"]["cart_hex"][2:]
-        window(runtime, "b")
-        operation = secrets.token_hex(16)
-        message = frame(runtime, "b", after, None)
-        returned(runtime, "b", operation, message, settle_observations=True)
+        # B's own obligations are clear, but A's memorial is open: the heartbeat waits (P10).
+        assert runtime.journal.pending_ids("a") and not runtime.journal.pending_ids("b")
+        _, _, deferred = observe(runtime, "b", inventory=after, allow_deferred=True)
+        assert deferred["inventory_deferred"] is True
+        complete_memorial(runtime, "a", source_point, 122)
+        assert not runtime.journal.pending_ids("a")
+        after["frame"] = 122
+        operation, request, result = observe(runtime, "b", inventory=after)
         saved = runtime.journal.snapshot()
-        returned(runtime, "b", operation, message, settle_observations=True)
+        assert record_batch(runtime, "b", operation, request) == result
         assert runtime.journal.snapshot() == saved
         entry = runtime.state().document()["components"][COMPONENT]["b"]
         writes = entry["transition"]["authorized_writes"]
@@ -209,8 +242,6 @@ def test_forced_faint_and_memorial_same_frame_have_ordered_attribution_not_gamep
         )["movements"]
         _, baseline = replay(before["source"], entry["write_attribution"])
         assert delta(baseline, after["source"])["cart"]["runs"][0]["offset"] == 0
-        # A's pending memorial cannot block B's own clean inventory stream.
-        assert runtime.journal.pending_ids("a") and not runtime.journal.pending_ids("b")
     finally:
         runtime.close()
     runtime = open_runtime(tmp_path)
@@ -252,53 +283,33 @@ def test_other_players_pending_command_does_not_authorize_or_block_this_inventor
         runtime.close()
 
 
-def test_unapplied_command_arriving_mid_window_does_not_block_owned_frame_closure(tmp_path):
-    from server.gen1_frame_runtime import verified_held_frame
+def test_unapplied_command_arriving_mid_batch_defers_only_the_heartbeat_checkpoint(tmp_path):
     from server.gen1_held_faint import verify
     from tests.unit.test_gen1_held_faint import evidence
 
     runtime = create_runtime(tmp_path, contract("yellow", "yellow"))
     try:
         starters(runtime)
-        window(runtime, "b")
-        window(runtime, "a")
         signal = signal_batch(runtime, "a")
         a = copy.deepcopy(runtime.state().document()["components"][COMPONENT]["a"]["observation"])
         a["frame"] = 122
         a["source"]["fields"]["party"] = signal["signals"][-1]["point"]["party_hex"]
-        returned(
-            runtime,
-            "a",
-            secrets.token_hex(16),
-            frame(runtime, "a", a, signal),
-            settle_observations=True,
-        )
+        observe(runtime, "a", inventory=a, signals=signal)
         pending = runtime.journal.pending_ids("b")
         assert len(pending) == 1
         b = copy.deepcopy(runtime.state().document()["components"][COMPONENT]["b"]["observation"])
         b["frame"] = 115
-        returned(
-            runtime,
-            "b",
-            secrets.token_hex(16),
-            frame(runtime, "b", b, None),
-            settle_observations=True,
-        )
-        assert runtime.journal.pending_ids("b") == pending
-        assert verified_held_frame(runtime.state().document(), "b", 115)
-        assert not runtime.state().document()["components"][COMPONENT]["b"]["write_attribution"][
-            "writes"
-        ]
+        _, _, result = observe(runtime, "b", inventory=b, allow_deferred=True)
+        assert result["inventory_deferred"] is True and runtime.journal.pending_ids("b") == pending
+        assert runtime.state().document()["components"][COMPONENT]["b"]["observation"]["frame"] == 110
+        binding = runtime.gate.sessions["b"].metadata["control_binding"]
         command = runtime.journal.command("b", pending[0])
         value = evidence(runtime, command)
-        value["host"]["frame"] = 115
-        assert verify(
-            "b",
-            command,
-            value,
-            runtime.state().document(),
-            runtime.gate.sessions["b"].metadata["control_binding"],
-        )
+        value["host"]["frame"] = 115  # the momentary hold follows the batch the server settled
+        assert verify("b", command, value, runtime.state().document(), binding)
+        value["host"]["frame"] = 114
+        with pytest.raises(JournalError, match="precedes the observation checkpoint"):
+            verify("b", command, value, runtime.state().document(), binding)
     finally:
         runtime.close()
 

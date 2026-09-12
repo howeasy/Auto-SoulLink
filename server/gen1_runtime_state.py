@@ -112,9 +112,8 @@ class Gen1RuntimeState:
         verify_bootstrap(self)
         from server.gen1_initial_save_runtime import verify_state as verify_initial_save
         verify_initial_save(self)
-        from server.gen1_frame_runtime import validate_state as verify_frames
-        verify_frames(self.document())
-        from server.gen1_native_frame_accounting import validate_state as verify_native_frames
+        from server.gen1_native_frame_accounting import validate_ledger, validate_state as verify_native_frames
+        validate_ledger(self.document())
         verify_native_frames(self.document())
         from server.gen1_engine_signal_runtime import verify_state as verify_signals
         verify_signals(self)

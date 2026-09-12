@@ -11,7 +11,6 @@ import json
 import os
 import secrets
 import tempfile
-import time
 from pathlib import Path
 
 import pytest
@@ -71,7 +70,7 @@ def enrollment_fixture(variant, directory, player):
     return fixture
 
 
-def run_bootstrap_pair(variants, *, cold_boot, ordinary=False):
+def run_bootstrap_pair(variants, *, cold_boot):
     assert not verify()["failures"]
 
     async def scenario():
@@ -82,7 +81,7 @@ def run_bootstrap_pair(variants, *, cold_boot, ordinary=False):
         private["Rewind"]["Enabled"] = False
         config = directory / "base-config.ini"
         config.write_text(json.dumps(private))
-        gate_name = "test_gen1_ordinary_launcher_gate" if ordinary else "test_gen1_bootstrap_launcher_gate"
+        gate_name = "test_gen1_bootstrap_launcher_gate"
         source = (ROOT / f"lua/tests/{gate_name}.lua").read_text()
         jobs, listener, web = [], None, None
         runtime = None
@@ -145,25 +144,7 @@ def run_bootstrap_pair(variants, *, cold_boot, ordinary=False):
             observed = {p: await wait("observed", p, 55) for p in players}
             assert all(row["cold_boot"] is cold_boot for row in observed.values())
             expected = contract(*variants)
-            runtime = create_runtime(directory, expected, run_id=run_id, ordinary_frames=ordinary)
-            if ordinary:
-                original_process = runtime.process
-                timings = []
-
-                def measured_process(message, owner):
-                    began = time.perf_counter()
-                    failure = None
-                    try:
-                        return original_process(message, owner)
-                    except Exception as error:
-                        failure = f'{type(error).__name__}: {error}'
-                        raise
-                    finally:
-                        timings.append({'event': message.get('event'), 'player': message.get('player'),
-                                        'seconds': time.perf_counter() - began, 'error': failure})
-                        publish(directory / 'ordinary-server-timing.json', {'turns': timings[-100:]})
-
-                runtime.process = measured_process
+            runtime = create_runtime(directory, expected, run_id=run_id)
             snap = runtime.journal.snapshot()
             assert not snap.state["rules"]["core"]["player_identity"]
             configure_runtime(runtime)
@@ -193,39 +174,12 @@ def run_bootstrap_pair(variants, *, cold_boot, ordinary=False):
                             passed, path, log = await job
                             raise AssertionError(f"emulator exited before initial save: {passed} {path}\n{log}")
                     await asyncio.sleep(0.05)
-            if ordinary:
-                # The server and audit run on this event loop. Stop the proven,
-                # refused clients before expensive synchronous evidence review;
-                # auditing must not manufacture a control-response timeout.
-                publish(directory / "finish.json", {"done": True})
-                for job in jobs:
-                    passed, path, log = await job
-                    assert passed, f"{path}\n{log[-4000:]}"
             document = runtime.state().document()
             state = runtime.state()
-            if ordinary:
-                publish(directory / "ordinary-performance.json", {
-                    p: {**row['status']['frame_progress']['metrics'],
-                        'effective_fps': row['status']['frame_progress']['metrics']['steps']
-                        / row['status']['frame_progress']['metrics']['elapsed'],
-                        'end_to_end_fps': row['status']['frame_progress']['metrics']['acknowledged_steps']
-                        / row['status']['frame_progress']['metrics']['end_to_end_seconds']}
-                    for p, row in ready.items()
-                })
             for p, result in ready.items():
                 status = result["status"]
                 assert result["actual_generated_launcher"]
-                if ordinary:
-                    assert result["frame_after"] >= result["held_frame"] + 8
-                    ledger = document["components"]["gen1-frame-progress"][p]["ledger"]
-                    assert ledger["frame"] == result["frame_after"] == status["frame_progress"]["frame"]
-                    assert ledger["steps"] == result["frame_after"] - result["held_frame"]
-                    assert ledger["pending"] is None
-                    assert result["refused_ticks"] >= 20 and not status["frame_progress"]["window"]["available"]
-                    assert status["engine_signals"].get("failed") is None
-                    assert status["engine_signals"]["pending"] == 0
-                else:
-                    assert result["held_frame"] == result["frame_after"]
+                assert result["held_frame"] == result["frame_after"]
                 assert status["run_id"] == run_id and status["player"] == p
                 assert not status["ordinary_execution"]
                 assert status["initial_observation"] == "acknowledged"
@@ -296,11 +250,10 @@ def run_bootstrap_pair(variants, *, cold_boot, ordinary=False):
                     assert hashlib.sha256(fixture.read_bytes()).hexdigest() == hashlib.sha256(
                         b"\xff" * 0x8000
                     ).hexdigest()
-            if not ordinary:
-                publish(directory / "finish.json", {"done": True})
-                for job in jobs:
-                    passed, path, log = await job
-                    assert passed, f"{path}\n{log[-4000:]}"
+            publish(directory / "finish.json", {"done": True})
+            for job in jobs:
+                passed, path, log = await job
+                assert passed, f"{path}\n{log[-4000:]}"
             if cold_boot:
                 paths = []
                 for p in players:
@@ -311,8 +264,6 @@ def run_bootstrap_pair(variants, *, cold_boot, ordinary=False):
                     paths.append(Path(event.request["receipt"]["file"]["path"]).resolve())
                 assert paths[0] != paths[1]
         finally:
-            if ordinary and any(not job.done() for job in jobs):
-                publish(directory / "abort.json", {"reason": "paired ordinary launcher test finished or failed"})
             if web is not None:
                 await web.close()
             if listener is not None:

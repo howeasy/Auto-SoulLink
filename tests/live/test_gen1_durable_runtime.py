@@ -202,7 +202,6 @@ def test_actual_paired_runtime_delivers_durably_without_advancing_held_games(var
                     "endpoints": ready,
                     "transport": "actual LuaSocket/TCP",
                     "authoritative_rule_state": "ProtocolJournal",
-                    "ordinary_frames": 0,
                     "physical_writes": 0,
                     "production_launch_qualified": False,
                 },

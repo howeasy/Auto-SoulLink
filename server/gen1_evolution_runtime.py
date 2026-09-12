@@ -453,14 +453,3 @@ def verify_journal(journal, stage, *, rom_provider=None):
             decoded = facts[0]
             if decoded["fact"] != row["fact"]:
                 raise JournalError("evolution differs from its authoritative source result")
-            if source.request.get("event") == "frame_complete":
-                from server.gen1_frame_acquisitions import verify_frames
-                from server.gen1_frame_journal import retained_return
-
-                bound = document["components"]["gen1-frame-progress"][player]["ledger"]["anchor"]
-                closed = retained_return(
-                    journal, player, source.result.get("closed_frame_digest", ""), bound
-                )
-                if closed["receipt"] != source.request["receipt"]:
-                    raise JournalError("evolution source changed its returned range")
-                verify_frames(journal, player, bound, closed, [raw], [decoded])

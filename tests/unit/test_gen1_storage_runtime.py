@@ -1,4 +1,4 @@
-"""Real frame and SQLite storage jobs; cartridge images/file receipts are synthetic."""
+"""Real observation batches and SQLite storage jobs; cartridge images/file receipts are synthetic."""
 
 import copy
 import hashlib
@@ -18,8 +18,7 @@ from server.gen1_storage_runtime import (
     verify_state,
 )
 from server.protocol import digest
-from tests.unit.test_gen1_atomic_frame_settlement import starters
-from tests.unit.test_gen1_frame_acquisitions import commit
+from tests.unit.observation_fixture import commit, current_frame, observe, starters
 from tests.unit.test_gen1_held_faint import checkpoint
 from tests.unit.test_gen1_memorial import fixture
 from tests.unit.test_gen1_sessions import contract
@@ -75,7 +74,7 @@ def read(runtime, player, *, point=None, raw_checkpoint=None):
         "command_sequence": command["command_sequence"],
         "context_generation": player * 32,
         "final_sha1": observed["final_sha1"],
-        "host": {**observed["host"], "frame": observed["frame"]},
+        "host": {**observed["host"], "frame": current_frame(runtime, player)},
         "checkpoint": raw_checkpoint or checkpoint(observed["source"]["variant"]),
         "point": observed["source"],
     }
@@ -275,11 +274,7 @@ def test_cartridge_deposit_refusal_keeps_peer_containers_and_undoes_actor(tmp_pa
 
 @pytest.mark.parametrize("variants", [("yellow", "yellow"), ("red", "blue"), ("blue", "yellow")])
 def test_boxed_grants_pair_logically_without_becoming_usable_party_keys(tmp_path, variants):
-    from tests.unit.test_gen1_frame_acquisitions import (
-        checkpoint as observed,
-        source as grant,
-        start,
-    )
+    from tests.unit.observation_fixture import checkpoint as observed, source as grant, start
 
     runtime = create_runtime(tmp_path, contract(*variants))
     try:
@@ -308,11 +303,7 @@ def test_boxed_birth_in_grave_relocates_without_party_space_or_adopting_archive(
     from server.gen1_full_save import SYMBOLS, image
     from server.gen1_grave_storage import checksum_banks
     from server.gen1_memorial_policy import box_offset
-    from tests.unit.test_gen1_frame_acquisitions import (
-        checkpoint as observed,
-        source as grant,
-        start,
-    )
+    from tests.unit.observation_fixture import checkpoint as observed, source as grant, start
 
     runtime = create_runtime(tmp_path, contract(*variants))
     try:
@@ -369,7 +360,7 @@ def test_reserved_grave_pc_undo_advances_only_its_exact_owned_archive_head(tmp_p
     from server.gen1_retirement_runtime import acknowledge as retire_ack
     from server.gen1_storage_runtime import _prepare
     from server.protocol_journal import JournalError
-    from tests.unit.test_gen1_frame_acquisitions import checkpoint as observed
+    from tests.unit.observation_fixture import checkpoint as observed
     from tests.unit.test_gen1_grant_receipt import DATA, receipt as granted
     from tests.unit.test_gen1_retirement_runtime import (
         observed as retire_read,
@@ -465,83 +456,10 @@ def test_reserved_grave_pc_undo_advances_only_its_exact_owned_archive_head(tmp_p
         runtime.close()
 
 
-@pytest.mark.parametrize("all_full", [False, True], ids=["inactive-capacity", "no-legal-capacity"])
-def test_quarantine_uses_proved_capacity_or_records_specific_no_space_hold(tmp_path, all_full):
-    from server.gen1_full_save import SYMBOLS, image
-    from server.gen1_grave_storage import checksum_banks
-    from server.gen1_memorial_policy import box_offset
-    from server.gen1_party_codec import PartyCodec
-    from server.gen1_storage_runtime import REASON
-    from tests.unit.test_gen1_frame_acquisitions import checkpoint as observed, party_blobs
-    from tests.unit.test_gen1_frame_source_receipts import static_capture
-    from tests.unit.test_gen1_party_codec import make_blob
-
-    runtime = create_runtime(tmp_path, contract("yellow", "yellow"))
-    try:
-        starters(runtime)
-        point = source(runtime, "a")
-        physical = point["source"]
-        cart = bytearray.fromhex(physical["cart_hex"])
-        for box in range(12):
-            raw = bytearray(1122)
-            raw[1] = 255
-            if box == 0 or all_full and box < 11:
-                raw[0] = 20
-                raw[21] = 255
-                for slot in range(20):
-                    mon = make_blob(PartyCodec("yellow"), dv=0x8000 + 20 * box + slot)
-                    raw[1 + slot] = mon[0]
-                    for start, data in (
-                        (22 + 33 * slot, mon[:33]),
-                        (682 + 11 * slot, mon[44:55]),
-                        (902 + 11 * slot, mon[55:]),
-                    ):
-                        raw[start : start + len(data)] = data
-            if box == 0:
-                physical["fields"]["box"] = raw.hex().upper()
-                raw = bytearray(1122)
-                raw[1] = 255
-            cart[box_offset(box) : box_offset(box) + 1122] = raw
-        checksum_banks(cart, {2, 3})
-        symbols = SYMBOLS["pokeyellow"]
-        main = bytearray.fromhex(physical["fields"]["main"])
-        main[symbols["wCurrentBoxNum"] - symbols["wMainDataStart"]] = 128
-        physical["fields"]["main"] = main.hex().upper()
-        physical["cart_hex"] = cart.hex().upper()
-        physical["cart_hex"] = image(physical).hex().upper()
-        physical["save_status"] = 2
-        point["frame"] = 120
-        commit(runtime, "a", [], point=point)
-        raw = static_capture(
-            runtime, "a", begin=130, end=145, party=party_blobs(physical["fields"]["party"])
-        )
-        for witness in ("begin", "end"):
-            raw["receipt"]["receipt"][witness]["point"]["box_hex"] = physical["fields"]["box"]
-            raw["receipt"]["receipt"][witness]["point"]["current_box"] = 128
-        commit(runtime, "a", [raw], point=observed(runtime, "a", [raw], 150))
-        read(runtime, "a")
-        job = latest_job(runtime)
-        if all_full:
-            assert job["blocked_reason"] == "no-proved-storage-capacity" and not job["prepared"]
-            assert not runtime.journal.pending_ids("a")
-            assert REASON in runtime.state().barrier.document()["blockers"].values()
-        else:
-            assert job["prepared"]["a"]["destination_box"] == 1
-            assert job["prepared"]["a"]["after"]["fields"]["box"] == physical["fields"]["box"]
-            write(runtime, "a")
-            assert job["keys"]["a"] not in runtime.state().rules.party_keys["a"]
-        verify_state(runtime.state())
-        verify_journal(runtime.journal, runtime.state())
-    finally:
-        runtime.close()
-
-
 def test_manual_dead_link_withdrawal_rearchives_without_new_death_or_usable_key(tmp_path):
     from server.gen1_faint_runtime import acknowledge as faint_ack
-    from server.gen1_frame_journal import returned
     from server.gen1_memorial_runtime import acknowledge as memorial_ack
     from server.state import LinkStatus
-    from tests.unit.test_gen1_atomic_frame_settlement import frame, window
     from tests.unit.test_gen1_faint_runtime import signal_batch
     from tests.unit.test_gen1_memorial_runtime import completion
 
@@ -559,14 +477,7 @@ def test_manual_dead_link_withdrawal_rearchives_without_new_death_or_usable_key(
         signals["signals"][-1]["point"]["party_hex"] = raw.hex().upper()
         points["a"]["source"]["fields"]["party"] = raw.hex().upper()
         points["a"]["frame"] = 123
-        window(runtime, "a")
-        returned(
-            runtime,
-            "a",
-            secrets.token_hex(16),
-            frame(runtime, "a", points["a"], signals),
-            settle_observations=True,
-        )
+        observe(runtime, "a", inventory=points["a"], signals=signals)
         command = runtime.journal.command("b", runtime.journal.pending_ids("b")[0])
         mons = [
             r

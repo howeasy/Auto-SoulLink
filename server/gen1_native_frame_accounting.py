@@ -8,16 +8,23 @@ atomically. Frame counts alone never authorize ordinary gameplay.
 """
 
 import copy
+from types import SimpleNamespace
 
 from server import frame_progress
 from server.execution_window import VerifiedExecutionWindow, issue
-from server.gen1_frame_runtime import COMPONENT as FRAMES
+from server.gen1_bootstrap_receipt import validate as validate_bootstrap
 from server.protocol import digest
 from server.protocol_journal import JournalError
 
 COMPONENT = "gen1-native-frame-accounting"
 HISTORY = COMPONENT + "-events"
 RETURN_SCHEMA = "rby-native-frame-return-v1"
+# The ordinary baseline ledger a native loan borrows against. The frame-credit loop that used
+# to seed (frame_enrollment) and advance (frame_complete) it is retired; free-run observation
+# (gen1_observation_runtime) keeps no ledger, so only a handed-back loan writes this now.
+FRAMES = "gen1-frame-progress"
+FRAME_RETURNS = FRAMES + "-returns"
+BOOTSTRAP = "gen1-new-game-bootstrap"
 COMMANDS = {
     "native_receptionist",
     "native_trade_prompt",
@@ -43,6 +50,25 @@ def key(player, operation=None):
 def borrowed(document, player):
     entry = document["components"].get(COMPONENT, {}).get(player)
     return entry is not None and entry["phase"] == "borrowed"
+
+
+def _handed_back_predecessor(journal, player, baseline):
+    """The loan this baseline was handed back from, when the ordinary ledger retains one.
+
+    The frame-credit loop used to record an inventory checkpoint between two loans, so one
+    loan's chain always covered an attribution interval; without it the walk follows the
+    retained ordinary return of the previous handoff instead.
+    """
+    if not baseline["ledger"]["sequence"]:
+        return None
+    retained = journal.record(FRAME_RETURNS, baseline["ledger"]["previous_digest"][:32])
+    if retained is None:
+        return None
+    head, _ = _checked_event(journal, player, retained)
+    row, _ = _checked_event(journal, player, journal.record(HISTORY, key(player, head["operation_id"])))
+    if row["entry"]["phase"] != "handed_back":
+        raise JournalError("native loan predecessor was not handed back")
+    return row["entry"]
 
 
 def completed_commands(journal, player, low, high):
@@ -73,6 +99,8 @@ def completed_commands(journal, player, low, high):
                     (ack.revision, command["body"]["cmd"], ack, command, {"native_return": payload})
                 )
         entry = row["previous"]
+        if entry is None:
+            entry = _handed_back_predecessor(journal, player, row["entry"]["baseline"])
     for _revision, _kind, _event, command, source in returns:
         source["native_initial"] = grants.get(command["command_id"])
     return returns
@@ -564,8 +592,6 @@ def _persist(
         {"namespace": HISTORY, "key": key(player, operation), "value": record},
     ]
     if handoff:
-        from server.gen1_frame_journal import RETURNS, key as frame_key
-
         head = {
             **record,
             "previous": previous["baseline"],
@@ -574,7 +600,7 @@ def _persist(
         }
         records += [
             {"namespace": FRAMES, "key": frame_key(player), "value": head},
-            {"namespace": RETURNS, "key": entry["progress"]["previous_digest"][:32], "value": head},
+            {"namespace": FRAME_RETURNS, "key": entry["progress"]["previous_digest"][:32], "value": head},
         ]
     records.extend(extra_records)
     return runtime.journal.commit(
@@ -935,3 +961,117 @@ def handoff_status(runtime, player, request):
             )
         )
     return {**copy.deepcopy(evidence), "ready": bool(ready)}
+
+
+
+# ---------------------------------------------------------------------------------------------
+# Ordinary baseline ledger (moved from the retired gen1_frame_runtime / gen1_frame_journal).
+
+
+def frame_key(player):
+    return digest({"component": FRAMES, "player": player})[:32]
+
+
+def anchor(document, player):
+    if player not in ("a", "b"):
+        raise JournalError("RBY frame player required")
+    initial = document["components"].get("gen1-initial-observations", {}).get(player)
+    bootstrap = document["components"].get(BOOTSTRAP, {}).get(player)
+    if not isinstance(initial, dict) or not isinstance(bootstrap, dict):
+        raise JournalError("normal new-game enrollment required before frame accounting")
+    metadata = initial["metadata"]
+    observation = initial["observation"]
+    gen1 = metadata["gen1_metadata"]
+    proof = validate_bootstrap(
+        bootstrap["payload"],
+        variant=gen1["cartridge"]["variant"],
+        identity=metadata["save_identity"],
+        context_generation=initial["binding"]["context_generation"],
+        physical_instance=gen1["physical_instance"],
+        final_sha1=gen1["cartridge"]["final_rom_sha1"],
+        source=observation["source"],
+        frame=observation["frame"],
+    )
+    if bootstrap["proof"] != proof:
+        raise JournalError("frame bootstrap differs from its source receipt")
+    return frame_progress.initial(
+        context_generation=initial["binding"]["context_generation"],
+        physical_digest=digest(
+            {
+                "metadata": {k: v for k, v in metadata.items() if k != "control_binding"},
+                "host": observation["host"],
+                "bootstrap": bootstrap["operation_id"],
+            }
+        ),
+        frame=observation["frame"],
+    )["anchor"]
+
+
+def seed_ledger(document, player):
+    """An unused ledger at the enrollment anchor; nothing in production calls this any more."""
+    expected = frame_progress.initial(**anchor(document, player))
+    entries = document["components"].setdefault(FRAMES, {})
+    if player in entries:
+        raise JournalError("frame accounting cannot replace an existing history")
+    entries[player] = {"ledger": expected, "pending_observation": None}
+    return entries[player]
+
+
+def validate_ledger(document):
+    entries = document["components"].get(FRAMES, {})
+    if not isinstance(entries, dict) or set(entries) - {"a", "b"}:
+        raise JournalError("invalid RBY frame ledger component")
+    for player, entry in entries.items():
+        if not isinstance(entry, dict) or set(entry) != {"ledger", "pending_observation"}:
+            raise JournalError("complete RBY frame ledger entry required")
+        ledger = frame_progress.validate(entry["ledger"])
+        if ledger["anchor"] != anchor(document, player):
+            raise JournalError("frame progress physical enrollment changed")
+        pending = entry["pending_observation"]
+        if pending is not None:
+            if not isinstance(pending, dict) or set(pending) != {"closed", "bundle_digest"}:
+                raise JournalError("complete pending frame observation required")
+            closed = frame_progress.verify_closed(pending["closed"], anchor=ledger["anchor"])
+            if (
+                ledger["pending"] is not None
+                or digest(closed) != ledger["previous_digest"]
+                or closed["receipt"]["after"] != ledger["frame"]
+                or pending["bundle_digest"] != closed["receipt"]["observations_digest"]
+            ):
+                raise JournalError("unsettled observation differs from the consumed frame range")
+
+
+def verified_held_frame(document, player, frame, *, historical=False):
+    """Only a settled, closed boundary can serve a later physical-write policy."""
+    validate_ledger(document)
+    entry = document["components"].get(FRAMES, {}).get(player)
+    if historical:
+        if (entry is None or type(frame) is not int
+                or not entry["ledger"]["anchor"]["frame"] <= frame <= entry["ledger"]["frame"]):
+            raise JournalError("historical frame is outside accounted execution")
+        return True
+    if (
+        entry is None
+        or entry["ledger"]["pending"] is not None
+        or entry["pending_observation"] is not None
+    ):
+        raise JournalError("held frame still has unclosed execution or observation obligations")
+    if type(frame) is not int or frame != entry["ledger"]["frame"]:
+        raise JournalError("held frame differs from the server-accounted step count")
+    return True
+
+
+def retained_return(journal, player, fingerprint, anchor):
+    """The closed range a handed-back loan retained under the ordinary return key."""
+    frame_progress.identifier(fingerprint, 64)
+    record = journal.record(FRAME_RETURNS, fingerprint[:32])
+    value, event = _checked_event(journal, player, record)
+    if event.request.get("event") not in {"native_frame_return", "native_frame_handoff"}:
+        raise JournalError("retained frame return is not a native handoff")
+    head = {**value, "message": event.request, "result": event.result}
+    verify_frame_head(SimpleNamespace(journal=journal), journal.snapshot().state, player, head)
+    native = journal.record(HISTORY, key(player, value["operation_id"]))
+    closed = native.value["entry"]["closed"]
+    if digest(closed) != fingerprint or closed["grant"]["anchor_digest"] != digest(anchor):
+        raise JournalError("native retained frame range differs")
+    return closed

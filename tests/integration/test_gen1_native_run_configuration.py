@@ -17,7 +17,6 @@ def test_reproduced_yellow_pair_selects_native_services_and_reopens_held(tmp_pat
         tmp_path,
         cartridges.contract(),
         prepared_cartridges=cartridges,
-        ordinary_frames=True,
         native_trade=True,
     )
     try:
@@ -44,10 +43,10 @@ def test_reproduced_yellow_pair_selects_native_services_and_reopens_held(tmp_pat
         runtime.close()
 
 
-@pytest.mark.parametrize("ordinary", [False, True])
-def test_native_selection_never_infers_a_local_cartridge_artifact(tmp_path, ordinary):
+@pytest.mark.parametrize("free_service", [False, True])
+def test_native_selection_never_infers_a_local_cartridge_artifact(tmp_path, free_service):
     with pytest.raises(JournalError, match="reproduced prepared"):
         create_runtime(
-            tmp_path, contract("yellow", "yellow"), ordinary_frames=ordinary, native_trade=True
+            tmp_path, contract("yellow", "yellow"), free_service=free_service, native_trade=True
         )
     assert not (tmp_path / "runtime.sqlite3").exists()

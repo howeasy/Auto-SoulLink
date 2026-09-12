@@ -11,7 +11,7 @@ whenever an engine signal, a source receipt or the heartbeat exists::
      "acquisitions": [{"kind": "capture" | "grant", "receipt": {...}}, ...],
      "inventory": <rby-initial-observation-v1 checkpoint or null>}
 
-The batch is settled the way gen1_frame_journal.returned settles a compound frame bundle,
+The batch is settled the way the retired frame-credit loop settled a compound frame bundle,
 minus the frame ledger: each part is staged by the module that owns its evidence on ONE
 detached stage/document, and one journal commit carries every record and both outboxes.
 Order: inventory (the stable checkpoint acquisitions settle against), engine signals (ball
@@ -34,7 +34,7 @@ ENTRY = frozenset({'sequence', 'operation_id', 'frame'})
 MAX_RECEIPTS = 16
 MAX_INT = 2**53 - 1
 # gen1_source_receipts.ACQUISITION_KINDS. Static, exchange, wild and evolution rows belong to
-# runtimes still welded to frame_complete (P10 section 5): refused fail-closed, never dropped.
+# runtimes not yet wired to observation batches (P10 section 5): refused fail-closed, never dropped.
 SETTLED_KINDS = ('capture', 'grant')
 
 
@@ -135,7 +135,7 @@ def stage_observation(runtime, stage, document, player, operation, request):
         from server.gen1_engine_signal_runtime import stage_observation as stage_engine
         merge(stage_engine(runtime, stage, document, player, operation,
                            {'event': 'engine_signals', 'payload': copy.deepcopy(request['signals'])}), 'engine_evidence_digest')
-    # 3. Acquisition receipts, plus pending facts a fresh checkpoint may now settle (gen1_frame_acquisitions.stage).
+    # 3. Acquisition receipts, plus pending facts a fresh checkpoint may now settle.
     from server.gen1_acquisition_runtime import COMPONENT as ACQUISITIONS
     pending = document['components'].get(ACQUISITIONS, {}).get(player, {}).get('pending')
     if request['acquisitions'] or (pending and recorded_inventory):
@@ -147,6 +147,13 @@ def stage_observation(runtime, stage, document, player, operation, request):
                                 reference=event_reference.make(player, operation, request), rom=rom)
         merge(stage_acquisitions(runtime, stage, document, player, operation, facts, frame_request=request, rom=rom),
               'acquisition_digest')
+    # 4. Storage compensation (boxed deliveries, PC moves) for the checkpoint this batch recorded.
+    if recorded_inventory:
+        from server.gen1_storage_runtime import stage as stage_storage
+        storage = stage_storage(runtime, stage, document, player, operation, request)
+        records.extend(storage['records'])
+        for recipient in ('a', 'b'):
+            commands[recipient].extend(storage['commands'][recipient])
     entry = {'sequence': request['sequence'], 'operation_id': operation, 'frame': request['frame']}
     entries[player] = entry
     result['observation_digest'] = digest(entry)

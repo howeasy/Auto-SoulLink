@@ -11,7 +11,6 @@ import pytest
 
 from server.execution_window import SCHEMA, command_scope, issue
 from server.gen1_cartridge_profiles import companion_profiles
-from server.gen1_frame_journal import returned as ordinary_return
 from server.gen1_held_faint import verify as held_verify
 from server.gen1_initial_observation import inventory
 from server.gen1_native_execution import NativeExecutionPolicy
@@ -30,10 +29,45 @@ from server.gen1_native_observation import checkpoint_from
 from server.gen1_run_config import create_runtime
 from server.protocol import digest
 from server.protocol_journal import JournalError
-from tests.unit.test_gen1_atomic_frame_settlement import frame, starters, window
+from tests.unit.observation_fixture import ledger, observe, starters
 from tests.unit.test_gen1_held_faint import checkpoint
 from tests.unit.test_gen1_sessions import contract
 from tests.unit.test_gen1_trade_result import rules
+
+
+def compose(value, tmp_path):
+    """Install the native execution policy and receptionist the composed runtime would."""
+    models = {p: rules("yellow") for p in ("a", "b")}
+    manifests = {p: copy.deepcopy(companion_profiles()["yellow"]["manifest"]) for p in models}
+    for p in models:
+        models[p].rom_sha1 = value.contract["players"][p]["final_rom_sha1"]
+        manifests[p]["final_sha1"] = models[p].rom_sha1
+    policy = NativeExecutionPolicy(rules=models, manifests=manifests, fallback=held_verify)
+    policy.bind(value)
+    value.verify_operation_execution = policy
+    value._native_acceptance = {}
+    from types import SimpleNamespace
+
+    from server.gen1_receptionist_runtime import ReceptionistRuntime
+    from server.gen1_trade_rules import Gen1TradeRules
+
+    ui_policy = SimpleNamespace(
+        runtime=value,
+        execution=policy,
+        rules=models,
+        manifests=manifests,
+        binding=Gen1TradeRules(models, data_dir=tmp_path),
+        candidate_checkpoints=lambda _player: {
+            p: checkpoint_from(
+                party_snapshot(value, p),
+                value.state().document()["components"]["gen1-inventory-observations"][p][
+                    "observation"
+                ],
+            )
+            for p in ("a", "b")
+        },
+    )
+    value.receptionist = ReceptionistRuntime(ui_policy)
 
 
 @pytest.fixture
@@ -41,37 +75,8 @@ def runtime(tmp_path):
     value = create_runtime(tmp_path, contract("yellow", "yellow"))
     try:
         starters(value)
-        models = {p: rules("yellow") for p in ("a", "b")}
-        manifests = {p: copy.deepcopy(companion_profiles()["yellow"]["manifest"]) for p in models}
-        for p in models:
-            models[p].rom_sha1 = value.contract["players"][p]["final_rom_sha1"]
-            manifests[p]["final_sha1"] = models[p].rom_sha1
-        policy = NativeExecutionPolicy(rules=models, manifests=manifests, fallback=held_verify)
-        policy.bind(value)
-        value.verify_operation_execution = policy
-        value._native_acceptance = {}
-        from types import SimpleNamespace
-
-        from server.gen1_receptionist_runtime import ReceptionistRuntime
-        from server.gen1_trade_rules import Gen1TradeRules
-
-        ui_policy = SimpleNamespace(
-            runtime=value,
-            execution=policy,
-            rules=models,
-            manifests=manifests,
-            binding=Gen1TradeRules(models, data_dir=tmp_path),
-            candidate_checkpoints=lambda _player: {
-                p: checkpoint_from(
-                    party_snapshot(value, p),
-                    value.state().document()["components"]["gen1-inventory-observations"][p][
-                        "observation"
-                    ],
-                )
-                for p in ("a", "b")
-            },
-        )
-        value.receptionist = ReceptionistRuntime(ui_policy)
+        ledger(value)  # the settled ordinary baseline a native loan borrows against
+        compose(value, tmp_path)
         yield value
     finally:
         value.close()
@@ -367,20 +372,12 @@ def test_two_sided_returns_then_delayed_handoff_and_later_native_cycle(runtime):
         assert runtime.journal.snapshot() == saved
         current = runtime.state().document()["components"]["gen1-frame-progress"][player]
         assert current["ledger"]["frame"] == 120 and current["pending_observation"] is None
-    window(runtime, "a")
-    observed = copy.deepcopy(
-        runtime.state().document()["components"]["gen1-inventory-observations"]["a"]["observation"]
-    )
-    observed["frame"] = 125
-    ordinary_return(
-        runtime,
-        "a",
-        secrets.token_hex(16),
-        frame(runtime, "a", observed, None),
-        settle_observations=True,
-    )
+    from server.gen1_native_observation import candidate_checkpoints, checkpoints
+
+    assert set(checkpoints(runtime)) == {"a", "b"} and set(candidate_checkpoints(runtime, "b")) == {"a", "b"}
+    # A later loan borrows the handed-back ledger exactly where the handoff left it.
     next_command = queue(runtime)
-    grant(runtime, next_command, 125)
+    grant(runtime, next_command, 120)
     returned(runtime, "a", secrets.token_hex(16), terminal(runtime, next_command, 130))
     assert runtime.state().document()["components"][COMPONENT]["a"]["progress"]["frame"] == 130
 
@@ -406,36 +403,35 @@ def test_handoff_query_is_read_only_and_binds_return_reference(runtime):
     assert runtime.journal.snapshot() == before
 
 
-def test_composed_native_verifier_preserves_the_existing_held_faint_policy(runtime):
+def test_composed_native_verifier_preserves_the_existing_held_faint_policy(tmp_path):
     from server.held_write_permit import VerifiedHeldWrite
     from tests.unit.test_gen1_faint_runtime import signal_batch
     from tests.unit.test_gen1_held_faint import evidence
 
-    window(runtime, "a")
-    signal = signal_batch(runtime, "a")
-    observed = copy.deepcopy(
-        runtime.state().document()["components"]["gen1-inventory-observations"]["a"]["observation"]
-    )
-    observed["frame"] = 122
-    observed["source"]["fields"]["party"] = signal["signals"][-1]["point"]["party_hex"]
-    ordinary_return(
-        runtime,
-        "a",
-        secrets.token_hex(16),
-        frame(runtime, "a", observed, signal),
-        settle_observations=True,
-    )
-    command = runtime.journal.command("b", runtime.journal.pending_ids("b")[0])
-    point = evidence(runtime, command)
-    point["host"]["frame"] = 110
-    proof = runtime.verify_operation_execution(
-        "b",
-        command,
-        point,
-        runtime.state().document(),
-        runtime.gate.sessions["b"].metadata["control_binding"],
-    )
-    assert isinstance(proof, VerifiedHeldWrite) and not hasattr(proof, "frames")
+    value = create_runtime(tmp_path, contract("yellow", "yellow"))
+    try:
+        starters(value)
+        signal = signal_batch(value, "a")
+        observed = copy.deepcopy(
+            value.state().document()["components"]["gen1-inventory-observations"]["a"]["observation"]
+        )
+        observed["frame"] = 122
+        observed["source"]["fields"]["party"] = signal["signals"][-1]["point"]["party_hex"]
+        observe(value, "a", inventory=observed, signals=signal)
+        compose(value, tmp_path)
+        command = value.journal.command("b", value.journal.pending_ids("b")[0])
+        point = evidence(value, command)
+        point["host"]["frame"] = 110
+        proof = value.verify_operation_execution(
+            "b",
+            command,
+            point,
+            value.state().document(),
+            value.gate.sessions["b"].metadata["control_binding"],
+        )
+        assert isinstance(proof, VerifiedHeldWrite) and not hasattr(proof, "frames")
+    finally:
+        value.close()
 
 
 @pytest.mark.parametrize("variant", ["red", "blue", "yellow"])

@@ -6,7 +6,7 @@ import pytest
 
 from server.gen1_run_config import create_runtime
 from server.protocol_journal import JournalError
-from tests.unit.test_gen1_frame_journal import setup
+from tests.unit.observation_fixture import setup
 from tests.unit.test_gen1_sessions import contract
 
 

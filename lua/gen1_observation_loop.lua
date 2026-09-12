@@ -2,7 +2,7 @@
 -- (docs/gen1_reference/EXECUTION_MODEL_PROPOSAL.md sections 3-5). One tick per
 -- emulated frame: peek the read-only sources, publish ONE "observation" event when
 -- a signal or receipt exists or the heartbeat is due, and only then drain the
--- sources: persist-before-drain, the invariant gen1_frame_client.lua:340-345 keeps.
+-- sources: persist-before-drain, the invariant the retired frame-credit client kept.
 -- A capture call that opened without returning yet persists the cursor alone
 -- (ctx.persist) before its witness is acknowledged. No RAM address, no write and
 -- no hold live here; writes are ctx.writer:service(), which takes its own hold.

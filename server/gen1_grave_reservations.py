@@ -106,24 +106,35 @@ def source_point(journal, document, player, source):
     if set(source) == {"kind", "head"} and source["kind"] == "grave":
         return checked(journal, player, source["head"])
     if set(source) == {"kind", "event"} and source["kind"] == "frame":
+        # A checkpoint the owner published inside a containing event: a free-run observation
+        # batch (P10) or a handed-back native loan settling its final inventory.
         event = resolve(journal, source["event"])
+        if source["event"]["player"] != player:
+            raise JournalError("archive source is not a settled owned frame")
+        from server.gen1_initial_observation import validate
+
+        initial = document["components"]["gen1-initial-observations"][player]
+        if event.request.get("event") == "observation":
+            observed = event.request.get("inventory")
+            if observed is None or event.result.get("inventory_transition_digest") is None:
+                raise JournalError("archive source batch recorded no checkpoint")
+            validate(observed, initial["metadata"], initial["binding"])
+            return observed["source"]
         if (
-            source["event"]["player"] != player
-            or event.request.get("event") != "frame_complete"
+            event.request.get("event") != "native_frame_handoff"
             or event.result.get("observations_settled") is not True
         ):
             raise JournalError("archive source is not a settled owned frame")
-        observed = event.request.get("bundle", {}).get("inventory")
-        initial = document["components"]["gen1-initial-observations"][player]
-        from server.gen1_frame_journal import retained_return
-        from server.gen1_frame_runtime import anchor
-        from server.gen1_initial_observation import validate
+        from server.gen1_native_frame_accounting import FRAMES, retained_return
+        from server.gen1_observation_provenance import observation_bundle
 
+        observed = observation_bundle(event.request)["inventory"]
         validate(observed, initial["metadata"], initial["binding"])
         closed = retained_return(
-            journal, player, event.result.get("closed_frame_digest"), anchor(document, player)
+            journal, player, event.result.get("closed_frame_digest", ""),
+            document["components"][FRAMES][player]["ledger"]["anchor"],
         )
-        if closed["receipt"] != event.request["receipt"]:
+        if closed["receipt"]["after"] != observed["frame"]:
             raise JournalError("archive source differs from its retained frame")
         return observed["source"]
     raise JournalError("unknown archive source reference")
@@ -145,13 +156,16 @@ def check_preimage(journal, document, player, point, head, *, source=None):
     if head is not None:
         candidates.append((head["revision"], {"kind": "grave", "head": copy.deepcopy(head)}))
     entry = document["components"].get("gen1-inventory-observations", {}).get(player)
-    if entry is not None and entry.get("frame_origin") is not None:
+    outer = None if entry is None else journal.event_snapshot(player, entry["operation_id"])
+    if entry is not None and (entry.get("frame_origin") is not None
+                              or outer is not None and outer.request.get("event") == "observation"):
+        from server.event_reference import make
         from server.gen1_observation_provenance import semantic_receipt
 
         event = semantic_receipt(journal, player, entry, "inventory_observation")
-        candidates.append(
-            (event.revision, {"kind": "frame", "event": copy.deepcopy(entry["frame_origin"])})
-        )
+        reference = (copy.deepcopy(entry["frame_origin"]) if entry.get("frame_origin") is not None
+                     else make(player, entry["operation_id"], outer.request))
+        candidates.append((event.revision, {"kind": "frame", "event": reference}))
     if source is None:
         _, source = max(candidates, key=lambda row: row[0])
     anchor_point = source_point(journal, document, player, source)

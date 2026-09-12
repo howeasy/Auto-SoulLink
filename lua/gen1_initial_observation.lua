@@ -37,7 +37,7 @@ function M.new(options)
         end})
     function self:step(admitted)
         if not admitted then return false end
-        if options.ordinary_frames and self.enrolled and self.signals then options.owned();return false end
+        if options.free_service and self.enrolled and self.signals then options.owned();return false end
         local baseline=assert(options.journal.store:read()).observation
         if baseline.initial_inventory then
             assert(baseline.initial_inventory.payload.payload.context_generation==options.owned().context_generation,
@@ -51,7 +51,7 @@ function M.new(options)
                         final_sha1=gameinfo.getromhash():lower(),owned=options.source_owned or options.owned,
                         held=function()return options.host.status().physical_stop_verified or (options.at_boundary and options.at_boundary()==true)end})
                 end
-                if not options.ordinary_frames then self.signals:flush()end
+                if not options.free_service then self.signals:flush()end
             end
             if options.bootstrap and baseline.initial_inventory.phase=="acknowledged" and not baseline.bootstrap then
                 -- Exactly one raw New Game receipt, only after enrollment is
@@ -65,7 +65,7 @@ function M.new(options)
                     return true
                 end
             end
-            if options.ordinary_frames then
+            if options.free_service then -- the loop publishes the inventory stream inside its batches
                 self.enrolled=baseline.initial_inventory.phase=="acknowledged"and baseline.bootstrap and baseline.bootstrap.phase=="acknowledged"
                 return false
             end
@@ -83,9 +83,6 @@ function M.new(options)
     return self
 end
 function M.acknowledge_event(payload,operation_id,baseline)
-    if payload.event=="frame_complete"then
-        return require("gen1_frame_client").acknowledge_event(payload,operation_id,baseline)
-    end
     if payload.event=="inventory_observation"then
         return Stream.acknowledge("inventory_stream","inventory_observation",payload,operation_id,baseline)
     end

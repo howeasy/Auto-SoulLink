@@ -12,7 +12,7 @@ unobserved (reset, state load) and must never attribute anything.
 
 Evidence that matches a battle's operands without proving it is that battle (a call before
 the live origin began, or two origins that both join) is HELD: the capture is neither
-attributed nor treated as wild, and `gen1_frame_acquisitions` keeps it out of acquisition
+attributed nor treated as wild, and the compound settlement keeps it out of acquisition
 settlement until reconciliation. Every row keeps `source_ref = {event, index}` to the raw
 receipt inside its committed event, as acquisition facts do. `stage` mutates only the
 detached document it is given and returns the journal record for root's atomic commit.
@@ -222,28 +222,20 @@ def verify_state(component):
 
 
 def _source_fact(journal, stage, player, reference, kind, revision, rom_provider):
-    """Re-decode the raw row a source_ref names (refusing any other kind) and re-verify its witness frames."""
+    """Re-decode the raw row a source_ref names inside its observation batch (refusing any other kind)."""
     from server.gen1_acquisition_runtime import source_rom
-    from server.gen1_frame_acquisitions import retained_return, verify_frames
-    from server.gen1_frame_runtime import anchor
     from server.gen1_source_receipts import decode
 
     document = stage.document()
     initial = document["components"]["gen1-initial-observations"][player]
     snapshot = event_reference.resolve(journal, reference["event"])
-    rows = snapshot.request.get("bundle", {}).get("acquisitions") or []
-    if (reference["event"]["player"] != player or snapshot.request.get("event") != "frame_complete"
+    rows = snapshot.request.get("acquisitions") or []
+    if (reference["event"]["player"] != player or snapshot.request.get("event") != "observation"
             or type(reference["index"]) is not int or not 0 <= reference["index"] < len(rows) or snapshot.revision > revision):
         raise JournalError("static source reference leaves its receipt list")
     row = rows[reference["index"]]
     rom = source_rom(initial["metadata"], player, rom_provider)
-    decoded = decode([row], initial["metadata"], initial["binding"], reference=reference["event"], rom=rom, kinds=(kind,))[0]
-    bound = anchor(document, player)
-    closed = retained_return(journal, player, snapshot.result.get("closed_frame_digest", ""), bound)
-    if closed["receipt"] != snapshot.request["receipt"]:
-        raise JournalError("static source differs from retained frame receipt")
-    verify_frames(journal, player, bound, closed, [row], [decoded])
-    return decoded["fact"]
+    return decode([row], initial["metadata"], initial["binding"], reference=reference["event"], rom=rom, kinds=(kind,))[0]["fact"]
 
 
 def verify_journal(journal, stage, *, rom_provider=None):

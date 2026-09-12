@@ -132,7 +132,7 @@ def verify_journal(journal, stage):
         event = event_reference.resolve(journal, entry["origin"])
         if (
             event.revision != record.revision
-            or event.request.get("event") not in {"frame_complete", "native_frame_handoff"}
+            or event.request.get("event") != "native_frame_handoff"
             or event.result.get("observations_settled") is not True
             or event.result.get("native_checkpoint_digest") != digest(entry)
         ):
@@ -145,16 +145,13 @@ def verify_journal(journal, stage):
             or bundle["inventory"]["frame"] != entry["frame"]
         ):
             raise JournalError("native observation differs from its actual frame source")
-        from server.gen1_frame_journal import retained_return
+        from server.gen1_native_frame_accounting import FRAMES, retained_return
 
-        anchor = document["components"]["gen1-frame-progress"][player]["ledger"]["anchor"]
+        anchor = document["components"][FRAMES][player]["ledger"]["anchor"]
         closed = retained_return(
             journal, player, event.result.get("closed_frame_digest", ""), anchor
         )
-        if (
-            event.request["event"] == "frame_complete"
-            and closed["receipt"] != event.request["receipt"]
-        ) or closed["receipt"]["after"] != entry["frame"]:
+        if closed["receipt"]["after"] != entry["frame"]:
             raise JournalError("native observation lost its original consumed frame range")
         initial = document["components"]["gen1-initial-observations"][player]
         validate_inventory(bundle["inventory"], initial["metadata"], initial["binding"])
@@ -171,7 +168,7 @@ def _read_checkpoints(runtime, current_players):
         raise JournalError("both native checkpoint observations are required")
     for player in current_players:
         entry = entries[player]
-        from server.gen1_frame_runtime import verified_held_frame
+        from server.gen1_native_frame_accounting import verified_held_frame
 
         verified_held_frame(document, player, entry["frame"])
     return {

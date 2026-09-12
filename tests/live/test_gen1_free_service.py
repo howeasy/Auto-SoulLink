@@ -285,7 +285,7 @@ def run_free_pair(variants):
             # runtime_suspended / runtime_opened).
             reopened = open_runtime(directory)
             try:
-                assert reopened.free_service is True and not reopened.ordinary_frames
+                assert reopened.free_service is True
                 restored = reopened.state().document()
 
                 def evidence(doc):
