@@ -165,6 +165,54 @@ def test_first_reservation_checks_entire_grave_not_only_zero_count(active):
 
 
 @pytest.mark.parametrize("variant", ["red", "blue", "yellow"])
+@pytest.mark.parametrize("tail", ["live_record", "dead_record", "ot_name", "species_list"])
+def test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write(variant, tail):
+    from server.gen1_grave_storage import append
+
+    point, key, identity = fixture(variant, slot=0, initialized=False)
+    raw = bytearray.fromhex(point["cart_hex"])
+    grave = box_offset(11)
+    if tail in {"live_record", "dead_record"}:
+        base = grave + 22 + 19 * 33
+        raw[base] = 0x99
+        raw[base + 2] = 1 if tail == "live_record" else 0
+    elif tail == "ot_name":
+        raw[grave + BOX_SIZE - 1] = 0x80
+    else:
+        raw[grave + 20] = 0x99
+    point["cart_hex"] = raw.hex().upper()
+    original = copy.deepcopy(point)
+    with pytest.raises(JournalError, match="unowned bytes"):
+        storage_policy(point)
+    with pytest.raises(JournalError, match="unowned"):
+        expected(point, key, identity=identity)
+    assert point == original
+    fields = {name: bytearray.fromhex(value) for name, value in point["fields"].items()}
+    detached_cart = bytearray.fromhex(point["cart_hex"])
+    selected = next(mon for mon in inventory(point, identity)["members"] if mon["key"] == key)
+    party = bytes.fromhex(selected["blob_hex"])
+    boxed = bytearray(party[:33])
+    boxed[3] = party[33]
+    before_fields = {name: bytes(value) for name, value in fields.items()}
+    before_cart = bytes(detached_cart)
+    with pytest.raises(JournalError, match="unowned"):
+        append(point, fields, detached_cart, bytes(boxed) + party[44:66])
+    assert {name: bytes(value) for name, value in fields.items()} == before_fields
+    assert bytes(detached_cart) == before_cart
+
+
+@pytest.mark.parametrize("variant", ["red", "blue", "yellow"])
+def test_first_use_active_box12_is_not_a_cartridge_reachable_memorial_state(variant):
+    point, key, identity = fixture(variant, slot=0, initialized=False, current=11)
+    before = copy.deepcopy(point)
+    with pytest.raises(JournalError, match="cannot precede box initialization"):
+        storage_policy(point)
+    with pytest.raises(JournalError, match="cannot precede box initialization"):
+        expected(point, key, identity=identity, storage_policy={"fixture": True})
+    assert point == before
+
+
+@pytest.mark.parametrize("variant", ["red", "blue", "yellow"])
 @pytest.mark.parametrize("active", [False, True])
 def test_actual_lua_executor_repairs_archive_rotation_and_flushes_exactly_once(
     monkeypatch, variant, active

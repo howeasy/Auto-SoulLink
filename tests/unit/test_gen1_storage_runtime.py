@@ -33,6 +33,31 @@ def source(runtime, player):
     )
 
 
+def clean_first_use_grave(point):
+    """Give this synthetic fresh-save fixture a proved-empty, unowned Box 12.
+
+    The generic CartRAM fixture contains arbitrary pre-ChangeBox bytes. Those
+    bytes must now refuse memorial admission, so positive scenarios explicitly
+    supply the clean preimage they intend to exercise.
+    """
+    from server.gen1_full_save import SYMBOLS, image
+    from server.gen1_grave_storage import checksum_banks
+    from server.gen1_memorial_policy import box_offset
+
+    variant = point["variant"]
+    symbols = SYMBOLS["pokeyellow" if variant == "yellow" else "pokered"]
+    main = bytes.fromhex(point["fields"]["main"])
+    flag = main[symbols["wCurrentBoxNum"] - symbols["wMainDataStart"]]
+    if flag & 128:
+        return
+    cart = bytearray.fromhex(point["cart_hex"])
+    grave = box_offset(11)
+    cart[grave : grave + 1122] = b"\0\xff" + bytes(1120)
+    checksum_banks(cart, {3})
+    point["cart_hex"] = cart.hex().upper()
+    point["cart_hex"] = image(point).hex().upper()
+
+
 def all_jobs(runtime):
     from server.event_reference import resolve
     rows=runtime.state().document()['components'][COMPONENT]['jobs'].values()
@@ -52,6 +77,7 @@ def spare(runtime, player):
             "cart_hex"
         ]
         point["source"]["save_status"] = 2
+    clean_first_use_grave(point["source"])
     donor, _, _ = fixture(point["source"]["variant"], count=2, slot=0)
     other = bytes.fromhex(donor["fields"]["party"])
     raw = bytearray.fromhex(point["source"]["fields"]["party"])
@@ -398,6 +424,7 @@ def test_reserved_grave_pc_undo_advances_only_its_exact_owned_archive_head(tmp_p
             "after"
         ]["cart_hex"]
         acquired_point["source"]["save_status"] = 2
+        clean_first_use_grave(acquired_point["source"])
         commit(runtime, "a", [row], point=acquired_point)
         _, message = retire_read(runtime)
         retire_ack(runtime, "a", secrets.token_hex(16), message)

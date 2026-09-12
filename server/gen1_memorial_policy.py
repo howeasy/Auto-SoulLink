@@ -66,12 +66,13 @@ def grave_digest(point):
     return hashlib.sha256(raw).hexdigest()
 
 
-def entirely_empty(raw):
+def entirely_empty(raw, *, before_init=False):
     """A zero count alone cannot reserve stale or hidden monster/name bytes."""
     return (
         isinstance(raw, bytes)
         and len(raw) == BOX_SIZE
-        and raw[:2] == b"\0\xff"
+        and raw[0] == 0
+        and (raw[1] in (0, 255) if before_init else raw[1] == 255)
         and all(value in (0, 255) for value in raw[2:])
     )
 
@@ -101,9 +102,16 @@ def storage_policy(point, *, reserved_digest=None):
     The prepared payload and exact file receipt durably retain all archive bytes.
     """
     active, initialized = current_box(point)
+    if active == GRAVE_BOX and not initialized:
+        raise JournalError("active memorial box cannot precede box initialization")
     if reserved_digest is not None and reserved_digest != grave_digest(point):
         raise JournalError("memorial reservation changed")
     raw = box_image(point, GRAVE_BOX) if initialized or active == GRAVE_BOX else None
+    if not initialized and not active:
+        start = box_offset(GRAVE_BOX)
+        unowned = _bytes(point["cart_hex"], 0x8000)[start : start + BOX_SIZE]
+        if not entirely_empty(unowned, before_init=True):
+            raise JournalError("empty grave contains unowned bytes; reconciliation required")
     count = raw[0] if raw is not None else 0
     if count > CAPACITY:
         raise JournalError("invalid memorial box capacity")

@@ -2207,6 +2207,23 @@ function M.depositMemorialMon(slot)
 
     local reservation_key
     if geometry then
+        -- The cartridge's first ChangeBox clears only each box header. Before
+        -- we emulate that initialization, a zero count is not proof that Box 12
+        -- contains no player data. Refuse every nonempty byte in the entire
+        -- unowned image before protectSramBoxes can write either SRAM bank.
+        if initializing then
+            if mem_r8(mem_off, SRAM_DOMAIN) ~= 0
+                or (mem_r8(species_off, SRAM_DOMAIN) ~= 0
+                    and mem_r8(species_off, SRAM_DOMAIN) ~= 0xFF) then
+                return false, "unowned memorial box is not empty before initialization"
+            end
+            for i = 2, geometry.box_len - 1 do
+                local value = mem_r8(mem_off + i, SRAM_DOMAIN)
+                if value ~= 0 and value ~= 0xFF then
+                    return false, "unowned memorial box is not empty before initialization"
+                end
+            end
+        end
         M._memorial_reservations = M._memorial_reservations or {}
         reservation_key = tostring(M.readPlayerId()) .. ":" .. tostring(mem_off)
         local previous = M._memorial_reservations[reservation_key]
