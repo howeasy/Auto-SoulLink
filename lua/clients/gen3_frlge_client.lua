@@ -2228,6 +2228,7 @@ local function on_frame()
                     console.log("[SLink-FRLGE]   ↳ trade ABORTED: companion patch not present " ..
                                 "(the trade flow requires it); no swap performed")
                     pending_trade_apply = nil
+                elseif memory.read_u8(0x03000F9C) == 0 and not pending_ui then   -- field clear (no script/menu, no native box up)
                     relocate_trade_slot(p)                                       -- party may have been reordered
                     local sseq = MB.set_enemy_party({ p.blob })                  -- stage the partner mon
                     if sseq then
