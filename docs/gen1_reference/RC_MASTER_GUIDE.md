@@ -1,6 +1,6 @@
 # Gen 1 RBY RC — master completion guide
 
-Status: **execution paused for guide/owner reconciliation**, verified 2026-09-12 19:52 UTC. This is the single current planning and resume entry point. The 2026-09-12 [ownership plan](RC_COMPLETION_OWNERSHIP_PLAN_2026-09-12.md), [handoff](CODEX_RC_HANDOFF_2026-09-12.md), [release checklist](RC_CHECKLIST.md), and native classifier are supporting evidence, not competing task queues. The [388-row manifest](../../tests/gen1_release_requirements.json) remains the exact requirement catalogue; this guide groups its open work without copying 164 rows into a second drifting checklist.
+Status: **execution paused for owner review**, verified after A/B owner and independent checklist review 2026-09-12 20:00 UTC. This is the single current planning and resume entry point. The 2026-09-12 [ownership plan](RC_COMPLETION_OWNERSHIP_PLAN_2026-09-12.md), [handoff](CODEX_RC_HANDOFF_2026-09-12.md), [release checklist](RC_CHECKLIST.md), and native classifier are supporting evidence, not competing task queues. The [388-row manifest](../../tests/gen1_release_requirements.json) remains the exact requirement catalogue; this guide groups its open work without copying 164 rows into a second drifting checklist.
 
 ## Resume capsule — update before every break or compaction
 
