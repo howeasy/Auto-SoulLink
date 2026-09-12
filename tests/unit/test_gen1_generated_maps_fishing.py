@@ -69,7 +69,11 @@ def test_area_map_qualifies_against_both_decomps():
     # saffron_city. Pinned so an unmapped fishable map is a visible failure, not a note.
     for prefix in ("pokered:", "pokeyellow:"):
         note = next(n for n in notes if n.startswith(prefix))
-        assert note.endswith("(fishing there is not shown): none"), note
+        assert note.endswith("every one mapped to an area"), note
+    # Negative control: an unmapped fishable map is a FAILURE of the tool, not a note.
+    without_dock = {k: v for k, v in area_map.items() if k != "94"}
+    failures, _ = amap.check(without_dock, amap.find_repos())
+    assert any("VERMILION_DOCK (94) has a super rod table but no area" in f for f in failures), failures
     assert any("yellow-only map ids: SUMMER_BEACH_HOUSE(248)" in n for n in notes), notes
 
 
@@ -145,6 +149,33 @@ def test_yellow_super_rod_rows_match_the_asm():
     assert _rows(t["vermilion_city"]["Super Rod"]) == {"Tentacool": (90, 10, 20), "Horsea": (10, 5, 5)}
     assert _rows(t["vermilion_city"]["Super Rod Dock"]) == {"Tentacool": (70, 10, 15), "Staryu": (20, 15, 15), "Shellder": (10, 10, 10)}
     assert "Super Rod" not in t["cerulean_cave"]
+
+
+@pytest.mark.parametrize("title", TITLES)
+def test_every_fishing_map_keeps_its_own_labelled_super_rod_row(title):
+    """Source-stable, not example-patched: for every area, the number of Super Rod rows equals
+    the number of super rod maps mapped into it, and each label is derived from the map's own
+    source name (its wild floor, else the map constant minus the area's letters)."""
+    repo, _ = enc.VARIANTS[title]
+    consts = enc.parse_map_constants(os.path.join(repo, "constants", "map_constants.asm"))
+    by_id = {v: k for k, v in consts.items()}
+    with open(amap.AREA_MAP_PATH, encoding="utf-8") as f:
+        area_of = {int(k): v["area_id"] for k, v in json.load(f).items() if isinstance(v, dict)}
+    with open(enc._FLOORS_OUT, encoding="utf-8") as f:
+        floors = json.load(f)
+    super_rod = enc.parse_super_rod(repo, consts)
+    tables = _shipped()[title]
+    maps_per_area: dict[str, list[int]] = {}
+    for map_id in super_rod:
+        maps_per_area.setdefault(area_of[map_id], []).append(map_id)
+    for area, maps in maps_per_area.items():
+        rows = sorted(m for m in tables[area] if m.startswith("Super Rod"))
+        assert len(rows) == len(maps), f"{title}/{area}: {len(maps)} fishing maps, rows {rows}"
+        expected = sorted("Super Rod" + (floors.get(str(m), "") if len(maps) > 1 else "") for m in maps)
+        assert rows == expected, f"{title}/{area}: {rows} != {expected}"
+        for m in maps:
+            if len(maps) > 1 and str(m) not in floors:
+                assert enc.map_suffix(by_id[m], area) == "", f"{title}/{by_id[m]} needs a label"
 
 
 def test_super_rod_weights_are_the_titles_own_and_the_pin_bites(monkeypatch):
