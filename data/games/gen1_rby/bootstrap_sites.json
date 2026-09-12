@@ -1,0 +1,159 @@
+{
+  "schema": "rby-bootstrap-sites-v1",
+  "sha256": "e8b35f43f2429dd69a6e22a76b99958973b53c572da1780e5907f8624cc67551",
+  "titles": {
+    "blue": {
+      "bank_address": 65464,
+      "clean_sha1": "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2",
+      "fields": {
+        "box": {
+          "address": 55936,
+          "length": 1122
+        },
+        "current_box": {
+          "address": 54688,
+          "length": 1
+        },
+        "owned": {
+          "address": 54007,
+          "length": 19
+        },
+        "party": {
+          "address": 53603,
+          "length": 404
+        },
+        "player_id": {
+          "address": 54105,
+          "length": 2
+        },
+        "seen": {
+          "address": 54026,
+          "length": 19
+        },
+        "trainer": {
+          "address": 53592,
+          "length": 11
+        }
+      },
+      "sites": {
+        "begin": {
+          "address": 23890,
+          "bank": 1,
+          "expected_hex": "2132D7CB8ECD1561",
+          "rom_offset": 23890,
+          "symbol": "StartNewGame"
+        },
+        "end": {
+          "address": 23898,
+          "bank": 1,
+          "expected_hex": "0E14CD3937",
+          "rom_offset": 23898,
+          "symbol": "StartNewGameDebug+3"
+        }
+      },
+      "source_commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9"
+    },
+    "red": {
+      "bank_address": 65464,
+      "clean_sha1": "ea9bcae617fdf159b045185467ae58b2e4a48b9a",
+      "fields": {
+        "box": {
+          "address": 55936,
+          "length": 1122
+        },
+        "current_box": {
+          "address": 54688,
+          "length": 1
+        },
+        "owned": {
+          "address": 54007,
+          "length": 19
+        },
+        "party": {
+          "address": 53603,
+          "length": 404
+        },
+        "player_id": {
+          "address": 54105,
+          "length": 2
+        },
+        "seen": {
+          "address": 54026,
+          "length": 19
+        },
+        "trainer": {
+          "address": 53592,
+          "length": 11
+        }
+      },
+      "sites": {
+        "begin": {
+          "address": 23890,
+          "bank": 1,
+          "expected_hex": "2132D7CB8ECD1561",
+          "rom_offset": 23890,
+          "symbol": "StartNewGame"
+        },
+        "end": {
+          "address": 23898,
+          "bank": 1,
+          "expected_hex": "0E14CD3937",
+          "rom_offset": 23898,
+          "symbol": "StartNewGameDebug+3"
+        }
+      },
+      "source_commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9"
+    },
+    "yellow": {
+      "bank_address": 65464,
+      "clean_sha1": "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1",
+      "fields": {
+        "box": {
+          "address": 55935,
+          "length": 1122
+        },
+        "current_box": {
+          "address": 54687,
+          "length": 1
+        },
+        "owned": {
+          "address": 54006,
+          "length": 19
+        },
+        "party": {
+          "address": 53602,
+          "length": 404
+        },
+        "player_id": {
+          "address": 54104,
+          "length": 2
+        },
+        "seen": {
+          "address": 54025,
+          "length": 19
+        },
+        "trainer": {
+          "address": 53591,
+          "length": 11
+        }
+      },
+      "sites": {
+        "begin": {
+          "address": 23762,
+          "bank": 1,
+          "expected_hex": "2131D7CB8ECD855E",
+          "rom_offset": 23762,
+          "symbol": "StartNewGame"
+        },
+        "end": {
+          "address": 23770,
+          "bank": 1,
+          "expected_hex": "3E08EA27D50E14CD2F37",
+          "rom_offset": 23770,
+          "symbol": "StartNewGameDebug+3"
+        }
+      },
+      "source_commit": "0a0851546ff65f65c4bb2af2b95e279e709a8653"
+    }
+  }
+}

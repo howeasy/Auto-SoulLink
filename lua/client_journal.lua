@@ -2,19 +2,29 @@
 -- Executor/coordinator callbacks must prove effects; this module never invents ACKs.
 local JSON=require("json_codec")
 local Identity=require("platform_identity")
-local M={VERSION="slink-client-journal-v1",MAX_EVENTS=128,MAX_COMMANDS=256}
+local M={VERSION="slink-client-journal-v1",COMPOSED_VERSION="slink-client-journal-v2",MAX_EVENTS=128,MAX_COMMANDS=256}
 local transport={protocol=true,player=true,admission_epoch=true,session_id=true,seq=true,operation_id=true}
 local function token(value)return type(value)=="string" and #value==32 and value:match("^[0-9a-f]+$")~=nil end
 local function integer(value)return type(value)=="number" and value%1==0 and value>=0 and value<=9007199254740991 end
 local function encoded(value)return assert(JSON.encode(value))end
 local function copy(value)return assert(JSON.decode(encoded(value)))end
+local function completion(payload,entry)
+    assert(JSON.kind(payload)=="object" and type(payload.event)=="string" and #payload.event>=1
+        and #payload.event<=64 and payload.event~="hello" and payload.event~="control"
+        and payload.event~="sync" and payload.command_id==entry.command_id
+        and payload.command_sequence==entry.command_sequence and JSON.kind(payload.receipt)=="object"
+        and encoded(payload.receipt)==encoded(entry.receipt),"typed completion must retain exact command and receipt")
+    for field in pairs(transport)do assert(payload[field]==nil,"delivery envelope in typed completion")end
+    if payload.outcome~=nil then assert(payload.outcome==entry.outcome,"typed completion outcome differs")end
+    if payload.event=="command_ack" then assert(payload.outcome==entry.outcome,"generic ACK requires its outcome")end
+end
 
 function M.initial()
     return {version=M.VERSION,outbox=JSON.array(),inbox=JSON.array(),command_floor=0,observation=JSON.object()}
 end
 
 local function validate(state)
-    if type(state)~="table" or state.version~=M.VERSION or not integer(state.command_floor)
+    if type(state)~="table" or (state.version~=M.VERSION and state.version~=M.COMPOSED_VERSION) or not integer(state.command_floor)
         or JSON.kind(state.outbox)~="array" or #state.outbox>M.MAX_EVENTS
         or JSON.kind(state.inbox)~="array" or #state.inbox>M.MAX_COMMANDS
         or JSON.kind(state.observation)~="object" then error("invalid client journal",0) end
@@ -42,11 +52,21 @@ local function validate(state)
         end
         if entry.confirmed~=nil and type(entry.confirmed)~="boolean" then error("invalid receipt confirmation",0) end
         if entry.confirmed and not entry.outcome then error("unapplied command cannot be confirmed",0) end
+        if entry.completion_payload~=nil then
+            assert(state.version==M.COMPOSED_VERSION and entry.outcome and token(entry.completion_operation_id),
+                "typed completion requires composed journal version and exact event identity")
+            completion(entry.completion_payload,entry)
+        end
         command_ids[entry.command_id]=true;previous=entry.command_sequence
     end
 end
 
-function M.open(store,new_id)
+function M.open(store,new_id,options)
+    options=options or {}
+    if type(options)~="table" or (options.completion_event~=nil and type(options.completion_event)~="function")
+        or (options.acknowledge_event~=nil and type(options.acknowledge_event)~="function") then
+        return nil,"invalid journal composition callbacks"
+    end
     local initial,reason=store:read()
     if not initial then return nil,reason end
     local ok,validation_error=pcall(validate,initial)
@@ -175,14 +195,25 @@ function M.open(store,new_id)
                 end
             end
             local event=table.remove(state.outbox,1).payload
-            if event.event=="command_ack" then
-                local entry=by_id[event.command_id]
-                if not entry or entry.outcome~=event.outcome or encoded(entry.receipt)~=encoded(event.receipt) then
+            local entry=by_id[event.command_id]
+            if event.event=="command_ack" or (entry and entry.completion_operation_id==operation_id) then
+                local expected=entry and entry.completion_payload
+                if not entry or (expected and encoded(event)~=encoded(expected))
+                    or (not expected and (entry.outcome~=event.outcome or encoded(entry.receipt)~=encoded(event.receipt))) then
                     error("command receipt differs from its durable inbox record",0)
                 end
                 entry.confirmed=true
                 while state.inbox[1] and state.inbox[1].confirmed do
                     state.command_floor=table.remove(state.inbox,1).command_sequence
+                end
+            end
+            if options.acknowledge_event then
+                local baseline=options.acknowledge_event(copy(event),operation_id,copy(state.observation))
+                if baseline~=nil then
+                    assert(JSON.kind(baseline)=="object","acknowledged observation baseline must be an object")
+                    if encoded(baseline)~=encoded(state.observation)then
+                        state.version=M.COMPOSED_VERSION;state.observation=copy(baseline)
+                    end
                 end
             end
             return true
@@ -204,8 +235,15 @@ function M.open(store,new_id)
             end
             if #state.outbox>=M.MAX_EVENTS then error("durable event outbox is full",0) end
             entry.outcome=outcome;entry.receipt=proof
-            state.outbox[#state.outbox+1]={operation_id=id,payload=JSON.object({event="command_ack",command_id=command_id,
-                command_sequence=entry.command_sequence,outcome=outcome,receipt=proof})}
+            local payload=options.completion_event and options.completion_event(copy(entry),outcome,copy(proof))
+            if payload~=nil then
+                payload=copy(payload);completion(payload,entry)
+                entry.completion_payload=copy(payload);entry.completion_operation_id=id;state.version=M.COMPOSED_VERSION
+            else
+                payload=JSON.object({event="command_ack",command_id=command_id,
+                    command_sequence=entry.command_sequence,outcome=outcome,receipt=proof})
+            end
+            state.outbox[#state.outbox+1]={operation_id=id,payload=payload}
             return true
         end)
     end

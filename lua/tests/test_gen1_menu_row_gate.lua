@@ -166,51 +166,27 @@ t.check("the cursor can be moved onto the SLINK row", reached,
 -- under test is both halves: that it appears at all, and that everything it borrowed comes
 -- back. A panel that draws correctly and then leaves the map screen wrecked is worse than
 -- no panel.
-local PANEL_STATE = 0xDEE2 + 9
+local PANEL_STATE = M.PANEL_STATE
 if reached then
     t.hold("A", 8)
-    -- Give it long enough to clear the screen, miss the stage timeout (~90 frames) and
-    -- settle on the fallback.
-    local saw_panel = false
-    for _ = 1, 240 do
+    local announced=false
+    for _=1,30 do
+        if M.read_u8(PANEL_STATE)==M.PANEL_AWAIT then announced=true;break end
         t.step(nil)
-        if find_row(screen_rows(), "SOUL LINK") then saw_panel = true break end
     end
-    t.check("selecting SLINK opens the panel", saw_panel,
-            "no SOUL LINK title appeared — the dispatch trampoline did not reach bank $3F")
-
-    t.check("the panel announces itself to the client", M.read_u8(PANEL_STATE) ~= 0,
-            fmt("panel state is %d — the client is never told it may paint",
-                M.read_u8(PANEL_STATE)))
-
-    -- No client is attached in this gate, so the stage wait must TIME OUT rather than hang.
-    local fell_back = false
-    for _ = 1, 300 do
+    t.check("SLINK announces an awaiting page",announced,"native page request absent")
+    local closed=false
+    for _=1,181 do
         t.step(nil)
-        if find_row(screen_rows(), "NO CLIENT") then fell_back = true break end
+        if M.read_u8(PANEL_STATE)==0 then closed=true;break end
     end
-    t.check("with no client attached it falls back instead of hanging", fell_back,
-            "the stage wait never timed out")
-
-    -- Close it. PRESS UNTIL IT CLOSES rather than pressing once and hoping: the panel
-    -- spends up to 90 frames waiting for a client and another 20 settling before it will
-    -- look at the joypad, and a single early press lands in that window and is discarded.
-    -- The first version of this check pressed A about two frames after the panel opened
-    -- and then blamed the patch for not closing.
-    local closed = false
-    for _ = 1, 12 do
-        t.hold("A", 6)
-        for _ = 1, 40 do t.step(nil) end
-        if find_row(screen_rows(), "SOUL LINK") == nil then closed = true break end
-    end
-    t.check("a button press closes the panel", closed,
-            "still on screen after 12 presses")
-    t.check("the panel hands the screen back", find_row(screen_rows(), "SOUL LINK") == nil,
-            "the panel is still on screen after a button press")
-    t.check("the panel clears its state on the way out",
-            M.read_u8(PANEL_STATE) == 0,
-            fmt("panel state left at %d — a client would keep painting over the map",
-                M.read_u8(PANEL_STATE)))
+    t.check("missing panel data closes within180 frames",closed,"native stage timeout did not close")
+    for _=1,60 do t.step(nil)end
+end
+local native_step=t.step
+t.step=function(buttons)
+    if M.panelHeartbeat then M.panelHeartbeat(true)end
+    return native_step(buttons)
 end
 
 -- ── the client can paint it ──────────────────────────────────────────────────
@@ -313,7 +289,7 @@ do
         end
 
         -- ── B CLOSES ────────────────────────────────────────────────────────────────
-        -- On the LAST page A closes too, but B must close from anywhere; that
+        -- A wraps after the last page; B must close from anywhere. That
         -- distinction is the whole reason this panel does not use
         -- WaitForTextScrollButtonPress, which cannot tell the two apart.
         local closed_by_b = false

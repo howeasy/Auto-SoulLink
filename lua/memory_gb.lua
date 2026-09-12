@@ -1577,7 +1577,7 @@ end
 -- If you see that, check the map id before blaming the game.
 -- ── The native in-game panel ─────────────────────────────────────────────────────────────
 -- The companion patch owns the SCREEN: it takes over from the START menu, blanks the
--- display, draws a fallback, and then sets a handshake byte meaning "the tile map is yours,
+-- display and sets an awaiting handshake meaning "the tile map is yours,
 -- paint now". We paint, set it to STAGED, and the patch reveals what we painted. Because
 -- the screen is white for the whole of that window, a half-painted page can never be seen.
 --
@@ -1586,16 +1586,19 @@ end
 -- to put it in the ROM's own memory, so the text is written straight into wTileMap and the
 -- patch never has to store it.
 M.PANEL_MAILBOX = 0xDEE2
-M.PANEL_CAPS    = M.PANEL_MAILBOX + 8
-M.PANEL_STATE   = M.PANEL_MAILBOX + 9
--- +10 is the patch's: which page it wants. +11 is ours: how many there are, which only we
--- can know because only we have seen how much text the server sent. The patch reads it to
--- decide whether A turns a page or closes, so a one-page panel does not flicker.
-M.PANEL_PAGE    = M.PANEL_MAILBOX + 10
-M.PANEL_PAGES   = M.PANEL_MAILBOX + 11
+M.PANEL_CAPS    = M.PANEL_MAILBOX + 5
+M.PANEL_STATE   = M.PANEL_MAILBOX + 15
+-- Native request/page and generation controls follow the locked ABI-3 layout.
+M.PANEL_PAGE    = M.PANEL_MAILBOX + 16
+M.PANEL_PAGES   = M.PANEL_MAILBOX + 17
+M.PANEL_GENERATION = M.PANEL_MAILBOX + 18
+M.PANEL_ACK = M.PANEL_MAILBOX + 19
+M.PANEL_TRANSFERS = M.PANEL_MAILBOX + 20
+M.PANEL_LEASE = M.PANEL_MAILBOX + 21
+M.PANEL_CANARY = M.PANEL_MAILBOX + 22
 M.PANEL_CAP_BIT = 0x02
 
-M.PANEL_CLOSED, M.PANEL_AWAIT, M.PANEL_STAGED = 0, 1, 2
+M.PANEL_CLOSED, M.PANEL_AWAIT, M.PANEL_STAGED, M.PANEL_DISPLAY = 0, 1, 2, 3
 
 M.TILEMAP = 0xC3A0
 M.PANEL_COLS, M.PANEL_ROWS = 20, 18
@@ -1641,7 +1644,11 @@ end
 --- from the ABI number, because a build may ship one feature without the other.
 function M.panelSupported()
     local caps = M.read_u8(M.PANEL_CAPS)
-    return caps ~= 0 and caps ~= 0xFF and (caps & M.PANEL_CAP_BIT) ~= 0
+    if caps == 0 or caps == 0xFF or (caps & M.PANEL_CAP_BIT) == 0 or M.panelAbi()~=3 then return false end
+    local magic={0x53,0x4C,0x4E,0x4B}
+    for i,value in ipairs(magic)do if M.read_u8(M.PANEL_MAILBOX+i-1)~=value then return false end end
+    for i=0,7 do if M.read_u8(M.PANEL_CANARY+i)~=0xA5 then return false end end
+    return true
 end
 
 function M.panelAbi()
@@ -1661,22 +1668,26 @@ end
 --- Paint the page the patch asked for, and hand the screen back.
 ---
 --- Rows past the bottom of a page are not dropped any more, they are the NEXT page: the
---- patch owns a page number at +10 and we paint the slice it names. Every row is written
+--- patch owns a page number at +16 and we paint the slice it names. Every row is written
 --- even when the slice is short, because panelWriteRow pads to the full width -- so nothing
 --- of the previous page can survive into this one.
-function M.panelStage(rows)
-    local pages = M.panelPageCount(rows)
-    M.write_u8(M.PANEL_PAGES, math.min(pages, 255))
-
-    local page = M.read_u8(M.PANEL_PAGE)
-    if page >= pages then page = pages - 1 end      -- defensive: never index past the end
-    local first = page * M.PANEL_ROWS
-
-    for i = 0, M.PANEL_ROWS - 1 do
-        M.panelWriteRow(i, (rows and rows[first + i + 1]) or "")
+local panel_publisher
+local function publisher()
+    if not panel_publisher then
+        local fields={state=M.PANEL_STATE,page=M.PANEL_PAGE,pages=M.PANEL_PAGES,generation=M.PANEL_GENERATION,
+            ack=M.PANEL_ACK,transfers=M.PANEL_TRANSFERS,lease=M.PANEL_LEASE}
+        panel_publisher=require("staged_panel").new({page_rows=M.PANEL_ROWS,lease_frames=180,
+            read=function(name)return M.read_u8(fields[name])end,
+            write=function(name,value)M.write_u8(fields[name],value)end,
+            available=M.panelSupported,
+            paint=function(rows,page)
+                for i=0,M.PANEL_ROWS-1 do M.panelWriteRow(i,rows[page*M.PANEL_ROWS+i+1]or "")end
+            end})
     end
-    M.write_u8(M.PANEL_STATE, M.PANEL_STAGED)
+    return panel_publisher
 end
+function M.panelStage(rows)return publisher():stage(rows)end
+function M.panelHeartbeat(connected)return publisher():maintain(connected)end
 
 function M.hasWildEncounters()
     if not M.GRASS_RATE_ADDR then return nil end
@@ -1736,36 +1747,16 @@ end
 
 --- Detect the Gen 1 companion patch and, if present, enable SFX through its mailbox.
 --
--- Gen 1 has no RAM-writable sound trigger — `wNewSoundID` is PlaySound's internal scratch,
--- not a polled mailbox — so an unpatched cartridge simply cannot play a sound from Lua and
--- SFX_DISPATCH_ADDR stays nil. ABI 2's patched build added a VBlank hook that consumed a
--- sound id from mailbox+7; ABI 3 drains that byte without playing it, because the hook's
--- PlaySound call was not safe. Whether a dispatch register exists is therefore a question
--- for the capability bits, not the ABI number.
---
--- Profile-keyed on `companion_patch_mailbox`, so Gen 2 never runs this. Called once at
--- startup; returns the detected ABI version, or nil when unpatched.
+-- No RBY SFX service is qualified. Detect only the current panel ABI and
+-- keep audio dispatch disabled; the retired mailbox+7 interface is never used.
 function M.detectCompanionPatch()
+    M.SFX_DISPATCH_ADDR = nil -- no qualified RBY SFX service is selected
     local mb = M.profile and M.profile.companion_patch_mailbox
     if not mb then return nil end
     local tag = string.char(M.read_u8(mb), M.read_u8(mb + 1),
                             M.read_u8(mb + 2), M.read_u8(mb + 3))
-    if tag ~= "SLNK" then return nil end
+    if tag ~= "SLNK" or not M.panelSupported() then return nil end
     local abi = M.read_u8(mb + 4)
-    -- ASK THE CAPABILITY BITS, NOT THE ABI NUMBER.
-    -- "ABI >= 2 therefore SFX" was true of every build that existed when it was written and
-    -- is false now: ABI 3 ships panel-only, because the VBlank PlaySound path it inherited
-    -- re-enters a non-reentrant audio routine (the long note in patch/gen1/src/slink.asm).
-    -- The bits exist precisely so a feature can be dropped without an ABI bump, and a client
-    -- that infers features from a version number cannot see that happen.
-    --
-    -- Cleared FIRST: redetection after a reset or a ROM reload must not leave a dispatch
-    -- address pointing into a layout that is no longer there.
-    M.SFX_DISPATCH_ADDR = nil
-    local caps = M.read_u8(mb + 8)
-    if abi >= 2 and caps ~= 0 and caps ~= 0xFF and (caps & 0x01) ~= 0 then
-        M.SFX_DISPATCH_ADDR = mb + 7
-    end
     return abi
 end
 
@@ -2159,6 +2150,19 @@ function M.depositMemorialMon(slot)
             local sp = M.read_u8(M.PARTY_BASE_ADDR + i * M.PARTY_STRUCT_SIZE + M.SPECIES_OFFSET)
             if M._game.toNatDex(sp) == 0 or M.read_u8(M.PARTY_SPECIES_ADDR + i) ~= sp then
                 return false, "invalid party species list"
+            end
+        end
+        -- A replay after a partial save/rewind must not append a second grave.
+        -- Refuse before initialization or writes; exact prepared-poststate
+        -- recovery belongs to the durable executor, not a key-only success.
+        if M.GENERATION == 1 then
+            local stored, storage_error = M.storedBoxKeys()
+            if not stored then return false, storage_error or "storage identity unavailable" end
+            local party_keys = {}
+            for i = 0, pcount - 1 do
+                local key = M.monKey(M.PARTY_BASE_ADDR + i * M.PARTY_STRUCT_SIZE)
+                if party_keys[key] or stored[key] then return false, "storage key collision" end
+                party_keys[key] = true
             end
         end
         local valid, reason = preflight_sram_boxes(geometry)

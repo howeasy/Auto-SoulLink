@@ -55,6 +55,7 @@ SCRIPTS = sorted(
         # it — leaving it out would let the literals simply move one file over.
         + glob.glob(os.path.join(REPO, "lua", "tests", "duo", "gen1_*.lua"))
         + glob.glob(os.path.join(REPO, "lua", "tests", "test_gen1_*_gate.lua"))
+        + glob.glob(os.path.join(REPO, "lua", "tests", "gen1_trade_ui_driver.lua"))
     ) if os.path.basename(p) not in ORACLE_SCRIPTS
 )
 

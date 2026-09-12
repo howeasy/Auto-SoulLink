@@ -51,7 +51,7 @@ from manifest import (  # noqa: E402
 )
 
 
-def assemble() -> bytes:
+def assemble(*, native_trade=False) -> bytes:
     """rgbasm + rgblink the module; return the raw bytes of bank $3F."""
     rgbds = ensure_rgbds()
     os.makedirs(BUILD, exist_ok=True)
@@ -59,7 +59,8 @@ def assemble() -> bytes:
     obj = os.path.join(BUILD, "slink.o")
     out = os.path.join(BUILD, "slink_stub.gb")
 
-    subprocess.run([os.path.join(rgbds, "rgbasm" + exe), "-o", obj, SRC], check=True)
+    definitions = ["-D", "SLINK_NATIVE_TRADE=1"] if native_trade else []
+    subprocess.run([os.path.join(rgbds, "rgbasm" + exe), *definitions, "-o", obj, SRC], check=True)
     # -p 0x00 matches pokered's own RGBLINKFLAGS, so the padding we emit is the padding the
     # target bank already contains.
     subprocess.run([os.path.join(rgbds, "rgblink" + exe), "-p", "0x00",

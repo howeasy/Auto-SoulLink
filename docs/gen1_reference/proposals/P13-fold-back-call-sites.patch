@@ -1,0 +1,141 @@
+diff --git a/server/adapters/gen1_rby.py b/server/adapters/gen1_rby.py
+index d80a2fd..9ee97c4 100644
+--- a/server/adapters/gen1_rby.py
++++ b/server/adapters/gen1_rby.py
+@@ -56,8 +56,9 @@ _GIFT_AREAS = frozenset({
+ # must also be in _GIFT_AREAS or the exemption silently stops firing.
+ # `test_gen1_gift_areas.py` pins that.
+ _FIXED_SPECIES_GIFTS = frozenset({
+-    "mt_moon_pokecenter",  # Magikarp from the salesman, always level 5
+-    "silph_co",            # Lapras on 7F
++    "mt_moon_pokecenter",     # Magikarp from the salesman, always level 5
++    "silph_co",               # Lapras on 7F
++    "celadon_mansion_roof",   # Eevee from the back-door flat; no player choice, so the clauses do not apply
+ })
+ 
+ # Gen 1 type IDs → names
+@@ -383,7 +384,12 @@ class Gen1Adapter(GameAdapter):
+         return area_id in _GIFT_AREAS or area_id.startswith("gift_")
+ 
+     def is_fixed_species_gift(self, area_id: str) -> bool:
+-        return area_id in _FIXED_SPECIES_GIFTS
++        # DECISION FLAGGED FOR THE OWNER (proposal P13): Gen 3 applies the clauses to starters
++        # ("intro" is not in its fixed-species set), so two identical starters under species lock
++        # are a violation there. The Gen 1 RC exempted starters (Yellow has no choice at all, and
++        # a violation at minute one has no retry). This keeps the RC policy explicitly, at the
++        # adapter, until the owner picks one rule for every generation.
++        return area_id in _FIXED_SPECIES_GIFTS or area_id == "oaks_lab"
+ 
+     def evo_family(self, species_id: int) -> int:
+         """Gen 1's own evolution families — see _GEN1_FAMILY above.
+diff --git a/server/gen1_evolution_runtime.py b/server/gen1_evolution_runtime.py
+index 221a590..71a960e 100644
+--- a/server/gen1_evolution_runtime.py
++++ b/server/gen1_evolution_runtime.py
+@@ -15,7 +15,7 @@ from server.gen1_initial_observation import COMPONENT as INITIAL, display_name
+ from server.gen1_party_codec import PartyCodec
+ from server.gen1_starter_settlement import context
+ from server.identity_registry import IdentityWitness, MigrationWitness
+-from server.member_identity_rules import rekey as _rekey
++from server.gen1_engine_bridge import rekey as _rekey
+ from server.protocol import digest
+ from server.protocol_journal import JournalError, _identifier, _player
+ from server.state import MonInfo
+@@ -217,6 +217,7 @@ def stage_evolutions(
+                     level=after.level,
+                     nickname=display_name(after.nickname),
+                 ),
++                reason="evolution",
+             )
+             if usable:
+                 stage.rules.party_keys[player].discard(before.key)
+diff --git a/server/gen1_memorial_runtime.py b/server/gen1_memorial_runtime.py
+index cb26fd8..86823be 100644
+--- a/server/gen1_memorial_runtime.py
++++ b/server/gen1_memorial_runtime.py
+@@ -10,7 +10,7 @@ from server.gen1_initial_observation import inventory
+ from server.gen1_memorial import expected, reservation, verify_receipt
+ from server.gen1_party_codec import PartyCodec
+ from server.held_write_permit import VerifiedHeldWrite
+-from server.linked_death_rules import record_memorial_completion
++from server.gen1_engine_bridge import memorial_completion as record_memorial_completion
+ from server.operation_scope import command_scope
+ from server.protocol import digest
+ from server.protocol_journal import JournalError, _identifier
+diff --git a/server/gen1_npc_exchange_runtime.py b/server/gen1_npc_exchange_runtime.py
+index 0be231d..be8f204 100644
+--- a/server/gen1_npc_exchange_runtime.py
++++ b/server/gen1_npc_exchange_runtime.py
+@@ -34,7 +34,7 @@ from server.gen1_initial_observation import (
+ from server.gen1_party_codec import PartyCodec
+ from server.gen1_starter_settlement import context as identity_context
+ from server.identity_registry import IdentityWitness, MigrationWitness
+-from server.member_identity_rules import rekey as _rekey
++from server.gen1_engine_bridge import rekey as _rekey
+ from server.protocol import digest
+ from server.protocol_journal import JournalError, _identifier
+ from server.state import MonInfo
+@@ -185,7 +185,7 @@ def stage_exchanges(runtime, stage, document, player, operation, facts, frame_or
+         witness = MigrationWitness(member_id, own_context, outgoing, before_digest, IdentityWitness(own_context, mon.key, mon.sha256, 1))
+         stage.identities.migrate_many(player, event_id, [witness])
+         info = MonInfo(key=mon.key, level=mon.level, species=mon.species_id, nickname=display_name(mon.nickname))
+-        rule, area = _rekey(stage.rules, player, outgoing, info)
++        rule, area = _rekey(stage.rules, player, outgoing, info, reason="npc_trade")
+         if outgoing in stage.rules.party_keys[player]:
+             stage.rules.party_keys[player].discard(outgoing)
+             stage.rules.party_keys[player].add(mon.key)
+diff --git a/server/gen1_starter_settlement.py b/server/gen1_starter_settlement.py
+index 19291cf..1e0bb18 100644
+--- a/server/gen1_starter_settlement.py
++++ b/server/gen1_starter_settlement.py
+@@ -9,7 +9,7 @@ from server.gen1_full_save import SYMBOLS
+ from server.gen1_party_codec import PartyCodec
+ from server.gen1_observation_provenance import semantic_receipt
+ from server.identity_registry import IdentityContext, IdentityWitness
+-from server.party_grant_rules import record_exempt_party_grant
++from server.gen1_engine_bridge import starter_grant
+ from server.protocol import digest
+ from server.protocol_journal import JournalError, _identifier
+ from server.save_identity import SaveIdentity
+@@ -123,7 +123,7 @@ def settle_ready(runtime, stage, document, *, frame_origin=None):
+         acquired = stage.identities.acquire(acquisition, acquisition, witness)
+         peer = mon_info(PartyCodec(initials[partner]['observation']['source']['variant']).validate_blob(
+             bytes.fromhex(other['blob_hex']))) if other else None
+-        linked = record_exempt_party_grant(stage.rules, player, AREA, mon_info(mon), peer=peer)
++        linked = starter_grant(stage.rules, player, AREA, mon_info(mon))   # the shared engine pairs the starters
+         cache_party(stage.rules, player, mon)
+         component['settled'][player] = {'member_id': acquired['member_id'], 'acquisition_id': acquisition,
+             'inventory_entry': copy.deepcopy(entry), 'blob_hex': mon.raw.hex().upper()}
+diff --git a/server/gen1_wild_encounter_runtime.py b/server/gen1_wild_encounter_runtime.py
+index 8e1788d..191158c 100644
+--- a/server/gen1_wild_encounter_runtime.py
++++ b/server/gen1_wild_encounter_runtime.py
+@@ -9,7 +9,7 @@ and supplies the exact identity required by the shared retirement executor.
+ import copy
+ from datetime import UTC, datetime
+ 
+-from server import event_reference, no_catch_rules
++from server import event_reference, gen1_engine_bridge, no_catch_rules
+ from server.adapters.gen1_rby import _MAP_ID_TO_AREA
+ from server.admission_context import same_admitted_context
+ from server.gen1_capture_receipt import validate_receipt as capture_receipt
+@@ -337,16 +337,17 @@ def _resolve(runtime, stage, document, component, event):
+                 row["phase"] = "awaiting_peer"
+                 continue
+             at = datetime.now(UTC).isoformat()
+-            outcome = no_catch_rules.record(
++            outcome = gen1_engine_bridge.no_catch(
+                 stage.rules,
+                 player,
+                 area,
+                 begin["species_id"],
+                 begin["level"],
+                 activated=row["activated"],
+-                occurred_at=at,
+                 proved_peers=_boxed_peers(document, player),
++                decision=no_catch_rules.decision,
+             )
++            at = outcome.pop("at") or at
+             row.update(phase="no_catch", decision=outcome, occurred_at=at)
+             if outcome["retire"]:
+                 peer, key = outcome["retire"]["player"], outcome["retire"]["key"]

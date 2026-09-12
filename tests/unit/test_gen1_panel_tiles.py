@@ -12,6 +12,7 @@ dash and rendered as an indented name.
 
 Character ids are re-derived from the decomp here rather than copied from the Lua.
 """
+
 from __future__ import annotations
 
 import os
@@ -42,10 +43,17 @@ def mem():
                                              t[a] = v % 256; t[a+1] = math.floor(v/256) % 256 end,
         }
     """)
-    p = lambda *x: os.path.join(_REPO, *x).replace("\\", "/")
+
+    def p(*x):
+        return os.path.join(_REPO, *x).replace("\\", "/")
+
     M = lua.eval(f'dofile("{p("lua", "memory_gb.lua")}")')
     G = lua.eval(f'dofile("{p("lua", "games", "gen1_rby.lua")}")')
     M.initProfile(G, "red")
+    lua.execute("package.path='" + p("lua", "?.lua") + ";'..package.path")
+    lua.execute(
+        "bus[0xDEE2]=0x53;bus[0xDEE3]=0x4C;bus[0xDEE4]=0x4E;bus[0xDEE5]=0x4B;bus[0xDEE6]=3;bus[0xDEE7]=2;bus[0xDEF1]=1;for a=0xDEF8,0xDEFF do bus[a]=0xA5 end"
+    )
     return lua, M
 
 
@@ -90,12 +98,13 @@ def test_every_supported_character_matches_the_decomp(mem, charmap):
     # In COLS-wide chunks: writing only supported[:COLS] would have checked the first
     # twenty letters and none of the digits, the slash, the dash or the space.
     for start in range(0, len(supported), COLS):
-        chunk = supported[start:start + COLS]
+        chunk = supported[start : start + COLS]
         M.panelWriteRow(0, chunk)
         tiles = row_tiles(lua, 0)
         for col, ch in enumerate(chunk):
             assert tiles[col] == charmap[ch], (
-                f"{ch!r} rendered as {tiles[col]:#04x}, cartridge says {charmap[ch]:#04x}")
+                f"{ch!r} rendered as {tiles[col]:#04x}, cartridge says {charmap[ch]:#04x}"
+            )
 
 
 def test_the_dash_is_not_a_space(mem, charmap):
@@ -142,7 +151,7 @@ def test_rows_past_the_bottom_are_dropped(mem):
     """panelStage writes whatever the patch is about to reveal; spilling past row 17
     would run into whatever follows wTileMap."""
     lua, M = mem
-    rows = lua.table_from(["R%d" % i for i in range(ROWS + 5)])
+    rows = lua.table_from([f"R{i}" for i in range(ROWS + 5)])
     M.panelStage(rows)
     last = lua.eval(f"bus[{TILEMAP + ROWS * COLS}] or 0")
     assert last == 0, "panelStage wrote past the bottom row of the screen"

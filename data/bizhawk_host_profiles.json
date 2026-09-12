@@ -1,0 +1,21 @@
+{
+  "profiles": {
+    "gambatte": {
+      "capability_id": "bizhawk-2.11.1-gambatte-exclusive-hold-v1",
+      "core_assembly_sha256": "444bc157418e9b5df5d07e987fc7ad1d2d1c6993676f5b864368027cb4f054d5",
+      "core_type": "BizHawk.Emulation.Cores.Nintendo.Gameboy.Gameboy",
+      "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+      "emulator_version": "2.11.1",
+      "native_module_sha256": "320d615454af44bbe586bcb53afa14a64e834a4156c0d4a731d59cda30ce0722"
+    },
+    "mgba": {
+      "capability_id": "bizhawk-2.11.1-mgba-exclusive-hold-v1",
+      "core_assembly_sha256": "444bc157418e9b5df5d07e987fc7ad1d2d1c6993676f5b864368027cb4f054d5",
+      "core_type": "BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk",
+      "emulator_sha256": "f8cdb93551a544f680bf3876d9d8d72643859e7a44a23b04e1a25b92e48f80cd",
+      "emulator_version": "2.11.1",
+      "native_module_sha256": "ba398a56e62ce1e4280fe96834cbbe4e6469b7070f34da313ec3d4637c4979e1"
+    }
+  },
+  "schema": 1
+}

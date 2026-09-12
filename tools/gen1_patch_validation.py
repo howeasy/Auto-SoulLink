@@ -88,12 +88,16 @@ def verify_assembly_references(source: str, rom_symbols: dict, ram_symbols: dict
     """Every external literal address in the assembly resolves to a pinned symbol."""
     code = re.sub(r";[^\n]*", "", source)
     patch_constants = {
-        "SLINK_MAILBOX": 0xDEE2, "SLINK_ABI_VERSION": 3, "SLINK_SFX_REQUEST": 0xDEE9,
-        "SLINK_CAPS": 0xDEEA, "SLINK_PANEL_STATE": 0xDEEB,
-        "SLINK_PANEL_PAGE": 0xDEEC, "SLINK_PANEL_PAGES": 0xDEED,
-        "SLINK_CAP_SFX": 1, "SLINK_CAP_PANEL": 2,
-        "SLINK_PANEL_CLOSED": 0, "SLINK_PANEL_AWAIT": 1, "SLINK_PANEL_STAGED": 2,
-        "SCREEN_WIDTH": 20, "SLINK_STAGE_TIMEOUT": 90, "SLINK_PAD_A": 1, "SLINK_PAD_ANY": 11,
+        "SLINK_MAILBOX": 0xDEE2, "SLINK_ABI_VERSION": 3, "SLINK_HEARTBEAT": 0xDEE8,
+        "SLINK_SFX_HEAD": 0xDEEA, "SLINK_SFX_TAIL": 0xDEEB, "SLINK_SFX_FIFO": 0xDEEC, "SLINK_SFX_OVERFLOW": 0xDEF0,
+        "SLINK_CAPS": 0xDEE7, "SLINK_PANEL_STATE": 0xDEF1,
+        "SLINK_PANEL_PAGE": 0xDEF2, "SLINK_PANEL_PAGES": 0xDEF3,
+        "SLINK_PANEL_GEN": 0xDEF4, "SLINK_PANEL_ACK": 0xDEF5, "SLINK_PANEL_TRANSFERS": 0xDEF6,
+        "SLINK_PANEL_LEASE": 0xDEF7, "SLINK_CANARY": 0xDEF8, "SLINK_CANARY_VALUE": 0xA5,
+        "SLINK_CAP_SFX": 1, "SLINK_CAP_PANEL": 2, "SLINK_CAP_PC_TRADE": 4,
+        "SLINK_PANEL_CLOSED": 0, "SLINK_PANEL_AWAIT": 1, "SLINK_PANEL_STAGED": 2, "SLINK_PANEL_DISPLAY": 3,
+        "SCREEN_WIDTH": 20, "SLINK_STAGE_TIMEOUT": 180, "SLINK_PAD_A": 1, "SLINK_PAD_ANY": 11,
+        "rBGP": 0xFF47, "rOBP0": 0xFF48, "rOBP1": 0xFF49,
     }
     constants = {}
     ops = {ast.Add: operator.add, ast.Sub: operator.sub,

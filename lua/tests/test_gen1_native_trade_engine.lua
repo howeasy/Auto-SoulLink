@@ -16,10 +16,22 @@ assert(type(manifest.test_probe)=="table" and manifest.test_probe.NativeTradeTes
 local cases=read_json(ROOT.."/.cache/native-trade-cases-"..t.variant..".json")
 local source=t.variant=="yellow" and "pokeyellow" or "pokered"
 local target=t.variant=="blue" and "pokeblue" or source
-local frame,active=0,false
+local frame,active,cancel_pressed=0,false,false
+local current_case,learning_active,learning_menu,learning_questions,forget_menus
 local function step()
     frame=frame+1
-    t.step({A=active and frame%20<8})
+    local buttons={A=active and frame%20<8,B=active and cancel_pressed,Down=false}
+    if learning_menu then
+        learning_menu.clock=learning_menu.clock+1
+        local row=learning_menu.row
+        buttons.A=learning_menu.clock>=70 and learning_menu.clock<76
+        buttons.B=false
+        for i=1,row do
+            local start=10+(i-1)*12
+            if learning_menu.clock>=start and learning_menu.clock<start+5 then buttons.Down=true end
+        end
+    end
+    t.step(buttons)
 end
 local oracle=dofile(ROOT.."/lua/tests/gb_routine_oracle.lua").new({
     symbols_path=ROOT.."/.cache/pret/"..source.."/"..target..".sym",step=step,
@@ -45,6 +57,7 @@ end
 local counts,min_sp={},0xFFFF
 local observations={}
 local hooks={}
+local learning_returns={}
 local returned,returning,original_registers,callback_error,active_refusal
 hooks[#hooks+1]=event.on_bus_exec(function()
     if active and r(a("hLoadedROMBank"))==manifest.test_probe.bank then
@@ -62,11 +75,12 @@ hooks[#hooks+1]=event.on_bus_exec(function()
         returned=returning;returning=nil;active=false;joypad.set({A=false})
     end
 end,0x40,"native-trade-test-resume","System Bus")
-for _,name in ipairs({"_RemovePokemon","_AddEnemyMonToPlayerParty","InternalClockTradeAnim","TryEvolvingMon","SavePartyAndDexData","InGameTrade_RestoreScreen","RedrawMapView"})do
+for _,name in ipairs({"_RemovePokemon","_AddEnemyMonToPlayerParty","InternalClockTradeAnim","TryEvolvingMon","SavePartyAndDexData","InGameTrade_RestoreScreen","RedrawMapView","LearnMove"})do
     local symbol=oracle.symbol(name)
     hooks[#hooks+1]=event.on_bus_exec(function()
         if active and (symbol.bank==0 or r(a("hLoadedROMBank"))==symbol.bank) then
             counts[name]=(counts[name] or 0)+1
+            if name=="LearnMove"then learning_active=true end
             observations[name]=M.getPartyCount()
             if name=="InternalClockTradeAnim" then
                 observations.trade_music=r(a("wLastMusicSoundID"))
@@ -76,11 +90,37 @@ for _,name in ipairs({"_RemovePokemon","_AddEnemyMonToPlayerParty","InternalCloc
         end
     end,symbol.address,"trade-engine-"..name,"System Bus")
 end
+hooks[#hooks+1]=event.on_bus_exec(function()
+    if not active or not learning_active or not current_case.learning_action then return end
+    local x,y=r(a("wTopMenuItemX")),r(a("wTopMenuItemY"))
+    local row
+    if x==5 and y==8 then
+        forget_menus=forget_menus+1
+        row=current_case.forget_choices and current_case.forget_choices[math.min(forget_menus,#current_case.forget_choices)]
+            or current_case.forget_slot or 0
+    elseif x==15 and y==8 then
+        learning_questions=learning_questions+1
+        row=(current_case.learning_action=="decline" and learning_questions==1)and 1 or 0
+    else return end
+    local sp=emu.getregister("SP")
+    local return_address=r(sp)+256*r(sp+1)
+    local bank=r(a("hLoadedROMBank"))
+    local key=bank..":"..return_address
+    learning_menu={clock=0,row=row,key=key}
+    if not learning_returns[key]then
+        learning_returns[key]=true
+        hooks[#hooks+1]=event.on_bus_exec(function()
+            if learning_menu and learning_menu.key==key and r(a("hLoadedROMBank"))==bank then learning_menu=nil end
+        end,return_address,"native-learning-return-"..key,"System Bus")
+    end
+end,a("HandleMenuInput"),"native-learning-menu","System Bus")
 local boot=memorysavestate.savecorestate()
 local evidence=JSON.array()
 local ok,reason=xpcall(function()
     for _,case in ipairs(cases)do
+        current_case=case;learning_active=false;learning_menu=nil;learning_questions=0;forget_menus=0
         memorysavestate.loadcorestate(boot)
+        cancel_pressed=case.press_cancel==true
         counts={};observations={};min_sp=0xFFFF
         local prepared={}
         for i,hex in ipairs(case.party)do prepared[i]=assert(M.hexToBytes(hex))end
@@ -122,6 +162,12 @@ local ok,reason=xpcall(function()
         local controls=bytes(a("wSpriteStateData1"),0x200)
         local tilemap=bytes(a("wTileMap"),360)
         local party_before=M.bytesToHex(bytes(a("wPartyDataStart"),a("wPartyDataEnd")-a("wPartyDataStart")))
+        local before_dex=M.bytesToHex(bytes(a("wPokedexOwned"),38))
+        local save_length=a("sMainDataCheckSum")-a("sGameData")+1
+        local before_save_region=M.bytesToHex(bytes(cart_offset("sGameData"),save_length,"CartRAM"))
+        local before_pikachu=t.variant=="yellow" and M.bytesToHex(bytes(a("wPikachuHappiness"),2)) or nil
+        local save_id=string.format("%04X",M.readPlayerId())
+        local save_name=M.bytesToHex(bytes(M.PLAYER_NAME_ADDR,11))
         local cart_before=case.refusal and M.bytesToHex(bytes(0,0x8000,"CartRAM"))
         local scratch_before=M.bytesToHex(bytes(a("wTradedPlayerMonSpecies"),32))
         local which_before=r(a("wWhichPokemon"))
@@ -191,8 +237,25 @@ local ok,reason=xpcall(function()
             assert(actual.hp==received.hp+actual.maxHP-received.maxHP,"evolution did not preserve HP damage")
             local allowed={[1]=true,[2]=true,[3]=true,[6]=true,[7]=true}
             for i=35,44 do allowed[i]=true end
+            if case.expected_nickname then
+                local nickname=assert(M.hexToBytes(case.expected_nickname))
+                assert(#nickname==11,"expected nickname must include every cartridge byte")
+                for i=1,11 do
+                    assert(actual.blob[55+i]==nickname[i],"native evolution nickname differs from MonsterNames")
+                    allowed[55+i]=true
+                end
+            end
+            if case.expected_moves then
+                for i=1,4 do
+                    assert(actual.blob[8+i]==case.expected_moves[i],"native learned move differs")
+                    assert(actual.blob[29+i]==case.expected_packed_pp[i],"native learned PP differs")
+                    allowed[8+i]=true;allowed[29+i]=true
+                end
+            end
             for i,byte in ipairs(incoming)do if not allowed[i] then assert(actual.blob[i]==byte,"evolution changed unrelated blob field "..i)end end
         end
+        if case.expected_learn_calls then assert((counts.LearnMove or 0)==case.expected_learn_calls,"native learning path differs")end
+        if case.expected_forget_menus then assert(forget_menus==case.expected_forget_menus,"native HM refusal path differs")end
         local live_party=bytes(a("wPartyDataStart"),a("wPartyDataEnd")-a("wPartyDataStart"))
         local saved_party=bytes(cart_offset("sPartyData"),#live_party,"CartRAM")
         assert(M.bytesToHex(live_party)==M.bytesToHex(saved_party),"party did not reach canonical SRAM")
@@ -218,7 +281,10 @@ local ok,reason=xpcall(function()
         assert(r(a("wLastMusicSoundID"))==map_music,"map music was not restored")
         client.screenshot(ROOT.."/.cache/native-trade-return-"..t.variant..".png")
         evidence[#evidence+1]={id=case.id,before=case.party,incoming=case.incoming,slot=case.slot,party=after,frames=frame-start,native_calls=JSON.object(counts),
-            min_sp=min_sp,saved_party_hex=M.bytesToHex(saved_party),sprite_state_before=M.bytesToHex(controls)}
+            min_sp=min_sp,saved_party_hex=M.bytesToHex(saved_party),live_party_hex=M.bytesToHex(live_party),
+            before_dex_hex=before_dex,before_save_region_hex=before_save_region,before_pikachu_hex=before_pikachu,
+            saved_region_hex=M.bytesToHex(bytes(cart_offset("sGameData"),save_length,"CartRAM")),
+            save_id=save_id,save_name_hex=save_name,sprite_state_before=M.bytesToHex(controls)}
         if case.reset then
             assert(case==cases[#cases],"reset proof must be the final case")
             memorysavestate.removestate(boot);boot=nil

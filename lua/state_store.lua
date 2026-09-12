@@ -9,6 +9,15 @@ local function encode(value)
     return text
 end
 local function clone(value) return assert(JSON.decode(encode(value))) end
+-- Only for the private cache produced by unpack(), after full JSON validation.
+-- Strings/numbers are immutable; table tags and the null sentinel are preserved.
+-- External initial/replacement values still take the full codec validation path.
+local function clone_validated(value)
+    if value==JSON.null or type(value)~="table"then return value end
+    local result=JSON.kind(value)=="array" and JSON.array() or JSON.object()
+    for key,child in pairs(value)do result[key]=clone_validated(child)end
+    return result
+end
 local function exact_fields(value,fields)
     if type(value)~="table" then return false end
     local count=0
@@ -52,26 +61,30 @@ function M.open(backend,binding,initial)
             local actual,read_error=backend.read()
             if actual~=text then error(read_error or "initial state readback differs",0) end
         end
-        self.document=unpack(text); self.wire=text
+        local document,wire=unpack(text),text
         function self:read()
             if self.closed or self.fault then return nil,self.fault or "state store is closed" end
-            return clone(self.document.payload),self.document.revision
+            return clone_validated(document.payload),document.revision
+        end
+        function self:revision()
+            if self.closed or self.fault then return nil,self.fault or "state store is closed" end
+            return document.revision
         end
         function self:commit(payload)
             if self.closed or self.fault then return false,self.fault or "state store is closed" end
             local success,error=pcall(function()
                 local actual,reason=backend.read()
-                if actual~=self.wire then error(reason or "local state changed outside its owner",0) end
-                if self.document.revision>=9007199254740991 then error("local state revision exhausted",0) end
-                local next_document={schema=M.SCHEMA,binding=self.document.binding,
-                    revision=self.document.revision+1,payload=clone(payload)}
+                if actual~=wire then error(reason or "local state changed outside its owner",0) end
+                if document.revision>=9007199254740991 then error("local state revision exhausted",0) end
+                local next_document={schema=M.SCHEMA,binding=document.binding,
+                    revision=document.revision+1,payload=clone(payload)}
                 if JSON.kind(next_document.payload)~="object" then error("local state payload must be an object",0) end
                 local next_wire=encode({document=next_document,sha256=backend.sha256(encode(next_document))})
                 local saved,why=backend.replace(next_wire)
                 if not saved then error(why or "state publication failed",0) end
                 local observed,read_error=backend.read()
                 if observed~=next_wire then error(read_error or "state publication readback differs",0) end
-                self.document=unpack(observed);self.wire=observed
+                document=unpack(observed);wire=observed
             end)
             if not success then self.fault=tostring(error);return false,self.fault end
             return true

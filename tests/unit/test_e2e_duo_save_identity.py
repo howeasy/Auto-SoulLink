@@ -15,12 +15,19 @@ import run_gb_gate as gb_gate
 
 @pytest.fixture
 def workspace(tmp_path, monkeypatch):
-    root = tmp_path / "worktree"
+    root = tmp_path / "work tree"
     build = root / "patch/build"
     build.mkdir(parents=True)
     monkeypatch.setattr(duo, "REPO", str(root))
     monkeypatch.setattr(duo, "BUILD", str(build))
     monkeypatch.setattr(duo, "WT_FWD", root.as_posix())
+    config = tmp_path / "emulator" / "config.ini"
+    config.parent.mkdir()
+    config.write_text(json.dumps({"PathEntries": {"Paths": [
+        {"System": system, "Type": kind, "Path": "/user/original"}
+        for system in ("GBA", "GB_GBC_SGB")
+        for kind in ("Base", "ROM", "Save RAM", "Savestates", "Screenshots", "Cheats")]}}))
+    monkeypatch.setattr(duo, "BIZHAWK_CONFIG", str(config))
     (root / "data").mkdir()
     wrapper = root / "lua/tests/duo/duo_gb_main.lua"
     wrapper.parent.mkdir(parents=True)
@@ -138,8 +145,13 @@ def test_only_gen1_b_is_prepared_before_its_emulator_launch(workspace, monkeypat
     root, build = workspace
     events = []
     monkeypatch.setattr(duo, "free_port", lambda: 32123)
-    monkeypatch.setattr(duo.importlib, "import_module", lambda name: SimpleNamespace(staged_rom=lambda key: None))
-    monkeypatch.setattr(play, "write_run_config", lambda source, destination, saveram_dir=None: Path(destination).write_text("{}"))
+    roms = {key: key + ".gb" for key in ("red", "blue", "yellow", "crystal")}
+    for key, filename in roms.items():
+        (root / filename).write_bytes(b"synthetic ROM " + key.encode())
+        (root / (key + ".SaveRAM")).write_bytes(b"fixture")
+    monkeypatch.setattr(duo.importlib, "import_module", lambda name: SimpleNamespace(
+        ROMS=roms, fixture_path=lambda key, target: root / (key + ".SaveRAM")))
+    monkeypatch.setattr(duo.DuoRun, "_remember_process", lambda self, process: None)
     def seed(key, target, dest_dir):
         directory = Path(dest_dir)
         directory.mkdir(parents=True, exist_ok=True)
@@ -159,7 +171,7 @@ def test_only_gen1_b_is_prepared_before_its_emulator_launch(workspace, monkeypat
     run = duo.DuoRun("memorialize", SimpleNamespace(game=game))
     assert Path(run.data_dir).is_relative_to(build)
     run.start_instances()
-    wanted = [("seed", "a"), ("launch", "a"), ("seed", "b")]
+    wanted = [("seed", "a"), ("seed", "b")]
     if expected:
         wanted.append(("identity", expected))
-    assert events == wanted + [("launch", "b")]
+    assert events == wanted + [("launch", "a"), ("launch", "b")]

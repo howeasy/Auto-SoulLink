@@ -1,0 +1,319 @@
+{
+  "schema": "rby-identity-sites-v1",
+  "sha256": "0f3837def12a0c998e6141d6a648753db4cacd074f4c79e17e81ce56741d047d",
+  "titles": {
+    "blue": {
+      "copy": {
+        "address": 181,
+        "bank": 0,
+        "expected_hex": "2A12130B79B020F8C9",
+        "rom_offset": 181,
+        "symbol": "CopyData"
+      },
+      "names": {
+        "1": {
+          "address": 20242,
+          "hex": "8E8B837F8C808D50FA2DCC",
+          "kind": "old_man",
+          "map": 1
+        }
+      },
+      "ram": {
+        "hLoadedROMBank": 65464,
+        "wBattleType": 53338,
+        "wBuffer": 52969,
+        "wCurMap": 54110,
+        "wIsInBattle": 53335,
+        "wLinkEnemyTrainerName": 55431,
+        "wPalletTownCurScript": 54769,
+        "wPartyCount": 53603,
+        "wPlayerID": 54105,
+        "wPlayerName": 53592
+      },
+      "sites": {
+        "backup_begin": {
+          "address": 20198,
+          "bank": 15,
+          "expected_hex": "CDB500",
+          "rom_offset": 249574,
+          "symbol": "backup_begin"
+        },
+        "backup_done": {
+          "address": 20201,
+          "bank": 15,
+          "expected_hex": "21124F",
+          "rom_offset": 249577,
+          "symbol": "backup_done"
+        },
+        "borrow_begin": {
+          "address": 20210,
+          "bank": 15,
+          "expected_hex": "CDB500",
+          "rom_offset": 249586,
+          "symbol": "borrow_begin"
+        },
+        "borrow_done": {
+          "address": 20213,
+          "bank": 15,
+          "expected_hex": "21C1C4",
+          "rom_offset": 249589,
+          "symbol": "borrow_done"
+        },
+        "restore_begin": {
+          "address": 22243,
+          "bank": 3,
+          "expected_hex": "CDB500",
+          "rom_offset": 55011,
+          "symbol": "restore_begin"
+        },
+        "restore_done": {
+          "address": 22246,
+          "bank": 3,
+          "expected_hex": "C38B57",
+          "rom_offset": 55014,
+          "symbol": "restore_done"
+        },
+        "swap_begin": {
+          "address": 21015,
+          "bank": 16,
+          "expected_hex": "2158D111E9CE010B00CDB5002187D81158D1010B00CDB50021E9CE1187D8010B00C3B500",
+          "rom_offset": 266775,
+          "symbol": "Trade_SwapNames"
+        },
+        "swap_cleanup": {
+          "address": 21051,
+          "bank": 16,
+          "expected_hex": "AFCDBA20",
+          "rom_offset": 266811,
+          "symbol": "Trade_Cleanup"
+        },
+        "swap_copy_begin": {
+          "address": 21036,
+          "bank": 16,
+          "expected_hex": "CDB500",
+          "rom_offset": 266796,
+          "symbol": "Trade_SwapNames+21"
+        },
+        "swap_copy_done": {
+          "address": 21039,
+          "bank": 16,
+          "expected_hex": "21E9CE",
+          "rom_offset": 266799,
+          "symbol": "Trade_SwapNames+24"
+        }
+      },
+      "source_commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9"
+    },
+    "red": {
+      "copy": {
+        "address": 181,
+        "bank": 0,
+        "expected_hex": "2A12130B79B020F8C9",
+        "rom_offset": 181,
+        "symbol": "CopyData"
+      },
+      "names": {
+        "1": {
+          "address": 20242,
+          "hex": "8E8B837F8C808D50FA2DCC",
+          "kind": "old_man",
+          "map": 1
+        }
+      },
+      "ram": {
+        "hLoadedROMBank": 65464,
+        "wBattleType": 53338,
+        "wBuffer": 52969,
+        "wCurMap": 54110,
+        "wIsInBattle": 53335,
+        "wLinkEnemyTrainerName": 55431,
+        "wPalletTownCurScript": 54769,
+        "wPartyCount": 53603,
+        "wPlayerID": 54105,
+        "wPlayerName": 53592
+      },
+      "sites": {
+        "backup_begin": {
+          "address": 20198,
+          "bank": 15,
+          "expected_hex": "CDB500",
+          "rom_offset": 249574,
+          "symbol": "backup_begin"
+        },
+        "backup_done": {
+          "address": 20201,
+          "bank": 15,
+          "expected_hex": "21124F",
+          "rom_offset": 249577,
+          "symbol": "backup_done"
+        },
+        "borrow_begin": {
+          "address": 20210,
+          "bank": 15,
+          "expected_hex": "CDB500",
+          "rom_offset": 249586,
+          "symbol": "borrow_begin"
+        },
+        "borrow_done": {
+          "address": 20213,
+          "bank": 15,
+          "expected_hex": "21C1C4",
+          "rom_offset": 249589,
+          "symbol": "borrow_done"
+        },
+        "restore_begin": {
+          "address": 22243,
+          "bank": 3,
+          "expected_hex": "CDB500",
+          "rom_offset": 55011,
+          "symbol": "restore_begin"
+        },
+        "restore_done": {
+          "address": 22246,
+          "bank": 3,
+          "expected_hex": "C38B57",
+          "rom_offset": 55014,
+          "symbol": "restore_done"
+        },
+        "swap_begin": {
+          "address": 21015,
+          "bank": 16,
+          "expected_hex": "2158D111E9CE010B00CDB5002187D81158D1010B00CDB50021E9CE1187D8010B00C3B500",
+          "rom_offset": 266775,
+          "symbol": "Trade_SwapNames"
+        },
+        "swap_cleanup": {
+          "address": 21051,
+          "bank": 16,
+          "expected_hex": "AFCDBA20",
+          "rom_offset": 266811,
+          "symbol": "Trade_Cleanup"
+        },
+        "swap_copy_begin": {
+          "address": 21036,
+          "bank": 16,
+          "expected_hex": "CDB500",
+          "rom_offset": 266796,
+          "symbol": "Trade_SwapNames+21"
+        },
+        "swap_copy_done": {
+          "address": 21039,
+          "bank": 16,
+          "expected_hex": "21E9CE",
+          "rom_offset": 266799,
+          "symbol": "Trade_SwapNames+24"
+        }
+      },
+      "source_commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9"
+    },
+    "yellow": {
+      "copy": {
+        "address": 177,
+        "bank": 0,
+        "expected_hex": "78A7280C79A7280104CDC1000520FAC92A12130D20FAC9",
+        "rom_offset": 177,
+        "symbol": "CopyData"
+      },
+      "names": {
+        "1": {
+          "address": 20455,
+          "hex": "8E8B837F8C808D508F918E",
+          "kind": "old_man",
+          "map": 1
+        },
+        "4": {
+          "address": 20463,
+          "hex": "8F918E85E88E808A50FA2D",
+          "kind": "oak",
+          "map": 0,
+          "pallet_script": 5
+        }
+      },
+      "ram": {
+        "hLoadedROMBank": 65464,
+        "wBattleType": 53337,
+        "wBuffer": 52969,
+        "wCurMap": 54109,
+        "wIsInBattle": 53334,
+        "wLinkEnemyTrainerName": 55430,
+        "wPalletTownCurScript": 54768,
+        "wPartyCount": 53602,
+        "wPlayerID": 54104,
+        "wPlayerName": 53591
+      },
+      "sites": {
+        "backup_begin": {
+          "address": 20402,
+          "bank": 15,
+          "expected_hex": "CDB100",
+          "rom_offset": 249778,
+          "symbol": "backup_begin"
+        },
+        "backup_done": {
+          "address": 20405,
+          "bank": 15,
+          "expected_hex": "21E74F",
+          "rom_offset": 249781,
+          "symbol": "backup_done"
+        },
+        "borrow_begin": {
+          "address": 20423,
+          "bank": 15,
+          "expected_hex": "CDB100",
+          "rom_offset": 249799,
+          "symbol": "borrow_begin"
+        },
+        "borrow_done": {
+          "address": 20426,
+          "bank": 15,
+          "expected_hex": "21C1C4",
+          "rom_offset": 249802,
+          "symbol": "borrow_done"
+        },
+        "restore_begin": {
+          "address": 21525,
+          "bank": 3,
+          "expected_hex": "CDB100",
+          "rom_offset": 54293,
+          "symbol": "restore_begin"
+        },
+        "restore_done": {
+          "address": 21528,
+          "bank": 3,
+          "expected_hex": "FA59D0",
+          "rom_offset": 54296,
+          "symbol": "restore_done"
+        },
+        "swap_begin": {
+          "address": 21794,
+          "bank": 16,
+          "expected_hex": "2157D111E9CE010B00CDB1002186D81157D1010B00CDB10021E9CE1186D8010B00C3B100",
+          "rom_offset": 267554,
+          "symbol": "Trade_SwapNames"
+        },
+        "swap_cleanup": {
+          "address": 21830,
+          "bank": 16,
+          "expected_hex": "AFCD6F1E",
+          "rom_offset": 267590,
+          "symbol": "Trade_Cleanup"
+        },
+        "swap_copy_begin": {
+          "address": 21815,
+          "bank": 16,
+          "expected_hex": "CDB100",
+          "rom_offset": 267575,
+          "symbol": "Trade_SwapNames+21"
+        },
+        "swap_copy_done": {
+          "address": 21818,
+          "bank": 16,
+          "expected_hex": "21E9CE",
+          "rom_offset": 267578,
+          "symbol": "Trade_SwapNames+24"
+        }
+      },
+      "source_commit": "0a0851546ff65f65c4bb2af2b95e279e709a8653"
+    }
+  }
+}

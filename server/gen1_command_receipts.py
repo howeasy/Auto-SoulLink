@@ -119,7 +119,7 @@ class Gen1ReceiptPolicy:
         if body.get("cmd") != "force_faint":
             raise JournalError("command has no verified RBY receipt policy")
         verify_force_faint_receipt(body, event.get("receipt"), variant=self._variants[player],
-                                   identity=state.player_identity.get(player))
+                                   identity=getattr(state,'rules',state).player_identity.get(player))
         # The original faint transition already marked the linked pair dead.
         # Confirming its physical effect must not manufacture a second faint.
         return []

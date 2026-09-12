@@ -75,10 +75,11 @@ def test_lost_retired_or_ambiguous_captures_fail_without_recapturing(location, f
 
 def test_real_runner_stops_before_waiting_for_a_failed_partner(monkeypatch):
     from tools import e2e_duo
-    monkeypatch.setattr(e2e_duo, "read_result", lambda scenario, player:
+    monkeypatch.setattr(e2e_duo, "read_result", lambda scenario, player, directory:
                         "RESULT: FAIL first encounter lost" if player == "b" else "still playing")
     runner = e2e_duo.DuoRun.__new__(e2e_duo.DuoRun)
     runner.scenario = "playthrough"
+    runner.data_dir = "isolated-run"
     runner.cfg = {"timeout": 1500}
     with pytest.raises(RuntimeError, match="instance b.*first encounter lost"):
         runner.assert_real_link_formed()

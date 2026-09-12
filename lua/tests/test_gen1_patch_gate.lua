@@ -31,7 +31,7 @@ local function beacon()
                        M.read_u8(MAILBOX + 2), M.read_u8(MAILBOX + 3))
 end
 local function counter()
-    return M.read_u8(MAILBOX + 5) + M.read_u8(MAILBOX + 6) * 256
+    return M.read_u8(MAILBOX + 6) + M.read_u8(MAILBOX + 7) * 256
 end
 
 -- 1. Presence.
@@ -109,7 +109,7 @@ t.check("ABI version byte is 3", M.read_u8(MAILBOX + 4) == 3,
 -- CAPABILITIES ARE ADVERTISED, NOT INFERRED FROM THE ABI NUMBER. This build dropping SFX
 -- while keeping ABI 3 is exactly the case that motivated the bits: a client reasoning
 -- "ABI 3 therefore both" would drive an audio path that is not there.
-local CAPS = MAILBOX + 8
+local CAPS = MAILBOX + 5
 local CAP_SFX, CAP_PANEL = 0x01, 0x02
 t.check("the capability byte does NOT advertise SFX", M.read_u8(CAPS) & CAP_SFX == 0,
         fmt("caps=0x%02X — this build must not claim an unsafe audio path", M.read_u8(CAPS)))
@@ -118,8 +118,8 @@ t.check("the capability byte advertises the panel", M.read_u8(CAPS) & CAP_PANEL 
 
 -- The panel handshake byte must be CLOSED while the player is walking around. If it were
 -- not, a client would paint over the map.
-t.check("the panel handshake is closed outside the panel", M.read_u8(MAILBOX + 9) == 0,
-        fmt("panel state is %d in the overworld", M.read_u8(MAILBOX + 9)))
+t.check("the panel handshake is closed outside the panel", M.read_u8(MAILBOX + 15) == 0,
+        fmt("panel state is %d in the overworld", M.read_u8(MAILBOX + 15)))
 
 local function sfx_channels()
     return fmt("%d/%d/%d/%d",
@@ -127,23 +127,13 @@ local function sfx_channels()
                M.read_u8(CHANNEL_SOUND_IDS + 6), M.read_u8(CHANNEL_SOUND_IDS + 7))
 end
 
--- The request byte is still DRAINED, so a client that writes one leaves no stale state.
-M.write_u8(SFX_REQUEST, SFX_TINK)
-local consumed = false
-for _ = 1, 10 do
-    t.step(nil)
-    if M.read_u8(SFX_REQUEST) == 0 then consumed = true break end
-end
-t.check("the SFX request byte is still consumed by the hook", consumed,
-        fmt("still %#04x after 10 frames", M.read_u8(SFX_REQUEST)))
-
--- ...and it must NOT reach the audio engine. This is the assertion that would have failed
--- against the ABI-2 build, and it is the one that matters: no reachable PlaySound means no
--- re-entrancy window to land in.
-local before = sfx_channels()
-for _ = 1, 30 do t.step(nil) end
-t.check("a drained SFX request never starts a sound", sfx_channels() == before,
-        fmt("CHAN5-8 %s -> %s — the hook still reaches PlaySound", before, sfx_channels()))
+-- SFX is deliberately unavailable; legacy mailbox writes must not be selected.
+local before=sfx_channels()
+M.detectCompanionPatch()
+t.check("disabled SFX exposes no dispatch address",M.SFX_DISPATCH_ADDR==nil)
+t.check("disabled SFX refuses requests",M.playSfxRaw(SFX_TINK)==false)
+for _=1,30 do t.step(nil)end
+t.check("no SFX request reaches the audio engine",sfx_channels()==before)
 
 -- 8. And the game still runs normally afterwards — a botched `call` from inside an interrupt
 --    would corrupt the bank or the stack and the walk check below would hang or crash.

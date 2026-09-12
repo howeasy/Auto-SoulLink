@@ -1,0 +1,2148 @@
+{
+  "schema": "gen1-upr-layout-v1",
+  "source_commit": "7f00eb866ed35c8fe3963f078b6a2e0979dc2b8c",
+  "source_sha256": {
+    "gen1_offsets.ini": "6c36a57ec538f8d69f032ddc8113f0914edc0e312d560ddb9274d3d02ddad587",
+    "gameboy_jpn.tbl": "6f52530485d61c84a5b32cf815e0226caf907fcd635ad1ead83348313a9bf3e4",
+    "rby_english.tbl": "c82be8cdf0aa85d762e90e98699784a9551ff8cdce2015e84d528d4a0e446c01",
+    "Gen1Constants.java": "c55eddf85caac4fb762b2200599a32d302a0a55e4f15638974c993efa67d96f4",
+    "Gen1Items.java": "16f4b079c13604d085db911bb3e35750d98f28e7a082682c3189529b58637303"
+  },
+  "text_encoding": {
+    "\u30ac": 5,
+    "\u30ae": 6,
+    "\u30b0": 7,
+    "\u30b2": 8,
+    "\u30b4": 9,
+    "\u30b6": 10,
+    "\u30b8": 11,
+    "\u30ba": 12,
+    "\u30bc": 13,
+    "\u30be": 14,
+    "\u30c0": 15,
+    "\u30c2": 16,
+    "\u30c5": 17,
+    "\u30c7": 18,
+    "\u30c9": 19,
+    "\u30d0": 25,
+    "\u30d3": 26,
+    "\u30d6": 27,
+    "\u30dc": 28,
+    "\u304c": 38,
+    "\u304e": 39,
+    "\u3050": 40,
+    "\u3052": 41,
+    "\u3054": 42,
+    "\u3056": 43,
+    "\u3058": 44,
+    "\u305a": 45,
+    "\u305c": 46,
+    "\u305e": 47,
+    "\u3060": 48,
+    "\u3062": 49,
+    "\u3065": 50,
+    "\u3067": 51,
+    "\u3069": 52,
+    "\u3070": 58,
+    "\u3073": 59,
+    "\u3076": 60,
+    "\u3079": 61,
+    "\u307c": 62,
+    "\u30d1": 64,
+    "\u30d4": 65,
+    "\u30d7": 66,
+    "\u30dd": 67,
+    "\u3071": 68,
+    "\u3074": 69,
+    "\u3077": 70,
+    "\u307a": 71,
+    "\u307d": 72,
+    "[POK\u00e9]": 84,
+    " ": 127,
+    "A": 128,
+    "B": 129,
+    "C": 130,
+    "D": 131,
+    "E": 132,
+    "F": 133,
+    "G": 134,
+    "H": 135,
+    "I": 136,
+    "J": 137,
+    "K": 138,
+    "L": 139,
+    "M": 140,
+    "N": 141,
+    "O": 142,
+    "P": 143,
+    "Q": 144,
+    "R": 145,
+    "S": 146,
+    "T": 147,
+    "U": 148,
+    "V": 149,
+    "W": 150,
+    "X": 151,
+    "Y": 152,
+    "Z": 153,
+    "(": 154,
+    ")": 155,
+    ":": 156,
+    ";": 157,
+    "[": 158,
+    "]": 159,
+    "a": 160,
+    "b": 161,
+    "c": 162,
+    "d": 163,
+    "e": 164,
+    "f": 165,
+    "g": 166,
+    "h": 167,
+    "i": 168,
+    "j": 169,
+    "k": 170,
+    "l": 171,
+    "m": 172,
+    "n": 173,
+    "o": 174,
+    "p": 175,
+    "q": 176,
+    "r": 177,
+    "s": 178,
+    "t": 179,
+    "u": 180,
+    "v": 181,
+    "w": 182,
+    "x": 183,
+    "y": 184,
+    "z": 185,
+    "\u00e9": 186,
+    "'d": 187,
+    "'l": 188,
+    "'s": 189,
+    "'t": 190,
+    "'v": 191,
+    "\u305f": 192,
+    "\u3061": 193,
+    "\u3064": 194,
+    "\u3066": 195,
+    "\u3068": 196,
+    "\u306a": 197,
+    "\u306b": 198,
+    "\u306c": 199,
+    "\u306d": 200,
+    "\u306e": 201,
+    "\u306f": 202,
+    "\u3072": 203,
+    "\u3075": 204,
+    "\u3078": 205,
+    "\u307b": 206,
+    "\u307e": 207,
+    "\u307f": 208,
+    "\u3080": 209,
+    "\u3081": 210,
+    "\u3082": 211,
+    "\u3084": 212,
+    "\u3086": 213,
+    "\u3088": 214,
+    "\u3089": 215,
+    "\u308a": 216,
+    "\u308b": 217,
+    "\u308c": 218,
+    "\u308d": 219,
+    "\u308f": 220,
+    "\u3092": 221,
+    "\u3093": 222,
+    "\u3063": 223,
+    "'": 224,
+    "[PK]": 225,
+    "[MN]": 226,
+    "-": 227,
+    "'r": 228,
+    "'m": 229,
+    "?": 230,
+    "!": 231,
+    ".": 232,
+    "\u30a1": 233,
+    "\u30a7": 235,
+    "\u2642": 239,
+    "$": 240,
+    "\u00d7": 241,
+    "[.]": 242,
+    "/": 243,
+    ",": 244,
+    "\u2640": 245,
+    "0": 246,
+    "1": 247,
+    "2": 248,
+    "3": 249,
+    "4": 250,
+    "5": 251,
+    "6": 252,
+    "7": 253,
+    "8": 254,
+    "9": 255,
+    "\\n": 79,
+    "\\p": 81,
+    "\\l": 85,
+    "\\e": 87,
+    "\\r": 88,
+    "[pk]": 74,
+    "\u2116": 116,
+    "\u2026": 117,
+    "\u250c": 121,
+    "\u2500": 122,
+    "\u2510": 123,
+    "\u2502": 124,
+    "\u2514": 125,
+    "\u2518": 126
+  },
+  "allowed_items": [
+    1,
+    2,
+    3,
+    4,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    29,
+    30,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    46,
+    47,
+    49,
+    51,
+    52,
+    53,
+    54,
+    55,
+    56,
+    57,
+    58,
+    60,
+    61,
+    62,
+    65,
+    66,
+    67,
+    68,
+    79,
+    80,
+    81,
+    82,
+    83,
+    201,
+    202,
+    203,
+    204,
+    205,
+    206,
+    207,
+    208,
+    209,
+    210,
+    211,
+    212,
+    213,
+    214,
+    215,
+    216,
+    217,
+    218,
+    219,
+    220,
+    221,
+    222,
+    223,
+    224,
+    225,
+    226,
+    227,
+    228,
+    229,
+    230,
+    231,
+    232,
+    233,
+    234,
+    235,
+    236,
+    237,
+    238,
+    239,
+    240,
+    241,
+    242,
+    243,
+    244,
+    245,
+    246,
+    247,
+    248,
+    249,
+    250
+  ],
+  "tm_items": [
+    201,
+    202,
+    203,
+    204,
+    205,
+    206,
+    207,
+    208,
+    209,
+    210,
+    211,
+    212,
+    213,
+    214,
+    215,
+    216,
+    217,
+    218,
+    219,
+    220,
+    221,
+    222,
+    223,
+    224,
+    225,
+    226,
+    227,
+    228,
+    229,
+    230,
+    231,
+    232,
+    233,
+    234,
+    235,
+    236,
+    237,
+    238,
+    239,
+    240,
+    241,
+    242,
+    243,
+    244,
+    245,
+    246,
+    247,
+    248,
+    249,
+    250
+  ],
+  "profiles": {
+    "red": {
+      "settings": {
+        "Game": "POKEMON RED",
+        "Version": 0,
+        "NonJapanese": 1,
+        "Type": "RB",
+        "ExtraTableFile": "rby_english",
+        "BWXPTweak": "bwexp/rb_en_bwxp",
+        "XAccNerfTweak": "rb_en_xaccnerf",
+        "CritRateTweak": "rb_en_critrate",
+        "InternalPokemonCount": 190,
+        "PokedexOrder": 266276,
+        "PokemonNamesOffset": 115230,
+        "PokemonNamesLength": 10,
+        "PokemonStatsOffset": 230366,
+        "MewStatsOffset": 16987,
+        "WildPokemonTableOffset": 52971,
+        "OldRodOffset": 57938,
+        "GoodRodOffset": 57983,
+        "SuperRodTableOffset": 59673,
+        "MapNameTableOffset": 463635,
+        "MoveCount": 165,
+        "MoveDataOffset": 229376,
+        "MoveNamesOffset": 720896,
+        "ItemNamesOffset": 18219,
+        "TypeEffectivenessOffset": 255092,
+        "PokemonMovesetsTableOffset": 241756,
+        "PokemonMovesetsDataSize": 2068,
+        "PokemonMovesetsExtraSpaceOffset": 244710,
+        "StarterOffsets1": [
+          119078,
+          117892,
+          119054,
+          236792,
+          331699,
+          331997
+        ],
+        "StarterOffsets2": [
+          119044,
+          103825,
+          117896,
+          118216,
+          119071,
+          331695,
+          331993,
+          335023,
+          394766,
+          398416,
+          483230
+        ],
+        "StarterOffsets3": [
+          119061,
+          103833,
+          118224,
+          119088,
+          236786,
+          331697,
+          331995,
+          335031,
+          394774,
+          398424,
+          483238
+        ],
+        "PatchPokedex": 1,
+        "CanChangeStarterText": 1,
+        "CanChangeTrainerText": 1,
+        "StarterTextOffsets": [
+          609799,
+          609840,
+          609880
+        ],
+        "StarterPokedexOnOffset": 377052,
+        "StarterPokedexOffOffset": 377062,
+        "StarterPokedexBranchOffset": 385024,
+        "PokedexRamOffset": 54007,
+        "TrainerDataTableOffset": 236859,
+        "TrainerDataClassCounts": [
+          0,
+          13,
+          14,
+          18,
+          8,
+          9,
+          24,
+          7,
+          12,
+          14,
+          15,
+          9,
+          3,
+          0,
+          11,
+          15,
+          9,
+          7,
+          15,
+          4,
+          2,
+          8,
+          6,
+          17,
+          9,
+          9,
+          3,
+          0,
+          13,
+          3,
+          41,
+          10,
+          8,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          5,
+          12,
+          3,
+          1,
+          24,
+          1,
+          1
+        ],
+        "ExtraTrainerMovesTableOffset": 236850,
+        "GymLeaderMovesTableOffset": 236835,
+        "TMMovesOffset": 79731,
+        "TrainerClassNamesOffsets": [
+          163522,
+          236031
+        ],
+        "IntroPokemonOffset": 24941,
+        "IntroCryOffset": 7283,
+        "MapBanks": 49725,
+        "MapAddresses": 430,
+        "SpecialMapList": 289344,
+        "SpecialMapPointerTable": 289430,
+        "HiddenItemRoutine": 485000,
+        "TradeTableOffset": 465787,
+        "TradeTableSize": 10,
+        "TradeNameLength": 11,
+        "TradesUnused": [
+          2
+        ],
+        "TextDelayFunctionOffset": 14547,
+        "PCPotionOffset": 24884,
+        "CatchingTutorialMonOffset": 102533,
+        "MonPaletteIndicesOffset": 468424,
+        "SGBPalettesOffset": 468576,
+        "StaticPokemonSupport": 1,
+        "CRC32": "9F7FDD53"
+      },
+      "statics": [
+        {
+          "Species": [
+            299808
+          ],
+          "Level": [
+            299807
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            122185
+          ],
+          "Level": [
+            122184
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            380695
+          ],
+          "Level": [
+            380719
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            380767
+          ],
+          "Level": [
+            380791
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            335277
+          ],
+          "Level": [
+            335276
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            397416
+          ],
+          "Level": [
+            482741
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            397420
+          ],
+          "Level": [
+            482741
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            397412
+          ],
+          "Level": [
+            482741
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            366128,
+            400363
+          ],
+          "Level": [
+            366133
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            366960
+          ],
+          "Level": [
+            366965
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123861
+          ],
+          "Level": [
+            123862
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123869
+          ],
+          "Level": [
+            123870
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123877
+          ],
+          "Level": [
+            123878
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123893
+          ],
+          "Level": [
+            123894
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123901
+          ],
+          "Level": [
+            123902
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123917
+          ],
+          "Level": [
+            123918
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123885
+          ],
+          "Level": [
+            123886
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123909
+          ],
+          "Level": [
+            123910
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            288936,
+            289000,
+            383902
+          ],
+          "Level": [
+            289001
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123829,
+            123925
+          ],
+          "Level": [
+            123926
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            334016,
+            334179
+          ],
+          "Level": [
+            334180
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            286508,
+            286532
+          ],
+          "Level": [
+            286533
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            338009,
+            338314
+          ],
+          "Level": [
+            338315
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            338010,
+            338316
+          ],
+          "Level": [
+            338317
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            338011,
+            338318
+          ],
+          "Level": [
+            338319
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            338020,
+            338320
+          ],
+          "Level": [
+            338321
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            338021,
+            338322
+          ],
+          "Level": [
+            338323
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            338022,
+            338324
+          ],
+          "Level": [
+            338325
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            55028,
+            257946,
+            364004,
+            396083,
+            396298,
+            461025
+          ],
+          "Level": [
+            396088
+          ],
+          "ghost": true
+        }
+      ],
+      "tm_text": [
+        {
+          "number": 6,
+          "offset": 655616,
+          "template": "\\pTM06 contains\\n%m!\\e",
+          "limit": 655683,
+          "next_symbol": "_FuchsiaGymKogaTM06NoRoomText"
+        },
+        {
+          "number": 11,
+          "offset": 625276,
+          "template": "TM11 teaches\\n%m!\\e",
+          "limit": 625328,
+          "next_symbol": "_CeruleanGymMistyCascadeBadgeInfoText"
+        },
+        {
+          "number": 13,
+          "offset": 642082,
+          "template": "contains\\n%m!\\e",
+          "limit": 642138,
+          "next_symbol": "_CeladonMartRoofLittleGirlYaySodaPopText"
+        },
+        {
+          "number": 18,
+          "offset": 641135,
+          "template": "TM18 is\\n%m!\\e",
+          "limit": 641194,
+          "next_symbol": "_CeladonMart3FClerkTM18NoRoomText"
+        },
+        {
+          "number": 21,
+          "offset": 644385,
+          "template": "\\pTM21 contains\\n%m.\\e",
+          "limit": 644470,
+          "next_symbol": "_CeladonGymTM21NoRoomText"
+        },
+        {
+          "number": 24,
+          "offset": 639222,
+          "template": "\\pTM24 contains\\n%m!\\e",
+          "limit": 639280,
+          "next_symbol": "_VermilionGymLTSurgeTM24NoRoomText"
+        },
+        {
+          "number": 27,
+          "offset": 614550,
+          "template": "\\pTM27 is\\n%m!\\e",
+          "limit": 614660,
+          "next_symbol": "_ViridianGymGiovanniTM27NoRoomText"
+        },
+        {
+          "number": 28,
+          "offset": 624477,
+          "template": "Those miserable\\nROCKETs!\\pLook what they\\ndid here!\\pThey stole a TM\\nfor teaching\\l[POK\u00e9]MON how to\\l%m!\\e",
+          "limit": 624610,
+          "next_symbol": "_CeruleanTrashedHouseFishingGuruWhatsLostIsLostText"
+        },
+        {
+          "number": 28,
+          "offset": 624611,
+          "template": "I figure what's\\nlost is lost!\\pI decided to get\\n%m\\lwithout a TM!\\e",
+          "limit": 624692,
+          "next_symbol": "_CeruleanTrashedHouseGirlText"
+        },
+        {
+          "number": 29,
+          "offset": 664895,
+          "template": "TM29 is\\n%m!\\e",
+          "limit": 664956,
+          "next_symbol": "_MrPsychicsHouseMrPsychicTM29NoRoomText"
+        },
+        {
+          "number": 31,
+          "offset": 661130,
+          "template": "\\pTM31 contains my\\nfavorite,\\l%m!\\e",
+          "limit": 661189,
+          "next_symbol": "_CopycatsHouse2FCopycatTM31Explanation2Text"
+        },
+        {
+          "number": 34,
+          "offset": 622785,
+          "template": "\\pA TM contains a\\ntechnique that\\lcan be taught to\\l[POK\u00e9]MON!\\pA TM is good only\\nonce! So when you\\luse one to teach\\la new technique,\\lpick the [POK\u00e9]MON\\lcarefully!\\pTM34 contains\\n%m!\\e",
+          "limit": 623019,
+          "next_symbol": "_PewterGymTM34NoRoomText"
+        },
+        {
+          "number": 36,
+          "offset": 533706,
+          "template": "TM36 is\\n%m!\\e",
+          "limit": 533788,
+          "next_symbol": "_SilphCo2FSilphWorkerFTM36NoRoomText"
+        },
+        {
+          "number": 38,
+          "offset": 657853,
+          "template": "\\pTM38 contains\\n%m!\\e",
+          "limit": 657950,
+          "next_symbol": "_CinnabarGymBlaineTM38NoRoomText"
+        },
+        {
+          "number": 39,
+          "offset": 575706,
+          "template": "TM39 is the move\\n%m.\\e",
+          "limit": 575804,
+          "next_symbol": "_Route12Gate2FBrunetteGirlTM39NoRoomText"
+        },
+        {
+          "number": 41,
+          "offset": 678767,
+          "template": "TM41 teaches\\n%m!\\pMany [POK\u00e9]MON\\ncan use it!\\e",
+          "limit": 678840,
+          "next_symbol": "_CeladonCityGramps3TM41NoRoomText"
+        },
+        {
+          "number": 42,
+          "offset": 673454,
+          "template": "TM42 contains\\n%m...\\e",
+          "limit": 673495,
+          "next_symbol": "_ViridianCityFisherTM42NoRoomText"
+        },
+        {
+          "number": 46,
+          "offset": 663009,
+          "template": "\\pTM46 is\\n%m!\\e",
+          "limit": 663077,
+          "next_symbol": "_SaffronGymSabrinaTM46NoRoomText"
+        },
+        {
+          "number": 48,
+          "offset": 642221,
+          "template": "contains\\n%m!\\e",
+          "limit": 642278,
+          "next_symbol": "_CeladonMartRoofLittleGirlYayLemonadeText"
+        },
+        {
+          "number": 49,
+          "offset": 642353,
+          "template": "\\pTM49 is\\n%m!\\e",
+          "limit": 642381,
+          "next_symbol": "_CeladonMartRoofLittleGirlNoRoomText"
+        }
+      ],
+      "text_symbol_sha256": "5142424dd1e85f00f7193655a0a6c5f0b6366163c74280e5d55990ef8c6b3db9",
+      "starter_text_bounds": [
+        {
+          "offset": 609799,
+          "limit": 609839,
+          "next_symbol": "_OaksLabYouWantSquirtleText"
+        },
+        {
+          "offset": 609840,
+          "limit": 609879,
+          "next_symbol": "_OaksLabYouWantBulbasaurText"
+        },
+        {
+          "offset": 609880,
+          "limit": 609920,
+          "next_symbol": "_OaksLabMonEnergeticText"
+        }
+      ]
+    },
+    "blue": {
+      "settings": {
+        "Game": "POKEMON BLUE",
+        "Version": 0,
+        "NonJapanese": 1,
+        "Type": "RB",
+        "CopyTMText": 1,
+        "InternalPokemonCount": 190,
+        "PokedexOrder": 266276,
+        "PokemonNamesOffset": 115230,
+        "PokemonNamesLength": 10,
+        "PokemonStatsOffset": 230366,
+        "MewStatsOffset": 16987,
+        "WildPokemonTableOffset": 52971,
+        "OldRodOffset": 57938,
+        "GoodRodOffset": 57983,
+        "SuperRodTableOffset": 59673,
+        "MapNameTableOffset": 463635,
+        "MoveCount": 165,
+        "MoveDataOffset": 229376,
+        "MoveNamesOffset": 720896,
+        "ItemNamesOffset": 18219,
+        "TypeEffectivenessOffset": 255092,
+        "PokemonMovesetsTableOffset": 241756,
+        "PokemonMovesetsDataSize": 2068,
+        "PokemonMovesetsExtraSpaceOffset": 244710,
+        "StarterOffsets1": [
+          119078,
+          117892,
+          119054,
+          236792,
+          331699,
+          331997
+        ],
+        "StarterOffsets2": [
+          119044,
+          103825,
+          117896,
+          118216,
+          119071,
+          331695,
+          331993,
+          335023,
+          394766,
+          398416,
+          483231
+        ],
+        "StarterOffsets3": [
+          119061,
+          103833,
+          118224,
+          119088,
+          236786,
+          331697,
+          331995,
+          335031,
+          394774,
+          398424,
+          483239
+        ],
+        "PatchPokedex": 1,
+        "CanChangeStarterText": 1,
+        "CanChangeTrainerText": 1,
+        "StarterTextOffsets": [
+          609799,
+          609840,
+          609880
+        ],
+        "StarterPokedexOnOffset": 377052,
+        "StarterPokedexOffOffset": 377062,
+        "StarterPokedexBranchOffset": 385024,
+        "PokedexRamOffset": 54007,
+        "TrainerDataTableOffset": 236859,
+        "TrainerDataClassCounts": [
+          0,
+          13,
+          14,
+          18,
+          8,
+          9,
+          24,
+          7,
+          12,
+          14,
+          15,
+          9,
+          3,
+          0,
+          11,
+          15,
+          9,
+          7,
+          15,
+          4,
+          2,
+          8,
+          6,
+          17,
+          9,
+          9,
+          3,
+          0,
+          13,
+          3,
+          41,
+          10,
+          8,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          5,
+          12,
+          3,
+          1,
+          24,
+          1,
+          1
+        ],
+        "ExtraTrainerMovesTableOffset": 236850,
+        "GymLeaderMovesTableOffset": 236835,
+        "TMMovesOffset": 79731,
+        "TrainerClassNamesOffsets": [
+          163522,
+          236031
+        ],
+        "IntroPokemonOffset": 24941,
+        "IntroCryOffset": 7283,
+        "MapBanks": 49725,
+        "MapAddresses": 430,
+        "SpecialMapList": 289344,
+        "SpecialMapPointerTable": 289430,
+        "HiddenItemRoutine": 485001,
+        "TradeTableOffset": 465787,
+        "TradeTableSize": 10,
+        "TradeNameLength": 11,
+        "TradesUnused": [
+          2
+        ],
+        "TextDelayFunctionOffset": 14547,
+        "PCPotionOffset": 24884,
+        "CatchingTutorialMonOffset": 102533,
+        "MonPaletteIndicesOffset": 468424,
+        "SGBPalettesOffset": 468576,
+        "StaticPokemonSupport": 1,
+        "ExtraTableFile": "rby_english",
+        "BWXPTweak": "bwexp/rb_en_bwxp",
+        "XAccNerfTweak": "rb_en_xaccnerf",
+        "CritRateTweak": "rb_en_critrate",
+        "CRC32": "D6DA8A1A"
+      },
+      "statics": [
+        {
+          "Species": [
+            299808
+          ],
+          "Level": [
+            299807
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            122185
+          ],
+          "Level": [
+            122184
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            380695
+          ],
+          "Level": [
+            380719
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            380767
+          ],
+          "Level": [
+            380791
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            335277
+          ],
+          "Level": [
+            335276
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            397416
+          ],
+          "Level": [
+            482742
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            397420
+          ],
+          "Level": [
+            482742
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            397412
+          ],
+          "Level": [
+            482742
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            366128,
+            400363
+          ],
+          "Level": [
+            366133
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            366960
+          ],
+          "Level": [
+            366965
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123861
+          ],
+          "Level": [
+            123862
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123869
+          ],
+          "Level": [
+            123870
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123877
+          ],
+          "Level": [
+            123878
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123893
+          ],
+          "Level": [
+            123894
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123901
+          ],
+          "Level": [
+            123902
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123917
+          ],
+          "Level": [
+            123918
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123885
+          ],
+          "Level": [
+            123886
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123909
+          ],
+          "Level": [
+            123910
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            288936,
+            289000,
+            383902
+          ],
+          "Level": [
+            289001
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            123829,
+            123925
+          ],
+          "Level": [
+            123926
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            334016,
+            334179
+          ],
+          "Level": [
+            334180
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            286508,
+            286532
+          ],
+          "Level": [
+            286533
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            338009,
+            338314
+          ],
+          "Level": [
+            338315
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            338010,
+            338316
+          ],
+          "Level": [
+            338317
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            338011,
+            338318
+          ],
+          "Level": [
+            338319
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            338020,
+            338320
+          ],
+          "Level": [
+            338321
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            338021,
+            338322
+          ],
+          "Level": [
+            338323
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            338022,
+            338324
+          ],
+          "Level": [
+            338325
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            55028,
+            257946,
+            364004,
+            396083,
+            396298,
+            461025
+          ],
+          "Level": [
+            396088
+          ],
+          "ghost": true
+        }
+      ],
+      "tm_text": [
+        {
+          "number": 6,
+          "offset": 655616,
+          "template": "\\pTM06 contains\\n%m!\\e",
+          "limit": 655683,
+          "next_symbol": "_FuchsiaGymKogaTM06NoRoomText"
+        },
+        {
+          "number": 11,
+          "offset": 625276,
+          "template": "TM11 teaches\\n%m!\\e",
+          "limit": 625328,
+          "next_symbol": "_CeruleanGymMistyCascadeBadgeInfoText"
+        },
+        {
+          "number": 13,
+          "offset": 642082,
+          "template": "contains\\n%m!\\e",
+          "limit": 642138,
+          "next_symbol": "_CeladonMartRoofLittleGirlYaySodaPopText"
+        },
+        {
+          "number": 18,
+          "offset": 641135,
+          "template": "TM18 is\\n%m!\\e",
+          "limit": 641194,
+          "next_symbol": "_CeladonMart3FClerkTM18NoRoomText"
+        },
+        {
+          "number": 21,
+          "offset": 644385,
+          "template": "\\pTM21 contains\\n%m.\\e",
+          "limit": 644470,
+          "next_symbol": "_CeladonGymTM21NoRoomText"
+        },
+        {
+          "number": 24,
+          "offset": 639222,
+          "template": "\\pTM24 contains\\n%m!\\e",
+          "limit": 639280,
+          "next_symbol": "_VermilionGymLTSurgeTM24NoRoomText"
+        },
+        {
+          "number": 27,
+          "offset": 614550,
+          "template": "\\pTM27 is\\n%m!\\e",
+          "limit": 614660,
+          "next_symbol": "_ViridianGymGiovanniTM27NoRoomText"
+        },
+        {
+          "number": 28,
+          "offset": 624477,
+          "template": "Those miserable\\nROCKETs!\\pLook what they\\ndid here!\\pThey stole a TM\\nfor teaching\\l[POK\u00e9]MON how to\\l%m!\\e",
+          "limit": 624610,
+          "next_symbol": "_CeruleanTrashedHouseFishingGuruWhatsLostIsLostText"
+        },
+        {
+          "number": 28,
+          "offset": 624611,
+          "template": "I figure what's\\nlost is lost!\\pI decided to get\\n%m\\lwithout a TM!\\e",
+          "limit": 624692,
+          "next_symbol": "_CeruleanTrashedHouseGirlText"
+        },
+        {
+          "number": 29,
+          "offset": 664895,
+          "template": "TM29 is\\n%m!\\e",
+          "limit": 664956,
+          "next_symbol": "_MrPsychicsHouseMrPsychicTM29NoRoomText"
+        },
+        {
+          "number": 31,
+          "offset": 661130,
+          "template": "\\pTM31 contains my\\nfavorite,\\l%m!\\e",
+          "limit": 661189,
+          "next_symbol": "_CopycatsHouse2FCopycatTM31Explanation2Text"
+        },
+        {
+          "number": 34,
+          "offset": 622785,
+          "template": "\\pA TM contains a\\ntechnique that\\lcan be taught to\\l[POK\u00e9]MON!\\pA TM is good only\\nonce! So when you\\luse one to teach\\la new technique,\\lpick the [POK\u00e9]MON\\lcarefully!\\pTM34 contains\\n%m!\\e",
+          "limit": 623019,
+          "next_symbol": "_PewterGymTM34NoRoomText"
+        },
+        {
+          "number": 36,
+          "offset": 533706,
+          "template": "TM36 is\\n%m!\\e",
+          "limit": 533788,
+          "next_symbol": "_SilphCo2FSilphWorkerFTM36NoRoomText"
+        },
+        {
+          "number": 38,
+          "offset": 657853,
+          "template": "\\pTM38 contains\\n%m!\\e",
+          "limit": 657950,
+          "next_symbol": "_CinnabarGymBlaineTM38NoRoomText"
+        },
+        {
+          "number": 39,
+          "offset": 575706,
+          "template": "TM39 is the move\\n%m.\\e",
+          "limit": 575804,
+          "next_symbol": "_Route12Gate2FBrunetteGirlTM39NoRoomText"
+        },
+        {
+          "number": 41,
+          "offset": 678767,
+          "template": "TM41 teaches\\n%m!\\pMany [POK\u00e9]MON\\ncan use it!\\e",
+          "limit": 678840,
+          "next_symbol": "_CeladonCityGramps3TM41NoRoomText"
+        },
+        {
+          "number": 42,
+          "offset": 673454,
+          "template": "TM42 contains\\n%m...\\e",
+          "limit": 673495,
+          "next_symbol": "_ViridianCityFisherTM42NoRoomText"
+        },
+        {
+          "number": 46,
+          "offset": 663009,
+          "template": "\\pTM46 is\\n%m!\\e",
+          "limit": 663077,
+          "next_symbol": "_SaffronGymSabrinaTM46NoRoomText"
+        },
+        {
+          "number": 48,
+          "offset": 642221,
+          "template": "contains\\n%m!\\e",
+          "limit": 642278,
+          "next_symbol": "_CeladonMartRoofLittleGirlYayLemonadeText"
+        },
+        {
+          "number": 49,
+          "offset": 642353,
+          "template": "\\pTM49 is\\n%m!\\e",
+          "limit": 642381,
+          "next_symbol": "_CeladonMartRoofLittleGirlNoRoomText"
+        }
+      ],
+      "text_symbol_sha256": "65d0f3216e23117336623d2df2f263b8cc9ea784c0d3d4124eacbd8345a45a7d",
+      "starter_text_bounds": [
+        {
+          "offset": 609799,
+          "limit": 609839,
+          "next_symbol": "_OaksLabYouWantSquirtleText"
+        },
+        {
+          "offset": 609840,
+          "limit": 609879,
+          "next_symbol": "_OaksLabYouWantBulbasaurText"
+        },
+        {
+          "offset": 609880,
+          "limit": 609920,
+          "next_symbol": "_OaksLabMonEnergeticText"
+        }
+      ]
+    },
+    "yellow": {
+      "settings": {
+        "Game": "POKEMON YELLOW",
+        "Version": 0,
+        "NonJapanese": 1,
+        "Type": "Yellow",
+        "InternalPokemonCount": 190,
+        "PokedexOrder": 266417,
+        "PokemonNamesOffset": 950272,
+        "PokemonNamesLength": 10,
+        "PokemonStatsOffset": 230366,
+        "MewStatsOffset": 0,
+        "WildPokemonTableOffset": 52117,
+        "OldRodOffset": 57599,
+        "GoodRodOffset": 57644,
+        "SuperRodTableOffset": 1007322,
+        "MapNameTableOffset": 463772,
+        "MoveCount": 165,
+        "MoveDataOffset": 229376,
+        "MoveNamesOffset": 770048,
+        "ItemNamesOffset": 17847,
+        "TypeEffectivenessOffset": 255482,
+        "PokemonMovesetsTableOffset": 242149,
+        "PokemonMovesetsDataSize": 3231,
+        "PokemonMovesetsExtraSpaceOffset": 0,
+        "StarterOffsets1": [
+          102169,
+          117569,
+          117606
+        ],
+        "StarterOffsets2": [
+          238218
+        ],
+        "StarterOffsets3": [
+          119061,
+          103833,
+          118224,
+          119088,
+          236786,
+          331697,
+          331995,
+          335031,
+          394774,
+          398424,
+          483238
+        ],
+        "PatchPokedex": 1,
+        "CanChangeStarterText": 1,
+        "CanChangeTrainerText": 1,
+        "StarterTextOffsets": [
+          609799,
+          609840,
+          609880
+        ],
+        "StarterPokedexOnOffset": 377052,
+        "StarterPokedexOffOffset": 377062,
+        "StarterPokedexBranchOffset": 385024,
+        "PokedexRamOffset": 54007,
+        "TrainerDataTableOffset": 237009,
+        "TrainerDataClassCounts": [
+          0,
+          14,
+          15,
+          19,
+          8,
+          10,
+          25,
+          7,
+          12,
+          14,
+          15,
+          9,
+          3,
+          0,
+          11,
+          15,
+          9,
+          7,
+          15,
+          4,
+          2,
+          8,
+          6,
+          17,
+          9,
+          3,
+          3,
+          0,
+          13,
+          3,
+          49,
+          10,
+          8,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          5,
+          10,
+          3,
+          1,
+          24,
+          1,
+          1
+        ],
+        "ExtraTrainerMovesTableOffset": 236651,
+        "GymLeaderMovesTableOffset": 0,
+        "TMMovesOffset": 74541,
+        "TrainerClassNamesOffsets": [
+          163447,
+          235902
+        ],
+        "IntroPokemonOffset": 24283,
+        "IntroCryOffset": 6732,
+        "MapBanks": 1033188,
+        "MapAddresses": 1032690,
+        "SpecialMapList": 289344,
+        "SpecialMapPointerTable": 992909,
+        "HiddenItemRoutine": 483188,
+        "TradeTableOffset": 465949,
+        "TradeTableSize": 10,
+        "TradeNameLength": 11,
+        "TradesUnused": [
+          2,
+          4,
+          6
+        ],
+        "TextDelayFunctionOffset": 14536,
+        "PCPotionOffset": 24226,
+        "CatchingTutorialMonOffset": 102634,
+        "MonPaletteIndicesOffset": 469281,
+        "SGBPalettesOffset": 469433,
+        "StaticPokemonSupport": 1,
+        "ExtraTableFile": "rby_english",
+        "BWXPTweak": "bwexp/yellow_en_bwxp",
+        "XAccNerfTweak": "yellow_en_xaccnerf",
+        "CritRateTweak": "yellow_en_critrate",
+        "PikachuEvoJumpOffset": 55305,
+        "PikachuHappinessCheckOffset": 118628,
+        "CRC32": "7D527D62"
+      },
+      "statics": [
+        {
+          "Species": [
+            991680
+          ],
+          "Level": [
+            991679
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            118651,
+            118668,
+            118763
+          ],
+          "Level": [
+            118667
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            333214,
+            333231
+          ],
+          "Level": [
+            333230
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            989748,
+            989765
+          ],
+          "Level": [
+            989764
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            120402
+          ],
+          "Level": [
+            120401
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            380429
+          ],
+          "Level": [
+            380453
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            380501
+          ],
+          "Level": [
+            380525
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            335318
+          ],
+          "Level": [
+            335317
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            397396
+          ],
+          "Level": [
+            480816
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            397400
+          ],
+          "Level": [
+            480816
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            397392
+          ],
+          "Level": [
+            480816
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            365772,
+            400398
+          ],
+          "Level": [
+            365777
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            366604
+          ],
+          "Level": [
+            366609
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            122079
+          ],
+          "Level": [
+            122080
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            122087
+          ],
+          "Level": [
+            122088
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            122095
+          ],
+          "Level": [
+            122096
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            122111
+          ],
+          "Level": [
+            122112
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            122119
+          ],
+          "Level": [
+            122120
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            122135
+          ],
+          "Level": [
+            122136
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            122103
+          ],
+          "Level": [
+            122104
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            122127
+          ],
+          "Level": [
+            122128
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            289562,
+            289626,
+            383955
+          ],
+          "Level": [
+            289627
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            122047,
+            122143
+          ],
+          "Level": [
+            122144
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            334082,
+            334245
+          ],
+          "Level": [
+            334246
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            287117,
+            287141
+          ],
+          "Level": [
+            287142
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            337850,
+            338154
+          ],
+          "Level": [
+            338155
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            337851,
+            338156
+          ],
+          "Level": [
+            338157
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            337852,
+            338158
+          ],
+          "Level": [
+            338159
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            337861,
+            338160
+          ],
+          "Level": [
+            338161
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            337862,
+            338162
+          ],
+          "Level": [
+            338163
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            337863,
+            338164
+          ],
+          "Level": [
+            338165
+          ],
+          "ghost": false
+        },
+        {
+          "Species": [
+            54333,
+            396066,
+            396281,
+            461125,
+            999536,
+            1007765
+          ],
+          "Level": [
+            396071
+          ],
+          "ghost": true
+        }
+      ],
+      "tm_text": [
+        {
+          "number": 6,
+          "offset": 724708,
+          "template": "\\pTM06 contains\\n%m!\\e",
+          "limit": 724775,
+          "next_symbol": "_FuchsiaGymKogaTM06NoRoomText"
+        },
+        {
+          "number": 11,
+          "offset": 701142,
+          "template": "TM11 teaches\\n%m!\\e",
+          "limit": 701194,
+          "next_symbol": "_CeruleanGymMistyCascadeBadgeInfoText"
+        },
+        {
+          "number": 13,
+          "offset": 714186,
+          "template": "contains\\n%m!\\e",
+          "limit": 714242,
+          "next_symbol": "_CeladonMartRoofLittleGirlYaySodaPopText"
+        },
+        {
+          "number": 18,
+          "offset": 713715,
+          "template": "TM18 is\\n%m!\\e",
+          "limit": 713774,
+          "next_symbol": "_CeladonMart3FClerkTM18NoRoomText"
+        },
+        {
+          "number": 21,
+          "offset": 717121,
+          "template": "\\pTM21 contains\\n%m.\\e",
+          "limit": 717206,
+          "next_symbol": "_CeladonGymTM21NoRoomText"
+        },
+        {
+          "number": 24,
+          "offset": 711166,
+          "template": "\\pTM24 contains\\n%m!\\e",
+          "limit": 711224,
+          "next_symbol": "_VermilionGymLTSurgeTM24NoRoomText"
+        },
+        {
+          "number": 27,
+          "offset": 695276,
+          "template": "\\pTM27 is\\n%m!\\e",
+          "limit": 695386,
+          "next_symbol": "_ViridianGymGiovanniTM27NoRoomText"
+        },
+        {
+          "number": 28,
+          "offset": 700100,
+          "template": "Those miserable\\nROCKETs!\\pLook what they\\ndid here!\\pThey stole a TM\\nfor teaching\\l[POK\u00e9]MON how to\\l%m!\\e",
+          "limit": 700233,
+          "next_symbol": "_CeruleanTrashedHouseFishingGuruWhatsLostIsLostText"
+        },
+        {
+          "number": 28,
+          "offset": 700234,
+          "template": "I figure what's\\nlost is lost!\\pI decided to get\\n%m\\lwithout a TM!\\e",
+          "limit": 700315,
+          "next_symbol": "_CeruleanTrashedHouseGirlText"
+        },
+        {
+          "number": 29,
+          "offset": 734269,
+          "template": "TM29 is\\n%m!\\e",
+          "limit": 734330,
+          "next_symbol": "_MrPsychicsHouseMrPsychicTM29NoRoomText"
+        },
+        {
+          "number": 31,
+          "offset": 730515,
+          "template": "\\pTM31 contains my\\nfavorite,\\l%m!\\e",
+          "limit": 730574,
+          "next_symbol": "_CopycatsHouse2FCopycatTM31Explanation2Text"
+        },
+        {
+          "number": 34,
+          "offset": 698153,
+          "template": "\\pA TM contains a\\ntechnique that\\lcan be taught to\\l[POK\u00e9]MON!\\pA TM is good only\\nonce! So when you\\luse one to teach\\la new technique,\\lpick the [POK\u00e9]MON\\lcarefully!\\pTM34 contains\\n%m!\\e",
+          "limit": 698387,
+          "next_symbol": "_PewterGymTM34NoRoomText"
+        },
+        {
+          "number": 36,
+          "offset": 632240,
+          "template": "TM36 is\\n%m!\\e",
+          "limit": 632322,
+          "next_symbol": "_SilphCo2FSilphWorkerFTM36NoRoomText"
+        },
+        {
+          "number": 38,
+          "offset": 726945,
+          "template": "\\pTM38 contains\\n%m!\\e",
+          "limit": 727042,
+          "next_symbol": "_CinnabarGymBlaineTM38NoRoomText"
+        },
+        {
+          "number": 39,
+          "offset": 662494,
+          "template": "TM39 is the move\\n%m.\\e",
+          "limit": 662592,
+          "next_symbol": "_Route12Gate2FBrunetteGirlTM39NoRoomText"
+        },
+        {
+          "number": 41,
+          "offset": 744991,
+          "template": "TM41 teaches\\n%m!\\pMany [POK\u00e9]MON\\ncan use it!\\e",
+          "limit": 745064,
+          "next_symbol": "_CeladonCityGramps3TM41NoRoomText"
+        },
+        {
+          "number": 42,
+          "offset": 739488,
+          "template": "TM42 contains\\n%m...\\e",
+          "limit": 739529,
+          "next_symbol": "_ViridianCityFisherTM42NoRoomText"
+        },
+        {
+          "number": 46,
+          "offset": 732394,
+          "template": "\\pTM46 is\\n%m!\\e",
+          "limit": 732462,
+          "next_symbol": "_SaffronGymSabrinaTM46NoRoomText"
+        },
+        {
+          "number": 48,
+          "offset": 714325,
+          "template": "contains\\n%m!\\e",
+          "limit": 714347,
+          "next_symbol": "_CeladonMartRoofLittleGirlYayLemonadeText"
+        },
+        {
+          "number": 49,
+          "offset": 714423,
+          "template": "\\pTM49 is\\n%m!\\e",
+          "limit": 714450,
+          "next_symbol": "_CeladonMartRoofLittleGirlNoRoomText"
+        }
+      ],
+      "text_symbol_sha256": "f97ce33581421ae31171cd66205daec7d3951464f577109bf5bda674207832e4",
+      "starter_text_bounds": []
+    }
+  }
+}

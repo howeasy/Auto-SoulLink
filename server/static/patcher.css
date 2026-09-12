@@ -158,3 +158,4 @@
   border-color: var(--accent, #6cf);
   background: var(--accent-dim, rgba(102, 204, 255, 0.15));
 }
+.patcher-wrap [hidden] { display: none !important; }

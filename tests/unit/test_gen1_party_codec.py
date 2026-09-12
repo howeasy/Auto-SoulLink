@@ -148,6 +148,35 @@ def test_names_require_termination_but_preserve_padding(lua_codec):
         assert lua_result(lua_codec, invalid)[0] is None
 
 
+NPC_TRADE_OT = bytes.fromhex("5D" + "50" * 10)  # InGameTrade_TrainerString: <TRAINER> then "@" padding
+
+
+@pytest.mark.parametrize("variant", ["red", "blue", "yellow"])
+def test_npc_traded_ot_string_is_the_only_legal_text_control_and_only_as_ot(lua_codec, variant):
+    codec = PartyCodec(variant)
+    assert codec.npc_trade_ot == NPC_TRADE_OT == bytes(DATA["npc_trade_ot"])
+    assert 0x5D not in codec.names
+    raw = bytearray(make_blob(codec))
+    raw[44:55] = NPC_TRADE_OT
+    assert codec.validate_blob(raw).ot_name == NPC_TRADE_OT
+    assert bytes(lua_result(lua_codec, raw, variant)[0].ot_name.values()) == NPC_TRADE_OT
+    for label, offset, field in (
+        ("nickname", 55, NPC_TRADE_OT),  # the same bytes as a nickname
+        ("nickname glyph", 55, b"\x91\x5d\x50" + bytes(8)),  # $5D inside a nickname
+        ("OT glyph", 44, b"\x91\x5d\x50" + bytes(8)),  # $5D anywhere else in an OT
+        ("OT tail", 44, b"\x5d" + b"\x50" * 9 + b"\x00"),  # wrong tail byte
+        ("OT terminator", 44, b"\x5d\x5d" + b"\x50" * 9),  # not terminated right after <TRAINER>
+        ("OT twice", 44, b"\x5d\x50\x5d" + b"\x50" * 8),
+    ):
+        invalid = bytearray(make_blob(codec))
+        invalid[offset:offset + 11] = field
+        with pytest.raises(PartyCodecError, match="glyph|terminator"):
+            codec.validate_blob(invalid)
+        assert lua_result(lua_codec, invalid, variant)[0] is None, label
+    with pytest.raises(PartyCodecError, match="glyph"):
+        codec._name(NPC_TRADE_OT, "player name")  # save/player names never accept the trade OT
+
+
 def test_forty_pp_moves_gain_seven_per_pp_up_not_eight(lua_codec):
     codec = PartyCodec("red")
     move = next(int(k) for k, pp in codec.profile["move_pp"].items() if pp == 40)
@@ -249,17 +278,50 @@ def test_duplicate_boxed_inventory_cannot_be_silently_collapsed():
         codec.validate_party([raw], boxed_keys=["FFFF:0000:99", "FFFF:0000:99"])
 
 
-def test_identical_outgoing_and_incoming_keys_are_refused(lua_codec):
-    codec = PartyCodec("red")
-    raw = make_blob(codec)
-    key = codec.validate_blob(raw).key
-    with pytest.raises(PartyCodecError, match="collide"):
-        codec.prepare_exchange([raw], 0, raw, expected_key=key, incoming_key=key,
-                               evolved_species=153, boxed_keys=())
+@pytest.mark.parametrize("variant", ["red", "blue", "yellow"])
+@pytest.mark.parametrize("count", range(1, 7))
+@pytest.mark.parametrize("identical_blob", [False, True])
+def test_equal_cross_player_key_replaces_only_the_selected_local_slot(lua_codec, variant, count, identical_blob):
+    codec = PartyCodec(variant)
+    members = [make_blob(codec, dv=0x1000 + i) for i in range(count)]
     lua, module = lua_codec
-    result = module.prepareExchange(lua.table_from([lua.table_from(list(raw))]), "red", 0,
-        lua.table_from(list(raw)), key, key, 153, lua.table_from({}))
-    assert result[0] is None and "collide" in result[1]
+    for slot in range(count):
+        incoming = bytearray(members[slot])
+        if not identical_blob:
+            incoming[2] = 9  # same DVs/OTID/species key, independently different physical data
+        incoming = bytes(incoming)
+        key = codec.validate_blob(incoming).key
+        expected = tuple(members[:slot] + members[slot + 1:] + [incoming])
+        prepared, predicted = codec.prepare_exchange(members, slot, incoming, expected_key=key,
+            incoming_key=key, evolved_species=153, boxed_keys=())
+        assert prepared == expected and predicted == key
+        result = module.prepareExchange(lua.table_from([lua.table_from(list(raw)) for raw in members]),
+            variant, slot, lua.table_from(list(incoming)), key, key, 153, lua.table_from({}))
+        assert not isinstance(result, tuple), result
+        assert tuple(bytes(blob.values()) for blob in result.blobs.values()) == expected
+        assert result.predicted_key == key
+
+
+@pytest.mark.parametrize("variant", ["red", "blue", "yellow"])
+@pytest.mark.parametrize("where", ["party", "box", "evolved-party", "evolved-box"])
+def test_recipient_party_and_box_collisions_still_refuse_both_codecs(lua_codec, variant, where):
+    codec = PartyCodec(variant)
+    incoming = make_blob(codec, species=38, otid=2)  # Kadabra
+    occupied = make_blob(codec, species=149 if where.startswith("evolved") else 38, otid=2)
+    outgoing = incoming if where.startswith("evolved") else make_blob(codec, otid=1)
+    members = [outgoing, occupied] if where.endswith("party") else [outgoing]
+    boxes = () if where.endswith("party") else (codec.validate_blob(occupied).key,)
+    key, incoming_key = codec.validate_blob(outgoing).key, codec.validate_blob(incoming).key
+    evolved = 149 if where.startswith("evolved") else 38
+    before = tuple(members)
+    with pytest.raises(PartyCodecError, match="collision"):
+        codec.prepare_exchange(members, 0, incoming, expected_key=key, incoming_key=incoming_key,
+                               evolved_species=evolved, boxed_keys=boxes)
+    lua, module = lua_codec
+    result = module.prepareExchange(lua.table_from([lua.table_from(list(raw)) for raw in members]), variant, 0,
+        lua.table_from(list(incoming)), key, incoming_key, evolved, lua.table_from({key: True for key in boxes}))
+    assert isinstance(result, tuple) and result[0] is None and "collision" in result[1]
+    assert tuple(members) == before
 
 
 @pytest.mark.parametrize("species_list", [[153, 255], [153, 255, 0, 0, 0, 0, 0], [153, 0], [153], [153, 255, 0]])

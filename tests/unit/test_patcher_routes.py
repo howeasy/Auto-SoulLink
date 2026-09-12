@@ -13,6 +13,7 @@ Run:
 
 import os
 import re
+import hashlib
 
 import pytest
 
@@ -48,6 +49,9 @@ async def test_every_target_is_served_with_download_headers(slug, tmp_path, monk
     payload = b"UPS1" + slug.encode()
     (tmp_path / name).write_bytes(payload)
     monkeypatch.setattr(patcher, "_DIST", str(tmp_path))
+    monkeypatch.setattr(patcher,"patch_path",lambda selected:str(tmp_path/patcher.TARGETS[selected]["patch"]))
+    if "patch_sha256"in patcher.TARGETS[slug]:
+        monkeypatch.setitem(patcher.TARGETS[slug],"patch_sha256",hashlib.sha256(payload).hexdigest())
 
     client = TestClient(TestServer(_make_app()))
     await client.start_server()
@@ -92,14 +96,20 @@ async def test_an_unknown_patch_name_is_refused(tmp_path, monkeypatch):
         await client.close()
 
 
-def test_no_yellow_companion_artifact_is_shipped():
-    """Yellow has arithmetically zero free WRAM for the mailbox, so there is no build to
-    ship -- and shipping one would advertise a capability that cannot exist."""
-    assert not any("yellow" in t["patch"].lower() for t in patcher.TARGETS.values())
-    dist = os.path.normpath(os.path.join(os.path.dirname(patcher.__file__), "..",
-                                         "patch", "dist"))
-    if os.path.isdir(dist):
-        assert not [f for f in os.listdir(dist) if "yellow" in f.lower()]
+def test_yellow_target_has_native_trade_without_panel_or_event_sfx():
+    assert patcher.TARGETS["yellow"]["capabilities"]=={"panel":False,"pc_trade":True,"sfx":False}
+    assert patcher.TARGETS["yellow"]["patch"]=="SLink-Yellow.ups"
+
+
+@pytest.mark.asyncio
+async def test_changed_gen1_patch_bytes_are_not_served(tmp_path,monkeypatch):
+    path=tmp_path/"bad.ups";path.write_bytes(b"UPS1 changed")
+    monkeypatch.setattr(patcher,"patch_path",lambda slug:str(path))
+    client=TestClient(TestServer(_make_app()));await client.start_server()
+    try:
+        response=await client.get("/companion/SLink-Yellow.ups")
+        assert response.status==409
+    finally:await client.close()
 
 
 
@@ -166,7 +176,7 @@ class TestTheShippedPatchesActuallyApply:
                                              "patch", "build", name))
 
     @pytest.mark.parametrize("slug,base", [("rb-red", "gen1_red.gb"),
-                                           ("rb-blue", "gen1_blue.gb")])
+                                           ("rb-blue", "gen1_blue.gb"),("yellow","gen1_yellow.gbc")])
     def test_applying_the_shipped_ups_reproduces_the_recorded_md5(self, slug, base):
         import hashlib
         src, patch_bytes = self._bytes(self._clean(base), patcher.patch_path(slug))

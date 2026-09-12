@@ -24,6 +24,7 @@ Launch rules match run_gate.py: cwd = repo root with RELATIVE EmuHawk arg paths,
 absolute paths containing the "Google Drive" space break BizHawk's CLI parser.
 """
 import argparse
+import hashlib
 import os
 import re
 import shutil
@@ -31,6 +32,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from pathlib import Path
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "tools"))
@@ -75,6 +77,15 @@ GENS = {
             "red_native_trade": ("red", "patch/gen1/build/native_trade_red.gb", "native trade red.SaveRAM"),
             "blue_native_trade": ("blue", "patch/gen1/build/native_trade_blue.gb", "native trade blue.SaveRAM"),
             "yellow_native_trade": ("yellow", "patch/gen1/build/native_trade_yellow.gb", "native trade yellow.SaveRAM"),
+            "red_foreground_trade": ("red", "patch/gen1/build/foreground_trade_red.gb", "foreground trade red.SaveRAM"),
+            "blue_foreground_trade": ("blue", "patch/gen1/build/foreground_trade_blue.gb", "foreground trade blue.SaveRAM"),
+            "yellow_foreground_trade": ("yellow", "patch/gen1/build/foreground_trade_yellow.gb", "foreground trade yellow.SaveRAM"),
+            "red_receptionist_trade": ("red", "patch/gen1/build/receptionist_trade_red.gb", "receptionist trade red.SaveRAM"),
+            "blue_receptionist_trade": ("blue", "patch/gen1/build/receptionist_trade_blue.gb", "receptionist trade blue.SaveRAM"),
+            "yellow_receptionist_trade": ("yellow", "patch/gen1/build/receptionist_trade_yellow.gb", "receptionist trade yellow.SaveRAM"),
+            "red_companion": ("red", "patch/gen1/build/companion_red/slink_red.gb", "slink red.SaveRAM"),
+            "blue_companion": ("blue", "patch/gen1/build/companion_blue/slink_blue.gb", "slink blue.SaveRAM"),
+            "yellow_companion": ("yellow", "patch/gen1/build/companion_yellow/slink_yellow.gb", "slink yellow.SaveRAM"),
             "red_patched": ("red", "patch/gen1/build/slink_red.gb", "slink red.SaveRAM"),
             # The RANDOMIZED path's artifact. Built by
             # `tests/live/make_randomized_patched.py` when a UPR jar is available, and
@@ -168,8 +179,17 @@ def seed_saveram(rom_key: str, target: str, dest_dir: str | None = None) -> str:
     return dst
 
 
-def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *, config_base=None):
-    """Run one gate. Returns (passed, result_path, text)."""
+def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *, config_base=None,
+             fixture_override=None, extra_env=None, cartridge_override=None):
+    """Run one gate with isolated saves and optional per-run Lua input paths.
+
+    Fixture overrides are copied into the same private SaveRAM directory as
+    normal fixtures. Neither an override nor extra environment changes the
+    caller's environment, base config, or source fixture.
+    Returns (passed, result_path, text).
+    """
+    if extra_env and "SLINK_ROOT" in extra_env:
+        raise ValueError("extra environment cannot override the gate worktree")
     if not os.path.exists(EMUHAWK):
         raise FileNotFoundError(f"EmuHawk not found at {EMUHAWK} (set $SLINK_EMUHAWK)")
     spec = GENS[gen_for(rom_key)]
@@ -184,7 +204,28 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *, 
     if not os.path.isfile(base_config):
         raise FileNotFoundError(f"BizHawk config required for isolated SaveRAM: {base_config}")
 
-    if rom_key in spec["patched"]:
+    override_save_name=None
+    if cartridge_override is not None:
+        if not isinstance(cartridge_override,dict) or set(cartridge_override)!={"path","sha256","saveram_name"}:
+            raise ValueError("explicit cartridge path, SHA256 and SaveRAM name required")
+        source=Path(cartridge_override["path"]).resolve()
+        if not source.is_relative_to(Path(REPO).resolve()) or source.suffix.lower() not in (".gb",".gbc"):
+            raise ValueError("gate cartridge must be a Game Boy artifact inside this worktree")
+        if not 0<source.stat().st_size<=8*1024*1024:raise ValueError("bounded Game Boy artifact required")
+        data=source.read_bytes()
+        if hashlib.sha256(data).hexdigest()!=cartridge_override["sha256"]:
+            raise ValueError("gate cartridge hash differs")
+        override_save_name=cartridge_override["saveram_name"]
+        if not isinstance(override_save_name,str) or len(override_save_name)>180 or not re.fullmatch(r"[A-Za-z0-9 _().-]+\.SaveRAM",override_save_name):
+            raise ValueError("single bounded SaveRAM filename required")
+        base_key=spec["patched"][rom_key][0] if rom_key in spec["patched"] else rom_key
+        if base_key is None:raise ValueError("explicit cartridge override requires a battery-save gate")
+        staged=Path(run_dir)/("candidate"+source.suffix.lower());staged.write_bytes(data)
+        if staged.read_bytes()!=data:raise ValueError("staged gate cartridge differs")
+        rom_rel=staged.relative_to(REPO).as_posix()
+        fixture=fixture_override or os.path.join(play.FIXTURES,f"{base_key}_{target}.SaveRAM")
+        shutil.copyfile(fixture,os.path.join(run_saveram,override_save_name))
+    elif rom_key in spec["patched"]:
         base_key, rom_rel, saveram_name = spec["patched"][rom_key]
         if rom_rel is None:
             rom_rel = play.staged_rom(rom_key.rsplit("_", 1)[0])
@@ -193,15 +234,19 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *, 
                        else "python patch/gen1/tools/build.py")
             raise FileNotFoundError(f"{rom_rel} missing — build it with `{builder}`")
         if base_key is None:
-            pass  # Fresh isolated directory is empty, including for cold-boot controls.
+            if fixture_override is not None:
+                raise ValueError("cold-boot gates cannot accept a fixture override")
         else:
-            fixture = os.path.join(play.FIXTURES, f"{base_key}_{target}.SaveRAM")
+            fixture = fixture_override or os.path.join(play.FIXTURES, f"{base_key}_{target}.SaveRAM")
             if not os.path.exists(fixture):
                 raise FileNotFoundError(f"missing fixture {os.path.relpath(fixture, REPO)}")
             shutil.copyfile(fixture, os.path.join(run_saveram, saveram_name))
     else:
         rom_rel = play.staged_rom(rom_key)
-        seed_saveram(rom_key, target, dest_dir=run_saveram)
+        if fixture_override is not None:
+            shutil.copyfile(fixture_override, os.path.join(run_saveram, spec["saveram_names"][rom_key]))
+        else:
+            seed_saveram(rom_key, target, dest_dir=run_saveram)
     os.makedirs(BUILD, exist_ok=True)
 
     result = _result_path_for(script)
@@ -213,6 +258,12 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *, 
     write_run_config(base_config, os.path.join(REPO, cfg_rel), saveram_dir=run_saveram)
 
     env = dict(os.environ, SLINK_ROOT=REPO.replace("\\", "/"))
+    if extra_env:
+        env.update(extra_env)
+    # This is the runner-owned destination, never an override from a test payload.
+    save_name = override_save_name or (spec["patched"][rom_key][2] if rom_key in spec["patched"] else spec["saveram_names"][rom_key])
+    env["SLINK_GATE_SAVERAM"] = os.path.join(run_saveram, save_name)
+    env["SLINK_SAVERAM_DIRECTORY"] = run_saveram
     cmd = [EMUHAWK, f"--lua={script}"]
     if os.path.exists(os.path.join(REPO, cfg_rel)):
         cmd.append(f"--config={cfg_rel}")

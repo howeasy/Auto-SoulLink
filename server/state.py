@@ -24,6 +24,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import Enum
 
+from server import player_keys
 from server.adapters.base import GameRulesAdapter
 from server.pokemon_data import _parse_pid_otid_key, pid_otid_shiny
 from server.save_identity import SaveIdentity
@@ -314,7 +315,7 @@ class SoulLinkState:
             key = msg.get("key", "")
             stats = msg.get("stats")
             if key and stats:
-                self.mon_stats[key] = stats
+                self.cache_stats(player_id, key, stats)
                 if key in self.party_keys[player_id]:
                     self.party_size[player_id] = max(0, self.party_size.get(player_id, 0) - 1)
                 self.party_keys[player_id].discard(key)
@@ -342,7 +343,7 @@ class SoulLinkState:
                     rb["queued_keys"] = [k for k in rb["queued_keys"] if k != key]
                     self._maybe_finish_rebuild(player_id)
                 # Find the linked partner and re-box them to maintain sync
-                entry = self._key_index.get(key)
+                entry = self.find_link(player_id, key)
                 if entry and entry.status == LinkStatus.ALIVE:
                     partner = _partner(player_id)
                     partner_mon = entry.a if player_id == "b" else entry.b
@@ -487,7 +488,7 @@ class SoulLinkState:
         out = []
         for be in sorted(self.partner_blobs.get(player_id, []), key=lambda e: e.get("slot", 99)):
             k = be.get("key", "")
-            entry = self._key_index.get(k)
+            entry = self.find_link(player_id, k)
             if not entry or entry.status != LinkStatus.ALIVE:
                 continue
             my_mon  = entry.a if player_id == "a" else entry.b
@@ -767,6 +768,8 @@ class SoulLinkState:
                 data = json.load(f)
             state._restore_document(data)
         except Exception as e:
+            if isinstance(e, player_keys.AmbiguousPhysicalKey):
+                raise
             log.error(f"Failed to load {state._links_path}: {e}")
         return state
 
@@ -787,6 +790,11 @@ class SoulLinkState:
         return state
 
     def _restore_document(self, data: dict):
+        saved_game_id = data.get("game_id")
+        if saved_game_id and saved_game_id != self.adapter.game_id:
+            from server.adapters import get_adapter
+            self.adapter = get_adapter(saved_game_id, is_rr=self.is_rr, rom_type=data.get("rom_type", ""))
+        self.rom_type = data.get("rom_type", "")
         for ed in data.get("links", []):
             a = MonInfo(**ed["a"]) if ed.get("a") else None
             b = MonInfo(**ed["b"]) if ed.get("b") else None
@@ -1011,7 +1019,7 @@ class SoulLinkState:
         # Strip dead/memorial mons that may have been re-added (e.g. hp=0 mon still in party
         # slot when a reconnect happens before the Lua sends the faint event back).
         for _k in list(self.party_keys[player_id]):
-            _e = self._key_index.get(_k)
+            _e = self.find_link(player_id, _k)
             if _e and _e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL):
                 self.party_keys[player_id].discard(_k)
 
@@ -1039,7 +1047,7 @@ class SoulLinkState:
                 continue
             if hp > 0:
                 # Mon is alive — log confirmation if it's a known linked mon.
-                entry = self._key_index.get(key)
+                entry = self.find_link(player_id, key)
                 if entry and entry.status == LinkStatus.ALIVE:
                     log.debug(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=alive_confirmed")
                 continue
@@ -1048,7 +1056,7 @@ class SoulLinkState:
             if not self.pokeballs_obtained[player_id]:
                 log.debug(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=ignored  reason=pre_nuzlocke")
                 continue
-            entry = self._key_index.get(key)
+            entry = self.find_link(player_id, key)
             if entry and entry.status == LinkStatus.ALIVE:
                 log.info(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=faint_detected  reason=hp=0_in_party")
                 self._propagate_faint(player_id, entry, level=m.get("level", 0))
@@ -1069,7 +1077,7 @@ class SoulLinkState:
             key = m.get("key", "")
             if not key:
                 continue
-            entry = self._key_index.get(key)
+            entry = self.find_link(player_id, key)
             if (entry and entry.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL)
                     and not any(c.get("cmd") == "memorialize" and c.get("key") == key
                                 for c in self.queued_commands[player_id])):
@@ -1090,7 +1098,7 @@ class SoulLinkState:
             sid  = m.get("species_id", 0)
             if not key or (not nick and not sid):
                 continue
-            entry = self._key_index.get(key)
+            entry = self.find_link(player_id, key)
             if not entry:
                 continue
             mon = entry.a if player_id == "a" else entry.b
@@ -1155,7 +1163,7 @@ class SoulLinkState:
             for k in queued_keys:
                 if k in restored:
                     continue
-                entry = self._key_index.get(k)
+                entry = self.find_link(player_id, k)
                 if not entry:
                     continue
                 mon = entry.a if player_id == "a" else entry.b
@@ -1206,6 +1214,10 @@ class SoulLinkState:
         key     = msg.get("key", "")
         if not area_id or not key:
             return
+        if self.player_scoped_keys and self.find_link(player_id, key) is not None:
+            # A physical duplicate must not be "rejected" by fainting its raw
+            # key: that could kill the previously linked member instead.
+            raise player_keys.AmbiguousPhysicalKey("capture key already identifies a member in this player's save")
         is_egg  = bool(msg.get("is_egg", False))
         # `gift=true` is the Lua's authoritative signal for any new mon received
         # outside battle (gifts, starters, fossils, eggs) — independent of whether
@@ -1271,7 +1283,7 @@ class SoulLinkState:
             if stats is None:
                 stats = {}
             stats["species_id"] = species  # always store, even if 0
-            self.mon_stats[key] = stats
+            self.cache_stats(player_id, key, stats)
             self._save()
             return
 
@@ -1283,7 +1295,7 @@ class SoulLinkState:
             partner = _partner(player_id)
 
             # Reconstruct MonInfo for the shiny side using cached stats
-            shiny_stats = self.mon_stats.get(shiny_key, {})
+            shiny_stats = self.stats_for(partner, shiny_key, {})
             shiny_species = shiny_stats.get("species_id", 0)
             shiny_mon_info = MonInfo(key=shiny_key, species=shiny_species,
                                      level=shiny_stats.get("level", 0),
@@ -1354,7 +1366,7 @@ class SoulLinkState:
                     stats_local = {"level": lv, "maxHP": mhp}
             if stats_local:
                 stats_local["species_id"] = cap_species_local
-                self.mon_stats[key] = stats_local
+                self.cache_stats(player_id, key, stats_local)
 
             # Party sync at formation: both mons should be in the same location.
             bonus_in_box = msg.get("in_box", False)
@@ -1566,7 +1578,7 @@ class SoulLinkState:
             if lv and mhp:
                 stats = {"level": lv, "maxHP": mhp}
         if stats:
-            self.mon_stats[key] = stats
+            self.cache_stats(player_id, key, stats)
 
         partner     = _partner(player_id)
         partner_cap = self.pending_captures[area_id].get(partner)
@@ -1651,7 +1663,7 @@ class SoulLinkState:
                     cmd: dict = {"cmd": "party_mon", "key": mon_obj.key}
                     if mon_obj.nickname:
                         cmd["nickname"] = mon_obj.nickname
-                    cached = self.mon_stats.get(mon_obj.key)
+                    cached = self.stats_for(pid, mon_obj.key)
                     if cached:
                         cmd["stats"] = cached
                     # Cancel any pending box_mon for this key (quarantine command may still be queued)
@@ -1702,7 +1714,7 @@ class SoulLinkState:
         if not self.pokeballs_obtained[player_id]:
             log.debug(f"[FAINT GATE] player={player_id}  key={key[:8]}  suppressed=True  reason=nuzlocke_not_active")
             return
-        entry = self._key_index.get(key)
+        entry = self.find_link(player_id, key)
         if not entry or entry.status != LinkStatus.ALIVE:
             log.debug(f"[{player_id}] faint {key[:8]}: no alive linked entry — ignored "
                       f"(status={entry.status.value if entry else 'not_found'})")
@@ -2072,7 +2084,7 @@ class SoulLinkState:
         # Cache stats so we can echo them back in the partner's party_mon command later.
         stats = msg.get("stats")
         if stats:
-            self.mon_stats[key] = stats
+            self.cache_stats(player_id, key, stats)
         # Decrement party_size immediately (same reason as stats_cache handler): avoids a
         # false "partner's party full" block if the partner tries to withdraw their linked mon
         # before the next tick arrives and corrects the count.
@@ -2082,7 +2094,7 @@ class SoulLinkState:
             log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {self.party_size[player_id]}  (party_to_box)")
         self.party_keys[player_id].discard(key)
         log.debug(f"[PARTY] player={player_id}  party_keys remove {key[:8]}  (party_to_box)")
-        entry = self._key_index.get(key)
+        entry = self.find_link(player_id, key)
         if not entry or entry.status != LinkStatus.ALIVE:
             return
         partner     = _partner(player_id)
@@ -2146,7 +2158,7 @@ class SoulLinkState:
                 })
                 return
 
-        entry = self._key_index.get(key)
+        entry = self.find_link(player_id, key)
         if not entry:
             self.party_keys[player_id].add(key)
             return
@@ -2203,7 +2215,7 @@ class SoulLinkState:
             cmd: dict = {"cmd": "party_mon", "key": partner_mon.key}
             if partner_mon.nickname:
                 cmd["nickname"] = partner_mon.nickname
-            cached = self.mon_stats.get(partner_mon.key)
+            cached = self.stats_for(partner, partner_mon.key)
             if cached:
                 cmd["stats"] = cached
             # Cancel any pending box_mon for the same key before queuing party_mon.
@@ -2287,7 +2299,7 @@ class SoulLinkState:
                 continue
             if self._is_quarantined(player_id, key):
                 continue
-            entry = self._key_index.get(key)
+            entry = self.find_link(player_id, key)
             if entry is None:
                 # Untracked mon (e.g. unlinked, never had a partner) — server
                 # has no opinion about box vs. party for it, so just sync.
@@ -2310,7 +2322,7 @@ class SoulLinkState:
                 cmd: dict = {"cmd": "party_mon", "key": partner_mon.key}
                 if partner_mon.nickname:
                     cmd["nickname"] = partner_mon.nickname
-                cached = self.mon_stats.get(partner_mon.key)
+                cached = self.stats_for(partner, partner_mon.key)
                 if cached:
                     cmd["stats"] = cached
                 self.queued_commands[partner].append(cmd)
@@ -2378,7 +2390,7 @@ class SoulLinkState:
                 # Partner has no more room. Per Soul Link co-location, both
                 # halves must move together — skip this and any further pairs.
                 break
-            entry = self._key_index.get(my_key)
+            entry = self.find_link(player_id, my_key)
             if not entry:
                 continue
             my_mon = entry.a if player_id == "a" else entry.b
@@ -2408,7 +2420,7 @@ class SoulLinkState:
             cmd: dict = {"cmd": "party_mon", "key": mon.key}
             if mon.nickname:
                 cmd["nickname"] = mon.nickname
-            cached = self.mon_stats.get(mon.key)
+            cached = self.stats_for(pid, mon.key)
             if cached:
                 cmd["stats"] = cached
             self.queued_commands[pid].append(cmd)
@@ -2486,7 +2498,13 @@ class SoulLinkState:
 
         # 1. Links + key index
         mon = None
-        entry = self._key_index.pop(old_key, None)
+        entry = self.find_link(player_id, old_key)
+        if entry and self.player_scoped_keys:
+            collision = self.find_link(player_id, new_key)
+            if collision is not None and collision is not entry:
+                raise ValueError("key change collides within the player's save")
+        if not self.player_scoped_keys:
+            self._key_index.pop(old_key, None)
         if entry:
             _migrated = True
             side = "a" if player_id == "a" else "b"
@@ -2500,7 +2518,11 @@ class SoulLinkState:
                     mon.species = new_species
                 if new_nickname is not None:
                     mon.nickname = new_nickname
-            self._key_index[new_key] = entry
+            if self.player_scoped_keys:
+                self._refresh_key_projection(old_key)
+                self._refresh_key_projection(new_key)
+            else:
+                self._key_index[new_key] = entry
 
         # 2. Pending captures
         for _area_id, players in self.pending_captures.items():
@@ -2516,8 +2538,10 @@ class SoulLinkState:
             _migrated = True
 
         # 4. Mon stats cache
-        if old_key in self.mon_stats:
-            self.mon_stats[new_key] = self.mon_stats.pop(old_key)
+        old_stats_key = self.cache_key(player_id, old_key)
+        new_stats_key = self.cache_key(player_id, new_key)
+        if old_stats_key in self.mon_stats:
+            self.mon_stats[new_stats_key] = self.mon_stats.pop(old_stats_key)
             _migrated = True
 
         # 5. Bonus keys (shiny clause)
@@ -2538,7 +2562,7 @@ class SoulLinkState:
                 cmd["key"] = new_key
 
         # 8. Pending bonus queue (shiny keys in partner's pending_bonus)
-        for pid in ("a", "b"):
+        for pid in ((_partner(player_id),) if self.player_scoped_keys else ("a", "b")):
             self.pending_bonus[pid] = deque(
                 new_key if k == old_key else k for k in self.pending_bonus[pid]
             )
@@ -2570,11 +2594,11 @@ class SoulLinkState:
         for mon, pid in ((a_mon, "a"), (b_mon, "b")):
             if not (mon and mon.key):
                 continue
-            existing = self._key_index.get(mon.key)
-            if existing is not None and existing.status == LinkStatus.ALIVE:
+            existing = self.find_link(pid, mon.key)
+            if existing is not None and (self.player_scoped_keys or existing.status == LinkStatus.ALIVE):
                 return (f"Key collision: {mon.key} already identifies a live link in "
                         f"{existing.area_id}", pid)
-        if a_mon and b_mon and a_mon.key and a_mon.key == b_mon.key:
+        if not self.player_scoped_keys and a_mon and b_mon and a_mon.key and a_mon.key == b_mon.key:
             # Both halves indexing one key would make the pair its own alias.
             return (f"Key collision: both halves report the key {a_mon.key}", "")
 
@@ -2688,11 +2712,11 @@ class SoulLinkState:
         entry.initiating_player = player_id
         # Update MonInfo levels to death-time values so memorial shows current level.
         if player_mon:
-            lv = level or self.mon_stats.get(player_mon.key, {}).get("level", 0)
+            lv = level or self.stats_for(player_id, player_mon.key, {}).get("level", 0)
             if lv:
                 player_mon.level = lv
         if partner_mon:
-            lv = self.mon_stats.get(partner_mon.key, {}).get("level", 0)
+            lv = self.stats_for(partner, partner_mon.key, {}).get("level", 0)
             if lv:
                 partner_mon.level = lv
         if player_mon:
@@ -2701,6 +2725,48 @@ class SoulLinkState:
             self._queue_memorialize(partner, partner_mon.key)
         self._check_game_over()
         self._save()
+
+    @property
+    def player_scoped_keys(self):
+        return self.adapter.game_id == "gen1_rby" and not self.rom_type.lower().endswith("_ap")
+
+    def find_link(self, player_id, key):
+        if not key:
+            return None
+        if self.player_scoped_keys:
+            return player_keys.find_link(self.links, player_id, key)
+        return self._key_index.get(key)
+
+    def cache_key(self, player_id, key):
+        return player_keys.reference(player_id, key) if self.player_scoped_keys else key
+
+    def cache_stats(self, player_id, key, stats):
+        self.mon_stats[self.cache_key(player_id, key)] = stats
+
+    def stats_for(self, player_id, key, default=None):
+        if not key:
+            return default
+        scoped = self.cache_key(player_id, key)
+        if scoped in self.mon_stats:
+            return self.mon_stats[scoped]
+        if self.player_scoped_keys and key in self.mon_stats:
+            # Legacy cache evidence is usable only when its physical owner is
+            # unambiguous. Never copy one player's cached HP/moves to both saves.
+            owners = {pid for pid in ("a", "b")
+                      if self.find_link(pid, key) is not None
+                      or any(cap.key == key for entries in self.pending_captures.values()
+                             if (cap := entries.get(pid)) is not None)
+                      or key in self.bonus_keys[pid] or key in self.party_keys[pid]}
+            if owners == {player_id}:
+                return self.mon_stats[key]
+        return default
+
+    def _refresh_key_projection(self, key):
+        entry = player_keys.unique_link(self.links, key)
+        if entry is None:
+            self._key_index.pop(key, None)
+        else:
+            self._key_index[key] = entry
 
     def _index_entry(self, entry: LinkEntry):
         """Index both halves by key.
@@ -2712,6 +2778,17 @@ class SoulLinkState:
         here is reported loudly even though the write still happens -- a half-indexed link
         would be worse than an aliased one.
         """
+        if self.player_scoped_keys:
+            if not any(candidate is entry for candidate in self.links):
+                raise ValueError("link must be in the authoritative list before indexing")
+            for player in ("a", "b"):
+                half = getattr(entry, player)
+                if half is not None:
+                    # Reject ambiguous loaded/captured state; no half may silently
+                    # displace another physical member in the same save.
+                    self.find_link(player, half.key)
+                    self._refresh_key_projection(half.key)
+            return
         for half in (entry.a, entry.b):
             if not half:
                 continue
@@ -2753,7 +2830,7 @@ class SoulLinkState:
         self.pending_memorials[player_id].discard(key)
         self.party_keys[player_id].discard(key)
         log.info(f"[{player_id}] memorialize_done key={key[:8]}")
-        entry = self._key_index.get(key)
+        entry = self.find_link(player_id, key)
         if not entry or entry.status != LinkStatus.DEAD:
             self._save()
             return
@@ -2780,7 +2857,7 @@ class SoulLinkState:
         self.pending_memorials[player_id].discard(key)
         log.warning(f"[{player_id}] memorialize_failed key={key[:8]} reason={reason}")
         # Check if the pair can now be finalized despite the failure
-        entry = self._key_index.get(key)
+        entry = self.find_link(player_id, key)
         if not entry or entry.status != LinkStatus.DEAD:
             self._save()
             return

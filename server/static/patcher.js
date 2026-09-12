@@ -41,22 +41,29 @@
   }
 
   // ── UPS variable-length decode — mirrors _ups_decode() ───────────────────
-  function upsDecode(data, pos) {
+  function upsDecode(data, pos, end = data.length) {
     let value = 0;
     let shift = 1;
-    for (;;) {
+    for (let count = 0; count < 8; count++) {
+      if (!Number.isSafeInteger(pos) || pos < 0 || pos >= end) throw new Error("Truncated UPS integer.");
       const x = data[pos];
       pos += 1;
       value += (x & 0x7f) * shift;
-      if (x & 0x80) break;
-      shift <<= 7;
+      if (!Number.isSafeInteger(value)) throw new Error("UPS integer exceeds its supported range.");
+      if (x & 0x80) return [value, pos];
+      shift *= 128;
       value += shift;
+      if (!Number.isSafeInteger(value) || !Number.isSafeInteger(shift)) throw new Error("UPS integer exceeds its supported range.");
     }
-    return [value, pos];
+    throw new Error("UPS integer is too long.");
   }
 
   // ── UPS apply — mirrors ups_apply() ──────────────────────────────────────
   function upsApply(source, patch) {
+    if (!(source instanceof Uint8Array) || !(patch instanceof Uint8Array) ||
+        source.length > 64 * 1024 * 1024 || patch.length > 64 * 1024 * 1024) {
+      throw new Error("Unsupported ROM or patch size.");
+    }
     if (
       patch.length < 18 ||
       patch[0] !== 0x55 || // 'U'
@@ -74,36 +81,37 @@
     }
     const srcCrc = readU32LE(patch, patch.length - 12);
     if (crc32(source) !== srcCrc) {
-      throw new Error(
-        "This doesn't look like a clean Radical Red ROM — its checksum doesn't " +
-          "match the patch's expected base (md5 should be " +
-          (document.querySelector(".patcher-wrap").dataset.baseMd5 || "8529…") +
-          ")."
-      );
+      throw new Error("This ROM does not match the patch's required input.");
     }
+    const bodyEnd = patch.length - 12;
     let pos = 4;
-    let dec = upsDecode(patch, pos);
-    pos = dec[1]; // src_size (unused beyond advancing pos)
-    dec = upsDecode(patch, pos);
+    let dec = upsDecode(patch, pos, bodyEnd);
+    if (dec[0] !== source.length) throw new Error("UPS source size differs from the ROM.");
+    pos = dec[1];
+    dec = upsDecode(patch, pos, bodyEnd);
     const dstSize = dec[0];
+    if (dstSize > 64 * 1024 * 1024) throw new Error("UPS output size exceeds the supported limit.");
     pos = dec[1];
 
     const out = new Uint8Array(dstSize);
     out.set(source.subarray(0, Math.min(source.length, dstSize)));
 
-    const bodyEnd = patch.length - 12;
     let i = 0;
     while (pos < bodyEnd) {
-      dec = upsDecode(patch, pos);
+      dec = upsDecode(patch, pos, bodyEnd);
       i += dec[0];
+      if (!Number.isSafeInteger(i) || i > dstSize) throw new Error("UPS span starts outside the output.");
       pos = dec[1];
+      let terminated = false;
       while (pos < bodyEnd) {
         const x = patch[pos];
         pos += 1;
+        if (i > dstSize || (i === dstSize && x !== 0)) throw new Error("UPS span writes outside the output.");
         if (i < dstSize) out[i] ^= x;
         i += 1;
-        if (x === 0) break;
+        if (x === 0) { terminated = true; break; }
       }
+      if (!terminated) throw new Error("UPS span has no terminator.");
     }
 
     const tgtCrc = readU32LE(patch, patch.length - 8);
@@ -205,6 +213,13 @@
 
   let romFile = null;
   let blobUrl = null;
+  let generation = 0;
+
+  async function sha256(bytes) {
+    if (!window.crypto || !window.crypto.subtle) throw new Error("Open this patcher on localhost or HTTPS to verify the ROM.");
+    const hash = new Uint8Array(await window.crypto.subtle.digest("SHA-256", bytes));
+    return Array.from(hash, x => x.toString(16).padStart(2, "0")).join("");
+  }
 
   function setStatus(msg, kind) {
     statusEl.textContent = msg;
@@ -213,6 +228,7 @@
 
   function resetOutput() {
     downloadEl.hidden = true;
+    downloadEl.removeAttribute("href");
     fp.hidden = true;
     if (blobUrl) {
       URL.revokeObjectURL(blobUrl);
@@ -221,6 +237,7 @@
   }
 
   function chooseFile(file) {
+    generation += 1;
     romFile = file || null;
     resetOutput();
     if (romFile) {
@@ -257,25 +274,39 @@
 
   applyBtn.addEventListener("click", async function () {
     if (!romFile) return;
+    const selected = romFile;
+    const token = ++generation;
     applyBtn.disabled = true;
     resetOutput();
     try {
       setStatus("Reading ROM…", "working");
-      const source = new Uint8Array(await romFile.arrayBuffer());
+      if (selected.size > 64 * 1024 * 1024) throw new Error("Unsupported ROM size.");
+      const source = new Uint8Array(await selected.arrayBuffer());
+      if (token !== generation) return;
+      if (cfg.baseSha256 && await sha256(source) !== cfg.baseSha256) throw new Error("Choose the exact input ROM for this target. Different or already patched ROMs are not accepted here.");
+      if (token !== generation) return;
 
       setStatus("Fetching patch…", "working");
       const resp = await fetch(cfg.patchUrl);
+      if (token !== generation) return;
       if (!resp.ok) {
         throw new Error(
-          "Couldn't load the patch from the server (SLink-RR.ups). It may not be built."
+          "Couldn't load the verified patch from the server. It may need to be rebuilt."
         );
       }
       const patch = new Uint8Array(await resp.arrayBuffer());
+      if (token !== generation) return;
+      if (cfg.patchSha256 && await sha256(patch) !== cfg.patchSha256) throw new Error("The downloaded patch differs from its verified fingerprint.");
+      if (token !== generation) return;
 
       setStatus("Applying patch…", "working");
       const inMd5 = md5(source);
       const out = upsApply(source, patch);
       const outMd5 = md5(out);
+      if (cfg.patchedSha256 && await sha256(out) !== cfg.patchedSha256) throw new Error("Patched ROM failed final fingerprint verification.");
+      const expected = (cfg.patchedMd5 || "").toLowerCase();
+      if (expected && outMd5 !== expected) throw new Error("Patched ROM failed final fingerprint verification.");
+      if (token !== generation) return;
 
       blobUrl = URL.createObjectURL(
         new Blob([out], { type: "application/octet-stream" })
@@ -291,23 +322,11 @@
       fpOut.textContent = outMd5;
       fp.hidden = false;
 
-      const expected = (cfg.patchedMd5 || "").toLowerCase();
-      if (expected && outMd5 === expected) {
-        setStatus(
-          "Done — patched ROM matches the expected md5. Click download.",
-          "ok"
-        );
-      } else {
-        setStatus(
-          "Patched, but the output md5 didn't match the expected fingerprint. " +
-            "Use the result with caution.",
-          "warn"
-        );
-      }
+      setStatus("Done — the patched ROM matches its verified fingerprint. Click download.", "ok");
     } catch (err) {
-      setStatus(err && err.message ? err.message : String(err), "error");
+      if (token === generation) setStatus(err && err.message ? err.message : String(err), "error");
     } finally {
-      applyBtn.disabled = false;
+      if (token === generation) applyBtn.disabled = !romFile;
     }
   });
 })();

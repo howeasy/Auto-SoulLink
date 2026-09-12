@@ -18,6 +18,7 @@ Run:
 import argparse
 import asyncio
 import contextlib
+import copy
 import html
 import json
 import logging
@@ -32,12 +33,11 @@ from collections import deque
 from datetime import datetime
 from pathlib import Path
 
-from server import gen1_admission
-from server import runtime_boundary
-from server.save_identity import SaveIdentity
+from server import gen1_admission, runtime_boundary
 from server.http_safety import csrf_protection, theme_cache
 from server.lua_literals import lua_comment, lua_string
 from server.overlay_catalog import build_index_context as _build_stream_index_context
+from server.save_identity import SaveIdentity
 
 try:
     from aiohttp import web as aiohttp_web
@@ -1531,7 +1531,15 @@ class SLinkServer:
                  type_lock: bool = False, explode_mode: bool = False,
                  rival_team_swap: bool = False, overworld_presence: bool = False,
                  native_messages: bool = False, native_sounds: bool = False,
-                 battle_calc: bool = True, pc_trade_npc: bool = True):
+                 battle_calc: bool = True, pc_trade_npc: bool = True, gen1_runtime=None):
+        if gen1_runtime is not None:
+            from server.gen1_runtime import Gen1Runtime
+            if not isinstance(gen1_runtime, Gen1Runtime):
+                raise TypeError("configured Gen1 runtime required")
+            if data_dir is not None and Path(data_dir).resolve() != Path(gen1_runtime.data_dir).resolve():
+                raise ValueError("Gen1 runtime belongs to another run directory")
+            data_dir, run_id = gen1_runtime.data_dir, run_id or gen1_runtime.journal.run_id
+        self.gen1_runtime = gen1_runtime
         self._data_dir = data_dir  # None → use global DATA_DIR (backward compat)
         self._run_id   = run_id
         self._run_name = run_name
@@ -1540,7 +1548,7 @@ class SLinkServer:
         self._last_seq: dict[str, int] = {}
         self._connection_owners: dict[str, object] = {}
         self._gen1_sessions = gen1_admission.SessionGate()
-        self.state = SoulLinkState.load(data_dir=data_dir,
+        self.state = (gen1_runtime.rule_state() if gen1_runtime is not None else SoulLinkState.load(data_dir=data_dir,
                                         species_lock=species_lock,
                                         gender_lock=gender_lock,
                                         type_lock=type_lock,
@@ -1550,7 +1558,7 @@ class SLinkServer:
                                         native_messages=native_messages,
                                         native_sounds=native_sounds,
                                         battle_calc=battle_calc,
-                                        pc_trade_npc=pc_trade_npc)
+                                        pc_trade_npc=pc_trade_npc))
         # Game adapter — shared with state machine for consistent behavior.
         # Provides both rules and presentation methods.
         self.adapter = self.state.adapter
@@ -1570,7 +1578,7 @@ class SLinkServer:
         # A run with no contract has nothing to check and admits everyone, which is every
         # vanilla run and the entire existing test suite.
         self._rom_contract_mtime: float | None = None
-        self._rom_contract = self._load_rom_contract()
+        self._rom_contract = copy.deepcopy(gen1_runtime.contract) if gen1_runtime is not None else self._load_rom_contract()
         self.admission: dict[str, dict] = {}
         # Track live connections: player_id → {rom_type, last_event, connected}
         self.connected_players: dict[str, dict] = {}
@@ -1626,6 +1634,25 @@ class SLinkServer:
         # OBS WebSocket integration
         _obs_cfg = obs_config_path(data_dir)
         self.obs = OBSController(_obs_cfg)
+        if gen1_runtime is not None:
+            self._publish_gen1_state(gen1_runtime.rule_state(), gen1_runtime.status())
+
+    def _publish_gen1_state(self, state, status):
+        """Read committed runtime facts into presentation; never dispatch an event."""
+        from server.adapters import get_adapter
+        self.state, self.adapter = state, state.adapter
+        runtime = self.gen1_runtime
+        for player in ("a", "b"):
+            session = runtime.gate.sessions.get(player)
+            self.connected_players[player] = copy.deepcopy(status["connections"][player])
+            self.admission[player] = {"state": "admitted" if session else "contract_pending",
+                "reason": "verified metadata; paired control is separate" if session else status["recovery"]["reason"]}
+            if session:
+                profile = session.metadata["gen1_metadata"]["cartridge"]
+                self.connected_players[player].update(copy.deepcopy(profile))
+                self._player_adapters[player] = get_adapter("gen1_rby", rom_type=profile["variant"])
+                self.admission[player].update(admission_epoch=runtime.gate.epoch, session_id=session.session_id)
+        self._notify_sse()
 
     def _get_sprite_html(self, species_id: int, form: int = 0) -> str:
         """Get sprite HTML by delegating to the game adapter.
@@ -1721,6 +1748,8 @@ class SLinkServer:
 
     def _refresh_rom_contract(self, *, force=False) -> None:
         """Pick up a contract the Manager wrote after this server started."""
+        if getattr(self, "gen1_runtime", None) is not None:
+            return  # The configured journal owns an immutable verified contract.
         base = self._data_dir or DATA_DIR
         path = os.path.join(base, "rom_contract.json")
         try:
@@ -2483,6 +2512,9 @@ class SLinkServer:
             return gen1_admission.nack(msg, "dispatcher failure requires recovery")
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        if getattr(self, "gen1_runtime", None) is not None:
+            await self.gen1_runtime.handle_client(reader, writer, on_change=self._publish_gen1_state)
+            return
         peer = writer.get_extra_info("peername")
         log.info(f"Client connected: {peer}")
         player_id_for_conn: str | None = None
@@ -2521,6 +2553,13 @@ class SLinkServer:
                 except gen1_admission.AdmissionError as e:
                     log.warning(f"Bad JSON from {peer}: {e}")
                     await self._respond_packet(writer, gen1_admission.nack({}, "invalid JSON frame"))
+                    continue
+
+                if msg.get("protocol") == "slink-gen1-durable-v1":
+                    from server.protocol import nack
+                    response = nack(msg, "Gen1 durable runtime is not configured", pending=True, protocol="slink-gen1-durable-v1")
+                    response["reason_code"] = "gen1_durable_runtime_unconfigured"
+                    await self._respond_packet(writer, response)
                     continue
 
                 player_id = msg.get("player", "")
@@ -2725,7 +2764,7 @@ class SLinkServer:
 
         def half(mon, owner, label):
             det = self.party_details.get(owner, {}).get(mon.key) or {}
-            cached = self._mon_cache.get(mon.key, {})
+            cached = self._mon_cache.get(self.state.cache_key(owner, mon.key), {})
             species = det.get("species_id") or cached.get("species_id") or mon.species
             name = (det.get("nickname") or cached.get("nickname")
                     or (self.adapter.species_name(species) if species else "")
@@ -2831,35 +2870,39 @@ class SLinkServer:
         name = (mon.nickname or "").strip() or self.adapter.species_name(mon.species) or "?"
         return name[:8]
 
-    def _cache_mon_info(self, key: str, detail: dict):
+    def _cache_mon_info(self, key: str, detail: dict, player_id: str | None = None):
         """Update the persistent per-monKey display cache from a detail dict.
 
         Also backfills level=0 and stale nicknames in any LinkEntry MonInfo
         for this key, so data gets corrected once the mon connects with
         live party data.
         """
-        entry = self._mon_cache.get(key, {})
+        cache_key = self.state.cache_key(player_id, key)
+        entry = self._mon_cache.get(cache_key, {})
         for field in ("species_id", "nickname", "level", "gender", "held_item_id"):
             val = detail.get(field)
             if val:  # only overwrite with non-empty / non-zero
                 entry[field] = val
-        self._mon_cache[key] = entry
+        self._mon_cache[cache_key] = entry
         # Backfill mon_stats for PC box level display (covers shiny/bonus mons)
         lv = detail.get("level", 0)
         maxhp = detail.get("maxHP", 0)
-        if lv and key not in self.state.mon_stats:
-            self.state.mon_stats[key] = {"level": lv}
+        stats = self.state.stats_for(player_id, key)
+        if lv and not stats:
+            stats = {"level": lv}
             if maxhp:
-                self.state.mon_stats[key]["maxHP"] = maxhp
-        elif lv and not self.state.mon_stats.get(key, {}).get("level"):
-            self.state.mon_stats[key]["level"] = lv
+                stats["maxHP"] = maxhp
+            self.state.cache_stats(player_id, key, stats)
+        elif lv and not stats.get("level"):
+            self.state.cache_stats(player_id, key, {**stats, "level": lv})
         # Backfill level and nickname into link entries
         nick = detail.get("nickname", "")
         species_id = detail.get("species_id", 0)
-        if (lv or nick or species_id) and self.state._key_index.get(key):
-            link_entry = self.state._key_index[key]
+        if (lv or nick or species_id) and self.state.find_link(player_id, key):
+            link_entry = self.state.find_link(player_id, key)
             dirty = False
-            for mi in (link_entry.a, link_entry.b):
+            halves = (getattr(link_entry, player_id),) if self.state.player_scoped_keys else (link_entry.a, link_entry.b)
+            for mi in halves:
                 if mi and mi.key == key:
                     if lv and not mi.level:
                         mi.level = lv
@@ -2879,15 +2922,16 @@ class SLinkServer:
         detail = self.party_details.get(player_id, {}).get(key, {})
         if detail.get("nickname"):
             return detail["nickname"]
-        cached = self._mon_cache.get(key, {})
+        cached = self._mon_cache.get(self.state.cache_key(player_id, key), {})
         if cached.get("nickname"):
             return cached["nickname"]
         species_id = detail.get("species_id", 0) or cached.get("species_id", 0)
         if species_id:
             return self.adapter.species_name(species_id)
-        link_entry = self.state._key_index.get(key)
+        link_entry = self.state.find_link(player_id, key)
         if link_entry:
-            for mon in (link_entry.a, link_entry.b):
+            halves = (getattr(link_entry, player_id),) if self.state.player_scoped_keys else (link_entry.a, link_entry.b)
+            for mon in halves:
                 if mon and mon.key == key:
                     return mon.nickname or self.adapter.species_name(mon.species) or key[:8]
         return key[:8]
@@ -2952,6 +2996,8 @@ class SLinkServer:
         }
 
     def _dispatch(self, player_id: str, msg: dict, *, _gen1_session=None) -> list:
+        if getattr(self, "gen1_runtime", None) is not None:
+            raise RuntimeError("Gen1 durable events must use the configured journal runtime")
         # The Python session object is never deserialized from a client frame.
         if (msg.get("protocol") == gen1_admission.PROTOCOL and
                 (_gen1_session is None or self._gen1_sessions.sessions.get(player_id) is not _gen1_session)):
@@ -2962,7 +3008,7 @@ class SLinkServer:
         _pre_battle = self.battle_state[player_id]["in_battle"]
         _pre_memorial_status = None
         if event == "memorialize_done":
-            _pre_memorial_link = self.state._key_index.get(msg.get("key", ""))
+            _pre_memorial_link = self.state.find_link(player_id, msg.get("key", ""))
             if _pre_memorial_link:
                 _pre_memorial_status = getattr(_pre_memorial_link.status, "value", _pre_memorial_link.status)
 
@@ -3057,12 +3103,12 @@ class SLinkServer:
                 for bentry in msg["pc_boxes"]:
                     bk = bentry.get("key", "")
                     if bk:
-                        self._cache_mon_info(bk, bentry)
+                        self._cache_mon_info(bk, bentry, player_id)
                 self._check_memorial_box_contamination(player_id, msg["pc_boxes"])
             # Seed party_details from snapshot
             self.party_details[player_id] = self._party_snapshot(player_id, msg.get("party", []))
             for k, det in self.party_details[player_id].items():
-                self._cache_mon_info(k, det)
+                self._cache_mon_info(k, det, player_id)
             # Seed battle state from hello (so page reflects battle immediately)
             if "in_battle" in msg:
                 self.battle_state[player_id]["in_battle"] = bool(msg["in_battle"])
@@ -3104,7 +3150,7 @@ class SLinkServer:
                     "gender":       self.adapter.gender_from_key(key, sid),
                 }
                 self.party_details[player_id][key] = detail
-                self._cache_mon_info(key, detail)
+                self._cache_mon_info(key, detail, player_id)
         elif event == "faint":
             key = msg.get("key", "")
             log.info(f"[{player_id}] faint key={key} area='{msg.get('area_id','')}'")
@@ -3152,7 +3198,7 @@ class SLinkServer:
             log.info(f"[{player_id}] box_to_party key={key}")
             if key and key not in self.party_details[player_id]:
                 # Populate from persistent cache so sprites don't go blank until next tick.
-                cached = self._mon_cache.get(key, {})
+                cached = self._mon_cache.get(self.state.cache_key(player_id, key), {})
                 self.party_details[player_id][key] = {
                     "level":        cached.get("level", 0),
                     "hp":           1,
@@ -3194,7 +3240,7 @@ class SLinkServer:
                 for bentry in msg["pc_boxes"]:
                     bk = bentry.get("key", "")
                     if bk:
-                        self._cache_mon_info(bk, bentry)
+                        self._cache_mon_info(bk, bentry, player_id)
                 self._check_memorial_box_contamination(player_id, msg["pc_boxes"])
             if "in_battle" in msg:
                 was_in_battle = self.battle_state[player_id]["in_battle"]
@@ -3294,7 +3340,7 @@ class SLinkServer:
         if "party" in msg and event == "tick":
             self.party_details[player_id] = self._party_snapshot(player_id, msg["party"])
             for k, det in self.party_details[player_id].items():
-                self._cache_mon_info(k, det)
+                self._cache_mon_info(k, det, player_id)
 
         cmds = self.state.handle_event(player_id, msg)
 
@@ -3318,7 +3364,7 @@ class SLinkServer:
                 _sv = _new_state.value if hasattr(_new_state, "value") else str(_new_state)
                 if _sv == "linked":
                     _cap_key = msg.get("key", "")
-                    _link = self.state._key_index.get(_cap_key) if _cap_key else None
+                    _link = self.state.find_link(player_id, _cap_key) if _cap_key else None
                     if _link:
                         _ma = _link.a if player_id == "a" else _link.b
                         _mb = _link.b if player_id == "a" else _link.a
@@ -3336,13 +3382,13 @@ class SLinkServer:
 
         if event == "faint" and msg.get("key"):
             _faint_key = msg["key"]
-            _link = self.state._key_index.get(_faint_key)
+            _link = self.state.find_link(player_id, _faint_key)
             if _link:
                 _p_mon = _link.b if player_id == "a" else _link.a
                 _death = (self.state.queued_death_cmd(_partner, _p_mon.key)
                           if _p_mon else None)
                 if _death:
-                    _cached = self._mon_cache.get(_p_mon.key, {})
+                    _cached = self._mon_cache.get(self.state.cache_key(_partner, _p_mon.key), {})
                     _p_nick = (
                         _cached.get("nickname") or
                         self.adapter.species_name(_cached.get("species_id", 0)) or
@@ -3376,7 +3422,7 @@ class SLinkServer:
 
         if event == "memorialize_done":
             _mem_key = msg.get("key", "")
-            _link = self.state._key_index.get(_mem_key) if _mem_key else None
+            _link = self.state.find_link(player_id, _mem_key) if _mem_key else None
             _post_status = getattr(getattr(_link, "status", None), "value", getattr(_link, "status", None))
             if _link and _post_status == "memorial" and _pre_memorial_status != "memorial":
                 _a_name = (_link.a.nickname or self.adapter.species_name(_link.a.species)) if _link.a else "?"
@@ -3450,7 +3496,7 @@ class SLinkServer:
             # link_death — partner receives a death command (force_faint or force_explode)
             _faint_key = msg.get("key", "")
             if _faint_key:
-                _link = self.state._key_index.get(_faint_key)
+                _link = self.state.find_link(player_id, _faint_key)
                 if _link:
                     _p_mon = _link.b if player_id == "a" else _link.a
                     if _p_mon and self.state.queued_death_cmd(_partner, _p_mon.key):
@@ -3946,7 +3992,7 @@ class SLinkServer:
             is_active = det.get("active", False)
             active_pfx = ('<svg class="inline-ico" aria-hidden="true">'
                           '<use href="#i-swords"/></svg> ' if is_active else '')
-            entry_x = s._key_index.get(key)
+            entry_x = s.find_link(side, key)
             mi = (entry_x.a if side == "a" else entry_x.b) if entry_x else None
             is_shiny = key in s.bonus_keys.get(side, set()) or bool(mi and mi.is_shiny)
             name_html = mon_label(key, nick, sid, gender, shiny=is_shiny)
@@ -3998,7 +4044,7 @@ class SLinkServer:
                 + '</div>'
             )
 
-        def _resolve_box_level(bentry: dict) -> int:
+        def _resolve_box_level(bentry: dict, owner: str) -> int:
             """Box snapshots don't always carry level — walk the same fallback
             chain as the split-view box table (mon_stats → link entry →
             party_details on either client → _mon_cache). Returns 0 if none
@@ -4008,19 +4054,19 @@ class SLinkServer:
             k = bentry.get("key", "")
             if not k:
                 return 0
-            cs = s.mon_stats.get(k)
+            cs = s.stats_for(owner, k)
             if cs and cs.get("level"):
                 return cs["level"]
-            ent = s._key_index.get(k)
+            ent = s.find_link(owner, k)
             if ent:
-                mi = ent.a if ent.a and ent.a.key == k else ent.b
+                mi = getattr(ent, owner)
                 if mi and mi.level:
                     return mi.level
-            for _pid2 in ("a", "b"):
+            for _pid2 in ((owner,) if s.player_scoped_keys else ("a", "b")):
                 pd = self.party_details.get(_pid2, {}).get(k)
                 if pd and pd.get("level"):
                     return pd["level"]
-            mc = self._mon_cache.get(k)
+            mc = self._mon_cache.get(s.cache_key(owner, k))
             if mc and mc.get("level"):
                 return mc["level"]
             return 0
@@ -4367,7 +4413,7 @@ class SLinkServer:
                     row_cls     = "fainted" if hp == 0 else ("active-mon" if is_active else "")
 
                     # Resolve partner display + link status
-                    entry = s._key_index.get(key)
+                    entry = s.find_link(pid, key)
                     if entry:
                         p_mon = entry.b if pid == "a" else entry.a
                         if p_mon:
@@ -4499,9 +4545,9 @@ class SLinkServer:
                 for bentry in boxes:
                     bx_key = bentry.get("key", "")
                     bx_det = dict(bentry)
-                    bx_det["level"] = _resolve_box_level(bentry)
+                    bx_det["level"] = _resolve_box_level(bentry, pid)
 
-                    bx_entry = s._key_index.get(bx_key) if bx_key else None
+                    bx_entry = s.find_link(pid, bx_key) if bx_key else None
                     if bx_entry:
                         bx_p_mon = bx_entry.b if pid == "a" else bx_entry.a
                         if bx_p_mon:
@@ -4698,7 +4744,7 @@ class SLinkServer:
                 _a_loc = _lp_hp_cell(_ad)
             elif a_bx:
                 _ad = dict(a_bx)
-                _ad["level"] = _resolve_box_level(a_bx)
+                _ad["level"] = _resolve_box_level(a_bx, "a")
                 _a_mon = _lp_mon_cell(_ad, _lnk, "a", _ak, is_box=True, key_prefix="lpbx:")
                 _a_loc = _lp_loc_cell(a_bx)
             else:
@@ -4712,7 +4758,7 @@ class SLinkServer:
                 _b_loc = _lp_hp_cell(_bd)
             elif b_bx:
                 _bd = dict(b_bx)
-                _bd["level"] = _resolve_box_level(b_bx)
+                _bd["level"] = _resolve_box_level(b_bx, "b")
                 _b_mon = _lp_mon_cell(_bd, _lnk, "b", _bk, mirror_b=True, is_box=True, key_prefix="lpbx:")
                 _b_loc = _lp_loc_cell(b_bx)
             else:
@@ -5439,7 +5485,7 @@ class SLinkServer:
                 mi = lnk.a if pid == "a" else lnk.b
                 if not mi or not mi.key or mi.key in party_key_set:
                     continue
-                stats = s.mon_stats.get(mi.key, {})
+                stats = s.stats_for(pid, mi.key, {})
                 detail = {
                     "species_id":   mi.species,
                     "level":        mi.level or stats.get("level", 0),
@@ -6422,6 +6468,23 @@ class SLinkServer:
         player = request.match_info["player"]
         if player not in ("a", "b"):
             return aiohttp_web.Response(text="player must be 'a' or 'b'", status=400)
+        if self.gen1_runtime is not None:
+            from urllib.parse import urlsplit
+
+            from server.gen1_launcher import launcher
+            host = urlsplit("http://"+(request.host or "127.0.0.1")).hostname or "127.0.0.1"
+            try:
+                content = launcher(self.gen1_runtime, player, host, self._tcp_port,
+                    name=self._run_name or self._run_id or "SLink")
+            except (ValueError, OSError) as error:
+                return aiohttp_web.Response(text=str(error), status=409)
+            if getattr(request,'query',{}).get('bundle')=='1':
+                from server.bizhawk_launch import bundle
+                return aiohttp_web.Response(body=bundle(run_id=self.gen1_runtime.journal.run_id,player=player,profile='gambatte',
+                    rom_sha1=self.gen1_runtime.contract['players'][player]['final_rom_sha1'],launcher=content),
+                    content_type='application/zip',headers={'Content-Disposition':f'attachment; filename="slink_{player}_launch.zip"'})
+            return aiohttp_web.Response(text=content, content_type="application/octet-stream",
+                headers={"Content-Disposition": f'attachment; filename="slink_{self.gen1_runtime.journal.run_id}_{player}_held.lua"'})
         host_header = request.host or "127.0.0.1"
         connect_host = host_header.split(":")[0] or "127.0.0.1"
         run_name = self._run_name or self._run_id or "SLink"
@@ -8262,7 +8325,7 @@ class SLinkServer:
                                 f"[{player_id}] Quarantined mon {key[:8]} found in memorial box! "
                                 f"Queueing party_mon + box_mon to relocate."
                             )
-                            stats = s.mon_stats.get(key, {})
+                            stats = s.stats_for(player_id, key, {})
                             s.queued_commands[player_id].append({"cmd": "party_mon", "key": key, "stats": stats})
                             s.queued_commands[player_id].append({"cmd": "box_mon", "key": key})
                             break
@@ -8314,11 +8377,11 @@ class SLinkServer:
         if mi.level:
             return mi.level
         # Try mon_stats cache (set when mon was deposited to box)
-        cached = self.state.mon_stats.get(mi.key)
+        cached = self.state.stats_for(player_id, mi.key)
         if cached and cached.get("level"):
             return cached["level"]
-        # Try live party_details from either player
-        for pid in ("a", "b"):
+        # Gen1 raw keys are scoped; another player's level is not evidence.
+        for pid in ((player_id,) if self.state.player_scoped_keys else ("a", "b")):
             det = self.party_details.get(pid, {}).get(mi.key)
             if det and det.get("level"):
                 return det["level"]
@@ -8346,17 +8409,17 @@ class SLinkServer:
                     return {"nickname": mon.nickname, "species_id": mon.species, "level": mon.level}
         # Enrich with level from mon_stats cache or existing link entry
         if result and not result.get("level"):
-            cached = self.state.mon_stats.get(key)
+            cached = self.state.stats_for(player_id, key)
             if cached and cached.get("level"):
                 result["level"] = cached["level"]
             else:
-                link_entry = self.state._key_index.get(key)
+                link_entry = self.state.find_link(player_id, key)
                 if link_entry:
-                    mi = link_entry.a if link_entry.a and link_entry.a.key == key else link_entry.b
+                    mi = getattr(link_entry, player_id)
                     if mi and mi.level:
                         result["level"] = mi.level
-        # Also check the OTHER player's party_details (for solo-testing with same OT)
-        if result and not result.get("level"):
+        # Preserve the older cross-save fallback only for legacy key formats.
+        if result and not result.get("level") and not self.state.player_scoped_keys:
             other = "b" if player_id == "a" else "a"
             other_det = self.party_details.get(other, {}).get(key)
             if other_det and other_det.get("level"):
@@ -8557,7 +8620,13 @@ def build_app(srv):
     Extracted from main() so tests can construct the SAME app and walk the SAME route
     table — a test that re-declared the routes would drift the moment one was added here.
     """
-    app = aiohttp_web.Application(middlewares=[csrf_protection, theme_cache])
+    @aiohttp_web.middleware
+    async def gen1_runtime_controls(request, handler):
+        if getattr(srv, "gen1_runtime", None) is not None and request.method not in {"GET", "HEAD", "OPTIONS"}:
+            raise aiohttp_web.HTTPConflict(text="Gen1 durable UI command binding is still pending")
+        return await handler(request)
+
+    app = aiohttp_web.Application(middlewares=[csrf_protection, theme_cache, gen1_runtime_controls])
     setup_templating(app)
     app.router.add_get("/",            srv.handle_status_html)
     app.router.add_get("/memorial",    srv.handle_memorial_html)
@@ -8658,7 +8727,9 @@ def build_app(srv):
     app.router.add_get("/api/calc/mons",  srv.handle_calc_mons)
 
     from server.patcher import setup_patcher_routes
-    setup_patcher_routes(app, srv._build_sidebar_html)
+    from server.gen1_patcher_targets import prepared_targets
+    setup_patcher_routes(app, srv._build_sidebar_html,
+        prepared_targets=lambda request:prepared_targets(getattr(srv.gen1_runtime,"prepared_cartridges",None)))
     return app
 
 
@@ -8671,6 +8742,10 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                battle_calc: bool = True, pc_trade_npc: bool = True,
                manager_port: int = 0, verbose: bool = False):
     _configure_logging(data_dir, verbose)
+    from server.gen1_run_config import FILENAME as GEN1_RUN_CONFIG, open_runtime
+    if reset and data_dir and Path(data_dir, GEN1_RUN_CONFIG).exists():
+        raise SystemExit("A prepared durable run cannot use legacy --reset; its journal requires an explicit recovery operation.")
+    configured_runtime = open_runtime(data_dir) if data_dir else None
     if reset:
         links_path = os.path.join(data_dir, "links.json") if data_dir else LINKS_PATH
         if os.path.exists(links_path):
@@ -8687,7 +8762,7 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                       native_messages=native_messages,
                       native_sounds=native_sounds,
                       battle_calc=battle_calc,
-                      pc_trade_npc=pc_trade_npc)
+                      pc_trade_npc=pc_trade_npc, gen1_runtime=configured_runtime)
 
     # TCP game server.
     # limit=4 MiB lifts asyncio's default 64 KiB readline buffer so Gen 5's

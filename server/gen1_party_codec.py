@@ -103,6 +103,7 @@ class PartyCodec:
         self.variant = variant
         self.profile = data["titles"][variant]
         self.names = frozenset(data["name_bytes"])
+        self.npc_trade_ot = bytes(data["npc_trade_ot"])
         self.curves = data["growth_rates"]
 
     def experience_for_level(self, growth: int, level: int) -> int:
@@ -134,6 +135,16 @@ class PartyCodec:
         if any(value not in self.names for value in raw[:terminator]):
             raise PartyCodecError(f"{label} contains an invalid name glyph or text control")
         # Bytes following the terminator are opaque cartridge padding and are preserved.
+
+    def _ot_name(self, raw: bytes, label: str) -> None:
+        """OT-only rule: the engine's own in-game-trade OT string is legal verbatim.
+
+        InGameTrade_CopyDataToReceivedMon copies all 11 bytes of `dname "<TRAINER>"`
+        ($5D then ten $50) onto every NPC-traded mon. Only that exact 11-byte field is
+        exempt from the name alphabet; nicknames and player names stay strict.
+        """
+        if raw != self.npc_trade_ot:
+            self._name(raw, label)
 
     def validate_blob(self, raw, *, expected_key: str | None = None) -> PartyMon:
         data = _bytes(raw)
@@ -178,7 +189,7 @@ class PartyCodec:
             ups.append(count)
         if not moves[0]:
             raise PartyCodecError("Pokemon must have at least one move")
-        self._name(data[44:55], "OT name")
+        self._ot_name(data[44:55], "OT name")
         self._name(data[55:66], "nickname")
         return PartyMon(data, key, species, facts["dex"], level, hp, stats[0], status,
                         moves, tuple(pp), tuple(ups), data[3], (data[5], data[6]), data[7],
@@ -203,15 +214,19 @@ class PartyCodec:
 
     def prepare_exchange(self, blobs, selected_slot: int, incoming, *, expected_key: str,
                          incoming_key: str, evolved_species: int, boxed_keys=None) -> tuple[tuple[bytes, ...], str]:
-        """Validate representation/order; the coordinator must also verify epochs,
-        offer blob digests and the recipient ROM's exact evolution-method outcome.
+        """Validate the recipient's representation/order and local collision scope.
+
+        The coordinator separately proves distinct admitted participants/physical
+        instances, logical link membership, epochs, both blob digests and the
+        recipient ROM's exact evolution outcome. Equal cross-player raw keys do
+        not identify the same physical Pokemon. Removing the selected slot may
+        therefore free that raw key for the incoming linked member.
         """
         if boxed_keys is None:
             raise PartyCodecError("verified boxed inventory is required before trade preparation")
-        if expected_key == incoming_key:
-            raise PartyCodecError("outgoing and incoming keys collide")
         boxed_keys = _key_set(boxed_keys)
-        _key_set((expected_key, incoming_key))
+        _key_set((expected_key,))
+        _key_set((incoming_key,))
         party = self.validate_party(blobs, boxed_keys=boxed_keys)
         _integer(selected_slot, 0, len(party) - 1, "selected slot")
         outgoing = party[selected_slot]

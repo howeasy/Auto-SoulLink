@@ -8,7 +8,7 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 |-----|-------|-------------|--------|
 | 3 | FireRed, LeafGreen | Vanilla, randomized, Archipelago, Radical Red 4.1 (CFRU) | **✅ Stable** |
 | 3 | Emerald | Vanilla | ⚠️ Experimental — RAM profile is complete, but the area/location name tables are not generated, so area resolution falls back to FireRed and is wrong |
-| 1 | Red, Blue, Yellow | US English | ⚠️ Partially verified — mechanisms proven on real cartridges, no full playthrough |
+| 1 | Red, Blue, Yellow | US English | ⚠️ RC integration in progress — see the [current RBY matrix](docs/gen1_reference/RC_STATUS_AND_ESTIMATE.md); full playthrough/recovery qualification remains open |
 | 2 | Crystal | GBC | ⚠️ Partially verified — Crystal only, mechanisms proven on a real cartridge, no full playthrough |
 | 4 | HeartGold, SoulSilver, Platinum | Vanilla, Renegade Platinum | ⚠️ Experimental — never run against a real game |
 | 5 | Black, White, Black 2, White 2 | US | ⚠️ Experimental — never run against a real game |

@@ -1,0 +1,82 @@
+"""Pin the ordinary party evolution attempt, complete-publication and cancel PCs."""
+import argparse
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+from gen_gen1_acquisition_sources import TITLES, flat, symbols
+from gen_gen1_grant_sites import lua, site, word
+from verify_canonical_sources import verify
+
+ROOT=Path(__file__).resolve().parents[1]
+sys.path.insert(0,str(ROOT))
+from server.gen1_trade_result import TradeResultRules  # noqa: E402
+OUTPUT=ROOT/'data/games/gen1_rby/evolution_sites.json'
+LUA=OUTPUT.with_name('gen1_evolution_sites.lua')
+NAMES=('hLoadedROMBank','wPartyDataStart','wBoxDataStart','wPlayerName','wPlayerID','wCurMap',
+       'wIsInBattle','wLinkState','wWhichPokemon','wEvoOldSpecies','wCurItem','wForceEvolution',
+       'wCurrentBoxNum','wPokedexOwned','wPokedexSeen','wMonDataLocation')
+
+
+def build():
+    assert verify(rom_dir=ROOT)['status']=='pass','canonical evolution sources must verify'
+    lock=json.loads((ROOT/'data/pret_sources.lock.json').read_text())
+    result={'schema':'rby-evolution-sites-v1','titles':{}}
+    for variant,(source,target) in TITLES.items():
+        repo=ROOT/'.cache/pret'/source;syms=symbols(repo/(target+'.sym'))
+        rom=(ROOT/lock['clean_roms'][target]['filename']).read_bytes()
+        text=(repo/'engine/pokemon/evos_moves.asm').read_text()
+        assert 'ld hl, wPartyCount' in text and 'ld hl, wWhichPokemon\n\tinc [hl]' in text
+        assert 'xor a ; PLAYER_PARTY_DATA\n\tld [wMonDataLocation], a\n\tcall LoadMonData' in text
+        assert '\tcallfar EvolveMon\n\tjp c, CancelledEvolution' in text
+        assert '\tpop de\n\tpop hl\n\tld a, [wLoadedMonSpecies]\n\tld [hl], a\n\tpush hl' in text
+        serial=(repo/'constants/serial_constants.asm').read_text()
+        assert 'LINK_STATE_TRADING       EQU $32' in serial
+        begin=syms['Evolution_PartyMonLoop.doEvolution'];base=flat(begin)
+        assert rom[base:base+3]==b'\xea'+word(syms,'wCurEnemyLevel')
+        tail=b'\xd1\xe1\xfa'+word(syms,'wLoadedMonSpecies')+b'\x77\xe5\x6b\x62'
+        end=flat(syms['Evolution_PartyMonLoop.nextEvoEntry1'])
+        hits=[i for i in range(base,end) if rom[i:i+len(tail)]==tail]
+        assert len(hits)==1
+        published=hits[0]+7
+        cancelled=syms['CancelledEvolution'];canceloff=flat(cancelled)
+        prefix=b'\x21'+word(syms,'StoppedEvolvingText')+b'\xcd'+word(syms,'PrintText')+b'\xcd'+word(syms,'ClearScreen')+b'\xe1'
+        assert rom[canceloff:canceloff+10]==prefix
+        movie=(repo/'engine/movie/evolution.asm').read_text()
+        assert '\tld a, [wForceEvolution]\n\tand a\n\tjr nz, .notAllowedToCancel' in movie
+        result['titles'][variant]={'source_commit':lock['sources'][source]['commit'],'clean_sha1':lock['clean_roms'][target]['sha1'],
+            'source_sha256':hashlib.sha256(text.encode()).hexdigest(),'party_only':True,'link_state_trading':0x32,
+            'addresses':{name:syms[name][1] for name in NAMES},'table':{'bank':syms['EvosMovesPointerTable'][0],'rom_offset':flat(syms['EvosMovesPointerTable'])},
+            'sites':{'begin':site(rom,'Evolution_PartyMonLoop.doEvolution',begin[0],begin[1],3),
+                'evolved':site(rom,'Evolution_PartyMonLoop.species_published',begin[0],published%0x4000+0x4000,4),
+                'cancelled':site(rom,'CancelledEvolution.after_pop',cancelled[0],cancelled[1]+10,3)}}
+        rules=TradeResultRules.from_rom(variant,rom,expected_sha1=lock['clean_roms'][target]['sha1'])
+        entries={}
+        for index in rules._records:
+            pointer=int.from_bytes(rom[flat(syms['EvosMovesPointerTable'])+(index-1)*2:flat(syms['EvosMovesPointerTable'])+index*2],'little')
+            records=[]
+            while rom[begin[0]*0x4000+pointer-0x4000]:
+                offset=begin[0]*0x4000+pointer-0x4000;method=rom[offset];size=4 if method==2 else 3
+                records.append({'pointer':pointer+size-1,'method':method,'parameter':rom[offset+1],
+                                'minimum_level':rom[offset+2] if method==2 else rom[offset+1],'target':rom[offset+size-1]})
+                pointer+=size
+            entries[str(index)]=records
+        result['titles'][variant]['rules']={'names':{str(k):v.hex().upper() for k,v in rules._names.items()},
+            'records':{str(k):{'evolutions':v[0],'moves':v[1]} for k,v in rules._records.items()},
+            'hm_moves':sorted(rules._hm_moves),'entries':entries}
+    result['sha256']=hashlib.sha256(json.dumps(result,sort_keys=True,separators=(',',':')).encode()).hexdigest()
+    return result
+
+
+def main():
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--check',action='store_true');args=parser.parse_args()
+    value=json.loads(json.dumps(build()))
+    client={**value,'titles':{variant:{k:v for k,v in profile.items() if k!='rules'} for variant,profile in value['titles'].items()}}
+    for path,text in {OUTPUT:json.dumps(value,sort_keys=True,indent=2)+'\n',LUA:'-- Generated by tools/gen_gen1_evolution_sites.py.\nreturn '+lua(client)+'\n'}.items():
+        if args.check:assert path.read_text()==text,str(path)+' differs'
+        else:path.write_text(text,encoding='utf-8',newline='\n')
+    print('Verified ordinary evolution/cancellation publication sites for R/B/Y; party only')
+
+
+if __name__=='__main__':main()

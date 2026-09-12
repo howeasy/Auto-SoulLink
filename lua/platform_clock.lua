@@ -2,6 +2,7 @@
 local M={}
 function M.new()
     local ok,watch=pcall(function()
+        luanet.load_assembly("System")
         return luanet.import_type("System.Diagnostics.Stopwatch").StartNew()
     end)
     if not ok or not watch then return nil,"monotonic host clock unavailable" end

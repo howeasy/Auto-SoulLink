@@ -57,6 +57,14 @@ local function valid_name(raw, offset)
     end
     return false
 end
+-- OT-only rule: the engine's in-game-trade OT (`dname "<TRAINER>"`: $5D then ten $50)
+-- is legal verbatim as all 11 bytes; nicknames and player names stay strict.
+local function valid_ot(raw, offset)
+    for index = 1, 11 do
+        if raw[offset + index] ~= Data.npc_trade_ot[index] then return valid_name(raw, offset) end
+    end
+    return true
+end
 
 function M.experienceForLevel(growth, level)
     if not integer(growth, 0, 5) or not integer(level, 1, 100) then return nil end
@@ -129,7 +137,7 @@ function M.validateBlob(raw, variant, expected_key)
         moves[slot], pp[slot], pp_ups[slot] = move, current, ups
     end
     if moves[1] == 0 then return nil, "Pokemon must have at least one move" end
-    if not valid_name(blob, 44) then return nil, "invalid or unterminated OT name" end
+    if not valid_ot(blob, 44) then return nil, "invalid or unterminated OT name" end
     if not valid_name(blob, 55) then return nil, "invalid or unterminated nickname" end
     local stat_exp, stats, ot_name, nickname = {}, {}, {}, {}
     for i = 1, 5 do stat_exp[i], stats[i] = be16(blob, 15 + i * 2), be16(blob, 32 + i * 2) end
@@ -184,9 +192,11 @@ function M.validateParty(blobs, variant, species_list, boxed_keys)
 end
 
 function M.prepareExchange(blobs, variant, slot, incoming, expected_key, incoming_key, evolved_species, boxed_keys)
+    -- Raw keys are recipient-scoped. The coordinator proves separate admitted
+    -- physical participants and logical link membership; this codec only checks
+    -- local occupancy after removing the selected outgoing slot.
     if not key_set(boxed_keys) then return nil, "verified boxed inventory is required before trade preparation" end
     if type(expected_key) ~= "string" or type(incoming_key) ~= "string" then return nil, "both exact selected keys are required" end
-    if expected_key == incoming_key then return nil, "outgoing and incoming keys collide" end
     local party, err = M.validateParty(blobs, variant, nil, boxed_keys)
     if not party then return nil, err end
     if not integer(slot, 0, #party - 1) then return nil, "invalid selected slot" end

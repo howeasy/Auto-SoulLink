@@ -6,8 +6,8 @@
         "pc_trade": false,
         "sfx": false
       },
-      "codec_data_sha256": "59aa570f6b1fb7769f858ca2ca2cc38d39e3e481f8aaef7291a04100d1d6db79",
-      "content_profile_hash": "510ffebccf513b58890751be2571e21b54bbfce0f63eab7b05162965af226eb8",
+      "codec_data_sha256": "1f1ecb0a810ccd0d52e589ff254e1e9d38eddbd39afa43ac2663808b423a01a8",
+      "content_profile_hash": "ec01328018cd06c4c137d72e600eaad38914a2002cea80055dfba44b016385c1",
       "final_rom_sha1": "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2",
       "party_codec": "gen1-rby-party-v1",
       "patch_version": 0,
@@ -23,8 +23,8 @@
         "pc_trade": false,
         "sfx": false
       },
-      "codec_data_sha256": "59aa570f6b1fb7769f858ca2ca2cc38d39e3e481f8aaef7291a04100d1d6db79",
-      "content_profile_hash": "36e447d983a0bc6eb59a4a81563a653dc2ad4eeba4a95ece0d18cb7bfa375073",
+      "codec_data_sha256": "1f1ecb0a810ccd0d52e589ff254e1e9d38eddbd39afa43ac2663808b423a01a8",
+      "content_profile_hash": "efa212555f27021e2ce3a31838c4ee51a1f5c38155ed85d06d8aecf4fc8d1bd6",
       "final_rom_sha1": "ea9bcae617fdf159b045185467ae58b2e4a48b9a",
       "party_codec": "gen1-rby-party-v1",
       "patch_version": 0,
@@ -40,8 +40,8 @@
         "pc_trade": false,
         "sfx": false
       },
-      "codec_data_sha256": "59aa570f6b1fb7769f858ca2ca2cc38d39e3e481f8aaef7291a04100d1d6db79",
-      "content_profile_hash": "c321f06c92b84f1c48a4efc95034091fe0415659bf403cb412d4167f4b4373eb",
+      "codec_data_sha256": "1f1ecb0a810ccd0d52e589ff254e1e9d38eddbd39afa43ac2663808b423a01a8",
+      "content_profile_hash": "659951d5b24cc1baa6a0e26d086682b7280490d5fab7cba577b88234bafd632e",
       "final_rom_sha1": "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1",
       "party_codec": "gen1-rby-party-v1",
       "patch_version": 0,

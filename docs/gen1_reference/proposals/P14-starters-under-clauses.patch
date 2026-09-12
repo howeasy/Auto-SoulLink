@@ -1,0 +1,296 @@
+diff --git a/server/adapters/gen1_rby.py b/server/adapters/gen1_rby.py
+index 9ee97c4..809470f 100644
+--- a/server/adapters/gen1_rby.py
++++ b/server/adapters/gen1_rby.py
+@@ -340,6 +340,10 @@ class Gen1Adapter(GameAdapter):
+         rom_type = kwargs.get("rom_type") or ""
+         self._enc_variant = self._ROM_TYPE_TO_ENC_VARIANT.get(
+             rom_type, self._DEFAULT_ENC_VARIANT)
++        # The partner cartridge, when the run declares it (the durable runtime always does:
++        # both variants are in the paired contract). It decides only whether the starter
++        # gift is fixed-species for this pair; None means "unknown", which applies the clauses.
++        self._peer_enc_variant = self._ROM_TYPE_TO_ENC_VARIANT.get(kwargs.get("peer_rom_type") or "")
+         # None means "nobody has told us what this cartridge holds", which is different
+         # from an empty table and must keep the shipped data in use.
+         self._rom_encounters: dict[str, dict[str, list[dict]]] | None = None
+@@ -383,13 +387,21 @@ class Gen1Adapter(GameAdapter):
+     def is_gift_area(self, area_id: str) -> bool:
+         return area_id in _GIFT_AREAS or area_id.startswith("gift_")
+ 
++    def bind_peer(self, rom_type: str) -> None:
++        """Declare the partner cartridge after construction (the restore path learns the
++        pair from the runtime contract, after the rule state has been rebuilt)."""
++        self._peer_enc_variant = self._ROM_TYPE_TO_ENC_VARIANT.get(rom_type or "")
++
+     def is_fixed_species_gift(self, area_id: str) -> bool:
+-        # DECISION FLAGGED FOR THE OWNER (proposal P13): Gen 3 applies the clauses to starters
+-        # ("intro" is not in its fixed-species set), so two identical starters under species lock
+-        # are a violation there. The Gen 1 RC exempted starters (Yellow has no choice at all, and
+-        # a violation at minute one has no retry). This keeps the RC policy explicitly, at the
+-        # adapter, until the owner picks one rule for every generation.
+-        return area_id in _FIXED_SPECIES_GIFTS or area_id == "oaks_lab"
++        # Owner decision 2026-09-11: starters are under the clauses like every other capture,
++        # which is what Gen 3 does today ("intro" is not in its fixed-species set). The one
++        # exemption is Yellow/Yellow: both scripts hand out Pikachu with no choice, so the
++        # starter is a fixed-species gift there by the engine's own definition. Every other
++        # pairing has a choice on at least one side, and Pikachu shares no family or type
++        # with the three Kanto starters, so the clauses are always satisfiable.
++        if area_id == "oaks_lab":
++            return self._enc_variant == "yellow" and self._peer_enc_variant == "yellow"
++        return area_id in _FIXED_SPECIES_GIFTS
+ 
+     def evo_family(self, species_id: int) -> int:
+         """Gen 1's own evolution families — see _GEN1_FAMILY above.
+diff --git a/server/gen1_engine_bridge.py b/server/gen1_engine_bridge.py
+index 35608e6..9070fd7 100644
+--- a/server/gen1_engine_bridge.py
++++ b/server/gen1_engine_bridge.py
+@@ -22,14 +22,33 @@ def _drain(rules):
+ 
+ def starter_grant(rules, player, area, info):
+     """A starter is a gift capture in the lab: pending for the first player, a link for the second,
+-    clauses applied unless the adapter declares the gift fixed-species. Returns the live link or None."""
++    clauses applied unless the adapter declares the gift fixed-species (Gen 1: Yellow/Yellow only).
++    Returns ``(link, rejection)``: the live link or None, and the clause rejection the engine decided
++    (``{"player", "key", "reason"}``, the rejected starter stays pending for the other player) or None."""
+     activated = dict(rules.pokeballs_obtained)
+-    rules.handle_event(player, capture_event(key=info.key, area_id=area, species_id=info.species, level=info.level,
+-                                             nickname=info.nickname or "", gift=True))
++    # The engine returns the caller's own commands and queues only the partner's.
++    own = rules.handle_event(player, capture_event(key=info.key, area_id=area, species_id=info.species,
++                                                   level=info.level, nickname=info.nickname or "", gift=True))
++    peer = "b" if player == "a" else "a"
++    rejection = None
++    for pid, commands in ((player, own or []), (peer, rules.queued_commands[peer])):
++        fainted = [c for c in commands if c.get("cmd") == "force_faint"]
++        if not fainted:
++            continue
++        if len(fainted) != 1 or rejection is not None:
++            raise JournalError("shared rule engine rejected more than one starter")
++        prompts = [c.get("text", "") for c in commands if c.get("cmd") == "gui_prompt"]
++        reason = prompts[0][4:] if prompts and prompts[0].startswith("[x] ") else "clause violation"
++        rejection = {"player": pid, "key": fainted[0]["key"], "reason": reason}
++        # The engine books the burial (force_faint and memorialize) for the rejected starter. Gen 1
++        # executes physical consequences from the rules state through the held executors (handoff
++        # item 4: a retirement with a starter_clause cause), so the obligation is released here, not
++        # left dangling, exactly as no_catch does for a retired partner catch.
++        rules.pending_memorials[pid].discard(fainted[0]["key"])
+     _drain(rules)
+     rules.pokeballs_obtained = activated
+     link = rules.find_link(player, info.key)
+-    return link if link is not None and link.status == LinkStatus.ALIVE else None
++    return (link if link is not None and link.status == LinkStatus.ALIVE else None), rejection
+ 
+ 
+ def no_catch(rules, player, area, species, level, *, activated, proved_peers, decision):
+diff --git a/server/gen1_run_config.py b/server/gen1_run_config.py
+index d604c43..463df49 100644
+--- a/server/gen1_run_config.py
++++ b/server/gen1_run_config.py
+@@ -113,7 +113,8 @@ def create_runtime(directory,contract,*,run_id=None,prepared_cartridges=None,rul
+         raise JournalError('fresh runtime creation cannot replace an existing or legacy run')
+     profiles=state_type_for(prepared_cartridges).validate_contract(contract)
+     run_id=run_id or secrets.token_hex(16)
+-    rules=SoulLinkState(data_dir=str(directory),adapter=get_adapter('gen1_rby',rom_type=profiles['a']['variant']))
++    rules=SoulLinkState(data_dir=str(directory),adapter=get_adapter('gen1_rby',rom_type=profiles['a']['variant'],
++        peer_rom_type=profiles['b']['variant']))   # the pair decides the starter clause policy
+     rules.rom_type=profiles['a']['variant']
+     rules.battle_calc=False;rules.native_messages=False;rules.overworld_presence=False
+     allowed={'species_lock','gender_lock','type_lock','explode_mode','rival_team_swap','native_sounds','pc_trade_npc'}
+diff --git a/server/gen1_runtime_state.py b/server/gen1_runtime_state.py
+index 76254e8..0e3e32f 100644
+--- a/server/gen1_runtime_state.py
++++ b/server/gen1_runtime_state.py
+@@ -70,6 +70,9 @@ class Gen1RuntimeState:
+         expected = self.validate_contract(component["contract"])
+         if self.rules.rom_type and self.rules.rom_type.lower() != expected["a"]["variant"]:
+             raise JournalError("RBY primary rule variant differs from the paired contract")
++        # from_document rebuilt the adapter from the primary variant alone; the partner
++        # cartridge decides the starter clause policy (Yellow/Yellow is a fixed-species gift).
++        self.rules.adapter.bind_peer(expected["b"]["variant"])
+         self.barrier = RecoveryBarrier.restore(component["recovery"])
+         expected_blockers = blockers(self._document)
+         actual_blockers = {
+diff --git a/server/gen1_starter_settlement.py b/server/gen1_starter_settlement.py
+index 1e0bb18..e683f37 100644
+--- a/server/gen1_starter_settlement.py
++++ b/server/gen1_starter_settlement.py
+@@ -1,6 +1,7 @@
+ """Join a verified starter source to stable inventory, then stage rules/identity."""
+ import copy
+ from dataclasses import asdict
++from datetime import UTC, datetime
+ 
+ from server.admission_context import same_admitted_context
+ from server.gen1_engine_signal_runtime import interpret
+@@ -13,15 +14,15 @@ from server.gen1_engine_bridge import starter_grant
+ from server.protocol import digest
+ from server.protocol_journal import JournalError, _identifier
+ from server.save_identity import SaveIdentity
+-from server.state import MonInfo
++from server.state import AreaStatus, MonInfo
+ 
+ COMPONENT = 'gen1-starter-settlement'
+-SCHEMA = 'rby-starter-settlement-v1'
++SCHEMA = 'rby-starter-settlement-v2'   # v2: a clause rejection is part of the settlement record
+ AREA = 'oaks_lab'
+ 
+ 
+ def initial_component():
+-    return {'schema': SCHEMA, 'sources': {}, 'settled': {}, 'link_id': None}
++    return {'schema': SCHEMA, 'sources': {}, 'settled': {}, 'link_id': None, 'rejection': None}
+ 
+ 
+ def remember_source(document, player, entry):
+@@ -121,12 +122,20 @@ def settle_ready(runtime, stage, document, *, frame_origin=None):
+             'starter_source': source['engine_record']['operation_id']})[:32]
+         witness = IdentityWitness(own_context, mon.key, mon.sha256, 1)
+         acquired = stage.identities.acquire(acquisition, acquisition, witness)
+-        peer = mon_info(PartyCodec(initials[partner]['observation']['source']['variant']).validate_blob(
+-            bytes.fromhex(other['blob_hex']))) if other else None
+-        linked = starter_grant(stage.rules, player, AREA, mon_info(mon))   # the shared engine pairs the starters
++        linked, rejected = starter_grant(stage.rules, player, AREA, mon_info(mon))   # the shared engine pairs the starters
+         cache_party(stage.rules, player, mon)
+         component['settled'][player] = {'member_id': acquired['member_id'], 'acquisition_id': acquisition,
+             'inventory_entry': copy.deepcopy(entry), 'blob_hex': mon.raw.hex().upper()}
++        if rejected is not None:
++            # The engine applied the clauses to the pair of starters and rejected one (Gen 3 does the
++            # same; Gen 1 exempts Yellow/Yellow at the adapter). The rejected starter is not usable and
++            # the lab stays pending for the other player; the physical retirement is executed from the
++            # rules state (handoff item 4), and the pair has no logical link.
++            if rejected['player'] not in component['settled'] or component['link_id'] is not None:
++                raise JournalError('starter clause rejection does not name a settled starter')
++            component['rejection'] = {'player': rejected['player'], 'key': rejected['key'],
++                'member_id': component['settled'][rejected['player']]['member_id'], 'reason': rejected['reason'],
++                'at': datetime.now(UTC).isoformat()}
+         if linked is not None:
+             setattr(linked, partner, mon_info(current_peer))
+             cache_party(stage.rules, partner, current_peer)
+@@ -144,7 +153,7 @@ def verify_state(stage):
+     document = stage.document(); component = document['components'].get(COMPONENT)
+     if component is None:
+         return
+-    if not isinstance(component, dict) or set(component) != {'schema', 'sources', 'settled', 'link_id'} or component['schema'] != SCHEMA:
++    if not isinstance(component, dict) or set(component) != {'schema', 'sources', 'settled', 'link_id', 'rejection'} or component['schema'] != SCHEMA:
+         raise JournalError('invalid starter settlement component')
+     for field in ('sources', 'settled'):
+         if not isinstance(component[field], dict) or set(component[field])-{'a', 'b'}:
+@@ -200,8 +209,26 @@ def verify_state(stage):
+         origin = link['history'][0]['members'] if link['history'] else link['members']
+         if set(origin) != {row['member_id'] for row in component['settled'].values()}:
+             raise JournalError('starter logical link origin differs')
+-    elif len(component['settled']) == 2:
++    elif len(component['settled']) == 2 and component['rejection'] is None:
+         raise JournalError('paired settled starters lack logical linkage')
++    rejection = component['rejection']
++    if rejection is not None:
++        if (not isinstance(rejection, dict) or set(rejection) != {'player', 'key', 'member_id', 'reason', 'at'}
++                or rejection['player'] not in component['settled'] or component['link_id'] is not None
++                or not isinstance(rejection['reason'], str) or not rejection['reason']):
++            raise JournalError('invalid starter clause rejection')
++        settled = component['settled'][rejection['player']]
++        mon = checked_mon(initials[rejection['player']], component['sources'][rejection['player']],
++                          settled['inventory_entry']['observation'])
++        if rejection['member_id'] != settled['member_id'] or rejection['key'] != mon.key:
++            raise JournalError('starter clause rejection names another starter')
++        partner = 'b' if rejection['player'] == 'a' else 'a'
++        rules = stage.rules
++        if (rules.find_link(rejection['player'], mon.key) is not None or mon.key in rules.party_keys[rejection['player']]
++                or AREA not in rules.retry_areas[rejection['player']]
++                or rules.area_states.get(AREA) != (AreaStatus.PENDING_A if rejection['player'] == 'a' else AreaStatus.PENDING_B)   # waiting on the rejected player
++                or set(rules.pending_captures.get(AREA, {})) != {partner}):
++            raise JournalError('starter clause rejection differs from the rule state')
+ 
+ 
+ def verify_journal(journal, stage):
+diff --git a/tests/unit/test_gen1_starter_settlement.py b/tests/unit/test_gen1_starter_settlement.py
+index a816dd6..11b073e 100644
+--- a/tests/unit/test_gen1_starter_settlement.py
++++ b/tests/unit/test_gen1_starter_settlement.py
+@@ -28,9 +28,11 @@ def enroll(runtime):
+     return owners,initials,operations
+ 
+ 
+-def source_and_checkpoint(runtime,player,initial,previous,*,dv=0x1234):
++def source_and_checkpoint(runtime,player,initial,previous,*,dv=0x1234,species=None):
+     variant=runtime.contract['players'][player]['variant']
+-    birth=bytearray(make_blob(PartyCodec(variant),species=84 if variant=='yellow' else 153,otid=0,dv=dv))
++    # Internal species bytes: Yellow always hands out Pikachu (0x54); Red and Blue default to
++    # Bulbasaur (0x99) unless the case picks another starter.
++    birth=bytearray(make_blob(PartyCodec(variant),species=species or (84 if variant=='yellow' else 153),otid=0,dv=dv))
+     birth[44:55]=bytes.fromhex(initial['source']['fields']['name'])
+     source=engine_payload(runtime,player,['starter_begin','starter_end'])
+     for row in source['signals']:row['point']['cur_species']=birth[0]
+@@ -44,35 +46,64 @@ def source_and_checkpoint(runtime,player,initial,previous,*,dv=0x1234):
+     return source,{'sequence':1,'previous_operation_id':previous,'observation':stable}
+ 
+ 
+-@pytest.mark.parametrize('variants',list(product(('red','blue','yellow'),repeat=2)))
++# Starters are under the clauses in every generation (owner decision 2026-09-11, the Gen 3 rule);
++# Yellow/Yellow is the one exemption because both scripts hand out Pikachu with no choice.
++# A mixed pair always links (Pikachu shares no family or type with the Kanto starters); a pair
++# with a choice on both sides links when the starters differ and is rejected when they match.
++BULBASAUR,CHARMANDER=153,176   # internal species bytes
++STARTER_CASES=[]
++for _variants in product(('red','blue','yellow'),repeat=2):
++    if _variants.count('yellow')==2:STARTER_CASES.append((_variants,'same','exempt_link'))
++    elif _variants.count('yellow')==1:STARTER_CASES.append((_variants,'different','link'))
++    else:STARTER_CASES.extend([(_variants,'same','rejected'),(_variants,'different','link')])
++
++
++@pytest.mark.parametrize('variants,starters,outcome',STARTER_CASES)
+ @pytest.mark.parametrize('order',[('a','b'),('b','a')])
+-def test_stable_starters_settle_owned_identities_and_one_exempt_link_atomically(tmp_path,variants,order):
++def test_stable_starters_settle_owned_identities_and_the_engine_pairs_or_rejects_them_atomically(tmp_path,variants,starters,outcome,order):
+     runtime=create_runtime(tmp_path,contract(*variants))
+     try:
+         owners,initials,operations=enroll(runtime)
+-        # Prove scripted-grant exemption includes identical Yellow/Yellow starters.
+         snap=runtime.journal.snapshot();stage=runtime.state()
+         for flag in ('species_lock','gender_lock','type_lock'):setattr(stage.rules,flag,True)
+         stage.barrier.set_history(stage.history_digest());document=stage.document()
+         runtime.journal.commit('a',secrets.token_hex(16),{'event':'explicit-rule-options-fixture'},expected_revision=snap.revision,
+             state=document,commands={'a':[],'b':[]},result={'ack':'ACK'})
++        keys={}
+         for index,player in enumerate(order):
+-            source,checkpoint=source_and_checkpoint(runtime,player,initials[player],operations[player])
++            variant=runtime.contract['players'][player]['variant']
++            species=None if variant=='yellow' else (CHARMANDER if starters=='different' and index==1 else BULBASAUR)
++            source,checkpoint=source_and_checkpoint(runtime,player,initials[player],operations[player],species=species)
+             engine_event(runtime,player,owners[player],source)
+             assert len(runtime.state().identities.document()['members'])==index
+             op=secrets.token_hex(16);inventory_event(runtime,player,owners[player],checkpoint,op)
+             before=runtime.journal.snapshot();inventory_event(runtime,player,owners[player],checkpoint,op)
+             assert runtime.journal.snapshot()==before
+             stage=runtime.state();settled=stage.document()['components'][COMPONENT]['settled'][player]
++            keys[player]=stage.rules.partner_blobs[player][0]['key']
+             assert stage.rules.party_size[player]==1
+             assert bytes.fromhex(settled['blob_hex'])==stage.rules.partner_blobs[player][0]['blob']
+             if index==0:
+                 assert stage.rules.area_states[AREA]==(AreaStatus.PENDING_B if player=='a' else AreaStatus.PENDING_A)
+                 assert not stage.rules.links
+-        stage=runtime.state();document=stage.document()
+-        assert len(stage.rules.links)==len(document['identities']['links'])==1
+-        assert len(document['identities']['members'])==2 and not stage.rules.pending_captures
+-        assert stage.rules.links[0].area_id==AREA and stage.rules.area_states[AREA]==AreaStatus.LINKED
++        stage=runtime.state();document=stage.document();component=document['components'][COMPONENT]
++        first,second=order
++        assert len(document['identities']['members'])==2
++        if outcome=='rejected':
++            assert not stage.rules.links and not document['identities']['links'] and component['link_id'] is None
++            assert component['rejection']=={'player':second,'key':keys[second],'member_id':component['settled'][second]['member_id'],
++                'reason':'Species clause: both are Bulbasaur','at':component['rejection']['at']}
++            assert stage.rules.area_states[AREA]==(AreaStatus.PENDING_A if second=='a' else AreaStatus.PENDING_B)   # the lab waits on the rejected player
++            assert set(stage.rules.pending_captures[AREA])=={first} and AREA in stage.rules.retry_areas[second]
++            assert keys[second] not in stage.rules.party_keys[second] and not stage.rules.pending_memorials[second]
++        else:
++            assert len(stage.rules.links)==len(document['identities']['links'])==1 and component['rejection'] is None
++            assert not stage.rules.pending_captures and not any(stage.rules.retry_areas.values())
++            assert stage.rules.links[0].area_id==AREA and stage.rules.area_states[AREA]==AreaStatus.LINKED
++            if outcome=='exempt_link':
++                assert stage.rules.links[0].a.species==stage.rules.links[0].b.species==25   # two Pikachu, exempt
++            else:
++                assert stage.rules.links[0].a.species!=stage.rules.links[0].b.species
+         assert not any(stage.rules.pokeballs_obtained.values()) and stage.barrier.ticket() is None
+         assert not runtime.journal.pending_ids('a') and not runtime.journal.pending_ids('b')
+     finally:runtime.close()

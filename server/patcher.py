@@ -18,6 +18,9 @@ uploaded. This module only serves the page and the patch file.
 from __future__ import annotations
 
 import os
+import hashlib
+import json
+from pathlib import Path
 from collections.abc import Callable
 
 import aiohttp_jinja2
@@ -39,11 +42,8 @@ _DIST = os.path.normpath(os.path.join(_SERVER_DIR, "..", "patch", "dist"))
 # fingerprints the page echoes; correctness is gated by the UPS-embedded CRC32 in
 # patcher.js, which is a property of the patch file rather than of this table.
 #
-# NO YELLOW ENTRY, deliberately. Yellow has arithmetically zero free WRAM
-# (pokeyellow/ram/wram.asm: the CGB palette section took Red's gap and the stack was
-# shortened $100 -> $EB), so there is no companion build to ship and shipping one would
-# imply a capability that cannot exist. tests/unit/test_patcher_routes.py asserts its
-# absence rather than leaving it to be noticed.
+# Gen1 targets are generated from checked ABI-3 artifacts below. Yellow's patch
+# supplies native trade only; it does not claim an R/B panel or event SFX.
 TARGETS: dict[str, dict] = {
     "rr": {
         "slug":        "rr",
@@ -55,34 +55,39 @@ TARGETS: dict[str, dict] = {
         "out_name":    "Pokemon - Radical Red (SLink companion).gba",
         "base_hint":   "a clean Radical Red 4.1 ROM",
     },
-    "rb-red": {
-        "slug":        "rb-red",
-        "label":       "Pokemon Red",
-        "patch":       "SLink-RB-Red.ups",
-        "base_md5":    "3d45c1ee9abd5738df46d2bdda8b57dc",
-        "patched_md5": "123cfcdff9f1ee5b5e53621874e22332",
-        "accept":      ".gb,.gbc,application/octet-stream",
-        "out_name":    "Pokemon Red (SLink companion).gb",
-        "base_hint":   "a clean US/English Pokemon Red dump",
-    },
-    "rb-blue": {
-        "slug":        "rb-blue",
-        "label":       "Pokemon Blue",
-        "patch":       "SLink-RB-Blue.ups",
-        "base_md5":    "50927e843568814f7ed45ec4f944bd8b",
-        "patched_md5": "c3edad823f9a425edc129a187233758e",
-        "accept":      ".gb,.gbc,application/octet-stream",
-        "out_name":    "Pokemon Blue (SLink companion).gb",
-        "base_hint":   "a clean US/English Pokemon Blue dump",
-    },
 }
+
+
+def _gen1_targets():
+    from server.gen1_admission import clean_profiles
+    from server.gen1_cartridge_profiles import companion_profiles
+    root=Path(_SERVER_DIR).parent
+    data=json.loads((root/"data/games/gen1_rby/patcher_targets.json").read_text())
+    if data.get("schema")!="gen1-browser-patcher-targets-v1" or set(data.get("targets",{}))!={"rb-red","rb-blue","yellow"}:
+        raise ValueError("invalid Gen1 browser target catalog")
+    clean,companions=clean_profiles(),companion_profiles()
+    for slug,target in data["targets"].items():
+        variant=target["variant"];profile=companions[variant]
+        if (target["slug"]!=slug or target["base_sha256"]!=clean[variant]["rom_sha256"]
+                or target["patched_sha256"]!=profile["rom_sha256"] or target["capabilities"]!=profile["capabilities"]
+                or target["patch_sha256"]!=profile["manifest"]["companion"]["ups_sha256"]
+                or target["patch_path"]!=profile["manifest"]["companion"]["ups"]
+                or not (root/target["patch_path"]).resolve().is_relative_to(root.resolve())):
+            raise ValueError("Gen1 browser target differs from installed companion")
+    return data["targets"]
+
+
+_GEN1_TARGETS=_gen1_targets()
+TARGETS.update({slug:_GEN1_TARGETS[slug] for slug in ("rb-red","rb-blue","yellow")})
 
 DEFAULT_TARGET = "rr"
 
 
 def patch_path(slug: str) -> str:
     """Absolute path to a target's UPS file."""
-    return os.path.join(_DIST, TARGETS[slug]["patch"])
+    target=TARGETS[slug]
+    if "patch_path"in target:return str(Path(_SERVER_DIR).parent/target["patch_path"])
+    return os.path.join(_DIST, target["patch"])
 
 
 # Kept for callers that predate the registry; the RR patch is still the default.
@@ -94,6 +99,7 @@ PATCHED_ROM_MD5 = TARGETS[DEFAULT_TARGET]["patched_md5"]
 def setup_patcher_routes(
     app: web.Application,
     sidebar_builder: Callable[[str], str],
+    prepared_targets=None,
 ) -> None:
     """Register the patcher routes on ``app``.
 
@@ -104,17 +110,26 @@ def setup_patcher_routes(
     are populated).
     """
 
+    def targets_for(request):
+        extra=prepared_targets(request) if prepared_targets is not None else {}
+        if not isinstance(extra,dict) or set(extra)&set(TARGETS):raise ValueError("invalid run patch targets")
+        targets={**TARGETS,**extra}
+        if len({target['patch'] for target in targets.values()})!=len(targets):raise ValueError("ambiguous patch filenames")
+        return targets
+
     async def handle_patcher_page(request: web.Request) -> web.Response:
+        targets=targets_for(request)
         slug = request.query.get("game", DEFAULT_TARGET)
-        if slug not in TARGETS:
+        if slug not in targets:
             slug = DEFAULT_TARGET
-        target = TARGETS[slug]
+        targets={key:{name:value for name,value in target.items() if name!='patch_bytes'} for key,target in targets.items()}
+        target = targets[slug]
         ctx = {
             "page_title":      "SLink Companion ROM Patcher",
             "theme":           resolve_theme(request),
             "sidebar_html":    sidebar_builder("patcher"),
             "target":          target,
-            "targets":         list(TARGETS.values()),
+            "targets":         list(targets.values()),
             "base_rom_md5":    target["base_md5"],
             "patched_rom_md5": target["patched_md5"],
         }
@@ -127,15 +142,24 @@ def setup_patcher_routes(
 
     async def handle_patch_file(request: web.Request) -> web.Response:
         name = request.match_info["name"]
-        slug = next((s for s, t in TARGETS.items() if t["patch"] == name), None)
+        targets=targets_for(request)
+        slug = next((s for s, t in targets.items() if t["patch"] == name), None)
         if slug is None:
             raise web.HTTPNotFound(text=f"{name} is not a companion patch this build ships")
-        path = patch_path(slug)
-        if not os.path.isfile(path):
-            raise web.HTTPNotFound(
-                text=f"{name} not built — run patch/tools/make_ups.py (see patch/README.md)")
-        with open(path, "rb") as fh:
-            body = fh.read()
+        target=targets[slug]
+        if "patch_bytes"in target:
+            body=target["patch_bytes"]
+            if not isinstance(body,bytes):raise web.HTTPConflict(text="Verified run patch is unavailable.")
+        else:
+            path = patch_path(slug)
+            if not os.path.isfile(path):
+                raise web.HTTPNotFound(
+                    text=f"{name} not built — run patch/tools/make_ups.py (see patch/README.md)")
+            with open(path, "rb") as fh:
+                body = fh.read()
+        expected=target.get("patch_sha256")
+        if expected and hashlib.sha256(body).hexdigest()!=expected:
+            raise web.HTTPConflict(text="Companion patch differs from its verified artifact. Rebuild before downloading.")
         return web.Response(
             body=body,
             content_type="application/octet-stream",

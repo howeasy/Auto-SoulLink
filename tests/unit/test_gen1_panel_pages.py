@@ -9,6 +9,7 @@ Before this the panel showed one screen and `panelStage` silently DROPPED anythi
 row 18, while the server capped dead zones at eight to stay under that limit. Both the cap
 and the silent drop existed only because there was nowhere to put the rest.
 """
+
 from __future__ import annotations
 
 import os
@@ -19,7 +20,7 @@ lupa = pytest.importorskip("lupa")
 
 _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 TILEMAP, COLS, ROWS = 0xC3A0, 20, 18
-PANEL_PAGE, PANEL_PAGES, PANEL_STATE = 0xDEEC, 0xDEED, 0xDEEB
+PANEL_PAGE, PANEL_PAGES, PANEL_STATE = 0xDEF2, 0xDEF3, 0xDEF1
 
 
 @pytest.fixture
@@ -38,10 +39,17 @@ def mem():
                                              t[a] = v % 256; t[a+1] = math.floor(v/256) % 256 end,
         }
     """)
-    p = lambda *x: os.path.join(_REPO, *x).replace("\\", "/")
+
+    def p(*x):
+        return os.path.join(_REPO, *x).replace("\\", "/")
+
     M = lua.eval(f'dofile("{p("lua", "memory_gb.lua")}")')
     G = lua.eval(f'dofile("{p("lua", "games", "gen1_rby.lua")}")')
     M.initProfile(G, "red")
+    lua.execute("package.path='" + p("lua", "?.lua") + ";'..package.path")
+    lua.execute(
+        "bus[0xDEE2]=0x53;bus[0xDEE3]=0x4C;bus[0xDEE4]=0x4E;bus[0xDEE5]=0x4B;bus[0xDEE6]=3;bus[0xDEE7]=2;bus[0xDEF1]=1;for a=0xDEF8,0xDEFF do bus[a]=0xA5 end"
+    )
     return lua, M
 
 
@@ -53,12 +61,16 @@ def row_text(lua, row):
     out = []
     for c in range(COLS):
         b = lua.eval(f"bus[{TILEMAP + row * COLS + c}] or 0")
-        out.append(chr(b - 0x80 + 65) if 0x80 <= b <= 0x99 else
-                   (chr(b - 0xF6 + 48) if 0xF6 <= b <= 0xFF else " "))
+        out.append(
+            chr(b - 0x80 + 65)
+            if 0x80 <= b <= 0x99
+            else (chr(b - 0xF6 + 48) if 0xF6 <= b <= 0xFF else " ")
+        )
     return "".join(out).rstrip()
 
 
 # ── the page count ───────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.parametrize("n,expected", [(0, 1), (1, 1), (18, 1), (19, 2), (36, 2), (37, 3)])
 def test_page_count(mem, n, expected):
@@ -75,6 +87,7 @@ def test_the_count_is_published_for_the_patch(mem):
 
 
 # ── which rows land on screen ────────────────────────────────────────────────────────
+
 
 def test_page_zero_paints_the_first_screen(mem):
     lua, M = mem
@@ -96,22 +109,22 @@ def test_a_short_last_page_is_padded_not_left_stale(mem):
     """Otherwise the tail of the previous page shows through under the last one."""
     lua, M = mem
     M.panelStage(_rows(lua, 40, prefix="OLD"))
-    lua.execute(f"bus[{PANEL_PAGE}] = 2")
+    lua.execute(f"bus[{PANEL_PAGE}] = 2;bus[{PANEL_STATE}]=1")
     M.panelStage(_rows(lua, 40))
     assert row_text(lua, 0) == "R36"
     assert row_text(lua, 5) == "", "a stale row from the previous page survived"
 
 
-def test_a_page_past_the_end_clamps_instead_of_reading_off_the_list(mem):
-    """Defensive: the patch should never ask, but a stale byte must not paint garbage."""
+def test_a_page_past_the_end_refuses_instead_of_painting_another_page(mem):
     lua, M = mem
     lua.execute(f"bus[{PANEL_PAGE}] = 40")
-    M.panelStage(_rows(lua, 5))
-    assert row_text(lua, 0) == "R0"
+    with pytest.raises(Exception, match="outside the payload"):
+        M.panelStage(_rows(lua, 5))
+    assert lua.eval(f"bus[{PANEL_STATE}]") == 1
 
 
 def test_staging_still_hands_the_screen_back(mem):
     """The control: pagination must not break the handshake the patch waits on."""
     lua, M = mem
     M.panelStage(_rows(lua, 5))
-    assert lua.eval(f"bus[{PANEL_STATE}]") == 2      # STAGED
+    assert lua.eval(f"bus[{PANEL_STATE}]") == 2  # STAGED

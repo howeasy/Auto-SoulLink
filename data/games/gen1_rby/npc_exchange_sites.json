@@ -1,0 +1,1192 @@
+{
+  "schema": "rby-npc-exchange-sites-v1",
+  "sha256": "765a1b3d3cb9da9bd91caf66b086d508123eb438bd1927f8df4c1b4b453e22dc",
+  "titles": {
+    "blue": {
+      "addresses": {
+        "hLoadedROMBank": 65464,
+        "wBoxDataStart": 55936,
+        "wCurEnemyLevel": 53543,
+        "wCurMap": 54110,
+        "wCurPartySpecies": 53137,
+        "wCurrentBoxNum": 54688,
+        "wInGameTradeGiveMonSpecies": 52495,
+        "wInGameTradeMonNick": 52521,
+        "wInGameTradeReceiveMonSpecies": 52532,
+        "wIsInBattle": 53335,
+        "wMonDataLocation": 52297,
+        "wPartyDataStart": 53603,
+        "wPlayerID": 54105,
+        "wPlayerName": 53592,
+        "wRemoveMonFromBox": 53141,
+        "wTradedEnemyMonOTID": 52569,
+        "wWhichPokemon": 53138,
+        "wWhichTrade": 52541
+      },
+      "clean_sha1": "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2",
+      "engine": {
+        "block": {
+          "expected_hex": "F1EA27D1F1EA92CFFA34CDEA91CFAFEA49CCEA95CFCD1F393E80EA49CCCD2739CD195D217D7D0605CDD635CD0F19CDA25C060321DC6ECDD635A73E031801",
+          "rom_offset": 466015
+        },
+        "copy_received": {
+          "expected_hex": "21B5D2010B00CD4F5D2129CD010B00CDB5002173D2010B00CD4F5D21595D010B00CDB5002177D1012C00CD4F5D2159CD010200C3B500",
+          "rom_offset": 466201,
+          "source": "nickname <- table, OT name <- InGameTrade_TrainerString, OT id <- wTradedEnemyMonOTID, all at slot wPartyCount-1"
+        },
+        "do_trade": {
+          "address": 23559,
+          "bank": 28,
+          "rom_offset": 465927,
+          "symbol": "InGameTrade_DoTrade"
+        },
+        "ot_id_source": {
+          "expected_hex": "114CCD010200CD115DCD5C3E21D3FF1159CDC3B500",
+          "rom_offset": 466172,
+          "source": "InGameTrade_PrepareTradeData: two Random bytes (hRandomAdd, hRandomSub) -> wTradedEnemyMonOTID"
+        },
+        "remove": {
+          "address": 23668,
+          "bank": 28,
+          "expected_hex": "CD1F39",
+          "rom_offset": 466036,
+          "source": "call RemovePokemon: party intact, wWhichPokemon = outgoing slot, wCurEnemyLevel = its level, wCurPartySpecies = receive species",
+          "symbol": "InGameTrade_DoTrade"
+        },
+        "return": {
+          "address": 23690,
+          "bank": 28,
+          "expected_hex": "CD0F19",
+          "rom_offset": 466058,
+          "source": "call ClearScreen: reached only after AddPartyMon, InGameTrade_CopyDataToReceivedMon and the trade-evolution hook returned",
+          "symbol": "InGameTrade_DoTrade"
+        },
+        "species_level_check": {
+          "expected_hex": "FA0FCD47FA91CFB83E022075FA92CF218CD1012C00CD873A7EEA27D1",
+          "rom_offset": 465948,
+          "source": "engine/events/in_game_trades.asm: cp wInGameTradeGiveMonSpecies, else .tradeFailed; wCurEnemyLevel = outgoing party level"
+        },
+        "trainer_string": {
+          "expected_hex": "5D50505050505050505050",
+          "rom_offset": 466265,
+          "symbol": "InGameTrade_TrainerString"
+        }
+      },
+      "lengths": {
+        "box": 1122,
+        "name": 11,
+        "ot_id": 2,
+        "party": 404,
+        "player_id": 2,
+        "record": 14
+      },
+      "out_of_battle_flag": 0,
+      "predef_id": 84,
+      "sites": {
+        "npc:cerulean_trade_house:6": {
+          "call": {
+            "address": 22277,
+            "bank": 7,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 120581,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "CeruleanTradeHouseGamblerText"
+          },
+          "delivered_species": 72,
+          "dispatch": {
+            "address": 22280,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 120584,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:cerulean_trade_house:6",
+          "give_species": 110,
+          "map": "CERULEAN_TRADE_HOUSE",
+          "map_id": 63,
+          "nickname_hex": "8B8E8B8050505050505050",
+          "receive_species": 72,
+          "record_hex": "6E48018B8E8B8050505050505050",
+          "record_rom_offset": 465871,
+          "scope_symbol": "CeruleanTradeHouseGamblerText",
+          "selector": {
+            "expected_hex": "083E06EA3DCD",
+            "rom_offset": 120578
+          },
+          "source_file": "scripts/CeruleanTradeHouse.asm",
+          "source_line": 16,
+          "trade_constant": "TRADE_FOR_LOLA",
+          "trade_index": 6
+        },
+        "npc:cinnabar_lab_fossil_room:3": {
+          "call": {
+            "address": 24030,
+            "bank": 29,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 482782,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "CinnabarLabFossilRoomScientist2Text"
+          },
+          "delivered_species": 58,
+          "dispatch": {
+            "address": 24033,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 482785,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:cinnabar_lab_fossil_room:3",
+          "give_species": 163,
+          "map": "CINNABAR_LAB_FOSSIL_ROOM",
+          "map_id": 170,
+          "nickname_hex": "9280888B8E915050505050",
+          "receive_species": 58,
+          "record_hex": "A33A009280888B8E915050505050",
+          "record_rom_offset": 465829,
+          "scope_symbol": "CinnabarLabFossilRoomScientist2Text",
+          "selector": {
+            "expected_hex": "083E03EA3DCD",
+            "rom_offset": 482779
+          },
+          "source_file": "scripts/CinnabarLabFossilRoom.asm",
+          "source_line": 104,
+          "trade_constant": "TRADE_FOR_SAILOR",
+          "trade_index": 3
+        },
+        "npc:cinnabar_lab_trade_room:7": {
+          "call": {
+            "address": 23603,
+            "bank": 29,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 482355,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "CinnabarLabTradeRoomGrampsText"
+          },
+          "delivered_species": 141,
+          "dispatch": {
+            "address": 23614,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 482366,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:cinnabar_lab_trade_room:7",
+          "give_species": 85,
+          "map": "CINNABAR_LAB_TRADE_ROOM",
+          "map_id": 168,
+          "nickname_hex": "838E918892505050505050",
+          "receive_species": 141,
+          "record_hex": "558D01838E918892505050505050",
+          "record_rom_offset": 465885,
+          "scope_symbol": "CinnabarLabTradeRoomGrampsText",
+          "selector": {
+            "expected_hex": "083E07EA3DCD",
+            "rom_offset": 482352
+          },
+          "source_file": "scripts/CinnabarLabTradeRoom.asm",
+          "source_line": 17,
+          "trade_constant": "TRADE_FOR_DORIS",
+          "trade_index": 7
+        },
+        "npc:cinnabar_lab_trade_room:8": {
+          "call": {
+            "address": 23611,
+            "bank": 29,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 482363,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "CinnabarLabTradeRoomBeautyText"
+          },
+          "delivered_species": 30,
+          "dispatch": {
+            "address": 23614,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 482366,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:cinnabar_lab_trade_room:8",
+          "give_species": 65,
+          "map": "CINNABAR_LAB_TRADE_ROOM",
+          "map_id": 168,
+          "nickname_hex": "8291888D8A8B8492505050",
+          "receive_species": 30,
+          "record_hex": "411E028291888D8A8B8492505050",
+          "record_rom_offset": 465899,
+          "scope_symbol": "CinnabarLabTradeRoomBeautyText",
+          "selector": {
+            "expected_hex": "083E08EA3DCD",
+            "rom_offset": 482360
+          },
+          "source_file": "scripts/CinnabarLabTradeRoom.asm",
+          "source_line": 23,
+          "trade_constant": "TRADE_FOR_CRINKLES",
+          "trade_index": 8
+        },
+        "npc:route_11_gate_2f:0": {
+          "call": {
+            "address": 21601,
+            "bank": 18,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 300129,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "Route11Gate2FYoungsterText"
+          },
+          "delivered_species": 168,
+          "dispatch": {
+            "address": 21604,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 300132,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:route_11_gate_2f:0",
+          "give_species": 167,
+          "map": "ROUTE_11_GATE_2F",
+          "map_id": 86,
+          "nickname_hex": "9384919198505050505050",
+          "receive_species": 168,
+          "record_hex": "A7A8009384919198505050505050",
+          "record_rom_offset": 465787,
+          "scope_symbol": "Route11Gate2FYoungsterText",
+          "selector": {
+            "expected_hex": "08AFEA3DCD",
+            "rom_offset": 300127
+          },
+          "source_file": "scripts/Route11Gate2F.asm",
+          "source_line": 14,
+          "trade_constant": "TRADE_FOR_TERRY",
+          "trade_index": 0
+        },
+        "npc:route_18_gate_2f:5": {
+          "call": {
+            "address": 22913,
+            "bank": 18,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 301441,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "Route18Gate2FYoungsterText"
+          },
+          "delivered_species": 11,
+          "dispatch": {
+            "address": 22916,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 301444,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:route_18_gate_2f:5",
+          "give_species": 8,
+          "map": "ROUTE_18_GATE_2F",
+          "map_id": 191,
+          "nickname_hex": "8C80918250505050505050",
+          "receive_species": 11,
+          "record_hex": "080B008C80918250505050505050",
+          "record_rom_offset": 465857,
+          "scope_symbol": "Route18Gate2FYoungsterText",
+          "selector": {
+            "expected_hex": "083E05EA3DCD",
+            "rom_offset": 301438
+          },
+          "source_file": "scripts/Route18Gate2F.asm",
+          "source_line": 13,
+          "trade_constant": "TRADE_FOR_MARC",
+          "trade_index": 5
+        },
+        "npc:route_2_trade_house:1": {
+          "call": {
+            "address": 24316,
+            "bank": 7,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 122620,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "Route2TradeHouseGameboyKidText"
+          },
+          "delivered_species": 42,
+          "dispatch": {
+            "address": 24319,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 122623,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:route_2_trade_house:1",
+          "give_species": 148,
+          "map": "ROUTE_2_TRADE_HOUSE",
+          "map_id": 48,
+          "nickname_hex": "8C809182848B5050505050",
+          "receive_species": 42,
+          "record_hex": "942A008C809182848B5050505050",
+          "record_rom_offset": 465801,
+          "scope_symbol": "Route2TradeHouseGameboyKidText",
+          "selector": {
+            "expected_hex": "083E01EA3DCD",
+            "rom_offset": 122617
+          },
+          "source_file": "scripts/Route2TradeHouse.asm",
+          "source_line": 16,
+          "trade_constant": "TRADE_FOR_MARCEL",
+          "trade_index": 1
+        },
+        "npc:underground_path_route_5:9": {
+          "call": {
+            "address": 22197,
+            "bank": 23,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 382645,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "UndergroundPathRoute5LittleGirlText"
+          },
+          "delivered_species": 15,
+          "dispatch": {
+            "address": 22200,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 382648,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:underground_path_route_5:9",
+          "give_species": 3,
+          "map": "UNDERGROUND_PATH_ROUTE_5",
+          "map_id": 71,
+          "nickname_hex": "928F8E9350505050505050",
+          "receive_species": 15,
+          "record_hex": "030F02928F8E9350505050505050",
+          "record_rom_offset": 465913,
+          "scope_symbol": "UndergroundPathRoute5LittleGirlText",
+          "selector": {
+            "expected_hex": "083E09EA3DCD",
+            "rom_offset": 382642
+          },
+          "source_file": "scripts/UndergroundPathRoute5.asm",
+          "source_line": 16,
+          "trade_constant": "TRADE_FOR_SPOT",
+          "trade_index": 9
+        },
+        "npc:vermilion_trade_house:4": {
+          "call": {
+            "address": 23578,
+            "bank": 6,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 105498,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "VermilionTradeHouseLittleGirlText"
+          },
+          "delivered_species": 64,
+          "dispatch": {
+            "address": 23581,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 105501,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:vermilion_trade_house:4",
+          "give_species": 5,
+          "map": "VERMILION_TRADE_HOUSE",
+          "map_id": 196,
+          "nickname_hex": "8394975050505050505050",
+          "receive_species": 64,
+          "record_hex": "0540028394975050505050505050",
+          "record_rom_offset": 465843,
+          "scope_symbol": "VermilionTradeHouseLittleGirlText",
+          "selector": {
+            "expected_hex": "083E04EA3DCD",
+            "rom_offset": 105495
+          },
+          "source_file": "scripts/VermilionTradeHouse.asm",
+          "source_line": 11,
+          "trade_constant": "TRADE_FOR_DUX",
+          "trade_index": 4
+        }
+      },
+      "source_commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9",
+      "symbols_sha256": "65d0f3216e23117336623d2df2f263b8cc9ea784c0d3d4124eacbd8345a45a7d",
+      "table": {
+        "policy": "pinned: gen1_upr_scan claims no in-game-trade domain (inGameTradesMod is never validated), so RomChangeAudit.finish rejects any admitted ROM that changed these bytes",
+        "record_length": 14,
+        "rom_offset": 465787,
+        "symbol": "TradeMons"
+      },
+      "unused": [
+        {
+          "constant": "TRADE_FOR_CHIKUCHIKU",
+          "index": 2,
+          "reason": "no map script invokes this trade index"
+        }
+      ]
+    },
+    "red": {
+      "addresses": {
+        "hLoadedROMBank": 65464,
+        "wBoxDataStart": 55936,
+        "wCurEnemyLevel": 53543,
+        "wCurMap": 54110,
+        "wCurPartySpecies": 53137,
+        "wCurrentBoxNum": 54688,
+        "wInGameTradeGiveMonSpecies": 52495,
+        "wInGameTradeMonNick": 52521,
+        "wInGameTradeReceiveMonSpecies": 52532,
+        "wIsInBattle": 53335,
+        "wMonDataLocation": 52297,
+        "wPartyDataStart": 53603,
+        "wPlayerID": 54105,
+        "wPlayerName": 53592,
+        "wRemoveMonFromBox": 53141,
+        "wTradedEnemyMonOTID": 52569,
+        "wWhichPokemon": 53138,
+        "wWhichTrade": 52541
+      },
+      "clean_sha1": "ea9bcae617fdf159b045185467ae58b2e4a48b9a",
+      "engine": {
+        "block": {
+          "expected_hex": "F1EA27D1F1EA92CFFA34CDEA91CFAFEA49CCEA95CFCD1F393E80EA49CCCD2739CD195D217D7D0605CDD635CD0F19CDA25C060321DC6ECDD635A73E031801",
+          "rom_offset": 466015
+        },
+        "copy_received": {
+          "expected_hex": "21B5D2010B00CD4F5D2129CD010B00CDB5002173D2010B00CD4F5D21595D010B00CDB5002177D1012C00CD4F5D2159CD010200C3B500",
+          "rom_offset": 466201,
+          "source": "nickname <- table, OT name <- InGameTrade_TrainerString, OT id <- wTradedEnemyMonOTID, all at slot wPartyCount-1"
+        },
+        "do_trade": {
+          "address": 23559,
+          "bank": 28,
+          "rom_offset": 465927,
+          "symbol": "InGameTrade_DoTrade"
+        },
+        "ot_id_source": {
+          "expected_hex": "114CCD010200CD115DCD5C3E21D3FF1159CDC3B500",
+          "rom_offset": 466172,
+          "source": "InGameTrade_PrepareTradeData: two Random bytes (hRandomAdd, hRandomSub) -> wTradedEnemyMonOTID"
+        },
+        "remove": {
+          "address": 23668,
+          "bank": 28,
+          "expected_hex": "CD1F39",
+          "rom_offset": 466036,
+          "source": "call RemovePokemon: party intact, wWhichPokemon = outgoing slot, wCurEnemyLevel = its level, wCurPartySpecies = receive species",
+          "symbol": "InGameTrade_DoTrade"
+        },
+        "return": {
+          "address": 23690,
+          "bank": 28,
+          "expected_hex": "CD0F19",
+          "rom_offset": 466058,
+          "source": "call ClearScreen: reached only after AddPartyMon, InGameTrade_CopyDataToReceivedMon and the trade-evolution hook returned",
+          "symbol": "InGameTrade_DoTrade"
+        },
+        "species_level_check": {
+          "expected_hex": "FA0FCD47FA91CFB83E022075FA92CF218CD1012C00CD873A7EEA27D1",
+          "rom_offset": 465948,
+          "source": "engine/events/in_game_trades.asm: cp wInGameTradeGiveMonSpecies, else .tradeFailed; wCurEnemyLevel = outgoing party level"
+        },
+        "trainer_string": {
+          "expected_hex": "5D50505050505050505050",
+          "rom_offset": 466265,
+          "symbol": "InGameTrade_TrainerString"
+        }
+      },
+      "lengths": {
+        "box": 1122,
+        "name": 11,
+        "ot_id": 2,
+        "party": 404,
+        "player_id": 2,
+        "record": 14
+      },
+      "out_of_battle_flag": 0,
+      "predef_id": 84,
+      "sites": {
+        "npc:cerulean_trade_house:6": {
+          "call": {
+            "address": 22277,
+            "bank": 7,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 120581,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "CeruleanTradeHouseGamblerText"
+          },
+          "delivered_species": 72,
+          "dispatch": {
+            "address": 22280,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 120584,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:cerulean_trade_house:6",
+          "give_species": 110,
+          "map": "CERULEAN_TRADE_HOUSE",
+          "map_id": 63,
+          "nickname_hex": "8B8E8B8050505050505050",
+          "receive_species": 72,
+          "record_hex": "6E48018B8E8B8050505050505050",
+          "record_rom_offset": 465871,
+          "scope_symbol": "CeruleanTradeHouseGamblerText",
+          "selector": {
+            "expected_hex": "083E06EA3DCD",
+            "rom_offset": 120578
+          },
+          "source_file": "scripts/CeruleanTradeHouse.asm",
+          "source_line": 16,
+          "trade_constant": "TRADE_FOR_LOLA",
+          "trade_index": 6
+        },
+        "npc:cinnabar_lab_fossil_room:3": {
+          "call": {
+            "address": 24029,
+            "bank": 29,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 482781,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "CinnabarLabFossilRoomScientist2Text"
+          },
+          "delivered_species": 58,
+          "dispatch": {
+            "address": 24032,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 482784,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:cinnabar_lab_fossil_room:3",
+          "give_species": 163,
+          "map": "CINNABAR_LAB_FOSSIL_ROOM",
+          "map_id": 170,
+          "nickname_hex": "9280888B8E915050505050",
+          "receive_species": 58,
+          "record_hex": "A33A009280888B8E915050505050",
+          "record_rom_offset": 465829,
+          "scope_symbol": "CinnabarLabFossilRoomScientist2Text",
+          "selector": {
+            "expected_hex": "083E03EA3DCD",
+            "rom_offset": 482778
+          },
+          "source_file": "scripts/CinnabarLabFossilRoom.asm",
+          "source_line": 104,
+          "trade_constant": "TRADE_FOR_SAILOR",
+          "trade_index": 3
+        },
+        "npc:cinnabar_lab_trade_room:7": {
+          "call": {
+            "address": 23602,
+            "bank": 29,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 482354,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "CinnabarLabTradeRoomGrampsText"
+          },
+          "delivered_species": 141,
+          "dispatch": {
+            "address": 23613,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 482365,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:cinnabar_lab_trade_room:7",
+          "give_species": 85,
+          "map": "CINNABAR_LAB_TRADE_ROOM",
+          "map_id": 168,
+          "nickname_hex": "838E918892505050505050",
+          "receive_species": 141,
+          "record_hex": "558D01838E918892505050505050",
+          "record_rom_offset": 465885,
+          "scope_symbol": "CinnabarLabTradeRoomGrampsText",
+          "selector": {
+            "expected_hex": "083E07EA3DCD",
+            "rom_offset": 482351
+          },
+          "source_file": "scripts/CinnabarLabTradeRoom.asm",
+          "source_line": 17,
+          "trade_constant": "TRADE_FOR_DORIS",
+          "trade_index": 7
+        },
+        "npc:cinnabar_lab_trade_room:8": {
+          "call": {
+            "address": 23610,
+            "bank": 29,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 482362,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "CinnabarLabTradeRoomBeautyText"
+          },
+          "delivered_species": 30,
+          "dispatch": {
+            "address": 23613,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 482365,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:cinnabar_lab_trade_room:8",
+          "give_species": 65,
+          "map": "CINNABAR_LAB_TRADE_ROOM",
+          "map_id": 168,
+          "nickname_hex": "8291888D8A8B8492505050",
+          "receive_species": 30,
+          "record_hex": "411E028291888D8A8B8492505050",
+          "record_rom_offset": 465899,
+          "scope_symbol": "CinnabarLabTradeRoomBeautyText",
+          "selector": {
+            "expected_hex": "083E08EA3DCD",
+            "rom_offset": 482359
+          },
+          "source_file": "scripts/CinnabarLabTradeRoom.asm",
+          "source_line": 23,
+          "trade_constant": "TRADE_FOR_CRINKLES",
+          "trade_index": 8
+        },
+        "npc:route_11_gate_2f:0": {
+          "call": {
+            "address": 21601,
+            "bank": 18,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 300129,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "Route11Gate2FYoungsterText"
+          },
+          "delivered_species": 168,
+          "dispatch": {
+            "address": 21604,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 300132,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:route_11_gate_2f:0",
+          "give_species": 167,
+          "map": "ROUTE_11_GATE_2F",
+          "map_id": 86,
+          "nickname_hex": "9384919198505050505050",
+          "receive_species": 168,
+          "record_hex": "A7A8009384919198505050505050",
+          "record_rom_offset": 465787,
+          "scope_symbol": "Route11Gate2FYoungsterText",
+          "selector": {
+            "expected_hex": "08AFEA3DCD",
+            "rom_offset": 300127
+          },
+          "source_file": "scripts/Route11Gate2F.asm",
+          "source_line": 14,
+          "trade_constant": "TRADE_FOR_TERRY",
+          "trade_index": 0
+        },
+        "npc:route_18_gate_2f:5": {
+          "call": {
+            "address": 22913,
+            "bank": 18,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 301441,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "Route18Gate2FYoungsterText"
+          },
+          "delivered_species": 11,
+          "dispatch": {
+            "address": 22916,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 301444,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:route_18_gate_2f:5",
+          "give_species": 8,
+          "map": "ROUTE_18_GATE_2F",
+          "map_id": 191,
+          "nickname_hex": "8C80918250505050505050",
+          "receive_species": 11,
+          "record_hex": "080B008C80918250505050505050",
+          "record_rom_offset": 465857,
+          "scope_symbol": "Route18Gate2FYoungsterText",
+          "selector": {
+            "expected_hex": "083E05EA3DCD",
+            "rom_offset": 301438
+          },
+          "source_file": "scripts/Route18Gate2F.asm",
+          "source_line": 13,
+          "trade_constant": "TRADE_FOR_MARC",
+          "trade_index": 5
+        },
+        "npc:route_2_trade_house:1": {
+          "call": {
+            "address": 24316,
+            "bank": 7,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 122620,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "Route2TradeHouseGameboyKidText"
+          },
+          "delivered_species": 42,
+          "dispatch": {
+            "address": 24319,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 122623,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:route_2_trade_house:1",
+          "give_species": 148,
+          "map": "ROUTE_2_TRADE_HOUSE",
+          "map_id": 48,
+          "nickname_hex": "8C809182848B5050505050",
+          "receive_species": 42,
+          "record_hex": "942A008C809182848B5050505050",
+          "record_rom_offset": 465801,
+          "scope_symbol": "Route2TradeHouseGameboyKidText",
+          "selector": {
+            "expected_hex": "083E01EA3DCD",
+            "rom_offset": 122617
+          },
+          "source_file": "scripts/Route2TradeHouse.asm",
+          "source_line": 16,
+          "trade_constant": "TRADE_FOR_MARCEL",
+          "trade_index": 1
+        },
+        "npc:underground_path_route_5:9": {
+          "call": {
+            "address": 22197,
+            "bank": 23,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 382645,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "UndergroundPathRoute5LittleGirlText"
+          },
+          "delivered_species": 15,
+          "dispatch": {
+            "address": 22200,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 382648,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:underground_path_route_5:9",
+          "give_species": 3,
+          "map": "UNDERGROUND_PATH_ROUTE_5",
+          "map_id": 71,
+          "nickname_hex": "928F8E9350505050505050",
+          "receive_species": 15,
+          "record_hex": "030F02928F8E9350505050505050",
+          "record_rom_offset": 465913,
+          "scope_symbol": "UndergroundPathRoute5LittleGirlText",
+          "selector": {
+            "expected_hex": "083E09EA3DCD",
+            "rom_offset": 382642
+          },
+          "source_file": "scripts/UndergroundPathRoute5.asm",
+          "source_line": 16,
+          "trade_constant": "TRADE_FOR_SPOT",
+          "trade_index": 9
+        },
+        "npc:vermilion_trade_house:4": {
+          "call": {
+            "address": 23578,
+            "bank": 6,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 105498,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "VermilionTradeHouseLittleGirlText"
+          },
+          "delivered_species": 64,
+          "dispatch": {
+            "address": 23581,
+            "expected_hex": "3E54CD6D3E",
+            "rom_offset": 105501,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:vermilion_trade_house:4",
+          "give_species": 5,
+          "map": "VERMILION_TRADE_HOUSE",
+          "map_id": 196,
+          "nickname_hex": "8394975050505050505050",
+          "receive_species": 64,
+          "record_hex": "0540028394975050505050505050",
+          "record_rom_offset": 465843,
+          "scope_symbol": "VermilionTradeHouseLittleGirlText",
+          "selector": {
+            "expected_hex": "083E04EA3DCD",
+            "rom_offset": 105495
+          },
+          "source_file": "scripts/VermilionTradeHouse.asm",
+          "source_line": 11,
+          "trade_constant": "TRADE_FOR_DUX",
+          "trade_index": 4
+        }
+      },
+      "source_commit": "405b6246372d7e5a2cb029cbb65219b13286b8c9",
+      "symbols_sha256": "5142424dd1e85f00f7193655a0a6c5f0b6366163c74280e5d55990ef8c6b3db9",
+      "table": {
+        "policy": "pinned: gen1_upr_scan claims no in-game-trade domain (inGameTradesMod is never validated), so RomChangeAudit.finish rejects any admitted ROM that changed these bytes",
+        "record_length": 14,
+        "rom_offset": 465787,
+        "symbol": "TradeMons"
+      },
+      "unused": [
+        {
+          "constant": "TRADE_FOR_CHIKUCHIKU",
+          "index": 2,
+          "reason": "no map script invokes this trade index"
+        }
+      ]
+    },
+    "yellow": {
+      "addresses": {
+        "hLoadedROMBank": 65464,
+        "wBoxDataStart": 55935,
+        "wCurEnemyLevel": 53542,
+        "wCurMap": 54109,
+        "wCurPartySpecies": 53136,
+        "wCurrentBoxNum": 54687,
+        "wInGameTradeGiveMonSpecies": 52495,
+        "wInGameTradeMonNick": 52521,
+        "wInGameTradeReceiveMonSpecies": 52532,
+        "wIsInBattle": 53334,
+        "wMonDataLocation": 52297,
+        "wPartyDataStart": 53602,
+        "wPlayerID": 54104,
+        "wPlayerName": 53591,
+        "wRemoveMonFromBox": 53140,
+        "wTradedEnemyMonOTID": 52569,
+        "wWhichPokemon": 53137,
+        "wWhichTrade": 52541
+      },
+      "clean_sha1": "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1",
+      "engine": {
+        "block": {
+          "expected_hex": "F1EA26D1F1EA91CFFA34CDEA90CFAFEA49CCEA94CFCD14393E80EA49CCCD1C39CDAD5DCDF95DCDDD16CD365D060321596DCD843EA73E031801",
+          "rom_offset": 466168
+        },
+        "copy_received": {
+          "expected_hex": "21B4D2010B00CDE35D2129CD010B00CDB1002172D2010B00CDE35D212D5E010B00CDB1002176D1012C00CDE35D2159CD010200C3B100",
+          "rom_offset": 466349,
+          "source": "nickname <- table, OT name <- InGameTrade_TrainerString, OT id <- wTradedEnemyMonOTID, all at slot wPartyCount-1"
+        },
+        "do_trade": {
+          "address": 23721,
+          "bank": 28,
+          "rom_offset": 466089,
+          "symbol": "InGameTrade_DoTrade"
+        },
+        "ot_id_source": {
+          "expected_hex": "114CCD010200CDA55DCD6D3E21D3FF1159CDC3B100",
+          "rom_offset": 466320,
+          "source": "InGameTrade_PrepareTradeData: two Random bytes (hRandomAdd, hRandomSub) -> wTradedEnemyMonOTID"
+        },
+        "remove": {
+          "address": 23821,
+          "bank": 28,
+          "expected_hex": "CD1439",
+          "rom_offset": 466189,
+          "source": "call RemovePokemon: party intact, wWhichPokemon = outgoing slot, wCurEnemyLevel = its level, wCurPartySpecies = receive species",
+          "symbol": "InGameTrade_DoTrade"
+        },
+        "return": {
+          "address": 23838,
+          "bank": 28,
+          "expected_hex": "CDDD16",
+          "rom_offset": 466206,
+          "source": "call ClearScreen: reached only after AddPartyMon, InGameTrade_CopyDataToReceivedMon and the trade-evolution hook returned",
+          "symbol": "InGameTrade_DoTrade"
+        },
+        "species_level_check": {
+          "expected_hex": "FA0FCD47FA90CFB83E022067FA91CF218BD1012C00CD743A7EEA26D1",
+          "rom_offset": 466110,
+          "source": "engine/events/in_game_trades.asm: cp wInGameTradeGiveMonSpecies, else .tradeFailed; wCurEnemyLevel = outgoing party level"
+        },
+        "trainer_string": {
+          "expected_hex": "5D50505050505050505050",
+          "rom_offset": 466477,
+          "symbol": "InGameTrade_TrainerString"
+        }
+      },
+      "lengths": {
+        "box": 1122,
+        "name": 11,
+        "ot_id": 2,
+        "party": 404,
+        "player_id": 2,
+        "record": 14
+      },
+      "out_of_battle_flag": 0,
+      "predef_id": 84,
+      "sites": {
+        "npc:cinnabar_lab_fossil_room:3": {
+          "call": {
+            "address": 22104,
+            "bank": 29,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 480856,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "CinnabarLabFossilRoomScientist2Text"
+          },
+          "delivered_species": 136,
+          "dispatch": {
+            "address": 22107,
+            "expected_hex": "3E54CDB43E",
+            "rom_offset": 480859,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:cinnabar_lab_fossil_room:3",
+          "give_species": 2,
+          "map": "CINNABAR_LAB_FOSSIL_ROOM",
+          "map_id": 170,
+          "nickname_hex": "929388828A985050505050",
+          "receive_species": 136,
+          "record_hex": "028800929388828A985050505050",
+          "record_rom_offset": 465991,
+          "scope_symbol": "CinnabarLabFossilRoomScientist2Text",
+          "selector": {
+            "expected_hex": "083E03EA3DCD",
+            "rom_offset": 480853
+          },
+          "source_file": "scripts/CinnabarLabFossilRoom.asm",
+          "source_line": 104,
+          "trade_constant": "TRADE_FOR_STICKY",
+          "trade_index": 3
+        },
+        "npc:cinnabar_lab_trade_room:7": {
+          "call": {
+            "address": 21677,
+            "bank": 29,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 480429,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "CinnabarLabTradeRoomGrampsText"
+          },
+          "delivered_species": 1,
+          "dispatch": {
+            "address": 21688,
+            "expected_hex": "3E54CDB43E",
+            "rom_offset": 480440,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:cinnabar_lab_trade_room:7",
+          "give_species": 128,
+          "map": "CINNABAR_LAB_TRADE_ROOM",
+          "map_id": 168,
+          "nickname_hex": "8194858598505050505050",
+          "receive_species": 1,
+          "record_hex": "8001018194858598505050505050",
+          "record_rom_offset": 466047,
+          "scope_symbol": "CinnabarLabTradeRoomGrampsText",
+          "selector": {
+            "expected_hex": "083E07EA3DCD",
+            "rom_offset": 480426
+          },
+          "source_file": "scripts/CinnabarLabTradeRoom.asm",
+          "source_line": 17,
+          "trade_constant": "TRADE_FOR_BUFFY",
+          "trade_index": 7
+        },
+        "npc:cinnabar_lab_trade_room:8": {
+          "call": {
+            "address": 21685,
+            "bank": 29,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 480437,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "CinnabarLabTradeRoomBeautyText"
+          },
+          "delivered_species": 120,
+          "dispatch": {
+            "address": 21688,
+            "expected_hex": "3E54CDB43E",
+            "rom_offset": 480440,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:cinnabar_lab_trade_room:8",
+          "give_species": 33,
+          "map": "CINNABAR_LAB_TRADE_ROOM",
+          "map_id": 168,
+          "nickname_hex": "828499808D8D8450505050",
+          "receive_species": 120,
+          "record_hex": "217802828499808D8D8450505050",
+          "record_rom_offset": 466061,
+          "scope_symbol": "CinnabarLabTradeRoomBeautyText",
+          "selector": {
+            "expected_hex": "083E08EA3DCD",
+            "rom_offset": 480434
+          },
+          "source_file": "scripts/CinnabarLabTradeRoom.asm",
+          "source_line": 23,
+          "trade_constant": "TRADE_FOR_CEZANNE",
+          "trade_index": 8
+        },
+        "npc:route_11_gate_2f:0": {
+          "call": {
+            "address": 21496,
+            "bank": 18,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 300024,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "Route11Gate2FYoungsterText"
+          },
+          "delivered_species": 118,
+          "dispatch": {
+            "address": 21499,
+            "expected_hex": "3E54CDB43E",
+            "rom_offset": 300027,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:route_11_gate_2f:0",
+          "give_species": 11,
+          "map": "ROUTE_11_GATE_2F",
+          "map_id": 86,
+          "nickname_hex": "869491888E505050505050",
+          "receive_species": 118,
+          "record_hex": "0B7600869491888E505050505050",
+          "record_rom_offset": 465949,
+          "scope_symbol": "Route11Gate2FYoungsterText",
+          "selector": {
+            "expected_hex": "083E00EA3DCD",
+            "rom_offset": 300021
+          },
+          "source_file": "scripts/Route11Gate2F.asm",
+          "source_line": 14,
+          "trade_constant": "TRADE_FOR_GURIO",
+          "trade_index": 0
+        },
+        "npc:route_18_gate_2f:5": {
+          "call": {
+            "address": 22808,
+            "bank": 18,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 301336,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "Route18Gate2FCookText"
+          },
+          "delivered_species": 46,
+          "dispatch": {
+            "address": 22811,
+            "expected_hex": "3E54CDB43E",
+            "rom_offset": 301339,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:route_18_gate_2f:5",
+          "give_species": 30,
+          "map": "ROUTE_18_GATE_2F",
+          "map_id": 191,
+          "nickname_hex": "928F888A84505050505050",
+          "receive_species": 46,
+          "record_hex": "1E2E00928F888A84505050505050",
+          "record_rom_offset": 466019,
+          "scope_symbol": "Route18Gate2FCookText",
+          "selector": {
+            "expected_hex": "083E05EA3DCD",
+            "rom_offset": 301333
+          },
+          "source_file": "scripts/Route18Gate2F.asm",
+          "source_line": 13,
+          "trade_constant": "TRADE_FOR_SPIKE",
+          "trade_index": 5
+        },
+        "npc:route_2_trade_house:1": {
+          "call": {
+            "address": 22534,
+            "bank": 7,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 120838,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "Route2TradeHouseGameboyKidText"
+          },
+          "delivered_species": 42,
+          "dispatch": {
+            "address": 22537,
+            "expected_hex": "3E54CDB43E",
+            "rom_offset": 120841,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:route_2_trade_house:1",
+          "give_species": 4,
+          "map": "ROUTE_2_TRADE_HOUSE",
+          "map_id": 48,
+          "nickname_hex": "8C888B8492505050505050",
+          "receive_species": 42,
+          "record_hex": "042A008C888B8492505050505050",
+          "record_rom_offset": 465963,
+          "scope_symbol": "Route2TradeHouseGameboyKidText",
+          "selector": {
+            "expected_hex": "083E01EA3DCD",
+            "rom_offset": 120835
+          },
+          "source_file": "scripts/Route2TradeHouse.asm",
+          "source_line": 16,
+          "trade_constant": "TRADE_FOR_MILES",
+          "trade_index": 1
+        },
+        "npc:underground_path_route_5:9": {
+          "call": {
+            "address": 21952,
+            "bank": 23,
+            "expected_hex": "EA3DCD",
+            "register": "a",
+            "rom_offset": 382400,
+            "source": "ld [wWhichTrade], a: A = trade index; unique per source",
+            "symbol": "UndergroundPathRoute5LittleGirlText"
+          },
+          "delivered_species": 126,
+          "dispatch": {
+            "address": 21955,
+            "expected_hex": "3E54CDB43E",
+            "rom_offset": 382403,
+            "symbol": "predef DoInGameTradeDialogue"
+          },
+          "exchange_id": "exchange:underground_path_route_5:9",
+          "give_species": 17,
+          "map": "UNDERGROUND_PATH_ROUTE_5",
+          "map_id": 71,
+          "nickname_hex": "9188828A98505050505050",
+          "receive_species": 41,
+          "record_hex": "1129029188828A98505050505050",
+          "record_rom_offset": 466075,
+          "scope_symbol": "UndergroundPathRoute5LittleGirlText",
+          "selector": {
+            "expected_hex": "083E09EA3DCD",
+            "rom_offset": 382397
+          },
+          "source_file": "scripts/UndergroundPathRoute5.asm",
+          "source_line": 16,
+          "trade_constant": "TRADE_FOR_RICKY",
+          "trade_evolution": {
+            "forced": true,
+            "from": 41,
+            "record": "species/stats/HP/types follow the evolved species; catch rate byte, experience and moves stay the received species'",
+            "source": "InGameTrade_CheckForTradeEvo -> TryEvolvingMon with wForceEvolution=1 (B cannot cancel) and LINK_STATE_TRADING",
+            "to": 126
+          },
+          "trade_index": 9
+        }
+      },
+      "source_commit": "0a0851546ff65f65c4bb2af2b95e279e709a8653",
+      "symbols_sha256": "f97ce33581421ae31171cd66205daec7d3951464f577109bf5bda674207832e4",
+      "table": {
+        "policy": "pinned: gen1_upr_scan claims no in-game-trade domain (inGameTradesMod is never validated), so RomChangeAudit.finish rejects any admitted ROM that changed these bytes",
+        "record_length": 14,
+        "rom_offset": 465949,
+        "symbol": "TradeMons"
+      },
+      "unused": [
+        {
+          "constant": "TRADE_FOR_STINGER",
+          "index": 2,
+          "reason": "no map script invokes this trade index"
+        },
+        {
+          "constant": "TRADE_FOR_BART",
+          "index": 4,
+          "reason": "no map script invokes this trade index"
+        },
+        {
+          "constant": "TRADE_FOR_MARTY",
+          "index": 6,
+          "reason": "no map script invokes this trade index"
+        }
+      ]
+    }
+  }
+}

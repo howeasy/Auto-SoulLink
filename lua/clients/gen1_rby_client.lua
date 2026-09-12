@@ -1370,6 +1370,7 @@ local function redetect_patch()
 end
 
 local function service_panel()
+    if M.panelHeartbeat then M.panelHeartbeat(C.connected() and writes_enabled)end
     if session and (session.state ~= "admitted" or not C.connected() or not writes_enabled) then return end
     -- ASK WHETHER THIS CARTRIDGE HAS A PANEL AT ALL, not just whether the byte says AWAIT.
     -- On an unpatched ROM $DEEB is ordinary unallocated WRAM; if it ever happened to read 1
@@ -1384,6 +1385,7 @@ local function service_panel()
 end
 
 local function revoke_session(reason)
+    if M.panelHeartbeat then M.panelHeartbeat(false)end
     session:revoke(reason)
     writes_enabled, initialized = false, false
     pending_sync_cmds, pending_labels = {}, {}

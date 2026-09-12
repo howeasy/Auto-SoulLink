@@ -46,6 +46,25 @@ def name_bytes(source: Path) -> list[int]:
     return sorted(values)
 
 
+def npc_trade_ot(source: Path, rom: bytes, symbols: dict) -> list[int]:
+    """The 11 OT bytes InGameTrade_CopyDataToReceivedMon copies onto every NPC-traded mon.
+
+    Source: `dname "<TRAINER>", NAME_LENGTH` pads with "@" ($50); the ROM bytes at the
+    symbol must agree with the charmap. This is the only legal OT that carries a text control.
+    """
+    charmap = (source / "constants/charmap.asm").read_text(encoding="utf-8")
+    trainer = re.search(r'^\s*charmap\s+"<TRAINER>",\s*\$([\da-fA-F]+)', charmap, re.M)
+    trades = (source / "engine/events/in_game_trades.asm").read_text(encoding="utf-8")
+    if trainer is None or not re.search(r'^InGameTrade_TrainerString:\s*\n\s*dname "<TRAINER>", NAME_LENGTH\s*$',
+                                        trades, re.M):
+        raise ValueError(f"{source.name}: InGameTrade_TrainerString or <TRAINER> charmap differs")
+    offset = sym_to_offset(symbols["InGameTrade_TrainerString"])
+    values = list(rom[offset:offset + 11])
+    if values != [int(trainer.group(1), 16)] + [0x50] * 10:
+        raise ValueError(f"{source.name}: InGameTrade_TrainerString ROM bytes differ from source")
+    return values
+
+
 def build_tables() -> dict:
     evidence = verify(rom_dir=ROOT)
     if evidence["status"] != "pass":
@@ -56,6 +75,7 @@ def build_tables() -> dict:
     sources = {}
     alphabets = []
     curves = []
+    trade_ots = []
     for title, target in (("red", "pokered"), ("blue", "pokeblue"), ("yellow", "pokeyellow")):
         pin = lock["clean_roms"][target]
         source = ROOT / ".cache/pret" / pin["source"]
@@ -94,14 +114,16 @@ def build_tables() -> dict:
             raise ValueError(f"{title}: expected six canonical growth polynomials")
         curves.append(growth)
         alphabets.append(name_bytes(source))
+        trade_ots.append(npc_trade_ot(source, rom, symbols))
         profiles[title] = {"species": species, "move_pp": move_pp}
         sources[title] = {"commit": lock["sources"][pin["source"]]["commit"],
                           "clean_sha1": pin["sha1"], "symbols": {name: symbols[name] for name in
                           ("Moves", "BaseStats", "PokedexOrder")}}
-    if any(value != curves[0] for value in curves) or any(value != alphabets[0] for value in alphabets):
-        raise ValueError("RBY name alphabets or growth polynomials differ; require per-title codec rules")
+    if (any(value != curves[0] for value in curves) or any(value != alphabets[0] for value in alphabets)
+            or any(value != trade_ots[0] for value in trade_ots)):
+        raise ValueError("RBY name alphabets, trade OT or growth polynomials differ; require per-title codec rules")
     result = {"schema": SCHEMA, "sources": sources, "titles": profiles,
-              "name_bytes": alphabets[0], "growth_rates": curves[0]}
+              "name_bytes": alphabets[0], "npc_trade_ot": trade_ots[0], "growth_rates": curves[0]}
     result["content_sha256"] = digest(result)
     return result
 

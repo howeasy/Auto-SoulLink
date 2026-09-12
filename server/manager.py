@@ -42,8 +42,8 @@ except ImportError:
 
 import aiohttp_jinja2
 
-from server.adapters import variant_label
 from server import runtime_boundary
+from server.adapters import variant_label
 from server.http_safety import csrf_protection, theme_cache
 from server.json_files import atomic_write_json
 from server.lua_literals import lua_comment, lua_string
@@ -717,14 +717,76 @@ class RunManager:
         # Derive connect host from the Host header (strip port)
         host_header = request.host or "127.0.0.1"
         connect_host = host_header.split(":")[0] or "127.0.0.1"
-        content = _build_launcher(run, player, connect_host)
+        from server.gen1_run_config import read_bound_configuration
+        from server.protocol_journal import JournalError
+        try:
+            prepared,cartridges = read_bound_configuration(os.path.join(MANAGER_DIR, run_id))
+            if prepared is not None:
+                from urllib.parse import urlsplit
+
+                from server.gen1_launcher import build_configuration
+                from server.runtime_launcher import render_launcher
+                connect_host = urlsplit("http://"+host_header).hostname or "127.0.0.1"
+                configuration=build_configuration(prepared["run_id"],prepared["contract"],player,prepared_cartridges=cartridges,
+                    initial_observations=prepared.get('initial_observations',False))
+                content = render_launcher(configuration,
+                    host=connect_host, port=run["tcp_port"], name=run.get("name") or run_id)
+                if getattr(request,'query',{}).get('bundle')=='1':
+                    from server.bizhawk_launch import bundle
+                    return web.Response(body=bundle(run_id=prepared['run_id'],player=player,profile='gambatte',
+                        rom_sha1=configuration['cartridge']['final_rom_sha1'],launcher=content),content_type='application/zip',
+                        headers={'Content-Disposition':f'attachment; filename="slink_{player}_launch.zip"'})
+            else:
+                content = _build_launcher(run, player, connect_host)
+        except (JournalError, ValueError, OSError) as error:
+            return web.json_response({"ok": False, "error": str(error)}, status=409)
         safe_name = re.sub(r'[^\w-]', '_', run.get("name") or run_id).strip('_') or run_id
-        filename = f"slink_{safe_name}_{player}.lua"
+        filename = f"slink_{safe_name}_{player}{'_held' if prepared is not None else ''}.lua"
         return web.Response(
             text=content,
             content_type="application/octet-stream",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+
+    async def handle_create_gen1(self, request: web.Request) -> web.Response:
+        """Prepare a fresh RBY runtime before starting its server process."""
+        import secrets
+        import sqlite3
+        from pathlib import Path
+        from server.gen1_admission import clean_contract, write_contract
+        from server.gen1_run_config import create_runtime
+        from server.protocol_journal import JournalError
+        try:
+            body=await request.json()
+            if (not isinstance(body,dict) or not {'name','rom_a','rom_b'}<=set(body)
+                    or set(body)-{'name','rom_a','rom_b','rules','start'}
+                    or not isinstance(body['name'],str) or not 1<=len(body['name'].strip())<=120
+                    or any(ord(c)<32 for c in body['name'])
+                    or type(body.get('start',True)) is not bool):
+                raise ValueError('name, two cartridge paths and optional explicit rules/start are required')
+            contract=await asyncio.to_thread(clean_contract,{'a':body['rom_a'],'b':body['rom_b']})
+            runs=_load_registry();tcp_port,http_port=_next_ports(runs)
+            run_id='run_'+datetime.now(UTC).strftime('%Y%m%d_%H%M%S')+'_'+secrets.token_hex(3)
+            directory=Path(MANAGER_DIR)/run_id
+            runtime=create_runtime(directory,contract,rule_options=body.get('rules',{}))
+            try:
+                rules=runtime.state().rules
+                settings={key:bool(getattr(rules,key)) for key in ('species_lock','gender_lock','type_lock','explode_mode',
+                    'rival_team_swap','overworld_presence','native_messages','native_sounds','battle_calc','pc_trade_npc')}
+            finally:runtime.close()
+            write_contract(directory/'rom_contract.json',contract)
+            run={'run_id':run_id,'name':body['name'].strip(),'created_at':datetime.now(UTC).isoformat(),
+                'tcp_port':tcp_port,'http_port':http_port,'status':'stopped','pid':None,'cartridges':contract['players'],
+                **settings}
+            _write_run_meta(run);runs.append(run);_save_registry(runs)
+            if body.get('start',True):
+                run['pid']=await _spawn_run(run,self.bind_host,manager_port=self.manager_port)
+                run['status']='running';_save_registry(runs)
+        except (ValueError,TypeError,JournalError) as error:
+            return web.json_response({'ok':False,'error':str(error)},status=400)
+        except (RuntimeError,OSError,sqlite3.Error) as error:
+            return web.json_response({'ok':False,'error':str(error)},status=500)
+        return web.json_response({'ok':True,'run':run,'runtime_mode':'held_service'})
 
     async def handle_cartridges(self, request: web.Request) -> web.Response:
         """Bind each RBY player to an inspected local cartridge before admission."""
@@ -1038,6 +1100,7 @@ async def main(host: str, port: int):
     app.router.add_post("/api/runs/{run_id}/archive", manager.handle_archive)
     app.router.add_post("/api/runs/{run_id}/delete",  manager.handle_delete)
     app.router.add_get("/api/runs/{run_id}/launcher/{player}", manager.handle_launcher)
+    app.router.add_post("/api/runs/gen1", manager.handle_create_gen1)
     app.router.add_post("/api/runs/{run_id}/randomize", manager.handle_randomize)
     app.router.add_post("/api/runs/{run_id}/cartridges", manager.handle_cartridges)
     app.router.add_get("/api/runs/{run_id}/live",     manager.handle_run_live)

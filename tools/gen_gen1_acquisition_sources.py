@@ -307,7 +307,7 @@ def build() -> dict:
         maps = map_ids(repo, syms, rom)
         pokemon = parse_pokemon_constants(str(repo / "constants/pokemon_constants.asm"))
         for file in (repo / "constants").glob("*.asm"):
-            for name, target_name in re.findall(r"^DEF (\w+) EQU (\w+)\s*(?:;[^\n]*)?$", file.read_text(), re.M):
+            for name, target_name in re.findall(r"^DEF (\w+) EQU (\w+)\s*(?:;[^\n]*)?$", file.read_text(encoding='utf-8'), re.M):
                 if target_name in pokemon:
                     pokemon[name] = pokemon[target_name]
         valid_species = {int(key) for key in codec["titles"][title]["species"]}

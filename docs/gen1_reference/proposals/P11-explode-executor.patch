@@ -1,0 +1,491 @@
+diff --git a/lua/battle_force_authority.lua b/lua/battle_force_authority.lua
+index a9e6b0f..905d79a 100644
+--- a/lua/battle_force_authority.lua
++++ b/lua/battle_force_authority.lua
+@@ -1,11 +1,13 @@
+--- R/B/Y binding for lua/instruction_executor.lua: battle force-faint (PROTOTYPE, not wired in).
+--- Sites, addresses and the member come from the server-issued authority; this file only knows
+--- how to snapshot the Gen 1 battle state at the instruction and which bytes a death may write:
+---   active linked mon  -> wBattleMonHP=0000 (+ wPlayerSelectedMove=$FF at ExecutePlayerMove+0)
+---   benched linked mon -> its party slot HP=0000 and status=00 (the only copy during a battle)
+--- decide() must stay byte-for-byte equivalent to server/battle_force_authority.decide.
++-- R/B/Y binding for lua/instruction_executor.lua: battle force-faint and force-explode (PROTOTYPE, not wired in).
++-- Sites, addresses, the member AND the write lists come from the server-issued authority; this file only knows
++-- how to snapshot the Gen 1 battle state at the instruction and which of the server's write sets a death may take:
++--   faint   (NAME)    active linked mon -> wBattleMonHP=0000 (+ wPlayerSelectedMove=$FF at ExecutePlayerMove+0)
++--   explode (EXPLODE) active linked mon -> loop_head: wBattleMonMoves[0..3]=$99 + wBattleMonPP[0..3]=5 (not transformed)
++--                                          player_action: wPlayerSelectedMove=$99 (unless the turn was already taken)
++--   either            benched linked mon -> its party slot HP=0000 and status=00 (the only copy during a battle)
++-- decide() must stay byte-for-byte equivalent to server/battle_force_authority.decide (same checks, order, reasons).
+ local Executor=require("instruction_executor")
+-local M={NAME="rby-battle-force-faint",PARTY_STRIDE=44,TRANSFORMED=8}
++local M={NAME="rby-battle-force-faint",EXPLODE="rby-battle-force-explode",PARTY_STRIDE=44,TRANSFORMED=8}
+ local function u8(a)return memory.read_u8(a,"System Bus")end
+ function M.snapshot(a,member)
+     local slot=u8(a.wPlayerMonNumber);local mine=member.slot
+@@ -15,7 +17,8 @@ function M.snapshot(a,member)
+         party_ot_id_hex=Executor.hex(a.wPartyMon1OTID+M.PARTY_STRIDE*mine,2),
+         party_hp_hex=Executor.hex(a.wPartyMon1HP+M.PARTY_STRIDE*mine,2),party_status=u8(a.wPartyMon1Status+M.PARTY_STRIDE*mine),
+         hp_hex=Executor.hex(a.wBattleMonHP,2),enemy_hp_hex=Executor.hex(a.wEnemyMonHP,2),
+-        action_result=u8(a.wActionResultOrTookBattleTurn),selected_move=u8(a.wPlayerSelectedMove)}
++        action_result=u8(a.wActionResultOrTookBattleTurn),selected_move=u8(a.wPlayerSelectedMove),
++        moves_hex=Executor.hex(a.wBattleMonMoves,4),pp_hex=Executor.hex(a.wBattleMonPP,4)}
+ end
+ function M.decide(state,member,site,authority)
+     local function refuse(reason)return {writes={},refusal=reason}end
+@@ -37,9 +40,13 @@ function M.decide(state,member,site,authority)
+     end
+     if state.hp_hex=="0000" then return refuse("already fainted")end
+     if state.enemy_hp_hex=="0000" then return refuse("enemy faint path owns this turn")end
+-    return {writes=authority.sites[site].writes,outcome="fainted"}
++    if authority.binding~=M.EXPLODE then return {writes=authority.sites[site].writes,outcome="fainted"}end
++    if site=="loop_head" and transformed then return refuse("transformed battle mon keeps the copied moveset")end
++    if site=="player_action" and state.action_result~=0 then return refuse("turn already taken")end
++    return {writes=authority.sites[site].writes,outcome="explode_armed"}
+ end
++-- options.name selects the binding this executor serves (default the faint binding); the authority must name the same one.
+ function M.new(options)
+-    return Executor.new({owner_id=options.owner_id,held=options.held,binding={name=M.NAME,snapshot=M.snapshot,decide=M.decide}})
++    return Executor.new({owner_id=options.owner_id,held=options.held,binding={name=options.name or M.NAME,snapshot=M.snapshot,decide=M.decide}})
+ end
+ return M
+diff --git a/lua/tests/test_gen1_battle_force_gate.lua b/lua/tests/test_gen1_battle_force_gate.lua
+index 3e60996..6bca588 100644
+--- a/lua/tests/test_gen1_battle_force_gate.lua
++++ b/lua/tests/test_gen1_battle_force_gate.lua
+@@ -17,6 +17,10 @@
+     transform    Ditto (not linked) uses TRANSFORM: wPlayerBattleStatus3 TRANSFORMED set, battle struct = enemy
+     player_action  Ditto linked while transformed: menu -> not_reached only; FIGHT commit ->
+                  ExecutePlayerMove+0 write (HP 0000 + CANNOT_MOVE) -> faint -> black-out (both mons down)
++    explode_first  (scenarios=["explode_first"] only, P11) the EXPLODE binding armed for the linked Squirtle from the
++                 walk on: the wild battle's first MainInBattleLoop+0 rewrites its four move slots to EXPLOSION (PP 5)
++                 before the first menu; FIGHT + slot 1 reaches ExecutePlayerMove+0 with $99 already selected (one-byte
++                 no-op write) and the ORIGINAL engine's ExplodeEffect faints the mon itself and hits the wild mon
+   Assertions and screenshots anchor on the CURRENT member's non-refused row, never an earlier callback.
+ --]]
+ local ROOT=SLINK_ROOT or os.getenv("SLINK_ROOT")
+@@ -32,7 +36,7 @@ local f=assert(io.open(assert(os.getenv("SLINK_BATTLE_FORCE_INPUT")),"r"));local
+ local A=config.addresses;local SITES=config.sites;local OUT=config.out_dir;local D=config.driver
+ -- config.scenarios (optional list) selects scenarios; nil = the full benched -> transform -> player_action battle.
+ local function want(name)
+-    local sc=config.scenarios;if sc==nil or sc==JSON.null then return name~="fight_first" end
++    local sc=config.scenarios;if sc==nil or sc==JSON.null then return name~="fight_first" and name~="explode_first" end
+     for _,n in ipairs(sc)do if n==name then return true end end;return false
+ end
+ local u8=function(a)return memory.read_u8(a,"System Bus")end
+@@ -53,11 +57,14 @@ local function world()return {map=u8(config.coord_addr.map),x=u8(config.coord_ad
+     party0=party_slot(0).hp_hex,party1=party_count()>=2 and party_slot(1).hp_hex or JSON.null,frame=emu.framecount()}end
+ local challenge_n=0
+ local owner=nil;local in_frame=false
++-- current.binding selects the authority a step arms (faint by default); the explode binding carries its own site writes
++local current={member=nil,scenario=nil,exec=nil,binding=Battle.NAME}
+ local function authority(member,frame,step)
+     challenge_n=challenge_n+1
++    local explode=current.binding==Battle.EXPLODE
+     return {schema=Executor.SCHEMA,challenge=fmt("%032x",challenge_n),scope={operation_id=string.rep("0",32),operation_digest=string.rep("0",64),
+         context_generation=string.rep("0",32),binding_digest=string.rep("0",64),phase="battle_force_faint"},proof_digest=string.rep("0",64),
+-        owner_id=result.owner_id,frame=frame,step=step,uses=1,held=false,binding=Battle.NAME,member=member,sites=SITES,addresses=A,
++        owner_id=result.owner_id,frame=frame,step=step,uses=1,held=false,binding=current.binding,member=member,sites=explode and config.explode_sites or SITES,addresses=A,
+         hook_frame_offset=(owner and result.hook_frame_offset_bounded) or result.hook_frame_offset_harness or 0}
+ end
+ local function scenario(name)local s={name=name,reached=JSON.array(),not_reached=0,checks=JSON.array()};result.scenarios[#result.scenarios+1]=s;return s end
+@@ -66,6 +73,8 @@ local function check(s,what,ok,detail)s.checks[#s.checks+1]={what=what,ok=ok and
+ -- ── frame primitive: harness (emu.frameadvance) until the owner exists, then step_one ──────────
+ local function held()if owner then return owner.status().host.physical_stop_verified end;return not in_frame end
+ local X=Battle.new({owner_id=result.owner_id,held=held})
++local XE=Battle.new({owner_id=result.owner_id,held=held,name=Battle.EXPLODE}) -- same two sites, its own hooks and challenge ledger
++current.exec=X
+ local step_n=0
+ -- Measured live (lua/tests/probe_input_latency.lua): under step_one joypad.set is STICKY — a button stays
+ -- held until another joypad.set replaces it (frameadvance auto-releases). Every frame therefore sets all
+@@ -78,15 +87,14 @@ local function frame(buttons)
+     if owner then local ok,r=owner.step_one({});assert(ok,r)else in_frame=true;emu.frameadvance();in_frame=false end
+     t.frame=t.frame+1
+ end
+-local current={member=nil,scenario=nil}
+ local function step(buttons)
+-    local member,s=current.member,current.scenario
++    local member,s,ex=current.member,current.scenario,current.exec
+     step_n=step_n+1
+     local before=emu.framecount()
+     local auth=authority(member,before,step_n)
+-    assert(X.arm(auth))
++    assert(ex.arm(auth))
+     frame(buttons)
+-    local ev=X.finish()
++    local ev=ex.finish()
+     if ev.site~=JSON.null and ev.site~=nil then
+         s.reached[#s.reached+1]={authority=auth,evidence=ev,world_at_finish=world(),bounded=owner~=nil}
+         note(fmt("[%s] REACHED %s frame=%d hook_frame=%s member=%02X refusal=%s writes=%d",s.name,ev.site,before,tostring(ev.hook_frame),member.species,
+@@ -94,7 +102,7 @@ local function step(buttons)
+     else s.not_reached=s.not_reached+1 end
+     return ev
+ end
+-local function use(member,s)current.member=member;current.scenario=s end
++local function use(member,s,exec,binding)current.member=member;current.scenario=s;current.exec=exec or X;current.binding=binding or Battle.NAME end
+ local function wait(frames,stop)for _=1,frames do if stop and stop()then return true end;step(nil)end;return stop and stop()or false end
+ local function landed(s,base,member)
+     local r=s.reached[#s.reached]
+@@ -204,7 +212,18 @@ local ok,why=xpcall(function()
+         check(s,"joypad input reaches the core inside step_one",moved,fmt("%s -> %s",JSON.encode(w0),JSON.encode(world())))
+     end
+     -- ── the one battle ─────────────────────────────────────────────────────────────────────────
+-    local battle=scenario("battle_entry");use(stranger,battle)
++    local battle=scenario("battle_entry")
++    -- explode_first arms the EXPLODE binding for the linked Squirtle from the walk on, so the wild battle's very first
++    -- MainInBattleLoop+0 (before its first menu) is the loop_head site: the eight-byte moveset write lands before any menu.
++    -- A stray battle from the probe walk has already passed its first loop head: end it with the non-linked member first.
++    local explode=want("explode_first") and scenario("explode_first") or nil
++    if explode and u8(A.wIsInBattle)~=0 then
++        local c=scenario("explode_cleanup");use(stranger,c)
++        to_menu(120,"A")
++        for _=1,8 do if u8(A.wIsInBattle)==0 then break end;local r=drv.run();c.run=r;if not r.ok then to_menu(120,nil)end end
++        check(c,"stray battle ended by RUN before the explode entry",u8(A.wIsInBattle)==0,JSON.encode(world()))
++    end
++    if explode then use(squirtle,explode,XE,Battle.EXPLODE) else use(stranger,battle) end
+     if u8(A.wIsInBattle)==0 then check(battle,"entered a wild battle by walking (step_one)",enter_battle(battle),JSON.encode(world()))
+     else battle.menu=to_menu(240,"A");check(battle,"battle from the probe reached its menu",battle.menu and battle.menu.ok,JSON.encode(battle.menu))end
+     shot("battle_menu");battle.world=world()
+@@ -244,6 +263,55 @@ local ok,why=xpcall(function()
+         s.world_final=world();shot("fight_first_after")
+         note("fight_first final: "..JSON.encode(s.world_final))
+     end
++    -- explode_first: the EXPLODE binding on the ACTIVE linked Squirtle (armed since the walk: see the battle entry above)
++    if explode then
++        local s=explode
++        s.world_before=world()
++        check(s,"the linked mon is the active battle mon",u8(A.wPlayerMonNumber)==0 and s.world_before.battle_species==squirtle.species,JSON.encode(s.world_before))
++        local head=landed(s,0,squirtle) and s.reached[#s.reached] or nil
++        local moves,pp=hexrange(A.wBattleMonMoves,4),hexrange(A.wBattleMonPP,4)
++        check(s,"MainInBattleLoop+0 was reached before the first menu with the EXPLODE footprint (4 x $99 moves + 4 x PP 5)",
++            head~=nil and head.evidence.site=="loop_head" and #head.evidence.writes==8 and head.evidence.writes[1].address==A.wBattleMonMoves
++            and head.evidence.writes[5].address==A.wBattleMonPP and moves=="99999999" and pp=="05050505",
++            JSON.encode({rows=#s.reached,site=head and head.evidence.site or JSON.null,writes=head and head.evidence.writes or JSON.null,moves=moves,pp=pp}))
++        if head then s.loop_head_row={site=head.evidence.site,frame=head.evidence.frame,hook_frame=head.evidence.hook_frame,challenge=head.authority.challenge,
++            writes=head.evidence.writes,state=head.evidence.state,world=head.world_at_finish} end
++        local menu_rows=s.not_reached;wait(30)
++        check(s,"menu state with the active linked member yields not_reached only",s.not_reached==menu_rows+30,fmt("%d->%d reached=%d",menu_rows,s.not_reached,#s.reached))
++        local base=#s.reached
++        local enemy_before=u8(A.wEnemyMonHP)*256+u8(A.wEnemyMonHP+1)
++        if drv.state().x~=5 then s.choose=drv.choose("FIGHT") else s.choose={skipped="move menu already open"} end
++        wait(30);shot("explode_first_after_write") -- the move menu: EXPLOSION in every slot
++        local trace=drv.commit_move(1,900);s.commit_trace=trace
++        wait(600,function()return landed(s,base,squirtle) end)
++        local row=landed(s,base,squirtle) and s.reached[#s.reached] or nil
++        check(s,"ExecutePlayerMove+0 was reached and written for the ACTIVE linked member after FIGHT",row~=nil and row.evidence.site=="player_action",
++            fmt("rows after commit=%d stages=%s",#s.reached-base,JSON.encode(trace.stages or {})))
++        if row then
++            s.write_row={site=row.evidence.site,frame=row.evidence.frame,hook_frame=row.evidence.hook_frame,challenge=row.authority.challenge,writes=row.evidence.writes,
++                state=row.evidence.state,world=row.world_at_finish}
++            check(s,"the action-site write is wPlayerSelectedMove=$99 alone, already $99 from the menu (the slot re-derivation): a one-byte no-op",
++                #row.evidence.writes==1 and row.evidence.writes[1].address==A.wPlayerSelectedMove and row.evidence.writes[1].before_hex=="99"
++                and row.evidence.writes[1].after_hex=="99" and row.evidence.state.selected_move==0x99,JSON.encode(row.evidence))
++        end
++        -- the engine's own turn: ExplodeEffect zeroes the user's HP and status, the wild mon takes the hit
++        wait(900,function()return hexrange(A.wBattleMonHP,2)=="0000" or party_slot(0).hp_hex=="0000" or u8(A.wPlayerMonNumber)~=0 or u8(A.wIsInBattle)==0 end)
++        wait(60)
++        local enemy_after=u8(A.wEnemyMonHP)*256+u8(A.wEnemyMonHP+1)
++        s.engine={selected_move_at_execute=row and row.evidence.state.selected_move or JSON.null,selected_move_after_a=trace.selected_move,
++            enemy_hp_before=enemy_before,enemy_hp_after=enemy_after,slot0_hp=party_slot(0).hp_hex,battle_hp=hexrange(A.wBattleMonHP,2),
++            active=u8(A.wPlayerMonNumber),in_battle=u8(A.wIsInBattle),frame=emu.framecount()}
++        shot("explode_first_fainted")
++        check(s,"the linked mon exploded itself in the original engine (party HP 0000)",party_slot(0).hp_hex=="0000",JSON.encode(s.engine))
++        check(s,"the wild mon took the Explosion (enemy HP dropped)",enemy_after<enemy_before,JSON.encode(s.engine))
++        -- "Use next POKeMON?" -> Ditto (not linked: zero writes); then end the battle by RUN attempts, or it is already over
++        use(stranger,s)
++        for _=1,30 do if u8(A.wPlayerMonNumber)==1 or u8(A.wIsInBattle)==0 then break end;for _=1,3 do step({A=true})end;for _=1,20 do step(nil)end end
++        if u8(A.wIsInBattle)~=0 then to_menu(120,"A") end
++        for _=1,8 do if u8(A.wIsInBattle)==0 then break end;local r=drv.run();s.run=r;if not r.ok then to_menu(120,nil)end end
++        s.world_final=world();shot("explode_first_after")
++        note("explode_first final: "..JSON.encode(s.world_final))
++    end
+     -- benched: PKMN -> Ditto in while Squirtle is the linked member
+     if want("benched") then
+         local s=scenario("benched");use(squirtle,s)
+diff --git a/server/battle_force_authority.py b/server/battle_force_authority.py
+index 495502c..3bfce1b 100644
+--- a/server/battle_force_authority.py
++++ b/server/battle_force_authority.py
+@@ -28,6 +28,26 @@ Branches decided from the client's snapshot (the server re-derives the same deci
+   the copy-down, Red 1022-1023); ``HasMonFainted`` (Red 1473-1480) then refuses to send it
+   out, so it cannot act for the rest of the battle.
+ 
++A second binding, ``rby-battle-force-explode`` (the ``force_explode`` command of Explode Mode),
++shares both sites, the snapshot and every refusal above; only what the ACTIVE linked mon gets
++written differs (the benched write is the faint binding's, byte for byte):
++
++* ``loop_head``, active and NOT transformed: ``wBattleMonMoves[0..3] = EXPLOSION`` ($99) and
++  ``wBattleMonPP[0..3] = 5``, eight bytes. All four slots because ``SelectMenuItem`` re-derives
++  ``wPlayerSelectedMove`` from ``wBattleMonMoves[wCurrentMenuItem]`` on every confirm (core.asm
++  Red 2660-2668), PP 5 so the menu never refuses a slot (``and PP_MASK; jr z, .noPP``). A
++  transformed mon shows the enemy's copied moveset, not its own: refused, nothing written (the
++  committed turn is still coerced below). HP is never written: the engine's own ``ExplodeEffect``
++  zeroes the user's HP and status even on a miss (effects.asm), then the ordinary faint follows.
++* ``player_action``, active: ``wPlayerSelectedMove = EXPLOSION``, one byte. ``GetCurrentMove``
++  loads that id with no membership check and ``DecrementPP`` indexes PP by
++  ``wPlayerMoveListIndex`` only. Refused when ``wActionResultOrTookBattleTurn != 0`` (an item,
++  switch or failed run took the turn: ``jp nz, ExecutePlayerMoveDone`` would skip the move).
++
++Outcome ``explode_armed`` is NOT terminal: sleep, freeze, paralysis, confusion or a RUN can still
++stop the move that turn, so the caller re-issues while the death stays pending; the re-arm is
++idempotent (before equals after, the footprint still verifies). Only ``benched`` is terminal.
++
+ Paths that leave the battle without reaching either site — a successful RUN or Poké Doll
+ (``DisplayBattleMenu`` then ``ret c`` / ``ret nz``, Red 305-309), a capture
+ (``.returnAfterCapturingMon`` ``scf; ret``) — end the battle before the dead mon can act;
+@@ -44,6 +64,10 @@ from server.protocol import digest
+ from server.protocol_journal import JournalError
+ 
+ BINDING = 'rby-battle-force-faint'
++EXPLODE = 'rby-battle-force-explode'
++BINDINGS = {'force_faint': BINDING, 'force_explode': EXPLODE}  # the command names its binding; nothing else selects it
++EXPLOSION = 0x99  # constants/move_constants.asm: const EXPLOSION ; 99
++EXPLODE_PP = 5
+ PARTY_STRIDE = 44
+ LINK_STATE_BATTLING = 4
+ BATTLE_TYPE_NORMAL = 0
+@@ -61,6 +85,7 @@ _RB = {
+     'poison_tail': {'pc': 0x4421, 'expected_hex': '2ab6c0cd5a4d0e14cd3937afc9'},
+     'move_done': {'pc': 0x580A, 'expected_hex': 'afea6acd0601c9'},
+     'addresses': {'wBattleMonHP': 0xD015, 'wBattleMonSpecies': 0xD014, 'wBattleMonDVs': 0xD020, 'wPlayerSelectedMove': 0xCCDC,
++                  'wBattleMonMoves': 0xD01C, 'wBattleMonPP': 0xD02D,
+                   'wPartyMon1': 0xD16B, 'wPartyMon1HP': 0xD16C, 'wPartyMon1Status': 0xD16F, 'wPartyMon1OTID': 0xD177, 'wPartyMon1DVs': 0xD186,
+                   'wPlayerMonNumber': 0xCC2F, 'wIsInBattle': 0xD057, 'wBattleType': 0xD05A, 'wLinkState': 0xD12B,
+                   'wEnemyMonHP': 0xCFE6, 'wActionResultOrTookBattleTurn': 0xCD6A, 'wPlayerBattleStatus3': 0xD064,
+@@ -76,6 +101,7 @@ ANCHORS = {
+         'poison_tail': {'pc': 0x4437, 'expected_hex': '2ab6c0cd1f4e0e14cd2f37afc9'},
+         'move_done': {'pc': 0x597C, 'expected_hex': 'afea6acd0601c9'},
+         'addresses': {'wBattleMonHP': 0xD014, 'wBattleMonSpecies': 0xD013, 'wBattleMonDVs': 0xD01F, 'wPlayerSelectedMove': 0xCCDC,
++                      'wBattleMonMoves': 0xD01B, 'wBattleMonPP': 0xD02C,
+                       'wPartyMon1': 0xD16A, 'wPartyMon1HP': 0xD16B, 'wPartyMon1Status': 0xD16E, 'wPartyMon1OTID': 0xD176, 'wPartyMon1DVs': 0xD185,
+                       'wPlayerMonNumber': 0xCC2F, 'wIsInBattle': 0xD056, 'wBattleType': 0xD059, 'wLinkState': 0xD12A,
+                       'wEnemyMonHP': 0xCFE5, 'wActionResultOrTookBattleTurn': 0xCD6A, 'wPlayerBattleStatus3': 0xD063,
+@@ -85,10 +111,11 @@ ANCHORS = {
+ SITES = ('loop_head', 'player_action')
+ STATE_FIELDS = {'is_in_battle', 'battle_type', 'link_state', 'player_mon_number', 'status3', 'battle_species', 'battle_dvs_hex',
+                 'party_species', 'party_dvs_hex', 'party_ot_id_hex', 'party_hp_hex', 'party_status', 'hp_hex', 'enemy_hp_hex',
+-                'action_result', 'selected_move'}
++                'action_result', 'selected_move', 'moves_hex', 'pp_hex'}
+ BYTE_FIELDS = ('is_in_battle', 'battle_type', 'link_state', 'player_mon_number', 'status3', 'battle_species', 'party_species',
+                'party_status', 'action_result', 'selected_move')
+ WORD_FIELDS = ('battle_dvs_hex', 'party_dvs_hex', 'party_ot_id_hex', 'party_hp_hex', 'hp_hex', 'enemy_hp_hex')
++SLOT_FIELDS = ('moves_hex', 'pp_hex')  # wBattleMonMoves[0..3], wBattleMonPP[0..3]
+ KEY = re.compile(r'([0-9A-F]{4}):([0-9A-F]{4}):([0-9A-F]{2})')  # the codec's physical key: DVs:OTID:species (PartyCodec.validate_blob)
+ 
+ 
+@@ -100,13 +127,13 @@ def member_of(key, slot):
+     return {'slot': slot, 'species': int(match.group(3), 16), 'dvs_hex': match.group(1).lower(), 'ot_id_hex': match.group(2).lower()}
+ 
+ 
+-def sites(variant):
++def sites(variant, binding=BINDING):
+     a = ANCHORS[variant]
+     out = {}
+     for name in SITES:
+         site = dict(a[name])
+         site['bank'] = a['bank']
+-        site['writes'] = active_writes(variant, name)
++        site['writes'] = explode_writes(variant, name) if binding == EXPLODE else active_writes(variant, name)
+         out[name] = site
+     return out
+ 
+@@ -119,15 +146,23 @@ def active_writes(variant, site):
+     return rows
+ 
+ 
++def explode_writes(variant, site):
++    a = ANCHORS[variant]['addresses']
++    if site == 'player_action':
++        return [{'address': a['wPlayerSelectedMove'], 'value': EXPLOSION}]
++    return ([{'address': a['wBattleMonMoves'] + i, 'value': EXPLOSION} for i in range(4)]
++            + [{'address': a['wBattleMonPP'] + i, 'value': EXPLODE_PP} for i in range(4)])
++
++
+ def benched_writes(variant, slot):
+     a = ANCHORS[variant]['addresses']
+     hp = a['wPartyMon1HP'] + PARTY_STRIDE * slot
+     return [{'address': hp, 'value': 0}, {'address': hp + 1, 'value': 0}, {'address': a['wPartyMon1Status'] + PARTY_STRIDE * slot, 'value': 0}]
+ 
+ 
+-def decide(state, member, variant, site):
+-    """{'writes': [...], 'refusal': None, 'outcome': 'fainted'|'benched'} or {'writes': [], 'refusal': reason}.
+-    Same function, same order, as lua/battle_force_authority.lua decide()."""
++def decide(state, member, variant, site, binding=BINDING):
++    """{'writes': [...], 'refusal': None, 'outcome': 'fainted'|'explode_armed'|'benched'} or {'writes': [], 'refusal': reason}.
++    Same function, same order, as lua/battle_force_authority.lua decide(); ``binding`` selects the active write."""
+     def refuse(reason):
+         return {'writes': [], 'refusal': reason}
+     if state['is_in_battle'] not in (1, 2):
+@@ -149,7 +184,13 @@ def decide(state, member, variant, site):
+         return refuse('already fainted')
+     if state['enemy_hp_hex'] == '0000':
+         return refuse('enemy faint path owns this turn')
+-    return {'writes': active_writes(variant, site), 'refusal': None, 'outcome': 'fainted'}
++    if binding != EXPLODE:
++        return {'writes': active_writes(variant, site), 'refusal': None, 'outcome': 'fainted'}
++    if site == 'loop_head' and state['status3'] & TRANSFORMED:
++        return refuse('transformed battle mon keeps the copied moveset')
++    if site == 'player_action' and state['action_result'] != 0:
++        return refuse('turn already taken')
++    return {'writes': explode_writes(variant, site), 'refusal': None, 'outcome': 'explode_armed'}
+ 
+ 
+ def prepare(player, command, binding, death, member, host, *, variant):
+@@ -157,8 +198,9 @@ def prepare(player, command, binding, death, member, host, *, variant):
+     the caller supplies the linked member's stable slot/species/DVs and the bounded owner's next step
+     (``host['count']``, default 1, widens the authority to that many consecutive steps: instruction_authority window)."""
+     body = command['body']
+-    if body.get('cmd') != 'force_faint' or 'death_id' not in body:
+-        raise JournalError('battle instruction authority serves force_faint only')
++    name = BINDINGS.get(body.get('cmd'))
++    if name is None or 'death_id' not in body:
++        raise JournalError('battle instruction authority serves force_faint and force_explode only')
+     if (not isinstance(death, dict) or death.get('phase') != 'pending_faint' or death.get('peer') != player
+             or death.get('peer_key') != body.get('key')):
+         raise JournalError('battle instruction authority lacks its pending owned death obligation')
+@@ -172,19 +214,19 @@ def prepare(player, command, binding, death, member, host, *, variant):
+         raise JournalError('unsupported title')
+     proof = {'death_id': body['death_id'], 'key': body['key'], 'member': member, 'host': host, 'variant': variant}
+     return generic.VerifiedInstructionAuthority(command_scope(command, binding, phase='battle_force_faint'), digest(proof), host['owner_id'],
+-                                                host['frame'], host['step'], BINDING, {**member, 'variant': variant}, host.get('count', 1))
++                                                host['frame'], host['step'], name, {**member, 'variant': variant}, host.get('count', 1))
+ 
+ 
+ def issue(request, proof):
+-    if not isinstance(proof, generic.VerifiedInstructionAuthority) or proof.binding != BINDING:
++    if not isinstance(proof, generic.VerifiedInstructionAuthority) or proof.binding not in BINDINGS.values():
+         raise ValueError('verified battle instruction authority required')
+     variant = proof.member['variant']
+-    return generic.issue(request, proof, sites(variant), ANCHORS[variant]['addresses'], hook_frame_offset=HOOK_FRAME_OFFSET)
++    return generic.issue(request, proof, sites(variant, proof.binding), ANCHORS[variant]['addresses'], hook_frame_offset=HOOK_FRAME_OFFSET)
+ 
+ 
+ def verify_evidence(authority, evidence, *, hook_frame_offset=None):
+-    """Return {'outcome': 'fainted'|'benched'|'refused'|'not_reached', 'site', 'reason'} or raise JournalError."""
+-    if authority.get('binding') != BINDING:
++    """Return {'outcome': 'fainted'|'explode_armed'|'benched'|'refused'|'not_reached', 'site', 'reason'} or raise JournalError."""
++    if authority.get('binding') not in BINDINGS.values():
+         raise JournalError('authority is not a battle force-faint authority')
+     site = generic.verify_envelope(authority, evidence, hook_frame_offset=hook_frame_offset)
+     if site is None:
+@@ -198,8 +240,11 @@ def verify_evidence(authority, evidence, *, hook_frame_offset=None):
+     for key in WORD_FIELDS:
+         if not isinstance(state[key], str) or not re.fullmatch('[0-9a-f]{4}', state[key]):
+             raise JournalError('instruction state words required')
++    for key in SLOT_FIELDS:
++        if not isinstance(state[key], str) or not re.fullmatch('[0-9a-f]{8}', state[key]):
++            raise JournalError('instruction state move slots required')
+     member = authority['member']
+-    decision = decide(state, member, member['variant'], site)
++    decision = decide(state, member, member['variant'], site, binding=authority['binding'])
+     a = authority['addresses']
+     slot = member['slot']
+     before = {a['wBattleMonHP']: int(state['hp_hex'][0:2], 16), a['wBattleMonHP'] + 1: int(state['hp_hex'][2:4], 16),
+@@ -207,5 +252,8 @@ def verify_evidence(authority, evidence, *, hook_frame_offset=None):
+               a['wPartyMon1HP'] + PARTY_STRIDE * slot: int(state['party_hp_hex'][0:2], 16),
+               a['wPartyMon1HP'] + PARTY_STRIDE * slot + 1: int(state['party_hp_hex'][2:4], 16),
+               a['wPartyMon1Status'] + PARTY_STRIDE * slot: state['party_status']}
++    for i in range(4):
++        before[a['wBattleMonMoves'] + i] = int(state['moves_hex'][2 * i:2 * i + 2], 16)
++        before[a['wBattleMonPP'] + i] = int(state['pp_hex'][2 * i:2 * i + 2], 16)
+     outcome = generic.verify_footprint(evidence, decision, before)
+     return {'outcome': outcome, 'site': site, 'reason': decision['refusal']}
+diff --git a/tests/live/test_gen1_battle_force.py b/tests/live/test_gen1_battle_force.py
+index cd871e5..dd54afb 100644
+--- a/tests/live/test_gen1_battle_force.py
++++ b/tests/live/test_gen1_battle_force.py
+@@ -46,7 +46,7 @@ def run_live(variant, *, bounded_battle=True, timeout=900, fixture=None, scenari
+     """`fixture`: an isolated .cache two-mon SaveRAM (disclosed fixture) instead of the committed one-mon save."""
+     directory = Path(tempfile.mkdtemp(prefix=f'battle-force-{variant}-', dir=Path(REPO) / '.cache'))
+     output = directory / 'result.json'
+-    spec = {'addresses': auth.ANCHORS[variant]['addresses'], 'sites': auth.sites(variant), 'output': output.as_posix(),
++    spec = {'addresses': auth.ANCHORS[variant]['addresses'], 'sites': auth.sites(variant), 'explode_sites': auth.sites(variant, auth.EXPLODE), 'output': output.as_posix(),
+             'out_dir': directory.as_posix(), 'coord_addr': COORDS[variant], 'encounter': ENCOUNTER[variant], 'bounded_battle': bounded_battle,
+             'menu_pc': MENU_PC[variant], 'diag_pcs': DIAG_PCS.get(variant, {}), 'fixture': str(fixture) if fixture else None,
+             'scenarios': scenarios, 'driver': DRIVER[variant]}
+@@ -112,3 +112,28 @@ def test_active_linked_mon_faints_at_execute_player_move_under_bounded_owner(var
+     active = [o for o in outcomes if o['scenario'] == 'fight_first' and o['site'] == 'player_action' and o['outcome'] == 'fainted']
+     assert active, json.dumps(outcomes, indent=1)
+     assert passed and result['passed'] and result['sram_diff_bytes'] == 0, f'{directory}\n{log[-3000:]}'
++
++
++@pytest.mark.parametrize('variant', ['red', 'blue', 'yellow'])
++def test_active_linked_mon_explodes_under_the_explode_binding(variant):
++    """P11: the EXPLODE binding on the same two sites. MainInBattleLoop+0 rewrites the active linked mon's four move
++    slots to EXPLOSION (PP 5) before the battle's first menu, the menu re-derives $99 from the chosen slot,
++    ExecutePlayerMove+0 finds it already selected (a one-byte no-op write) and the ORIGINAL engine's ExplodeEffect
++    faints the mon itself while the wild mon takes the hit."""
++    passed, path, log, result, directory = run_live(variant, fixture=FIXTURES[variant], scenarios=['explode_first'])
++    assert result is not None, f'{directory}\n{path}\n{log[-4000:]}'
++    outcomes = verify_rows(result, variant)
++    scenario = next((s for s in result['scenarios'] if s['name'] == 'explode_first'), None)
++    (directory / 'summary.json').write_text(json.dumps({'variant': variant, 'passed': passed, 'outcomes': outcomes,
++                                                        'checks': [(s['name'], [(c['what'], c['ok']) for c in s['checks']]) for s in result['scenarios']],
++                                                        'engine': scenario and scenario.get('engine'), 'loop_head_row': scenario and scenario.get('loop_head_row'),
++                                                        'write_rows': [s.get('write_row') for s in result['scenarios'] if s.get('write_row')]}, indent=1))
++    armed = {o['site'] for o in outcomes if o['scenario'] == 'explode_first' and o['outcome'] == 'explode_armed'}
++    assert armed == {'loop_head', 'player_action'}, json.dumps(outcomes, indent=1)
++    assert all(o['outcome'] != 'REFUSED_BY_SERVER' for o in outcomes), json.dumps(outcomes, indent=1)
++    row = scenario['loop_head_row']
++    assert [(w['address'], w['after_hex']) for w in row['writes']] == [(a, '99') for a in range(auth.ANCHORS[variant]['addresses']['wBattleMonMoves'], auth.ANCHORS[variant]['addresses']['wBattleMonMoves'] + 4)] + \
++        [(a, '05') for a in range(auth.ANCHORS[variant]['addresses']['wBattleMonPP'], auth.ANCHORS[variant]['addresses']['wBattleMonPP'] + 4)]
++    engine = scenario['engine']
++    assert engine['selected_move_at_execute'] == auth.EXPLOSION and engine['slot0_hp'] == '0000' and engine['enemy_hp_after'] < engine['enemy_hp_before'], json.dumps(engine)
++    assert passed and result['passed'] and result['sram_diff_bytes'] == 0, f'{directory}\n{log[-3000:]}'
+diff --git a/tests/unit/test_battle_force_authority.py b/tests/unit/test_battle_force_authority.py
+index e93a29d..1d1d844 100644
+--- a/tests/unit/test_battle_force_authority.py
++++ b/tests/unit/test_battle_force_authority.py
+@@ -104,7 +104,7 @@ def authority(variant, **host):
+ def state(variant, **over):
+     base = {"is_in_battle": 1, "battle_type": 0, "link_state": 0, "player_mon_number": 2, "status3": 0, "battle_species": 0x84,
+             "battle_dvs_hex": "9a5f", "party_species": 0x84, "party_dvs_hex": "9a5f", "party_ot_id_hex": "1234", "party_hp_hex": "0037", "party_status": 0,
+-            "hp_hex": "0037", "enemy_hp_hex": "0012", "action_result": 0, "selected_move": 0x21}
++            "hp_hex": "0037", "enemy_hp_hex": "0012", "action_result": 0, "selected_move": 0x21, "moves_hex": "21270000", "pp_hex": "231e0000"}
+     base.update(over)
+     return base
+ 
+@@ -112,18 +112,22 @@ def state(variant, **over):
+ def before_bytes(variant, st):
+     a = auth.ANCHORS[variant]["addresses"]
+     hp = a["wPartyMon1HP"] + 88
+-    return {a["wBattleMonHP"]: int(st["hp_hex"][:2], 16), a["wBattleMonHP"] + 1: int(st["hp_hex"][2:], 16), a["wPlayerSelectedMove"]: st["selected_move"],
+-            hp: int(st["party_hp_hex"][:2], 16), hp + 1: int(st["party_hp_hex"][2:], 16), a["wPartyMon1Status"] + 88: st["party_status"]}
++    out = {a["wBattleMonHP"]: int(st["hp_hex"][:2], 16), a["wBattleMonHP"] + 1: int(st["hp_hex"][2:], 16), a["wPlayerSelectedMove"]: st["selected_move"],
++           hp: int(st["party_hp_hex"][:2], 16), hp + 1: int(st["party_hp_hex"][2:], 16), a["wPartyMon1Status"] + 88: st["party_status"]}
++    for i in range(4):
++        out[a["wBattleMonMoves"] + i] = int(st["moves_hex"][2 * i:2 * i + 2], 16)
++        out[a["wBattleMonPP"] + i] = int(st["pp_hex"][2 * i:2 * i + 2], 16)
++    return out
+ 
+ 
+-def evidence(variant, site, st=None, **over):
++def evidence(variant, site, st=None, binding=auth.BINDING, **over):
+     a = auth.ANCHORS[variant]
+     st = st if st is not None else state(variant)
+     row = {"schema": generic.EVIDENCE, "challenge": "f" * 32, "owner_id": OWNER, "frame": 1200, "step": 9, "held": False, "site": site,
+            "pc": a[site]["pc"], "bank": a["bank"], "sp": 0xDFF0,
+            "stack_hex": ("64430000" if variant != "yellow" else "7a430000") if site == "player_action" else "12345678",
+            "hook_frame": 1200 + OFFSET, "state": st, "writes": [], "refusal": None}
+-    decision = auth.decide(st, MEMBER, variant, site)
++    decision = auth.decide(st, MEMBER, variant, site, binding=binding)
+     if decision["refusal"] is None:
+         before = before_bytes(variant, st)
+         row["writes"] = [{"address": w["address"], "before_hex": f"{before[w['address']]:02x}", "after_hex": f"{w['value']:02x}"} for w in decision["writes"]]
+@@ -256,7 +260,7 @@ def test_loop_head_arrives_by_jump_so_only_the_action_site_pins_a_return_address
+ 
+ 
+ def test_prepare_binds_the_pending_owned_death_and_refuses_everything_else():
+-    with pytest.raises(JournalError, match="force_faint only"):
++    with pytest.raises(JournalError, match="serves force_faint"):
+         auth.prepare("a", {**COMMAND, "body": {"cmd": "memorialize"}}, BINDING, DEATH, MEMBER, HOST, variant="red")
+     for death in ({**DEATH, "phase": "pending_memorial"}, {**DEATH, "peer": "b"}, {**DEATH, "peer_key": "K2"}, None):
+         with pytest.raises(JournalError, match="pending owned death"):
+@@ -327,6 +331,7 @@ def load(lua, variant, st, site):
+         put(a.wPartyMon1HP+p.stride*p.slot,st.party_hp_hex);bus[a.wPartyMon1Status+p.stride*p.slot]=st.party_status
+         put(a.wBattleMonHP,st.hp_hex);put(a.wEnemyMonHP,st.enemy_hp_hex);bus[a.wActionResultOrTookBattleTurn]=st.action_result
+         bus[a.wPlayerSelectedMove]=st.selected_move;put(regs.SP,p.stack)
++        put(a.wBattleMonMoves,st.moves_hex);put(a.wBattleMonPP,st.pp_hex)
+         target=p.sites[p.site]
+     """)
+ 

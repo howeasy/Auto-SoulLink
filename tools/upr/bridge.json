@@ -1,0 +1,10 @@
+{
+  "schema": "slink-upr-bridge-v1",
+  "source_sha256": "880f9d63868b6e595cacba88df31bc3a39ccc5454bd032834f4d397f99ca8136",
+  "class_sha256": "fee983362a3538a0c3d4e4a235c5393125171216ef233a19dc7b540b111e75bd",
+  "class_version": 52,
+  "gen1_policy_source_sha256": "f30cccc22773fb8ffdae800069ba38970b1aea11b43c2f144abbfa13a5c3ef81",
+  "gen1_policy_class_sha256": "df119cd42b6ebac1fac02872817afe00b6e51c2e98f92f0b56747d76e3d862ac",
+  "compiler_sha256": "6b0118e094cd23d9b5626e05a425bf736e1f5c56e216d031588c49af2ae466a8",
+  "compiler_version": "javac 1.8.0_482"
+}

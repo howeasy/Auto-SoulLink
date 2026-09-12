@@ -9,6 +9,24 @@
 local _dir = debug.getinfo(1, "S").source:match([=[@(.+[/\])]=]) or ""
 package.path = _dir .. "?.lua;" .. _dir .. "?/init.lua;" .. package.path
 
+-- Explicit durable selection never falls through to a legacy client or its
+-- shared log file. The checked launcher supplies the run-bound configuration.
+if rawget(_G,"SLINK_RUNTIME_LAUNCH_JSON")~=nil then
+    for _,name in ipairs({"gen1_client_entry","gen1_runtime","gen1_session","gen1_admission_profiles",
+        "gen1_runtime_profiles","gen1_companion_profiles","gen1_party_codec_data",
+        "staged_panel",
+        "durable_runtime","client_session","client_journal","control_service","command_executor",
+        "connector","json_codec","state_store","platform_storage","platform_identity","platform_execution",
+        "platform_clock","memory_gb","gen1_write_safety","games.gen1_rby","gen1_party_codec","wire_protocol"})do
+        package.loaded[name]=nil
+    end
+    local JSON=require("json_codec")
+    local configuration=assert(JSON.decode(SLINK_RUNTIME_LAUNCH_JSON))
+    SLINK_RUNTIME_LAUNCH_JSON=nil
+    assert(configuration.protocol=="slink-gen1-durable-v1","unsupported durable launcher protocol")
+    return require("gen1_client_entry").run(configuration)
+end
+
 -- ── Console tee ──────────────────────────────────────────────────────────────
 -- BizHawk's Lua console scrolls and drops old lines, so when something logs
 -- a lot at startup (BizHawk's "Unable to find domain" warnings, our diagnostic

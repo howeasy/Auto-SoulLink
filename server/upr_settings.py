@@ -306,8 +306,13 @@ def parse_settings_string(settings_string: str) -> dict:
 
     data = blob[:LENGTH_OF_SETTINGS_DATA]
     name_len = blob[LENGTH_OF_SETTINGS_DATA]
-    rom_name = blob[LENGTH_OF_SETTINGS_DATA + 1:
-                    LENGTH_OF_SETTINGS_DATA + 1 + name_len].decode("ascii", "replace")
+    if len(blob) != LENGTH_OF_SETTINGS_DATA + 1 + name_len + 8:
+        raise UprSettingsError("settings blob name length or trailing data differs")
+    try:
+        rom_name = blob[LENGTH_OF_SETTINGS_DATA + 1:
+                        LENGTH_OF_SETTINGS_DATA + 1 + name_len].decode("ascii")
+    except UnicodeError as exc:
+        raise UprSettingsError("settings ROM name must be ASCII") from exc
     tweaks = struct.unpack(">i", data[32:36])[0]
     return {
         "rom_name": rom_name,
@@ -328,7 +333,7 @@ def load(path_or_bytes) -> dict:
     if len(raw) < 8:
         raise UprSettingsError(f"file is only {len(raw)} bytes, too short for a header")
     version, length = struct.unpack(">i", raw[:4])[0], struct.unpack(">i", raw[4:8])[0]
-    if length < 0 or 8 + length > len(raw):
+    if length < 0 or 8 + length != len(raw):
         raise UprSettingsError(
             f"declared settings-string length {length} does not fit in {len(raw)} bytes")
     out = parse_settings_string(raw[8:8 + length].decode("ascii", "replace"))

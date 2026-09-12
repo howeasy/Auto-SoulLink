@@ -1,0 +1,2872 @@
+{
+  "schema": "slink-upr-layout-v1",
+  "version": 322,
+  "upr_version": "4.6.1",
+  "data_bytes": 51,
+  "source_commit": "7f00eb866ed35c8fe3963f078b6a2e0979dc2b8c",
+  "settings_source_sha256": "60d7956fe074c95e9fdb939d07566315c6031102dbc92597b3cecad9d1a25178",
+  "fields": {
+    "abilitiesFollowEvolutions": {
+      "kind": "boolean",
+      "positions": [
+        [
+          3,
+          3
+        ]
+      ]
+    },
+    "abilitiesFollowMegaEvolutions": {
+      "kind": "boolean",
+      "positions": [
+        [
+          3,
+          7
+        ]
+      ]
+    },
+    "abilitiesMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          3,
+          0
+        ],
+        [
+          3,
+          1
+        ]
+      ],
+      "choices": {
+        "UNCHANGED": [
+          3,
+          0
+        ],
+        "RANDOMIZE": [
+          3,
+          1
+        ]
+      },
+      "java_type": "AbilitiesMod"
+    },
+    "additionalBossTrainerPokemon": {
+      "kind": "integer",
+      "positions": [
+        [
+          40,
+          1
+        ],
+        [
+          40,
+          2
+        ],
+        [
+          40,
+          3
+        ]
+      ],
+      "bias": 0
+    },
+    "additionalImportantTrainerPokemon": {
+      "kind": "integer",
+      "positions": [
+        [
+          40,
+          4
+        ],
+        [
+          40,
+          5
+        ],
+        [
+          40,
+          6
+        ]
+      ],
+      "bias": 0
+    },
+    "additionalRegularTrainerPokemon": {
+      "kind": "integer",
+      "positions": [
+        [
+          41,
+          0
+        ],
+        [
+          41,
+          1
+        ],
+        [
+          41,
+          2
+        ]
+      ],
+      "bias": 0
+    },
+    "allowStarterAltFormes": {
+      "kind": "boolean",
+      "positions": [
+        [
+          4,
+          6
+        ]
+      ]
+    },
+    "allowStaticAltFormes": {
+      "kind": "boolean",
+      "positions": [
+        [
+          17,
+          6
+        ]
+      ]
+    },
+    "allowTotemAltFormes": {
+      "kind": "boolean",
+      "positions": [
+        [
+          42,
+          7
+        ]
+      ]
+    },
+    "allowTrainerAlternateFormes": {
+      "kind": "boolean",
+      "positions": [
+        [
+          39,
+          6
+        ]
+      ]
+    },
+    "allowWildAltFormes": {
+      "kind": "boolean",
+      "positions": [
+        [
+          39,
+          7
+        ]
+      ]
+    },
+    "allowWonderGuard": {
+      "kind": "boolean",
+      "positions": [
+        [
+          3,
+          2
+        ]
+      ]
+    },
+    "allyPokemonMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          42,
+          3
+        ],
+        [
+          42,
+          4
+        ],
+        [
+          42,
+          5
+        ]
+      ],
+      "choices": {
+        "UNCHANGED": [
+          42,
+          3
+        ],
+        "RANDOM": [
+          42,
+          4
+        ],
+        "SIMILAR_STRENGTH": [
+          42,
+          5
+        ]
+      },
+      "java_type": "AllyPokemonMod"
+    },
+    "assignEvoStatsRandomly": {
+      "kind": "boolean",
+      "positions": [
+        [
+          1,
+          7
+        ]
+      ]
+    },
+    "auraMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          41,
+          3
+        ],
+        [
+          41,
+          4
+        ],
+        [
+          41,
+          5
+        ]
+      ],
+      "choices": {
+        "UNCHANGED": [
+          41,
+          3
+        ],
+        "RANDOM": [
+          41,
+          4
+        ],
+        "SAME_STRENGTH": [
+          41,
+          5
+        ]
+      },
+      "java_type": "AuraMod"
+    },
+    "balanceShakingGrass": {
+      "kind": "boolean",
+      "positions": [
+        [
+          16,
+          7
+        ]
+      ]
+    },
+    "balanceShopPrices": {
+      "kind": "boolean",
+      "positions": [
+        [
+          37,
+          6
+        ]
+      ]
+    },
+    "banBadAbilities": {
+      "kind": "boolean",
+      "positions": [
+        [
+          3,
+          6
+        ]
+      ]
+    },
+    "banBadRandomFieldItems": {
+      "kind": "boolean",
+      "positions": [
+        [
+          24,
+          3
+        ]
+      ]
+    },
+    "banBadRandomPickupItems": {
+      "kind": "boolean",
+      "positions": [
+        [
+          49,
+          2
+        ]
+      ]
+    },
+    "banBadRandomShopItems": {
+      "kind": "boolean",
+      "positions": [
+        [
+          37,
+          3
+        ]
+      ]
+    },
+    "banBadRandomStarterHeldItems": {
+      "kind": "boolean",
+      "positions": [
+        [
+          4,
+          5
+        ]
+      ]
+    },
+    "banBadRandomWildPokemonHeldItems": {
+      "kind": "boolean",
+      "positions": [
+        [
+          16,
+          4
+        ]
+      ]
+    },
+    "banIrregularAltFormes": {
+      "kind": "boolean",
+      "positions": [
+        [
+          49,
+          3
+        ]
+      ]
+    },
+    "banNegativeAbilities": {
+      "kind": "boolean",
+      "positions": [
+        [
+          3,
+          5
+        ]
+      ]
+    },
+    "banOPShopItems": {
+      "kind": "boolean",
+      "positions": [
+        [
+          37,
+          5
+        ]
+      ]
+    },
+    "banRegularShopItems": {
+      "kind": "boolean",
+      "positions": [
+        [
+          37,
+          4
+        ]
+      ]
+    },
+    "banTrappingAbilities": {
+      "kind": "boolean",
+      "positions": [
+        [
+          3,
+          4
+        ]
+      ]
+    },
+    "baseStatisticsMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          1,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          3
+        ]
+      ],
+      "choices": {
+        "RANDOM": [
+          1,
+          1
+        ],
+        "SHUFFLE": [
+          1,
+          2
+        ],
+        "UNCHANGED": [
+          1,
+          3
+        ]
+      },
+      "java_type": "BaseStatisticsMod"
+    },
+    "baseStatsFollowEvolutions": {
+      "kind": "boolean",
+      "positions": [
+        [
+          1,
+          0
+        ]
+      ]
+    },
+    "baseStatsFollowMegaEvolutions": {
+      "kind": "boolean",
+      "positions": [
+        [
+          1,
+          6
+        ]
+      ]
+    },
+    "betterTrainerMovesets": {
+      "kind": "boolean",
+      "positions": [
+        [
+          27,
+          7
+        ]
+      ]
+    },
+    "blockBrokenMoves": {
+      "kind": "boolean",
+      "positions": [
+        [
+          2,
+          4
+        ]
+      ]
+    },
+    "blockBrokenMovesetMoves": {
+      "kind": "boolean",
+      "positions": [
+        [
+          39,
+          3
+        ]
+      ]
+    },
+    "blockBrokenTMMoves": {
+      "kind": "boolean",
+      "positions": [
+        [
+          39,
+          4
+        ]
+      ]
+    },
+    "blockBrokenTutorMoves": {
+      "kind": "boolean",
+      "positions": [
+        [
+          39,
+          5
+        ]
+      ]
+    },
+    "blockWildLegendaries": {
+      "kind": "boolean",
+      "positions": [
+        [
+          16,
+          1
+        ]
+      ]
+    },
+    "changeImpossibleEvolutions": {
+      "kind": "boolean",
+      "positions": [
+        [
+          0,
+          0
+        ]
+      ]
+    },
+    "consumableItemsOnlyForTrainerPokemon": {
+      "kind": "boolean",
+      "positions": [
+        [
+          48,
+          3
+        ]
+      ]
+    },
+    "correctStaticMusic": {
+      "kind": "boolean",
+      "positions": [
+        [
+          25,
+          5
+        ]
+      ]
+    },
+    "currentMiscTweaks": {
+      "kind": "integer",
+      "positions": [
+        [
+          35,
+          0
+        ],
+        [
+          35,
+          1
+        ],
+        [
+          35,
+          2
+        ],
+        [
+          35,
+          3
+        ],
+        [
+          35,
+          4
+        ],
+        [
+          35,
+          5
+        ],
+        [
+          35,
+          6
+        ],
+        [
+          35,
+          7
+        ],
+        [
+          34,
+          0
+        ],
+        [
+          34,
+          1
+        ],
+        [
+          34,
+          2
+        ],
+        [
+          34,
+          3
+        ],
+        [
+          34,
+          4
+        ],
+        [
+          34,
+          5
+        ],
+        [
+          34,
+          6
+        ],
+        [
+          34,
+          7
+        ],
+        [
+          33,
+          0
+        ],
+        [
+          33,
+          1
+        ],
+        [
+          33,
+          2
+        ],
+        [
+          33,
+          3
+        ],
+        [
+          33,
+          4
+        ],
+        [
+          33,
+          5
+        ],
+        [
+          33,
+          6
+        ],
+        [
+          33,
+          7
+        ],
+        [
+          32,
+          0
+        ],
+        [
+          32,
+          1
+        ],
+        [
+          32,
+          2
+        ],
+        [
+          32,
+          3
+        ],
+        [
+          32,
+          4
+        ],
+        [
+          32,
+          5
+        ],
+        [
+          32,
+          6
+        ],
+        [
+          32,
+          7
+        ]
+      ],
+      "bias": 0
+    },
+    "currentRestrictions": {
+      "kind": "integer",
+      "positions": [
+        [
+          31,
+          0
+        ],
+        [
+          31,
+          1
+        ],
+        [
+          31,
+          2
+        ],
+        [
+          31,
+          3
+        ],
+        [
+          31,
+          4
+        ],
+        [
+          31,
+          5
+        ],
+        [
+          31,
+          6
+        ],
+        [
+          31,
+          7
+        ],
+        [
+          30,
+          0
+        ],
+        [
+          30,
+          1
+        ],
+        [
+          30,
+          2
+        ],
+        [
+          30,
+          3
+        ],
+        [
+          30,
+          4
+        ],
+        [
+          30,
+          5
+        ],
+        [
+          30,
+          6
+        ],
+        [
+          30,
+          7
+        ],
+        [
+          29,
+          0
+        ],
+        [
+          29,
+          1
+        ],
+        [
+          29,
+          2
+        ],
+        [
+          29,
+          3
+        ],
+        [
+          29,
+          4
+        ],
+        [
+          29,
+          5
+        ],
+        [
+          29,
+          6
+        ],
+        [
+          29,
+          7
+        ],
+        [
+          28,
+          0
+        ],
+        [
+          28,
+          1
+        ],
+        [
+          28,
+          2
+        ],
+        [
+          28,
+          3
+        ],
+        [
+          28,
+          4
+        ],
+        [
+          28,
+          5
+        ],
+        [
+          28,
+          6
+        ],
+        [
+          28,
+          7
+        ]
+      ],
+      "bias": 0
+    },
+    "customStarters[0]": {
+      "kind": "integer",
+      "positions": [
+        [
+          5,
+          0
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          5,
+          5
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          5,
+          7
+        ],
+        [
+          6,
+          0
+        ],
+        [
+          6,
+          1
+        ],
+        [
+          6,
+          2
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          6,
+          5
+        ],
+        [
+          6,
+          6
+        ],
+        [
+          6,
+          7
+        ]
+      ],
+      "bias": 1
+    },
+    "customStarters[1]": {
+      "kind": "integer",
+      "positions": [
+        [
+          7,
+          0
+        ],
+        [
+          7,
+          1
+        ],
+        [
+          7,
+          2
+        ],
+        [
+          7,
+          3
+        ],
+        [
+          7,
+          4
+        ],
+        [
+          7,
+          5
+        ],
+        [
+          7,
+          6
+        ],
+        [
+          7,
+          7
+        ],
+        [
+          8,
+          0
+        ],
+        [
+          8,
+          1
+        ],
+        [
+          8,
+          2
+        ],
+        [
+          8,
+          3
+        ],
+        [
+          8,
+          4
+        ],
+        [
+          8,
+          5
+        ],
+        [
+          8,
+          6
+        ],
+        [
+          8,
+          7
+        ]
+      ],
+      "bias": 1
+    },
+    "customStarters[2]": {
+      "kind": "integer",
+      "positions": [
+        [
+          9,
+          0
+        ],
+        [
+          9,
+          1
+        ],
+        [
+          9,
+          2
+        ],
+        [
+          9,
+          3
+        ],
+        [
+          9,
+          4
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          9,
+          6
+        ],
+        [
+          9,
+          7
+        ],
+        [
+          10,
+          0
+        ],
+        [
+          10,
+          1
+        ],
+        [
+          10,
+          2
+        ],
+        [
+          10,
+          3
+        ],
+        [
+          10,
+          4
+        ],
+        [
+          10,
+          5
+        ],
+        [
+          10,
+          6
+        ],
+        [
+          10,
+          7
+        ]
+      ],
+      "bias": 1
+    },
+    "doubleBattleMode": {
+      "kind": "boolean",
+      "positions": [
+        [
+          40,
+          0
+        ]
+      ]
+    },
+    "dualTypeOnly": {
+      "kind": "boolean",
+      "positions": [
+        [
+          2,
+          7
+        ]
+      ]
+    },
+    "eliteFourUniquePokemonNumber": {
+      "kind": "integer",
+      "positions": [
+        [
+          50,
+          0
+        ],
+        [
+          50,
+          1
+        ],
+        [
+          50,
+          2
+        ]
+      ],
+      "bias": 0
+    },
+    "ensureTwoAbilities": {
+      "kind": "boolean",
+      "positions": [
+        [
+          48,
+          6
+        ]
+      ]
+    },
+    "evolutionMovesForAll": {
+      "kind": "boolean",
+      "positions": [
+        [
+          41,
+          6
+        ]
+      ]
+    },
+    "evolutionsMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          26,
+          0
+        ],
+        [
+          26,
+          1
+        ],
+        [
+          26,
+          7
+        ]
+      ],
+      "choices": {
+        "UNCHANGED": [
+          26,
+          0
+        ],
+        "RANDOM": [
+          26,
+          1
+        ],
+        "RANDOM_EVERY_LEVEL": [
+          26,
+          7
+        ]
+      },
+      "java_type": "EvolutionsMod"
+    },
+    "evosAllowAltFormes": {
+      "kind": "boolean",
+      "positions": [
+        [
+          26,
+          6
+        ]
+      ]
+    },
+    "evosForceChange": {
+      "kind": "boolean",
+      "positions": [
+        [
+          26,
+          5
+        ]
+      ]
+    },
+    "evosMaxThreeStages": {
+      "kind": "boolean",
+      "positions": [
+        [
+          26,
+          4
+        ]
+      ]
+    },
+    "evosSameTyping": {
+      "kind": "boolean",
+      "positions": [
+        [
+          26,
+          3
+        ]
+      ]
+    },
+    "evosSimilarStrength": {
+      "kind": "boolean",
+      "positions": [
+        [
+          26,
+          2
+        ]
+      ]
+    },
+    "expCurveMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          39,
+          0
+        ],
+        [
+          39,
+          1
+        ],
+        [
+          39,
+          2
+        ]
+      ],
+      "choices": {
+        "LEGENDARIES": [
+          39,
+          0
+        ],
+        "STRONG_LEGENDARIES": [
+          39,
+          1
+        ],
+        "ALL": [
+          39,
+          2
+        ]
+      },
+      "java_type": "ExpCurveMod"
+    },
+    "fieldItemsMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          24,
+          0
+        ],
+        [
+          24,
+          1
+        ],
+        [
+          24,
+          2
+        ],
+        [
+          24,
+          4
+        ]
+      ],
+      "choices": {
+        "RANDOM": [
+          24,
+          0
+        ],
+        "SHUFFLE": [
+          24,
+          1
+        ],
+        "UNCHANGED": [
+          24,
+          2
+        ],
+        "RANDOM_EVEN": [
+          24,
+          4
+        ]
+      },
+      "java_type": "FieldItemsMod"
+    },
+    "fullHMCompat": {
+      "kind": "boolean",
+      "positions": [
+        [
+          19,
+          0
+        ]
+      ]
+    },
+    "guaranteeEvolutionItems": {
+      "kind": "boolean",
+      "positions": [
+        [
+          37,
+          7
+        ]
+      ]
+    },
+    "guaranteeXItems": {
+      "kind": "boolean",
+      "positions": [
+        [
+          41,
+          7
+        ]
+      ]
+    },
+    "guaranteedMoveCount": {
+      "kind": "integer",
+      "positions": [
+        [
+          11,
+          6
+        ],
+        [
+          11,
+          7
+        ]
+      ],
+      "bias": 2
+    },
+    "highestLevelOnlyGetsItemsForTrainerPokemon": {
+      "kind": "boolean",
+      "positions": [
+        [
+          48,
+          5
+        ]
+      ]
+    },
+    "inGameTradesMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          23,
+          0
+        ],
+        [
+          23,
+          1
+        ],
+        [
+          23,
+          6
+        ]
+      ],
+      "choices": {
+        "RANDOMIZE_GIVEN_AND_REQUESTED": [
+          23,
+          0
+        ],
+        "RANDOMIZE_GIVEN": [
+          23,
+          1
+        ],
+        "UNCHANGED": [
+          23,
+          6
+        ]
+      },
+      "java_type": "InGameTradesMod"
+    },
+    "keepFieldMoveTMs": {
+      "kind": "boolean",
+      "positions": [
+        [
+          18,
+          6
+        ]
+      ]
+    },
+    "keepFieldMoveTutors": {
+      "kind": "boolean",
+      "positions": [
+        [
+          21,
+          6
+        ]
+      ]
+    },
+    "limit600": {
+      "kind": "boolean",
+      "positions": [
+        [
+          17,
+          5
+        ]
+      ]
+    },
+    "limitMainGameLegendaries": {
+      "kind": "boolean",
+      "positions": [
+        [
+          17,
+          4
+        ]
+      ]
+    },
+    "limitPokemon": {
+      "kind": "boolean",
+      "positions": [
+        [
+          2,
+          5
+        ]
+      ]
+    },
+    "makeEvolutionsEasier": {
+      "kind": "boolean",
+      "positions": [
+        [
+          0,
+          5
+        ]
+      ]
+    },
+    "minimumCatchRateLevel": {
+      "kind": "integer",
+      "positions": [
+        [
+          50,
+          3
+        ],
+        [
+          50,
+          4
+        ],
+        [
+          50,
+          5
+        ]
+      ],
+      "bias": 1
+    },
+    "moveTutorMovesMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          21,
+          3
+        ],
+        [
+          21,
+          4
+        ]
+      ],
+      "choices": {
+        "RANDOM": [
+          21,
+          3
+        ],
+        "UNCHANGED": [
+          21,
+          4
+        ]
+      },
+      "java_type": "MoveTutorMovesMod"
+    },
+    "moveTutorsCompatibilityMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          21,
+          0
+        ],
+        [
+          21,
+          1
+        ],
+        [
+          21,
+          2
+        ],
+        [
+          21,
+          7
+        ]
+      ],
+      "choices": {
+        "COMPLETELY_RANDOM": [
+          21,
+          0
+        ],
+        "RANDOM_PREFER_TYPE": [
+          21,
+          1
+        ],
+        "UNCHANGED": [
+          21,
+          2
+        ],
+        "FULL": [
+          21,
+          7
+        ]
+      },
+      "java_type": "MoveTutorsCompatibilityMod"
+    },
+    "movesetsForceGoodDamaging": {
+      "kind": "boolean",
+      "positions": [
+        [
+          12,
+          7
+        ]
+      ]
+    },
+    "movesetsGoodDamagingPercent": {
+      "kind": "integer",
+      "positions": [
+        [
+          12,
+          0
+        ],
+        [
+          12,
+          1
+        ],
+        [
+          12,
+          2
+        ],
+        [
+          12,
+          3
+        ],
+        [
+          12,
+          4
+        ],
+        [
+          12,
+          5
+        ],
+        [
+          12,
+          6
+        ]
+      ],
+      "bias": 0
+    },
+    "movesetsMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          11,
+          0
+        ],
+        [
+          11,
+          1
+        ],
+        [
+          11,
+          2
+        ],
+        [
+          11,
+          3
+        ]
+      ],
+      "choices": {
+        "COMPLETELY_RANDOM": [
+          11,
+          0
+        ],
+        "RANDOM_PREFER_SAME_TYPE": [
+          11,
+          1
+        ],
+        "UNCHANGED": [
+          11,
+          2
+        ],
+        "METRONOME_ONLY": [
+          11,
+          3
+        ]
+      },
+      "java_type": "MovesetsMod"
+    },
+    "pickupItemsMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          49,
+          0
+        ],
+        [
+          49,
+          1
+        ]
+      ],
+      "choices": {
+        "RANDOM": [
+          49,
+          0
+        ],
+        "UNCHANGED": [
+          49,
+          1
+        ]
+      },
+      "java_type": "PickupItemsMod"
+    },
+    "raceMode": {
+      "kind": "boolean",
+      "positions": [
+        [
+          2,
+          3
+        ]
+      ]
+    },
+    "randomizeHeldItemsForBossTrainerPokemon": {
+      "kind": "boolean",
+      "positions": [
+        [
+          48,
+          0
+        ]
+      ]
+    },
+    "randomizeHeldItemsForImportantTrainerPokemon": {
+      "kind": "boolean",
+      "positions": [
+        [
+          48,
+          1
+        ]
+      ]
+    },
+    "randomizeHeldItemsForRegularTrainerPokemon": {
+      "kind": "boolean",
+      "positions": [
+        [
+          48,
+          2
+        ]
+      ]
+    },
+    "randomizeInGameTradesIVs": {
+      "kind": "boolean",
+      "positions": [
+        [
+          23,
+          3
+        ]
+      ]
+    },
+    "randomizeInGameTradesItems": {
+      "kind": "boolean",
+      "positions": [
+        [
+          23,
+          2
+        ]
+      ]
+    },
+    "randomizeInGameTradesNicknames": {
+      "kind": "boolean",
+      "positions": [
+        [
+          23,
+          4
+        ]
+      ]
+    },
+    "randomizeInGameTradesOTs": {
+      "kind": "boolean",
+      "positions": [
+        [
+          23,
+          5
+        ]
+      ]
+    },
+    "randomizeMoveAccuracies": {
+      "kind": "boolean",
+      "positions": [
+        [
+          25,
+          1
+        ]
+      ]
+    },
+    "randomizeMoveCategory": {
+      "kind": "boolean",
+      "positions": [
+        [
+          25,
+          4
+        ]
+      ]
+    },
+    "randomizeMovePPs": {
+      "kind": "boolean",
+      "positions": [
+        [
+          25,
+          2
+        ]
+      ]
+    },
+    "randomizeMovePowers": {
+      "kind": "boolean",
+      "positions": [
+        [
+          25,
+          0
+        ]
+      ]
+    },
+    "randomizeMoveTypes": {
+      "kind": "boolean",
+      "positions": [
+        [
+          25,
+          3
+        ]
+      ]
+    },
+    "randomizeStartersHeldItems": {
+      "kind": "boolean",
+      "positions": [
+        [
+          4,
+          4
+        ]
+      ]
+    },
+    "randomizeTotemHeldItems": {
+      "kind": "boolean",
+      "positions": [
+        [
+          42,
+          6
+        ]
+      ]
+    },
+    "randomizeTrainerClassNames": {
+      "kind": "boolean",
+      "positions": [
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    "randomizeTrainerNames": {
+      "kind": "boolean",
+      "positions": [
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    "randomizeWildPokemonHeldItems": {
+      "kind": "boolean",
+      "positions": [
+        [
+          16,
+          3
+        ]
+      ]
+    },
+    "removeTimeBasedEvolutions": {
+      "kind": "boolean",
+      "positions": [
+        [
+          0,
+          6
+        ]
+      ]
+    },
+    "reorderDamagingMoves": {
+      "kind": "boolean",
+      "positions": [
+        [
+          11,
+          5
+        ]
+      ]
+    },
+    "reserved_0_7": {
+      "kind": "reserved",
+      "positions": [
+        [
+          0,
+          7
+        ]
+      ]
+    },
+    "reserved_13_6": {
+      "kind": "reserved",
+      "positions": [
+        [
+          13,
+          6
+        ]
+      ]
+    },
+    "reserved_13_7": {
+      "kind": "reserved",
+      "positions": [
+        [
+          13,
+          7
+        ]
+      ]
+    },
+    "reserved_16_5": {
+      "kind": "reserved",
+      "positions": [
+        [
+          16,
+          5
+        ]
+      ]
+    },
+    "reserved_16_6": {
+      "kind": "reserved",
+      "positions": [
+        [
+          16,
+          6
+        ]
+      ]
+    },
+    "reserved_19_3": {
+      "kind": "reserved",
+      "positions": [
+        [
+          19,
+          3
+        ]
+      ]
+    },
+    "reserved_19_4": {
+      "kind": "reserved",
+      "positions": [
+        [
+          19,
+          4
+        ]
+      ]
+    },
+    "reserved_19_5": {
+      "kind": "reserved",
+      "positions": [
+        [
+          19,
+          5
+        ]
+      ]
+    },
+    "reserved_19_6": {
+      "kind": "reserved",
+      "positions": [
+        [
+          19,
+          6
+        ]
+      ]
+    },
+    "reserved_19_7": {
+      "kind": "reserved",
+      "positions": [
+        [
+          19,
+          7
+        ]
+      ]
+    },
+    "reserved_23_7": {
+      "kind": "reserved",
+      "positions": [
+        [
+          23,
+          7
+        ]
+      ]
+    },
+    "reserved_24_5": {
+      "kind": "reserved",
+      "positions": [
+        [
+          24,
+          5
+        ]
+      ]
+    },
+    "reserved_24_6": {
+      "kind": "reserved",
+      "positions": [
+        [
+          24,
+          6
+        ]
+      ]
+    },
+    "reserved_24_7": {
+      "kind": "reserved",
+      "positions": [
+        [
+          24,
+          7
+        ]
+      ]
+    },
+    "reserved_25_6": {
+      "kind": "reserved",
+      "positions": [
+        [
+          25,
+          6
+        ]
+      ]
+    },
+    "reserved_25_7": {
+      "kind": "reserved",
+      "positions": [
+        [
+          25,
+          7
+        ]
+      ]
+    },
+    "reserved_48_7": {
+      "kind": "reserved",
+      "positions": [
+        [
+          48,
+          7
+        ]
+      ]
+    },
+    "reserved_49_4": {
+      "kind": "reserved",
+      "positions": [
+        [
+          49,
+          4
+        ]
+      ]
+    },
+    "reserved_49_5": {
+      "kind": "reserved",
+      "positions": [
+        [
+          49,
+          5
+        ]
+      ]
+    },
+    "reserved_49_6": {
+      "kind": "reserved",
+      "positions": [
+        [
+          49,
+          6
+        ]
+      ]
+    },
+    "reserved_49_7": {
+      "kind": "reserved",
+      "positions": [
+        [
+          49,
+          7
+        ]
+      ]
+    },
+    "reserved_4_7": {
+      "kind": "reserved",
+      "positions": [
+        [
+          4,
+          7
+        ]
+      ]
+    },
+    "reserved_50_6": {
+      "kind": "reserved",
+      "positions": [
+        [
+          50,
+          6
+        ]
+      ]
+    },
+    "reserved_50_7": {
+      "kind": "reserved",
+      "positions": [
+        [
+          50,
+          7
+        ]
+      ]
+    },
+    "rivalCarriesStarterThroughout": {
+      "kind": "boolean",
+      "positions": [
+        [
+          27,
+          1
+        ]
+      ]
+    },
+    "selectedEXPCurve": {
+      "kind": "integer",
+      "positions": [
+        [
+          46,
+          0
+        ],
+        [
+          46,
+          1
+        ],
+        [
+          46,
+          2
+        ],
+        [
+          46,
+          3
+        ],
+        [
+          46,
+          4
+        ],
+        [
+          46,
+          5
+        ],
+        [
+          46,
+          6
+        ],
+        [
+          46,
+          7
+        ]
+      ],
+      "bias": 0
+    },
+    "sensibleItemsOnlyForTrainerPokemon": {
+      "kind": "boolean",
+      "positions": [
+        [
+          48,
+          4
+        ]
+      ]
+    },
+    "shinyChance": {
+      "kind": "boolean",
+      "positions": [
+        [
+          27,
+          6
+        ]
+      ]
+    },
+    "shopItemsMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          37,
+          0
+        ],
+        [
+          37,
+          1
+        ],
+        [
+          37,
+          2
+        ]
+      ],
+      "choices": {
+        "RANDOM": [
+          37,
+          0
+        ],
+        "SHUFFLE": [
+          37,
+          1
+        ],
+        "UNCHANGED": [
+          37,
+          2
+        ]
+      },
+      "java_type": "ShopItemsMod"
+    },
+    "standardizeEXPCurves": {
+      "kind": "boolean",
+      "positions": [
+        [
+          1,
+          4
+        ]
+      ]
+    },
+    "startWithGuaranteedMoves": {
+      "kind": "boolean",
+      "positions": [
+        [
+          11,
+          4
+        ]
+      ]
+    },
+    "startersMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          4,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          4,
+          3
+        ]
+      ],
+      "choices": {
+        "CUSTOM": [
+          4,
+          0
+        ],
+        "COMPLETELY_RANDOM": [
+          4,
+          1
+        ],
+        "UNCHANGED": [
+          4,
+          2
+        ],
+        "RANDOM_WITH_TWO_EVOLUTIONS": [
+          4,
+          3
+        ]
+      },
+      "java_type": "StartersMod"
+    },
+    "staticLevelModified": {
+      "kind": "boolean",
+      "positions": [
+        [
+          47,
+          7
+        ]
+      ]
+    },
+    "staticLevelModifier": {
+      "kind": "integer",
+      "positions": [
+        [
+          47,
+          0
+        ],
+        [
+          47,
+          1
+        ],
+        [
+          47,
+          2
+        ],
+        [
+          47,
+          3
+        ],
+        [
+          47,
+          4
+        ],
+        [
+          47,
+          5
+        ],
+        [
+          47,
+          6
+        ]
+      ],
+      "bias": -50
+    },
+    "staticPokemonMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          17,
+          0
+        ],
+        [
+          17,
+          1
+        ],
+        [
+          17,
+          2
+        ],
+        [
+          17,
+          3
+        ]
+      ],
+      "choices": {
+        "UNCHANGED": [
+          17,
+          0
+        ],
+        "RANDOM_MATCHING": [
+          17,
+          1
+        ],
+        "COMPLETELY_RANDOM": [
+          17,
+          2
+        ],
+        "SIMILAR_STRENGTH": [
+          17,
+          3
+        ]
+      },
+      "java_type": "StaticPokemonMod"
+    },
+    "swapStaticMegaEvos": {
+      "kind": "boolean",
+      "positions": [
+        [
+          17,
+          7
+        ]
+      ]
+    },
+    "swapTrainerMegaEvos": {
+      "kind": "boolean",
+      "positions": [
+        [
+          27,
+          5
+        ]
+      ]
+    },
+    "tmLevelUpMoveSanity": {
+      "kind": "boolean",
+      "positions": [
+        [
+          18,
+          5
+        ]
+      ]
+    },
+    "tmsFollowEvolutions": {
+      "kind": "boolean",
+      "positions": [
+        [
+          19,
+          1
+        ]
+      ]
+    },
+    "tmsForceGoodDamaging": {
+      "kind": "boolean",
+      "positions": [
+        [
+          20,
+          7
+        ]
+      ]
+    },
+    "tmsGoodDamagingPercent": {
+      "kind": "integer",
+      "positions": [
+        [
+          20,
+          0
+        ],
+        [
+          20,
+          1
+        ],
+        [
+          20,
+          2
+        ],
+        [
+          20,
+          3
+        ],
+        [
+          20,
+          4
+        ],
+        [
+          20,
+          5
+        ],
+        [
+          20,
+          6
+        ]
+      ],
+      "bias": 0
+    },
+    "tmsHmsCompatibilityMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          18,
+          0
+        ],
+        [
+          18,
+          1
+        ],
+        [
+          18,
+          2
+        ],
+        [
+          18,
+          7
+        ]
+      ],
+      "choices": {
+        "COMPLETELY_RANDOM": [
+          18,
+          0
+        ],
+        "RANDOM_PREFER_TYPE": [
+          18,
+          1
+        ],
+        "UNCHANGED": [
+          18,
+          2
+        ],
+        "FULL": [
+          18,
+          7
+        ]
+      },
+      "java_type": "TMsHMsCompatibilityMod"
+    },
+    "tmsMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          18,
+          3
+        ],
+        [
+          18,
+          4
+        ]
+      ],
+      "choices": {
+        "RANDOM": [
+          18,
+          3
+        ],
+        "UNCHANGED": [
+          18,
+          4
+        ]
+      },
+      "java_type": "TMsMod"
+    },
+    "totemLevelModifier": {
+      "kind": "integer",
+      "positions": [
+        [
+          43,
+          0
+        ],
+        [
+          43,
+          1
+        ],
+        [
+          43,
+          2
+        ],
+        [
+          43,
+          3
+        ],
+        [
+          43,
+          4
+        ],
+        [
+          43,
+          5
+        ],
+        [
+          43,
+          6
+        ]
+      ],
+      "bias": -50
+    },
+    "totemLevelsModified": {
+      "kind": "boolean",
+      "positions": [
+        [
+          43,
+          7
+        ]
+      ]
+    },
+    "totemPokemonMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          42,
+          0
+        ],
+        [
+          42,
+          1
+        ],
+        [
+          42,
+          2
+        ]
+      ],
+      "choices": {
+        "UNCHANGED": [
+          42,
+          0
+        ],
+        "RANDOM": [
+          42,
+          1
+        ],
+        "SIMILAR_STRENGTH": [
+          42,
+          2
+        ]
+      },
+      "java_type": "TotemPokemonMod"
+    },
+    "trainersBlockEarlyWonderGuard": {
+      "kind": "boolean",
+      "positions": [
+        [
+          27,
+          4
+        ]
+      ]
+    },
+    "trainersBlockLegendaries": {
+      "kind": "boolean",
+      "positions": [
+        [
+          27,
+          3
+        ]
+      ]
+    },
+    "trainersForceFullyEvolved": {
+      "kind": "boolean",
+      "positions": [
+        [
+          14,
+          7
+        ]
+      ]
+    },
+    "trainersForceFullyEvolvedLevel": {
+      "kind": "integer",
+      "positions": [
+        [
+          14,
+          0
+        ],
+        [
+          14,
+          1
+        ],
+        [
+          14,
+          2
+        ],
+        [
+          14,
+          3
+        ],
+        [
+          14,
+          4
+        ],
+        [
+          14,
+          5
+        ],
+        [
+          14,
+          6
+        ]
+      ],
+      "bias": 0
+    },
+    "trainersLevelModified": {
+      "kind": "boolean",
+      "positions": [
+        [
+          36,
+          7
+        ]
+      ]
+    },
+    "trainersLevelModifier": {
+      "kind": "integer",
+      "positions": [
+        [
+          36,
+          0
+        ],
+        [
+          36,
+          1
+        ],
+        [
+          36,
+          2
+        ],
+        [
+          36,
+          3
+        ],
+        [
+          36,
+          4
+        ],
+        [
+          36,
+          5
+        ],
+        [
+          36,
+          6
+        ]
+      ],
+      "bias": -50
+    },
+    "trainersMatchTypingDistribution": {
+      "kind": "boolean",
+      "positions": [
+        [
+          27,
+          2
+        ]
+      ]
+    },
+    "trainersMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          13,
+          0
+        ],
+        [
+          13,
+          1
+        ],
+        [
+          13,
+          2
+        ],
+        [
+          13,
+          3
+        ],
+        [
+          13,
+          4
+        ],
+        [
+          13,
+          5
+        ]
+      ],
+      "choices": {
+        "UNCHANGED": [
+          13,
+          0
+        ],
+        "RANDOM": [
+          13,
+          1
+        ],
+        "DISTRIBUTED": [
+          13,
+          2
+        ],
+        "MAINPLAYTHROUGH": [
+          13,
+          3
+        ],
+        "TYPE_THEMED": [
+          13,
+          4
+        ],
+        "TYPE_THEMED_ELITE4_GYMS": [
+          13,
+          5
+        ]
+      },
+      "java_type": "TrainersMod"
+    },
+    "trainersUsePokemonOfSimilarStrength": {
+      "kind": "boolean",
+      "positions": [
+        [
+          27,
+          0
+        ]
+      ]
+    },
+    "tutorFollowEvolutions": {
+      "kind": "boolean",
+      "positions": [
+        [
+          19,
+          2
+        ]
+      ]
+    },
+    "tutorLevelUpMoveSanity": {
+      "kind": "boolean",
+      "positions": [
+        [
+          21,
+          5
+        ]
+      ]
+    },
+    "tutorsForceGoodDamaging": {
+      "kind": "boolean",
+      "positions": [
+        [
+          22,
+          7
+        ]
+      ]
+    },
+    "tutorsGoodDamagingPercent": {
+      "kind": "integer",
+      "positions": [
+        [
+          22,
+          0
+        ],
+        [
+          22,
+          1
+        ],
+        [
+          22,
+          2
+        ],
+        [
+          22,
+          3
+        ],
+        [
+          22,
+          4
+        ],
+        [
+          22,
+          5
+        ],
+        [
+          22,
+          6
+        ]
+      ],
+      "bias": 0
+    },
+    "typesFollowMegaEvolutions": {
+      "kind": "boolean",
+      "positions": [
+        [
+          2,
+          6
+        ]
+      ]
+    },
+    "typesMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          2
+        ]
+      ],
+      "choices": {
+        "RANDOM_FOLLOW_EVOLUTIONS": [
+          2,
+          0
+        ],
+        "COMPLETELY_RANDOM": [
+          2,
+          1
+        ],
+        "UNCHANGED": [
+          2,
+          2
+        ]
+      },
+      "java_type": "TypesMod"
+    },
+    "updateBaseStats": {
+      "kind": "boolean",
+      "positions": [
+        [
+          1,
+          5
+        ]
+      ]
+    },
+    "updateBaseStatsToGeneration": {
+      "kind": "integer",
+      "positions": [
+        [
+          44,
+          0
+        ],
+        [
+          44,
+          1
+        ],
+        [
+          44,
+          2
+        ],
+        [
+          44,
+          3
+        ],
+        [
+          44,
+          4
+        ],
+        [
+          44,
+          5
+        ],
+        [
+          44,
+          6
+        ],
+        [
+          44,
+          7
+        ]
+      ],
+      "bias": 0
+    },
+    "updateMoves": {
+      "kind": "boolean",
+      "positions": [
+        [
+          0,
+          1
+        ]
+      ]
+    },
+    "updateMovesLegacy": {
+      "kind": "boolean",
+      "positions": [
+        [
+          0,
+          2
+        ]
+      ]
+    },
+    "updateMovesToGeneration": {
+      "kind": "integer",
+      "positions": [
+        [
+          45,
+          0
+        ],
+        [
+          45,
+          1
+        ],
+        [
+          45,
+          2
+        ],
+        [
+          45,
+          3
+        ],
+        [
+          45,
+          4
+        ],
+        [
+          45,
+          5
+        ],
+        [
+          45,
+          6
+        ],
+        [
+          45,
+          7
+        ]
+      ],
+      "bias": 0
+    },
+    "useMinimumCatchRate": {
+      "kind": "boolean",
+      "positions": [
+        [
+          16,
+          0
+        ]
+      ]
+    },
+    "useTimeBasedEncounters": {
+      "kind": "boolean",
+      "positions": [
+        [
+          15,
+          7
+        ]
+      ]
+    },
+    "weighDuplicateAbilitiesTogether": {
+      "kind": "boolean",
+      "positions": [
+        [
+          40,
+          7
+        ]
+      ]
+    },
+    "wildLevelModifier": {
+      "kind": "integer",
+      "positions": [
+        [
+          38,
+          0
+        ],
+        [
+          38,
+          1
+        ],
+        [
+          38,
+          2
+        ],
+        [
+          38,
+          3
+        ],
+        [
+          38,
+          4
+        ],
+        [
+          38,
+          5
+        ],
+        [
+          38,
+          6
+        ]
+      ],
+      "bias": -50
+    },
+    "wildLevelsModified": {
+      "kind": "boolean",
+      "positions": [
+        [
+          38,
+          7
+        ]
+      ]
+    },
+    "wildPokemonMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          15,
+          1
+        ],
+        [
+          15,
+          4
+        ],
+        [
+          15,
+          5
+        ],
+        [
+          15,
+          6
+        ]
+      ],
+      "choices": {
+        "AREA_MAPPING": [
+          15,
+          1
+        ],
+        "GLOBAL_MAPPING": [
+          15,
+          4
+        ],
+        "RANDOM": [
+          15,
+          5
+        ],
+        "UNCHANGED": [
+          15,
+          6
+        ]
+      },
+      "java_type": "WildPokemonMod"
+    },
+    "wildPokemonRestrictionMod": {
+      "kind": "enum",
+      "positions": [
+        [
+          15,
+          0
+        ],
+        [
+          15,
+          2
+        ],
+        [
+          15,
+          3
+        ],
+        [
+          16,
+          2
+        ]
+      ],
+      "choices": {
+        "CATCH_EM_ALL": [
+          15,
+          0
+        ],
+        "NONE": [
+          15,
+          2
+        ],
+        "TYPE_THEME_AREAS": [
+          15,
+          3
+        ],
+        "SIMILAR_STRENGTH": [
+          16,
+          2
+        ]
+      },
+      "java_type": "WildPokemonRestrictionMod"
+    }
+  }
+}

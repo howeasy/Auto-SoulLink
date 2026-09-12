@@ -84,20 +84,19 @@ def test_a_capture_colliding_with_a_live_link_is_refused(st):
     assert pid == "a"
 
 
-def test_a_collision_with_a_DEAD_link_is_allowed(st):
-    """A buried mon's key is no longer load-bearing; refusing here would cost the
-    player encounters for no benefit."""
+def test_a_collision_with_a_DEAD_link_requires_physical_reconciliation(st):
+    """A pending or stored memorial may still physically own the same key."""
     dead = LinkEntry(area_id="route_1", a=_mon("AABB:30B8:10"), b=_mon("CCDD:7B0B:10"),
                      status=LinkStatus.DEAD)
     st.links.append(dead)
     st._index_entry(dead)
-    assert st._check_link_violation(_mon("AABB:30B8:10"), _mon("EEFF:7B0B:10")) is None
+    assert st._check_link_violation(_mon("AABB:30B8:10"), _mon("EEFF:7B0B:10")) is not None
 
 
-def test_two_halves_reporting_one_key_is_refused(st):
-    """A pair that is its own alias — both lookups would return the same half."""
+def test_two_players_reporting_one_key_remain_distinct(st):
+    """Two physical saves may legitimately contain matching raw keys."""
     result = st._check_link_violation(_mon("AABB:30B8:10"), _mon("AABB:30B8:10"))
-    assert result is not None and "Key collision" in result[0]
+    assert result is None
 
 
 def test_ordinary_distinct_keys_still_link(st):
@@ -115,14 +114,15 @@ def test_the_collision_check_does_not_need_the_species_lock(st):
     assert st._check_link_violation(_mon("AABB:30B8:10"), _mon("EEFF:7B0B:11")) is not None
 
 
-def test_index_entry_reports_a_collision_it_cannot_refuse(st, caplog):
-    """Links also arrive from disk and from bonus pairs, where refusing is not an
-    option; the alias must at least be loud instead of silent."""
+def test_index_entry_refuses_same_save_aliasing(st):
+    """Invalid persisted/staged links must not silently displace an owner."""
     first = LinkEntry(area_id="route_1", a=_mon("AABB:30B8:10"), b=_mon("CCDD:7B0B:10"),
                       status=LinkStatus.ALIVE)
     second = LinkEntry(area_id="route_2", a=_mon("AABB:30B8:10"), b=_mon("EEFF:7B0B:11"),
                        status=LinkStatus.ALIVE)
+    st.links.append(first)
     st._index_entry(first)
-    with caplog.at_level("ERROR"):
+    st.links.append(second)
+    with pytest.raises(ValueError, match="ambiguous physical key"):
         st._index_entry(second)
-    assert any("KEY COLLISION" in r.message for r in caplog.records)
+    assert st._key_index[first.a.key] is first

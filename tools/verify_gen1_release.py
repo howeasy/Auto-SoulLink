@@ -53,7 +53,7 @@ Git's text checkout rules can change CRLF/LF without changing an assertion. Bina
 payloads, fixture saves, canonical artifacts and before/after snapshots are never
 normalized by their integrity checks.
     """
-    if path.suffix in {".py", ".lua", ".asm", ".json"}:
+    if path.suffix in {".py", ".lua", ".asm", ".json", ".java", ".js", ".cjs", ".mjs", ".css", ".html", ".md"}:
         return hashlib.sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
     return sha256(path)
 

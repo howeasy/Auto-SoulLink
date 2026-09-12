@@ -16,6 +16,9 @@
     <div class="patcher-wrap"
          data-base-md5="{{ base_rom_md5 }}"
          data-patched-md5="{{ patched_rom_md5 }}"
+         data-base-sha256="{{ target.base_sha256 | default('') }}"
+         data-patched-sha256="{{ target.patched_sha256 | default('') }}"
+         data-patch-sha256="{{ target.patch_sha256 | default('') }}"
          data-out-name="{{ target.out_name }}"
          data-patch-url="/companion/{{ target.patch }}">
 
@@ -41,10 +44,9 @@
         </nav>
         {% if target.slug != "rr" %}
         <p class="patcher-muted">
-          Pokemon Yellow is not listed because there is no companion build for it: its
-          WRAM has no free bytes for the mailbox the patch needs. Yellow plays fine —
-          the core Soul Link rules need no patch on any Game Boy title — it simply has
-          no in-game panel.
+          Red and Blue include the native START panel and Pokémon Center trade.
+          Yellow includes Pokémon Center trade with the original animation.
+          Yellow has no native panel. Event sound cues are disabled for these builds.
         </p>
         {% endif %}
       </header>
@@ -78,11 +80,23 @@
       <section class="patcher-card">
         <h2>What the patch unlocks</h2>
         <p class="patcher-muted">
+          {% if target.slug != "rr" %}
+          Both players need trade-capable cartridges for Pokémon Center trade.
+          Soul Link rules apply independently of this optional patch.
+          {% else %}
           These native in-game features <strong>require</strong> the patch (both linked
           players must be patched for the peer/trade features). Everything else in SLink
           works without it.
+          {% endif %}
         </p>
         <ul class="patcher-features">
+          {% if target.slug != "rr" %}
+          {% if target.capabilities.panel %}
+          <li><strong>START panel</strong> — view Soul Link information in the game's menu.</li>
+          {% endif %}
+          <li><strong>Pokémon Center trade</strong> — use the existing Link Receptionist;
+            both cartridges play their original trade animation.</li>
+          {% else %}
           <li><strong>Native message box</strong> — momentous overworld events (a link
             forms, a shiny is found, an area becomes a dead zone) show in the real in-game
             text box instead of the HUD.</li>
@@ -95,12 +109,18 @@
             own sound engine instead of a Lua RAM-poke.</li>
           <li><strong>Bundled Battle Calc</strong> — an in-battle damage / type-effectiveness
             readout for the highlighted move, folded into the same patch.</li>
+          {% endif %}
         </ul>
+        {% if target.slug == "rr" %}
         <p class="patcher-muted">
           Patch-dependent augmentations (<strong>Explode Mode</strong>, <strong>Rival Swap</strong>,
           <strong>Overworld Presence</strong>) are toggled per-run when you create a run in the
           <strong>Manager</strong> — under the “Requires ROM patch” section.
         </p>
+        {% else %}
+        <p class="patcher-muted">These cartridge features also require the matching SLink runtime.
+          This integration build keeps generated R/B/Y launchers held until runtime setup is complete.</p>
+        {% endif %}
       </section>
 
       {# ── Manual download ────────────────────────────────────────────── #}

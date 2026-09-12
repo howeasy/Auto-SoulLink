@@ -1,0 +1,53 @@
+diff --git a/server/gen1_acquisition_runtime.py b/server/gen1_acquisition_runtime.py
+index 539f335..492d5cf 100644
+--- a/server/gen1_acquisition_runtime.py
++++ b/server/gen1_acquisition_runtime.py
+@@ -104,6 +104,8 @@ def receipts_of(request):
+     if request.get('event') == 'frame_complete':
+         rows = request.get('bundle', {}).get('acquisitions')
+         return rows or []
++    if request.get('event') == 'observation':  # free-run batch (P10)
++        return request.get('acquisitions') or []
+     raise JournalError('acquisition source event is neither standalone nor a compound frame')
+ 
+ 
+@@ -454,6 +456,9 @@ def verify_journal(journal, stage, *, rom_provider=None):
+                 raise JournalError('acquisition current frame origin differs')
+             if current.result.get('acquisition_digest')!=digest(entry) or current.result.get('observations_settled') is not True:
+                 raise JournalError('acquisition current frame result differs from its entry')
++        elif current.request.get('event')=='observation':
++            if current.result.get('acquisition_digest')!=digest(entry):
++                raise JournalError('acquisition current observation result differs from its entry')
+         elif current.request.get('event')!=EVENT or current.result!=result_for(entry):
+             raise JournalError('acquisition current standalone result differs')
+         else:
+@@ -491,6 +496,8 @@ def verify_journal(journal, stage, *, rom_provider=None):
+                     observed=stable_event.request.get('bundle',{}).get('inventory')
+                 elif stable_event.request.get('event')=='inventory_observation':
+                     observed=stable_event.request.get('payload',{}).get('observation')
++                elif stable_event.request.get('event')=='observation':
++                    observed=stable_event.request.get('inventory')
+                 else:
+                     observed=None
+                 from server.gen1_initial_observation import validate
+diff --git a/server/gen1_observation_provenance.py b/server/gen1_observation_provenance.py
+index de52b32..8dc5eed 100644
+--- a/server/gen1_observation_provenance.py
++++ b/server/gen1_observation_provenance.py
+@@ -105,7 +105,15 @@ def semantic_receipt(journal, player, entry, kind):
+         raise JournalError('unknown observation receipt kind')
+     origin = validate_entry_origin(entry, player)
+     if origin is None:
+-        return journal.event(player, entry['operation_id'], semantic)
++        outer = journal.event_snapshot(player, entry['operation_id'])
++        if outer is None or outer.request.get('event') != 'observation':
++            return journal.event(player, entry['operation_id'], semantic)
++        # A free-run observation (P10) contains its semantics the way a compound frame does.
++        contained = outer.request.get('signals') if kind == 'engine_signals' else outer.request.get('inventory')
++        expected = semantic['payload'] if kind == 'engine_signals' else semantic['payload']['observation']
++        if contained is None or contained != expected or outer.result.get(field) != digest(entry):
++            raise JournalError('free-run observation differs from its semantic evidence digest')
++        return EventReceipt(outer.revision, {'ack': 'ACK', field: digest(entry), 'ordinary_execution': False}, outer.command_ids)
+     outer = event_reference.resolve(journal, origin)
+     _contained(outer.request, semantic)
+     result = outer.result

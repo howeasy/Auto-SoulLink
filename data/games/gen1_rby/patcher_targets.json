@@ -1,0 +1,65 @@
+{
+  "schema": "gen1-browser-patcher-targets-v1",
+  "targets": {
+    "rb-blue": {
+      "slug": "rb-blue",
+      "label": "Pokemon Blue",
+      "variant": "blue",
+      "patch": "SLink-Blue.ups",
+      "patch_path": "patch/gen1/build/companion_blue/SLink-Blue.ups",
+      "base_md5": "50927e843568814f7ed45ec4f944bd8b",
+      "patched_md5": "f833de852737215edc2670f6d5ee1992",
+      "base_sha256": "2a951313c2640e8c2cb21f25d1db019ae6245d9c7121f754fa61afd7bee6452d",
+      "patched_sha256": "34997b6fe8ee2e0214896397ffbe2576cdf1ea7aa977f80fa07157d23809e7f9",
+      "patch_sha256": "1af40281b28c412d527c55b99582292bc9274d83c4973275352d55c853e0ded7",
+      "capabilities": {
+        "panel": true,
+        "pc_trade": true,
+        "sfx": false
+      },
+      "accept": ".gb,.gbc,application/octet-stream",
+      "out_name": "Pokemon Blue (SLink companion).gbc",
+      "base_hint": "a clean US-English Pokemon Blue dump"
+    },
+    "rb-red": {
+      "slug": "rb-red",
+      "label": "Pokemon Red",
+      "variant": "red",
+      "patch": "SLink-Red.ups",
+      "patch_path": "patch/gen1/build/companion_red/SLink-Red.ups",
+      "base_md5": "3d45c1ee9abd5738df46d2bdda8b57dc",
+      "patched_md5": "a990e4dde39e7165463c4bf5f19b3fb7",
+      "base_sha256": "5ca7ba01642a3b27b0cc0b5349b52792795b62d3ed977e98a09390659af96b7b",
+      "patched_sha256": "26c1e987f3ced30c4ecdb932af3f41e742abe89ab92bb69a130708f0d90394e7",
+      "patch_sha256": "8888e9351126aab726c79bc60dc6388e2f1196f4ece76254867384db5a9b9c17",
+      "capabilities": {
+        "panel": true,
+        "pc_trade": true,
+        "sfx": false
+      },
+      "accept": ".gb,.gbc,application/octet-stream",
+      "out_name": "Pokemon Red (SLink companion).gbc",
+      "base_hint": "a clean US-English Pokemon Red dump"
+    },
+    "yellow": {
+      "slug": "yellow",
+      "label": "Pokemon Yellow",
+      "variant": "yellow",
+      "patch": "SLink-Yellow.ups",
+      "patch_path": "patch/gen1/build/companion_yellow/SLink-Yellow.ups",
+      "base_md5": "d9290db87b1f0a23b89f99ee4469e34b",
+      "patched_md5": "37d39b9f99ae2222b42b740ce0db0487",
+      "base_sha256": "8cbaa499397e4f1a679c992ea9382a2dd7942ab398b48c19829c2d9529de47bf",
+      "patched_sha256": "f33d45e2f926d418f9896a1f07f1dfdde4f7191f2abb03e52b191b1831a805dc",
+      "patch_sha256": "1fb890aed76944b7b53563f961268988c22d2c3ddf4504b0fc3c3c57793dcb47",
+      "capabilities": {
+        "panel": false,
+        "pc_trade": true,
+        "sfx": false
+      },
+      "accept": ".gb,.gbc,application/octet-stream",
+      "out_name": "Pokemon Yellow (SLink companion).gbc",
+      "base_hint": "a clean US-English Pokemon Yellow dump"
+    }
+  }
+}

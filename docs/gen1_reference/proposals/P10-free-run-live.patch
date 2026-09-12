@@ -1,0 +1,29 @@
+diff --git a/lua/gen1_client_entry.lua b/lua/gen1_client_entry.lua
+index ae5d8d2..e125ec7 100644
+--- a/lua/gen1_client_entry.lua
++++ b/lua/gen1_client_entry.lua
+@@ -124,8 +124,12 @@ function M.start(launch,options)
+         local function unavailable()error("cartridge execution is not selected in held-service launch mode",0)end
+         local clock=assert(require("platform_clock").new())
+         self.clock=clock
++        -- Free-run: the executor reads that run on every control turn (operations.request,
++        -- ready) happen unheld, and gen1_held_faint.safe() already answers false without the
++        -- hold; the identity reader it calls first must therefore not assert one. Every write
++        -- still runs under the writer hold below, which safe() requires.
+         local faint=Observation and require("gen1_held_faint").new({journal=journal,memory=memory,player=launch.player,
+-            variant=launch.cartridge.variant,owned=owned,host=self.host,clock=clock,
++            variant=launch.cartridge.variant,owned=free and source_owned or owned,host=self.host,clock=clock,
+             saveram_directory=self.saveram_directory})or nil
+         -- Free-run boundary predicate (P4 section 4): "held" also reads "between frames, inside the loop".
+         local function at_boundary()return self.loop_ctx~=nil and self.loop_ctx.at_boundary==true end
+@@ -261,6 +265,10 @@ function M.start(launch,options)
+             local Loop=require("gen1_observation_loop")
+             local function loop_ready()
+                 local baseline=assert(self.store:read()).observation
++                -- Held-phase writes finish, and every held-phase event is acknowledged, before the
++                -- core is released: the initial save is an image command prepared from the enrollment
++                -- checkpoint, and gen1_held_save_image.classify refuses it once the core has moved.
++                if #assert(journal:pending_commands())>0 or #assert(journal:pending_events())>0 then return false end
+                 return self.runtime:is_bound() and self.observer.signals~=nil and self.acquisitions~=nil
+                     and baseline.initial_inventory~=nil and baseline.initial_inventory.phase=="acknowledged"
+                     and baseline.bootstrap~=nil and baseline.bootstrap.phase=="acknowledged"

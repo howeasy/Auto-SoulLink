@@ -1,10 +1,5 @@
-; slink.asm — SLink companion patch for Pokemon Red/Blue: the SPIKE.
-;
-; Proves the injection approach and NOTHING else: it writes a 'SLNK' beacon plus an ABI
-; version and a per-frame counter into WRAM, then runs the code it displaced. If this is
-; solid — beacon visible, counter advancing in the overworld AND in battle AND in menus,
-; game otherwise indistinguishable over a long session — the approach is sound and features
-; can follow. If it is not, the whole idea dies for ~1% of the cost of finding out later.
+; R/B ABI-3 panel, heartbeat, lease and BG-transfer accounting. No VBlank audio.
+; Native trade is advertised only by the combined companion build.
 ;
 ; WHY THIS HOOK SITE
 ;   VBlank (home, 00:2024) contains `farcall TrackPlayTime`, which the macro assembles as
@@ -38,32 +33,34 @@
 DEF SLINK_MAILBOX      EQU $DEE2
 DEF SLINK_ABI_VERSION  EQU 3
 
-; Mailbox layout (30 bytes available, $DEE2-$DEFF):
-;   +0..3  'SLNK' beacon, rewritten every frame
-;   +4     ABI version
-;   +5..6  16-bit frame counter
-;   +7     SFX request: Lua writes a sound id, we play it and zero the byte
-DEF SLINK_SFX_REQUEST  EQU SLINK_MAILBOX + 7
-;   +8     capability bits, so a client asks WHAT this build can do rather than inferring
-;          it from the ABI number -- which stops being true the moment one feature ships
-;          without another
-;   +9     panel state, the handshake between this code and the client
-;   +10    page number, ours to the client: which page it should paint
-;   +11    page COUNT, the client's to us: how many there are. We need it to know when A
-;          should close instead of advancing, and only the client knows how much text the
-;          server sent. 0 (never written) reads as one page.
-DEF SLINK_CAPS         EQU SLINK_MAILBOX + 8
-DEF SLINK_PANEL_STATE  EQU SLINK_MAILBOX + 9
-DEF SLINK_PANEL_PAGE   EQU SLINK_MAILBOX + 10
-DEF SLINK_PANEL_PAGES  EQU SLINK_MAILBOX + 11
+; Mailbox $DEE2-$DEFF: magic0-3, ABI4, capabilities5, heartbeat6-7,
+; SFX head/tail8-9, FIFO10-13, overflow14, panel15-21, canary22-29.
+; SFX is disabled and these reserved queue fields never dispatch audio.
+DEF SLINK_HEARTBEAT    EQU SLINK_MAILBOX + 6
+DEF SLINK_SFX_HEAD     EQU SLINK_MAILBOX + 8
+DEF SLINK_SFX_TAIL     EQU SLINK_MAILBOX + 9
+DEF SLINK_SFX_FIFO     EQU SLINK_MAILBOX + 10
+DEF SLINK_SFX_OVERFLOW EQU SLINK_MAILBOX + 14
+DEF SLINK_CAPS         EQU SLINK_MAILBOX + 5
+DEF SLINK_PANEL_STATE  EQU SLINK_MAILBOX + 15
+DEF SLINK_PANEL_PAGE   EQU SLINK_MAILBOX + 16
+DEF SLINK_PANEL_PAGES  EQU SLINK_MAILBOX + 17
+DEF SLINK_PANEL_GEN    EQU SLINK_MAILBOX + 18
+DEF SLINK_PANEL_ACK    EQU SLINK_MAILBOX + 19
+DEF SLINK_PANEL_TRANSFERS EQU SLINK_MAILBOX + 20
+DEF SLINK_PANEL_LEASE  EQU SLINK_MAILBOX + 21
+DEF SLINK_CANARY       EQU SLINK_MAILBOX + 22
+DEF SLINK_CANARY_VALUE EQU $A5
 
 DEF SLINK_CAP_SFX      EQU 1 << 0
 DEF SLINK_CAP_PANEL    EQU 1 << 1
+DEF SLINK_CAP_PC_TRADE EQU 1 << 2
 
 ; Panel handshake. The client may paint only in AWAIT, and must stop at CLOSED.
 DEF SLINK_PANEL_CLOSED EQU 0
 DEF SLINK_PANEL_AWAIT  EQU 1
 DEF SLINK_PANEL_STAGED EQU 2
+DEF SLINK_PANEL_DISPLAY EQU 3
 
 ; Displaced call, from data/pret_rom_syms.json.
 DEF TrackPlayTime      EQU $4DEE
@@ -100,12 +97,44 @@ DEF Bankswitch         EQU $35D6
 ; PANEL ONLY and says so in the capability byte, rather than shipping audio that is silently
 ; dropped a fifth of the time and corrupts the music the rest.
 ;
-; The request byte is still CONSUMED (cleared) so a client that writes one does not leave
-; stale state in the mailbox; it simply never becomes a sound.
+; No legacy one-byte SFX request register is exposed by this ABI.
+; The reserved queue remains inactive until a main-thread implementation is qualified.
 
 SECTION "SLink Hook", ROMX[$4000], BANK[$3F]
 
 SlinkHook::
+	ld hl, SLINK_MAILBOX
+	ld a, [hli]
+	cp 'S'
+	jr nz, .initialize
+	ld a, [hli]
+	cp 'L'
+	jr nz, .initialize
+	ld a, [hli]
+	cp 'N'
+	jr nz, .initialize
+	ld a, [hli]
+	cp 'K'
+	jr nz, .initialize
+	ld a, [hl]
+	cp SLINK_ABI_VERSION
+	jr z, .beacon
+.initialize
+	ld hl, SLINK_CAPS
+	ld b, 25
+	xor a
+.clear
+	ld [hli], a
+	dec b
+	jr nz, .clear
+	ld hl, SLINK_CANARY
+	ld b, 8
+	ld a, SLINK_CANARY_VALUE
+.canary
+	ld [hli], a
+	dec b
+	jr nz, .canary
+.beacon
 	; Beacon, rewritten every frame. Cheap, and it self-heals if anything scribbles on it
 	; — which is exactly what a presence check wants to be.
 	ld a, 'S'
@@ -122,29 +151,68 @@ SlinkHook::
 	; not safe, so the capability it would advertise is not claimed. A client reads this
 	; byte rather than inferring features from the ABI number, which is why dropping a
 	; feature does not need an ABI bump.
-	ld a, SLINK_CAP_PANEL
+	IF DEF(SLINK_NATIVE_TRADE)
+		ld a, SLINK_CAP_PANEL | SLINK_CAP_PC_TRADE
+	ELSE
+		ld a, SLINK_CAP_PANEL
+	ENDC
 	ld [SLINK_CAPS], a
 
 	; 16-bit little-endian frame counter at +5. `inc [hl]` sets Z on wrap, so carry into
 	; the high byte only when the low byte rolled over to zero.
-	ld hl, SLINK_MAILBOX + 5
+	ld hl, SLINK_HEARTBEAT
 	inc [hl]
 	jr nz, .noCarry
 	inc hl
 	inc [hl]
 .noCarry
 
-	; ── SFX request: drained, never played ────────────────────────────────────────────
-	; Clearing it keeps the mailbox honest for a client that still writes one. There is
-	; deliberately NO call here — see the note at the top of this file.
+	; Age the panel lease and account for actual BG transfers only.
+	ld a, [SLINK_PANEL_STATE]
+	and a
+	jr z, .displaced
+	ld hl, SLINK_PANEL_LEASE
+	ld a, [hl]
+	and a
+	jr z, .transfer
+	dec [hl]
+.transfer
+	ld a, [SLINK_PANEL_STATE]
+	cp SLINK_PANEL_STAGED
+	jr nz, .displaced
+	ld a, [SLINK_PANEL_GEN]
+	and 1
+	jr nz, .unstable
+	ldh a, [hAutoBGTransferEnabled]
+	and a
+	jr z, .displaced
+	; AutoBgMapTransfer already stored its NEXT portion: 0 means bottom was
+	; copied, 1 means top, 2 means middle. Require all three distinct portions.
+	ldh a, [hAutoBGTransferPortion]
+	ld b, 4
+	and a
+	jr z, .markTransfer
+	ld b, 1
+	dec a
+	jr z, .markTransfer
+	ld b, 2
+.markTransfer
+	ld a, [SLINK_PANEL_TRANSFERS]
+	or b
+	ld [SLINK_PANEL_TRANSFERS], a
+	jr .displaced
+.unstable
 	xor a
-	ld [SLINK_SFX_REQUEST], a
+	ld [SLINK_PANEL_TRANSFERS], a
+.displaced
 
 	; Run the code the hook displaced, then hand control back to VBlank.
 	ld b, TrackPlayTimeBank
 	ld hl, TrackPlayTime
 	call Bankswitch
 	ret
+SlinkHookEnd::
+ASSERT SlinkHookEnd <= $4100
 
 
 ; ── The SLINK panel ──────────────────────────────────────────────────────────────────────
@@ -183,6 +251,12 @@ DEF PlaceString                  EQU $1955
 DEF DelayFrame                   EQU $20AF
 DEF Delay3                       EQU $3DD7
 DEF hTileAnimations              EQU $FFD7
+DEF hAutoBGTransferEnabled       EQU $FFBA
+DEF hAutoBGTransferPortion       EQU $FFBB
+DEF hAutoBGTransferDest          EQU $FFBC
+DEF rBGP                        EQU $FF47
+DEF rOBP0                       EQU $FF48
+DEF rOBP1                       EQU $FF49
 DEF wUpdateSpritesEnabled        EQU $CFCB
 DEF wTileMap                     EQU $C3A0
 DEF SCREEN_WIDTH                 EQU 20
@@ -190,11 +264,29 @@ DEF SCREEN_WIDTH                 EQU 20
 ; How long to wait for the client to paint a screen before giving up and showing the
 ; fallback. ~1.5s at 60fps: long enough for a client that is running, short enough that a
 ; player with no client attached is not left staring at a blank box.
-DEF SLINK_STAGE_TIMEOUT EQU 90
+DEF SLINK_STAGE_TIMEOUT EQU 180
 
 SECTION "SLink Panel", ROMX[$4100], BANK[$3F]
 
 SlinkPanel::
+	call SlinkPanelCanary
+	ret c
+	ldh a, [rBGP]
+	push af
+	ldh a, [rOBP0]
+	push af
+	ldh a, [rOBP1]
+	push af
+	ldh a, [hAutoBGTransferEnabled]
+	push af
+	ldh a, [hAutoBGTransferPortion]
+	push af
+	ldh a, [hAutoBGTransferDest]
+	push af
+	ldh a, [hAutoBGTransferDest + 1]
+	push af
+	ld a, 1
+	ldh [hAutoBGTransferEnabled], a
 	call GBPalWhiteOut
 	call ClearScreen
 	call UpdateSprites
@@ -225,47 +317,50 @@ SlinkPanel::
 	ld [SLINK_PANEL_PAGES], a
 
 .page
-	; Draw the fallback FIRST, so a timeout shows something that explains itself rather
-	; than an empty screen. A client that is attached simply paints over it -- panelStage
-	; writes all eighteen rows, padded, so nothing of the previous page survives either.
-	call SlinkDrawFallback
+	; Start a fresh request while the palette remains blank.
+	ld a, [SLINK_PANEL_ACK]
+	ld [SLINK_PANEL_GEN], a
+	xor a
+	ld [SLINK_PANEL_TRANSFERS], a
+	ld a, SLINK_STAGE_TIMEOUT
+	ld [SLINK_PANEL_LEASE], a
 
 	; Hand the screen to the client and wait for it to say it has finished painting. The
 	; screen is already white at this point, so a client painting mid-wait cannot be seen
 	; doing it -- which is what makes a torn page impossible rather than unlikely.
 	ld a, SLINK_PANEL_AWAIT
 	ld [SLINK_PANEL_STATE], a
-	call SlinkWaitForStage      ; returns a = the state we gave up on
-	push af                     ; remember whether a client actually answered
-
-	call Delay3                 ; let the auto-BG transfers carry wTileMap into VRAM
+	call SlinkWaitForStage
+	jp c, .close
+	push af
+	; The stable generation has completed all three actual BG portions.
+.reveal
 	call GBPalNormal            ; reveal, once and whole
-	call SlinkWaitForButton     ; returns a = the buttons that were pressed
-	ld c, a
 	pop af
-
-	; No client answered, so there are no pages to turn -- any button closes.
-	cp SLINK_PANEL_STAGED
-	jr nz, .close
+	ld [SLINK_PANEL_ACK], a
+	ld a, SLINK_PANEL_DISPLAY
+	ld [SLINK_PANEL_STATE], a
+	call SlinkWaitForButton     ; returns a = the buttons that were pressed
+	jp c, .close
 
 	; A advances, B and START close. This is the whole reason the panel does not use
 	; WaitForTextScrollButtonPress: that returns on A or B without saying which.
-	ld a, c
 	and SLINK_PAD_A
 	jr z, .close
 
-	; ...but only while there IS a next page. The client publishes the count, because only
-	; it knows how much text the server sent; a count of 0 means it never said, which we
-	; read as one page. Without this, A on a one-page panel would white out and repaint the
-	; same rows -- a flicker that looks like a fault.
+	; A advances and wraps after the last page. B/START close.
 	ld a, [SLINK_PANEL_PAGE]
 	inc a
 	ld b, a
 	ld a, [SLINK_PANEL_PAGES]
 	cp b
-	jr c, .close                ; pages < page+1  -> that was the last one
-	jr z, .close                ; pages == page+1 -> ditto
+	jr z, .wrap
+	jr c, .wrap
 	ld a, b
+	jr .selectedPage
+.wrap
+	xor a
+.selectedPage
 	ld [SLINK_PANEL_PAGE], a
 	call GBPalWhiteOut          ; hide the repaint, exactly as on the way in
 	jr .page
@@ -274,6 +369,7 @@ SlinkPanel::
 	xor a
 	ld [SLINK_PANEL_STATE], a   ; closed: the client must stop painting
 	ld [SLINK_PANEL_PAGE], a
+	ld [SLINK_PANEL_LEASE], a
 
 	call GBPalWhiteOut
 	call LoadFontTilePatterns
@@ -285,6 +381,20 @@ SlinkPanel::
 	call LoadGBPal
 	pop af
 	ldh [hTileAnimations], a
+	pop af
+	ldh [hAutoBGTransferDest + 1], a
+	pop af
+	ldh [hAutoBGTransferDest], a
+	pop af
+	ldh [hAutoBGTransferPortion], a
+	pop af
+	ldh [hAutoBGTransferEnabled], a
+	pop af
+	ldh [rOBP1], a
+	pop af
+	ldh [rOBP0], a
+	pop af
+	ldh [rBGP], a
 	ret
 
 ; Wait for the player to dismiss the panel.
@@ -305,10 +415,16 @@ DEF SLINK_PAD_ANY EQU $01 | $02 | $08      ; A, B, START
 SlinkWaitForButton:
 	ld b, 20
 .settle
+	call SlinkPanelDisplayed
+	ret c
+	push bc
 	call DelayFrame
+	pop bc
 	dec b
 	jr nz, .settle
 .wait
+	call SlinkPanelDisplayed
+	ret c
 	call DelayFrame
 	call Joypad
 	ldh a, [hJoyPressed]
@@ -316,53 +432,112 @@ SlinkWaitForButton:
 	ret nz                      ; caller reads WHICH buttons out of a
 	jr .wait
 
-; Poll the mailbox for up to SLINK_STAGE_TIMEOUT frames. Returns either way: a player
-; without a client still gets a panel, it just says so.
-; bc is pushed around DelayFrame because nothing documents it as preserved, and a counter
-; that silently stops counting would turn the timeout into a hang.
+; Require a fresh stable even generation and all three actual BG portions.
+; Carry means timeout, lease/canary failure, or a changed publication.
 SlinkWaitForStage:
 	ld b, SLINK_STAGE_TIMEOUT
 .loop
+	call SlinkPanelHealthy
+	ret c
 	ld a, [SLINK_PANEL_STATE]
 	cp SLINK_PANEL_STAGED
-	ret z                       ; a = STAGED: a client answered
+	jr nz, .next
+	ld a, [SLINK_PANEL_GEN]
+	bit 0, a
+	jr nz, .next
+	ld c, a
+	ld a, [SLINK_PANEL_ACK]
+	cp c
+	jr z, .next
+	ld a, [SLINK_PANEL_PAGES]
+	and a
+	jr z, .next
+.stable
+	call SlinkPanelHealthy
+	ret c
+	ld a, [SLINK_PANEL_GEN]
+	cp c
+	jr nz, .failed
+	ld a, [SLINK_PANEL_STATE]
+	cp SLINK_PANEL_STAGED
+	jr nz, .failed
+	ld a, [SLINK_PANEL_TRANSFERS]
+	cp 7
+	jr nz, .nextStable
+	ld a, [SLINK_PANEL_GEN]
+	cp c
+	jr nz, .failed
+	and a
+	ret
+.nextStable
 	push bc
 	call DelayFrame
 	pop bc
 	dec b
-	jr nz, .loop
-	ld a, [SLINK_PANEL_STATE]   ; a = whatever it still is: nobody answered
+	jr z, .failed
+	jr .stable
+.next
+	push bc
+	call DelayFrame
+	pop bc
+	dec b
+	jp nz, .loop
+.failed
+	scf
 	ret
 
-SlinkDrawFallback:
-	ld hl, wTileMap + SCREEN_WIDTH * 2 + 2
-	ld de, .title
-	call PlaceString
-	ld hl, wTileMap + SCREEN_WIDTH * 5 + 2
-	ld de, .noData
-	call PlaceString
+SlinkPanelCanary:
+	push bc
+	push hl
+	ld b, 8
+	ld hl, SLINK_CANARY
+.loop
+	ld a, [hli]
+	cp SLINK_CANARY_VALUE
+	jr nz, .bad
+	dec b
+	jr nz, .loop
+	pop hl
+	pop bc
+	and a
 	ret
-; ── Gen 1's text encoding, scoped to the strings that need it ────────────────────────────
-; rgbasm does not know it, so without a charmap `db "SLINK@"` emits ASCII -- and '@' is $40
-; in ASCII while the terminator PlaceString looks for is $50, so it walks off the end of the
-; string and paints memory until it finds one. Measured: the first panel build assembled
-; 53 4F 55 4C 20 4C 49 4E 4B 40 and hung the game.
-;
-; PUSHC/POPC rather than a file-wide charmap, because a charmap rewrites CHARACTER LITERALS
-; too. A global one turned `ld a, 'S'` in the beacon above into $92 and the mailbox stopped
-; reading as "SLNK" -- caught by the companion-patch gate, which is exactly what it is for.
-;
-; Letters are $80 + (c - 'A'), cross-checked against the ROM's own "POK<e>DEX@", which reads
-; 8F 8E 8A BA 83 84 97 50.
-	PUSHC
-	NEWCHARMAP slinktext
-	CHARMAP "@", $50
-	CHARMAP " ", $7F
-FOR I, 26
-	CHARMAP STRSUB("ABCDEFGHIJKLMNOPQRSTUVWXYZ", I + 1, 1), $80 + I
-ENDR
-.title
-	db "SOUL LINK@"
-.noData
-	db "NO CLIENT@"
-	POPC
+.bad
+	pop hl
+	pop bc
+	scf
+	ret
+
+SlinkPanelHealthy:
+	call SlinkPanelCanary
+	ret c
+	ld a, [SLINK_PANEL_LEASE]
+	and a
+	jr z, .bad
+	ld a, [SLINK_CAPS]
+	and SLINK_CAP_PANEL
+	jr z, .bad
+	ld a, [SLINK_PANEL_STATE]
+	and a
+	ret nz
+.bad
+	scf
+	ret
+
+SlinkPanelDisplayed:
+	call SlinkPanelHealthy
+	ret c
+	ld a, [SLINK_PANEL_STATE]
+	cp SLINK_PANEL_DISPLAY
+	jr nz, .bad
+	ld a, [SLINK_PANEL_ACK]
+	ld hl, SLINK_PANEL_GEN
+	cp [hl]
+	jr nz, .bad
+	and a
+	ret
+.bad
+	scf
+	ret
+
+SlinkPanelEnd::
+ASSERT SlinkPanelEnd <= $4500
