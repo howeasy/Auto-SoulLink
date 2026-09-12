@@ -91,6 +91,11 @@ function M.new(options)
     local function matches(body)
         refresh();return self.current~=nil and same(self.current.body,body)
     end
+    local function missed_rival(body,intent)
+        if not Rival.handles(body)then return false end
+        if type(intent)=="table"and intent.schema==Rival.MISSED_INTENT then return true end
+        return rival.missed(body)==true
+    end
     -- Answer whether the head command is at its route-specific checkpoint before
     -- the outer free loop takes the physical hold. Rival Swap is intentionally
     -- an in-battle write and therefore cannot use the generic overworld party
@@ -105,12 +110,15 @@ function M.new(options)
     self.adapter={}
     for _,name in ipairs({"prepare"})do
         self.adapter[name]=function(body,...)
-            assert(matches(body) and readable(body),"owned held faint command required")
+            assert(matches(body),"owned held faint command required")
+            if not missed_rival(body)then assert(readable(body),"owned held faint command required")end
             return selected(body)[name](body,...)
         end
     end
     self.adapter.classify=function(body,intent,identity)
-        assert(matches(body) and readable(body),"owned held faint command required")
+        assert(matches(body),"owned held faint command required")
+        if missed_rival(body,intent)then return selected(body).classify(body,intent,identity)end
+        assert(readable(body),"owned held faint command required")
         if not is_read(body)and permit:valid()~=true then
             return "armed",{schema="rby-held-faint-awaiting-permit-v1",command_id=identity.command_id}
         end
@@ -131,6 +139,7 @@ function M.new(options)
         return result
     end
     self.adapter.receipt=function(body,intent,...)
+        if missed_rival(body,intent)then assert(matches(body));return selected(body).receipt(body,intent,...)end
         if is_read(body)then assert(matches(body)and readable(body));return selected(body).receipt(body,intent,...)end
         assert(matches(body) and safe() and permit:valid()==true,"held faint receipt needs fresh command authority")
         if not permit:status().used then assert(permit:consume(),"held no-op receipt permission unavailable")end
@@ -139,7 +148,9 @@ function M.new(options)
         return result
     end
     self.ready=function(body,intent,control)
-        if not matches(body) or not control.admitted or not control.held or not readable(body)then return false,"waiting for owned held faint command"end
+        if not matches(body) or not control.admitted then return false,"waiting for owned held faint command"end
+        if missed_rival(body,intent)then return true end
+        if not control.held or not readable(body)then return false,"waiting for owned held faint command"end
         if body.cmd=="retirement_observe"or body.cmd=="storage_observe"then return true end
         if body.cmd=="memorial_observe" then
             if mem.getPartyCount()<1 then return false,"memorial read requires an existing party member"end

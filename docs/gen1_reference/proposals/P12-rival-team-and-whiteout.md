@@ -127,9 +127,10 @@ verifier and deferred-faint suites: 73 passed. `ruff check` clean on every new a
    publish condition next to signals (`lua/gen1_observation_loop.lua:53-54`), not on the heartbeat. The server
    translates the row with `trainer_battle_start_event` and `_handle_trainer_battle_start` (`server/state.py`)
    queues `replace_rival_team {trainer_id, n, blobs_hex, source}` from `partner_blobs` when the id is a rival and
-   the run has `rival_team_swap`; the command then reaches this executor through the held-write path. Emitting at
-   engagement puts the command in the outbox before the battle begins, so only the permit round trip sits inside
-   the write window.
+   the run has `rival_team_swap`; the command then reaches this executor through the held-write path. The event is
+   emitted after three in-battle ticks, so the free-loop live gate must measure the remaining battle-intro margin.
+   A versioned missed-window receipt closes a late command without writing, preventing it from blocking later
+   death, memorial or storage commands; a miss is not evidence that Rival Swap succeeded.
 2. Server dispatch of `replace_rival_team` from `gen1_held_faint.verify`, and a receipt policy entry for the ACK;
    the `gen1_runtime_state` call of `gen1_whiteout.verify_state`; the new test node ids in
    `tests/gen1_release_inventory.json` and `tests/portable_ci_inventory.json` (the portable lane accounts for

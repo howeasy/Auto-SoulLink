@@ -26,7 +26,8 @@ def test_prepare_and_noop_wait_for_permission_then_complete_without_frames(runti
             receipt=function()return {schema='fixture-receipt',hp=current.hp}end}end}
         package.loaded.gen1_command_receipts={party_snapshot=function()return current end}
         package.loaded.gen1_write_checkpoint={capture=function()return {fixture=true}end}
-        service=require('gen1_held_faint').new({journal=journal,memory={profile={},isPartyWriteSafe=function()return true end},
+        party_safe=true;mem={profile={},isPartyWriteSafe=function()return party_safe end}
+        service=require('gen1_held_faint').new({journal=journal,memory=mem,
             player='b',variant='yellow',clock=function()return now end,owned=function()return context end,
             host={status=function()return {owner_id=string.rep('b',32),capability_id='fixture',process_id=1,physical_stop_verified=held}end}})
         local adapter={}
@@ -47,6 +48,10 @@ def test_prepare_and_noop_wait_for_permission_then_complete_without_frames(runti
                 challenge=request.window.challenge,uses=1,ttl_ms=1000,proof_digest=proof}))
         end
     ''')
+    assert lua.execute('return service.pending()') is True
+    lua.execute('party_safe=false')
+    assert lua.execute('return service.pending()') is False
+    lua.execute('party_safe=true')
     done,result=lua.globals().step()
     assert done is False and result['pending'] is True and lua.globals().physical_writes==0,dict(result.items())
     requested=json.loads(lua.globals().request())
@@ -57,6 +62,7 @@ def test_prepare_and_noop_wait_for_permission_then_complete_without_frames(runti
     # The faint executor produced the receipt; force_explode names itself so the server settles that command.
     assert result['receipt']['schema']==('fixture-receipt' if cmd=='force_faint' else 'gen1-force-explode-receipt-v1')
     assert lua.globals().step()[0] is True and lua.globals().physical_writes==(0 if hp==0 else 1)
+    assert lua.execute('return service.pending()') is False
     assert lua.globals().frame==100
 
 

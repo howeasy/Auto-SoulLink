@@ -744,7 +744,7 @@ class RunManager:
         except (JournalError, ValueError, OSError) as error:
             return web.json_response({"ok": False, "error": str(error)}, status=409)
         safe_name = re.sub(r'[^\w-]', '_', run.get("name") or run_id).strip('_') or run_id
-        filename = f"slink_{safe_name}_{player}{'_held' if prepared is not None else ''}.lua"
+        filename = f"slink_{safe_name}_{player}{'_free' if prepared is not None else ''}.lua"
         return web.Response(
             text=content,
             content_type="application/octet-stream",

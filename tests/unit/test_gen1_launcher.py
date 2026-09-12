@@ -159,6 +159,8 @@ def test_manager_selects_only_prepared_run_launcher_and_refuses_corrupt_binding(
 ):
     from server import manager
 
+    prepared.runtime.initial_observations = True
+    prepared.runtime.free_service = True
     configure_runtime(prepared.runtime)
     run_name = prepared.path.name
     monkeypatch.setattr(manager, "MANAGER_DIR", str(prepared.path.parent))
@@ -170,8 +172,8 @@ def test_manager_selects_only_prepared_run_launcher_and_refuses_corrupt_binding(
     request = SimpleNamespace(match_info={"run_id": run_name, "player": "b"}, host="[::1]:8090")
     instance = manager.RunManager("127.0.0.1")
     response = asyncio.run(instance.handle_launcher(request))
-    assert response.status == 200 and "_held.lua" in response.headers["Content-Disposition"]
-    assert RUN_ID in response.text and "held_service" in response.text
+    assert response.status == 200 and "_free.lua" in response.headers["Content-Disposition"]
+    assert RUN_ID in response.text and "free_service" in response.text
     config = json.loads((prepared.path / FILENAME).read_text())
     config["run_id"] = "f" * 32
     (prepared.path / FILENAME).write_text(json.dumps(config))

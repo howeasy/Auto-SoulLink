@@ -23,6 +23,7 @@ PROFILES = DATA["titles"]
 SCHEMA = "rby-held-rival-evidence-v1"
 INTENT = "rby-rival-team-intent-v1"
 RECEIPT = "gen1-rival-team-receipt-v1"
+MISSED_RECEIPT = "gen1-rival-team-missed-receipt-v1"
 COMMAND = "replace_rival_team"
 
 
@@ -125,6 +126,24 @@ def verify(player, command, evidence, state, binding):
 
 def verify_rival_team_receipt(body, receipt, *, variant):
     """The readback proves the written block, count and species list; the effect is informational."""
+    if isinstance(receipt, dict) and receipt.get("schema") == MISSED_RECEIPT:
+        if set(receipt) != {"schema", "trainer_id", "observed"} or receipt["trainer_id"] != body.get("trainer_id"):
+            raise JournalError("versioned missed rival receipt required")
+        blobs, _ = validate_party(body, variant)
+        observed = receipt["observed"]
+        if (not isinstance(observed, dict) or set(observed) != {"battle", "opponent", "enemy_position", "frame"}
+                or any(type(observed[name]) is not int or not 0 <= observed[name] <= 255
+                       for name in ("battle", "opponent", "enemy_position"))
+                or type(observed["frame"]) is not int or observed["frame"] < 0):
+            raise JournalError("complete missed rival window observation required")
+        source_frame = body.get("source_frame")
+        if type(source_frame) is not int or source_frame < 0 or observed["frame"] < source_frame:
+            raise JournalError("missed rival receipt predates its trainer observation")
+        profile = PROFILES[variant]
+        if (observed["battle"] == profile["trainer_battle"] and observed["opponent"] == body["trainer_id"]
+                and observed["enemy_position"] == 0xFF):
+            raise JournalError("rival battle-init window was not missed")
+        return {"trainer_id": body["trainer_id"], "n": len(blobs), "missed": True, "observed": observed.copy()}
     if (not isinstance(receipt, dict) or set(receipt) != {"schema", "trainer_id", "before", "after"}
             or receipt["schema"] != RECEIPT or receipt["trainer_id"] != body.get("trainer_id")):
         raise JournalError("versioned rival team receipt required")

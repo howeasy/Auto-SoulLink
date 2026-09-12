@@ -450,7 +450,8 @@ def test_trainer_engagement_reaches_the_engine_and_queues_the_rival_team_swap(tm
         operation, result = publish(runtime, "a", owners["a"], request)
         assert result["trainer_battle"] == {"trainer_id": 225, "rival_team": 1}
         [command] = [runtime.journal.command("a", i) for i in runtime.journal.pending_ids("a")]
-        assert command["body"] == {"cmd": "replace_rival_team", "trainer_id": 225, "n": 1, "blobs_hex": [b["blob"].hex() for b in blobs], "source": "auto"}
+        assert command["body"] == {"cmd": "replace_rival_team", "trainer_id": 225, "source_frame": 147,
+                                   "n": 1, "blobs_hex": [b["blob"].hex() for b in blobs], "source": "auto"}
         assert record(runtime, "a", operation, request) == result, "replay returns the committed result"
         verify_journal(runtime.journal, runtime.state())
     finally:

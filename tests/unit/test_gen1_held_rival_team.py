@@ -49,7 +49,7 @@ def blobs(variant, n=2, hp=10):
 
 def body(variant, n=2, hp=10, trainer=RIVAL):
     rows = blobs(variant, n, hp)
-    command = {"cmd": "replace_rival_team", "trainer_id": trainer, "n": n,
+    command = {"cmd": "replace_rival_team", "trainer_id": trainer, "source_frame": 100, "n": n,
                "blobs_hex": [b.hex().upper() for b in rows], "source": "auto"}
     return command, rows
 
@@ -125,6 +125,24 @@ def test_valid_swap_writes_the_party_and_its_readback_receipt_verifies_on_the_se
         assert bytes(g.bus[mem.ENEMY_OT_NAMES_ADDR + 11 * i + j] for j in range(11)) == raw[44:55]
         assert bytes(g.bus[mem.ENEMY_NICKS_ADDR + 11 * i + j] for j in range(11)) == raw[55:]
     assert g.bus[mem.ENEMY_COUNT_ADDR] == 2 and g.bus[mem.ENEMY_SPECIES_LIST_ADDR + 2] == 0xFF
+
+
+@pytest.mark.parametrize("variant", ["red", "blue", "yellow"])
+def test_missed_battle_init_window_closes_without_writing(variant):
+    lua, g, executor = lua_runtime(variant)
+    command, _ = body(variant)
+    request = wire(g, command)
+    before = bus_snapshot(g)
+    g.bus[rival.PROFILES[variant]["enemy_mon_party_pos"]] = 0
+    missed = plain(g, executor.prepare(request))
+    assert missed["schema"] == "rby-rival-team-missed-intent-v1"
+    state, observed = executor.classify(request, wire(g, missed))
+    assert state == "after" and plain(g, observed) == missed["observed"]
+    receipt = plain(g, executor.receipt(request, wire(g, missed), observed))
+    assert receipt["schema"] == rival.MISSED_RECEIPT
+    result = rival.verify_rival_team_receipt(command, receipt, variant=variant)
+    assert result["missed"] is True and result["trainer_id"] == RIVAL
+    assert bus_snapshot(g) == {**before, rival.PROFILES[variant]["enemy_mon_party_pos"]: 0}
 
 
 @pytest.mark.parametrize("fault", ["short_hex", "non_hex", "bad_species", "no_hp", "seven"])
@@ -224,6 +242,29 @@ def test_receipt_with_a_tampered_species_byte_is_refused():
             rival.verify_rival_team_receipt(cmd, bad, variant="red")
 
 
+def test_missed_receipt_requires_a_complete_ineligible_window():
+    command, _ = body("red")
+    p = rival.PROFILES["red"]
+    receipt = {"schema": rival.MISSED_RECEIPT, "trainer_id": RIVAL,
+               "observed": {"battle": 2, "opponent": RIVAL, "enemy_position": 0, "frame": 123}}
+    assert rival.verify_rival_team_receipt(command, receipt, variant="red")["missed"] is True
+    for fault in ("missing", "trainer", "frame", "early", "eligible"):
+        bad = copy.deepcopy(receipt)
+        if fault == "missing":
+            del bad["observed"]["opponent"]
+        elif fault == "trainer":
+            bad["trainer_id"] = 242
+        elif fault == "frame":
+            bad["observed"]["frame"] = -1
+        elif fault == "early":
+            bad["observed"]["frame"] = command["source_frame"] - 1
+        else:
+            bad["observed"] = {"battle": p["trainer_battle"], "opponent": RIVAL,
+                               "enemy_position": 0xFF, "frame": 123}
+        with pytest.raises(JournalError):
+            rival.verify_rival_team_receipt(command, bad, variant="red")
+
+
 def test_exact_rival_swap_gets_a_held_write_and_faults_are_refused(tmp_path):
     server = create_runtime(tmp_path, contract("red", "red"))
     try:
@@ -300,6 +341,9 @@ def test_receipt_policy_settles_the_rival_swap_ack_by_its_readback():
         return policy("a", journal_command, event, SimpleNamespace(player_identity={}))
 
     assert ack(receipt) == []
+    missed = {"schema": rival.MISSED_RECEIPT, "trainer_id": RIVAL,
+              "observed": {"battle": 2, "opponent": RIVAL, "enemy_position": 0, "frame": 123}}
+    assert ack(missed) == []
     tampered = copy.deepcopy(receipt)
     tampered["after"]["species_list"][0] ^= 1
     with pytest.raises(JournalError):
@@ -345,6 +389,15 @@ def test_composed_held_faint_dispatches_the_swap_under_the_one_use_permit(runtim
             return service.operations.accept(JSON.object({schema="slink-held-write-permit-v1",scope=value.window.scope,
                 challenge=value.window.challenge,uses=1,ttl_ms=1000,proof_digest=proof}))
         end
+        function ready_unheld()return service.ready(body,nil,{admitted=true,held=false})end
+        function next_command()
+            local pending=assert(journal:pending_events())[1]
+            assert(pending and journal:accept_response(pending.operation_id,JSON.array()))
+            id=string.rep("b",32)
+            local event=assert(journal:append({event="fixture-next"}))
+            assert(journal:accept_response(event,JSON.array({{command_id=id,command_sequence=2,body={cmd=body.cmd,body=body}}})))
+            executor=require("command_executor").new(journal,adapter)
+        end
     """)
     g = lua.globals()
     arm(g, g.Mem, "yellow")
@@ -353,10 +406,20 @@ def test_composed_held_faint_dispatches_the_swap_under_the_one_use_permit(runtim
     # must request its hold even while that generic predicate is false.
     lua.execute("Mem.isPartyWriteSafe=function()return false end")
     assert lua.execute("return service.pending()") is True
+    # Persist a normal in-window intent, but do not grant its permit yet.
+    done, result = g.step()
+    assert done is False and result["pending"] is True
     g.enemy_pos = rival.PROFILES["yellow"]["enemy_mon_party_pos"]
     lua.execute("bus[enemy_pos]=0")
     assert lua.execute("return service.pending()") is False
+    assert g.ready_unheld() is True
+    done, result = g.step()
+    assert done is True and result["outcome"] == "ACK"
+    missed = plain(g, result["receipt"])
+    assert rival.verify_rival_team_receipt(command, missed, variant="yellow")["missed"] is True
+    g.next_command()
     lua.execute("bus[enemy_pos]=0xFF")
+    assert lua.execute("return service.pending()") is True
     done, result = g.step()
     assert done is False and result["pending"] is True and result["evidence"]["schema"] == "rby-held-faint-awaiting-permit-v1"
     assert g.bus[g.Mem.ENEMY_COUNT_ADDR] == 3

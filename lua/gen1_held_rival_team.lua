@@ -9,7 +9,8 @@ if not ok then
     Data=dofile((root and (root.."/") or "").."data/games/gen1_rby/gen1_rival_team_checkpoint.lua")
 end
 assert(Data.schema=="rby-battle-init-checkpoint-v1","unsupported battle-init checkpoint data schema")
-local M={INTENT="rby-rival-team-intent-v1",RECEIPT="gen1-rival-team-receipt-v1",EVIDENCE="rby-held-rival-evidence-v1"}
+local M={INTENT="rby-rival-team-intent-v1",RECEIPT="gen1-rival-team-receipt-v1",EVIDENCE="rby-held-rival-evidence-v1",
+    MISSED_INTENT="rby-rival-team-missed-intent-v1",MISSED_RECEIPT="gen1-rival-team-missed-receipt-v1"}
 local BAD="invalid complete rival payload; nothing written"
 
 function M.handles(body)
@@ -146,6 +147,16 @@ function M.new(o) -- o.memory (initProfile done), o.variant
         return blobs
     end
     local self={}
+    local function late(body)
+        if not M.handles(body)then return false end
+        local ok,point=pcall(function()return {battle=mem.read_u8(profile.is_in_battle),
+            opponent=mem.read_u8(profile.cur_opponent),enemy_position=mem.read_u8(profile.enemy_mon_party_pos),
+            frame=emu.framecount()}end)
+        if not ok or type(point.frame)~="number"or point.frame%1~=0 or point.frame<0 then return false end
+        local missed=point.battle~=profile.trainer_battle or point.opponent~=body.trainer_id or point.enemy_position~=0xFF
+        return missed,point
+    end
+    function self.missed(body)return late(body)end
     function self.safe(body)return M.check(profile,body,live_io())end
     function self.checkpoint(body)return M.capture(profile,body)end
     function self.image(body)return image(#body.blobs_hex)end
@@ -158,9 +169,15 @@ function M.new(o) -- o.memory (initProfile done), o.variant
         for _,mon in ipairs(party) do if mon.hp>0 then alive=true end end
         -- StartBattle scans for the first living enemy with no exit (core.asm:139-150).
         if not alive then return nil,"rival party needs a living member; nothing written" end
+        local missed,observed=late(body)
+        if missed then return {schema=M.MISSED_INTENT,trainer_id=body.trainer_id,observed=observed}end
         return {schema=M.INTENT,trainer_id=body.trainer_id,n=#blobs,before=image(#blobs)}
     end
     function self.classify(body,intent)
+        if type(intent)=="table"and intent.schema==M.MISSED_INTENT and intent.trainer_id==body.trainer_id
+            and type(intent.observed)=="table"then return "after",intent.observed end
+        local missed,observed=late(body)
+        if missed then return "after",observed end
         local blobs,why=validated(body,intent)
         if not blobs then return "diverged",why end
         local now=image(#blobs)
@@ -175,6 +192,15 @@ function M.new(o) -- o.memory (initProfile done), o.variant
         if not written then error(reason,0) end
     end
     function self.receipt(body,intent,observed)
+        if type(intent)=="table"and intent.schema==M.MISSED_INTENT and intent.trainer_id==body.trainer_id
+            and type(observed)=="table"then
+            return {schema=M.MISSED_RECEIPT,trainer_id=body.trainer_id,observed=observed}
+        end
+        local missed,current=late(body)
+        if missed and type(observed)=="table"and observed.battle==current.battle and observed.opponent==current.opponent
+            and observed.enemy_position==current.enemy_position and observed.frame==current.frame then
+            return {schema=M.MISSED_RECEIPT,trainer_id=body.trainer_id,observed=observed}
+        end
         local blobs,why=validated(body,intent)
         if not blobs then return nil,why end
         if type(observed)~="table" or observed.image_hex~=M.expectedImageHex(blobs) or observed.count~=#blobs then

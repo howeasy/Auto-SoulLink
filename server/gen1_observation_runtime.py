@@ -162,6 +162,8 @@ def stage_observation(runtime, stage, document, player, operation, request):
         # replace_rival_team is the only Gen 1 command this event queues; anything else the engine might add here is
         # executed elsewhere on Gen 1 (gen1_faint_runtime.settle drops sounds and memorials the same way).
         swaps = [c for c in taken[player] if c.get('cmd') == 'replace_rival_team']
+        for swap in swaps:
+            swap['source_frame'] = request['trainer']['frame']
         commands[player].extend(swaps)
         result['trainer_battle'] = {'trainer_id': trainer_id, 'rival_team': len(swaps)}
         synchronize(stage, document)
