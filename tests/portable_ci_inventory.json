@@ -374,14 +374,11 @@
         "tests/unit/test_gen1_adapter.py::test_gender_always_genderless",
         "tests/unit/test_gen1_adapter.py::test_gender_genderless_any_species",
         "tests/unit/test_gen1_adapter.py::test_gender_symbol_always_empty",
-        "tests/unit/test_gen1_adapter.py::test_gift_areas_return_true[celadon_city]",
         "tests/unit/test_gen1_adapter.py::test_gift_areas_return_true[celadon_game_corner]",
         "tests/unit/test_gen1_adapter.py::test_gift_areas_return_true[celadon_mansion_roof]",
-        "tests/unit/test_gen1_adapter.py::test_gift_areas_return_true[cinnabar_island]",
         "tests/unit/test_gen1_adapter.py::test_gift_areas_return_true[gift]",
         "tests/unit/test_gen1_adapter.py::test_gift_areas_return_true[mt_moon_pokecenter]",
         "tests/unit/test_gen1_adapter.py::test_gift_areas_return_true[oaks_lab]",
-        "tests/unit/test_gen1_adapter.py::test_gift_areas_return_true[pallet_town]",
         "tests/unit/test_gen1_adapter.py::test_gift_areas_return_true[saffron_city]",
         "tests/unit/test_gen1_adapter.py::test_gift_areas_return_true[silph_co]",
         "tests/unit/test_gen1_adapter.py::test_gift_prefix_area",
@@ -5116,7 +5113,22 @@
         "tests/unit/test_gen1_whiteout.py::test_tampered_whiteout_records_are_refused_by_the_state_aggregate[keys-incomplete whiteout record]",
         "tests/unit/test_gen1_wild_encounter.py::test_dead_zone_retirement_reports_memorialize_done_and_the_pair_reaches_memorial",
         "tests/unit/test_gen1_wild_encounter.py::test_batched_wild_boundaries_are_rechecked_from_their_committed_batches_after_reopen",
-        "tests/unit/test_gen1_wild_encounter.py::test_a_rewritten_wild_witness_in_the_committed_batch_fails_the_audit"
+        "tests/unit/test_gen1_wild_encounter.py::test_a_rewritten_wild_witness_in_the_committed_batch_fails_the_audit",
+        "tests/unit/test_gen1_held_rival_team.py::test_missed_battle_init_window_closes_without_writing[blue]",
+        "tests/unit/test_gen1_held_rival_team.py::test_missed_battle_init_window_closes_without_writing[red]",
+        "tests/unit/test_gen1_held_rival_team.py::test_missed_battle_init_window_closes_without_writing[yellow]",
+        "tests/unit/test_gen1_held_rival_team.py::test_missed_receipt_requires_a_complete_ineligible_window",
+        "tests/unit/test_manager_stream_pin.py::test_a_pinned_run_that_dies_falls_back_and_is_recorded_as_stopped",
+        "tests/unit/test_manager_stream_pin.py::test_an_unknown_run_id_is_refused_and_the_pin_is_kept",
+        "tests/unit/test_manager_stream_pin.py::test_pinning_an_older_run_redirects_every_overlay_to_it",
+        "tests/unit/test_manager_stream_pin.py::test_the_ability_column_follows_the_adapter_capability[gen1_rby]",
+        "tests/unit/test_manager_stream_pin.py::test_the_ability_column_follows_the_adapter_capability[gen3_rr]",
+        "tests/unit/test_manager_stream_pin.py::test_the_patcher_offers_the_start_panel_only_where_the_target_has_one[rb-blue-True]",
+        "tests/unit/test_manager_stream_pin.py::test_the_patcher_offers_the_start_panel_only_where_the_target_has_one[rb-red-True]",
+        "tests/unit/test_manager_stream_pin.py::test_the_patcher_offers_the_start_panel_only_where_the_target_has_one[yellow-False]",
+        "tests/unit/test_manager_stream_pin.py::test_unpinning_restores_newest_running_selection",
+        "tests/unit/test_manager_stream_pin.py::test_with_no_running_run_the_overlay_explains_and_status_is_empty",
+        "tests/unit/test_manager_stream_pin.py::test_without_a_pin_the_newest_running_run_is_the_stream_target"
       ]
     },
     {
@@ -5305,7 +5317,6 @@
         "tests/unit/test_gen1_rom_content.py::test_percentages_sum_to_100_per_method[blue]",
         "tests/unit/test_gen1_rom_content.py::test_percentages_sum_to_100_per_method[red]",
         "tests/unit/test_gen1_rom_content.py::test_percentages_sum_to_100_per_method[yellow]",
-        "tests/unit/test_gen1_rom_content.py::test_super_rod_is_added_where_the_shipped_tables_have_no_fishing_at_all",
         "tests/unit/test_gen1_rom_content.py::test_the_payload_is_a_realistic_size_for_one_line[blue]",
         "tests/unit/test_gen1_rom_content.py::test_the_payload_is_a_realistic_size_for_one_line[red]",
         "tests/unit/test_gen1_rom_content.py::test_the_payload_is_a_realistic_size_for_one_line[yellow]",
@@ -5371,7 +5382,10 @@
         "tests/unit/test_upr_pipeline.py::test_an_older_settings_version_is_refused",
         "tests/unit/test_upr_pipeline.py::test_identical_seeds_are_refused",
         "tests/unit/test_upr_pipeline.py::test_randomizing_a_rom_over_itself_is_refused",
-        "tests/unit/test_upr_pipeline.py::test_settings_that_touch_rule_data_are_refused"
+        "tests/unit/test_upr_pipeline.py::test_settings_that_touch_rule_data_are_refused",
+        "tests/unit/test_gen1_rom_content.py::test_the_scanner_super_rod_blocks_equal_the_shipped_ones[blue]",
+        "tests/unit/test_gen1_rom_content.py::test_the_scanner_super_rod_blocks_equal_the_shipped_ones[red]",
+        "tests/unit/test_gen1_rom_content.py::test_the_scanner_super_rod_blocks_equal_the_shipped_ones[yellow]"
       ]
     },
     {
@@ -5438,7 +5452,28 @@
         "tests/unit/test_gen1_strict_profile_contracts.py::test_constant_structures_and_save_geometry_match_exact_sources[alchav_pokered]",
         "tests/unit/test_gen1_strict_profile_contracts.py::test_constant_structures_and_save_geometry_match_exact_sources[pokered]",
         "tests/unit/test_gen1_strict_profile_contracts.py::test_constant_structures_and_save_geometry_match_exact_sources[pokeyellow]",
-        "tests/unit/test_gen1_strict_profile_contracts.py::test_structure_symbol_drift_is_not_a_warning"
+        "tests/unit/test_gen1_strict_profile_contracts.py::test_structure_symbol_drift_is_not_a_warning",
+        "tests/unit/test_gen1_canonical_moves_trainers_types.py::test_move_types_are_pret_type_names[red/blue]",
+        "tests/unit/test_gen1_canonical_moves_trainers_types.py::test_move_types_are_pret_type_names[yellow]",
+        "tests/unit/test_gen1_canonical_moves_trainers_types.py::test_moves_check_bites",
+        "tests/unit/test_gen1_canonical_moves_trainers_types.py::test_moves_match_pret",
+        "tests/unit/test_gen1_canonical_moves_trainers_types.py::test_trainer_id_offset_is_pret_opp_id_offset",
+        "tests/unit/test_gen1_canonical_moves_trainers_types.py::test_trainers_check_bites",
+        "tests/unit/test_gen1_canonical_moves_trainers_types.py::test_trainers_match_pret_and_upr_pin",
+        "tests/unit/test_gen1_canonical_moves_trainers_types.py::test_types_check_bites",
+        "tests/unit/test_gen1_canonical_moves_trainers_types.py::test_types_match_pret[red/blue]",
+        "tests/unit/test_gen1_canonical_moves_trainers_types.py::test_types_match_pret[yellow]",
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_area_map_qualifies_against_both_decomps",
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_every_rod_method_is_present_and_sums_to_100[blue]",
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_every_rod_method_is_present_and_sums_to_100[red]",
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_every_rod_method_is_present_and_sums_to_100[yellow]",
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_in_memory_rebuild_equals_the_shipped_tables",
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_old_and_good_rod_match_the_asm[blue]",
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_old_and_good_rod_match_the_asm[red]",
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_old_and_good_rod_match_the_asm[yellow]",
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_red_blue_super_rod_groups_match_the_asm",
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_rendered_widget_carries_the_rod_icon",
+        "tests/unit/test_gen1_generated_maps_fishing.py::test_yellow_super_rod_rows_match_the_asm"
       ]
     },
     {
@@ -5486,7 +5521,13 @@
       "nodes": [
         "tests/unit/test_gen1_rom_scan.py::TestAgainstPret::test_every_wild_table_matches_the_decomp[blue]",
         "tests/unit/test_gen1_rom_scan.py::TestAgainstPret::test_every_wild_table_matches_the_decomp[red]",
-        "tests/unit/test_gen1_rom_scan.py::TestAgainstPret::test_every_wild_table_matches_the_decomp[yellow]"
+        "tests/unit/test_gen1_rom_scan.py::TestAgainstPret::test_every_wild_table_matches_the_decomp[yellow]",
+        "tests/unit/test_gen1_upr_roots.py::test_shifted_root_is_named[blue]",
+        "tests/unit/test_gen1_upr_roots.py::test_shifted_root_is_named[red]",
+        "tests/unit/test_gen1_upr_roots.py::test_shifted_root_is_named[yellow]",
+        "tests/unit/test_gen1_upr_roots.py::test_upr_roots_row_ok[blue]",
+        "tests/unit/test_gen1_upr_roots.py::test_upr_roots_row_ok[red]",
+        "tests/unit/test_gen1_upr_roots.py::test_upr_roots_row_ok[yellow]"
       ]
     },
     {
@@ -5931,7 +5972,10 @@
         "tests/unit/test_gen1_launcher.py::test_prepared_config_cannot_escape_or_silently_fall_back_to_links_json",
         "tests/unit/test_gen1_launcher.py::test_http_download_selects_held_entry_and_keeps_mutations_closed",
         "tests/unit/test_gen1_launcher.py::test_manager_selects_only_prepared_run_launcher_and_refuses_corrupt_binding",
-        "tests/unit/test_gen1_launcher.py::test_actual_server_cli_selects_prepared_journal_without_creating_legacy_links"
+        "tests/unit/test_gen1_launcher.py::test_actual_server_cli_selects_prepared_journal_without_creating_legacy_links",
+        "tests/unit/test_gen1_launcher.py::test_durable_entry_evicts_every_checked_lua_module_before_start",
+        "tests/unit/test_gen1_launcher.py::test_free_service_checked_bundle_covers_every_literal_lua_dependency[extra0]",
+        "tests/unit/test_gen1_launcher.py::test_free_service_checked_bundle_covers_every_literal_lua_dependency[extra1]"
       ]
     },
     {
@@ -7941,7 +7985,8 @@
       "nodes": [
         "tests/unit/test_manager_prepared_gen1.py::test_manager_prepares_a_fresh_runtime_before_optional_server_start[False]",
         "tests/unit/test_manager_prepared_gen1.py::test_manager_prepares_a_fresh_runtime_before_optional_server_start[True]",
-        "tests/unit/test_manager_prepared_gen1.py::test_unsupported_rules_cannot_start_or_register_a_prepared_run"
+        "tests/unit/test_manager_prepared_gen1.py::test_unsupported_rules_cannot_start_or_register_a_prepared_run",
+        "tests/unit/test_manager_prepared_gen1.py::test_manager_refuses_a_pre_free_service_gen1_launcher"
       ]
     },
     {

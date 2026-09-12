@@ -27,7 +27,7 @@ def test_reproduced_pair_admits_only_its_exact_metadata_without_widening_default
     initial=state_type_for(cartridges).initial(model.rules,IdentityRegistry(RUN_ID).document(),contract,data_dir=runtime_dir)
     options=dict(contract=contract,data_dir=runtime_dir,run_id=RUN_ID,validate_event=lambda *args:None,
         validate_receipt=Gen1ReceiptPolicy(dict(zip(("a","b"),variants))),verify_reconciliation=lambda *args:None,
-        clock=lambda:10)
+        clock=lambda:10,initial_observations=True,free_service=True)
     runtime=Gen1Runtime(runtime_dir/"gen1.sqlite3",initial_state=initial,prepared_cartridges=cartridges,**options)
     try:
         configuration=configure_runtime(runtime)
@@ -45,7 +45,9 @@ def test_reproduced_pair_admits_only_its_exact_metadata_without_widening_default
         monkeypatch.setattr(manager,"_load_registry",lambda:[{"run_id":runtime_dir.name,"name":"Prepared UPR","tcp_port":54321}])
         request=SimpleNamespace(match_info={"run_id":runtime_dir.name,"player":"b"},host="127.0.0.1:8090")
         response=asyncio.run(manager.RunManager("127.0.0.1").handle_launcher(request))
-        assert response.status==200 and "held_service" in response.text
+        # The manager launches free-service runs only (a held-service run is refused with 409,
+        # tests/unit/test_manager_prepared_gen1.py), so the reproduced pair is prepared as one.
+        assert response.status==200 and "free_service" in response.text
         assert contract["players"]["b"]["final_rom_sha1"] in response.text
     finally:runtime.close()
     # A reopened owner must supply independently revalidated artifacts again.

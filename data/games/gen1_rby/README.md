@@ -45,8 +45,8 @@ Archipelago variants have never been launched. See
 - `moves.json` — 165 moves: name, type, power, accuracy, pp, split
 - `trainers.json` — `classes` (class_id → class name) + `named_trainers` (gym leaders, E4, rivals)
 - `encounter_tables.json` — Wild encounter slots, keyed **by game version first**
-  (`red` / `blue` / `yellow`), then by area_id. 42 areas each (39 with grass or surf, plus Pallet Town,
-  Celadon City and Cinnabar Island which only have fishing). Red and Blue differ in 25 of
+  (`red` / `blue` / `yellow`), then by area_id. 46 areas each (39 with grass or surf, plus the seven towns that only fish: Pallet, Viridian, Cerulean, Vermilion,
+  Celadon, Fuchsia and Cinnabar). Red and Blue differ in 25 of
   those areas and Yellow differs from Red in 36, so they cannot share one table — the
   generator honours pokered's `IF DEF(_RED)` / `IF DEF(_BLUE)` blocks and reads Yellow from
   pokeyellow. Regenerate with `python tools/gen_gen1_encounters.py`, which refuses to write
