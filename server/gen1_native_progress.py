@@ -15,19 +15,40 @@ from server.protocol_journal import JournalError
 LIVE = frozenset({"process_id", "frame", "steps", "start", "intent_digest", "armed", "sequence_length"})
 
 
+def enrolled_process(document, player):
+    """The emulator process the player enrolled with (gen1-initial-observations host), or None."""
+    initial = document["components"].get("gen1-initial-observations", {}).get(player)
+    if initial is None:
+        return None
+    return initial["observation"]["host"]["process_id"]
+
+
 def durable_progress(runtime, player, command_id):
-    """The observed-shaped progress from the durable window record, or None."""
+    """The observed-shaped progress from the durable window record, or None.
+
+    Frames are meaningful only inside the emulator process that ran the window, so the record
+    is usable only while the player's enrolled process (the initial observation host, the same
+    identity every held write is bound to) is the process the window was issued to. A restarted
+    emulator gets no window from here: its frame counter restarted too, and an old window must
+    never bound a NEW flush. The receipt this authorizes is therefore only the one produced
+    inside that window (verified() additionally requires it to equal the journaled applied
+    receipt); a later flush falls outside the frame range and is refused.
+    """
     if getattr(runtime, "free_service", False) is not True or getattr(runtime, "native_trade", False) is not True:
         return None
     from server.gen1_native_windows import ENTRY, windows_for
 
-    entry = windows_for(runtime.state().document(), player).get(command_id)
+    document = runtime.state().document()
+    entry = windows_for(document, player).get(command_id)
     if entry is None:
         return None
     if set(entry) != ENTRY or entry["scope"].get("operation_id") != command_id:
         raise JournalError("durable native window is incomplete for this command")
     if runtime.journal.command(player, command_id)["command_id"] != command_id:
         raise JournalError("durable native window names a command the journal never issued")
+    process = enrolled_process(document, player)
+    if process is None or process != entry["host"]["process_id"]:
+        return None  # a different (or unknown) emulator process: no window, fail closed
     return {"process_id": entry["host"]["process_id"], "frame": entry["host"]["frame"], "steps": entry["host"]["steps"],
             "start": entry["start"], "intent_digest": entry["intent_digest"], "armed": entry["armed"],
             "sequence_length": entry["sequence_length"], **entry["extra"], "durable": True}
