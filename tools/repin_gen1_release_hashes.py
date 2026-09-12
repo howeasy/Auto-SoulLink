@@ -22,9 +22,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from verify_gen1_release import MANIFEST, local_path, proof_sha256, read_json  # noqa: E402
 
 
-def drift(manifest: dict) -> tuple[list[tuple[str, str, str, str]], list[tuple[str, str]]]:
-    """Return (stale rows as (requirement, path, old, new), missing rows as (requirement, path))."""
-    stale, missing = [], []
+def drift(manifest: dict) -> tuple[list[tuple[str, str, str, str]], list[tuple[str, str]], set[str]]:
+    """Return (stale rows as (requirement, path, old, new), missing rows as (requirement, path),
+    the set of pinned hashes that are still correct for some path)."""
+    stale, missing, current = [], [], set()
     for requirement in manifest["requirements"]:
         for proof in requirement.get("proofs", []):
             entries = [(proof.get("source"), proof.get("source_sha256"))]
@@ -39,7 +40,9 @@ def drift(manifest: dict) -> tuple[list[tuple[str, str, str, str]], list[tuple[s
                     continue
                 if new != old:
                     stale.append((requirement["id"], name, old, new))
-    return stale, missing
+                else:
+                    current.add(old)
+    return stale, missing, current
 
 
 def main(argv=None) -> int:
@@ -47,7 +50,7 @@ def main(argv=None) -> int:
     parser.add_argument("--write", action="store_true", help="rewrite the stale hashes in the manifest")
     args = parser.parse_args(argv)
     manifest = read_json(MANIFEST)
-    stale, missing = drift(manifest)
+    stale, missing, current = drift(manifest)
     for requirement_id, name in missing:
         print(f"MISSING  {requirement_id} | {name}")
     for requirement_id, name, old, new in stale:
@@ -59,9 +62,15 @@ def main(argv=None) -> int:
     if not args.write:
         return 0
     replacements = {}
-    for _, _, old, new in stale:
+    for _, name, old, new in stale:
         if replacements.setdefault(old, new) != new:
             print(f"REFUSED: hash {old[:12]} would map to two different new hashes; re-register by hand")
+            return 1
+        if old in current:
+            # The replacement is textual and path-blind: this stale pin is still the correct pin of
+            # another path (two files that used to be identical), so rewriting it would corrupt that one.
+            print(f"REFUSED: stale hash {old[:12]} of {name} is still the live hash of another pinned path; "
+                  "re-pin that row by hand")
             return 1
     text = MANIFEST.read_bytes().decode("utf-8")
     for old, new in replacements.items():
