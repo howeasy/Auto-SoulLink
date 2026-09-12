@@ -38,6 +38,10 @@ function M.start(launch,options)
     package.path=root.."/lua/?.lua;"..root.."/data/games/gen1_rby/?.lua;"..package.path
     local JSON=require("json_codec")
     launch=assert(JSON.decode(assert(JSON.encode(launch))))
+    -- TEMPORARY A1 profiling only; this block and its status field are reverted
+    -- before the release branch receives any performance source change.
+    local profile_clock=assert(require("platform_clock").new())
+    local profile={captures=JSON.array(),appends=JSON.array(),replaces=JSON.array()}
     local memory=require("memory_gb")
     memory.initProfile(require("games.gen1_rby"),launch.cartridge.variant)
     assert(gameinfo.getromhash():lower()==launch.cartridge.final_rom_sha1,"loaded ROM differs from the run launcher")
@@ -95,7 +99,16 @@ function M.start(launch,options)
         self.path=storage_path()
         self.saveram_directory=options.saveram_directory or os.getenv("SLINK_SAVERAM_DIRECTORY")
             or tostring(luanet.import_type("System.IO.Path").GetDirectoryName(self.path)).."/SaveRAM"
-        self.store=assert(Store.open(assert(Storage.new(self.path)),
+        local backend=assert(Storage.new(self.path))
+        local replace=backend.replace
+        backend.replace=function(text)
+            local began=profile_clock();local ok,why=replace(text)
+            if self.loop and #profile.replaces<64 then
+                profile.replaces[#profile.replaces+1]={frame=emu.framecount(),bytes=#text,ms=(profile_clock()-began)*1000}
+            end
+            return ok,why
+        end
+        self.store=assert(Store.open(backend,
             {schema="slink-gen1-client-binding-v1",run_id=launch.run_id,player=launch.player,
              cartridge=launch.cartridge,save_identity=context.save_identity},Journal.initial()))
         local Observation=launch.initial_observations and require("gen1_initial_observation")or nil
@@ -295,8 +308,15 @@ function M.start(launch,options)
                         local frame=emu.framecount();source_owned()
                         local current=Fingerprint.capture(memory,launch.cartridge.variant)
                         local dirty=previous~=false and(force or not previous or not Fingerprint.same(previous,current))
-                        local full=dirty and Observation.capture({owned=owned,host=self.host,memory=memory,
-                            variant=launch.cartridge.variant})or nil
+                        local full
+                        if dirty then
+                            local began=profile_clock()
+                            full=Observation.capture({owned=owned,host=self.host,memory=memory,
+                                variant=launch.cartridge.variant})
+                            if #profile.captures<32 then
+                                profile.captures[#profile.captures+1]={frame=frame,ms=(profile_clock()-began)*1000}
+                            end
+                        end
                         source_owned();assert(emu.framecount()==frame,"inventory fingerprint frame changed")
                         return full,current,dirty
                     end)
@@ -316,7 +336,13 @@ function M.start(launch,options)
                         return true
                     end,
                     journal={append=function(_,event,baseline)
-                            local ids,why=self.runtime:observe(JSON.array({event}),baseline);return ids and ids[1],why end,
+                            local began=profile_clock()
+                            local ids,why=self.runtime:observe(JSON.array({event}),baseline)
+                            if #profile.appends<32 then
+                                profile.appends[#profile.appends+1]={frame=emu.framecount(),inventory=event.inventory~=JSON.null,
+                                    ms=(profile_clock()-began)*1000}
+                            end
+                            return ids and ids[1],why end,
                         append_many=function(_,events,baseline)return self.runtime:observe(events,baseline)end},
                     session={pump=function()assert(self.runtime:step())end}, -- never blocks: connector settimeout(0)
                     inventory=capture_inventory,checkpoint=checkpoint,
@@ -409,6 +435,7 @@ function M.start(launch,options)
             engine_signals=self.observer and self.observer.signals and self.observer.signals:status()or nil,
             runtime=self.runtime and self.runtime:status({summary=true}) or nil,
             observation_diagnostics=self.loop and self.loop:status()or nil,
+            perf_probe=profile,
             hud=self.hud and self.hud.status() or nil,
             continuity=self.continuity_status,
             hold_mux=self.holds and self.holds:status() or nil,
