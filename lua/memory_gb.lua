@@ -2212,14 +2212,16 @@ function M.depositMemorialMon(slot)
         -- contains no player data. Refuse every nonempty byte in the entire
         -- unowned image before protectSramBoxes can write either SRAM bank.
         if initializing then
-            if mem_r8(mem_off, SRAM_DOMAIN) ~= 0
-                or (mem_r8(species_off, SRAM_DOMAIN) ~= 0
-                    and mem_r8(species_off, SRAM_DOMAIN) ~= 0xFF) then
+            local virgin_count = mem_r8(mem_off, SRAM_DOMAIN)
+            local virgin_species = mem_r8(species_off, SRAM_DOMAIN)
+            local zero_image = virgin_count == 0 and (virgin_species == 0 or virgin_species == 0xFF)
+            local erased_image = virgin_count == 0xFF and virgin_species == 0xFF
+            if not (zero_image or erased_image) then
                 return false, "unowned memorial box is not empty before initialization"
             end
             for i = 2, geometry.box_len - 1 do
                 local value = mem_r8(mem_off + i, SRAM_DOMAIN)
-                if value ~= 0 and value ~= 0xFF then
+                if value ~= (zero_image and 0 or 0xFF) then
                     return false, "unowned memorial box is not empty before initialization"
                 end
             end

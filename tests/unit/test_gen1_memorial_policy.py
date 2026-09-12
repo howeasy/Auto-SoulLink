@@ -13,6 +13,7 @@ from server.gen1_memorial_policy import (
     MemorialRecoveryRequired,
     box_image,
     box_offset,
+    current_box,
     empty_archive_candidates,
     entirely_empty,
     storage_policy,
@@ -165,14 +166,19 @@ def test_first_reservation_checks_entire_grave_not_only_zero_count(active):
 
 
 @pytest.mark.parametrize("variant", ["red", "blue", "yellow"])
-@pytest.mark.parametrize("tail", ["live_record", "dead_record", "ot_name", "species_list"])
+@pytest.mark.parametrize("tail", ["live_record", "dead_record", "ot_name", "species_list", "mixed_zero", "mixed_ff"])
 def test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write(variant, tail):
     from server.gen1_grave_storage import append
 
     point, key, identity = fixture(variant, slot=0, initialized=False)
     raw = bytearray.fromhex(point["cart_hex"])
     grave = box_offset(11)
-    if tail in {"live_record", "dead_record"}:
+    if tail == "mixed_ff":
+        raw[grave : grave + BOX_SIZE] = b"\xff" * BOX_SIZE
+        raw[grave + 100] = 0
+    elif tail == "mixed_zero":
+        raw[grave + 100] = 255
+    elif tail in {"live_record", "dead_record"}:
         base = grave + 22 + 19 * 33
         raw[base] = 0x99
         raw[base + 2] = 1 if tail == "live_record" else 0
@@ -202,14 +208,16 @@ def test_first_use_memorial_requires_entire_unowned_box12_empty_before_any_write
 
 
 @pytest.mark.parametrize("variant", ["red", "blue", "yellow"])
-def test_first_use_active_box12_is_not_a_cartridge_reachable_memorial_state(variant):
-    point, key, identity = fixture(variant, slot=0, initialized=False, current=11)
-    before = copy.deepcopy(point)
-    with pytest.raises(JournalError, match="cannot precede box initialization"):
-        storage_policy(point)
-    with pytest.raises(JournalError, match="cannot precede box initialization"):
-        expected(point, key, identity=identity, storage_policy={"fixture": True})
-    assert point == before
+def test_virgin_erased_ff_box12_is_a_valid_first_use_memorial(variant):
+    point, key, identity = fixture(variant, slot=0, initialized=False)
+    cart = bytearray.fromhex(point["cart_hex"])
+    grave = box_offset(11)
+    cart[grave : grave + BOX_SIZE] = b"\xff" * BOX_SIZE
+    point["cart_hex"] = cart.hex().upper()
+    assert storage_policy(point)["rotation"] is None
+    after = expected(point, key, identity=identity)
+    assert box_image(after, 11)[0] == 1
+    assert current_box(after) == (0, True)
 
 
 @pytest.mark.parametrize("variant", ["red", "blue", "yellow"])
