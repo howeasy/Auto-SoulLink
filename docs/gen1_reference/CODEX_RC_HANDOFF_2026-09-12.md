@@ -2,6 +2,8 @@
 
 This is a stop/resume ledger, not a release verdict. The owner narrowed the target to Gen 1 RC and shared-module readiness, with sustained full speed at 1× and 3× (5× is not required). No Gen 2/Gen 3/UI port or feature expansion is part of this checkpoint. Evidence must distinguish source, controlled engine, downloaded production launcher, paired gameplay, and human use. Passing component tests or a peer review is not a full-playthrough claim.
 
+**Current plan of record:** [RC_COMPLETION_OWNERSHIP_PLAN_2026-09-12.md](RC_COMPLETION_OWNERSHIP_PLAN_2026-09-12.md). It supersedes the broad resume-order list below for the current mandate: only active 3× and native recovery are in progress, followed by an owner-requested pause. The later release ledger is not authorization to start more lanes.
+
 ## Checkout and merge state
 
 - Work only in `E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`, branch `gen1/rc`. At this checkpoint HEAD is `5579b57` before committing this handoff. The branch was 32 commits ahead of `origin/gen1/rc`. The original root checkout `E:/Google Drive/SLink` remains on `master` `adf3362` and must not be switched or edited for this lane.
