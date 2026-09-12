@@ -1,11 +1,12 @@
 """Join a verified starter source to stable inventory, then stage rules/identity."""
 import copy
+import time
 from dataclasses import asdict
 from datetime import UTC, datetime
 
 from server import event_reference
 from server.admission_context import same_admitted_context
-from server.gen1_engine_bridge import allowed_starters, starter_grant
+from server.gen1_engine_bridge import allowed_starters, starter_grant_feedback
 from server.gen1_engine_signal_runtime import interpret
 from server.gen1_full_save import SYMBOLS
 from server.gen1_initial_observation import COMPONENT as INITIAL, display_name, validate
@@ -88,11 +89,12 @@ def cache_party(rules, player, mon):
         'defense': defense, 'speed': speed, 'spAtk': special, 'spDef': special})
 
 
-def settle_ready(runtime, stage, document, *, frame_origin=None):
+def settle_ready(runtime, stage, document, *, frame_origin=None, hud_now=time.time):
+    feedback = {'a': [], 'b': []}
     component = document['components'].get(COMPONENT)
     initials = document['components'].get(INITIAL, {})
     if component is None or set(initials) != {'a', 'b'}:
-        return
+        return feedback
     # Do not adopt one side of an arbitrary pre-existing game into a new run.
     if any(row['inventory']['members'] or starter_flag(row['observation']['source']) for row in initials.values()):
         raise JournalError('paired starter settlement requires two observed pre-starter saves')
@@ -125,7 +127,11 @@ def settle_ready(runtime, stage, document, *, frame_origin=None):
             'starter_source': source['engine_record']['operation_id']})[:32]
         witness = IdentityWitness(own_context, mon.key, mon.sha256, 1)
         acquired = stage.identities.acquire(acquisition, acquisition, witness)
-        linked, rejected = starter_grant(stage.rules, player, AREA, mon_info(mon))   # the shared engine pairs the starters
+        linked, rejected, notices = starter_grant_feedback(
+            stage.rules, player, AREA, mon_info(mon), now=hud_now
+        )
+        for recipient in ('a', 'b'):
+            feedback[recipient].extend(notices[recipient])
         cache_party(stage.rules, player, mon)
         component['settled'][player] = {'member_id': acquired['member_id'], 'acquisition_id': acquisition,
             'inventory_entry': copy.deepcopy(entry), 'blob_hex': mon.raw.hex().upper()}
@@ -152,6 +158,9 @@ def settle_ready(runtime, stage, document, *, frame_origin=None):
     stage.barrier.set_history(recovery_history(document['rules'], document['identities'], document['active_trade'],
         document['components'].get('gen1-trade')))
     document['components']['gen1-runtime']['recovery'] = stage.barrier.document()
+    from server.gen1_hud_feedback import coalesce
+
+    return coalesce(feedback)
 
 
 def rejected_starter(document, player, acquisition_id):
@@ -177,9 +186,8 @@ def complete_rejection(document, player, receipt_ref):
 
 def rejection_prompt(document, adapter):
     """The engine's clause prompt for the rejected player, extended with the starters the engine would
-    accept now. Its delivery is the item-4 HUD executor: Gen 1's durable outbox carries physical
-    obligations only (lua/gen1_held_faint handles them; durable_runtime.lua revokes on any other kind),
-    so the bridges drain every engine prompt today and this one is recorded, not queued."""
+    accept now. Durable HUD delivery uses the compact engine prompt; this complete copy remains the
+    presentation/status projection of the persisted rejection and its allowed choices."""
     rejection = document['components'][COMPONENT]['rejection']
     names = ', '.join(adapter.species_name(species) for species in rejection['allowed'])
     return {'cmd': 'gui_prompt', 'text': '[x] ' + rejection['reason'] + ' -- allowed starters: ' + names,

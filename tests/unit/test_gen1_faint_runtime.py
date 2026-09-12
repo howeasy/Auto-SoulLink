@@ -11,10 +11,11 @@ from server.gen1_run_config import create_runtime, open_runtime
 from server.gen1_runtime_state import Gen1RuntimeState
 from server.protocol_journal import JournalError
 from server.state import LinkStatus
+from tests.unit.test_gen1_engine_signal_runtime import deliver, payload
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
+from tests.unit.test_gen1_inventory_observation import deliver as inventory_event
 from tests.unit.test_gen1_sessions import contract
 from tests.unit.test_gen1_starter_settlement import enroll, source_and_checkpoint
-from tests.unit.test_gen1_engine_signal_runtime import deliver, payload
-from tests.unit.test_gen1_inventory_observation import deliver as inventory_event
 
 
 def bag(variant,item=4,quantity=5):
@@ -32,6 +33,7 @@ def paired(runtime):
         source,checkpoint=source_and_checkpoint(runtime,player,initials[player],operations[player])
         deliver(runtime,player,owners[player],source)
         inventory_event(runtime,player,owners[player],checkpoint)
+        acknowledge_hud(runtime)
     return owners
 
 

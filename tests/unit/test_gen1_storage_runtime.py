@@ -20,6 +20,7 @@ from server.gen1_storage_runtime import (
 from server.protocol import digest
 from tests.unit.observation_fixture import commit, current_frame, observe, starters
 from tests.unit.test_gen1_held_faint import checkpoint
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
 from tests.unit.test_gen1_memorial import fixture
 from tests.unit.test_gen1_sessions import contract
 
@@ -137,6 +138,7 @@ def complete_storage(runtime):
     physical = getattr(runtime, "test_storage_physical", {})
     for _ in range(32):
         progressed = False
+        acknowledge_hud(runtime)
         for player in ("a", "b"):
             pending = runtime.journal.pending_ids(player)
             if not pending:
@@ -283,6 +285,7 @@ def test_boxed_grants_pair_logically_without_becoming_usable_party_keys(tmp_path
             raw = grant(runtime, player, delivery="box")
             point = observed(runtime, player, [raw], 140)
             commit(runtime, player, [raw], point=point)
+            acknowledge_hud(runtime)
             entry = runtime.state().document()["components"]["gen1-acquisition-settlement"][player]
             row = entry["settled"][0]
             assert row["rule"] == "exempt_grant" and row["violation"] is None

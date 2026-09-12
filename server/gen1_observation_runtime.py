@@ -170,7 +170,11 @@ def stage_observation(runtime, stage, document, player, operation, request):
     # 3. The source-receipt list, decoded ONCE so every fact keeps its raw index, then staged kind by kind in
     # the order the retired compound frame used (gen1_frame_acquisitions.stage, gen1_frame_journal.returned).
     from server import event_reference
-    from server.gen1_acquisition_runtime import COMPONENT as ACQUISITIONS, source_rom, stage_acquisitions
+    from server.gen1_acquisition_runtime import (
+        COMPONENT as ACQUISITIONS,
+        source_rom,
+        stage_acquisitions,
+    )
     from server.gen1_npc_exchange_runtime import COMPONENT as EXCHANGES, stage_exchanges
     from server.gen1_source_receipts import (
         ACQUISITION_KINDS,
@@ -179,7 +183,11 @@ def stage_observation(runtime, stage, document, player, operation, request):
         LIFECYCLE_KINDS,
         decode,
     )
-    from server.gen1_wild_encounter_runtime import COMPONENT as ENCOUNTERS, KINDS as ENCOUNTER_ROWS, stage as stage_encounters
+    from server.gen1_wild_encounter_runtime import (
+        COMPONENT as ENCOUNTERS,
+        KINDS as ENCOUNTER_ROWS,
+        stage as stage_encounters,
+    )
     components = document['components']
     pending = {name: bool(components.get(name, {}).get(player, {}).get('pending')) for name in (ACQUISITIONS, EXCHANGES)}
     reference = event_reference.make(player, operation, request)
@@ -250,6 +258,9 @@ def stage_observation(runtime, stage, document, player, operation, request):
     entries[player] = entry
     result['observation_digest'] = digest(entry)
     records.append({'namespace': COMPONENT, 'key': key(player), 'value': entry})
+    from server.gen1_hud_feedback import feedback_last
+
+    commands = feedback_last(commands)
     return {'entry': entry, 'result': result, 'commands': commands, 'records': records}
 
 

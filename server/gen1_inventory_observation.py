@@ -171,11 +171,11 @@ def stage_observation(runtime, stage, document, player, operation, request, *, f
     verify_entry(entry, initial)
     entries[player] = entry
     from server.gen1_starter_settlement import settle_ready
-    settle_ready(runtime, stage, document, frame_origin=origin)
+    feedback = settle_ready(runtime, stage, document, frame_origin=origin)
     from server.gen1_rule_inventory import refresh_party
     refresh_party(stage.rules, player, after, initial['metadata']['save_identity'])
     document['rules'] = stage.rules.document()
     # The history/execution blocker stays until the ordinary lifecycle qualifies.
     # Only a separately proved starter source can settle from this checkpoint.
-    return {'entry': entry, 'commands': {'a': [], 'b': []}, 'result': result(entry),
+    return {'entry': entry, 'commands': feedback, 'result': result(entry),
         'records': [{'namespace': COMPONENT, 'key': record_key(player), 'value': entry}]}

@@ -13,6 +13,7 @@ root folds it into the compound frame commit. `record` is the standalone handler
 """
 import copy
 import hashlib
+import time
 from functools import lru_cache
 
 from server import event_reference
@@ -25,7 +26,7 @@ from server.gen1_starter_settlement import context as identity_context
 from server.identity_registry import IdentityWitness
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier
-from server.state import DEATH_COMMANDS, LinkStatus, MonInfo
+from server.state import DEATH_COMMANDS, AreaStatus, LinkStatus, MonInfo
 
 COMPONENT = 'gen1-acquisition-settlement'
 ORDINALS = 'gen1-acquisition-ordinals'
@@ -170,7 +171,8 @@ def _stable_member(document, player, fact, initial):
     return {'operation_id': checkpoint['operation_id'], 'location': row['location'], 'blob': blob}
 
 
-def stage_acquisitions(runtime, stage, document, player, operation, facts, frame_origin=None, *, frame_request=None, rom=None, attributions=None):
+def stage_acquisitions(runtime, stage, document, player, operation, facts, frame_origin=None, *,
+                       frame_request=None, rom=None, attributions=None, hud_now=time.time):
     """Stage new facts as pending, then settle every pending fact a stable checkpoint proves.
 
     Returns entry/result/commands/records for the caller's atomic commit. Only the
@@ -224,6 +226,7 @@ def stage_acquisitions(runtime, stage, document, player, operation, facts, frame
     codec = PartyCodec(initial['metadata']['gen1_metadata']['cartridge']['variant'])
     own_context = identity_context(initial, player)
     still_pending = []
+    feedback = {'a': [], 'b': []}
     for row in entry['pending']:
         fact = row['fact']
         stable = _stable_member(document, player, fact, initial)
@@ -252,10 +255,14 @@ def stage_acquisitions(runtime, stage, document, player, operation, facts, frame
             settled['retirement_reason'] = RETIREMENT_REASON
         else:
             exempt = fact['kind'] == 'scripted_grant'
-            outcome = _decide_through_engine(stage.rules, player, area, mon, stable, exempt=exempt)
+            outcome = _decide_through_engine(
+                stage.rules, player, area, mon, stable, exempt=exempt, hud_now=hud_now
+            )
             settled['rule'] = 'exempt_grant' if exempt else 'clause_checked'
             settled['violation'] = outcome['violation']
             linked = outcome['linked']
+            for recipient in ('a', 'b'):
+                feedback[recipient].extend(outcome['feedback'][recipient])
         if settled['rule'] == 'retirement_required' or settled['violation'] is not None:
             blockers = stage.barrier.document()['blockers']
             blockers[constraint_id(player,acquisition_id)] = CONSTRAINT_REASON
@@ -289,18 +296,23 @@ def stage_acquisitions(runtime, stage, document, player, operation, facts, frame
     if frame_request is not None:
         commands, extra_records = schedule_retirement(document,player,
             {'player':player,'operation_id':operation,'message':frame_request})
+    from server.gen1_hud_feedback import append_after_physical
+
+    commands = append_after_physical(commands, feedback)
     return {'entry': entry, 'result': result_for(entry), 'commands': commands,
             'records': [{'namespace': COMPONENT, 'key': record_key(player), 'value': entry}, *extra_records]}
 
 
-def _decide_through_engine(rules, player, area, mon, stable, *, exempt):
+def _decide_through_engine(rules, player, area, mon, stable, *, exempt, hud_now=time.time):
     """The shared rule engine decides pending/link/violation exactly as it does for Gen 3
     (SoulLinkState._handle_capture). Three RBY adapter policies stay around it:
     usability is published only by the proved physical disposition (the party mask is
     restored, as before), ball activation comes only from the bag_received engine signal
     (the flag is restored), and physical effects are executed by the storage and memorial
-    runtimes from the rules state, so the engine's queued commands are drained here."""
+    runtimes from the rules state. Presentation is best-effort and can never revoke the rule."""
     partner = "b" if player == "a" else "a"
+    status_before = rules.area_states.get(area, AreaStatus.UNSEEN)
+    existing_before = rules.pending_captures.get(area, {}).get(player)
     # area_of already namespaced grants (gift_<area> or the pairing id), so the engine gets gift=False and
     # therefore keeps the id as given; a real gift area still maps through _is_gift_capture unchanged.
     peer = rules.pending_captures.get(area, {}).get(partner)
@@ -315,21 +327,45 @@ def _decide_through_engine(rules, player, area, mon, stable, *, exempt):
     own = rules.handle_event(player, capture_event(key=mon.key, area_id=area, species_id=mon.species, level=mon.level,
                                                    nickname=mon.nickname or "", gift=False,
                                                    in_box=stable["location"] == "box"))
-    # handle_event returns the caller's own queue (state.py:403-411), so the captured key's death command
-    # is read there, never from queued_commands[player].
-    if violation is None and any(c.get("cmd") in DEATH_COMMANDS and c.get("key") == mon.key for c in own):
-        # The engine's own pre-check rejects a single half before it pends (the family already sits in an
-        # alive link or a pending capture elsewhere, _handle_capture): the death command for the captured
-        # key is its universal rejection signal, and the consequence is the pair path's (hold, retry area,
-        # memorial obligation kept); it never reaches _check_link_violation, so the text is a stable one.
-        violation = [f"Species clause: {rules.adapter.species_name(mon.species)} family already held", ""]
-    rules.queued_commands = {"a": [], "b": []}
+    # Capture both recipients before clearing the staged engine. Gen 1 keeps physical effects in its
+    # dedicated runtimes, but eligible presentation commands are projected into durable HUD notices.
+    captured = rules.take_commands(player, own)
+    rejected = any(
+        command.get("cmd") in DEATH_COMMANDS and command.get("key") == mon.key
+        for batch in captured.values()
+        for command in batch
+    )
+    if violation is None and rejected:
+        if status_before == AreaStatus.DEAD_ZONE:
+            violation = [f"Dead zone: {area} is closed", player]
+        elif status_before == AreaStatus.LINKED:
+            violation = [f"Area clause: {area} is linked", player]
+        elif existing_before is not None and existing_before.key != mon.key:
+            violation = [f"Area clause: second capture in {area}", player]
+        elif any(command.get("cmd") == "gui_prompt" for command in captured[player]):
+            # The engine's single-half family pre-check is the only acquisition rejection that
+            # emits this prompt before a peer pairing exists.
+            violation = [
+                f"Species clause: {rules.adapter.species_name(mon.species)} family already held",
+                "",
+            ]
+        else:
+            violation = [f"Capture rejected in {area}", player]
     rules.party_keys = masks
     rules.pokeballs_obtained = activated
     linked = rules.find_link(player, mon.key)
     if linked is not None and linked.status != LinkStatus.ALIVE:
         linked = None
-    return {"linked": linked, "violation": violation}
+    from server.gen1_hud_feedback import classify_captured
+
+    feedback = classify_captured(
+        captured,
+        linked=linked is not None,
+        rejected=rejected,
+        rejection_text=violation[0] if violation is not None else None,
+        now=hud_now,
+    )
+    return {"linked": linked, "violation": violation, "feedback": feedback}
 
 
 def _link_members(entries, player, link, own_member_id, identities, initials):

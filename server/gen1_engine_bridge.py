@@ -5,10 +5,12 @@ Each function feeds ``SoulLinkState.handle_event`` the semantic event Gen 3 alre
 runtime keeps. Three RBY policies are preserved on purpose: usability of a member is published
 only by its proved physical disposition (callers own ``party_keys``), ball activation comes only
 from the ``bag_received`` engine signal (the flag is restored), and physical effects are executed
-by the held executors and runtimes from the rules state, so the commands the engine queues
-(sounds, prompts, box moves, memorials) are drained here. The executor map of handoff item 4
-replaces those drains one command kind at a time.
+by the held executors and runtimes from the rules state. Engine commands are captured before their
+staged queues are cleared: physical effects stay with those runtimes, while explicitly classified
+display commands become durable HUD notices.
 """
+import copy
+import time
 from dataclasses import fields
 
 from server.gen1_semantic_events import (
@@ -21,8 +23,16 @@ from server.protocol_journal import JournalError
 from server.state import AreaStatus, LinkStatus, MonInfo
 
 
-def _drain(rules):
+def _capture_and_clear(rules, player, immediate):
+    """Return both engine outboxes exactly once, then clear the staged legacy queues."""
+    if player not in ("a", "b") or not isinstance(immediate, list):
+        raise JournalError("invalid Gen 1 engine command capture")
+    if callable(getattr(rules, "take_commands", None)):
+        return rules.take_commands(player, immediate)
+    captured = {side: copy.deepcopy(rules.queued_commands[side]) for side in ("a", "b")}
+    captured[player] = copy.deepcopy(immediate) + captured[player]
     rules.queued_commands = {"a": [], "b": []}
+    return captured
 
 
 def starter_grant(rules, player, area, info):
@@ -30,13 +40,19 @@ def starter_grant(rules, player, area, info):
     clauses applied unless the adapter declares the gift fixed-species (Gen 1: Yellow/Yellow only).
     Returns ``(link, rejection)``: the live link or None, and the clause rejection the engine decided
     (``{"player", "key", "reason"}``, the rejected starter stays pending for the other player) or None."""
+    linked, rejection, _feedback = starter_grant_feedback(rules, player, area, info)
+    return linked, rejection
+
+
+def starter_grant_feedback(rules, player, area, info, *, now=time.time):
+    """Starter settlement plus the explicitly classified durable presentation batch."""
     activated = dict(rules.pokeballs_obtained)
     # The engine returns the caller's own commands and queues only the partner's.
     own = rules.handle_event(player, capture_event(key=info.key, area_id=area, species_id=info.species,
                                                    level=info.level, nickname=info.nickname or "", gift=True))
-    peer = "b" if player == "a" else "a"
+    captured = _capture_and_clear(rules, player, own or [])
     rejection = None
-    for pid, commands in ((player, own or []), (peer, rules.queued_commands[peer])):
+    for pid, commands in captured.items():
         fainted = [c for c in commands if c.get("cmd") == "force_faint"]
         if not fainted:
             continue
@@ -48,10 +64,19 @@ def starter_grant(rules, player, area, info):
         # job with the starter_clause cause (gen1_retirement_runtime), whose verified image reports
         # memorialize_done through memorial_completion below; the obligation stays booked until then.
         rejection = {"player": pid, "key": fainted[0]["key"], "reason": reason}
-    _drain(rules)
     rules.pokeballs_obtained = activated
     link = rules.find_link(player, info.key)
-    return (link if link is not None and link.status == LinkStatus.ALIVE else None), rejection
+    linked = link if link is not None and link.status == LinkStatus.ALIVE else None
+    from server.gen1_hud_feedback import classify_captured
+
+    feedback = classify_captured(
+        captured,
+        linked=linked is not None,
+        rejected=rejection is not None,
+        rejection_text=rejection["reason"] if rejection is not None else None,
+        now=now,
+    )
+    return linked, rejection, feedback
 
 
 def allowed_starters(rules, player, area, species):
@@ -68,22 +93,49 @@ def allowed_starters(rules, player, area, species):
     return allowed
 
 
-def no_catch(rules, player, area, species, level, *, activated, proved_peers, decision):
+def no_catch(rules, player, area, species, level, *, activated, proved_peers, decision,
+             now=time.time):
     """``decision`` is ``no_catch_rules.decision``, a pure function that names the outcome; the state
-    change is the engine. Returns ``{"outcome", "retire", "at"}``: ``retire`` names the partner catch
-    the engine force-fainted (the retirement runtime executes it), ``at`` is the engine death timestamp
-    when a dead zone was recorded."""
+    change is the engine. ``retire`` names the partner catch the engine force-fainted (the retirement
+    runtime executes it), ``at`` is the engine death timestamp, and ``feedback`` is best-effort HUD
+    presentation captured from the same decision."""
     outcome = decision(rules, player, area, species, activated=activated, proved_peers=proved_peers)
     if outcome == "dupe_already_notified":
         rules.dupe_notified_areas[player].discard(area)
     if outcome != "dead_zone":
-        return {"outcome": outcome, "retire": None, "at": None}
+        feedback = {"a": [], "b": []}
+        if outcome == "species_clause":
+            from server.gen1_hud_feedback import best_effort_notice
+
+            species_name = rules.adapter.species_name(species) if species else "Encounter"
+            area_name = rules.adapter.area_display_name(area) or area.replace("_", " ").title()
+            notice = best_effort_notice(
+                "clause_retry",
+                "prompt",
+                f"{species_name} in {area_name} - retry",
+                r=255,
+                g=200,
+                b=60,
+                frames=360,
+                now=now,
+                source="no_catch:species_clause",
+            )
+            if notice is not None:
+                feedback[player].append(notice)
+        return {
+            "outcome": outcome,
+            "retire": None,
+            "at": None,
+            "feedback": feedback,
+        }
     peer = "b" if player == "a" else "a"
-    rules.handle_event(player, no_catch_event(area_id=area, species_id=species, level=level))
+    immediate = rules.handle_event(
+        player, no_catch_event(area_id=area, species_id=species, level=level)
+    )
     if rules.area_states.get(area) != AreaStatus.DEAD_ZONE:
         raise JournalError("shared rule engine did not settle the dead zone")
-    retired = [c for c in rules.queued_commands[peer] if c.get("cmd") == "force_faint"]
-    _drain(rules)
+    captured = _capture_and_clear(rules, player, immediate or [])
+    retired = [c for c in captured[peer] if c.get("cmd") == "force_faint"]
     if len(retired) > 1:
         raise JournalError("shared rule engine retired more than one partner catch")
     if retired:
@@ -93,8 +145,14 @@ def no_catch(rules, player, area, species, level, *, activated, proved_peers, de
         # (memorial_completion), and the retired pair reaches MEMORIAL as in Gen 3.
         rules.party_keys[peer].discard(retired[0]["key"])
     dead = [link for link in rules.links if link.area_id == area and link.cause == "dead_zone"]
-    return {"outcome": outcome, "retire": {"player": peer, "key": retired[0]["key"]} if retired else None,
-            "at": dead[-1].killed_at if dead else None}
+    from server.gen1_hud_feedback import classify_captured
+
+    return {
+        "outcome": outcome,
+        "retire": {"player": peer, "key": retired[0]["key"]} if retired else None,
+        "at": dead[-1].killed_at if dead else None,
+        "feedback": classify_captured(captured, linked=False, rejected=True, now=now),
+    }
 
 
 def rekey(rules, player, outgoing, mon, *, reason):
@@ -121,9 +179,17 @@ def rekey(rules, player, outgoing, mon, *, reason):
     if not matches:
         return "identity_only", None
     kind, area = matches[0]
-    rules.handle_event(player, key_change_event(old_key=outgoing, new_key=mon.key, reason=reason,
-                                                new_species=mon.species, new_nickname=mon.nickname))
-    _drain(rules)
+    immediate = rules.handle_event(
+        player,
+        key_change_event(
+            old_key=outgoing,
+            new_key=mon.key,
+            reason=reason,
+            new_species=mon.species,
+            new_nickname=mon.nickname,
+        ),
+    )
+    _capture_and_clear(rules, player, immediate or [])
     if kind == "link":
         moved = rules.find_link(player, mon.key)
         if moved is None or moved.area_id != area or rules.find_link(player, outgoing) is not None:
@@ -145,6 +211,6 @@ def memorial_completion(rules, player, key):
     link = rules.find_link(player, key)
     if key not in rules.pending_memorials[player] or (link is not None and link.status != LinkStatus.DEAD):
         raise JournalError("exact pending memorial obligation required")
-    rules.handle_event(player, memorialize_done_event(key=key))
-    _drain(rules)
+    immediate = rules.handle_event(player, memorialize_done_event(key=key))
+    _capture_and_clear(rules, player, immediate or [])
     return link is None or link.status == LinkStatus.MEMORIAL

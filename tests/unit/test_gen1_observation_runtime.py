@@ -28,6 +28,7 @@ from server.state import LinkStatus
 from tests.unit.test_gen1_acquisition_runtime import grant
 from tests.unit.test_gen1_engine_signal_runtime import deliver as deliver_signals
 from tests.unit.test_gen1_faint_runtime import ack, acknowledgement, paired, signal_batch
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
 from tests.unit.test_gen1_initial_observation import admit, observation, send
 from tests.unit.test_gen1_inventory_observation import deliver as deliver_inventory
 from tests.unit.test_gen1_sessions import contract
@@ -209,6 +210,7 @@ def test_acquisition_receipt_settles_pending_or_in_the_same_batch_as_its_checkpo
         deliver(runtime, "a", owners["a"], batch(runtime, "a", 2, frame=200, inventory=stable("a", 200)))
         row = acquisitions(runtime, "a")
         assert row["pending"] == [] and len(row["settled"]) == 1 and row["settled"][0]["link_id"] is None
+        acknowledge_hud(runtime)
         # b: receipt and heartbeat checkpoint in ONE batch; inventory is staged first, so it settles at once.
         # (A checkpoint committed before its receipt cannot prove it: the verifier orders them by revision.)
         _, result = publish(runtime, "b", owners["b"], batch(runtime, "b", 1, frame=200, acquisitions=[receipts["b"]],
@@ -252,6 +254,7 @@ def test_starter_source_and_checkpoint_settle_through_observation_batches(tmp_pa
             deliver(runtime, player, owners[player], batch(runtime, player, 1, frame=105, signals=source))
             assert player in runtime.state().document()["components"][STARTERS]["sources"]
             deliver(runtime, player, owners[player], batch(runtime, player, 2, frame=110, inventory=stable["observation"]))
+            acknowledge_hud(runtime)
         state = runtime.state()
         assert set(state.document()["components"][STARTERS]["settled"]) == {"a", "b"}
         assert len(state.rules.links) == 1 and state.rules.links[0].status == LinkStatus.ALIVE
@@ -272,6 +275,7 @@ def test_heartbeat_inventory_is_deferred_while_any_physical_obligation_is_open(t
             deliver_signals(runtime, player, owners[player], source)
             deliver_inventory(runtime, player, owners[player], stable)
             points[player] = stable["observation"]
+            acknowledge_hud(runtime)
         deliver(runtime, "a", owners["a"], batch(runtime, "a", 1, frame=121, signals=signal_batch(runtime, "a")))
         assert runtime.journal.pending_ids("b") and not runtime.journal.pending_ids("a")
         sequences = {p: runtime.state().document()["components"][INVENTORY][p]["sequence"] for p in ("a", "b")}

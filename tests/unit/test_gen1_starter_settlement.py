@@ -16,6 +16,7 @@ from tests.unit.test_gen1_engine_signal_runtime import (
     deliver as engine_event,
     payload as engine_payload,
 )
+from tests.unit.test_gen1_hud_feedback import acknowledge_hud
 from tests.unit.test_gen1_initial_observation import admit, observation, send
 from tests.unit.test_gen1_inventory_observation import deliver as inventory_event, party_point
 from tests.unit.test_gen1_party_codec import make_blob
@@ -89,6 +90,7 @@ def test_stable_starters_settle_owned_identities_and_the_engine_pairs_or_rejects
             if index==0:
                 assert stage.rules.area_states[AREA]==(AreaStatus.PENDING_B if player=='a' else AreaStatus.PENDING_A)
                 assert not stage.rules.links
+            acknowledge_hud(runtime)
         stage=runtime.state();document=stage.document();component=document['components'][COMPONENT]
         first,second=order
         assert len(document['identities']['members'])==2
@@ -144,6 +146,7 @@ def test_rejected_starter_is_retired_in_place_and_reports_its_memorial_once(tmp_
         for player in ('a','b'):   # both choose Bulbasaur; the engine rejects the second
             source,checkpoint=source_and_checkpoint(runtime,player,initials[player],operations[player],species=BULBASAUR)
             engine_event(runtime,player,owners[player],source);inventory_event(runtime,player,owners[player],checkpoint)
+            acknowledge_hud(runtime)
         stage=runtime.state();document=stage.document();component=document['components'][COMPONENT]
         rejection=component['rejection'];key=rejection['key'];acquisition=component['settled']['b']['acquisition_id']
         assert rejection['player']=='b' and rejection['receipt_ref'] is None and stage.rules.pending_memorials['b']=={key}
@@ -285,6 +288,7 @@ def test_pairing_rechecks_the_first_players_latest_inventory(tmp_path,changed_ke
         first_source,first=source_and_checkpoint(runtime,'a',initials['a'],ops['a'])
         engine_event(runtime,'a',owners['a'],first_source)
         first_op=secrets.token_hex(16);inventory_event(runtime,'a',owners['a'],first,first_op)
+        acknowledge_hud(runtime)
         current=bytearray(make_blob(PartyCodec('yellow'),species=84,level=6,otid=0,dv=0x4321 if changed_key else 0x1234))
         current[7]=0xA3;current[44:55]=bytes.fromhex(initials['a']['source']['fields']['name'])
         later=copy.deepcopy(first);later['sequence']=2;later['previous_operation_id']=first_op
@@ -311,7 +315,9 @@ def test_partial_inventory_commit_failure_rolls_back_rules_identity_and_link(tmp
         for player in ('a','b'):
             source,checkpoint=source_and_checkpoint(runtime,player,initials[player],ops[player])
             engine_event(runtime,player,owners[player],source)
-            if player=='a':inventory_event(runtime,player,owners[player],checkpoint)
+            if player=='a':
+                inventory_event(runtime,player,owners[player],checkpoint)
+                acknowledge_hud(runtime)
         before=runtime.journal.snapshot()
         runtime.journal._db.execute("CREATE TRIGGER fail_inventory BEFORE INSERT ON records WHEN NEW.namespace='gen1-inventory-observations' BEGIN SELECT RAISE(ABORT, 'fixture'); END")
         import sqlite3
