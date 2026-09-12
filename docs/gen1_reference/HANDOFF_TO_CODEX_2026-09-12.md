@@ -20,8 +20,9 @@ current plan of record (that page remains the agreed decision table and the item
   pre-move snapshot beside it (tracked diff, 716 untracked files, evidence tar, the git admin dir).
 - Everything after that is 37 commits, listed by `git log --oneline 7c7c0a6..gen1/rc`. Total diff versus the
   chain tip: 615 files, +201,100 / -12,042 (most of the insertions are the previously untracked docs and data).
-- `master` is untouched (still `adf3362`, 27 days old). The root checkout is untouched on `codex/gen2base`.
-  Nothing was stashed. Gen 2, Gen 3 and UI branches and directories are untouched.
+- `master` is untouched (still `adf3362`, 27 days old). Nothing was stashed. Gen 2, Gen 3 and UI branches
+  and directories are untouched. I never moved the root checkout; something switched it from
+  `codex/gen2base` to `master` at 2026-09-12 07:00 (section 6).
 
 ## 2. What changed, in the order it happened
 
@@ -86,7 +87,7 @@ intact, no cuts.** Both inventories are regenerated.
 
 | Gate | Result |
 | --- | --- |
-| Unit + integration | 7,278 passed, 2 skipped, 0 failed at checkpoint 5; the post-Phase-6 run is recorded in the ledger |
+| Unit + integration | 7,399 passed, 2 skipped (symlink privilege), 0 failed over 7,401 nodes (`.cache/junit/phase6_full.xml`) |
 | Portable CI (`tools/verify_portable_ci.py`) | PASS: 6,754 passed, 526 deferred by named reason |
 | Release gate `--list` | 187 registered / 201 missing (unchanged by all of this) |
 | Release gate `--quick` | every validator passes; fails only on the unset emulator and UPR paths |
