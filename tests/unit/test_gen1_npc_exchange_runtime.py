@@ -11,7 +11,6 @@ import secrets
 import pytest
 
 from server import event_reference
-from server.capture_rules import record_clause_checked_acquisition
 from server.gen1_acquisition_runtime import COMPONENT as ACQUISITIONS, ORDINALS
 from server.gen1_npc_exchange_receipt import records
 from server.gen1_npc_exchange_runtime import (
@@ -32,6 +31,7 @@ from server.gen1_starter_settlement import context, mon_info
 from server.identity_registry import IdentityWitness
 from server.protocol_journal import JournalError, _encode
 from server.state import AreaStatus, LinkStatus
+from tests.unit.rules_fixture import seed_link_half
 from tests.unit.test_gen1_acquisition_runtime import (
     INSTANCE,
     checkpoint,
@@ -92,7 +92,7 @@ def seed(runtime, blobs, *, rule=True):
         identifier = secrets.token_hex(16)
         stage.identities.acquire(identifier, identifier, IdentityWitness(context(initials[player], player), mon.key, mon.sha256, 1))
         if rule:
-            record_clause_checked_acquisition(stage.rules, player, AREA, mon_info(mon), gift=False, activate_from_capture=False)
+            seed_link_half(stage.rules, player, AREA, mon_info(mon))
     stage.barrier.set_history(stage.history_digest())
     runtime.journal.commit("a", secrets.token_hex(16), {"event": "explicit-exchange-seed-fixture"},
         expected_revision=stage.journal_revision, state=stage.document(), commands={"a": [], "b": []}, result={"ack": "ACK"})

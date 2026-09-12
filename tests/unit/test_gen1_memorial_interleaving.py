@@ -11,8 +11,8 @@ from server.gen1_party_codec import PartyCodec
 from server.gen1_run_config import create_runtime, open_runtime
 from server.gen1_starter_settlement import context, mon_info
 from server.identity_registry import IdentityWitness
-from server.party_grant_rules import record_exempt_party_grant
 from server.protocol import digest
+from tests.unit.rules_fixture import seed_link_half
 from tests.unit.test_gen1_engine_signal_runtime import deliver
 from tests.unit.test_gen1_faint_runtime import ack, paired, signal_batch
 from tests.unit.test_gen1_held_faint import checkpoint
@@ -27,7 +27,7 @@ def second_pair(runtime):
     stage = runtime.state()
     initials = stage.document()["components"]["gen1-initial-observations"]
     physical = {}
-    members, peer = [], None
+    members = []
     for player in ("a", "b"):
         codec = PartyCodec(runtime.contract["players"][player]["variant"])
         mon = codec.validate_blob(make_blob(codec, dv=0x4321, otid=0))
@@ -39,10 +39,7 @@ def second_pair(runtime):
                 IdentityWitness(context(initials[player], player), mon.key, mon.sha256, 1),
             )["member_id"]
         )
-        record_exempt_party_grant(
-            stage.rules, player, "second-pair-fixture", mon_info(mon), peer=peer
-        )
-        peer = mon_info(mon)
+        seed_link_half(stage.rules, player, "second-pair-fixture", mon_info(mon))
         spare = make_blob(codec, dv=0x7654, otid=0)
         physical[player] = [stage.rules.partner_blobs[player][0]["blob"], mon.raw, spare]
         stage.rules.party_size[player] = 3

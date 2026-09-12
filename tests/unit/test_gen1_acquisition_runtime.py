@@ -10,12 +10,13 @@ import secrets
 
 import pytest
 
-from server.capture_rules import record_clause_checked_acquisition
 from server.gen1_acquisition_runtime import (
     COMPONENT,
+    CONSTRAINT_REASON,
     EVENT,
     ORDINALS,
     SCHEMA,
+    constraint_id,
     record,
     record_key,
     verify_journal,
@@ -25,8 +26,7 @@ from server.gen1_party_codec import PartyCodec
 from server.gen1_run_config import create_runtime, open_runtime
 from server.gen1_runtime_state import Gen1RuntimeState
 from server.protocol_journal import JournalError
-from server.staged_state import StagedSoulLinkState
-from server.state import AreaStatus, LinkStatus, MonInfo, SoulLinkState
+from server.state import AreaStatus, LinkStatus
 from tests.unit.test_gen1_grant_receipt import fresh, receipt as grant_receipt
 from tests.unit.test_gen1_initial_observation import admit, observation, send
 from tests.unit.test_gen1_inventory_observation import deliver as deliver_inventory, party_point
@@ -115,8 +115,6 @@ def test_grant_is_pending_until_stable_then_settles_identity_ordinal_rule_and_pa
         assert len(links) == 1 and links[0]["area_id"] == "celadon_mansion_roof" and links[0]["status"] == LinkStatus.ALIVE.value
         assert document["rules"]["core"]["area_states"]["celadon_mansion_roof"] == AreaStatus.LINKED.value
         assert not document["rules"]["core"]["pending_captures"]
-        for player in ("a", "b"):
-            assert entry(runtime, player)["settled"][0]["fact"]["key"] in document["rules"]["runtime"]["party_keys"][player]
         verify_state(state)
         verify_journal(runtime.journal, state)
         assert runtime.journal.record(COMPONENT, record_key("a")).value == entry(runtime, "a")
@@ -164,7 +162,10 @@ def test_ordinals_are_per_source_and_only_consumed_by_stable_deliveries(tmp_path
         runtime.close()
 
 
-def test_boxed_delivery_settles_identity_and_ordinal_but_defers_its_rule(tmp_path):
+def test_boxed_delivery_settles_as_an_exempt_grant_whose_half_pends_for_the_partner(tmp_path):
+    """A grant delivered to the box is a capture like any other to the shared engine: the half pends
+    and links once both halves exist, boxed or not. Usability follows the proved physical disposition,
+    so the key is not a usable party member and no recovery hold is needed."""
     runtime = create_runtime(tmp_path, contract("yellow", "yellow"))
     try:
         owner, initial, first = enroll(runtime, "a")
@@ -177,14 +178,90 @@ def test_boxed_delivery_settles_identity_and_ordinal_but_defers_its_rule(tmp_pat
         deliver_inventory(runtime, "a", owner, {"sequence": 1, "previous_operation_id": first, "observation": point})
         observe(runtime, "a", [], 2)
         settled = entry(runtime, "a")["settled"][0]
-        assert settled["rule"] == "boxed_deferred" and settled["ordinal"] == 1 and settled["link_id"] is None
-        document = runtime.state().document()
+        assert settled["rule"] == "exempt_grant" and settled["violation"] is None
+        assert settled["ordinal"] == 1 and settled["link_id"] is None
+        state = runtime.state()
+        document = state.document()
         assert "a:" + settled["acquisition_id"] in document["identities"]["acquisitions"]
-        assert not document["rules"]["core"]["pending_captures"]
-        verify_state(runtime.state())
-        verify_journal(runtime.journal, runtime.state())
+        pending = document["rules"]["core"]["pending_captures"][settled["area"]]
+        assert set(pending) == {"a"} and pending["a"]["key"] == settled["fact"]["key"]
+        assert settled["fact"]["key"] not in document["rules"]["runtime"]["party_keys"]["a"]
+        assert CONSTRAINT_REASON not in state.barrier.document()["blockers"].values()
+        verify_state(state)
+        verify_journal(runtime.journal, state)
+        saved = document["components"][COMPONENT]
     finally:
         runtime.close()
+    reopened = open_runtime(tmp_path)
+    try:
+        stage = reopened.state()
+        assert stage.document()["components"][COMPONENT] == saved
+        verify_state(stage)
+        verify_journal(reopened.journal, stage)
+    finally:
+        reopened.close()
+
+
+def test_game_corner_purchases_pair_by_ordinal_and_the_same_prize_on_both_sides_is_the_species_clause_violation(tmp_path):
+    """Each player's Nth stable purchase pairs with the partner's Nth on the per-purchase ordinal area.
+    Prizes are player-choice gifts, so the clauses apply exactly as the shared engine applies them:
+    Abra against Dratini satisfies the species lock and links; Clefairy against Clefairy is the
+    violation, recorded against the half that settled second. The engine force-faints that half
+    (the runtime drains the command: Gen 1 executes physical consequences from the rules state) and
+    the recovery hold stays as the visible consequence (P9)."""
+    runtime = create_runtime(tmp_path, contract("red", "red"), rule_options={"species_lock": True})
+    try:
+        codec = PartyCodec("red")
+        prizes = {0: (0x94, 9), 1: (0x04, 8), 3: (0x58, 18)}  # red prize table slot -> species index, level
+        purchases = {"a": [(0, 0x1111), (1, 0x2222)], "b": [(3, 0x3333), (1, 0x4444)]}  # (slot, dv)
+        enrolled = {player: enroll(runtime, player) for player in ("a", "b")}  # before any history exists
+        for player in ("a", "b"):
+            owner, initial, first = enrolled[player]
+            observe(runtime, player, [grant(runtime, player, "grant:game_corner_purchase:0", slot=slot, dv=dv)
+                                      for slot, dv in purchases[player]], 1)
+            stable = [fresh(codec, *prizes[slot], dv=dv, ot_id=0) for slot, dv in purchases[player]]
+            checkpoint(runtime, player, owner, initial, first, party_point("red", stable)["fields"]["party"])
+            observe(runtime, player, [], 2)
+        state = runtime.state()
+        document = state.document()
+        assert document["components"][ORDINALS] == {"grant:game_corner_purchase": {"a": 2, "b": 2}}
+        settled = {player: entry(runtime, player)["settled"] for player in ("a", "b")}
+        first_area, second_area = "grant:game_corner_purchase#1", "grant:game_corner_purchase#2"
+        for player in ("a", "b"):
+            assert [row["pairing_key"] for row in settled[player]] == [first_area, second_area]
+            assert [row["area"] for row in settled[player]] == [first_area, second_area]
+            assert all(row["rule"] == "exempt_grant" for row in settled[player])
+        core = document["rules"]["core"]
+        # First purchases: Abra and Dratini satisfy the species lock and link on the #1 area.
+        assert settled["a"][0]["violation"] is None and settled["b"][0]["violation"] is None
+        assert settled["a"][0]["link_id"] is None  # the earlier half only pends; the link settles with the later one
+        link_id = settled["b"][0]["link_id"]
+        assert document["identities"]["links"][link_id]["members"] == [settled["a"][0]["member_id"], settled["b"][0]["member_id"]]
+        assert len(core["links"]) == 1 and core["links"][0]["area_id"] == first_area
+        assert core["links"][0]["status"] == LinkStatus.ALIVE.value and core["area_states"][first_area] == AreaStatus.LINKED.value
+        # Second purchases: two Clefairy under the species lock. The engine rejects the later half.
+        assert settled["a"][1]["violation"] is None and settled["a"][1]["link_id"] is None
+        assert settled["b"][1]["violation"][0].startswith("Species clause") and settled["b"][1]["link_id"] is None
+        assert set(core["pending_captures"]) == {second_area} and set(core["pending_captures"][second_area]) == {"a"}
+        assert core["area_states"][second_area] == AreaStatus.PENDING_B.value and second_area in core["retry_areas"]["b"]
+        assert not any(document["rules"]["runtime"]["queued_commands"].values())  # force_faint drained, never published
+        for player in ("a", "b"):
+            assert settled[player][1]["fact"]["key"] not in document["rules"]["runtime"]["party_keys"][player]
+        holds = {key for key, reason in state.barrier.document()["blockers"].items() if reason == CONSTRAINT_REASON}
+        assert holds == {constraint_id("b", settled["b"][1]["acquisition_id"])}
+        verify_state(state)
+        verify_journal(runtime.journal, state)
+        saved = document["components"][COMPONENT]
+    finally:
+        runtime.close()
+    reopened = open_runtime(tmp_path)
+    try:
+        stage = reopened.state()
+        assert stage.document()["components"][COMPONENT] == saved
+        verify_state(stage)
+        verify_journal(reopened.journal, stage)
+    finally:
+        reopened.close()
 
 
 @pytest.mark.parametrize("fault", ["sequence", "context", "repeat_key", "unknown_source", "malformed_row", "too_many"])
@@ -261,33 +338,3 @@ def test_replay_returns_the_committed_result_and_restore_rechecks_evidence(tmp_p
     finally:
         runtime.close()
 
-
-def staged_rules(tmp_path, *, species_lock=False):
-    from server.adapters import get_adapter
-
-    live = SoulLinkState(data_dir=str(tmp_path), adapter=get_adapter("gen1_rby", rom_type="red"))
-    live.rom_type = "red"
-    live.species_lock = species_lock
-    return StagedSoulLinkState.from_live(live, {"retired_pairs": []})
-
-
-def test_clause_checked_acquisition_pairs_or_records_the_violation_without_enforcing(tmp_path):
-    rules = staged_rules(tmp_path)
-    eevee_a = MonInfo(key="1111:0000:66", level=25, species=133, nickname="EEVEE")
-    eevee_b = MonInfo(key="2222:0000:66", level=25, species=133, nickname="EEVEE")
-    first = record_clause_checked_acquisition(rules, "a", "celadon_mansion_roof", eevee_a, gift=True)
-    assert first == {"linked": None, "violation": None}
-    assert rules.area_states["celadon_mansion_roof"] == AreaStatus.PENDING_B and not rules.pokeballs_obtained["a"]
-    second = record_clause_checked_acquisition(rules, "b", "celadon_mansion_roof", eevee_b, gift=True)
-    assert second["violation"] is None and second["linked"].status == LinkStatus.ALIVE
-    assert rules.area_states["celadon_mansion_roof"] == AreaStatus.LINKED and "celadon_mansion_roof" not in rules.pending_captures
-    with pytest.raises(JournalError, match="already resolved"):
-        record_clause_checked_acquisition(rules, "a", "celadon_mansion_roof", MonInfo(key="3333:0000:66", level=25, species=133), gift=True)
-    locked = staged_rules(tmp_path, species_lock=True)
-    record_clause_checked_acquisition(locked, "a", "route_24", MonInfo(key="4444:0000:04", level=10, species=35), gift=False)
-    assert locked.pokeballs_obtained["a"]  # a catch in an encounter area proves Pokeballs
-    outcome = record_clause_checked_acquisition(locked, "b", "route_24", MonInfo(key="5555:0000:04", level=10, species=35), gift=False)
-    assert outcome["linked"] is None and outcome["violation"][0].startswith("Species clause")
-    assert set(locked.pending_captures["route_24"]) == {"a", "b"} and not locked.links
-    with pytest.raises(JournalError, match="already has a pending"):
-        record_clause_checked_acquisition(locked, "a", "route_3", MonInfo(key="4444:0000:04", level=10, species=35), gift=False)

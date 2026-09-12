@@ -2,26 +2,25 @@
 import copy
 import secrets
 
-from server.gen1_starter_settlement import context, mon_info, cache_party
-from server.identity_registry import IdentityWitness
-from server.party_grant_rules import record_exempt_party_grant
-from server.gen1_party_codec import PartyCodec
-from server.gen1_engine_signals import DATA
 from server.gen1_engine_signal_runtime import record
+from server.gen1_engine_signals import DATA
+from server.gen1_party_codec import PartyCodec
+from server.gen1_starter_settlement import cache_party, context, mon_info
+from server.identity_registry import IdentityWitness
+from tests.unit.rules_fixture import seed_link_half
 from tests.unit.test_gen1_engine_signals import signal
 from tests.unit.test_gen1_faint_runtime import bag
 
 
 def publish_death(runtime):
     stage=runtime.state();doc=stage.document();initials=doc['components']['gen1-initial-observations']
-    members=[];mons={};peer=None
+    members=[];mons={}
     for player in ('a','b'):
         initial=initials[player];variant=initial['observation']['source']['variant']
         mon=PartyCodec(variant).validate_blob(bytes.fromhex(initial['inventory']['members'][0]['blob_hex']));mons[player]=mon
         identifier=secrets.token_hex(16)
         members.append(stage.identities.acquire(identifier,identifier,IdentityWitness(context(initial,player),mon.key,mon.sha256,1))['member_id'])
-        record_exempt_party_grant(stage.rules,player,'fixture_link',mon_info(mon),peer=peer);cache_party(stage.rules,player,mon)
-        peer=mon_info(mon)
+        seed_link_half(stage.rules,player,'fixture_link',mon_info(mon));cache_party(stage.rules,player,mon)
     stage.identities.create_link('b',secrets.token_hex(16),members)
     stage.barrier.set_history(stage.history_digest())
     runtime.journal.commit('a',secrets.token_hex(16),{'event':'explicit-linked-authority-fixture'},

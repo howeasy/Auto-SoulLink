@@ -20,11 +20,11 @@ from server.adapters.gen1_rby import _MAP_ID_TO_AREA
 from server.admission_context import same_admitted_context
 from server.gen1_initial_observation import COMPONENT as INITIAL, display_name, inventory
 from server.gen1_party_codec import PartyCodec
+from server.gen1_semantic_events import capture_event
 from server.gen1_starter_settlement import context as identity_context
 from server.identity_registry import IdentityWitness
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier
-from server.gen1_semantic_events import capture_event
 from server.state import LinkStatus, MonInfo
 
 COMPONENT = 'gen1-acquisition-settlement'
@@ -256,7 +256,7 @@ def stage_acquisitions(runtime, stage, document, player, operation, facts, frame
             settled['rule'] = 'exempt_grant' if exempt else 'clause_checked'
             settled['violation'] = outcome['violation']
             linked = outcome['linked']
-        if settled['rule'] in ('boxed_deferred','retirement_required') or settled['violation'] is not None:
+        if settled['rule'] == 'retirement_required' or settled['violation'] is not None:
             blockers = stage.barrier.document()['blockers']
             blockers[constraint_id(player,acquisition_id)] = CONSTRAINT_REASON
             stage.barrier.set_blockers(blockers)
@@ -410,11 +410,11 @@ def verify_state(stage):
             if (type(row['ordinal']) is not int or row['ordinal']!=counted[row['pairing_id']][player]
                     or row['pairing_id']!=pairing_of(row['fact'],area_of(stage.rules.adapter,row['fact']))):
                 raise JournalError('acquisition ordinal is not its successful-purchase order')
-            if row['rule'] not in ('boxed_deferred', 'exempt_grant', 'clause_checked','retirement_required'):
+            if row['rule'] not in ('exempt_grant', 'clause_checked', 'retirement_required'):
                 raise JournalError('unknown acquisition rule outcome')
             if row['rule']=='retirement_required' and (row.get('retirement_reason')!=RETIREMENT_REASON or row['link_id'] is not None):
                 raise JournalError('Yellow-only retirement lost its permanent physical obligation')
-            if (row['rule'] in ('boxed_deferred','retirement_required') or row['violation'] is not None) and row['fact']['key'] in stage.rules.party_keys[player]:
+            if (row['rule'] == 'retirement_required' or row['violation'] is not None) and row['fact']['key'] in stage.rules.party_keys[player]:
                 raise JournalError('constrained acquisition remains enabled as a usable party member')
             if row['link_id'] is not None and row['link_id'] not in document['identities']['links']:
                 raise JournalError('settled acquisition names an unknown link')
@@ -423,12 +423,15 @@ def verify_state(stage):
             raise JournalError('acquisition ordinals differ from settled history')
     if set(counted) - set(ordinals):
         raise JournalError('settled acquisitions lack their ordinal record')
-    from server.gen1_retirement_runtime import completed as retired, verify_state as verify_retirements
+    from server.gen1_retirement_runtime import (
+        completed as retired,
+        verify_state as verify_retirements,
+    )
     verify_retirements(stage)
     expected_holds={constraint_id(player,row['acquisition_id']):CONSTRAINT_REASON
         for player,entry in entries.items() for row in entry['settled']
-        if (row['rule'] in ('boxed_deferred','retirement_required')
-            and not retired(document,player,row['acquisition_id'])) or row['violation'] is not None}
+        if (row['rule'] == 'retirement_required' and not retired(document,player,row['acquisition_id']))
+        or row['violation'] is not None}
     actual={key:reason for key,reason in stage.barrier.document()['blockers'].items() if reason==CONSTRAINT_REASON}
     if expected_holds!=actual:
         raise JournalError('acquisition physical constraints lost their recovery holds')
@@ -479,15 +482,6 @@ def verify_journal(journal, stage, *, rom_provider=None):
             decoded = decode_receipts([receipts[reference['index']]], initial['metadata'], initial['binding'], reference=reference['event'],rom=rom)[0]
             if decoded['kind'] != row['kind'] or decoded['fact'] != row['fact']:
                 raise JournalError('acquisition fact differs from its authoritative receipt')
-            if snapshot.request.get('event')=='frame_complete':
-                from server.gen1_frame_acquisitions import retained_return, verify_frames
-                from server.gen1_frame_runtime import anchor
-
-                bound = anchor(document,player)
-                closed = retained_return(journal,player,snapshot.result.get('closed_frame_digest',''),bound)
-                if closed['receipt']!=snapshot.request['receipt']:
-                    raise JournalError('acquisition source differs from retained frame receipt')
-                verify_frames(journal,player,bound,closed,[receipts[reference['index']]],[decoded])
             if row in entry['settled']:
                 stable_event=journal.event_snapshot(player,row['inventory_operation'])
                 if stable_event is None or not snapshot.revision<=stable_event.revision<=stored.revision:

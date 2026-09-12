@@ -1,16 +1,11 @@
-"""Shared detached no-catch rule bookkeeping; physical retirement is caller-owned.
+"""Names the no-catch outcome the shared engine records (SoulLinkState._handle_no_catch).
 
-Policy follows SoulLinkState._handle_no_catch. No dialogue, sound, memory write,
-or unqualified command is queued by this reusable operation.
+A pure decision: `gen1_engine_bridge.no_catch` makes the state change through the engine.
 """
 
-import copy
-from datetime import datetime
-
-from server.linked_death_rules import update_run_over
 from server.protocol_journal import JournalError
 from server.staged_state import StagedSoulLinkState
-from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo
+from server.state import AreaStatus, LinkStatus, MonInfo
 
 
 def _peers(state, player, proved_peers):
@@ -69,43 +64,3 @@ def decision(state, player, area, species, *, activated, proved_peers=None):
             if mon and mon.species and state.adapter.evo_family(mon.species) == family:
                 return "species_clause"
     return "dead_zone"
-
-
-def record(state, player, area, species, level, *, activated, occurred_at, proved_peers=None):
-    if type(level) is not int or not 1 <= level <= 100:
-        raise JournalError("verified no-catch level required")
-    try:
-        datetime.fromisoformat(occurred_at)
-    except (ValueError, TypeError) as error:
-        raise JournalError("explicit no-catch timestamp required") from error
-    outcome = decision(state, player, area, species, activated=activated, proved_peers=proved_peers)
-    if outcome == "dupe_already_notified":
-        state.dupe_notified_areas[player].discard(area)
-    if outcome != "dead_zone":
-        return {"outcome": outcome, "retire": None}
-    if any(state.queued_commands.values()):
-        raise JournalError("no-catch cannot replace unpublished commands")
-    peer = "b" if player == "a" else "a"
-    mon = copy.deepcopy(_peers(state, player, proved_peers).get(area))
-    halves = {player: None, peer: mon}
-    encountered = {player: MonInfo(key="", species=species, level=level), peer: None}
-    link = LinkEntry(
-        area_id=area,
-        a=halves["a"],
-        b=halves["b"],
-        status=LinkStatus.DEAD,
-        encounter_a=encountered["a"],
-        encounter_b=encountered["b"],
-        killed_at=occurred_at,
-        cause="dead_zone",
-        initiating_player=player,
-    )
-    state.links.append(link)
-    state._index_entry(link)
-    state._set_area_state(area, AreaStatus.DEAD_ZONE, player=player, reason="no_catch")
-    state.pending_captures.pop(area, None)
-    if mon:
-        state.party_keys[peer].discard(mon.key)
-    update_run_over(state)
-    return {"outcome": outcome, "retire": {"player": peer, "key": mon.key} if mon else None}
-

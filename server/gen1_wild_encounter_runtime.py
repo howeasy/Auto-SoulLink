@@ -181,34 +181,6 @@ def _peer_unsettled(document, rules, player, area, species):
     return False
 
 
-def _boxed_peers(document, player):
-    from server.gen1_acquisition_runtime import _mon_info
-    from server.gen1_party_codec import PartyCodec
-    from server.gen1_retirement_runtime import completed
-
-    peer = "b" if player == "a" else "a"
-    codec = PartyCodec(
-        document["components"][INITIAL][peer]["metadata"]["gen1_metadata"]["cartridge"]["variant"]
-    )
-    result = {}
-    for row in document["components"].get(ACQUISITIONS, {}).get(peer, {}).get("settled", []):
-        if (
-            row["fact"]["kind"] != "capture"
-            or row["rule"] != "boxed_deferred"
-            or completed(document, peer, row["acquisition_id"])
-        ):
-            continue
-        if row["area"] in result:
-            raise JournalError("multiple unresolved boxed counterparts in one area")
-        mon, _ = _mon_info(codec, row["fact"], bytes.fromhex(row["fact"]["blob_hex"]))
-        member = document["identities"]["members"][row["member_id"]]["current"]
-        if member["player"] != peer:
-            raise JournalError("boxed counterpart transferred before disposition")
-        mon.key = member["key"]
-        result[row["area"]] = mon
-    return result
-
-
 def retirement_source(document, target_player, obligation_id):
     _player(target_player)
     _identifier(obligation_id)
@@ -288,18 +260,6 @@ def complete_retirement(stage, document, target_player, obligation_id, receipt_r
     if blockers.get(source["hold_id"]) != REASON:
         raise JournalError("no-catch retirement lost its exact hold")
     del blockers[source["hold_id"]]
-    from server.gen1_acquisition_runtime import CONSTRAINT_REASON, constraint_id
-
-    captured = next(
-        row
-        for row in document["components"][ACQUISITIONS][target_player]["settled"]
-        if row["acquisition_id"] == source["acquisition_id"]
-    )
-    if captured["rule"] == "boxed_deferred" and captured["violation"] is None:
-        original = constraint_id(target_player, source["acquisition_id"])
-        if blockers.get(original) != CONSTRAINT_REASON:
-            raise JournalError("boxed retirement lost its source acquisition hold")
-        del blockers[original]
     stage.barrier.set_blockers(blockers)
     value["phase"] = "complete"
     value["receipt_ref"] = copy.deepcopy(receipt_ref)
@@ -344,7 +304,7 @@ def _resolve(runtime, stage, document, component, event):
                 begin["species_id"],
                 begin["level"],
                 activated=row["activated"],
-                proved_peers=_boxed_peers(document, player),
+                proved_peers=None,
                 decision=no_catch_rules.decision,
             )
             at = outcome.pop("at") or at
@@ -738,26 +698,6 @@ def verify_journal(journal, state):
                 matches = [item for item in actual if item["source_ref"]["index"] == ref["index"]]
                 if matches != [source]:
                     raise JournalError("wild encounter source differs from its checked receipt")
-                if event.request.get("event") == "frame_complete":
-                    from server.gen1_frame_acquisitions import verify_frames
-                    from server.gen1_frame_journal import retained_return
-
-                    anchor = document["components"]["gen1-frame-progress"][player]["ledger"][
-                        "anchor"
-                    ]
-                    closed = retained_return(
-                        journal, player, event.result.get("closed_frame_digest"), anchor
-                    )
-                    if closed["receipt"] != event.request["receipt"]:
-                        raise JournalError("wild source differs from its retained frame receipt")
-                    verify_frames(
-                        journal,
-                        player,
-                        anchor,
-                        closed,
-                        [receipts_of(event.request)[ref["index"]]],
-                        [source],
-                    )
             if row["activated"] != _activation(document, player, row["begin"]["fact"]["frame"]):
                 raise JournalError("encounter ball gate differs from its source ordering")
     for value in component["obligations"].values():

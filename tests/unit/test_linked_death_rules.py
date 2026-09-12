@@ -1,43 +1,24 @@
-import pytest
-
-from server.linked_death_rules import record_linked_death, update_run_over
-from server.party_grant_rules import record_exempt_party_grant
-from server.protocol_journal import JournalError
-from server.state import MonInfo, LinkStatus
-from tests.unit.test_party_grant_rules import staged
+"""The one rule helper left beside the engine: a run is over once every pair is dead."""
+from server.linked_death_rules import update_run_over
+from server.state import LinkStatus, MonInfo
+from tests.unit.rules_fixture import seed_link_half, staged
 
 
-@pytest.mark.parametrize('command',['force_faint','force_explode'])
-def test_verified_death_only_queues_the_selected_physical_effect_and_retains_memorial_work(tmp_path,command):
-    state=staged(tmp_path);a=MonInfo(key='same',level=5,species=25);b=MonInfo(key='same',level=5,species=25)
-    record_exempt_party_grant(state,'a','gift',a);record_exempt_party_grant(state,'b','gift',b,peer=a)
-    before=state.document()
-    assert record_linked_death(state,'a','same',cause='battle',level=6,at='2026-09-08T00:00:00+00:00',partner_command=command) is None
-    assert state.document()==before
-    state.pokeballs_obtained['a']=True
-    effect=record_linked_death(state,'a','same',cause='poison',level=6,at='2026-09-08T00:00:00+00:00',partner_command=command)
-    assert effect['player']=='b' and effect['command']['cmd']==command
-    assert state.links[0].status==LinkStatus.DEAD and state.links[0].cause=='poison'
-    assert not any(state.queued_commands.values()) and all(state.pending_memorials.values())
-    assert not state.run_over
-    state.pokeballs_obtained['b']=True;update_run_over(state);assert state.run_over
-    assert record_linked_death(state,'b','same',cause='battle',level=5,at='2026-09-08T00:00:00+00:00',partner_command=command) is None
-
-
-def test_unlinked_active_death_refuses_before_mutation(tmp_path):
-    state=staged(tmp_path);state.pokeballs_obtained['a']=True;before=state.document()
-    with pytest.raises(JournalError):
-        record_linked_death(state,'a','unknown',cause='battle',level=5,at='2026-09-08T00:00:00+00:00',partner_command='force_faint')
-    assert state.document()==before
-
-
-def test_ambiguous_same_player_key_refuses_without_selecting_a_pair(tmp_path):
-    from server.state import LinkEntry
-    state=staged(tmp_path);state.pokeballs_obtained['a']=True
-    for area in ('first','second'):
-        state.links.append(LinkEntry(area_id=area,a=MonInfo(key='same',species=25,level=5),
-            b=MonInfo(key=area,species=25,level=5),status=LinkStatus.ALIVE))
-    before=state.document()
-    with pytest.raises(JournalError,match='ambiguous'):
-        record_linked_death(state,'a','same',cause='battle',level=5,at='2026-09-08T00:00:00+00:00',partner_command='force_faint')
-    assert state.document()==before
+def test_run_over_needs_both_balls_no_pending_half_and_no_live_pair(tmp_path):
+    state = staged(tmp_path)
+    a = MonInfo(key="1111:0000:19", level=5, species=25)
+    b = MonInfo(key="2222:0000:07", level=5, species=7)
+    assert seed_link_half(state, "a", "gift", a) is None and state.pending_captures["gift"]["a"].key == a.key
+    link = seed_link_half(state, "b", "gift", b)
+    assert link.status == LinkStatus.ALIVE and not state.pending_captures and not any(state.queued_commands.values())
+    assert state.party_keys == {"a": {a.key}, "b": {b.key}} and not any(state.pokeballs_obtained.values())
+    state.pokeballs_obtained = {"a": True, "b": True}
+    update_run_over(state)
+    assert not state.run_over  # a live pair keeps the run going
+    link.status = LinkStatus.DEAD
+    state.pokeballs_obtained["b"] = False
+    update_run_over(state)
+    assert not state.run_over  # an unproved ball is not a finished run
+    state.pokeballs_obtained["b"] = True
+    update_run_over(state)
+    assert state.run_over

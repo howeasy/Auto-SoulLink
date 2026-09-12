@@ -7,7 +7,13 @@ import pytest
 
 from server.gen1_full_save import SYMBOLS, image
 from server.gen1_memorial import SCHEMA
-from server.gen1_memorial_runtime import COMPONENT, EVIDENCE, OBSERVE, verify_operation, expand_entry
+from server.gen1_memorial_runtime import (
+    COMPONENT,
+    EVIDENCE,
+    OBSERVE,
+    expand_entry,
+    verify_operation,
+)
 from server.gen1_run_config import create_runtime, open_runtime
 from server.protocol import digest
 from server.protocol_journal import JournalError
@@ -340,11 +346,12 @@ def test_sql_failure_rolls_back_memorial_state_and_receipt_together(tmp_path, ph
 
 def test_ten_paired_deaths_keep_active_state_bounded_and_audit_archived_evidence(tmp_path):
     import json
-    from server.gen1_starter_settlement import context, mon_info, cache_party
-    from server.identity_registry import IdentityWitness
-    from server.party_grant_rules import record_exempt_party_grant
-    from server.gen1_party_codec import PartyCodec
+
     from server.gen1_memorial_runtime import COMPLETED
+    from server.gen1_party_codec import PartyCodec
+    from server.gen1_starter_settlement import cache_party, context, mon_info
+    from server.identity_registry import IdentityWitness
+    from tests.unit.rules_fixture import seed_link_half
     from tests.unit.test_gen1_party_codec import make_blob
     runtime=create_runtime(tmp_path,contract('yellow','yellow'))
     try:
@@ -353,13 +360,13 @@ def test_ten_paired_deaths_keep_active_state_bounded_and_audit_archived_evidence
         for index in range(10):
             if index:
                 stage=runtime.state();document=stage.document();initials=document['components']['gen1-initial-observations']
-                members=[];peer=None
+                members=[]
                 for player in ('a','b'):
                     mon=PartyCodec('yellow').validate_blob(make_blob(PartyCodec('yellow'),dv=0x2000+index,otid=0))
                     identifier=secrets.token_hex(16)
                     members.append(stage.identities.acquire(identifier,identifier,IdentityWitness(context(initials[player],player),mon.key,mon.sha256,1))['member_id'])
-                    record_exempt_party_grant(stage.rules,player,'fixture_memorial_'+str(index),mon_info(mon),peer=peer)
-                    cache_party(stage.rules,player,mon);peer=mon_info(mon)
+                    seed_link_half(stage.rules,player,'fixture_memorial_'+str(index),mon_info(mon))
+                    cache_party(stage.rules,player,mon)
                 stage.identities.create_link('b',secrets.token_hex(16),members)
                 stage.barrier.set_history(stage.history_digest())
                 runtime.journal.commit('a',secrets.token_hex(16),{'event':'explicit-next-pair-growth-fixture','index':index},

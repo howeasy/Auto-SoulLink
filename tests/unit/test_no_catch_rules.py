@@ -1,4 +1,4 @@
-"""Shared no-catch policy parity against the existing coordinator's clause rules."""
+"""The no-catch outcome names stay the live coordinator's clause decisions; the engine records them."""
 
 import copy
 
@@ -26,7 +26,7 @@ from tests.unit.test_gen1_wild_encounter import runtime  # noqa: F401
         ("peer_pending_other_area", "species_clause"),
     ],
 )
-def test_staged_policy_preserves_legacy_area_pending_and_species_decisions(runtime, case, outcome):  # noqa: F811
+def test_decision_names_the_legacy_area_pending_and_species_outcome_without_touching_state(runtime, case, outcome):  # noqa: F811
     base = runtime.state().rules
     base.pokeballs_obtained = {"a": True, "b": True}
     area = "pallet_town" if case == "gift" else "route_1"
@@ -53,23 +53,9 @@ def test_staged_policy_preserves_legacy_area_pending_and_species_decisions(runti
         base.pending_captures[area if case.endswith("same_area") else "route_2"] = {
             "b": MonInfo(key="peer", species=26, level=5)
         }
-    legacy, modern = copy.deepcopy(base), copy.deepcopy(base)
+    before = base.document()
+    assert no_catch_rules.decision(base, "a", area, 25, activated=True) == outcome
+    assert base.document() == before  # a pure name: the shared engine owns the state change
+    legacy = copy.deepcopy(base)
     legacy._handle_no_catch("a", {"area_id": area, "species_id": 25, "level": 7})
-    result = no_catch_rules.record(
-        modern, "a", area, 25, 7, activated=True, occurred_at="2026-09-08T00:00:00+00:00"
-    )
-    assert result["outcome"] == outcome
-    assert legacy.area_states == modern.area_states
-    assert legacy.pending_captures == modern.pending_captures
-    assert legacy.retry_areas == modern.retry_areas
-    assert legacy.dupe_notified_areas == modern.dupe_notified_areas
-    assert legacy.party_keys == modern.party_keys
-    assert [
-        (link.area_id, link.a, link.b, link.encounter_a, link.encounter_b, link.status, link.cause)
-        for link in legacy.links
-    ] == [
-        (link.area_id, link.a, link.b, link.encounter_a, link.encounter_b, link.status, link.cause)
-        for link in modern.links
-    ]
-    assert not any(modern.queued_commands.values())
-    assert (result["retire"] is not None) == (case == "partner_capture")
+    assert (legacy.area_states.get(area) == AreaStatus.DEAD_ZONE) == (outcome == "dead_zone")
