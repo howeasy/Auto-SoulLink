@@ -249,6 +249,8 @@ def run_free_pair(variants):
                 assert [ph["name"] for ph in phases] == [ph["name"] for ph in PHASES]
                 for ph, planned in zip(phases, PHASES, strict=True):
                     assert ph["frames"] >= planned["frames"] and ph["seconds"] > 0
+                    assert ph["active"]["injected"] and ph["active"]["restored"]
+                    assert ph["active"]["original"] != ph["active"]["replacement"]
                     target = TARGET_FPS * planned["speed"] / 100
                     assert ph["fps"] >= target * MIN_FRACTION, ph
                     assert ph["windows"] and all(window["fps"] >= target * MIN_FRACTION for window in ph["windows"]), ph
@@ -282,11 +284,11 @@ def run_free_pair(variants):
                 measured_publications = sum(ph["diagnostics"]["after"]["inventory_publications"]
                                             - ph["diagnostics"]["before"]["inventory_publications"] for ph in phases)
                 assert measured_checks == sum(ph["frames"] for ph in PHASES) // 30
-                assert measured_publications == 0
+                assert measured_publications >= 4
                 dirty = result["dirty_probe"]
                 assert dirty["schema"] == "rby-inventory-dirty-negative-control-v1"
                 assert dirty["phase"] == "restored" and dirty["after"] - dirty["before"] == 2
-                assert diagnostics["inventory_publications"] == len(heartbeats) == 2
+                assert diagnostics["inventory_publications"] == len(heartbeats) == measured_publications + 2
                 per_phase = {}
                 for ph in phases:
                     inside = [row for row in commits if ph["began"]["frame"] <= row["frame"] <= ph["ended"]["frame"]]

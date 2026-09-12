@@ -75,6 +75,7 @@ local function begin_phase(status)
     phase.began={frame=emu.framecount(),clock=clock(),pending_events=status.runtime.pending_events}
     phase.windows=JSON.array();phase.window={frame=emu.framecount(),clock=clock()}
     phase.diagnostics_before=status.observation_diagnostics
+    phase.active={injected=false,restored=false,address=assert(symbols.wPartyDataStart)+403}
     return true
 end
 local function end_phase(status)
@@ -82,7 +83,7 @@ local function end_phase(status)
     local frames,seconds=ended.frame-phase.began.frame,ended.clock-phase.began.clock
     phases[#phases+1]={name=phase.name,speed=phase.speed,planned_frames=phase.frames,frames=frames,seconds=seconds,
         fps=frames/seconds,began=phase.began,ended=ended,windows=phase.windows,
-        diagnostics={before=phase.diagnostics_before,after=status.observation_diagnostics}}
+        diagnostics={before=phase.diagnostics_before,after=status.observation_diagnostics},active=phase.active}
 end
 emu.yield=function()
     -- Held phases yield here, as the credit-loop gate does: normal inputs before the hold,
@@ -118,6 +119,19 @@ emu.frameadvance=function()
     else
         local buttons={};for key,value in pairs(idle)do buttons[key]=value end
         buttons.Right=emu.framecount()-loop_started.frame<16;joypad.set(buttons)
+        if phase then
+            local offset=emu.framecount()-phase.began.frame
+            if not phase.active.injected and offset>=90 then
+                phase.active.original=memory.read_u8(phase.active.address,"System Bus")
+                phase.active.replacement=(phase.active.original+1)%256
+                phase.active.injected_frame=emu.framecount()
+                memory.write_u8(phase.active.address,phase.active.replacement,"System Bus")
+                phase.active.injected=true
+            elseif phase.active.injected and not phase.active.restored and offset>=180 then
+                memory.write_u8(phase.active.address,phase.active.original,"System Bus")
+                phase.active.restored_frame=emu.framecount();phase.active.restored=true
+            end
+        end
         if status then
             if phase and emu.framecount()-phase.window.frame>=WINDOW then
                 local now=clock();local frames=emu.framecount()-phase.window.frame
