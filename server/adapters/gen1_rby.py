@@ -397,6 +397,11 @@ class Gen1Adapter(GameAdapter):
     # they move to the gift namespace and keep exactly the meaning they had; new records use
     # the bare id for rod captures and gift_<id> for grants, as every other wild area does.
     _RECLASSIFIED_GIFT_AREAS = frozenset({"pallet_town", "celadon_city", "cinnabar_island"})
+    # Bump when an area is reclassified again; a document without this exact token is legacy.
+    _AREA_POLICY = "gen1-areas-v2-fishing-towns"
+
+    def area_policy(self) -> str | None:
+        return self._AREA_POLICY
 
     def persisted_area(self, area_id: str) -> str:
         if area_id in self._RECLASSIFIED_GIFT_AREAS:

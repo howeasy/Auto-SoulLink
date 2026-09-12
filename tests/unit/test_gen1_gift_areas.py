@@ -199,12 +199,8 @@ def test_no_lua_gift_area_is_a_wild_encounter_area():
 
 # ── persisted state across the 2026-09-12 reclassification ──────────────────────────────
 
-def test_records_saved_under_a_reclassified_gift_area_keep_their_gift_meaning_on_reload(tmp_path):
-    """pallet_town, celadon_city and cinnabar_island were gift areas and are fishing areas
-    now. Everything a run persisted under those ids was gift-classified (that was the
-    defect), so a reload moves them into the gift namespace: the fossil pair stays a gift
-    pair, a pending fossil cannot pair with a rod catch, and the town is free to become a
-    real encounter area for the rest of the run."""
+def _legacy_document(tmp_path):
+    """A links.json written BEFORE the reclassification: no area_policy token."""
     from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo, SoulLinkState
     state = SoulLinkState(data_dir=str(tmp_path), adapter=Gen1Adapter())
     fossil = LinkEntry(area_id="cinnabar_island",
@@ -217,7 +213,81 @@ def test_records_saved_under_a_reclassified_gift_area_keep_their_gift_meaning_on
     state.area_states["pallet_town"] = AreaStatus.PENDING_B
     state.pending_captures["pallet_town"] = {"a": MonInfo(key="EEFF:30B8:99", level=5, species=1)}
     state.area_states["route_1"] = AreaStatus.LINKED
+    document = state.to_document()
+    assert document.pop("area_policy") == "gen1-areas-v2-fishing-towns"
+    with open(tmp_path / "links.json", "w", encoding="utf-8") as f:
+        json.dump(document, f)
+
+
+def test_a_new_fishing_record_stays_bare_across_repeated_reloads(tmp_path):
+    """The migration must never touch a record written under the current policy: a rod catch
+    in Cinnabar is saved under the bare id and stays there through any number of reloads."""
+    from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo, SoulLinkState
+    state = SoulLinkState(data_dir=str(tmp_path), adapter=Gen1Adapter())
+    catch = LinkEntry(area_id="cinnabar_island",
+                      a=MonInfo(key="AABB:30B8:81", level=15, species=129),
+                      b=MonInfo(key="CCDD:7B0B:81", level=15, species=129),
+                      status=LinkStatus.ALIVE)
+    state.links.append(catch)
+    state._index_entry(catch)
+    state.area_states["cinnabar_island"] = AreaStatus.LINKED
+    state.area_states["pallet_town"] = AreaStatus.PENDING_B
+    state.pending_captures["pallet_town"] = {"a": MonInfo(key="EEFF:30B8:81", level=5, species=129)}
     state._save()
+    with open(tmp_path / "links.json", encoding="utf-8") as f:
+        assert json.load(f)["area_policy"] == "gen1-areas-v2-fishing-towns"
+    for _ in range(3):
+        reloaded = SoulLinkState.load(data_dir=str(tmp_path), adapter=Gen1Adapter())
+        assert [link.area_id for link in reloaded.links] == ["cinnabar_island"]
+        assert reloaded.area_states == {"cinnabar_island": AreaStatus.LINKED,
+                                        "pallet_town": AreaStatus.PENDING_B}
+        assert set(reloaded.pending_captures) == {"pallet_town"}
+        reloaded._save()
+
+
+def test_a_legacy_document_is_migrated_exactly_once(tmp_path):
+    """No token: migrate. The next save stamps the token, so the migrated ids (now in the
+    gift namespace) and any new bare fishing record both survive every later reload."""
+    from server.state import AreaStatus, LinkEntry, LinkStatus, MonInfo, SoulLinkState
+    _legacy_document(tmp_path)
+    reloaded = SoulLinkState.load(data_dir=str(tmp_path), adapter=Gen1Adapter())
+    assert [link.area_id for link in reloaded.links] == ["gift_cinnabar_island"]
+    catch = LinkEntry(area_id="cinnabar_island",
+                      a=MonInfo(key="AABB:30B8:81", level=15, species=129),
+                      b=MonInfo(key="CCDD:7B0B:81", level=15, species=129),
+                      status=LinkStatus.ALIVE)
+    reloaded.links.append(catch)
+    reloaded._index_entry(catch)
+    reloaded.area_states["cinnabar_island"] = AreaStatus.LINKED
+    reloaded._save()
+    for _ in range(2):
+        again = SoulLinkState.load(data_dir=str(tmp_path), adapter=Gen1Adapter())
+        assert sorted(link.area_id for link in again.links) == ["cinnabar_island", "gift_cinnabar_island"]
+        assert again.area_states["cinnabar_island"] == AreaStatus.LINKED
+        assert again.area_states["gift_cinnabar_island"] == AreaStatus.LINKED
+        again._save()
+
+
+def test_a_document_under_a_different_token_is_treated_as_legacy(tmp_path):
+    from server.state import SoulLinkState
+    _legacy_document(tmp_path)
+    with open(tmp_path / "links.json", encoding="utf-8") as f:
+        document = json.load(f)
+    document["area_policy"] = "gen1-areas-v1"
+    with open(tmp_path / "links.json", "w", encoding="utf-8") as f:
+        json.dump(document, f)
+    reloaded = SoulLinkState.load(data_dir=str(tmp_path), adapter=Gen1Adapter())
+    assert [link.area_id for link in reloaded.links] == ["gift_cinnabar_island"]
+
+
+def test_records_saved_under_a_reclassified_gift_area_keep_their_gift_meaning_on_reload(tmp_path):
+    """pallet_town, celadon_city and cinnabar_island were gift areas and are fishing areas
+    now. Everything a run persisted under those ids was gift-classified (that was the
+    defect), so a reload moves them into the gift namespace: the fossil pair stays a gift
+    pair, a pending fossil cannot pair with a rod catch, and the town is free to become a
+    real encounter area for the rest of the run."""
+    from server.state import AreaStatus, SoulLinkState
+    _legacy_document(tmp_path)
 
     reloaded = SoulLinkState.load(data_dir=str(tmp_path), adapter=Gen1Adapter())
     assert [link.area_id for link in reloaded.links] == ["gift_cinnabar_island"]

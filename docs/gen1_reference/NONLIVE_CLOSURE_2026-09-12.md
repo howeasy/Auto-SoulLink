@@ -68,12 +68,15 @@ Data defects the checks found and fixed:
 - The dashboard looked encounter icons up on the first word of the method, so no rod or Rock Smash method
   in any generation ever had its icon.
 
-Persisted state across the gift-area reclassification: everything a run saved under `pallet_town`,
-`celadon_city` or `cinnabar_island` was gift-classified (that was the defect), so `SoulLinkState.load` passes
-every persisted area id through the adapter's `persisted_area` hook and Gen 1 moves those three into the gift
-namespace (`gift_cinnabar_island` keeps the fossil pair a gift pair; a pending fossil cannot pair with a rod
-catch; the town is a real encounter area from then on). Shared code calls the hook only; identity elsewhere.
-`tools/gen_gen1_area_map.py --check` fails on any fishable map without an area (no note path). The Super Rod
+Persisted state across the gift-area reclassification: every saved state document now carries the
+adapter's `area_policy` token (`gen1-areas-v2-fishing-towns`). A document without that exact token was written
+under the old classification, where everything under `pallet_town`, `celadon_city` or `cinnabar_island` was
+gift-classified (the defect), so `SoulLinkState.load` passes its link, pending-capture and area-state ids through
+the adapter's `persisted_area` exactly once (`gift_cinnabar_island` keeps the fossil pair a gift pair; a pending
+fossil cannot pair with a rod catch); the next save stamps the token. A document carrying the current token is
+loaded as is, so a rod catch saved under the bare id stays bare across any number of reloads (round-trip tests:
+new record x3 reloads, legacy migrated once then a new bare record survives, a foreign token is legacy). Shared
+code calls the two hooks only. `tools/gen_gen1_area_map.py --check` fails on any fishable map without an area (no note path). The Super Rod
 labels are derived, not hand-typed: a per-title test asserts that every area holds exactly one labelled row per
 fishing map, each label the wild floor or the map constant's tail, so a future map or decomp change cannot
 silently collapse rows. Ruff on the lane's files is clean under the default ruleset; the six findings left in
