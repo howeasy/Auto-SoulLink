@@ -1,4 +1,9 @@
-"""Pin the normal New Game entry and the return from Oak's initialization."""
+"""Pin the normal New Game entry and the return from Oak's initialization, and the CONTINUE path.
+
+CONTINUE (a battery-save boot) is `MainMenu -> predef TryLoadSaveFile` (before any choice: it
+fills the save preview, so its entry/return alone only proves SaveRAM loaded) then
+`.choseContinue -> .pressedA -> SpecialEnterMap` (the selected path). Five sites pin it.
+"""
 
 import argparse
 import hashlib
@@ -10,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 try:
     from gen_gen1_acquisition_sources import TITLES, symbols
-    from gen_gen1_capture_sites import site
+    from gen_gen1_capture_sites import operand, site
     from gen_gen1_engine_signals import lua
     from verify_canonical_sources import verify
 finally:
@@ -59,6 +64,33 @@ def build():
             "InitializeEmptyList:\n\txor a ; count\n\tld [hli], a\n\tdec a ; terminator\n\tld [hl], a\n\tret"
             in init
         )
+        save = (repo / "engine/menus/save.asm").read_text(encoding="utf-8")
+        assert "\tpredef TryLoadSaveFile\n" in menu and "\tjr z, .choseContinue\n" in menu
+        assert "TryLoadSaveFile:\n\tcall ClearScreen\n\tcall LoadFontTilePatterns\n" in save
+        assert "\tld a, $2 ; good checksum\n\tjr .done\n" in save
+        assert "\tld a, $1 ; bad checksum\n.done\n\tld [wSaveFileStatus], a\n\tret\n" in save
+        assert ".choseContinue\n\tcall DisplayContinueGameInfo\n\tld hl, wCurrentMapScriptFlags\n" in menu
+        assert "\tjr nz, .pressedA\n" in menu
+        assert ".pressedA\n\tcall GBPalWhiteOutWithDelay3\n\tcall ClearScreen\n" in menu
+        assert "\tjp z, SpecialEnterMap\n" in menu and "\tjp nz, SpecialEnterMap\n" in menu
+        assert ("SpecialEnterMap::\n\txor a\n\tldh [hJoyPressed], a\n\tldh [hJoyHeld], a\n\tldh [hJoy5], a\n"
+                "\tld [wCableClubDestinationMap], a\n") in menu
+        continue_sites = {}
+        for kind, label, length, expected in (
+            ("load", "TryLoadSaveFile", 6, b"\xcd" + operand(syms, "ClearScreen") + b"\xcd" + operand(syms, "LoadFontTilePatterns")),
+            ("loaded", "TryLoadSaveFile.done", 4, b"\xea" + operand(syms, "wSaveFileStatus") + b"\xc9"),
+            ("chose", "MainMenu.choseContinue", 6,
+             b"\xcd" + operand(syms, "DisplayContinueGameInfo") + b"\x21" + operand(syms, "wCurrentMapScriptFlags")),
+            ("pressed", "MainMenu.pressedA", 6, b"\xcd" + operand(syms, "GBPalWhiteOutWithDelay3") + b"\xcd" + operand(syms, "ClearScreen")),
+            ("enter", "SpecialEnterMap", 10, b"\xaf\xe0" + operand(syms, "hJoyPressed")[:1] + b"\xe0" + operand(syms, "hJoyHeld")[:1]
+             + b"\xe0" + operand(syms, "hJoy5")[:1] + b"\xea" + operand(syms, "wCableClubDestinationMap")),
+        ):
+            site_bank, cpu = syms[label]
+            row = site(rom, label, site_bank, cpu, length)
+            assert bytes.fromhex(row["expected_hex"]) == expected, label
+            continue_sites[kind] = row
+        assert continue_sites["load"]["bank"] == continue_sites["loaded"]["bank"] != 0
+        assert {continue_sites[k]["bank"] for k in ("chose", "pressed", "enter")} == {syms["MainMenu"][0]}
         bank, begin = syms["StartNewGame"]
         call_bank, call = syms["StartNewGameDebug"]
         assert call_bank == bank and call == begin + 5 and syms["OakSpeech"][0] == bank
@@ -90,6 +122,7 @@ def build():
                 for name, (label, length) in FIELDS.items()
             },
             "sites": {"begin": entry, "end": end},
+            "continue": {**continue_sites, "save_file_status": syms["wSaveFileStatus"][1]},
         }
     result["sha256"] = hashlib.sha256(
         json.dumps(result, sort_keys=True, separators=(",", ":")).encode()
@@ -112,7 +145,7 @@ def main():
     else:
         OUTPUT.write_text(encoded, encoding="utf-8", newline="\n")
         LUA.write_text(source, encoding="utf-8", newline="\n")
-    print("OK: normal New Game bootstrap sites for Red, Blue and Yellow")
+    print("OK: normal New Game and CONTINUE bootstrap sites for Red, Blue and Yellow")
 
 
 if __name__ == "__main__":

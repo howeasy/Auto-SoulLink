@@ -1,10 +1,48 @@
 {
   "schema": "rby-bootstrap-sites-v1",
-  "sha256": "e8b35f43f2429dd69a6e22a76b99958973b53c572da1780e5907f8624cc67551",
+  "sha256": "39c39101293bc503c3deb2533ce43c1750a0ae2264307d4e799a14cfb4d6b7ad",
   "titles": {
     "blue": {
       "bank_address": 65464,
       "clean_sha1": "d7037c83e1ae5b39bde3c30787637ba1d4c48ce2",
+      "continue": {
+        "chose": {
+          "address": 23474,
+          "bank": 1,
+          "expected_hex": "CDB55D2126D1",
+          "rom_offset": 23474,
+          "symbol": "MainMenu.choseContinue"
+        },
+        "enter": {
+          "address": 23903,
+          "bank": 1,
+          "expected_hex": "AFE0B3E0B4E0B5EA2DD7",
+          "rom_offset": 23903,
+          "symbol": "SpecialEnterMap"
+        },
+        "load": {
+          "address": 30184,
+          "bank": 28,
+          "expected_hex": "CD0F19CD8036",
+          "rom_offset": 472552,
+          "symbol": "TryLoadSaveFile"
+        },
+        "loaded": {
+          "address": 30234,
+          "bank": 28,
+          "expected_hex": "EA88D0C9",
+          "rom_offset": 472602,
+          "symbol": "TryLoadSaveFile.done"
+        },
+        "pressed": {
+          "address": 23505,
+          "bank": 1,
+          "expected_hex": "CDD43DCD0F19",
+          "rom_offset": 23505,
+          "symbol": "MainMenu.pressedA"
+        },
+        "save_file_status": 53384
+      },
       "fields": {
         "box": {
           "address": 55936,
@@ -56,6 +94,44 @@
     "red": {
       "bank_address": 65464,
       "clean_sha1": "ea9bcae617fdf159b045185467ae58b2e4a48b9a",
+      "continue": {
+        "chose": {
+          "address": 23474,
+          "bank": 1,
+          "expected_hex": "CDB55D2126D1",
+          "rom_offset": 23474,
+          "symbol": "MainMenu.choseContinue"
+        },
+        "enter": {
+          "address": 23903,
+          "bank": 1,
+          "expected_hex": "AFE0B3E0B4E0B5EA2DD7",
+          "rom_offset": 23903,
+          "symbol": "SpecialEnterMap"
+        },
+        "load": {
+          "address": 30184,
+          "bank": 28,
+          "expected_hex": "CD0F19CD8036",
+          "rom_offset": 472552,
+          "symbol": "TryLoadSaveFile"
+        },
+        "loaded": {
+          "address": 30234,
+          "bank": 28,
+          "expected_hex": "EA88D0C9",
+          "rom_offset": 472602,
+          "symbol": "TryLoadSaveFile.done"
+        },
+        "pressed": {
+          "address": 23505,
+          "bank": 1,
+          "expected_hex": "CDD43DCD0F19",
+          "rom_offset": 23505,
+          "symbol": "MainMenu.pressedA"
+        },
+        "save_file_status": 53384
+      },
       "fields": {
         "box": {
           "address": 55936,
@@ -107,6 +183,44 @@
     "yellow": {
       "bank_address": 65464,
       "clean_sha1": "cc7d03262ebfaf2f06772c1a480c7d9d5f4a38e1",
+      "continue": {
+        "chose": {
+          "address": 23652,
+          "bank": 1,
+          "expected_hex": "CD1F5D2125D1",
+          "rom_offset": 23652,
+          "symbol": "MainMenu.choseContinue"
+        },
+        "enter": {
+          "address": 23780,
+          "bank": 1,
+          "expected_hex": "AFE0B3E0B4E0B5EA2CD7",
+          "rom_offset": 23780,
+          "symbol": "SpecialEnterMap"
+        },
+        "load": {
+          "address": 31065,
+          "bank": 28,
+          "expected_hex": "CDDD16CD8336",
+          "rom_offset": 473433,
+          "symbol": "TryLoadSaveFile"
+        },
+        "loaded": {
+          "address": 31115,
+          "bank": 28,
+          "expected_hex": "EA87D0C9",
+          "rom_offset": 473483,
+          "symbol": "TryLoadSaveFile.done"
+        },
+        "pressed": {
+          "address": 23683,
+          "bank": 1,
+          "expected_hex": "CDD83DCDDD16",
+          "rom_offset": 23683,
+          "symbol": "MainMenu.pressedA"
+        },
+        "save_file_status": 53383
+      },
       "fields": {
         "box": {
           "address": 55935,

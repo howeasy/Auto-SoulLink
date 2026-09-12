@@ -20,53 +20,21 @@ local G=dofile(ROOT.."/lua/tests/gatelib.lua")
 -- run_gb_gate.py locates the verdict file by this literal G.start(...) call.
 local t=G.start("probe_gen1_native_reboot",{no_boot=true})   -- verdict file exists from here on
 local mem=t.M
--- Boot witness sites (pret, per title). TryLoadSaveFile runs from MainMenu BEFORE any choice (it
--- fills the CONTINUE preview), so its entry/same-SP return proves only that SaveRAM loaded with a
--- good checksum; MainMenu.choseContinue -> MainMenu.pressedA -> SpecialEnterMap is the selected
--- CONTINUE path. All four are recorded; the overworld is then proven by walking (Lib.prove_booted).
-local SITES={"TryLoadSaveFile","MainMenu.choseContinue","MainMenu.pressedA","SpecialEnterMap"}
-local witness={sites={},entries={},returns={},save_file_status=nil}
+-- Boot witness: lua/gen1_continue_observer.lua on the source-pinned CONTINUE sites
+-- (data/games/gen1_rby/bootstrap_sites.json `continue`): TryLoadSaveFile entry/same-SP return with
+-- wSaveFileStatus 2, then MainMenu.choseContinue -> MainMenu.pressedA -> SpecialEnterMap, in order.
+-- The overworld is then proven by walking (G.prove_booted).
 local function hex(address,count,domain)
     local out={}
     for i=0,count-1 do out[#out+1]=string.format("%02X",memory.read_u8(address+i,domain or "System Bus")) end
     return table.concat(out)
 end
 local ok,why=pcall(function()
-    local source=manifest.variant=="yellow" and "pokeyellow" or "pokered"
-    local target=manifest.variant=="blue" and "pokeblue" or source
-    local symbols={}
-    local f=assert(io.open(ROOT.."/.cache/pret/"..source.."/"..target..".sym","r"))
-    for line in f:lines() do
-        local bank,addr,name=line:match("^(%x+):(%x+) (%S+)$")
-        if bank then symbols[name]={bank=tonumber(bank,16),addr=tonumber(addr,16)} end
-    end
-    f:close()
-    local status=assert(symbols.wSaveFileStatus,"wSaveFileStatus symbol")
-    local bank_reg=manifest.ram.hLoadedROMBank
-    for _,name in ipairs(SITES) do
-        local site=assert(symbols[name],name.." symbol");witness.sites[name]=site
-        local return_hooks,pending={},0
-        event.on_bus_exec(function()
-            local bank=memory.read_u8(bank_reg,"System Bus")
-            if site.bank~=0 and bank~=site.bank then return end
-            local sp=emu.getregister("SP");local ret=memory.read_u8(sp,"System Bus")+256*memory.read_u8(sp+1,"System Bus")
-            witness.entries[#witness.entries+1]={site=name,frame=emu.framecount(),pc=emu.getregister("PC"),sp=sp,return_address=ret,bank=bank}
-            if name=="TryLoadSaveFile" then
-                pending=pending+1
-                -- The return address is the shared predef trampoline; count one return per entry, at the
-                -- entry SP+2, so later predefs returning through the same site are not mistaken for it.
-                if not return_hooks[ret] then
-                    return_hooks[ret]=event.on_bus_exec(function()
-                        if pending>0 and emu.getregister("SP")==sp+2 then
-                            pending=pending-1
-                            witness.returns[#witness.returns+1]={site=name,frame=emu.framecount(),pc=emu.getregister("PC"),sp=emu.getregister("SP"),
-                                save_file_status=memory.read_u8(status.addr,"System Bus")}
-                        end
-                    end,ret,"probe-return-"..name.."-"..ret,"System Bus")
-                end
-            end
-        end,site.addr,"probe-entry-"..name,"System Bus")
-    end
+    local Sites=require("gen1_bootstrap_sites")
+    local status_address=assert(Sites.titles[manifest.variant]["continue"].save_file_status)
+    local observer=require("gen1_continue_observer").new({variant=manifest.variant,final_sha1=manifest.final_sha1,
+        owned=function()return {context_generation=string.rep("0",32),physical_instance=string.rep("0",32)} end,
+        held=function()return true end})   -- read-only probe: no admission, no writer; publication is local
     local booted=G.prove_booted(mem,"gen1_rby",t.step,t.hold)
     t.check("booted into the overworld from the killed SaveRAM",booted,"frame "..t.frame)
     for _=1,180 do if mem.isPartyWriteSafe() then break end;t.step({}) end
@@ -81,10 +49,10 @@ local ok,why=pcall(function()
     local save_path=os.getenv("SLINK_GATE_SAVERAM")
     local sf=assert(io.open(save_path,"rb"));local file=sf:read("*a");sf:close()
     local file_hex={};for i=1,#file do file_hex[#file_hex+1]=string.format("%02X",file:byte(i)) end
-    witness.save_file_status=memory.read_u8(status.addr,"System Bus")
-    local seen={};for _,e in ipairs(witness.entries) do seen[e.site]=true end
-    for _,name in ipairs(SITES) do t.check("boot witness "..name,seen[name]) end
-    t.check("TryLoadSaveFile returned at the same SP",#witness.returns>=1)
+    local save_file_status=memory.read_u8(status_address,"System Bus")
+    local witness=observer.peek();local state=observer.status()
+    t.check("ordered CONTINUE witness (load -> loaded status 2 -> chose -> pressed -> enter)",witness~=nil,state.failed)
+    observer.close()
     publish("reboot",{
         frame=emu.framecount(),pc=emu.getregister("PC"),sp=emu.getregister("SP"),
         booted=booted,write_safe=mem.isPartyWriteSafe(),party=party or JSON.null,party_error=party_error or JSON.null,
@@ -92,7 +60,7 @@ local ok,why=pcall(function()
         overlay_hex=overlay,backup_hex=backup,
         save_region_hex=cart:sub(region.address*2+1,(region.address+region.length)*2),
         cart_hex=cart,wram_hex=wram,save_file_hex=table.concat(file_hex),save_file_bytes=#file,save_path=save_path,
-        boot_witness=witness})
+        save_file_status=save_file_status,boot_witness=witness or JSON.null,observer_status=state})
 end)
 t.check("reboot observation recorded",ok,tostring(why))
 t.finish("native reboot probe")
