@@ -1,6 +1,6 @@
 # Gen 1 release checklist
 
-Rendered 2026-09-12 from `tests/gen1_release_requirements.json` (schema `1`) at worktree HEAD `ffcc118`. The manifest is the truth and `tools/verify_gen1_release.py` is the gate; this page is a render of the same rows so the status of the release fits on one screen. Regenerate with:
+Rendered 2026-09-12 from `tests/gen1_release_requirements.json` (schema `1`) at worktree HEAD `1f53928`. The manifest is the truth and `tools/verify_gen1_release.py` is the gate; this page is a render of the same rows so the status of the release fits on one screen. Regenerate with:
 
 ```bash
 python docs/gen1_reference/render_rc_checklist.py . docs/gen1_reference/RC_CHECKLIST.md
@@ -12,8 +12,8 @@ A row is `registered` when the manifest lists at least one reviewed executable p
 
 | Stage | Description | Registered | Missing | Closure plan |
 | --- | --- | ---: | ---: | --- |
-| `canonical-validation` | Canonical sources, constants, structures, addresses, ROM layouts and generated data | 10 | 2 | 7e umbrella registrations |
-| `unit-protocol` | Unit, server, admission, transaction, transport, DOM, route and API tests | 116 | 1 | 7e umbrella registrations |
+| `canonical-validation` | Canonical sources, constants, structures, addresses, ROM layouts and generated data | 12 | 0 | 7e umbrella registrations |
+| `unit-protocol` | Unit, server, admission, transaction, transport, DOM, route and API tests | 117 | 0 | 7e umbrella registrations |
 | `live-memory` | Clean R/B/Y memory transformations and write-safe state gates | 47 | 7 | 7e umbrella registrations |
 | `single-player` | Real single-player engine behavior and every mandatory gameplay axis | 0 | 60 | 7a natural-play drivers on the free-run loop (after handoff item 5) |
 | `live-duos` | Five live pairs: Red/Blue, Blue/Yellow, Yellow/Red, Red/Red and Yellow/Yellow | 7 | 5 | 7b existing duo runner on the production loop |
@@ -22,21 +22,21 @@ A row is `registered` when the manifest lists at least one reviewed executable p
 | `patch-browser` | Clean and approved UPR patching, genuine browser E2E and final artifact boots | 2 | 40 | 7d UPR categories per title, browser E2E (needs playwright), panel and SFX gates |
 | `trade-receptionist` | Full native receptionist and durable physical trade matrix | 13 | 55 | 7c register the passing nine-pair live matrix per title; add busy-queued and recovery rows |
 | `human-session` | Staged two-player human session after passing automation | 0 | 1 | 7g full gate run green, then the staged human session (--complete-human) |
-| **total** | 388 requirements, 10 stages | **215** | **173** | |
+| **total** | 388 requirements, 10 stages | **218** | **170** | |
 
 ## Requirements
 
 ### `canonical-validation`: Canonical sources, constants, structures, addresses, ROM layouts and generated data
 
-10 registered, 2 missing. Closure: 7e umbrella registrations.
+12 registered, 0 missing. Closure: 7e umbrella registrations.
 
 | # | Requirement | Description | Status | Proof (check, source) |
 | ---: | --- | --- | --- | --- |
 | 1 | `canonical.source-pins` | Exact pret source revisions, RGBDS tools, canonical builds and generated symbol artifact hashes | registered | `canonical-sources` (tools/verify_canonical_sources.py); `canonical-final` (tools/verify_canonical_sources.py) |
 | 2 | `canonical.profiles` | Every active WRAM/SRAM field in Red, Blue, Yellow and AP has source-backed verified classification or is intentionally nil | registered | `canonical-sources` (tools/verify_canonical_sources.py); `canonical-final` (tools/verify_canonical_sources.py); `profile-addresses` (tools/verify_profile_addresses.py) |
 | 3 | `canonical.constants` | All canonical capacities, layouts, names, PP/status encodings, endian rules, save geometry and checksum invariants | registered | `constants` (tools/verify_gen1_constants.py); `party-codec-data` (tools/gen_gen1_codec_data.py); `unit` (tests/unit/test_gen1_strict_profile_contracts.py); `unit` (tests/unit/test_gen1_party_codec.py); `unit` (tests/unit/test_gen1_sram_boxes.py) |
-| 4 | `canonical.rom-layout` | Every hook, free span, bank-qualified call, protected header byte, UPR pointer root and payload is source and byte validated | **MISSING PROOF** |  |
-| 5 | `canonical.generated-data` | Per-title maps/subareas, every encounter method, types, moves, trainers, items, gifts, statics and evolution families match canonical source | **MISSING PROOF** |  |
+| 4 | `canonical.rom-layout` | Every hook, free span, bank-qualified call, protected header byte, UPR pointer root and payload is source and byte validated | registered | `rom-layout` (tools/verify_gen1_rom_layout.py); `unit` (tests/unit/test_gen1_upr_roots.py) |
+| 5 | `canonical.generated-data` | Per-title maps/subareas, every encounter method, types, moves, trainers, items, gifts, statics and evolution families match canonical source | registered | `unit` (tests/unit/test_gen1_generated_maps_fishing.py); `unit` (tests/unit/test_gen1_rom_content.py); `unit` (tests/unit/test_gen1_canonical_moves_trainers_types.py); `unit` (tests/unit/test_gen1_items.py); `acquisition-source-census` (tools/gen_gen1_acquisition_sources.py); `unit` (tests/unit/test_gen1_static_receipt.py); `unit` (tests/unit/test_gen1_gift_areas.py); `unit` (tests/unit/test_gen1_rom_scan.py) |
 | 6 | `canonical.structure-limits` | Source-derived party/box/battle member offsets and sizes, name strides/terminators, transfer size, party/box/bag/move/max-level/stat limits, PP/status masks, SRAM box/checksum geometry and computed-stat byte order. Other multibyte codec/min-level enforcement remains in canonical.constants. | registered | `canonical-sources` (tools/verify_canonical_sources.py); `canonical-final` (tools/verify_canonical_sources.py); `constants` (tools/verify_gen1_constants.py) |
 | 7 | `canonical.current-patch-layout` | Existing R/B panel payload spans, source/byte anchors, bank-local calls, protected headers, full fresh-assembly payload equality, plus canonical RBY DelayFrame/receptionist dispatch and free-bank prerequisites. Does not establish final trade/ABI3 feature implementation. | registered | `canonical-sources` (tools/verify_canonical_sources.py); `canonical-final` (tools/verify_canonical_sources.py); `rom-layout` (tools/verify_gen1_rom_layout.py) |
 | 8 | `canonical.party-codec-facts` | Reproducible per-title party-codec facts from canonical builds, with no ROM distribution. | registered | `canonical-sources` (tools/verify_canonical_sources.py); `canonical-final` (tools/verify_canonical_sources.py); `party-codec-data` (tools/gen_gen1_codec_data.py) |
@@ -47,7 +47,7 @@ A row is `registered` when the manifest lists at least one reviewed executable p
 
 ### `unit-protocol`: Unit, server, admission, transaction, transport, DOM, route and API tests
 
-116 registered, 1 missing. Closure: 7e umbrella registrations.
+117 registered, 0 missing. Closure: 7e umbrella registrations.
 
 | # | Requirement | Description | Status | Proof (check, source) |
 | ---: | --- | --- | --- | --- |
@@ -56,7 +56,7 @@ A row is `registered` when the manifest lists at least one reviewed executable p
 | 3 | `protocol.admission` | Exact per-player final hash, profile, provenance, codec, capabilities, nonce and epoch gating before every semantic/write operation | registered | `unit` (tests/unit/test_gen1_sessions.py); `unit` (tests/unit/test_gen1_admission.py) |
 | 4 | `protocol.transactions` | Durable operation IDs, session sequences, ACK/NACK, zero-mutation validation and collision checks on every key-producing operation | registered | `unit` (tests/unit/test_protocol_journal.py); `unit` (tests/unit/test_gen1_sessions.py); `unit` (tests/unit/test_gen1_player_scoped_rules.py) |
 | 5 | `protocol.server` | Rule engine and persistence through actual server routes and APIs | registered | `unit` (tests/unit/test_gen1_runtime_server.py); `unit` (tests/unit/test_gen1_sessions.py); `unit` (tests/unit/test_manager_http_hardening.py) |
-| 6 | `protocol.dom` | Gen 1 accurate UI, safe JSON, stream active-run pins, capability-gated controls and variant labels | **MISSING PROOF** |  |
+| 6 | `protocol.dom` | Gen 1 accurate UI, safe JSON, stream active-run pins, capability-gated controls and variant labels | registered | `unit` (tests/unit/test_manager_stream_pin.py); `unit` (tests/unit/test_routes_smoke.py); `unit` (tests/unit/test_gen1_presentation.py); `unit` (tests/unit/test_http_server_security.py); `unit` (tests/unit/test_manager_xss.py); `unit` (tests/unit/test_rom_type_routing.py) |
 | 7 | `protocol.ap-regression` | Existing Archipelago behavior and gates remain safe; all inherited new R/B fields nil or independently verified | registered | `unit` (tests/unit/test_legacy_hello_admission.py); `unit` (tests/unit/test_runtime_boundary.py); `unit` (tests/unit/test_gen1_staged_state.py); `unit` (tests/unit/test_gen1_strict_profile_contracts.py) |
 | 8 | `release-gate.outcomes` | Actual pytest subprocess outcomes cannot disguise skip, collection skip, xfail, non-strict XPASS, failed teardown or deselection as success. | registered | `unit` (tests/unit/test_gen1_release_gate.py) |
 | 9 | `release-gate.inventory` | Missing expected tests, missing phases, stale evidence, deselected tests and quick-only diagnostics cannot produce release approval; legitimate individual passing assertions remain visible under failing lanes. | registered | `unit` (tests/unit/test_gen1_release_gate.py) |
