@@ -92,13 +92,21 @@ class GameRulesAdapter(ABC):
         """
         return False
 
+    def area_policy(self) -> str | None:
+        """A token naming how this adapter classifies areas, written into every saved state
+        document. A document that carries a different token (or none) was written under an
+        older classification and is passed through `persisted_area` exactly once, on the
+        load that first sees it; a document carrying the current token is loaded as is.
+        None means the adapter has never reclassified an area."""
+        return None
+
     def persisted_area(self, area_id: str) -> str:
-        """The area id a PERSISTED record should carry today.
+        """The area id a record saved under an OLDER area policy should carry today.
 
         An adapter that reclassifies an area (a former gift area that turns out to hold wild
         encounters) maps records saved under the old classification to the id that keeps
-        their old meaning, so a reload never changes what an existing link, pending capture
-        or area state was. Identity by default.
+        their old meaning. Called only for documents whose `area_policy` is not the current
+        one, so a record saved under the current policy is never touched. Identity by default.
         """
         return area_id
 

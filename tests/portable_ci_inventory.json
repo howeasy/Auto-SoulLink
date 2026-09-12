@@ -5130,7 +5130,10 @@
         "tests/unit/test_manager_stream_pin.py::test_with_no_running_run_the_overlay_explains_and_status_is_empty",
         "tests/unit/test_manager_stream_pin.py::test_without_a_pin_the_newest_running_run_is_the_stream_target",
         "tests/unit/test_manager_stream_pin.py::test_a_stopped_or_dead_run_cannot_be_pinned_and_the_pin_is_kept",
-        "tests/unit/test_gen1_gift_areas.py::test_records_saved_under_a_reclassified_gift_area_keep_their_gift_meaning_on_reload"
+        "tests/unit/test_gen1_gift_areas.py::test_records_saved_under_a_reclassified_gift_area_keep_their_gift_meaning_on_reload",
+        "tests/unit/test_gen1_gift_areas.py::test_a_new_fishing_record_stays_bare_across_repeated_reloads",
+        "tests/unit/test_gen1_gift_areas.py::test_a_legacy_document_is_migrated_exactly_once",
+        "tests/unit/test_gen1_gift_areas.py::test_a_document_under_a_different_token_is_treated_as_legacy"
       ]
     },
     {

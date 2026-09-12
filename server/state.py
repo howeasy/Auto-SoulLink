@@ -795,13 +795,21 @@ class SoulLinkState:
             from server.adapters import get_adapter
             self.adapter = get_adapter(saved_game_id, is_rr=self.is_rr, rom_type=data.get("rom_type", ""))
         self.rom_type = data.get("rom_type", "")
+        # A document written under an older area classification is migrated exactly once:
+        # its ids pass through the adapter's persisted_area, and the next save stamps the
+        # current policy so a later load leaves every id, new or migrated, alone.
+        current_policy = self.adapter.area_policy()
+        legacy = current_policy is not None and data.get("area_policy") != current_policy
+        area = self.adapter.persisted_area if legacy else (lambda area_id: area_id)
+        if legacy and (data.get("links") or data.get("area_states") or data.get("pending_captures")):
+            log.info(f"[LOAD] state document predates area policy {current_policy!r}; migrating area ids once")
         for ed in data.get("links", []):
             a = MonInfo(**ed["a"]) if ed.get("a") else None
             b = MonInfo(**ed["b"]) if ed.get("b") else None
             enc_a = MonInfo(**ed["encounter_a"]) if ed.get("encounter_a") else None
             enc_b = MonInfo(**ed["encounter_b"]) if ed.get("encounter_b") else None
             entry = LinkEntry(
-                area_id=self.adapter.persisted_area(ed["area_id"]),
+                area_id=area(ed["area_id"]),
                 a=a, b=b,
                 status=LinkStatus(ed["status"]),
                 encounter_a=enc_a,
@@ -814,9 +822,9 @@ class SoulLinkState:
             self.links.append(entry)
             self._index_entry(entry)
         for area_id, status_str in data.get("area_states", {}).items():
-            self.area_states[self.adapter.persisted_area(area_id)] = AreaStatus(status_str)
+            self.area_states[area(area_id)] = AreaStatus(status_str)
         for area_id, players in data.get("pending_captures", {}).items():
-            self.pending_captures[self.adapter.persisted_area(area_id)] = {
+            self.pending_captures[area(area_id)] = {
                 pid: MonInfo(**mon_data)
                 for pid, mon_data in players.items()
             }
@@ -3109,6 +3117,7 @@ class SoulLinkState:
         import copy
         payload = {
             "game_id": self.adapter.game_id,
+            "area_policy": self.adapter.area_policy(),
             "rules": {
                 "species_lock": self.species_lock,
                 "gender_lock": self.gender_lock,
