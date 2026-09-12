@@ -148,8 +148,10 @@ class NativeTradePolicy:
         image=_bytes(receipt["save_image_hex"],0x8000)
         proof=receipt["file"]
         binding=self.runtime.gate.sessions[player].metadata["control_binding"]
-        progress=self.execution.observed.get((player,command["command_id"],binding["binding_digest"]))
-        # The previous window can still be consumed while a renewal is in flight.
+        from server.gen1_native_progress import progress_for
+        # The previous window can still be consumed while a renewal is in flight; after a
+        # reopen the exact durable window record stands in for the vanished live cache.
+        progress=progress_for(self.execution,player,command["command_id"],binding)
         if progress is None:
             raise JournalError("file flush is outside the owned native frame window")
         verify_file_image(proof,image,host_profile='bizhawk-2.11.1-gambatte-exclusive-hold-v1',
