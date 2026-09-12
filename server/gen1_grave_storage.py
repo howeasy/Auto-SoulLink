@@ -5,7 +5,13 @@ authority; callers bind the original point, target removal and saved receipt.
 """
 
 from server.gen1_full_save import SYMBOLS, layout
-from server.gen1_memorial_policy import BOX_SIZE, box_offset, grave_digest, storage_policy
+from server.gen1_memorial_policy import (
+    BOX_SIZE,
+    box_offset,
+    entirely_empty,
+    grave_digest,
+    storage_policy,
+)
 from server.protocol_journal import JournalError
 
 
@@ -48,12 +54,16 @@ def append(point, fields, cart, boxed, *, reserved_digest=None, policy=None):
     flag = bytes.fromhex(point["fields"]["main"])[flag_offset]
     active = flag & 127 == 11
     initializing = not flag & 128
+    if active and initializing:
+        raise JournalError("active memorial box cannot precede box initialization")
     if active and policy is None:
         raise JournalError("active memorial box requires reconciliation")
     if reserved_digest is not None and reserved_digest != grave_digest(point):
         raise JournalError("memorial reservation changed")
     offset = box_offset(11)
     grave = fields["box"] if active else bytearray(cart[offset : offset + BOX_SIZE])
+    if initializing and not active and not entirely_empty(bytes(grave), before_init=True):
+        raise JournalError("unowned memorial box is not empty before initialization")
     count = 0 if initializing and not active else grave[0]
     if count and reserved_digest is None:
         raise JournalError("nonempty memorial requires an owned reservation")

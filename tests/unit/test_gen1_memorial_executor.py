@@ -78,13 +78,13 @@ def client(variant, fail_after=None, foreign=False):
         local adapter={}
         for _,name in ipairs({'prepare','classify','receipt'})do adapter[name]=function(body,...)return service.adapter[name](body.body,...)end end
         adapter.apply=function(body,intent,identity)
-            assert(service.operations.authorize_apply(body.body,intent,identity,{admitted=true,held=true}))
+            assert(service.operations.authorize_apply(body.body,intent,identity,{admitted=true,operation_held=true}))
             return service.adapter.apply(body.body,intent,identity)
         end
         executor=require('command_executor').new(journal,adapter)
         function step()return executor:step(id)end
         function grant()
-            local request=assert(service.operations.request({binding_digest=string.rep('b',64)},{admitted=true,held=true}))
+            local request=assert(service.operations.request({binding_digest=string.rep('b',64)},{admitted=true,operation_held=true}))
             local packet={schema='slink-held-write-permit-v1',challenge=request.window.challenge,scope=request.window.scope,
                 uses=1,ttl_ms=1000,proof_digest=hash_text(assert(Canonical.encode(request.evidence)))}
             assert(service.operations.accept(JSON.object(packet)));return packet.scope.phase

@@ -310,6 +310,26 @@ def test_first_memorial_persists_init_before_grave_data_and_reserves_empty_box()
     assert cartram(lua)[0x284C] == 128
 
 
+@pytest.mark.parametrize("tail", ["live_record", "dead_record", "ot_name", "species_list"])
+def test_first_memorial_refuses_unowned_box12_tail_before_initialization(tail):
+    lua, M = _memorial_runtime(changed_boxes_set=False)
+    ram = cartram(lua)
+    if tail in {"live_record", "dead_record"}:
+        base = BOX12 + 22 + 19 * 33
+        ram[base] = 0x99
+        ram[base + 2] = 1 if tail == "live_record" else 0
+    elif tail == "ot_name":
+        ram[BOX12 + BOX_LEN - 1] = 0x80
+    else:
+        ram[BOX12 + 20] = 0x99
+    before = dict(lua.globals().sysbus), dict(ram)
+    lua.execute("writes = {}")
+    result = M.depositMemorialMon(0)
+    assert isinstance(result, tuple) and result[0] is False and "unowned" in result[1]
+    assert (dict(lua.globals().sysbus), dict(ram)) == before
+    assert len(lua.globals().writes) == 0
+
+
 def test_memorial_also_saves_an_earlier_unsaved_ordinary_deposit():
     lua, M = _memorial_runtime()
     bus, cart = lua.globals().sysbus, cartram(lua)

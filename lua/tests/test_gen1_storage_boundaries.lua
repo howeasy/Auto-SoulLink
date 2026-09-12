@@ -304,15 +304,21 @@ local ok,err=pcall(function()
     local structs_off=memoff+1+(M.BOX_MAX_MONS+1)
     local ots_off=structs_off+M.BOX_MAX_MONS*M.BOX_STRUCT_SIZE
     local nicks_off=ots_off+M.BOX_MAX_MONS*11
-    local function memorial_state()
+local function memorial_state(initialized)
         seed(3,2)
         write(address("wCurrentBoxNum"),0)
         -- Party slot 1 is the dead one (HP 0); the memorial requires a fainted selection.
         write(address("wPartyMons")+44+1,0);write(address("wPartyMons")+44+2,0)
         invoke({"SaveGameData"})              -- a real canonical main save and checksum
-        local did,why=M.protectSramBoxes()    -- first-time init, as the cartridge would
-        assert(did and not why,"memorial geometry init refused: "..tostring(why))
-        write(memoff,0,"CartRAM");write(memoff+1,0xFF,"CartRAM")
+        if initialized == false then
+            -- A genuinely empty pre-ChangeBox image. Its zero header is legal:
+            -- EmptyAllSRAMBoxes will install the FF terminator during init.
+            for i=0,boxlen-1 do write(memoff+i,0,"CartRAM") end
+        else
+            local did,why=M.protectSramBoxes()    -- first-time init, as the cartridge would
+            assert(did and not why,"memorial geometry init refused: "..tostring(why))
+            write(memoff,0,"CartRAM");write(memoff+1,0xFF,"CartRAM")
+        end
     end
     local function hidden_record(slot,hp)
         local base=structs_off+slot*M.BOX_STRUCT_SIZE
@@ -331,6 +337,37 @@ local ok,err=pcall(function()
                           "memorial box contains a live Pokemon",before) and hidden_ok
     end
     t.check("a live record anywhere in the reserved box image refuses the memorial",hidden_ok)
+    local first_use_ok=true
+    for _,slot in ipairs({0,7,19}) do
+        memorial_state(false)
+        hidden_record(slot,specimen[35]*256+specimen[36])
+        local before=image()
+        local r,e=M.depositMemorialMon(1)
+        first_use_ok=refuses("first-use memorial refuses hidden live slot "..slot,r,e,
+            "unowned memorial box is not empty before initialization",before) and first_use_ok
+    end
+    memorial_state(false)
+    hidden_record(19,0)
+    local before=image()
+    local r,e=M.depositMemorialMon(1)
+    first_use_ok=refuses("first-use memorial refuses hidden dead tail",r,e,
+        "unowned memorial box is not empty before initialization",before) and first_use_ok
+    memorial_state(false)
+    write(nicks_off+19*11+10,0x80,"CartRAM")
+    before=image();r,e=M.depositMemorialMon(1)
+    first_use_ok=refuses("first-use memorial refuses unowned nickname tail",r,e,
+        "unowned memorial box is not empty before initialization",before) and first_use_ok
+    memorial_state(false)
+    write(memoff+20,0x99,"CartRAM")
+    before=image();r,e=M.depositMemorialMon(1)
+    first_use_ok=refuses("first-use memorial refuses unowned species-list tail",r,e,
+        "unowned memorial box is not empty before initialization",before) and first_use_ok
+    t.check("whole pre-init reserved image refuses all hidden record/name/list content",first_use_ok)
+    memorial_state(false)
+    local first,first_error=M.depositMemorialMon(1)
+    t.check("genuinely empty first-use memorial succeeds and persists initialized bit",
+        first==true and first_error==nil and read(memoff,"CartRAM")==1
+            and read(address("wCurrentBoxNum"))>=0x80,tostring(first_error))
     memorial_state()
     hidden_record(19,0)                                     -- dead tail record, legal to ignore
     M._memorial_reservations=nil
@@ -362,5 +399,5 @@ end)
 memorysavestate.loadcorestate(boot)
 memorysavestate.removestate(boot)
 t.check("boundary harness completed",ok,tostring(err))
-t.check("all 36 refusals were exercised",refusals==36,"refusals="..refusals)
+t.check("all 42 refusals were exercised",refusals==42,"refusals="..refusals)
 t.finish("storage boundaries")

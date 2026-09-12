@@ -31,6 +31,41 @@ Seeding and the canonical `_MoveMon`/`_RemovePokemon` trampoline are the ones
 
 36 refusals per title, each exact and mutation-free.
 
+## Independent correction after code review
+
+The first version of this gate initialized SRAM before testing hidden Box 12 records. That left
+the actual first-use branch untested: both the Lua memorial writer and the Python grave append
+treated a zero count as empty even when a live/dead record or name tail was hidden beyond it.
+The corrected writers now require the entire unowned, pre-initialization Box 12 image to be
+empty **before any initialization or grave write**. Count must be zero; the pre-init species
+terminator may be zero or `FF` (the cartridge's init installs `FF`); every remaining byte must
+be zero or `FF`. An impossible active-Box-12/uninitialized combination is refused. The already
+initialized dead-tail rule is unchanged.
+
+The revised live gate adds six first-use refusals per title: hidden live records at slots 0, 7,
+and 19, a hidden dead record at 19, an unowned nickname tail, and an unowned species-list tail.
+Every refusal preserves whole WRAM, HRAM, 32 KiB CartRAM and the bank register. A genuinely
+empty first-use image succeeds and persists the initialized bit. The gate now exercises **42
+exact refusals per title**. The Python policy and append paths have a separate 12-case
+Red/Blue/Yellow matrix that asserts the detached fields and CartRAM are unchanged before a
+refusal. Six initially failing executor tests were stale `operation_held` fixtures; two positive
+storage-runtime scenarios had arbitrary synthetic pre-ChangeBox SRAM and now explicitly seed a
+clean unowned Box 12, rather than weakening production admission.
+
+The former inactive-box scan test seeded only Box 12. Its replacement seeds a unique valid
+record in **all twelve SRAM boxes**, runs all twelve active-box selectors on Red, Blue, and
+Yellow, requires exactly eleven inactive SRAM keys plus the active WRAM key, excludes the stale
+active SRAM key, and proves each inactive source is read by poisoning it. The direct
+`gen1_gatelib.lua` dependency is pinned on all six rows, and exact storage-runtime sibling
+pytest nodes are registered on the three storage rows; no manifest row was removed.
+
+Corrected evidence: `SLINK_LIVE=1 python -m pytest tests/live/test_gen1_gates.py -q -p no:randomly
+-k storage_boundaries --junitxml=.cache/memory_boundaries_corrected_live.xml` passed Red, Blue,
+and Yellow (3 passed, 0 skipped, 56 other gates deselected, 18.20 s), with zero gate checks
+failed. The affected non-live sweep passed 254 tests; `tools/lua_syntax_check.py` parsed 302
+files. The full 15-gate matrix below predates the correction and is not claimed as a post-fix
+rerun.
+
 ## Registration
 
 | Row | Clause | Proof |

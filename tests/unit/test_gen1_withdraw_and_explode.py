@@ -276,23 +276,48 @@ def test_invalid_current_box_refuses_deposit_and_retrieval_without_writes(value)
     assert (dict(lua.globals().bus), dict(lua.globals().cart)) == before
 
 
-def test_storage_scan_uses_wram_for_current_box_and_sram_for_other_eleven():
-    lua, M = runtime()
-    seed_boxed_mon(lua)
-    lua.execute(f"""bus[{int(M.CURRENT_BOX_NUM_ADDR)}] = 128
-        bus[{int(M.BOX_SPECIES_ADDR)}] = 0x99
-        bus[{int(M.BOX_SPECIES_ADDR) + 1}] = 255
-        for bank=2,3 do for slot=0,5 do
-            local base = bank*8192+slot*1122; cart[base] = 0; cart[base+1] = 255
-        end end
-        -- The SRAM slot of active Box1 is not an alternate copy: ignore its junk.
-        cart[0x4000] = 99
-        cart[0x75EA] = 1; cart[0x75EB] = 0xB1; cart[0x75EC] = 255
-        cart[0x7600] = 0xB1; cart[0x761B] = 0x11; cart[0x761C] = 0x22
-        cart[0x760C] = 0x56; cart[0x760D] = 0x78
-    """)
+def _assert_storage_scan_sources(variant, current):
+    lua, M = runtime(variant)
+    bus, cart = lua.globals().bus, lua.globals().cart
+    sb = M.profile.stored_boxes
+    offsets = [int(sb.banks[index // 6 + 1]) + index % 6 * int(sb.stride)
+               for index in range(12)]
+    sram_keys = set()
+    for index, offset in enumerate(offsets):
+        # Every SRAM box has a valid, unique member. The currently selected
+        # slot's member is intentionally stale: only its WRAM copy counts.
+        cart[offset] = 1
+        cart[offset + 1], cart[offset + 2] = 0x99, 255
+        base = offset + 22
+        cart[base], cart[base + 12], cart[base + 13] = 0x99, 0x12, index
+        cart[base + 27], cart[base + 28] = 0xAA, 0xBB
+        sram_keys.add(f"AABB:{0x1200 + index:04X}:99")
+    bus[int(M.CURRENT_BOX_NUM_ADDR)] = 0x80 + current
+    bus[int(M.BOX_COUNT_ADDR)] = 1
+    bus[int(M.BOX_SPECIES_ADDR)], bus[int(M.BOX_SPECIES_ADDR) + 1] = 0x99, 255
+    active = int(M.BOX_BASE_ADDR)
+    bus[active], bus[active + 12], bus[active + 13] = 0x99, 0xEE, current
+    bus[active + 27], bus[active + 28] = 0xCC, 0xDD
+    active_key = f"CCDD:{0xEE00 + current:04X}:99"
+    stale_key = f"AABB:{0x1200 + current:04X}:99"
+    before = dict(bus), dict(cart)
     keys = M.storedBoxKeys()
-    assert set(keys.keys()) == {BOXED_KEY, "1122:5678:B1"}
+    observed = set(keys.keys())
+    assert observed == (sram_keys - {stale_key}) | {active_key}
+    assert stale_key not in observed and len(observed) == 12
+    assert (dict(bus), dict(cart)) == before
+    # Poison an inactive source; a scanner accidentally reading only Box 12
+    # or accepting WRAM as an SRAM substitute must now refuse the full scan.
+    other = (current + 1) % 12
+    cart[offsets[other] + 2] = 0
+    result = M.storedBoxKeys()
+    assert result[0] is None and result[1] == "invalid box species terminator"
+
+
+def test_storage_scan_uses_wram_for_current_box_and_sram_for_other_eleven():
+    for variant in ("red", "blue", "yellow"):
+        for current in range(12):
+            _assert_storage_scan_sources(variant, current)
 
 
 def test_inactive_boxes_do_not_exist_before_first_changebox():
