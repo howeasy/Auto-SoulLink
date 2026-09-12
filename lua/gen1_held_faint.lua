@@ -91,6 +91,17 @@ function M.new(options)
     local function matches(body)
         refresh();return self.current~=nil and same(self.current.body,body)
     end
+    -- Answer whether the head command is at its route-specific checkpoint before
+    -- the outer free loop takes the physical hold. Rival Swap is intentionally
+    -- an in-battle write and therefore cannot use the generic overworld party
+    -- predicate; taking the hold before its exact battle-init checkpoint would
+    -- freeze the core before the command can ever become ready.
+    self.pending=function()
+        refresh()
+        if not self.current then return false end
+        if Rival.handles(self.current.body)then return rival.safe(self.current.body)==true end
+        return mem.isPartyWriteSafe()==true
+    end
     self.adapter={}
     for _,name in ipairs({"prepare"})do
         self.adapter[name]=function(body,...)

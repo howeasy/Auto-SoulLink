@@ -16,7 +16,7 @@ from tests.unit.test_gen1_sessions import contract
 @pytest.mark.asyncio
 @pytest.mark.parametrize('endpoint',['server','manager'])
 async def test_launcher_bundle_binds_the_run_and_keeps_initial_observation_selection(tmp_path,monkeypatch,endpoint):
-    runtime=create_runtime(tmp_path/'run-test',contract('yellow','yellow'))
+    runtime=create_runtime(tmp_path/'run-test',contract('yellow','yellow'),free_service=endpoint=='manager')
     try:
         request=SimpleNamespace(match_info={'player':'b','run_id':'run-test'},host='127.0.0.1:8080',query={'bundle':'1'})
         before=runtime.journal.snapshot()
@@ -38,5 +38,6 @@ async def test_launcher_bundle_binds_the_run_and_keeps_initial_observation_selec
             line=next(line for line in script.decode().splitlines() if line.startswith('SLINK_RUNTIME_LAUNCH_JSON='))
             configuration=json.loads(LuaRuntime().eval(line.split('=',1)[1]))
             assert configuration['initial_observations'] is True
+            assert configuration['mode']==('free_service' if endpoint=='manager' else 'held_service')
         assert runtime.journal.snapshot()==before
     finally:runtime.close()

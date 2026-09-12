@@ -726,9 +726,12 @@ class RunManager:
 
                 from server.gen1_launcher import build_configuration
                 from server.runtime_launcher import render_launcher
+                if not prepared.get('free_service',False):
+                    raise JournalError('Manager cannot launch a held-service Gen1 run; create a new Gen1 run')
                 connect_host = urlsplit("http://"+host_header).hostname or "127.0.0.1"
                 configuration=build_configuration(prepared["run_id"],prepared["contract"],player,prepared_cartridges=cartridges,
-                    initial_observations=prepared.get('initial_observations',False))
+                    initial_observations=prepared.get('initial_observations',False),
+                    free_service=prepared.get('free_service',False))
                 content = render_launcher(configuration,
                     host=connect_host, port=run["tcp_port"], name=run.get("name") or run_id)
                 if getattr(request,'query',{}).get('bundle')=='1':
@@ -768,7 +771,7 @@ class RunManager:
             runs=_load_registry();tcp_port,http_port=_next_ports(runs)
             run_id='run_'+datetime.now(UTC).strftime('%Y%m%d_%H%M%S')+'_'+secrets.token_hex(3)
             directory=Path(MANAGER_DIR)/run_id
-            runtime=create_runtime(directory,contract,rule_options=body.get('rules',{}))
+            runtime=create_runtime(directory,contract,rule_options=body.get('rules',{}),free_service=True)
             try:
                 rules=runtime.state().rules
                 settings={key:bool(getattr(rules,key)) for key in ('species_lock','gender_lock','type_lock','explode_mode',
@@ -786,7 +789,7 @@ class RunManager:
             return web.json_response({'ok':False,'error':str(error)},status=400)
         except (RuntimeError,OSError,sqlite3.Error) as error:
             return web.json_response({'ok':False,'error':str(error)},status=500)
-        return web.json_response({'ok':True,'run':run,'runtime_mode':'held_service'})
+        return web.json_response({'ok':True,'run':run,'runtime_mode':'free_service'})
 
     async def handle_cartridges(self, request: web.Request) -> web.Response:
         """Bind each RBY player to an inspected local cartridge before admission."""

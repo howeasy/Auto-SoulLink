@@ -10,6 +10,7 @@ import zipfile
 import aiohttp
 import psutil
 import pytest
+from lupa.lua54 import LuaRuntime
 
 from server import manager
 
@@ -35,9 +36,10 @@ async def test_manager_prepared_run_starts_real_server_and_serves_bound_bundle(m
         response=await manager.RunManager('127.0.0.1',manager_port=0).handle_create_gen1(Request())
         result=json.loads(response.text)
         assert response.status==200,result
+        assert result['runtime_mode']=='free_service'
         run=result['run'];owned_pid=run['pid'];run_dir=directory/run['run_id']
         spec=json.loads((run_dir/'gen1_runtime.json').read_text())
-        assert spec['initial_observations'] is True
+        assert spec['initial_observations'] is True and spec['free_service'] is True
         async with aiohttp.ClientSession() as session:
             deadline=asyncio.get_running_loop().time()+20
             while True:
@@ -51,8 +53,13 @@ async def test_manager_prepared_run_starts_real_server_and_serves_bound_bundle(m
                     await asyncio.sleep(.05)
         with zipfile.ZipFile(io.BytesIO(raw)) as bundle:
             manifest=json.loads(bundle.read('launch.json'))
+            launcher=bundle.read('launcher.lua').decode()
             assert manifest['run_id']==spec['run_id'] and manifest['player']=='a'
             assert manifest['rom_sha1']==spec['contract']['players']['a']['final_rom_sha1']
+            line=next(row for row in launcher.splitlines() if row.startswith('SLINK_RUNTIME_LAUNCH_JSON='))
+            configuration=json.loads(LuaRuntime().eval(line.split('=',1)[1]))
+            assert configuration['mode']=='free_service'
+            assert 'lua/gen1_observation_loop.lua' in {entry['path'] for entry in configuration['files']}
         assert not (run_dir/'links.json').exists()
     finally:
         if owned_pid and psutil.pid_exists(owned_pid):

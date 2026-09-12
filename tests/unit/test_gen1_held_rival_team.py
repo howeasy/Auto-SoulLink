@@ -348,6 +348,15 @@ def test_composed_held_faint_dispatches_the_swap_under_the_one_use_permit(runtim
     """)
     g = lua.globals()
     arm(g, g.Mem, "yellow")
+    # Rival Swap owns a battle-init checkpoint, not the generic overworld party
+    # checkpoint used by death/storage writers. The composed free-loop router
+    # must request its hold even while that generic predicate is false.
+    lua.execute("Mem.isPartyWriteSafe=function()return false end")
+    assert lua.execute("return service.pending()") is True
+    g.enemy_pos = rival.PROFILES["yellow"]["enemy_mon_party_pos"]
+    lua.execute("bus[enemy_pos]=0")
+    assert lua.execute("return service.pending()") is False
+    lua.execute("bus[enemy_pos]=0xFF")
     done, result = g.step()
     assert done is False and result["pending"] is True and result["evidence"]["schema"] == "rby-held-faint-awaiting-permit-v1"
     assert g.bus[g.Mem.ENEMY_COUNT_ADDR] == 3

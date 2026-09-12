@@ -157,9 +157,7 @@ function M.start(launch,options)
                     and baseline.bootstrap~=nil and baseline.bootstrap.phase=="acknowledged"
             end
             local function writer_pending()
-                if not memory.isPartyWriteSafe()then return false end -- in battle the command waits (item 5)
-                local entry=assert(journal:pending_commands())[1]
-                return entry~=nil and require("gen1_held_faint").handles(require("gen1_runtime").unwrap(entry.body,launch.player))
+                return faint~=nil and faint.pending()
             end
             self.start_loop=function()
                 if self.loop or not loop_ready()then return end

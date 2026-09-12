@@ -1,4 +1,5 @@
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -29,10 +30,12 @@ async def test_manager_prepares_a_fresh_runtime_before_optional_server_start(tmp
         'name':'Fresh Yellow pair','rom_a':'a.gbc','rom_b':'b.gbc','rules':{'species_lock':True,'gender_lock':True},'start':start}))
     result=json.loads(response.text)
     assert response.status==200 and result['ok'] and len(runs)==1
+    assert result['runtime_mode']=='free_service'
     assert bool(started)==start and runs[0]['status']==('running' if start else 'stopped')
     runtime=open_runtime(tmp_path/runs[0]['run_id'])
     try:
-        assert runtime.initial_observations and runtime.state().rules.species_lock and runtime.state().rules.gender_lock
+        assert runtime.initial_observations and runtime.free_service
+        assert runtime.state().rules.species_lock and runtime.state().rules.gender_lock
         assert not runtime.state().rules.battle_calc and not runtime.state().rules.native_messages
         assert not runtime.state().rules.links and not runtime.state().identities.document()['members']
     finally:runtime.close()
@@ -47,3 +50,18 @@ async def test_unsupported_rules_cannot_start_or_register_a_prepared_run(tmp_pat
     response=await manager.RunManager('127.0.0.1').handle_create_gen1(Request({
         'name':'invalid','rom_a':'a.gb','rom_b':'b.gb','rules':{'native_messages':True},'start':True}))
     assert response.status==400
+
+
+@pytest.mark.asyncio
+async def test_manager_refuses_a_pre_free_service_gen1_launcher(tmp_path,monkeypatch):
+    from server.gen1_run_config import create_runtime
+
+    run_id='run-test'
+    runtime=create_runtime(tmp_path/run_id,contract('red','blue'))
+    runtime.close()
+    monkeypatch.setattr(manager,'MANAGER_DIR',str(tmp_path))
+    monkeypatch.setattr(manager,'_load_registry',lambda:[{'run_id':run_id,'name':'Held legacy run','tcp_port':5000}])
+    request=SimpleNamespace(match_info={'run_id':run_id,'player':'a'},host='127.0.0.1:8000',query={})
+    response=await manager.RunManager('127.0.0.1').handle_launcher(request)
+    assert response.status==409
+    assert json.loads(response.text)['error']=='Manager cannot launch a held-service Gen1 run; create a new Gen1 run'
