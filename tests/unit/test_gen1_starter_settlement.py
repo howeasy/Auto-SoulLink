@@ -28,9 +28,11 @@ def enroll(runtime):
     return owners,initials,operations
 
 
-def source_and_checkpoint(runtime,player,initial,previous,*,dv=0x1234):
+def source_and_checkpoint(runtime,player,initial,previous,*,dv=0x1234,species=None):
     variant=runtime.contract['players'][player]['variant']
-    birth=bytearray(make_blob(PartyCodec(variant),species=84 if variant=='yellow' else 153,otid=0,dv=dv))
+    # Internal species bytes: Yellow always hands out Pikachu (0x54); Red and Blue default to
+    # Bulbasaur (0x99) unless the case picks another starter.
+    birth=bytearray(make_blob(PartyCodec(variant),species=species or (84 if variant=='yellow' else 153),otid=0,dv=dv))
     birth[44:55]=bytes.fromhex(initial['source']['fields']['name'])
     source=engine_payload(runtime,player,['starter_begin','starter_end'])
     for row in source['signals']:row['point']['cur_species']=birth[0]
@@ -44,35 +46,64 @@ def source_and_checkpoint(runtime,player,initial,previous,*,dv=0x1234):
     return source,{'sequence':1,'previous_operation_id':previous,'observation':stable}
 
 
-@pytest.mark.parametrize('variants',list(product(('red','blue','yellow'),repeat=2)))
+# Starters are under the clauses in every generation (owner decision 2026-09-11, the Gen 3 rule);
+# Yellow/Yellow is the one exemption because both scripts hand out Pikachu with no choice.
+# A mixed pair always links (Pikachu shares no family or type with the Kanto starters); a pair
+# with a choice on both sides links when the starters differ and is rejected when they match.
+BULBASAUR,CHARMANDER=153,176   # internal species bytes
+STARTER_CASES=[]
+for _variants in product(('red','blue','yellow'),repeat=2):
+    if _variants.count('yellow')==2:STARTER_CASES.append((_variants,'same','exempt_link'))
+    elif _variants.count('yellow')==1:STARTER_CASES.append((_variants,'different','link'))
+    else:STARTER_CASES.extend([(_variants,'same','rejected'),(_variants,'different','link')])
+
+
+@pytest.mark.parametrize('variants,starters,outcome',STARTER_CASES)
 @pytest.mark.parametrize('order',[('a','b'),('b','a')])
-def test_stable_starters_settle_owned_identities_and_one_exempt_link_atomically(tmp_path,variants,order):
+def test_stable_starters_settle_owned_identities_and_the_engine_pairs_or_rejects_them_atomically(tmp_path,variants,starters,outcome,order):
     runtime=create_runtime(tmp_path,contract(*variants))
     try:
         owners,initials,operations=enroll(runtime)
-        # Prove scripted-grant exemption includes identical Yellow/Yellow starters.
         snap=runtime.journal.snapshot();stage=runtime.state()
         for flag in ('species_lock','gender_lock','type_lock'):setattr(stage.rules,flag,True)
         stage.barrier.set_history(stage.history_digest());document=stage.document()
         runtime.journal.commit('a',secrets.token_hex(16),{'event':'explicit-rule-options-fixture'},expected_revision=snap.revision,
             state=document,commands={'a':[],'b':[]},result={'ack':'ACK'})
+        keys={}
         for index,player in enumerate(order):
-            source,checkpoint=source_and_checkpoint(runtime,player,initials[player],operations[player])
+            variant=runtime.contract['players'][player]['variant']
+            species=None if variant=='yellow' else (CHARMANDER if starters=='different' and index==1 else BULBASAUR)
+            source,checkpoint=source_and_checkpoint(runtime,player,initials[player],operations[player],species=species)
             engine_event(runtime,player,owners[player],source)
             assert len(runtime.state().identities.document()['members'])==index
             op=secrets.token_hex(16);inventory_event(runtime,player,owners[player],checkpoint,op)
             before=runtime.journal.snapshot();inventory_event(runtime,player,owners[player],checkpoint,op)
             assert runtime.journal.snapshot()==before
             stage=runtime.state();settled=stage.document()['components'][COMPONENT]['settled'][player]
+            keys[player]=stage.rules.partner_blobs[player][0]['key']
             assert stage.rules.party_size[player]==1
             assert bytes.fromhex(settled['blob_hex'])==stage.rules.partner_blobs[player][0]['blob']
             if index==0:
                 assert stage.rules.area_states[AREA]==(AreaStatus.PENDING_B if player=='a' else AreaStatus.PENDING_A)
                 assert not stage.rules.links
-        stage=runtime.state();document=stage.document()
-        assert len(stage.rules.links)==len(document['identities']['links'])==1
-        assert len(document['identities']['members'])==2 and not stage.rules.pending_captures
-        assert stage.rules.links[0].area_id==AREA and stage.rules.area_states[AREA]==AreaStatus.LINKED
+        stage=runtime.state();document=stage.document();component=document['components'][COMPONENT]
+        first,second=order
+        assert len(document['identities']['members'])==2
+        if outcome=='rejected':
+            assert not stage.rules.links and not document['identities']['links'] and component['link_id'] is None
+            assert component['rejection']=={'player':second,'key':keys[second],'member_id':component['settled'][second]['member_id'],
+                'reason':'Species clause: both are Bulbasaur','at':component['rejection']['at']}
+            assert stage.rules.area_states[AREA]==(AreaStatus.PENDING_A if second=='a' else AreaStatus.PENDING_B)   # the lab waits on the rejected player
+            assert set(stage.rules.pending_captures[AREA])=={first} and AREA in stage.rules.retry_areas[second]
+            assert keys[second] not in stage.rules.party_keys[second] and not stage.rules.pending_memorials[second]
+        else:
+            assert len(stage.rules.links)==len(document['identities']['links'])==1 and component['rejection'] is None
+            assert not stage.rules.pending_captures and not any(stage.rules.retry_areas.values())
+            assert stage.rules.links[0].area_id==AREA and stage.rules.area_states[AREA]==AreaStatus.LINKED
+            if outcome=='exempt_link':
+                assert stage.rules.links[0].a.species==stage.rules.links[0].b.species==25   # two Pikachu, exempt
+            else:
+                assert stage.rules.links[0].a.species!=stage.rules.links[0].b.species
         assert not any(stage.rules.pokeballs_obtained.values()) and stage.barrier.ticket() is None
         assert not runtime.journal.pending_ids('a') and not runtime.journal.pending_ids('b')
     finally:runtime.close()

@@ -22,14 +22,33 @@ def _drain(rules):
 
 def starter_grant(rules, player, area, info):
     """A starter is a gift capture in the lab: pending for the first player, a link for the second,
-    clauses applied unless the adapter declares the gift fixed-species. Returns the live link or None."""
+    clauses applied unless the adapter declares the gift fixed-species (Gen 1: Yellow/Yellow only).
+    Returns ``(link, rejection)``: the live link or None, and the clause rejection the engine decided
+    (``{"player", "key", "reason"}``, the rejected starter stays pending for the other player) or None."""
     activated = dict(rules.pokeballs_obtained)
-    rules.handle_event(player, capture_event(key=info.key, area_id=area, species_id=info.species, level=info.level,
-                                             nickname=info.nickname or "", gift=True))
+    # The engine returns the caller's own commands and queues only the partner's.
+    own = rules.handle_event(player, capture_event(key=info.key, area_id=area, species_id=info.species,
+                                                   level=info.level, nickname=info.nickname or "", gift=True))
+    peer = "b" if player == "a" else "a"
+    rejection = None
+    for pid, commands in ((player, own or []), (peer, rules.queued_commands[peer])):
+        fainted = [c for c in commands if c.get("cmd") == "force_faint"]
+        if not fainted:
+            continue
+        if len(fainted) != 1 or rejection is not None:
+            raise JournalError("shared rule engine rejected more than one starter")
+        prompts = [c.get("text", "") for c in commands if c.get("cmd") == "gui_prompt"]
+        reason = prompts[0][4:] if prompts and prompts[0].startswith("[x] ") else "clause violation"
+        rejection = {"player": pid, "key": fainted[0]["key"], "reason": reason}
+        # The engine books the burial (force_faint and memorialize) for the rejected starter. Gen 1
+        # executes physical consequences from the rules state through the held executors (handoff
+        # item 4: a retirement with a starter_clause cause), so the obligation is released here, not
+        # left dangling, exactly as no_catch does for a retired partner catch.
+        rules.pending_memorials[pid].discard(fainted[0]["key"])
     _drain(rules)
     rules.pokeballs_obtained = activated
     link = rules.find_link(player, info.key)
-    return link if link is not None and link.status == LinkStatus.ALIVE else None
+    return (link if link is not None and link.status == LinkStatus.ALIVE else None), rejection
 
 
 def no_catch(rules, player, area, species, level, *, activated, proved_peers, decision):

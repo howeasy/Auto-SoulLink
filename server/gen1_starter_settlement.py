@@ -1,6 +1,7 @@
 """Join a verified starter source to stable inventory, then stage rules/identity."""
 import copy
 from dataclasses import asdict
+from datetime import UTC, datetime
 
 from server.admission_context import same_admitted_context
 from server.gen1_engine_signal_runtime import interpret
@@ -13,15 +14,15 @@ from server.gen1_engine_bridge import starter_grant
 from server.protocol import digest
 from server.protocol_journal import JournalError, _identifier
 from server.save_identity import SaveIdentity
-from server.state import MonInfo
+from server.state import AreaStatus, MonInfo
 
 COMPONENT = 'gen1-starter-settlement'
-SCHEMA = 'rby-starter-settlement-v1'
+SCHEMA = 'rby-starter-settlement-v2'   # v2: a clause rejection is part of the settlement record
 AREA = 'oaks_lab'
 
 
 def initial_component():
-    return {'schema': SCHEMA, 'sources': {}, 'settled': {}, 'link_id': None}
+    return {'schema': SCHEMA, 'sources': {}, 'settled': {}, 'link_id': None, 'rejection': None}
 
 
 def remember_source(document, player, entry):
@@ -121,12 +122,20 @@ def settle_ready(runtime, stage, document, *, frame_origin=None):
             'starter_source': source['engine_record']['operation_id']})[:32]
         witness = IdentityWitness(own_context, mon.key, mon.sha256, 1)
         acquired = stage.identities.acquire(acquisition, acquisition, witness)
-        peer = mon_info(PartyCodec(initials[partner]['observation']['source']['variant']).validate_blob(
-            bytes.fromhex(other['blob_hex']))) if other else None
-        linked = starter_grant(stage.rules, player, AREA, mon_info(mon))   # the shared engine pairs the starters
+        linked, rejected = starter_grant(stage.rules, player, AREA, mon_info(mon))   # the shared engine pairs the starters
         cache_party(stage.rules, player, mon)
         component['settled'][player] = {'member_id': acquired['member_id'], 'acquisition_id': acquisition,
             'inventory_entry': copy.deepcopy(entry), 'blob_hex': mon.raw.hex().upper()}
+        if rejected is not None:
+            # The engine applied the clauses to the pair of starters and rejected one (Gen 3 does the
+            # same; Gen 1 exempts Yellow/Yellow at the adapter). The rejected starter is not usable and
+            # the lab stays pending for the other player; the physical retirement is executed from the
+            # rules state (handoff item 4), and the pair has no logical link.
+            if rejected['player'] not in component['settled'] or component['link_id'] is not None:
+                raise JournalError('starter clause rejection does not name a settled starter')
+            component['rejection'] = {'player': rejected['player'], 'key': rejected['key'],
+                'member_id': component['settled'][rejected['player']]['member_id'], 'reason': rejected['reason'],
+                'at': datetime.now(UTC).isoformat()}
         if linked is not None:
             setattr(linked, partner, mon_info(current_peer))
             cache_party(stage.rules, partner, current_peer)
@@ -144,7 +153,7 @@ def verify_state(stage):
     document = stage.document(); component = document['components'].get(COMPONENT)
     if component is None:
         return
-    if not isinstance(component, dict) or set(component) != {'schema', 'sources', 'settled', 'link_id'} or component['schema'] != SCHEMA:
+    if not isinstance(component, dict) or set(component) != {'schema', 'sources', 'settled', 'link_id', 'rejection'} or component['schema'] != SCHEMA:
         raise JournalError('invalid starter settlement component')
     for field in ('sources', 'settled'):
         if not isinstance(component[field], dict) or set(component[field])-{'a', 'b'}:
@@ -200,8 +209,26 @@ def verify_state(stage):
         origin = link['history'][0]['members'] if link['history'] else link['members']
         if set(origin) != {row['member_id'] for row in component['settled'].values()}:
             raise JournalError('starter logical link origin differs')
-    elif len(component['settled']) == 2:
+    elif len(component['settled']) == 2 and component['rejection'] is None:
         raise JournalError('paired settled starters lack logical linkage')
+    rejection = component['rejection']
+    if rejection is not None:
+        if (not isinstance(rejection, dict) or set(rejection) != {'player', 'key', 'member_id', 'reason', 'at'}
+                or rejection['player'] not in component['settled'] or component['link_id'] is not None
+                or not isinstance(rejection['reason'], str) or not rejection['reason']):
+            raise JournalError('invalid starter clause rejection')
+        settled = component['settled'][rejection['player']]
+        mon = checked_mon(initials[rejection['player']], component['sources'][rejection['player']],
+                          settled['inventory_entry']['observation'])
+        if rejection['member_id'] != settled['member_id'] or rejection['key'] != mon.key:
+            raise JournalError('starter clause rejection names another starter')
+        partner = 'b' if rejection['player'] == 'a' else 'a'
+        rules = stage.rules
+        if (rules.find_link(rejection['player'], mon.key) is not None or mon.key in rules.party_keys[rejection['player']]
+                or AREA not in rules.retry_areas[rejection['player']]
+                or rules.area_states.get(AREA) != (AreaStatus.PENDING_A if rejection['player'] == 'a' else AreaStatus.PENDING_B)   # waiting on the rejected player
+                or set(rules.pending_captures.get(AREA, {})) != {partner}):
+            raise JournalError('starter clause rejection differs from the rule state')
 
 
 def verify_journal(journal, stage):

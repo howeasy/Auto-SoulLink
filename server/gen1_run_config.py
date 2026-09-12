@@ -113,7 +113,8 @@ def create_runtime(directory,contract,*,run_id=None,prepared_cartridges=None,rul
         raise JournalError('fresh runtime creation cannot replace an existing or legacy run')
     profiles=state_type_for(prepared_cartridges).validate_contract(contract)
     run_id=run_id or secrets.token_hex(16)
-    rules=SoulLinkState(data_dir=str(directory),adapter=get_adapter('gen1_rby',rom_type=profiles['a']['variant']))
+    rules=SoulLinkState(data_dir=str(directory),adapter=get_adapter('gen1_rby',rom_type=profiles['a']['variant'],
+        peer_rom_type=profiles['b']['variant']))   # the pair decides the starter clause policy
     rules.rom_type=profiles['a']['variant']
     rules.battle_calc=False;rules.native_messages=False;rules.overworld_presence=False
     allowed={'species_lock','gender_lock','type_lock','explode_mode','rival_team_swap','native_sounds','pc_trade_npc'}

@@ -70,6 +70,9 @@ class Gen1RuntimeState:
         expected = self.validate_contract(component["contract"])
         if self.rules.rom_type and self.rules.rom_type.lower() != expected["a"]["variant"]:
             raise JournalError("RBY primary rule variant differs from the paired contract")
+        # from_document rebuilt the adapter from the primary variant alone; the partner
+        # cartridge decides the starter clause policy (Yellow/Yellow is a fixed-species gift).
+        self.rules.adapter.bind_peer(expected["b"]["variant"])
         self.barrier = RecoveryBarrier.restore(component["recovery"])
         expected_blockers = blockers(self._document)
         actual_blockers = {

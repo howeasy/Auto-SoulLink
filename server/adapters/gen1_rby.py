@@ -340,6 +340,10 @@ class Gen1Adapter(GameAdapter):
         rom_type = kwargs.get("rom_type") or ""
         self._enc_variant = self._ROM_TYPE_TO_ENC_VARIANT.get(
             rom_type, self._DEFAULT_ENC_VARIANT)
+        # The partner cartridge, when the run declares it (the durable runtime always does:
+        # both variants are in the paired contract). It decides only whether the starter
+        # gift is fixed-species for this pair; None means "unknown", which applies the clauses.
+        self._peer_enc_variant = self._ROM_TYPE_TO_ENC_VARIANT.get(kwargs.get("peer_rom_type") or "")
         # None means "nobody has told us what this cartridge holds", which is different
         # from an empty table and must keep the shipped data in use.
         self._rom_encounters: dict[str, dict[str, list[dict]]] | None = None
@@ -383,13 +387,21 @@ class Gen1Adapter(GameAdapter):
     def is_gift_area(self, area_id: str) -> bool:
         return area_id in _GIFT_AREAS or area_id.startswith("gift_")
 
+    def bind_peer(self, rom_type: str) -> None:
+        """Declare the partner cartridge after construction (the restore path learns the
+        pair from the runtime contract, after the rule state has been rebuilt)."""
+        self._peer_enc_variant = self._ROM_TYPE_TO_ENC_VARIANT.get(rom_type or "")
+
     def is_fixed_species_gift(self, area_id: str) -> bool:
-        # DECISION FLAGGED FOR THE OWNER (proposal P13): Gen 3 applies the clauses to starters
-        # ("intro" is not in its fixed-species set), so two identical starters under species lock
-        # are a violation there. The Gen 1 RC exempted starters (Yellow has no choice at all, and
-        # a violation at minute one has no retry). This keeps the RC policy explicitly, at the
-        # adapter, until the owner picks one rule for every generation.
-        return area_id in _FIXED_SPECIES_GIFTS or area_id == "oaks_lab"
+        # Owner decision 2026-09-11: starters are under the clauses like every other capture,
+        # which is what Gen 3 does today ("intro" is not in its fixed-species set). The one
+        # exemption is Yellow/Yellow: both scripts hand out Pikachu with no choice, so the
+        # starter is a fixed-species gift there by the engine's own definition. Every other
+        # pairing has a choice on at least one side, and Pikachu shares no family or type
+        # with the three Kanto starters, so the clauses are always satisfiable.
+        if area_id == "oaks_lab":
+            return self._enc_variant == "yellow" and self._peer_enc_variant == "yellow"
+        return area_id in _FIXED_SPECIES_GIFTS
 
     def evo_family(self, species_id: int) -> int:
         """Gen 1's own evolution families — see _GEN1_FAMILY above.
