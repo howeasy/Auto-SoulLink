@@ -29,10 +29,10 @@ def durable(request):
     run.free_service = True
     run.native_trade = True
     run.verify_operation_execution = execution
-    case = request.getfixturevalue("case")
-    _value, _policy, _command, window = case
+    base = request.getfixturevalue("case")
+    _value, _policy, _command, window = base
     execution.observed.clear()  # the evidence fixture stubs a live window; use a really verified one
-    proof = verify(case, window)
+    proof = verify(base, window)
     grant_request = request_for(proof)
     persist_grant(run, "a", grant_request, issue(grant_request, proof), window)
     execution.observed.clear()
