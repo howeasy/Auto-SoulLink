@@ -57,3 +57,54 @@ def test_incomplete_save_sources_are_refused(fault):
 
 def test_lua_layout_matches_the_current_pinned_symbol_generation():
     assert TARGET.read_text()==generated()
+
+
+@pytest.mark.parametrize('variant',['red','blue','yellow'])
+def test_bulk_and_scalar_capture_are_byte_identical_and_domain_explicit(variant):
+    lua=LuaRuntime(unpack_returned_tuples=True);lua.globals().root=ROOT.as_posix();lua.globals().variant=variant
+    lua.execute('''
+        package.path=root..'/lua/?.lua;'..root..'/data/games/gen1_rby/?.lua;'..package.path
+        JSON=require('json_codec')
+        scalar_calls=0;bulk_calls={};frame=123
+        local function byte(address,domain)return (address+(domain=='CartRAM'and 37 or 11))%256 end
+        memory={read_u8=function(address,domain)scalar_calls=scalar_calls+1;return byte(address,domain)end}
+        mem={bytesToHex=function(values)local out={};for _,value in ipairs(values)do out[#out+1]=string.format('%02X',value)end;return table.concat(out)end}
+        Full=require('gen1_full_save')
+        scalar=assert(JSON.encode(Full.capture(mem,variant)))
+        scalar_count=scalar_calls;scalar_calls=0
+        memory.read_bytes_as_array=function(address,count,domain)
+            bulk_calls[#bulk_calls+1]={address=address,count=count,domain=domain}
+            local out={};for i=0,count-1 do out[i+1]=byte(address+i,domain)end;return out
+        end
+        bulk=assert(JSON.encode(Full.capture(mem,variant)))
+    ''')
+    assert json.loads(lua.globals().bulk)==json.loads(lua.globals().scalar)
+    assert lua.globals().scalar_count==0x8000+sum(row['length'] for row in layout(variant)['regions'].values())+1
+    calls=list(lua.globals().bulk_calls.values())
+    assert len(calls)==7 and sum(row['count'] for row in calls)==0x8000+sum(
+        region['length'] for region in layout(variant)['regions'].values())
+    assert [row['domain'] for row in calls].count('CartRAM')==1
+    assert all(row['domain'] in ('System Bus','CartRAM') for row in calls)
+    assert lua.globals().scalar_calls==1,"only the one-byte save status stays scalar"
+    assert lua.globals().frame==123
+
+
+@pytest.mark.parametrize('fault',['error','short','non_byte'])
+def test_present_but_invalid_bulk_reader_fails_closed_without_scalar_fallback(fault):
+    lua=LuaRuntime(unpack_returned_tuples=True);lua.globals().root=ROOT.as_posix();lua.globals().fault=fault
+    lua.execute('''
+        package.path=root..'/lua/?.lua;'..root..'/data/games/gen1_rby/?.lua;'..package.path
+        scalar_calls=0
+        memory={read_u8=function()scalar_calls=scalar_calls+1;return 0 end,
+            read_bytes_as_array=function(address,count,domain)
+                if fault=='error'then error('fixture bulk failure')end
+                local n=fault=='short'and count-1 or count;local out={}
+                for i=1,n do out[i]=fault=='non_byte'and i==1 and 256 or 0 end
+                return out
+            end}
+        mem={bytesToHex=function()error('bulk capture must not use the scalar formatter')end}
+        Full=require('gen1_full_save')
+        ok,why=pcall(Full.capture,mem,'yellow')
+    ''')
+    assert lua.globals().ok is False and lua.globals().why
+    assert lua.globals().scalar_calls==0

@@ -7,9 +7,30 @@ local Layout=require("gen1_full_save_layout")
 local Preparation=require("gen1_trade_preparation")
 local M={POINT="rby-full-save-point-v1",INTENT="rby-full-save-intent-v1"}
 local function same(a,b)return assert(Canonical.encode(a))==assert(Canonical.encode(b))end
+local HEX={}
+for value=0,255 do HEX[value]=string.format("%02X",value)end
 local function read(mem,address,count,domain)
-    local result={};for i=0,count-1 do result[#result+1]=memory.read_u8(address+i,domain or "System Bus")end
-    return mem.bytesToHex(result)
+    domain=domain or "System Bus"
+    local result={}
+    if type(memory.read_bytes_as_array)=="function"then
+        local ok,values=pcall(memory.read_bytes_as_array,address,count,domain)
+        assert(ok,"bulk memory read failed: "..tostring(values))
+        assert(type(values)=="table"and #values==count,"bulk memory read returned an incomplete range")
+        for index=1,count do
+            local value=values[index]
+            assert(type(value)=="number"and value%1==0 and value>=0 and value<=255,
+                "bulk memory read returned a non-byte value")
+            result[index]=HEX[value]
+        end
+    else
+        for offset=0,count-1 do
+            local value=memory.read_u8(address+offset,domain)
+            assert(type(value)=="number"and value%1==0 and value>=0 and value<=255,
+                "scalar memory read returned a non-byte value")
+            result[#result+1]=HEX[value]
+        end
+    end
+    return table.concat(result)
 end
 function M.capture(mem,variant)
     local info=assert(Layout[variant]);local fields={}
