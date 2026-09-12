@@ -29,7 +29,7 @@ from tests.unit.test_gen1_wild_encounter import runtime  # noqa: F401
 def test_decision_names_the_legacy_area_pending_and_species_outcome_without_touching_state(runtime, case, outcome):  # noqa: F811
     base = runtime.state().rules
     base.pokeballs_obtained = {"a": True, "b": True}
-    area = "pallet_town" if case == "gift" else "route_1"
+    area = "oaks_lab" if case == "gift" else "route_1"
     peer = MonInfo(key="peer", species=7, level=5, nickname="PEER")
     if case == "resolved":
         base.area_states[area] = AreaStatus.LINKED

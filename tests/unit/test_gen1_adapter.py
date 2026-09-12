@@ -19,12 +19,11 @@ def test_game_id(adapter):
 # ── Gift areas ───────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("area_id", [
-    "pallet_town",
     "oaks_lab",
-    "celadon_city",
     "saffron_city",
     "silph_co",
-    "cinnabar_island",
+    # pallet_town, celadon_city and cinnabar_island were here and were the same defect
+    # as route_4 with a rod: all three are fishing areas in every title.
     # route_4 was here and was WRONG — it is a real wild-grass route, and listing it
     # as a gift area disabled the dead zone, all three clauses and the Pokéball gate
     # on it. The Magikarp salesman is on MT_MOON_POKECENTER (map 68). See
@@ -390,13 +389,13 @@ def test_integration_key_change(tmp_path, monkeypatch):
 
 
 def test_integration_gift_area_no_pokeballs(tmp_path, monkeypatch):
-    """Capture on pallet_town (gift area) doesn't activate pokeballs_obtained."""
+    """Capture in oaks_lab (gift area) doesn't activate pokeballs_obtained."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = SoulLinkState(adapter=Gen1Adapter())
     state.pokeballs_obtained = {"a": False, "b": False}
 
-    state.handle_event("a", {"event": "area_enter", "area_id": "pallet_town"})
-    state.handle_event("a", {"event": "capture", "key": "A5F3:1234:99", "area_id": "pallet_town",
+    state.handle_event("a", {"event": "area_enter", "area_id": "oaks_lab"})
+    state.handle_event("a", {"event": "capture", "key": "A5F3:1234:99", "area_id": "oaks_lab",
                              "species": 4, "nickname": "CHARMANDER", "level": 5})
 
     assert state.pokeballs_obtained["a"] is False
@@ -739,9 +738,9 @@ def test_the_rule_area_ids_did_not_change():
     """Splitting the AREA would silently change what a run means — each floor would become
     its own dead-zone unit. Only the display axis was split."""
     red = _all_shipped()["red"]
-    # 39 grass/surf areas, plus the three towns that only ever had a Super Rod table
-    # (Pallet, Celadon, Cinnabar) -- all of them existing area_map.json ids, none new.
-    assert len(red) == 42, f"the area count changed to {len(red)}"
+    # 39 grass/surf areas, plus the seven towns that only fish (Pallet, Viridian, Cerulean,
+    # Vermilion, Celadon, Fuchsia, Cinnabar) -- every one a city-level area_map.json id.
+    assert len(red) == 46, f"the area count changed to {len(red)}"
     for area in red:
         assert ":" not in area and " " not in area, f"{area} looks like a sub-area id"
 

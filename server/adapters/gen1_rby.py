@@ -31,13 +31,18 @@ log = logging.getLogger(__name__)
 # through to the literal area "gift", so the Magikarp and the Celadon Eevee
 # (CELADON_MANSION_ROOF_HOUSE, map 132) shared one bucket and PAIRED WITH EACH
 # OTHER. Both maps are now in area_map.json with their own ids.
+#
+# Pallet Town, Celadon City and Cinnabar Island used to be listed too, and they are
+# fishing areas (Old, Good and Super Rod in all three titles), so they were the same
+# free-catch hole as Route 4 with a rod instead of grass. No grant is delivered on those
+# maps at runtime: the starter lives in `oaks_lab`, and every other script grant reaches
+# the engine namespaced through `gift_link_area` (the fossil room folds into
+# cinnabar_island and pairs under gift_cinnabar_island). A gift area is only for maps
+# where a gift is the ONLY way a Pokémon arrives.
 _GIFT_AREAS = frozenset({
-    "pallet_town",
     "oaks_lab",
-    "celadon_city",
     "saffron_city",
     "silph_co",
-    "cinnabar_island",
     "mt_moon_pokecenter",     # Magikarp salesman
     "celadon_mansion_roof",   # Eevee
     "celadon_game_corner",
